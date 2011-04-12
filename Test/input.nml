@@ -286,9 +286,9 @@
 
 &schedule_nml
    calendar        = 'Gregorian',  
-   first_bin_start =  2007, 4, 26, 3, 0, 0 ,
-   first_bin_end   =  2007, 4, 26, 9, 0, 0 ,
-   last_bin_end    =  2007, 4, 26, 9, 0, 0 ,
+   first_bin_start =  2007, 4, 25,21, 0, 0 ,
+   first_bin_end   =  2007, 4, 26, 3, 0, 0 ,
+   last_bin_end    =  2007, 4, 26, 3, 0, 0 ,
    bin_interval_days    = 0,
    bin_interval_seconds = 21600,   
    max_num_bins         = 1000,    
