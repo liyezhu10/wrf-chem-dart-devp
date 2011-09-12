@@ -13,7 +13,7 @@ program dart_to_model
 !----------------------------------------------------------------------
 ! purpose: interface between DART and the model model
 !
-! method: Read DART state vector and overwrite values in a model restart file.
+! method: Read DART state vector and overwrite values in a model analysis file.
 !         If the DART state vector has an 'advance_to_time' present, a
 !         file called model_in.DART is created with a time_manager_nml namelist 
 !         appropriate to advance model to the requested time.
@@ -33,8 +33,8 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
-use        model_mod, only : static_init_model, sv_to_restart_file, &
-                             get_model_size, get_base_time, get_model_restart_filename
+use        model_mod, only : static_init_model, analysis_file_to_statevector, &
+                             get_model_size, get_base_time, get_model_analysis_filename
 
 implicit none
 
@@ -50,11 +50,11 @@ character(len=128), parameter :: &
 
 character (len = 128) :: dart_to_model_input_file = 'dart.ic'
 logical               :: advance_time_present    = .false.
-character(len=256)    :: model_restart_filename  = 'model_restart'
+character(len=256)    :: model_analysis_filename  = 'model_analysis'
 
 namelist /dart_to_model_nml/ dart_to_model_input_file, &
                             advance_time_present,    &
-                            model_restart_filename
+                            model_analysis_filename
 
 !----------------------------------------------------------------------
 
@@ -85,7 +85,7 @@ call check_namelist_read(iunit, io, "dart_to_model_nml")
 
 write(*,*)
 write(*,*) 'dart_to_model: converting DART file ', "'"//trim(dart_to_model_input_file)//"'"
-write(*,*) 'to model restart file ', "'"//trim(model_restart_filename)//"'" 
+write(*,*) 'to model analysis file ', "'"//trim(model_analysis_filename)//"'" 
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
@@ -107,8 +107,8 @@ print *, 'read state vector'
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
-print *, 'calling sv to restart file'
-call sv_to_restart_file(statevector, model_restart_filename, model_time)
+print *, 'calling sv to analysis file'
+call analysis_file_to_statevector(model_analysis_filename, statevector, model_time)
 
 if ( advance_time_present ) then
    call write_model_time_control(model_time, adv_to_time)

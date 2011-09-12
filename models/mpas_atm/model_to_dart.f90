@@ -13,7 +13,7 @@ program model_to_dart
 !----------------------------------------------------------------------
 ! purpose: interface between model and DART
 !
-! method: Read model "restart" files of model state
+! method: Read MPAS "history" files of model state.
 !         Reform fields into a DART state vector (control vector).
 !         Write out state vector in "proprietary" format for DART.
 !         The output is a "DART restart file" format.
@@ -22,14 +22,14 @@ program model_to_dart
 !         <edit model_to_dart_output_file in input.nml:model_to_dart_nml>
 !         model_to_dart
 !
-! author: Tim Hoar 6/24/09
+! author: Tim Hoar 12 Sep 2011
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
-use        model_mod, only : get_model_size, restart_file_to_sv, &
-                             get_model_restart_filename
+use        model_mod, only : get_model_size, analysis_file_to_statevector, &
+                             get_model_analysis_filename
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -46,11 +46,11 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: model_to_dart_output_file  = 'dart.ud'
-character(len=256) :: model_restart_filename     = 'model_restart'
+character(len=256) :: model_analysis_filename     = 'model_analysis'
 
 namelist /model_to_dart_nml/    &
      model_to_dart_output_file, &
-     model_restart_filename
+     model_analysis_filename
 
 !----------------------------------------------------------------------
 ! global storage
@@ -74,8 +74,8 @@ read(iunit, nml = model_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_to_dart_nml") ! closes, too.
 
 write(*,*)
-write(*,*) 'model_to_dart: converting model restart file ', &
-           "'"//trim(model_restart_filename)//"'" 
+write(*,*) 'model_to_dart: converting model analysis file ', &
+           "'"//trim(model_analysis_filename)//"'" 
 write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 
 !----------------------------------------------------------------------
@@ -85,9 +85,9 @@ write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-call get_model_restart_filename( model_restart_filename )
+call get_model_analysis_filename( model_analysis_filename )
 
-call restart_file_to_sv(model_restart_filename, statevector, model_time) 
+call analysis_file_to_statevector(model_analysis_filename, statevector, model_time) 
 
 iunit = open_restart_write(model_to_dart_output_file)
 

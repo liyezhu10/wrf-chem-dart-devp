@@ -32,7 +32,6 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
                              model_interpolate, get_state_time
-               !             test_interpolate
 
 implicit none
 
@@ -50,12 +49,13 @@ character (len = 129) :: input_file  = 'dart.ics'
 character (len = 129) :: output_file = 'check_me'
 logical               :: advance_time_present = .FALSE.
 logical               :: verbose              = .FALSE.
+integer               :: test1thru = -1
 integer               :: x_ind = -1
 real(r8), dimension(3) :: loc_of_interest = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
 namelist /model_mod_check_nml/ input_file, output_file, &
-                        advance_time_present, x_ind,    &
+                        advance_time_present, test1thru, x_ind,    &
                         loc_of_interest, kind_of_interest, verbose
 
 !----------------------------------------------------------------------
@@ -89,12 +89,22 @@ call find_namelist_in_file("input.nml", "model_mod_check_nml", iunit)
 read(iunit, nml = model_mod_check_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_mod_check_nml")
 
-! This harvests all kinds of initialization information
-call static_init_model()
+if (test1thru < 1) goto 999
 
+! This harvests all kinds of initialization information
+
+write(*,*)
+write(*,*)'Testing static_init_model ...'
+call static_init_model()
+write(*,*)'testing complete ...'
+
+if (test1thru < 2) goto 999
+
+write(*,*)
+write(*,*)'Testing get_model_size ...'
 x_size = get_model_size()
 write(*,'(''state vector has length'',i10)') x_size
-allocate(statevector(x_size))
+write(*,*)'testing complete ...'
 
 !----------------------------------------------------------------------
 ! Write a supremely simple restart file. Most of the time, I just use
@@ -102,8 +112,12 @@ allocate(statevector(x_size))
 ! values with something more complicated.
 !----------------------------------------------------------------------
 
+if (test1thru < 3) goto 999
+
 write(*,*)
-write(*,*)'Writing a trivial restart file.'
+write(*,*)'Writing a trivial restart file - "allones.ics".'
+
+allocate(statevector(x_size))
 
 statevector = 1.0_r8;
 model_time  = set_time(21600, 149446)   ! 06Z 4 March 2010
@@ -113,17 +127,11 @@ call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
 !----------------------------------------------------------------------
-! Reads the valid time from the header.rst file
-!----------------------------------------------------------------------
-
-model_time = get_state_time('../testdata1')
-call print_date( model_time,'model_mod_check:model date')
-call print_time( model_time,'model_mod_check:model time')
-
-!----------------------------------------------------------------------
 ! Open a test DART initial conditions file.
 ! Reads the valid time, the state, and (possibly) a target time.
 !----------------------------------------------------------------------
+
+if (test1thru < 4) goto 999
 
 write(*,*)
 write(*,*)'Reading '//trim(input_file)
@@ -147,6 +155,8 @@ call print_time( model_time,'model_mod_check:model time')
 ! finalize_diag_output()
 !----------------------------------------------------------------------
 
+if (test1thru < 5) goto 999
+
 write(*,*)
 write(*,*)'Exercising the netCDF routines.'
 write(*,*)'Creating '//trim(output_file)//'.nc'
@@ -168,15 +178,16 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 ! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
 
-if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+if (test1thru < 6) goto 999
 
-write(*,*)'Manually Stopping'
-stop
+if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
 ! Checking for valid input is tricky ... we don't know much. 
 !----------------------------------------------------------------------
+
+if (test1thru < 7) goto 999
 
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
@@ -184,6 +195,7 @@ if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest 
 ! Check the interpolation - print initially to STDOUT
 !----------------------------------------------------------------------
 
+if (test1thru < 7) goto 999
 
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
@@ -202,6 +214,9 @@ endif
 ! When called with 'end', timestamp will call finalize_utilities()
 ! This must be the last few lines of the main program.
 !----------------------------------------------------------------------
+
+ 999 continue
+
 call timestamp(string1=source, pos='end')
 
 contains

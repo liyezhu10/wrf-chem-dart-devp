@@ -46,10 +46,6 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-use     dart_model_mod, only: get_model_nLons, get_model_nLats, get_model_nAlts, &
-                             get_nSpecies, get_nSpeciesTotal, get_nIons,     &
-                             get_nSpeciesAll, decode_model_indices
-
 use typesizes
 use netcdf 
 
@@ -79,9 +75,9 @@ public :: get_model_size,         &
 ! the interfaces here can be changed as appropriate.
 
 public :: get_gridsize,                &
-          restart_file_to_statevector, &
-          statevector_to_restart_file, &
-          get_model_restart_dirname,    &
+          analysis_file_to_statevector, &
+          statevector_to_analysis_file, &
+          get_model_analysis_filename,    &
           get_base_time,               &
           get_state_time
 
@@ -107,10 +103,10 @@ real(r8)           :: model_perturbation_amplitude = 0.2
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_restart_dirname = 'model_restartdir'
+character(len=256) :: model_analysis_filename = 'model_analysisdir'
 
 namelist /model_nml/  &
-   model_restart_dirname,        &
+   model_analysis_filename,        &
    output_state_vector,         &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
@@ -136,7 +132,7 @@ namelist /model_nml/  &
 !  QS   long_name = "SNOW MIXING RATIO"     float  QS(TIME, ALT, LAT, LON)
 !  QH   long_name = "GRAUPEL MIXING RATIO"  float  QH(TIME, ALT, LAT, LON)
 !
-!  The variables in the model restart file that are used to create the 
+!  The variables in the model analysis file that are used to create the 
 !  DART state vector are specified in the input.nml:model_vars_nml namelist.
 !
 !------------------------------------------------------------------
@@ -211,7 +207,7 @@ integer :: print_every_Nth  = 10000
 integer, parameter :: nGhost = 2   ! number of ghost cells on all edges
 
 !------------------------------------------------------------------
-! The model restart manager namelist variables
+! The model analysis manager namelist variables
 !------------------------------------------------------------------
 
 character(len= 64) :: ew_boundary_type, ns_boundary_type
@@ -395,13 +391,13 @@ if (do_output()) write(     *     , nml=model_nml)
 
 ! Get the model variables in a restricted scope setting.
 
-nLons         = get_model_nLons()
-nLats         = get_model_nLats()
-nAlts         = get_model_nAlts()
-nSpecies      = get_nSpecies()
-nSpeciesTotal = get_nSpeciesTotal()
-nIons         = get_nIons()
-nSpeciesAll   = get_nSpeciesAll()
+! nLons         = get_model_nLons()
+! nLats         = get_model_nLats()
+! nAlts         = get_model_nAlts()
+! nSpecies      = get_nSpecies()
+! nSpeciesTotal = get_nSpeciesTotal()
+! nIons         = get_nIons()
+! nSpeciesAll   = get_nSpeciesAll()
 
 if ((debug > 0) .and.  do_output() ) then
    write(*,*)
@@ -436,7 +432,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 !---------------------------------------------------------------
 ! 1) get grid dimensions
 ! 2) allocate space for the grids 
-! 3) read them from the block restart files, could be stretched ...
+! 3) read them from the block analysis files, could be stretched ...
 
 call get_grid_info(NgridLon, NgridLat, NgridAlt, nBlocksLon, nBlocksLat, &
                    LatStart, LatEnd, LonStart)
@@ -449,22 +445,22 @@ allocate( LON( NgridLon ))
 allocate( LAT( NgridLat ))
 allocate( ALT( NgridAlt ))
 
-call get_grid(model_restart_dirname, nBlocksLon, nBlocksLat, &
+call get_grid(model_analysis_filename, nBlocksLon, nBlocksLat, &
               nLons, nLats, nAlts, LON, LAT, ALT )
               
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
 ! of the DART state vector. Required to determine model_size.
 !
-! Verify all variables are in the model restart file
+! Verify all variables are in the model analysis file
 !
 ! Compute the offsets into the state vector for the start of each
 ! different variable type. Requires reading shapes from the model
-! restart file. As long as TIME is the LAST dimension, we're OK.
+! analysis file. As long as TIME is the LAST dimension, we're OK.
 !
 ! Record the extent of the data type in the state vector.
 
-call verify_state_variables( model_state_variables, ncid, model_restart_dirname, &
+call verify_state_variables( model_state_variables, ncid, model_analysis_filename, &
                              nfields, variable_table )
 
 index1  = 1;
@@ -484,9 +480,9 @@ do ivar = 1, nfields
    ! progvar(ivar)%numdims
    ! progvar(ivar)%dimlens
 
-   call decode_model_indices( varname, progvar(ivar)%model_varname, progvar(ivar)%model_dim, &
-                             progvar(ivar)%model_index, progvar(ivar)%long_name, &
-                             progvar(ivar)%units)
+!  call decode_model_indices( varname, progvar(ivar)%model_varname, progvar(ivar)%model_dim, &
+!                            progvar(ivar)%model_index, progvar(ivar)%long_name, &
+!                            progvar(ivar)%units)
 
    varsize = NgridLon * NgridLat * NgridAlt
 
@@ -1351,7 +1347,7 @@ end subroutine get_gridsize
 
 ! FIXME:
 !  this routine needs:  
-!  1.  a base dirname for the restart files.
+!  1.  a base dirname for the analysis files.
 !  they will have the format 'dirname/bNNNN.rst'  where NNNN has
 !  leading 0s and is the block number.   blocks start in the
 !  southwest corner of the lat/lon grid and go west first, then
@@ -1380,9 +1376,9 @@ end subroutine get_gridsize
 !  any or all of the three dimensions.
 !
 
-subroutine restart_file_to_statevector(dirname, state_vector, model_time)
+subroutine analysis_file_to_statevector(dirname, state_vector, model_time)
 !------------------------------------------------------------------
-! Reads the current time and state variables from a model restart
+! Reads the current time and state variables from a model analysis
 ! file and packs them into a dart state vector.
 
 character(len=*), intent(in)  :: dirname 
@@ -1402,26 +1398,26 @@ state_vector = MISSING_R8
 model_time = get_state_time(dirname)
 
 if (do_output()) &
-    call print_time(model_time,'time in restart file '//trim(dirname)//'/header.rst')
+    call print_time(model_time,'time in analysis file '//trim(dirname)//'/header.rst')
 if (do_output()) &
-    call print_date(model_time,'date in restart file '//trim(dirname)//'/header.rst')
+    call print_date(model_time,'date in analysis file '//trim(dirname)//'/header.rst')
 
 ! sort the required fields into the order they exist in the
-! binary restart files and fill in the state vector as you
+! binary analysis files and fill in the state vector as you
 ! read each field.  when this routine returns all the data has
 ! been read.
 
 call get_data(dirname, state_vector)
 
 
-end subroutine restart_file_to_statevector
+end subroutine analysis_file_to_statevector
 
 
 
-subroutine statevector_to_restart_file(state_vector, dirname, statedate)
+subroutine statevector_to_analysis_file(state_vector, dirname, statedate)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
-! vector (1d array) into a model netcdf restart file.
+! vector (1d array) into a model netcdf analysis file.
 !
 real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: dirname 
@@ -1434,10 +1430,10 @@ character(len=128) :: dirnameout
 
 if ( .not. module_initialized ) call static_init_model
 
-print *, 'in statevector_to_restart_file, debug, nfields = ', debug, nfields
+print *, 'in statevector_to_analysis_file, debug, nfields = ', debug, nfields
 
 ! sort the required fields into the order they exist in the
-! binary restart files and write out the state vector data
+! binary analysis files and write out the state vector data
 ! field by field.  when this routine returns all the data has
 ! been written.
 
@@ -1450,11 +1446,11 @@ call put_data(dirname, dirnameout, state_vector)
 
  
 if (do_output()) &
-    call print_time(model_time,'time in restart file '//trim(dirname)//'/header.rst')
+    call print_time(model_time,'time in analysis file '//trim(dirname)//'/header.rst')
 if (do_output()) &
-    call print_date(model_time,'date in restart file '//trim(dirname)//'/header.rst')
+    call print_date(model_time,'date in analysis file '//trim(dirname)//'/header.rst')
 
-end subroutine statevector_to_restart_file
+end subroutine statevector_to_analysis_file
 
 
 
@@ -1882,7 +1878,7 @@ subroutine get_grid_info(NgridLon, NgridLat, NgridAlt, &
                 nBlocksLon, nBlocksLat, LatStart, LatEnd, LonStart)
 !------------------------------------------------------------------
 !
-! Read the grid dimensions from the restart netcdf file.
+! Read the grid dimensions from the analysis netcdf file.
 !
 ! The file name comes from module storage ... namelist.
 
@@ -1910,7 +1906,7 @@ LatStart   = 0.0_r8
 LatEnd     = 0.0_r8
 LonStart   = 0.0_r8
 
-write(fileloc,'(a,''/'',a)') trim(model_restart_dirname),trim(filename)
+write(fileloc,'(a,''/'',a)') trim(model_analysis_filename),trim(filename)
 
 iunit = open_file(fileloc, action='read')
 
@@ -1950,7 +1946,7 @@ end subroutine get_grid_info
 subroutine get_grid(dirname, nBlocksLon, nBlocksLat, &
                   nLons, nLats, nAlts, LON, LAT, ALT )
 !------------------------------------------------------------------
-! open enough of the restart files to read in the lon, lat, alt arrays
+! open enough of the analysis files to read in the lon, lat, alt arrays
 !
 character(len=*), intent(in) :: dirname
 integer, intent(in) :: nBlocksLon ! Number of Longitude blocks
@@ -2042,7 +2038,7 @@ end subroutine get_grid
 
 function open_block_file(dirname, blocknum, rw)
 !------------------------------------------------------------------
-! open the requested block number restart file and return the
+! open the requested block number analysis file and return the
 ! open file unit
 
 integer                      :: open_block_file
@@ -2071,7 +2067,7 @@ end function open_block_file
 
 subroutine get_data(dirname, statevector)
 !------------------------------------------------------------------
-! open all restart files and read in the requested data item
+! open all analysis files and read in the requested data item
 !
  character(len=*), intent(in)  :: dirname
  real(r8),         intent(out) :: statevector(:)
@@ -2112,7 +2108,7 @@ end subroutine get_data
 
 subroutine put_data(dirname, dirnameout, statevector)
 !------------------------------------------------------------------
-! open all restart files and write out the requested data item
+! open all analysis files and write out the requested data item
 !
  character(len=*), intent(in) :: dirname, dirnameout
  real(r8),         intent(in) :: statevector(:)
@@ -2224,7 +2220,7 @@ end subroutine pack_data
 
 subroutine read_data(iunit, blockoffset, statevector)
 !------------------------------------------------------------------
-! open all restart files and read in the requested data items
+! open all analysis files and read in the requested data items
 !
 integer,  intent(in)    :: iunit
 integer,  intent(in)    :: blockoffset
@@ -2375,7 +2371,7 @@ end subroutine read_data
 
 subroutine write_data(iunit, ounit, blockoffset, statevector)
 !------------------------------------------------------------------
-! open all restart files and write out the requested data item
+! open all analysis files and write out the requested data item
 !
 integer,  intent(in) :: iunit, ounit
 integer,  intent(in) :: blockoffset
@@ -2560,7 +2556,7 @@ end subroutine write_data
 
 function get_base_time_ncid( ncid )
 !------------------------------------------------------------------
-! The restart netcdf files have the start time of the experiment.
+! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
 
@@ -2595,7 +2591,7 @@ end function get_base_time_ncid
 
 function get_base_time_fname(filename)
 !------------------------------------------------------------------
-! The restart netcdf files have the start time of the experiment.
+! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
 
@@ -2813,7 +2809,7 @@ FieldLoop : do i=1,nfields
       call error_handler(E_ERR,'get_index_from_model_varname',string1,source,revision,revdate)
    endif
    ! i is index into progvar array - the order of the fields in the sv
-   ! model_index is index into the specific variable in the model restarts
+   ! model_index is index into the specific variable in the model analysiss
    ivals(count) = i
    gindex(count) = progvar(i)%model_index
 enddo FieldLoop
@@ -2858,15 +2854,15 @@ end function set_model_time_step
 !------------------------------------------------------------------
 
 
-subroutine get_model_restart_dirname( dirname )
+subroutine get_model_analysis_filename( filename )
 
-character(len=*), intent(OUT) :: dirname
+character(len=*), intent(OUT) :: filename
 
 if ( .not. module_initialized ) call static_init_model
 
-dirname = trim(model_restart_dirname)
+filename = trim(model_analysis_filename)
 
-end subroutine get_model_restart_dirname
+end subroutine get_model_analysis_filename
 
 
 !------------------------------------------------------------------
@@ -2904,7 +2900,7 @@ MyLoop : do i = 1, nrows
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif
 
-   ! Make sure variable exists in model restart variable list
+   ! Make sure variable exists in model analysis variable list
 
 !%!   write(string1,'(''there is no variable '',a,'' in '',a)') trim(varname), trim(filename)
 !%!   call nc_check(NF90_inq_varid(ncid, trim(varname), varid), &
