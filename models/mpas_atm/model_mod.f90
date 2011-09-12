@@ -103,7 +103,7 @@ real(r8)           :: model_perturbation_amplitude = 0.2
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_analysis_filename = 'model_analysisdir'
+character(len=256) :: model_analysis_filename = 'mpas_restart.nc'
 
 namelist /model_nml/  &
    model_analysis_filename,        &

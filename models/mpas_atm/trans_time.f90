@@ -89,14 +89,14 @@ out_unit = open_file(file_out, 'formatted', 'write')
 call get_date(dart_now_time, year, month, day, hour, minute, second)
 write (out_unit,'(I4.4, 5(1X, I2.2))') year, month, day, hour, minute, second
 ! debug
-write (*, '')
+write (*,'("")')
 write (*,'(A, I4.4, 5(1X, I2.2))') 'Now time: ', year, month, day, hour, minute, second
 
 
 call get_date(dart_advance_time, year, month, day, hour, minute, second)
 write (out_unit,'(I4.4, 5(1X, I2.2))') year, month, day, hour, minute, second
 ! debug
-write (*, '')
+write (*,'("")')
 write (*,'(A, I4.4, 5(1X, I2.2))') 'Adv time: ', year, month, day, hour, minute, second
 
 

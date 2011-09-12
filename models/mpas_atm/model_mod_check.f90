@@ -45,17 +45,18 @@ character(len=128), parameter :: &
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129) :: input_file  = 'dart.ics'
-character (len = 129) :: output_file = 'check_me'
+character (len = 129) :: dart_input_file      = 'dart.ics'
+character (len = 129) :: mpas_input_file      = 'mpas_analysis.nc'
+character (len = 129) :: output_file          = 'check_me'
 logical               :: advance_time_present = .FALSE.
 logical               :: verbose              = .FALSE.
-integer               :: test1thru = -1
-integer               :: x_ind = -1
-real(r8), dimension(3) :: loc_of_interest = -1.0_r8
+integer               :: test1thru            = -1
+integer               :: x_ind                = -1
+real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
-namelist /model_mod_check_nml/ input_file, output_file, &
-                        advance_time_present, test1thru, x_ind,    &
+namelist /model_mod_check_nml/ dart_input_file, output_file, &
+                        advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose
 
 !----------------------------------------------------------------------
@@ -134,9 +135,9 @@ call close_restart(iunit)
 if (test1thru < 4) goto 999
 
 write(*,*)
-write(*,*)'Reading '//trim(input_file)
+write(*,*)'Reading '//trim(dart_input_file)
 
-iunit = open_restart_read(input_file)
+iunit = open_restart_read(dart_input_file)
 if ( advance_time_present ) then
    call aread_state_restart(model_time, statevector, iunit, adv_to_time)
 else
