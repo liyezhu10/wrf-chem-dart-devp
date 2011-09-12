@@ -18,7 +18,7 @@ program model_to_dart
 !         Write out state vector in "proprietary" format for DART.
 !         The output is a "DART restart file" format.
 ! 
-! USAGE:  The model dirname is read from the model_in namelist
+! USAGE:  The model filename is read from the model_in namelist
 !         <edit model_to_dart_output_file in input.nml:model_to_dart_nml>
 !         model_to_dart
 !
@@ -26,10 +26,10 @@ program model_to_dart
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
-use    utilities_mod, only : initialize_utilities, timestamp, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
 use        model_mod, only : get_model_size, restart_file_to_sv, &
-                             get_model_restart_dirname
+                             get_model_restart_filename
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -46,11 +46,11 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: model_to_dart_output_file  = 'dart.ud'
-character(len=256) :: model_restart_dirname = 'model_restartdir'
+character(len=256) :: model_restart_filename     = 'model_restart'
 
 namelist /model_to_dart_nml/    &
      model_to_dart_output_file, &
-     model_restart_dirname
+     model_restart_filename
 
 !----------------------------------------------------------------------
 ! global storage
@@ -66,7 +66,7 @@ real(r8), allocatable :: statevector(:)
 call initialize_utilities(progname='model_to_dart', output_flag=verbose)
 
 !----------------------------------------------------------------------
-! Read the namelist to get the output dirname.
+! Read the namelist to get the output filename.
 !----------------------------------------------------------------------
 
 call find_namelist_in_file("input.nml", "model_to_dart_nml", iunit)
@@ -74,8 +74,8 @@ read(iunit, nml = model_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_to_dart_nml") ! closes, too.
 
 write(*,*)
-write(*,*) 'model_to_dart: converting model restart files in directory ', &
-           "'"//trim(model_restart_dirname)//"'" 
+write(*,*) 'model_to_dart: converting model restart file ', &
+           "'"//trim(model_restart_filename)//"'" 
 write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 
 !----------------------------------------------------------------------
@@ -85,9 +85,9 @@ write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-call get_model_restart_dirname( model_restart_dirname )
+call get_model_restart_filename( model_restart_filename )
 
-call restart_file_to_sv(model_restart_dirname, statevector, model_time) 
+call restart_file_to_sv(model_restart_filename, statevector, model_time) 
 
 iunit = open_restart_write(model_to_dart_output_file)
 
@@ -95,12 +95,12 @@ call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
 !----------------------------------------------------------------------
-! When called with 'end', timestamp will call finalize_utilities()
+! finish up
 !----------------------------------------------------------------------
 
 call print_date(model_time, str='model_to_dart:model model date')
 call print_time(model_time, str='model_to_dart:DART model time')
-call timestamp(string1=source, pos='end')
+call finalize_utilities()
 
 end program model_to_dart
 
