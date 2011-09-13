@@ -34,7 +34,7 @@ use  assim_model_mod, only : open_restart_read, aread_state_restart, close_resta
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
 use        model_mod, only : static_init_model, analysis_file_to_statevector, &
-                             get_model_size, get_base_time, get_model_analysis_filename
+                             get_model_size, get_model_analysis_filename
 
 implicit none
 

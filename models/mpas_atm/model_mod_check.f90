@@ -31,7 +31,7 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              print_time, write_time, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             model_interpolate, get_state_time
+                             model_interpolate, get_analysis_time
 
 implicit none
 

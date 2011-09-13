@@ -1381,7 +1381,7 @@ end subroutine get_model_analysis_filename
 
 
 
-subroutine analysis_file_to_statevector(state_vector, filename, model_time)
+subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 !-------------------------------------------------------------------
 ! Reads the current time and state variables from a mpas analysis
 ! file and packs them into a dart state vector.

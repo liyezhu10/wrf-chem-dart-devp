@@ -116,7 +116,7 @@
    /
 
 &model_nml
-   model_analysis_filename      = '../data/mpas_init.nc'
+   model_analysis_filename      = '../data/mpas_output.2010-10-23_03:00:00.nc'
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 3600,
    output_state_vector          = .true., 
@@ -139,13 +139,13 @@
 
 &model_to_dart_nml
    model_to_dart_output_file  = 'dart.ud',
-   model_analysis_filename    = '../data/mpas_init.nc',
+   model_analysis_filename    = '../data/mpas_output.2010-10-23_03:00:00.nc',
   /
 
 &dart_to_model_nml
    dart_to_model_input_file = 'dart.ic',
    advance_time_present     = .false.,
-   model_analysis_filename  = 'model_analysis',
+   model_analysis_filename  = 'mpas_new',
   / 
 
 &utilities_nml
@@ -237,7 +237,7 @@
 
 &model_mod_check_nml
    dart_input_file      = 'dart.ics'
-   mpas_input_file      = '../data/mpas_init.nc'
+   mpas_input_file      = '../data/mpas_output.2010-10-23_03:00:00.nc'
    output_file          = 'check_me'
    advance_time_present = .FALSE.
    verbose              = .TRUE.
