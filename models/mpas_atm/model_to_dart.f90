@@ -85,8 +85,6 @@ write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-call get_model_analysis_filename( model_analysis_filename )
-
 call analysis_file_to_statevector(model_analysis_filename, statevector, model_time) 
 
 iunit = open_restart_write(model_to_dart_output_file)
