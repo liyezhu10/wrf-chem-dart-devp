@@ -1362,56 +1362,155 @@ end subroutine get_model_analysis_filename
 
 
 
-subroutine analysis_file_to_statevector(dirname, state_vector, model_time)
+subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 !------------------------------------------------------------------
 ! Reads the current time and state variables from a model analysis
 ! file and packs them into a dart state vector.
 
-character(len=*), intent(in)  :: dirname 
+character(len=*), intent(in)  :: filename 
 real(r8),         intent(out) :: state_vector(:)
 type(time_type),  intent(out) :: model_time
 
-integer :: ivar, i
-character(len=NF90_MAX_NAME) :: varname
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
+character(len=NF90_MAX_NAME)          :: varname
+character(len=128)                    :: myerrorstring
+integer :: i, j, ivar, VarID, ncNdims, dimlen, ncid, indx, ni, nj
+
+real(r8), allocatable, dimension(:)       :: data_1d_array
+real(r8), allocatable, dimension(:,:)     :: data_2d_array
+
 
 if ( .not. module_initialized ) call static_init_model
 
 state_vector = MISSING_R8
 
-! this is going to have to loop over all the blocks, both to get
-! the data values and to get the full grid spacings.
+! Check that the input file exists ...
 
-model_time = get_state_time(dirname)
+if ( .not. file_exist(filename) ) then
+   write(string1,*) 'cannot open file ', trim(filename),' for reading.'
+   call error_handler(E_ERR,'analysis_file_to_statevector',string1,source,revision,revdate)
+endif
+
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+             'analysis_file_to_statevector','open '//trim(filename))
+
+model_time = get_state_time(ncid, filename)
+
 
 if (do_output()) &
-    call print_time(model_time,'time in analysis file '//trim(dirname)//'/header.rst')
+    call print_time(model_time,'time in analysis file '//trim(filename))
 if (do_output()) &
-    call print_date(model_time,'date in analysis file '//trim(dirname)//'/header.rst')
+    call print_date(model_time,'date in analysis file '//trim(filename))
 
-! sort the required fields into the order they exist in the
-! binary analysis files and fill in the state vector as you
-! read each field.  when this routine returns all the data has
-! been read.
+! loop over fields
+! read into 1d or 2d arrays
+! unpack into 1d array
+! close netcdf file
+do ivar=1, nfields
 
-call get_data(dirname, state_vector)
+   varname = trim(progvar(ivar)%varname)
+   myerrorstring = trim(filename)//' '//trim(varname)
+
+   ! determine the shape of the netCDF variable
+
+   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
+            'analysis_file_to_statevector', 'inq_varid '//trim(myerrorstring))
+
+   call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=ncNdims), &
+            'analysis_file_to_statevector', 'inquire '//trim(myerrorstring))
+
+   mystart = 1   ! These are arrays, actually
+   mycount = 1
+   DimCheck : do i = 1,progvar(ivar)%numdims
+
+      write(string1,'(a,i2,A)') 'inquire dimension ',i,trim(string2)
+      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
+            'nc_write_model_vars', trim(string1))
+
+      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
+         write(string2,*)' but it should be.'
+         call error_handler(E_ERR, 'nc_write_model_vars', trim(string1), &
+                            source, revision, revdate, text2=trim(string2))
+      endif
+
+      mycount(i) = dimlen
+
+   enddo DimCheck
+
+
+   indx = progvar(ivar)%index1
+
+   if (ncNdims == 1) then
+
+      ! FIXME: read into state vector as-is
+      ni = mycount(1)
+      allocate(data_1d_array(ni))
+      call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
+        start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'analysis_file_to_statevector', 'get_var '//trim(varname))
+      do i = 1, ni
+         state_vector(indx) = data_1d_array(i)
+         indx = indx + 1
+      enddo
+      deallocate(data_1d_array)
+
+   elseif (ncNdims == 2) then
+
+      ni = mycount(1)
+      nj = mycount(2)
+      allocate(data_2d_array(ni, nj))
+      call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
+        start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'restart_file_to_sv', 'get_var '//trim(varname))
+      do j = 1, nj
+      do i = 1, ni
+         state_vector(indx) = data_2d_array(i, j)
+         indx = indx + 1
+      enddo
+      enddo
+      deallocate(data_2d_array)
+
+   else
+      write(string1, *) 'no support for data array of dimension ', ncNdims
+      call error_handler(E_ERR,'restart_file_to_sv', string1, &
+                        source,revision,revdate)
+   endif
+
+
+   ! FIXME: read into state vector
+   indx = indx - 1
+   if ( indx /= progvar(ivar)%indexN ) then
+      write(string1, *)'Variable '//trim(varname)//' filled wrong.'
+      write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
+      call error_handler(E_ERR,'analysis_file_to_statevector', string1, &
+                        source,revision,revdate,text2=string2)
+   endif
+
+enddo
+
+call nc_check(nf90_close(ncid), &
+             'analysis_file_to_statevector','close '//trim(filename))
+
+
 
 end subroutine analysis_file_to_statevector
 
 
 
-subroutine statevector_to_analysis_file(state_vector, dirname, statedate)
+subroutine statevector_to_analysis_file(state_vector, filename, statedate)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a model netcdf analysis file.
 !
 real(r8),         intent(in) :: state_vector(:)
-character(len=*), intent(in) :: dirname 
+character(len=*), intent(in) :: filename 
 type(time_type),  intent(in) :: statedate
 
 
 integer :: ivar 
 character(len=NF90_MAX_NAME) :: varname
-character(len=128) :: dirnameout
+character(len=128) :: filenameout
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1422,8 +1521,8 @@ print *, 'in statevector_to_analysis_file, debug, nfields = ', debug, nfields
 ! field by field.  when this routine returns all the data has
 ! been written.
 
-dirnameout = trim(dirname) // '.out'
-call put_data(dirname, dirnameout, state_vector)
+filenameout = trim(filename) // '.out'
+!call put_data(filename, filenameout, state_vector)
 
 ! FIXME:
 ! write out model_time to a text file?
@@ -1431,9 +1530,9 @@ call put_data(dirname, dirnameout, state_vector)
 
  
 if (do_output()) &
-    call print_time(model_time,'time in analysis file '//trim(dirname)//'/header.rst')
+    call print_time(model_time,'time in analysis file '//trim(filename)//'/header.rst')
 if (do_output()) &
-    call print_date(model_time,'date in analysis file '//trim(dirname)//'/header.rst')
+    call print_date(model_time,'date in analysis file '//trim(filename)//'/header.rst')
 
 end subroutine statevector_to_analysis_file
 
@@ -1513,74 +1612,43 @@ end function get_base_time_fname
 
 
 
-function get_state_time( dirname )
+function get_state_time( ncid, filename )
 !------------------------------------------------------------------
 ! the static_init_model ensures that the model namelists are read.
 !
 type(time_type)              :: get_state_time
-character(len=*), intent(in) :: dirname
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: filename
 
-type(time_type) :: model_offset, base_time
-
-integer  :: iunit, i, ios
-integer  :: istep
-real(r8) :: tsimulation
+integer  :: VarID
 integer  :: iyear, imonth, iday, ihour, imin, isec
-integer  :: ndays,nsec
 
-character(len=256) :: filename
 character(len=100) :: cLine
 
 if ( .not. module_initialized ) call static_init_model
 
-tsimulation = MISSING_R8
-istep       = -1
-iyear       = -1
-imonth      = -1
-iday        = -1
-ihour       = -1
-imin        = -1
-isec        = -1
+! get the contents of the character string xtime into a data
+! the format is: "YYYY-MM-DD_HH:mm:SS       "
 
-write(filename,'(a,''/header.rst'')') trim(dirname)
+call nc_check(nf90_inq_varid(ncid, 'xtime', VarID), &
+              'get_state_time', 'inq_varid xtime'//trim(model_analysis_filename))
 
-iunit = open_file(trim(filename), action='read')
+! TIM, HELP!   FIXME : does this correctly read netcdf var 'xtime' into cLine here?
+call nc_check(nf90_get_var( ncid, VarID, cLine), &
+              'get_state_time', 'get_var cLine '//trim(model_analysis_filename))
 
-FILEREAD : do i = 1, 100
 
-   read(iunit,'(a)',iostat=ios) cLine
+! extract the string into real integer variables
 
-   if (ios < 0) exit FILEREAD  ! end of file
+read(cLine, '(4I,1x,2I,1x,2I,1x,2I,1x,2I,1x,2x)') iyear, imonth, iday, ihour, imin, isec
 
-   if (ios /= 0) then
-      write(string1,*) 'cannot read ',trim(filename)
-      call error_handler(E_ERR,'get_grid_info',string1,source,revision,revdate)
-   endif
+! or
+! read(cLine(1:4), '(I4)') iyear
+! read(cline(6:7), '(I2)') imonth
+! etc
 
-   select case( cLine(1:6) ) 
-      case('#ISTEP')
-         read(iunit,*)istep
-      case('#TSIMU')
-         read(iunit,*)tsimulation
-      case('#TIMES')
-         read(iunit,*)iyear
-         read(iunit,*)imonth
-         read(iunit,*)iday
-         read(iunit,*)ihour
-         read(iunit,*)imin
-         read(iunit,*)isec
-      case default
-   end select
-
-enddo FILEREAD
-
-call close_file(iunit)
-
-base_time      = set_date(iyear, imonth, iday, ihour, imin, isec)
-ndays          = tsimulation/86400
-nsec           = tsimulation - ndays*86400
-model_offset   = set_time(nsec,ndays)
-get_state_time = base_time + model_offset
+! set into a dart time type
+get_state_time = set_date(iyear, imonth, iday, ihour, imin, isec)
 
 if (debug > 8) then
    write(*,*)'get_state_time : iyear       ',iyear
@@ -1589,13 +1657,7 @@ if (debug > 8) then
    write(*,*)'get_state_time : ihour       ',ihour
    write(*,*)'get_state_time : imin        ',imin
    write(*,*)'get_state_time : isec        ',isec
-   write(*,*)'get_state_time : tsimulation ',tsimulation
-   write(*,*)'get_state_time : ndays       ',ndays
-   write(*,*)'get_state_time : nsec        ',nsec
 
-   call print_date(     base_time, 'get_state_time:model base date')
-   call print_time(     base_time, 'get_state_time:model base time')
-   call print_time(  model_offset, 'get_state_time:model offset')
    call print_date(get_state_time, 'get_state_time:model date')
    call print_time(get_state_time, 'get_state_time:model time')
 endif

@@ -107,7 +107,7 @@ print *, 'read state vector'
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
-print *, 'calling sv to analysis file'
+print *, 'calling analysis file to state vector'
 call analysis_file_to_statevector(model_analysis_filename, statevector, model_time)
 
 if ( advance_time_present ) then

@@ -46,7 +46,7 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: model_to_dart_output_file  = 'dart.ud'
-character(len=256) :: model_analysis_filename     = 'model_analysis'
+character(len=256) :: model_analysis_filename    = 'model_analysis'
 
 namelist /model_to_dart_nml/    &
      model_to_dart_output_file, &
