@@ -139,6 +139,17 @@
                           'QH',  'KIND_GRAUPEL_MIXING_RATIO'
   /
 
+&model_to_dart_nml
+   model_to_dart_output_file  = 'dart.ud',
+   model_analysis_filename    = 'model_analysis',
+  /
+
+&dart_to_model_nml
+   dart_to_model_input_file = 'dart.ic',
+   advance_time_present     = .false.,
+   model_analysis_filename  = 'model_analysis',
+  / 
+
 &utilities_nml
    TERMLEVEL = 1,
    module_details = .false.,
