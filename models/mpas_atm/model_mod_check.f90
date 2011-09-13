@@ -55,7 +55,8 @@ integer               :: x_ind                = -1
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
-namelist /model_mod_check_nml/ dart_input_file, output_file, &
+namelist /model_mod_check_nml/ dart_input_file, mpas_input_file, &
+                        output_file, &
                         advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose
 
