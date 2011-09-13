@@ -77,8 +77,7 @@ public :: get_model_size,         &
 public :: get_model_analysis_filename,  &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
-          get_base_time,                &
-          get_state_time
+          get_analysis_time
 
 ! version controlled file description for error handling, do not edit
 
@@ -134,6 +133,7 @@ type progvartype
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
+   integer :: posdef
    integer :: xtype
    integer :: numdims
    integer :: numvertical
@@ -186,10 +186,29 @@ INTERFACE vector_to_prog_var
       MODULE PROCEDURE vector_to_4d_prog_var
 END INTERFACE
 
-INTERFACE get_base_time
-      MODULE PROCEDURE get_base_time_ncid
-      MODULE PROCEDURE get_base_time_fname
+INTERFACE get_analysis_time
+      MODULE PROCEDURE get_analysis_time_ncid
+      MODULE PROCEDURE get_analysis_time_fname
 END INTERFACE
+
+
+!------------------------------------------------
+! The regular grid for horizontal interpolation divides the sphere into
+! a set of regularly spaced lon-lat boxes. The number of boxes in
+! longitude and latitude are set by num_reg_x and num_reg_y. Making the
+! number of regular boxes smaller decreases the computation required for
+! doing each interpolation but increases the static storage requirements
+! and the initialization computation (which seems to be pretty small).
+
+integer, parameter :: num_reg_x = 180, num_reg_y = 90
+
+! The max_reg_list_num controls the size of temporary storage used for
+! initializing the regular grid. Each box will have a list of cell indices
+! that are located within the box.
+! Four arrays of size num_reg_x*num_reg_y*max_reg_list_num are needed. 
+! The initialization fails and returns an error if max_reg_list_num is too small.
+
+integer, parameter :: max_reg_list_num = 100
 
 contains
 
@@ -497,7 +516,7 @@ call verify_state_variables( mpas_state_variables, ncid, model_analysis_filename
 TimeDimID = FindTimeDimension( ncid )
 
 if (TimeDimID < 0 ) then
-   write(string1,*)'unable to find a dimension named xtime.'
+   write(string1,*)'unable to find a dimension named Time.'
    call error_handler(E_MSG,'static_init_model', string1, source, revision, revdate)
 endif
 
@@ -1362,23 +1381,26 @@ end subroutine get_model_analysis_filename
 
 
 
-subroutine analysis_file_to_statevector(filename, state_vector, model_time)
-!------------------------------------------------------------------
-! Reads the current time and state variables from a model analysis
+subroutine analysis_file_to_statevector(state_vector, filename, model_time)
+!-------------------------------------------------------------------
+! Reads the current time and state variables from a mpas analysis
 ! file and packs them into a dart state vector.
 
-character(len=*), intent(in)  :: filename 
-real(r8),         intent(out) :: state_vector(:)
-type(time_type),  intent(out) :: model_time
+character(len=*), intent(in)    :: filename
+real(r8),         intent(inout) :: state_vector(:)
+type(time_type),  intent(out)   :: model_time
+
+! temp space to hold data while we are reading it
+integer  :: i, j, k, ni, nj, nk, ivar, indx
+real(r8), allocatable, dimension(:)         :: data_1d_array
+real(r8), allocatable, dimension(:,:)       :: data_2d_array
+real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
-character(len=NF90_MAX_NAME)          :: varname
-character(len=128)                    :: myerrorstring
-integer :: i, j, ivar, VarID, ncNdims, dimlen, ncid, indx, ni, nj
-
-real(r8), allocatable, dimension(:)       :: data_1d_array
-real(r8), allocatable, dimension(:,:)     :: data_2d_array
-
+character(len=NF90_MAX_NAME) :: varname
+integer :: VarID, ncNdims, dimlen
+integer :: ncid, TimeDimID, TimeDimLength
+character(len=256) :: myerrorstring
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1394,18 +1416,31 @@ endif
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
              'analysis_file_to_statevector','open '//trim(filename))
 
-model_time = get_state_time(ncid, filename)
-
+model_time = get_analysis_time(ncid, filename)
 
 if (do_output()) &
-    call print_time(model_time,'time in analysis file '//trim(filename))
+    call print_time(model_time,'time in restart file '//trim(filename))
 if (do_output()) &
-    call print_date(model_time,'date in analysis file '//trim(filename))
+    call print_date(model_time,'date in restart file '//trim(filename))
 
-! loop over fields
-! read into 1d or 2d arrays
-! unpack into 1d array
-! close netcdf file
+! Start counting and filling the state vector one item at a time,
+! repacking the Nd arrays into a single 1d list of numbers.
+
+! The DART prognostic variables are only defined for a single time.
+! We already checked the assumption that variables are xy2d or xyz3d ...
+! IF the netCDF variable has a TIME dimension, it must be the last dimension,
+! and we need to read the LAST timestep and effectively squeeze out the
+! singleton dimension when we stuff it into the DART state vector.
+
+TimeDimID = FindTimeDimension( ncid )
+
+if ( TimeDimID > 0 ) then
+   call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=TimeDimLength), &
+            'analysis_file_to_statevector', 'inquire timedimlength '//trim(filename))
+else
+   TimeDimLength = 0
+endif
+
 do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
@@ -1419,31 +1454,39 @@ do ivar=1, nfields
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=ncNdims), &
             'analysis_file_to_statevector', 'inquire '//trim(myerrorstring))
 
-   mystart = 1   ! These are arrays, actually
+   mystart = 1   ! These are arrays, actually.
    mycount = 1
+
+   ! Only checking the shape of the variable - sans TIME
    DimCheck : do i = 1,progvar(ivar)%numdims
 
-      write(string1,'(a,i2,A)') 'inquire dimension ',i,trim(string2)
+      write(string1,'(''inquire dimension'',i2,A)') i,trim(myerrorstring)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'nc_write_model_vars', trim(string1))
+            'analysis_file_to_statevector', string1)
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
-         write(string2,*)' but it should be.'
-         call error_handler(E_ERR, 'nc_write_model_vars', trim(string1), &
-                            source, revision, revdate, text2=trim(string2))
+         write(string1,*) trim(myerrorstring),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
+         call error_handler(E_ERR,'analysis_file_to_statevector',string1,source,revision,revdate)
       endif
 
       mycount(i) = dimlen
 
    enddo DimCheck
 
+   where(dimIDs == TimeDimID) mystart = TimeDimLength
+   where(dimIDs == TimeDimID) mycount = 1   ! only the latest one
+
+   if ( debug > 1 ) then
+      write(*,*)'analysis_file_to_statevector '//trim(varname)//' start = ',mystart(1:ncNdims)
+      write(*,*)'analysis_file_to_statevector '//trim(varname)//' count = ',mycount(1:ncNdims)
+   endif
 
    indx = progvar(ivar)%index1
 
    if (ncNdims == 1) then
 
-      ! FIXME: read into state vector as-is
+      ! If the single dimension is TIME, we only need a scalar.
+      ! Pretty sure this cant happen given the test for x1d,y1d,z1d.
       ni = mycount(1)
       allocate(data_1d_array(ni))
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
@@ -1458,27 +1501,44 @@ do ivar=1, nfields
    elseif (ncNdims == 2) then
 
       ni = mycount(1)
-      nj = mycount(2)
-      allocate(data_2d_array(ni, nj))
+      nk = mycount(2)
+      allocate(data_2d_array(ni, nk))
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
-            'restart_file_to_sv', 'get_var '//trim(varname))
-      do j = 1, nj
+            'analysis_file_to_statevector', 'get_var '//trim(varname))
+      do k = 1, nk
       do i = 1, ni
-         state_vector(indx) = data_2d_array(i, j)
+         state_vector(indx) = data_2d_array(i, k)
          indx = indx + 1
       enddo
       enddo
       deallocate(data_2d_array)
 
+   elseif (ncNdims == 3) then
+
+      ni = mycount(1)
+      nj = mycount(2)
+      nk = mycount(3)
+      allocate(data_3d_array(ni, nj, nk))
+      call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
+        start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'analysis_file_to_statevector', 'get_var '//trim(varname))
+      do k = 1, nk
+      do j = 1, nj
+      do i = 1, ni
+         state_vector(indx) = data_3d_array(i, j, k)
+         indx = indx + 1
+      enddo
+      enddo
+      enddo
+      deallocate(data_3d_array)
+
    else
       write(string1, *) 'no support for data array of dimension ', ncNdims
-      call error_handler(E_ERR,'restart_file_to_sv', string1, &
+      call error_handler(E_ERR,'analysis_file_to_statevector', string1, &
                         source,revision,revdate)
    endif
 
-
-   ! FIXME: read into state vector
    indx = indx - 1
    if ( indx /= progvar(ivar)%indexN ) then
       write(string1, *)'Variable '//trim(varname)//' filled wrong.'
@@ -1492,92 +1552,255 @@ enddo
 call nc_check(nf90_close(ncid), &
              'analysis_file_to_statevector','close '//trim(filename))
 
-
-
 end subroutine analysis_file_to_statevector
 
 
 
 subroutine statevector_to_analysis_file(state_vector, filename, statedate)
-!------------------------------------------------------------------
+!-------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
-! vector (1d array) into a model netcdf analysis file.
+! vector (1d array) into a mpas netcdf analysis file.
 !
 real(r8),         intent(in) :: state_vector(:)
-character(len=*), intent(in) :: filename 
+character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: statedate
 
+! temp space to hold data while we are writing it
+integer :: i, ni, nj, nk, ivar
+real(r8), allocatable, dimension(:)         :: data_1d_array
+real(r8), allocatable, dimension(:,:)       :: data_2d_array
+real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
-integer :: ivar 
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
-character(len=128) :: filenameout
+integer :: VarID, ncNdims, dimlen
+integer :: ncFileID, TimeDimID, TimeDimLength
 
 if ( .not. module_initialized ) call static_init_model
 
-print *, 'in statevector_to_analysis_file, debug, nfields = ', debug, nfields
+! Check that the output file exists ...
 
-! sort the required fields into the order they exist in the
-! binary analysis files and write out the state vector data
-! field by field.  when this routine returns all the data has
-! been written.
+if ( .not. file_exist(filename) ) then
+   write(string1,*) 'cannot open file ', trim(filename),' for writing.'
+   call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
+endif
 
-filenameout = trim(filename) // '.out'
-!call put_data(filename, filenameout, state_vector)
+call nc_check(nf90_open(trim(filename), NF90_WRITE, ncFileID), &
+             'statevector_to_analysis_file','open '//trim(filename))
 
-! FIXME:
-! write out model_time to a text file?
-   call print_time(model_time)
+! make sure the time in the file is the same as the time on the data
+! we are trying to insert.  we are only updating part of the contents
+! of the mpas analysis file, and state vector contents from a different
+! time won't be consistent with the rest of the file.
 
- 
+model_time = get_analysis_time(ncFileID, filename)
+
+if ( model_time /= statedate ) then
+   call print_time( statedate,'DART current time',logfileunit)
+   call print_time(model_time,'mpas current time',logfileunit)
+   call print_time( statedate,'DART current time')
+   call print_time(model_time,'mpas current time')
+   write(string1,*)trim(filename),' current time /= model time. FATAL error.'
+   call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
+endif
+
 if (do_output()) &
-    call print_time(model_time,'time in analysis file '//trim(filename)//'/header.rst')
+    call print_time(statedate,'time of DART file '//trim(filename))
 if (do_output()) &
-    call print_date(model_time,'date in analysis file '//trim(filename)//'/header.rst')
+    call print_date(statedate,'date of DART file '//trim(filename))
+
+! The DART prognostic variables are only defined for a single time.
+! We already checked the assumption that variables are xy2d or xyz3d ...
+! IF the netCDF variable has a TIME dimension, it must be the last dimension,
+! and we need to read the LAST timestep and effectively squeeze out the
+! singleton dimension when we stuff it into the DART state vector.
+
+TimeDimID = FindTimeDimension( ncFileID )
+
+if ( TimeDimID > 0 ) then
+   call nc_check(nf90_inquire_dimension(ncFileID, TimeDimID, len=TimeDimLength), &
+            'statevector_to_analysis_file', 'inquire timedimlength '//trim(filename))
+else
+   TimeDimLength = 0
+endif
+
+do ivar=1, nfields
+
+   varname = trim(progvar(ivar)%varname)
+   string2 = trim(filename)//' '//trim(varname)
+
+   ! Ensure netCDF variable is conformable with progvar quantity.
+   ! The TIME and Copy dimensions are intentionally not queried
+   ! by looping over the dimensions stored in the progvar type.
+
+   call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+            'statevector_to_analysis_file', 'inq_varid '//trim(string2))
+
+   call nc_check(nf90_inquire_variable(ncFileID,VarId,dimids=dimIDs,ndims=ncNdims), &
+            'statevector_to_analysis_file', 'inquire '//trim(string2))
+
+   mystart = 1   ! These are arrays, actually.
+   mycount = 1
+   DimCheck : do i = 1,progvar(ivar)%numdims
+
+      write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
+      call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
+            'statevector_to_analysis_file', string1)
+
+      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
+         write(string2,*)' but it should be.'
+         call error_handler(E_ERR, 'statevector_to_analysis_file', string1, &
+                         source, revision, revdate, text2=string2)
+      endif
+
+      mycount(i) = dimlen
+
+   enddo DimCheck
+
+
+   where(dimIDs == TimeDimID) mystart = TimeDimLength
+   where(dimIDs == TimeDimID) mycount = 1   ! only the latest one
+
+   if ( debug > 1 ) then
+      write(*,*)'statevector_to_analysis_file '//trim(varname)//' start is ',mystart(1:ncNdims)
+      write(*,*)'statevector_to_analysis_file '//trim(varname)//' count is ',mycount(1:ncNdims)
+   endif
+
+   if (progvar(ivar)%numdims == 1) then
+      ni = mycount(1)
+      allocate(data_1d_array(ni))
+      call vector_to_prog_var(state_vector, progvar(ivar), data_1d_array)
+      call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
+            start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'statevector_to_analysis_file', 'put_var '//trim(varname))
+      deallocate(data_1d_array)
+
+   elseif (progvar(ivar)%numdims == 2) then
+
+      ni = mycount(1)
+      nj = mycount(2)
+      allocate(data_2d_array(ni, nj))
+      call vector_to_prog_var(state_vector, progvar(ivar), data_2d_array)
+
+      if ( progvar(ivar)%posdef == 1 ) then
+        where ( data_2d_array < 0 ) data_2d_array = 0
+      endif
+
+      call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
+        start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'statevector_to_analysis_file', 'put_var '//trim(varname))
+      deallocate(data_2d_array)
+
+   elseif (progvar(ivar)%numdims == 3) then
+
+      ni = mycount(1)
+      nj = mycount(2)
+      nk = mycount(3)
+      allocate(data_3d_array(ni, nj, nk))
+      call vector_to_prog_var(state_vector, progvar(ivar), data_3d_array)
+
+      if ( progvar(ivar)%posdef == 1 ) then
+        where ( data_3d_array < 0 ) data_3d_array = 0
+      endif
+
+      call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
+        start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+            'statevector_to_analysis_file', 'put_var '//trim(varname))
+      deallocate(data_3d_array)
+
+   else
+      write(string1, *) 'no support for data array of dimension ', ncNdims
+      call error_handler(E_ERR,'statevector_to_analysis_file', string1, &
+                        source,revision,revdate)
+   endif
+
+enddo
+
+call nc_check(nf90_close(ncFileID), &
+             'statevector_to_analysis_file','close '//trim(filename))
 
 end subroutine statevector_to_analysis_file
 
 
 
-function get_base_time_ncid( ncid )
+
+
+function get_analysis_time_ncid( ncid, filename )
 !------------------------------------------------------------------
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
 
-type(time_type) :: get_base_time_ncid
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: filename
+type(time_type) :: get_analysis_time_ncid
 
-integer, intent(in) :: ncid
+! local variables
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
+integer           :: VarID, numdims
 
-integer :: year, month, day, hour, minute, second
+character(len=64) :: timestring
+integer           :: iyear, imonth, iday, ihour, imin, isecond
 
 if ( .not. module_initialized ) call static_init_model
 
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'YEAR'  , year), &
-                  'get_base_time', 'get_att year')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MONTH' , month), &
-                  'get_base_time', 'get_att month')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'DAY'   , day), &
-                  'get_base_time', 'get_att day')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'HOUR'  , hour), &
-                  'get_base_time', 'get_att hour')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MINUTE', minute), &
-                  'get_base_time', 'get_att minute')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'SECOND', second), &
-                  'get_base_time', 'get_att second')
+call nc_check( nf90_inq_varid(ncid, 'xtime', VarID), &
+              'get_analysis_time', 'inquire xtime '//trim(filename))
 
-get_base_time_ncid = set_date(year, month, day, hour, minute, second)
+call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+              'get_analysis_time', 'inquire TIME '//trim(filename))
 
-end function get_base_time_ncid
+if (numdims /= 2) then
+   write(string1,*) 'xtime variable has unknown shape in ', trim(filename)
+   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
+endif
+
+call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=idims(1)), &
+                 'get_analysis_time', 'inquire time dimension length '//trim(filename))
+call nc_check( nf90_inquire_dimension(ncid, dimIDs(2), len=idims(2)), &
+                 'get_analysis_time', 'inquire time dimension length '//trim(filename))
+
+if(debug > 8) print*, ' xtime has shape ',idims(1),' by ',idims(2)
+
+if (idims(2) /= 1) then
+   write(string1,*) 'multiple timesteps (',idims(2),') in file ', trim(filename)
+   write(string2,*) 'We are confused.'
+   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate,text2=string2)
+endif
+
+! Get the lowest ranking time ...
+
+call nc_check( nf90_get_var(ncid, VarID, timestring, start = (/ 1, idims(2) /)), &
+              'get_analysis_time', 'get_var xtime '//trim(filename))
+
+read(timestring,'(i4,5(1x,i2))') iyear, imonth, iday, ihour, imin, isecond
+
+get_analysis_time_ncid = set_date(iyear, imonth, iday, ihour, imin, isecond)
+
+if (debug > 8) then
+   write(*,*)'get_analysis_time : iyear       ',iyear
+   write(*,*)'get_analysis_time : imonth      ',imonth
+   write(*,*)'get_analysis_time : iday        ',iday
+   write(*,*)'get_analysis_time : ihour       ',ihour
+   write(*,*)'get_analysis_time : imin        ',imin
+   write(*,*)'get_analysis_time : isecond     ',isecond
+
+   call print_date(get_analysis_time_ncid, 'get_analysis_time:model date')
+   call print_time(get_analysis_time_ncid, 'get_analysis_time:model time')
+endif
+
+end function get_analysis_time_ncid
 
 
 
-function get_base_time_fname(filename)
+function get_analysis_time_fname(filename)
 !------------------------------------------------------------------
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
 
-type(time_type) :: get_base_time_fname
+type(time_type) :: get_analysis_time_fname
 
 character(len=*), intent(in) :: filename
 
@@ -1585,85 +1808,32 @@ integer :: ncid, year, month, day, hour, minute, second
 
 if ( .not. module_initialized ) call static_init_model
 
+! FIXME so that it reads the date from the file NAME dummy !
+
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
-   call error_handler(E_ERR,'get_base_time',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
 endif
 
 call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-                  'get_base_time', 'open '//trim(filename))
+                  'get_analysis_time', 'open '//trim(filename))
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'YEAR'  , year), &
-                  'get_base_time', 'get_att year')
+                  'get_analysis_time', 'get_att year')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MONTH' , month), &
-                  'get_base_time', 'get_att month')
+                  'get_analysis_time', 'get_att month')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'DAY'   , day), &
-                  'get_base_time', 'get_att day')
+                  'get_analysis_time', 'get_att day')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'HOUR'  , hour), &
-                  'get_base_time', 'get_att hour')
+                  'get_analysis_time', 'get_att hour')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MINUTE', minute), &
-                  'get_base_time', 'get_att minute')
+                  'get_analysis_time', 'get_att minute')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'SECOND', second), &
-                  'get_base_time', 'get_att second')
-call nc_check(nf90_close(ncid), 'get_base_time', 'close '//trim(filename))
+                  'get_analysis_time', 'get_att second')
+call nc_check(nf90_close(ncid), 'get_analysis_time', 'close '//trim(filename))
 
-get_base_time_fname = set_date(year, month, day, hour, minute, second)
+get_analysis_time_fname = set_date(year, month, day, hour, minute, second)
 
-end function get_base_time_fname
-
-
-
-function get_state_time( ncid, filename )
-!------------------------------------------------------------------
-! the static_init_model ensures that the model namelists are read.
-!
-type(time_type)              :: get_state_time
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: filename
-
-integer  :: VarID
-integer  :: iyear, imonth, iday, ihour, imin, isec
-
-character(len=100) :: cLine
-
-if ( .not. module_initialized ) call static_init_model
-
-! get the contents of the character string xtime into a data
-! the format is: "YYYY-MM-DD_HH:mm:SS       "
-
-call nc_check(nf90_inq_varid(ncid, 'xtime', VarID), &
-              'get_state_time', 'inq_varid xtime'//trim(model_analysis_filename))
-
-! TIM, HELP!   FIXME : does this correctly read netcdf var 'xtime' into cLine here?
-call nc_check(nf90_get_var( ncid, VarID, cLine), &
-              'get_state_time', 'get_var cLine '//trim(model_analysis_filename))
-
-
-! extract the string into real integer variables
-
-read(cLine, '(4I,1x,2I,1x,2I,1x,2I,1x,2I,1x,2x)') iyear, imonth, iday, ihour, imin, isec
-
-! or
-! read(cLine(1:4), '(I4)') iyear
-! read(cline(6:7), '(I2)') imonth
-! etc
-
-! set into a dart time type
-get_state_time = set_date(iyear, imonth, iday, ihour, imin, isec)
-
-if (debug > 8) then
-   write(*,*)'get_state_time : iyear       ',iyear
-   write(*,*)'get_state_time : imonth      ',imonth
-   write(*,*)'get_state_time : iday        ',iday
-   write(*,*)'get_state_time : ihour       ',ihour
-   write(*,*)'get_state_time : imin        ',imin
-   write(*,*)'get_state_time : isec        ',isec
-
-   call print_date(get_state_time, 'get_state_time:model date')
-   call print_time(get_state_time, 'get_state_time:model time')
-endif
-
-end function get_state_time
-
+end function get_analysis_time_fname
 
 
 !==================================================================
@@ -1998,15 +2168,15 @@ MyLoop : do i = 1, nrows
    if ( table(i,1) == ' ' .and. table(i,2) == ' ' ) exit MyLoop ! Found end of list.
 
    if ( table(i,1) == ' ' .or. table(i,2) == ' ' ) then
-      string1 = 'model_vars_nml:model state_variables not fully specified'
+      string1 = 'mpas_vars_nml:model state_variables not fully specified'
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif
 
    ! Make sure variable exists in model analysis variable list
 
-!%!   write(string1,'(''there is no variable '',a,'' in '',a)') trim(varname), trim(filename)
-!%!   call nc_check(NF90_inq_varid(ncid, trim(varname), varid), &
-!%!                 'verify_state_variables', trim(string1))
+   write(string1,'(''there is no variable '',a,'' in '',a)') trim(varname), trim(filename)
+   call nc_check(NF90_inq_varid(ncid, trim(varname), varid), &
+                 'verify_state_variables', trim(string1))
 
    ! Make sure DART kind is valid
 
@@ -2048,15 +2218,111 @@ integer,          intent(in) :: ncid
 integer :: nc_rc
 
 TimeDimID = -1 ! same as the netCDF library routines. 
-nc_rc = nf90_inq_dimid(ncid,'TIME',dimid=TimeDimID)
-if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-   nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
-   if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-      nc_rc = nf90_inq_dimid(ncid,'time',dimid=TimeDimID)
-   endif
-endif
+nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
 
 end function FindTimeDimension
+
+
+
+subroutine update_reg_list(reg_list_num, reg_list_cells)
+!------------------------------------------------------------------
+! Based on longitude and latitude in degrees the indices of
+! cells that belong to the regular lon-lat boxes are returned.
+!
+! FIXME : reg_list_num, reg_list_cells must be allocated someplace
+
+integer, intent(out) :: reg_list_num(  num_reg_x, num_reg_y)
+integer, intent(out) :: reg_list_cells(num_reg_x, num_reg_y, max_reg_list_num)
+
+integer  :: ic, iv, ix, iy
+integer  :: ind_x, ind_y, indv_x, indv_y
+real(r8) :: xlon, ylat
+
+if ( .not. module_initialized ) call static_init_model
+
+reg_list_num   = 0
+reg_list_cells = 0
+
+! Loop through the cells to find the right regular lon-lat boxes
+do ic = 1, nCells
+
+   ! xlon and ylat are in degrees
+   xlon = lonCell(ic)
+   ylat = latCell(ic)
+
+   ! which regular lon-lat box this cell belongs to.
+   call get_reg_box_indices(xlon, ylat, ind_x, ind_y)
+
+   ! Make sure the list storage isn't full
+   if(reg_list_num(ind_x, ind_y) >= max_reg_list_num) then
+      write(string1,*) 'max_reg_list_num (',max_reg_list_num,') is too small ... increase'
+      call error_handler(E_ERR, 'update_reg_list', string1, source, revision, revdate)
+   endif
+
+   ! Increment the count 
+   reg_list_num(ind_x, ind_y) = reg_list_num(ind_x, ind_y) + 1
+
+   ! Store this cell in the list for this regular box
+   reg_list_cells(ind_x, ind_y, reg_list_num(ind_x, ind_y)) = ic
+
+enddo
+
+end subroutine update_reg_list
+
+
+
+subroutine get_reg_box_indices(lon, lat, x_ind, y_ind)
+!------------------------------------------------------------
+! Given a longitude and latitude in degrees returns the index of the regular
+! lon-lat box that contains the point.
+
+real(r8), intent(in)  :: lon, lat
+integer,  intent(out) :: x_ind, y_ind
+
+call get_reg_lon_box(lon, x_ind)
+call get_reg_lat_box(lat, y_ind)
+
+end subroutine get_reg_box_indices
+
+
+
+subroutine get_reg_lon_box(lon, x_ind)
+!------------------------------------------------------------
+! Determine which regular longitude box a longitude is in.
+
+real(r8), intent(in)  :: lon
+integer,  intent(out) :: x_ind
+
+x_ind = int(num_reg_x * lon / 360.0_r8) + 1
+
+! Watch out for exactly at top; assume all lats and lons in legal range
+if(lon == 360.0_r8) x_ind = num_reg_x
+
+end subroutine get_reg_lon_box
+
+
+
+subroutine get_reg_lat_box(lat, y_ind)
+!------------------------------------------------------------
+! Determine which regular latitude box a latitude is in.
+
+real(r8), intent(in)  :: lat
+integer,  intent(out) :: y_ind
+
+y_ind = int(num_reg_y * (lat + 90.0_r8) / 180.0_r8) + 1
+
+! Watch out for exactly at top; assume all lats and lons in legal range
+if(lat == 90.0_r8)  y_ind = num_reg_y
+
+end subroutine get_reg_lat_box
+
+
+
+
+
+
+
+
 
 
 !===================================================================

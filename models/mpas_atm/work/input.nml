@@ -125,17 +125,16 @@
    /
 
 &mpas_vars_nml
-   mpas_state_variables = 'u',   'KIND_U_WIND_COMPONENT',
-                          'v',   'KIND_V_WIND_COMPONENT',
-                          'w',   'KIND_VERTICAL_VELOCITY',
-                          'TH',  'KIND_POTENTIAL_TEMPERATURE',
-                          'PH',  'KIND_GEOPOTENTIAL_HEIGHT',
-                          'qv',  'KIND_VAPOR_MIXING_RATIO',
-                          'qc',  'KIND_CLOUDWATER_MIXING_RATIO',
-                          'qr',  'KIND_RAINWATER_MIXING_RATIO',
-                          'qi',  'KIND_ICE_MIXING_RATIO',
-                          'qs',  'KIND_SNOW_MIXING_RATIO',
-                          'QH',  'KIND_GRAUPEL_MIXING_RATIO'
+   mpas_state_variables = 'uReconstructZonal',   'KIND_U_WIND_COMPONENT',
+                          'uReconstructMeridional',   'KIND_V_WIND_COMPONENT',
+                          'w',     'KIND_VERTICAL_VELOCITY',
+                          'theta', 'KIND_POTENTIAL_TEMPERATURE',
+                          'qv',    'KIND_VAPOR_MIXING_RATIO',
+                          'qc',    'KIND_CLOUDWATER_MIXING_RATIO',
+                          'qr',    'KIND_RAINWATER_MIXING_RATIO',
+                          'qi',    'KIND_ICE_MIXING_RATIO',
+                          'qs',    'KIND_SNOW_MIXING_RATIO',
+                          'qg',    'KIND_GRAUPEL_MIXING_RATIO'
   /
 
 &model_to_dart_nml
