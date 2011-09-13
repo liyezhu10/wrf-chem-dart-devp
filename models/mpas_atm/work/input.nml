@@ -125,6 +125,20 @@
    debug = 8
    /
 
+&mpas_vars_nml
+   mpas_state_variables = 'u',   'KIND_U_WIND_COMPONENT',
+                          'v',   'KIND_V_WIND_COMPONENT',
+                          'w',   'KIND_VERTICAL_VELOCITY',
+                          'TH',  'KIND_POTENTIAL_TEMPERATURE',
+                          'PH',  'KIND_GEOPOTENTIAL_HEIGHT',
+                          'qv',  'KIND_VAPOR_MIXING_RATIO',
+                          'qc',  'KIND_CLOUDWATER_MIXING_RATIO',
+                          'qr',  'KIND_RAINWATER_MIXING_RATIO',
+                          'qi',  'KIND_ICE_MIXING_RATIO',
+                          'qs',  'KIND_SNOW_MIXING_RATIO',
+                          'QH',  'KIND_GRAUPEL_MIXING_RATIO'
+  /
+
 &utilities_nml
    TERMLEVEL = 1,
    module_details = .false.,
