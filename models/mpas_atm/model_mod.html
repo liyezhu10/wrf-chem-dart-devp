@@ -96,15 +96,11 @@
 
 type progvartype
    private
-   character(len=NF90_MAX_NAME) :: varname       ! crazy species name
+   character(len=NF90_MAX_NAME) :: varname
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
    character(len=NF90_MAX_NAME) :: storder
-   character(len=NF90_MAX_NAME) :: model_varname  ! NDensityS, IDensityS, ...
-   integer :: model_dim                           ! dimension defining species
-   integer :: model_index                         ! 'iSpecies' or u,v,w ...
-   integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens ! nlons, nlats, nalts [, nspecies]
-   integer :: posdef
+   integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
    integer :: numdims
    integer :: varsize     ! prod(dimlens(1:numdims))
    integer :: index1      ! location in dart state vector of first occurrence
@@ -117,8 +113,17 @@ type(progvartype), dimension(max_state_variables) :: progvar
 </pre>
    </div>
 
+   <P>
    The variables are simply read from the MPAS analysis file and stored in the DART state
-   vector with a minimum of 
+   vector such that all quantities for one variable are stored contiguously. Within each
+   variable; they are stored horizontally-contiguous - then vertically. From a storage 
+   standpoint, this would be equivalent to a Fortran variable dimensioned 
+   x(nHorizontal,nVertical,nVariables). The fastest-varying dimension is horizontal,
+   then vertical, then variable ... naturally, the DART state vector is 1D. 
+   <em class=code>progvar(ivar)%index1</em> and 
+   <em class=code>progvar(ivar)%indexN</em> define the extent of 
+   <em class=code>progvar(ivar)%varname</em> in the DART state vector.
+   </P>
 </div>
 
 
