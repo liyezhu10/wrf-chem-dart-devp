@@ -107,7 +107,7 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'RAW_STATE_VARIABLE'
+   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
    /
 
 &assim_model_nml

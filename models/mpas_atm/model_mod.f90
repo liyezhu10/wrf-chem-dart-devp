@@ -483,13 +483,11 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! 2) allocate space for the grids 
 ! 3) read them from the analysis file
 
-! FIXME: Do we need to define nVertLevelsP1 in get_grid_dims for staggered grids?
-
 call get_grid_dims(nCells, nVertices, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels)
 
 allocate(latCell(nCells), lonCell(nCells)) 
-allocate(zgrid(nCells, nVertLevelsP1))
-allocate(CellsOnVertex(nVertices, vertexDegree))
+allocate(zgrid(nVertLevelsP1, nCells))
+allocate(CellsOnVertex(vertexDegree, nVertices))
 
 call get_grid(nCells, nVertices, nVertLevels, vertexDegree, &
               latCell, lonCell, zgrid, CellsOnVertex)
@@ -544,11 +542,11 @@ do ivar = 1, nfields
    call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
             'static_init_model', 'inq_varid '//trim(string2))
 
-   call nc_check( nf90_get_att(ncid, VarId, 'long_name' , progvar(ivar)%long_name), &
-            'static_init_model', 'get_att long_name '//trim(string2))
+!  call nc_check( nf90_get_att(ncid, VarId, 'long_name' , progvar(ivar)%long_name), &
+!           'static_init_model', 'get_att long_name '//trim(string2))
 
-   call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
-            'static_init_model', 'get_att units '//trim(string2))
+!  call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
+!           'static_init_model', 'get_att units '//trim(string2))
 
    call nc_check(nf90_inquire_variable(ncid, VarId, dimids=dimIDs, ndims=progvar(ivar)%numdims), &
             'static_init_model', 'inquire '//trim(string2))
@@ -609,10 +607,14 @@ call nc_check( nf90_close(ncid), &
 model_size = progvar(nfields)%indexN
 
 if ( debug > 0 ) then
-  write(logfileunit,'("grid: nCells, nVertices, nVertLevels =",3(1x,i6))') nCells, nVertices, nVertLevels
-  write(     *     ,'("grid: nCells, nVertices, nVertLevels =",3(1x,i6))') nCells, nVertices, nVertLevels
-  write(logfileunit, *)'model_size = ', model_size
-  write(     *     , *)'model_size = ', model_size
+  write(logfileunit,*)
+  write(     *     ,*)
+  write(logfileunit,'("static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
+                                          nCells, nVertices, nVertLevels
+  write(     *     ,'("static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
+                                          nCells, nVertices, nVertLevels
+  write(logfileunit, *)'static_init_model:model_size = ', model_size
+  write(     *     , *)'static_init_model:model_size = ', model_size
 endif
 
 allocate( ens_mean(model_size) )
@@ -1911,6 +1913,16 @@ call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nSoilLevels), &
 call nc_check(nf90_close(grid_id), &
          'get_grid_dims','close '//trim(model_analysis_filename) )
 
+if (debug > 7) then
+   write(*,*)
+   write(*,*)'get_grid_dims: nCells        is ', nCells
+   write(*,*)'get_grid_dims: nVertices     is ', nVertices
+   write(*,*)'get_grid_dims: nVertLevels   is ', nVertLevels
+   write(*,*)'get_grid_dims: nVertLevelsP1 is ', nVertLevelsP1
+   write(*,*)'get_grid_dims: vertexDegree  is ', vertexDegree
+   write(*,*)'get_grid_dims: nSoilLevels   is ', nSoilLevels
+endif
+
 end subroutine get_grid_dims
 
 
@@ -1955,7 +1967,7 @@ call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, zgrid), &
       'get_grid', 'get_var zgrid '//trim(model_analysis_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'CellsOnVertex', VarID), &
+call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
       'get_grid', 'inq_varid CellsOnVertex '//trim(model_analysis_filename))
 call nc_check(nf90_get_var( ncid, VarID, CellsOnVertex), &
       'get_grid', 'get_var CellsOnVertex '//trim(model_analysis_filename))
@@ -1969,8 +1981,9 @@ lonCell = lonCell * rad2deg
 
 ! A little sanity check
 
-if ( debug > 1 ) then
+if ( debug > 7 ) then
 
+   write(*,*)
    write(*,*)'latCell       range ',minval(latCell),      maxval(latCell)
    write(*,*)'lonCell       range ',minval(lonCell),      maxval(lonCell)
    write(*,*)'zgrid         range ',minval(zgrid  ),      maxval(zgrid  )
