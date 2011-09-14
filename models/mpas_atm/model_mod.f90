@@ -574,31 +574,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ( debug > 0 ) then
-      write(logfileunit,*)
-      write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
-      write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
-      write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-      write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
-      write(logfileunit,*) '  index1      ',progvar(ivar)%index1
-      write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
-      write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
-
-      write(     *     ,*)
-      write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
-      write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
-      write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-      write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
-      write(     *     ,*) '  index1      ',progvar(ivar)%index1
-      write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
-      write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
-   endif
+   if ( debug > 0 ) call dump_progvar(ivar)
 
 enddo
 
@@ -607,7 +583,7 @@ call nc_check( nf90_close(ncid), &
 
 model_size = progvar(nfields)%indexN
 
-if ( debug > 0 ) then
+if ( debug > 0 .and. do_output()) then
   write(logfileunit,*)
   write(     *     ,*)
   write(logfileunit,'("static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
@@ -2232,7 +2208,7 @@ MyLoop : do i = 1, nrows
 
    ! Record the contents of the DART state vector 
 
-   if ( debug > 0 ) then
+   if ( debug > 0 .and. do_output()) then
       write(logfileunit,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
       write(     *     ,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
    endif
@@ -2248,6 +2224,68 @@ endif
 
 end subroutine verify_state_variables
 
+
+subroutine dump_progvar(ivar)
+!------------------------------------------------------------------
+ integer, intent(in) :: ivar
+
+!%! type progvartype
+!%!    private
+!%!    character(len=NF90_MAX_NAME) :: varname
+!%!    character(len=NF90_MAX_NAME) :: long_name
+!%!    character(len=NF90_MAX_NAME) :: units
+!%!    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
+!%!    integer :: posdef
+!%!    integer :: xtype
+!%!    integer :: numdims
+!%!    integer :: numvertical
+!%!    integer :: numcells
+!%!    logical :: ZonHalf     ! vertical coordinate has dimension nVertLevels
+!%!    integer :: varsize     ! prod(dimlens(1:numdims))
+!%!    integer :: index1      ! location in dart state vector of first occurrence
+!%!    integer :: indexN      ! location in dart state vector of last  occurrence
+!%!    integer :: dart_kind
+!%!    character(len=paramname_length) :: kind_string
+!%! end type progvartype
+
+! take care of parallel runs where we only want a single copy of
+! the output.
+if (.not. do_output()) return
+
+write(logfileunit,*)
+write(     *     ,*)
+write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
+write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
+write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
+write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
+write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
+write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
+write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+write(logfileunit,*) '  posdef      ',progvar(ivar)%posdef
+write(     *     ,*) '  posdef      ',progvar(ivar)%posdef
+write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
+write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
+write(logfileunit,*) '  numvertical ',progvar(ivar)%numvertical
+write(     *     ,*) '  numvertical ',progvar(ivar)%numvertical
+write(logfileunit,*) '  numcells    ',progvar(ivar)%numcells
+write(     *     ,*) '  numcells    ',progvar(ivar)%numcells
+write(logfileunit,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
+write(     *     ,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
+write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
+write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
+write(logfileunit,*) '  index1      ',progvar(ivar)%index1
+write(     *     ,*) '  index1      ',progvar(ivar)%index1
+write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
+write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
+write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
+write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
+write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
+write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
+
+end subroutine dump_progvar
 
 
 function FindTimeDimension(ncid) result(timedimid)
