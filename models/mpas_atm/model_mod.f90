@@ -134,17 +134,19 @@ type progvartype
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
-   integer :: posdef
-   integer :: xtype
-   integer :: numdims
-   integer :: numvertical
-   integer :: numcells
-   logical :: ZonHalf     ! vertical coordinate has dimension nVertLevels
-   integer :: varsize     ! prod(dimlens(1:numdims))
-   integer :: index1      ! location in dart state vector of first occurrence
-   integer :: indexN      ! location in dart state vector of last  occurrence
+   integer :: xtype         ! netCDF variable type (NF90_double, etc.) 
+   integer :: numdimsWtime  ! number of dims in MPAS analysis file
+   integer :: numdims       ! number of dims - excluding TIME
+   integer :: numvertical   ! number of vertical levels in variable
+   integer :: numcells      ! number of horizontal locations (typically cell centers)
+   logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
+   integer :: varsize       ! prod(dimlens(1:numdims))
+   integer :: index1        ! location in dart state vector of first occurrence
+   integer :: indexN        ! location in dart state vector of last  occurrence
    integer :: dart_kind
    character(len=paramname_length) :: kind_string
+   logical  :: clamping     ! does variable need to be range-restricted before 
+   real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
 end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
@@ -184,7 +186,6 @@ INTERFACE vector_to_prog_var
       MODULE PROCEDURE vector_to_1d_prog_var
       MODULE PROCEDURE vector_to_2d_prog_var
       MODULE PROCEDURE vector_to_3d_prog_var
-      MODULE PROCEDURE vector_to_4d_prog_var
 END INTERFACE
 
 INTERFACE get_analysis_time
@@ -537,6 +538,7 @@ do ivar = 1, nfields
    progvar(ivar)%kind_string = kind_string
    progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
    progvar(ivar)%dimlens     = 0
+   progvar(ivar)%numdims     = 0
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
@@ -549,21 +551,26 @@ do ivar = 1, nfields
 !  call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
 !           'static_init_model', 'get_att units '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(ncid, VarId, dimids=dimIDs, ndims=progvar(ivar)%numdims), &
+   call nc_check(nf90_inquire_variable(ncid, VarId, dimids=dimIDs, ndims=progvar(ivar)%numdimsWtime), &
             'static_init_model', 'inquire '//trim(string2))
 
-   ! TIME is the unlimited dimension, and in Fortran, this is always the
-   ! LAST dimension in this loop. Since we are not concerned with it, we
-   ! need to skip it. 
+   call set_variable_clamping(ivar)
+
+   ! Since we are not concerned with the TIME dimension, we need to skip it.
+   ! When the variables are read, only a single timestep is ingested into
+   ! the DART state vector.
+
    varsize = 1
    dimlen  = 1
-   DimensionLoop : do i = 1,progvar(ivar)%numdims
+   DimensionLoop : do i = 1,progvar(ivar)%numdimsWtime
 
       if (dimIDs(i) == TimeDimID) cycle DimensionLoop
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
                                           'static_init_model', string1)
+
+      progvar(ivar)%numdims    = progvar(ivar)%numdims + 1
       progvar(ivar)%dimlens(i) = dimlen
       varsize = varsize * dimlen
 
@@ -1155,25 +1162,6 @@ else
                    'nc_write_model_vars', 'put_var '//trim(string2))
          deallocate(data_3d_array)
 
-      elseif ( progvar(ivar)%numdims == 4) then
-
-         if ( ncNdims /= 6 ) then
-            write(string1,*)trim(varname),' no room for copy,time dimensions.'
-            write(string2,*)'netcdf file should have 6 dimensions, has ',ncNdims
-            call error_handler(E_ERR, 'nc_write_model_vars', string1, &
-                            source, revision, revdate, text2=string2)
-         endif
-
-         allocate(data_4d_array( progvar(ivar)%dimlens(1), &
-                                 progvar(ivar)%dimlens(2), &
-                                 progvar(ivar)%dimlens(3), &
-                                 progvar(ivar)%dimlens(4)))
-         call vector_to_prog_var(state_vec, progvar(ivar), data_4d_array)
-         call nc_check(nf90_put_var(ncFileID, VarID, data_4d_array, &
-             start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
-                   'nc_write_model_vars', 'put_var '//trim(string2))
-         deallocate(data_4d_array)
-
       else
 
          ! FIXME put an error message here
@@ -1650,6 +1638,12 @@ do ivar=1, nfields
       ni = mycount(1)
       allocate(data_1d_array(ni))
       call vector_to_prog_var(state_vector, progvar(ivar), data_1d_array)
+
+      if ( progvar(ivar)%clamping ) then
+        where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
+        where ( data_1d_array > progvar(ivar)%range(2) ) data_1d_array = progvar(ivar)%range(2)
+      endif
+
       call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
             start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'statevector_to_analysis_file', 'put_var '//trim(varname))
@@ -1662,8 +1656,9 @@ do ivar=1, nfields
       allocate(data_2d_array(ni, nj))
       call vector_to_prog_var(state_vector, progvar(ivar), data_2d_array)
 
-      if ( progvar(ivar)%posdef == 1 ) then
-        where ( data_2d_array < 0 ) data_2d_array = 0
+      if ( progvar(ivar)%clamping ) then
+        where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
+        where ( data_2d_array > progvar(ivar)%range(2) ) data_2d_array = progvar(ivar)%range(2)
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
@@ -1679,8 +1674,9 @@ do ivar=1, nfields
       allocate(data_3d_array(ni, nj, nk))
       call vector_to_prog_var(state_vector, progvar(ivar), data_3d_array)
 
-      if ( progvar(ivar)%posdef == 1 ) then
-        where ( data_3d_array < 0 ) data_3d_array = 0
+      if ( progvar(ivar)%clamping ) then
+        where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
+        where ( data_3d_array > progvar(ivar)%range(2) ) data_3d_array = progvar(ivar)%range(2)
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
@@ -2105,45 +2101,6 @@ end subroutine vector_to_3d_prog_var
 
 
 
-subroutine vector_to_4d_prog_var(x, progvar, data_4d_array)
-!------------------------------------------------------------------
-! convert the values from a 1d array, starting at an offset,
-! into a 4d array.
-!
-real(r8), dimension(:),       intent(in)  :: x
-type(progvartype),            intent(in)  :: progvar
-real(r8), dimension(:,:,:,:), intent(out) :: data_4d_array
-
-integer :: i,j,k,m,ii
-
-if ( .not. module_initialized ) call static_init_model
-
-ii = progvar%index1
-
-do m = 1,progvar%dimlens(4)
-do k = 1,progvar%dimlens(3)
-do j = 1,progvar%dimlens(2)
-do i = 1,progvar%dimlens(1)
-   data_4d_array(i,j,k,m) = x(ii)
-   ii = ii + 1
-enddo
-enddo
-enddo
-enddo
-
-ii = ii - 1
-if ( ii /= progvar%indexN ) then
-   write(string1, *)'Variable '//trim(progvar%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_4d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
-
-end subroutine vector_to_4d_prog_var
-
-
-
-
 function set_model_time_step()
 !------------------------------------------------------------------
 ! the static_init_model ensures that the model namelists are read.
@@ -2225,6 +2182,7 @@ endif
 end subroutine verify_state_variables
 
 
+
 subroutine dump_progvar(ivar)
 !------------------------------------------------------------------
  integer, intent(in) :: ivar
@@ -2235,17 +2193,19 @@ subroutine dump_progvar(ivar)
 !%!    character(len=NF90_MAX_NAME) :: long_name
 !%!    character(len=NF90_MAX_NAME) :: units
 !%!    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
-!%!    integer :: posdef
-!%!    integer :: xtype
-!%!    integer :: numdims
-!%!    integer :: numvertical
-!%!    integer :: numcells
-!%!    logical :: ZonHalf     ! vertical coordinate has dimension nVertLevels
-!%!    integer :: varsize     ! prod(dimlens(1:numdims))
-!%!    integer :: index1      ! location in dart state vector of first occurrence
-!%!    integer :: indexN      ! location in dart state vector of last  occurrence
+!%!    integer :: xtype         ! netCDF variable type (NF90_double, etc.) 
+!%!    integer :: numdimsWtime  ! number of dims in MPAS analysis file
+!%!    integer :: numdims       ! number of dims - excluding TIME
+!%!    integer :: numvertical   ! number of vertical levels in variable
+!%!    integer :: numcells      ! number of horizontal locations (typically cell centers)
+!%!    logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
+!%!    integer :: varsize       ! prod(dimlens(1:numdims))
+!%!    integer :: index1        ! location in dart state vector of first occurrence
+!%!    integer :: indexN        ! location in dart state vector of last  occurrence
 !%!    integer :: dart_kind
 !%!    character(len=paramname_length) :: kind_string
+!%!    logical  :: clamping     ! does variable need to be range-restricted before 
+!%!    real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
 !%! end type progvartype
 
 ! take care of parallel runs where we only want a single copy of
@@ -2254,20 +2214,18 @@ if (.not. do_output()) return
 
 write(logfileunit,*)
 write(     *     ,*)
-write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
+write(logfileunit,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
+write(     *     ,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
 write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
 write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
 write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
 write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
-write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
-write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
-write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-write(logfileunit,*) '  posdef      ',progvar(ivar)%posdef
-write(     *     ,*) '  posdef      ',progvar(ivar)%posdef
 write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
 write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
+write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
 write(logfileunit,*) '  numvertical ',progvar(ivar)%numvertical
 write(     *     ,*) '  numvertical ',progvar(ivar)%numvertical
 write(logfileunit,*) '  numcells    ',progvar(ivar)%numcells
@@ -2284,7 +2242,10 @@ write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
 write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
 write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
 write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
-
+write(logfileunit,*) '  clamping    ',progvar(ivar)%clamping
+write(     *     ,*) '  clamping    ',progvar(ivar)%clamping
+write(logfileunit,*) '  range       ',progvar(ivar)%range
+write(     *     ,*) '  range       ',progvar(ivar)%range
 end subroutine dump_progvar
 
 
@@ -2401,10 +2362,25 @@ end subroutine get_reg_lat_box
 
 
 
+subroutine set_variable_clamping(ivar)
+!------------------------------------------------------------
+! The model may behave poorly if some quantities are outside
+! a physically realizable range.
+!
+! FIXME : add more DART types
 
+integer, intent(in) :: ivar
 
+select case (trim(progvar(ivar)%kind_string))
+   case ('KIND_VAPOR_MIXING_RATIO')
+      progvar(ivar)%clamping = .true.
+      progvar(ivar)%range    = (/ 0.0_r8, 1.0_r8 /)
+   case default
+      progvar(ivar)%clamping = .false.
+      progvar(ivar)%range    = MISSING_R8
+end select
 
-
+end subroutine set_variable_clamping
 
 
 
