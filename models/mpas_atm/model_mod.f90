@@ -166,7 +166,6 @@ real(r8), allocatable :: zgrid(:,:) ! cell center geometric height at cell cente
 integer,  allocatable :: CellsOnVertex(:,:) ! list of cell centers defining a triangle
 
 integer               :: model_size      ! the state vector length
-type(time_type)       :: model_time      ! valid time of the model state
 type(time_type)       :: model_timestep  ! smallest time to adv model
 real(r8), allocatable :: ens_mean(:)     ! may be needed for forward ops
 
@@ -1544,14 +1543,14 @@ end subroutine analysis_file_to_statevector
 
 
 
-subroutine statevector_to_analysis_file(state_vector, filename, statedate)
+subroutine statevector_to_analysis_file(state_vector, filename, statetime)
 !-------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a mpas netcdf analysis file.
 !
 real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: filename
-type(time_type),  intent(in) :: statedate
+type(time_type),  intent(in) :: statetime
 
 ! temp space to hold data while we are writing it
 integer :: i, ni, nj, nk, ivar
@@ -1563,6 +1562,7 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: ncFileID, TimeDimID, TimeDimLength
+type(time_type) :: model_time
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1583,19 +1583,19 @@ call nc_check(nf90_open(trim(filename), NF90_WRITE, ncFileID), &
 
 model_time = get_analysis_time(ncFileID, filename)
 
-if ( model_time /= statedate ) then
-   call print_time( statedate,'DART current time',logfileunit)
+if ( model_time /= statetime ) then
+   call print_time( statetime,'DART current time',logfileunit)
    call print_time(model_time,'mpas current time',logfileunit)
-   call print_time( statedate,'DART current time')
+   call print_time( statetime,'DART current time')
    call print_time(model_time,'mpas current time')
-   write(string1,*)trim(filename),' current time /= model time. FATAL error.'
+   write(string1,*)trim(filename),' current time must equal model time'
    call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
 endif
 
 if (do_output()) &
-    call print_time(statedate,'time of DART file '//trim(filename))
+    call print_time(statetime,'time of DART file '//trim(filename))
 if (do_output()) &
-    call print_date(statedate,'date of DART file '//trim(filename))
+    call print_date(statetime,'date of DART file '//trim(filename))
 
 ! The DART prognostic variables are only defined for a single time.
 ! We already checked the assumption that variables are xy2d or xyz3d ...
@@ -1616,6 +1616,17 @@ do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
+
+   ! special processing for the wind vectors.  in the analysis file they are on
+   ! edge centers, with directions normal to and parallel with the edge direction.
+   ! in the dart state vector they are at cell centers and are meridional and zonal
+   ! (parallel to lat and lon lines).  we can read them directly from the analysis
+   ! file at the cell centers, but in putting them back into the file we've got to
+   ! update ( one, both ?) the edge arrays as well as the centers.  (is this true?)
+   if (varname == 'uReconstructZonal' .or. varname == 'uReconstructMeridional') then
+      call handle_winds(ivar)
+      ! cycle ?   or    ! do we ALSO write out the centers array for consistency?
+   endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
    ! The TIME and Copy dimensions are intentionally not queried
@@ -1820,15 +1831,20 @@ subroutine write_model_time(time_filename, model_time, adv_to_time)
 
 integer :: iunit
 character(len=19) :: timestring
+type(time_type)   :: deltatime
 
-iunit = open_file(time_filename, 'write')
+iunit = open_file(time_filename, action='write')
 
 timestring = time_to_string(model_time)
-write(iunit, *) timestring
+write(iunit, '(A)') timestring
 
 if (present(adv_to_time)) then
    timestring = time_to_string(adv_to_time)
-   write(iunit, *) timestring
+   write(iunit, '(A)') timestring
+
+   deltatime = adv_to_time - model_time
+   timestring = time_to_string(deltatime, brief=.true.)
+   write(iunit, '(A)') timestring
 endif
 
 call close_file(iunit)
@@ -1841,16 +1857,29 @@ end subroutine write_model_time
 
 
 
-function time_to_string(t)
+function time_to_string(t, brief)
 !------------------------------------------------------------------
  character(len=19) :: time_to_string
  type(time_type), intent(in) :: t
+ logical, intent(in), optional :: brief
 
 integer :: iyear, imonth, iday, ihour, imin, isec
+logical :: dobrief
 
 call get_date(t, iyear, imonth, iday, ihour, imin, isec)
-write(time_to_string, '(I4.4,5(A1,I2.2))') &
+if (present(brief)) then
+   dobrief = brief
+else
+   dobrief = .false.
+endif
+
+if (dobrief) then
+   write(time_to_string, '(I2.2,3(A1,I2.2))') &
+                        iday, '_', ihour, ':', imin, ':', isec
+else
+   write(time_to_string, '(I4.4,5(A1,I2.2))') &
                         iyear, '-', imonth, '-', iday, '_', ihour, ':', imin, ':', isec
+endif
 
 end function time_to_string
 
@@ -2292,6 +2321,21 @@ nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
 
 end function FindTimeDimension
 
+
+subroutine handle_winds(ivar)
+!------------------------------------------------------------------
+ integer, intent(in) :: ivar
+ 
+!  the current plan for winds is:
+!  read the reconstructed zonal and meridional winds at cell centers
+!  do the assimilation of U,V winds and update the centers
+!  at write time, map the cell centers back to edge centers and rotate
+!  to be normal and parallel to the edge directions
+!  question remains on what to do with the centers - does that updated
+!  info need to be written out to the file to be self-consistent?  or
+!  will the model update them as soon as it runs? 
+
+end subroutine handle_winds
 
 
 subroutine update_reg_list(reg_list_num, reg_list_cells)

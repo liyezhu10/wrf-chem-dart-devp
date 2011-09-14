@@ -33,7 +33,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
-use        model_mod, only : static_init_model, analysis_file_to_statevector, &
+use        model_mod, only : static_init_model, statevector_to_analysis_file, &
                              get_model_size, get_model_analysis_filename,     &
                              write_model_time
 
@@ -111,7 +111,7 @@ print *, 'read state vector'
 !----------------------------------------------------------------------
 
 print *, 'calling analysis file to state vector'
-call analysis_file_to_statevector(model_analysis_filename, statevector, model_time)
+call statevector_to_analysis_file(statevector, model_analysis_filename, model_time)
 
 ! write time into in text format (YYYY-MM-DD_hh:mm:ss) into a file.
 ! if advance time is there, write the current time then advance time.
