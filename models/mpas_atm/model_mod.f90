@@ -2092,7 +2092,7 @@ subroutine get_edges(latEdge, lonEdge, cellsOnEdge)
 ! must first be allocated by calling code with the following sizes:
 real(r8), intent(inout) :: latEdge(:)       ! latEdge(nEdges)
 real(r8), intent(inout) :: lonEdge(:)       ! lonEdge(nEdges)
-integer,  intent(inout) :: cellsOnEdge(:,:) ! cellsOnEdge(nEdges, 2)
+integer,  intent(inout) :: cellsOnEdge(:,:) ! cellsOnEdge(2, nEdges)
 
 integer  :: ncid, VarID
 
@@ -2148,10 +2148,9 @@ subroutine get_u(u)
 ! must first be allocated by calling code with the following sizes:
 real(r8), intent(inout) :: u(:,:)       ! u(nVertLevels, nEdges) 
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims, mystart, mycount, numu
 integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: ntimes
-integer :: mystart(3), mycount(3), numu(3)
+integer :: ntimes, i
 
 ! Read the netcdf file data
 
@@ -2161,29 +2160,30 @@ if ( .not. module_initialized ) call static_init_model
 call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_u', 'open '//trim(model_analysis_filename))
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-                    'static_init_model', 'inquire '//trim(model_analysis_filename))
+                    'get_u', 'inquire '//trim(model_analysis_filename))
 
 call nc_check( nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-                 'get_analysis_time', 'inquire time dimension length '//trim(model_analysis_filename))
+                 'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
              'get_u', 'inq_varid u '//trim(model_analysis_filename))
 
 call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'get_analysis_time', 'inquire u '//trim(model_analysis_filename))
+              'get_u', 'inquire u '//trim(model_analysis_filename))
 
-call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=numu(1)), &
-                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
+do i=1, numdims
+   call nc_check( nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
+                 'get_u', 'inquire U dimension length '//trim(model_analysis_filename))
+enddo
 
-call nc_check( nf90_inquire_dimension(ncid, dimIDs(2), len=numu(2)), &
-                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
+print *, 'u dimids = ', numu(1:numdims)
 
-call nc_check( nf90_inquire_dimension(ncid, dimIDs(3), len=numu(3)), &
-                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
-print *, 'u dimids = ', numu(1), numu(2), numu(3)
-
-mystart = (/ 1, 1, ntimes /)
-mycount = (/ numu(1), numu(2), 1 /)
+! for all but the time dimension, read all the values.   
+! for time read only the last one (if more than 1 present)
+mystart = 1
+mystart(numdims) = ntimes
+mycount = numu
+mycount(numdims) = 1
 
 call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
               'get_u', 'get_var u '//trim(model_analysis_filename))
@@ -2544,7 +2544,7 @@ real(r8), allocatable :: latEdge(:), lonEdge(:), u(:,:)
 integer,  allocatable :: cellsOnEdge(:,:)
 
 allocate(latEdge(nEdges), lonEdge(nEdges)) 
-allocate(cellsOnEdge(nEdges, 2), u(nEdges, nVertLevels))
+allocate(cellsOnEdge(2, nEdges), u(nVertLevels, nEdges))
 
 call get_edges(latEdge, lonEdge, cellsOnEdge) 
 call get_u(u)
@@ -2554,9 +2554,9 @@ do i=1, nEdges
    ! to value at lat/lon for edge
    if ((i < 10) .and. (debug > 7) .and. do_output()) then
       print *, 'handle_winds: i, lat/lon edge, neighbor cell ids, cell centers'
-      print *, i, latEdge(i), lonEdge(i), cellsOnEdge(i, 1), cellsOnEdge(i, 2)
-      print *, latCell(cellsOnEdge(i, 1)), lonCell(cellsOnEdge(i, 1))
-      print *, latCell(cellsOnEdge(i, 2)), lonCell(cellsOnEdge(i, 2))
+      print *, i, latEdge(i), lonEdge(i), cellsOnEdge(1, i), cellsOnEdge(2, i)
+      print *, latCell(cellsOnEdge(1, i)), lonCell(cellsOnEdge(1, i))
+      print *, latCell(cellsOnEdge(2, i)), lonCell(cellsOnEdge(2, i))
    endif
 enddo
 
