@@ -537,27 +537,27 @@ do ivar = 1, nfields
    progvar(ivar)%kind_string = kind_string
    progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
    progvar(ivar)%numdims     = 0
+   progvar(ivar)%numvertical = 1
    progvar(ivar)%dimlens     = MISSING_I
    progvar(ivar)%numcells    = MISSING_I
-   progvar(ivar)%numvertical = MISSING_I
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
    call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
             'static_init_model', 'inq_varid '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(ncid, VarId, xtype=progvar(ivar)%xtype, &
+   call nc_check(nf90_inquire_variable(ncid, VarID, xtype=progvar(ivar)%xtype, &
            dimids=dimIDs, ndims=numdims), 'static_init_model', 'inquire '//trim(string2))
 
    ! If the long_name and/or units attributes are set, get them. 
    ! They are not REQUIRED to exist but are nice to use if they are present.
 
-   if( nf90_inquire_attribute(    ncid, VarId, 'long_name') == NF90_NOERR ) &
-      call nc_check( nf90_get_att(ncid, VarId, 'long_name' , progvar(ivar)%long_name), &
+   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) &
+      call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
                   'static_init_model', 'get_att long_name '//trim(string2))
 
-   if( nf90_inquire_attribute(    ncid, VarId, 'units') == NF90_NOERR ) &
-      call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
+   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR ) &
+      call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
                   'static_init_model', 'get_att units '//trim(string2))
 
    ! Since we are not concerned with the TIME dimension, we need to skip it.
@@ -582,7 +582,9 @@ do ivar = 1, nfields
       select case ( dimname(1:6) )
          case ('nCells')
             progvar(ivar)%numcells = dimlen
-         case ('nVertL')
+         case ('nVertL')  ! nVertLevels, nVertLevelsP1, nVertLevelsP2
+            progvar(ivar)%numvertical = dimlen
+         case ('nSoilL')  ! nSoilLevels
             progvar(ivar)%numvertical = dimlen
       end select
 
@@ -1096,7 +1098,7 @@ else
       call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
             'nc_write_model_vars', 'inq_varid '//trim(string2))
 
-      call nc_check(nf90_inquire_variable(ncFileID,VarId,dimids=dimIDs,ndims=ncNdims), &
+      call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
             'nc_write_model_vars', 'inquire '//trim(string2))
 
       mystart = 1   ! These are arrays, actually
@@ -1438,7 +1440,7 @@ do ivar=1, nfields
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
             'analysis_file_to_statevector', 'inq_varid '//trim(myerrorstring))
 
-   call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=ncNdims), &
+   call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=ncNdims), &
             'analysis_file_to_statevector', 'inquire '//trim(myerrorstring))
 
    mystart = 1   ! These are arrays, actually.
@@ -1635,7 +1637,7 @@ do ivar=1, nfields
    call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
             'statevector_to_analysis_file', 'inq_varid '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(ncFileID,VarId,dimids=dimIDs,ndims=ncNdims), &
+   call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
             'statevector_to_analysis_file', 'inquire '//trim(string2))
 
    mystart = 1   ! These are arrays, actually.
@@ -2176,11 +2178,16 @@ character(len=*),                 intent(in)  :: filename
 integer,                          intent(out) :: ngood
 character(len=*), dimension(:,:), intent(out) :: table
 
-integer :: nrows, ncols, i, varid
-character(len=NF90_MAX_NAME) :: varname
+integer :: nrows, ncols, i, j, VarID
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+character(len=NF90_MAX_NAME) :: varname, dimname
 character(len=NF90_MAX_NAME) :: dartstr
+integer :: dimlen, numdims
+logical :: failure
 
 if ( .not. module_initialized ) call static_init_model
+
+failure = .FALSE. ! perhaps all with go well
 
 nrows = size(table,1)
 ncols = size(table,2)
@@ -2202,9 +2209,45 @@ MyLoop : do i = 1, nrows
 
    ! Make sure variable exists in model analysis variable list
 
-   write(string1,'(''there is no variable '',a,'' in '',a)') trim(varname), trim(filename)
-   call nc_check(NF90_inq_varid(ncid, trim(varname), varid), &
-                 'verify_state_variables', trim(string1))
+   write(string1,'(''variable '',a,'' in '',a)') trim(varname), trim(filename)
+   write(string2,'(''there is no '',a)') trim(string1)
+   call nc_check(NF90_inq_varid(ncid, trim(varname), VarID), &
+                 'verify_state_variables', trim(string2))
+
+   ! Make sure variable is defined by (Time,nCells) or (Time,nCells,vertical)
+   ! unable to support Edges or Vertices at this time.
+
+   call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+                 'verify_state_variables', 'inquire '//trim(string1))
+
+   DimensionLoop : do j = 1,numdims
+
+      write(string2,'(''inquire dimension'',i2,'' of '',a)') j,trim(string1)
+      call nc_check(nf90_inquire_dimension(ncid, dimIDs(j), len=dimlen, name=dimname), &
+                                          'verify_state_variables', trim(string2))
+      select case ( trim(dimname) )
+         case ('Time')
+            ! supported - do nothing
+         case ('nCells')
+            ! supported - do nothing
+         case ('nVertLevels')
+            ! supported - do nothing
+         case ('nVertLevelsP1')
+            ! supported - do nothing
+         case ('nSoilLevels')
+            ! supported - do nothing
+         case default
+            write(string2,'(''unsupported dimension '',a,'' in '',a)') trim(dimname),trim(string1)
+            call error_handler(E_MSG,'verify_state_variables',string2,source,revision,revdate)
+            failure = .TRUE.
+      end select
+
+   enddo DimensionLoop
+
+   if (failure) then
+       string2 = 'unsupported dimension(s) are fatal'
+       call error_handler(E_ERR,'verify_state_variables',string2,source,revision,revdate)
+   endif
 
    ! Make sure DART kind is valid
 
