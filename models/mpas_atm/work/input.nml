@@ -125,28 +125,26 @@
    /
 
 &mpas_vars_nml
-   mpas_state_variables = 'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
+   mpas_state_variables = 'theta',                 'KIND_POTENTIAL_TEMPERATURE',
+                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
                           'uReconstructMeridional','KIND_V_WIND_COMPONENT',
                           'w',                     'KIND_VERTICAL_VELOCITY',
-                          'theta',                 'KIND_POTENTIAL_TEMPERATURE',
                           'qv',                    'KIND_VAPOR_MIXING_RATIO',
                           'qc',                    'KIND_CLOUDWATER_MIXING_RATIO',
                           'qr',                    'KIND_RAINWATER_MIXING_RATIO',
                           'qi',                    'KIND_ICE_MIXING_RATIO',
                           'qs',                    'KIND_SNOW_MIXING_RATIO',
-                          'qg',                    'KIND_GRAUPEL_MIXING_RATIO',
+                          'qg',                    'KIND_GRAUPEL_MIXING_RATIO'
                           'surface_pressure',      'KIND_SURFACE_PRESSURE'
   /
 
 &model_to_dart_nml
    model_to_dart_output_file  = 'dart.ud',
-   model_analysis_filename    = '../data/mpas_output.2010-10-23_03:00:00.nc',
   /
 
 &dart_to_model_nml
    dart_to_model_input_file = 'dart.ic',
-   advance_time_present     = .false.,
-   model_analysis_filename  = 'mpas_new',
+   advance_time_present     = .true.,
   / 
 
 &utilities_nml
@@ -238,7 +236,6 @@
 
 &model_mod_check_nml
    dart_input_file      = 'dart.ics'
-   mpas_input_file      = '../data/mpas_output.2010-10-23_03:00:00.nc'
    output_file          = 'check_me'
    advance_time_present = .FALSE.
    verbose              = .TRUE.

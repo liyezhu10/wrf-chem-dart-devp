@@ -29,7 +29,7 @@ use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
 use        model_mod, only : get_model_size, analysis_file_to_statevector, &
-                             get_model_analysis_filename
+                             get_model_analysis_filename, static_init_model
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -46,11 +46,9 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: model_to_dart_output_file  = 'dart.ud'
-character(len=256) :: model_analysis_filename    = 'model_analysis'
 
 namelist /model_to_dart_nml/    &
-     model_to_dart_output_file, &
-     model_analysis_filename
+     model_to_dart_output_file
 
 !----------------------------------------------------------------------
 ! global storage
@@ -60,6 +58,7 @@ logical               :: verbose = .TRUE.
 integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
+character(len=256)    :: model_analysis_filename
 
 !======================================================================
 
@@ -81,6 +80,10 @@ write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
 !----------------------------------------------------------------------
 ! get to work
 !----------------------------------------------------------------------
+
+call static_init_model()
+
+call get_model_analysis_filename(model_analysis_filename)
 
 x_size = get_model_size()
 allocate(statevector(x_size))

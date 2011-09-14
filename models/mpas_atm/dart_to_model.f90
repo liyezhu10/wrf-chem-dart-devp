@@ -52,12 +52,10 @@ character(len=128), parameter :: &
 character(len=256)  :: dart_to_model_input_file = 'dart.ic'
 logical             :: advance_time_present     = .false.
 character(len=256)  :: time_filename            = 'mpas_time'
-character(len=256)  :: model_analysis_filename  = 'model_analysis'
 
 namelist /dart_to_model_nml/ dart_to_model_input_file, &
-                            advance_time_present,      &
-                            time_filename,             &
-                            model_analysis_filename
+                             advance_time_present,      &
+                             time_filename
 
 !----------------------------------------------------------------------
 
@@ -65,10 +63,18 @@ integer               :: iunit, io, x_size, diff1, diff2
 type(time_type)       :: model_time, adv_to_time, base_time
 real(r8), allocatable :: statevector(:)
 logical               :: verbose              = .FALSE.
+character(len=256)    :: model_analysis_filename
 
 !----------------------------------------------------------------------
 
 call initialize_utilities(progname='dart_to_model', output_flag=verbose)
+
+! Read the namelist to get the input filename. 
+
+call find_namelist_in_file("input.nml", "dart_to_model_nml", iunit)
+read(iunit, nml = dart_to_model_nml, iostat = io)
+call check_namelist_read(iunit, io, "dart_to_model_nml")
+
 
 !----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists
@@ -77,14 +83,10 @@ call initialize_utilities(progname='dart_to_model', output_flag=verbose)
 
 call static_init_model()
 
+call get_model_analysis_filename(model_analysis_filename)
+
 x_size = get_model_size()
 allocate(statevector(x_size))
-
-! Read the namelist to get the input filename. 
-
-call find_namelist_in_file("input.nml", "dart_to_model_nml", iunit)
-read(iunit, nml = dart_to_model_nml, iostat = io)
-call check_namelist_read(iunit, io, "dart_to_model_nml")
 
 write(*,*)
 write(*,*) 'dart_to_model: converting DART file ', "'"//trim(dart_to_model_input_file)//"'"

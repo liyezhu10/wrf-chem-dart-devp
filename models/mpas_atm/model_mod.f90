@@ -79,7 +79,7 @@ public :: get_model_analysis_filename,  &
           statevector_to_analysis_file, &
           get_analysis_time,            &
           write_model_time,             &
-          get_grid_dims
+          get_grid_dims, get_u
 
 ! version controlled file description for error handling, do not edit
 
@@ -319,11 +319,11 @@ kloc = myindx - (iloc-1)*nzp   ! vertical level index
 ! you have to take the midpoint of the top and bottom face of the cell.
 
 if ( progvar(nf)%ZonHalf ) then
-   height = (zgrid(iloc,kloc) + zgrid(iloc,kloc+1))*0.5
+   height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5
 else if (nzp <= 1) then
-   height = zgrid(iloc,kloc)   ! FIXME: need topography/height/terrain val here
+   height = zgrid(1,iloc)
 else
-   height = zgrid(iloc,kloc)
+   height = zgrid(kloc,iloc)
 endif
 
 if (nzp <= 1) then
@@ -2029,7 +2029,7 @@ subroutine get_grid(latCell, lonCell, zgrid, cellsOnVertex)
 ! The file name comes from module storage ... namelist.
 
 real(r8), dimension(:),   intent(out) :: latCell, lonCell  
-real(r8), dimension(:,:), intent(out) :: zgrid          ! geometric height - FIXME: do we need it here?
+real(r8), dimension(:,:), intent(out) :: zgrid 
 integer,  dimension(:,:), intent(out) :: cellsOnVertex
 
 integer  :: ncid, VarID
@@ -2146,22 +2146,48 @@ subroutine get_u(u)
 ! The file name comes from module storage ... namelist.
 
 ! must first be allocated by calling code with the following sizes:
-real(r8), intent(inout) :: u(:,:)       ! u(nEdges, nVertLevels)   is (Time,nEdges,nVert)
+real(r8), intent(inout) :: u(:,:)       ! u(nVertLevels, nEdges) 
 
-integer  :: ncid, VarID
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
+integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
+integer :: ntimes
+integer :: mystart(3), mycount(3), numu(3)
 
 ! Read the netcdf file data
 
+if ( .not. module_initialized ) call static_init_model
+
+
 call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_u', 'open '//trim(model_analysis_filename))
 
-! Read the variables
+call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
+                    'static_init_model', 'inquire '//trim(model_analysis_filename))
 
-! FIXME:  what about time here?  var in file is (Time, nEdges, nVertLevels)
+call nc_check( nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
+                 'get_analysis_time', 'inquire time dimension length '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-      'get_u', 'inq_varid u '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, u), &
-      'get_u', 'get_var u '//trim(model_analysis_filename))
+             'get_u', 'inq_varid u '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+              'get_analysis_time', 'inquire u '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=numu(1)), &
+                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_dimension(ncid, dimIDs(2), len=numu(2)), &
+                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_dimension(ncid, dimIDs(3), len=numu(3)), &
+                 'get_analysis_time', 'inquire U dimension length '//trim(model_analysis_filename))
+print *, 'u dimids = ', numu(1), numu(2), numu(3)
+
+mystart = (/ 1, 1, ntimes /)
+mycount = (/ numu(1), numu(2), 1 /)
+
+call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
+              'get_u', 'get_var u '//trim(model_analysis_filename))
+
 
 call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
 

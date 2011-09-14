@@ -31,7 +31,8 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              print_time, write_time, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             model_interpolate, get_analysis_time
+                             model_interpolate, get_analysis_time, get_u, &
+                             get_model_analysis_filename
 
 implicit none
 
@@ -46,7 +47,6 @@ character(len=128), parameter :: &
 !------------------------------------------------------------------
 
 character (len = 129) :: dart_input_file      = 'dart.ics'
-character (len = 129) :: mpas_input_file      = 'mpas_analysis.nc'
 character (len = 129) :: output_file          = 'check_me'
 logical               :: advance_time_present = .FALSE.
 logical               :: verbose              = .FALSE.
@@ -55,8 +55,7 @@ integer               :: x_ind                = -1
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
-namelist /model_mod_check_nml/ dart_input_file, mpas_input_file, &
-                        output_file, &
+namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose
 
@@ -72,9 +71,11 @@ type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
 
 character(len=metadatalength) :: state_meta(1)
+character(len=129) :: mpas_input_file  ! set with get_model_analysis_filename() if needed
 type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
+real(r8), allocatable :: u(:,:)
 real(r8) :: interp_val
 
 !----------------------------------------------------------------------
@@ -101,6 +102,12 @@ call static_init_model()
 write(*,*)'testing complete ...'
 
 if (test1thru < 2) goto 999
+
+! test get_u()
+allocate(u(41, 30720))
+call get_u(u)
+
+stop
 
 write(*,*)
 write(*,*)'Testing get_model_size ...'
