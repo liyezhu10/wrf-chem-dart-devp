@@ -34,7 +34,8 @@ use  assim_model_mod, only : open_restart_read, aread_state_restart, close_resta
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
 use        model_mod, only : static_init_model, analysis_file_to_statevector, &
-                             get_model_size, get_model_analysis_filename
+                             get_model_size, get_model_analysis_filename,     &
+                             write_model_time
 
 implicit none
 
@@ -48,12 +49,14 @@ character(len=128), parameter :: &
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_model_input_file = 'dart.ic'
-logical               :: advance_time_present    = .false.
-character(len=256)    :: model_analysis_filename  = 'model_analysis'
+character(len=256)  :: dart_to_model_input_file = 'dart.ic'
+logical             :: advance_time_present     = .false.
+character(len=256)  :: time_filename            = 'mpas_time'
+character(len=256)  :: model_analysis_filename  = 'model_analysis'
 
 namelist /dart_to_model_nml/ dart_to_model_input_file, &
-                            advance_time_present,    &
+                            advance_time_present,      &
+                            time_filename,             &
                             model_analysis_filename
 
 !----------------------------------------------------------------------
@@ -110,8 +113,13 @@ print *, 'read state vector'
 print *, 'calling analysis file to state vector'
 call analysis_file_to_statevector(model_analysis_filename, statevector, model_time)
 
+! write time into in text format (YYYY-MM-DD_hh:mm:ss) into a file.
+! if advance time is there, write the current time then advance time.
+! otherwise just write current time.
 if ( advance_time_present ) then
-   call write_model_time_control(model_time, adv_to_time)
+   call write_model_time(time_filename, model_time, adv_to_time)
+else
+   call write_model_time(time_filename, model_time)
 endif
 
 !----------------------------------------------------------------------
@@ -131,67 +139,5 @@ call print_date(adv_to_time,'dart_to_model:advance_to date',logfileunit)
 endif
 
 call finalize_utilities()
-
-!----------------------------------------------------------------------
-! end of main program - what follows are subroutines available to this code
-!----------------------------------------------------------------------
-
-!======================================================================
-
-contains
-
-! FIXME: should this be in the model mod so the details are specific
-! to each model?
-
-subroutine write_model_time_control(model_time, adv_to_time)
-! The idea is to write a text file with the following structure:
-!
-!#TIMESTART
-!2003            year
-!06              month
-!21              day
-!00              hour
-!00              minute
-!00              second
-!
-!#TIMEEND
-!2003            year
-!07              month
-!21              day
-!00              hour
-!00              minute
-!00              second
-!
-
-type(time_type), intent(in) :: model_time, adv_to_time
-integer :: iyear,imonth,iday,ihour,imin,isec
-
-iunit = open_file('DART_model_time_control.txt', action='write')
-write(iunit,*)
-
-call get_date(model_time,iyear,imonth,iday,ihour,imin,isec)
-write(iunit,'(''#TIMESTART'')') 
-write(iunit,'(i4.4,10x,''year''  )')iyear
-write(iunit,'(i2.2,12x,''month'' )')imonth
-write(iunit,'(i2.2,12x,''day''   )')iday
-write(iunit,'(i2.2,12x,''hour''  )')ihour
-write(iunit,'(i2.2,12x,''minute'')')imin
-write(iunit,'(i2.2,12x,''second'')')isec
-write(iunit,*)
-
-call get_date(adv_to_time,iyear,imonth,iday,ihour,imin,isec)
-write(iunit,'(''#TIMEEND'')') 
-write(iunit,'(i4.4,10x,''year''  )')iyear
-write(iunit,'(i2.2,12x,''month'' )')imonth
-write(iunit,'(i2.2,12x,''day''   )')iday
-write(iunit,'(i2.2,12x,''hour''  )')ihour
-write(iunit,'(i2.2,12x,''minute'')')imin
-write(iunit,'(i2.2,12x,''second'')')isec
-write(iunit,*)
-
-call close_file(iunit)
-end subroutine write_model_time_control
-
-
 
 end program dart_to_model

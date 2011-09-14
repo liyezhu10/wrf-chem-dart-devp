@@ -77,7 +77,8 @@ public :: get_model_size,         &
 public :: get_model_analysis_filename,  &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
-          get_analysis_time
+          get_analysis_time,            &
+          write_model_time
 
 ! version controlled file description for error handling, do not edit
 
@@ -1743,7 +1744,6 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
 integer           :: VarID, numdims
 
 character(len=64) :: timestring
-integer           :: iyear, imonth, iday, ihour, imin, isecond
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1776,18 +1776,9 @@ endif
 call nc_check( nf90_get_var(ncid, VarID, timestring, start = (/ 1, idims(2) /)), &
               'get_analysis_time', 'get_var xtime '//trim(filename))
 
-read(timestring,'(i4,5(1x,i2))') iyear, imonth, iday, ihour, imin, isecond
-
-get_analysis_time_ncid = set_date(iyear, imonth, iday, ihour, imin, isecond)
+get_analysis_time_ncid = string_to_time(timestring)
 
 if (debug > 8) then
-   write(*,*)'get_analysis_time : iyear       ',iyear
-   write(*,*)'get_analysis_time : imonth      ',imonth
-   write(*,*)'get_analysis_time : iday        ',iday
-   write(*,*)'get_analysis_time : ihour       ',ihour
-   write(*,*)'get_analysis_time : imin        ',imin
-   write(*,*)'get_analysis_time : isecond     ',isecond
-
    call print_date(get_analysis_time_ncid, 'get_analysis_time:model date')
    call print_time(get_analysis_time_ncid, 'get_analysis_time:model time')
 endif
@@ -1806,7 +1797,7 @@ type(time_type) :: get_analysis_time_fname
 
 character(len=*), intent(in) :: filename
 
-integer :: ncid, year, month, day, hour, minute, second
+integer :: ncid, i
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1817,30 +1808,71 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
 endif
 
-call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-                  'get_analysis_time', 'open '//trim(filename))
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'YEAR'  , year), &
-                  'get_analysis_time', 'get_att year')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MONTH' , month), &
-                  'get_analysis_time', 'get_att month')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'DAY'   , day), &
-                  'get_analysis_time', 'get_att day')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'HOUR'  , hour), &
-                  'get_analysis_time', 'get_att hour')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'MINUTE', minute), &
-                  'get_analysis_time', 'get_att minute')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'SECOND', second), &
-                  'get_analysis_time', 'get_att second')
-call nc_check(nf90_close(ncid), 'get_analysis_time', 'close '//trim(filename))
+! find the first number and use that as the start of the string conversion
+i = scan(filename, "0123456789")
+if (i <= 0) then
+   write(string1,*) 'cannot find time string in name ', trim(filename)
+   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
+endif 
 
-get_analysis_time_fname = set_date(year, month, day, hour, minute, second)
+get_analysis_time_fname = string_to_time(filename(i:i+19))
 
 end function get_analysis_time_fname
 
 
-!==================================================================
+subroutine write_model_time(time_filename, model_time, adv_to_time)
+ character(len=*), intent(in)           :: time_filename
+ type(time_type),  intent(in)           :: model_time
+ type(time_type),  intent(in), optional :: adv_to_time
+
+integer :: iunit
+character(len=19) :: timestring
+
+iunit = open_file(time_filename, 'write')
+
+timestring = time_to_string(model_time)
+write(iunit, *) timestring
+
+if (present(adv_to_time)) then
+   timestring = time_to_string(adv_to_time)
+   write(iunit, *) timestring
+endif
+
+call close_file(iunit)
+
+end subroutine write_model_time
+
+
 ! The (model-specific) private interfaces come last
 !==================================================================
+
+
+
+function time_to_string(t)
+!------------------------------------------------------------------
+ character(len=19) :: time_to_string
+ type(time_type), intent(in) :: t
+
+integer :: iyear, imonth, iday, ihour, imin, isec
+
+call get_date(t, iyear, imonth, iday, ihour, imin, isec)
+write(time_to_string, '(I4.4,5(A1,I2.2))') &
+                        iyear, '-', imonth, '-', iday, '_', ihour, ':', imin, ':', isec
+
+end function time_to_string
+
+
+function string_to_time(s)
+!------------------------------------------------------------------
+ type(time_type) :: string_to_time
+ character(len=*), intent(in) :: s
+
+integer :: iyear, imonth, iday, ihour, imin, isec
+
+read(s,'(i4,5(1x,i2))') iyear, imonth, iday, ihour, imin, isec
+string_to_time = set_date(iyear, imonth, iday, ihour, imin, isec)
+
+end function string_to_time
 
 
 subroutine get_grid_dims(nCells, nVertices, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels)
