@@ -78,7 +78,8 @@ public :: get_model_analysis_filename,  &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
           get_analysis_time,            &
-          write_model_time
+          write_model_time,             &
+          get_grid_dims
 
 ! version controlled file description for error handling, do not edit
 
@@ -153,17 +154,20 @@ type(progvartype), dimension(max_state_variables) :: progvar
 
 ! Grid parameters - the values will be read from an mpas analysis file. 
 
-integer :: nCells=-1, nVertices=-1, nEdges=-1   ! horizontal grid dimensions
-integer :: nVertLevels=-1, nVertLevelsP1=-1     ! vertical grid dimensions
-integer :: maxEdges=-1, vertexDegree=-1         ! unstructured mesh
-integer :: nSoilLevels=-1                       ! soil layers
+integer :: nCells        = -1  ! Total number of cells making up the grid
+integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
+integer :: nEdges        = -1  ! Straight lines between vertices making up cells
+integer :: nVertLevels   = -1  ! Vertical levels; count of vert cell centers
+integer :: nVertLevelsP1 = -1  ! Vert levels plus 1; count of vert cell faces
+integer :: vertexDegree  = -1  ! Max number of cells/edges that touch any vertex
+integer :: nSoilLevels   = -1  ! Number of soil layers
 
 ! scalar grid positions
 
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
 real(r8), allocatable :: zgrid(:,:) ! cell center geometric height at cell centers (ncells,nvert)
-integer,  allocatable :: CellsOnVertex(:,:) ! list of cell centers defining a triangle
+integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 
 integer               :: model_size      ! the state vector length
 type(time_type)       :: model_timestep  ! smallest time to adv model
@@ -310,15 +314,23 @@ nzp = progvar(nf)%numvertical
 iloc   = 1 + (myindx-1) / nzp  ! cell index
 kloc = myindx - (iloc-1)*nzp   ! vertical level index
 
-! If full sigma level
+! the zgrid array contains the location of the cell top and bottom faces, so it has one 
+! more value than the number of cells in each column.  for locations of cell centers
+! you have to take the midpoint of the top and bottom face of the cell.
 
 if ( progvar(nf)%ZonHalf ) then
    height = (zgrid(iloc,kloc) + zgrid(iloc,kloc+1))*0.5
+else if (nzp <= 1) then
+   height = zgrid(iloc,kloc)   ! FIXME: need topography/height/terrain val here
 else
    height = zgrid(iloc,kloc)
 endif
 
-location = set_location(lonCell(iloc),latCell(iloc), height, VERTISHEIGHT)
+if (nzp <= 1) then
+   location = set_location(lonCell(iloc),latCell(iloc), height, VERTISSURFACE)
+else
+   location = set_location(lonCell(iloc),latCell(iloc), height, VERTISHEIGHT)
+endif
 
 if (debug > 5) then
 
@@ -484,14 +496,15 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! 2) allocate space for the grids 
 ! 3) read them from the analysis file
 
-call get_grid_dims(nCells, nVertices, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels)
+! read_grid_dims() fills in the following module global variables:
+!  nCells, nVertices, nEdges, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels
+call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells)) 
 allocate(zgrid(nVertLevelsP1, nCells))
-allocate(CellsOnVertex(vertexDegree, nVertices))
+allocate(cellsOnVertex(vertexDegree, nVertices))
 
-call get_grid(nCells, nVertices, nVertLevels, vertexDegree, &
-              latCell, lonCell, zgrid, CellsOnVertex)
+call get_grid(latCell, lonCell, zgrid, cellsOnVertex)
               
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
@@ -639,7 +652,7 @@ subroutine end_model()
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
 if (allocated(zgrid))          deallocate(zgrid)
-if (allocated(CellsOnVertex))  deallocate(CellsOnVertex)
+if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 
 end subroutine end_model
 
@@ -1627,7 +1640,8 @@ do ivar=1, nfields
    ! update ( one, both ?) the edge arrays as well as the centers.  (is this true?)
    if (varname == 'uReconstructZonal' .or. varname == 'uReconstructMeridional') then
       call handle_winds(ivar)
-      ! cycle ?   or    ! do we ALSO write out the centers array for consistency?
+      ! FIXME: cycle here OR do we also write out the centers array for consistency?
+      ! right now the code is going to do both just to be safe.  belt & suspenders.
    endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
@@ -1807,8 +1821,6 @@ integer :: ncid, i
 
 if ( .not. module_initialized ) call static_init_model
 
-! FIXME so that it reads the date from the file NAME dummy !
-
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
@@ -1852,6 +1864,32 @@ endif
 call close_file(iunit)
 
 end subroutine write_model_time
+
+
+subroutine get_grid_dims(Cells, Vertices, Edges, VertLevels, VertexDeg, SoilLevels)
+!------------------------------------------------------------------
+!
+! public routine for returning the counts of various things in the grid
+!
+
+integer, intent(out) :: Cells         ! Total number of cells making up the grid
+integer, intent(out) :: Vertices      ! Unique points in grid which are corners of cells
+integer, intent(out) :: Edges         ! Straight lines between vertices making up cells
+integer, intent(out) :: VertLevels    ! Vertical levels; count of vert cell centers
+integer, intent(out) :: VertexDeg     ! Max number of edges that touch any vertex
+integer, intent(out) :: SoilLevels    ! Number of soil layers
+
+if ( .not. module_initialized ) call static_init_model
+
+Cells      = nCells
+Vertices   = nVertices
+Edges      = nEdges
+VertLevels = nVertLevels
+VertexDeg  = vertexDegree
+SoilLevels = nSoilLevels
+
+end subroutine get_grid_dims
+
 
 
 ! The (model-specific) private interfaces come last
@@ -1899,19 +1937,12 @@ string_to_time = set_date(iyear, imonth, iday, ihour, imin, isec)
 end function string_to_time
 
 
-subroutine get_grid_dims(nCells, nVertices, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels)
+subroutine read_grid_dims()
 !------------------------------------------------------------------
 !
 ! Read the grid dimensions from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
-
-integer, intent(out) :: nCells         ! Number of cells
-integer, intent(out) :: nVertices      ! Number of vertices
-integer, intent(out) :: nVertLevels    ! Number of levels
-integer, intent(out) :: nVertLevelsP1  ! Number of levels
-integer, intent(out) :: vertexDegree   ! Number of edges that touch a vertex
-integer, intent(out) :: nSoilLevels    ! Number of soil layers
 
 integer :: grid_id, dimid
 
@@ -1920,85 +1951,87 @@ if ( .not. module_initialized ) call static_init_model
 ! get the ball rolling ...
 
 call nc_check( nf90_open(trim(model_analysis_filename), NF90_NOWRITE, grid_id), &
-              'get_grid_dims', 'open '//trim(model_analysis_filename))
+              'read_grid_dims', 'open '//trim(model_analysis_filename))
 
 ! nCells : get dimid for 'nCells' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nCells', dimid), &
-              'get_grid_dims','inq_dimid nCells '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nCells '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nCells), &
-            'get_grid_dims','inquire_dimension nCells '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nCells '//trim(model_analysis_filename))
 
 ! nVertices : get dimid for 'nVertices' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertices', dimid), &
-              'get_grid_dims','inq_dimid nVertices '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertices '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertices), &
-            'get_grid_dims','inquire_dimension nVertices '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertices '//trim(model_analysis_filename))
+
+! nEdges : get dimid for 'nEdges' and then get value
+
+call nc_check(nf90_inq_dimid(grid_id, 'nEdges', dimid), &
+              'read_grid_dims','inq_dimid nEdges '//trim(model_analysis_filename))
+call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nEdges), &
+            'read_grid_dims','inquire_dimension nEdges '//trim(model_analysis_filename))
 
 ! nVertLevels : get dimid for 'nVertLevels' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertLevels', dimid), &
-              'get_grid_dims','inq_dimid nVertLevels '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertLevels '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevels), &
-            'get_grid_dims','inquire_dimension nVertLevels '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertLevels '//trim(model_analysis_filename))
 
 ! nVertLevelsP1 : get dimid for 'nVertLevelsP1' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertLevelsP1', dimid), &
-              'get_grid_dims','inq_dimid nVertLevelsP1 '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertLevelsP1 '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevelsP1), &
-            'get_grid_dims','inquire_dimension nVertLevelsP1 '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertLevelsP1 '//trim(model_analysis_filename))
 
 ! vertexDegree : get dimid for 'vertexDegree' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'vertexDegree', dimid), &
-              'get_grid_dims','inq_dimid vertexDegree '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid vertexDegree '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=vertexDegree), &
-            'get_grid_dims','inquire_dimension vertexDegree '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension vertexDegree '//trim(model_analysis_filename))
 
 ! nSoilLevels : get dimid for 'nSoilLevels' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nSoilLevels', dimid), &
-              'get_grid_dims','inq_dimid nSoilLevels '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nSoilLevels '//trim(model_analysis_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nSoilLevels), &
-            'get_grid_dims','inquire_dimension nSoilLevels '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nSoilLevels '//trim(model_analysis_filename))
 
 ! tidy up
 
 call nc_check(nf90_close(grid_id), &
-         'get_grid_dims','close '//trim(model_analysis_filename) )
+         'read_grid_dims','close '//trim(model_analysis_filename) )
 
 if (debug > 7) then
    write(*,*)
-   write(*,*)'get_grid_dims: nCells        is ', nCells
-   write(*,*)'get_grid_dims: nVertices     is ', nVertices
-   write(*,*)'get_grid_dims: nVertLevels   is ', nVertLevels
-   write(*,*)'get_grid_dims: nVertLevelsP1 is ', nVertLevelsP1
-   write(*,*)'get_grid_dims: vertexDegree  is ', vertexDegree
-   write(*,*)'get_grid_dims: nSoilLevels   is ', nSoilLevels
+   write(*,*)'read_grid_dims: nCells        is ', nCells
+   write(*,*)'read_grid_dims: nVertices     is ', nVertices
+   write(*,*)'read_grid_dims: nEdges        is ', nEdges
+   write(*,*)'read_grid_dims: nVertLevels   is ', nVertLevels
+   write(*,*)'read_grid_dims: nVertLevelsP1 is ', nVertLevelsP1
+   write(*,*)'read_grid_dims: vertexDegree  is ', vertexDegree
+   write(*,*)'read_grid_dims: nSoilLevels   is ', nSoilLevels
 endif
 
-end subroutine get_grid_dims
+end subroutine read_grid_dims
 
 
 
-subroutine get_grid(nCells, nVertices, nVertLevels, vertexDegree, &
-                     latCell, lonCell, zgrid, CellsOnVertex) 
+subroutine get_grid(latCell, lonCell, zgrid, cellsOnVertex) 
 !------------------------------------------------------------------
 !
 ! Read the grid dimensions from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
 
-integer, intent(in) :: nCells          ! Number of cells
-integer, intent(in) :: nVertices       ! Number of vertices
-integer, intent(in) :: nVertLevels     ! Number of levels
-integer, intent(in) :: vertexDegree    ! Degree of vertices - No. of edges that touch the vertex
-
 real(r8), dimension(:),   intent(out) :: latCell, lonCell  
 real(r8), dimension(:,:), intent(out) :: zgrid          ! geometric height - FIXME: do we need it here?
-integer,  dimension(:,:), intent(out) :: CellsOnVertex
+integer,  dimension(:,:), intent(out) :: cellsOnVertex
 
 integer  :: ncid, VarID
 
@@ -2024,9 +2057,9 @@ call nc_check(nf90_get_var( ncid, VarID, zgrid), &
       'get_grid', 'get_var zgrid '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
-      'get_grid', 'inq_varid CellsOnVertex '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, CellsOnVertex), &
-      'get_grid', 'get_var CellsOnVertex '//trim(model_analysis_filename))
+      'get_grid', 'inq_varid cellsOnVertex '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
+      'get_grid', 'get_var cellsOnVertex '//trim(model_analysis_filename))
 
 call nc_check(nf90_close(ncid), 'get_grid','close '//trim(model_analysis_filename) )
 
@@ -2043,11 +2076,107 @@ if ( debug > 7 ) then
    write(*,*)'latCell       range ',minval(latCell),      maxval(latCell)
    write(*,*)'lonCell       range ',minval(lonCell),      maxval(lonCell)
    write(*,*)'zgrid         range ',minval(zgrid  ),      maxval(zgrid  )
-   write(*,*)'CellsOnVertex range ',minval(CellsOnVertex),maxval(CellsOnVertex)
+   write(*,*)'cellsOnVertex range ',minval(cellsOnVertex),maxval(cellsOnVertex)
 
 endif
 
 end subroutine get_grid
+
+
+subroutine get_edges(latEdge, lonEdge, cellsOnEdge) 
+!------------------------------------------------------------------
+!
+! Read the edge list and neighboring cells from the MPAS netcdf file.
+!
+! The file name comes from module storage ... namelist.
+
+! must first be allocated by calling code with the following sizes:
+real(r8), intent(inout) :: latEdge(:)       ! latEdge(nEdges)
+real(r8), intent(inout) :: lonEdge(:)       ! lonEdge(nEdges)
+integer,  intent(inout) :: cellsOnEdge(:,:) ! cellsOnEdge(nEdges, 2)
+
+integer  :: ncid, VarID
+
+! Read the netcdf file data
+
+call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_edges', 'open '//trim(model_analysis_filename))
+
+! Read the variables
+
+call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
+      'get_edges', 'inq_varid latEdge '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, latEdge), &
+      'get_edges', 'get_var latEdge '//trim(model_analysis_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'lonEdge', VarID), &
+      'get_edges', 'inq_varid lonEdge '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, lonEdge), &
+      'get_edges', 'get_var lonEdge '//trim(model_analysis_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'cellsOnEdge', VarID), &
+      'get_edges', 'inq_varid cellsOnEdge '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, cellsOnEdge), &
+      'get_edges', 'get_var cellsOnEdge '//trim(model_analysis_filename))
+
+call nc_check(nf90_close(ncid), 'get_edges','close '//trim(model_analysis_filename) )
+
+! MPAS analysis files are in radians - at this point DART needs degrees.
+
+latEdge = latEdge * rad2deg
+lonEdge = lonEdge * rad2deg
+
+! A little sanity check
+
+if ( debug > 7 ) then
+
+   write(*,*)
+   write(*,*)'latEdge       range ',minval(latEdge),     maxval(latEdge)
+   write(*,*)'lonEdge       range ',minval(lonEdge),     maxval(lonEdge)
+   write(*,*)'cellsOnEdge   range ',minval(cellsOnEdge), maxval(cellsOnEdge)
+
+endif
+
+end subroutine get_edges
+
+
+subroutine get_u(u)
+!------------------------------------------------------------------
+!
+! Read the edge list and neighboring cells from the MPAS netcdf file.
+!
+! The file name comes from module storage ... namelist.
+
+! must first be allocated by calling code with the following sizes:
+real(r8), intent(inout) :: u(:,:)       ! u(nEdges, nVertLevels)   is (Time,nEdges,nVert)
+
+integer  :: ncid, VarID
+
+! Read the netcdf file data
+
+call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_u', 'open '//trim(model_analysis_filename))
+
+! Read the variables
+
+! FIXME:  what about time here?  var in file is (Time, nEdges, nVertLevels)
+
+call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
+      'get_u', 'inq_varid u '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, u), &
+      'get_u', 'get_var u '//trim(model_analysis_filename))
+
+call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
+
+
+! A little sanity check
+
+if ( debug > 7 ) then
+
+   write(*,*)
+   write(*,*)'u       range ',minval(u),     maxval(u)
+
+endif
+
+end subroutine get_u
 
 
 
@@ -2377,6 +2506,36 @@ subroutine handle_winds(ivar)
 !  question remains on what to do with the centers - does that updated
 !  info need to be written out to the file to be self-consistent?  or
 !  will the model update them as soon as it runs? 
+
+! the 'cellsOnEdge' array has the ids of the two neighboring cell numbers
+! the lonEdge/latEdge arrays have the ?midpoints of the edges.
+! the ends of each edge are the lonVertex/latVertex arrays
+! the location of the winds are at the lonCell/latCell arrays (cell centers)
+
+! is that all we need for this conversion?
+
+integer :: i
+real(r8), allocatable :: latEdge(:), lonEdge(:), u(:,:)
+integer,  allocatable :: cellsOnEdge(:,:)
+
+allocate(latEdge(nEdges), lonEdge(nEdges)) 
+allocate(cellsOnEdge(nEdges, 2), u(nEdges, nVertLevels))
+
+call get_edges(latEdge, lonEdge, cellsOnEdge) 
+call get_u(u)
+
+do i=1, nEdges
+   ! FIXME: convert values from cells 1 and 2 for this edge
+   ! to value at lat/lon for edge
+   if ((i < 10) .and. (debug > 7) .and. do_output()) then
+      print *, 'handle_winds: i, lat/lon edge, neighbor cell ids, cell centers'
+      print *, i, latEdge(i), lonEdge(i), cellsOnEdge(i, 1), cellsOnEdge(i, 2)
+      print *, latCell(cellsOnEdge(i, 1)), lonCell(cellsOnEdge(i, 1))
+      print *, latCell(cellsOnEdge(i, 2)), lonCell(cellsOnEdge(i, 2))
+   endif
+enddo
+
+deallocate(latEdge, lonEdge, cellsOnEdge)
 
 end subroutine handle_winds
 
