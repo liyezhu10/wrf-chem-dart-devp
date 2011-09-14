@@ -586,6 +586,12 @@ do ivar = 1, nfields
 
    call set_variable_clamping(ivar)
 
+   if (progvar(ivar)%numvertical == nVertLevels) then
+      progvar(ivar)%ZonHalf = .TRUE.
+   else
+      progvar(ivar)%ZonHalf = .FALSE.
+   endif
+
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
    progvar(ivar)%indexN      = index1 + varsize - 1
