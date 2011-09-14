@@ -14,7 +14,7 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
-                             rad2deg, deg2rad, PI
+                             rad2deg, deg2rad, PI, MISSING_I
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
@@ -133,9 +133,9 @@ type progvartype
    character(len=NF90_MAX_NAME) :: varname
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
+   character(len=NF90_MAX_NAME), dimension(NF90_MAX_VAR_DIMS) :: dimname
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
    integer :: xtype         ! netCDF variable type (NF90_double, etc.) 
-   integer :: numdimsWtime  ! number of dims in MPAS analysis file
    integer :: numdims       ! number of dims - excluding TIME
    integer :: numvertical   ! number of vertical levels in variable
    integer :: numcells      ! number of horizontal locations (typically cell centers)
@@ -435,7 +435,7 @@ subroutine static_init_model()
 
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME)          :: varname
+character(len=NF90_MAX_NAME)          :: varname,dimname
 character(len=paramname_length)       :: kind_string
 integer :: ncid, VarID, numdims, varsize, dimlen
 integer :: iunit, io, ivar, i, index1, indexN
@@ -537,8 +537,10 @@ do ivar = 1, nfields
    progvar(ivar)%varname     = varname
    progvar(ivar)%kind_string = kind_string
    progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
-   progvar(ivar)%dimlens     = 0
    progvar(ivar)%numdims     = 0
+   progvar(ivar)%dimlens     = MISSING_I
+   progvar(ivar)%numcells    = MISSING_I
+   progvar(ivar)%numvertical = MISSING_I
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
@@ -551,10 +553,8 @@ do ivar = 1, nfields
 !  call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
 !           'static_init_model', 'get_att units '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(ncid, VarId, dimids=dimIDs, ndims=progvar(ivar)%numdimsWtime), &
-            'static_init_model', 'inquire '//trim(string2))
-
-   call set_variable_clamping(ivar)
+   call nc_check(nf90_inquire_variable(ncid, VarId, xtype=progvar(ivar)%xtype, &
+           dimids=dimIDs, ndims=numdims), 'static_init_model', 'inquire '//trim(string2))
 
    ! Since we are not concerned with the TIME dimension, we need to skip it.
    ! When the variables are read, only a single timestep is ingested into
@@ -562,19 +562,29 @@ do ivar = 1, nfields
 
    varsize = 1
    dimlen  = 1
-   DimensionLoop : do i = 1,progvar(ivar)%numdimsWtime
+   DimensionLoop : do i = 1,numdims
 
       if (dimIDs(i) == TimeDimID) cycle DimensionLoop
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
-      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
+      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname), &
                                           'static_init_model', string1)
 
       progvar(ivar)%numdims    = progvar(ivar)%numdims + 1
       progvar(ivar)%dimlens(i) = dimlen
+      progvar(ivar)%dimname(i) = trim(dimname)
       varsize = varsize * dimlen
 
+      select case ( dimname(1:6) )
+         case ('nCells')
+            progvar(ivar)%numcells = dimlen
+         case ('nVertL')
+            progvar(ivar)%numvertical = dimlen
+      end select
+
    enddo DimensionLoop
+
+   call set_variable_clamping(ivar)
 
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
@@ -1121,7 +1131,7 @@ else
          endif
 
          allocate(data_1d_array( progvar(ivar)%dimlens(1) ) )
-         call vector_to_prog_var(state_vec, progvar(ivar), data_1d_array)
+         call vector_to_prog_var(state_vec, ivar, data_1d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
              start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1138,7 +1148,7 @@ else
 
          allocate(data_2d_array( progvar(ivar)%dimlens(1),  &
                                  progvar(ivar)%dimlens(2) ))
-         call vector_to_prog_var(state_vec, progvar(ivar), data_2d_array)
+         call vector_to_prog_var(state_vec, ivar, data_2d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
              start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1156,7 +1166,7 @@ else
          allocate(data_3d_array( progvar(ivar)%dimlens(1), &
                                  progvar(ivar)%dimlens(2), &
                                  progvar(ivar)%dimlens(3)))
-         call vector_to_prog_var(state_vec, progvar(ivar), data_3d_array)
+         call vector_to_prog_var(state_vec, ivar, data_3d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
              start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1637,7 +1647,7 @@ do ivar=1, nfields
    if (progvar(ivar)%numdims == 1) then
       ni = mycount(1)
       allocate(data_1d_array(ni))
-      call vector_to_prog_var(state_vector, progvar(ivar), data_1d_array)
+      call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
       if ( progvar(ivar)%clamping ) then
         where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
@@ -1654,7 +1664,7 @@ do ivar=1, nfields
       ni = mycount(1)
       nj = mycount(2)
       allocate(data_2d_array(ni, nj))
-      call vector_to_prog_var(state_vector, progvar(ivar), data_2d_array)
+      call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
       if ( progvar(ivar)%clamping ) then
         where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
@@ -1672,7 +1682,7 @@ do ivar=1, nfields
       nj = mycount(2)
       nk = mycount(3)
       allocate(data_3d_array(ni, nj, nk))
-      call vector_to_prog_var(state_vector, progvar(ivar), data_3d_array)
+      call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
       if ( progvar(ivar)%clamping ) then
         where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
@@ -1999,30 +2009,30 @@ end subroutine get_grid
 
 
 
-subroutine vector_to_1d_prog_var(x, progvar, data_1d_array)
+subroutine vector_to_1d_prog_var(x, ivar, data_1d_array)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 1d array.
 !
 real(r8), dimension(:),   intent(in)  :: x
-type(progvartype),        intent(in)  :: progvar
+integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
 
 integer :: i,ii
 
 if ( .not. module_initialized ) call static_init_model
 
-ii = progvar%index1
+ii = progvar(ivar)%index1
 
-do i = 1, progvar%dimlens(1)
+do i = 1, progvar(ivar)%dimlens(1)
    data_1d_array(i) = x(ii)
    ii = ii + 1
 enddo
 
 ii = ii - 1
-if ( ii /= progvar%indexN ) then
-   write(string1, *)'Variable '//trim(progvar%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar%indexN,' actually ended at ',ii
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
    call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
                     source, revision, revdate, text2=string2)
 endif
@@ -2031,32 +2041,32 @@ end subroutine vector_to_1d_prog_var
 
 
 
-subroutine vector_to_2d_prog_var(x, progvar, data_2d_array)
+subroutine vector_to_2d_prog_var(x, ivar, data_2d_array)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 2d array.
 !
 real(r8), dimension(:),   intent(in)  :: x
-type(progvartype),        intent(in)  :: progvar
+integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
 
 integer :: i,j,ii
 
 if ( .not. module_initialized ) call static_init_model
 
-ii = progvar%index1
+ii = progvar(ivar)%index1
 
-do j = 1,progvar%dimlens(2)
-do i = 1,progvar%dimlens(1)
+do j = 1,progvar(ivar)%dimlens(2)
+do i = 1,progvar(ivar)%dimlens(1)
    data_2d_array(i,j) = x(ii)
    ii = ii + 1
 enddo
 enddo
 
 ii = ii - 1
-if ( ii /= progvar%indexN ) then
-   write(string1, *)'Variable '//trim(progvar%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar%indexN,' actually ended at ',ii
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
    call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
                     source, revision, revdate, text2=string2)
 endif
@@ -2065,24 +2075,24 @@ end subroutine vector_to_2d_prog_var
 
 
 
-subroutine vector_to_3d_prog_var(x, progvar, data_3d_array)
+subroutine vector_to_3d_prog_var(x, ivar, data_3d_array)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 3d array.
 !
 real(r8), dimension(:),     intent(in)  :: x
-type(progvartype),          intent(in)  :: progvar
+integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
 
 integer :: i,j,k,ii
 
 if ( .not. module_initialized ) call static_init_model
 
-ii = progvar%index1
+ii = progvar(ivar)%index1
 
-do k = 1,progvar%dimlens(3)
-do j = 1,progvar%dimlens(2)
-do i = 1,progvar%dimlens(1)
+do k = 1,progvar(ivar)%dimlens(3)
+do j = 1,progvar(ivar)%dimlens(2)
+do i = 1,progvar(ivar)%dimlens(1)
    data_3d_array(i,j,k) = x(ii)
    ii = ii + 1
 enddo
@@ -2090,9 +2100,9 @@ enddo
 enddo
 
 ii = ii - 1
-if ( ii /= progvar%indexN ) then
-   write(string1, *)'Variable '//trim(progvar%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar%indexN,' actually ended at ',ii
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
    call error_handler(E_ERR,'vector_to_3d_prog_var', string1, &
                     source, revision, revdate, text2=string2)
 endif
@@ -2194,7 +2204,6 @@ subroutine dump_progvar(ivar)
 !%!    character(len=NF90_MAX_NAME) :: units
 !%!    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
 !%!    integer :: xtype         ! netCDF variable type (NF90_double, etc.) 
-!%!    integer :: numdimsWtime  ! number of dims in MPAS analysis file
 !%!    integer :: numdims       ! number of dims - excluding TIME
 !%!    integer :: numvertical   ! number of vertical levels in variable
 !%!    integer :: numcells      ! number of horizontal locations (typically cell centers)
@@ -2207,6 +2216,8 @@ subroutine dump_progvar(ivar)
 !%!    logical  :: clamping     ! does variable need to be range-restricted before 
 !%!    real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
 !%! end type progvartype
+
+integer :: i
 
 ! take care of parallel runs where we only want a single copy of
 ! the output.
@@ -2246,6 +2257,10 @@ write(logfileunit,*) '  clamping    ',progvar(ivar)%clamping
 write(     *     ,*) '  clamping    ',progvar(ivar)%clamping
 write(logfileunit,*) '  range       ',progvar(ivar)%range
 write(     *     ,*) '  range       ',progvar(ivar)%range
+do i = 1,progvar(ivar)%numdims
+   write(logfileunit,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
+   write(     *     ,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
+enddo
 end subroutine dump_progvar
 
 
