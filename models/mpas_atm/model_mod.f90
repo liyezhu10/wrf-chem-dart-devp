@@ -673,11 +673,8 @@ type(time_type), intent(out) :: time
 
 if ( .not. module_initialized ) call static_init_model
 
-! for now, just set to 0
-time = set_time(0,0)
-
-! FIXME: put an error handler call here - we cannot initialize the model
-! this way and it would be an error if filter called it.
+! FIXME: perhaps just set to the time in the analysis file
+time = get_analysis_time(trim(model_analysis_filename))
 
 end subroutine init_time
 
@@ -1263,7 +1260,9 @@ end subroutine pert_model_state
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs_loc, obs_kind, num_close, close_ind, dist)
 !------------------------------------------------------------------
-
+!
+! FIXME ... not tested.
+!
 ! Given a DART location (referred to as "base") and a set of candidate
 ! locations & kinds (obs, obs_kind), returns the subset close to the
 ! "base", their indices, and their distances to the "base" ...
@@ -1475,8 +1474,8 @@ do ivar=1, nfields
 
    enddo DimCheck
 
-   where(dimIDs == TimeDimID) mystart = TimeDimLength
-   where(dimIDs == TimeDimID) mycount = 1   ! only the latest one
+   where(dimIDs == TimeDimID) mystart = TimeDimLength  ! pick the latest time
+   where(dimIDs == TimeDimID) mycount = 1              ! only use one time
 
    if ( debug > 1 ) then
       write(*,*)'analysis_file_to_statevector '//trim(varname)//' start = ',mystart(1:ncNdims)
@@ -1783,7 +1782,7 @@ call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=idims(1)), &
 call nc_check( nf90_inquire_dimension(ncid, dimIDs(2), len=idims(2)), &
                  'get_analysis_time', 'inquire time dimension length '//trim(filename))
 
-if(debug > 8) print*, ' xtime has shape ',idims(1),' by ',idims(2)
+if(debug > 5) print*, ' xtime has shape ',idims(1),' by ',idims(2)
 
 if (idims(2) /= 1) then
    write(string1,*) 'multiple timesteps (',idims(2),') in file ', trim(filename)
@@ -1791,14 +1790,14 @@ if (idims(2) /= 1) then
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate,text2=string2)
 endif
 
-! Get the lowest ranking time ...
+! Get the highest ranking time ... the last one, basically.
 
 call nc_check( nf90_get_var(ncid, VarID, timestring, start = (/ 1, idims(2) /)), &
               'get_analysis_time', 'get_var xtime '//trim(filename))
 
 get_analysis_time_ncid = string_to_time(timestring)
 
-if (debug > 8) then
+if (debug > 5) then
    call print_date(get_analysis_time_ncid, 'get_analysis_time:model date')
    call print_time(get_analysis_time_ncid, 'get_analysis_time:model time')
 endif
