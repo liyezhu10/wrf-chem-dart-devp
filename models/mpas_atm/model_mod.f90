@@ -547,14 +547,19 @@ do ivar = 1, nfields
    call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
             'static_init_model', 'inq_varid '//trim(string2))
 
-!  call nc_check( nf90_get_att(ncid, VarId, 'long_name' , progvar(ivar)%long_name), &
-!           'static_init_model', 'get_att long_name '//trim(string2))
-
-!  call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
-!           'static_init_model', 'get_att units '//trim(string2))
-
    call nc_check(nf90_inquire_variable(ncid, VarId, xtype=progvar(ivar)%xtype, &
            dimids=dimIDs, ndims=numdims), 'static_init_model', 'inquire '//trim(string2))
+
+   ! If the long_name and/or units attributes are set, get them. 
+   ! They are not REQUIRED to exist but are nice to use if they are present.
+
+   if( nf90_inquire_attribute(    ncid, VarId, 'long_name') == NF90_NOERR ) &
+      call nc_check( nf90_get_att(ncid, VarId, 'long_name' , progvar(ivar)%long_name), &
+                  'static_init_model', 'get_att long_name '//trim(string2))
+
+   if( nf90_inquire_attribute(    ncid, VarId, 'units') == NF90_NOERR ) &
+      call nc_check( nf90_get_att(ncid, VarId, 'units' , progvar(ivar)%units), &
+                  'static_init_model', 'get_att units '//trim(string2))
 
    ! Since we are not concerned with the TIME dimension, we need to skip it.
    ! When the variables are read, only a single timestep is ingested into
@@ -609,12 +614,12 @@ model_size = progvar(nfields)%indexN
 if ( debug > 0 .and. do_output()) then
   write(logfileunit,*)
   write(     *     ,*)
-  write(logfileunit,'("static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
+  write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
                                           nCells, nVertices, nVertLevels
-  write(     *     ,'("static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
+  write(     *     ,'(" static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
                                           nCells, nVertices, nVertLevels
-  write(logfileunit, *)'static_init_model:model_size = ', model_size
-  write(     *     , *)'static_init_model:model_size = ', model_size
+  write(logfileunit, *)'static_init_model: model_size = ', model_size
+  write(     *     , *)'static_init_model: model_size = ', model_size
 endif
 
 allocate( ens_mean(model_size) )
