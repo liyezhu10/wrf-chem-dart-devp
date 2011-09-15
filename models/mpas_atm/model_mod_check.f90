@@ -17,7 +17,7 @@ program model_mod_check
 use        types_mod, only : r8, digits12, metadatalength
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
-                             check_namelist_read
+                             check_namelist_read, nmlfileunit, do_nml_file, do_nml_term
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
@@ -91,6 +91,10 @@ write(*,*)'Reading the namelist to get the input filename.'
 call find_namelist_in_file("input.nml", "model_mod_check_nml", iunit)
 read(iunit, nml = model_mod_check_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_mod_check_nml")
+
+! Record the namelist values used for the run
+if (do_nml_file()) write(nmlfileunit, nml=model_mod_check_nml)
+if (do_nml_term()) write(     *     , nml=model_mod_check_nml)
 
 if (test1thru < 1) goto 999
 

@@ -33,10 +33,10 @@ use     location_mod, only : location_type, get_dist, query_location,          &
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, do_output, to_upper,                    &
+                             nc_check, do_output, to_upper, nmlfileunit,       &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
-                             file_to_text, close_file
+                             file_to_text, close_file, do_nml_file, do_nml_term
 
 use     obs_kind_mod, only : paramname_length,        &
                              get_raw_obs_kind_index,  &
@@ -472,12 +472,14 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
-if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
+if (do_nml_term()) write(     *     , nml=model_nml)
 
 ! Read the MPAS variable list to populate DART state vector
-! Once parsed, the values will be recorded for posterity
+! Intentionally do not try to dump them to the nml unit because
+! they include large character arrays which output pages of white space.
+! The routine that reads and parses this namelist will output what
+! values it found into the log.
 call find_namelist_in_file('input.nml', 'mpas_vars_nml', iunit)
 read(iunit, nml = mpas_vars_nml, iostat = io)
 call check_namelist_read(iunit, io, 'mpas_vars_nml')
@@ -569,13 +571,19 @@ do ivar = 1, nfields
    ! If the long_name and/or units attributes are set, get them. 
    ! They are not REQUIRED to exist but are nice to use if they are present.
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) &
+   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
       call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
                   'static_init_model', 'get_att long_name '//trim(string2))
+   else
+      progvar(ivar)%long_name = varname
+   endif
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR ) &
+   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
       call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
                   'static_init_model', 'get_att units '//trim(string2))
+   else
+      progvar(ivar)%units = 'unknown'
+   endif
 
    ! Since we are not concerned with the TIME dimension, we need to skip it.
    ! When the variables are read, only a single timestep is ingested into
