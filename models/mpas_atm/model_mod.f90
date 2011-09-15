@@ -757,9 +757,13 @@ integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 !----------------------------------------------------------------------
 
 ! for the dimensions and coordinate variables
-integer :: NCellsDimID
-integer :: NVertLevelsDimID
-integer :: NVertLevelsP1DimID
+integer :: nCellsDimID
+integer :: nEdgesDimID
+integer :: nVerticesDimID
+integer :: VertexDegreeDimID
+integer :: nSoilLevelsDimID
+integer :: nVertLevelsDimID
+integer :: nVertLevelsP1DimID
 
 ! for the prognostic variables
 integer :: ivar, VarID
@@ -771,7 +775,6 @@ integer :: ivar, VarID
 character(len=129), allocatable, dimension(:) :: textblock
 integer :: LineLenDimID, nlinesDimID, nmlVarID
 integer :: nlines, linelen
-logical :: has_model_namelist
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -835,6 +838,7 @@ endif
 !-------------------------------------------------------------------------------
 ! Define the model size / state variable dimension / whatever ...
 !-------------------------------------------------------------------------------
+
 call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
         dimid = StateVarDimID),'nc_write_model_atts', 'state def_dim '//trim(filename))
 
@@ -902,13 +906,32 @@ else
    !----------------------------------------------------------------------------
    ! Define the new dimensions IDs
    !----------------------------------------------------------------------------
-   
+
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nCells', &
-          len = nCells, dimid = NCellsDimID),'nc_write_model_atts', 'nCells def_dim '//trim(filename))
+          len = nCells, dimid = nCellsDimID),'nc_write_model_atts', 'nCells def_dim '//trim(filename))
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='nEdges', &
+          len = nEdges, dimid = nEdgesDimID),'nc_write_model_atts', 'nEdges def_dim '//trim(filename))
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='nVertices', &
+          len = nVertices, dimid = nVerticesDimID),'nc_write_model_atts', &
+               'nVertices def_dim '//trim(filename))
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='VertexDegree', &
+          len = VertexDegree, dimid = VertexDegreeDimID),'nc_write_model_atts', &
+               'VertexDegree def_dim '//trim(filename))
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='nVertLevels', &
+          len = nVertLevels, dimid = NVertLevelsDimID),'nc_write_model_atts', &
+                                      'nVertLevels def_dim '//trim(filename))
 
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nVertLevelsP1', &
           len = nVertLevelsP1, dimid = NVertLevelsP1DimID),'nc_write_model_atts', &
                                       'nVertLevelsP1 def_dim '//trim(filename))
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='nSoilLevels', &
+          len = nSoilLevels, dimid = nSoilLevelsDimID),'nc_write_model_atts', &
+               'nSoilLevels def_dim '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Coordinate Variables and the Attributes
@@ -943,7 +966,7 @@ else
                  'nc_write_model_atts', 'latCell valid_range '//trim(filename))
 
    ! Grid vertical information
-   call nc_check(nf90_def_var(ncFileID,name='zgrid',xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='zgrid',xtype=nf90_double, &
                  dimids=(/ nVertLevelsP1DimID, nCellsDimID /) ,varid=VarID), &
                  'nc_write_model_atts', 'zgrid def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid zgrid'), &
@@ -954,6 +977,13 @@ else
                  'nc_write_model_atts', 'zgrid units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
                  'nc_write_model_atts', 'zgrid cartesian_axis '//trim(filename))
+
+   ! Grid vertical information
+   call nc_check(nf90_def_var(ncFileID,name='cellsOnVertex',xtype=nf90_int, &
+                 dimids=(/ VertexDegreeDimID, nVerticesDimID /) ,varid=VarID), &
+                 'nc_write_model_atts', 'cellsOnVertex def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid cellsOnVertex'), &
+                 'nc_write_model_atts', 'cellsOnVertex long_name '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -966,8 +996,7 @@ else
 
       ! match shape of the variable to the dimension IDs
 
- !    call define_var_dims(progvar(ivar), myndims, mydimids, MemberDimID, unlimitedDimID, &
- !                    NLONDimID, NLATDimID, NALTDimID, NgridLon, NgridLat, NgridAlt)
+      call define_var_dims(ncFileID, ivar, MemberDimID, unlimitedDimID, myndims, mydimids) 
 
       ! define the variable and set the attributes
 
@@ -1016,12 +1045,6 @@ endif
 ! Fill the variables we can
 !-------------------------------------------------------------------------------
 
-if (has_model_namelist) then
-   call file_to_text('model_vars.nml', textblock)
-   call nc_check(nf90_put_var(ncFileID, nmlVarID, textblock ), &
-                 'nc_write_model_atts', 'put_var nmlVarID')
-   deallocate(textblock)
-endif
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -2709,6 +2732,44 @@ end subroutine set_variable_clamping
 
 
 
+subroutine define_var_dims(ncid,ivar, memberdimid, unlimiteddimid, ndims, dimids) 
+!------------------------------------------------------------
+! set the dimids array needed to augment the natural shape of the variable
+! with the two additional dimids needed by the DART diagnostic output.
+integer,               intent(in)  :: ncid
+integer,               intent(in)  :: ivar
+integer,               intent(in)  :: memberdimid, unlimiteddimid
+integer,               intent(out) :: ndims
+integer, dimension(:), intent(out) :: dimids
+
+integer :: i,mydimid
+
+ndims  = 0
+dimids = 0
+
+do i = 1,progvar(ivar)%numdims
+
+   ! Each of these dimension names (originally from the MPAS analysis file)
+   ! must exist in the DART diagnostic netcdf files. 
+
+   call nc_check(nf90_inq_dimid(ncid, trim(progvar(ivar)%dimname(i)), mydimid), &
+              'define_var_dims','inq_dimid '//trim(progvar(ivar)%dimname(i)))
+
+   ndims = ndims + 1
+
+   dimids(ndims) = mydimid
+
+enddo
+
+ndims         = ndims + 1
+dimids(ndims) = memberdimid
+ndims         = ndims + 1
+dimids(ndims) = unlimiteddimid
+
+end subroutine define_var_dims
+
+
+
 subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, uReconstructZonal, uReconstructMeridional, u)
 !------------------------------------------------------------
 ! Project the u, v winds at the cell centers onto the edges.
@@ -2735,14 +2796,14 @@ integer :: iCell, iEdge, jEdge, kLev, i, k
 if ( .not. module_initialized ) call static_init_model
 
 ! Initialization
-U(:,:) = 0.
+U(:,:) = 0.0_r8
 
 ! Compute unit vectors in east and north directions for each cell:
- do iCell = 1, nCells
+do iCell = 1, nCells
 
     east(1,iCell) = -sin(lonCell(iCell))
     east(2,iCell) =  cos(lonCell(iCell))
-    east(3,iCell) =  0.0
+    east(3,iCell) =  0.0_r8
     call r3_normalize(east(1,iCell), east(2,iCell), east(3,iCell))
 
     north(1,iCell) = -cos(lonCell(iCell))*sin(latCell(iCell))
@@ -2750,7 +2811,7 @@ U(:,:) = 0.
     north(3,iCell) =  cos(latCell(iCell))
     call r3_normalize(north(1,iCell), north(2,iCell), north(3,iCell))
 
- end do
+enddo
 
 ! Projection from the cell centers to the edges
 do iCell = 1, nCells
@@ -2758,16 +2819,18 @@ do iCell = 1, nCells
       iEdge = EdgesOnCell(jEdge, iCell)
       do k = 1, nVertLevels
          U(k,iEdge) = U(k,iEdge) + &
-                      0.5 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
-                                                       +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
-                                                       +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
-              +  0.5 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell)  &
-                                                       +  edgeNormalVectors(2,iEdge) * north(2,iCell)  &
-                                                       +  edgeNormalVectors(3,iEdge) * north(3,iCell))
+                 0.5_r8 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
+                                                     +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
+                                                     +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
+          + 0.5_r8 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
+                                                     +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
+                                                     +  edgeNormalVectors(3,iEdge) * north(3,iCell)) 
       enddo
    enddo
 enddo
+
 end subroutine uv_cell_to_edges
+
 
 
 subroutine r3_normalize(ax, ay, az)
@@ -2777,12 +2840,13 @@ subroutine r3_normalize(ax, ay, az)
 real(r8), intent(inout) :: ax, ay, az
 real(r8) :: mi
 
- mi = 1.0 / sqrt(ax**2 + ay**2 + az**2)
+ mi = 1.0_r8 / sqrt(ax**2 + ay**2 + az**2)
  ax = ax * mi
  ay = ay * mi
  az = az * mi
 
 end subroutine r3_normalize
+
 
 
 subroutine get_index_range_string(string,index1,indexN)
@@ -2812,6 +2876,7 @@ if ((index1 == 0) .or. (indexN == 0)) then
    call error_handler(E_ERR,'get_index_range_string',string1,source,revision,revdate)
 endif
 end subroutine get_index_range_string
+
 
 
 subroutine get_index_range_int(dartkind,index1,indexN)
@@ -2847,6 +2912,7 @@ endif
 end subroutine get_index_range_int
 
 
+
 function get_index_from_varname(varname)
 !------------------------------------------------------------------
 ! Determine what index corresponds to the given varname
@@ -2870,7 +2936,6 @@ return
 end function get_index_from_varname
 
 
-!------------------------------------------------------------------
 
 !===================================================================
 ! End of model_mod
