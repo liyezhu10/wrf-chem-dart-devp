@@ -15,7 +15,7 @@ program model_mod_check
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength
-use    utilities_mod, only : initialize_utilities, timestamp, nc_check, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
@@ -220,13 +220,12 @@ else
 endif
 
 !----------------------------------------------------------------------
-! When called with 'end', timestamp will call finalize_utilities()
 ! This must be the last few lines of the main program.
 !----------------------------------------------------------------------
 
  999 continue
 
-call timestamp(string1=source, pos='end')
+call finalize_utilities()
 
 contains
 
