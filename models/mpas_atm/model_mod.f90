@@ -1827,12 +1827,10 @@ call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=idims(1)), &
 call nc_check( nf90_inquire_dimension(ncid, dimIDs(2), len=idims(2)), &
                  'get_analysis_time', 'inquire time dimension length '//trim(filename))
 
-if(debug > 5) print*, ' xtime has shape ',idims(1),' by ',idims(2)
-
 if (idims(2) /= 1) then
    write(string1,*) 'multiple timesteps (',idims(2),') in file ', trim(filename)
-   write(string2,*) 'We are confused.'
-   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate,text2=string2)
+   write(string2,*) 'We are using the LAST one, presumably, the LATEST timestep.'
+   call error_handler(E_MSG,'get_analysis_time',string1,source,revision,revdate,text2=string2)
 endif
 
 ! Get the highest ranking time ... the last one, basically.
