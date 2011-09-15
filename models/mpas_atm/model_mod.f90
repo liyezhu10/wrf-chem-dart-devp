@@ -196,6 +196,10 @@ INTERFACE get_analysis_time
       MODULE PROCEDURE get_analysis_time_fname
 END INTERFACE
 
+INTERFACE get_index_range
+      MODULE PROCEDURE get_index_range_int
+      MODULE PROCEDURE get_index_range_string
+END INTERFACE
 
 !------------------------------------------------
 ! The regular grid for horizontal interpolation divides the sphere into
@@ -2786,7 +2790,7 @@ integer :: i
 index1 = 0
 indexN = 0
 
-write(*,*)'FIXME ... actually, just test get_index_range_string ... '
+write(*,*)'FIXME: needs testing'
 
 FieldLoop : do i=1,nfields
    if (progvar(i)%kind_string /= trim(string)) cycle FieldLoop
