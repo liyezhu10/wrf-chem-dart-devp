@@ -1,4 +1,3 @@
-
 Hints for porting a new model to DART:
 
 copy this template directory into a DART/models/xxx
