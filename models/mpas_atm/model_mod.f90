@@ -1570,11 +1570,13 @@ type(time_type),  intent(in) :: statetime
 integer :: i, ni, nj, nk, ivar
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
+real(r8), allocatable, dimension(:,:)       :: data_2d_array2
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
+integer :: zonal, meridional
 integer :: ncFileID, TimeDimID, TimeDimLength
 type(time_type) :: model_time
 
@@ -1630,18 +1632,6 @@ do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
-
-   ! special processing for the wind vectors.  in the analysis file they are on
-   ! edge centers, with directions normal to and parallel with the edge direction.
-   ! in the dart state vector they are at cell centers and are meridional and zonal
-   ! (parallel to lat and lon lines).  we can read them directly from the analysis
-   ! file at the cell centers, but in putting them back into the file we've got to
-   ! update ( one, both ?) the edge arrays as well as the centers.  (is this true?)
-   if (varname == 'uReconstructZonal' .or. varname == 'uReconstructMeridional') then
-      call handle_winds(ivar)
-      ! FIXME: cycle here OR do we also write out the centers array for consistency?
-      ! right now the code is going to do both just to be safe.  belt & suspenders.
-   endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
    ! The TIME and Copy dimensions are intentionally not queried
@@ -1738,6 +1728,26 @@ do ivar=1, nfields
    endif
 
 enddo
+
+! special processing for the wind vectors.  in the analysis file they are on
+! edge centers, with directions normal to and parallel with the edge direction.
+! in the dart state vector they are at cell centers and are meridional and zonal
+! (parallel to lat and lon lines).  we can read them directly from the analysis
+! file at the cell centers, but in putting them back into the file we've got to
+! update the edge arrays as well as the centers.
+if (winds_present(zonal,meridional)) then
+   allocate(data_2d_array ( progvar(ivar)%dimlens(1),  &
+                            progvar(ivar)%dimlens(2) ))
+   allocate(data_2d_array2( progvar(ivar)%dimlens(1),  &
+                            progvar(ivar)%dimlens(2) ))
+
+   call vector_to_prog_var(state_vector, zonal,      data_2d_array )
+   call vector_to_prog_var(state_vector, meridional, data_2d_array2)
+ 
+   call handle_winds(data_2d_array, data_2d_array2)
+
+   deallocate(data_2d_array, data_2d_array2)
+endif
 
 call nc_check(nf90_close(ncFileID), &
              'statevector_to_analysis_file','close '//trim(filename))
@@ -2082,17 +2092,16 @@ endif
 end subroutine get_grid
 
 
-subroutine get_edges(latEdge, lonEdge, cellsOnEdge) 
+subroutine get_edges(edgeNormalVectors, nEdgesOnCell)
 !------------------------------------------------------------------
 !
-! Read the edge list and neighboring cells from the MPAS netcdf file.
+! Read the edge info needed to map from cell centers to edge values
 !
 ! The file name comes from module storage ... namelist.
 
 ! must first be allocated by calling code with the following sizes:
-real(r8), intent(inout) :: latEdge(:)       ! latEdge(nEdges)
-real(r8), intent(inout) :: lonEdge(:)       ! lonEdge(nEdges)
-integer,  intent(inout) :: cellsOnEdge(:,:) ! cellsOnEdge(2, nEdges)
+real(r8), intent(inout) :: edgeNormalVectors(:,:) ! (3, nEdges)
+integer,  intent(inout) :: nEdgesOnCell(:)        ! (nCells)
 
 integer  :: ncid, VarID
 
@@ -2102,36 +2111,25 @@ call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get
 
 ! Read the variables
 
-call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
-      'get_edges', 'inq_varid latEdge '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, latEdge), &
-      'get_edges', 'get_var latEdge '//trim(model_analysis_filename))
+call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
+      'get_edges', 'inq_varid edgeNormalVectors '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
+      'get_edges', 'get_var edgeNormalVectors '//trim(model_analysis_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'lonEdge', VarID), &
-      'get_edges', 'inq_varid lonEdge '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, lonEdge), &
-      'get_edges', 'get_var lonEdge '//trim(model_analysis_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'cellsOnEdge', VarID), &
-      'get_edges', 'inq_varid cellsOnEdge '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, cellsOnEdge), &
-      'get_edges', 'get_var cellsOnEdge '//trim(model_analysis_filename))
+call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
+      'get_edges', 'inq_varid nEdgesOnCell '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
+      'get_edges', 'get_var nEdgesOnCell '//trim(model_analysis_filename))
 
 call nc_check(nf90_close(ncid), 'get_edges','close '//trim(model_analysis_filename) )
-
-! MPAS analysis files are in radians - at this point DART needs degrees.
-
-latEdge = latEdge * rad2deg
-lonEdge = lonEdge * rad2deg
 
 ! A little sanity check
 
 if ( debug > 7 ) then
 
    write(*,*)
-   write(*,*)'latEdge       range ',minval(latEdge),     maxval(latEdge)
-   write(*,*)'lonEdge       range ',minval(lonEdge),     maxval(lonEdge)
-   write(*,*)'cellsOnEdge   range ',minval(cellsOnEdge), maxval(cellsOnEdge)
+   write(*,*)'edgeNormalVectors  range ',minval(edgeNormalVectors),  maxval(edgeNormalVectors)
+   write(*,*)'nEdgesOnCell       range ',minval(nEdgesOnCell),       maxval(nEdgesOnCell)
 
 endif
 
@@ -2519,9 +2517,35 @@ nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
 end function FindTimeDimension
 
 
-subroutine handle_winds(ivar)
+function winds_present(zonal,meridional)
 !------------------------------------------------------------------
- integer, intent(in) :: ivar
+ logical :: winds_present
+ integer,  intent(out) :: zonal, meridional
+
+! if neither of uReconstructZonal or uReconstructMeridional are in the
+!   state vector, return .false. and we're done.
+! if both are there, return the ivar indices for each
+! if only one is there, it's an error.
+
+zonal = get_index_from_varname('uReconstructZonal')
+meridional = get_index_from_varname('uReconstructMeridional')
+
+if (zonal > 0 .and. meridional > 0) then
+  winds_present = .true.
+  return
+else if (zonal < 0 .and. meridional < 0) then
+  winds_present = .false. 
+  return
+endif
+
+! only one present - error.
+! FIXME : add call to error_handler
+
+end function winds_present
+
+subroutine handle_winds(zonal_data, meridional_data)
+!------------------------------------------------------------------
+ real(r8), intent(in) :: zonal_data(:,:), meridional_data(:,:)
  
 !  the current plan for winds is:
 !  read the reconstructed zonal and meridional winds at cell centers
@@ -2540,27 +2564,19 @@ subroutine handle_winds(ivar)
 ! is that all we need for this conversion?
 
 integer :: i
-real(r8), allocatable :: latEdge(:), lonEdge(:), u(:,:)
-integer,  allocatable :: cellsOnEdge(:,:)
+real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:), EdgesOnCell(:,:)
+integer,  allocatable :: nEdgesOnCell(:)
 
-allocate(latEdge(nEdges), lonEdge(nEdges)) 
-allocate(cellsOnEdge(2, nEdges), u(nVertLevels, nEdges))
+allocate(u(nVertLevels, nEdges))
+allocate(nEdgesOnCell(nCells), EdgesOnCell(nEdges, nCells))
+allocate(edgeNormalVectors(3, nEdges))
 
-call get_edges(latEdge, lonEdge, cellsOnEdge) 
+call get_edges(edgeNormalVectors, nEdgesOnCell)
 call get_u(u)
 
-do i=1, nEdges
-   ! FIXME: convert values from cells 1 and 2 for this edge
-   ! to value at lat/lon for edge
-   if ((i < 10) .and. (debug > 7) .and. do_output()) then
-      print *, 'handle_winds: i, lat/lon edge, neighbor cell ids, cell centers'
-      print *, i, latEdge(i), lonEdge(i), cellsOnEdge(1, i), cellsOnEdge(2, i)
-      print *, latCell(cellsOnEdge(1, i)), lonCell(cellsOnEdge(1, i))
-      print *, latCell(cellsOnEdge(2, i)), lonCell(cellsOnEdge(2, i))
-   endif
-enddo
+call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, zonal_data, meridional_data, u)
 
-deallocate(latEdge, lonEdge, cellsOnEdge)
+deallocate(u, nEdgesOnCell, edgeNormalVectors)
 
 end subroutine handle_winds
 
@@ -2681,7 +2697,7 @@ end subroutine set_variable_clamping
 
 
 
-subroutine uv_cell_to_edges
+subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, uReconstructZonal, uReconstructMeridional, u)
 !------------------------------------------------------------
 ! Project the u, v winds at the cell centers onto the edges.
 ! FIXME: I just pretend to have all the input arguments read 
@@ -2693,23 +2709,18 @@ subroutine uv_cell_to_edges
 !        We may need to read edgeNormalVectors in get_grid to use this subroutine.
 !        Here "U" is the prognostic variable in MPAS.
 
-real(r8), allocatable(:,:), intent(in) :: edgeNormalVectors      ! unit direction vectors on the edges
-real(r8), allocatable(:,:), intent(in) :: uReconstructZonal      ! u wind at cell centers
-real(r8), allocatable(:,:), intent(in) :: uReconstructMeridional ! u wind at cell centers
-real(r8), allocatable(:,:), intent(out):: U                      ! normal velocity on the edges
+real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
+integer,  intent(in) :: nEdgesOnCell(:)
+real(r8), intent(in) :: EdgesOnCell(:,:)      ! unit direction vectors on the edges
+real(r8), intent(in) :: uReconstructZonal(:,:)      ! u wind at cell centers
+real(r8), intent(in) :: uReconstructMeridional(:,:) ! u wind at cell centers
+real(r8), intent(out):: u(:,:)                      ! normal velocity on the edges
 
 ! Local variables
 real(r8) :: east(3,nCells), north(3,nCells)
-integer :: iCell, iEdge, jEdge, kLev
+integer :: iCell, iEdge, jEdge, kLev, i, k
 
 if ( .not. module_initialized ) call static_init_model
-
-allocate(edgeNormalVectors(nEdges, R3))
-
-!FIXME: These variables may be already allocated above. But let us just proceed from the beginning.
-allocate(uReconstructZonal(nVertLevels, nCells))
-allocate(uReconstructMeridional(nVertLevels, nCells))
-allocate(U(nVertLevels, nEdges))        ! Time dimension ignored.
 
 ! Initialization
 U(:,:) = 0.
@@ -2738,10 +2749,9 @@ do iCell = 1, nCells
                       0.5 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
                                                        +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
                                                        +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
-                 0.5 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell)  &
+              +  0.5 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell)  &
                                                        +  edgeNormalVectors(2,iEdge) * north(2,iCell)  &
-                                                       +  edgeNormalVectors(3,iEdge) * north(3,iCell)) &
-
+                                                       +  edgeNormalVectors(3,iEdge) * north(3,iCell))
       enddo
    enddo
 enddo
@@ -2762,6 +2772,93 @@ real(r8) :: mi
 
 end subroutine r3_normalize
 
+
+subroutine get_index_range_string(string,index1,indexN)
+!------------------------------------------------------------------
+! Determine where a particular DART kind (string) exists in the 
+! DART state vector.
+
+character(len=*), intent(in)  :: string
+integer,          intent(out) :: index1,indexN
+
+integer :: i
+
+index1 = 0
+indexN = 0
+
+write(*,*)'FIXME ... actually, just test get_index_range_string ... '
+
+FieldLoop : do i=1,nfields
+   if (progvar(i)%kind_string /= trim(string)) cycle FieldLoop
+   index1 = progvar(i)%index1
+   indexN = progvar(i)%indexN
+   exit FieldLoop
+enddo FieldLoop
+
+if ((index1 == 0) .or. (indexN == 0)) then
+   write(string1,*) 'Problem, cannot find indices for '//trim(string)
+   call error_handler(E_ERR,'get_index_range_string',string1,source,revision,revdate)
+endif
+end subroutine get_index_range_string
+
+
+subroutine get_index_range_int(dartkind,index1,indexN)
+!------------------------------------------------------------------
+! Determine where a particular DART kind (integer) exists in the 
+! DART state vector.
+
+integer, intent(in) :: dartkind
+integer, intent(out) :: index1,indexN
+
+integer :: i
+character(len=paramname_length) :: string
+
+index1 = 0
+indexN = 0
+
+write(*,*)'FIXME: needs testing'
+
+FieldLoop : do i=1,nfields
+   if (progvar(i)%dart_kind /= dartkind) cycle FieldLoop
+   index1 = progvar(i)%index1
+   indexN = progvar(i)%indexN
+   exit FieldLoop
+enddo FieldLoop
+
+string = get_raw_obs_kind_name(dartkind)
+
+if ((index1 == 0) .or. (indexN == 0)) then
+   write(string1,*) 'Problem, cannot find indices for kind ',dartkind,trim(string)
+   call error_handler(E_ERR,'get_index_range_int',string1,source,revision,revdate)
+endif
+
+end subroutine get_index_range_int
+
+
+function get_index_from_varname(varname)
+!------------------------------------------------------------------
+! Determine what index corresponds to the given varname
+! if name not in state vector, return -1 -- not an error.
+
+integer :: get_index_from_varname
+character(len=*), intent(in) :: varname
+
+integer :: i
+
+FieldLoop : do i=1,nfields
+   if (progvar(i)%varname == varname) then
+      get_index_from_varname = i
+      return
+   endif 
+enddo FieldLoop
+
+get_index_from_varname = -1
+return
+
+end function get_index_from_varname
+
+
+!------------------------------------------------------------------
 
 !===================================================================
 ! End of model_mod
