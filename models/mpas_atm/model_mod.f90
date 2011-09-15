@@ -79,7 +79,7 @@ public :: get_model_analysis_filename,  &
           statevector_to_analysis_file, &
           get_analysis_time,            &
           write_model_time,             &
-          get_grid_dims, get_u
+          get_grid_dims
 
 ! version controlled file description for error handling, do not edit
 
@@ -336,7 +336,7 @@ else
    location = set_location(lonCell(iloc),latCell(iloc), height, VERTISHEIGHT)
 endif
 
-if (debug > 5) then
+if (debug > 9) then
 
     write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
     write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, kloc
@@ -2172,7 +2172,9 @@ end subroutine get_edges
 subroutine get_u(u)
 !------------------------------------------------------------------
 !
-! Read the edge list and neighboring cells from the MPAS netcdf file.
+! get the contents of the U array.   it is not clear that we really
+! need this since the computation code seems to zero out the U array
+! before starting - so this might be unnecessary work.
 !
 ! The file name comes from module storage ... namelist.
 
@@ -2217,7 +2219,7 @@ mycount = numu
 mycount(numdims) = 1
 
 call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
-              'get_u', 'get_var u '//trim(model_analysis_filename))
+              'get_u', 'put_var u '//trim(model_analysis_filename))
 
 
 call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
@@ -2233,6 +2235,72 @@ if ( debug > 7 ) then
 endif
 
 end subroutine get_u
+
+
+subroutine put_u(u)
+!------------------------------------------------------------------
+!
+! Put the newly updated 'u' field back into the netcdf file.
+!
+! The file name comes from module storage ... namelist.
+
+! must first be allocated by calling code with the following sizes:
+real(r8), intent(in) :: u(:,:)       ! u(nVertLevels, nEdges) 
+
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims, mystart, mycount, numu
+integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
+integer :: ntimes, i
+
+! Read the netcdf file data
+
+if ( .not. module_initialized ) call static_init_model
+
+
+call nc_check(nf90_open(trim(model_analysis_filename), nf90_write, ncid), 'put_u', 'open '//trim(model_analysis_filename))
+
+call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
+                    'put_u', 'inquire '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
+                 'put_u', 'inquire time dimension length '//trim(model_analysis_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
+             'put_u', 'inq_varid u '//trim(model_analysis_filename))
+
+call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+              'put_u', 'inquire u '//trim(model_analysis_filename))
+
+do i=1, numdims
+   call nc_check( nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
+                 'put_u', 'inquire U dimension length '//trim(model_analysis_filename))
+enddo
+
+print *, 'u dimids = ', numu(1:numdims)
+
+! for all but the time dimension, read all the values.   
+! for time read only the last one (if more than 1 present)
+mystart = 1
+mystart(numdims) = ntimes
+mycount = numu
+mycount(numdims) = 1
+
+call nc_check( nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
+              'put_u', 'get_var u '//trim(model_analysis_filename))
+
+
+call nc_check(nf90_close(ncid), 'put_u','close '//trim(model_analysis_filename) )
+
+
+! A little sanity check
+
+if ( debug > 7 ) then
+
+   write(*,*)
+   write(*,*)'u       range ',minval(u),     maxval(u)
+
+endif
+
+end subroutine put_u
 
 
 
@@ -2597,19 +2665,21 @@ subroutine handle_winds(zonal_data, meridional_data)
 ! is that all we need for this conversion?
 
 integer :: i
-real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:), EdgesOnCell(:,:)
+real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:), edgesOnCell(:,:)
 integer,  allocatable :: nEdgesOnCell(:)
 
 allocate(u(nVertLevels, nEdges))
-allocate(nEdgesOnCell(nCells), EdgesOnCell(nEdges, nCells))
+allocate(nEdgesOnCell(nCells), edgesOnCell(nEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 
 call get_edges(edgeNormalVectors, nEdgesOnCell)
 call get_u(u)
 
-call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, zonal_data, meridional_data, u)
+call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, zonal_data, meridional_data, u)
 
-deallocate(u, nEdgesOnCell, edgeNormalVectors)
+call put_u(u)
+
+deallocate(u, nEdgesOnCell, edgesOnCell, edgeNormalVectors)
 
 end subroutine handle_winds
 
@@ -2768,7 +2838,7 @@ end subroutine define_var_dims
 
 
 
-subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, uReconstructZonal, uReconstructMeridional, u)
+subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, uReconstructZonal, uReconstructMeridional, u)
 !------------------------------------------------------------
 ! Project the u, v winds at the cell centers onto the edges.
 ! FIXME: I just pretend to have all the input arguments read 
@@ -2776,13 +2846,13 @@ subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, EdgesOnCell, uRecon
 !        We can use progvar for these later on.
 !        We need to define a new dimension "R3" for edgeNormalVectors in get_grid_dims,
 !        or we can just hard-code it as 3 since it just came from the x/y/z cartesian coordinate.
-!        We also need to define nEdgesOnCell in get_grid_dims, and read EdgesOnCell in get_grid.
+!        We also need to define nEdgesOnCell in get_grid_dims, and read edgesOnCell in get_grid.
 !        We may need to read edgeNormalVectors in get_grid to use this subroutine.
 !        Here "U" is the prognostic variable in MPAS.
 
 real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
 integer,  intent(in) :: nEdgesOnCell(:)
-real(r8), intent(in) :: EdgesOnCell(:,:)      ! unit direction vectors on the edges
+real(r8), intent(in) :: edgesOnCell(:,:)      ! unit direction vectors on the edges
 real(r8), intent(in) :: uReconstructZonal(:,:)      ! u wind at cell centers
 real(r8), intent(in) :: uReconstructMeridional(:,:) ! u wind at cell centers
 real(r8), intent(out):: u(:,:)                      ! normal velocity on the edges
@@ -2814,7 +2884,7 @@ enddo
 ! Projection from the cell centers to the edges
 do iCell = 1, nCells
    do jEdge = 1, nEdgesOnCell(iCell)
-      iEdge = EdgesOnCell(jEdge, iCell)
+      iEdge = edgesOnCell(jEdge, iCell)
       do k = 1, nVertLevels
          U(k,iEdge) = U(k,iEdge) + &
                  0.5_r8 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
