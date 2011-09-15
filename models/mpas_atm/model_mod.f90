@@ -2681,6 +2681,88 @@ end subroutine set_variable_clamping
 
 
 
+subroutine uv_cell_to_edges
+!------------------------------------------------------------
+! Project the u, v winds at the cell centers onto the edges.
+! FIXME: I just pretend to have all the input arguments read 
+!        directly from the mpas file here.
+!        We can use progvar for these later on.
+!        We need to define a new dimension "R3" for edgeNormalVectors in get_grid_dims,
+!        or we can just hard-code it as 3 since it just came from the x/y/z cartesian coordinate.
+!        We also need to define nEdgesOnCell in get_grid_dims, and read EdgesOnCell in get_grid.
+!        We may need to read edgeNormalVectors in get_grid to use this subroutine.
+!        Here "U" is the prognostic variable in MPAS.
+
+real(r8), allocatable(:,:), intent(in) :: edgeNormalVectors      ! unit direction vectors on the edges
+real(r8), allocatable(:,:), intent(in) :: uReconstructZonal      ! u wind at cell centers
+real(r8), allocatable(:,:), intent(in) :: uReconstructMeridional ! u wind at cell centers
+real(r8), allocatable(:,:), intent(out):: U                      ! normal velocity on the edges
+
+! Local variables
+real(r8) :: east(3,nCells), north(3,nCells)
+integer :: iCell, iEdge, jEdge, kLev
+
+if ( .not. module_initialized ) call static_init_model
+
+allocate(edgeNormalVectors(nEdges, R3))
+
+!FIXME: These variables may be already allocated above. But let us just proceed from the beginning.
+allocate(uReconstructZonal(nVertLevels, nCells))
+allocate(uReconstructMeridional(nVertLevels, nCells))
+allocate(U(nVertLevels, nEdges))        ! Time dimension ignored.
+
+! Initialization
+U(:,:) = 0.
+
+! Compute unit vectors in east and north directions for each cell:
+ do iCell = 1, nCells
+
+    east(1,iCell) = -sin(lonCell(iCell))
+    east(2,iCell) =  cos(lonCell(iCell))
+    east(3,iCell) =  0.0
+    call r3_normalize(east(1,iCell), east(2,iCell), east(3,iCell))
+
+    north(1,iCell) = -cos(lonCell(iCell))*sin(latCell(iCell))
+    north(2,iCell) = -sin(lonCell(iCell))*sin(latCell(iCell))
+    north(3,iCell) =  cos(latCell(iCell))
+    call r3_normalize(north(1,iCell), north(2,iCell), north(3,iCell))
+
+ end do
+
+! Projection from the cell centers to the edges
+do iCell = 1, nCells
+   do jEdge = 1, nEdgesOnCell(iCell)
+      iEdge = EdgesOnCell(jEdge, iCell)
+      do k = 1, nVertLevels
+         U(k,iEdge) = U(k,iEdge) + &
+                      0.5 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
+                                                       +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
+                                                       +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
+                 0.5 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell)  &
+                                                       +  edgeNormalVectors(2,iEdge) * north(2,iCell)  &
+                                                       +  edgeNormalVectors(3,iEdge) * north(3,iCell)) &
+
+      enddo
+   enddo
+enddo
+end subroutine uv_cell_to_edges
+
+
+subroutine r3_normalize(ax, ay, az)
+!------------------------------------------------------------------
+!normalizes the vector (ax, ay, az)
+
+real(r8), intent(inout) :: ax, ay, az
+real(r8) :: mi
+
+ mi = 1.0 / sqrt(ax**2 + ay**2 + az**2)
+ ax = ax * mi
+ ay = ay * mi
+ az = az * mi
+
+end subroutine r3_normalize
+
+
 !===================================================================
 ! End of model_mod
 !===================================================================
