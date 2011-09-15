@@ -103,15 +103,15 @@ real(r8)           :: model_perturbation_amplitude = 0.2
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_analysis_filename = 'mpas_restart.nc'
+character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 
-namelist /model_nml/  &
-   model_analysis_filename,        &
-   output_state_vector,         &
-   assimilation_period_days,    &  ! for now, this is the timestep
-   assimilation_period_seconds, &
-   model_perturbation_amplitude,&
-   calendar,                    &
+namelist /model_nml/             &
+   model_analysis_filename,      &
+   output_state_vector,          &
+   assimilation_period_days,     &
+   assimilation_period_seconds,  &
+   model_perturbation_amplitude, &
+   calendar,                     &
    debug
 
 !------------------------------------------------------------------
