@@ -72,15 +72,10 @@ call find_namelist_in_file("input.nml", "model_to_dart_nml", iunit)
 read(iunit, nml = model_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_to_dart_nml") ! closes, too.
 
-write(*,*)
-write(*,*) 'model_to_dart: converting model analysis file ', &
-           "'"//trim(model_analysis_filename)//"'" 
-write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
-
 !----------------------------------------------------------------------
-! get to work
+! Call model_mod:static_init_model() which reads the model namelists
+! to set grid sizes, etc.
 !----------------------------------------------------------------------
-
 call static_init_model()
 
 call get_model_analysis_filename(model_analysis_filename)
@@ -88,8 +83,19 @@ call get_model_analysis_filename(model_analysis_filename)
 x_size = get_model_size()
 allocate(statevector(x_size))
 
+write(*,*)
+write(*,*) 'model_to_dart: converting model analysis file ', &
+           "'"//trim(model_analysis_filename)//"'" 
+write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
+
+!----------------------------------------------------------------------
+! Read the valid time and the state from the MPAS netcdf file
+!----------------------------------------------------------------------
 call analysis_file_to_statevector(model_analysis_filename, statevector, model_time) 
 
+!----------------------------------------------------------------------
+! Write the valid time and the state to the dart restart file
+!----------------------------------------------------------------------
 iunit = open_restart_write(model_to_dart_output_file)
 
 call awrite_state_restart(model_time, statevector, iunit)
