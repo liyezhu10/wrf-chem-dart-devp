@@ -91,6 +91,18 @@
    print_every_nth_obs             = 0
    /
 
+&location_nml
+   horiz_dist_only             = .true.,
+   vert_normalization_pressure = 100000.0,
+   vert_normalization_height   = 10000.0,
+   vert_normalization_level    = 20.0,
+   approximate_distance        = .true.,
+   nlon                        = 71,
+   nlat                        = 36,
+   output_box_info             = .false.,
+   print_box_level             = 0,
+  /
+
 &cov_cutoff_nml
    select_localization = 1
    /
@@ -125,7 +137,8 @@
    /
 
 &mpas_vars_nml
-   mpas_state_variables = 'theta',                 'KIND_POTENTIAL_TEMPERATURE',
+   mpas_state_variables = 
+                          'theta',                 'KIND_POTENTIAL_TEMPERATURE',
                           'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
                           'uReconstructMeridional','KIND_V_WIND_COMPONENT',
                           'w',                     'KIND_VERTICAL_VELOCITY',
