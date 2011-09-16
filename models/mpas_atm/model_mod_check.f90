@@ -20,7 +20,8 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check,
                              check_namelist_read, nmlfileunit, do_nml_file, do_nml_term
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
-use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
+use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
+                             KIND_POTENTIAL_TEMPERATURE
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -96,6 +97,8 @@ call check_namelist_read(iunit, io, "model_mod_check_nml")
 if (do_nml_file()) write(nmlfileunit, nml=model_mod_check_nml)
 if (do_nml_term()) write(     *     , nml=model_mod_check_nml)
 
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+
 if (test1thru < 1) goto 999
 
 ! This harvests all kinds of initialization information
@@ -130,7 +133,7 @@ statevector = 1.0_r8;
 model_time  = set_time(21600, 149446)   ! 06Z 4 March 2010
 
 iunit = open_restart_write('allones.ics')
-call awrite_state_restart(model_time, statevector, iunit)
+!!!call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
 !----------------------------------------------------------------------
@@ -196,7 +199,7 @@ if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
 
 if (test1thru < 7) goto 999
 
-if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+!!!if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
 !----------------------------------------------------------------------
 ! Check the interpolation - print initially to STDOUT
@@ -207,9 +210,7 @@ if (test1thru < 7) goto 999
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
 
-!     KIND_SNOWCOVER_FRAC              = 90, &   comes from the obs_kind_mod.f90
-
-call model_interpolate(statevector, loc, 90 , interp_val, ios_out)
+call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 
    write(*,*)'model_interpolate SUCCESS: The interpolated value is ',interp_val
