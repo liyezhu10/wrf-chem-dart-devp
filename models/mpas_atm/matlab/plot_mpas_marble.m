@@ -1,10 +1,10 @@
-function plot_mpas(fname,varname,level)
-%% plot_mpas 
+function plot_mpas_marble(fname,varname,level)
+%% plot_mpas_marble
 % 
 % fname   = '../data/mpas_output.2010-10-23_03:00:00.nc';
 % varname = 'theta';
-% level   = 1;
-% plot_mpas(fname,varname,level)
+% level   = 4;
+% plot_mpas_marble(fname,varname,level)
 %
 
 %% DART software - Copyright 2004 - 2011 UCAR. This open source software is
