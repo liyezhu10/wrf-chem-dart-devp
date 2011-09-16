@@ -252,9 +252,9 @@
    output_file          = 'check_me'
    advance_time_present = .FALSE.
    verbose              = .TRUE.
-   test1thru            = 3
+   test1thru            = 9
    x_ind            = 300 
    loc_of_interest  = 240.0, 0.0, 10000.0,
-   kind_of_interest = 'ANY'
+   kind_of_interest = 'KIND_POTENTIAL_TEMPERATURE'
    /
 

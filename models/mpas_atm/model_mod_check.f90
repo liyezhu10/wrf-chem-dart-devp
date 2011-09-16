@@ -33,7 +33,10 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
                              model_interpolate, get_analysis_time, &
-                             get_model_analysis_filename
+                             get_model_analysis_filename, analysis_file_to_statevector, &
+                             statevector_to_analysis_file, get_analysis_time,            &
+                             write_model_time, get_grid_dims
+
 
 implicit none
 
@@ -64,7 +67,7 @@ namelist /model_mod_check_nml/ dart_input_file, output_file, &
 ! integer :: numlons, numlats, numlevs
 
 integer :: in_unit, out_unit, ios_out, iunit, io, offset
-integer :: x_size
+integer :: x_size, skip, i
 integer :: year, month, day, hour, minute, second
 integer :: secs, days
 
@@ -152,8 +155,8 @@ if ( advance_time_present ) then
 else
    call aread_state_restart(model_time, statevector, iunit)
 endif
-
 call close_restart(iunit)
+
 call print_date( model_time,'model_mod_check:model date')
 call print_time( model_time,'model_mod_check:model time')
 
@@ -180,17 +183,15 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 
 !----------------------------------------------------------------------
 ! Checking get_state_meta_data (and get_state_indices, get_state_kind)
-! nx = 144; ny=72; nz=42; produce the expected values :
-!  U(       1 :  435456)
-!  V(  435457 :  870912)
-!  T(  870913 : 1306368)
-!  Q( 1306369 : 1741824)
-! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
 
 if (test1thru < 6) goto 999
 
-if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+skip = 10000
+
+do i = 1, x_size, skip
+   if ( i > 0 .and. i <= x_size ) call check_meta_data( i )
+enddo
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
@@ -199,13 +200,56 @@ if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
 
 if (test1thru < 7) goto 999
 
-!!!if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+
+!----------------------------------------------------------------------
+! convert model data into a dart state vector and write it into a
+! initial conditions file.  writes the valid time and the state.
+!----------------------------------------------------------------------
+
+if (test1thru < 8) goto 999
+
+call get_model_analysis_filename( mpas_input_file )
+
+write(*,*)
+write(*,*)'Reading restart files from  '//trim(mpas_input_file)
+
+call analysis_file_to_statevector (mpas_input_file, statevector, model_time)
+
+write(*,*)
+write(*,*)'Writing data into '//trim(output_file)
+
+iunit = open_restart_write(output_file)
+call awrite_state_restart(model_time, statevector, iunit)
+call close_restart(iunit)
+
+!----------------------------------------------------------------------
+! Open a test DART initial conditions file.
+! Reads the valid time, the state, and (possibly) a target time.
+!----------------------------------------------------------------------
+
+if (test1thru < 9) goto 999
+
+write(*,*)
+write(*,*)'Reading '//trim(output_file)
+
+iunit = open_restart_read(output_file)
+if ( advance_time_present ) then
+   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
+else
+   call aread_state_restart(model_time, statevector, iunit)
+endif
+call close_restart(iunit)
+
+call print_date( model_time,'model_mod_check:model date')
+call print_time( model_time,'model_mod_check:model time')
+
 
 !----------------------------------------------------------------------
 ! Check the interpolation - print initially to STDOUT
 !----------------------------------------------------------------------
 
-if (test1thru < 7) goto 999
+if (test1thru < 10) goto 999
 
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
@@ -226,6 +270,9 @@ endif
 
 call finalize_utilities()
 
+!----------------------------------------------------------------------
+!----------------------------------------------------------------------
+
 contains
 
 
@@ -241,8 +288,8 @@ write(*,*)'Checking metadata routines.'
 
 call get_state_meta_data( iloc, loc, var_type)
 
-call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
+call write_location(0, loc, fform='formatted', charstring=string1)
+write(*,*)' indx ',iloc,' is type ',var_type,trim(get_raw_obs_kind_name(var_type)),trim(string1)
 
 end subroutine check_meta_data
 
@@ -257,7 +304,7 @@ real(r8), dimension(:), intent(in) :: loc_of_interest
 type(location_type) :: loc0, loc1
 integer  :: mykindindex
 integer  :: i, var_type, which_vert
-real(r8) :: closest, rlon, rlat, rlev
+real(r8) :: closest, rlon, rlat, rlev, vals(3)
 real(r8), allocatable, dimension(:) :: thisdist
 real(r8), dimension(LocationDims) :: rloc
 character(len=32) :: kind_name
@@ -273,7 +320,7 @@ endif
 
 write(*,*)
 write(*,'(''Checking for the indices into the state vector that are at'')')
-write(*,'(''lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
+write(*,'(''lon/lat/lev'',3(1x,f14.5))')loc_of_interest(1:LocationDims)
 
 allocate( thisdist(get_model_size()) )
 thisdist  = 9999999999.9_r8         ! really far away 
@@ -303,13 +350,11 @@ do i = 1,get_model_size()
    if ( (var_type == mykindindex) .or. (mykindindex < 0) ) then
       which_vert  = nint( query_location(loc1) )
       loc0        = set_location(rlon, rlat, rlev, which_vert)
-      thisdist(i) = get_dist( loc1, loc0, no_vert= .true. )
+      thisdist(i) = get_dist( loc1, loc0, no_vert= .false. )
       matched     = .true.
    endif
 
 enddo
-
-closest = minval(thisdist)
 
 if (.not. matched) then
    write(*,*)'No state vector elements of type '//trim(kind_of_interest)
@@ -318,24 +363,29 @@ endif
 
 ! Now that we know the distances ... report 
 
+closest = minval(thisdist)
+if (closest == 9999999999.9_r8) then
+   write(*,*)'No closest gridpoint found'
+   return
+endif
+
+
 matched = .false.
 do i = 1,get_model_size()
 
    if ( thisdist(i) == closest ) then
       call get_state_meta_data(i, loc1, var_type)
-      rloc      = get_location(loc1)
-      if (nint(rloc(3)) == nint(rlev)) then
-         kind_name = get_raw_obs_kind_name(var_type)
-         write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
-             rloc, i, trim(kind_name)
-         matched = .true.
-      endif
+      kind_name = get_raw_obs_kind_name(var_type)
+      vals = get_location(loc1)
+      write(*,'(''lon/lat/lev'',3(1x,f14.5),'' is index '',i10,'' for '',a)') &
+             vals, i, trim(kind_name)
+      matched = .true.
    endif
 
 enddo
 
 if ( .not. matched ) then
-   write(*,*)'Nothing matched the vertical.'
+   write(*,*)'Nothing matched the closest gridpoint'
 endif
 
 deallocate( thisdist )
