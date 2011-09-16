@@ -40,7 +40,9 @@ use    utilities_mod, only : register_module, error_handler,                   &
 
 use     obs_kind_mod, only : paramname_length,        &
                              get_raw_obs_kind_index,  &
-                             get_raw_obs_kind_name
+                             get_raw_obs_kind_name,   &
+                             KIND_SURFACE_PRESSURE,   &
+                             KIND_VERTICAL_VELOCITY
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -203,22 +205,33 @@ INTERFACE get_index_range
 END INTERFACE
 
 !------------------------------------------------
-! The regular grid for horizontal interpolation divides the sphere into
+
+! The regular grid used for triangle interpolation divides the sphere into
 ! a set of regularly spaced lon-lat boxes. The number of boxes in
 ! longitude and latitude are set by num_reg_x and num_reg_y. Making the
 ! number of regular boxes smaller decreases the computation required for
 ! doing each interpolation but increases the static storage requirements
 ! and the initialization computation (which seems to be pretty small).
-
-integer, parameter :: num_reg_x = 180, num_reg_y = 90
+integer, parameter :: num_reg_x = 90, num_reg_y = 90
 
 ! The max_reg_list_num controls the size of temporary storage used for
-! initializing the regular grid. Each box will have a list of cell indices
-! that are located within the box.
-! Four arrays of size num_reg_x*num_reg_y*max_reg_list_num are needed. 
-! The initialization fails and returns an error if max_reg_list_num is too small.
-
+! initializing the regular grid. Two arrays
+! of size num_reg_x*num_reg_y*max_reg_list_num are needed. The initialization
+! fails and returns an error if max_reg_list_num is too small. A value of
+! ??? is sufficient for ???
 integer, parameter :: max_reg_list_num = 100
+
+! The triangle interpolation keeps a list of how many and which triangles
+! overlap each regular lon-lat box. The number is stored in
+! array triangle_num. The allocatable array
+! triangle_list lists the uniquen index 
+! of each overlapping triangle. The entry in
+! triangle_start for a given regular lon-lat box indicates
+! where the list of triangles begins in the triangle_list.
+
+integer :: triangle_start(num_reg_x, num_reg_y)
+integer :: triangle_num  (num_reg_x, num_reg_y) = 0
+integer, allocatable :: triangle_list(:)
 
 contains
 
@@ -364,11 +377,11 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !
 !       ERROR codes:
 !
-!       ISTATUS = 99:  general error in case something terrible goes wrong...
-!       ISTATUS = 15:  dont know what to do with vertical coord supplied
-!       ISTATUS = 16:  lonCell illegal
-!       ISTATUS = 17:  latCell illegal
-!       ISTATUS = 18:  altitude illegal
+!       ?ISTATUS = 99:  general error in case something terrible goes wrong...
+!       ?ISTATUS = 15:  dont know what to do with vertical coord supplied
+!       ?ISTATUS = 16:  lonCell illegal
+!       ?ISTATUS = 17:  latCell illegal
+!       ?ISTATUS = 18:  altitude illegal
 !
 !############################################################################
 
@@ -382,9 +395,11 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
 ! Local storage
 
-  real(r8)         :: loc_array(3), llon, llat, lheight, lon_fract, lat_fract, alt_fract
-  integer          :: base_offset, end_offset, blon(2), blat(2), balt(2), i, j, k, ier
-  real(r8)         :: cube(2, 2, 2), square(2, 2), line(2)
+  real(r8)         :: loc_array(3), llon, llat, lheight, fract, v_interp(3)
+  integer          :: base_offset, end_offset, i, ier, lower, upper
+
+real(r8) :: weights(3)
+integer  :: tri_indices(3)
 
   IF ( .not. module_initialized ) call static_init_model
 
@@ -406,19 +421,638 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
   IF (debug > 2) print *, 'requesting interpolation at ', llon, llat, lheight
 
+
+! Find the start and end offsets for this field in the state vector x(:)
+  call get_index_range(obs_type, base_offset, end_offset)
+
+  IF (debug > 2) print *, 'base offset now ', base_offset
+
+
+! Find the indices of the three cell centers that surround this point in
+! the horizontal along with the barycentric weights.
+call get_cell_indices(llon, llat, tri_indices, weights, istatus)
+
+! If istatus is not zero couldn't find a triangle, fail
+if(istatus /= 0) return
+
+! Surface pressure is a 2D field
+if(obs_type == KIND_SURFACE_PRESSURE) then
+   call do_tri_interp(x, base_offset, tri_indices, weights, interp_val) 
+   istatus = 0
+   return
+endif
+
 ! Only height for vertical location type is supported at this point
   IF(.not. vert_is_height(location) ) THEN 
      istatus = 15
      return
   ENDIF
 
-! Find the start and end offsets for this field in the state vector x(:)
+! Not prepared to do w interpolation at this time
+!!!if(this is w) then
+   !!!istatus = 15
+   !!!return
+!!!endif
 
+! For height, can do simple vertical search for interpolation for now
+! Get the lower and upper bounds and fraction for each column
+do i = 1, 3
+   call find_height_bounds(lheight, nVertLevels, zgrid(tri_indices(i) , :), &
+      lower, upper, fract, ier)
+   if(ier /= 0) then
+      istatus = 15
+      return
+   endif
+   call vert_interp(x, base_offset, tri_indices(i), lower, upper, fract, v_interp(i))
+end do
 
-! FIXME ... Jeffs homework starts here ...
+! Now do the horizontal interpolation
+interp_val = sum(weights * v_interp)
+istatus = 0
 
 
 end subroutine model_interpolate
+
+
+!------------------------------------------------------------------
+
+subroutine vert_interp(x, base_offset, tri_index, lower, upper, fract, val)
+
+! Interpolates in vertical in column indexed by tri_index for a field
+! with base_offset.
+
+real(r8), intent(in)  :: x(:)
+integer,  intent(in)  :: base_offset
+integer,  intent(in)  :: tri_index
+integer,  intent(in)  :: lower, upper
+real(r8), intent(in)  :: fract
+real(r8), intent(out) :: val
+
+integer  :: offset
+real(r8) :: lx, ux
+
+! Get the value at the lower and upper points
+offset = base_offset + (lower - 1)*nCells + tri_index - 1
+lx = x(offset)
+
+offset = offset + nCells
+ux = x(offset)
+
+val = (1.0_r8 - fract) * lx + fract*ux
+
+end subroutine vert_interp
+
+
+!------------------------------------------------------------------
+
+subroutine find_height_bounds(height, nbounds, bounds, lower, upper, fract, ier)
+
+! Finds position of a given latitude in an array of latitude grid points and returns
+! the index of the lower and upper bounds and the fractional offset. Used for both
+! latitude and altitude which have similar linear arrays. ier returns 0 unless there
+! is an error.
+
+real(r8), intent(in)  :: height
+integer,  intent(in)  :: nbounds
+real(r8), intent(in)  :: bounds(nbounds)
+integer,  intent(out) :: lower, upper
+real(r8), intent(out) :: fract
+integer,  intent(out) :: ier
+
+! For now, assume that the spacing on latitudes or altitudes is arbitrary
+! Do a silly linear search. Probably not worth any fancier searching unless
+! models get to be huge.
+
+integer :: i
+
+if(height < bounds(1) .or. height > bounds(nbounds)) then
+   ier = 2
+   return
+endif
+
+do i = 2, nbounds
+   if(height <= bounds(i)) then
+      lower = i - 1
+      upper = i
+      fract = (height - bounds(i-1)) / (bounds(i) - bounds(i - 1))
+      ier = 0
+      return
+   endif
+end do
+
+! Shouldn't ever fall off end of loop
+ier = 2
+
+end subroutine find_height_bounds
+
+!------------------------------------------------------------------
+
+
+
+
+
+subroutine get_cell_indices(lon, lat, indices, weights, istatus)
+!=======================================================================
+!
+! Finds the indices of the three cell centers that form the vertices of
+! the triangle that contains the given (lon, lat) point. Also returns
+! the barycentric weights for the three corners for this point. Returns istatus
+! 0 if successful, otherwise nonzero.
+
+real(r8),            intent(in) :: lon, lat
+real(r8),           intent(out) :: weights(3)
+integer,            intent(out) :: indices(3), istatus
+
+! Local storage
+integer  :: lat_bot, lat_top, lon_bot, lon_top, num_inds, start_ind
+integer  :: x_ind, y_ind
+
+if ( .not. module_initialized ) call static_init_model
+
+! Succesful return has istatus of 0
+istatus = 0
+
+! Figure out which of the regular grid boxes this is in
+call get_reg_box_indices(lon, lat, x_ind, y_ind)
+num_inds =  triangle_num  (x_ind, y_ind)
+start_ind = triangle_start(x_ind, y_ind)
+
+! If there are no quads overlapping, can't do interpolation
+if(num_inds == 0) then
+   istatus = 1
+   return
+endif
+
+! Search the list of triangles to see if (lon, lat) is in one
+call get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
+! Fail on bad istatus return
+if(istatus /= 0) return
+
+end subroutine get_cell_indices
+
+!------------------------------------------------------------
+
+
+subroutine lon_lat_interpolate(x, lon, lat, var_type, height, interp_val, istatus)
+!=======================================================================
+!
+! Subroutine to interpolate to a lon lat location given the state vector 
+! for that level, x. This works just on one horizontal slice.
+! NOTE: Using array sections to pass in the x array may be inefficient on some
+! compiler/platform setups. Might want to pass in the entire array with a base
+! offset value instead of the section if this is an issue.
+! Successful interpolation returns istatus=0.
+
+real(r8),            intent(in) :: x(:)
+real(r8),            intent(in) :: lon, lat
+integer,             intent(in) :: var_type, height
+real(r8),           intent(out) :: interp_val
+integer,            intent(out) :: istatus
+
+! Local storage
+integer  :: lat_bot, lat_top, lon_bot, lon_top, num_inds, start_ind
+integer  :: x_ind, y_ind
+
+if ( .not. module_initialized ) call static_init_model
+
+! Succesful return has istatus of 0
+istatus = 0
+
+! Figure out which of the regular grid boxes this is in
+call get_reg_box_indices(lon, lat, x_ind, y_ind)
+! On U grid
+num_inds =  triangle_num  (x_ind, y_ind)
+start_ind = triangle_start(x_ind, y_ind)
+
+! If there are no quads overlapping, can't do interpolation
+if(num_inds == 0) then
+   istatus = 1
+   return
+endif
+
+! Search the list of triangles to see if (lon, lat) is in one
+call triangle_interp(x, lon, lat, num_inds, start_ind, interp_val, istatus)
+! Fail on bad istatus return
+if(istatus /= 0) return
+
+end subroutine lon_lat_interpolate
+
+!------------------------------------------------------------
+
+subroutine get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
+
+! Given a latitude longitude point, and the starting address for the number
+! of triangles that might contain this lon lat in the list, finds the
+! triangle that contains the point and returns the indices and barycentric
+! weights. Returns istatus of 0 if a value is found and istatus of 1 if
+! there is no value found.
+
+real(r8), intent(in)  :: lon, lat
+integer,  intent(in)  :: num_inds, start_ind
+integer,  intent(out) :: indices(3), istatus
+real(r8), intent(out) :: weights(3)
+
+integer :: i, ind
+real(r8) :: clons(3), clats(3)
+
+! Assume successful until proven otherwise
+istatus = 0
+
+! Loop through the candidate triangles
+do i = start_ind, start_ind + num_inds - 1
+   ! Get the index of the triangle
+   ind = triangle_list(i)
+   ! Get corner lons and lats
+   call get_triangle_corners(ind, clons, clats)
+   ! Get the barycentric weights 
+   call get_barycentric_weights(lon, lat, clons, clats, weights)
+   ! Is point in this triangle? Interpolate and return
+   if(maxval(weights) <= 1.0_r8 .and. minval(weights) >= 0.0_r8) then
+      ! Get the indices for this triangle
+      indices(:) = cellsOnVertex(:, ind)
+      return
+   endif
+end do
+
+! Falling off the end means failure for now (could weakly extrapolate)
+weights = -1.0_r8
+indices = -1
+istatus = 1
+
+end subroutine get_triangle
+
+
+!------------------------------------------------------------
+
+subroutine triangle_interp(x, lon, lat, num_inds, start_ind, interp_val, istatus)
+
+! Given a latitude longitude point, and the starting address for the number
+! of triangles that might contain this lon lat in the list, finds the
+! triangle that contains the point and interpolates using barycentric 
+! weights. Returns istatus of 0 if a value is found and istatus of 1 if
+! there is no value found.
+
+real(r8), intent(in)  :: x(:)
+real(r8), intent(in)  :: lon, lat
+integer,  intent(in)  :: num_inds, start_ind
+real(r8), intent(out) :: interp_val
+integer,  intent(out) :: istatus
+
+integer :: i, ind
+real(r8) :: clons(3), clats(3), weights(3), values(3)
+
+! Assume successful until proven otherwise
+istatus = 0
+
+! Loop through the candidate triangles
+do i = start_ind, start_ind + num_inds - 1
+   ! Get the index of the triangle
+   ind = triangle_list(i)
+   ! Get corner lons and lats
+   call get_triangle_corners(ind, clons, clats)
+   ! Get the barycentric weights 
+   call get_barycentric_weights(lon, lat, clons, clats, weights)
+   ! Is point in this triangle? Interpolate and return
+   if(maxval(weights) <= 1.0_r8 .and. minval(weights) >= 0.0_r8) then
+      call get_corner_values(ind, x, values)
+      interp_val = sum(weights * values)
+      return
+   endif
+end do
+
+! Falling off the end means failure for now (could weakly extrapolate)
+istatus = 1
+
+end subroutine triangle_interp
+
+!------------------------------------------------------------
+
+subroutine do_tri_interp(x, base_offset, tri_indices, weights, interp_val) 
+
+! Given state, offset for start of horizontal slice, the indices of the
+! triangle vertices in that slice, and the barycentric weights, computes
+! the interpolated value.
+
+real(r8), intent(in)  :: x(:)
+integer,  intent(in)  :: base_offset, tri_indices(3)
+real(r8), intent(in)  :: weights(3)
+real(r8), intent(out) :: interp_val
+
+integer :: i
+
+interp_val = 0.0_r8
+do i = 1, 3
+   interp_val = interp_val + x(base_offset + tri_indices(i) - 1) * weights(i)
+end do
+
+end subroutine do_tri_interp
+
+
+!------------------------------------------------------------
+
+
+subroutine get_barycentric_weights(lon, lat, clons, clats, weights)
+
+! Computes the barycentric weights for interpolating point (lon, lat) 
+! in a triangle with the given lon and lat corners.
+
+real(r8), intent(in)  :: lon, lat, clons(3), clats(3)
+real(r8), intent(out) :: weights(3)
+
+real(r8) :: denom
+
+! Formula for barycentric weights is:
+
+! Get denominator
+denom = (clats(2) - clats(3)) * (clons(1) - clons(3)) + &
+   (clons(3) - clons(2)) * (clats(1) - clats(3))
+
+weights(1) = (clats(2) - clats(3)) * (lon - clons(3)) + &
+   (clons(3) - clons(3)) * (lat - clats(3)) / denom
+
+weights(2) = (clats(3) - clats(1)) * (lon - clons(3)) + &
+   (clons(1) - clons(3)) * (lat - clats(3))
+
+weights(3) = 1.0_r8 - weights(1) - weights(2)
+
+end subroutine get_barycentric_weights
+
+!------------------------------------------------------------
+
+subroutine get_reg_box_indices(lon, lat, x_ind, y_ind)
+
+! Given a longitude and latitude in degrees returns the index of the regular
+! lon-lat box that contains the point.
+
+real(r8), intent(in)  :: lon, lat
+integer,  intent(out) :: x_ind, y_ind
+
+call get_reg_lon_box(lon, x_ind)
+call get_reg_lat_box(lat, y_ind)
+
+end subroutine get_reg_box_indices
+
+!------------------------------------------------------------
+
+subroutine get_reg_lon_box(lon, x_ind)
+
+! Determine which regular longitude box a longitude is in.
+
+real(r8), intent(in)  :: lon
+integer,  intent(out) :: x_ind
+
+x_ind = int(num_reg_x * lon / 360.0_r8) + 1
+
+! Watch out for exactly at top; assume all lats and lons in legal range
+if(lon == 360.0_r8) x_ind = num_reg_x
+
+end subroutine get_reg_lon_box
+
+!------------------------------------------------------------
+
+subroutine get_reg_lat_box(lat, y_ind)
+
+! Determine which regular latitude box a latitude is in.
+
+real(r8), intent(in)  :: lat
+integer,  intent(out) :: y_ind
+
+y_ind = int(num_reg_y * (lat + 90.0_r8) / 180.0_r8) + 1
+
+! Watch out for exactly at top; assume all lats and lons in legal range
+if(lat == 90.0_r8)  y_ind = num_reg_y
+
+end subroutine get_reg_lat_box
+
+
+!------------------------------------------------------------
+
+subroutine init_interp()
+
+! Initializes data structures needed for MPAS interpolation.
+! This should be called at static_init_model time to avoid 
+! having all this temporary storage in the middle of a run.
+
+
+! Build the data structure for interpolation for a triangle grid.
+! Need a temporary data structure to build this.
+! This array keeps a list of the indices of cell center triangles
+! that potentially overlap each regular boxes.
+integer :: reg_list(num_reg_x, num_reg_y, max_reg_list_num)
+
+real(r8) :: c_lons(3), c_lats(3)
+integer  :: i, j, k
+integer  :: reg_lon_ind(2), reg_lat_ind(2), total, ind
+
+
+! Loop through each of the triangles
+do i = 1, nCells
+
+   ! Set up array of lons and lats for the corners of this triangle
+   call get_triangle_corners(i, c_lons, c_lats)
+
+   ! Get list of regular boxes that cover this triangle.
+   call reg_box_overlap(c_lons, c_lats, reg_lon_ind, reg_lat_ind)
+
+   ! Update the temporary data structures of triangles that overlap regulare quads
+   call update_reg_list(triangle_num, reg_list, reg_lon_ind, reg_lat_ind, i)
+
+enddo
+
+if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
+if (do_output()) write(*,*)'triangle_num is ',maxval(triangle_num)
+
+! Invert the temporary data structure. The total number of entries will be 
+! the sum of the number of triangle cells for each regular cell. 
+total = sum(triangle_num)
+
+! Allocate storage for the final structures in module storage
+allocate(triangle_list(total))
+
+! Fill up the long list by traversing the temporary structure. Need indices 
+! to keep track of where to put the next entry.
+ind = 1
+
+! Loop through each regular grid box
+do i = 1, num_reg_x
+   do j = 1, num_reg_y
+
+      ! The list for this regular box starts at the current indices.
+      triangle_start(i, j) = ind
+
+      ! Copy all the close triangles for regular box(i, j)
+      do k = 1, triangle_num(i, j)
+         triangle_list(ind) = reg_list(i, j, k)
+         ind = ind + 1
+      enddo
+   enddo
+enddo
+
+! Confirm that the indices come out okay as debug
+if(ind /= total + 1) then
+   string1 = 'Storage indices did not balance: : contact DART developers'
+   call error_handler(E_ERR, 'init_interp', string1, source, revision, revdate)
+endif
+
+end subroutine init_interp
+
+
+!------------------------------------------------------------
+
+
+subroutine get_triangle_corners(ind, lon_corners, lat_corners)
+
+integer,  intent(in)  :: ind
+real(r8), intent(out) :: lon_corners(3), lat_corners(3)
+
+integer :: i, cell
+
+! Grabs the corners for a given triangle from the initialized lists.
+do i = 1, 3
+   ! Loop through the three cells adjacent to the vertex at the triangle center.
+   cell = cellsOnVertex(i, ind)
+   ! Get the lats and lons of the centers
+   lon_corners(i) = lonCell(cell)
+   lat_corners(i) = latCell(cell)
+end do
+
+end subroutine get_triangle_corners
+
+!------------------------------------------------------------
+
+
+subroutine get_corner_values(ind, x, values)
+
+integer,  intent(in)  :: ind
+real(r8), intent(in)  :: x(:)
+real(r8), intent(out) :: values(3)
+
+integer :: i, cell
+
+! Grabs the corner values for a given triangle
+do i = 1, 3
+   ! Loop through the three cells adjacent to the vertex at the triangle center.
+   cell = cellsOnVertex(i, ind)
+   ! Get the values of the centers
+   values(i) = x(cell)
+end do
+
+end subroutine get_corner_values
+
+
+!------------------------------------------------------------
+
+subroutine reg_box_overlap(x_corners, y_corners, reg_lon_ind, reg_lat_ind)
+
+real(r8), intent(in)  :: x_corners(3), y_corners(3)
+integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
+
+! Find a set of regular lat lon boxes that covers all of the area possibley covered by 
+! a triangle whose corners are given by the dimension three x_corners 
+! and y_corners arrays.  The two dimensional arrays reg_lon_ind and reg_lat_ind
+! return the first and last indices of the regular boxes in latitude and
+! longitude respectively. These indices may wraparound for reg_lon_ind.  
+! A special computation is needed for a triangle that contains one of the poles.
+! If the longitude boxes overlap 0
+! degrees, the indices returned are adjusted by adding the total number of
+! boxes to the second index (e.g. the indices might be 88 and 93 for a case
+! with 90 longitude boxes).
+
+real(r8) :: lat_min, lat_max, lon_min, lon_max
+integer  :: i
+
+
+! Finding the range of latitudes is cake, caveat a pole triangle
+lat_min = minval(y_corners)
+lat_max = maxval(y_corners)
+
+! Lons are much trickier. Need to make sure to wraparound the
+! right way. 
+! All longitudes for non-pole rows have to be within 180 degrees
+! of one another while a triangle containing the pole will have more
+! Than a 180 degree span. Need to confirm that there are no exceptions
+! to this.
+
+lon_min = minval(x_corners)
+lon_max = maxval(x_corners)
+if((lon_max - lon_min) > 180.0_r8) then
+   ! If the max longitude value is more than 180 
+   ! degrees larger than the min, then there must be wraparound or a pole.
+   ! Then, find the smallest value > 180 and the largest < 180 to get range.
+   lon_min = 360.0_r8
+   lon_max = 0.0_r8
+   do i=1, 3
+      if(x_corners(i) > 180.0_r8 .and. x_corners(i) < lon_min) lon_min = x_corners(i)
+      if(x_corners(i) < 180.0_r8 .and. x_corners(i) > lon_max) lon_max = x_corners(i)
+   enddo
+   ! See if this is a triangle containing the pole
+   ! This happens if the difference in wraparound is also greater than 180 degrees
+   if((360.0_r8 - lon_min) + (lon_max) > 180.0_r8) then
+      ! Set the min and max lons and lats for a pole triangle
+      lon_min = 0.0_r8
+      lon_max = 360.0_r8
+      ! North or south pole?
+      if(lat_min > 0.0_r8) then
+         lat_max = 90.0_r8
+      else 
+         lat_min = -90.0_r8
+      endif
+   endif
+endif
+
+! Get the indices for the extreme longitudes
+call get_reg_lon_box(lon_min, reg_lon_ind(1))
+call get_reg_lon_box(lon_max, reg_lon_ind(2))
+
+! Figure out the indices of the regular boxes for min and max lats
+call get_reg_lat_box(lat_min, reg_lat_ind(1))
+call get_reg_lat_box(lat_max, reg_lat_ind(2))
+
+! Watch for wraparound again; make sure that second index is greater than first
+if(reg_lon_ind(2) < reg_lon_ind(1)) reg_lon_ind(2) = reg_lon_ind(2) + num_reg_x
+
+end subroutine reg_box_overlap
+
+!------------------------------------------------------------
+
+
+subroutine update_reg_list(reg_list_num, reg_list, reg_lon_ind, reg_lat_ind, triangle_index)
+
+integer, intent(inout) :: reg_list_num(:, :), reg_list(:, :, :)
+integer, intent(inout) :: reg_lon_ind(2), reg_lat_ind(2)
+integer, intent(in)    :: triangle_index
+
+! Updates the data structure listing dipole quads that are in a given regular box
+integer :: ind_x, index_x, ind_y
+
+! Loop through indices for each possible regular rectangle
+! Have to watch for wraparound in longitude
+if(reg_lon_ind(2) < reg_lon_ind(1)) reg_lon_ind(2) = reg_lon_ind(2) + num_reg_x
+
+do ind_x = reg_lon_ind(1), reg_lon_ind(2)
+   ! Inside loop, need to go back to wraparound indices to find right box
+   index_x = ind_x
+   if(index_x > num_reg_x) index_x = index_x - num_reg_x
+
+   do ind_y = reg_lat_ind(1), reg_lat_ind(2)
+      ! Make sure the list storage isn't full
+      if(reg_list_num(index_x, ind_y) >= max_reg_list_num) then
+         write(string1,*) 'max_reg_list_num (',max_reg_list_num,') is too small ... increase'
+         call error_handler(E_ERR, 'update_reg_list', string1, source, revision, revdate)
+      endif
+
+      ! Increment the count
+      reg_list_num(index_x, ind_y) = reg_list_num(index_x, ind_y) + 1
+      ! Store this quad in the list for this regular box
+      reg_list(index_x, ind_y, reg_list_num(index_x, ind_y)) = triangle_index
+   enddo
+enddo
+
+end subroutine update_reg_list
+
+!------------------------------------------------------------
+
+
 
 
 
@@ -2698,98 +3332,6 @@ deallocate(u, nEdgesOnCell, edgesOnCell, edgeNormalVectors)
 end subroutine handle_winds
 
 
-subroutine update_reg_list(reg_list_num, reg_list_cells)
-!------------------------------------------------------------------
-! Based on longitude and latitude in degrees the indices of
-! cells that belong to the regular lon-lat boxes are returned.
-!
-! FIXME : reg_list_num, reg_list_cells must be allocated someplace
-
-integer, intent(out) :: reg_list_num(  num_reg_x, num_reg_y)
-integer, intent(out) :: reg_list_cells(num_reg_x, num_reg_y, max_reg_list_num)
-
-integer  :: ic, iv, ix, iy
-integer  :: ind_x, ind_y, indv_x, indv_y
-real(r8) :: xlon, ylat
-
-if ( .not. module_initialized ) call static_init_model
-
-reg_list_num   = 0
-reg_list_cells = 0
-
-! Loop through the cells to find the right regular lon-lat boxes
-do ic = 1, nCells
-
-   ! xlon and ylat are in degrees
-   xlon = lonCell(ic)
-   ylat = latCell(ic)
-
-   ! which regular lon-lat box this cell belongs to.
-   call get_reg_box_indices(xlon, ylat, ind_x, ind_y)
-
-   ! Make sure the list storage isn't full
-   if(reg_list_num(ind_x, ind_y) >= max_reg_list_num) then
-      write(string1,*) 'max_reg_list_num (',max_reg_list_num,') is too small ... increase'
-      call error_handler(E_ERR, 'update_reg_list', string1, source, revision, revdate)
-   endif
-
-   ! Increment the count 
-   reg_list_num(ind_x, ind_y) = reg_list_num(ind_x, ind_y) + 1
-
-   ! Store this cell in the list for this regular box
-   reg_list_cells(ind_x, ind_y, reg_list_num(ind_x, ind_y)) = ic
-
-enddo
-
-end subroutine update_reg_list
-
-
-
-subroutine get_reg_box_indices(lon, lat, x_ind, y_ind)
-!------------------------------------------------------------
-! Given a longitude and latitude in degrees returns the index of the regular
-! lon-lat box that contains the point.
-
-real(r8), intent(in)  :: lon, lat
-integer,  intent(out) :: x_ind, y_ind
-
-call get_reg_lon_box(lon, x_ind)
-call get_reg_lat_box(lat, y_ind)
-
-end subroutine get_reg_box_indices
-
-
-
-subroutine get_reg_lon_box(lon, x_ind)
-!------------------------------------------------------------
-! Determine which regular longitude box a longitude is in.
-
-real(r8), intent(in)  :: lon
-integer,  intent(out) :: x_ind
-
-x_ind = int(num_reg_x * lon / 360.0_r8) + 1
-
-! Watch out for exactly at top; assume all lats and lons in legal range
-if(lon == 360.0_r8) x_ind = num_reg_x
-
-end subroutine get_reg_lon_box
-
-
-
-subroutine get_reg_lat_box(lat, y_ind)
-!------------------------------------------------------------
-! Determine which regular latitude box a latitude is in.
-
-real(r8), intent(in)  :: lat
-integer,  intent(out) :: y_ind
-
-y_ind = int(num_reg_y * (lat + 90.0_r8) / 180.0_r8) + 1
-
-! Watch out for exactly at top; assume all lats and lons in legal range
-if(lat == 90.0_r8)  y_ind = num_reg_y
-
-end subroutine get_reg_lat_box
-
 
 
 subroutine set_variable_clamping(ivar)
@@ -2944,8 +3486,6 @@ integer :: i
 index1 = 0
 indexN = 0
 
-write(*,*)'FIXME: needs testing'
-
 FieldLoop : do i=1,nfields
    if (progvar(i)%kind_string /= trim(string)) cycle FieldLoop
    index1 = progvar(i)%index1
@@ -2974,8 +3514,6 @@ character(len=paramname_length) :: string
 
 index1 = 0
 indexN = 0
-
-write(*,*)'FIXME: needs testing'
 
 FieldLoop : do i=1,nfields
    if (progvar(i)%dart_kind /= dartkind) cycle FieldLoop
