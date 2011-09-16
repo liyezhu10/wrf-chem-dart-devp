@@ -39,7 +39,7 @@ set MPASFILE = mpas_output.2010-10-23_03:00:00.nc
 
 set COMPACT = mpas_analysis.nc
 
-ncks -O -a -v xtime,latCell,lonCell,zgrid,cellsOnVertex,theta,uReconstructZonal,uReconstructMeridional,w,qv,qc,qr,qi,qs,qg,surface_pressure,edgeNormalVectors,nEdgesOnCell,u,dzs ${MPASFILE} ${COMPACT}
+ncks -O -a -v xtime,latCell,lonCell,zgrid,cellsOnVertex,theta,uReconstructZonal,uReconstructMeridional,w,qv,qc,qr,qi,qs,qg,surface_pressure,edgeNormalVectors,nEdgesOnCell,edgesOnCell,u,dzs,xCell,yCell,zCell,cellsOnVertex ${MPASFILE} ${COMPACT}
 
 exit 0
 
