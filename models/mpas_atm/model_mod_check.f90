@@ -203,11 +203,28 @@ if (test1thru < 7) goto 999
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 
 !----------------------------------------------------------------------
+! Check the interpolation - print initially to STDOUT
+!----------------------------------------------------------------------
+
+if (test1thru < 8) goto 999
+
+write(*,*)
+write(*,*)'Testing model_interpolate ...'
+
+call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
+
+if ( ios_out == 0 ) then 
+   write(*,*)'model_interpolate SUCCESS: The interpolated value is ',interp_val
+else
+   write(*,*)'model_interpolate ERROR: model_interpolate failed with error code ',ios_out
+endif
+
+!----------------------------------------------------------------------
 ! convert model data into a dart state vector and write it into a
 ! initial conditions file.  writes the valid time and the state.
 !----------------------------------------------------------------------
 
-if (test1thru < 8) goto 999
+if (test1thru < 9) goto 999
 
 call get_model_analysis_filename( mpas_input_file )
 
@@ -228,7 +245,7 @@ call close_restart(iunit)
 ! Reads the valid time, the state, and (possibly) a target time.
 !----------------------------------------------------------------------
 
-if (test1thru < 9) goto 999
+if (test1thru < 10) goto 999
 
 write(*,*)
 write(*,*)'Reading '//trim(output_file)
@@ -244,23 +261,6 @@ call close_restart(iunit)
 call print_date( model_time,'model_mod_check:model date')
 call print_time( model_time,'model_mod_check:model time')
 
-
-!----------------------------------------------------------------------
-! Check the interpolation - print initially to STDOUT
-!----------------------------------------------------------------------
-
-if (test1thru < 10) goto 999
-
-write(*,*)
-write(*,*)'Testing model_interpolate ...'
-
-call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
-
-if ( ios_out == 0 ) then 
-   write(*,*)'model_interpolate SUCCESS: The interpolated value is ',interp_val
-else
-   write(*,*)'model_interpolate ERROR: model_interpolate failed with error code ',ios_out
-endif
 
 !----------------------------------------------------------------------
 ! This must be the last few lines of the main program.
