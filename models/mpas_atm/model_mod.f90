@@ -157,6 +157,7 @@ type(progvartype), dimension(max_state_variables) :: progvar
 integer :: nCells        = -1  ! Total number of cells making up the grid
 integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
 integer :: nEdges        = -1  ! Straight lines between vertices making up cells
+integer :: maxEdges      = -1  ! Largest number of edges a cell can have
 integer :: nVertLevels   = -1  ! Vertical levels; count of vert cell centers
 integer :: nVertLevelsP1 = -1  ! Vert levels plus 1; count of vert cell faces
 integer :: vertexDegree  = -1  ! Max number of cells/edges that touch any vertex
@@ -503,7 +504,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! 3) read them from the analysis file
 
 ! read_grid_dims() fills in the following module global variables:
-!  nCells, nVertices, nEdges, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels
+!  nCells, nVertices, nEdges, maxEdges, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels
 call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells)) 
@@ -1771,10 +1772,10 @@ enddo
 ! file at the cell centers, but in putting them back into the file we've got to
 ! update the edge arrays as well as the centers.
 if (winds_present(zonal,meridional)) then
-   allocate(data_2d_array ( progvar(ivar)%dimlens(1),  &
-                            progvar(ivar)%dimlens(2) ))
-   allocate(data_2d_array2( progvar(ivar)%dimlens(1),  &
-                            progvar(ivar)%dimlens(2) ))
+   allocate(data_2d_array ( progvar(zonal)%dimlens(1),  &
+                            progvar(zonal)%dimlens(2) ))
+   allocate(data_2d_array2( progvar(meridional)%dimlens(1),  &
+                            progvar(meridional)%dimlens(2) ))
 
    call vector_to_prog_var(state_vector, zonal,      data_2d_array )
    call vector_to_prog_var(state_vector, meridional, data_2d_array2)
@@ -2016,6 +2017,13 @@ call nc_check(nf90_inq_dimid(grid_id, 'nEdges', dimid), &
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nEdges), &
             'read_grid_dims','inquire_dimension nEdges '//trim(model_analysis_filename))
 
+! maxEdges : get dimid for 'maxEdges' and then get value
+
+call nc_check(nf90_inq_dimid(grid_id, 'maxEdges', dimid), &
+              'read_grid_dims','inq_dimid maxEdges '//trim(model_analysis_filename))
+call nc_check(nf90_inquire_dimension(grid_id, dimid, len=maxEdges), &
+            'read_grid_dims','inquire_dimension maxEdges '//trim(model_analysis_filename))
+
 ! nVertLevels : get dimid for 'nVertLevels' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertLevels', dimid), &
@@ -2125,7 +2133,7 @@ endif
 end subroutine get_grid
 
 
-subroutine get_edges(edgeNormalVectors, nEdgesOnCell)
+subroutine get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
 !------------------------------------------------------------------
 !
 ! Read the edge info needed to map from cell centers to edge values
@@ -2133,8 +2141,9 @@ subroutine get_edges(edgeNormalVectors, nEdgesOnCell)
 ! The file name comes from module storage ... namelist.
 
 ! must first be allocated by calling code with the following sizes:
-real(r8), intent(inout) :: edgeNormalVectors(:,:) ! (3, nEdges)
-integer,  intent(inout) :: nEdgesOnCell(:)        ! (nCells)
+real(r8), intent(out) :: edgeNormalVectors(:,:) ! (3, nEdges)
+integer,  intent(out) :: nEdgesOnCell(:)        ! (nCells)
+integer,  intent(out) :: edgesOnCell(:,:)       ! (maxEdges, nCells)
 
 integer  :: ncid, VarID
 
@@ -2153,6 +2162,11 @@ call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
       'get_edges', 'inq_varid nEdgesOnCell '//trim(model_analysis_filename))
 call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
       'get_edges', 'get_var nEdgesOnCell '//trim(model_analysis_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
+      'get_edges', 'inq_varid edgesOnCell '//trim(model_analysis_filename))
+call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
+      'get_edges', 'get_var edgesOnCell '//trim(model_analysis_filename))
 
 call nc_check(nf90_close(ncid), 'get_edges','close '//trim(model_analysis_filename) )
 
@@ -2665,14 +2679,14 @@ subroutine handle_winds(zonal_data, meridional_data)
 ! is that all we need for this conversion?
 
 integer :: i
-real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:), edgesOnCell(:,:)
-integer,  allocatable :: nEdgesOnCell(:)
+real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:)
+integer,  allocatable :: nEdgesOnCell(:), edgesOnCell(:,:)
 
 allocate(u(nVertLevels, nEdges))
-allocate(nEdgesOnCell(nCells), edgesOnCell(nEdges, nCells))
+allocate(nEdgesOnCell(nCells), edgesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 
-call get_edges(edgeNormalVectors, nEdgesOnCell)
+call get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
 call get_u(u)
 
 call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, zonal_data, meridional_data, u)
@@ -2851,8 +2865,8 @@ subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, uRecon
 !        Here "U" is the prognostic variable in MPAS.
 
 real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
-integer,  intent(in) :: nEdgesOnCell(:)
-real(r8), intent(in) :: edgesOnCell(:,:)      ! unit direction vectors on the edges
+integer,  intent(in) :: nEdgesOnCell(:)             ! how many edges this cell has
+integer,  intent(in) :: edgesOnCell(:,:)            ! index list of edges per cell
 real(r8), intent(in) :: uReconstructZonal(:,:)      ! u wind at cell centers
 real(r8), intent(in) :: uReconstructMeridional(:,:) ! u wind at cell centers
 real(r8), intent(out):: u(:,:)                      ! normal velocity on the edges
