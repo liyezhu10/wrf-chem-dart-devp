@@ -3422,6 +3422,10 @@ if ( .not. module_initialized ) call static_init_model
 ! Initialization
 U(:,:) = 0.0_r8
 
+! lat/lonCell back in radians
+lonCell = lonCell*deg2rad
+latCell = latCell*deg2rad
+
 ! Compute unit vectors in east and north directions for each cell:
 do iCell = 1, nCells
 
