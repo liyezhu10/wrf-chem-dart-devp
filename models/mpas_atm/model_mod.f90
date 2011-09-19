@@ -3415,6 +3415,7 @@ real(r8), intent(out):: u(:,:)                      ! normal velocity on the edg
 
 ! Local variables
 real(r8) :: east(3,nCells), north(3,nCells)
+real(r8) :: lonCell_rad(nCells), latCell_rad(nCells)
 integer :: iCell, iEdge, jEdge, kLev, i, k
 
 if ( .not. module_initialized ) call static_init_model
@@ -3422,21 +3423,21 @@ if ( .not. module_initialized ) call static_init_model
 ! Initialization
 U(:,:) = 0.0_r8
 
-! lat/lonCell back in radians
-lonCell = lonCell*deg2rad
-latCell = latCell*deg2rad
+! Back to radians (locally)
+lonCell_rad = lonCell*deg2rad
+latCell_rad = latCell*deg2rad
 
 ! Compute unit vectors in east and north directions for each cell:
 do iCell = 1, nCells
 
-    east(1,iCell) = -sin(lonCell(iCell))
-    east(2,iCell) =  cos(lonCell(iCell))
+    east(1,iCell) = -sin(lonCell_rad(iCell))
+    east(2,iCell) =  cos(lonCell_rad(iCell))
     east(3,iCell) =  0.0_r8
     call r3_normalize(east(1,iCell), east(2,iCell), east(3,iCell))
 
-    north(1,iCell) = -cos(lonCell(iCell))*sin(latCell(iCell))
-    north(2,iCell) = -sin(lonCell(iCell))*sin(latCell(iCell))
-    north(3,iCell) =  cos(latCell(iCell))
+    north(1,iCell) = -cos(lonCell_rad(iCell))*sin(latCell_rad(iCell))
+    north(2,iCell) = -sin(lonCell_rad(iCell))*sin(latCell_rad(iCell))
+    north(3,iCell) =  cos(latCell_rad(iCell))
     call r3_normalize(north(1,iCell), north(2,iCell), north(3,iCell))
 
 enddo
