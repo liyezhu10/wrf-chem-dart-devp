@@ -44,7 +44,8 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_SURFACE_PRESSURE,   &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
-                             KIND_U_WIND_COMPONENT
+                             KIND_U_WIND_COMPONENT,   &
+                             KIND_PRESSURE
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -171,7 +172,8 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
-real(r8), allocatable :: zgrid(:,:) ! cell center geometric height at cell centers (ncells,nvert)
+real(r8), allocatable :: zgridFace(:,:)   ! cell center geometric height at cell centers (ncells,nvert+1)
+real(r8), allocatable :: zgridCenter(:,:) ! cell center geometric height at cell centers (ncells,nvert)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 
 integer               :: model_size      ! the state vector length
@@ -339,11 +341,12 @@ kloc = myindx - (iloc-1)*nzp   ! vertical level index
 ! you have to take the midpoint of the top and bottom face of the cell.
 
 if ( progvar(nf)%ZonHalf ) then
-   height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5
+   height = zgridCenter(kloc,iloc)
+   !height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5
 else if (nzp <= 1) then
-   height = zgrid(1,iloc)
+   height = zgridFace(1,iloc)
 else
-   height = zgrid(kloc,iloc)
+   height = zgridFace(kloc,iloc)
 endif
 
 if (nzp <= 1) then
@@ -465,7 +468,7 @@ endif
 ! For height, can do simple vertical search for interpolation for now
 ! Get the lower and upper bounds and fraction for each column
 do i = 1, 3
-   call find_height_bounds(lheight, nVertLevels, zgrid(:, tri_indices(i)), &
+   call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
       lower, upper, fract, ier)
 !JLA
 ! TIM: I'm confused about this array. I need the cell center values to work with
@@ -1013,7 +1016,7 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname,dimname
 character(len=paramname_length)       :: kind_string
 integer :: ncid, VarID, numdims, varsize, dimlen
-integer :: iunit, io, ivar, i, index1, indexN
+integer :: iunit, io, ivar, i, index1, indexN, iloc, kloc
 integer :: ss, dd
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
 
@@ -1067,10 +1070,19 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells)) 
-allocate(zgrid(nVertLevelsP1, nCells))
+allocate(zgridFace(nVertLevelsP1, nCells))
+allocate(zgridCenter(nVertLevels, nCells))
 allocate(cellsOnVertex(vertexDegree, nVertices))
 
-call get_grid(latCell, lonCell, zgrid, cellsOnVertex)
+! this reads in latCell, lonCell, zgridFace, cellsOnVertex
+call get_grid()
+
+! read in vert cell face locations and then compute vertical center locations
+do kloc=1, nCells
+ do iloc=1, nVertLevels
+   zgridCenter = (zgridFace(kloc,iloc) + zgridFace(kloc+1,iloc))*0.5
+ enddo
+enddo
               
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
@@ -1226,7 +1238,8 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
-if (allocated(zgrid))          deallocate(zgrid)
+if (allocated(zgridFace))      deallocate(zgridFace)
+if (allocated(zgridCenter))    deallocate(zgridCenter)
 if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 
 end subroutine end_model
@@ -1599,7 +1612,7 @@ else
 
    call nc_check(NF90_inq_varid(ncFileID, 'zgrid', VarID), &
                  'nc_write_model_atts', 'zgrid inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, zgrid ), &
+   call nc_check(nf90_put_var(ncFileID, VarID, zgridFace ), &
                 'nc_write_model_atts', 'zgrid put_var '//trim(filename))
 
 endif
@@ -2634,16 +2647,15 @@ end subroutine read_grid_dims
 
 
 
-subroutine get_grid(latCell, lonCell, zgrid, cellsOnVertex) 
+subroutine get_grid()
 !------------------------------------------------------------------
 !
 ! Read the grid dimensions from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
+! This reads in the following arrays:
+!   latCell, lonCell, zgridFace, cellsOnVertex (all in module global storage)
 
-real(r8), dimension(:),   intent(out) :: latCell, lonCell  
-real(r8), dimension(:,:), intent(out) :: zgrid 
-integer,  dimension(:,:), intent(out) :: cellsOnVertex
 
 integer  :: ncid, VarID
 
@@ -2665,7 +2677,7 @@ call nc_check(nf90_get_var( ncid, VarID, lonCell), &
 
 call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
       'get_grid', 'inq_varid zgrid '//trim(model_analysis_filename))
-call nc_check(nf90_get_var( ncid, VarID, zgrid), &
+call nc_check(nf90_get_var( ncid, VarID, zgridFace), &
       'get_grid', 'get_var zgrid '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
@@ -2687,7 +2699,7 @@ if ( debug > 7 ) then
    write(*,*)
    write(*,*)'latCell       range ',minval(latCell),      maxval(latCell)
    write(*,*)'lonCell       range ',minval(lonCell),      maxval(lonCell)
-   write(*,*)'zgrid         range ',minval(zgrid  ),      maxval(zgrid  )
+   write(*,*)'zgrid         range ',minval(zgridFace),    maxval(zgridFace)
    write(*,*)'cellsOnVertex range ',minval(cellsOnVertex),maxval(cellsOnVertex)
 
 endif
@@ -3249,7 +3261,8 @@ allocate(nEdgesOnCell(nCells), edgesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 
 call get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
-call get_u(u)
+! not clear we need to read it since uv_cell_to_edges() zeros it first thing.
+! call get_u(u)
 
 call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, zonal_data, meridional_data, u)
 
