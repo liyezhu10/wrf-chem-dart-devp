@@ -21,7 +21,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check,
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_POTENTIAL_TEMPERATURE
+                             KIND_POTENTIAL_TEMPERATURE, KIND_SURFACE_PRESSURE, KIND_U_WIND_COMPONENT
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -66,7 +66,7 @@ namelist /model_mod_check_nml/ dart_input_file, output_file, &
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
-integer :: in_unit, out_unit, ios_out, iunit, io, offset
+integer :: in_unit, out_unit, ios_out, iunit, io, offset, i, j
 integer :: x_size, skip, i
 integer :: year, month, day, hour, minute, second
 integer :: secs, days
@@ -80,7 +80,8 @@ type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
 real(r8), allocatable :: u(:,:)
-real(r8) :: interp_val
+real(r8) :: interp_val, lon, lat
+real(r8) :: interp(60, 30)
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
@@ -211,7 +212,19 @@ if (test1thru < 8) goto 999
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
 
-call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
+do i = 1, 60
+   lon = (i - 1) * 6.0_r8
+   do j = 1, 30
+      lat = -87.0_r8 + (j - 1) * 6.0_r8 
+      loc = set_location(lon, lat, 6345.0_r8, VERTISHEIGHT)
+      call model_interpolate(statevector, loc, KIND_U_WIND_COMPONENT, interp_val, ios_out)
+      !!!call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
+      !!!call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, interp_val, ios_out)
+      write(*, *) 'interp val ', interp_val, ios_out
+      interp(i, j) = interp_val
+      write(81, *) i, j, interp(i, j)
+   end do 
+end do
 
 if ( ios_out == 0 ) then 
    write(*,*)'model_interpolate SUCCESS: The interpolated value is ',interp_val
