@@ -1080,7 +1080,7 @@ call get_grid()
 ! read in vert cell face locations and then compute vertical center locations
 do kloc=1, nCells
  do iloc=1, nVertLevels
-   zgridCenter = (zgridFace(kloc,iloc) + zgridFace(kloc+1,iloc))*0.5
+   zgridCenter(iloc,kloc) = (zgridFace(iloc,kloc) + zgridFace(iloc+1,kloc))*0.5
  enddo
 enddo
               
