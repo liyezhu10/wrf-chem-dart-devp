@@ -67,7 +67,7 @@ namelist /model_mod_check_nml/ dart_input_file, output_file, &
 ! integer :: numlons, numlats, numlevs
 
 integer :: in_unit, out_unit, ios_out, iunit, io, offset, i, j
-integer :: x_size, skip, i
+integer :: x_size, skip
 integer :: year, month, day, hour, minute, second
 integer :: secs, days
 
