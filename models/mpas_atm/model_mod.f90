@@ -96,6 +96,13 @@ character(len=128), parameter :: &
 character(len=256) :: string1, string2
 logical, save :: module_initialized = .false.
 
+! Real (physical) constants as defined exactly in MPAS.
+! redefined here for consistency with the model.
+real(r8), parameter :: rgas = 287.0_r8
+real(r8), parameter :: cp = 1003.0_r8
+real(r8), parameter :: cv = 716.0_r8
+real(r8), parameter :: p0 = 100000.0_r8
+
 ! Storage for a random sequence for perturbing a single initial state
 
 type(random_seq_type) :: random_seq
@@ -3515,16 +3522,11 @@ real(r8)  :: theta_to_tk          ! sensible temperature [K]
 ! Local variables
 real(r8) :: theta_m               ! potential temperature modified by qv
 real(r8) :: exner                 ! exner function
+real(r8) :: rcv
 
-! Constants (as in MPAS)
-rgas = 287.0_r8
-  cp = 1003.0_r8
-  cv = 716.0_r8
-  p0 = 100000.0_r8
- rcv = rgas/(cp-rgas)
-
+rcv = rgas/(cp-rgas)
 theta_m = (1.0_r8 + 1.61_r8 * qv)*theta
-  exner = ( (rgas/p0) * (rho*theta_m) )**rcv
+exner = ( (rgas/p0) * (rho*theta_m) )**rcv
 
 ! Temperature [K]
 theta_to_tk = theta * exner
@@ -3545,11 +3547,8 @@ real(r8) :: compute_full_pressure ! full pressure [Pa]
 ! Local variables
 real(r8) :: tk                    ! temperature [K]
 
-! Constants (as in MPAS)
-rgas = 287.0_r8
-
 tk = theta_to_tk(theta, rho, qv)
-pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
+compute_full_pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
 
 end function compute_full_pressure
 
