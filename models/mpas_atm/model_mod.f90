@@ -3503,6 +3503,58 @@ end function get_index_from_varname
 
 
 
+function theta_to_tk (theta, rho, qv)
+!------------------------------------------------------------------
+! Compute sensible temperature [K] from potential temperature [K].
+
+real(r8), intent(in)  :: theta    ! potential temperature [K]
+real(r8), intent(in)  :: rho      ! dry density
+real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
+real(r8)  :: theta_to_tk          ! sensible temperature [K]
+
+! Local variables
+real(r8) :: theta_m               ! potential temperature modified by qv
+real(r8) :: exner                 ! exner function
+
+! Constants (as in MPAS)
+rgas = 287.0_r8
+  cp = 1003.0_r8
+  cv = 716.0_r8
+  p0 = 100000.0_r8
+ rcv = rgas/(cp-rgas)
+
+theta_m = (1.0_r8 + 1.61_r8 * qv)*theta
+  exner = ( (rgas/p0) * (rho*theta_m) )**rcv
+
+! Temperature [K]
+theta_to_tk = theta * exner
+
+end function theta_to_tk
+
+
+
+function compute_full_pressure(theta, rho, qv)
+!------------------------------------------------------------------
+! Compute full pressure from the equation of state.
+
+real(r8), intent(in)  :: theta    ! potential temperature [K]
+real(r8), intent(in)  :: rho      ! dry density
+real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
+real(r8) :: compute_full_pressure ! full pressure [Pa]
+
+! Local variables
+real(r8) :: tk                    ! temperature [K]
+
+! Constants (as in MPAS)
+rgas = 287.0_r8
+
+tk = theta_to_tk(theta, rho, qv)
+pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
+
+end function compute_full_pressure
+
+
+
 !===================================================================
 ! End of model_mod
 !===================================================================
