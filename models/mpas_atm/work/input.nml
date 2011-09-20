@@ -248,14 +248,19 @@
    verbose   = .false.
    /
 
+   kind_of_interest = 'KIND_SURFACE_PRESSURE',
 &model_mod_check_nml
-   dart_input_file      = 'dart.ics'
-   output_file          = 'check_me'
-   advance_time_present = .FALSE.
-   verbose              = .TRUE.
-   test1thru            = 10
-   x_ind            = 300 
+   dart_input_file      = 'dart.ics',
+   output_file          = 'check_me',
+   advance_time_present = .FALSE.,
+   verbose              = .TRUE.,
+   test1thru            = 10,
+   x_ind            = 300 ,
    loc_of_interest  = 240.0, 0.0, 10000.0,
-   kind_of_interest = 'KIND_POTENTIAL_TEMPERATURE'
+   kind_of_interest = 'KIND_POTENTIAL_TEMPERATURE',
+   interp_test_lonrange =   0.0, 359.0,
+   interp_test_latrange = -89.0,  89.0,
+   interp_test_dlon     = 1.0,
+   interp_test_dlat     = 1.0,
+   interp_test_levelcoord = 'height'
    /
-

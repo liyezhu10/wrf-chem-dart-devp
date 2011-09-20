@@ -436,21 +436,19 @@ endif
   llat      = loc_array(2)
   lheight   = loc_array(3)
 
-  IF (debug > 2) print *, 'requesting interpolation at ', llon, llat, lheight
-
+  IF (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 
 ! Find the start and end offsets for this field in the state vector x(:)
 ! Call terminates if obs_type is not found
   call get_index_range(obs_type, base_offset, end_offset)
 
-  IF (debug > 2) print *, 'base offset now ', base_offset, end_offset
-
+  IF (debug > 5) print *, 'base offset now ', base_offset, end_offset
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
-call get_cell_indices(llon, llat, tri_indices, weights, ier)
-write(*, *) 'tri_inds ', tri_indices
-write(*, *) 'weights ', weights
+   call get_cell_indices(llon, llat, tri_indices, weights, ier)
+  if (debug > 5) write(*, *) 'tri_inds ', tri_indices
+  if (debug > 5) write(*, *) 'weights ', weights
 
 ! If istatus is not zero couldn't find a triangle, fail
 if(ier /= 0)then
@@ -604,11 +602,11 @@ istatus = 0
 ! Figure out which of the regular grid boxes this is in
 call get_reg_box_indices(lon, lat, x_ind, y_ind)
 !JLA
-write(*, *) 'x_ind, y_ind ', x_ind, y_ind
+if (debug > 5) write(*, *) 'x_ind, y_ind ', x_ind, y_ind
 num_inds =  triangle_num  (x_ind, y_ind)
 start_ind = triangle_start(x_ind, y_ind)
 !JLA
-write(*, *) 'num, start_ind ', num_inds, start_ind
+if (debug > 5) write(*, *) 'num, start_ind ', num_inds, start_ind
 
 ! If there are no triangles overlapping, can't do interpolation
 if(num_inds == 0) then
@@ -654,9 +652,9 @@ do i = start_ind, start_ind + num_inds - 1
    ! Get corner lons and lats
    call get_triangle_corners(ind, clons, clats)
 ! JLA
-write(*, *) 'tri ', ind
-write(*, *) 'clons ', clons
-write(*, *) 'clats ', clats
+   if (debug > 5) write(*, *) 'tri ', ind
+   if (debug > 5) write(*, *) 'clons ', clons
+   if (debug > 5) write(*, *) 'clats ', clats
 
    ! Need to deal with longitude wraparound before doing triangle computations
    ! JLA Need to deal with possible triangle at pole, keep an index in global for this?

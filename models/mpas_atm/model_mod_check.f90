@@ -17,7 +17,8 @@ program model_mod_check
 use        types_mod, only : r8, digits12, metadatalength
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
-                             check_namelist_read, nmlfileunit, do_nml_file, do_nml_term
+                             check_namelist_read, nmlfileunit, do_nml_file, do_nml_term, &
+                             E_MSG, error_handler, get_unit
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
@@ -37,6 +38,8 @@ use        model_mod, only : static_init_model, get_model_size, get_state_meta_d
                              statevector_to_analysis_file, get_analysis_time,            &
                              write_model_time, get_grid_dims
 
+use netcdf
+use typesizes
 
 implicit none
 
@@ -46,22 +49,32 @@ character(len=128), parameter :: &
    revision = "$Revision$", &
    revdate  = "$Date$"
 
+character(len=256) :: string1, string2
+
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129) :: dart_input_file      = 'dart.ics'
-character (len = 129) :: output_file          = 'check_me'
-logical               :: advance_time_present = .FALSE.
-logical               :: verbose              = .FALSE.
-integer               :: test1thru            = -1
-integer               :: x_ind                = -1
+character (len = 129)  :: dart_input_file      = 'dart.ics'
+character (len = 129)  :: output_file          = 'check_me'
+logical                :: advance_time_present = .FALSE.
+logical                :: verbose              = .FALSE.
+integer                :: test1thru            = -1
+integer                :: x_ind                = -1
+real(r8)               :: interp_test_dlon     = 1.0
+real(r8)               :: interp_test_dlat     = 1.0
+real(r8), dimension(2) :: interp_test_latrange = (/ -90.0,  90.0 /)
+real(r8), dimension(2) :: interp_test_lonrange = (/   0.0, 360.0 /)
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
+character(len=metadatalength) :: interp_test_levelcoord = 'height'
 
 namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         advance_time_present, test1thru, x_ind, &
-                        loc_of_interest, kind_of_interest, verbose
+                        loc_of_interest, kind_of_interest, verbose, &
+                        interp_test_dlon, interp_test_lonrange, &
+                        interp_test_dlat, interp_test_latrange, &
+                        interp_test_levelcoord
 
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
@@ -212,21 +225,10 @@ if (test1thru < 8) goto 999
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
 
-do i = 1, 360
-   lon = (i - 1) * 1.0_r8
-   do j = 1, 180
-      lat = -89.5_r8 + (j - 1) * 1.0_r8 
-      loc = set_location(lon, lat, 6345.0_r8, VERTISHEIGHT)
-      !!!call model_interpolate(statevector, loc, KIND_U_WIND_COMPONENT, interp_val, ios_out)
-      !!!call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
-      call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, interp_val, ios_out)
-      write(*, *) 'interp val ', interp_val, ios_out
-      write(81, *) i, j, interp_val
-   end do 
-end do
+ios_out = test_interpolate()
 
 if ( ios_out == 0 ) then 
-   write(*,*)'model_interpolate SUCCESS: The interpolated value is ',interp_val
+   write(*,*)'model_interpolate SUCCESS.'
 else
    write(*,*)'model_interpolate ERROR: model_interpolate failed with error code ',ios_out
 endif
@@ -404,5 +406,126 @@ deallocate( thisdist )
 
 end subroutine find_closest_gridpoint
 
+
+
+function test_interpolate()
+! function to exercise the model_mod:model_interpolate() function
+! This will result in a netCDF file with all salient metadata 
+integer :: test_interpolate
+
+! Local variables
+
+real(r8), allocatable :: lon(:), lat(:)
+real(r8), allocatable :: field(:,:)
+integer :: mykindindex
+integer :: nlon, nlat
+integer :: ilon, jlat
+character(len=128) :: ncfilename,txtfilename
+
+integer :: ncid, nlonDimID, nlatDimID, VarID, lonVarID, latVarID
+
+!if ((interp_test_nlon < 1) .or.  (interp_test_nlat < 1)) then
+!   write(string1,*)'interp_test_nlon,nlat must be > 1; they are ', &
+!                    interp_test_nlon,interp_test_nlat
+!   call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate)
+!endif
+
+write( ncfilename,'(a,a)')trim(output_file),'_interptest.nc'
+write(txtfilename,'(a,a)')trim(output_file),'_interptest.txt'
+
+iunit = open_file(trim(txtfilename), action='write')
+
+nlat = nint((interp_test_latrange(2) - interp_test_latrange(1))/interp_test_dlat) + 1
+nlon = nint((interp_test_lonrange(2) - interp_test_lonrange(1))/interp_test_dlon) + 1
+
+allocate(lon(nlon), lat(nlat), field(nlon,nlat))
+
+! Other kinds tested are :   KIND_U_WIND_COMPONENT   KIND_POTENTIAL_TEMPERATURE
+mykindindex = get_raw_obs_kind_index(kind_of_interest)
+
+write(*,*)'kind_of_interest is ',kind_of_interest
+write(*,*)'mykindindex                is ',mykindindex
+write(*,*)'KIND_U_WIND_COMPONENT      is ',KIND_U_WIND_COMPONENT
+write(*,*)'KIND_POTENTIAL_TEMPERATURE is ',KIND_POTENTIAL_TEMPERATURE
+write(*,*)'KIND_SURFACE_PRESSURE      is ',KIND_SURFACE_PRESSURE
+
+do ilon = 1, nlon
+   lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
+   do jlat = 1, nlat
+      lat(jlat) = interp_test_latrange(1) + real(jlat-1,r8) * interp_test_dlat
+
+      loc = set_location(lon(ilon), lat(jlat), 6345.0_r8, VERTISHEIGHT)
+
+      call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, field(ilon,jlat), ios_out)
+!     call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
+!     write(  *  , *) 'interp val,status ', field(ilon,jlat), ios_out
+      write(iunit, *) ilon, jlat, field(ilon,jlat)
+
+      if (ios_out /= 0) then
+        write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
+        write(string1,*) 'interpolation failed with error ', ios_out
+        call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+      endif
+
+   end do 
+end do
+call close_file(iunit)
+
+! Write out the netCDF file for easy exploration.
+
+call nc_check( nf90_create(path=trim(ncfilename), cmode=NF90_clobber, ncid=ncid), &
+                  'test_interpolate', 'open '//trim(ncfilename))
+
+call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'parent_file', dart_input_file ), &
+           'test_interpolate', 'model put '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'kind_of_interest', kind_of_interest ), &
+           'test_interpolate', 'model put '//trim(ncfilename))
+
+! Define dimensions
+
+call nc_check(nf90_def_dim(ncid=ncid, name='lon', len=nlon, &
+        dimid = nlonDimID),'test_interpolate', 'nlon def_dim '//trim(ncfilename))
+
+call nc_check(nf90_def_dim(ncid=ncid, name='lat', len=nlat, &
+        dimid = nlatDimID),'test_interpolate', 'nlat def_dim '//trim(ncfilename))
+
+
+! Define variables
+
+call nc_check(nf90_def_var(ncid=ncid, name='lon', xtype=nf90_double, &
+        dimids=nlonDimID, varid=lonVarID), 'test_interpolate', &
+                 'lon def_var '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, lonVarID, 'range', interp_test_lonrange), &
+           'test_interpolate', 'lonrange put '//trim(ncfilename))
+
+call nc_check(nf90_def_var(ncid=ncid, name='lat', xtype=nf90_double, &
+        dimids=nlatDimID, varid=latVarID), 'test_interpolate', &
+                 'lat def_var '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, latVarID, 'range', interp_test_latrange), &
+           'test_interpolate', 'latrange put '//trim(ncfilename))
+
+call nc_check(nf90_def_var(ncid=ncid, name='field', xtype=nf90_double, &
+        dimids=(/ nlonDimID, nlatDimID /), varid=VarID), 'test_interpolate', &
+                 'field def_var '//trim(ncfilename))
+
+! Leave define mode so we can fill the variables.
+call nc_check(nf90_enddef(ncid), &
+              'test_interpolate','field enddef '//trim(ncfilename))
+
+! Fill the variables
+call nc_check(nf90_put_var(ncid, lonVarID, lon), &
+              'test_interpolate','lon put_var '//trim(ncfilename))
+call nc_check(nf90_put_var(ncid, latVarID, lat), &
+              'test_interpolate','lat put_var '//trim(ncfilename))
+call nc_check(nf90_put_var(ncid, VarID, field), &
+              'test_interpolate','field put_var '//trim(ncfilename))
+
+! tidy up
+call nc_check(nf90_close(ncid), &
+             'test_interpolate','close '//trim(ncfilename))
+
+deallocate(lon, lat, field)
+
+end function test_interpolate
 
 end program model_mod_check
