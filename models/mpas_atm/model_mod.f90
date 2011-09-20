@@ -179,8 +179,8 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
-real(r8), allocatable :: zgridFace(:,:)   ! cell center geometric height at cell centers (ncells,nvert+1)
-real(r8), allocatable :: zgridCenter(:,:) ! cell center geometric height at cell centers (ncells,nvert)
+real(r8), allocatable :: zgridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
+real(r8), allocatable :: zgridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 
 integer               :: model_size      ! the state vector length
@@ -2010,7 +2010,8 @@ real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: model_time
 
 ! temp space to hold data while we are reading it
-integer  :: i, j, k, ni, nj, nk, ivar, indx
+integer  :: idim1, idim2, idim3, ndim1, ndim2, ndim3
+integer  :: i, ivar, indx
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
@@ -2105,29 +2106,29 @@ do ivar=1, nfields
    if (ncNdims == 1) then
 
       ! If the single dimension is TIME, we only need a scalar.
-      ! Pretty sure this cant happen given the test for x1d,y1d,z1d.
-      ni = mycount(1)
-      allocate(data_1d_array(ni))
+      ! Pretty sure this cannot happen ...
+      ndim1 = mycount(1)
+      allocate(data_1d_array(ndim1))
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do i = 1, ni
-         state_vector(indx) = data_1d_array(i)
+      do idim1 = 1, ndim1
+         state_vector(indx) = data_1d_array(idim1)
          indx = indx + 1
       enddo
       deallocate(data_1d_array)
 
    elseif (ncNdims == 2) then
 
-      ni = mycount(1)
-      nk = mycount(2)
-      allocate(data_2d_array(ni, nk))
+      ndim1 = mycount(1)
+      ndim2 = mycount(2)
+      allocate(data_2d_array(ndim1, ndim2))
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do k = 1, nk
-      do i = 1, ni
-         state_vector(indx) = data_2d_array(i, k)
+      do idim2 = 1, ndim2
+      do idim1 = 1, ndim1
+         state_vector(indx) = data_2d_array(idim1, idim2)
          indx = indx + 1
       enddo
       enddo
@@ -2135,17 +2136,17 @@ do ivar=1, nfields
 
    elseif (ncNdims == 3) then
 
-      ni = mycount(1)
-      nj = mycount(2)
-      nk = mycount(3)
-      allocate(data_3d_array(ni, nj, nk))
+      ndim1 = mycount(1)
+      ndim2 = mycount(2)
+      ndim3 = mycount(3)
+      allocate(data_3d_array(ndim1, ndim2, ndim3))
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do k = 1, nk
-      do j = 1, nj
-      do i = 1, ni
-         state_vector(indx) = data_3d_array(i, j, k)
+      do idim3 = 1, ndim3
+      do idim2 = 1, ndim2
+      do idim1 = 1, ndim1
+         state_vector(indx) = data_3d_array(idim1, idim2, idim3)
          indx = indx + 1
       enddo
       enddo
@@ -2185,7 +2186,7 @@ character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: statetime
 
 ! temp space to hold data while we are writing it
-integer :: i, ni, nj, nk, ivar
+integer :: i, ndim1, ndim2, ndim3, ivar
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array2
@@ -2290,8 +2291,8 @@ do ivar=1, nfields
    endif
 
    if (progvar(ivar)%numdims == 1) then
-      ni = mycount(1)
-      allocate(data_1d_array(ni))
+      ndim1 = mycount(1)
+      allocate(data_1d_array(ndim1))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2306,9 +2307,9 @@ do ivar=1, nfields
 
    elseif (progvar(ivar)%numdims == 2) then
 
-      ni = mycount(1)
-      nj = mycount(2)
-      allocate(data_2d_array(ni, nj))
+      ndim1 = mycount(1)
+      ndim2 = mycount(2)
+      allocate(data_2d_array(ndim1, ndim2))
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2323,10 +2324,10 @@ do ivar=1, nfields
 
    elseif (progvar(ivar)%numdims == 3) then
 
-      ni = mycount(1)
-      nj = mycount(2)
-      nk = mycount(3)
-      allocate(data_3d_array(ni, nj, nk))
+      ndim1 = mycount(1)
+      ndim2 = mycount(2)
+      ndim3 = mycount(3)
+      allocate(data_3d_array(ndim1, ndim2, ndim3))
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2908,14 +2909,14 @@ real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
 
-integer :: i,ii
+integer :: idim1,ii
 
 if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do i = 1, progvar(ivar)%dimlens(1)
-   data_1d_array(i) = x(ii)
+do idim1 = 1, progvar(ivar)%dimlens(1)
+   data_1d_array(idim1) = x(ii)
    ii = ii + 1
 enddo
 
@@ -2940,15 +2941,15 @@ real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
 
-integer :: i,j,ii
+integer :: idim1,idim2,ii
 
 if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do j = 1,progvar(ivar)%dimlens(2)
-do i = 1,progvar(ivar)%dimlens(1)
-   data_2d_array(i,j) = x(ii)
+do idim2 = 1,progvar(ivar)%dimlens(2)
+do idim1 = 1,progvar(ivar)%dimlens(1)
+   data_2d_array(idim1,idim2) = x(ii)
    ii = ii + 1
 enddo
 enddo
@@ -2974,16 +2975,16 @@ real(r8), dimension(:),     intent(in)  :: x
 integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
 
-integer :: i,j,k,ii
+integer :: idim1,idim2,idim3,ii
 
 if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do k = 1,progvar(ivar)%dimlens(3)
-do j = 1,progvar(ivar)%dimlens(2)
-do i = 1,progvar(ivar)%dimlens(1)
-   data_3d_array(i,j,k) = x(ii)
+do idim3 = 1,progvar(ivar)%dimlens(3)
+do idim2 = 1,progvar(ivar)%dimlens(2)
+do idim1 = 1,progvar(ivar)%dimlens(1)
+   data_3d_array(idim1,idim2,idim3) = x(ii)
    ii = ii + 1
 enddo
 enddo
