@@ -66,7 +66,7 @@ namelist /model_mod_check_nml/ dart_input_file, output_file, &
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
-integer :: in_unit, out_unit, ios_out, iunit, io, offset, i, j
+integer :: in_unit, out_unit, ios_out, iunit, io, offset, j
 integer :: x_size, skip
 integer :: year, month, day, hour, minute, second
 integer :: secs, days
@@ -81,7 +81,7 @@ type(location_type) :: loc
 
 real(r8), allocatable :: u(:,:)
 real(r8) :: interp_val, lon, lat
-real(r8) :: interp(60, 30)
+real(r8) :: interp
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
@@ -188,7 +188,7 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 
 if (test1thru < 6) goto 999
 
-skip = 10000
+skip = 100000
 
 do i = 1, x_size, skip
    if ( i > 0 .and. i <= x_size ) call check_meta_data( i )
@@ -212,17 +212,16 @@ if (test1thru < 8) goto 999
 write(*,*)
 write(*,*)'Testing model_interpolate ...'
 
-do i = 1, 60
-   lon = (i - 1) * 6.0_r8
-   do j = 1, 30
-      lat = -87.0_r8 + (j - 1) * 6.0_r8 
+do i = 1, 360
+   lon = (i - 1) * 1.0_r8
+   do j = 1, 180
+      lat = -89.5_r8 + (j - 1) * 1.0_r8 
       loc = set_location(lon, lat, 6345.0_r8, VERTISHEIGHT)
-      call model_interpolate(statevector, loc, KIND_U_WIND_COMPONENT, interp_val, ios_out)
+      !!!call model_interpolate(statevector, loc, KIND_U_WIND_COMPONENT, interp_val, ios_out)
       !!!call model_interpolate(statevector, loc, KIND_POTENTIAL_TEMPERATURE, interp_val, ios_out)
-      !!!call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, interp_val, ios_out)
+      call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, interp_val, ios_out)
       write(*, *) 'interp val ', interp_val, ios_out
-      interp(i, j) = interp_val
-      write(81, *) i, j, interp(i, j)
+      write(81, *) i, j, interp_val
    end do 
 end do
 
