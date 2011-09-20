@@ -409,7 +409,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 ! Local storage
 
   real(r8)         :: loc_array(3), llon, llat, lheight, fract, v_interp(3)
-  integer          :: base_offset, end_offset, i, ier, lower, upper
+  integer          :: base_offset, end_offset, i, ier, lower, upper, offset
 
 real(r8) :: weights(3)
 integer  :: tri_indices(3)
@@ -424,8 +424,13 @@ integer  :: tri_indices(3)
   interp_val = MISSING_R8     ! the DART bad value flag
   istatus = 99                ! unknown error
 
-! Get the individual locations values
+! Not prepared to do w interpolation at this time
+if(obs_type == KIND_VERTICAL_VELOCITY) then
+   istatus = 16
+   return
+endif
 
+! Get the individual locations values
   loc_array = get_location(location)
   llon      = loc_array(1)
   llat      = loc_array(2)
@@ -460,45 +465,48 @@ if(obs_type == KIND_SURFACE_PRESSURE) then
    return
 endif
 
+! If vertical is on a model level don't need vertical interpolation either
+if(vert_is_level(location)) then
+   do i = 1, 3
+      offset = base_offset + (tri_indices(i) - 1) * nVertLevels + nint(lheight) - 1
+      v_interp(i) = x(offset) 
+   end do
+   interp_val = sum(weights * v_interp)
+   istatus = 0
+   return
+endif
+
 ! Only height for vertical location type is supported at this point
-  IF(.not. vert_is_height(location) ) THEN 
+  IF(vert_is_pressure(location) ) THEN 
      istatus = 15
      return
   ENDIF
 
-! Not prepared to do w interpolation at this time
-if(obs_type == KIND_VERTICAL_VELOCITY) then
-   istatus = 16
-   return
+
+if(vert_is_height(location)) then
+   ! For height, can do simple vertical search for interpolation for now
+   ! Get the lower and upper bounds and fraction for each column
+   do i = 1, 3
+      call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
+         lower, upper, fract, ier)
+      if(ier /= 0) then
+         istatus = 12
+         return
+      endif
+      call vert_interp(x, base_offset, tri_indices(i), lower, fract, v_interp(i))
+   end do
+
+   ! Now do the horizontal interpolation
+   interp_val = sum(weights * v_interp)
+   istatus = 0
 endif
-
-! For height, can do simple vertical search for interpolation for now
-! Get the lower and upper bounds and fraction for each column
-do i = 1, 3
-   call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
-      lower, upper, fract, ier)
-!JLA
-! TIM: I'm confused about this array. I need the cell center values to work with
-! IT's possible that the comment has the size indices reversed.
-write(*, *) 'vert bounds ', i, lower, upper, fract
-write(*, *) 'vert ier ', ier
-   if(ier /= 0) then
-      istatus = 12
-      return
-   endif
-   call vert_interp(x, base_offset, tri_indices(i), lower, upper, fract, v_interp(i))
-end do
-
-! Now do the horizontal interpolation
-interp_val = sum(weights * v_interp)
-istatus = 0
 
 end subroutine model_interpolate
 
 
 !------------------------------------------------------------------
 
-subroutine vert_interp(x, base_offset, tri_index, lower, upper, fract, val)
+subroutine vert_interp(x, base_offset, tri_index, lower, fract, val)
 
 ! Interpolates in vertical in column indexed by tri_index for a field
 ! with base_offset.  Vertical index is varying fastest here.
@@ -506,7 +514,7 @@ subroutine vert_interp(x, base_offset, tri_index, lower, upper, fract, val)
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
 integer,  intent(in)  :: tri_index
-integer,  intent(in)  :: lower, upper
+integer,  intent(in)  :: lower
 real(r8), intent(in)  :: fract
 real(r8), intent(out) :: val
 
@@ -901,6 +909,13 @@ integer  :: i
 lat_min = minval(y_corners)
 lat_max = maxval(y_corners)
 
+! JLA
+if (lat_min <= -89.999 .or. lat_max >= 89.999) then
+   write(*, *) 'found pole corner'
+   write(*, *) x_corners
+   write(*, *) y_corners
+endif
+
 ! Lons are much trickier. Need to make sure to wraparound the
 ! right way. 
 ! All longitudes for non-pole rows have to be within 180 degrees
@@ -930,8 +945,14 @@ if((lon_max - lon_min) > 180.0_r8) then
       ! North or south pole?
       if(lat_min > 0.0_r8) then
          lat_max = 90.0_r8
+         !JLA 
+         write(*, *) 'Found north pole ', x_corners
+         write(*, *) 'Found north pole ', y_corners
       else 
          lat_min = -90.0_r8
+         !JLA 
+         write(*, *) 'Found south pole ', x_corners
+         write(*, *) 'Found south pole ', y_corners
       endif
    endif
 endif
