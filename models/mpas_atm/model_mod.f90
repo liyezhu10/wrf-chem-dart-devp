@@ -313,7 +313,7 @@ integer, optional, intent(out) :: var_type
 ! Local variables
 
 integer  :: nxp, nzp, iloc, kloc, nf, n
-integer  :: myindx, cell_index
+integer  :: myindx
 real(r8) :: height
 
 if ( .not. module_initialized ) call static_init_model
@@ -587,7 +587,7 @@ real(r8),           intent(out) :: weights(3)
 integer,            intent(out) :: istatus
 
 ! Local storage
-integer  :: lat_bot, lat_top, lon_bot, lon_top, num_inds, start_ind
+integer  :: num_inds, start_ind
 integer  :: x_ind, y_ind
 
 ! Succesful return has istatus of 0
@@ -1352,14 +1352,6 @@ integer :: nVertLevelsP1DimID
 integer :: ivar, VarID
 
 !----------------------------------------------------------------------
-! variables for the namelist output
-!----------------------------------------------------------------------
-
-character(len=129), allocatable, dimension(:) :: textblock
-integer :: LineLenDimID, nlinesDimID, nmlVarID
-integer :: nlines, linelen
-
-!----------------------------------------------------------------------
 ! local variables 
 !----------------------------------------------------------------------
 
@@ -1405,8 +1397,6 @@ call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filen
 ! Our job is create the 'model size' dimension.
 !-------------------------------------------------------------------------------
 
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name='NMLlinelen', dimid=LineLenDimID), &
-                           'nc_write_model_atts','inq_dimid NMLlinelen')
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='copy', dimid=MemberDimID), &
                            'nc_write_model_atts', 'copy dimid '//trim(filename))
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='time', dimid=  TimeDimID), &
@@ -1674,7 +1664,6 @@ integer :: TimeDimID, CopyDimID
 real(r8), allocatable, dimension(:)       :: data_1d_array
 real(r8), allocatable, dimension(:,:)     :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)   :: data_3d_array
-real(r8), allocatable, dimension(:,:,:,:) :: data_4d_array
 
 character(len=128) :: filename
 
@@ -2443,7 +2432,7 @@ type(time_type) :: get_analysis_time_fname
 
 character(len=*), intent(in) :: filename
 
-integer :: ncid, i
+integer :: i
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2777,7 +2766,7 @@ subroutine get_u(u)
 ! must first be allocated by calling code with the following sizes:
 real(r8), intent(inout) :: u(:,:)       ! u(nVertLevels, nEdges) 
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims, mystart, mycount, numu
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu
 integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: ntimes, i
 
@@ -2843,7 +2832,7 @@ subroutine put_u(u)
 ! must first be allocated by calling code with the following sizes:
 real(r8), intent(in) :: u(:,:)       ! u(nVertLevels, nEdges) 
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims, mystart, mycount, numu
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu
 integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: ntimes, i
 
@@ -3260,7 +3249,6 @@ subroutine handle_winds(zonal_data, meridional_data)
 
 ! is that all we need for this conversion?
 
-integer :: i
 real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:)
 integer,  allocatable :: nEdgesOnCell(:), edgesOnCell(:,:)
 
@@ -3365,7 +3353,7 @@ real(r8), intent(out):: u(:,:)                      ! normal velocity on the edg
 ! Local variables
 real(r8) :: east(3,nCells), north(3,nCells)
 real(r8) :: lonCell_rad(nCells), latCell_rad(nCells)
-integer :: iCell, iEdge, jEdge, kLev, i, k
+integer :: iCell, iEdge, jEdge, k
 
 if ( .not. module_initialized ) call static_init_model
 
