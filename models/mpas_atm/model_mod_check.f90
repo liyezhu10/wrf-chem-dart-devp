@@ -14,13 +14,15 @@ program model_mod_check
 ! purpose: test routines
 !----------------------------------------------------------------------
 
-use        types_mod, only : r8, digits12, metadatalength
+use        types_mod, only : r8, digits12, metadatalength, MISSING_R8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, nmlfileunit, do_nml_file, do_nml_term, &
-                             E_MSG, error_handler, get_unit
+                             E_MSG, E_ERR, error_handler, get_unit
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
-                             query_location, LocationDims, get_location, VERTISHEIGHT
+                             query_location, LocationDims, get_location, &
+                             VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, VERTISPRESSURE, &
+                             VERTISHEIGHT, VERTISSCALEHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_POTENTIAL_TEMPERATURE, KIND_SURFACE_PRESSURE, KIND_U_WIND_COMPONENT
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
@@ -63,18 +65,19 @@ integer                :: test1thru            = -1
 integer                :: x_ind                = -1
 real(r8)               :: interp_test_dlon     = 1.0
 real(r8)               :: interp_test_dlat     = 1.0
+real(r8)               :: interp_test_level    = 1.0
 real(r8), dimension(2) :: interp_test_latrange = (/ -90.0,  90.0 /)
 real(r8), dimension(2) :: interp_test_lonrange = (/   0.0, 360.0 /)
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
-character(len=metadatalength) :: interp_test_levelcoord = 'height'
+character(len=metadatalength) :: interp_test_levelcoord = 'VERTISHEIGHT'
 
 namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose, &
                         interp_test_dlon, interp_test_lonrange, &
                         interp_test_dlat, interp_test_latrange, &
-                        interp_test_levelcoord
+                        interp_test_level, interp_test_levelcoord
 
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
@@ -83,6 +86,7 @@ integer :: in_unit, out_unit, ios_out, iunit, io, offset, i, j
 integer :: x_size, skip
 integer :: year, month, day, hour, minute, second
 integer :: secs, days
+integer :: mykindindex, vertcoord
 
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
@@ -93,8 +97,7 @@ type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
 real(r8), allocatable :: u(:,:)
-real(r8) :: interp_val, lon, lat
-real(r8) :: interp
+real(r8) :: interp_val
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
@@ -115,23 +118,24 @@ if (do_nml_file()) write(nmlfileunit, nml=model_mod_check_nml)
 if (do_nml_term()) write(     *     , nml=model_mod_check_nml)
 
 loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+mykindindex = get_raw_obs_kind_index(kind_of_interest)
 
 if (test1thru < 1) goto 999
 
 ! This harvests all kinds of initialization information
 
 write(*,*)
-write(*,*)'Testing static_init_model ...'
+write(*,*)'static_init_model test STARTING ...'
 call static_init_model()
-write(*,*)'testing complete ...'
+write(*,*)'static_init_model test COMPLETE ...'
 
 if (test1thru < 2) goto 999
 
 write(*,*)
-write(*,*)'Testing get_model_size ...'
+write(*,*)'get_model_size test STARTING ...'
 x_size = get_model_size()
-write(*,'(''state vector has length'',i10)') x_size
-write(*,*)'testing complete ...'
+write(*,*)'get_model_size test : state vector has length',x_size
+write(*,*)'get_model_size test COMPLETE ...'
 
 !----------------------------------------------------------------------
 ! Write a supremely simple restart file. Most of the time, I just use
@@ -141,17 +145,17 @@ write(*,*)'testing complete ...'
 
 if (test1thru < 3) goto 999
 
-write(*,*)
-write(*,*)'Writing a trivial restart file - "allones.ics".'
-
 allocate(statevector(x_size))
 
 statevector = 1.0_r8;
 model_time  = set_time(21600, 149446)   ! 06Z 4 March 2010
 
-iunit = open_restart_write('allones.ics')
-!!!call awrite_state_restart(model_time, statevector, iunit)
-call close_restart(iunit)
+! write(*,*)
+! write(*,*)'Writing a trivial restart file - "allones.ics".'
+! iunit = open_restart_write('allones.ics')
+! call awrite_state_restart(model_time, statevector, iunit)
+! call close_restart(iunit)
+! write(*,*)'trivial restart file written.'
 
 !----------------------------------------------------------------------
 ! Open a test DART initial conditions file.
@@ -223,14 +227,44 @@ if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest 
 if (test1thru < 8) goto 999
 
 write(*,*)
-write(*,*)'Testing model_interpolate ...'
+write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
 
-ios_out = test_interpolate()
+select case(trim(interp_test_levelcoord))
+   case ('VERTISUNDEF')
+      vertcoord = VERTISUNDEF
+   case ('VERTISSURFACE')
+      vertcoord = VERTISSURFACE
+   case ('VERTISLEVEL')
+      vertcoord = VERTISLEVEL
+   case ('VERTISPRESSURE')
+      vertcoord = VERTISPRESSURE
+   case ('VERTISHEIGHT')
+      vertcoord = VERTISHEIGHT
+   case ('VERTISSCALEHEIGHT')
+      vertcoord = VERTISSCALEHEIGHT
+   case default
+      write(string1,*) 'unknown levelcoord ', trim(interp_test_levelcoord)
+      call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
+end select
+
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), vertcoord)
+call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 
    write(*,*)'model_interpolate SUCCESS.'
 else
    write(*,*)'model_interpolate ERROR: model_interpolate failed with error code ',ios_out
+endif
+
+write(*,*)
+write(*,*)'Rigorous test of model_interpolate ...'
+
+ios_out = test_interpolate()
+
+if ( ios_out == 0 ) then 
+   write(*,*)'Rigorous model_interpolate SUCCESS.'
+else
+   write(*,*)'Rigorous model_interpolate ERROR: model_interpolate failed with error code ',ios_out
 endif
 
 !----------------------------------------------------------------------
@@ -316,7 +350,6 @@ subroutine find_closest_gridpoint( loc_of_interest )
 real(r8), dimension(:), intent(in) :: loc_of_interest
 
 type(location_type) :: loc0, loc1
-integer  :: mykindindex
 integer  :: i, var_type, which_vert
 real(r8) :: closest, rlon, rlat, rlev, vals(3)
 real(r8), allocatable, dimension(:) :: thisdist
@@ -343,8 +376,6 @@ matched   = .false.
 ! Trying to support the ability to specify matching a particular KIND.
 ! With staggered grids, the closest gridpoint might not be of the kind
 ! you are interested in. mykindindex = -1 means anything will do.
-
-mykindindex = get_raw_obs_kind_index(kind_of_interest)
 
 rlon = loc_of_interest(1)
 rlat = loc_of_interest(2)
@@ -417,49 +448,42 @@ integer :: test_interpolate
 
 real(r8), allocatable :: lon(:), lat(:)
 real(r8), allocatable :: field(:,:)
-integer :: mykindindex
 integer :: nlon, nlat
 integer :: ilon, jlat
 character(len=128) :: ncfilename,txtfilename
 
 integer :: ncid, nlonDimID, nlatDimID, VarID, lonVarID, latVarID
 
-!if ((interp_test_nlon < 1) .or.  (interp_test_nlat < 1)) then
-!   write(string1,*)'interp_test_nlon,nlat must be > 1; they are ', &
-!                    interp_test_nlon,interp_test_nlat
-!   call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate)
-!endif
+if ((interp_test_dlon < 0.0_r8) .or. (interp_test_dlat < 0.0_r8)) then
+   write(*,*)'Skipping the rigorous interpolation test because one of'
+   write(*,*)'interp_test_dlon,interp_test_dlat are < 0.0'
+   write(*,*)'interp_test_dlon = ',interp_test_dlon
+   write(*,*)'interp_test_dlat = ',interp_test_dlat
+endif
 
 write( ncfilename,'(a,a)')trim(output_file),'_interptest.nc'
-write(txtfilename,'(a,a)')trim(output_file),'_interptest.txt'
-
-iunit = open_file(trim(txtfilename), action='write')
+write(txtfilename,'(a,a)')trim(output_file),'_interptest.m'
 
 nlat = nint((interp_test_latrange(2) - interp_test_latrange(1))/interp_test_dlat) + 1
 nlon = nint((interp_test_lonrange(2) - interp_test_lonrange(1))/interp_test_dlon) + 1
 
+iunit = open_file(trim(txtfilename), action='write')
+write(iunit,'(''missingvals = '',f12.4,'';'')')MISSING_R8
+write(iunit,'(''nlon = '',i8,'';'')')nlon
+write(iunit,'(''nlat = '',i8,'';'')')nlat
+write(iunit,'(''interptest = [ ... '')')
+
 allocate(lon(nlon), lat(nlat), field(nlon,nlat))
-
-! Other kinds tested are :   KIND_U_WIND_COMPONENT   KIND_POTENTIAL_TEMPERATURE
-mykindindex = get_raw_obs_kind_index(kind_of_interest)
-
-write(*,*)'kind_of_interest is ',kind_of_interest
-write(*,*)'mykindindex                is ',mykindindex
-write(*,*)'KIND_U_WIND_COMPONENT      is ',KIND_U_WIND_COMPONENT
-write(*,*)'KIND_POTENTIAL_TEMPERATURE is ',KIND_POTENTIAL_TEMPERATURE
-write(*,*)'KIND_SURFACE_PRESSURE      is ',KIND_SURFACE_PRESSURE
 
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
    do jlat = 1, nlat
       lat(jlat) = interp_test_latrange(1) + real(jlat-1,r8) * interp_test_dlat
 
-      loc = set_location(lon(ilon), lat(jlat), 6345.0_r8, VERTISHEIGHT)
+      loc = set_location(lon(ilon), lat(jlat), interp_test_level, vertcoord)
 
-      call model_interpolate(statevector, loc, KIND_SURFACE_PRESSURE, field(ilon,jlat), ios_out)
-!     call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
-!     write(  *  , *) 'interp val,status ', field(ilon,jlat), ios_out
-      write(iunit, *) ilon, jlat, field(ilon,jlat)
+      call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
+      write(iunit,*) field(ilon,jlat)
 
       if (ios_out /= 0) then
         write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
@@ -469,6 +493,9 @@ do ilon = 1, nlon
 
    end do 
 end do
+write(iunit,'(''];'')')
+write(iunit,'(''datmat = reshape(interptest,nlat,nlon);'')')
+write(iunit,'(''datmat(datmat == missingvals) = NaN;'')')
 call close_file(iunit)
 
 ! Write out the netCDF file for easy exploration.
@@ -477,9 +504,7 @@ call nc_check( nf90_create(path=trim(ncfilename), cmode=NF90_clobber, ncid=ncid)
                   'test_interpolate', 'open '//trim(ncfilename))
 
 call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'parent_file', dart_input_file ), &
-           'test_interpolate', 'model put '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'kind_of_interest', kind_of_interest ), &
-           'test_interpolate', 'model put '//trim(ncfilename))
+           'test_interpolate', 'put_att filename '//trim(ncfilename))
 
 ! Define dimensions
 
@@ -489,24 +514,40 @@ call nc_check(nf90_def_dim(ncid=ncid, name='lon', len=nlon, &
 call nc_check(nf90_def_dim(ncid=ncid, name='lat', len=nlat, &
         dimid = nlatDimID),'test_interpolate', 'nlat def_dim '//trim(ncfilename))
 
-
 ! Define variables
 
 call nc_check(nf90_def_var(ncid=ncid, name='lon', xtype=nf90_double, &
         dimids=nlonDimID, varid=lonVarID), 'test_interpolate', &
                  'lon def_var '//trim(ncfilename))
 call nc_check(nf90_put_att(ncid, lonVarID, 'range', interp_test_lonrange), &
-           'test_interpolate', 'lonrange put '//trim(ncfilename))
+           'test_interpolate', 'put_att lonrange '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, lonVarID, 'cartesian_axis', 'X'),   &
+           'test_interpolate', 'lon cartesian_axis '//trim(ncfilename))
+
 
 call nc_check(nf90_def_var(ncid=ncid, name='lat', xtype=nf90_double, &
         dimids=nlatDimID, varid=latVarID), 'test_interpolate', &
                  'lat def_var '//trim(ncfilename))
 call nc_check(nf90_put_att(ncid, latVarID, 'range', interp_test_latrange), &
-           'test_interpolate', 'latrange put '//trim(ncfilename))
+           'test_interpolate', 'put_att latrange '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, latVarID, 'cartesian_axis', 'Y'),   &
+           'test_interpolate', 'lat cartesian_axis '//trim(ncfilename))
 
 call nc_check(nf90_def_var(ncid=ncid, name='field', xtype=nf90_double, &
         dimids=(/ nlonDimID, nlatDimID /), varid=VarID), 'test_interpolate', &
                  'field def_var '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'long_name', kind_of_interest), &
+           'test_interpolate', 'put_att field long_name '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, '_FillValue', MISSING_R8), &
+           'test_interpolate', 'put_att field FillValue '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'missing_value', MISSING_R8), &
+           'test_interpolate', 'put_att field missing_value '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'levelcoord_string', interp_test_levelcoord ), &
+           'test_interpolate', 'put_att field levelcoord_string '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'levelcoord', vertcoord ), &
+           'test_interpolate', 'put_att field levelcoord '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'level', interp_test_level ), &
+           'test_interpolate', 'put_att field level '//trim(ncfilename))
 
 ! Leave define mode so we can fill the variables.
 call nc_check(nf90_enddef(ncid), &
