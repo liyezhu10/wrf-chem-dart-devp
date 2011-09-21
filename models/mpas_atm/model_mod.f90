@@ -45,7 +45,9 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
                              KIND_U_WIND_COMPONENT,   &
-                             KIND_PRESSURE
+                             KIND_PRESSURE,           &
+                             KIND_DENSITY,            & 
+                             KIND_VAPOR_MIXING_RATIO
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -409,9 +411,10 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 ! Local storage
 
   real(r8)         :: loc_array(3), llon, llat, lheight, fract, v_interp(3)
-  integer          :: base_offset, end_offset, i, ier, lower, upper, offset
+  integer          :: base_offset, end_offset, i, ier, lower, upper
+  integer          :: pt_base_offset, density_base_offset, qv_base_offset
 
-real(r8) :: weights(3)
+real(r8) :: weights(3), lower_interp, upper_interp
 integer  :: tri_indices(3)
 
   IF ( .not. module_initialized ) call static_init_model
@@ -425,6 +428,7 @@ integer  :: tri_indices(3)
   istatus = 99                ! unknown error
 
 ! Not prepared to do w interpolation at this time
+! Watch out for the staggered grid in the vertical 
 if(obs_type == KIND_VERTICAL_VELOCITY) then
    istatus = 16
    return
@@ -458,25 +462,38 @@ endif
 
 ! Surface pressure is a 2D field
 if(obs_type == KIND_SURFACE_PRESSURE) then
-   call triangle_interp(x, base_offset, tri_indices, weights, interp_val) 
+   call triangle_interp(x, base_offset, tri_indices, weights, &
+      1, 1, interp_val) 
    istatus = 0
    return
 endif
 
 ! If vertical is on a model level don't need vertical interpolation either
 if(vert_is_level(location)) then
-   do i = 1, 3
-      offset = base_offset + (tri_indices(i) - 1) * nVertLevels + nint(lheight) - 1
-      v_interp(i) = x(offset) 
-   end do
-   interp_val = sum(weights * v_interp)
+   call triangle_interp(x, base_offset, tri_indices, weights, &
+      nint(lheight), nVertLevels, interp_val)
    istatus = 0
    return
 endif
 
-! Only height for vertical location type is supported at this point
+! Vertical interpolation for pressure coordinates
   IF(vert_is_pressure(location) ) THEN 
-     istatus = 15
+   ! Need to get base offsets for the potential temperature, density, and water 
+   ! vapor mixing fields in the state vector
+   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset, end_offset)
+   call get_index_range(KIND_DENSITY, density_base_offset, end_offset)
+   call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset, end_offset)
+   call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
+         pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
+ !JLA 
+ write(*, *) 'pressure l, u, f ', lower, upper, fract
+     ! Next interpolate the observed quantity to the horizontal point at both levels
+     call triangle_interp(x, base_offset, tri_indices, weights, lower, nVertLevels, &
+         lower_interp)
+     call triangle_interp(x, base_offset, tri_indices, weights, upper, nVertLevels, &
+         upper_interp)
+     interp_val = (1.0_r8 - fract) * lower_interp + fract * upper_interp
+     istatus = 0
      return
   ENDIF
 
@@ -491,7 +508,7 @@ if(vert_is_height(location)) then
          istatus = 12
          return
       endif
-      call vert_interp(x, base_offset, tri_indices(i), lower, fract, v_interp(i))
+      call vert_interp(x, base_offset, tri_indices(i), nVertLevels, lower, fract, v_interp(i))
    end do
 
    ! Now do the horizontal interpolation
@@ -501,10 +518,94 @@ endif
 
 end subroutine model_interpolate
 
+!------------------------------------------------------------------
+
+subroutine find_pressure_bounds(x, lheight, tri_indices, weights, nbounds, &
+   pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
+
+! Finds vertical interpolation for a quantity with pressure vertical coordinate
+
+real(r8),  intent(in)  :: x(:)
+real(r8),  intent(in)  :: lheight
+integer,   intent(in)  :: tri_indices(3)
+real(r8),  intent(in)  :: weights(3)
+integer,   intent(in)  :: nbounds
+integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
+integer,   intent(out) :: lower, upper
+real(r8),  intent(out) :: fract
+integer,   intent(out) :: ier
+
+integer  :: i
+real(r8) :: pressure(nbounds)
+
+
+! Loop through the height levels
+call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
+   tri_indices, weights, 1, nbounds, pressure(1))
+call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
+   tri_indices, weights, nbounds, nbounds, pressure(nbounds))
+
+! Check for out of the column range
+if(lheight > pressure(1) .or. lheight < pressure(nbounds)) then
+   ier = 2
+   return
+endif
+
+! Loop through the rest of the column
+do i = 2, nbounds
+   call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
+      tri_indices, weights, i, nbounds, pressure(i))
+   if(lheight > pressure(i)) then
+      lower = i - 1
+      upper = i
+      fract = (lheight - pressure(i-1)) / (pressure(i) - pressure(i-1))
+      return
+   endif
+   
+end do
+
+! Shouldn't ever fall off end of loop
+ier = 3
+
+end subroutine find_pressure_bounds
+
 
 !------------------------------------------------------------------
 
-subroutine vert_interp(x, base_offset, tri_index, lower, fract, val)
+subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
+   tri_indices, weights, lev, nlevs, pressure)
+
+! Finds the value of pressure at a given point at model level lev
+
+real(r8), intent(in)  :: x(:)
+integer,  intent(in)  :: pt_offset, density_offset, qv_offset
+integer,  intent(in)  :: tri_indices(3)
+real(r8), intent(in)  :: weights(3)
+integer,  intent(in)  :: lev, nlevs
+real(r8), intent(out) :: pressure
+
+integer  :: i, offset
+real(r8) :: pt(3), density(3), qv(3), pt_int, density_int, qv_int
+
+do i = 1, 3
+   offset = (tri_indices(i) - 1) * nlevs + lev - 1
+   pt(i) =      x(pt_offset + offset)
+   density(i) = x(density_offset + offset)
+   qv(i) =      x(qv_offset + offset)
+end do
+
+! Interpolate, then compute pressure to save number of exponentiations
+pt_int = sum(weights * pt)
+density_int = sum(weights * density)
+qv_int = sum(weights * qv)
+
+pressure =  compute_full_pressure(pt_int, density_int, qv_int)
+
+end subroutine get_interp_pressure
+
+!------------------------------------------------------------------
+
+subroutine vert_interp(x, base_offset, tri_index, nlevs, lower, fract, val)
 
 ! Interpolates in vertical in column indexed by tri_index for a field
 ! with base_offset.  Vertical index is varying fastest here.
@@ -512,6 +613,7 @@ subroutine vert_interp(x, base_offset, tri_index, lower, fract, val)
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
 integer,  intent(in)  :: tri_index
+integer,  intent(in)  :: nlevs
 integer,  intent(in)  :: lower
 real(r8), intent(in)  :: fract
 real(r8), intent(out) :: val
@@ -520,7 +622,7 @@ integer  :: offset
 real(r8) :: lx, ux
 
 ! Get the value at the lower and upper points
-offset = base_offset + (tri_index - 1) * nVertLevels + lower - 1
+offset = base_offset + (tri_index - 1) * nlevs + lower - 1
 lx = x(offset)
 ux = x(offset + 1)
 
@@ -690,7 +792,8 @@ end subroutine get_triangle
 
 !------------------------------------------------------------
 
-subroutine triangle_interp(x, base_offset, tri_indices, weights, interp_val) 
+subroutine triangle_interp(x, base_offset, tri_indices, weights, &
+   level, nlevels, interp_val) 
 
 ! Given state, offset for start of horizontal slice, the indices of the
 ! triangle vertices in that slice, and the barycentric weights, computes
@@ -700,14 +803,17 @@ real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
 integer,  intent(in)  :: tri_indices(3)
 real(r8), intent(in)  :: weights(3)
+integer,  intent(in)  :: level, nlevels
 real(r8), intent(out) :: interp_val
 
-integer :: i
+integer  :: i, offset
+real(r8) :: corner_val(3)
 
-interp_val = 0.0_r8
 do i = 1, 3
-   interp_val = interp_val + x(base_offset + tri_indices(i) - 1) * weights(i)
+   offset = base_offset + (tri_indices(i) -1) * nlevels + level - 1
+   corner_val(i) = x(offset)
 end do
+interp_val = sum(weights * corner_val)
 
 end subroutine triangle_interp
 
