@@ -396,6 +396,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ISTATUS = 12:  Height vertical coordinate out of model range.
 !       ISTATUS = 15:  Don't know how to interpolate this vertical coordinate
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
+!       ISTATUS = 17:  Unable to compute pressure values 
 !       ISTATUS = 18:  altitude illegal
 !
 !############################################################################
@@ -485,8 +486,10 @@ endif
    call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset, end_offset)
    call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
          pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
- !JLA 
- write(*, *) 'pressure l, u, f ', lower, upper, fract
+   if(ier /= 0) then
+      istatus = 17
+      return
+   endif
      ! Next interpolate the observed quantity to the horizontal point at both levels
      call triangle_interp(x, base_offset, tri_indices, weights, lower, nVertLevels, &
          lower_interp)
@@ -535,15 +538,26 @@ integer,   intent(out) :: lower, upper
 real(r8),  intent(out) :: fract
 integer,   intent(out) :: ier
 
-integer  :: i
+integer  :: i, gip_err
 real(r8) :: pressure(nbounds)
 
+! Default error return is 0
+ier = 0
 
 ! Loop through the height levels
 call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
-   tri_indices, weights, 1, nbounds, pressure(1))
+   tri_indices, weights, 1, nbounds, pressure(1), gip_err)
+if(gip_err /= 0) then
+   ier = gip_err
+   return
+endif
+
 call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
-   tri_indices, weights, nbounds, nbounds, pressure(nbounds))
+   tri_indices, weights, nbounds, nbounds, pressure(nbounds), gip_err)
+if(gip_err /= 0) then
+   ier = gip_err
+   return
+endif
 
 ! Check for out of the column range
 if(lheight > pressure(1) .or. lheight < pressure(nbounds)) then
@@ -554,7 +568,11 @@ endif
 ! Loop through the rest of the column
 do i = 2, nbounds
    call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
-      tri_indices, weights, i, nbounds, pressure(i))
+      tri_indices, weights, i, nbounds, pressure(i), gip_err)
+   if(gip_err /= 0) then
+      ier = gip_err
+      return
+   endif
    if(lheight > pressure(i)) then
       lower = i - 1
       upper = i
@@ -573,7 +591,7 @@ end subroutine find_pressure_bounds
 !------------------------------------------------------------------
 
 subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
-   tri_indices, weights, lev, nlevs, pressure)
+   tri_indices, weights, lev, nlevs, pressure, ier)
 
 ! Finds the value of pressure at a given point at model level lev
 
@@ -583,16 +601,24 @@ integer,  intent(in)  :: tri_indices(3)
 real(r8), intent(in)  :: weights(3)
 integer,  intent(in)  :: lev, nlevs
 real(r8), intent(out) :: pressure
+integer,  intent(out) :: ier
 
 integer  :: i, offset
 real(r8) :: pt(3), density(3), qv(3), pt_int, density_int, qv_int
+
 
 do i = 1, 3
    offset = (tri_indices(i) - 1) * nlevs + lev - 1
    pt(i) =      x(pt_offset + offset)
    density(i) = x(density_offset + offset)
    qv(i) =      x(qv_offset + offset)
+   ! Error if any of the values are missing
+   if(pt(i) == MISSING_R8 .or. density(i) == MISSING_R8 .or. qv(i) == MISSING_R8) then
+      ier = 2
+      return
+   endif
 end do
+
 
 ! Interpolate, then compute pressure to save number of exponentiations
 pt_int = sum(weights * pt)
@@ -600,6 +626,8 @@ density_int = sum(weights * density)
 qv_int = sum(weights * qv)
 
 pressure =  compute_full_pressure(pt_int, density_int, qv_int)
+! Default is no error
+ier = 0
 
 end subroutine get_interp_pressure
 
