@@ -87,11 +87,11 @@ set(h,'LineStyle','none');
 colorbar
 axis image
 
-figure(2)
-m_proj('set','Equidistant Cylindrical');
-h = m_patch(xpoly,ypoly,c);
-set(h,'LineStyle','none');
-colorbar
+% figure(2)
+% m_proj('set','Equidistant Cylindrical');
+% h = m_patch(xpoly,ypoly,c);
+% set(h,'LineStyle','none');
+% colorbar
 
 
 function [start, count] = find_hyperslab(fname,varname,level);
