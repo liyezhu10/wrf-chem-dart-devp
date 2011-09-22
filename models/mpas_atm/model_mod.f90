@@ -394,7 +394,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ISTATUS = 99:  general error in case something terrible goes wrong...
 !       ISTATUS = 11:  Could not find a triangle that contains this lat/lon
 !       ISTATUS = 12:  Height vertical coordinate out of model range.
-!       ISTATUS = 15:  Don't know how to interpolate this vertical coordinate
+!       ISTATUS = 13:  Missing value in interpolation.
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values 
 !       ISTATUS = 18:  altitude illegal
@@ -464,16 +464,24 @@ endif
 ! Surface pressure is a 2D field
 if(obs_type == KIND_SURFACE_PRESSURE) then
    call triangle_interp(x, base_offset, tri_indices, weights, &
-      1, 1, interp_val) 
-   istatus = 0
+      1, 1, interp_val, ier) 
+   if(ier /= 0) then
+      istatus = 13
+   else
+      istatus = 0
+   endif
    return
 endif
 
 ! If vertical is on a model level don't need vertical interpolation either
 if(vert_is_level(location)) then
    call triangle_interp(x, base_offset, tri_indices, weights, &
-      nint(lheight), nVertLevels, interp_val)
-   istatus = 0
+      nint(lheight), nVertLevels, interp_val, ier)
+   if(ier /= 0) then
+      istatus = 13
+   else
+      istatus = 0
+   endif
    return
 endif
 
@@ -492,9 +500,19 @@ endif
    endif
      ! Next interpolate the observed quantity to the horizontal point at both levels
      call triangle_interp(x, base_offset, tri_indices, weights, lower, nVertLevels, &
-         lower_interp)
+         lower_interp, ier)
+     if(ier /= 0) then
+        istatus = 13
+        return
+     endif
      call triangle_interp(x, base_offset, tri_indices, weights, upper, nVertLevels, &
-         upper_interp)
+         upper_interp, ier)
+     if(ier /= 0) then
+        istatus = 13
+        interp_val = MISSING_R8
+     endif
+
+     ! Got both values, interpolate and return
      interp_val = (1.0_r8 - fract) * lower_interp + fract * upper_interp
      istatus = 0
      return
@@ -511,7 +529,11 @@ if(vert_is_height(location)) then
          istatus = 12
          return
       endif
-      call vert_interp(x, base_offset, tri_indices(i), nVertLevels, lower, fract, v_interp(i))
+      call vert_interp(x, base_offset, tri_indices(i), nVertLevels, lower, fract, v_interp(i), ier)
+      if(ier /= 0) then
+         istatus = 13
+         return
+      endif
    end do
 
    ! Now do the horizontal interpolation
@@ -523,13 +545,17 @@ end subroutine model_interpolate
 
 !------------------------------------------------------------------
 
-subroutine find_pressure_bounds(x, lheight, tri_indices, weights, nbounds, &
+subroutine find_pressure_bounds(x, p, tri_indices, weights, nbounds, &
    pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
 
-! Finds vertical interpolation for a quantity with pressure vertical coordinate
+! Finds vertical interpolation indices and fraction for a quantity with 
+! pressure vertical coordinate. Loops through the height levels and
+! computes the corresponding pressure at the horizontal point.  nbounds is
+! the number of vertical levels in the potential temperature, density,
+! and water vapor grids.
 
 real(r8),  intent(in)  :: x(:)
-real(r8),  intent(in)  :: lheight
+real(r8),  intent(in)  :: p
 integer,   intent(in)  :: tri_indices(3)
 real(r8),  intent(in)  :: weights(3)
 integer,   intent(in)  :: nbounds
@@ -544,7 +570,7 @@ real(r8) :: pressure(nbounds)
 ! Default error return is 0
 ier = 0
 
-! Loop through the height levels
+! Find the lowest pressure
 call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
    tri_indices, weights, 1, nbounds, pressure(1), gip_err)
 if(gip_err /= 0) then
@@ -552,6 +578,7 @@ if(gip_err /= 0) then
    return
 endif
 
+! Get the highest pressure level
 call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
    tri_indices, weights, nbounds, nbounds, pressure(nbounds), gip_err)
 if(gip_err /= 0) then
@@ -560,12 +587,12 @@ if(gip_err /= 0) then
 endif
 
 ! Check for out of the column range
-if(lheight > pressure(1) .or. lheight < pressure(nbounds)) then
+if(p > pressure(1) .or. p < pressure(nbounds)) then
    ier = 2
    return
 endif
 
-! Loop through the rest of the column
+! Loop through the rest of the column from the bottom up
 do i = 2, nbounds
    call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
       tri_indices, weights, i, nbounds, pressure(i), gip_err)
@@ -573,10 +600,12 @@ do i = 2, nbounds
       ier = gip_err
       return
    endif
-   if(lheight > pressure(i)) then
+
+   ! Is pressure between i-1 and i level?
+   if(p > pressure(i)) then
       lower = i - 1
       upper = i
-      fract = (lheight - pressure(i-1)) / (pressure(i) - pressure(i-1))
+      fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
       return
    endif
    
@@ -607,25 +636,27 @@ integer  :: i, offset
 real(r8) :: pt(3), density(3), qv(3), pt_int, density_int, qv_int
 
 
+! Get the values of potential temperature, density, and vapor at each corner
 do i = 1, 3
    offset = (tri_indices(i) - 1) * nlevs + lev - 1
    pt(i) =      x(pt_offset + offset)
    density(i) = x(density_offset + offset)
    qv(i) =      x(qv_offset + offset)
-   ! Error if any of the values are missing
+   ! Error if any of the values are missing; probably will be all or nothing
    if(pt(i) == MISSING_R8 .or. density(i) == MISSING_R8 .or. qv(i) == MISSING_R8) then
       ier = 2
       return
    endif
 end do
 
-
-! Interpolate, then compute pressure to save number of exponentiations
-pt_int = sum(weights * pt)
+! Interpolate three state values in horizontal
+pt_int =      sum(weights * pt)
 density_int = sum(weights * density)
-qv_int = sum(weights * qv)
+qv_int =      sum(weights * qv)
 
+! Get pressure at the interpolated point
 pressure =  compute_full_pressure(pt_int, density_int, qv_int)
+
 ! Default is no error
 ier = 0
 
@@ -633,10 +664,11 @@ end subroutine get_interp_pressure
 
 !------------------------------------------------------------------
 
-subroutine vert_interp(x, base_offset, tri_index, nlevs, lower, fract, val)
+subroutine vert_interp(x, base_offset, tri_index, nlevs, lower, fract, val, ier)
 
 ! Interpolates in vertical in column indexed by tri_index for a field
-! with base_offset.  Vertical index is varying fastest here.
+! with base_offset.  Vertical index is varying fastest here. Returns ier=0
+! unless missing value is encounterd. 
 
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
@@ -645,15 +677,26 @@ integer,  intent(in)  :: nlevs
 integer,  intent(in)  :: lower
 real(r8), intent(in)  :: fract
 real(r8), intent(out) :: val
+integer,  intent(out) :: ier
 
 integer  :: offset
 real(r8) :: lx, ux
+
+! Default return is good
+ier = 0
 
 ! Get the value at the lower and upper points
 offset = base_offset + (tri_index - 1) * nlevs + lower - 1
 lx = x(offset)
 ux = x(offset + 1)
 
+! Check for missing value
+if(lx == MISSING_R8 .or. ux == MISSING_R8) then
+   ier = 2
+   return
+endif 
+
+! Interpolate
 val = (1.0_r8 - fract)*lx + fract*ux
 
 end subroutine vert_interp
@@ -707,11 +750,8 @@ end subroutine find_height_bounds
 !------------------------------------------------------------------
 
 
-
-
 subroutine get_cell_indices(lon, lat, indices, weights, istatus)
-!=======================================================================
-!
+
 ! Finds the indices of the three cell centers that form the vertices of
 ! the triangle that contains the given (lon, lat) point. Also returns
 ! the barycentric weights for the three corners for this point. Returns istatus
@@ -731,12 +771,8 @@ istatus = 0
 
 ! Figure out which of the regular grid boxes this is in
 call get_reg_box_indices(lon, lat, x_ind, y_ind)
-!JLA
-if (debug > 5) write(*, *) 'x_ind, y_ind ', x_ind, y_ind
 num_inds =  triangle_num  (x_ind, y_ind)
 start_ind = triangle_start(x_ind, y_ind)
-!JLA
-if (debug > 5) write(*, *) 'num, start_ind ', num_inds, start_ind
 
 ! If there are no triangles overlapping, can't do interpolation
 if(num_inds == 0) then
@@ -750,6 +786,7 @@ call get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
 if(istatus /= 0) istatus = 2
 
 end subroutine get_cell_indices
+
 
 !------------------------------------------------------------
 
@@ -781,17 +818,16 @@ do i = start_ind, start_ind + num_inds - 1
    ind = triangle_list(i)
    ! Get corner lons and lats
    call get_triangle_corners(ind, clons, clats)
-! JLA
-   if (debug > 5) write(*, *) 'tri ', ind
-   if (debug > 5) write(*, *) 'clons ', clons
-   if (debug > 5) write(*, *) 'clats ', clats
 
-   ! Need to deal with longitude wraparound before doing triangle computations
-   ! JLA Need to deal with possible triangle at pole, keep an index in global for this?
+   ! Need to deal with longitude wraparound before doing triangle computations.
+   ! Begin by finding the range of the longitudes (including the target point).
    lonmax = max(lon, maxval(clons))
    lonmin = min(lon, minval(clons))
+   ! lonfix is used to store the target longitude
    lonfix = lon
 
+   ! If the range is more than 180.0, assume that points wrapped around 0 longitude
+   ! Move the points to a 180 to 540 degree representation
    if((lonmax - lonmin) > 180.0_r8) then
       do j = 1, 3
          if(clons(j) < 180.0_r8) clons(j) = clons(j) + 360.0_r8
@@ -801,7 +837,8 @@ do i = start_ind, start_ind + num_inds - 1
 
    ! Get the barycentric weights 
    call get_barycentric_weights(lonfix, lat, clons, clats, weights)
-   ! Is point in this triangle? If so, return the indices of corners
+   ! Is point in this triangle? Yes, if weights are in range [0 1]
+   ! If so, return the indices of corners. 
    if(maxval(weights) <= 1.0_r8 .and. minval(weights) >= 0.0_r8) then
       ! Get the indices for this triangle
       indices(:) = cellsOnVertex(:, ind)
@@ -821,11 +858,11 @@ end subroutine get_triangle
 !------------------------------------------------------------
 
 subroutine triangle_interp(x, base_offset, tri_indices, weights, &
-   level, nlevels, interp_val) 
+   level, nlevels, interp_val, ier) 
 
 ! Given state, offset for start of horizontal slice, the indices of the
 ! triangle vertices in that slice, and the barycentric weights, computes
-! the interpolated value.
+! the interpolated value. Returns ier=0 unless a missing value is found.
 
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
@@ -833,15 +870,24 @@ integer,  intent(in)  :: tri_indices(3)
 real(r8), intent(in)  :: weights(3)
 integer,  intent(in)  :: level, nlevels
 real(r8), intent(out) :: interp_val
+integer,  intent(out) :: ier
 
 integer  :: i, offset
 real(r8) :: corner_val(3)
 
+! Find the three corner values
 do i = 1, 3
    offset = base_offset + (tri_indices(i) -1) * nlevels + level - 1
    corner_val(i) = x(offset)
+   if(corner_val(i) == MISSING_R8) then
+      ier = 1
+      interp_val = MISSING_R8
+      return
+   endif
 end do
+
 interp_val = sum(weights * corner_val)
+ier = 0
 
 end subroutine triangle_interp
 
@@ -859,8 +905,6 @@ real(r8), intent(out) :: weights(3)
 
 real(r8) :: denom
 
-! Formula for barycentric weights is:
-
 ! Get denominator
 denom = (clats(2) - clats(3)) * (clons(1) - clons(3)) + &
    (clons(3) - clons(2)) * (clats(1) - clats(3))
@@ -874,6 +918,7 @@ weights(2) = ((clats(3) - clats(1)) * (lon - clons(3)) + &
 weights(3) = 1.0_r8 - weights(1) - weights(2)
 
 end subroutine get_barycentric_weights
+
 
 !------------------------------------------------------------
 
@@ -935,10 +980,18 @@ subroutine init_interp()
 ! Need a temporary data structure to build this.
 ! This array keeps a list of the indices of cell center triangles
 ! that potentially overlap each regular boxes.
+
+! Current version assumes that triangles are on lat/lon grid. This
+! leads to interpolation errors that increase for near the poles 
+! and for coarse grids. At some point need to at least treat 
+! triangles as being locally inscribed in the sphere. Actual
+! exact spherical geometry is almost certainly not needed to
+! forward operator interpolation.
+
 integer :: reg_list(num_reg_x, num_reg_y, max_reg_list_num)
 
 real(r8) :: c_lons(3), c_lats(3)
-integer  :: i, j, k
+integer  :: i, j, k, ier
 integer  :: reg_lon_ind(2), reg_lat_ind(2), total, ind
 
 
@@ -949,10 +1002,12 @@ do i = 1, nVertices
    call get_triangle_corners(i, c_lons, c_lats)
 
    ! Get list of regular boxes that cover this triangle.
-   call reg_box_overlap(c_lons, c_lats, reg_lon_ind, reg_lat_ind)
+   call reg_box_overlap(c_lons, c_lats, reg_lon_ind, reg_lat_ind, ier)
 
    ! Update the temporary data structures of triangles that overlap regular quads
-   call update_reg_list(triangle_num, reg_list, reg_lon_ind, reg_lat_ind, i)
+   ! If this triangle had pole, don't add it
+   if(ier == 0) &
+      call update_reg_list(triangle_num, reg_list, reg_lon_ind, reg_lat_ind, i)
 
 enddo
 
@@ -1017,10 +1072,11 @@ end subroutine get_triangle_corners
 !------------------------------------------------------------
 
 
-subroutine reg_box_overlap(x_corners, y_corners, reg_lon_ind, reg_lat_ind)
+subroutine reg_box_overlap(x_corners, y_corners, reg_lon_ind, reg_lat_ind, ier)
 
 real(r8), intent(in)  :: x_corners(3), y_corners(3)
 integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
+integer,  intent(out) :: ier
 
 ! Find a set of regular lat lon boxes that covers all of the area possibley covered by 
 ! a triangle whose corners are given by the dimension three x_corners 
@@ -1032,20 +1088,23 @@ integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
 ! degrees, the indices returned are adjusted by adding the total number of
 ! boxes to the second index (e.g. the indices might be 88 and 93 for a case
 ! with 90 longitude boxes).
+! For this version, any triangle that has a vertex at the pole or contains a pole
+! returns an error.
 
 real(r8) :: lat_min, lat_max, lon_min, lon_max
 integer  :: i
 
+! Default is success
+ier = 0
 
 ! Finding the range of latitudes is cake, caveat a pole triangle
 lat_min = minval(y_corners)
 lat_max = maxval(y_corners)
 
-! JLA
+! For now, will not allow interpolation into triangles that have corners at pole
 if (lat_min <= -89.999 .or. lat_max >= 89.999) then
-   write(*, *) 'found pole corner'
-   write(*, *) x_corners
-   write(*, *) y_corners
+   ier = 1
+   return
 endif
 
 ! Lons are much trickier. Need to make sure to wraparound the
@@ -1077,15 +1136,12 @@ if((lon_max - lon_min) > 180.0_r8) then
       ! North or south pole?
       if(lat_min > 0.0_r8) then
          lat_max = 90.0_r8
-         !JLA 
-         write(*, *) 'Found north pole ', x_corners
-         write(*, *) 'Found north pole ', y_corners
       else 
          lat_min = -90.0_r8
-         !JLA 
-         write(*, *) 'Found south pole ', x_corners
-         write(*, *) 'Found south pole ', y_corners
       endif
+      ! For now will fail on pole overlap
+      ier = 1
+      return
    endif
 endif
 
