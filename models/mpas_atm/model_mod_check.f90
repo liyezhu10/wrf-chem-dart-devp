@@ -205,7 +205,7 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 
 if (test1thru < 6) goto 999
 
-skip = 100000
+skip = 1000000
 
 do i = 1, x_size, skip
    if ( i > 0 .and. i <= x_size ) call check_meta_data( i )
@@ -252,6 +252,7 @@ call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 
    write(*,*)'model_interpolate SUCCESS.'
+   write(*,*)'value = ', interp_val
 else
    write(*,*)'model_interpolate ERROR: model_interpolate failed with error code ',ios_out
 endif
@@ -337,7 +338,7 @@ write(*,*)'Checking metadata routines.'
 call get_state_meta_data( iloc, loc, var_type)
 
 call write_location(0, loc, fform='formatted', charstring=string1)
-write(*,*)' indx ',iloc,' is type ',var_type,trim(get_raw_obs_kind_name(var_type)),trim(string1)
+write(*,*)' indx ',iloc,' is type ',var_type,' ',trim(get_raw_obs_kind_name(var_type)),' ',trim(string1)
 
 end subroutine check_meta_data
 
@@ -449,7 +450,7 @@ integer :: test_interpolate
 real(r8), allocatable :: lon(:), lat(:)
 real(r8), allocatable :: field(:,:)
 integer :: nlon, nlat
-integer :: ilon, jlat
+integer :: ilon, jlat, nfailed
 character(len=128) :: ncfilename,txtfilename
 
 integer :: ncid, nlonDimID, nlatDimID, VarID, lonVarID, latVarID
@@ -474,6 +475,7 @@ write(iunit,'(''nlat = '',i8,'';'')')nlat
 write(iunit,'(''interptest = [ ... '')')
 
 allocate(lon(nlon), lat(nlat), field(nlon,nlat))
+nfailed = 0
 
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
@@ -485,10 +487,11 @@ do ilon = 1, nlon
       call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
       write(iunit,*) field(ilon,jlat)
 
-      if (ios_out /= 0) then
+      if (ios_out /= 0  .and. verbose) then
         write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
         write(string1,*) 'interpolation failed with error ', ios_out
         call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+        nfailed = nfailed + 1
       endif
 
    end do 
@@ -497,6 +500,8 @@ write(iunit,'(''];'')')
 write(iunit,'(''datmat = reshape(interptest,nlat,nlon);'')')
 write(iunit,'(''datmat(datmat == missingvals) = NaN;'')')
 call close_file(iunit)
+
+write(*,*) 'total interpolations, num failed: ', nlon*nlat, nfailed
 
 ! Write out the netCDF file for easy exploration.
 

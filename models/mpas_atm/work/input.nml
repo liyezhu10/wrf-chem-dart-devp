@@ -123,7 +123,7 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .false.,
+   write_binary_restart_files = .true.,
    netCDF_large_file_support  = .false.
    /
 
@@ -132,8 +132,9 @@
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 3600,
    output_state_vector          = .true., 
+   model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
-   debug = 8
+   debug = 1
    /
 
 &mpas_vars_nml
@@ -253,6 +254,11 @@
 # VERTISUNDEF VERTISSURFACE VERTISLEVEL VERTISPRESSURE VERTISHEIGHT VERTISSCALEHEIGHT
    kind_of_interest = 'KIND_SURFACE_PRESSURE',
    kind_of_interest = 'KIND_POTENTIAL_TEMPERATURE',
+   kind_of_interest = 'KIND_U_WIND_COMPONENT',
+   kind_of_interest = 'KIND_V_WIND_COMPONENT',
+   kind_of_interest = 'KIND_DENSITY',
+   kind_of_interest = 'KIND_VAPOR_MIXING_RATIO',
+
 &model_mod_check_nml
    dart_input_file      = 'dart.ics',
    output_file          = 'check_me',

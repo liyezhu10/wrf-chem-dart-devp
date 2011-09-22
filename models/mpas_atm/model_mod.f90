@@ -44,6 +44,7 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_SURFACE_PRESSURE,   &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
+                             KIND_TEMPERATURE,        &
                              KIND_U_WIND_COMPONENT,   &
                              KIND_PRESSURE,           &
                              KIND_DENSITY,            & 
@@ -104,6 +105,7 @@ real(r8), parameter :: rgas = 287.0_r8
 real(r8), parameter :: cp = 1003.0_r8
 real(r8), parameter :: cv = 716.0_r8
 real(r8), parameter :: p0 = 100000.0_r8
+real(r8), parameter :: rcv = rgas/(cp-rgas)
 
 ! Storage for a random sequence for perturbing a single initial state
 
@@ -113,7 +115,7 @@ type(random_seq_type) :: random_seq
 
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
-real(r8)           :: model_perturbation_amplitude = 0.2
+real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
@@ -392,6 +394,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ERROR codes:
 !
 !       ISTATUS = 99:  general error in case something terrible goes wrong...
+!       ISTATUS = 88:  this kind is not in the state vector
 !       ISTATUS = 11:  Could not find a triangle that contains this lat/lon
 !       ISTATUS = 12:  Height vertical coordinate out of model range.
 !       ISTATUS = 13:  Missing value in interpolation.
@@ -427,6 +430,12 @@ integer  :: tri_indices(3)
 
   interp_val = MISSING_R8     ! the DART bad value flag
   istatus = 99                ! unknown error
+
+! make sure we have this kind in our state vector
+  if (get_progvar_index_from_kind(obs_type) <= 0) then
+      istatus = 88            ! this kind not in state vector
+      return
+  endif
 
 ! Not prepared to do w interpolation at this time
 ! Watch out for the staggered grid in the vertical 
@@ -475,6 +484,11 @@ endif
 
 ! If vertical is on a model level don't need vertical interpolation either
 if(vert_is_level(location)) then
+   ! FIXME: if this is W, the top is nVertLevels+1
+   if (lheight > nVertLevels) then
+      istatus = 12
+      return
+   endif
    call triangle_interp(x, base_offset, tri_indices, weights, &
       nint(lheight), nVertLevels, interp_val, ier)
    if(ier /= 0) then
@@ -2050,23 +2064,72 @@ real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
 logical,  intent(out) :: interf_provided
 
-integer :: i
-logical, save :: random_seq_init = .false.
+real(r8)              :: pert_ampl, range
+real(r8)              :: minv, maxv, temp
+type(random_seq_type) :: random_seq
+integer               :: id, i, j, s, e
+integer, save         :: counter = 1
+
+
+! generally you do not want to perturb a single state
+! to begin an experiment - unless you make minor perturbations
+! and then run the model free for long enough that differences
+! develop which contain actual structure.
+!
+! the subsequent code is a pert routine which
+! can be used to add minor perturbations which can be spun up.
+!
+! if all values in a field are identical (i.e. 0.0) this 
+! routine will not change those values since it won't 
+! make a new value outside the original min/max of that
+! variable in the state vector.  to handle this case you can
+! remove the min/max limit lines below.
+
+
+! start of pert code
 
 if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
 
-! Initialize my random number sequence
-if(.not. random_seq_init) then
-   call init_random_seq(random_seq, my_task_id())
-   random_seq_init = .true.
-endif
+! the first time through get the task id (0:N-1)
+! and set a unique seed per task.  this won't
+! be consistent between different numbers of mpi
+! tasks, but at least it will reproduce with
+! multiple runs with the same task count.
+! best i can do since this routine doesn't have
+! the ensemble member number as an argument
+! (which i think it needs for consistent seeds).
+!
+! this only executes the first time since counter
+! gets incremented after the first use and the value
+! is saved between calls.
+if (counter == 1) counter = counter + (my_task_id() * 1000)
 
-! add some uncertainty to each ...
-do i=1,size(state)
-   pert_state(i) = random_gaussian(random_seq, state(i), &
-                                   model_perturbation_amplitude)
+call init_random_seq(random_seq, counter)
+counter = counter + 1
+
+do i=1, nfields
+   ! starting and ending indices in the linear state vect
+   ! for each different state kind.
+   s = progvar(i)%index1
+   e = progvar(i)%indexN
+   ! original min/max data values of each type
+   minv = minval(state(s:e))
+   maxv = maxval(state(s:e))
+   do j=s, e
+      ! once you change pert_state, state is changed as well
+      ! since they are the same storage as called from filter.
+      ! you have to save it if you want to use it again.
+      temp = state(j)  ! original value
+      ! perturb each value individually
+      ! make the perturbation amplitude N% of this value
+      pert_ampl = model_perturbation_amplitude * temp
+      pert_state(j) = random_gaussian(random_seq, state(j), pert_ampl)
+      ! keep it from exceeding the original range
+      pert_state(j) = max(minv, pert_state(j))
+      pert_state(j) = min(maxv, pert_state(j))
+   enddo
 enddo
 
 end subroutine pert_model_state
@@ -3003,8 +3066,6 @@ do i=1, numdims
                  'get_u', 'inquire U dimension length '//trim(model_analysis_filename))
 enddo
 
-print *, 'u dimids = ', numu(1:numdims)
-
 ! for all but the time dimension, read all the values.   
 ! for time read only the last one (if more than 1 present)
 mystart = 1
@@ -3068,8 +3129,6 @@ do i=1, numdims
    call nc_check( nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
                  'put_u', 'inquire U dimension length '//trim(model_analysis_filename))
 enddo
-
-print *, 'u dimids = ', numu(1:numdims)
 
 ! for all but the time dimension, read all the values.   
 ! for time read only the last one (if more than 1 present)
@@ -3683,6 +3742,26 @@ endif
 end subroutine get_index_range_int
 
 
+function get_progvar_index_from_kind(dartkind)
+!------------------------------------------------------------------
+! Determine what index a particular DART kind (integer) is in the
+! progvar array.
+integer :: get_progvar_index_from_kind
+integer, intent(in) :: dartkind
+
+integer :: i
+
+FieldLoop : do i=1,nfields
+   if (progvar(i)%dart_kind /= dartkind) cycle FieldLoop
+   get_progvar_index_from_kind = i 
+   return
+enddo FieldLoop
+
+get_progvar_index_from_kind = -1
+
+end function get_progvar_index_from_kind
+
+
 
 function get_index_from_varname(varname)
 !------------------------------------------------------------------
@@ -3720,9 +3799,7 @@ real(r8)  :: theta_to_tk          ! sensible temperature [K]
 ! Local variables
 real(r8) :: theta_m               ! potential temperature modified by qv
 real(r8) :: exner                 ! exner function
-real(r8) :: rcv
 
-rcv = rgas/(cp-rgas)
 theta_m = (1.0_r8 + 1.61_r8 * qv)*theta
 exner = ( (rgas/p0) * (rho*theta_m) )**rcv
 
