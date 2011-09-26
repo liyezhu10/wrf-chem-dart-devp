@@ -265,7 +265,7 @@ ios_out = test_interpolate()
 if ( ios_out == 0 ) then 
    write(*,*)'Rigorous model_interpolate SUCCESS.'
 else
-   write(*,*)'Rigorous model_interpolate ERROR: model_interpolate failed with error code ',ios_out
+   write(*,*)'Rigorous model_interpolate ERROR: model_interpolate had ', ios_out, ' errors'
 endif
 
 !----------------------------------------------------------------------
@@ -487,10 +487,12 @@ do ilon = 1, nlon
       call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
       write(iunit,*) field(ilon,jlat)
 
-      if (ios_out /= 0  .and. verbose) then
-        write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
-        write(string1,*) 'interpolation failed with error ', ios_out
-        call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+      if (ios_out /= 0) then
+        if (verbose) then
+           write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
+           write(string1,*) 'interpolation failed with error ', ios_out
+           call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+        endif
         nfailed = nfailed + 1
       endif
 
@@ -571,6 +573,8 @@ call nc_check(nf90_close(ncid), &
              'test_interpolate','close '//trim(ncfilename))
 
 deallocate(lon, lat, field)
+
+test_interpolate = nfailed
 
 end function test_interpolate
 
