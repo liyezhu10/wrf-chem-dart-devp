@@ -1,0 +1,4 @@
+&dart_to_ncommas_nml
+   dart_output_file = 'dart.ic',
+   new_cosmo_analysis_file  = "/daten02/jkeller/laftest.grb"  /
+
