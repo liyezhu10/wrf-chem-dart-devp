@@ -6,16 +6,36 @@
 #
 # $Id$
 #
-# Standard script for use in assimilation applications
-# where the model advance is executed as a separate process.
-# Can be used as-is with most low-order models and the bgrid model which
-# can be advanced using the integrate_model executable.
-# 
+# Shell script to run the MPAS-A(tmostphere) model from DART input.
+#
+# This script performs the following:
+# 1.  Creates a temporary directory to run a MPAS-A realization (see options)
+# 2.  Copies or links the necessary files into the temporary directory
+# 3.  Converts DART state vectors to mpas input
+# 4.  Updates an MPAS namelist from a template withe new dates
+# 5.  Runs MPAS-A model until target time
+# 7.  Checks for incomplete runs
+# 8.  Converts mpas output to DART state vectors
+#
 # Arguments are (created by 'filter' or 'perfect_model_obs' and include):
 # 1) the process number of caller,
 # 2) the number of ensemble members/state copies belonging to that process, and 
 # 3) the name of the control_file for that process.
 # 
+# Note: For the required data to run this script, 
+#       check the section of 'dependencies'.
+#
+# FIXME: As of September 30, 2011, it has not been decided if we will run 
+#        MPAS-A as a restart mode or not. So this script was written
+#        assuming that we take the model output (instead of the restart file)
+#        at target time to use it as a background for the next filter. 
+#        If we switch to use a restart file later, we should edit this script to have
+#        config_restart_interval instead of config_output_interval, and 
+#        check config_restart_name instead of config_output_name, and
+#        set up config_do_restart = .true. for namelist.input.
+#        We may also need to change the dart_to_model converter to write 
+#        coupled variables (with dry density) in restart file.
+#
 # If this script finishes and the 'control_file' still exists, it is
 # an ERROR CONDITION and means one or more of the ensemble members did
 # not advance properly. Despite our best attempts to trap on this
@@ -29,12 +49,6 @@
 # Read DART/doc/html/filter_async_modes.html and the mpi_intro.html
 # for an overview.
 #
-# This script has 4 logical 'blocks':
-# 1) creates a clean, temporary directory in which to run a model instance
-#    and copies the necessary files into the temporary directory
-# 2) copies/converts the DART state vector to something the model can ingest
-# 3) runs the model
-# 4) copies/converts the model output to input expected by DART
 
 set      process = $1
 set   num_states = $2
@@ -47,20 +61,58 @@ set control_file = $3
 #          members being advanced by this script.
 #----------------------------------------------------------------------
 
-# Create a unique temporary working directory for this process's stuff
 # The run-time directory for the entire experiment is called CENTRALDIR;
-# we need to provide a safe haven for each TASK ... in 'temp_dir'.
-
-set temp_dir = 'advance_temp'${process}
+set CENTRALDIR = `pwd`
 
 # Create a clean temporary directory and go there
-\rm -rf  $temp_dir  || exit 1
-mkdir -p $temp_dir  || exit 1
-cd       $temp_dir  || exit 1
+set delete_temp_dir = false
 
-# Get the program and input.nml
-ln -s ../integrate_model  .  || exit 1
-cp    ../input.nml        .  || exit 1
+# set this to true if you want to maintain complete individual input/output 
+# for each member (to carry through non-updated fields)
+set individual_members = true
+
+# next line ensures that the last cycle leaves everything in the temp dirs
+if ( $individual_members == true ) set delete_temp_dir = false
+
+set  REMOVE = '/bin/rm -rf'
+set    COPY = '/bin/cp -p'
+set    MOVE = '/bin/mv -f'
+set    LINK = '/bin/ln -sf'
+unalias cd
+unalias ls
+
+# if process 0 go ahead and check for dependencies here
+if ( $process == 0 ) then
+
+   if ( ! -x advance_time ) then
+     echo ABORT\: advance_model.csh could not find required executable dependency ${CENTRALDIR}/advance_time
+     exit 1
+   endif
+
+   if ( ! -d MPAS_RUN ) then
+      echo ABORT\: advance_model.csh could not find required data directory ${CENTRALDIR}/MPAS_RUN, 
+      echo         which contains all the MPAS run-time input files
+      exit 1
+   endif
+
+   if ( ! -x MPAS_RUN/nhyd_atmos_model.exe ) then
+     echo ABORT\: advance_model.csh could not find required executable dependency 
+     echo         ${CENTRALDIR}/MPAS_RUN/nhyd_atmos_model.exe
+     exit 1
+   endif
+
+   if ( ! -r input.nml ) then
+     echo ABORT\: advance_model.csh could not find required readable dependency ${CENTRALDIR}/input.nml
+     exit 1
+   endif
+
+   if ( ! -r namelist.input ) then
+     echo ABORT\: advance_model.csh could not find required readable dependency ${CENTRALDIR}/namelist.input
+     exit 1
+   endif
+
+endif # process 0 dependency checking
+
 
 # Loop through each state
 set state_copy = 1
@@ -70,63 +122,126 @@ set     output_file_line = 3
 
 while($state_copy <= $num_states)
    
-   set ensemble_member = `head -$ensemble_member_line ../$control_file | tail -1`
-   set input_file      = `head -$input_file_line      ../$control_file | tail -1`
-   set output_file     = `head -$output_file_line     ../$control_file | tail -1`
+   set ensemble_member = `head -$ensemble_member_line ${CENTRALDIR}/$control_file | tail -1`
+   set input_file      = `head -$input_file_line      ${CENTRALDIR}/$control_file | tail -1`
+   set output_file     = `head -$output_file_line     ${CENTRALDIR}/$control_file | tail -1`
    
-   #-------------------------------------------------------------------
-   # Block 2: copy/convert the DART state vector to something the 
-   #          model can ingest. In this case, just copy.
-   #          In general, there is more to it. 
-   #
-   #          * copy/link ensemble-member-specific files
-   #          * convey the advance-to-time to the model
-   #          * convert the DART state vector to model format 
-   #-------------------------------------------------------------------
+   # Create a new temp directory for each member unless requested to keep and it exists already.
+   set temp_dir = 'advance_temp'${ensemble_member}
 
-   mv ../$input_file temp_ic || exit 2
+   if ( $delete_temp_dir == "true" ) then
+        if( -d $temp_dir ) ${REMOVE} $temp_dir  || exit 1
+        mkdir -p $temp_dir  || exit 1
+   endif
 
-   #-------------------------------------------------------------------
+   cd $temp_dir  || exit 1
+
+   # Get the program and necessary files for the model
+   ${LINK} ${CENTRALDIR}/MPAS_RUN/nhyd_atmos_model.exe .         || exit 1
+   ${LINK} ${CENTRALDIR}/MPAS_RUN/*BL                  .         || exit 1
+
+   # Get the namelists
+   ${COPY} ${CENTRALDIR}/input.nml      .                        || exit 1
+   ${COPY} ${CENTRALDIR}/namelist.input namelist.input.template  || exit 1
+
+   # Get the in/out file names for converters and the model
+   set f1 = `grep  dart_to_model_input_file input.nml | awk '{print $3}' | cut -d ',' -f1 | sed -e "s/'//g"`
+   set f2 = `grep model_to_dart_output_file input.nml | awk '{print $3}' | cut -d ',' -f1 | sed -e "s/'//g"`
+   set f3 = `grep   model_analysis_filename input.nml | awk '{print $3}' | cut -d ',' -f1 | sed -e "s/'//g"`
+
+   # model output file name 
+   set fhead = `grep config_output_name namelist.input.template | awk '{print $3}' | cut -d . -f1 | sed -e "s/'//g"`
+
+   #----------------------------------------------------------------------
+   # Block 2: move/convert the DART state vector to the model netcdf file.
+   #----------------------------------------------------------------------
+
+   ${MOVE} ${CENTRALDIR}/$input_file $f1 || exit 2
+   ${CENTRALDIR}/dart_to_model >&! out.dart_to_model 
+
+   # The program dart_to_model has created an ascii file named mpas_time.
+   # Time information is extracted from the file.
+   set curr_utc = `head -1 mpas_time | tail -1`
+   set targ_utc = `head -2 mpas_time | tail -1`
+   set intv_utc = `head -3 mpas_time | tail -1`
+
+   #----------------------------------------------------------------------
    # Block 3: advance the model
-   #          In this case, we are saving the run-time messages to
-   #          a LOCAL file, which makes debugging easier.
-   #          integrate_model is hardcoded to expect input in temp_ic 
-   #          and it creates temp_ud as output. 
-   #          Your model will likely be different.
+   #          Make sure the file name is consistent in the namelist.input.
+   #----------------------------------------------------------------------
+   cat >! script.sed << EOF
+   /config_start_time/c\
+   config_start_time = '$curr_utc'
+   /config_run_duration/c\
+   config_run_duration ='$intv_utc'
+   /config_output_interval/c\
+   config_output_interval = '$intv_utc'
+   /config_input_name/c\
+   config_input_name = '$f3'
+   /config_frames_per_outfile/c\
+   config_frames_per_outfile = 1
+EOF
+# The EOF on the line above MUST REMAIN in column 1.
+
+   sed -f script.sed namelist.input.template >! namelist.input
+
+   # clean out any old rsl files
+   if ( -e rsl.out.integration )  ${REMOVE} rsl.*
+
+   # run MPAS here
+   ./nhyd_atmos_model.exe >! rsl.out.integration || exit 3
+  
+   # Model output at the target time
+   set     fout = `ls -1 ${fhead}.*.nc | tail -1`
+   set date_utc = `echo $fout | awk -F. '{print $(NF-1)}'`
+   set targ_grg = `echo $date_utc 0 -g | advance_time`
+   set targ_day = $targ_grg[1]
+   set targ_sec = $targ_grg[2]
+
+   # Check if the model was succefully completed.
+   if($date_utc != $targ_utc) then
+      echo $ensemble_member >>! ${CENTRALDIR}/blown_${targ_day}_${targ_sec}.out
+      echo "Model failure! Check file " ${CENTRALDIR}/blown_${targ_day}_${targ_sec}.out
+      exit 1
+   endif
+
    #-------------------------------------------------------------------
-
-   ./integrate_model >! integrate_model_out_temp || exit 3
-
-   # (OPTIONAL) Append the run-time messages to the file in the CENTRALDIR
-   #cat integrate_model_out_temp >> ../integrate_model_out_temp${ensemble_member}
-
+   # Block 4: Convert your model output to a DART format ics file,
+   #          then move it back to CENTRALDIR
    #-------------------------------------------------------------------
-   # Block 4: Move the updated state vector back to CENTRALDIR
-   #          (temp_ud was created by integrate_model and is in the 
-   #          right format already.) In general, you must convert your 
-   #          model output to a DART ics file with the proper name.
-   #-------------------------------------------------------------------
+   ${MOVE} input.nml input.nml.template
+   cat >! script1.sed << EOF
+   /model_analysis_filename/c\
+   model_analysis_filename      = '$fout'
+EOF
+   sed -f script1.sed input.nml.template >! input.nml
+   ${CENTRALDIR}/model_to_dart >&! out.model_to_dart 
+   mv $f2 ${CENTRALDIR}/$output_file || exit 4
 
-   mv temp_ud ../$output_file || exit 4
+   # Change back to original directory.
+   cd $CENTRALDIR
 
+   # delete the temp directory for each member if desired
+   # If all goes well, there should be no need to keep this directory.
+   # If you are debugging, you may want to keep this directory. 
+
+   if ( $delete_temp_dir == true )  ${REMOVE} $temp_dir
+   echo "Ensemble Member $ensemble_member completed"
+
+   # and now repeat the entire process for any other ensemble member that
+   # needs to be advanced by this task.
    @ state_copy++
    @ ensemble_member_line = $ensemble_member_line + 3
    @ input_file_line = $input_file_line + 3
    @ output_file_line = $output_file_line + 3
+
 end
-
-# Change back to original directory and get rid of temporary directory.
-# If all goes well, there should be no need to keep this directory.
-# If you are debugging, you may want to keep this directory. 
-
-cd ..
-\rm -rf $temp_dir
 
 # MANDATORY - Remove the control_file to signal completion. If it still
 # exists in CENTRALDIR after all the ensemble members have been advanced,
 # it means one or more of the advances failed and is an ERROR CONDITION.
 
-\rm -rf $control_file
+${REMOVE} $control_file
 
 exit 0
 
