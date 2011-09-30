@@ -83,6 +83,7 @@ public :: get_model_size,         &
 ! the interfaces here can be changed as appropriate.
 
 public :: get_model_analysis_filename,  &
+          get_grid_definition_filename, &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
           get_analysis_time,            &
@@ -120,9 +121,11 @@ logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
+character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
 
 namelist /model_nml/             &
    model_analysis_filename,      &
+   grid_definition_filename,     &
    output_state_vector,          &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
@@ -191,11 +194,6 @@ integer               :: model_size      ! the state vector length
 type(time_type)       :: model_timestep  ! smallest time to adv model
 real(r8), allocatable :: ens_mean(:)     ! may be needed for forward ops
 
-! set this to true if you want to print out the current time
-! after each N observations are processed, for benchmarking.
-
-logical :: print_timestamps = .false.
-integer :: print_every_Nth  = 10000
 
 !------------------------------------------------------------------
 ! The model analysis manager namelist variables
@@ -207,6 +205,12 @@ INTERFACE vector_to_prog_var
       MODULE PROCEDURE vector_to_1d_prog_var
       MODULE PROCEDURE vector_to_2d_prog_var
       MODULE PROCEDURE vector_to_3d_prog_var
+END INTERFACE
+
+INTERFACE prog_var_to_vector
+      MODULE PROCEDURE prog_var_1d_to_vector
+      MODULE PROCEDURE prog_var_2d_to_vector
+      MODULE PROCEDURE prog_var_3d_to_vector
 END INTERFACE
 
 INTERFACE get_analysis_time
@@ -256,8 +260,7 @@ contains
 
 
 function get_model_size()
-!------------------------------------------------------------------
-! Done - TJH.
+
 ! Returns the size of the model as an integer. 
 ! Required for all applications.
 
@@ -270,10 +273,10 @@ get_model_size = model_size
 end function get_model_size
 
 
+!------------------------------------------------------------------
 
 subroutine adv_1step(x, time)
-!------------------------------------------------------------------
-! Done - TJH.
+
 ! Does a single timestep advance of the model. The input value of
 ! the vector x is the starting condition and x is updated to reflect
 ! the changed state after a timestep. The time argument is intent
@@ -296,23 +299,25 @@ if (do_output()) then
    call print_time(time,'NULL interface adv_1step (no advance) DART time is',logfileunit)
 endif
 
-! FIXME: put an error handler call here - we cannot advance the model
-! this way and it would be an error if filter called it.
+write(string1,*) 'Cannot advance MPAS with a subroutine call; async cannot equal 0'
+call error_handler(E_ERR,'adv_1step',string1,source,revision,revdate)
 
 end subroutine adv_1step
 
 
+!------------------------------------------------------------------
 
 subroutine get_state_meta_data(index_in, location, var_type)
-!------------------------------------------------------------------
-! FIXME ... just needs checking ....
+
 ! given an index into the state vector, return its location and
 ! if given, the var kind.   despite the name, var_type is a generic
 ! kind, like those in obs_kind/obs_kind_mod.f90, starting with KIND_
 
-integer, intent(in)            :: index_in
-type(location_type)            :: location
-integer, optional, intent(out) :: var_type
+! passed variables
+
+integer,             intent(in)  :: index_in
+type(location_type), intent(out) :: location
+integer, optional,   intent(out) :: var_type
   
 ! Local variables
 
@@ -326,18 +331,18 @@ myindx = -1
 nf     = -1
 
 ! Determine the right variable
-FindIndex : DO n = 1,nfields
-    IF( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) THEN
+FindIndex : do n = 1,nfields
+    if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) THEN
       nf = n
       myindx = index_in - progvar(n)%index1 + 1
-      EXIT FindIndex
-    ENDIF
-ENDDO FindIndex
+      exit FindIndex
+    endif
+enddo FindIndex
 
-IF( myindx == -1 ) THEN
+if( myindx == -1 ) then
      write(string1,*) 'Problem, cannot find base_offset, index_in is: ', index_in
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
-ENDIF
+endif
 
 ! Now that we know the variable, find the cell 
 
@@ -353,7 +358,7 @@ kloc = myindx - (iloc-1)*nzp   ! vertical level index
 
 if ( progvar(nf)%ZonHalf ) then
    height = zgridCenter(kloc,iloc)
-   !height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5
+   ! was: height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5_r8
 else if (nzp <= 1) then
    height = zgridFace(1,iloc)
 else
@@ -375,21 +380,114 @@ if (debug > 9) then
 endif
 
 if (present(var_type)) then
-     var_type = progvar(nf)%dart_kind
+   var_type = progvar(nf)%dart_kind
 endif
 
 end subroutine get_state_meta_data
 
 
+!------------------------------------------------------------------
 
 subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
-!############################################################################
+! given a state vector, a location, and a KIND_xxx, return the
+! interpolated value at that location, and an error code.  0 is success,
+! anything positive is an error.  (negative reserved for system use)
 !
-!     PURPOSE:
-!
-!     For a given lat, lon, and height, interpolate the correct state value
-!     to that location for the filter from the model state vectors
+! for specific error codes, see the local_interpolate() comments
+
+! passed variables
+
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in)  :: location
+integer,             intent(in)  :: obs_type
+real(r8),            intent(out) :: interp_val
+integer,             intent(out) :: istatus
+
+! local storage
+
+integer  :: obs_kinds(3)
+real(r8) :: values(3)
+
+! call the normal interpolate code.  if it fails because
+! the kind doesn't exist directly in the state vector, try a few
+! kinds we know how to convert.
+
+interp_val = MISSING_R8
+istatus    = 888888       ! must be positive (and integer)
+
+obs_kinds(1) = obs_type
+
+call local_interpolate(x, location, 1, obs_kinds, values, istatus)
+if (istatus /= 88) then
+   ! this is for debugging - when we're confident the code is
+   ! returning consistent values and rc codes, both these tests can
+   ! be removed for speed.  FIXME.
+   if (istatus /= 0 .and. values(1) /= MISSING_R8) then
+      write(string1,*) 'interp routine returned a bad status but good value'
+      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+   endif
+   if (istatus == 0 .and. values(1) == MISSING_R8) then
+      write(string1,*) 'interp routine returned a good status but bad value'
+      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+   endif
+   interp_val = values(1)
+   return
+endif
+
+if (obs_type == KIND_TEMPERATURE) then
+   obs_kinds(1) = KIND_POTENTIAL_TEMPERATURE
+   obs_kinds(2) = KIND_DENSITY
+   obs_kinds(3) = KIND_VAPOR_MIXING_RATIO
+
+   call local_interpolate(x, location, 3, obs_kinds, values, istatus)
+   if (istatus /= 0) then
+      ! this is for debugging - when we're confident the code is
+      ! returning consistent values and rc codes, both these tests can
+      ! be removed for speed.  FIXME.
+      if (istatus /= 0 .and. .not. any(values == MISSING_R8)) then
+         write(string1,*) 'interp routine returned a bad status but good values'
+         call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+      endif
+      if (istatus == 0 .and. any(values == MISSING_R8)) then
+         write(string1,*) 'interp routine returned a good status but bad values'
+         call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+      endif
+      interp_val = MISSING_R8
+      return
+   endif
+
+   ! compute sensible temperature as return value
+   interp_val = theta_to_tk(values(1), values(2), values(3))
+   return
+endif
+
+
+! add other cases here for kinds we want to handle
+! if (istatus == 88) then
+!  could try different interpolating different kinds here.
+!  if (obs_type == KIND_xxx) then
+!    code goes here
+!  endif
+! endif
+
+! shouldn't get here.
+interp_val = MISSING_R8
+istatus = 100
+
+end subroutine model_interpolate
+
+
+!------------------------------------------------------------------
+
+subroutine local_interpolate(x, location, num_kinds, obs_kinds, interp_vals, istatus)
+
+! THIS VERSION IS ONLY CALLED INTERNALLY, so we can mess with the arguments.
+! For a given lat, lon, and height, interpolate the correct state values
+! to that location for the filter from the model state vectors.  this version
+! can take multiple kinds at a single location.  there is only a single return
+! istatus code - 0 is all interpolations worked, positive means one or more
+! failed.
 !
 !       ERROR codes:
 !
@@ -401,68 +499,93 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values 
 !       ISTATUS = 18:  altitude illegal
+!       ISTATUS = 101: Internal error; reached end of subroutine without 
+!                      finding an applicable case.
 !
-!############################################################################
 
 ! Passed variables
 
-  real(r8),            intent(in)  :: x(:)
-  type(location_type), intent(in)  :: location
-  integer,             intent(in)  :: obs_type
-  real(r8),            intent(out) :: interp_val
-  integer,             intent(out) :: istatus
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in)  :: location
+integer,             intent(in)  :: num_kinds
+integer,             intent(in)  :: obs_kinds(:)
+real(r8),            intent(out) :: interp_vals(:)
+integer,             intent(out) :: istatus
 
 ! Local storage
 
-  real(r8)         :: loc_array(3), llon, llat, lheight, fract, v_interp(3)
-  integer          :: base_offset, end_offset, i, ier, lower, upper
-  integer          :: pt_base_offset, density_base_offset, qv_base_offset
+real(r8) :: loc_array(3), llon, llat, lheight, fract, v_interp
+integer  :: i, j, ivar, ier, lower, upper
+integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
-real(r8) :: weights(3), lower_interp, upper_interp
-integer  :: tri_indices(3)
+real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp
+integer  :: tri_indices(3), base_offset(num_kinds)
 
-  IF ( .not. module_initialized ) call static_init_model
+if ( .not. module_initialized ) call static_init_model
 
-! Let's assume failure.  Set return val to missing, then the code can
+! Assume failure.  Set return val to missing, then the code can
 ! just set istatus to something indicating why it failed, and return.
 ! If the interpolation is good, the interp_val will be set to the 
 ! good value.  Make any error codes set here be in the 10s
 
-  interp_val = MISSING_R8     ! the DART bad value flag
-  istatus = 99                ! unknown error
+interp_vals(:) = MISSING_R8     ! the DART bad value flag
+istatus = 99                ! unknown error
 
-! make sure we have this kind in our state vector
-  if (get_progvar_index_from_kind(obs_type) <= 0) then
-      istatus = 88            ! this kind not in state vector
-      return
-  endif
+! see if all variable kinds are in the state vector.  this sets an
+! error code and returns without a fatal error if any answer is no.
+! one exception:  if the vertical location is specified in pressure
+! we end up computing the sensible temperature as part of converting
+! to height (meters), so if the kind to be computed is sensible temp
+! (which is not in state vector; potential temp is), go ahead and
+! say yes, we know how to compute it.  if the vert is any other units
+! then fail and let the calling code call in for the components
+! it needs to compute sensible temp itself.
+do i=1, num_kinds
+   ivar = get_progvar_index_from_kind(obs_kinds(i))
+   if (ivar <= 0) then
+      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) then
+         continue;
+      else
+         istatus = 88            ! this kind not in state vector
+         return
+     endif
+   endif
+enddo
 
 ! Not prepared to do w interpolation at this time
-! Watch out for the staggered grid in the vertical 
-if(obs_type == KIND_VERTICAL_VELOCITY) then
-   istatus = 16
-   return
-endif
+do i=1, num_kinds
+   if(obs_kinds(i) == KIND_VERTICAL_VELOCITY) then
+      istatus = 16
+      return
+   endif
+enddo
 
 ! Get the individual locations values
-  loc_array = get_location(location)
-  llon      = loc_array(1)
-  llat      = loc_array(2)
-  lheight   = loc_array(3)
+loc_array = get_location(location)
+llon      = loc_array(1)
+llat      = loc_array(2)
+lheight   = loc_array(3)
 
-  IF (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
+if (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 
-! Find the start and end offsets for this field in the state vector x(:)
-! Call terminates if obs_type is not found
-  call get_index_range(obs_type, base_offset, end_offset)
 
-  IF (debug > 5) print *, 'base offset now ', base_offset, end_offset
+! Find the start and end offsets for these fields in the state vector x(:)
+! Call terminates if any obs_kind is not found
+do i=1, num_kinds
+   if (obs_kinds(i) == KIND_TEMPERATURE) then
+      base_offset(i) = 0  ! this won't be used in this case
+   else
+      call get_index_range(obs_kinds(i), base_offset(i))
+   endif
+enddo
+
+!  if (debug > 2) print *, 'base offset now ', base_offset(1)
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
-   call get_cell_indices(llon, llat, tri_indices, weights, ier)
-  if (debug > 5) write(*, *) 'tri_inds ', tri_indices
-  if (debug > 5) write(*, *) 'weights ', weights
+call get_cell_indices(llon, llat, tri_indices, weights, ier)
+if (debug > 5) write(*, *) 'tri_inds ', tri_indices
+if (debug > 5) write(*, *) 'weights ', weights
 
 ! If istatus is not zero couldn't find a triangle, fail
 if(ier /= 0)then
@@ -470,10 +593,15 @@ if(ier /= 0)then
    return
 endif
 
+! FIXME: cannot do both surface pressure and any other 3d field with
+! this code (yet).  if num kinds > 1 and any are not surface pressure, this
+! should fail.
 ! Surface pressure is a 2D field
-if(obs_type == KIND_SURFACE_PRESSURE) then
-   call triangle_interp(x, base_offset, tri_indices, weights, &
-      1, 1, interp_val, ier) 
+if(obs_kinds(1) == KIND_SURFACE_PRESSURE) then
+   lheight = 1.0_r8 
+   ! the 1 below is max number of vert levels to examine
+   call triangle_interp(x, base_offset(1), tri_indices, weights, &
+      nint(lheight), 1, interp_vals(1), ier) 
    if(ier /= 0) then
       istatus = 13
    else
@@ -482,85 +610,147 @@ if(obs_type == KIND_SURFACE_PRESSURE) then
    return
 endif
 
+! the code below has vert undef returning an error, and vert surface
+! returning level 1 (which i believe is correct - the vertical grid
+! is terrain following).  FIXME:
+! vert undef could return anything in the column in theory, right?
+
+if (vert_is_undef(location)) then
+   istatus = 12
+   return
+endif
+
+if(vert_is_surface(location)) then
+   do j=1, num_kinds
+      lheight = 1.0_r8  ! first grid level is surface
+      call triangle_interp(x, base_offset(j), tri_indices, weights, &
+         nint(lheight), nVertLevels, interp_vals(j), ier)
+      if(ier /= 0) then
+         istatus = 13
+         return
+      endif
+   enddo
+   istatus = 0
+   return
+endif
+
 ! If vertical is on a model level don't need vertical interpolation either
+! (FIXME: since the vertical value is a real, in the wrf model_mod they
+! support non-integer levels and interpolate in the vertical just like
+! any other vertical type.  we could easily add that here.)
 if(vert_is_level(location)) then
    ! FIXME: if this is W, the top is nVertLevels+1
    if (lheight > nVertLevels) then
       istatus = 12
       return
    endif
-   call triangle_interp(x, base_offset, tri_indices, weights, &
-      nint(lheight), nVertLevels, interp_val, ier)
-   if(ier /= 0) then
-      istatus = 13
-   else
-      istatus = 0
-   endif
-   return
-endif
-
-! Vertical interpolation for pressure coordinates
-  IF(vert_is_pressure(location) ) THEN 
-   ! Need to get base offsets for the potential temperature, density, and water 
-   ! vapor mixing fields in the state vector
-   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset, end_offset)
-   call get_index_range(KIND_DENSITY, density_base_offset, end_offset)
-   call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset, end_offset)
-   call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
-         pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
-   if(ier /= 0) then
-      istatus = 17
-      return
-   endif
-     ! Next interpolate the observed quantity to the horizontal point at both levels
-     call triangle_interp(x, base_offset, tri_indices, weights, lower, nVertLevels, &
-         lower_interp, ier)
-     if(ier /= 0) then
-        istatus = 13
-        return
-     endif
-     call triangle_interp(x, base_offset, tri_indices, weights, upper, nVertLevels, &
-         upper_interp, ier)
-     if(ier /= 0) then
-        istatus = 13
-        interp_val = MISSING_R8
-     endif
-
-     ! Got both values, interpolate and return
-     interp_val = (1.0_r8 - fract) * lower_interp + fract * upper_interp
-     istatus = 0
-     return
-  ENDIF
-
-
-if(vert_is_height(location)) then
-   ! For height, can do simple vertical search for interpolation for now
-   ! Get the lower and upper bounds and fraction for each column
-   do i = 1, 3
-      call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
-         lower, upper, fract, ier)
-      if(ier /= 0) then
-         istatus = 12
-         return
-      endif
-      call vert_interp(x, base_offset, tri_indices(i), nVertLevels, lower, fract, v_interp(i), ier)
+   do j=1, num_kinds
+      call triangle_interp(x, base_offset(j), tri_indices, weights, &
+         nint(lheight), nVertLevels, interp_vals(j), ier)
       if(ier /= 0) then
          istatus = 13
          return
       endif
-   end do
-
-   ! Now do the horizontal interpolation
-   interp_val = sum(weights * v_interp)
+   enddo
    istatus = 0
+   return
 endif
 
-end subroutine model_interpolate
+! Vertical interpolation for pressure coordinates
+  if(vert_is_pressure(location) ) then 
+   ! Need to get base offsets for the potential temperature, density, and water 
+   ! vapor mixing fields in the state vector
+   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
+   call get_index_range(KIND_DENSITY, density_base_offset)
+   call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+   call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
+         pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, &
+         ltemp, utemp, ier)
+   if(ier /= 0) then
+      istatus = 17
+      return
+   endif
+   ! if any of the input kinds are sensible temperature, we had to compute
+   ! that value already to convert the pressure to the model levels, so just
+   ! interpolate in the vertical and we're done with that one.
+   do j=1, num_kinds
+      if (obs_kinds(j) == KIND_TEMPERATURE) then
+         ! Already have both values, interpolate in the vertical here.
+         if (ltemp == MISSING_R8 .or. utemp == MISSING_R8) then
+            istatus = 12
+            return
+         endif
+         interp_vals(j) = (1.0_r8 - fract) * ltemp + fract * utemp
+      else
+         ! Next interpolate the observed quantity to the horizontal point at both levels
+         call triangle_interp(x, base_offset(j), tri_indices, weights, lower, nVertLevels, &
+                              lower_interp, ier)
+         if(ier /= 0) then
+            istatus = 13
+            return
+         endif
+         call triangle_interp(x, base_offset(j), tri_indices, weights, upper, nVertLevels, &
+                              upper_interp, ier)
+         if(ier /= 0) then
+            istatus = 13
+            return
+         endif
+
+         ! Got both values, interpolate and return
+         if (lower_interp == MISSING_R8 .or. upper_interp == MISSING_R8) then
+            istatus = 12
+            return
+         endif
+         interp_vals(j) = (1.0_r8 - fract) * lower_interp + fract * upper_interp
+      endif
+   enddo
+   istatus = 0
+   return
+endif
+
+
+! in this section, unlike the others, we loop 3 times adding successive
+! contributions to the return value.  if there's an error the 
+! result value has been set to 0 so we have to reset it to the 
+! missing value instead of only setting the istatus code.
+if(vert_is_height(location)) then
+   ! For height, can do simple vertical search for interpolation for now
+   ! Get the lower and upper bounds and fraction for each column
+   interp_vals(:) = 0.0_r8
+   do i = 1, 3
+      call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
+                              lower, upper, fract, ier)
+      if(ier /= 0) then
+         istatus = 12
+         interp_vals(:) = MISSING_R8
+         return
+      endif
+      do j=1, num_kinds
+         call vert_interp(x, base_offset(j), tri_indices(i), nVertLevels, lower, fract, v_interp, ier)
+         if(ier /= 0) then
+            istatus = 13
+            interp_vals(:) = MISSING_R8
+            return
+         endif
+         interp_vals(j) = interp_vals(j) + weights(i) * v_interp
+      enddo
+   enddo
+   istatus = 0
+   return
+endif
+
+! shouldn't get here.
+interp_vals(:) = MISSING_R8
+istatus = 101
+
+end subroutine local_interpolate
+
 
 !------------------------------------------------------------------
 
 subroutine find_pressure_bounds(x, p, tri_indices, weights, nbounds, &
-   pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, ier)
+   pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, &
+   ltemp, utemp, ier)
 
 ! Finds vertical interpolation indices and fraction for a quantity with 
 ! pressure vertical coordinate. Loops through the height levels and
@@ -576,6 +766,7 @@ integer,   intent(in)  :: nbounds
 integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
 integer,   intent(out) :: lower, upper
 real(r8),  intent(out) :: fract
+real(r8),  intent(out) :: ltemp, utemp
 integer,   intent(out) :: ier
 
 integer  :: i, gip_err
@@ -586,7 +777,7 @@ ier = 0
 
 ! Find the lowest pressure
 call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
-   tri_indices, weights, 1, nbounds, pressure(1), gip_err)
+   tri_indices, weights, 1, nbounds, pressure(1), gip_err, ltemp)
 if(gip_err /= 0) then
    ier = gip_err
    return
@@ -609,7 +800,7 @@ endif
 ! Loop through the rest of the column from the bottom up
 do i = 2, nbounds
    call get_interp_pressure(x, pt_base_offset, density_base_offset, qv_base_offset, &
-      tri_indices, weights, i, nbounds, pressure(i), gip_err)
+      tri_indices, weights, i, nbounds, pressure(i), gip_err, utemp)
    if(gip_err /= 0) then
       ier = gip_err
       return
@@ -619,10 +810,12 @@ do i = 2, nbounds
    if(p > pressure(i)) then
       lower = i - 1
       upper = i
+      ! FIXME: should this be interpolated in log(p)??
       fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
       return
    endif
    
+   ltemp = utemp
 end do
 
 ! Shouldn't ever fall off end of loop
@@ -634,7 +827,7 @@ end subroutine find_pressure_bounds
 !------------------------------------------------------------------
 
 subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
-   tri_indices, weights, lev, nlevs, pressure, ier)
+   tri_indices, weights, lev, nlevs, pressure, ier, temperature)
 
 ! Finds the value of pressure at a given point at model level lev
 
@@ -645,9 +838,10 @@ real(r8), intent(in)  :: weights(3)
 integer,  intent(in)  :: lev, nlevs
 real(r8), intent(out) :: pressure
 integer,  intent(out) :: ier
+real(r8), intent(out), optional :: temperature
 
 integer  :: i, offset
-real(r8) :: pt(3), density(3), qv(3), pt_int, density_int, qv_int
+real(r8) :: pt(3), density(3), qv(3), pt_int, density_int, qv_int, tk
 
 
 ! Get the values of potential temperature, density, and vapor at each corner
@@ -669,12 +863,16 @@ density_int = sum(weights * density)
 qv_int =      sum(weights * qv)
 
 ! Get pressure at the interpolated point
-pressure =  compute_full_pressure(pt_int, density_int, qv_int)
+call compute_full_pressure(pt_int, density_int, qv_int, pressure, tk)
+
+! if the caller asked for sensible temperature, return it
+if (present(temperature)) temperature = tk
 
 ! Default is no error
 ier = 0
 
 end subroutine get_interp_pressure
+
 
 !------------------------------------------------------------------
 
@@ -741,7 +939,7 @@ integer :: i
 
 if(height < bounds(1) .or. height > bounds(nbounds)) then
    !JLA 
-   write(*, *) 'fail in find_height_bounds ', height, bounds(1), bounds(nbounds)
+   !write(*, *) 'fail in find_height_bounds ', height, bounds(1), bounds(nbounds)
    ier = 2
    return
 endif
@@ -761,8 +959,8 @@ ier = 3
 
 end subroutine find_height_bounds
 
-!------------------------------------------------------------------
 
+!------------------------------------------------------------------
 
 subroutine get_cell_indices(lon, lat, indices, weights, istatus)
 
@@ -803,7 +1001,6 @@ end subroutine get_cell_indices
 
 
 !------------------------------------------------------------
-
 
 subroutine get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
 
@@ -868,7 +1065,6 @@ istatus = 1
 end subroutine get_triangle
 
 
-
 !------------------------------------------------------------
 
 subroutine triangle_interp(x, base_offset, tri_indices, weights, &
@@ -907,7 +1103,6 @@ end subroutine triangle_interp
 
 
 !------------------------------------------------------------
-
 
 subroutine get_barycentric_weights(lon, lat, clons, clats, weights)
 
@@ -949,6 +1144,7 @@ call get_reg_lat_box(lat, y_ind)
 
 end subroutine get_reg_box_indices
 
+
 !------------------------------------------------------------
 
 subroutine get_reg_lon_box(lon, x_ind)
@@ -964,6 +1160,7 @@ x_ind = int(num_reg_x * lon / 360.0_r8) + 1
 if(lon == 360.0_r8) x_ind = num_reg_x
 
 end subroutine get_reg_lon_box
+
 
 !------------------------------------------------------------
 
@@ -1083,14 +1280,10 @@ end do
 
 end subroutine get_triangle_corners
 
+
 !------------------------------------------------------------
 
-
 subroutine reg_box_overlap(x_corners, y_corners, reg_lon_ind, reg_lat_ind, ier)
-
-real(r8), intent(in)  :: x_corners(3), y_corners(3)
-integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
-integer,  intent(out) :: ier
 
 ! Find a set of regular lat lon boxes that covers all of the area possibley covered by 
 ! a triangle whose corners are given by the dimension three x_corners 
@@ -1104,6 +1297,10 @@ integer,  intent(out) :: ier
 ! with 90 longitude boxes).
 ! For this version, any triangle that has a vertex at the pole or contains a pole
 ! returns an error.
+
+real(r8), intent(in)  :: x_corners(3), y_corners(3)
+integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
+integer,  intent(out) :: ier
 
 real(r8) :: lat_min, lat_max, lon_min, lon_max
 integer  :: i
@@ -1172,16 +1369,17 @@ if(reg_lon_ind(2) < reg_lon_ind(1)) reg_lon_ind(2) = reg_lon_ind(2) + num_reg_x
 
 end subroutine reg_box_overlap
 
+
 !------------------------------------------------------------
 
-
 subroutine update_reg_list(reg_list_num, reg_list, reg_lon_ind, reg_lat_ind, triangle_index)
+
+! Updates the data structure listing dipole quads that are in a given regular box
 
 integer, intent(inout) :: reg_list_num(:, :), reg_list(:, :, :)
 integer, intent(inout) :: reg_lon_ind(2), reg_lat_ind(2)
 integer, intent(in)    :: triangle_index
 
-! Updates the data structure listing dipole quads that are in a given regular box
 integer :: ind_x, index_x, ind_y
 
 ! Loop through indices for each possible regular rectangle
@@ -1209,14 +1407,11 @@ enddo
 
 end subroutine update_reg_list
 
+
 !------------------------------------------------------------
 
-
-
-
 function get_model_time_step()
-!------------------------------------------------------------------
-!
+
 ! Returns the the time step of the model; the smallest increment
 ! in time that the model is capable of advancing the state in a given
 ! implementation. This interface is required for all applications.
@@ -1230,10 +1425,10 @@ get_model_time_step = model_timestep
 end function get_model_time_step
 
 
+!------------------------------------------------------------------
 
 subroutine static_init_model()
-!------------------------------------------------------------------
-!
+
 ! Called to do one time initialization of the model.
 ! 
 ! All the grid information comes from the initialization of
@@ -1459,12 +1654,11 @@ call init_interp()
 end subroutine static_init_model
 
 
+!------------------------------------------------------------------
 
 subroutine end_model()
-!------------------------------------------------------------------
-!
-! Does any shutdown and clean-up needed for model. Can be a NULL
-! INTERFACE if the model has no need to clean up storage, etc.
+
+! Does any shutdown and clean-up needed for model.
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
@@ -1475,55 +1669,54 @@ if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 end subroutine end_model
 
 
+!------------------------------------------------------------------
 
 subroutine init_time(time)
-!------------------------------------------------------------------
-!
+
 ! Companion interface to init_conditions. Returns a time that is somehow 
 ! appropriate for starting up a long integration of the model.
 ! At present, this is only used if the namelist parameter 
 ! start_from_restart is set to .false. in the program perfect_model_obs.
-! If this option is not to be used in perfect_model_obs, or if no 
-! synthetic data experiments using perfect_model_obs are planned, 
-! this can be a NULL INTERFACE.
 
 type(time_type), intent(out) :: time
 
 if ( .not. module_initialized ) call static_init_model
 
-! FIXME: perhaps just set to the time in the analysis file
-time = get_analysis_time(trim(model_analysis_filename))
+! this shuts up the compiler warnings about unused variables
+time = set_time(0, 0)
+
+write(string1,*) 'Cannot initialize MPAS time via subroutine call; start_from_restart cannot be F'
+call error_handler(E_ERR,'init_time',string1,source,revision,revdate)
 
 end subroutine init_time
 
 
+!------------------------------------------------------------------
 
 subroutine init_conditions(x)
-!------------------------------------------------------------------
-!
+
 ! Returns a model state vector, x, that is some sort of appropriate
 ! initial condition for starting up a long integration of the model.
 ! At present, this is only used if the namelist parameter 
 ! start_from_restart is set to .false. in the program perfect_model_obs.
-! If this option is not to be used in perfect_model_obs, or if no 
-! synthetic data experiments using perfect_model_obs are planned, 
-! this can be a NULL INTERFACE.
 
 real(r8), intent(out) :: x(:)
 
 if ( .not. module_initialized ) call static_init_model
  
+! this shuts up the compiler warnings about unused variables
 x = 0.0_r8
 
-! FIXME: put an error handler call here - we cannot initialize the model
-! this way and it would be an error if filter called it.
+write(string1,*) 'Cannot initialize MPAS state via subroutine call; start_from_restart cannot be F'
+call error_handler(E_ERR,'init_conditions',string1,source,revision,revdate)
 
 end subroutine init_conditions
 
 
+!------------------------------------------------------------------
 
 function nc_write_model_atts( ncFileID ) result (ierr)
-!------------------------------------------------------------------
+
 ! TJH -- Writes the model-specific attributes to a netCDF file.
 !     This includes coordinate variables and some metadata, but NOT
 !     the model state vector.
@@ -1852,10 +2045,10 @@ ierr = 0 ! If we got here, things went well.
 end function nc_write_model_atts
 
 
+!------------------------------------------------------------------
 
 function nc_write_model_vars( ncFileID, state_vec, copyindex, timeindex ) result (ierr)         
-!------------------------------------------------------------------
-!
+
 ! TJH 29 Aug 2011 -- all errors are fatal, so the
 ! return code is always '0 == normal', since the fatal errors stop execution.
 !
@@ -2027,6 +2220,9 @@ else
       else
 
          ! FIXME put an error message here
+         write(string1,*)'no support (yet) for 4d fields'
+         call error_handler(E_ERR, 'nc_write_model_vars', string1, &
+                            source, revision, revdate)
 
       endif
 
@@ -2046,10 +2242,10 @@ ierr = 0 ! If we got here, things went well.
 end function nc_write_model_vars
 
 
+!------------------------------------------------------------------
 
 subroutine pert_model_state(state, pert_state, interf_provided)
-!------------------------------------------------------------------
-!
+
 ! Perturbs a model state for generating initial ensembles.
 ! The perturbed state is returned in pert_state.
 ! A model may choose to provide a NULL INTERFACE by returning
@@ -2064,10 +2260,10 @@ real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
 logical,  intent(out) :: interf_provided
 
-real(r8)              :: pert_ampl, range
+real(r8)              :: pert_ampl
 real(r8)              :: minv, maxv, temp
 type(random_seq_type) :: random_seq
-integer               :: id, i, j, s, e
+integer               :: i, j, s, e
 integer, save         :: counter = 1
 
 
@@ -2135,10 +2331,10 @@ enddo
 end subroutine pert_model_state
 
 
+!------------------------------------------------------------------
 
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs_loc, obs_kind, num_close, close_ind, dist)
-!------------------------------------------------------------------
 !
 ! FIXME ... not tested.
 !
@@ -2229,9 +2425,10 @@ endif
 end subroutine get_close_obs
 
 
+!------------------------------------------------------------------
 
 subroutine ens_mean_for_model(filter_ens_mean)
-!------------------------------------------------------------------
+
 ! If needed by the model interface, this is the current mean
 ! for all state vector items across all ensembles.
 
@@ -2245,11 +2442,15 @@ end subroutine ens_mean_for_model
 
 
 !==================================================================
-! The (model-specific) optional interfaces come next
+! The (model-specific) public interfaces come next
+!  (these are not required by dart but are used by other programs)
 !==================================================================
 
 
 subroutine get_model_analysis_filename( filename )
+
+! return the name of the analysis filename that was set
+! in the model_nml namelist
 
 character(len=*), intent(OUT) :: filename
 
@@ -2260,9 +2461,27 @@ filename = trim(model_analysis_filename)
 end subroutine get_model_analysis_filename
 
 
+!-------------------------------------------------------------------
+
+subroutine get_grid_definition_filename( filename )
+
+! return the name of the grid_definition filename that was set
+! in the model_nml namelist
+
+character(len=*), intent(out) :: filename
+
+if ( .not. module_initialized ) call static_init_model
+
+filename = trim(grid_definition_filename)
+
+
+end subroutine get_grid_definition_filename
+
+
+!-------------------------------------------------------------------
 
 subroutine analysis_file_to_statevector(filename, state_vector, model_time)
-!-------------------------------------------------------------------
+
 ! Reads the current time and state variables from a mpas analysis
 ! file and packs them into a dart state vector.
 
@@ -2271,8 +2490,8 @@ real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: model_time
 
 ! temp space to hold data while we are reading it
-integer  :: idim1, idim2, idim3, ndim1, ndim2, ndim3
-integer  :: i, ivar, indx
+integer  :: ndim1, ndim2, ndim3
+integer  :: i, ivar
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
@@ -2362,8 +2581,6 @@ do ivar=1, nfields
       write(*,*)'analysis_file_to_statevector '//trim(varname)//' count = ',mycount(1:ncNdims)
    endif
 
-   indx = progvar(ivar)%index1
-
    if (ncNdims == 1) then
 
       ! If the single dimension is TIME, we only need a scalar.
@@ -2373,10 +2590,7 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do idim1 = 1, ndim1
-         state_vector(indx) = data_1d_array(idim1)
-         indx = indx + 1
-      enddo
+      call prog_var_to_vector(data_1d_array, state_vector, ivar)
       deallocate(data_1d_array)
 
    elseif (ncNdims == 2) then
@@ -2387,12 +2601,7 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do idim2 = 1, ndim2
-      do idim1 = 1, ndim1
-         state_vector(indx) = data_2d_array(idim1, idim2)
-         indx = indx + 1
-      enddo
-      enddo
+      call prog_var_to_vector(data_2d_array, state_vector, ivar)
       deallocate(data_2d_array)
 
    elseif (ncNdims == 3) then
@@ -2404,28 +2613,13 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      do idim3 = 1, ndim3
-      do idim2 = 1, ndim2
-      do idim1 = 1, ndim1
-         state_vector(indx) = data_3d_array(idim1, idim2, idim3)
-         indx = indx + 1
-      enddo
-      enddo
-      enddo
+      call prog_var_to_vector(data_3d_array, state_vector, ivar)
       deallocate(data_3d_array)
 
    else
       write(string1, *) 'no support for data array of dimension ', ncNdims
       call error_handler(E_ERR,'analysis_file_to_statevector', string1, &
                         source,revision,revdate)
-   endif
-
-   indx = indx - 1
-   if ( indx /= progvar(ivar)%indexN ) then
-      write(string1, *)'Variable '//trim(varname)//' filled wrong.'
-      write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
-      call error_handler(E_ERR,'analysis_file_to_statevector', string1, &
-                        source,revision,revdate,text2=string2)
    endif
 
 enddo
@@ -2436,18 +2630,19 @@ call nc_check(nf90_close(ncid), &
 end subroutine analysis_file_to_statevector
 
 
+!-------------------------------------------------------------------
 
 subroutine statevector_to_analysis_file(state_vector, filename, statetime)
-!-------------------------------------------------------------------
+
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a mpas netcdf analysis file.
-!
+
 real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: statetime
 
 ! temp space to hold data while we are writing it
-integer :: i, ndim1, ndim2, ndim3, ivar
+integer :: i, ivar
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array2
@@ -2458,6 +2653,7 @@ character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: zonal, meridional
 integer :: ncFileID, TimeDimID, TimeDimLength
+logical :: both
 type(time_type) :: model_time
 
 if ( .not. module_initialized ) call static_init_model
@@ -2552,8 +2748,7 @@ do ivar=1, nfields
    endif
 
    if (progvar(ivar)%numdims == 1) then
-      ndim1 = mycount(1)
-      allocate(data_1d_array(ndim1))
+      allocate(data_1d_array(mycount(1)))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2568,9 +2763,7 @@ do ivar=1, nfields
 
    elseif (progvar(ivar)%numdims == 2) then
 
-      ndim1 = mycount(1)
-      ndim2 = mycount(2)
-      allocate(data_2d_array(ndim1, ndim2))
+      allocate(data_2d_array(mycount(1), mycount(2)))
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2585,10 +2778,7 @@ do ivar=1, nfields
 
    elseif (progvar(ivar)%numdims == 3) then
 
-      ndim1 = mycount(1)
-      ndim2 = mycount(2)
-      ndim3 = mycount(3)
-      allocate(data_3d_array(ndim1, ndim2, ndim3))
+      allocate(data_3d_array(mycount(1), mycount(2), mycount(3)))
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
       if ( progvar(ivar)%clamping ) then
@@ -2615,7 +2805,8 @@ enddo
 ! (parallel to lat and lon lines).  we can read them directly from the analysis
 ! file at the cell centers, but in putting them back into the file we've got to
 ! update the edge arrays as well as the centers.
-if (winds_present(zonal,meridional)) then
+call winds_present(zonal, meridional, both)
+if (both) then
    allocate(data_2d_array ( progvar(zonal)%dimlens(1),  &
                             progvar(zonal)%dimlens(2) ))
    allocate(data_2d_array2( progvar(meridional)%dimlens(1),  &
@@ -2635,11 +2826,10 @@ call nc_check(nf90_close(ncFileID), &
 end subroutine statevector_to_analysis_file
 
 
-
-
+!------------------------------------------------------------------
 
 function get_analysis_time_ncid( ncid, filename )
-!------------------------------------------------------------------
+
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
@@ -2693,9 +2883,10 @@ endif
 end function get_analysis_time_ncid
 
 
+!------------------------------------------------------------------
 
 function get_analysis_time_fname(filename)
-!------------------------------------------------------------------
+
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
@@ -2725,6 +2916,8 @@ get_analysis_time_fname = string_to_time(filename(i:i+19))
 end function get_analysis_time_fname
 
 
+!------------------------------------------------------------------
+
 subroutine write_model_time(time_filename, model_time, adv_to_time)
  character(len=*), intent(in)           :: time_filename
  type(time_type),  intent(in)           :: model_time
@@ -2753,9 +2946,10 @@ call close_file(iunit)
 end subroutine write_model_time
 
 
-subroutine get_grid_dims(Cells, Vertices, Edges, VertLevels, VertexDeg, SoilLevels)
 !------------------------------------------------------------------
-!
+
+subroutine get_grid_dims(Cells, Vertices, Edges, VertLevels, VertexDeg, SoilLevels)
+
 ! public routine for returning the counts of various things in the grid
 !
 
@@ -2778,17 +2972,22 @@ SoilLevels = nSoilLevels
 end subroutine get_grid_dims
 
 
-
+!==================================================================
 ! The (model-specific) private interfaces come last
 !==================================================================
 
 
-
 function time_to_string(t, brief)
-!------------------------------------------------------------------
+
+! convert time type into a character string with the
+! format of YYYY-MM-DD_hh:mm:ss
+
+! passed variables
  character(len=19) :: time_to_string
  type(time_type), intent(in) :: t
  logical, intent(in), optional :: brief
+
+! local variables
 
 integer :: iyear, imonth, iday, ihour, imin, isec
 logical :: dobrief
@@ -2811,8 +3010,14 @@ endif
 end function time_to_string
 
 
-function string_to_time(s)
 !------------------------------------------------------------------
+
+function string_to_time(s)
+
+! parse a string to extract time.  the expected format of
+! the string is YYYY-MM-DD_hh:mm:ss  (although the exact
+! non-numeric separator chars are skipped and not validated.)
+
  type(time_type) :: string_to_time
  character(len=*), intent(in) :: s
 
@@ -2824,9 +3029,10 @@ string_to_time = set_date(iyear, imonth, iday, ihour, imin, isec)
 end function string_to_time
 
 
-subroutine read_grid_dims()
 !------------------------------------------------------------------
-!
+
+subroutine read_grid_dims()
+
 ! Read the grid dimensions from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
@@ -2837,69 +3043,69 @@ if ( .not. module_initialized ) call static_init_model
 
 ! get the ball rolling ...
 
-call nc_check( nf90_open(trim(model_analysis_filename), NF90_NOWRITE, grid_id), &
-              'read_grid_dims', 'open '//trim(model_analysis_filename))
+call nc_check( nf90_open(trim(grid_definition_filename), NF90_NOWRITE, grid_id), &
+              'read_grid_dims', 'open '//trim(grid_definition_filename))
 
 ! nCells : get dimid for 'nCells' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nCells', dimid), &
-              'read_grid_dims','inq_dimid nCells '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nCells '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nCells), &
-            'read_grid_dims','inquire_dimension nCells '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nCells '//trim(grid_definition_filename))
 
 ! nVertices : get dimid for 'nVertices' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertices', dimid), &
-              'read_grid_dims','inq_dimid nVertices '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertices '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertices), &
-            'read_grid_dims','inquire_dimension nVertices '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertices '//trim(grid_definition_filename))
 
 ! nEdges : get dimid for 'nEdges' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nEdges', dimid), &
-              'read_grid_dims','inq_dimid nEdges '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nEdges '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nEdges), &
-            'read_grid_dims','inquire_dimension nEdges '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nEdges '//trim(grid_definition_filename))
 
 ! maxEdges : get dimid for 'maxEdges' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'maxEdges', dimid), &
-              'read_grid_dims','inq_dimid maxEdges '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid maxEdges '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=maxEdges), &
-            'read_grid_dims','inquire_dimension maxEdges '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension maxEdges '//trim(grid_definition_filename))
 
 ! nVertLevels : get dimid for 'nVertLevels' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertLevels', dimid), &
-              'read_grid_dims','inq_dimid nVertLevels '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertLevels '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevels), &
-            'read_grid_dims','inquire_dimension nVertLevels '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertLevels '//trim(grid_definition_filename))
 
 ! nVertLevelsP1 : get dimid for 'nVertLevelsP1' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nVertLevelsP1', dimid), &
-              'read_grid_dims','inq_dimid nVertLevelsP1 '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nVertLevelsP1 '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevelsP1), &
-            'read_grid_dims','inquire_dimension nVertLevelsP1 '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nVertLevelsP1 '//trim(grid_definition_filename))
 
 ! vertexDegree : get dimid for 'vertexDegree' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'vertexDegree', dimid), &
-              'read_grid_dims','inq_dimid vertexDegree '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid vertexDegree '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=vertexDegree), &
-            'read_grid_dims','inquire_dimension vertexDegree '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension vertexDegree '//trim(grid_definition_filename))
 
 ! nSoilLevels : get dimid for 'nSoilLevels' and then get value
 
 call nc_check(nf90_inq_dimid(grid_id, 'nSoilLevels', dimid), &
-              'read_grid_dims','inq_dimid nSoilLevels '//trim(model_analysis_filename))
+              'read_grid_dims','inq_dimid nSoilLevels '//trim(grid_definition_filename))
 call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nSoilLevels), &
-            'read_grid_dims','inquire_dimension nSoilLevels '//trim(model_analysis_filename))
+            'read_grid_dims','inquire_dimension nSoilLevels '//trim(grid_definition_filename))
 
 ! tidy up
 
 call nc_check(nf90_close(grid_id), &
-         'read_grid_dims','close '//trim(model_analysis_filename) )
+         'read_grid_dims','close '//trim(grid_definition_filename) )
 
 if (debug > 7) then
    write(*,*)
@@ -2915,11 +3121,11 @@ endif
 end subroutine read_grid_dims
 
 
+!------------------------------------------------------------------
 
 subroutine get_grid()
-!------------------------------------------------------------------
-!
-! Read the grid dimensions from the MPAS netcdf file.
+
+! Read the actual grid values in from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
 ! This reads in the following arrays:
@@ -2930,31 +3136,31 @@ integer  :: ncid, VarID
 
 ! Read the netcdf file data
 
-call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_grid', 'open '//trim(model_analysis_filename))
+call nc_check(nf90_open(trim(grid_definition_filename), nf90_nowrite, ncid), 'get_grid', 'open '//trim(grid_definition_filename))
 
 ! Read the variables
 
 call nc_check(nf90_inq_varid(ncid, 'latCell', VarID), &
-      'get_grid', 'inq_varid latCell '//trim(model_analysis_filename))
+      'get_grid', 'inq_varid latCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, latCell), &
-      'get_grid', 'get_var latCell '//trim(model_analysis_filename))
+      'get_grid', 'get_var latCell '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'lonCell', VarID), &
-      'get_grid', 'inq_varid lonCell '//trim(model_analysis_filename))
+      'get_grid', 'inq_varid lonCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, lonCell), &
-      'get_grid', 'get_var lonCell '//trim(model_analysis_filename))
+      'get_grid', 'get_var lonCell '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
-      'get_grid', 'inq_varid zgrid '//trim(model_analysis_filename))
+      'get_grid', 'inq_varid zgrid '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, zgridFace), &
-      'get_grid', 'get_var zgrid '//trim(model_analysis_filename))
+      'get_grid', 'get_var zgrid '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
-      'get_grid', 'inq_varid cellsOnVertex '//trim(model_analysis_filename))
+      'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
-      'get_grid', 'get_var cellsOnVertex '//trim(model_analysis_filename))
+      'get_grid', 'get_var cellsOnVertex '//trim(grid_definition_filename))
 
-call nc_check(nf90_close(ncid), 'get_grid','close '//trim(model_analysis_filename) )
+call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
 
 ! MPAS analysis files are in radians - at this point DART needs degrees.
 
@@ -2976,9 +3182,10 @@ endif
 end subroutine get_grid
 
 
-subroutine get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
 !------------------------------------------------------------------
-!
+
+subroutine get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
+
 ! Read the edge info needed to map from cell centers to edge values
 !
 ! The file name comes from module storage ... namelist.
@@ -2992,26 +3199,27 @@ integer  :: ncid, VarID
 
 ! Read the netcdf file data
 
-call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_edges', 'open '//trim(model_analysis_filename))
+call nc_check(nf90_open(trim(grid_definition_filename), nf90_nowrite, ncid), &
+      'get_edges', 'open '//trim(grid_definition_filename))
 
 ! Read the variables
 
 call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
-      'get_edges', 'inq_varid edgeNormalVectors '//trim(model_analysis_filename))
+      'get_edges', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
-      'get_edges', 'get_var edgeNormalVectors '//trim(model_analysis_filename))
+      'get_edges', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
-      'get_edges', 'inq_varid nEdgesOnCell '//trim(model_analysis_filename))
+      'get_edges', 'inq_varid nEdgesOnCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
-      'get_edges', 'get_var nEdgesOnCell '//trim(model_analysis_filename))
+      'get_edges', 'get_var nEdgesOnCell '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
-      'get_edges', 'inq_varid edgesOnCell '//trim(model_analysis_filename))
+      'get_edges', 'inq_varid edgesOnCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
-      'get_edges', 'get_var edgesOnCell '//trim(model_analysis_filename))
+      'get_edges', 'get_var edgesOnCell '//trim(grid_definition_filename))
 
-call nc_check(nf90_close(ncid), 'get_edges','close '//trim(model_analysis_filename) )
+call nc_check(nf90_close(ncid), 'get_edges','close '//trim(grid_definition_filename) )
 
 ! A little sanity check
 
@@ -3026,9 +3234,10 @@ endif
 end subroutine get_edges
 
 
-subroutine get_u(u)
 !------------------------------------------------------------------
-!
+
+subroutine get_u(u)
+
 ! get the contents of the U array.   it is not clear that we really
 ! need this since the computation code seems to zero out the U array
 ! before starting - so this might be unnecessary work.
@@ -3047,22 +3256,23 @@ integer :: ntimes, i
 if ( .not. module_initialized ) call static_init_model
 
 
-call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), 'get_u', 'open '//trim(model_analysis_filename))
+call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), &
+              'get_u', 'open '//trim(model_analysis_filename))
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-                    'get_u', 'inquire '//trim(model_analysis_filename))
+              'get_u', 'inquire '//trim(model_analysis_filename))
 
-call nc_check( nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-                 'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
+call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
+              'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-             'get_u', 'inq_varid u '//trim(model_analysis_filename))
+              'get_u', 'inq_varid u '//trim(model_analysis_filename))
 
-call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
               'get_u', 'inquire u '//trim(model_analysis_filename))
 
 do i=1, numdims
-   call nc_check( nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
                  'get_u', 'inquire U dimension length '//trim(model_analysis_filename))
 enddo
 
@@ -3092,9 +3302,10 @@ endif
 end subroutine get_u
 
 
-subroutine put_u(u)
 !------------------------------------------------------------------
-!
+
+subroutine put_u(u)
+
 ! Put the newly updated 'u' field back into the netcdf file.
 !
 ! The file name comes from module storage ... namelist.
@@ -3111,22 +3322,23 @@ integer :: ntimes, i
 if ( .not. module_initialized ) call static_init_model
 
 
-call nc_check(nf90_open(trim(model_analysis_filename), nf90_write, ncid), 'put_u', 'open '//trim(model_analysis_filename))
+call nc_check(nf90_open(trim(model_analysis_filename), nf90_write, ncid), &
+              'put_u', 'open '//trim(model_analysis_filename))
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-                    'put_u', 'inquire '//trim(model_analysis_filename))
+              'put_u', 'inquire '//trim(model_analysis_filename))
 
-call nc_check( nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-                 'put_u', 'inquire time dimension length '//trim(model_analysis_filename))
+call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
+              'put_u', 'inquire time dimension length '//trim(model_analysis_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-             'put_u', 'inq_varid u '//trim(model_analysis_filename))
+              'put_u', 'inq_varid u '//trim(model_analysis_filename))
 
-call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
               'put_u', 'inquire u '//trim(model_analysis_filename))
 
 do i=1, numdims
-   call nc_check( nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
                  'put_u', 'inquire U dimension length '//trim(model_analysis_filename))
 enddo
 
@@ -3137,7 +3349,7 @@ mystart(numdims) = ntimes
 mycount = numu
 mycount(numdims) = 1
 
-call nc_check( nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
+call nc_check(nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
               'put_u', 'get_var u '//trim(model_analysis_filename))
 
 
@@ -3156,12 +3368,13 @@ endif
 end subroutine put_u
 
 
+!------------------------------------------------------------------
 
 subroutine vector_to_1d_prog_var(x, ivar, data_1d_array)
-!------------------------------------------------------------------
+
 ! convert the values from a 1d array, starting at an offset,
 ! into a 1d array.
-!
+
 real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
@@ -3172,7 +3385,7 @@ if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do idim1 = 1, progvar(ivar)%dimlens(1)
+do idim1 = 1, size(data_1d_array, 1)
    data_1d_array(idim1) = x(ii)
    ii = ii + 1
 enddo
@@ -3188,12 +3401,13 @@ endif
 end subroutine vector_to_1d_prog_var
 
 
+!------------------------------------------------------------------
 
 subroutine vector_to_2d_prog_var(x, ivar, data_2d_array)
-!------------------------------------------------------------------
+
 ! convert the values from a 1d array, starting at an offset,
 ! into a 2d array.
-!
+
 real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
@@ -3204,11 +3418,11 @@ if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do idim2 = 1,progvar(ivar)%dimlens(2)
-do idim1 = 1,progvar(ivar)%dimlens(1)
-   data_2d_array(idim1,idim2) = x(ii)
-   ii = ii + 1
-enddo
+do idim2 = 1,size(data_2d_array, 2)
+   do idim1 = 1,size(data_2d_array, 1)
+      data_2d_array(idim1,idim2) = x(ii)
+      ii = ii + 1
+   enddo
 enddo
 
 ii = ii - 1
@@ -3222,12 +3436,13 @@ endif
 end subroutine vector_to_2d_prog_var
 
 
+!------------------------------------------------------------------
 
 subroutine vector_to_3d_prog_var(x, ivar, data_3d_array)
-!------------------------------------------------------------------
+
 ! convert the values from a 1d array, starting at an offset,
 ! into a 3d array.
-!
+
 real(r8), dimension(:),     intent(in)  :: x
 integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
@@ -3238,13 +3453,13 @@ if ( .not. module_initialized ) call static_init_model
 
 ii = progvar(ivar)%index1
 
-do idim3 = 1,progvar(ivar)%dimlens(3)
-do idim2 = 1,progvar(ivar)%dimlens(2)
-do idim1 = 1,progvar(ivar)%dimlens(1)
-   data_3d_array(idim1,idim2,idim3) = x(ii)
-   ii = ii + 1
-enddo
-enddo
+do idim3 = 1,size(data_3d_array, 3)
+   do idim2 = 1,size(data_3d_array, 2)
+      do idim1 = 1,size(data_3d_array, 1)
+         data_3d_array(idim1,idim2,idim3) = x(ii)
+         ii = ii + 1
+      enddo
+   enddo
 enddo
 
 ii = ii - 1
@@ -3258,25 +3473,131 @@ endif
 end subroutine vector_to_3d_prog_var
 
 
+!------------------------------------------------------------------
+
+subroutine prog_var_1d_to_vector(data_1d_array, x, ivar)
+
+! convert the values from a 1d array into a 1d array
+! starting at an offset.
+
+real(r8), dimension(:),   intent(in)    :: data_1d_array
+real(r8), dimension(:),   intent(inout) :: x
+integer,                  intent(in)    :: ivar
+
+integer :: idim1,ii
+
+if ( .not. module_initialized ) call static_init_model
+
+ii = progvar(ivar)%index1
+
+do idim1 = 1, size(data_1d_array, 1)
+   x(ii) = data_1d_array(idim1)
+   ii = ii + 1
+enddo
+
+ii = ii - 1
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
+   call error_handler(E_ERR,'prog_var_1d_to_vector', string1, &
+                    source, revision, revdate, text2=string2)
+endif
+
+end subroutine prog_var_1d_to_vector
+
+
+!------------------------------------------------------------------
+
+subroutine prog_var_2d_to_vector(data_2d_array, x, ivar)
+
+! convert the values from a 2d array into a 1d array
+! starting at an offset.
+
+real(r8), dimension(:,:), intent(in)    :: data_2d_array
+real(r8), dimension(:),   intent(inout) :: x
+integer,                  intent(in)    :: ivar
+
+integer :: idim1,idim2,ii
+
+if ( .not. module_initialized ) call static_init_model
+
+ii = progvar(ivar)%index1
+
+do idim2 = 1,size(data_2d_array, 2)
+   do idim1 = 1,size(data_2d_array, 1)
+      x(ii) = data_2d_array(idim1,idim2)
+      ii = ii + 1
+   enddo
+enddo
+
+ii = ii - 1
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
+   call error_handler(E_ERR,'prog_var_2d_to_vector', string1, &
+                    source, revision, revdate, text2=string2)
+endif
+
+end subroutine prog_var_2d_to_vector
+
+
+!------------------------------------------------------------------
+
+subroutine prog_var_3d_to_vector(data_3d_array, x, ivar)
+
+! convert the values from a 2d array into a 1d array
+! starting at an offset.
+
+real(r8), dimension(:,:,:), intent(in)    :: data_3d_array
+real(r8), dimension(:),     intent(inout) :: x
+integer,                    intent(in)    :: ivar
+
+integer :: idim1,idim2,idim3,ii
+
+if ( .not. module_initialized ) call static_init_model
+
+ii = progvar(ivar)%index1
+
+do idim3 = 1,size(data_3d_array, 3)
+   do idim2 = 1,size(data_3d_array, 2)
+      do idim1 = 1,size(data_3d_array, 1)
+         x(ii) = data_3d_array(idim1,idim2,idim3) 
+         ii = ii + 1
+      enddo
+   enddo
+enddo
+
+ii = ii - 1
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
+   call error_handler(E_ERR,'prog_var_3d_to_vector', string1, &
+                    source, revision, revdate, text2=string2)
+endif
+
+end subroutine prog_var_3d_to_vector
+
+
+!------------------------------------------------------------------
 
 function set_model_time_step()
-!------------------------------------------------------------------
+
 ! the static_init_model ensures that the model namelists are read.
-!
+
 type(time_type) :: set_model_time_step
 
 if ( .not. module_initialized ) call static_init_model
 
-! FIXME - determine when we can stop the model
-
-   set_model_time_step = set_time(0, 1) ! (seconds, days)
+! these are from the namelist
+!FIXME: sanity check these for valid ranges?
+set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
 
 end function set_model_time_step
 
 
+!------------------------------------------------------------------
 
 subroutine verify_state_variables( state_variables, ncid, filename, ngood, table )
-!------------------------------------------------------------------
 
 character(len=*), dimension(:),   intent(in)  :: state_variables
 integer,                          intent(in)  :: ncid
@@ -3381,9 +3702,10 @@ endif
 end subroutine verify_state_variables
 
 
+!------------------------------------------------------------------
 
 subroutine dump_progvar(ivar)
-!------------------------------------------------------------------
+
  integer, intent(in) :: ivar
 
 !%! type progvartype
@@ -3453,8 +3775,9 @@ enddo
 end subroutine dump_progvar
 
 
-function FindTimeDimension(ncid) result(timedimid)
 !------------------------------------------------------------------
+
+function FindTimeDimension(ncid) result(timedimid)
 
 ! Find the Time Dimension ID in a netCDF file.
 ! If there is none - (spelled the obvious way) - the routine
@@ -3471,13 +3794,15 @@ nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
 end function FindTimeDimension
 
 
-function winds_present(zonal,meridional)
 !------------------------------------------------------------------
- logical :: winds_present
+
+subroutine winds_present(zonal,meridional,both)
+
  integer,  intent(out) :: zonal, meridional
+ logical, intent(out) :: both
 
 ! if neither of uReconstructZonal or uReconstructMeridional are in the
-!   state vector, return .false. and we're done.
+!   state vector, set both to .false. and we're done.
 ! if both are there, return the ivar indices for each
 ! if only one is there, it's an error.
 
@@ -3485,20 +3810,24 @@ zonal = get_index_from_varname('uReconstructZonal')
 meridional = get_index_from_varname('uReconstructMeridional')
 
 if (zonal > 0 .and. meridional > 0) then
-  winds_present = .true.
+  both = .true.
   return
 else if (zonal < 0 .and. meridional < 0) then
-  winds_present = .false. 
+  both = .false. 
   return
 endif
 
 ! only one present - error.
-! FIXME : add call to error_handler
+write(string1,*) 'both components for U winds must be in state vector'
+call error_handler(E_ERR,'winds_present',string1,source,revision,revdate)
 
-end function winds_present
+end subroutine winds_present
+
+
+!------------------------------------------------------------------
 
 subroutine handle_winds(zonal_data, meridional_data)
-!------------------------------------------------------------------
+
  real(r8), intent(in) :: zonal_data(:,:), meridional_data(:,:)
  
 !  the current plan for winds is:
@@ -3537,14 +3866,16 @@ deallocate(u, nEdgesOnCell, edgesOnCell, edgeNormalVectors)
 end subroutine handle_winds
 
 
-
+!------------------------------------------------------------
 
 subroutine set_variable_clamping(ivar)
-!------------------------------------------------------------
+
 ! The model may behave poorly if some quantities are outside
 ! a physically realizable range.
 !
 ! FIXME : add more DART types
+! FIXME2 : need to be able to set just min or just max
+!  and leave the other MISSING_R8
 
 integer, intent(in) :: ivar
 
@@ -3560,9 +3891,10 @@ end select
 end subroutine set_variable_clamping
 
 
+!------------------------------------------------------------
 
 subroutine define_var_dims(ncid,ivar, memberdimid, unlimiteddimid, ndims, dimids) 
-!------------------------------------------------------------
+
 ! set the dimids array needed to augment the natural shape of the variable
 ! with the two additional dimids needed by the DART diagnostic output.
 integer,               intent(in)  :: ncid
@@ -3598,17 +3930,15 @@ dimids(ndims) = unlimiteddimid
 end subroutine define_var_dims
 
 
+!------------------------------------------------------------
 
 subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, uReconstructZonal, uReconstructMeridional, u)
-!------------------------------------------------------------
+
 ! Project the u, v winds at the cell centers onto the edges.
-! FIXME: I just pretend to have all the input arguments read 
-!        directly from the mpas file here.
-!        We can use progvar for these later on.
-!        We need to define a new dimension "R3" for edgeNormalVectors in get_grid_dims,
-!        or we can just hard-code it as 3 since it just came from the x/y/z cartesian coordinate.
-!        We also need to define nEdgesOnCell in get_grid_dims, and read edgesOnCell in get_grid.
-!        We may need to read edgeNormalVectors in get_grid to use this subroutine.
+! FIXME:
+!        we can hard-code R3 here since it comes from the (3d) x/y/z cartesian coordinate.
+!        We define nEdgesOnCell in get_grid_dims, and read edgesOnCell in get_grid.
+!        We read edgeNormalVectors in get_grid to use this subroutine.
 !        Here "U" is the prognostic variable in MPAS.
 
 real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
@@ -3619,7 +3949,8 @@ real(r8), intent(in) :: uReconstructMeridional(:,:) ! u wind at cell centers
 real(r8), intent(out):: u(:,:)                      ! normal velocity on the edges
 
 ! Local variables
-real(r8) :: east(3,nCells), north(3,nCells)
+integer, parameter :: R3 = 3
+real(r8) :: east(R3,nCells), north(R3,nCells)
 real(r8) :: lonCell_rad(nCells), latCell_rad(nCells)
 integer :: iCell, iEdge, jEdge, k
 
@@ -3653,12 +3984,12 @@ do iCell = 1, nCells
       iEdge = edgesOnCell(jEdge, iCell)
       do k = 1, nVertLevels
          U(k,iEdge) = U(k,iEdge) + &
-                 0.5_r8 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
-                                                     +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
-                                                     +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
-          + 0.5_r8 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
-                                                     +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
-                                                     +  edgeNormalVectors(3,iEdge) * north(3,iCell)) 
+              0.5_r8 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
+                                                  +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
+                                                  +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
+       + 0.5_r8 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
+                                                  +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
+                                                  +  edgeNormalVectors(3,iEdge) * north(3,iCell)) 
       enddo
    enddo
 enddo
@@ -3666,9 +3997,10 @@ enddo
 end subroutine uv_cell_to_edges
 
 
+!------------------------------------------------------------------
 
 subroutine r3_normalize(ax, ay, az)
-!------------------------------------------------------------------
+
 !normalizes the vector (ax, ay, az)
 
 real(r8), intent(inout) :: ax, ay, az
@@ -3682,59 +4014,63 @@ real(r8) :: mi
 end subroutine r3_normalize
 
 
+!------------------------------------------------------------------
 
 subroutine get_index_range_string(string,index1,indexN)
-!------------------------------------------------------------------
+
 ! Determine where a particular DART kind (string) exists in the 
 ! DART state vector.
 
-character(len=*), intent(in)  :: string
-integer,          intent(out) :: index1,indexN
+character(len=*),  intent(in)  :: string
+integer,           intent(out) :: index1
+integer, optional, intent(out) :: indexN
 
 integer :: i
 
 index1 = 0
-indexN = 0
+if (present(indexN)) indexN = 0
 
 FieldLoop : do i=1,nfields
    if (progvar(i)%kind_string /= trim(string)) cycle FieldLoop
    index1 = progvar(i)%index1
-   indexN = progvar(i)%indexN
+   if (present(indexN)) indexN = progvar(i)%indexN
    exit FieldLoop
 enddo FieldLoop
 
-if ((index1 == 0) .or. (indexN == 0)) then
+if (index1 == 0) then
    write(string1,*) 'Problem, cannot find indices for '//trim(string)
    call error_handler(E_ERR,'get_index_range_string',string1,source,revision,revdate)
 endif
 end subroutine get_index_range_string
 
 
+!------------------------------------------------------------------
 
 subroutine get_index_range_int(dartkind,index1,indexN)
-!------------------------------------------------------------------
+
 ! Determine where a particular DART kind (integer) exists in the 
 ! DART state vector.
 
-integer, intent(in) :: dartkind
-integer, intent(out) :: index1,indexN
+integer,           intent(in)  :: dartkind
+integer,           intent(out) :: index1
+integer, optional, intent(out) :: indexN
 
 integer :: i
 character(len=paramname_length) :: string
 
 index1 = 0
-indexN = 0
+if (present(indexN)) indexN = 0
 
 FieldLoop : do i=1,nfields
    if (progvar(i)%dart_kind /= dartkind) cycle FieldLoop
    index1 = progvar(i)%index1
-   indexN = progvar(i)%indexN
+   if (present(indexN)) indexN = progvar(i)%indexN
    exit FieldLoop
 enddo FieldLoop
 
 string = get_raw_obs_kind_name(dartkind)
 
-if ((index1 == 0) .or. (indexN == 0)) then
+if (index1 == 0) then
    write(string1,*) 'Problem, cannot find indices for kind ',dartkind,trim(string)
    call error_handler(E_ERR,'get_index_range_int',string1,source,revision,revdate)
 endif
@@ -3742,8 +4078,10 @@ endif
 end subroutine get_index_range_int
 
 
-function get_progvar_index_from_kind(dartkind)
 !------------------------------------------------------------------
+
+function get_progvar_index_from_kind(dartkind)
+
 ! Determine what index a particular DART kind (integer) is in the
 ! progvar array.
 integer :: get_progvar_index_from_kind
@@ -3762,9 +4100,10 @@ get_progvar_index_from_kind = -1
 end function get_progvar_index_from_kind
 
 
+!------------------------------------------------------------------
 
 function get_index_from_varname(varname)
-!------------------------------------------------------------------
+
 ! Determine what index corresponds to the given varname
 ! if name not in state vector, return -1 -- not an error.
 
@@ -3786,10 +4125,12 @@ return
 end function get_index_from_varname
 
 
+!------------------------------------------------------------------
 
 function theta_to_tk (theta, rho, qv)
-!------------------------------------------------------------------
+
 ! Compute sensible temperature [K] from potential temperature [K].
+! matches computation done in MPAS model
 
 real(r8), intent(in)  :: theta    ! potential temperature [K]
 real(r8), intent(in)  :: rho      ! dry density
@@ -3809,23 +4150,23 @@ theta_to_tk = theta * exner
 end function theta_to_tk
 
 
-
-function compute_full_pressure(theta, rho, qv)
 !------------------------------------------------------------------
+
+subroutine compute_full_pressure(theta, rho, qv, pressure, tk)
+
 ! Compute full pressure from the equation of state.
+! matches computation done in MPAS model
 
 real(r8), intent(in)  :: theta    ! potential temperature [K]
 real(r8), intent(in)  :: rho      ! dry density
 real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
-real(r8) :: compute_full_pressure ! full pressure [Pa]
-
-! Local variables
-real(r8) :: tk                    ! temperature [K]
+real(r8), intent(out) :: pressure ! full pressure [Pa]
+real(r8), intent(out) :: tk       ! return sensible temperature to caller
 
 tk = theta_to_tk(theta, rho, qv)
-compute_full_pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
+pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
 
-end function compute_full_pressure
+end subroutine compute_full_pressure
 
 
 

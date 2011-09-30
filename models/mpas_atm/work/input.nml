@@ -25,14 +25,14 @@
    async                    = 0,
    adv_ens_command          = "./advance_model.csh",
    ens_size                 = 20,
-   start_from_restart       = .true.,
+   start_from_restart       = .false.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "filter_ics",
+   restart_in_file_name     = "perfect_ics",
    restart_out_file_name    = "filter_restart",
-   init_time_days           = 0,
-   init_time_seconds        = 0,
+   init_time_days           = -1,
+   init_time_seconds        = -1,
    first_obs_days           = -1,
    first_obs_seconds        = -1,
    last_obs_days            = -1,
@@ -46,7 +46,7 @@
    output_forward_op_errors = .false.,
    output_timestamps        = .false.,
    output_inflation         = .true.,
-   trace_execution          = .false.,
+   trace_execution          = .true.,
    silence                  = .false.,
 
    inf_flavor                  = 0,                       0,
@@ -129,6 +129,7 @@
 
 &model_nml
    model_analysis_filename      = '../data/mpas_analysis.nc'
+   grid_definition_filename     = '../data/mpas_analysis.nc'
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 3600,
    output_state_vector          = .true., 
@@ -254,24 +255,26 @@
 # VERTISUNDEF VERTISSURFACE VERTISLEVEL VERTISPRESSURE VERTISHEIGHT VERTISSCALEHEIGHT
    kind_of_interest = 'KIND_SURFACE_PRESSURE',
    kind_of_interest = 'KIND_POTENTIAL_TEMPERATURE',
+   kind_of_interest = 'KIND_TEMPERATURE',
    kind_of_interest = 'KIND_U_WIND_COMPONENT',
    kind_of_interest = 'KIND_V_WIND_COMPONENT',
    kind_of_interest = 'KIND_DENSITY',
    kind_of_interest = 'KIND_VAPOR_MIXING_RATIO',
 
 &model_mod_check_nml
-   dart_input_file      = 'dart.ics',
-   output_file          = 'check_me',
-   advance_time_present = .FALSE.,
-   verbose              = .TRUE.,
-   test1thru            = 10,
-   x_ind            = 300 ,
-   loc_of_interest  = 240.0, 0.0, 10000.0,
-   kind_of_interest = 'KIND_SURFACE_PRESSURE',
-   interp_test_lonrange =   0.0, 359.0,
-   interp_test_latrange = -89.0,  89.0,
-   interp_test_dlon     = 1.0,
-   interp_test_dlat     = 1.0,
-   interp_test_level      = 10000.0,
-   interp_test_levelcoord = 'VERTISHEIGHT'
+   dart_input_file       = 'dart.ics',
+   output_file           = 'check_me',
+   advance_time_present  = .FALSE.,
+   verbose               = .FALSE.,
+   test1thru             = 10,
+   x_ind                 = 300,
+   loc_of_interest       = 240.0, 0.0, 10000.0,
+   kind_of_interest      = 'KIND_TEMPERATURE',
+   interp_test_lonrange  = 0.0, 359.0,
+   interp_test_dlon      = 1.0,
+   interp_test_latrange  = -89.0, 89.0,
+   interp_test_dlat      = 1.0,
+   interp_test_vertrange = 100.0,  20100.0,
+   interp_test_dvert     = 2000.0,
+   interp_test_vertcoord = 'VERTISHEIGHT'
    /

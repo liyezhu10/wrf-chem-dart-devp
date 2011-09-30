@@ -65,27 +65,27 @@ integer                :: test1thru            = -1
 integer                :: x_ind                = -1
 real(r8)               :: interp_test_dlon     = 1.0
 real(r8)               :: interp_test_dlat     = 1.0
-real(r8)               :: interp_test_level    = 1.0
+real(r8)               :: interp_test_dvert    = 1.0
 real(r8), dimension(2) :: interp_test_latrange = (/ -90.0,  90.0 /)
 real(r8), dimension(2) :: interp_test_lonrange = (/   0.0, 360.0 /)
+real(r8), dimension(2) :: interp_test_vertrange = (/  1000.0, 30000.0 /)
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
-character(len=metadatalength) :: interp_test_levelcoord = 'VERTISHEIGHT'
+character(len=metadatalength) :: interp_test_vertcoord = 'VERTISHEIGHT'
 
 namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose, &
                         interp_test_dlon, interp_test_lonrange, &
                         interp_test_dlat, interp_test_latrange, &
-                        interp_test_level, interp_test_levelcoord
+                        interp_test_dvert, interp_test_vertrange, &
+                        interp_test_vertcoord
 
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
-integer :: in_unit, out_unit, ios_out, iunit, io, offset, i, j
+integer :: ios_out, iunit, io, i
 integer :: x_size, skip
-integer :: year, month, day, hour, minute, second
-integer :: secs, days
 integer :: mykindindex, vertcoord
 
 type(time_type)       :: model_time, adv_to_time
@@ -96,7 +96,6 @@ character(len=129) :: mpas_input_file  ! set with get_model_analysis_filename() 
 type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
-real(r8), allocatable :: u(:,:)
 real(r8) :: interp_val
 
 !----------------------------------------------------------------------
@@ -229,7 +228,7 @@ if (test1thru < 8) goto 999
 write(*,*)
 write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
 
-select case(trim(interp_test_levelcoord))
+select case(trim(interp_test_vertcoord))
    case ('VERTISUNDEF')
       vertcoord = VERTISUNDEF
    case ('VERTISSURFACE')
@@ -243,7 +242,7 @@ select case(trim(interp_test_levelcoord))
    case ('VERTISSCALEHEIGHT')
       vertcoord = VERTISSCALEHEIGHT
    case default
-      write(string1,*) 'unknown levelcoord ', trim(interp_test_levelcoord)
+      write(string1,*) 'unknown vertcoord ', trim(interp_test_vertcoord)
       call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
 end select
 
@@ -354,7 +353,6 @@ type(location_type) :: loc0, loc1
 integer  :: i, var_type, which_vert
 real(r8) :: closest, rlon, rlat, rlev, vals(3)
 real(r8), allocatable, dimension(:) :: thisdist
-real(r8), dimension(LocationDims) :: rloc
 character(len=32) :: kind_name
 logical :: matched
 
@@ -447,63 +445,71 @@ integer :: test_interpolate
 
 ! Local variables
 
-real(r8), allocatable :: lon(:), lat(:)
-real(r8), allocatable :: field(:,:)
-integer :: nlon, nlat
-integer :: ilon, jlat, nfailed
+real(r8), allocatable :: lon(:), lat(:), vert(:)
+real(r8), allocatable :: field(:,:,:)
+integer :: nlon, nlat, nvert
+integer :: ilon, jlat, kvert, nfailed
 character(len=128) :: ncfilename,txtfilename
 
-integer :: ncid, nlonDimID, nlatDimID, VarID, lonVarID, latVarID
+integer :: ncid, nlonDimID, nlatDimID, nvertDimID
+integer :: VarID, lonVarID, latVarID, vertVarID
 
 if ((interp_test_dlon < 0.0_r8) .or. (interp_test_dlat < 0.0_r8)) then
    write(*,*)'Skipping the rigorous interpolation test because one of'
    write(*,*)'interp_test_dlon,interp_test_dlat are < 0.0'
-   write(*,*)'interp_test_dlon = ',interp_test_dlon
-   write(*,*)'interp_test_dlat = ',interp_test_dlat
+   write(*,*)'interp_test_dlon  = ',interp_test_dlon
+   write(*,*)'interp_test_dlat  = ',interp_test_dlat
+   write(*,*)'interp_test_dvert = ',interp_test_dvert
 endif
 
 write( ncfilename,'(a,a)')trim(output_file),'_interptest.nc'
 write(txtfilename,'(a,a)')trim(output_file),'_interptest.m'
 
-nlat = nint((interp_test_latrange(2) - interp_test_latrange(1))/interp_test_dlat) + 1
-nlon = nint((interp_test_lonrange(2) - interp_test_lonrange(1))/interp_test_dlon) + 1
+nlat  = nint(( interp_test_latrange(2) -  interp_test_latrange(1))/interp_test_dlat) + 1
+nlon  = nint(( interp_test_lonrange(2) -  interp_test_lonrange(1))/interp_test_dlon) + 1
+nvert = nint((interp_test_vertrange(2) - interp_test_vertrange(1))/interp_test_dvert) + 1
 
 iunit = open_file(trim(txtfilename), action='write')
 write(iunit,'(''missingvals = '',f12.4,'';'')')MISSING_R8
 write(iunit,'(''nlon = '',i8,'';'')')nlon
 write(iunit,'(''nlat = '',i8,'';'')')nlat
+write(iunit,'(''nvert = '',i8,'';'')')nvert
 write(iunit,'(''interptest = [ ... '')')
 
-allocate(lon(nlon), lat(nlat), field(nlon,nlat))
+allocate(lon(nlon), lat(nlat), vert(nvert), field(nlon,nlat,nvert))
 nfailed = 0
 
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
    do jlat = 1, nlat
       lat(jlat) = interp_test_latrange(1) + real(jlat-1,r8) * interp_test_dlat
+      do kvert = 1, nvert
+         vert(kvert) = interp_test_vertrange(1) + real(kvert-1,r8) * interp_test_dvert
 
-      loc = set_location(lon(ilon), lat(jlat), interp_test_level, vertcoord)
+         loc = set_location(lon(ilon), lat(jlat), vert(kvert), vertcoord)
 
-      call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat), ios_out)
-      write(iunit,*) field(ilon,jlat)
+         call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat,kvert), ios_out)
+         write(iunit,*) field(ilon,jlat,kvert)
 
-      if (ios_out /= 0) then
-        if (verbose) then
-           write(string2,'(''ilon,jlat,lon,lat'',2(1x,i6),2(1x,f14.6))')ilon,jlat,lon(ilon),lat(jlat)
-           write(string1,*) 'interpolation failed with error ', ios_out
-           call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
-        endif
-        nfailed = nfailed + 1
-      endif
+         if (ios_out /= 0) then
+           if (verbose) then
+              write(string2,'(''ilon,jlat,kvert,lon,lat,vert'',3(1x,i6),3(1x,f14.6))') &
+                          ilon,jlat,kvert,lon(ilon),lat(jlat),vert(kvert)
+              write(string1,*) 'interpolation failed with error ', ios_out
+              call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+           endif
+           nfailed = nfailed + 1
+         endif
 
+      enddo
    end do 
 end do
 write(iunit,'(''];'')')
-write(iunit,'(''datmat = reshape(interptest,nlat,nlon);'')')
+write(iunit,'(''datmat = reshape(interptest,nvert,nlat,nlon);'')')
 write(iunit,'(''datmat(datmat == missingvals) = NaN;'')')
 call close_file(iunit)
 
-write(*,*) 'total interpolations, num failed: ', nlon*nlat, nfailed
+write(*,*) 'total interpolations, num failed: ', nlon*nlat*nvert, nfailed
 
 ! Write out the netCDF file for easy exploration.
 
@@ -520,6 +526,9 @@ call nc_check(nf90_def_dim(ncid=ncid, name='lon', len=nlon, &
 
 call nc_check(nf90_def_dim(ncid=ncid, name='lat', len=nlat, &
         dimid = nlatDimID),'test_interpolate', 'nlat def_dim '//trim(ncfilename))
+
+call nc_check(nf90_def_dim(ncid=ncid, name='vert', len=nvert, &
+        dimid = nvertDimID),'test_interpolate', 'nvert def_dim '//trim(ncfilename))
 
 ! Define variables
 
@@ -540,8 +549,16 @@ call nc_check(nf90_put_att(ncid, latVarID, 'range', interp_test_latrange), &
 call nc_check(nf90_put_att(ncid, latVarID, 'cartesian_axis', 'Y'),   &
            'test_interpolate', 'lat cartesian_axis '//trim(ncfilename))
 
+call nc_check(nf90_def_var(ncid=ncid, name='vert', xtype=nf90_double, &
+        dimids=nvertDimID, varid=vertVarID), 'test_interpolate', &
+                 'vert def_var '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, vertVarID, 'range', interp_test_vertrange), &
+           'test_interpolate', 'put_att vertrange '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, vertVarID, 'cartesian_axis', 'Z'),   &
+           'test_interpolate', 'vert cartesian_axis '//trim(ncfilename))
+
 call nc_check(nf90_def_var(ncid=ncid, name='field', xtype=nf90_double, &
-        dimids=(/ nlonDimID, nlatDimID /), varid=VarID), 'test_interpolate', &
+        dimids=(/ nlonDimID, nlatDimID, nvertDimID /), varid=VarID), 'test_interpolate', &
                  'field def_var '//trim(ncfilename))
 call nc_check(nf90_put_att(ncid, VarID, 'long_name', kind_of_interest), &
            'test_interpolate', 'put_att field long_name '//trim(ncfilename))
@@ -549,12 +566,10 @@ call nc_check(nf90_put_att(ncid, VarID, '_FillValue', MISSING_R8), &
            'test_interpolate', 'put_att field FillValue '//trim(ncfilename))
 call nc_check(nf90_put_att(ncid, VarID, 'missing_value', MISSING_R8), &
            'test_interpolate', 'put_att field missing_value '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, VarID, 'levelcoord_string', interp_test_levelcoord ), &
-           'test_interpolate', 'put_att field levelcoord_string '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, VarID, 'levelcoord', vertcoord ), &
-           'test_interpolate', 'put_att field levelcoord '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, VarID, 'level', interp_test_level ), &
-           'test_interpolate', 'put_att field level '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'vertcoord_string', interp_test_vertcoord ), &
+           'test_interpolate', 'put_att field vertcoord_string '//trim(ncfilename))
+call nc_check(nf90_put_att(ncid, VarID, 'vertcoord', vertcoord ), &
+           'test_interpolate', 'put_att field vertcoord '//trim(ncfilename))
 
 ! Leave define mode so we can fill the variables.
 call nc_check(nf90_enddef(ncid), &
@@ -565,6 +580,8 @@ call nc_check(nf90_put_var(ncid, lonVarID, lon), &
               'test_interpolate','lon put_var '//trim(ncfilename))
 call nc_check(nf90_put_var(ncid, latVarID, lat), &
               'test_interpolate','lat put_var '//trim(ncfilename))
+call nc_check(nf90_put_var(ncid, vertVarID, vert), &
+              'test_interpolate','vert put_var '//trim(ncfilename))
 call nc_check(nf90_put_var(ncid, VarID, field), &
               'test_interpolate','field put_var '//trim(ncfilename))
 
@@ -572,7 +589,7 @@ call nc_check(nf90_put_var(ncid, VarID, field), &
 call nc_check(nf90_close(ncid), &
              'test_interpolate','close '//trim(ncfilename))
 
-deallocate(lon, lat, field)
+deallocate(lon, lat, vert, field)
 
 test_interpolate = nfailed
 
