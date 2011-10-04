@@ -1748,7 +1748,6 @@ integer :: StateVarDimID   ! netCDF pointer to state variable dimension (model s
 integer :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
 integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimited)
 
-integer :: StateVarVarID   ! netCDF pointer to state variable coordinate array
 integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 
 !----------------------------------------------------------------------
@@ -1781,7 +1780,7 @@ integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
 character(len=NF90_MAX_NAME) :: varname
 integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
-integer :: i, myndims
+integer :: myndims
 
 character(len=128) :: filename
 
@@ -1863,17 +1862,6 @@ if ( output_state_vector ) then
    ! Create a variable for the state vector
    !----------------------------------------------------------------------------
 
-  ! Define the state vector coordinate variable and some attributes.
-   call nc_check(nf90_def_var(ncid=ncFileID,name='StateVariable', xtype=nf90_int, &
-                 dimids=StateVarDimID, varid=StateVarVarID), 'nc_write_model_atts', &
-                 'statevariable def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarVarID,'long_name','State Variable ID'),&
-                 'nc_write_model_atts','statevariable long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, StateVarVarID, 'units','indexical'), &
-                 'nc_write_model_atts', 'statevariable units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarVarID,'valid_range',(/ 1,model_size /)),&
-                 'nc_write_model_atts', 'statevariable valid_range '//trim(filename))
-
    ! Define the actual (3D) state vector, which gets filled as time goes on ... 
    call nc_check(nf90_def_var(ncid=ncFileID, name='state', xtype=nf90_real, &
                  dimids=(/StateVarDimID,MemberDimID,unlimitedDimID/),varid=StateVarID),&
@@ -1881,12 +1869,8 @@ if ( output_state_vector ) then
    call nc_check(nf90_put_att(ncFileID,StateVarID,'long_name','model state or fcopy'),&
                  'nc_write_model_atts', 'state long_name '//trim(filename))
 
-   ! Leave define mode so we can fill the coordinate variable.
-   call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','state enddef '//trim(filename))
-
-   ! Fill the state variable coordinate variable
-   call nc_check(nf90_put_var(ncFileID, StateVarVarID, (/ (i,i=1,model_size) /) ), &
-                 'nc_write_model_atts', 'state put_var '//trim(filename))
+   ! Leave define mode.
+   call nc_check(nf90_enddef(ncFileID),'nc_write_model_atts','state enddef '//trim(filename))
 
 else
 
