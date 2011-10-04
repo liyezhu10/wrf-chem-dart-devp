@@ -329,7 +329,6 @@ subroutine check_meta_data( iloc )
 integer, intent(in) :: iloc
 type(location_type) :: loc
 integer             :: var_type
-character(len=129)  :: string1
 
 write(*,*)
 write(*,*)'Checking metadata routines.'
@@ -451,8 +450,15 @@ integer :: nlon, nlat, nvert
 integer :: ilon, jlat, kvert, nfailed
 character(len=128) :: ncfilename,txtfilename
 
+character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
+character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
+character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
+integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
+
 integer :: ncid, nlonDimID, nlatDimID, nvertDimID
 integer :: VarID, lonVarID, latVarID, vertVarID
+
+test_interpolate = 0   ! normal termination
 
 if ((interp_test_dlon < 0.0_r8) .or. (interp_test_dlat < 0.0_r8)) then
    write(*,*)'Skipping the rigorous interpolation test because one of'
@@ -513,11 +519,16 @@ write(*,*) 'total interpolations, num failed: ', nlon*nlat*nvert, nfailed
 
 ! Write out the netCDF file for easy exploration.
 
+call DATE_AND_TIME(crdate,crtime,crzone,values)
+write(string1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
+                  values(1), values(2), values(3), values(5), values(6), values(7)
+
 call nc_check( nf90_create(path=trim(ncfilename), cmode=NF90_clobber, ncid=ncid), &
                   'test_interpolate', 'open '//trim(ncfilename))
-
-call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'parent_file', dart_input_file ), &
-           'test_interpolate', 'put_att filename '//trim(ncfilename))
+call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'creation_date' ,trim(string1) ), &
+                  'test_interpolate', 'creation put '//trim(ncfilename))
+call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'parent_file', dart_input_file ), &
+                  'test_interpolate', 'put_att filename '//trim(ncfilename))
 
 ! Define dimensions
 
