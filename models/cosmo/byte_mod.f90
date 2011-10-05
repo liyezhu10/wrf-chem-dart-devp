@@ -88,7 +88,8 @@ CONTAINS
   ! This routine converts a vector of bytes to a integer word checkin for a sign bit
 
   SUBROUTINE byte_to_word_signed(b,w,n)
-    INTEGER(kind=1),INTENT(in) :: b(:),n
+    INTEGER(kind=1),INTENT(in) :: b(:)
+    INTEGER,        INTENT(in) :: n
     INTEGER,INTENT(out)        :: w
     INTEGER                    :: ibin,work(1:n),isign
 

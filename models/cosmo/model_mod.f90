@@ -499,7 +499,7 @@ contains
     integer              :: LineLenDimID
     integer              :: StateVarVarID,StateVarID,VarID
     integer              :: ikind,ndims,idim,dims(100),nx,ny,nz,i
-    character(len=3)     :: ckind
+    character(len=6)     :: ckind
 
     integer              :: lonVarID, latVarID, ulonVarID, ulatVarID, vlonVarID, vlatVarID
     integer              :: levVarID, wlevVarID
@@ -772,7 +772,7 @@ contains
           call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', trim(state_vector_vars(ikind)%varname_long)), &
                         'nc_write_model_atts', trim(error_string)//' put_att long_name' )
 
-          write(ckind,'(I)') ikind
+          write(ckind,'(I6)') ikind
           call nc_check(nf90_put_att(ncFileID, VarID, 'DART_kind', trim(ckind)), &
                         'nc_write_model_atts', trim(error_string)//' put_att dart_kind' )
 
@@ -1631,7 +1631,7 @@ contains
 !    
 !  end subroutine grib_to_sv
   
-  function get_state_time result (time)
+  function get_state_time() result (time)
     type(time_type) :: time
     
     if ( .not. module_initialized ) call static_init_model
@@ -1641,7 +1641,7 @@ contains
 
   end function get_state_time
 
-  function get_state_vector result (sv)
+  function get_state_vector() result (sv)
 
     real(r8)             :: sv(1:model_size)
 
