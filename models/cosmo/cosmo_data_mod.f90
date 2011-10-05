@@ -17,13 +17,14 @@ MODULE cosmo_data_mod
   use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
                                rad2deg, deg2rad, PI
 
-  use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
-                               print_time, print_date, set_calendar_type,        &
+  use time_manager_mod, only : time_type, set_date, print_time, print_date,      &
                                operator(*),  operator(+), operator(-),           &
                                operator(>),  operator(<), operator(/),           &
-                               operator(/=), operator(<=),                       &
-                               julian_day,GREGORIAN,JULIAN
+                               operator(/=), operator(<=)
 
+  use    utilities_mod, only : register_module, error_handler,                   &
+                               E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
+                               open_file, close_file
 
   use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,                            &
                                KIND_V_WIND_COMPONENT,                            &
@@ -177,20 +178,22 @@ CONTAINS
     INTEGER                                 :: ibyte,irec,istat,nrec
     INTEGER(kind=4)                         :: word(4)
     INTEGER(kind=1)                         :: bin1(4)
-    
-    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    integer :: gribunit   
+ 
+    gribunit = get_unit() 
+    OPEN(gribunit,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
 
     ibyte=1
     irec=1
     istat=0
     DO WHILE(istat==0)
-      READ(10,rec=irec,iostat=istat) bin1
+      READ(gribunit,rec=irec,iostat=istat) bin1
       word=bin1
       irec=irec+1
       temp(ibyte:ibyte+3)=word
       ibyte=ibyte+4
     END DO
-    CLOSE(10)
+    call close_file(gribunit)
 
     nrec=irec-1
     ALLOCATE(bdata(1:nrec*4))
@@ -271,8 +274,10 @@ CONTAINS
 
     INTEGER                         :: grib_start,data_start,ioff
     LOGICAL                         :: foundoff
+    integer :: gribunit
 
-    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    gribunit = get_unit()
+    OPEN(gribunit,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
 
     gribword(1)=ICHAR('G')
     gribword(2)=ICHAR('R')
@@ -284,9 +289,9 @@ CONTAINS
     istat=0
 
     DO WHILE(istat==0)
-      READ(10,rec=irec,iostat=istat) bin4
+      READ(gribunit,rec=irec,iostat=istat) bin4
       bin8(1:4)=bin4
-      READ(10,rec=irec+1,iostat=istat) bin4
+      READ(gribunit,rec=irec+1,iostat=istat) bin4
       bin8(5:8)=bin4
 
       foundoff=.FALSE.
@@ -308,22 +313,22 @@ CONTAINS
 
         irec=irec+2
 
-        READ(10,rec=irec,iostat=istat) bin4
+        READ(gribunit,rec=irec,iostat=istat) bin4
         bin8(1:4)=bin4
-        READ(10,rec=irec+1,iostat=istat) bin4
+        READ(gribunit,rec=irec+1,iostat=istat) bin4
         bin8(5:8)=bin4
         
         pdslen=concat_bytes1(bin8(1+ioff:3+ioff),3,.TRUE.)
 
         m=MOD(pdslen+ioff,4)
 
-        READ(10,rec=irec+(pdslen+ioff)/4,iostat=istat) bin4
+        READ(gribunit,rec=irec+(pdslen+ioff)/4,iostat=istat) bin4
         IF (m==0) THEN
           bin(1:4)=bin4(1:4)
         ELSE
           bin(1:m)=bin4(m+1:4)
         END IF
-        READ(10,rec=irec+(pdslen+ioff)/4+1,iostat=istat) bin4
+        READ(gribunit,rec=irec+(pdslen+ioff)/4+1,iostat=istat) bin4
         if (m>0) THEN
           bin(m+1:4)=bin4(1:m)
         END if
@@ -335,7 +340,7 @@ CONTAINS
 
         ibyte=1
         DO irec2=irec,irec+CEILING((pdslen+gdslen+bdslen+ioff)/4.)+1
-          READ(10,rec=irec2,iostat=istat) bin4
+          READ(gribunit,rec=irec2,iostat=istat) bin4
           bytearr(ibyte:ibyte+3)=bin4
           ibyte=ibyte+4
         END DO
@@ -365,7 +370,7 @@ CONTAINS
         irec=irec+1
       end if
     END DO
-    CLOSE(10)
+    call close_file(gribunit)
 
     nvar=ivar-1
 
@@ -589,22 +594,24 @@ CONTAINS
     INTEGER                       :: idsf,ibsf,dval,irec,ix,iy,istat,ibyte,is,ie
     REAL(r8)                      :: dsf,bsf,ref_value
     INTEGER(kind=1),ALLOCATABLE   :: bytearr(:)
+    integer :: gribunit
 
     ALLOCATE(bytearr(1:header%data_length+header%data_offset+8))
 
     CALL byte_to_word_signed(header%pds(27:28),idsf,2)
     dsf=FLOAT(idsf)
 
-    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    gribunit = get_unit()
+    OPEN(gribunit,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
     is=header%data_record
     ie=header%data_record+CEILING((header%data_length+header%data_offset)/4.)
     ibyte=1
     DO irec=is,ie
-      READ(10,rec=irec,iostat=istat) bin4
+      READ(gribunit,rec=irec,iostat=istat) bin4
       bytearr(ibyte:ibyte+3)=bin4
       ibyte=ibyte+4
     END DO
-    CLOSE(10)
+    call close_file(gribunit)
 
     bytearr(1:header%data_length)=bytearr(1+header%data_offset:header%data_length+header%data_offset)
 
@@ -814,12 +821,10 @@ CONTAINS
 
   SUBROUTINE read_time(header,tf)
     
-    TYPE(grib_header_type),INTENT(in)   :: header
-    TYPE(time_type),INTENT(out)    :: tf
+    TYPE(grib_header_type),INTENT(in)  :: header
+    TYPE(time_type),       INTENT(out) :: tf
 
-    TYPE(time_type)                :: ta
-    INTEGER                        :: doy1(13),doy2(13),jd
-    INTEGER                        :: ye,mo,da,ho,mi,dt,f1,f2,dc
+    INTEGER :: century,ye,mo,da,ho,mi
 
     ye=header%pds(13)
     mo=header%pds(14)
@@ -827,44 +832,10 @@ CONTAINS
     ho=header%pds(16)
     mi=header%pds(17)
 
-    doy1=(/ 0,31,59,90,120,151,181,212,243,273,304,334,365 /)
-    doy2=(/ 0,31,60,91,121,152,182,213,244,274,305,335,366 /)
+    century = (header%pds(25)-1)*100
 
-    SELECT CASE (header%pds(18))
-      CASE (0)
-        dt=60
-      CASE (1)
-        dt=60*60
-      CASE (2)
-        dt=60*60*24
-      CASE DEFAULT
-        dt=1
-    END SELECT
+    tf = set_date(century+ye,mo,da,ho,mi,0)
 
-    f1=header%pds(19)
-    f2=header%pds(20)
-
-    dc=(header%pds(25)-1)*100
-    ye=ye+dc
-
-    IF (f2==0) THEN
-      tf=set_time(f1*dt)
-    ELSE
-      tf=set_time(f2*dt)
-    END IF
-
-    call set_calendar_type(GREGORIAN)
-    jd=julian_day(ye,mo,da)
-
-!    if is_leap_year(ye) then
-!      ta=set_time(ho*60*60+mi*60,(ye-1)*365+doy2(mo)+mo)
-!    else
-!      ta=set_time(ho*60*60+mi*60,(ye-1)*365+doy1(mo)+mo)
-!    end if
-
-    tf=set_time(ho*60*60+mi*60,jd)
-    
-    RETURN
   END SUBROUTINE read_time
   
 END MODULE cosmo_data_mod

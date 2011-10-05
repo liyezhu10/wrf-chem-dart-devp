@@ -151,7 +151,7 @@
    ivctype                      = 2,
    model_dt                     = 40,
    model_perturbation_amplitude = 0.1,
-   output_state_vector          = .FALSE.
+   output_state_vector          = .false.
   /
 
 # The list of variables to assimilate is contained in a separate file
@@ -283,7 +283,7 @@
    output_file          = 'check_me',
    advance_time_present = .FALSE.,
    verbose              = .FALSE.,
-   test1thru            =  4,
+   test1thru            =  5,
    x_ind                = -1,
    interp_test_dlon     = 1.0,
    interp_test_dlat     = 1.0,

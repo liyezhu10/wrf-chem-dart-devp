@@ -130,7 +130,7 @@ character(len=128), parameter :: &
   logical, save                  :: module_initialized = .FALSE.
 
   type(cosmo_meta),allocatable   :: cosmo_vars(:)
-  type(cosmo_hcoord)             :: cosmo_lonlat(3)
+  type(cosmo_hcoord)             :: cosmo_lonlat(3) ! 3 is for the stagger
   integer                        :: nvars
 
   character(len=256)             :: cosmo_filename
@@ -199,6 +199,9 @@ contains
     call find_namelist_in_file('input.nml', 'model_nml', iunit)
     read(iunit, nml = model_nml, iostat = io)
     call check_namelist_read(iunit, io, 'model_nml')
+
+    call set_calendar_type('Gregorian')
+
     print*,TRIM(cosmo_filename)
 
     call get_cosmo_info(cosmo_filename,cosmo_vars,cosmo_lonlat,grib_header,&
@@ -523,7 +526,6 @@ contains
     integer, intent(in)  :: ncFileID      ! netCDF file identifier
     integer              :: ierr          ! return value of function
 
-
     integer              :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
     integer              :: StateVarDimID   ! netCDF pointer to state variable dimension (model size)
     integer              :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
@@ -582,20 +584,20 @@ contains
     ! Write Global Attributes 
     !-------------------------------------------------------------------------------
 
-!    call DATE_AND_TIME(crdate,crtime,crzone,values)
-!    write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-!     values(1), values(2), values(3), values(5), values(6), values(7)
+     call DATE_AND_TIME(crdate,crtime,crzone,values)
+     write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
+      values(1), values(2), values(3), values(5), values(6), values(7)
     
-!    call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'creation_date' ,str1    ), &
-!                  'nc_write_model_atts', 'creation put '//trim(filename))
-!    call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_source'  ,source  ), &
-!                  'nc_write_model_atts', 'source put '//trim(filename))
-!    call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revision',revision), &
-!                  'nc_write_model_atts', 'revision put '//trim(filename))
-!    call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
-!                  'nc_write_model_atts', 'revdate put '//trim(filename))
-!    call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'cosmo' ), &
-!                  'nc_write_model_atts', 'model put '//trim(filename))
+     call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'creation_date' ,str1    ), &
+                   'nc_write_model_atts', 'creation put '//trim(filename))
+     call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_source'  ,source  ), &
+                   'nc_write_model_atts', 'source put '//trim(filename))
+     call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revision',revision), &
+                   'nc_write_model_atts', 'revision put '//trim(filename))
+     call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
+                   'nc_write_model_atts', 'revdate put '//trim(filename))
+     call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'cosmo' ), &
+                   'nc_write_model_atts', 'model put '//trim(filename))
     
     !-------------------------------------------------------------------------------
     ! Here is the extensible part. The simplest scenario is to output the state vector,
@@ -643,7 +645,9 @@ contains
       ! Define the new dimensions IDs
       !----------------------------------------------------------------------------
 
-      
+      call nc_check(nf90_def_dim(ncid=ncFileID, name='lon', len=nx, dimid = lonDimID),'nc_write_model_atts', 'state def_dim '//trim(filename))
+
+
       findnxny : do ikind=1,n_max_kinds
         if (state_vector_vars(ikind)%is_present) then
           nx=state_vector_vars(ikind)%nx
@@ -663,7 +667,7 @@ contains
 
       ! Standard Grid Longitudes
       call nc_check(nf90_def_var(ncFileID,name='LON', xtype=nf90_real, &
-       dimids=(/ nx*ny /), varid=lonVarID),&
+                    dimids=(/ nx*ny /), varid=lonVarID),&
                     'nc_write_model_atts', 'LON def_var '//trim(filename))
       call nc_check(nf90_put_att(ncFileID,  lonVarID, 'long_name', 'longitudes of grid'), &
                     'nc_write_model_atts', 'LON long_name '//trim(filename))

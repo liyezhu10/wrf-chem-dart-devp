@@ -25,12 +25,12 @@ program cosmo_to_dart
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
-use    utilities_mod, only : initialize_utilities, timestamp, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
-use        model_mod, only : get_model_size,get_state_vector,get_state_time
+use        model_mod, only : get_model_size, get_state_vector, get_state_time, &
+                             get_cosmo_filename, static_init_model
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
-use time_manager_mod, only : time_type, print_time, print_date,&
-                             set_calendar_type,JULIAN
+use time_manager_mod, only : time_type, print_time, print_date
 
 implicit none
 
@@ -54,23 +54,31 @@ logical               :: verbose = .TRUE.
 integer               :: io, iunit, x_size
 real(r8),allocatable  :: x(:)
 type(time_type)       :: model_time
-character(len=256)    :: cosmo_restart_filename
+character(len=256)    :: cosmo_filename
 
 !======================================================================
 
 call initialize_utilities(progname='cosmo_to_dart', output_flag=verbose)
 
 !----------------------------------------------------------------------
-! get to work
+! Call model_mod:static_init_model() which reads the model namelists
+! to set grid sizes, etc.
 !----------------------------------------------------------------------
+call static_init_model()
 
 model_time = get_state_time()
-x_size = get_model_size()
+x_size     = get_model_size()
+cosmo_filename = get_cosmo_filename()
 
 print*,x_size
 
 allocate(x(1:x_size))
 x(:)=get_state_vector()
+
+write(*,*)
+write(*,*) 'cosmo_to_dart: converting cosmo file ', &
+           "'"//trim(cosmo_filename)//"'"
+write(*,*) ' to DART file ', "'"//trim(cosmo_to_dart_output_file)//"'"
 
 iunit = open_restart_write(cosmo_to_dart_output_file)
 
@@ -81,10 +89,8 @@ call close_restart(iunit)
 ! When called with 'end', timestamp will call finalize_utilities()
 !----------------------------------------------------------------------
 
-call set_calendar_type(JULIAN)
-
 call print_date(model_time, str='cosmo_to_dart:cosmo model date')
-call print_time(model_time, str='cosmo_to_dart:DART model time')
-call timestamp(string1=source, pos='end')
+call print_time(model_time, str='cosmo_to_dart:DART  model time')
+call finalize_utilities()
 
 end program cosmo_to_dart
