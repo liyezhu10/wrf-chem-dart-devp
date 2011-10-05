@@ -1,6 +1,18 @@
 MODULE byte_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+
   use        types_mod, only : r4, r8
+
+! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
   public :: concat_bytes1
   public :: concat_bytes1_sign

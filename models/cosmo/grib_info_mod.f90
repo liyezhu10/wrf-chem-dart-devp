@@ -1,5 +1,15 @@
 MODULE grib_info_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+
+!----------------------------------------------------------------------
+! purpose: test routines
+!----------------------------------------------------------------------
+
   USE byte_mod, ONLY: concat_bytes1,to_positive
   USE obs_kind_mod, only : KIND_CLOUD_FRACTION, &
                            KIND_CLOUD_ICE, &
@@ -16,6 +26,14 @@ MODULE grib_info_mod
                            KIND_V_WIND_COMPONENT, &
                            KIND_VERTICAL_VELOCITY,&
                            KIND_SURFACE_GEOPOTENTIAL
+
+  implicit none
+
+  ! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
   TYPE varnames
     CHARACTER(len=256) :: longname

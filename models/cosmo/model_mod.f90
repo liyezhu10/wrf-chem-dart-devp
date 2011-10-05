@@ -7,6 +7,11 @@ module model_mod
 !         Meteorological Institute, University of Bonn, Germany
 !         2011-09-15
 !
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
   use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
                                rad2deg, deg2rad, PI
@@ -35,8 +40,8 @@ module model_mod
                                E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                                nc_check, do_output, to_upper,                    &
                                find_namelist_in_file, check_namelist_read,       &
-                               open_file, file_exist, find_textfile_dims,        &
-                               file_to_text
+                               open_file, close_file, file_exist,                &
+                               find_textfile_dims, file_to_text
 
   use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,                            &
                                KIND_V_WIND_COMPONENT,                            &
@@ -56,6 +61,12 @@ module model_mod
   use netcdf 
 
   implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
   public  :: get_model_size
   public  :: static_init_model
@@ -90,6 +101,7 @@ module model_mod
   public  :: get_state_time
   public  :: get_state_vector
   public  :: write_grib_file
+  public  :: get_cosmo_filename
 
   INTERFACE sv_to_field
     MODULE PROCEDURE sv_to_field_2d
@@ -164,6 +176,9 @@ contains
     get_model_size = model_size
 
   end function get_model_size
+
+
+
 
   subroutine static_init_model()
 
@@ -274,6 +289,8 @@ contains
     return
   end subroutine static_init_model
 
+
+
   subroutine get_state_meta_data(index_in,location,var_type)
 
     integer, intent(in)            :: index_in
@@ -310,6 +327,8 @@ contains
 
   end subroutine get_state_meta_data
 
+
+
   function get_model_time_step()
 
     type(time_type) :: get_model_time_step
@@ -321,6 +340,8 @@ contains
     return
 
   end function get_model_time_step
+
+
 
   subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
@@ -368,7 +389,7 @@ contains
 
       ! calculate the angles (in reference to lon/lat) between the desired location and all horizontal grid points
       xyz_grid=ll_to_xyz_vector(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,&
-                        cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat)
+                                cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat)
 
       xyz_point=ll_to_xyz_single(point_coords(1),point_coords(2))
 
@@ -433,6 +454,8 @@ contains
 
   end subroutine model_interpolate
 
+
+
   subroutine init_conditions(x)
     !------------------------------------------------------------------
     !
@@ -452,6 +475,8 @@ contains
     
   end subroutine init_conditions
 
+
+
   subroutine init_time(time)
     type(time_type), intent(out) :: time
 
@@ -459,6 +484,8 @@ contains
 
     return
   end subroutine init_time
+
+
   
   subroutine adv_1step(x, time)
 
@@ -478,6 +505,8 @@ contains
     return
     
   end subroutine adv_1step
+
+
   
   subroutine end_model()
 
@@ -486,6 +515,8 @@ contains
 
     return
   end subroutine end_model
+
+
 
   function nc_write_model_atts( ncFileID ) result (ierr)
     
@@ -818,7 +849,9 @@ contains
     
     return
   end function nc_write_model_atts
-  
+ 
+
+ 
   function nc_write_model_vars( ncFileID, state_vec, copyindex, timeindex ) result (ierr)         
     !------------------------------------------------------------------
     ! TJH 24 Oct 2006 -- Writes the model variables to a netCDF file.
@@ -979,7 +1012,9 @@ contains
     return
 
   end function nc_write_model_vars
-  
+
+
+
   subroutine pert_model_state(state, pert_state, interf_provided)
     !------------------------------------------------------------------
     !
@@ -1039,6 +1074,8 @@ contains
     return
     
   end subroutine pert_model_state
+
+
   
   subroutine ens_mean_for_model(ens_mean)
 
@@ -1046,7 +1083,9 @@ contains
     return
 
   end subroutine ens_mean_for_model
-  
+
+
+
   subroutine set_allowed_state_vector_vars()
     
     is_allowed_state_vector_var(:)=.FALSE.
@@ -1080,6 +1119,8 @@ contains
 
   end subroutine set_allowed_state_vector_vars
 
+
+
   function ll_to_xyz_vector(lon,lat) RESULT (xyz)
     
     ! Passed variables
@@ -1110,6 +1151,8 @@ contains
     return
   end function ll_to_xyz_vector
 
+
+
   function ll_to_xyz_single(lon,lat) result (xyz)
     
     ! Passed variables
@@ -1134,6 +1177,8 @@ contains
     return
   end function ll_to_xyz_single
 
+
+
   subroutine get_enclosing_grid_box(p,g,n,nx,ny,b,bw)
     
     integer,intent(in)   :: n,nx,ny
@@ -1145,10 +1190,14 @@ contains
     real(r8)             :: work(1:nx+2,1:ny+2,1:3),dist(1:nx+2,1:ny+2),boxdist(1:2,1:2)
     integer              :: i,j,minidx(2),boxidx(2),idx1,idx2,xb,yb
 
+    real(r8) :: sqrt2
+
+    sqrt2 = sqrt(2.0_r8)
+
     work(2:nx+1,2:ny+1,1:3)=RESHAPE( g, (/ nx,ny,3 /))
 
     do i=2,nx+1
-      work(i,1,1:3)=work(i,2,1:3)-(work(i,3,1:3)-work(i,2,1:3))
+      work(i,   1,1:3)=work(i,   2,1:3)-(work(i, 3,1:3)-work(i,   2,1:3))
       work(i,ny+2,1:3)=work(i,ny+1,1:3)-(work(i,ny,1:3)-work(i,ny+1,1:3))
     end do
 
@@ -1157,10 +1206,10 @@ contains
       work(nx+2,j,1:3)=work(nx+1,j,1:3)-(work(nx,j,1:3)-work(nx+1,j,1:3))
     end do
 
-    work(1,1,1:3)=work(2,2,1:3)-0.5*(sqrt(2.)*(work(2,2,1:3)-work(1,2,1:3))+sqrt(2.)*(work(2,2,1:3)-work(2,1,1:3)))
-    work(1,ny+2,1:3)=work(2,ny+1,1:3)-0.5*(sqrt(2.)*(work(2,ny+1,1:3)-work(1,ny+1,1:3))+sqrt(2.)*(work(2,ny+1,1:3)-work(2,ny+2,1:3)))
-    work(nx+2,1,1:3)=work(nx+1,2,1:3)-0.5*(sqrt(2.)*(work(nx+1,2,1:3)-work(nx+2,2,1:3))+sqrt(2.)*(work(nx+1,2,1:3)-work(nx+1,1,1:3)))
-    work(nx+2,ny+2,1:3)=work(nx+1,ny+1,1:3)-0.5*(sqrt(2.)*(work(nx+1,ny+1,1:3)-work(nx+2,ny+1,1:3))+sqrt(2.)*(work(nx+1,ny+1,1:3)-work(nx+1,ny+2,1:3)))
+    work(   1,   1,1:3) = work(   2,   2,1:3) - 0.5*(sqrt2*(work(   2,   2,1:3)-work(   1,   2,1:3)) + sqrt2*(work(   2,   2,1:3)-work(   2,   1,1:3)))
+    work(   1,ny+2,1:3) = work(   2,ny+1,1:3) - 0.5*(sqrt2*(work(   2,ny+1,1:3)-work(   1,ny+1,1:3)) + sqrt2*(work(   2,ny+1,1:3)-work(   2,ny+2,1:3)))
+    work(nx+2,   1,1:3) = work(nx+1,   2,1:3) - 0.5*(sqrt2*(work(nx+1,   2,1:3)-work(nx+2,   2,1:3)) + sqrt2*(work(nx+1,   2,1:3)-work(nx+1,   1,1:3)))
+    work(nx+2,ny+2,1:3) = work(nx+1,ny+1,1:3) - 0.5*(sqrt2*(work(nx+1,ny+1,1:3)-work(nx+2,ny+1,1:3)) + sqrt2*(work(nx+1,ny+1,1:3)-work(nx+1,ny+2,1:3)))
 
     do i=1,nx+2
       do j=1,ny+2
@@ -1218,17 +1267,23 @@ contains
 
   end subroutine get_enclosing_grid_box
 
+
+
   subroutine get_enclosing_grid_box_lonlat(lon,lat,p,n,nx,ny,b,bw)
     
-    integer,intent(in)   :: n,nx,ny
+    integer, intent(in)  :: n,nx,ny
     real(r8),intent(in)  :: p(1:2),lon(1:n),lat(1:n)
-    integer,intent(out)  :: b(1:2,1:2)
+    integer, intent(out) :: b(1:2,1:2)
     real(r8),intent(out) :: bw(1:2,1:2)
 
 !    real(r8)             :: work(1:nx,1:ny,1:3),dist(1:nx,1:ny),boxdist(1:2,1:2)
     real(r8)             :: work(1:nx+2,1:ny+2,1:2),dist(1:nx+2,1:ny+2),boxdist(1:2,1:2),pw(2)
 
-    integer              :: i,j,minidx(2),boxidx(2),idx1,idx2,xb,yb,bx(2,2),by(2,2)
+    integer  :: i,j,minidx(2),boxidx(2),idx1,idx2,xb,yb,bx(2,2),by(2,2)
+    real(r8) :: sqrt2
+    integer  :: iunit
+
+    sqrt2 = sqrt(2.0_r8)
 
     work(2:nx+1,2:ny+1,1)=reshape(lon,(/ nx,ny /))*deg2rad
     work(2:nx+1,2:ny+1,2)=reshape(lat,(/ nx,ny /))*deg2rad
@@ -1244,10 +1299,10 @@ contains
       work(nx+2,j,1:2)=work(nx+1,j,1:2)-(work(nx,j,1:2)-work(nx+1,j,1:2))
     end do
 
-    work(1,1,1:2)=work(2,2,1:2)-0.5*(sqrt(2.)*(work(2,2,1:2)-work(1,2,1:2))+sqrt(2.)*(work(2,2,1:2)-work(2,1,1:2)))
-    work(1,ny+2,1:2)=work(2,ny+1,1:2)-0.5*(sqrt(2.)*(work(2,ny+1,1:2)-work(1,ny+1,1:2))+sqrt(2.)*(work(2,ny+1,1:2)-work(2,ny+2,1:2)))
-    work(nx+2,1,1:2)=work(nx+1,2,1:2)-0.5*(sqrt(2.)*(work(nx+1,2,1:2)-work(nx+2,2,1:2))+sqrt(2.)*(work(nx+1,2,1:2)-work(nx+1,1,1:2)))
-    work(nx+2,ny+2,1:2)=work(nx+1,ny+1,1:2)-0.5*(sqrt(2.)*(work(nx+1,ny+1,1:2)-work(nx+2,ny+1,1:2))+sqrt(2.)*(work(nx+1,ny+1,1:2)-work(nx+1,ny+2,1:2)))
+    work(   1,   1,1:2)=work(   2,   2,1:2) -0.5_r8*(sqrt2*(work(   2,   2,1:2)-work(   1,   2,1:2))+sqrt2*(work(   2,   2,1:2)-work(   2,   1,1:2)))
+    work(   1,ny+2,1:2)=work(   2,ny+1,1:2) -0.5_r8*(sqrt2*(work(   2,ny+1,1:2)-work(   1,ny+1,1:2))+sqrt2*(work(   2,ny+1,1:2)-work(   2,ny+2,1:2)))
+    work(nx+2,   1,1:2)=work(nx+1,   2,1:2) -0.5_r8*(sqrt2*(work(nx+1,   2,1:2)-work(nx+2,   2,1:2))+sqrt2*(work(nx+1,   2,1:2)-work(nx+1,   1,1:2)))
+    work(nx+2,ny+2,1:2)=work(nx+1,ny+1,1:2) -0.5_r8*(sqrt2*(work(nx+1,ny+1,1:2)-work(nx+2,ny+1,1:2))+sqrt2*(work(nx+1,ny+1,1:2)-work(nx+1,ny+2,1:2)))
 
     do i=1,nx+2
       do j=1,ny+2
@@ -1267,9 +1322,10 @@ contains
       return
     end if
 
-    open(21,file='/daten02/jkeller/testbox.bin',form='unformatted')
-    write(21) nx
-    write(21) ny
+!   open(21,file='/daten02/jkeller/testbox.bin',form='unformatted')
+    iunit = open_file('testbox.bin',form='unformatted',action='write') 
+    write(iunit) nx
+    write(iunit) ny
 
 !    print*,mod(b(i,j),nx),(b(i,j)/nx)+1
 
@@ -1277,11 +1333,11 @@ contains
       do j=0,1
         boxdist(i+1,j+1)=sum(dist(minidx(1)+i-1:minidx(1)+i,minidx(2)+j-1:minidx(2)+j))/4.
 !        write(*,'(4(I5))') minidx(1)+i-1,minidx(1)+i,minidx(2)+j-1,minidx(2)+j
-        write(21) (minidx(2)+j-1),minidx(1)+i-1,&
+        write(iunit) (minidx(2)+j-1),minidx(1)+i-1,&
                   (minidx(2)+j-1),minidx(1)+i,&
                   (minidx(2)+j),minidx(1)+i-1,&
                   (minidx(2)+j),minidx(1)+i
-        write(21) boxdist(i+1,j+1)
+        write(iunit) boxdist(i+1,j+1)
       end do
     end do 
 
@@ -1322,11 +1378,11 @@ contains
 !    write(*,'(4(F6.3,1X))') lon(b(1,1)),lat(b(1,1)),lon(b(2,1)),lat(b(2,1))
 !    write(*,'(4(F6.3,1X))') lon(b(1,2)),lat(b(1,2)),lon(b(2,2)),lat(b(2,2))
 
-    write(21) b
-    write(21) minidx-1
-    write(21) lon
-    write(21) lat
-    close(21)
+    write(iunit) b
+    write(iunit) minidx-1
+    write(iunit) lon
+    write(iunit) lat
+    call close_file(iunit)
     return
 
   end subroutine get_enclosing_grid_box_lonlat
@@ -1365,7 +1421,7 @@ contains
 
     d1=sqrt((lo1-p(1))**2+(la1-p(2))**2)
     d2=sqrt((lo2-p(1))**2+(la2-p(2))**2)
-    d=sqrt((lo1-lo2)**2+(la1-la2)**2)
+    d =sqrt((lo1-lo2 )**2+(la1-la2 )**2)
 
     v=(1.-(d1/d))*x1+(1.-(d2/d))*x2
 
@@ -1375,6 +1431,8 @@ contains
     return
 
   end subroutine bilinear_interpolation
+
+
 
   subroutine linear_interpolation(lop,lap,x1,lo1,la1,x2,lo2,la2,x,lo,la)
 
@@ -1393,14 +1451,14 @@ contains
 
       d1=sqrt((lo1-lo)**2+(la1-la)**2)
       d2=sqrt((lo2-lo)**2+(la2-la)**2)
-      d=sqrt((lo1-lo2)**2+(la1-la2)**2)
+      d =sqrt((lo1-lo2)**2+(la1-la2)**2)
     else
       la=la1
       lo=lop
 
       d1=sqrt((lo1-lo)**2+(la1-la)**2)
       d2=sqrt((lo2-lo)**2+(la2-la)**2)
-      d=sqrt((lo1-lo2)**2+(la1-la2)**2)
+      d =sqrt((lo1-lo2)**2+(la1-la2)**2)
     end if
 
     x=(1.-(d1/d))*x1+(1.-(d2/d))*x2
@@ -1408,6 +1466,7 @@ contains
     return
 
   end subroutine linear_interpolation
+
 
 !  SUBROUTINE data_to_state_vector(bdata,nvar,bpos,blen,allowed,v,sv,x)
 !
@@ -1449,14 +1508,14 @@ contains
 !
   subroutine get_vertical_boundaries(hb,hw,otype,vcs,p,b,w,istatus)
 
-    real(r8),intent(in)  :: hw(2,2),p,vcs
-    integer,intent(in)   :: hb(2,2),otype
-    integer,intent(out)  :: b(2),istatus
-    real(r8),intent(out) :: w(2)
+    real(r8), intent(in)  :: hw(2,2),p,vcs
+    integer,  intent(in)  :: hb(2,2),otype
+    integer,  intent(out) :: b(2),istatus
+    real(r8), intent(out) :: w(2)
 
-    integer              :: k,nlevel,x1,x2,x3,x4,y1,y2,y3,y4
-    real(r8)             :: u,l
-    real(r8),allocatable :: klevel(:),hlevel(:),plevel(:)
+    integer               :: k,nlevel,x1,x2,x3,x4,y1,y2,y3,y4
+    real(r8)              :: u,l
+    real(r8),allocatable  :: klevel(:),hlevel(:),plevel(:)
 
     b(:)=-1
 
@@ -1538,6 +1597,8 @@ contains
     return
   end subroutine get_vertical_boundaries
 
+
+
   subroutine sv_to_field_2d(f,x,v)
 
     real(r8),intent(out)                :: f(:,:)
@@ -1553,6 +1614,8 @@ contains
     return
 
   end subroutine sv_to_field_2d
+
+
 
   subroutine sv_to_field_3d(f,x,v)
 
@@ -1571,6 +1634,8 @@ contains
     return
 
   end subroutine sv_to_field_3d
+
+
 
 !  subroutine grib_to_sv(filename, state_vector, model_time)
 !    !------------------------------------------------------------------
@@ -1641,6 +1706,8 @@ contains
 
   end function get_state_time
 
+
+
   function get_state_vector() result (sv)
 
     real(r8)             :: sv(1:model_size)
@@ -1672,13 +1739,15 @@ contains
 
   end function get_state_vector
 
+
+
   subroutine write_grib_file(sv,nfile)
 
     real(r8),intent(in)           :: sv(:)
     character(len=128),intent(in) :: nfile
 
     integer                       :: irec,ivar,istat,ipos,nrec
-    integer                       :: len,hlen,ix,iy,nx,ny,idx,naddbyte
+    integer                       :: mylen,hlen,ix,iy,nx,ny,idx,naddbyte
     integer                       :: dval,ibsf,idsf
     integer,allocatable           :: griblen(:)
     real(r8)                      :: bsf,dsf
@@ -1686,25 +1755,26 @@ contains
     integer(kind=1),allocatable   :: bytearr(:)
     real(r8),allocatable          :: data(:,:)
     real(r8)                      :: ref_value
+    integer                       :: gribunit, funit
 
-
-    OPEN(10,FILE=TRIM(cosmo_filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    gribunit = get_unit()
+    OPEN(gribunit,FILE=TRIM(cosmo_filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
 
     if ( .not. module_initialized ) call static_init_model
 !    sv(:)=state_vector(:)
 
 !    generate byte_array to write
-    len=0
+    mylen=0
     nvars=2
     allocate(griblen(1:nvars))
     DO ivar=1,nvars
-      len=len+size(grib_header(ivar)%pds)+size(grib_header(ivar)%gds)+grib_header(ivar)%data_length+8+4
+      mylen = mylen+size(grib_header(ivar)%pds)+size(grib_header(ivar)%gds)+grib_header(ivar)%data_length+8+4
       griblen(ivar)=size(grib_header(ivar)%pds)+size(grib_header(ivar)%gds)+grib_header(ivar)%data_length+8+4
     END DO
     
-!    if (MOD(len,4) .NE. 0) len=len+4-MOD(len,4)
+!    if (MOD(mylen,4) .NE. 0) mylen=mylen+4-MOD(mylen,4)
 
-    ALLOCATE(bytearr(1:len))
+    ALLOCATE(bytearr(1:mylen))
     bytearr(:)=0
 
     ipos=1
@@ -1792,29 +1862,29 @@ contains
 
     END DO
 
-    OPEN(11,FILE=TRIM(nfile),FORM='UNFORMATTED')
-    print*,len
-    WRITE(11) bytearr(1:len)
+    funit = get_unit()
+    OPEN(funit,FILE=TRIM(nfile),FORM='UNFORMATTED')
+    print*,mylen
+    WRITE(funit) bytearr(1:mylen)
 
     ipos=1
-    nrec=(len/4)
+    nrec=(mylen/4)
     DO irec=1,nrec
 !      if (ipos .GT. 300) print*,ipos,ipos+3
-!      READ(10,rec=irec,iostat=istat) bin4
+!      READ(gribunit,rec=irec,iostat=istat) bin4
 !      if (ipos .GT. 300) print*,bin4
       bin4=bytearr(ipos:ipos+3)
-!      WRITE(11,rec=irec,iostat=istat) bin4
+!      WRITE(funit,rec=irec,iostat=istat) bin4
 !      if (ipos .GT. 300) print*,bin4
 !      if (ipos .GT. 300) print*,''
       ipos=ipos+4
     END DO
 
-    
 
-!    if ((len-nrec*4)>0) WRITE(11,rec=nrec+1,iostat=istat) bytearr(ipos:ipos+(len-nrec*4)-1)
+!    if ((mylen-nrec*4)>0) WRITE(funit,rec=nrec+1,iostat=istat) bytearr(ipos:ipos+(mylen-nrec*4)-1)
 
-    CLOSE(10)
-    CLOSE(11)
+    CLOSE(gribunit)
+    CLOSE(funit)
 
 !    istat=0
 !    irec=1
@@ -1836,5 +1906,18 @@ contains
     return
 
   end subroutine write_grib_file
+
+
+
+function get_cosmo_filename()
+character(len=256) :: get_cosmo_filename
+character(len=256) :: lj_filename
+
+lj_filename        = adjustl(cosmo_filename)
+get_cosmo_filename = trim(lj_filename)
+
+end function get_cosmo_filename
+
+
   
 end module model_mod

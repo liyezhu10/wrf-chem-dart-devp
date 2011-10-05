@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: mkmf_filter 5187 2011-09-09 22:15:56Z nancy $
+# $Id$
 #
 # usage: mkmf_filter [ -mpi | -nompi ]
 #
@@ -58,7 +58,7 @@ rm -f path_names_filter.back
 exit $status
 
 # <next few lines under version control, do not edit>
-# $URL: https://subversion.ucar.edu/DAReS/DART/branches/mpas/models/mpas_atm/work/mkmf_filter $
-# $Revision: 5187 $
-# $Date: 2011-09-09 16:15:56 -0600 (Fri, 09 Sep 2011) $
+# $URL$
+# $Revision$
+# $Date$
 

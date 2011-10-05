@@ -277,3 +277,22 @@
    dart_output_file = '/home/jkeller/DART/models/cosmo/work/dart.ud',
    new_cosmo_analysis_file  = "/daten02/jkeller/laftest.grb"
   /
+
+&model_mod_check_nml
+   dart_input_file      = 'dart.ud',
+   output_file          = 'check_me',
+   advance_time_present = .FALSE.,
+   verbose              = .FALSE.,
+   test1thru            =  4,
+   x_ind                = -1,
+   interp_test_dlon     = 1.0,
+   interp_test_dlat     = 1.0,
+   interp_test_dvert    = 1.0,
+   interp_test_latrange =   20.0,  70.0,
+   interp_test_lonrange =  0.0, 40.0,
+   interp_test_vertrange = 1000.0, 30000.0,
+   loc_of_interest       = 8.0, 50.0, 4000,
+   kind_of_interest      = 'ANY',
+   interp_test_vertcoord = 'VERTISHEIGHT'
+   /
+

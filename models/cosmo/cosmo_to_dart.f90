@@ -1,4 +1,4 @@
-! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 
@@ -11,9 +11,9 @@ program cosmo_to_dart
 ! $Date$
 
 !----------------------------------------------------------------------
-! purpose: interface between ncommas and DART
+! purpose: interface between cosmo and DART
 !
-! method: Read ncommas "restart" files of model state
+! method: Read cosmo "restart" files of model state
 !         Reform fields into a DART state vector (control vector).
 !         Write out state vector in "proprietary" format for DART.
 !         The output is a "DART restart file" format.
@@ -22,7 +22,6 @@ program cosmo_to_dart
 !         <edit cosmo_to_dart_output_file in input.nml:cosmo_to_dart_nml>
 !         cosmo_to_dart
 !
-! author: Tim Hoar 6/24/09
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8

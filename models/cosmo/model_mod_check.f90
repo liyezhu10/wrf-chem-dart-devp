@@ -5,38 +5,44 @@
 program model_mod_check
 
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/models/mpas_atm/model_mod_check.f90 $
-! $Id: model_mod_check.f90 5299 2011-09-30 23:00:08Z nancy $
-! $Revision: 5299 $
-! $Date: 2011-09-30 17:00:08 -0600 (Fri, 30 Sep 2011) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: test routines
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength, MISSING_R8
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, nmlfileunit, do_nml_file, do_nml_term, &
                              E_MSG, E_ERR, error_handler, get_unit
+
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, &
                              VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, VERTISPRESSURE, &
                              VERTISHEIGHT, VERTISSCALEHEIGHT
+
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_POTENTIAL_TEMPERATURE, KIND_SURFACE_PRESSURE, KIND_U_WIND_COMPONENT
+
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
                              init_diag_output, finalize_diag_output
+
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              read_time, get_time, set_time,  &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
+
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             model_interpolate, &
-                             get_state_time
+                             get_state_time, get_state_vector, get_cosmo_filename, &
+                             model_interpolate
 
 use netcdf
 use typesizes
@@ -45,9 +51,9 @@ implicit none
 
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/models/mpas_atm/model_mod_check.f90 $", &
-   revision = "$Revision: 5299 $", &
-   revdate  = "$Date: 2011-09-30 17:00:08 -0600 (Fri, 30 Sep 2011) $"
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 character(len=256) :: string1, string2
 
@@ -90,11 +96,10 @@ type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
 
 character(len=metadatalength) :: state_meta(1)
-character(len=129) :: mpas_input_file  ! set with get_model_analysis_filename() if needed
-type(netcdf_file_type) :: ncFileID
-type(location_type) :: loc
-
-real(r8) :: interp_val
+character(len=129)            :: cosmo_input_file
+type(netcdf_file_type)        :: ncFileID
+type(location_type)           :: loc
+real(r8)                      :: interp_val
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information. 
@@ -272,19 +277,20 @@ endif
 
 if (test1thru < 9) goto 999
 
-!call get_model_analysis_filename( mpas_input_file )
+cosmo_input_file = get_cosmo_filename()
 
-!write(*,*)
-!write(*,*)'Reading restart files from  '//trim(mpas_input_file)
+write(*,*)
+write(*,*)'Reading restart files from  '//trim(cosmo_input_file)
 
-!call analysis_file_to_statevector (mpas_input_file, statevector, model_time)
+statevector = get_state_vector()
+model_time  = get_state_time()
 
-!write(*,*)
-!write(*,*)'Writing data into '//trim(output_file)
+write(*,*)
+write(*,*)'Writing data into '//trim(output_file)
 
-!iunit = open_restart_write(output_file)
-!call awrite_state_restart(model_time, statevector, iunit)
-!call close_restart(iunit)
+iunit = open_restart_write(output_file)
+call awrite_state_restart(model_time, statevector, iunit)
+call close_restart(iunit)
 
 !----------------------------------------------------------------------
 ! Open a test DART initial conditions file.
@@ -293,20 +299,19 @@ if (test1thru < 9) goto 999
 
 if (test1thru < 10) goto 999
 
-!write(*,*)
-!write(*,*)'Reading '//trim(output_file)
-!
-!iunit = open_restart_read(output_file)
-!if ( advance_time_present ) then
-!   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
-!else
-!   call aread_state_restart(model_time, statevector, iunit)
-!endif
-!call close_restart(iunit)
-!
-!call print_date( model_time,'model_mod_check:model date')
-!call print_time( model_time,'model_mod_check:model time')
+write(*,*)
+write(*,*)'Reading '//trim(output_file)
 
+iunit = open_restart_read(output_file)
+if ( advance_time_present ) then
+   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
+else
+   call aread_state_restart(model_time, statevector, iunit)
+endif
+call close_restart(iunit)
+
+call print_date( model_time,'model_mod_check:model date')
+call print_time( model_time,'model_mod_check:model time')
 
 !----------------------------------------------------------------------
 ! This must be the last few lines of the main program.

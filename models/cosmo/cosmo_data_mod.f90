@@ -8,8 +8,11 @@ MODULE cosmo_data_mod
 !         Meteorological Institute, University of Bonn, Germany
 !         2011-09-15
 !
-
-  
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
   use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
                                rad2deg, deg2rad, PI
@@ -40,6 +43,12 @@ MODULE cosmo_data_mod
   USE     grib_info_mod, ONLY: get_level,get_varname,get_dims,get_dart_kind
 
   IMPLICIT none
+
+! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL: ", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
   type cosmo_meta
     character(len=16)  :: varname_short
@@ -116,12 +125,12 @@ MODULE cosmo_data_mod
 
 CONTAINS
 
-  SUBROUTINE get_cosmo_info(file,v,h,header,allowed,tf)
+  SUBROUTINE get_cosmo_info(filename,v,h,header,allowed,tf)
 
     ! get_cosmo_info_and_data calls subroutines to read the data, extract the desired information
     ! and put the data into the state vector
 
-    CHARACTER(len=256),INTENT(in)            :: file
+    CHARACTER(len=256),INTENT(in)            :: filename
     LOGICAL,INTENT(in)                       :: allowed(:)
     TYPE(cosmo_meta),ALLOCATABLE,INTENT(out) :: v(:)
     TYPE(cosmo_hcoord),INTENT(out)           :: h(3)
@@ -139,9 +148,9 @@ CONTAINS
 
     INTEGER                                  :: nbyte,nvar
 
-    CALL read_grib_header(file,header,nvar)
+    CALL read_grib_header(filename,header,nvar)
 
-!    CALL read_grib_data(file,bdata,nbyte)
+!    CALL read_grib_data(filename,bdata,nbyte)
 !    CALL find_grib_records(bdata,nbyte,nvar,bytepos,bytelen)
 
     ALLOCATE(v(1:nvar))
@@ -156,11 +165,11 @@ CONTAINS
 
   END SUBROUTINE get_cosmo_info
 
-  SUBROUTINE read_grib_data(file,bdata,nbyte)
+  SUBROUTINE read_grib_data(filename,bdata,nbyte)
     
     IMPLICIT NONE
 
-    CHARACTER(len=256),INTENT(in)           :: file
+    CHARACTER(len=256),INTENT(in)           :: filename
     INTEGER(kind=1),INTENT(out),ALLOCATABLE :: bdata(:)
     INTEGER,INTENT(out)                     :: nbyte
 
@@ -169,7 +178,7 @@ CONTAINS
     INTEGER(kind=4)                         :: word(4)
     INTEGER(kind=1)                         :: bin1(4)
     
-    OPEN(10,FILE=TRIM(file),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
 
     ibyte=1
     irec=1
@@ -213,7 +222,7 @@ CONTAINS
 
     ivar=0
     ibyte=1
-    DO WHILE (ibyte.LE.nbyte-4)
+    DO WHILE (ibyte .LE. nbyte-4)
       IF (get_word(gribword).EQ.get_word(bdata(ibyte:ibyte+3))) THEN
         ivar=ivar+1
         temppos(1,ivar)=ibyte
@@ -244,11 +253,11 @@ CONTAINS
     RETURN
   END SUBROUTINE find_grib_records
 
-  SUBROUTINE read_grib_header(file,header,nvar)
+  SUBROUTINE read_grib_header(filename,header,nvar)
     
-    CHARACTER(len=256),INTENT(in)                     :: file
+    CHARACTER(len=256),                INTENT(in)  :: filename
     TYPE(grib_header_type),ALLOCATABLE,INTENT(out) :: header(:)
-    INTEGER,INTENT(out)                               :: nvar
+    INTEGER,                           INTENT(out) :: nvar
 
     TYPE(grib_header_type)                         :: temp(1:nmaxvar)
     INTEGER                                           :: irec,istat,nrec,irec2,ibyte,m
@@ -258,13 +267,12 @@ CONTAINS
 
     INTEGER(kind=1)                 :: gribword(4)
     INTEGER(kind=1),ALLOCATABLE     :: bytearr(:)
-    INTEGER                         :: ivar,len,pdslen,gdslen,datalen,bdslen
-!    INTEGER                         :: temppos(1:4,1:nmaxvar),templen(1:4,1:nmaxvar)
+    INTEGER                         :: ivar,mylen,pdslen,gdslen,datalen,bdslen
 
     INTEGER                         :: grib_start,data_start,ioff
     LOGICAL                         :: foundoff
 
-    OPEN(10,FILE=TRIM(file),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
 
     gribword(1)=ICHAR('G')
     gribword(2)=ICHAR('R')
@@ -323,7 +331,7 @@ CONTAINS
 
         bdslen=11
 
-        ALLOCATE(bytearr(1:pdslen+gdslen+bdslen+ioff+8))
+        ALLOCATE(bytearr(1:pdslen+gdslen+bdslen+ioff+8+4))
 
         ibyte=1
         DO irec2=irec,irec+CEILING((pdslen+gdslen+bdslen+ioff)/4.)+1
@@ -345,12 +353,12 @@ CONTAINS
         temp(ivar)%data_record=irec2
         temp(ivar)%data_offset=MOD(pdslen+gdslen+ioff,4)
         
-        len=concat_bytes1(bytearr(pdslen+gdslen+1:pdslen+gdslen+3),3,.TRUE.)
-        temp(ivar)%data_length=len
+        mylen=concat_bytes1(bytearr(pdslen+gdslen+1:pdslen+gdslen+3),3,.TRUE.)
+        temp(ivar)%data_length=mylen
 
         DEALLOCATE(bytearr)
 
-        irec=irec+FLOOR((pdslen+gdslen+len)/4.)
+        irec=irec+FLOOR((pdslen+gdslen+mylen)/4.)
 
         ivar=ivar+1
       else
@@ -398,11 +406,10 @@ CONTAINS
 
   SUBROUTINE read_variable_info(header,nvar,v,allowed)
     
-    TYPE(grib_header_type),INTENT(in) :: header(1:nvar)
-    INTEGER,INTENT(in)           :: nvar
-    LOGICAL,INTENT(in)           :: allowed(:)
-
-    TYPE(cosmo_meta),INTENT(out) :: v(1:nvar)
+    TYPE(grib_header_type),INTENT(in)  :: header(1:nvar)
+    INTEGER,               INTENT(in)  :: nvar
+    LOGICAL,               INTENT(in)  :: allowed(:)
+    TYPE(cosmo_meta),      INTENT(out) :: v(1:nvar)
 
     INTEGER                      :: ivar,ibyte,level(1:3),index,nlevels(200)
     CHARACTER(len=256)           :: varname(3)
@@ -569,11 +576,11 @@ CONTAINS
     RETURN
   END SUBROUTINE rlatlon2latlon
 
-  FUNCTION get_data_from_binary(file,header,nx,ny) RESULT (data)
+  FUNCTION get_data_from_binary(filename,header,nx,ny) RESULT (data)
 
     REAL(r8)                      :: data(1:nx,1:ny)
     REAL                          :: data2(1:nx,1:ny)
-    CHARACTER(len=256),INTENT(in) :: file
+    CHARACTER(len=256),INTENT(in) :: filename
     TYPE(grib_header_type),INTENT(in)  :: header
 
     INTEGER,INTENT(in)            :: nx,ny
@@ -588,7 +595,7 @@ CONTAINS
     CALL byte_to_word_signed(header%pds(27:28),idsf,2)
     dsf=FLOAT(idsf)
 
-    OPEN(10,FILE=TRIM(file),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
+    OPEN(10,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
     is=header%data_record
     ie=header%data_record+CEILING((header%data_length+header%data_offset)/4.)
     ibyte=1
@@ -618,10 +625,10 @@ CONTAINS
     RETURN
   END FUNCTION get_data_from_binary
 
-  SUBROUTINE set_vertical_coords(file,header,nsv,ivctype,sv,pp_index)
+  SUBROUTINE set_vertical_coords(filename,header,nsv,ivctype,sv,pp_index)
 
     TYPE(cosmo_non_state_data),INTENT(inout) :: nsv
-    CHARACTER(len=256),INTENT(in)            :: file
+    CHARACTER(len=256),INTENT(in)            :: filename
     TYPE(grib_header_type),INTENT(in)             :: header
     INTEGER,INTENT(in)                       :: ivctype
     REAL(r8),INTENT(in)                      :: sv(:)

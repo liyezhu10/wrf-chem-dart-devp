@@ -1,5 +1,15 @@
 PROGRAM test
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+
+!----------------------------------------------------------------------
+! purpose: test routines
+!----------------------------------------------------------------------
+
   use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
                                rad2deg, deg2rad, PI
 
@@ -9,10 +19,9 @@ PROGRAM test
                                operator(>),  operator(<), operator(/),           &
                                operator(/=), operator(<=)
 
+  use        model_mod, only : static_init_model,get_model_size,get_state_meta_data,&
+                               model_interpolate, state_vector,grib_to_sv
 
-  use   model_mod, only : static_init_model,get_model_size,get_state_meta_data,&
-                          model_interpolate,state_vector,grib_to_sv
-  
   use     location_mod, only : location_type, get_dist, query_location,          &
                                get_close_maxdist_init, get_close_type,           &
                                set_location, get_location, horiz_dist_only,      & 
@@ -24,6 +33,12 @@ PROGRAM test
                                get_close_obs_init, loc_get_close_obs => get_close_obs
 
   IMPLICIT NONE
+
+! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
   INTEGER :: var_type,index,istat,n,i
   integer,allocatable :: seed(:)
