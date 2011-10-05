@@ -143,14 +143,11 @@
   /
 
 
-#&model_nml
-#   cosmo_filename             = "~/cosmo_dart_test/test3.grb",
-#  /
-#&model_nml
-#   cosmo_filename             = "/daten03/cosmonrw/cosmo/cosmoinput/in_2011-08-17-00/laf2011081700",
-#  /
+# cosmo_filename = "~/cosmo_dart_test/test3.grb",
+# cosmo_filename = "/daten03/cosmonrw/cosmo/cosmoinput/in_2011-08-17-00/laf2011081700",
+
 &model_nml
-   cosmo_filename               = "/daten02/jkeller/test.grb",
+   cosmo_filename               = "../data/test.grb",
    ivctype                      = 2,
    model_dt                     = 40,
    model_perturbation_amplitude = 0.1,
