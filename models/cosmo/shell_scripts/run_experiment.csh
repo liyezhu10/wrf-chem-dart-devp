@@ -13,9 +13,55 @@
 #  initial setup
 #=============================================================================
 
-set expname = bob
-set ncycles = 10
+set expname  = bob        # name of this experiment
+set ncycles  = 10         # how many assimilation/model advance loops to do
+set num_ens  = 32         # how many ensemble members?
+set proj_num = xxxxxxxx   # project to charge this job to
+set nprocs   = 32         # number of mpi tasks for filter
 
+set start_time   = 2009-10-01_00:00:00  # oct 1st, 2009, 0Z
+set advance_time = +3h                  # 3 hour model advances
+
+set obs_base = /glade/proj3/image/Observations/ACARS/   # where to find obs
+set run_dir  = .
+
+set usingsec = 'false'    # sampling error correction option
+set usinginf = 'true'     # using adaptive inflation
+
+set submit   = 'bsub < '   # or qsub, or qsub <, or mpirun -n X
+
+set reqfiles = "input.nml.template advance_time filter fill_inflation_restart cosmo_to_dart dart_to_cosmo"
+
+foreach i ( $reqfiles )
+   if ( ! -e $i ) then
+      echo required file $i not found, exiting.
+      exit -2
+   endif
+end
+
+# if you are using sampling error correction, you need a file that
+# depends on the number of ensemble members.
+if ( $usingsec == 'true' ) then
+   if ( ! -e final_full.${num_ens} ) then
+      echo sampling error correction file not found: final_full.${num_ens}
+      echo get from DART/system_simulation/final_full_precomputed_tables
+      echo or generate your own following the instructions in the html page
+      echo -3
+   endif
+endif
+
+# if you are using adaptive inflation and this is the first job step,
+# use 'fill_inflation_restart' to initialize a set of restart files.
+
+set currtime = `echo $start_time 0 | ./advance_time`
+
+# set up the common header things that will be used in all job submit scripts
+echo "s/JOB_NAME/$expname/" >! script.sed
+echo "s/PROJ_NUMBER/$proj_num/" >> script.sed
+echo "s/NPROCS/$nprocs/"        >> script.sed
+
+
+#
 #=============================================================================
 #  main cycle loop
 #=============================================================================
@@ -23,37 +69,45 @@ set ncycles = 10
 set icyc = 1
 while ( $icyc < $ncycles )
 
+   echo Starting cycle $icyc of $ncycles
+   echo current time: $currtime
+
    #==========================================================================
-   #  1. set up and run filter to assimilate next set of observations
-   #==========================================================================
-   
-   sed filter.job.template > filter.job
-   bsub < filter.job
-   
-   #==========================================================================
-   #  2. convert filter output to model input files
+   #  1. convert model output files to filter input files
    #==========================================================================
    
-   bsub < convert1.job
+   sed -f script.sed convert_to_dart.template > convert_to_dart.job
+   eval "$submit convert_to_dart.job"
    
    #==========================================================================
-   #  3. run N copies of the model here
+   #  2. set up and run filter to assimilate next set of observations
    #==========================================================================
    
-   sed model.job.template > model.job
-   bsub < model.job
+   # collect files you have from a previous run:
+   # restart, inflation, etc
+
+   sed -f script.sed filter.template > filter.job
+   eval "$submit filter.job"
    
    #==========================================================================
-   #  4. convert model output files to filter input files
+   #  3. convert filter output to model input files
    #==========================================================================
    
-   bsub < convert2.job
+   sed -f script.sed convert_to_model.template > convert_to_model.job
+   eval "$submit convert_to_model.job"
+   
+   #==========================================================================
+   #  4. run N copies of the model here
+   #==========================================================================
+   
+   sed -f script.sed model.template > model.job
+   eval "$submit model.job"
    
    #==========================================================================
    #  5. (optional) archive files here
    #==========================================================================
    
-   echo hsi or mss commands here
+   echo add hsi or mss commands here
 
    @ icyc ++
 end
