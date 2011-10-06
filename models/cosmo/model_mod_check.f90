@@ -231,8 +231,13 @@ if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest 
 
 if (test1thru < 8) goto 999
 
-write(*,*)
-write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
+if ( mykindindex < 0 ) then
+   write(*,*)'WARNING'
+   write(*,*)'WARNING - input.nml:model_mod_check does not have a known "kind_of_interest"' 
+   write(*,*)'WARNING - skipping the model_interpolate tests.'
+   write(*,*)'WARNING'
+   goto 200
+endif
 
 select case(trim(interp_test_vertcoord))
    case ('VERTISUNDEF')
@@ -251,6 +256,10 @@ select case(trim(interp_test_vertcoord))
       write(string1,*) 'unknown vertcoord ', trim(interp_test_vertcoord)
       call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
 end select
+
+write(*,*)
+write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
+write(*,*)'at ', loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), vertcoord
 
 loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), vertcoord)
 call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
@@ -277,6 +286,8 @@ endif
 ! convert model data into a dart state vector and write it into a
 ! initial conditions file.  writes the valid time and the state.
 !----------------------------------------------------------------------
+
+200 continue
 
 if (test1thru < 9) goto 999
 
@@ -483,6 +494,8 @@ nfailed = 0
 
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
+   write(*,*)'Interpolating lon row ',ilon,' of ',nlon
+
    do jlat = 1, nlat
       lat(jlat) = interp_test_latrange(1) + real(jlat-1,r8) * interp_test_dlat
       do kvert = 1, nvert

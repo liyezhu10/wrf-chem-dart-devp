@@ -644,12 +644,11 @@ CONTAINS
     RETURN
   END FUNCTION get_data_from_binary
 
-  SUBROUTINE set_vertical_coords(filename,header,nsv,ivctype,sv,pp_index)
+  SUBROUTINE set_vertical_coords(filename,header,nsv,sv,pp_index)
 
     TYPE(cosmo_non_state_data),INTENT(inout) :: nsv
     CHARACTER(len=256),INTENT(in)            :: filename
     TYPE(grib_header_type),INTENT(in)             :: header
-    INTEGER,INTENT(in)                       :: ivctype
     REAL(r8),INTENT(in)                      :: sv(:)
     INTEGER,INTENT(in)                       :: pp_index(:)  
 
@@ -666,6 +665,8 @@ CONTAINS
     REAL(r8),ALLOCATABLE                     :: pp1(:,:),pp2(:,:)
 
     ! This routine calculates the vertical coordinate for the 3D grid
+
+    INTEGER :: ivctype
 
     IF (allocated(nsv%surface_orography).AND.(.NOT. nsv%vertical_coords_set)) THEN
 
@@ -703,6 +704,12 @@ CONTAINS
         pos=pos+4
       END DO
 
+      if (vcoord(nhl) > vcoord(1)) then
+         ivctype = 1
+      else
+         ivctype = 2
+      endif
+
       ! calculate needed parameters       
       zgdrt = g/r/t0sl
       IF (dt0lp /= 0.) THEN
@@ -729,11 +736,12 @@ CONTAINS
         
         ! Compute the surface reference pressure from surface topography
         hhl(:,:,nhl) = nsv%surface_orography(:,:)
-        IF (dt0lp == 0.0) THEN
+
+        IF (dt0lp == 0.0_r8) THEN
           p0hl (:,:,nhl) = p0sl*EXP ( - zgdrt*hhl(:,:,nhl) )
         ELSE
-          p0hl (:,:,nhl) = p0sl*EXP ( - ztdbe &
-           * (1.0 - SQRT(1.0 - zbetf*hhl(:,:,nhl))) )
+          p0hl (:,:,nhl) = p0sl*EXP ( - ztdbe * & 
+                           (1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,nhl))) )
         ENDIF
         ! Compute the reference pressure at half levels from surface topography
         ! and vertical coordinate parameters ak and bk as well as the
@@ -741,12 +749,12 @@ CONTAINS
         
         DO  k = 1, nhl-1
           p0hl(:,:,k) = ak(k) + bk(k)*p0hl(:,:,nhl)
-          hhl (:,:,k) = (r/g)*LOG(p0sl/p0hl(:,:,k)) &
-           *( t0sl - 0.5*dt0lp*LOG(p0sl/p0hl(:,:,k)) )
+          hhl (:,:,k) =     (r/g)*LOG(p0sl/p0hl(:,:,k)) &
+           *( t0sl - 0.5_r8*dt0lp*LOG(p0sl/p0hl(:,:,k)) )
         ENDDO
       END IF
       
-      IF (ivctype==2) THEN
+      IF (ivctype == 2) THEN
 
         ! Calculate the inverse coordinate transformation, i.e. the ak's and bk's
         kflat = 0
@@ -760,47 +768,57 @@ CONTAINS
             bk(k) = (vcflat - vcoord(k))/ vcflat
           ENDIF
         ENDDO
+
+        write(*,*)'ak is ',ak
+        write(*,*)'bk is ',bk
         
         ! Compute the height of the model half-levels
         hhl(:,:,nhl) = nsv%surface_orography(:,:)
         DO  k = 1, nhl-1
           hhl(:,:,k) = ak(k) + bk(k)*hhl(:,:,nhl)
         ENDDO
-        
+
+        write(*,*)'surface orography min,max',minval(nsv%surface_orography(:,:)),maxval(nsv%surface_orography(:,:))
+        write(*,*)'zgdrt,ztdbe,zbetf', zgdrt,ztdbe,zbetf
+
         ! Compute the reference pressure at half levels
         DO  k = 1, nhl
-          IF (dt0lp == 0.0) THEN
+          IF (dt0lp == 0.0_r8) THEN
             p0hl (:,:,k) = p0sl * EXP ( - zgdrt*hhl(:,:,k) )
           ELSE
-            p0hl (:,:,k) = p0sl * EXP ( - ztdbe*(1.0         &
-             - SQRT(1.0 - zbetf*hhl(:,:,k))) )
+            p0hl (:,:,k) = p0sl * EXP ( - ztdbe*(1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,k))) )
           ENDIF
+
+          write(*,'(i3,4(1x,f14.5))')k,p0hl(1,1,k),hhl(1,1,k),ak(k),bk(k)
+
         ENDDO
 
       END IF
 
       ! set the vertical coordinate information in the non-state variable
 
-      nsv%nfl=nfl
-      nsv%nhl=nhl
-      nsv%p0sl=p0sl
-      nsv%t0sl=t0sl
-      nsv%dt0lp=dt0lp
-      nsv%vcflat=vcflat
+      nsv%nfl    = nfl
+      nsv%nhl    = nhl
+      nsv%p0sl   = p0sl
+      nsv%t0sl   = t0sl
+      nsv%dt0lp  = dt0lp
+      nsv%vcflat = vcflat
 
-      ALLOCATE(nsv%vct_a(1:nhl))
-      ALLOCATE(nsv%vct_b(1:nhl))
+      write(*,*)'set_vertical_coords p0sl t0sl dt0lp vcflat ',p0sl,t0sl,dt0lp,vcflat
+
+      ALLOCATE(nsv%vct_a(         1:nhl))
+      ALLOCATE(nsv%vct_b(         1:nhl))
       ALLOCATE(nsv%hhl( 1:nx,1:ny,1:nhl))
       ALLOCATE(nsv%hfl( 1:nx,1:ny,1:nfl))
       ALLOCATE(nsv%p0hl(1:nx,1:ny,1:nhl))
       ALLOCATE(nsv%p0fl(1:nx,1:ny,1:nfl))
 
-      nsv%hhl( 1:nx,1:ny,1:nhl)=hhl
-      nsv%p0hl(1:nx,1:ny,1:nhl)=p0hl
+      nsv%hhl( 1:nx,1:ny,1:nhl) = hhl
+      nsv%p0hl(1:nx,1:ny,1:nhl) = p0hl
       
       DO  k = 1, nfl 
-        nsv%hfl( :,:,k)=0.5*(nsv%hhl( :,:,k)+nsv%hhl( :,:,k+1))
-        nsv%p0fl(:,:,k)=0.5*(nsv%p0hl(:,:,k)+nsv%p0hl(:,:,k+1))
+        nsv%hfl( :,:,k)=0.5_r8*(nsv%hhl( :,:,k)+nsv%hhl( :,:,k+1))
+        nsv%p0fl(:,:,k)=0.5_r8*(nsv%p0hl(:,:,k)+nsv%p0hl(:,:,k+1))
       END DO
 
       if (pp_index(1)>-1) then
@@ -809,14 +827,15 @@ CONTAINS
         ALLOCATE(    pp1(1:nx,1:ny))
         ALLOCATE(    pp2(1:nx,1:ny))
         DO  k=1,nfl
-          pp1=RESHAPE(sv(pp_index(k):pp_index(k)+nx*ny-1),(/ nx,ny /))
-          nsv%pfl(1:nx,1:ny,k)=nsv%p0fl(1:nx,1:ny,k)+pp1(1:nx,1:ny)
+          pp1 = RESHAPE(sv(pp_index(k):pp_index(k)+nx*ny-1), (/ nx,ny /))
+          nsv%pfl(1:nx,1:ny,k) = nsv%p0fl(1:nx,1:ny,k) + pp1(1:nx,1:ny)
+
           if (k==1) then
-            nsv%phl(1:nx,1:ny,k)=nsv%p0hl(1:nx,1:ny,k)+pp1
+            nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + pp1
           else
-            nsv%phl(1:nx,1:ny,k)=nsv%p0hl(1:nx,1:ny,k)+0.5*( &
+            nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + 0.5_r8*( &
              pp2*(nsv%hfl(1:nx,1:ny,k-1)-nsv%hhl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k))+&
-             pp1*(nsv%hhl(1:nx,1:ny,k)-nsv%hfl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k)))
+             pp1*(nsv%hhl(1:nx,1:ny,k  )-nsv%hfl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k)))
           end if
           pp2=pp1
         END DO
