@@ -28,14 +28,14 @@ echo "host is " `hostname`
 set tempdir = advance_temp
 
 # grab the intended input and output filenames from the input.nml namelist template file
-set outputline = `fgrep -A 6 \&model_nml input.nml.template | fgrep cosmo_filename`
-set outputfile = `echo $outputline | sed -e 's/^.*cosmo_filename.*=//' -e 's/"//g' -e 's/,//' `
+set line       = `fgrep -A 40 \&filter_nml input.nml.template | fgrep restart_out_file_name`
+set inputfile  = `echo $line | sed -e 's/^.*restart_out_file_name.*=//' -e 's/"//g' -e 's/,//' `
 
-set inputline = `fgrep -A 40 \&filter_nml input.nml.template | fgrep restart_out_file_name`
-set inputfile = `echo $inputline | sed -e 's/^.*restart_out_file_name.*=//' -e 's/"//g' -e 's/,//' `
+set line       = `fgrep -A 6 \&model_nml input.nml.template | fgrep cosmo_filename`
+set outputfile = `echo $line | sed -e 's/^.*cosmo_filename.*=//' -e 's/"//g' -e 's/,//' `
 
-set numensline = `fgrep -A 40 \&filter_nml input.nml.template | fgrep ens_size`
-set num_ens    = `echo $numensline | sed -e 's/^.*ens_size.*=//' -e 's/"//g' -e 's/,//' `
+set line       = `fgrep -A 40 \&filter_nml input.nml.template | fgrep ens_size`
+set num_ens    = `echo $line | sed -e 's/^.*ens_size.*=//' -e 's/"//g' -e 's/,//' `
 
 # this is fixed in the converter
 set convertin = dart.ic
