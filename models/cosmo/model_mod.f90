@@ -300,7 +300,7 @@ contains
     type(location_type)            :: location
     integer, optional, intent(out) :: var_type
 
-    integer                        :: ivar,var,varindex,hindex,dims(3)
+    integer                        :: ivar,var,hindex,dims(3)
     real(r8)                       :: lon,lat,vloc
 
     if (.NOT. module_initialized) CALL static_init_model()
@@ -310,11 +310,10 @@ contains
     findindex : DO ivar=1,nvars
       IF ((index_in >= cosmo_vars(ivar)%dart_sindex) .AND. (index_in <= cosmo_vars(ivar)%dart_eindex)) THEN
         var      = ivar
-        varindex = index_in-cosmo_vars(ivar)%dart_sindex+1
+        hindex   = index_in-cosmo_vars(ivar)%dart_sindex+1
         var_type = cosmo_vars(ivar)%dart_kind
         dims     = cosmo_vars(ivar)%dims
         vloc     = cosmo_vars(ivar)%dart_level
-        hindex   = MOD(varindex,(dims(1)*dims(2)))
         lon      = cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lon(hindex)
         lat      = cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lat(hindex)
         location = set_location(lon,lat,vloc,VERTISLEVEL)

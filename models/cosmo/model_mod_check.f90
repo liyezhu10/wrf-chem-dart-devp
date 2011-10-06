@@ -205,6 +205,9 @@ call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize
 ! Checking get_state_meta_data (and get_state_indices, get_state_kind)
 !----------------------------------------------------------------------
 
+write(*,*)
+write(*,*)'Checking metadata routines.'
+
 if (test1thru < 6) goto 999
 
 skip = 1000000
@@ -334,12 +337,9 @@ type(location_type) :: loc
 integer             :: var_type
 character(len=129)  :: string1
 
-write(*,*)
-write(*,*)'Checking metadata routines.'
-
 call get_state_meta_data( iloc, loc, var_type)
-
 call write_location(0, loc, fform='formatted', charstring=string1)
+
 write(*,*)' indx ',iloc,' is type ',var_type,' ',trim(get_raw_obs_kind_name(var_type)),' ',trim(string1)
 
 end subroutine check_meta_data
@@ -415,7 +415,6 @@ if (closest == 9999999999.9_r8) then
    write(*,*)'No closest gridpoint found'
    return
 endif
-
 
 matched = .false.
 do i = 1,get_model_size()

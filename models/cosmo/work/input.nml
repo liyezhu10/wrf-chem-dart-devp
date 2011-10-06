@@ -283,7 +283,7 @@
    output_file          = 'check_me',
    advance_time_present = .FALSE.,
    verbose              = .FALSE.,
-   test1thru            =  5,
+   test1thru            =  7,
    x_ind                = -1,
    interp_test_dlon     = 1.0,
    interp_test_dlat     = 1.0,

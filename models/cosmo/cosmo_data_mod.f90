@@ -521,26 +521,28 @@ CONTAINS
     REAL(r8)                   :: rlats(1:nx,1:ny),rlons(1:nx,1:ny)
     INTEGER                    :: ix,iy
 
-    rlat1=FLOAT(concat_bytes1_sign(gds(11:13),3,.FALSE.))/1000.
-    rlon1=FLOAT(concat_bytes1_sign(gds(14:16),3,.FALSE.))/1000.
+    rlat1=REAL(concat_bytes1_sign(gds(11:13),3,.FALSE.),r8)/1000.0_r8
+    rlon1=REAL(concat_bytes1_sign(gds(14:16),3,.FALSE.),r8)/1000.0_r8
 
-    rlat2=FLOAT(concat_bytes1_sign(gds(18:20),3,.FALSE.))/1000.
-    rlon2=FLOAT(concat_bytes1_sign(gds(21:23),3,.FALSE.))/1000.
+    rlat2=REAL(concat_bytes1_sign(gds(18:20),3,.FALSE.),r8)/1000.0_r8
+    rlon2=REAL(concat_bytes1_sign(gds(21:23),3,.FALSE.),r8)/1000.0_r8
 
-    lat0=FLOAT(concat_bytes1_sign(gds(33:35),3,.FALSE.))/1000.
-    lon0=FLOAT(concat_bytes1_sign(gds(36:38),3,.FALSE.))/1000.
+    lat0=REAL(concat_bytes1_sign(gds(33:35),3,.FALSE.),r8)/1000.0_r8
+    lon0=REAL(concat_bytes1_sign(gds(36:38),3,.FALSE.),r8)/1000.0_r8
 
     DO iy=1,ny
-      rlats(:,iy)=rlat1+(iy-1)*(rlat2-rlat1)/FLOAT((ny-1))
+      rlats(:,iy)=rlat1+(iy-1)*(rlat2-rlat1)/REAL((ny-1),r8)
     END DO
     DO ix=1,nx
-      rlons(ix,:)=rlon1+(ix-1)*(rlon2-rlon1)/FLOAT((nx-1))
+      rlons(ix,:)=rlon1+(ix-1)*(rlon2-rlon1)/REAL((nx-1),r8)
     END DO
 
     CALL rlatlon2latlon(rlats,rlons,lat0, lon0, lats, lons,nx,ny)
     RETURN
 
   END SUBROUTINE read_lonlat
+
+
 
   SUBROUTINE rlatlon2latlon(rlat,rlon,lat0, lon0, lat, lon, nx, ny)
     IMPLICIT NONE
@@ -553,15 +555,15 @@ CONTAINS
     REAL(r8)              :: sinlat0,coslat0,sinlon0,coslon0
     REAL(r8)              :: sinlon(1:nx,1:ny),sinlat(1:nx,1:ny),coslat(1:nx,1:ny),coslon(1:nx,1:ny)
 
-    WHERE (rlon>180.)
-      rlon1=rlon-360.
+    WHERE (rlon > 180.0_r8)
+      rlon1=rlon-360.0_r8
     ELSEWHERE
       rlon1=rlon   
     END WHERE
 
     lat00 = lat0
     lon00 = lon0
-    IF (lon00>180.) lon00 = lon00-360.
+    IF (lon00 > 180.0_r8) lon00 = lon00 - 360.0_r8
 
     sinlat0 = SIN(lat00*deg2rad)
     coslat0 = COS(lat00*deg2rad)
@@ -578,11 +580,12 @@ CONTAINS
     a2 = coslon0 * (-sinlat0*coslon*coslat + &
                      coslat0       *sinlat)+ &
          sinlon0 *           sinlon*coslat
-    WHERE (abs(a2)<1.e-20)
-      a2 = 1.e-20
-    END WHERE
+
+    WHERE (abs(a2) < 1.e-20_r8) a2 = 1.e-20_r8
 
     lon = ATAN2(a1,a2)/deg2rad
+
+    WHERE (lon < 0.0_r8) lon = lon + 360.0_r8
 
     a3 = coslat0*coslat*coslon + sinlat0*sinlat
     lat = ASIN(a3)/deg2rad

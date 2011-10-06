@@ -282,7 +282,6 @@ real(r8) :: lon_dif, vert_dist, rtemp
 integer  :: lat1_ind, lat2_ind, lon_ind, temp  ! indexes into lookup tables
 logical  :: comp_h_only
 
-
 if ( .not. module_initialized ) call initialize_module
 
 ! Begin with the horizontal distance
@@ -665,7 +664,7 @@ select case  (loc%which_vert)
    case (VERTISSURFACE)
       write(charstring, '(A,1X,F12.5,A)') trim(string1), loc%vloc, '  surface (m)'
    case (VERTISLEVEL)
-      write(charstring, '(A,1X,F5.0,A)')  trim(string1), loc%vloc, '         level'
+      write(charstring, '(A,1X,F8.3,A)')  trim(string1), loc%vloc, '         level'
    case (VERTISPRESSURE)
       write(charstring, '(A,1X,F12.7,A)') trim(string1), loc%vloc / 100.0_r8, '  hPa'
    case (VERTISHEIGHT)
