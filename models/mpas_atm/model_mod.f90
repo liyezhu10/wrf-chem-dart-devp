@@ -2261,7 +2261,7 @@ if (present(adv_to_time)) then
    write(iunit, '(A)') timestring
 
    deltatime = adv_to_time - model_time
-   timestring = time_to_string(deltatime, brief=.true.)
+   timestring = time_to_string(deltatime, interval=.true.)
    write(iunit, '(A)') timestring
 endif
 
@@ -2303,7 +2303,7 @@ end subroutine get_grid_dims
 
 !------------------------------------------------------------------
 
-function time_to_string(t, brief)
+function time_to_string(t, interval)
 
 ! convert time type into a character string with the
 ! format of YYYY-MM-DD_hh:mm:ss
@@ -2311,24 +2311,38 @@ function time_to_string(t, brief)
 ! passed variables
  character(len=19) :: time_to_string
  type(time_type), intent(in) :: t
- logical, intent(in), optional :: brief
+ logical, intent(in), optional :: interval
 
 ! local variables
 
 integer :: iyear, imonth, iday, ihour, imin, isec
-logical :: dobrief
+integer :: ndays, nsecs
+logical :: dointerval
 
-call get_date(t, iyear, imonth, iday, ihour, imin, isec)
-if (present(brief)) then
-   dobrief = brief
+if (present(interval)) then
+   dointerval = interval
 else
-   dobrief = .false.
+   dointerval = .false.
 endif
 
-if (dobrief) then
+! for interval output, output the number of days, then hours, mins, secs
+! for date output, use the calendar routine to get the year/month/day hour:min:sec
+if (dointerval) then
+   call get_time(t, nsecs, ndays)
+   if (ndays > 99) then
+      write(string1, *) 'interval number of days is ', ndays
+      call error_handler(E_ERR,'time_to_string', 'interval days cannot be > 99', &
+                         source, revision, revdate, text2=string1)
+   endif
+   ihour = nsecs / 3600
+   nsecs = nsecs - (ihour * 3600)
+   imin  = nsecs / 60
+   nsecs = nsecs - (imin * 60)
+   isec  = nsecs
    write(time_to_string, '(I2.2,3(A1,I2.2))') &
-                        iday, '_', ihour, ':', imin, ':', isec
+                        ndays, '_', ihour, ':', imin, ':', isec
 else
+   call get_date(t, iyear, imonth, iday, ihour, imin, isec)
    write(time_to_string, '(I4.4,5(A1,I2.2))') &
                         iyear, '-', imonth, '-', iday, '_', ihour, ':', imin, ':', isec
 endif
