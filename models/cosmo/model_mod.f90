@@ -209,8 +209,8 @@ contains
 
     state_vector_vars(:)%is_present=.false.
 
-    model_size=maxval(cosmo_vars(:)%dart_eindex)
-    nvars=size(cosmo_vars,1)
+    model_size = maxval(cosmo_vars(:)%dart_eindex)
+    nvars      = size(cosmo_vars,1)
 
     sv_length=0
     do ivar=1,nvars
@@ -227,13 +227,13 @@ contains
 
       if (is_allowed_state_vector_var(ikind)) then
         if (.not. state_vector_vars(ikind)%is_present) then
-          state_vector_vars(ikind)%is_present=.true.
-          state_vector_vars(ikind)%varname_short=cosmo_vars(ivar)%varname_short
-          state_vector_vars(ikind)%varname_long=cosmo_vars(ivar)%varname_long
-          state_vector_vars(ikind)%units=cosmo_vars(ivar)%units
-          state_vector_vars(ikind)%nx=cosmo_vars(ivar)%dims(1)
-          state_vector_vars(ikind)%ny=cosmo_vars(ivar)%dims(2)
-          state_vector_vars(ikind)%nz=cosmo_vars(ivar)%dims(3)
+          state_vector_vars(ikind)%is_present   = .true.
+          state_vector_vars(ikind)%varname_short= cosmo_vars(ivar)%varname_short
+          state_vector_vars(ikind)%varname_long = cosmo_vars(ivar)%varname_long
+          state_vector_vars(ikind)%units        = cosmo_vars(ivar)%units
+          state_vector_vars(ikind)%nx           = cosmo_vars(ivar)%dims(1)
+          state_vector_vars(ikind)%ny           = cosmo_vars(ivar)%dims(2)
+          state_vector_vars(ikind)%nz           = cosmo_vars(ivar)%dims(3)
           state_vector_vars(ikind)%horizontal_coordinate=cosmo_vars(ivar)%hcoord_type
           if (state_vector_vars(ikind)%nz>1) then
             state_vector_vars(ikind)%vertical_coordinate=VERTISLEVEL
@@ -241,15 +241,15 @@ contains
             state_vector_vars(ikind)%vertical_coordinate=VERTISSURFACE
           end if
 
-          allocate(state_vector_vars(ikind)%vertical_level(1:state_vector_vars(ikind)%nz))
+          allocate(state_vector_vars(ikind)%vertical_level(     1:state_vector_vars(ikind)%nz))
           allocate(state_vector_vars(ikind)%state_vector_sindex(1:state_vector_vars(ikind)%nz))
-          allocate(state_vector_vars(ikind)%cosmo_state_index(1:state_vector_vars(ikind)%nz))
+          allocate(state_vector_vars(ikind)%cosmo_state_index(  1:state_vector_vars(ikind)%nz))
 
         end if
 
-        state_vector_vars(ikind)%vertical_level(cosmo_vars(ivar)%ilevel)=cosmo_vars(ivar)%dart_level
+        state_vector_vars(ikind)%vertical_level(     cosmo_vars(ivar)%ilevel)=cosmo_vars(ivar)%dart_level
         state_vector_vars(ikind)%state_vector_sindex(cosmo_vars(ivar)%ilevel)=cosmo_vars(ivar)%dart_sindex
-        state_vector_vars(ikind)%cosmo_state_index(cosmo_vars(ivar)%ilevel)=ivar
+        state_vector_vars(ikind)%cosmo_state_index(  cosmo_vars(ivar)%ilevel)=ivar
 
       end if
 
@@ -309,23 +309,22 @@ contains
 
     findindex : DO ivar=1,nvars
       IF ((index_in >= cosmo_vars(ivar)%dart_sindex) .AND. (index_in <= cosmo_vars(ivar)%dart_eindex)) THEN
-        var=ivar
-        varindex=index_in-cosmo_vars(ivar)%dart_sindex+1
-        dims=cosmo_vars(ivar)%dims
-        hindex=MOD(varindex,(dims(1)*dims(2)))
-        vloc=cosmo_vars(ivar)%dart_level
-        lon=cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lon(hindex)
-        lat=cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lat(hindex)
-
-        location=set_location(lon,lat,vloc,VERTISLEVEL)
-        var_type=cosmo_vars(ivar)%dart_kind
+        var      = ivar
+        varindex = index_in-cosmo_vars(ivar)%dart_sindex+1
+        var_type = cosmo_vars(ivar)%dart_kind
+        dims     = cosmo_vars(ivar)%dims
+        vloc     = cosmo_vars(ivar)%dart_level
+        hindex   = MOD(varindex,(dims(1)*dims(2)))
+        lon      = cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lon(hindex)
+        lat      = cosmo_lonlat(cosmo_vars(ivar)%hcoord_type)%lat(hindex)
+        location = set_location(lon,lat,vloc,VERTISLEVEL)
         EXIT findindex
       END IF
     END DO findindex
 
     IF( var == -1 ) THEN
       write(string,*) 'Problem, cannot find base_offset, index_in is: ', index_in
-!      call error_handler(E_ERR,'get_state_meta_data',string,source,revision,revdate)
+      call error_handler(E_ERR,'get_state_meta_data',string,source,revision,revdate)
     ENDIF
 
   end subroutine get_state_meta_data
@@ -338,7 +337,7 @@ contains
     
     if ( .not. module_initialized ) call static_init_model
     
-    model_timestep=set_time(model_dt)
+    model_timestep      = set_time(model_dt)
     get_model_time_step = model_timestep
     return
 
@@ -797,7 +796,8 @@ contains
       call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'valid_range', (/ 1._r8,float(nz)+1._r8 /)), &
                     'nc_write_model_atts', 'WLEV valid_range '//trim(filename))
 
-      if ( 0 == 0 ) then
+      ! DEBUG block to check shape of netCDF variables
+      if ( 1 == 0 ) then
          write(*,*)'lon   dimid is ',lonDimID
          write(*,*)'lat   dimid is ',latDimID
          write(*,*)'lev   dimid is ',levDimID
@@ -834,7 +834,8 @@ contains
           dims(idim) = unlimitedDimID
           ndims=idim
 
-          write(*,*)trim(state_vector_vars(ikind)%varname_short),' has dims',dims(1:ndims)  ! TJH DEBUG FIXME
+          if ( 1 == 0 ) &  ! DEBUG block to check shape of netCDF variables
+          write(*,*)trim(state_vector_vars(ikind)%varname_short),' has netCDF dimIDs ',dims(1:ndims)
 
           call nc_check(nf90_def_var(ncid=ncFileID, name=trim(state_vector_vars(ikind)%varname_short), xtype=nf90_real, &
                         dimids = dims(1:ndims), varid=VarID),&
@@ -852,8 +853,6 @@ contains
 
         end if
       end do
-
-      write(*,*)'After the variable definitions '
 
       ! Leave define mode so we can fill the coordinate variable.
       call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','prognostic enddef '//trim(filename))
@@ -895,9 +894,6 @@ contains
 
       deallocate(data2d)
 
-      write(*,*)'levs is ',levs(1:nz)
-      write(*,*)'wlevs is ',wlevs(1:nz+1)
-
       call nc_check(nf90_put_var(ncFileID, levVarID, levs(1:nz) ), &
                     'nc_write_model_atts', 'LEV put_var '//trim(filename))
 
@@ -913,7 +909,6 @@ contains
     
     ierr = 0 ! If we got here, things went well.
     
-    return
   end function nc_write_model_atts
  
 
@@ -970,7 +965,7 @@ contains
     ! the netcdf handle, so in case of error we can trace back to see
     ! which netcdf file is involved.
     !--------------------------------------------------------------------
-    
+
     write(filename,*) 'ncFileID', ncFileID
     
     !-------------------------------------------------------------------------------
@@ -998,8 +993,8 @@ contains
       
       do ikind=1,n_max_kinds
         if (state_vector_vars(ikind)%is_present) then
-            
-          varname = trim(state_vector_vars(ikind)%varname_short)
+          
+          varname      = trim(state_vector_vars(ikind)%varname_short)
           error_string = trim(filename)//' '//trim(varname)
 
           ! Ensure netCDF variable is conformable with progvar quantity.
@@ -1027,21 +1022,21 @@ contains
 
           DimCheck : do i = 1,ndims
             
-            write(error_string,'(a,i2,A)') 'inquire dimension ',i,trim(error_string2)
+            write(error_string,'(a,i2,A)') 'inquire dimension ',i,trim(varname)
             call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
              'nc_write_model_vars', trim(error_string))
             
             if ( dimlen /= vardims(i) ) then
-              write(error_string,*) trim(error_string2),' dim/dimlen ',i,dimlen,' not ',vardims(i)
+              write(error_string,*) trim(varname),' dim/dimlen ',i,dimlen,' not ',vardims(i)
               write(error_string2,*)' but it should be.'
-!              call error_handler(E_ERR, 'nc_write_model_vars', trim(error_string), &
-!               source, revision, revdate, text2=trim(error_string2))
+              call error_handler(E_ERR, 'nc_write_model_vars', trim(error_string), &
+                              source, revision, revdate, text2=trim(error_string2))
             endif
             
             mycount(i) = dimlen
             
           end do DimCheck
-          
+        
           where(dimIDs == CopyDimID) mystart = copyindex
           where(dimIDs == CopyDimID) mycount = 1
           where(dimIDs == TimeDimID) mystart = timeindex
@@ -1056,17 +1051,17 @@ contains
             deallocate(data_2d_array)
 
           elseif (ndims==3) then
-
             allocate(data_3d_array(vardims(1),vardims(2),vardims(3)))
             call sv_to_field(data_3d_array,state_vec,state_vector_vars(ikind))
             call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
                           start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
                           'nc_write_model_vars', 'put_var '//trim(error_string2))
             deallocate(data_3d_array)
+
           else
-            write(error_string, *) 'no support for data array of dimension ', ncNdims
-!            call error_handler(E_ERR,'sv_to_restart_file', string1, &
-!                          source,revision,revdate)
+             write(error_string, *) 'no support for data array of dimension ', ncNdims
+             call error_handler(E_ERR,'nc_write_model_vars', error_string, &
+                           source,revision,revdate)
           end if
 
         end if

@@ -14,31 +14,31 @@ MODULE cosmo_data_mod
 ! $Revision$
 ! $Date$
 
-  use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
+  use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,      &
                                rad2deg, deg2rad, PI
 
-  use time_manager_mod, only : time_type, set_date, print_time, print_date,      &
-                               operator(*),  operator(+), operator(-),           &
-                               operator(>),  operator(<), operator(/),           &
+  use time_manager_mod, only : time_type, set_date, print_time, print_date,  &
+                               operator(*),  operator(+), operator(-),       &
+                               operator(>),  operator(<), operator(/),       &
                                operator(/=), operator(<=)
 
-  use    utilities_mod, only : register_module, error_handler,                   &
-                               E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
+  use    utilities_mod, only : register_module, error_handler,               &
+                               E_ERR, E_WARN, E_MSG, logfileunit, get_unit,  &
                                open_file, close_file
 
-  use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,                            &
-                               KIND_V_WIND_COMPONENT,                            &
-                               KIND_VERTICAL_VELOCITY,                           &
-                               KIND_TEMPERATURE,                                 &
-                               KIND_PRESSURE,                                    &
-                               KIND_SPECIFIC_HUMIDITY,                           &
-                               KIND_CLOUD_LIQUID_WATER,                          &
-                               KIND_CLOUD_ICE,                                   &
-                               KIND_SURFACE_ELEVATION,                           &
+  use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,                        &
+                               KIND_V_WIND_COMPONENT,                        &
+                               KIND_VERTICAL_VELOCITY,                       &
+                               KIND_TEMPERATURE,                             &
+                               KIND_PRESSURE,                                &
+                               KIND_SPECIFIC_HUMIDITY,                       &
+                               KIND_CLOUD_LIQUID_WATER,                      &
+                               KIND_CLOUD_ICE,                               &
+                               KIND_SURFACE_ELEVATION,                       &
                                KIND_SURFACE_GEOPOTENTIAL
 
-  USE          byte_mod, ONLY: concat_bytes1,concat_bytes1_sign,to_positive,&
-                               byte_to_word_signed,to_float1,&
+  USE          byte_mod, ONLY: concat_bytes1,concat_bytes1_sign,to_positive, &
+                               byte_to_word_signed,to_float1,                &
                                byte_to_word_data,get_word
 
   USE     grib_info_mod, ONLY: get_level,get_varname,get_dims,get_dart_kind
@@ -131,18 +131,18 @@ CONTAINS
     ! get_cosmo_info_and_data calls subroutines to read the data, extract the desired information
     ! and put the data into the state vector
 
-    CHARACTER(len=256),INTENT(in)            :: filename
-    LOGICAL,INTENT(in)                       :: allowed(:)
-    TYPE(cosmo_meta),ALLOCATABLE,INTENT(out) :: v(:)
-    TYPE(cosmo_hcoord),INTENT(out)           :: h(3)
+    CHARACTER(len=256),                INTENT(in)  :: filename
+    LOGICAL,                           INTENT(in)  :: allowed(:)
+    TYPE(cosmo_meta),ALLOCATABLE,      INTENT(out) :: v(:)
+    TYPE(cosmo_hcoord),                INTENT(out) :: h(3)
     TYPE(grib_header_type),ALLOCATABLE,INTENT(out) :: header(:)
 
-!    INTEGER(kind=1),ALLOCATABLE,INTENT(out)  :: bdata(:)
-!    INTEGER,ALLOCATABLE,INTENT(out)          :: bytepos(:,:) ! byte positions for  (1,:) beginning of GRIB record
+!   INTEGER(kind=1),ALLOCATABLE,INTENT(out)  :: bdata(:)
+!   INTEGER,ALLOCATABLE,INTENT(out)          :: bytepos(:,:) ! byte positions for  (1,:) beginning of GRIB record
                                                              !                     (2,:) beginning of PDS section
                                                              !                     (3,:) beginning of GDS section
                                                              !                     (4,:) beginning of data section
-!    INTEGER,ALLOCATABLE,INTENT(out)          :: bytelen(:,:) ! byte length for the (2,:) PDS section
+!   INTEGER,ALLOCATABLE,INTENT(out)          :: bytelen(:,:) ! byte length for the (2,:) PDS section
                                                              !                     (3,:) GDS section
                                                              !                     (4,:) data section
     TYPE(time_type),INTENT(out)              :: tf
@@ -165,6 +165,8 @@ CONTAINS
 !    CALL read_time(bdata,nvar,bytepos,tf)
 
   END SUBROUTINE get_cosmo_info
+
+
 
   SUBROUTINE read_grib_data(filename,bdata,nbyte)
     
@@ -416,38 +418,42 @@ CONTAINS
     LOGICAL,               INTENT(in)  :: allowed(:)
     TYPE(cosmo_meta),      INTENT(out) :: v(1:nvar)
 
-    INTEGER                      :: ivar,ibyte,level(1:3),index,nlevels(200)
+    INTEGER                      :: ivar,ibyte,level(1:3),indx,nlevels(200)
     CHARACTER(len=256)           :: varname(3)
 
-    index=0
+    indx=0
     nlevels(:)=0
 
     DO ivar=1,nvar
-      v(ivar)%grib_file_position =ivar
-      v(ivar)%grib_table         =to_positive(header(ivar)%pds(4))
-      v(ivar)%grib_code          =to_positive(header(ivar)%pds(9))
-      v(ivar)%grib_leveltype     =to_positive(header(ivar)%pds(10))
+      v(ivar)%grib_file_position = ivar
+      v(ivar)%grib_table         = to_positive(header(ivar)%pds(4))
+      v(ivar)%grib_code          = to_positive(header(ivar)%pds(9))
+      v(ivar)%grib_leveltype     = to_positive(header(ivar)%pds(10))
 
-      level=get_level(v(ivar)%grib_leveltype,header(ivar)%pds(11:12))
-      v(ivar)%grib_nlevels       =level(3)
-      v(ivar)%grib_level         =level(1:2)
+      level = get_level(v(ivar)%grib_leveltype,header(ivar)%pds(11:12))
+      v(ivar)%grib_nlevels       = level(3)
+      v(ivar)%grib_level         = level(1:2)
+
       IF (v(ivar)%grib_nlevels==1) THEN
-        v(ivar)%dart_level       =level(1)
+        v(ivar)%dart_level       = level(1)
       ELSE
-        v(ivar)%dart_level       =SUM(level(1:2))/2.
+        v(ivar)%dart_level       = SUM(level(1:2))/2.
       END IF
+
+!     write(*,*)'ivar ',ivar,' of ',nvar, v(ivar)%grib_nlevels, v(ivar)%grib_level, v(ivar)%dart_level
+
       varname=get_varname(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
-      v(ivar)%varname_short=varname(2)
-      v(ivar)%varname_long=varname(1)
-      v(ivar)%units=varname(3)
-      v(ivar)%dart_kind=get_dart_kind(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
-      v(ivar)%dims=get_dims(header(ivar)%gds(1:10))
+      v(ivar)%varname_short = varname(2)
+      v(ivar)%varname_long  = varname(1)
+      v(ivar)%units         = varname(3)
+      v(ivar)%dart_kind     = get_dart_kind(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
+      v(ivar)%dims          = get_dims(header(ivar)%gds(1:10))
 
       if (allowed(v(ivar)%dart_kind)) then
-        v(ivar)%dart_sindex=index+1
-        v(ivar)%dart_eindex=index+(v(ivar)%dims(1)*v(ivar)%dims(2))
-        index=v(ivar)%dart_eindex
-        v(ivar)%ilevel=nlevels(v(ivar)%dart_kind)+1
+        v(ivar)%dart_sindex=indx+1
+        v(ivar)%dart_eindex=indx+(v(ivar)%dims(1)*v(ivar)%dims(2))
+        indx=v(ivar)%dart_eindex
+        v(ivar)%ilevel            =nlevels(v(ivar)%dart_kind)+1
         nlevels(v(ivar)%dart_kind)=nlevels(v(ivar)%dart_kind)+1
       ELSE
         v(ivar)%dart_sindex=-1
@@ -459,10 +465,11 @@ CONTAINS
       IF (v(ivar)%dart_kind==KIND_U_WIND_COMPONENT) v(ivar)%hcoord_type=2
       IF (v(ivar)%dart_kind==KIND_V_WIND_COMPONENT) v(ivar)%hcoord_type=3
 
-!      print*,TRIM(v(ivar)%varname_short)," - HCOORD_TYPE: ",v(ivar)%hcoord_type
-!      print*,TRIM(v(ivar)%varname_short)," - DART_KIND: ",v(ivar)%dart_kind," - DART_SINDEX: ",v(ivar)%dart_sindex
-!      print*,v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype,v(ivar)%grib_level(1:v(ivar)%grib_nlevels),v(ivar)%dart_level
-!      print*,v(ivar)%dims
+!     print*,TRIM(v(ivar)%varname_short)," - HCOORD_TYPE: ",v(ivar)%hcoord_type
+!     print*,TRIM(v(ivar)%varname_short)," - DART_KIND: ",v(ivar)%dart_kind," - DART_SINDEX: ",v(ivar)%dart_sindex
+!     print*,v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype,v(ivar)%grib_level(1:v(ivar)%grib_nlevels),v(ivar)%dart_level
+!     print*,v(ivar)%dims
+
     END DO
 
     RETURN
@@ -487,8 +494,10 @@ CONTAINS
         ny=v(ivar)%dims(2)
         ALLOCATE(lons(1:nx,1:ny))
         ALLOCATE(lats(1:nx,1:ny))
+
         ALLOCATE(h(v(ivar)%hcoord_type)%lon(1:nx*ny))
         ALLOCATE(h(v(ivar)%hcoord_type)%lat(1:nx*ny))
+
         CALL read_lonlat(header(ivar)%gds,lons,lats,v(ivar)%dims(1),v(ivar)%dims(2))
         h(v(ivar)%hcoord_type)%lon(1:nx*ny)=RESHAPE( lons, (/ nx*ny /) )
         h(v(ivar)%hcoord_type)%lat(1:nx*ny)=RESHAPE( lats, (/ nx*ny /) )
@@ -778,24 +787,24 @@ CONTAINS
 
       ALLOCATE(nsv%vct_a(1:nhl))
       ALLOCATE(nsv%vct_b(1:nhl))
-      ALLOCATE(nsv%hhl(1:nx,1:ny,1:nhl))
-      ALLOCATE(nsv%hfl(1:nx,1:ny,1:nfl))
+      ALLOCATE(nsv%hhl( 1:nx,1:ny,1:nhl))
+      ALLOCATE(nsv%hfl( 1:nx,1:ny,1:nfl))
       ALLOCATE(nsv%p0hl(1:nx,1:ny,1:nhl))
       ALLOCATE(nsv%p0fl(1:nx,1:ny,1:nfl))
 
-      nsv%hhl(1:nx,1:ny,1:nhl)=hhl
+      nsv%hhl( 1:nx,1:ny,1:nhl)=hhl
       nsv%p0hl(1:nx,1:ny,1:nhl)=p0hl
       
       DO  k = 1, nfl 
-        nsv%hfl(:,:,k)=0.5*(nsv%hhl(:,:,k)+nsv%hhl(:,:,k+1))
+        nsv%hfl( :,:,k)=0.5*(nsv%hhl( :,:,k)+nsv%hhl( :,:,k+1))
         nsv%p0fl(:,:,k)=0.5*(nsv%p0hl(:,:,k)+nsv%p0hl(:,:,k+1))
       END DO
 
       if (pp_index(1)>-1) then
         ALLOCATE(nsv%phl(1:nx,1:ny,1:nhl))
         ALLOCATE(nsv%pfl(1:nx,1:ny,1:nfl))
-        ALLOCATE(pp1(1:nx,1:ny))
-        ALLOCATE(pp2(1:nx,1:ny))
+        ALLOCATE(    pp1(1:nx,1:ny))
+        ALLOCATE(    pp2(1:nx,1:ny))
         DO  k=1,nfl
           pp1=RESHAPE(sv(pp_index(k):pp_index(k)+nx*ny-1),(/ nx,ny /))
           nsv%pfl(1:nx,1:ny,k)=nsv%p0fl(1:nx,1:ny,k)+pp1(1:nx,1:ny)

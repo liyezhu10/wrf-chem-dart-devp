@@ -950,9 +950,9 @@ CONTAINS
     INTEGER                    :: get_dims(3)
     INTEGER(kind=1),INTENT(in) :: b(10)
 
-    get_dims(1)=concat_bytes1(b(7:8),2,.FALSE.)
-    get_dims(2)=concat_bytes1(b(9:10),2,.FALSE.)
-    get_dims(3)=to_positive(b(4))
+    get_dims(1) = concat_bytes1(b(7:8),2,.FALSE.)
+    get_dims(2) = concat_bytes1(b(9:10),2,.FALSE.)
+    get_dims(3) = to_positive(b(4)) - 5  ! 4 parameters + 1 edge
 
     RETURN
 

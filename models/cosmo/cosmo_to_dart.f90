@@ -66,11 +66,11 @@ call initialize_utilities(progname='cosmo_to_dart', output_flag=verbose)
 !----------------------------------------------------------------------
 call static_init_model()
 
-model_time = get_state_time()
-x_size     = get_model_size()
+model_time     = get_state_time()
+x_size         = get_model_size()
 cosmo_filename = get_cosmo_filename()
 
-print*,x_size
+print*,'model size is ',x_size
 
 allocate(x(1:x_size))
 x(:)=get_state_vector()
