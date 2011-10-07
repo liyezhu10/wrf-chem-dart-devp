@@ -1512,29 +1512,40 @@ contains
     real(r8),intent(in)  :: lo1,lo2,la1,la2,x1,x2,lop,lap
     real(r8),intent(out) :: lo,la,x
 
-    real(r8)             :: m1,m2,n1,n2,d1,d2,d
+    real(r8)             :: m1,m2,n1,n2,d1,d2,d,mylo1,mylo2,mylop,w1,w2
 
-    m1=(la2-la1)/(lo2-lo1)
+    mylo1=lo1
+    mylo2=lo2
+    mylop=lop
+
+    if (lo1>180.0_r8) mylo1=lo1-360.0_r8
+    if (lo2>180.0_r8) mylo2=lo2-360.0_r8
+    if (lop>180.0_r8) mylop=lop-360.0_r8
+
+    m1=(la2-la1)/(mylo2-mylo1)
     if (m1 .ne. 0.0_r8) then
-      n1=la1-lo1*m1
+      n1=la1-mylo1*m1
       m2=-1.0_r8/m1
-      n2=lap-lop*m2
+      n2=lap-mylop*m2
       lo=(n2-n1)/(m1-m2)
       la=lo*m1+n1
-
-      d1=sqrt((lo1-lo)**2+(la1-la)**2)
-      d2=sqrt((lo2-lo)**2+(la2-la)**2)
-      d =sqrt((lo1-lo2)**2+(la1-la2)**2)
+      d1=sqrt((mylo1-lo)**2+(la1-la)**2)
+      d2=sqrt((mylo2-lo)**2+(la2-la)**2)
+      d =sqrt((mylo1-mylo2)**2+(la1-la2)**2)
     else
       la=la1
-      lo=lop
+      lo=mylop
 
-      d1=sqrt((lo1-lo)**2+(la1-la)**2)
-      d2=sqrt((lo2-lo)**2+(la2-la)**2)
-      d =sqrt((lo1-lo2)**2+(la1-la2)**2)
+      d1=sqrt((mylo1-lo)**2+(la1-la)**2)
+      d2=sqrt((mylo2-lo)**2+(la2-la)**2)
+      d =sqrt((mylo1-mylo2)**2+(la1-la2)**2)
     end if
 
-    x=(1.0_r8-(d1/d))*x1+(1.0_r8-(d2/d))*x2
+    if (lo < 0.0_r8) lo=lo+360.0_r8
+
+    w1=abs(1.0_r8-(d1/d))
+    w2=abs(1.0_r8-(d2/d))
+    x=w1*x1+w2*x2
 
     return
 
