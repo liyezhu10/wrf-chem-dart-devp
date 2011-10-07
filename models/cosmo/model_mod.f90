@@ -135,16 +135,16 @@ character(len=128), parameter :: &
   type(cosmo_hcoord)             :: cosmo_lonlat(3) ! 3 is for the stagger
   integer                        :: nslabs
 
-  character(len=256)             :: cosmo_filename
-  integer                        :: model_dt
-  real(r8)                       :: model_perturbation_amplitude
-  logical                        :: output_state_vector
+  character(len=256)             :: cosmo_filename               = "test.grb"
+  integer                        :: model_dt                     = 40
+  real(r8)                       :: model_perturbation_amplitude = 0.1
+  logical                        :: output_state_vector          = .FALSE.
 
   namelist /model_nml/  &
-   cosmo_filename,model_dt,model_perturbation_amplitude,output_state_vector
+    cosmo_filename, model_dt, model_perturbation_amplitude, output_state_vector
 
   integer                        :: model_size
-  type(time_type)                :: model_timestep  ! smallest time to adv model
+  type(time_type)                :: model_timestep ! smallest time to adv model
 
   integer, parameter             :: n_max_kinds=200
 
@@ -183,12 +183,11 @@ contains
 
   subroutine static_init_model()
 
-    integer                       :: iunit,io,islab,ikind,sv_length,i
-    integer                       :: sidx,eidx
-    integer,allocatable           :: pp_index(:)
+    integer                       :: iunit,io,islab,ikind,sv_length
+    integer, allocatable          :: pp_index(:)
     real(r8),allocatable          :: data(:,:)
 
-    real(r8),parameter            :: g = 9.80665
+    real(r8),parameter            :: g = 9.80665_r8
 
     if ( module_initialized ) return ! only need to do this once.
     
@@ -276,7 +275,7 @@ contains
 
     setlevel : do islab=1,nslabs
 
-      write(*,*)'slab ',islab,' of ',nslabs,cosmo_slabs(islab)%dart_kind==KIND_U_WIND_COMPONENT
+      write(*,*)'slab ', islab, ' of ', nslabs, cosmo_slabs(islab)%dart_kind
 
       if (cosmo_slabs(islab)%dart_kind==KIND_U_WIND_COMPONENT) then
 
@@ -287,7 +286,7 @@ contains
           allocate(pp_index(1:1))
           pp_index(1)=-1
         end if
-        call set_vertical_coords(cosmo_filename,grib_header(islab),non_state_data,state_vector,pp_index)
+        call set_vertical_coords(grib_header(islab),non_state_data,state_vector,pp_index)
         write(*,*)'non_state_data pfl min max ',minval(non_state_data%pfl),maxval(non_state_data%pfl)
 
         exit setlevel
@@ -336,6 +335,9 @@ contains
 
 
   function get_model_time_step()
+  ! Returns the smallest increment of time that we want to advance the model.
+  ! This defines the minimum assimilation interval.
+  ! It is NOT the dynamical timestep of the model.
 
     type(time_type) :: get_model_time_step
     
@@ -351,178 +353,185 @@ contains
 
   subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
-    ! Passed variables
-    
-    real(r8),            intent(in)  :: x(:)
-    type(location_type), intent(in)  :: location
-    integer,             intent(in)  :: obs_type
-    real(r8),            intent(out) :: interp_val
-    integer,             intent(out) :: istatus
-    
-    ! Local storage
-    
-    real(r8),allocatable :: xyz_grid(:,:)
-    real(r8)             :: point_coords(1:3)
-    real(r8)             :: xyz_point(3)
-    real(r8)             :: lo1,lo2,la1,la2
-    real(r8)             :: m1,m2,n1,n2,xc,yc
-    
-    integer              :: i,j,hbox(2,2),n,vbound(2),sindex,eindex
-    real(r8)             :: hbox_weight(2,2),hbox_val(2,2),hbox_lon(2,2),hbox_lat(2,2)
-    real(r8)             :: vbound_weight(2),val1,val2
-    real(r8),allocatable :: hgrid_data(:)
+  ! Error codes:
+  ! istatus = 99 : unknown error
+  ! istatus = 10 : observation type is not in state vector
+  ! istatus = 15 : observation lies outside the model domain (horizontal)
+  ! istatus = 16 : observation lies outside the model domain (vertical)
+  ! istatus = 19 : observation vertical coordinate is not supported
 
-    ! Error codes:
-    ! istatus = 99 : unknown error
-    ! istatus = 10 : observation type is not in state vector
-    ! istatus = 15 : observation lies outside the model domain (horizontal)
-    ! istatus = 16 : observation lies outside the model domain (vertical)
-    ! istatus = 19 : observation vertical coordinate is not supported
+  ! Passed variables
+  
+  real(r8),            intent(in)  :: x(:)
+  type(location_type), intent(in)  :: location
+  integer,             intent(in)  :: obs_type
+  real(r8),            intent(out) :: interp_val
+  integer,             intent(out) :: istatus
+  
+  ! Local storage
+  
+  real(r8),allocatable :: xyz_grid(:,:)
+  real(r8)             :: point_coords(1:3)
+  real(r8)             :: xyz_point(3)
+  
+  integer              :: i,j,hbox(2,2),n,vbound(2),sindex
+  real(r8)             :: hbox_weight(2,2),hbox_val(2,2),hbox_lon(2,2),hbox_lat(2,2)
+  real(r8)             :: vbound_weight(2),val1,val2
 
-    IF ( .not. module_initialized ) call static_init_model
-    
-    interp_val = MISSING_R8     ! the DART bad value flag
-    istatus = 99                ! unknown error
-    
-    if (state_vector_vars(obs_type)%is_present) then
+  IF ( .not. module_initialized ) call static_init_model
+  
+  interp_val = MISSING_R8     ! the DART bad value flag
+  istatus = 99                ! unknown error
 
-      ! horizontal interpolation
+  ! FIXME ... want some sort of error message here?
+  if ( .not. state_vector_vars(obs_type)%is_present) then
+     istatus=10
+     return
+  end if
 
-      n = size(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,1)
+  ! horizontal interpolation
 
-      allocate(xyz_grid(1:n,1:3))
-      point_coords(1:3) = get_location(location)
+  n = size(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,1)
 
-      ! calculate the angles (in reference to lon/lat) between the desired location and all horizontal grid points
-      xyz_grid=ll_to_xyz_vector(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,&
-                                cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat)
+  allocate(xyz_grid(1:n,1:3))
+  point_coords(1:3) = get_location(location)
 
-      xyz_point=ll_to_xyz_single(point_coords(1),point_coords(2))
+  ! calculate the angles (in reference to lon/lat) between the desired location and all horizontal grid points
+  xyz_grid=ll_to_xyz_vector(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,&
+                            cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat)
 
-      ! Find grid indices of box enclosing the observation location
+  xyz_point=ll_to_xyz_single(point_coords(1),point_coords(2))
 
-!      call get_enclosing_grid_box(xyz_point,xyz_grid,n,state_vector_vars(obs_type)%nx,state_vector_vars(obs_type)%ny,hbox,hbox_weight)
-      call get_enclosing_grid_box_lonlat(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,&
-                                         cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat,&
-                                         point_coords(1:2),n,state_vector_vars(obs_type)%nx,state_vector_vars(obs_type)%ny,hbox,hbox_weight)
-      
-!      print*,cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon(hbox(1,1))
-!      print*,cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat(hbox(1,1))
+  ! Find grid indices of box enclosing the observation location
 
-      if (hbox(1,1)==-1) then
-        istatus=15
-        return
-      end if
+! call get_enclosing_grid_box(xyz_point,xyz_grid,n, &
+!                             state_vector_vars(obs_type)%nx,&
+!                             state_vector_vars(obs_type)%ny,hbox,hbox_weight)
+  call get_enclosing_grid_box_lonlat(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,&
+                                     cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat,&
+                              point_coords(1:2),n,state_vector_vars(obs_type)%nx,                        &
+                                                  state_vector_vars(obs_type)%ny, hbox, hbox_weight)
+   
+! print*,cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon(hbox(1,1))
+! print*,cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat(hbox(1,1))
+
+  if (hbox(1,1)==-1) then
+     istatus=15
+     return
+  end if
 
 ! TJH write(*,*)'vertical system is ',query_location(location,'which_vert')
 
-      ! determine vertical level above and below obsevation
-      call get_vertical_boundaries(hbox, hbox_weight, obs_type, query_location(location,'which_vert'),&
-                                   point_coords(3), vbound, vbound_weight, istatus)
+  ! determine vertical level above and below obsevation
+  call get_vertical_boundaries(hbox, hbox_weight, obs_type, query_location(location,'which_vert'),&
+                               point_coords(3), vbound, vbound_weight, istatus)
 
-      ! check if observation is in vertical domain and vertical coordinate system is supported
-      if (vbound(1)==-1) then
-        return
-      end if
-      
-      ! Perform a bilinear interpolation from the grid box to the desired location
-      ! for the level above and below the observation
+  ! check if observation is in vertical domain and vertical coordinate system is supported
+  ! FIXME istatus value?
+  if (vbound(1)==-1) then
+     return
+  end if
+   
+  ! Perform a bilinear interpolation from the grid box to the desired location
+  ! for the level above and below the observation
 
-      sindex=state_vector_vars(obs_type)%state_vector_sindex(vbound(1))
+  sindex=state_vector_vars(obs_type)%state_vector_sindex(vbound(1))
 
-      do i=1,2
-        do j=1,2
-          hbox_val(i,j)=x(sindex+hbox(i,j)-1)
-          hbox_lon(i,j)=cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon(hbox(i,j))
-          hbox_lat(i,j)=cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat(hbox(i,j))
-        end do
-      end do
+  do i=1,2
+  do j=1,2
+     hbox_val(i,j)=x(sindex+hbox(i,j)-1)
+     hbox_lon(i,j)=cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon(hbox(i,j))
+     hbox_lat(i,j)=cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lat(hbox(i,j))
+  enddo
+  enddo
 
-      call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val1,istatus)
+  ! FIXME - can you ignore the istatus
+  call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val1,istatus)
 
-      sindex=state_vector_vars(obs_type)%state_vector_sindex(vbound(2))
-      do i=1,2
-        do j=1,2
-          hbox_val(i,j)=x(sindex+hbox(i,j)-1)
-        end do
-      end do
+  sindex=state_vector_vars(obs_type)%state_vector_sindex(vbound(2))
+  do i=1,2
+  do j=1,2
+     hbox_val(i,j)=x(sindex+hbox(i,j)-1)
+  end do
+  end do
 
-      call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val2,istatus)
+  ! FIXME - can you ignore the istatus
+  call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val2,istatus)
 
-      ! vertical interpolation of horizontally interpolated values
+  ! vertical interpolation of horizontally interpolated values
 
-      interp_val=val1*vbound_weight(1)+val2*vbound_weight(2)
-      istatus=0
-      
-      return
-
-    else
-      istatus=10
-      return
-    end if
-
+  interp_val=val1*vbound_weight(1)+val2*vbound_weight(2)
+  istatus=0
+   
   end subroutine model_interpolate
 
 
 
   subroutine init_conditions(x)
-    !------------------------------------------------------------------
-    !
-    ! Returns a model state vector, x, that is some sort of appropriate
-    ! initial condition for starting up a long integration of the model.
-    ! At present, this is only used if the namelist parameter 
-    ! start_from_restart is set to .false. in the program perfect_model_obs.
-    ! If this option is not to be used in perfect_model_obs, or if no 
-    ! synthetic data experiments using perfect_model_obs are planned, 
-    ! this can be a NULL INTERFACE.
-    
-    real(r8), intent(out) :: x(:)
-    
-    if ( .not. module_initialized ) call static_init_model
-    
-    x = 0.0_r8
-    
+  !------------------------------------------------------------------
+  ! Returns a model state vector, x, that is some sort of appropriate
+  ! initial condition for starting up a long integration of the model.
+  ! At present, this is only used if the namelist parameter 
+  ! start_from_restart is set to .false. in the program perfect_model_obs.
+
+  real(r8), intent(out) :: x(:)
+
+  if ( .not. module_initialized ) call static_init_model
+
+  x = 0.0_r8  ! suppress compiler warnings about unused variables
+
+  write(string,*) 'Cannot initialize COSMO state via subroutine call; start_from_restart cannot be F'
+  call error_handler(E_ERR,'init_conditions',string,source,revision,revdate)
+
   end subroutine init_conditions
 
 
 
   subroutine init_time(time)
-    type(time_type), intent(out) :: time
+  !------------------------------------------------------------------
+  ! Companion interface to init_conditions. Returns a time that is somehow 
+  ! appropriate for starting up a long integration of the model.
+  ! At present, this is only used if the namelist parameter 
+  ! start_from_restart is set to .false. in the program perfect_model_obs.
 
-    time=set_time(0,0)
+  type(time_type), intent(out) :: time
 
-    return
+  time = set_time(0,0) ! suppress compiler warnings about unused variables
+
+  write(string,*) 'Cannot initialize COSMO time via subroutine call; start_from_restart cannot be F'
+  call error_handler(E_ERR,'init_time',string,source,revision,revdate)
+  
   end subroutine init_time
 
 
   
   subroutine adv_1step(x, time)
-
-    ! As COSMO can only be advanced as a separate executable,
-    ! this is a NULL INTERFACE.
+  !------------------------------------------------------------------
+  ! As COSMO can only be advanced as a separate executable,
+  ! this is a NULL INTERFACE.
     
-    real(r8),        intent(inout) :: x(:)
-    type(time_type), intent(in)    :: time
+  real(r8),        intent(inout) :: x(:)
+  type(time_type), intent(in)    :: time
     
-    if ( .not. module_initialized ) call static_init_model
+  if ( .not. module_initialized ) call static_init_model
     
-    if (do_output()) then
+  if (do_output()) then
       call print_time(time,'NULL interface adv_1step (no advance) DART time is')
       call print_time(time,'NULL interface adv_1step (no advance) DART time is',logfileunit)
-    endif
+  endif
 
-    return
-    
+  write(string,*) 'Cannot advance COSMO with a subroutine call; async cannot equal 0'
+  call error_handler(E_ERR,'adv_1step',string,source,revision,revdate)
+
   end subroutine adv_1step
 
 
   
   subroutine end_model()
 
-    deallocate(cosmo_slabs)
-    deallocate(state_vector)
+  deallocate(cosmo_slabs)
+  deallocate(state_vector)
 
-    return
   end subroutine end_model
 
 
@@ -955,10 +964,8 @@ contains
     integer :: i,ikind, VarID, ncNdims, dimlen,ndims,vardims(3)
     integer :: TimeDimID, CopyDimID
     
-    real(r8), allocatable, dimension(:)       :: data_1d_array
     real(r8), allocatable, dimension(:,:)     :: data_2d_array
     real(r8), allocatable, dimension(:,:,:)   :: data_3d_array
-    real(r8), allocatable, dimension(:,:,:,:) :: data_4d_array
     
     character(len=128) :: filename
     
@@ -1147,8 +1154,10 @@ contains
   
   subroutine ens_mean_for_model(ens_mean)
 
-    real(r8), dimension(:), intent(in) :: ens_mean
-    return
+  real(r8), dimension(:), intent(in) :: ens_mean
+
+  write(string,*) 'COSMO has no ensemble mean in storage.'
+  call error_handler(E_ERR,'ens_mean_for_model',string,source,revision,revdate)
 
   end subroutine ens_mean_for_model
 
@@ -1160,28 +1169,28 @@ contains
     is_allowed_non_state_var(:)=.FALSE.
 
     allowed_state_vector_vars(1)=KIND_U_WIND_COMPONENT
-    is_allowed_state_vector_var(KIND_U_WIND_COMPONENT)=.TRUE.
+     is_allowed_state_vector_var(KIND_U_WIND_COMPONENT)=.TRUE.
     allowed_state_vector_vars(1)=KIND_U_WIND_COMPONENT
-    is_allowed_state_vector_var(KIND_U_WIND_COMPONENT)=.TRUE.
+     is_allowed_state_vector_var(KIND_U_WIND_COMPONENT)=.TRUE.
     allowed_state_vector_vars(2)=KIND_V_WIND_COMPONENT
-    is_allowed_state_vector_var(KIND_V_WIND_COMPONENT)=.TRUE.
+     is_allowed_state_vector_var(KIND_V_WIND_COMPONENT)=.TRUE.
     allowed_state_vector_vars(3)=KIND_VERTICAL_VELOCITY
-    is_allowed_state_vector_var(KIND_VERTICAL_VELOCITY)=.TRUE.
+     is_allowed_state_vector_var(KIND_VERTICAL_VELOCITY)=.TRUE.
     allowed_state_vector_vars(4)=KIND_TEMPERATURE
-    is_allowed_state_vector_var(KIND_TEMPERATURE)=.TRUE.
+     is_allowed_state_vector_var(KIND_TEMPERATURE)=.TRUE.
     allowed_state_vector_vars(5)=KIND_PRESSURE
-    is_allowed_state_vector_var(KIND_PRESSURE)=.TRUE.
+     is_allowed_state_vector_var(KIND_PRESSURE)=.TRUE.
     allowed_state_vector_vars(6)=KIND_SPECIFIC_HUMIDITY
-    is_allowed_state_vector_var(KIND_SPECIFIC_HUMIDITY)=.TRUE.
+     is_allowed_state_vector_var(KIND_SPECIFIC_HUMIDITY)=.TRUE.
     allowed_state_vector_vars(7)=KIND_CLOUD_LIQUID_WATER
-    is_allowed_state_vector_var(KIND_CLOUD_LIQUID_WATER)=.TRUE.
+     is_allowed_state_vector_var(KIND_CLOUD_LIQUID_WATER)=.TRUE.
     allowed_state_vector_vars(8)=KIND_CLOUD_ICE
-    is_allowed_state_vector_var(KIND_CLOUD_ICE)=.TRUE.
+     is_allowed_state_vector_var(KIND_CLOUD_ICE)=.TRUE.
 
     allowed_non_state_vars(1)=KIND_SURFACE_ELEVATION
-    is_allowed_non_state_var(KIND_SURFACE_ELEVATION)=.TRUE.
+     is_allowed_non_state_var(KIND_SURFACE_ELEVATION)=.TRUE.
     allowed_non_state_vars(2)=KIND_SURFACE_GEOPOTENTIAL
-    is_allowed_non_state_var(KIND_SURFACE_GEOPOTENTIAL)=.TRUE.
+     is_allowed_non_state_var(KIND_SURFACE_GEOPOTENTIAL)=.TRUE.
 
     return
 
@@ -1197,7 +1206,6 @@ contains
     real(r8),intent(in)  :: lat(:),lon(:) ! input:  lat/lon coordinates in degrees
 
     real(r8)             :: radius
-
     integer              :: n
 
     ! define output vector size to be the same as the input vector size
@@ -1208,7 +1216,7 @@ contains
 
     ! as we are interested in relative distances we set the radius to 1 - may be changed later
 
-    radius=1.
+    radius=1.0_r8
 
     ! caclulate the x,y,z-coordinates
 
@@ -1230,11 +1238,9 @@ contains
 
     real(r8)             :: radius
 
-    integer              :: i,j,n
-
     ! as we are interested in relative distances we set the radius to 1 - may be changed later
 
-    radius=1.
+    radius=1.0_r8
 
     ! caclulate the x,y,z-coordinates
 
@@ -1256,7 +1262,7 @@ contains
 
 !    real(r8)             :: work(1:nx,1:ny,1:3),dist(1:nx,1:ny),boxdist(1:2,1:2)
     real(r8)             :: work(1:nx+2,1:ny+2,1:3),dist(1:nx+2,1:ny+2),boxdist(1:2,1:2)
-    integer              :: i,j,minidx(2),boxidx(2),idx1,idx2,xb,yb
+    integer              :: i,j,minidx(2),boxidx(2),xb,yb
 
     real(r8) :: sqrt2
 
@@ -1270,19 +1276,19 @@ contains
     end do
 
     do j=2,ny+1
-      work(1,j,1:3)=work(2,j,1:3)-(work(3,j,1:3)-work(2,j,1:3))
+      work(   1,j,1:3)=work(   2,j,1:3)-(work( 3,j,1:3)-work(   2,j,1:3))
       work(nx+2,j,1:3)=work(nx+1,j,1:3)-(work(nx,j,1:3)-work(nx+1,j,1:3))
     end do
 
-    work(   1,   1,1:3) = work(   2,   2,1:3) - 0.5*(sqrt2*(work(   2,   2,1:3)-work(   1,   2,1:3)) + sqrt2*(work(   2,   2,1:3)-work(   2,   1,1:3)))
-    work(   1,ny+2,1:3) = work(   2,ny+1,1:3) - 0.5*(sqrt2*(work(   2,ny+1,1:3)-work(   1,ny+1,1:3)) + sqrt2*(work(   2,ny+1,1:3)-work(   2,ny+2,1:3)))
-    work(nx+2,   1,1:3) = work(nx+1,   2,1:3) - 0.5*(sqrt2*(work(nx+1,   2,1:3)-work(nx+2,   2,1:3)) + sqrt2*(work(nx+1,   2,1:3)-work(nx+1,   1,1:3)))
-    work(nx+2,ny+2,1:3) = work(nx+1,ny+1,1:3) - 0.5*(sqrt2*(work(nx+1,ny+1,1:3)-work(nx+2,ny+1,1:3)) + sqrt2*(work(nx+1,ny+1,1:3)-work(nx+1,ny+2,1:3)))
+    work(   1,   1,1:3) = work(   2,   2,1:3) - 0.5_r8*(sqrt2*(work(   2,   2,1:3)-work(   1,   2,1:3)) + sqrt2*(work(   2,   2,1:3)-work(   2,   1,1:3)))
+    work(   1,ny+2,1:3) = work(   2,ny+1,1:3) - 0.5_r8*(sqrt2*(work(   2,ny+1,1:3)-work(   1,ny+1,1:3)) + sqrt2*(work(   2,ny+1,1:3)-work(   2,ny+2,1:3)))
+    work(nx+2,   1,1:3) = work(nx+1,   2,1:3) - 0.5_r8*(sqrt2*(work(nx+1,   2,1:3)-work(nx+2,   2,1:3)) + sqrt2*(work(nx+1,   2,1:3)-work(nx+1,   1,1:3)))
+    work(nx+2,ny+2,1:3) = work(nx+1,ny+1,1:3) - 0.5_r8*(sqrt2*(work(nx+1,ny+1,1:3)-work(nx+2,ny+1,1:3)) + sqrt2*(work(nx+1,ny+1,1:3)-work(nx+1,ny+2,1:3)))
 
     do i=1,nx+2
-      do j=1,ny+2
+    do j=1,ny+2
         dist(i,j)=sqrt(sum((work(i,j,:)-p(:))**2))
-      end do
+    end do
     end do
 
     minidx(:)=minloc(dist)
@@ -1296,9 +1302,9 @@ contains
 
 
     do i=0,1
-      do j=0,1
+    do j=0,1
         boxdist(i+1,j+1)=sum(dist(minidx(1)+i-1:minidx(1)+i,minidx(2)+j-1:minidx(2)+j))
-      end do
+    end do
     end do 
 
     boxidx=minloc(boxdist)-1
@@ -1314,15 +1320,15 @@ contains
       return
     else
       do i=1,2
-        do j=1,2
+      do j=1,2
           b(i,j)=((minidx(2)+(j-1)*(boxidx(2)-0.5)*2)*ny)+(minidx(1)+(i-1)*(2*(boxidx(1)-0.5)))
-        end do
+      end do
       end do
 
       do i=1,2
-        do j=1,2
+      do j=1,2
           boxdist(i,j)=dist(mod(b(i,j),ny),b(i,j)/ny)
-        end do
+      end do
       end do
 
       bw(:,:)=1./boxdist(:,:)
@@ -1330,8 +1336,6 @@ contains
       bw=bw/sum(bw)
       b(:,:)=b(:,:)-1
     end if
-
-    return
 
   end subroutine get_enclosing_grid_box
 
@@ -1344,10 +1348,10 @@ contains
     integer, intent(out) :: b(1:2,1:2)
     real(r8),intent(out) :: bw(1:2,1:2)
 
-!    real(r8)             :: work(1:nx,1:ny,1:3),dist(1:nx,1:ny),boxdist(1:2,1:2)
+!    real(r8)            :: work(1:nx,1:ny,1:3),dist(1:nx,1:ny),boxdist(1:2,1:2)
     real(r8)             :: work(1:nx+2,1:ny+2,1:2),dist(1:nx+2,1:ny+2),boxdist(1:2,1:2),pw(2)
 
-    integer  :: i,j,minidx(2),boxidx(2),idx1,idx2,xb,yb,bx(2,2),by(2,2)
+    integer  :: i,j,minidx(2),boxidx(2),xb,yb,bx(2,2),by(2,2)
     real(r8) :: sqrt2
     integer  :: iunit
 
@@ -1358,25 +1362,25 @@ contains
     pw=p*deg2rad
 
     do i=2,nx+1
-      work(i,1,1:2)=work(i,2,1:2)-(work(i,3,1:2)-work(i,2,1:2))
+      work(i,   1,1:2)=work(i,   2,1:2)-(work(i, 3,1:2)-work(i,   2,1:2))
       work(i,ny+2,1:2)=work(i,ny+1,1:2)-(work(i,ny,1:2)-work(i,ny+1,1:2))
     end do
 
     do j=2,ny+1
-      work(1,j,1:2)=work(2,j,1:2)-(work(3,j,1:2)-work(2,j,1:2))
+      work(   1,j,1:2)=work(   2,j,1:2)-(work( 3,j,1:2)-work(   2,j,1:2))
       work(nx+2,j,1:2)=work(nx+1,j,1:2)-(work(nx,j,1:2)-work(nx+1,j,1:2))
     end do
 
-    work(   1,   1,1:2)=work(   2,   2,1:2) -0.5_r8*(sqrt2*(work(   2,   2,1:2)-work(   1,   2,1:2))+sqrt2*(work(   2,   2,1:2)-work(   2,   1,1:2)))
-    work(   1,ny+2,1:2)=work(   2,ny+1,1:2) -0.5_r8*(sqrt2*(work(   2,ny+1,1:2)-work(   1,ny+1,1:2))+sqrt2*(work(   2,ny+1,1:2)-work(   2,ny+2,1:2)))
-    work(nx+2,   1,1:2)=work(nx+1,   2,1:2) -0.5_r8*(sqrt2*(work(nx+1,   2,1:2)-work(nx+2,   2,1:2))+sqrt2*(work(nx+1,   2,1:2)-work(nx+1,   1,1:2)))
-    work(nx+2,ny+2,1:2)=work(nx+1,ny+1,1:2) -0.5_r8*(sqrt2*(work(nx+1,ny+1,1:2)-work(nx+2,ny+1,1:2))+sqrt2*(work(nx+1,ny+1,1:2)-work(nx+1,ny+2,1:2)))
+    work(   1,   1,1:2) = work(   2,   2,1:2) - 0.5_r8*(sqrt2*(work(   2,   2,1:2)-work(   1,   2,1:2))+sqrt2*(work(   2,   2,1:2)-work(   2,   1,1:2)))
+    work(   1,ny+2,1:2) = work(   2,ny+1,1:2) - 0.5_r8*(sqrt2*(work(   2,ny+1,1:2)-work(   1,ny+1,1:2))+sqrt2*(work(   2,ny+1,1:2)-work(   2,ny+2,1:2)))
+    work(nx+2,   1,1:2) = work(nx+1,   2,1:2) - 0.5_r8*(sqrt2*(work(nx+1,   2,1:2)-work(nx+2,   2,1:2))+sqrt2*(work(nx+1,   2,1:2)-work(nx+1,   1,1:2)))
+    work(nx+2,ny+2,1:2) = work(nx+1,ny+1,1:2) - 0.5_r8*(sqrt2*(work(nx+1,ny+1,1:2)-work(nx+2,ny+1,1:2))+sqrt2*(work(nx+1,ny+1,1:2)-work(nx+1,ny+2,1:2)))
 
     do i=1,nx+2
-      do j=1,ny+2
-!        dist(i,j)=sqrt(sum((work(i,j,:)-p(:))**2))
-        dist(i,j)=6173.*acos(cos(work(i,j,2)-pw(2))-cos(work(i,j,2))*cos(pw(2))*(1-cos(work(i,j,1)-pw(1))))
-      end do
+    do j=1,ny+2
+!      dist(i,j)=sqrt(sum((work(i,j,:)-p(:))**2))
+       dist(i,j) = 6173.0_r8*acos(cos(work(i,j,2)-pw(2))-cos(work(i,j,2))*cos(pw(2))*(1-cos(work(i,j,1)-pw(1))))
+    end do
     end do
 
     minidx(:)=minloc(dist)
@@ -1391,28 +1395,28 @@ contains
     end if
 
 !   open(21,file='/daten02/jkeller/testbox.bin',form='unformatted')
-    iunit = open_file('testbox.bin',form='unformatted',action='write') 
-    write(iunit) nx
-    write(iunit) ny
+!   iunit = open_file('testbox.bin',form='unformatted',action='write') 
+!   write(iunit) nx
+!   write(iunit) ny
 
 !    print*,mod(b(i,j),nx),(b(i,j)/nx)+1
 
     do i=0,1
-      do j=0,1
-        boxdist(i+1,j+1)=sum(dist(minidx(1)+i-1:minidx(1)+i,minidx(2)+j-1:minidx(2)+j))/4.
-!        write(*,'(4(I5))') minidx(1)+i-1,minidx(1)+i,minidx(2)+j-1,minidx(2)+j
-        write(iunit) (minidx(2)+j-1),minidx(1)+i-1,&
-                  (minidx(2)+j-1),minidx(1)+i,&
-                  (minidx(2)+j),minidx(1)+i-1,&
-                  (minidx(2)+j),minidx(1)+i
-        write(iunit) boxdist(i+1,j+1)
-      end do
+    do j=0,1
+        boxdist(i+1,j+1)=sum(dist(minidx(1)+i-1:minidx(1)+i,minidx(2)+j-1:minidx(2)+j))/4.0_r8
+!       write(*,'(4(I5))') minidx(1)+i-1,minidx(1)+i,minidx(2)+j-1,minidx(2)+j
+!       write(iunit) (minidx(2)+j-1),minidx(1)+i-1,&
+!                 (minidx(2)+j-1),minidx(1)+i,&
+!                 (minidx(2)+j),minidx(1)+i-1,&
+!                 (minidx(2)+j),minidx(1)+i
+!       write(iunit) boxdist(i+1,j+1)
+    end do
     end do 
 
     boxidx=minloc(boxdist)-1
 
-    xb=minidx(1)+(2*(boxidx(1)-0.5))
-    yb=minidx(2)+(2*(boxidx(2)-0.5))
+    xb=minidx(1)+(2*(boxidx(1)-0.5_r8))
+    yb=minidx(2)+(2*(boxidx(2)-0.5_r8))
 
 !    print*,minidx
 !    print*,xb,yb
@@ -1422,20 +1426,20 @@ contains
       return
     else
       do i=1,2
-        do j=1,2
-          bx(i,j)=minidx(1)+(i-1)*(2*(boxidx(1)-0.5))
-          by(i,j)=minidx(2)+(j-1)*(2*(boxidx(2)-0.5))
+      do j=1,2
+          bx(i,j)=minidx(1)+(i-1)*(2*(boxidx(1)-0.5_r8))
+          by(i,j)=minidx(2)+(j-1)*(2*(boxidx(2)-0.5_r8))
 !          b(i,j)=(((minidx(2)+(j-1)*(boxidx(2)-0.5)*2)-1)*nx)+(minidx(1)+(i-1)*(2*(boxidx(1)-0.5)))
-        end do
+      end do
       end do
 
       do i=1,2
-        do j=1,2
+      do j=1,2
           boxdist(i,j)=dist(bx(i,j),by(i,j))
-        end do
+      end do
       end do
 
-      bw(:,:)=1./boxdist(:,:)
+      bw(:,:)=1.0_r8/boxdist(:,:)
 !      bw(:,:)=(((1.-boxdist(:,:))/(1.1*maxval(boxdist)))**2)/((boxdist(:,:)/(1.1*maxval(boxdist)))**2)
       bw=bw/sum(bw)
       bx=bx-1
@@ -1446,11 +1450,11 @@ contains
 !    write(*,'(4(F6.3,1X))') lon(b(1,1)),lat(b(1,1)),lon(b(2,1)),lat(b(2,1))
 !    write(*,'(4(F6.3,1X))') lon(b(1,2)),lat(b(1,2)),lon(b(2,2)),lat(b(2,2))
 
-    write(iunit) b
-    write(iunit) minidx-1
-    write(iunit) lon
-    write(iunit) lat
-    call close_file(iunit)
+!   write(iunit) b
+!   write(iunit) minidx-1
+!   write(iunit) lon
+!   write(iunit) lat
+!   call close_file(iunit)
     return
 
   end subroutine get_enclosing_grid_box_lonlat
@@ -1469,8 +1473,9 @@ contains
     
     ! Local storage
     
-    real(r8)             :: x1,x2,lo1,lo2,la1,la2
-    real(r8)             :: m1,m2,n1,n2,xc,yc,d1,d2,d
+    real(r8)             :: x1,lo1,la1
+    real(r8)             :: x2,lo2,la2
+    real(r8)             :: d1,d2,d
     
 !    write(*,'(3(F8.5,1X))') bv(1,1),blo(1,1),bla(1,1)
 !    write(*,'(3(F8.5,1X))') bv(2,1),blo(2,1),bla(2,1)
@@ -1491,7 +1496,7 @@ contains
     d2=sqrt((lo2-p(1))**2+(la2-p(2))**2)
     d =sqrt((lo1-lo2 )**2+(la1-la2 )**2)
 
-    v=(1.-(d1/d))*x1+(1.-(d2/d))*x2
+    v=(1.0_r8-(d1/d))*x1+(1.0_r8-(d2/d))*x2
 
 !    print*,1.-d1/d,1.-d2/d
 !    print*,v
@@ -1510,9 +1515,9 @@ contains
     real(r8)             :: m1,m2,n1,n2,d1,d2,d
 
     m1=(la2-la1)/(lo2-lo1)
-    if (m1 .ne. 0.) then
+    if (m1 .ne. 0.0_r8) then
       n1=la1-lo1*m1
-      m2=-1./m1
+      m2=-1.0_r8/m1
       n2=lap-lop*m2
       lo=(n2-n1)/(m1-m2)
       la=lo*m1+n1
@@ -1529,7 +1534,7 @@ contains
       d =sqrt((lo1-lo2)**2+(la1-la2)**2)
     end if
 
-    x=(1.-(d1/d))*x1+(1.-(d2/d))*x2
+    x=(1.0_r8-(d1/d))*x1+(1.0_r8-(d2/d))*x2
 
     return
 
@@ -1739,8 +1744,8 @@ contains
 !          cosmo_var=state_vector_vars(ivar)%cosmo_state_index(ilevel)
 !          len=(state_vector_vars(ivar)%nx*state_vector_vars(ivar)%ny)-1
 !          eidx=sidx+len-1
-!          data=get_data(bdata,bpos(cosmo_var,1:4),blen(cosmo_var,1:4))
-!          x(sidx:eidx)=reshape(data,(/ len /))
+!          mydata=get_data(bdata,bpos(cosmo_var,1:4),blen(cosmo_var,1:4))
+!          x(sidx:eidx)=reshape(mydata,(/ len /))
 !          
 !        end do
 !      end if
@@ -1768,7 +1773,7 @@ contains
     real(r8)             :: sv(1:model_size)
 
     integer              :: islab,ikind,nx,ny,sidx,eidx
-    real(r8),allocatable :: data(:,:)
+    real(r8),allocatable :: mydata(:,:)
 
     if ( .not. module_initialized ) call static_init_model
 
@@ -1779,12 +1784,12 @@ contains
       if (is_allowed_state_vector_var(ikind)) then
         nx=state_vector_vars(ikind)%nx
         ny=state_vector_vars(ikind)%ny
-        allocate(data(1:nx,1:ny))
-        data=get_data_from_binary(cosmo_filename,grib_header(islab),nx,ny)
+        allocate(mydata(1:nx,1:ny))
+        mydata=get_data_from_binary(cosmo_filename,grib_header(islab),nx,ny)
         sidx=cosmo_slabs(islab)%dart_sindex
         eidx=cosmo_slabs(islab)%dart_eindex
-        state_vector(sidx:eidx)=reshape(data,(/ (nx*ny) /))
-        deallocate(data)
+        state_vector(sidx:eidx)=reshape(mydata,(/ (nx*ny) /))
+        deallocate(mydata)
       end if
     end do
 
@@ -1808,7 +1813,7 @@ contains
     real(r8)                      :: bsf,dsf
     integer(kind=1)               :: bin4(4),gribword(4),bin42(4)
     integer(kind=1),allocatable   :: bytearr(:)
-    real(r8),allocatable          :: data(:,:)
+    real(r8),allocatable          :: mydata(:,:)
     real(r8)                      :: ref_value
     integer                       :: gribunit, funit
 
@@ -1823,8 +1828,8 @@ contains
     nslabs=2
     allocate(griblen(1:nslabs))
     DO islab=1,nslabs
-      mylen = mylen+size(grib_header(islab)%pds)+size(grib_header(islab)%gds)+grib_header(islab)%data_length+8+4
-      griblen(islab)=size(grib_header(islab)%pds)+size(grib_header(islab)%gds)+grib_header(islab)%data_length+8+4
+      mylen   =  mylen+size(grib_header(islab)%pds)+size(grib_header(islab)%gds)+grib_header(islab)%data_length+8+4
+      griblen(islab) = size(grib_header(islab)%pds)+size(grib_header(islab)%gds)+grib_header(islab)%data_length+8+4
     END DO
     
 !    if (MOD(mylen,4) .NE. 0) mylen=mylen+4-MOD(mylen,4)
@@ -1841,11 +1846,11 @@ contains
 
       nx=cosmo_slabs(islab)%dims(1)
       ny=cosmo_slabs(islab)%dims(2)
-      allocate(data(1:nx,1:ny))
+      allocate(mydata(1:nx,1:ny))
 
       idx=cosmo_slabs(islab)%dart_sindex
       
-      data(:,:)=reshape(sv(idx:idx+nx*ny),(/ nx,ny /))
+      mydata(:,:)=reshape(sv(idx:idx+nx*ny),(/ nx,ny /))
 
       ! write word GRIB
       gribword(1)=ICHAR('G')
@@ -1877,7 +1882,7 @@ contains
       bytearr(ipos:ipos+hlen-1)=grib_header(islab)%bds 
       print*,grib_header(islab)%bds
 
-      ref_value=minval(data)
+      ref_value=minval(mydata)
       bin4(1:4)=from_float1(ref_value)
       bytearr(ipos+6:ipos+9)=bin4
       CALL byte_to_word_signed(bytearr(ipos+4:ipos+5),ibsf,2)
@@ -1894,15 +1899,15 @@ contains
 
       DO iy=1,ny
         DO ix=1,nx
-!          print*,data(ix,iy)
-          dval=int((data(ix,iy)-ref_value)*((10.**dsf)/(2.**bsf)))
+!          print*,mydata(ix,iy)
+          dval=int((mydata(ix,iy)-ref_value)*((10.**dsf)/(2.**bsf)))
 !          print*,word_to_byte_data(dval)
           bytearr(ipos:ipos+1)=word_to_byte_data(dval)
           ipos=ipos+2
         END DO
       END DO
 
-      deallocate(data)
+      deallocate(mydata)
 
       naddbyte=IAND(grib_header(islab)%bds(4),15)/8
       ipos=ipos+naddbyte

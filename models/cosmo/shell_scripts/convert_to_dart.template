@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: advance_model.csh 4945 2011-06-02 22:29:30Z thoar $
+# $Id$
 #
 # batch script to convert all N ensemble members of COSMO grib files
 # to filter/dart restart files
@@ -106,8 +106,8 @@ echo "duration_sec = $length_time"
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: $
-# $Revision: $
-# $Date: $
+# $URL$
+# $Revision$
+# $Date$
 
 

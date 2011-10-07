@@ -1,0 +1,7 @@
+&model_nml
+   cosmo_filename               = "test.grb",
+   model_dt                     = 40,
+   model_perturbation_amplitude = 0.1,
+   output_state_vector          = .false.
+  /
+

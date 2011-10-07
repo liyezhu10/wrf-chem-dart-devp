@@ -126,7 +126,7 @@ CONTAINS
   SUBROUTINE word_to_byte(w,b,n)
     INTEGER,INTENT(in)          :: w,n
     INTEGER(kind=1),INTENT(out) :: b(1:n)
-    INTEGER                     :: ibin,work,isign
+    INTEGER                     :: ibin,work
 
     work=w
     DO ibin=n,1,-1
@@ -143,7 +143,7 @@ CONTAINS
     IMPLICIT NONE
     
     INTEGER(kind=1),INTENT(in) :: b(4)
-    INTEGER                    :: w(4),imant,ichar,isign,ibin
+    INTEGER                    :: w(4),imant,isign,ibin
 
     w=b
 

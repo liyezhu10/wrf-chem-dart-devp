@@ -1,6 +1,6 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
@@ -72,3 +72,54 @@ else
   echo "to bypass compiling with MPI to run in parallel on multiple cpus."
   echo ""
 endif
+
+#----------------------------------------------------------------------
+# to disable an MPI parallel version of filter for this model, 
+# call this script with the -nompi argument, or if you are never going to
+# build with MPI, add an exit before the entire section above.
+#----------------------------------------------------------------------
+
+#----------------------------------------------------------------------
+# Build the MPI-enabled target(s) 
+#----------------------------------------------------------------------
+
+\rm -f *.o *.mod filter wakeup_filter
+
+@ n = $n + 1
+echo
+echo "---------------------------------------------------"
+echo "build number $n is mkmf_filter"
+csh   mkmf_filter -mpi
+make
+
+if ($status != 0) then
+   echo
+   echo "If this died in mpi_utilities_mod, see code comment"
+   echo "in mpi_utilities_mod.f90 starting with 'BUILD TIP' "
+   echo
+   exit $n
+endif
+
+@ n = $n + 1
+echo
+echo "---------------------------------------------------"
+echo "build number $n is mkmf_wakeup_filter"
+csh  mkmf_wakeup_filter -mpi
+make || exit $n
+
+\rm -f *.o *.mod
+
+echo
+echo 'time to run filter here:'
+echo ' for lsf run "bsub < runme_filter"'
+echo ' for pbs run "qsub runme_filter"'
+echo ' for lam-mpi run "lamboot" once, then "runme_filter"'
+echo ' for mpich run "mpd" once, then "runme_filter"'
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
+

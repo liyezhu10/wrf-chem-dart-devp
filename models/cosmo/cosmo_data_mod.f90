@@ -264,19 +264,16 @@ CONTAINS
     TYPE(grib_header_type),ALLOCATABLE,INTENT(out) :: header(:)
     INTEGER,                           INTENT(out) :: nvar
 
-    TYPE(grib_header_type)                         :: temp(1:nmaxvar)
-    INTEGER                                           :: irec,istat,nrec,irec2,ibyte,m
-    INTEGER(kind=4)                                   :: word(4)
-    INTEGER(kind=1)                                   :: bin4(4),bin1,bin(4),bin8(8)
-    INTEGER(kind=1),ALLOCATABLE                       :: pds(:),gds(:)
+    TYPE(grib_header_type)      :: temp(1:nmaxvar)
+    INTEGER                     :: irec,istat,irec2,ibyte,m
+    INTEGER(kind=1)             :: bin4(4),bin(4),bin8(8)
 
-    INTEGER(kind=1)                 :: gribword(4)
-    INTEGER(kind=1),ALLOCATABLE     :: bytearr(:)
-    INTEGER                         :: ivar,mylen,pdslen,gdslen,datalen,bdslen
-
-    INTEGER                         :: grib_start,data_start,ioff
-    LOGICAL                         :: foundoff
-    integer :: gribunit
+    INTEGER(kind=1)             :: gribword(4)
+    INTEGER(kind=1),ALLOCATABLE :: bytearr(:)
+    INTEGER                     :: ivar,mylen,pdslen,gdslen,bdslen
+    INTEGER                     :: grib_start,ioff
+    LOGICAL                     :: foundoff
+    INTEGER                     :: gribunit
 
     gribunit = get_unit()
     OPEN(gribunit,FILE=TRIM(filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=1)
@@ -418,7 +415,7 @@ CONTAINS
     LOGICAL,               INTENT(in)  :: allowed(:)
     TYPE(cosmo_meta),      INTENT(out) :: v(1:nvar)
 
-    INTEGER                      :: ivar,ibyte,level(1:3),indx,nlevels(200)
+    INTEGER                      :: ivar,level(1:3),indx,nlevels(200)
     CHARACTER(len=256)           :: varname(3)
 
     indx=0
@@ -517,7 +514,7 @@ CONTAINS
     INTEGER,INTENT(in)         :: nx,ny
     REAL(r8),INTENT(out)       :: lons(1:nx,1:ny),lats(1:nx,1:ny)
 
-    REAL(r8)                   :: lat0,lon0,rlon1,rlat1,rlon2,rlat2,lon,lat
+    REAL(r8)                   :: lat0,lon0,rlon1,rlat1,rlon2,rlat2
     REAL(r8)                   :: rlats(1:nx,1:ny),rlons(1:nx,1:ny)
     INTEGER                    :: ix,iy
 
@@ -593,16 +590,14 @@ CONTAINS
     RETURN
   END SUBROUTINE rlatlon2latlon
 
-  FUNCTION get_data_from_binary(filename,header,nx,ny) RESULT (data)
+  FUNCTION get_data_from_binary(filename,header,nx,ny) RESULT (mydata)
 
-    REAL(r8)                      :: data(1:nx,1:ny)
-    REAL                          :: data2(1:nx,1:ny)
-    CHARACTER(len=256),INTENT(in) :: filename
-    TYPE(grib_header_type),INTENT(in)  :: header
+    REAL(r8)                          :: mydata(1:nx,1:ny)
+    CHARACTER(len=256),    INTENT(in) :: filename
+    TYPE(grib_header_type),INTENT(in) :: header
+    INTEGER,               INTENT(in) :: nx,ny
 
-    INTEGER,INTENT(in)            :: nx,ny
-    INTEGER(kind=1)               :: bin1(1:2),bin4(1:4)
-
+    INTEGER(kind=1)               :: bin4(1:4)
     INTEGER                       :: idsf,ibsf,dval,irec,ix,iy,istat,ibyte,is,ie
     REAL(r8)                      :: dsf,bsf,ref_value
     INTEGER(kind=1),ALLOCATABLE   :: bytearr(:)
@@ -636,7 +631,7 @@ CONTAINS
     DO iy=1,ny
       DO ix=1,nx
         dval=byte_to_word_data(bytearr(ibyte:ibyte+1))
-        data(ix,iy)=(ref_value+FLOAT(dval)*(2.**bsf))/(10.**dsf)
+        mydata(ix,iy)=(ref_value+FLOAT(dval)*(2.**bsf))/(10.**dsf)
         ibyte=ibyte+2
       END DO
     END DO
@@ -644,16 +639,17 @@ CONTAINS
     RETURN
   END FUNCTION get_data_from_binary
 
-  SUBROUTINE set_vertical_coords(filename,header,nsv,sv,pp_index)
+
+
+  SUBROUTINE set_vertical_coords(header,nsv,sv,pp_index)
 
     TYPE(cosmo_non_state_data),INTENT(inout) :: nsv
-    CHARACTER(len=256),INTENT(in)            :: filename
-    TYPE(grib_header_type),INTENT(in)             :: header
-    REAL(r8),INTENT(in)                      :: sv(:)
-    INTEGER,INTENT(in)                       :: pp_index(:)  
+    TYPE(grib_header_type),    INTENT(in)    :: header
+    REAL(r8),                  INTENT(in)    :: sv(:)
+    INTEGER,                   INTENT(in)    :: pp_index(:)  
 
-    REAL(r8),PARAMETER                       :: g = 9.80665
-    REAL(r8),PARAMETER                       :: r = 287.05
+    REAL(r8),PARAMETER                       :: g = 9.80665_r8
+    REAL(r8),PARAMETER                       :: r = 287.05_r8
     INTEGER                                  :: nhl,nfl,pos
     INTEGER(kind=1)                          :: w(4)
     REAL(r8),ALLOCATABLE                     :: ak(:),bk(:)

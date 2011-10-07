@@ -196,9 +196,7 @@ write(*,*)'Creating '//trim(output_file)//'.nc'
 
 state_meta(1) = 'restart test'
 ncFileID = init_diag_output(trim(output_file),'just testing a restart', 1, state_meta)
-
 call aoutput_diagnostics(ncFileID, model_time, statevector, 1)
-
 call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
 !----------------------------------------------------------------------
@@ -301,7 +299,6 @@ model_time  = get_state_time()
 
 write(*,*)
 write(*,*)'Writing data into '//trim(output_file)
-
 iunit = open_restart_write(output_file)
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)

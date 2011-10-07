@@ -155,13 +155,16 @@
 
 
 &cosmo_to_dart_nml
+   cosmo_to_dart_output_file  = 'dart.ud',
   /
 
 
+# in production ... dart_output_file is usually 'dart.ic'
+# in production ... advance_time_present is usually .TRUE.
 &dart_to_cosmo_nml
    dart_output_file           = 'dart.ud',
-   new_cosmo_analysis_file    = 'out.grb',
-   advance_time_present       = .false.
+   advance_time_present       = .false.,
+   new_cosmo_analysis_file    = 'out.grb'
   /
 
 
@@ -286,10 +289,10 @@
    interp_test_dlat     = 1.0,
    interp_test_dvert    = 5.0,
    interp_test_latrange =  40.0,  50.0,
-   interp_test_lonrange =  0.0, 20.0,
-   interp_test_vertrange = 25.0, 25.0,
-   loc_of_interest       = 8.0, 50.0, 10.5,
+   interp_test_lonrange =  0.0, 15.0,
+   interp_test_vertrange = 50000.0, 50000.0,
+   loc_of_interest       = 8.0, 50.0, 50000.0,
    kind_of_interest      = 'KIND_U_WIND_COMPONENT',
-   interp_test_vertcoord = 'VERTISLEVEL'
+   interp_test_vertcoord = 'VERTISPRESSURE'
    /
 

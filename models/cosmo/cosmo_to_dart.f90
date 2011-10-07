@@ -13,13 +13,14 @@ program cosmo_to_dart
 !----------------------------------------------------------------------
 ! purpose: interface between cosmo and DART
 !
-! method: Read cosmo "restart" files of model state
-!         Reform fields into a DART state vector (control vector).
+! method: Read grib files of cosmo model state.
+!         Reform fields into a DART state vector.
 !         Write out state vector in "proprietary" format for DART.
 !         The output is a "DART restart file" format.
+!         The cosmo filename is read from input.nml:model_nml:cosmo_filename
+!         DART filename is specified in 
 ! 
-! USAGE:  The cosmo filename is read from the cosmo_in namelist
-!         <edit cosmo_to_dart_output_file in input.nml:cosmo_to_dart_nml>
+! USAGE:  
 !         cosmo_to_dart
 !
 !----------------------------------------------------------------------
@@ -45,6 +46,7 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: cosmo_to_dart_output_file  = 'dart.ud'
+namelist /cosmo_to_dart_nml/ cosmo_to_dart_output_file
 
 !----------------------------------------------------------------------
 ! global storage
@@ -59,6 +61,14 @@ character(len=256)    :: cosmo_filename
 !======================================================================
 
 call initialize_utilities(progname='cosmo_to_dart', output_flag=verbose)
+
+!----------------------------------------------------------------------
+! Read the namelist to get the output filename.
+!----------------------------------------------------------------------
+
+call find_namelist_in_file("input.nml", "cosmo_to_dart_nml", iunit)
+read(iunit, nml = cosmo_to_dart_nml, iostat = io)
+call check_namelist_read(iunit, io, "cosmo_to_dart_nml") ! closes, too.
 
 !----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists

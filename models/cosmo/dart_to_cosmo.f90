@@ -22,17 +22,15 @@ program dart_to_cosmo
 !         determines whether or not the input file has an 'advance_to_time'.
 !         Typically, only temporary files like 'assim_model_state_ic' have
 !         an 'advance_to_time'.
-!
-! author: Tim Hoar 25 Jun 09, revised 12 July 2010
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
-use    utilities_mod, only : initialize_utilities, timestamp, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, open_file, close_file
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time, set_time
-use        model_mod, only : static_init_model,write_grib_file,get_model_size,write_state_times
+use        model_mod, only : static_init_model, write_grib_file, get_model_size, write_state_times
 
 implicit none
 
@@ -91,7 +89,6 @@ write(*,'(''dart_to_cosmo:converting DART file '',A, &
 ! Reads the valid time, the state, and the target time.
 !----------------------------------------------------------------------
 
-print*,dart_output_file
 iunit = open_restart_read(dart_output_file)
 
 if ( advance_time_present ) then
@@ -131,7 +128,6 @@ call print_time(adv_to_time,'dart_to_cosmo:advance_to time',logfileunit)
 call print_date(adv_to_time,'dart_to_cosmo:advance_to date',logfileunit)
 endif
 
-! When called with 'end', timestamp will call finalize_utilities()
-call timestamp(string1=source, pos='end')
+call finalize_utilities()
 
 end program dart_to_cosmo
