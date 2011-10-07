@@ -31,7 +31,7 @@ use    utilities_mod, only : initialize_utilities, timestamp, &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, open_file, close_file
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
-use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time
+use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time, set_time
 use        model_mod, only : static_init_model,write_grib_file,get_model_size
 
 implicit none
@@ -48,8 +48,11 @@ character(len=128), parameter :: &
 
 character (len = 128) :: dart_output_file = 'dart.ic'
 character (len = 128) :: new_cosmo_analysis_file
+logical               :: advance_time_present = .true.
 
-namelist /dart_to_cosmo_nml/ dart_output_file,new_cosmo_analysis_file
+namelist /dart_to_cosmo_nml/ dart_output_file,        &
+                             new_cosmo_analysis_file, &
+                             advance_time_present
 
 !----------------------------------------------------------------------
 
@@ -91,11 +94,11 @@ write(*,'(''dart_to_cosmo:converting DART file '',A, &
 print*,dart_output_file
 iunit = open_restart_read(dart_output_file)
 
-!if ( advance_time_present ) then
-!   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
-!else
+if ( advance_time_present ) then
+   call aread_state_restart(model_time, state_vector, iunit, adv_to_time)
+else
    call aread_state_restart(model_time, state_vector, iunit)
-!endif
+endif
 call close_restart(iunit)
 
 !----------------------------------------------------------------------
@@ -106,14 +109,15 @@ call close_restart(iunit)
 
 call write_grib_file(state_vector, new_cosmo_analysis_file)
 
-!if ( advance_time_present ) then
-!   base_time = get_base_time(cosmo_restart_filename)
-!   call get_time((model_time  - base_time), diff1)
-!   call get_time((adv_to_time - base_time), diff2)
-!   iunit = open_file('times', action='write')
-!   write(iunit, '(I8, I8)') diff1, diff2
-!   call close_file(iunit)
-!endif
+if ( advance_time_present ) then
+   !base_time = get_base_time(cosmo_restart_filename)
+   base_time = set_time(0, 0)    ! FIXME
+   call get_time((model_time  - base_time), diff1)
+   call get_time((adv_to_time - base_time), diff2)
+   iunit = open_file('times', action='write')
+   write(iunit, '(I8, I8)') diff1, diff2
+   call close_file(iunit)
+endif
 
 !----------------------------------------------------------------------
 ! Log what we think we're doing, and exit.
@@ -124,12 +128,12 @@ call print_time( model_time,'dart_to_cosmo:DART model time')
 call print_date( model_time,'dart_to_cosmo:cosmo model date',logfileunit)
 call print_time( model_time,'dart_to_cosmo:DART model time',logfileunit)
 
-!if ( advance_time_present ) then
-!call print_time(adv_to_time,'dart_to_cosmo:advance_to time')
-!call print_date(adv_to_time,'dart_to_cosmo:advance_to date')
-!call print_time(adv_to_time,'dart_to_cosmo:advance_to time',logfileunit)
-!call print_date(adv_to_time,'dart_to_cosmo:advance_to date',logfileunit)
-!endif
+if ( advance_time_present ) then
+call print_time(adv_to_time,'dart_to_cosmo:advance_to time')
+call print_date(adv_to_time,'dart_to_cosmo:advance_to date')
+call print_time(adv_to_time,'dart_to_cosmo:advance_to time',logfileunit)
+call print_date(adv_to_time,'dart_to_cosmo:advance_to date',logfileunit)
+endif
 
 ! When called with 'end', timestamp will call finalize_utilities()
 call timestamp(string1=source, pos='end')

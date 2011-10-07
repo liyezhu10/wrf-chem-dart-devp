@@ -159,8 +159,9 @@
 
 
 &dart_to_cosmo_nml
-   dart_to_cosmo_input_file   = 'dart.ic',
-   advance_time_present         = .false.
+   dart_output_file           = 'dart.ud',
+   new_cosmo_analysis_file    = 'out.grb',
+   advance_time_present       = .false.
   /
 
 
