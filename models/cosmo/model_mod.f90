@@ -103,6 +103,7 @@ character(len=128), parameter :: &
   public  :: get_state_vector
   public  :: write_grib_file
   public  :: get_cosmo_filename
+  public  :: write_state_times
 
   INTERFACE sv_to_field
     MODULE PROCEDURE sv_to_field_2d
@@ -1971,6 +1972,36 @@ lj_filename        = adjustl(cosmo_filename)
 get_cosmo_filename = trim(lj_filename)
 
 end function get_cosmo_filename
+
+
+   subroutine write_state_times(iunit, statetime, advancetime)
+     integer,         intent(in) :: iunit
+     type(time_type), intent(in) :: statetime, advancetime
+
+     character(len=32) :: timestring 
+     integer           :: iyear, imonth, iday, ihour, imin, isec
+     integer           :: ndays, nhours, nmins, nsecs
+     type(time_type)   :: interval
+
+     call get_date(statetime, iyear, imonth, iday, ihour, imin, isec)
+     write(timestring, "(I4,5(1X,I2))") iyear, imonth, iday, ihour, imin, isec
+     write(iunit, "(A)") trim(timestring)
+
+     call get_date(advancetime, iyear, imonth, iday, ihour, imin, isec)
+     write(timestring, "(I4,5(1X,I2))") iyear, imonth, iday, ihour, imin, isec
+     write(iunit, "(A)") trim(timestring)
+
+     interval = advancetime - statetime
+     call get_time(interval, nsecs, ndays)
+     nhours = nsecs / (60*60)
+     nsecs  = nsecs - (nhours * 60*60)
+     nmins  = nsecs / 60
+     nsecs  = nsecs - (nmins * 60)
+
+     write(timestring, "(I4,3(1X,I2))") ndays, nhours, nmins, nsecs
+     write(iunit, "(A)") trim(timestring)
+     
+   end subroutine write_state_times
 
 
   

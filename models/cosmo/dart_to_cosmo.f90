@@ -32,7 +32,7 @@ use    utilities_mod, only : initialize_utilities, timestamp, &
                              logfileunit, open_file, close_file
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time, set_time
-use        model_mod, only : static_init_model,write_grib_file,get_model_size
+use        model_mod, only : static_init_model,write_grib_file,get_model_size,write_state_times
 
 implicit none
 
@@ -110,12 +110,8 @@ call close_restart(iunit)
 call write_grib_file(state_vector, new_cosmo_analysis_file)
 
 if ( advance_time_present ) then
-   !base_time = get_base_time(cosmo_restart_filename)
-   base_time = set_time(0, 0)    ! FIXME
-   call get_time((model_time  - base_time), diff1)
-   call get_time((adv_to_time - base_time), diff2)
    iunit = open_file('times', action='write')
-   write(iunit, '(I8, I8)') diff1, diff2
+   call write_state_times(iunit, model_time, adv_to_time)
    call close_file(iunit)
 endif
 
