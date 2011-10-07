@@ -63,7 +63,7 @@ while ( $mem < $num_ens )
    ln ../$input ./$inputfile
 
    # do the conversion here, in background
-   echo ../cosmo_to_dart &
+   echo ../cosmo_to_dart &      # FIXME: remove echo to do real conversion
 
    # and cd back up to the directory where we started
    cd ..

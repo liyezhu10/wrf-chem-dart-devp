@@ -62,7 +62,7 @@ if ( ! -e $outputfile ) then
 
    set mem = 1
    while ( $mem < $num_ens )
-      #  convert member N
+      #  verify ensemble output is here
       set fname = `printf %s.%04d $outputfile $mem`
       if ( ! -e ${fname} ) then
          echo output file $fname not found 
