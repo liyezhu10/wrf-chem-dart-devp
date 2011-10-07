@@ -39,7 +39,10 @@ set line      = `fgrep -A 8 \&model_nml input.nml.template | fgrep cosmo_filenam
 set inputfile = `echo $inputline | sed -e 's/^.*cosmo_filename.*=//' -e 's/"//g' -e 's/,//' `
 
 
-# extract the times from a time file here
+# for now, use sed to update how far the model should run
+# here is where you'd update any control files for the model
+# to tell it how far to advance
+set currtime = CURRTIME
 
 
 set mem = 1
