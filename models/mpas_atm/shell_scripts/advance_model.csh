@@ -84,29 +84,31 @@ unalias ls
 # if process 0 go ahead and check for dependencies here
 if ( $process == 0 ) then
 
-   if ( ! -x advance_time ) then
-     echo ABORT\: advance_model.csh could not find required executable dependency ${CENTRALDIR}/advance_time
+   foreach fn ( advance_time dart_to_model model_to_dart )
+   if ( ! -x ${CENTRALDIR}/$fn ) then
+     echo ABORT\: advance_model.csh could not find required executable dependency ${CENTRALDIR}/$fn
      exit 1
    endif
+   end
 
-   if ( ! -d MPAS_RUN ) then
+   if ( ! -d ${CENTRALDIR}/MPAS_RUN ) then
       echo ABORT\: advance_model.csh could not find required data directory ${CENTRALDIR}/MPAS_RUN, 
       echo         which contains all the MPAS run-time input files
       exit 1
    endif
 
-   if ( ! -x MPAS_RUN/nhyd_atmos_model.exe ) then
+   if ( ! -x ${CENTRALDIR}/MPAS_RUN/nhyd_atmos_model.exe ) then
      echo ABORT\: advance_model.csh could not find required executable dependency 
      echo         ${CENTRALDIR}/MPAS_RUN/nhyd_atmos_model.exe
      exit 1
    endif
 
-   if ( ! -r input.nml ) then
+   if ( ! -r ${CENTRALDIR}/input.nml ) then
      echo ABORT\: advance_model.csh could not find required readable dependency ${CENTRALDIR}/input.nml
      exit 1
    endif
 
-   if ( ! -r namelist.input ) then
+   if ( ! -r ${CENTRALDIR}/namelist.input ) then
      echo ABORT\: advance_model.csh could not find required readable dependency ${CENTRALDIR}/namelist.input
      exit 1
    endif
@@ -130,19 +132,26 @@ while($state_copy <= $num_states)
    set temp_dir = 'advance_temp'${ensemble_member}
 
    if ( $delete_temp_dir == "true" ) then
-        if( -d $temp_dir ) ${REMOVE} $temp_dir  || exit 1
-        mkdir -p $temp_dir  || exit 1
+        if( -d $temp_dir ) ${REMOVE} $temp_dir || exit 1
    endif
 
+   if(! -d $temp_dir) mkdir -p $temp_dir  || exit 1
    cd $temp_dir  || exit 1
 
    # Get the program and necessary files for the model
    ${LINK} ${CENTRALDIR}/MPAS_RUN/nhyd_atmos_model.exe .         || exit 1
    ${LINK} ${CENTRALDIR}/MPAS_RUN/*BL                  .         || exit 1
+   ${LINK} ${CENTRALDIR}/advance_time                  .         || exit 1
 
    # Get the namelists
    ${COPY} ${CENTRALDIR}/input.nml      .                        || exit 1
    ${COPY} ${CENTRALDIR}/namelist.input namelist.input.template  || exit 1
+
+   # Get the grid info files
+   set fs_grid = `grep config_decomp_file_prefix namelist.input.template | awk '{print $3}' | sed -e "s/'//g"`
+   set  f_grid = `basename $fs_grid .part.`
+   ${LINK} ${CENTRALDIR}/MPAS_RUN/${fs_grid}* .
+   ${LINK} ${CENTRALDIR}/MPAS_RUN/${f_grid} .
 
    # Get the in/out file names for converters and the model
    set f1 = `grep  dart_to_model_input_file input.nml | awk '{print $3}' | cut -d ',' -f1 | sed -e "s/'//g"`
@@ -155,7 +164,12 @@ while($state_copy <= $num_states)
    #----------------------------------------------------------------------
    # Block 2: move/convert the DART state vector to the model netcdf file.
    #----------------------------------------------------------------------
+   if(! -e ${CENTRALDIR}/$f3) then
+      echo ABORT\: ${CENTRALDIR}/$f3 does not exist.
+      exit
+   endif
 
+   ${COPY} ${CENTRALDIR}/$f3 .           || exit 2
    ${MOVE} ${CENTRALDIR}/$input_file $f1 || exit 2
    ${CENTRALDIR}/dart_to_model >&! out.dart_to_model 
 
@@ -186,10 +200,13 @@ EOF
    sed -f script.sed namelist.input.template >! namelist.input
 
    # clean out any old rsl files
-   if ( -e rsl.out.integration )  ${REMOVE} rsl.*
+   if ( -e log.0000.out ) ${REMOVE} log.*
 
    # run MPAS here
-   ./nhyd_atmos_model.exe >! rsl.out.integration || exit 3
+   # mpi run on bluefire
+   mpirun.lsf /usr/local/bin/launch ./nhyd_atmos_model.exe || exit 3
+   # mpi run on Mac OS
+   #mpiexec -n 4 ./nhyd_atmos_model.exe || exit 3
   
    # Model output at the target time
    set     fout = `ls -1 ${fhead}.*.nc | tail -1`
@@ -216,7 +233,14 @@ EOF
 EOF
    sed -f script1.sed input.nml.template >! input.nml
    ${CENTRALDIR}/model_to_dart >&! out.model_to_dart 
-   mv $f2 ${CENTRALDIR}/$output_file || exit 4
+   ${MOVE} $f2 ${CENTRALDIR}/$output_file || exit 4
+
+   # Update the template file for the next cycle 
+   # only for $delete_temp_dir == false
+   ${MOVE} $fout $f3 || exit 5
+
+   # FIXME: Do we want to clean up the directory before moving up?
+   ${REMOVE} ${fhead}.*.nc mpas_time log.* 
 
    # Change back to original directory.
    cd $CENTRALDIR
