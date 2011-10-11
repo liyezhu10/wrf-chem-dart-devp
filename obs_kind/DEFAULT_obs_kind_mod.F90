@@ -142,7 +142,8 @@ integer, parameter, public :: &
 
 ! kind for COSMO (german weather)
 integer, parameter, public :: &
-    KIND_SURFACE_GEOPOTENTIAL        = 48
+    KIND_SURFACE_GEOPOTENTIAL        = 48, &
+    KIND_PRESSURE_PERTURBATION       = 49
 
 ! kinds for the MITgcm, POP ocean model
 integer, parameter, public :: &
@@ -375,7 +376,8 @@ obs_kind_names(44) = obs_kind_type(KIND_2D_PARAMETER, 'KIND_2D_PARAMETER')
 obs_kind_names(45) = obs_kind_type(KIND_3D_PARAMETER, 'KIND_3D_PARAMETER')
 obs_kind_names(46) = obs_kind_type(KIND_ATOMIC_OXYGEN_MIXING_RATIO, 'KIND_ATOMIC_OXYGEN_MIXING_RATIO')
 obs_kind_names(47) = obs_kind_type(KIND_MOLEC_OXYGEN_MIXING_RATIO, 'KIND_MOLEC_OXYGEN_MIXING_RATIO')
-
+obs_kind_names(48) = obs_kind_type(KIND_SURFACE_GEOPOTENTIAL, 'KIND_SURFACE_GEOPOTENTIAL')
+obs_kind_names(49) = obs_kind_type(KIND_PRESSURE_PERTURBATION, 'KIND_PRESSURE_PERTURBATION')
 obs_kind_names(50) = obs_kind_type(KIND_SALINITY, 'KIND_SALINITY')
 obs_kind_names(51) = obs_kind_type(KIND_U_CURRENT_COMPONENT, 'KIND_U_CURRENT_COMPONENT')
 obs_kind_names(52) = obs_kind_type(KIND_V_CURRENT_COMPONENT, 'KIND_V_CURRENT_COMPONENT')
