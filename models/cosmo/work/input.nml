@@ -149,7 +149,9 @@
    cosmo_filename               = "../data/test.grb",
    model_dt                     = 40,
    model_perturbation_amplitude = 0.1,
-   output_state_vector          = .false.
+   output_state_vector          = .false.,
+   model_dims                   = 665, 657, 40,
+   record_length                = 1
   /
 
 
@@ -282,7 +284,7 @@
    output_file          = 'check_me',
    advance_time_present = .FALSE.,
    verbose              = .FALSE.,
-   test1thru            =  8,
+   test1thru            =  10,
    x_ind                = -1,
    interp_test_dlon     = 1.0,
    interp_test_dlat     = 1.0,

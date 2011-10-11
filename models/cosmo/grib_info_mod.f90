@@ -15,6 +15,7 @@ MODULE grib_info_mod
                            KIND_CLOUD_ICE, &
                            KIND_CLOUD_LIQUID_WATER, &
                            KIND_PRESSURE, &
+                           KIND_PRESSURE_PERTURBATION, &
                            KIND_RELATIVE_HUMIDITY, &
                            KIND_SEA_SURFACE_PRESSURE, &
                            KIND_SOIL_MOISTURE, &
@@ -816,7 +817,7 @@ CONTAINS
     dartkinds(34,1,20)=KIND_V_WIND_COMPONENT
     dartkinds(40,1,19)=KIND_VERTICAL_VELOCITY
 !    dartkinds(1,1,20)=KIND_PRESSURE
-    dartkinds(139,2,20)=KIND_PRESSURE
+    dartkinds(139,2,20)=KIND_PRESSURE_PERTURBATION
     dartkinds(11,1,20)=KIND_TEMPERATURE
     dartkinds(51,1,20)=KIND_SPECIFIC_HUMIDITY
     dartkinds(31,2,20)=KIND_CLOUD_LIQUID_WATER
