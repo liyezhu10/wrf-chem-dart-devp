@@ -59,7 +59,7 @@ module model_mod
 
   use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-  use byte_mod, only: to_float1,from_float1,word_to_byte_data,byte_to_word_signed,word_to_byte,concat_bytes1
+  use byte_mod, only: to_float1,from_float1,word_to_byte,byte_to_word_signed,concat_bytes1
 
   use netcdf 
 
@@ -140,11 +140,12 @@ character(len=128), parameter :: &
   character(len=256)             :: cosmo_filename               = "test.grb"
   integer                        :: model_dt                     = 40
   logical                        :: output_state_vector          = .FALSE.
-  real(r8)                       :: model_perturbation_amplitude
+  real(r8)                       :: model_perturbation_amplitude = 0.1
+  logical                        :: verbose                      = .false.
 
   namelist /model_nml/  &
     cosmo_filename, model_dt, model_perturbation_amplitude, output_state_vector,&
-    model_dims,record_length
+    model_dims,record_length,verbose
 
   integer                        :: model_size
   type(time_type)                :: model_timestep ! smallest time to adv model
@@ -159,6 +160,8 @@ character(len=128), parameter :: &
   type(cosmo_non_state_data)     :: non_state_data
 
   real(r8),allocatable           :: state_vector(:)
+
+  real(r8),allocatable           :: ens_mean(:)  
 
   type(random_seq_type) :: random_seq
 
@@ -187,7 +190,6 @@ contains
   subroutine static_init_model()
 
     integer                       :: iunit,io,islab,ikind,sv_length
-    integer, allocatable          :: pp_index(:)
     real(r8),allocatable          :: data(:,:)
 
     real(r8),parameter            :: g = 9.80665_r8
@@ -218,8 +220,10 @@ contains
     sv_length = 0
     do islab = 1,nslabs
       ikind = cosmo_slabs(islab)%dart_kind
-      if (is_allowed_state_vector_var(ikind).OR.(ikind==KIND_PRESSURE_PERTURBATION)) then
-        sv_length = sv_length+cosmo_slabs(islab)%dims(1)*cosmo_slabs(islab)%dims(2)
+      if (ikind>0) then 
+        if (is_allowed_state_vector_var(ikind).OR.(ikind==KIND_PRESSURE_PERTURBATION)) then
+          sv_length = sv_length+cosmo_slabs(islab)%dims(1)*cosmo_slabs(islab)%dims(2)
+        end if
       end if
     end do
 
@@ -231,92 +235,94 @@ contains
       ikind=cosmo_slabs(islab)%dart_kind
 
       ! check if variable is a possible state vector variable
-      if (is_allowed_state_vector_var(ikind)) then
-
-        ! check if state vector variable information has not already been read
-        ! e.g. for another vertical level
-        if (.not. state_vector_vars(ikind)%is_present) then
-          ! assign the variable information
-          state_vector_vars(ikind)%is_present   = .true.
-          state_vector_vars(ikind)%varname_short= cosmo_slabs(islab)%varname_short
-          state_vector_vars(ikind)%varname_long = cosmo_slabs(islab)%varname_long
-          state_vector_vars(ikind)%units        = cosmo_slabs(islab)%units
-          state_vector_vars(ikind)%nx           = cosmo_slabs(islab)%dims(1)
-          state_vector_vars(ikind)%ny           = cosmo_slabs(islab)%dims(2)
-          state_vector_vars(ikind)%nz           = cosmo_slabs(islab)%dims(3)
-          state_vector_vars(ikind)%horizontal_coordinate=cosmo_slabs(islab)%hcoord_type
-          if (state_vector_vars(ikind)%nz>1) then
-            state_vector_vars(ikind)%vertical_coordinate=VERTISLEVEL
-          else
-            state_vector_vars(ikind)%vertical_coordinate=VERTISSURFACE
-          end if
-
-          allocate(state_vector_vars(ikind)%vertical_level(     1:state_vector_vars(ikind)%nz))
-          allocate(state_vector_vars(ikind)%state_vector_sindex(1:state_vector_vars(ikind)%nz))
-          allocate(state_vector_vars(ikind)%cosmo_state_index(  1:state_vector_vars(ikind)%nz))
-
-        end if
-
-        ! set vertical information for this vertical level (record/slab)
-        state_vector_vars(ikind)%vertical_level(     cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_level
-        state_vector_vars(ikind)%state_vector_sindex(cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_sindex
-        state_vector_vars(ikind)%cosmo_state_index(  cosmo_slabs(islab)%ilevel)=islab
-
-      end if
-
-      ! check for non state vector data (e.g. surface elevation) needed to run DART
-      if (is_allowed_non_state_var(ikind)) then
-        if (ikind==KIND_SURFACE_ELEVATION) then
-          allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
-          data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
-          if (.not. allocated(non_state_data%surface_orography)) then
-            allocate(non_state_data%surface_orography(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
-          end if
-          non_state_data%surface_orography(:,:)=data(:,:)
-          deallocate(data)
-          non_state_data%orography_present=.true.
-        end if
-        if ((ikind==KIND_SURFACE_GEOPOTENTIAL).and.(.not. allocated(non_state_data%surface_orography))) then
-          allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
-          data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
-          allocate(non_state_data%surface_orography(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
-          non_state_data%surface_orography(:,:)=data(:,:)/g
-          deallocate(data)
-          non_state_data%orography_present=.true.
-        end if
-        if (ikind==KIND_PRESSURE_PERTURBATION) then
-          allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
-          data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
-          if (.not. allocated(non_state_data%pressure_perturbation)) then
-            allocate(non_state_data%pressure_perturbation(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2),1:cosmo_slabs(islab)%dims(3)))
-          end if
-          non_state_data%pressure_perturbation(:,:,cosmo_slabs(islab)%ilevel)=data(:,:)
-          deallocate(data)
-
-          if (.not. state_vector_vars(KIND_PRESSURE)%is_present) then
-            ! assign the pressure variable information
-            state_vector_vars(KIND_PRESSURE)%is_present   = .true.
-            state_vector_vars(KIND_PRESSURE)%varname_short= cosmo_slabs(islab)%varname_short
-            state_vector_vars(KIND_PRESSURE)%varname_long = cosmo_slabs(islab)%varname_long
-            state_vector_vars(KIND_PRESSURE)%units        = cosmo_slabs(islab)%units
-            state_vector_vars(KIND_PRESSURE)%nx           = cosmo_slabs(islab)%dims(1)
-            state_vector_vars(KIND_PRESSURE)%ny           = cosmo_slabs(islab)%dims(2)
-            state_vector_vars(KIND_PRESSURE)%nz           = cosmo_slabs(islab)%dims(3)
-            state_vector_vars(KIND_PRESSURE)%horizontal_coordinate=cosmo_slabs(islab)%hcoord_type
-            state_vector_vars(KIND_PRESSURE)%vertical_coordinate=VERTISLEVEL
-            allocate(state_vector_vars(KIND_PRESSURE)%vertical_level(     1:state_vector_vars(KIND_PRESSURE)%nz))
-            allocate(state_vector_vars(KIND_PRESSURE)%state_vector_sindex(1:state_vector_vars(KIND_PRESSURE)%nz))
-            allocate(state_vector_vars(KIND_PRESSURE)%cosmo_state_index(  1:state_vector_vars(KIND_PRESSURE)%nz))
-          end if
-
-          ! set vertical information for this vertical level (record/slab)
-          state_vector_vars(KIND_PRESSURE)%vertical_level(     cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_level
-          state_vector_vars(KIND_PRESSURE)%state_vector_sindex(cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_sindex
-          state_vector_vars(KIND_PRESSURE)%cosmo_state_index(  cosmo_slabs(islab)%ilevel)=islab
+      if (ikind>0) then 
+        if (is_allowed_state_vector_var(ikind)) then
           
-          non_state_data%pressure_perturbation_present=.true.
+          ! check if state vector variable information has not already been read
+          ! e.g. for another vertical level
+          if (.not. state_vector_vars(ikind)%is_present) then
+            ! assign the variable information
+            state_vector_vars(ikind)%is_present   = .true.
+            state_vector_vars(ikind)%varname_short= cosmo_slabs(islab)%varname_short
+            state_vector_vars(ikind)%varname_long = cosmo_slabs(islab)%varname_long
+            state_vector_vars(ikind)%units        = cosmo_slabs(islab)%units
+            state_vector_vars(ikind)%nx           = cosmo_slabs(islab)%dims(1)
+            state_vector_vars(ikind)%ny           = cosmo_slabs(islab)%dims(2)
+            state_vector_vars(ikind)%nz           = cosmo_slabs(islab)%dims(3)
+            state_vector_vars(ikind)%horizontal_coordinate=cosmo_slabs(islab)%hcoord_type
+            if (state_vector_vars(ikind)%nz>1) then
+              state_vector_vars(ikind)%vertical_coordinate=VERTISLEVEL
+            else
+              state_vector_vars(ikind)%vertical_coordinate=VERTISSURFACE
+            end if
+            
+            allocate(state_vector_vars(ikind)%vertical_level(     1:state_vector_vars(ikind)%nz))
+            allocate(state_vector_vars(ikind)%state_vector_sindex(1:state_vector_vars(ikind)%nz))
+            allocate(state_vector_vars(ikind)%cosmo_state_index(  1:state_vector_vars(ikind)%nz))
+            
+          end if
+          
+          ! set vertical information for this vertical level (record/slab)
+          state_vector_vars(ikind)%vertical_level(     cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_level
+          state_vector_vars(ikind)%state_vector_sindex(cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_sindex
+          state_vector_vars(ikind)%cosmo_state_index(  cosmo_slabs(islab)%ilevel)=islab
+          
         end if
-
+        
+      ! check for non state vector data (e.g. surface elevation) needed to run DART
+        if (is_allowed_non_state_var(ikind)) then
+          if (ikind==KIND_SURFACE_ELEVATION) then
+            allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
+            data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
+            if (.not. allocated(non_state_data%surface_orography)) then
+              allocate(non_state_data%surface_orography(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
+            end if
+            non_state_data%surface_orography(:,:)=data(:,:)
+            deallocate(data)
+            non_state_data%orography_present=.true.
+          end if
+          if ((ikind==KIND_SURFACE_GEOPOTENTIAL).and.(.not. allocated(non_state_data%surface_orography))) then
+            allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
+            data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
+            allocate(non_state_data%surface_orography(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
+            non_state_data%surface_orography(:,:)=data(:,:)/g
+            deallocate(data)
+            non_state_data%orography_present=.true.
+          end if
+          if (ikind==KIND_PRESSURE_PERTURBATION) then
+            allocate(data(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2)))
+            data=get_data_from_binary(cosmo_filename,grib_header(islab),cosmo_slabs(islab)%dims(1),cosmo_slabs(islab)%dims(2))
+            if (.not. allocated(non_state_data%pressure_perturbation)) then
+              allocate(non_state_data%pressure_perturbation(1:cosmo_slabs(islab)%dims(1),1:cosmo_slabs(islab)%dims(2),1:cosmo_slabs(islab)%dims(3)))
+            end if
+            non_state_data%pressure_perturbation(:,:,cosmo_slabs(islab)%ilevel)=data(:,:)
+            deallocate(data)
+            
+            if (.not. state_vector_vars(KIND_PRESSURE)%is_present) then
+              ! assign the pressure variable information
+              state_vector_vars(KIND_PRESSURE)%is_present   = .true.
+              state_vector_vars(KIND_PRESSURE)%varname_short= cosmo_slabs(islab)%varname_short
+              state_vector_vars(KIND_PRESSURE)%varname_long = cosmo_slabs(islab)%varname_long
+              state_vector_vars(KIND_PRESSURE)%units        = cosmo_slabs(islab)%units
+              state_vector_vars(KIND_PRESSURE)%nx           = cosmo_slabs(islab)%dims(1)
+              state_vector_vars(KIND_PRESSURE)%ny           = cosmo_slabs(islab)%dims(2)
+              state_vector_vars(KIND_PRESSURE)%nz           = cosmo_slabs(islab)%dims(3)
+              state_vector_vars(KIND_PRESSURE)%horizontal_coordinate=cosmo_slabs(islab)%hcoord_type
+              state_vector_vars(KIND_PRESSURE)%vertical_coordinate=VERTISLEVEL
+              allocate(state_vector_vars(KIND_PRESSURE)%vertical_level(     1:state_vector_vars(KIND_PRESSURE)%nz))
+              allocate(state_vector_vars(KIND_PRESSURE)%state_vector_sindex(1:state_vector_vars(KIND_PRESSURE)%nz))
+              allocate(state_vector_vars(KIND_PRESSURE)%cosmo_state_index(  1:state_vector_vars(KIND_PRESSURE)%nz))
+            end if
+            
+            ! set vertical information for this vertical level (record/slab)
+            state_vector_vars(KIND_PRESSURE)%vertical_level(     cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_level
+            state_vector_vars(KIND_PRESSURE)%state_vector_sindex(cosmo_slabs(islab)%ilevel)=cosmo_slabs(islab)%dart_sindex
+            state_vector_vars(KIND_PRESSURE)%cosmo_state_index(  cosmo_slabs(islab)%ilevel)=islab
+            
+            non_state_data%pressure_perturbation_present=.true.
+          end if
+          
+        end if
       end if
     end do
 
@@ -409,9 +415,7 @@ contains
   
   ! Local storage
   
-  real(r8),allocatable :: xyz_grid(:,:)
   real(r8)             :: point_coords(1:3)
-  real(r8)             :: xyz_point(3)
   
   integer              :: i,j,hbox(2,2),n,vbound(2),sindex
   real(r8)             :: hbox_weight(2,2),hbox_val(2,2),hbox_lon(2,2),hbox_lat(2,2)
@@ -432,7 +436,6 @@ contains
 
   n = size(cosmo_lonlat(state_vector_vars(obs_type)%horizontal_coordinate)%lon,1)
 
-  allocate(xyz_grid(1:n,1:3))
   point_coords(1:3) = get_location(location)
 
   ! Find grid indices of box enclosing the observation location
@@ -469,8 +472,7 @@ contains
   enddo
   enddo
 
-  ! FIXME - can you ignore the istatus
-  call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val1,istatus)
+  call bilinear_interpolation(hbox_val,hbox_lon,hbox_lat,point_coords,val1)
 
   sindex=state_vector_vars(obs_type)%state_vector_sindex(vbound(2))
   do i=1,2
@@ -479,8 +481,7 @@ contains
   end do
   end do
 
-  ! FIXME - can you ignore the istatus
-  call bilinear_interpolation(hbox_val,hbox_weight,hbox_lon,hbox_lat,point_coords,val2,istatus)
+  call bilinear_interpolation(hbox_val,hbox_lon,hbox_lat,point_coords,val2)
 
   ! vertical interpolation of horizontally interpolated values
 
@@ -875,7 +876,8 @@ contains
           dims(idim) = unlimitedDimID
           ndims=idim
 
-          if ( 1 == 0 ) &  ! DEBUG block to check shape of netCDF variables
+          ! check shape of netCDF variables
+          if ( verbose ) &
           write(*,*)trim(state_vector_vars(ikind)%varname_short),' has netCDF dimIDs ',dims(1:ndims)
 
           call nc_check(nf90_def_var(ncid=ncFileID, name=trim(state_vector_vars(ikind)%varname_short), xtype=nf90_real, &
@@ -1179,12 +1181,17 @@ contains
 
 
 
-  subroutine ens_mean_for_model(ens_mean)
+  subroutine ens_mean_for_model(filter_ens_mean)
 
-  real(r8), dimension(:), intent(in) :: ens_mean
+    real(r8), dimension(:), intent(in) :: filter_ens_mean
+    
+    if ( .not. module_initialized ) call static_init_model
+    
+    allocate(ens_mean(1:model_size))
+    ens_mean(:) = filter_ens_mean(:)
 
-  write(string,*) 'COSMO has no ensemble mean in storage.'
-  call error_handler(E_ERR,'ens_mean_for_model',string,source,revision,revdate)
+!  write(string,*) 'COSMO has no ensemble mean in storage.'
+!  call error_handler(E_ERR,'ens_mean_for_model',string,source,revision,revdate)
 
   end subroutine ens_mean_for_model
 
@@ -1381,7 +1388,6 @@ contains
 
     integer  :: i,j,minidx(2),boxidx(2),xb,yb,bx(2,2),by(2,2)
     real(r8) :: sqrt2
-    integer  :: iunit
 
     sqrt2 = sqrt(2.0_r8)
 
@@ -1471,14 +1477,13 @@ contains
   end subroutine get_enclosing_grid_box_lonlat
 
 
-  subroutine bilinear_interpolation(bv,bw,blo,bla,p,v,istatus)
+  subroutine bilinear_interpolation(bv,blo,bla,p,v)
 
     ! Passed variables
     
-    real(r8),intent(in)  :: bv(2,2),bw(2,2),blo(2,2),bla(2,2)
+    real(r8),intent(in)  :: bv(2,2),blo(2,2),bla(2,2)
     real(r8),intent(in)  :: p(3)
     real(r8),intent(out) :: v
-    integer,intent(out)  :: istatus
     
     ! Local storage
     
@@ -1739,15 +1744,17 @@ contains
 
     do islab=1,nslabs
       ikind=cosmo_slabs(islab)%dart_kind
-      if (is_allowed_state_vector_var(ikind)) then
-        nx=state_vector_vars(ikind)%nx
-        ny=state_vector_vars(ikind)%ny
-        allocate(mydata(1:nx,1:ny))
-        mydata=get_data_from_binary(cosmo_filename,grib_header(islab),nx,ny)
-        sidx=cosmo_slabs(islab)%dart_sindex
-        eidx=cosmo_slabs(islab)%dart_eindex
-        state_vector(sidx:eidx)=reshape(mydata,(/ (nx*ny) /))
-        deallocate(mydata)
+      if (ikind>0) then
+        if (is_allowed_state_vector_var(ikind)) then
+          nx=state_vector_vars(ikind)%nx
+          ny=state_vector_vars(ikind)%ny
+          allocate(mydata(1:nx,1:ny))
+          mydata=get_data_from_binary(cosmo_filename,grib_header(islab),nx,ny)
+          sidx=cosmo_slabs(islab)%dart_sindex
+          eidx=cosmo_slabs(islab)%dart_eindex
+          state_vector(sidx:eidx)=reshape(mydata,(/ (nx*ny) /))
+          deallocate(mydata)
+        end if
       end if
     end do
 
@@ -1764,54 +1771,61 @@ contains
     real(r8),intent(in)           :: sv(:)
     character(len=128),intent(in) :: nfile
 
-    integer                       :: islab,istat,ipos,lpos
-    integer                       :: mylen,hlen,ix,iy,nx,ny,idx,naddbyte
+    integer                       :: istat = 0
+    integer                       :: islab,ipos,lpos,bpos,griblen
+    integer                       :: mylen,hlen,ix,iy,nx,ny,idx
     integer                       :: dval,ibsf,idsf
-    integer,allocatable           :: griblen(:)
     real(r8)                      :: bsf,dsf
-    integer(kind=1)               :: bin4(4),gribword(4),bin42(4)
-    integer(kind=1),allocatable   :: bytearr(:),tmparr(:),tmparr2(:)
+    integer(kind=1)               :: bin4(4)
+    integer(kind=1),allocatable   :: bytearr(:),tmparr(:)
     real(r8),allocatable          :: mydata(:,:)
     real(r8)                      :: ref_value
-    integer                       :: gribunitin, gribunitout
-    integer                       :: nrec,irec,sidx,eidx
+    integer                       :: gribunitin, gribunitout,irec
     integer                       :: recpos(nslabs+1),bytpos(nslabs+1),myrlen,myblen
 
-    logical                       :: debug = .true.
-
-    gribunitin  = get_unit()
-    OPEN(gribunitin,FILE=TRIM(cosmo_filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=record_length)
+    logical                       :: write_from_sv = .false.
 
     if ( .not. module_initialized ) call static_init_model
 
     mylen=0
-    allocate(griblen(1:nslabs))
 
     ! read information on record and byte positions in GRIB file
     myrlen=(grib_header(2)%start_record-grib_header(1)%start_record)
     myblen=(grib_header(2)%start_record-grib_header(1)%start_record)*4+grib_header(2)%data_offset
     DO islab=1,nslabs
        recpos(islab)=grib_header(islab)%start_record
-       bytpos(islab)=(grib_header(islab)%start_record-1)*4+1+grib_header(islab)%data_offset
-       griblen(islab)=myblen-8
+       bytpos(islab)=(grib_header(islab)%start_record-1)*4+1+grib_header(islab)%data_offset+4
     END DO
     recpos(nslabs+1)=recpos(nslabs)+myrlen
     bytpos(nslabs+1)=bytpos(nslabs)+myblen
 
-!    generate byte_array to write
-    ALLOCATE(bytearr(1:bytpos(nslabs+1)))
+    ! generate byte_array to write
+    ALLOCATE(bytearr(1:bytpos(nslabs+1)+100))
     bytearr(:)=0
 
-    ipos=1
-    DO irec=1,recpos(1)-2
-      READ(gribunitin,rec=irec,iostat=istat) bin4
-      bytearr(ipos:ipos+3)=bin4
-      ipos=ipos+4
-    END DO
+    ! read all data from the input GRIB file
+    gribunitin  = get_unit()
+    OPEN(gribunitin,FILE=TRIM(cosmo_filename),FORM='UNFORMATTED',ACCESS='DIRECT',RECL=record_length)
+    irec=1
+    lpos=1
 
-    DO islab=1,nslabs
+    do while (istat==0)
+      read(gribunitin,rec=irec,iostat=istat) bin4
+      irec=irec+1
+      lpos=lpos+4
+      bytearr(lpos:lpos+3)=bin4
+    end do
+    griblen=lpos-1
 
-      if (debug) write(*,'(A8,A,I4,A,I4,A,I12)')cosmo_slabs(islab)%varname_short," is GRIB record ",islab," of ",nslabs,", byte position is ",ipos
+    call close_file(gribunitin)
+
+    ipos=bytpos(1)
+
+    if (verbose) write(*,*)'number of slabs is ',nslabs
+
+    do islab=1,nslabs
+
+      if (verbose) write(*,'(A8,A,I4,A,I4,A,I12)')cosmo_slabs(islab)%varname_short," is GRIB record ",islab," of ",nslabs,", byte position is ",ipos
 
       nx=cosmo_slabs(islab)%dims(1)
       ny=cosmo_slabs(islab)%dims(2)
@@ -1819,121 +1833,86 @@ contains
       idx=cosmo_slabs(islab)%dart_sindex
 
       ! check if variable is in state vector
-      if (idx < 0) then
+      
+      write_from_sv = .false.
+      if (idx >= 0) write_from_sv = .true.
 
-        if (debug) write(*,*)'         ... data is copied from old grib file'
+      if (write_from_sv) then
 
-        ! if variable is not in state vector then read binary data from GRIB file
-
-        allocate( tmparr( (recpos(islab+1)-recpos(islab)+1)*4 ) )
-        tmparr(:)=0
-        DO irec=1,(recpos(islab+1)-recpos(islab)+1)
-          READ(gribunitin,rec=irec-1+grib_header(islab)%start_record,iostat=istat) bin4
-          sidx=((irec-1)*4)+1
-          tmparr(sidx:sidx+3)=bin4
-        END DO
-
-        mylen=bytpos(islab+1)-bytpos(islab)
-        sidx=grib_header(islab)%data_offset+1
-        bytearr(ipos:ipos+mylen-1)=tmparr(sidx:sidx+mylen-1)
-        
-        deallocate(tmparr)
-        
-        ipos=ipos+mylen
-
-      else
-         
         ! if variable is in state vector
 
-        if (debug) write(*,*)'         ... data is written to GRIB file from state vector'
+        if (verbose) write(*,*)'         ... data is written to GRIB file from state vector'
 
-        allocate( tmparr( (recpos(islab+1)-recpos(islab)+1)*4 ) )
-        lpos=1
-
-        ! write word GRIB
-        gribword(1)=ICHAR('G')
-        gribword(2)=ICHAR('R')
-        gribword(3)=ICHAR('I')
-        gribword(4)=ICHAR('B')
-        tmparr(lpos:lpos+3)=gribword
-        lpos=lpos+4
-        
-        call word_to_byte(griblen(islab),tmparr(lpos:lpos+2),3)
-        tmparr(lpos+3)=1
-        lpos=lpos+4
-
-        ! write PDS
-        hlen=size(grib_header(islab)%pds)
-        tmparr(lpos:lpos+hlen-1)=grib_header(islab)%pds
-        lpos=lpos+hlen
-        
-        ! write GDS
-        hlen=size(grib_header(islab)%gds)
-        tmparr(lpos:lpos+hlen-1)=grib_header(islab)%gds
-        lpos=lpos+hlen
-                
-        ! write BDS-header
-        hlen=size(grib_header(islab)%bds)
-        tmparr(lpos:lpos+hlen-1)=grib_header(islab)%bds 
-        
-        if (debug) write(*,'(A8,A,I4,A,I4,A,2(1x,I12))')cosmo_slabs(islab)%varname_short," is GRIB record ",islab," of ",nslabs,", i1/i2 are ",idx,(idx+nx*ny-1)
+        if (verbose) write(*,'(A8,A,I4,A,I4,A,2(1x,I12))')cosmo_slabs(islab)%varname_short," is GRIB record ",islab," of ",nslabs,", i1/i2 are ",idx,(idx+nx*ny-1)
 
         allocate(mydata(1:nx,1:ny))
         mydata(:,:)=reshape(sv(idx:(idx+nx*ny-1)),(/ nx,ny /))
 
+        if (cosmo_slabs(islab)%dart_kind==KIND_PRESSURE_PERTURBATION) then
+          mydata(:,:)=mydata(:,:)-non_state_data%p0fl(:,:,cosmo_slabs(islab)%ilevel)
+        end if
+
         ref_value=minval(mydata)
         bin4(1:4)=from_float1(ref_value)
-        tmparr(lpos+6:lpos+9)=bin4
-        CALL byte_to_word_signed(tmparr(lpos+4:lpos+5),ibsf,2)
+
+        hlen=size(grib_header(islab)%pds)+size(grib_header(islab)%gds)
+
+        ! offset to binary data section in GRIB data, 8 because of indicator section
+        bpos=ipos+hlen+8
+
+        ! set new reference value in GRIB data
+        bytearr(bpos+6:bpos+9)=bin4
+
+        ! get the binary scale factor
+        CALL byte_to_word_signed(bytearr(bpos+4:bpos+5),ibsf,2)
         bsf=FLOAT(ibsf)
         
+        ! get the decimal scale factor
         CALL byte_to_word_signed(grib_header(islab)%pds(27:28),idsf,2)
         dsf=FLOAT(idsf)
         
-        lpos=lpos+hlen
-        
-
+        ! allocate a temporal array to save the binary data values
+        allocate(tmparr((nx*ny*2)))
+        lpos=1
         DO iy=1,ny
         DO ix=1,nx
           dval=int((mydata(ix,iy)-ref_value)*((10.**dsf)/(2.**bsf)))
-          tmparr(lpos:lpos+1)=word_to_byte_data(dval)
+          tmparr(lpos:lpos+1)=word_to_byte(dval)
           lpos=lpos+2
         END DO
         END DO
 
         deallocate(mydata)
 
-        ! write word 7777
-        gribword(1)=ICHAR('7')
-        gribword(2)=ICHAR('7')
-        gribword(3)=ICHAR('7')
-        gribword(4)=ICHAR('7')
-        tmparr(griblen(islab)-3:griblen(islab))=gribword
-
-        mylen=bytpos(islab+1)-bytpos(islab)
-        sidx=grib_header(islab)%data_offset+1
-        bytearr(ipos:ipos+mylen-1)=tmparr(1:mylen)
-        
+        ! overwrite the old with new data
+        bytearr(bpos+11:(bpos+nx*ny*2))=tmparr(1:(nx*ny*2))
+         
         deallocate(tmparr)
-        
-        ipos=ipos+mylen
+       
+        ipos=bytpos(islab+1)
 
+      else
+
+        if (verbose) write(*,*)'         ... data is copied from old grib file'
+        
+        ! if variable is not in state vector then skip this slab
+        
+        ipos=bytpos(islab+1)
+                
       end if
 
     END DO
-
+    
     ! write the new GRIB file
     gribunitout = get_unit()
     OPEN(gribunitout,FILE=TRIM(nfile),FORM='UNFORMATTED')
-    WRITE(gribunitout) bytearr(1:ipos-1)
+    WRITE(gribunitout) bytearr(1:griblen)
 
-    CLOSE(gribunitout)
-    CLOSE(gribunitin)
+    call close_file(gribunitout)
 
     return
 
   end subroutine write_grib_file
-
 
 
   function get_cosmo_filename()

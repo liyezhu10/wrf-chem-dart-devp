@@ -6,7 +6,7 @@ MODULE cosmo_data_mod
 !
 ! Author: Jan D. Keller
 !         Meteorological Institute, University of Bonn, Germany
-!         2011-09-15
+!         2011-10-12
 !
 ! <next few lines under version control, do not edit>
 ! $URL$
@@ -40,7 +40,7 @@ MODULE cosmo_data_mod
 
   USE          byte_mod, ONLY: concat_bytes1,concat_bytes1_sign,to_positive, &
                                byte_to_word_signed,to_float1,                &
-                               byte_to_word_data,get_word
+                               byte_to_word,get_word
 
   USE     grib_info_mod, ONLY: get_level,get_varname,get_dims,get_dart_kind
 
@@ -155,7 +155,7 @@ CONTAINS
                                                              !                     (4,:) data section
     TYPE(time_type),INTENT(out)              :: tf
 
-    INTEGER                                  :: nbyte,nvar
+    INTEGER                                  :: nvar
 
     CALL read_grib_header(filename,header,nvar)
 
@@ -267,14 +267,16 @@ CONTAINS
   END SUBROUTINE find_grib_records
 
   SUBROUTINE read_grib_header(filename,header,nvar)
-    
+
+    IMPLICIT NONE
+
     CHARACTER(len=256),                INTENT(in)  :: filename
     TYPE(grib_header_type),ALLOCATABLE,INTENT(out) :: header(:)
     INTEGER,                           INTENT(out) :: nvar
 
     TYPE(grib_header_type)      :: temp(1:nmaxvar)
     INTEGER                     :: irec,istat,irec2,ibyte,m
-    INTEGER(kind=1)             :: bin4(4),bin(4),bin8(8),bin1
+    INTEGER(kind=1)             :: bin4(4),bin(4),bin8(8)
 
     INTEGER(kind=1)             :: gribword(4)
     INTEGER(kind=1),ALLOCATABLE :: bytearr(:)
@@ -428,7 +430,7 @@ CONTAINS
 
     INTEGER                      :: ivar,level(1:3),indx,nlevels(200)
     CHARACTER(len=256)           :: varname(3)
-
+    LOGICAL                      :: is_allowed_kind
     indx=0
     nlevels(:)=0
 
@@ -457,9 +459,12 @@ CONTAINS
       v(ivar)%dims          = model_dims
       if (v(ivar)%dart_kind==KIND_VERTICAL_VELOCITY) v(ivar)%dims(3)=v(ivar)%dims(3)+1
 
-      write(*,*)'var ',ivar,'dart_kind is ',v(ivar)%dart_kind  ! TJH FIXME
-
-      if (allowed(v(ivar)%dart_kind).OR.(v(ivar)%dart_kind==KIND_PRESSURE_PERTURBATION)) then
+      is_allowed_kind=.false.
+      if ((v(ivar)%dart_kind)>0) then
+        if (allowed(v(ivar)%dart_kind).OR.(v(ivar)%dart_kind==KIND_PRESSURE_PERTURBATION)) is_allowed_kind=.true.
+      end if
+          
+      if (is_allowed_kind) then
         v(ivar)%dart_sindex=indx+1
         v(ivar)%dart_eindex=indx+(v(ivar)%dims(1)*v(ivar)%dims(2))
         indx=v(ivar)%dart_eindex
@@ -638,7 +643,7 @@ CONTAINS
     ibyte=12
     DO iy=1,ny
       DO ix=1,nx
-        dval=byte_to_word_data(bytearr(ibyte:ibyte+1))
+        dval=byte_to_word(bytearr(ibyte:ibyte+1))
         mydata(ix,iy)=(ref_value+FLOAT(dval)*(2.**bsf))/(10.**dsf)
         ibyte=ibyte+2
       END DO
@@ -684,206 +689,202 @@ CONTAINS
       call error_handler(E_ERR,'set_vertical_coords',string,source,revision,revdate)
     ENDIF
 
-!    IF (allocated(nsv%surface_orography).AND.(.NOT. nsv%vertical_coords_set)) THEN
-
-      nx=SIZE(nsv%surface_orography,1)
-      ny=SIZE(nsv%surface_orography,2)
-            
-      ! get number of vertical full levels (nfl) and half levels (nhl, level boundaries)
-      nfl=model_dims(3)
-      nhl=nfl+1
-
-      ALLOCATE(vcoord(1:nhl))
-      ALLOCATE(ak(1:nhl))
-      ALLOCATE(bk(1:nhl))
-      ALLOCATE(hhl(1:nx,1:ny,1:nhl))
-      ALLOCATE(p0hl(1:nx,1:ny,1:nhl))
-      
-      ! read constants from the binary data
-      pos=to_positive(header%gds(5))
+    nx=SIZE(nsv%surface_orography,1)
+    ny=SIZE(nsv%surface_orography,2)
+    
+    ! get number of vertical full levels (nfl) and half levels (nhl, level boundaries)
+    nfl=model_dims(3)
+    nhl=nfl+1
+    
+    ALLOCATE(vcoord(1:nhl))
+    ALLOCATE(ak(1:nhl))
+    ALLOCATE(bk(1:nhl))
+    ALLOCATE(hhl(1:nx,1:ny,1:nhl))
+    ALLOCATE(p0hl(1:nx,1:ny,1:nhl))
+    
+    ! read constants from the binary data
+    pos=to_positive(header%gds(5))
+    w(1:4)=header%gds(pos:pos+3)
+    p0sl=to_float1(w)
+    pos=pos+4
+    w(1:4)=header%gds(pos:pos+3)
+    t0sl=to_float1(w)
+    pos=pos+4
+    w(1:4)=header%gds(pos:pos+3)
+    dt0lp=to_float1(w)
+    pos=pos+4
+    w(1:4)=header%gds(pos:pos+3)
+    vcflat=to_float1(w)
+    pos=pos+4
+    
+    ! read vertical parameters from the binary data
+    DO k=1,nhl
       w(1:4)=header%gds(pos:pos+3)
-      p0sl=to_float1(w)
+      vcoord(k)=to_float1(w)
       pos=pos+4
-      w(1:4)=header%gds(pos:pos+3)
-      t0sl=to_float1(w)
-      pos=pos+4
-      w(1:4)=header%gds(pos:pos+3)
-      dt0lp=to_float1(w)
-      pos=pos+4
-      w(1:4)=header%gds(pos:pos+3)
-      vcflat=to_float1(w)
-      pos=pos+4
-      
-      ! read vertical parameters from the binary data
-      DO k=1,nhl
-        w(1:4)=header%gds(pos:pos+3)
-        vcoord(k)=to_float1(w)
-        pos=pos+4
-      END DO
-
-      ! determine type of vertical coordinate system definition
-      !   ivctype = 1 > pressure based definition
-      !   ivctype = 2 > height based definition
-      if (vcoord(nhl) > vcoord(1)) then
-         ivctype = 1
-      else
-         ivctype = 2
-      endif
-
-      ! calculate needed parameters       
-      zgdrt = g/r/t0sl
-      IF (dt0lp /= 0.) THEN
-        ztdbe = t0sl/dt0lp
-      ELSE
-        ztdbe = 0.0
-      ENDIF
-      zbetf = 2.0*dt0lp*zgdrt/t0sl
-      
-      IF (ivctype==1) THEN
+    END DO
+    
+    ! determine type of vertical coordinate system definition
+    !   ivctype = 1 > pressure based definition
+    !   ivctype = 2 > height based definition
+    if (vcoord(nhl) > vcoord(1)) then
+      ivctype = 1
+    else
+      ivctype = 2
+    endif
+    
+    ! calculate needed parameters       
+    zgdrt = g/r/t0sl
+    IF (dt0lp /= 0.) THEN
+      ztdbe = t0sl/dt0lp
+    ELSE
+      ztdbe = 0.0
+    ENDIF
+    zbetf = 2.0*dt0lp*zgdrt/t0sl
+    
+    IF (ivctype==1) THEN
       ! if vcs definition is pressure based
-        
-        ! Calculate the inverse coordinate transformation, i.e. the ak's and bk's
-        kflat = 0
-        DO k = 1, nhl
-          IF( vcoord(k) <= vcflat ) THEN
-            ak(k) = vcoord(k)*p0sl
-            bk(k) = 0.0
-            kflat = k
-          ELSE
-            ak(k) = vcflat*p0sl*(1.0 - vcoord(k))/(1.0 - vcflat)
-            bk(k) = (vcoord(k) - vcflat)/(1.0 - vcflat)
-          ENDIF
-        ENDDO
-        
-        ! Compute the surface reference pressure from surface topography
-        hhl(:,:,nhl) = nsv%surface_orography(:,:)
-
-        IF (dt0lp == 0.0_r8) THEN
-          p0hl (:,:,nhl) = p0sl*EXP ( - zgdrt*hhl(:,:,nhl) )
+      
+      ! Calculate the inverse coordinate transformation, i.e. the ak's and bk's
+      kflat = 0
+      DO k = 1, nhl
+        IF( vcoord(k) <= vcflat ) THEN
+          ak(k) = vcoord(k)*p0sl
+          bk(k) = 0.0
+          kflat = k
         ELSE
-          p0hl (:,:,nhl) = p0sl*EXP ( - ztdbe * & 
-                           (1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,nhl))) )
+          ak(k) = vcflat*p0sl*(1.0 - vcoord(k))/(1.0 - vcflat)
+          bk(k) = (vcoord(k) - vcflat)/(1.0 - vcflat)
         ENDIF
-        ! Compute the reference pressure at half levels from surface topography
-        ! and vertical coordinate parameters ak and bk as well as the
-        ! height of half levels from the hydrostatic equation
-        
-        DO  k = 1, nhl-1
-          p0hl(:,:,k) = ak(k) + bk(k)*p0hl(:,:,nhl)
-          hhl (:,:,k) =     (r/g)*LOG(p0sl/p0hl(:,:,k)) &
-           *( t0sl - 0.5_r8*dt0lp*LOG(p0sl/p0hl(:,:,k)) )
-        ENDDO
-      END IF
+      ENDDO
       
-      IF (ivctype == 2) THEN
+      ! Compute the surface reference pressure from surface topography
+      hhl(:,:,nhl) = nsv%surface_orography(:,:)
+      
+      IF (dt0lp == 0.0_r8) THEN
+        p0hl (:,:,nhl) = p0sl*EXP ( - zgdrt*hhl(:,:,nhl) )
+      ELSE
+        p0hl (:,:,nhl) = p0sl*EXP ( - ztdbe * & 
+         (1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,nhl))) )
+      ENDIF
+      ! Compute the reference pressure at half levels from surface topography
+      ! and vertical coordinate parameters ak and bk as well as the
+      ! height of half levels from the hydrostatic equation
+      
+      DO  k = 1, nhl-1
+        p0hl(:,:,k) = ak(k) + bk(k)*p0hl(:,:,nhl)
+        hhl (:,:,k) =     (r/g)*LOG(p0sl/p0hl(:,:,k)) &
+         *( t0sl - 0.5_r8*dt0lp*LOG(p0sl/p0hl(:,:,k)) )
+      ENDDO
+    END IF
+    
+    IF (ivctype == 2) THEN
       ! if vcs definition is height based
-
-        ! Calculate the inverse coordinate transformation, i.e. the ak's and bk's
-        kflat = 0
-        DO k = 1, nhl
-          IF( vcoord(k) >= vcflat ) THEN
-            ak(k) = vcoord(k)
-            bk(k) = 0.0
-            kflat = k
-          ELSE
-            ak(k) = vcoord(k)
-            bk(k) = (vcflat - vcoord(k))/ vcflat
-          ENDIF
-        ENDDO
-
-        ! Compute the height of the model half-levels
-        hhl(:,:,nhl) = nsv%surface_orography(:,:)
-        DO  k = 1, nhl-1
-          hhl(:,:,k) = ak(k) + bk(k)*hhl(:,:,nhl)
-        ENDDO
-
-        ! Compute the reference pressure at half levels
-        DO  k = 1, nhl
-          IF (dt0lp == 0.0_r8) THEN
-            p0hl (:,:,k) = p0sl * EXP ( - zgdrt*hhl(:,:,k) )
-          ELSE
-            p0hl (:,:,k) = p0sl * EXP ( - ztdbe*(1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,k))) )
-          ENDIF
-
-        ENDDO
-
-      END IF
-
-      ! set the vertical coordinate information in the non-state variable
-
-      nsv%nfl    = nfl
-      nsv%nhl    = nhl
-      nsv%p0sl   = p0sl
-      nsv%t0sl   = t0sl
-      nsv%dt0lp  = dt0lp
-      nsv%vcflat = vcflat
-
-      ALLOCATE(nsv%vct_a(         1:nhl))
-      ALLOCATE(nsv%vct_b(         1:nhl))
-      ALLOCATE(nsv%hhl( 1:nx,1:ny,1:nhl))
-      ALLOCATE(nsv%hfl( 1:nx,1:ny,1:nfl))
-      ALLOCATE(nsv%p0hl(1:nx,1:ny,1:nhl))
-      ALLOCATE(nsv%p0fl(1:nx,1:ny,1:nfl))
-
-      nsv%hhl( 1:nx,1:ny,1:nhl) = hhl
-      nsv%p0hl(1:nx,1:ny,1:nhl) = p0hl
       
-      ! calculate reference height and pressure for the full levels
-      DO  k = 1, nfl 
-        nsv%hfl( :,:,k)=0.5_r8*(nsv%hhl( :,:,k)+nsv%hhl( :,:,k+1))
-        nsv%p0fl(:,:,k)=0.5_r8*(nsv%p0hl(:,:,k)+nsv%p0hl(:,:,k+1))
-      END DO
+      ! Calculate the inverse coordinate transformation, i.e. the ak's and bk's
+      kflat = 0
+      DO k = 1, nhl
+        IF( vcoord(k) >= vcflat ) THEN
+          ak(k) = vcoord(k)
+          bk(k) = 0.0
+          kflat = k
+        ELSE
+          ak(k) = vcoord(k)
+          bk(k) = (vcflat - vcoord(k))/ vcflat
+        ENDIF
+      ENDDO
+      
+      ! Compute the height of the model half-levels
+      hhl(:,:,nhl) = nsv%surface_orography(:,:)
+      DO  k = 1, nhl-1
+        hhl(:,:,k) = ak(k) + bk(k)*hhl(:,:,nhl)
+      ENDDO
+      
+      ! Compute the reference pressure at half levels
+      DO  k = 1, nhl
+        IF (dt0lp == 0.0_r8) THEN
+          p0hl (:,:,k) = p0sl * EXP ( - zgdrt*hhl(:,:,k) )
+        ELSE
+          p0hl (:,:,k) = p0sl * EXP ( - ztdbe*(1.0_r8 - SQRT(1.0_r8 - zbetf*hhl(:,:,k))) )
+        ENDIF
+        
+      ENDDO
 
-      ! check for pressure perturbations
-      ALLOCATE(nsv%phl(1:nx,1:ny,1:nhl))
-      ALLOCATE(nsv%pfl(1:nx,1:ny,1:nfl))
-      ALLOCATE(    pp1(1:nx,1:ny))
-      ALLOCATE(    pp2(1:nx,1:ny))
-
-      DO  k=1,nfl
-         ! calculate true pressure as sum of pressure perturbations and refernce pressure
-         ! on the full levels
-         pp1 = nsv%pressure_perturbation(:,:,k)
-         nsv%pfl(1:nx,1:ny,k) = nsv%p0fl(1:nx,1:ny,k) + pp1(1:nx,1:ny)
-
-         ! save true pressure in state vector
-         sindex=svidx(k)
-         eindex=sindex+nx*ny-1
-         sv(sindex:eindex)=RESHAPE(nsv%pfl(1:nx,1:ny,k), (/ nx*ny /))
-         
-         ! calculate the true pressure on the half levels
-         if (k==1) then
-            nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + pp1
-         else
-            nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + 0.5_r8*( &
-                 pp2*(nsv%hfl(1:nx,1:ny,k-1)-nsv%hhl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k))+&
-                 pp1*(nsv%hhl(1:nx,1:ny,k  )-nsv%hfl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k)))
-         end if
-         pp2=pp1
-      END DO
-      nsv%phl(1:nx,1:ny,nsv%nhl)=nsv%p0hl(1:nx,1:ny,nsv%nhl)+pp2
-      DEALLOCATE(pp1)
-      DEALLOCATE(pp2)
-
-      nsv%vertical_coords_set=.TRUE.
-
-!    END IF
+    END IF
+    
+    ! set the vertical coordinate information in the non-state variable
+    
+    nsv%nfl    = nfl
+    nsv%nhl    = nhl
+    nsv%p0sl   = p0sl
+    nsv%t0sl   = t0sl
+    nsv%dt0lp  = dt0lp
+    nsv%vcflat = vcflat
+    
+    ALLOCATE(nsv%vct_a(         1:nhl))
+    ALLOCATE(nsv%vct_b(         1:nhl))
+    ALLOCATE(nsv%hhl( 1:nx,1:ny,1:nhl))
+    ALLOCATE(nsv%hfl( 1:nx,1:ny,1:nfl))
+    ALLOCATE(nsv%p0hl(1:nx,1:ny,1:nhl))
+    ALLOCATE(nsv%p0fl(1:nx,1:ny,1:nfl))
+    
+    nsv%hhl( 1:nx,1:ny,1:nhl) = hhl
+    nsv%p0hl(1:nx,1:ny,1:nhl) = p0hl
+    
+    ! calculate reference height and pressure for the full levels
+    DO  k = 1, nfl 
+      nsv%hfl( :,:,k)=0.5_r8*(nsv%hhl( :,:,k)+nsv%hhl( :,:,k+1))
+      nsv%p0fl(:,:,k)=0.5_r8*(nsv%p0hl(:,:,k)+nsv%p0hl(:,:,k+1))
+    END DO
+    
+    ! check for pressure perturbations
+    ALLOCATE(nsv%phl(1:nx,1:ny,1:nhl))
+    ALLOCATE(nsv%pfl(1:nx,1:ny,1:nfl))
+    ALLOCATE(    pp1(1:nx,1:ny))
+    ALLOCATE(    pp2(1:nx,1:ny))
+    
+    DO  k=1,nfl
+      ! calculate true pressure as sum of pressure perturbations and refernce pressure
+      ! on the full levels
+      pp1 = nsv%pressure_perturbation(:,:,k)
+      nsv%pfl(1:nx,1:ny,k) = nsv%p0fl(1:nx,1:ny,k) + pp1(1:nx,1:ny)
+      
+      ! save true pressure in state vector
+      sindex=svidx(k)
+      eindex=sindex+nx*ny-1
+      sv(sindex:eindex)=RESHAPE(nsv%pfl(1:nx,1:ny,k), (/ nx*ny /))
+      
+      ! calculate the true pressure on the half levels
+      if (k==1) then
+        nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + pp1
+      else
+        nsv%phl(1:nx,1:ny,k) = nsv%p0hl(1:nx,1:ny,k) + 0.5_r8*( &
+         pp2*(nsv%hfl(1:nx,1:ny,k-1)-nsv%hhl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k))+&
+         pp1*(nsv%hhl(1:nx,1:ny,k  )-nsv%hfl(1:nx,1:ny,k))/(nsv%hfl(1:nx,1:ny,k-1)-nsv%hfl(1:nx,1:ny,k)))
+      end if
+      pp2=pp1
+    END DO
+    nsv%phl(1:nx,1:ny,nsv%nhl)=nsv%p0hl(1:nx,1:ny,nsv%nhl)+pp2
+    DEALLOCATE(pp1)
+    DEALLOCATE(pp2)
+    
+    nsv%vertical_coords_set=.TRUE.
     
   END SUBROUTINE set_vertical_coords
-
+  
   SUBROUTINE read_time(header,tf)
     
     TYPE(grib_header_type),INTENT(in)  :: header
     TYPE(time_type),       INTENT(out) :: tf
-
+    
     INTEGER :: century,ye,mo,da,ho,mi
-
+    
     ye=header%pds(13)
     mo=header%pds(14)
     da=header%pds(15)
     ho=header%pds(16)
     mi=header%pds(17)
-
+    
     century = (header%pds(25)-1)*100
 
     tf = set_date(century+ye,mo,da,ho,mi,0)

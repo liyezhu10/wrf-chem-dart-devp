@@ -20,8 +20,7 @@ character(len=128), parameter :: &
   public :: byte_to_word_signed
   public :: to_float1
   public :: from_float1
-  public :: byte_to_word_data
-  public :: word_to_byte_data
+  public :: byte_to_word
   public :: word_to_byte
   public :: get_word
   
@@ -123,21 +122,6 @@ CONTAINS
 
   END SUBROUTINE byte_to_word_signed
 
-  SUBROUTINE word_to_byte(w,b,n)
-    INTEGER,INTENT(in)          :: w,n
-    INTEGER(kind=1),INTENT(out) :: b(1:n)
-    INTEGER                     :: ibin,work
-
-    work=w
-    DO ibin=n,1,-1
-      b(ibin)=MOD(work,256)
-      work=work/256
-    END DO
-
-    RETURN
-
-  END SUBROUTINE word_to_byte
-
   REAL(r8) FUNCTION to_float1(b)
     
     IMPLICIT NONE
@@ -208,7 +192,7 @@ CONTAINS
 
   ! This routine converts a 2-element vector of bytes to an integer word
 
-  INTEGER FUNCTION byte_to_word_data(b)
+  INTEGER FUNCTION byte_to_word(b)
     INTEGER(kind=1),INTENT(in)  :: b(2)
     INTEGER                     :: w(2),r,n
     INTEGER                     :: ibin
@@ -224,12 +208,12 @@ CONTAINS
     END DO
 !    IF (w<0.) w=w+256**n
 
-    byte_to_word_data=r
+    byte_to_word=r
     RETURN
 
-  END FUNCTION byte_to_word_data
+  END FUNCTION byte_to_word
 
-  FUNCTION word_to_byte_data(d) RESULT (b2)
+  FUNCTION word_to_byte(d) RESULT (b2)
     INTEGER(kind=1)    :: b2(2)
     INTEGER,INTENT(in) :: d
     INTEGER            :: ibin,w
@@ -242,9 +226,9 @@ CONTAINS
     END DO
 
     RETURN
-  END FUNCTION word_to_byte_data
+  END FUNCTION word_to_byte
 
-  FUNCTION get_word(b)
+  INTEGER FUNCTION get_word(b)
     INTEGER(kind=1),INTENT(in) :: b(:)
     INTEGER                    :: w,n
     INTEGER                    :: ibin
@@ -258,33 +242,5 @@ CONTAINS
     RETURN
 
   END FUNCTION get_word
-
-!  FUNCTION to_float4(bin)
-!
-!    IMPLICIT NONE
-!
-!    REAL(r8)           :: to_float4
-!    INTEGER,INTENT(in) :: bin
-!    INTEGER            :: bin1,imant,ichar,isign,word(4),ibin
-!
-!    bin1=bin
-!    DO ibin=1,4
-!      word(ibin)=bin1/256**(4-ibin)
-!      bin1=bin1-word(ibin)*256**(4-ibin)
-!      IF (word(ibin)<0) word(ibin)=word(ibin)+256
-!    END DO
-!
-!    isign=1
-!    IF (word(1)>=128) THEN
-!      isign=-1
-!    END IF
-!    word(1)=word(1)-128
-!
-!    imant=word(2)*256**2+word(3)*256**1+word(4)
-!!    to_float4=isign*(2.**(-24))*imant*(16.**(word(1)-64))+(2.**(-12))
-!    to_float4=isign*(2.**(-24))*imant*(16.**(word(1)-64))
-!    RETURN
-!
-!  END FUNCTION to_float4
 
 END MODULE byte_mod

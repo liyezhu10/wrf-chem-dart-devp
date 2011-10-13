@@ -54,15 +54,25 @@ namelist /dart_to_cosmo_nml/ dart_output_file,        &
 
 !----------------------------------------------------------------------
 
-character(len=256)    :: cosmo_restart_filename
-integer               :: iunit, io, x_size, diff1, diff2,model_size
-type(time_type)       :: model_time, adv_to_time, base_time
+integer               :: iunit, io, model_size
+type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: state_vector(:)
 logical               :: verbose              = .FALSE.
 
 !----------------------------------------------------------------------
+! Read the namelist to get the output filename. 
+!----------------------------------------------------------------------
 
 call initialize_utilities(progname='dart_to_cosmo', output_flag=verbose)
+
+call find_namelist_in_file("input.nml", "dart_to_cosmo_nml", iunit)
+read(iunit, nml = dart_to_cosmo_nml, iostat = io)
+call check_namelist_read(iunit, io, "dart_to_cosmo_nml")
+
+write(*,*)
+write(*,'(''dart_to_cosmo:converting DART file '',A, &
+      &'' to cosmo anaylsis file '',A)') &
+     trim(dart_output_file), trim(new_cosmo_analysis_file)
 
 !----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the cosmo namelists
@@ -74,16 +84,6 @@ call static_init_model()
 model_size=get_model_size()
 
 allocate(state_vector(1:model_size))
-! Read the namelist to get the input filename. 
-
-call find_namelist_in_file("input.nml", "dart_to_cosmo_nml", iunit)
-read(iunit, nml = dart_to_cosmo_nml, iostat = io)
-call check_namelist_read(iunit, io, "dart_to_cosmo_nml")
-
-write(*,*)
-write(*,'(''dart_to_cosmo:converting DART file '',A, &
-      &'' to cosmo anaylsis file '',A)') &
-     trim(dart_output_file), trim(new_cosmo_analysis_file)
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
