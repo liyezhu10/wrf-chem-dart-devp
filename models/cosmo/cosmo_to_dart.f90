@@ -46,17 +46,18 @@ character(len=128), parameter :: &
 !-----------------------------------------------------------------------
 
 character(len=128) :: cosmo_to_dart_output_file  = 'dart.ud'
+
 namelist /cosmo_to_dart_nml/ cosmo_to_dart_output_file
 
 !----------------------------------------------------------------------
 ! global storage
 !----------------------------------------------------------------------
 
-logical               :: verbose = .TRUE.
 integer               :: io, iunit, x_size
 real(r8),allocatable  :: x(:)
 type(time_type)       :: model_time
 character(len=256)    :: cosmo_filename
+logical               :: verbose = .false.
 
 !======================================================================
 
@@ -70,10 +71,12 @@ call find_namelist_in_file("input.nml", "cosmo_to_dart_nml", iunit)
 read(iunit, nml = cosmo_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "cosmo_to_dart_nml") ! closes, too.
 
+cosmo_filename = get_cosmo_filename()
+
 write(*,*)
-write(*,*) 'cosmo_to_dart: converting cosmo file ', &
-           "'"//trim(cosmo_filename)//"'"
-write(*,*) ' to DART file ', "'"//trim(cosmo_to_dart_output_file)//"'"
+write(*,'(''cosmo_to_dart:converting cosmo file "'',A, &
+      &''" to DART file "'',A,''"'')') &
+     trim(cosmo_filename), trim(cosmo_to_dart_output_file)
 
 !----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists
@@ -83,7 +86,6 @@ call static_init_model()
 
 model_time     = get_state_time()
 x_size         = get_model_size()
-cosmo_filename = get_cosmo_filename()
 
 print*,'model size is ',x_size
 

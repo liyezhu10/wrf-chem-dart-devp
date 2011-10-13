@@ -56,6 +56,8 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
+\rm -f *.o *.mod Makefile .cppdefs
+
 if ( $#argv == 1 && "$1" == "-mpi" ) then
   echo "Success: All single task DART programs compiled."  
   echo "Script now compiling MPI parallel versions of the DART programs."
@@ -83,7 +85,7 @@ endif
 # Build the MPI-enabled target(s) 
 #----------------------------------------------------------------------
 
-\rm -f *.o *.mod filter wakeup_filter
+\rm -f filter wakeup_filter
 
 @ n = $n + 1
 echo

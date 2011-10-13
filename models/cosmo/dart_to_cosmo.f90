@@ -44,9 +44,9 @@ character(len=128), parameter :: &
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_output_file = 'dart.ic'
-character (len = 128) :: new_cosmo_analysis_file
-logical               :: advance_time_present = .true.
+character (len = 128) :: dart_output_file        = 'dart.ic'
+character (len = 128) :: new_cosmo_analysis_file = 'out.grb'
+logical               :: advance_time_present    = .true.
 
 namelist /dart_to_cosmo_nml/ dart_output_file,        &
                              new_cosmo_analysis_file, &
@@ -57,7 +57,7 @@ namelist /dart_to_cosmo_nml/ dart_output_file,        &
 integer               :: iunit, io, model_size
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: state_vector(:)
-logical               :: verbose              = .FALSE.
+logical               :: verbose = .false.
 
 !----------------------------------------------------------------------
 ! Read the namelist to get the output filename. 
@@ -70,8 +70,8 @@ read(iunit, nml = dart_to_cosmo_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_cosmo_nml")
 
 write(*,*)
-write(*,'(''dart_to_cosmo:converting DART file '',A, &
-      &'' to cosmo file '',A)') &
+write(*,'(''dart_to_cosmo:converting DART file "'',A, &
+      &''" to cosmo file "'',A,''"'')') &
      trim(dart_output_file), trim(new_cosmo_analysis_file)
 
 !----------------------------------------------------------------------
