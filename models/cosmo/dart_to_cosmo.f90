@@ -71,7 +71,7 @@ call check_namelist_read(iunit, io, "dart_to_cosmo_nml")
 
 write(*,*)
 write(*,'(''dart_to_cosmo:converting DART file '',A, &
-      &'' to cosmo anaylsis file '',A)') &
+      &'' to cosmo file '',A)') &
      trim(dart_output_file), trim(new_cosmo_analysis_file)
 
 !----------------------------------------------------------------------

@@ -70,6 +70,11 @@ call find_namelist_in_file("input.nml", "cosmo_to_dart_nml", iunit)
 read(iunit, nml = cosmo_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "cosmo_to_dart_nml") ! closes, too.
 
+write(*,*)
+write(*,*) 'cosmo_to_dart: converting cosmo file ', &
+           "'"//trim(cosmo_filename)//"'"
+write(*,*) ' to DART file ', "'"//trim(cosmo_to_dart_output_file)//"'"
+
 !----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists
 ! to set grid sizes, etc.
@@ -84,11 +89,6 @@ print*,'model size is ',x_size
 
 allocate(x(1:x_size))
 x(:)=get_state_vector()
-
-write(*,*)
-write(*,*) 'cosmo_to_dart: converting cosmo file ', &
-           "'"//trim(cosmo_filename)//"'"
-write(*,*) ' to DART file ', "'"//trim(cosmo_to_dart_output_file)//"'"
 
 iunit = open_restart_write(cosmo_to_dart_output_file)
 
