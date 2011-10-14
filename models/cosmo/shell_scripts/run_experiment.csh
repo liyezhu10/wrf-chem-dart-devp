@@ -67,6 +67,10 @@ echo "s/JOB_NAME/$expname/g"     >! script1.sed
 echo "s/PROJ_NUMBER/$proj_num/g" >> script1.sed
 echo "s/NPROCS/$nprocs/g"        >> script1.sed
 
+# if needed, sed anything that changes and do:
+#  sed -f script1.sed input.nml.template > input.nml
+cp input.nml.template input.nml
+
 #
 #=============================================================================
 #  main cycle loop
