@@ -18,6 +18,7 @@ character(len=128), parameter :: &
   public :: concat_bytes1_sign
   public :: to_positive
   public :: byte_to_word_signed
+  public :: get_characteristic
   public :: to_float1
   public :: from_float1
   public :: byte_to_word
@@ -122,12 +123,33 @@ CONTAINS
 
   END SUBROUTINE byte_to_word_signed
 
+  FUNCTION get_characteristic(b) result (c)
+    
+    IMPLICIT NONE
+    
+    INTEGER(kind=1)                      :: c
+    INTEGER(kind=1),         INTENT(in)  :: b
+    INTEGER                              :: w
+    
+    w=b
+
+    IF (w<0) w=256+w
+
+    IF (w>=128) THEN
+      w=w-128
+    END IF
+
+    c=w
+    RETURN
+    
+  END FUNCTION get_characteristic
+
   REAL(r8) FUNCTION to_float1(b)
     
     IMPLICIT NONE
     
-    INTEGER(kind=1),INTENT(in) :: b(4)
-    INTEGER                    :: w(4),imant,isign,ibin
+    INTEGER(kind=1),         INTENT(in)  :: b(4)
+    INTEGER                              :: w(4),imant,isign,ibin
 
     w=b
 
@@ -142,23 +164,22 @@ CONTAINS
     END IF
 
     imant=w(2)*256**2+w(3)*256**1+w(4)
-!    print*,b
-!    print*,isign,imant,w(1)
     to_float1=isign*(2.**(-24))*imant*(16.**(w(1)-64))
     RETURN
     
   END FUNCTION to_float1
 
-  FUNCTION from_float1(f) RESULT (b4)
+  FUNCTION from_float1(f,char) RESULT (b4)
     
     IMPLICIT NONE
     
     INTEGER(kind=1)     :: b4(4)
 
-    REAL(r8),INTENT(in) :: f
+    REAL(r8),       INTENT(in) :: f
+    INTEGER(kind=1),INTENT(in) :: char
 
     REAL(r8)            :: wf,wf0
-    INTEGER             :: ibin,n,n1
+    INTEGER             :: ibin
     INTEGER             :: ichar,isign
     INTEGER(kind=8)     :: imant,w
 
@@ -170,12 +191,14 @@ CONTAINS
 
     wf=ABS(f)
     wf0=wf*(2.**24.)
-    n=int(log(wf0)/log(2.))
-    n1=4*int(n/4.+0.5)
+!    n=int(log(wf0)/log(2.))
+!    n1=4*int(n/4.+0.5)
     
-    ichar=(n1+232)/4
+!    ichar=(n1+232)/4
+    ichar=char
 
-    imant=int((wf0/(2.**n1)*(2.**24)),8)
+!    imant=int((wf0/(2.**n1)*(2.**24)),8)
+    imant=int((wf0/(16**(ichar-64))),8)
 
     b4(1)=ichar+isign*128
 

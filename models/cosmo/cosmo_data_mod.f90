@@ -40,7 +40,7 @@ MODULE cosmo_data_mod
 
   USE          byte_mod, ONLY: concat_bytes1,concat_bytes1_sign,to_positive, &
                                byte_to_word_signed,to_float1,                &
-                               byte_to_word,get_word
+                               byte_to_word,get_word,get_characteristic
 
   USE     grib_info_mod, ONLY: get_level,get_varname,get_dims,get_dart_kind
 
@@ -70,6 +70,7 @@ character(len=128), parameter :: &
     integer            :: dart_eindex
     integer            :: dart_kind
     real(r8)           :: dart_level
+    integer(kind=1)    :: ref_value_char
   end type cosmo_meta
 
   type cosmo_non_state_data
@@ -451,12 +452,13 @@ CONTAINS
       END IF
 
       varname=get_varname(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
-      v(ivar)%varname_short = varname(2)
-      v(ivar)%varname_long  = varname(1)
-      v(ivar)%units         = varname(3)
-      v(ivar)%dart_kind     = get_dart_kind(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
-!      v(ivar)%dims          = get_dims(header(ivar)%gds(1:10))
-      v(ivar)%dims          = model_dims
+      v(ivar)%varname_short  = varname(2)
+      v(ivar)%varname_long   = varname(1)
+      v(ivar)%units          = varname(3)
+      v(ivar)%dart_kind      = get_dart_kind(v(ivar)%grib_table,v(ivar)%grib_code,v(ivar)%grib_leveltype)
+!      v(ivar)%dims           = get_dims(header(ivar)%gds(1:10))
+      v(ivar)%dims           = model_dims
+      v(ivar)%ref_value_char = get_characteristic(header(ivar)%bds(7))
       if (v(ivar)%dart_kind==KIND_VERTICAL_VELOCITY) v(ivar)%dims(3)=v(ivar)%dims(3)+1
 
       is_allowed_kind=.false.
@@ -605,10 +607,10 @@ CONTAINS
 
   FUNCTION get_data_from_binary(filename,header,nx,ny) RESULT (mydata)
 
-    REAL(r8)                          :: mydata(1:nx,1:ny)
-    CHARACTER(len=256),    INTENT(in) :: filename
-    TYPE(grib_header_type),INTENT(in) :: header
-    INTEGER,               INTENT(in) :: nx,ny
+    REAL(r8)                             :: mydata(1:nx,1:ny)
+    CHARACTER(len=256),      INTENT(in)  :: filename
+    TYPE(grib_header_type),  INTENT(in)  :: header
+    INTEGER,                 INTENT(in)  :: nx,ny
 
     INTEGER(kind=1)               :: bin4(1:4)
     INTEGER                       :: idsf,ibsf,dval,irec,ix,iy,istat,ibyte,is,ie

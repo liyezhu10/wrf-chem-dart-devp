@@ -1853,7 +1853,7 @@ contains
         end if
 
         ref_value=minval(mydata)
-        bin4(1:4)=from_float1(ref_value)
+        bin4(1:4)=from_float1(ref_value,cosmo_slabs(islab)%ref_value_char)
 
         hlen=size(grib_header(islab)%pds)+size(grib_header(islab)%gds)
 
