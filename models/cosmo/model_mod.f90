@@ -1905,8 +1905,8 @@ contains
     
     ! write the new GRIB file
     gribunitout = get_unit()
-    OPEN(gribunitout,FILE=TRIM(nfile),FORM='UNFORMATTED')
-    WRITE(gribunitout) bytearr(1:griblen)
+    OPEN(gribunitout,FILE=TRIM(nfile),FORM='UNFORMATTED',ACCESS='stream')
+    WRITE(gribunitout) bytearr(5:griblen)
 
     call close_file(gribunitout)
 
