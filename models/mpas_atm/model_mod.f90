@@ -1972,6 +1972,9 @@ real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array2
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
+! temp space to hold horizontal winds
+real(r8), allocatable :: u(:,:), ucell_incr(:,:), vcell_incr(:,:)
+
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
@@ -2027,6 +2030,13 @@ if ( TimeDimID > 0 ) then
 else
    TimeDimLength = 0
 endif
+
+! We need to read winds to compute increments.
+allocate(u(nVertLevels, nEdges))
+allocate(ucell_incr(nVertLevels, nCells))
+allocate(vcell_incr(nVertLevels, nCells))
+call get_u(ncFileID, u, ucell_incr, vcell_incr)
+!
 
 do ivar=1, nfields
 
@@ -2129,20 +2139,36 @@ enddo
 ! (parallel to lat and lon lines).  we can read them directly from the analysis
 ! file at the cell centers, but in putting them back into the file we've got to
 ! update the edge arrays as well as the centers.
+! 
+! SYHA: We should update normal velocity even when one of the horizontal wind components
+! exists because we no longer compute the full normal velocity from both u and v winds,
+! but only update the original field with the analysis increments. 
 call winds_present(zonal, meridional, both)
-if (both) then
+
+if (zonal > 0) then
    allocate(data_2d_array ( progvar(zonal)%dimlens(1),  &
                             progvar(zonal)%dimlens(2) ))
+   call vector_to_prog_var(state_vector, zonal,      data_2d_array )
+   ucell_incr = data_2d_array - ucell_incr
+   deallocate(data_2d_array)
+else
+   ucell_incr(:,:) = 0.0_r8
+endif
+
+if (meridional > 0) then
    allocate(data_2d_array2( progvar(meridional)%dimlens(1),  &
                             progvar(meridional)%dimlens(2) ))
 
-   call vector_to_prog_var(state_vector, zonal,      data_2d_array )
    call vector_to_prog_var(state_vector, meridional, data_2d_array2)
- 
-   call handle_winds(data_2d_array, data_2d_array2)
-
-   deallocate(data_2d_array, data_2d_array2)
+   vcell_incr = data_2d_array2 - vcell_incr
+   deallocate(data_2d_array2)
+else
+   vcell_incr(:,:) = 0.0_r8
 endif
+ 
+call handle_winds(u, ucell_incr, vcell_incr)
+deallocate(ucell_incr, vcell_incr)
+
 
 call nc_check(nf90_close(ncFileID), &
              'statevector_to_analysis_file','close '//trim(filename))
@@ -2593,34 +2619,40 @@ end subroutine get_edges
 
 !------------------------------------------------------------------
 
-subroutine get_u(u)
+subroutine get_u(ncid, u, ucell_prior, vcell_prior)
 
-! get the contents of the U array.   it is not clear that we really
-! need this since the computation code seems to zero out the U array
-! before starting - so this might be unnecessary work.
+! get the contents of the U, uReconstructZonal, uReconstructMeridional arrays.
+! We need to read them to compute their increments.
 !
 ! The file name comes from module storage ... namelist.
 
 ! must first be allocated by calling code with the following sizes:
-real(r8), intent(inout) :: u(:,:)       ! u(nVertLevels, nEdges) 
+integer,  intent(in)    :: ncid                   ! file ID for model_analysis_filename
+real(r8), intent(inout) :: u(:,:)                 ! u(nVertLevels, nEdges) 
+real(r8), intent(inout) :: ucell_prior(:,:)       ! uReconstructZonal(nVertLevels, nCells) 
+real(r8), intent(inout) :: vcell_prior(:,:)       ! uReconstructMeridional(nVertLevels, nCells) 
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu
-integer :: ncid, VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
+integer, dimension(NF90_MAX_VAR_DIMS) ::         uvstart, uvcount, numv
+integer :: VarID, numdims
+!integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: ntimes, i
 
-! Read the netcdf file data
+! Open the netcdf file 
 
 if ( .not. module_initialized ) call static_init_model
 
 
-call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), &
-              'get_u', 'open '//trim(model_analysis_filename))
+!call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), &
+!              'get_u', 'open '//trim(model_analysis_filename))
 
-call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-              'get_u', 'inquire '//trim(model_analysis_filename))
+!call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
+!              'get_u', 'inquire '//trim(model_analysis_filename))
 
-call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-              'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
+!call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
+!              'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
+
+! Read u
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
               'get_u', 'inq_varid u '//trim(model_analysis_filename))
@@ -2644,7 +2676,46 @@ call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
               'get_u', 'put_var u '//trim(model_analysis_filename))
 
 
-call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
+! Read uReconstructZonal
+
+call nc_check(nf90_inq_varid(ncid, 'uReconstructZonal', VarID), &
+              'get_u', 'inq_varid uReconstructZonal '//trim(model_analysis_filename))
+
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+              'get_u', 'inquire uReconstructZonal '//trim(model_analysis_filename))
+
+do i=1, numdims
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
+                 'get_u', 'inquire uReconstructZonal dimension length '//trim(model_analysis_filename))
+enddo
+
+! for all but the time dimension, read all the values.   
+! for time read only the last one (if more than 1 present)
+uvstart = 1
+uvstart(numdims) = ntimes
+uvcount = numv
+uvcount(numdims) = 1
+
+call nc_check( nf90_get_var(ncid, VarID, ucell_prior, start=uvstart, count=uvcount), &
+              'get_u', 'put_var uReconstructZonal '//trim(model_analysis_filename))
+
+! Read uReconstructMeridional
+
+call nc_check(nf90_inq_varid(ncid, 'uReconstructMeridional', VarID), &
+              'get_u', 'inq_varid uReconstructMeridional '//trim(model_analysis_filename))
+
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+              'get_u', 'inquire uReconstructMeridional '//trim(model_analysis_filename))
+
+do i=1, numdims
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
+                 'get_u', 'inquire uReconstructMeridional dimension length '//trim(model_analysis_filename))
+enddo
+
+call nc_check( nf90_get_var(ncid, VarID, vcell_prior, start=uvstart, count=uvcount), &
+              'get_u', 'put_var uReconstructMeridional '//trim(model_analysis_filename))
+
+!call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
 
 
 ! A little sanity check
@@ -2652,7 +2723,9 @@ call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) 
 if ( debug > 7 ) then
 
    write(*,*)
-   write(*,*)'u       range ',minval(u),     maxval(u)
+   write(*,*)'u           range ',minval(u),           maxval(u)
+   write(*,*)'ucell_prior range ',minval(ucell_prior), maxval(ucell_prior)
+   write(*,*)'vcell_prior range ',minval(vcell_prior), maxval(vcell_prior)
 
 endif
 
@@ -3166,42 +3239,60 @@ end subroutine winds_present
 
 !------------------------------------------------------------------
 
-subroutine handle_winds(zonal_data, meridional_data)
+subroutine handle_winds(u_prior , zonal_incr, meridional_incr)
 
- real(r8), intent(in) :: zonal_data(:,:), meridional_data(:,:)
+ real(r8), intent(in) :: u_prior(:,:), zonal_incr(:,:), meridional_incr(:,:)
  
 !  the current plan for winds is:
 !  read the reconstructed zonal and meridional winds at cell centers
 !  do the assimilation of U,V winds and update the centers
-!  at write time, map the cell centers back to edge centers and rotate
-!  to be normal and parallel to the edge directions
-!  question remains on what to do with the centers - does that updated
-!  info need to be written out to the file to be self-consistent?  or
-!  will the model update them as soon as it runs? 
+!  at write time, compute the increments at the centers, 
+!  map the increments back to the edges rotating
+!  to be normal and parallel to the edge directions.
+!  We write out the updated U,V winds at cell centers to the analysis 
+!  file although they are going to be reinitialized when the model
+!  gets started (since they are diagnostic variables in the model).
 
 ! the 'cellsOnEdge' array has the ids of the two neighboring cell numbers
 ! the lonEdge/latEdge arrays have the ?midpoints of the edges.
 ! the ends of each edge are the lonVertex/latVertex arrays
 ! the location of the winds are at the lonCell/latCell arrays (cell centers)
 
-! is that all we need for this conversion?
-
-real(r8), allocatable :: u(:,:), edgeNormalVectors(:,:)
+real(r8), allocatable :: u(:,:), du(:,:), edgeNormalVectors(:,:)
 integer,  allocatable :: nEdgesOnCell(:), edgesOnCell(:,:)
 
 allocate(u(nVertLevels, nEdges))
+allocate(du(nVertLevels, nEdges))
 allocate(nEdgesOnCell(nCells), edgesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 
 call get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
-! not clear we need to read it since uv_cell_to_edges() zeros it first thing.
-! call get_u(u)
 
-call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, zonal_data, meridional_data, u)
+if ( debug > 7 ) then
+write(*,*)'u wind increment:',minval(zonal_incr), maxval(zonal_incr)
+write(*,*)'v wind increment:',minval(meridional_incr), maxval(meridional_incr)
+write(*,*)'u_prior: ',minval(u_prior), maxval(u_prior)
+endif
+
+call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, &
+                      zonal_incr, meridional_incr, du)
+
+if ( debug > 7 ) then
+write(*,*)
+write(*,*)'du after uv_cell_to_edges:',minval(du), maxval(du)
+endif
+
+! Update normal velocity 
+u(:,:) = u_prior(:,:) + du(:,:)
+
+if ( debug > 7 ) then
+write(*,*)
+write(*,*)'u after update:',minval(u), maxval(u)
+endif
 
 call put_u(u)
 
-deallocate(u, nEdgesOnCell, edgesOnCell, edgeNormalVectors)
+deallocate(u, du, nEdgesOnCell, edgesOnCell, edgeNormalVectors) 
 
 end subroutine handle_winds
 
@@ -4054,32 +4145,34 @@ end subroutine update_reg_list
 
 !------------------------------------------------------------------
 
-subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, uReconstructZonal, uReconstructMeridional, u)
+subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, &
+                            zonal_wind, meridional_wind, du)
 
-! Project the u, v winds at the cell centers onto the edges.
+! Project u, v wind increments at cell centers onto the edges.
 ! FIXME:
 !        we can hard-code R3 here since it comes from the (3d) x/y/z cartesian coordinate.
 !        We define nEdgesOnCell in get_grid_dims, and read edgesOnCell in get_grid.
 !        We read edgeNormalVectors in get_grid to use this subroutine.
-!        Here "U" is the prognostic variable in MPAS.
+!        Here "U" is the prognostic variable in MPAS, and we update it with the wind
+!        increments at cell centers.
 
 real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
 integer,  intent(in) :: nEdgesOnCell(:)             ! how many edges this cell has
 integer,  intent(in) :: edgesOnCell(:,:)            ! index list of edges per cell
-real(r8), intent(in) :: uReconstructZonal(:,:)      ! u wind at cell centers
-real(r8), intent(in) :: uReconstructMeridional(:,:) ! u wind at cell centers
-real(r8), intent(out):: u(:,:)                      ! normal velocity on the edges
+real(r8), intent(in) :: zonal_wind(:,:)             ! u wind updated from filter
+real(r8), intent(in) :: meridional_wind(:,:)        ! v wind updated from filter
+real(r8), intent(out):: du(:,:)                     ! normal velocity increment on the edges
 
 ! Local variables
 integer, parameter :: R3 = 3
 real(r8) :: east(R3,nCells), north(R3,nCells)
 real(r8) :: lonCell_rad(nCells), latCell_rad(nCells)
-integer :: iCell, iEdge, jEdge, k
+integer  :: iCell, iEdge, jEdge, k
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Initialization
-U(:,:) = 0.0_r8
+du(:,:) = 0.0_r8
 
 ! Back to radians (locally)
 lonCell_rad = lonCell*deg2rad
@@ -4100,21 +4193,33 @@ do iCell = 1, nCells
 
 enddo
 
-! Projection from the cell centers to the edges
+if ( debug > 7 ) then
+write(*,*)
+write(*,*)'u,v incr before uv_cell_to_edges:',minval(zonal_wind), maxval(zonal_wind), &
+                                              minval(meridional_wind), maxval(meridional_wind)
+endif
+
+! Project analysis increments from the cell centers to the edges
 do iCell = 1, nCells
    do jEdge = 1, nEdgesOnCell(iCell)
       iEdge = edgesOnCell(jEdge, iCell)
       do k = 1, nVertLevels
-         U(k,iEdge) = U(k,iEdge) + &
-              0.5_r8 * uReconstructZonal(k,iCell) * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
-                                                  +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
-                                                  +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
-       + 0.5_r8 * uReconstructMeridional(k,iCell) * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
-                                                  +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
-                                                  +  edgeNormalVectors(3,iEdge) * north(3,iCell)) 
+         du(k,iEdge) = du(k,iEdge) + 0.5_r8 * zonal_wind(k,iCell)   &
+                     * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
+                     +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
+                     +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
+                     + 0.5_r8 * meridional_wind(k,iCell)            &
+                     * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
+                     +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
+                     +  edgeNormalVectors(3,iEdge) * north(3,iCell)) 
       enddo
    enddo
 enddo
+
+if ( debug > 7 ) then
+write(*,*)
+write(*,*)'du inside uv_cell_to_edges:',minval(du), maxval(du)
+endif
 
 end subroutine uv_cell_to_edges
 
