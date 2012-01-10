@@ -109,6 +109,8 @@ real(r8), parameter :: cv = 716.0_r8
 real(r8), parameter :: p0 = 100000.0_r8
 real(r8), parameter :: rcv = rgas/(cp-rgas)
 
+real(r8), parameter :: radius = 6371229.0 ! meters
+
 ! Storage for a random sequence for perturbing a single initial state
 
 type(random_seq_type) :: random_seq
@@ -4408,7 +4410,8 @@ logical               :: inside_cell
 ! convert lat/lon to cartesian coordinates and then determine
 ! from the xyz vertices if this point is inside the cell.
 
-integer :: nverts
+integer :: nverts, i, vertexid
+real(r8) :: x, y, z, px, py, pz
 
 inside_cell = .true.
 return
@@ -4416,12 +4419,26 @@ return
 print *, "FIXME: implement inside_cell"
 stop
 
+! cartesian location of point on surface of sphere
+call latlon_to_xyz(lat, lon, px, py, pz)
+
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
 
 ! go around the edges and take the cross product with
 ! the point.  if all the signs are the same it's inside.
 ! (or something like this.)
+do i=1, nverts
+   vertexid = verticesOnCell(cellid, i)
+   x = xVertex(vertexid)
+   y = yVertex(vertexid)
+   z = zVertex(vertexid)
+
+   ! compute the vectors we need here - vertex to point,
+   ! v1 to v2, etc.
+
+    
+enddo
 
 end function inside_cell
 
@@ -4442,7 +4459,7 @@ real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
 print *, "FIXME: implement closest_vertex"
 stop
 
-call latlon_to_xyz(lat, lon, 0.0_r8, px, py, pz)
+call latlon_to_xyz(lat, lon, px, py, pz)
 
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
@@ -4526,48 +4543,165 @@ end subroutine make_edge_list
 
 !------------------------------------------------------------
 
-subroutine latlon_to_xyz(lat, lon, vert, x, y, z)
+subroutine latlon_to_xyz(lat, lon, x, y, z)
 
-! Given a lat, lon, and vertical height in meters, return the 
-! cartesian x,y,z coordinate relative to the origin at the 
-! center of the earth.
+! Given a lat, lon in degrees, return the cartesian x,y,z coordinate 
+! on the surface of a specified radius relative to the origin 
+! at the center of the earth.  (this radius matches the one
+! used at MPAS grid generation time and must agree in order
+! to be consistent with the cartisian coordinate arrays in
+! the MPAS data files.)
 
-real(r8), intent(in)  :: lat, lon, vert
+real(r8), intent(in)  :: lat, lon
 real(r8), intent(out) :: x, y, z
 
-print *, "FIXME: implement latlon_to_xyz"
-stop
+real(r8) :: rlat, rlon
 
-! so-young is working on this one.
+rlat = lat * deg2rad
+rlon = lon * deg2rad
 
-x=0.0_r8
-y=0.0_r8
-z=0.0_r8
+x = radius * cos(rlon) * cos(rlat)
+y = radius * sin(rlon) * cos(rlat)
+z = radius * sin(rlat)
 
 end subroutine latlon_to_xyz
 
 !------------------------------------------------------------
 
-subroutine xyz_to_latlon(x, y, z, lat, lon, vert)
+subroutine xyz_to_latlon(x, y, z, lat, lon)
 
 ! Given a cartesian x, y, z coordinate relative to the origin
-! at the center of the earth, return the lat, lon, and vertical
-! height in meters.
+! at the center of the earth, using a fixed radius specified
+! by MPAS (in the grid generation step), return the corresponding
+! lat, lon location in degrees.
 
 real(r8), intent(in)  :: x, y, z
-real(r8), intent(out) :: lat, lon, vert
+real(r8), intent(out) :: lat, lon
+
+real(r8) :: rlat, rlon
 
 print *, "FIXME: implement xyz_to_latlon"
 stop
 
 ! only do this if we need it.
 
-lat = 0.0_r8
-lon = 0.0_r8
-vert = 0.0_r8
+rlat = 0.0_r8
+rlon = 0.0_r8
+
+lat = rlat * rad2deg
+lon = rlon * rad2deg
 
 end subroutine xyz_to_latlon
 
+!------------------------------------------------------------
+
+subroutine latlon_to_xyz_on_plane(lat, lon, cellid, x, y, z)
+
+! Given a lat, lon in degrees, and the id of a cell in the 
+! MPAS grid, return the cartesian x,y,z coordinate of that
+! location ON THE PLANE defined by the vertices of that cell.
+! This will be different from the x,y,z of the surface of the
+! sphere.
+
+real(r8), intent(in)  :: lat, lon
+integer,  intent(in)  :: cellid
+real(r8), intent(out) :: x, y, z
+
+real(r8) :: rlat, rlon   ! in radians
+real(r8) :: sx, sy, sz   ! location of point on surface
+
+rlat = lat * deg2rad
+rlon = lat * deg2rad
+
+sx = radius * cos(rlon) * cos(rlat)
+sy = radius * sin(rlon) * cos(rlat)
+sz = radius * sin(rlat)
+
+! get the first 3 vertices to define plane
+! intersect with sx,sy,sz to get answer
+
+!FIXME!!
+
+end subroutine latlon_to_xyz_on_plane
+
+!------------------------------------------------------------
+
+subroutine vector_magnitude(a, r)
+
+! Given a cartesian vector, compute the magnitude
+
+real(r8), intent(in)  :: a(3)
+real(r8), intent(out) :: r
+
+r = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
+
+end subroutine vector_magnitude
+
+!------------------------------------------------------------
+
+subroutine vector_cross_product(a, b, r)
+
+! Given 2 cartesian vectors, compute the cross product of a x b
+
+real(r8), intent(in)  :: a(3), b(3)
+real(r8), intent(out) :: r(3)
+
+r(1) = a(2)*b(3) - a(3)*b(2)
+r(2) = a(3)*b(1) - a(1)*b(3)
+r(3) = a(1)*b(2) - a(2)*b(1)
+
+end subroutine vector_cross_product
+
+!------------------------------------------------------------
+
+subroutine determinant3(a, r)
+
+! Given a 3x3 matrix, compute the determinant
+
+real(r8), intent(in)  :: a(3,3)
+real(r8), intent(out) :: r
+
+r = a(1,1)*(a(2,2)*a(3,3) - (a(3,2)*a(2,3))) + &
+    a(2,1)*(a(3,2)*a(1,3) - (a(3,3)*a(1,2))) + &
+    a(3,1)*(a(1,2)*a(2,3) - (a(2,2)*a(1,3)))
+
+end subroutine determinant3
+
+!------------------------------------------------------------
+
+subroutine invert3(a, r)
+
+! Given a 3x3 matrix, compute the inverse
+
+real(r8), intent(in)  :: a(3,3)
+real(r8), intent(out) :: r(3,3)
+
+real(r8) :: det, b(3,3)
+
+call determinant3(a, det)
+if (det == 0.0_r8) then
+   print *, 'matrix cannot be inverted'
+   r = 0.0_r8
+   return
+endif
+
+b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
+b(2,1) = a(3,1)*a(2,3) - a(2,1)*a(3,3)
+b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
+
+b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
+b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
+b(3,2) = a(3,1)*a(1,3) - a(1,1)*a(3,2)
+
+b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
+b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
+b(3,3) = a(1,1)*a(2,2) - a(2,1)*a(1,2)
+
+r = b / det
+
+end subroutine invert3
+
+!------------------------------------------------------------
 
 !==================================================================
 ! The following (private) routines were borrowed from the MPAS code
