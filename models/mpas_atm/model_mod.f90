@@ -56,7 +56,10 @@ use mpi_utilities_mod, only: my_task_id
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
 use typesizes
-use netcdf 
+use netcdf
+use get_geometry_mod
+use get_reconstruct_mod
+
 
 implicit none
 private
@@ -4249,11 +4252,15 @@ real(r8), intent(out) :: uval
 
 
 integer, parameter :: listsize = 15
+logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(listsize, 3)
 real(r8) :: veldata(listsize)
-integer  :: vertindex, index1, progindex
+real(r8) :: xreconstruct, yreconstruct, zreconstruct
+real(r8) :: datatangentplane(r3,2)
+real(r8) :: coeffs_reconstruct(r3,listsize)
+integer  :: vertindex, index1, progindex, cellid
 
 call find_rbf_edges(lat, lon, nedges, edgelist)
 
@@ -4287,9 +4294,30 @@ enddo
 
 ! i think we have what we need now to call the rbf code, more
 ! or less?  FIXME: put call here
+cellid = find_closest_cell_center(lat, lon)
 
-! uval = call to rbf code()
-uval = 0.0_r8  ! to shut compiler up
+! get the cartesian coordinates in the cell plane for the reconstruction point
+call latlon_to_xyz_on_plane(lat, lon, cellid, &
+              xreconstruct,yreconstruct,zreconstruct)
+
+! call a simple subroutine to define vectors in the tangent plane
+call get_geometry(nedges, xdata, ydata, zdata, &
+              xreconstruct, yreconstruct, zreconstruct, edgenormals, &
+              on_a_sphere, datatangentplane)
+
+! calculate coeffs_reconstruct
+call get_reconstruct_init(nedges, xdata, ydata, zdata, &
+              xreconstruct, yreconstruct, zreconstruct, edgenormals, &
+              datatangentplane, coeffs_reconstruct)
+
+! do the reconstruction
+call get_reconstruct(nedges, lat, lon, &
+              coeffs_reconstruct, on_a_sphere, veldata, &
+              ureconstructx, ureconstructy, ureconstructz, &
+              ureconstructzonal, ureconstructmeridional)
+
+! FIXME: temporary for now, later pass a flag in to get which one you want.
+uval = ureconstructzonal  ! to shut compiler up
 
 end subroutine compute_u_with_rbf
 
