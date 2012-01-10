@@ -2662,8 +2662,9 @@ real(r8), allocatable :: ucell_incr(:,:)       ! uReconstructZonal(nVertLevels, 
 real(r8), allocatable :: vcell_incr(:,:)       ! uReconstructMeridional(nVertLevels, nCells) 
 real(r8), allocatable :: data_2d_array(:,:)
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu, numv
-integer :: VarID, numdims, ntimes, i
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
+character(len=NF90_MAX_NAME) :: dimname 
+integer :: VarID, numdims, dimlen, ntimes, i
 integer :: zonal, meridional
 logical :: both
 logical :: already_updated = .false.
@@ -2671,6 +2672,10 @@ logical :: already_updated = .false.
 if ( .not. module_initialized ) call static_init_model
 
 if ( already_updated ) return  ! only need to do this routine one time
+
+allocate(         u(nVertLevels, nEdges))
+allocate(ucell_incr(nVertLevels, nCells))
+allocate(vcell_incr(nVertLevels, nCells))
 
 !
 ! Read 'u' : the normal component of the wind defined on the grid edges.
@@ -2685,21 +2690,20 @@ call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), 
               'update_wind_components', 'inquire u '//trim(model_analysis_filename))
 
 do i=1, numdims
-   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
-                 'update_wind_components', 'inquire U dimension length '//trim(model_analysis_filename))
+   write(string1,*)'inquire u length for dimension ',i
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname), &
+                 'update_wind_components', trim(string1)//' '//trim(model_analysis_filename))
+   if (trim(dimname) == 'Time') then
+      mystart(i)       = dimlen
+      mycount(numdims) = 1
+   else
+      mystart(i)       = 1
+      mycount(i)       = dimlen
+   endif
 enddo
 
-mystart = 1
-mystart(numdims) = ntimes
-mycount = numu
-mycount(numdims) = 1
-
-allocate(         u(nVertLevels, nEdges))
-allocate(ucell_incr(nVertLevels, nCells))
-allocate(vcell_incr(nVertLevels, nCells))
-
-call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
-              'update_wind_components', 'put_var u '//trim(model_analysis_filename))
+call nc_check( nf90_get_var(ncid, VarID, u, start=mystart(1:numdims), count=mycount(1:numdims)), &
+              'update_wind_components', 'get_var u '//trim(model_analysis_filename))
 
 !
 ! Read the original uReconstructZonal
@@ -2714,17 +2718,20 @@ call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), 
               'update_wind_components', 'inquire uReconstructZonal '//trim(model_analysis_filename))
 
 do i=1, numdims
-   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
-                 'update_wind_components', 'inquire uReconstructZonal dimension length '//trim(model_analysis_filename))
+   write(string1,*)'inquire uReconstructZonal length for dimension ',i
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname), &
+                 'update_wind_components', trim(string1)//' '//trim(model_analysis_filename))
+   if (trim(dimname) == 'Time') then
+      mystart(i)       = dimlen
+      mycount(numdims) = 1
+   else
+      mystart(i)       = 1
+      mycount(i)       = dimlen
+   endif
 enddo
 
-mystart = 1
-mystart(numdims) = ntimes
-mycount = numv
-mycount(numdims) = 1
-
-call nc_check( nf90_get_var(ncid, VarID, ucell_incr, start=mystart, count=mycount), &
-              'update_wind_components', 'put_var uReconstructZonal '//trim(model_analysis_filename))
+call nc_check( nf90_get_var(ncid, VarID, ucell_incr, start=mystart(1:numdims), count=mycount(1:numdims)), &
+              'update_wind_components', 'get_var uReconstructZonal '//trim(model_analysis_filename))
 
 !
 ! Read uReconstructMeridional
@@ -2737,12 +2744,20 @@ call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), 
               'update_wind_components', 'inquire uReconstructMeridional '//trim(model_analysis_filename))
 
 do i=1, numdims
-   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
-                 'update_wind_components', 'inquire uReconstructMeridional dimension length '//trim(model_analysis_filename))
+   write(string1,*)'inquire uReconstructMeridional length for dimension ',i
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname), &
+                 'update_wind_components', trim(string1)//' '//trim(model_analysis_filename))
+   if (trim(dimname) == 'Time') then
+      mystart(i)       = dimlen
+      mycount(numdims) = 1
+   else
+      mystart(i)       = 1
+      mycount(i)       = dimlen
+   endif
 enddo
 
-call nc_check( nf90_get_var(ncid, VarID, vcell_incr, start=mystart, count=mycount), &
-              'update_wind_components', 'put_var uReconstructMeridional '//trim(model_analysis_filename))
+call nc_check( nf90_get_var(ncid, VarID, vcell_incr, start=mystart(1:numdims), count=mycount(1:numdims)), &
+              'update_wind_components', 'get_var uReconstructMeridional '//trim(model_analysis_filename))
 
 if ( debug > 7 ) then
    write(*,*)
@@ -3192,6 +3207,9 @@ if (ngood == nrows) then
    call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate,text2=string2)
 endif
 
+! TJH FIXME need to add check so they cannot have both normal winds and reconstructed winds in
+! DART state vector.
+
 end subroutine verify_state_variables
 
 
@@ -3537,7 +3555,7 @@ character(len=*), intent(in) :: varname
 integer :: i
 
 FieldLoop : do i=1,nfields
-   if (progvar(i)%varname == varname) then
+   if (trim(progvar(i)%varname) == trim(varname)) then
       get_index_from_varname = i
       return
    endif 
@@ -4567,9 +4585,6 @@ subroutine uv_cell_to_edges(zonal_wind, meridional_wind, du)
 !        Here "U" is the prognostic variable in MPAS, and we update it with the wind
 !        increments at cell centers.
 
-!real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
-!integer,  intent(in) :: nEdgesOnCell(:)             ! how many edges this cell has
-!integer,  intent(in) :: edgesOnCell(:,:)            ! index list of edges per cell
 real(r8), intent(in) :: zonal_wind(:,:)             ! u wind updated from filter
 real(r8), intent(in) :: meridional_wind(:,:)        ! v wind updated from filter
 real(r8), intent(out):: du(:,:)                     ! normal velocity increment on the edges
