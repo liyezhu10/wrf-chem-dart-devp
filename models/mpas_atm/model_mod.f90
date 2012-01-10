@@ -29,7 +29,8 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              vert_is_level,    VERTISLEVEL,                    &
                              vert_is_pressure, VERTISPRESSURE,                 &
                              vert_is_height,   VERTISHEIGHT,                   &
-                             get_close_obs_init, loc_get_close_obs => get_close_obs
+                             get_close_obs_init, get_close_obs_destroy,        &
+                             loc_get_close_obs => get_close_obs
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -111,6 +112,12 @@ real(r8), parameter :: rcv = rgas/(cp-rgas)
 ! Storage for a random sequence for perturbing a single initial state
 
 type(random_seq_type) :: random_seq
+
+! Structure for computing distances to cell centers, and assorted arrays
+! needed for the get_close code.
+type(get_close_type)             :: cc_gc
+type(location_type), allocatable :: cell_locs(:)
+integer, allocatable             :: dummy(:), close_ind(:)
 
 ! things which can/should be in the model_nml
 
@@ -4187,6 +4194,305 @@ do ind_x = reg_lon_ind(1), reg_lon_ind(2)
 enddo
 
 end subroutine update_reg_list
+
+
+!------------------------------------------------------------
+! new code below here.  nsc 10jan2012
+!------------------------------------------------------------
+
+subroutine find_rbf_edges(lat, lon, nedges, edge_list)
+real(r8), intent(in)  :: lat, lon
+integer,  intent(out) :: nedges, edge_list(:)
+
+! given an arbitrary lat/lon location, find the edges of the
+! cells that share the nearest vertex.
+
+logical, save :: search_initialized = .false.
+integer :: cellid, vertexid
+
+if (.not. search_initialized) then
+   call init_closest_center()
+   search_initialized = .true.
+endif
+
+! find the cell id that has a center point closest
+! to the given point.
+cellid = find_closest_cell_center(lat, lon)
+
+if (.not. inside_cell(cellid, lat, lon)) then
+   nedges = 0
+   edge_list(:) = -1
+   return
+endif
+
+! inside this cell, find the vertex id that the point
+! is closest to.
+vertexid = closest_vertex(cellid, lat, lon)
+if (vertexid < 0) then
+   ! call error handler?  unexpected
+   nedges = 0
+   edge_list(:) = -1
+   return
+endif
+
+! FIXME: add code here to check if vertex or cell ids are 
+! on the boundary for ocean or for regional atmosphere. 
+
+! fill in the number of unique edges and fills the
+! edge list with the edge ids.
+call make_edge_list(vertexid, nedges, edge_list)
+
+end subroutine find_rbf_edges
+
+!------------------------------------------------------------
+
+subroutine init_closest_center()
+
+! use nCells, latCell, lonCell to initialize a GC structure
+! to be used later in find_closest_cell_center().
+
+! set up a GC in the locations mod
+
+integer :: i
+
+allocate(cell_locs(nCells), dummy(nCells), close_ind(nCells))
+dummy = 0
+
+do i=1, nCells
+   cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8, VERTISSURFACE)
+enddo
+
+call get_close_maxdist_init(cc_gc, PI)  ! FIXME: should be smaller
+call get_close_obs_init(cc_gc, nCells, cell_locs)
+
+end subroutine init_closest_center
+
+!------------------------------------------------------------
+
+function find_closest_cell_center(lat, lon)
+
+! Determine the cell index for the closest center to the given point
+! 2D calculation only.
+
+real(r8), intent(in)  :: lat, lon
+real(r8)              :: find_closest_cell_center
+
+type(location_type) :: pointloc
+integer :: i, closest_cell, num_close
+real(r8) :: closest_dist, dist
+
+pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
+
+! set up a GC in the locations mod
+! call get_close()
+! find the closest distance
+! return the cell index number
+
+call loc_get_close_obs(cc_gc, pointloc, 0, cell_locs, dummy, num_close, close_ind)
+
+closest_cell = -1
+closest_dist = 9.0e9  ! something large
+do i=1, num_close
+   dist = get_dist(pointloc, cell_locs(close_ind(i)), no_vert = .true.)
+   if (dist < closest_dist) then
+      closest_dist = dist
+      closest_cell = close_ind(i)
+   endif
+enddo
+ 
+! decide what to do if we don't find anything.
+if (closest_cell < 0) then
+   find_closest_cell_center = -1
+   return
+endif
+
+! this is the cell index for the closest center
+find_closest_cell_center = closest_cell
+
+end function find_closest_cell_center
+
+!------------------------------------------------------------
+
+subroutine finalize_closest_center()
+
+! get rid of storage associated with GC for cell centers.
+
+call get_close_obs_destroy(cc_gc)
+
+end subroutine finalize_closest_center
+
+!------------------------------------------------------------
+
+function inside_cell(cellid, lat, lon)
+
+! Determine if the given lat/lon is inside the specified cell
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: lat, lon
+logical               :: inside_cell
+
+! convert lat/lon to cartesian coordinates and then determine
+! from the xyz vertices if this point is inside the cell.
+
+integer :: nverts
+
+inside_cell = .true.
+return
+
+print *, "FIXME: implement inside_cell"
+stop
+
+! nedges and nverts is same
+nverts = nEdgesOnCell(cellid)
+
+! go around the edges and take the cross product with
+! the point.  if all the signs are the same it's inside.
+! (or something like this.)
+
+end function inside_cell
+
+!------------------------------------------------------------
+
+function closest_vertex(cellid, lat, lon)
+
+! Return the vertex id of the closest one to the given point
+! Determine if the given lat/lon is inside the specified cell
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: lat, lon
+integer               :: closest_vertex
+
+integer :: nverts, i, closest, vertexid
+real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
+
+print *, "FIXME: implement closest_vertex"
+stop
+
+call latlon_to_xyz(lat, lon, 0.0_r8, px, py, pz)
+
+! nedges and nverts is same
+nverts = nEdgesOnCell(cellid)
+
+closest_dist = 1.0e38
+closest_vertex = -1
+
+do i=1, nverts
+   vertexid = verticesOnCell(cellid, i)
+   x = xVertex(vertexid)
+   y = yVertex(vertexid)
+   z = zVertex(vertexid)
+   distsq = (x * px) + (y * py) + (z * pz)
+   if (distsq < closest_dist) then
+      closest_dist = distsq
+      closest_vertex = vertexid
+   endif
+enddo
+
+closest_vertex = vertexid
+
+end function closest_vertex
+
+!------------------------------------------------------------
+
+subroutine make_edge_list(vertexid, nedges, edge_list)
+
+! given a vertexid, look up the N cells which share it as
+! a vertex, and then for those cells look up the edge ids.
+! return a list with all edges listed exactly once (shared edges 
+! are detected and not replicated in the output list).  
+! the edge_list output should be at least 10x the Ncells to 
+! guarentee it will be large enough if all cells are disjoint.
+
+integer, intent(in)  :: vertexid
+integer, intent(out) :: nedges, edge_list(:)
+
+integer :: edgecount, i, c, e, listlen, l, nextedge
+integer, intent(in)  :: ncells, cellid_list(3)
+logical :: found
+
+! use the cellsOnVertex() array to find the three cells
+! which share this vertex.  note that if we wanted to change
+! the number of edges - for example only return the 3 immediate
+! edges to this vertex, or if we wanted to expand the region
+! to include the ~12 second-nearest-cell-neighbors, you can
+! change this code here.
+ncells = 3
+cellid_list(1) = cellsOnVertex(vertexid, 1)
+cellid_list(2) = cellsOnVertex(vertexid, 2)
+cellid_list(3) = cellsOnVertex(vertexid, 3)
+
+! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
+! find the edge numbers.  add them to the list, skipping if
+! the edge is already there.  increment nedges each time a
+! new edge is added.  check arrays for enough length before
+! starting to work.
+
+listlen = 0
+do c=1, ncells
+   edgecount = nEdgesOnCell(cellid_list(i))
+   do e=1, edgecount
+      nextedge = edgesOnCell(cellid_list(i), e)
+      found = .false.
+      addloop: do l=1, listlen
+         if (edge_list(l) == nextedge) then
+            found = .true.
+            exit addloop
+         endif
+      enddo addloop
+      if ( .not. found) then
+         listlen = listlen + 1
+         edge_list(listlen) = nextedge
+      endif
+   enddo
+enddo
+
+nedges = listlen
+
+end subroutine make_edge_list
+
+!------------------------------------------------------------
+
+subroutine latlon_to_xyz(lat, lon, vert, x, y, z)
+
+! Given a lat, lon, and vertical height in meters, return the 
+! cartesian x,y,z coordinate relative to the origin at the 
+! center of the earth.
+
+real(r8), intent(in)  :: lat, lon, vert
+real(r8), intent(out) :: x, y, z
+
+print *, "FIXME: implement latlon_to_xyz"
+stop
+
+! so-young is working on this one.
+
+x=0.0_r8
+y=0.0_r8
+z=0.0_r8
+
+end subroutine latlon_to_xyz
+
+!------------------------------------------------------------
+
+subroutine xyz_to_latlon(x, y, z, lat, lon, vert)
+
+! Given a cartesian x, y, z coordinate relative to the origin
+! at the center of the earth, return the lat, lon, and vertical
+! height in meters.
+
+real(r8), intent(in)  :: x, y, z
+real(r8), intent(out) :: lat, lon, vert
+
+print *, "FIXME: implement xyz_to_latlon"
+stop
+
+! only do this if we need it.
+
+lat = 0.0_r8
+lon = 0.0_r8
+vert = 0.0_r8
+
+end subroutine xyz_to_latlon
 
 
 !==================================================================
