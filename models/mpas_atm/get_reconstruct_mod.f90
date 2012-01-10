@@ -1,4 +1,15 @@
+!
+! This code may (or may not) be part of the MPAS distribution,
+! So it is not protected by the DART copyright agreement.
+!
+
 module get_reconstruct_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
   use types_mod, only : r8
   use get_coeff_mod
@@ -31,7 +42,7 @@ module get_reconstruct_mod
     real(kind=r8), dimension(3,2), intent(in)      :: dataTangentPlane
     real(kind=r8), dimension(3,nData), intent(out) :: coeffs_reconstruct
 
-	! local vars
+    ! local vars
     real(kind=r8) :: r, cellCenter(3), alpha, tangentPlane(2,3), Reconstruct(3)
     real(kind=r8), allocatable, dimension(:,:) :: dataLocations, &
       coeffs
@@ -39,7 +50,7 @@ module get_reconstruct_mod
 
 
     ! init arrays
-    coeffs_reconstruct = 0.0
+    coeffs_reconstruct = 0.0_r8
 
     allocate(dataLocations(nData,3))
     allocate(coeffs(nData,3))
@@ -55,7 +66,7 @@ module get_reconstruct_mod
       dataLocations(iData, 3)  = zData(iData)
     end do
 
-    alpha = 0.0
+    alpha = 0.0_r8
     do iData=1,nData
       r = sqrt(sum((Reconstruct - dataLocations(iData,:))**2))
       alpha = alpha + r
@@ -65,7 +76,7 @@ module get_reconstruct_mod
     tangentPlane(1,:) = dataTangentPlane(:,1)
     tangentPlane(2,:) = dataTangentPlane(:,2)
 
-	! the main call...
+    ! the main call...
     nData8=nData
     call mpas_rbf_interp_func_3D_plane_vec_const_dir_comp_coeffs(nData8, &
         dataLocations, &
@@ -110,9 +121,9 @@ module get_reconstruct_mod
     real(kind=r8) :: clat, slat, clon, slon
 
     ! init the intent(out)
-    uReconstructX = 0.0
-    uReconstructY = 0.0
-    uReconstructZ = 0.0
+    uReconstructX = 0.0_r8
+    uReconstructY = 0.0_r8
+    uReconstructZ = 0.0_r8
 
     ! a more efficient reconstruction where rbf_values*matrix_reconstruct has been precomputed
     ! in coeffs_reconstruct

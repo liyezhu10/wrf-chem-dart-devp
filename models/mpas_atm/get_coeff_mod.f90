@@ -1,4 +1,15 @@
+!
+! This code may (or may not) be part of the MPAS distribution,
+! So it is not protected by the DART copyright agreement.
+!
+
   module get_coeff_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
  
   use types_mod, only : r8
   implicit none

@@ -1,4 +1,15 @@
+!
+! This code may (or may not) be part of the MPAS distribution,
+! So it is not protected by the DART copyright agreement.
+! 
+
 module get_geometry_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
    use types_mod, only : r8
 
@@ -58,7 +69,7 @@ module get_geometry_mod
        localVerticalUnitVectors(3) = zReconstruct
        call mpas_unit_vec_in_r3(localVerticalUnitVectors)
     else ! on a plane
-       localVerticalUnitVectors(:) = (/ 0., 0., 1. /)
+       localVerticalUnitVectors(:) = (/ 0.0_r8, 0.0_r8, 1.0_r8 /)
     end if
 
     iData = 1
