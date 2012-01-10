@@ -196,6 +196,7 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 ! TJH for ocean we may need ?IsBoundaryArray? 
 
 real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
+real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
 real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees)
 real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees)
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
@@ -357,6 +358,7 @@ allocate(verticesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 allocate(latEdge(nEdges), lonEdge(nEdges)) 
 allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
+allocate(xEdge(nVertices), yEdge(nVertices), zEdge(nVertices))
 
 ! this reads in latCell, lonCell, zgridFace, cellsOnVertex
 call get_grid()
@@ -2586,6 +2588,21 @@ call nc_check(nf90_inq_varid(ncid, 'zVertex', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, zVertex), &
       'get_grid', 'get_var zVertex '//trim(grid_definition_filename))
 
+call nc_check(nf90_inq_varid(ncid, 'xEdge', VarID), &
+      'get_grid', 'inq_varid xEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, xEdge), &
+      'get_grid', 'get_var xEdge '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'yEdge', VarID), &
+      'get_grid', 'inq_varid yEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, yEdge), &
+      'get_grid', 'get_var yEdge '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'zEdge', VarID), &
+      'get_grid', 'inq_varid zEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, zEdge), &
+      'get_grid', 'get_var zEdge '//trim(grid_definition_filename))
+
 call nc_check(nf90_inq_varid(ncid, 'verticesOnCell', VarID), &
       'get_grid', 'inq_varid verticesOnCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
@@ -2610,6 +2627,9 @@ if ( debug > 7 ) then
    write(*,*)'xVertex           range ',minval(xVertex),           maxval(xVertex)
    write(*,*)'yVertex           range ',minval(yVertex),           maxval(yVertex)
    write(*,*)'zVertex           range ',minval(zVertex),           maxval(zVertex)
+   write(*,*)'xEdge             range ',minval(xEdge),             maxval(xEdge)
+   write(*,*)'yEdge             range ',minval(yEdge),             maxval(yEdge)
+   write(*,*)'zEdge             range ',minval(zEdge),             maxval(zEdge)
    write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
 
 endif
@@ -4200,6 +4220,42 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
+subroutine collect_rbf_inputs(lat, lon)
+real(r8), intent(in)  :: lat, lon
+
+integer, parameter :: listsize = 15
+integer  :: nedges, edgelist(listsize), i, j
+real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
+real(r8) :: edgenormals(listsize, 3)
+real(r8) :: veldata(listsize)
+integer  :: vertindex
+
+call find_rbf_edges(lat, lon, nedges, edgelist)
+
+! FIXME: need vert index for the vertical level
+
+! the code needs: nData == nedges
+! xyz data == xyzEdge
+! normalDirectionData == edgeNormalVectors
+! velocitydata = U field
+
+do i = 1, nedges
+   xdata(i) = xEdge(edgelist(i))
+   ydata(i) = yEdge(edgelist(i))
+   zdata(i) = zEdge(edgelist(i))
+
+   do j=1, 3
+      edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
+   enddo
+
+   !veldata(i) = u(vertindex, edgelist(i))
+enddo
+
+
+end subroutine collect_rbf_inputs
+
+!------------------------------------------------------------
+
 subroutine find_rbf_edges(lat, lon, nedges, edge_list)
 real(r8), intent(in)  :: lat, lon
 integer,  intent(out) :: nedges, edge_list(:)
@@ -4407,7 +4463,7 @@ integer, intent(in)  :: vertexid
 integer, intent(out) :: nedges, edge_list(:)
 
 integer :: edgecount, i, c, e, listlen, l, nextedge
-integer, intent(in)  :: ncells, cellid_list(3)
+integer :: ncells, cellid_list(3)
 logical :: found
 
 ! use the cellsOnVertex() array to find the three cells
