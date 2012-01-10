@@ -4244,10 +4244,11 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-subroutine compute_u_with_rbf(x, lat, lon, vert, verttype, uval)
+subroutine compute_u_with_rbf(x, lat, lon, vert, verttype, zonal, uval)
 real(r8), intent(in)  :: x(:)
 real(r8), intent(in)  :: lat, lon, vert
 integer,  intent(in)  :: verttype
+logical,  intent(in)  :: zonal
 real(r8), intent(out) :: uval
 
 
@@ -4264,7 +4265,11 @@ real(r8) :: datatangentplane(3,2)
 real(r8) :: coeffs_reconstruct(3,listsize)
 integer  :: vertindex, index1, progindex, cellid
 
-call find_rbf_edges(lat, lon, nedges, edgelist)
+! FIXME: make this cache the last value and if the location is
+! the same as before and it's asking for V now instead of U,
+! skip the expensive computation.
+
+call find_surrounding_edges(lat, lon, nedges, edgelist)
 
 ! FIXME: need vert index for the vertical level here
 vertindex = 1  ! just for testing
@@ -4274,9 +4279,9 @@ vertindex = 1  ! just for testing
 ! normalDirectionData == edgeNormalVectors
 ! velocitydata = U field
 
-progindex = get_index_from_varname('U')
+progindex = get_index_from_varname('u')
 if (progindex < 0) then
-   print *, 'U not in state vector, cannot compute RBF'
+   print *, '"u" not in state vector, cannot compute RBF'
    stop
 endif
 index1 = progvar(progindex)%index1
@@ -4291,11 +4296,10 @@ do i = 1, nedges
    enddo
 
    ! FIXME: needs to be right vertindex
-   veldata(i) = x(index1 + (edgelist(i)-1) * nEdges + vertindex-1)
+   veldata(i) = x(index1 + (edgelist(i)-1) * nVertLevels + vertindex-1)
 enddo
 
-! i think we have what we need now to call the rbf code, more
-! or less?  FIXME: put call here
+
 cellid = find_closest_cell_center(lat, lon)
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
@@ -4318,14 +4322,19 @@ call get_reconstruct(nedges, lat, lon, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
 
-! FIXME: temporary for now, later pass a flag in to get which one you want.
-uval = ureconstructzonal  ! to shut compiler up
+! FIXME: it would be nice to return both and not have to call this
+! code twice.  crap.
+if (zonal) then
+   uval = ureconstructzonal
+else
+   uval = ureconstructmeridional
+endif
 
 end subroutine compute_u_with_rbf
 
 !------------------------------------------------------------
 
-subroutine find_rbf_edges(lat, lon, nedges, edge_list)
+subroutine find_surrounding_edges(lat, lon, nedges, edge_list)
 real(r8), intent(in)  :: lat, lon
 integer,  intent(out) :: nedges, edge_list(:)
 
@@ -4367,7 +4376,7 @@ endif
 ! edge list with the edge ids.
 call make_edge_list(vertexid, nedges, edge_list)
 
-end subroutine find_rbf_edges
+end subroutine find_surrounding_edges
 
 !------------------------------------------------------------
 
@@ -4530,7 +4539,10 @@ real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
 print *, "FIXME: implement closest_vertex"
 stop
 
-call latlon_to_xyz(lat, lon, px, py, pz)
+! FIXME: verify that we want the point in the same plane
+! as the cell and not on the surface of the sphere.
+
+call latlon_to_xyz_on_plane(lat, lon, px, py, pz)
 
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
