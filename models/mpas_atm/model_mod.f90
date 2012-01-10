@@ -3638,8 +3638,9 @@ do i = 2, nbounds
    if(p > pressure(i)) then
       lower = i - 1
       upper = i
-      ! FIXME: should this be interpolated in log(p)??
+      ! FIXME: should this be interpolated in log(p)??  yes.
       fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+      !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
       return
    endif
    
@@ -4240,24 +4241,36 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-subroutine collect_rbf_inputs(lat, lon)
-real(r8), intent(in)  :: lat, lon
+subroutine compute_u_with_rbf(x, lat, lon, vert, verttype, uval)
+real(r8), intent(in)  :: x(:)
+real(r8), intent(in)  :: lat, lon, vert
+integer,  intent(in)  :: verttype
+real(r8), intent(out) :: uval
+
 
 integer, parameter :: listsize = 15
 integer  :: nedges, edgelist(listsize), i, j
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(listsize, 3)
 real(r8) :: veldata(listsize)
-integer  :: vertindex
+integer  :: vertindex, index1, progindex
 
 call find_rbf_edges(lat, lon, nedges, edgelist)
 
-! FIXME: need vert index for the vertical level
+! FIXME: need vert index for the vertical level here
+vertindex = 1  ! just for testing
 
 ! the code needs: nData == nedges
 ! xyz data == xyzEdge
 ! normalDirectionData == edgeNormalVectors
 ! velocitydata = U field
+
+progindex = get_index_from_varname('U')
+if (progindex < 0) then
+   print *, 'U not in state vector, cannot compute RBF'
+   stop
+endif
+index1 = progvar(progindex)%index1
 
 do i = 1, nedges
    xdata(i) = xEdge(edgelist(i))
@@ -4268,11 +4281,17 @@ do i = 1, nedges
       edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
    enddo
 
-   !veldata(i) = u(vertindex, edgelist(i))
+   ! FIXME: needs to be right vertindex
+   veldata(i) = x(index1 + (edgelist(i)-1) * nEdges + vertindex-1)
 enddo
 
+! i think we have what we need now to call the rbf code, more
+! or less?  FIXME: put call here
 
-end subroutine collect_rbf_inputs
+! uval = call to rbf code()
+uval = 0.0_r8  ! to shut compiler up
+
+end subroutine compute_u_with_rbf
 
 !------------------------------------------------------------
 
@@ -4401,7 +4420,12 @@ end subroutine finalize_closest_center
 
 function inside_cell(cellid, lat, lon)
 
-! Determine if the given lat/lon is inside the specified cell
+! Determine if the given lat/lon is inside the specified cell:
+! 1. convert the point to x,y,z on plane defined by cell.
+! 2. take the cross product of v1 to the point and v1 to v2
+! 3. if the sign is always positive, you're inside.  if it's
+!    ever negative, you're outside and you can return.
+
 
 integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
@@ -4411,16 +4435,13 @@ logical               :: inside_cell
 ! from the xyz vertices if this point is inside the cell.
 
 integer :: nverts, i, vertexid
-real(r8) :: x, y, z, px, py, pz
+real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
 
 inside_cell = .true.
 return
 
-print *, "FIXME: implement inside_cell"
-stop
-
 ! cartesian location of point on surface of sphere
-call latlon_to_xyz(lat, lon, px, py, pz)
+call latlon_to_xyz_on_plane(lat, lon, cellid, p(1), p(2), p(3))
 
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
@@ -4430,15 +4451,35 @@ nverts = nEdgesOnCell(cellid)
 ! (or something like this.)
 do i=1, nverts
    vertexid = verticesOnCell(cellid, i)
-   x = xVertex(vertexid)
-   y = yVertex(vertexid)
-   z = zVertex(vertexid)
+   v1(1) = xVertex(vertexid)
+   v1(2) = yVertex(vertexid)
+   v1(3) = zVertex(vertexid)
+   if (i /= nverts) then
+      vertexid = verticesOnCell(cellid, i+1)
+   else
+      vertexid = verticesOnCell(cellid, 1)
+   endif
+   v2(1) = xVertex(vertexid)
+   v2(2) = yVertex(vertexid)
+   v2(3) = zVertex(vertexid)
 
    ! compute the vectors we need here - vertex to point,
    ! v1 to v2, etc.
+   vec1 = p - v1
+   vec2 = v2 - v1
 
+   call vector_cross_product(vec1, vec2, r)
+
+   call vector_magnitude(r, m)
+
+   if (m < 0.0_r8) then
+      inside_cell = .false.
+      return
+   endif
     
 enddo
+
+inside_cell = .true.
 
 end function inside_cell
 
@@ -4607,20 +4648,66 @@ real(r8), intent(in)  :: lat, lon
 integer,  intent(in)  :: cellid
 real(r8), intent(out) :: x, y, z
 
+integer  :: nverts, i, vertexid
 real(r8) :: rlat, rlon   ! in radians
-real(r8) :: sx, sy, sz   ! location of point on surface
+real(r8) :: s(3)         ! location of point on surface
+real(r8) :: p(3,3)       ! first 3 vertices of cell, xyz
+real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
+real(r8) :: mi(3,3)      ! invert of m
+real(r8) :: vm           
 
 rlat = lat * deg2rad
 rlon = lat * deg2rad
 
-sx = radius * cos(rlon) * cos(rlat)
-sy = radius * sin(rlon) * cos(rlat)
-sz = radius * sin(rlat)
+s(1) = radius * cos(rlon) * cos(rlat)
+s(2) = radius * sin(rlon) * cos(rlat)
+s(3) = radius * sin(rlat)
 
 ! get the first 3 vertices to define plane
 ! intersect with sx,sy,sz to get answer
 
-!FIXME!!
+! nedges and nverts is same
+nverts = nEdgesOnCell(cellid)
+if (nverts < 3) then
+   print *, 'nverts is < 3', nverts
+   stop
+endif
+
+! use first 3 verts to define plane
+do i=1, 3
+   vertexid = verticesOnCell(cellid, i)
+
+   p(1,i) = xVertex(vertexid)
+   p(2,i) = yVertex(vertexid)
+   p(3,i) = zVertex(vertexid)
+enddo
+
+m(1,1) = s(1)
+m(2,1) = p(1,2) - p(1,1)
+m(3,1) = p(1,3) - p(1,1)
+
+m(1,2) = s(2)
+m(2,2) = p(2,2) - p(2,1)
+m(3,2) = p(2,3) - p(2,1)
+
+m(1,3) = s(3)
+m(2,3) = p(3,2) - p(3,1)
+m(3,3) = p(3,3) - p(3,1)
+
+call invert3(m, mi)
+
+v = matmul(mi, s)
+
+if (v(1) >= 0 .and. v(1) <= 1) then
+   vm = 1.0_r8 - v(1)
+   x = s(1) * vm
+   y = s(2) * vm
+   z = s(3) * vm
+endif
+
+! not needed for intersection, but can be used if P is within
+! the triangle defined by the 3 points in the p array:
+! if (v(2) and v(3) are between [0,1] and if (v(2) + v(3) <= 1) then yes
 
 end subroutine latlon_to_xyz_on_plane
 
