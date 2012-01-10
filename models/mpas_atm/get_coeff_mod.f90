@@ -1,6 +1,6 @@
   module get_coeff_mod
-
-  use kinds
+ 
+  use types_mod, only : r8
   implicit none
 
   private

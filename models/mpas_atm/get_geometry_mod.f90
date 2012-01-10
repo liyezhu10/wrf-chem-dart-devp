@@ -1,6 +1,6 @@
 module get_geometry_mod
 
-   use kinds
+   use types_mod, only : r8
 
    implicit none
    private
@@ -36,7 +36,7 @@ module get_geometry_mod
 
     implicit none
 
-    integer(kind=i4) :: nData
+    integer :: nData
     real(kind=r8), dimension(:) :: xData, yData, zData
     real(kind=r8) :: xReconstruct, yReconstruct, zReconstruct
     real(kind=r8), dimension(:,:) :: normalDirectionData

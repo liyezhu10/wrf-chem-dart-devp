@@ -4258,8 +4258,10 @@ real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(listsize, 3)
 real(r8) :: veldata(listsize)
 real(r8) :: xreconstruct, yreconstruct, zreconstruct
-real(r8) :: datatangentplane(r3,2)
-real(r8) :: coeffs_reconstruct(r3,listsize)
+real(r8) :: ureconstructx, ureconstructy, ureconstructz
+real(r8) :: ureconstructzonal, ureconstructmeridional
+real(r8) :: datatangentplane(3,2)
+real(r8) :: coeffs_reconstruct(3,listsize)
 integer  :: vertindex, index1, progindex, cellid
 
 call find_rbf_edges(lat, lon, nedges, edgelist)
@@ -4670,7 +4672,8 @@ subroutine latlon_to_xyz_on_plane(lat, lon, cellid, x, y, z)
 ! MPAS grid, return the cartesian x,y,z coordinate of that
 ! location ON THE PLANE defined by the vertices of that cell.
 ! This will be different from the x,y,z of the surface of the
-! sphere.
+! sphere.  Uses the parametric form description from
+! http://en.wikipedia.org/wiki/Line-plane_intersection
 
 real(r8), intent(in)  :: lat, lon
 integer,  intent(in)  :: cellid

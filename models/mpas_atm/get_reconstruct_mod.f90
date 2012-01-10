@@ -1,6 +1,6 @@
 module get_reconstruct_mod
 
-  use kinds
+  use types_mod, only : r8
   use get_coeff_mod
 
   implicit none
@@ -24,7 +24,7 @@ module get_reconstruct_mod
 
     implicit none
 
-    integer(kind=i4), intent(in) :: nData
+    integer, intent(in) :: nData
     real(kind=r8), intent(in)    :: xReconstruct, yReconstruct, zReconstruct
     real(kind=r8), dimension(nData), intent(in)    :: xData, yData, zData
     real(kind=r8), dimension(nData,3), intent(in)  :: normalDirectionData
@@ -97,7 +97,7 @@ module get_reconstruct_mod
 
     implicit none
 
-    integer(kind=i4), intent(in)                  :: nData
+    integer,       intent(in)                     :: nData
     real(kind=r8), intent(in)                     :: latReconstruct, lonReconstruct
     real(kind=r8), dimension(3,nData), intent(in) :: coeffs_reconstruct
     logical, intent(in)                           :: on_a_sphere
