@@ -158,7 +158,8 @@ type progvartype
    integer :: xtype         ! netCDF variable type (NF90_double, etc.) 
    integer :: numdims       ! number of dims - excluding TIME
    integer :: numvertical   ! number of vertical levels in variable
-   integer :: numcells      ! number of horizontal locations (typically cell centers)
+   integer :: numcells      ! number of horizontal locations (cell centers)
+   integer :: numedges      ! number of horizontal locations (edges for velocity components)
    logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
    integer :: varsize       ! prod(dimlens(1:numdims))
    integer :: index1        ! location in dart state vector of first occurrence
@@ -184,11 +185,22 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 ! scalar grid positions
 
+! TJH for ocean we may need verticesOnCell   inside a cell or not
+! TJH for ocean we may need ?IsBoundaryArray? 
+
+real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
+real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees)
+real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees)
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
 real(r8), allocatable :: zgridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
 real(r8), allocatable :: zgridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
+integer,  allocatable :: verticesOnCell(:,:)
+
+integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
+integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
+real(r8), allocatable :: edgeNormalVectors(:,:)
 
 integer               :: model_size      ! the state vector length
 type(time_type)       :: model_timestep  ! smallest time to adv model
@@ -332,6 +344,12 @@ allocate(latCell(nCells), lonCell(nCells))
 allocate(zgridFace(nVertLevelsP1, nCells))
 allocate(zgridCenter(nVertLevels, nCells))
 allocate(cellsOnVertex(vertexDegree, nVertices))
+allocate(nEdgesOnCell(nCells))
+allocate(edgesOnCell(maxEdges, nCells))
+allocate(verticesOnCell(maxEdges, nCells))
+allocate(edgeNormalVectors(3, nEdges))
+allocate(latEdge(nEdges), lonEdge(nEdges)) 
+allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
 
 ! this reads in latCell, lonCell, zgridFace, cellsOnVertex
 call get_grid()
@@ -390,6 +408,7 @@ do ivar = 1, nfields
    progvar(ivar)%numvertical = 1
    progvar(ivar)%dimlens     = MISSING_I
    progvar(ivar)%numcells    = MISSING_I
+   progvar(ivar)%numedges    = MISSING_I
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
@@ -438,6 +457,8 @@ do ivar = 1, nfields
       select case ( dimname(1:6) )
          case ('nCells')
             progvar(ivar)%numcells = dimlen
+         case ('nEdges')
+            progvar(ivar)%numedges = dimlen
          case ('nVertL')  ! nVertLevels, nVertLevelsP1, nVertLevelsP2
             progvar(ivar)%numvertical = dimlen
          case ('nSoilL')  ! nSoilLevels
@@ -529,6 +550,11 @@ endif
 
 ! Now that we know the variable, find the cell 
 
+! TJH FIXME ... add numedges support
+if (progvar(nf)%numcells == MISSING_I) then
+   write(*,*)'call for help ...'
+   stop
+endif
 nxp = progvar(nf)%numcells
 nzp = progvar(nf)%numvertical
 
@@ -2031,17 +2057,16 @@ else
    TimeDimLength = 0
 endif
 
-! We need to read winds to compute increments.
-allocate(u(nVertLevels, nEdges))
-allocate(ucell_incr(nVertLevels, nCells))
-allocate(vcell_incr(nVertLevels, nCells))
-call get_u(ncFileID, u, ucell_incr, vcell_incr)
-!
-
-do ivar=1, nfields
+PROGVARLOOP : do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
+
+   if ( varname == 'uReconstructZonal' .or. &
+        varname == 'uReconstructMeridional' ) then
+      call update_wind_components(ncFileID, state_vector)
+      cycle PROGVARLOOP
+   endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
    ! The TIME and Copy dimensions are intentionally not queried
@@ -2131,44 +2156,7 @@ do ivar=1, nfields
                         source,revision,revdate)
    endif
 
-enddo
-
-! special processing for the wind vectors.  in the analysis file they are on
-! edge centers, with directions normal to and parallel with the edge direction.
-! in the dart state vector they are at cell centers and are meridional and zonal
-! (parallel to lat and lon lines).  we can read them directly from the analysis
-! file at the cell centers, but in putting them back into the file we've got to
-! update the edge arrays as well as the centers.
-! 
-! SYHA: We should update normal velocity even when one of the horizontal wind components
-! exists because we no longer compute the full normal velocity from both u and v winds,
-! but only update the original field with the analysis increments. 
-call winds_present(zonal, meridional, both)
-
-if (zonal > 0) then
-   allocate(data_2d_array ( progvar(zonal)%dimlens(1),  &
-                            progvar(zonal)%dimlens(2) ))
-   call vector_to_prog_var(state_vector, zonal,      data_2d_array )
-   ucell_incr = data_2d_array - ucell_incr
-   deallocate(data_2d_array)
-else
-   ucell_incr(:,:) = 0.0_r8
-endif
-
-if (meridional > 0) then
-   allocate(data_2d_array2( progvar(meridional)%dimlens(1),  &
-                            progvar(meridional)%dimlens(2) ))
-
-   call vector_to_prog_var(state_vector, meridional, data_2d_array2)
-   vcell_incr = data_2d_array2 - vcell_incr
-   deallocate(data_2d_array2)
-else
-   vcell_incr(:,:) = 0.0_r8
-endif
- 
-call handle_winds(u, ucell_incr, vcell_incr)
-deallocate(ucell_incr, vcell_incr)
-
+enddo PROGVARLOOP 
 
 call nc_check(nf90_close(ncFileID), &
              'statevector_to_analysis_file','close '//trim(filename))
@@ -2495,6 +2483,7 @@ if (debug > 7) then
    write(*,*)'read_grid_dims: nCells        is ', nCells
    write(*,*)'read_grid_dims: nVertices     is ', nVertices
    write(*,*)'read_grid_dims: nEdges        is ', nEdges
+   write(*,*)'read_grid_dims: maxEdges      is ', maxEdges
    write(*,*)'read_grid_dims: nVertLevels   is ', nVertLevels
    write(*,*)'read_grid_dims: nVertLevelsP1 is ', nVertLevelsP1
    write(*,*)'read_grid_dims: vertexDegree  is ', vertexDegree
@@ -2543,22 +2532,78 @@ call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
       'get_grid', 'get_var cellsOnVertex '//trim(grid_definition_filename))
 
-call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
-
 ! MPAS analysis files are in radians - at this point DART needs degrees.
 
 latCell = latCell * rad2deg
 lonCell = lonCell * rad2deg
+
+! Read the variables
+
+call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
+      'get_grid', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
+      'get_grid', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
+      'get_grid', 'inq_varid nEdgesOnCell '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
+      'get_grid', 'get_var nEdgesOnCell '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
+      'get_grid', 'inq_varid edgesOnCell '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
+      'get_grid', 'get_var edgesOnCell '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
+      'get_grid', 'inq_varid latEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, latEdge), &
+      'get_grid', 'get_var latEdge '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'lonEdge', VarID), &
+      'get_grid', 'inq_varid lonEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, lonEdge), &
+      'get_grid', 'get_var lonEdge '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'xVertex', VarID), &
+      'get_grid', 'inq_varid xVertex '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, xVertex), &
+      'get_grid', 'get_var xVertex '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'yVertex', VarID), &
+      'get_grid', 'inq_varid yVertex '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, yVertex), &
+      'get_grid', 'get_var yVertex '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'zVertex', VarID), &
+      'get_grid', 'inq_varid zVertex '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, zVertex), &
+      'get_grid', 'get_var zVertex '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'verticesOnCell', VarID), &
+      'get_grid', 'inq_varid verticesOnCell '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
+      'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
+
+call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
 
 ! A little sanity check
 
 if ( debug > 7 ) then
 
    write(*,*)
-   write(*,*)'latCell       range ',minval(latCell),      maxval(latCell)
-   write(*,*)'lonCell       range ',minval(lonCell),      maxval(lonCell)
-   write(*,*)'zgrid         range ',minval(zgridFace),    maxval(zgridFace)
-   write(*,*)'cellsOnVertex range ',minval(cellsOnVertex),maxval(cellsOnVertex)
+   write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
+   write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
+   write(*,*)'zgrid             range ',minval(zgridFace),         maxval(zgridFace)
+   write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
+   write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
+   write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
+   write(*,*)'EdgesOnCell       range ',minval(EdgesOnCell),       maxval(EdgesOnCell)
+   write(*,*)'latEdge           range ',minval(latEdge),           maxval(latEdge)
+   write(*,*)'lonEdge           range ',minval(lonEdge),           maxval(lonEdge)
+   write(*,*)'xVertex           range ',minval(xVertex),           maxval(xVertex)
+   write(*,*)'yVertex           range ',minval(yVertex),           maxval(yVertex)
+   write(*,*)'zVertex           range ',minval(zVertex),           maxval(zVertex)
+   write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
 
 endif
 
@@ -2567,169 +2612,175 @@ end subroutine get_grid
 
 !------------------------------------------------------------------
 
-subroutine get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
 
-! Read the edge info needed to map from cell centers to edge values
-!
-! The file name comes from module storage ... namelist.
+subroutine update_wind_components( ncid, state_vector )
 
-! must first be allocated by calling code with the following sizes:
-real(r8), intent(out) :: edgeNormalVectors(:,:) ! (3, nEdges)
-integer,  intent(out) :: nEdgesOnCell(:)        ! (nCells)
-integer,  intent(out) :: edgesOnCell(:,:)       ! (maxEdges, nCells)
-
-integer  :: ncid, VarID
-
-! Read the netcdf file data
-
-call nc_check(nf90_open(trim(grid_definition_filename), nf90_nowrite, ncid), &
-      'get_edges', 'open '//trim(grid_definition_filename))
-
-! Read the variables
-
-call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
-      'get_edges', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
-      'get_edges', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
-      'get_edges', 'inq_varid nEdgesOnCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
-      'get_edges', 'get_var nEdgesOnCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
-      'get_edges', 'inq_varid edgesOnCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
-      'get_edges', 'get_var edgesOnCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_close(ncid), 'get_edges','close '//trim(grid_definition_filename) )
-
-! A little sanity check
-
-if ( debug > 7 ) then
-
-   write(*,*)
-   write(*,*)'edgeNormalVectors  range ',minval(edgeNormalVectors),  maxval(edgeNormalVectors)
-   write(*,*)'nEdgesOnCell       range ',minval(nEdgesOnCell),       maxval(nEdgesOnCell)
-
-endif
-
-end subroutine get_edges
-
-
-!------------------------------------------------------------------
-
-subroutine get_u(ncid, u, ucell_prior, vcell_prior)
-
-! get the contents of the U, uReconstructZonal, uReconstructMeridional arrays.
+! Special processing if the DART state uses the 'Reconstructed' winds (on the grid centers)
+! as opposed to the components on the grid edge centers (components normal to and parallel 
+! with the edge direction).  We can READ reconstructed winds directly from the analysis file,
+! but we must UPDATE the grid edge arrays as well as the centers.
+! 
+! SYHA: We should update normal velocity even when one of the horizontal wind components
+! exists because we no longer compute the full normal velocity from both u and v winds,
+! but only update the original field with the analysis increments.
+! Get the contents of the U, uReconstructZonal, uReconstructMeridional arrays.
 ! We need to read them to compute their increments.
-!
-! The file name comes from module storage ... namelist.
 
 ! must first be allocated by calling code with the following sizes:
-integer,  intent(in)    :: ncid                   ! file ID for model_analysis_filename
-real(r8), intent(inout) :: u(:,:)                 ! u(nVertLevels, nEdges) 
-real(r8), intent(inout) :: ucell_prior(:,:)       ! uReconstructZonal(nVertLevels, nCells) 
-real(r8), intent(inout) :: vcell_prior(:,:)       ! uReconstructMeridional(nVertLevels, nCells) 
+integer,  intent(in)  :: ncid                  ! netCDF handle for model_analysis_filename
+real(r8), intent(in)  :: state_vector(:)
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu
-integer, dimension(NF90_MAX_VAR_DIMS) ::         uvstart, uvcount, numv
-integer :: VarID, numdims
-!integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: ntimes, i
+real(r8), allocatable :: u(:,:)                ! u(nVertLevels, nEdges) 
+real(r8), allocatable :: ucell_incr(:,:)       ! uReconstructZonal(nVertLevels, nCells) 
+real(r8), allocatable :: vcell_incr(:,:)       ! uReconstructMeridional(nVertLevels, nCells) 
+real(r8), allocatable :: data_2d_array(:,:)
 
-! Open the netcdf file 
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu, numv
+integer :: VarID, numdims, ntimes, i
+integer :: zonal, meridional
+logical :: both
+logical :: already_updated = .false.
 
 if ( .not. module_initialized ) call static_init_model
 
+if ( already_updated ) return  ! only need to do this routine one time
 
-!call nc_check(nf90_open(trim(model_analysis_filename), nf90_nowrite, ncid), &
-!              'get_u', 'open '//trim(model_analysis_filename))
-
-!call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-!              'get_u', 'inquire '//trim(model_analysis_filename))
-
-!call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-!              'get_u', 'inquire time dimension length '//trim(model_analysis_filename))
-
-! Read u
+!
+! Read 'u' : the normal component of the wind defined on the grid edges.
+! Read all the values all dimensions but the time dimension.
+! Only read the last time (if more than 1 present)
+!
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-              'get_u', 'inq_varid u '//trim(model_analysis_filename))
+              'update_wind_components', 'inq_varid u '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'get_u', 'inquire u '//trim(model_analysis_filename))
+              'update_wind_components', 'inquire u '//trim(model_analysis_filename))
 
 do i=1, numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
-                 'get_u', 'inquire U dimension length '//trim(model_analysis_filename))
+                 'update_wind_components', 'inquire U dimension length '//trim(model_analysis_filename))
 enddo
 
-! for all but the time dimension, read all the values.   
-! for time read only the last one (if more than 1 present)
 mystart = 1
 mystart(numdims) = ntimes
 mycount = numu
 mycount(numdims) = 1
 
+allocate(         u(nVertLevels, nEdges))
+allocate(ucell_incr(nVertLevels, nCells))
+allocate(vcell_incr(nVertLevels, nCells))
+
 call nc_check( nf90_get_var(ncid, VarID, u, start=mystart, count=mycount), &
-              'get_u', 'put_var u '//trim(model_analysis_filename))
+              'update_wind_components', 'put_var u '//trim(model_analysis_filename))
 
-
-! Read uReconstructZonal
+!
+! Read the original uReconstructZonal
+! Read all the values all dimensions but the time dimension.
+! Only read the last time (if more than 1 present)
+!
 
 call nc_check(nf90_inq_varid(ncid, 'uReconstructZonal', VarID), &
-              'get_u', 'inq_varid uReconstructZonal '//trim(model_analysis_filename))
+              'update_wind_components', 'inq_varid uReconstructZonal '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'get_u', 'inquire uReconstructZonal '//trim(model_analysis_filename))
+              'update_wind_components', 'inquire uReconstructZonal '//trim(model_analysis_filename))
 
 do i=1, numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
-                 'get_u', 'inquire uReconstructZonal dimension length '//trim(model_analysis_filename))
+                 'update_wind_components', 'inquire uReconstructZonal dimension length '//trim(model_analysis_filename))
 enddo
 
-! for all but the time dimension, read all the values.   
-! for time read only the last one (if more than 1 present)
-uvstart = 1
-uvstart(numdims) = ntimes
-uvcount = numv
-uvcount(numdims) = 1
+mystart = 1
+mystart(numdims) = ntimes
+mycount = numv
+mycount(numdims) = 1
 
-call nc_check( nf90_get_var(ncid, VarID, ucell_prior, start=uvstart, count=uvcount), &
-              'get_u', 'put_var uReconstructZonal '//trim(model_analysis_filename))
+call nc_check( nf90_get_var(ncid, VarID, ucell_incr, start=mystart, count=mycount), &
+              'update_wind_components', 'put_var uReconstructZonal '//trim(model_analysis_filename))
 
+!
 ! Read uReconstructMeridional
+!
 
 call nc_check(nf90_inq_varid(ncid, 'uReconstructMeridional', VarID), &
-              'get_u', 'inq_varid uReconstructMeridional '//trim(model_analysis_filename))
+              'update_wind_components', 'inq_varid uReconstructMeridional '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'get_u', 'inquire uReconstructMeridional '//trim(model_analysis_filename))
+              'update_wind_components', 'inquire uReconstructMeridional '//trim(model_analysis_filename))
 
 do i=1, numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numv(i)), &
-                 'get_u', 'inquire uReconstructMeridional dimension length '//trim(model_analysis_filename))
+                 'update_wind_components', 'inquire uReconstructMeridional dimension length '//trim(model_analysis_filename))
 enddo
 
-call nc_check( nf90_get_var(ncid, VarID, vcell_prior, start=uvstart, count=uvcount), &
-              'get_u', 'put_var uReconstructMeridional '//trim(model_analysis_filename))
-
-!call nc_check(nf90_close(ncid), 'get_u','close '//trim(model_analysis_filename) )
-
-
-! A little sanity check
+call nc_check( nf90_get_var(ncid, VarID, vcell_incr, start=mystart, count=mycount), &
+              'update_wind_components', 'put_var uReconstructMeridional '//trim(model_analysis_filename))
 
 if ( debug > 7 ) then
-
    write(*,*)
-   write(*,*)'u           range ',minval(u),           maxval(u)
-   write(*,*)'ucell_prior range ',minval(ucell_prior), maxval(ucell_prior)
-   write(*,*)'vcell_prior range ',minval(vcell_prior), maxval(vcell_prior)
-
+   write(*,*)'update_wind_components: org u          range ',minval(u),          maxval(u)
+   write(*,*)'update_wind_components: org zonal      range ',minval(ucell_incr), maxval(ucell_incr)
+   write(*,*)'update_wind_components: org meridional range ',minval(vcell_incr), maxval(vcell_incr)
 endif
 
-end subroutine get_u
+! The state vector has updated zonal and meridional wind components.
+! (Implicit in just being IN this routine)
+
+zonal      = get_index_from_varname('uReconstructZonal')
+meridional = get_index_from_varname('uReconstructMeridional')
+
+if (zonal > 0) then
+   allocate(data_2d_array(progvar(zonal)%dimlens(1),progvar(zonal)%dimlens(2)))
+   call vector_to_prog_var(state_vector, zonal, data_2d_array )
+   ucell_incr = data_2d_array - ucell_incr
+   deallocate(data_2d_array)
+else
+   ucell_incr(:,:) = 0.0_r8
+endif
+
+if (meridional > 0) then
+   allocate(data_2d_array(progvar(meridional)%dimlens(1),progvar(meridional)%dimlens(2)))
+   call vector_to_prog_var(state_vector, meridional, data_2d_array)
+   vcell_incr = data_2d_array - vcell_incr
+   deallocate(data_2d_array)
+else
+   vcell_incr(:,:) = 0.0_r8
+endif
+
+if ( debug > 7 ) then
+   write(*,*)
+   write(*,*)'update_wind_components: u increment    range ',minval(ucell_incr), maxval(ucell_incr)
+   write(*,*)'update_wind_components: v increment    range ',minval(vcell_incr), maxval(vcell_incr)
+endif
+
+! Now that we have the U,V increments (at the cell centers) and 
+! the prior 'normal' wind component ('u' - at the cell edges),
+! convert the increments to increments at the edges.
+
+allocate(data_2d_array(nVertLevels, nEdges))
+
+call uv_cell_to_edges(ucell_incr, vcell_incr, data_2d_array)
+
+! Update normal velocity 
+u(:,:) = u(:,:) + data_2d_array(:,:)
+
+if ( debug > 7 ) then
+   write(*,*)
+   write(*,*)'update_wind_components: u after update:',minval(u), maxval(u)
+endif
+
+! Finally update the normal wind component field.
+
+call put_u(u)
+
+already_updated = .true. ! Change flag so we only do this routine once.
+
+deallocate(data_2d_array, ucell_incr, vcell_incr, u)
+
+! TJH FIXME can remove handle_winds, winds_present
+
+end subroutine update_wind_components
 
 
 !------------------------------------------------------------------
@@ -3070,6 +3121,8 @@ MyLoop : do i = 1, nrows
             ! supported - do nothing
          case ('nCells')
             ! supported - do nothing
+         case ('nEdges')
+            ! supported - do nothing
          case ('nVertLevels')
             ! supported - do nothing
          case ('nVertLevelsP1')
@@ -3131,6 +3184,7 @@ subroutine dump_progvar(ivar)
 !%!    integer :: numdims       ! number of dims - excluding TIME
 !%!    integer :: numvertical   ! number of vertical levels in variable
 !%!    integer :: numcells      ! number of horizontal locations (typically cell centers)
+!%!    integer :: numedges
 !%!    logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
 !%!    integer :: varsize       ! prod(dimlens(1:numdims))
 !%!    integer :: index1        ! location in dart state vector of first occurrence
@@ -3165,6 +3219,8 @@ write(logfileunit,*) '  numvertical ',progvar(ivar)%numvertical
 write(     *     ,*) '  numvertical ',progvar(ivar)%numvertical
 write(logfileunit,*) '  numcells    ',progvar(ivar)%numcells
 write(     *     ,*) '  numcells    ',progvar(ivar)%numcells
+write(logfileunit,*) '  numedges    ',progvar(ivar)%numedges
+write(     *     ,*) '  numedges    ',progvar(ivar)%numedges
 write(logfileunit,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
 write(     *     ,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
 write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
@@ -3211,15 +3267,15 @@ end function FindTimeDimension
 
 subroutine winds_present(zonal,meridional,both)
 
- integer,  intent(out) :: zonal, meridional
- logical, intent(out) :: both
+integer, intent(out) :: zonal, meridional
+logical, intent(out) :: both
 
 ! if neither of uReconstructZonal or uReconstructMeridional are in the
 !   state vector, set both to .false. and we're done.
 ! if both are there, return the ivar indices for each
 ! if only one is there, it's an error.
 
-zonal = get_index_from_varname('uReconstructZonal')
+zonal      = get_index_from_varname('uReconstructZonal')
 meridional = get_index_from_varname('uReconstructMeridional')
 
 if (zonal > 0 .and. meridional > 0) then
@@ -3258,15 +3314,10 @@ subroutine handle_winds(u_prior , zonal_incr, meridional_incr)
 ! the ends of each edge are the lonVertex/latVertex arrays
 ! the location of the winds are at the lonCell/latCell arrays (cell centers)
 
-real(r8), allocatable :: u(:,:), du(:,:), edgeNormalVectors(:,:)
-integer,  allocatable :: nEdgesOnCell(:), edgesOnCell(:,:)
+real(r8), allocatable :: u(:,:), du(:,:)
 
 allocate(u(nVertLevels, nEdges))
 allocate(du(nVertLevels, nEdges))
-allocate(nEdgesOnCell(nCells), edgesOnCell(maxEdges, nCells))
-allocate(edgeNormalVectors(3, nEdges))
-
-call get_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell)
 
 if ( debug > 7 ) then
 write(*,*)'u wind increment:',minval(zonal_incr), maxval(zonal_incr)
@@ -3274,8 +3325,7 @@ write(*,*)'v wind increment:',minval(meridional_incr), maxval(meridional_incr)
 write(*,*)'u_prior: ',minval(u_prior), maxval(u_prior)
 endif
 
-call uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, &
-                      zonal_incr, meridional_incr, du)
+call uv_cell_to_edges(zonal_incr, meridional_incr, du)
 
 if ( debug > 7 ) then
 write(*,*)
@@ -3292,7 +3342,7 @@ endif
 
 call put_u(u)
 
-deallocate(u, du, nEdgesOnCell, edgesOnCell, edgeNormalVectors) 
+deallocate(u, du) 
 
 end subroutine handle_winds
 
@@ -4145,8 +4195,7 @@ end subroutine update_reg_list
 
 !------------------------------------------------------------------
 
-subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, &
-                            zonal_wind, meridional_wind, du)
+subroutine uv_cell_to_edges(zonal_wind, meridional_wind, du)
 
 ! Project u, v wind increments at cell centers onto the edges.
 ! FIXME:
@@ -4156,9 +4205,9 @@ subroutine uv_cell_to_edges(edgeNormalVectors, nEdgesOnCell, edgesOnCell, &
 !        Here "U" is the prognostic variable in MPAS, and we update it with the wind
 !        increments at cell centers.
 
-real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
-integer,  intent(in) :: nEdgesOnCell(:)             ! how many edges this cell has
-integer,  intent(in) :: edgesOnCell(:,:)            ! index list of edges per cell
+!real(r8), intent(in) :: edgeNormalVectors(:,:)      ! unit direction vectors on the edges
+!integer,  intent(in) :: nEdgesOnCell(:)             ! how many edges this cell has
+!integer,  intent(in) :: edgesOnCell(:,:)            ! index list of edges per cell
 real(r8), intent(in) :: zonal_wind(:,:)             ! u wind updated from filter
 real(r8), intent(in) :: meridional_wind(:,:)        ! v wind updated from filter
 real(r8), intent(out):: du(:,:)                     ! normal velocity increment on the edges

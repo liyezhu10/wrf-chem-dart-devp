@@ -128,22 +128,23 @@
    /
 
 &model_nml
-   model_analysis_filename      = '../data/mpas_analysis.nc'
-   grid_definition_filename     = '../data/mpas_analysis.nc'
+   model_analysis_filename      = '../data/mpas_output.2010-10-23_03:00:00.nc'
+   grid_definition_filename     = '../data/mpas_output.2010-10-23_03:00:00.nc'
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 3600,
    output_state_vector          = .true., 
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
-   debug = 1
+   debug = 8
    /
 
+                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
+                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
 &mpas_vars_nml
    mpas_state_variables = 
                           'theta',                 'KIND_POTENTIAL_TEMPERATURE',
-                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
-                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
                           'surface_pressure',      'KIND_SURFACE_PRESSURE'
+                          'u',                     'KIND_EDGE_NORMAL_SPEED',
                           'w',                     'KIND_VERTICAL_VELOCITY',
                           'rho',                   'KIND_DENSITY',
                           'qv',                    'KIND_VAPOR_MIXING_RATIO',
@@ -160,7 +161,7 @@
 
 &dart_to_model_nml
    dart_to_model_input_file = 'dart.ic',
-   advance_time_present     = .true.,
+   advance_time_present     = .false.,
   / 
 
 &utilities_nml
