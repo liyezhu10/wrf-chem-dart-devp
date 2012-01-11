@@ -47,6 +47,7 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_POTENTIAL_TEMPERATURE, &
                              KIND_TEMPERATURE,        &
                              KIND_U_WIND_COMPONENT,   &
+                             KIND_V_WIND_COMPONENT,   &
                              KIND_PRESSURE,           &
                              KIND_DENSITY,            & 
                              KIND_VAPOR_MIXING_RATIO
@@ -210,6 +211,7 @@ real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
 real(r8), allocatable :: zgridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
 real(r8), allocatable :: zgridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
+real(r8), allocatable :: zgridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
 
@@ -724,6 +726,7 @@ subroutine local_interpolate(x, location, num_kinds, obs_kinds, interp_vals, ist
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values 
 !       ISTATUS = 18:  altitude illegal
+!       ISTATUS = 19:  could not compute u using RBF code
 !       ISTATUS = 101: Internal error; reached end of subroutine without 
 !                      finding an applicable case.
 !
@@ -805,6 +808,26 @@ do i=1, num_kinds
 enddo
 
 !  if (debug > 2) print *, 'base offset now ', base_offset(1)
+
+! FIXME: this needs to play well with multiple types in the kinds list
+! for now do only the first one.  if 'u' is part of the state vector
+! and if they are asking for U/V components, use the new RBF code.
+! if u isn't in the state vector, default to trying to interpolate
+! in the reconstructed U/V components at the cell centers.
+if ((obs_kinds(1) == KIND_U_WIND_COMPONENT) .or. &
+    (obs_kinds(1) == KIND_V_WIND_COMPONENT)) then
+   do i=1, num_kinds
+      ivar = get_index_from_varname('u')
+      if (ivar > 0) then
+         if (obs_kinds(1) == KIND_U_WIND_COMPONENT) then
+            call compute_u_with_rbf(x, location, .TRUE., interp_vals(1), istatus)
+         else
+            call compute_u_with_rbf(x, location, .FALSE., interp_vals(1), istatus)
+         endif
+         return
+     endif
+   enddo
+endif
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
@@ -1670,7 +1693,7 @@ type(location_type)    :: local_obs_loc
 
 num_close = 0
 close_ind = -99
-dist      = 1.0e9   !something big and positive (far away)
+dist      = 1.0e9   !something big and positive (far away) in radians
 istatus1  = 0
 istatus2  = 0
 
@@ -3752,11 +3775,10 @@ end subroutine vert_interp
 
 subroutine find_height_bounds(height, nbounds, bounds, lower, upper, fract, ier)
 
-! Finds position of a given latitude in an array of latitude grid points and returns
-! the index of the lower and upper bounds and the fractional offset. Used for both
-! latitude and altitude which have similar linear arrays. ier returns 0 unless there
-! is an error. Could be replaced with a more efficient search if there are many
-! vertical levels.
+! Finds position of a given height in an array of height grid points and returns
+! the index of the lower and upper bounds and the fractional offset.  ier returns 0 
+! unless there is an error. Could be replaced with a more efficient search if there 
+! are many vertical levels.
 
 real(r8), intent(in)  :: height
 integer,  intent(in)  :: nbounds
@@ -3765,8 +3787,8 @@ integer,  intent(out) :: lower, upper
 real(r8), intent(out) :: fract
 integer,  intent(out) :: ier
 
-! For now, assume that the spacing on latitudes or altitudes is arbitrary
-! Do a silly linear search. Probably not worth any fancier searching unless
+! Assume that the spacing on altitudes is arbitrary and do the simple thing
+! which is a linear search. Probably not worth any fancier searching unless
 ! models get to be huge.
 
 integer :: i
@@ -3793,6 +3815,36 @@ ier = 3
 
 end subroutine find_height_bounds
 
+!------------------------------------------------------------------
+
+subroutine find_vert_level(loc, ivar, lower, upper, fract, ier)
+
+! given what - cell center or edge?  maybe edge only?  return the
+! two level numbers that enclose the given vertical value.   this
+! is tricky since we only clearly know the heights in meters of the
+! cell centers.  we're asking if they have the elevations of the
+! edges or if we have to project from the planes defined by the
+! two neighboring cells.  hopefully not.
+
+type(location_type), intent(in)  :: loc
+integer,             intent(in)  :: ivar
+integer,             intent(out) :: lower, upper
+real(r8),            intent(out) :: fract
+integer,             intent(out) :: ier
+
+! ok - the plan is to pass in the index into the progvar structure,
+! the location so we can extract the vert value and which vert flag.
+! compute and return the lower and upper index level numbers that
+! enclose this vert, along with the fract between them.  ier is set
+! in case of error (e.g. outside the grid, on dry land, etc).
+
+!vert_is_undef,    VERTISUNDEF
+!vert_is_surface,  VERTISSURFACE
+!vert_is_level,    VERTISLEVEL
+!vert_is_pressure, VERTISPRESSURE
+!vert_is_height,   VERTISHEIGHT
+
+end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
@@ -4257,14 +4309,16 @@ end subroutine update_reg_list
 ! to adjust the xyz surface vector to be the actual elevation
 ! of the edge at that level.
 
-subroutine compute_u_with_rbf(x, lat, lon, vert, verttype, zonal, uval)
-real(r8), intent(in)  :: x(:)
-real(r8), intent(in)  :: lat, lon, vert
-integer,  intent(in)  :: verttype
-logical,  intent(in)  :: zonal
-real(r8), intent(out) :: uval
+subroutine compute_u_with_rbf(x, loc, zonal, uval, ier)
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in) :: loc
+logical,             intent(in)  :: zonal
+real(r8),            intent(out) :: uval
+integer,             intent(out) :: ier
 
 
+real(r8) :: lat, lon, vert, tmp(3)
+integer  :: verttype
 integer, parameter :: listsize = 15
 logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j
@@ -4282,10 +4336,18 @@ integer  :: vertindex, index1, progindex, cellid
 ! the same as before and it's asking for V now instead of U,
 ! skip the expensive computation.
 
+! unpack the location into local vars
+tmp = get_location(loc)
+lon = tmp(1)
+lat = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+
 call find_surrounding_edges(lat, lon, nedges, edgelist)
 if (nedges <= 0) then
    ! we are on a boundary, no interpolation
    uval = MISSING_R8
+   ier = 18
    return
 endif
 
@@ -4301,6 +4363,7 @@ progindex = get_index_from_varname('u')
 if (progindex < 0) then
    ! cannot compute u if it isn't in the state vector
    uval = MISSING_R8
+   ier = 18
    return
 endif
 index1 = progvar(progindex)%index1
@@ -4355,6 +4418,8 @@ if (zonal) then
 else
    uval = ureconstructmeridional
 endif
+
+ier = 0
 
 end subroutine compute_u_with_rbf
 
@@ -4421,7 +4486,8 @@ do i=1, nCells
    cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8, VERTISSURFACE)
 enddo
 
-call get_close_maxdist_init(cc_gc, PI)  ! FIXME: should be smaller
+! FIXME: should be smaller; now slightly less then 1/2 the sphere.
+call get_close_maxdist_init(cc_gc, PI* 0.95_r8)  
 call get_close_obs_init(cc_gc, nCells, cell_locs)
 
 end subroutine init_closest_center
@@ -4573,12 +4639,14 @@ stop
 ! FIXME: verify that we want the point in the same plane
 ! as the cell and not on the surface of the sphere.
 
-call latlon_to_xyz_on_plane(lat, lon, px, py, pz)
+! this computes the point on the sphere, using the radius
+! we believe is used for all the x/y/z arrays in the MPAS file.
+call latlon_to_xyz_on_plane(lat, lon, cellid, px, py, pz)
 
-! nedges and nverts is same
+! nedges and nverts is same in a closed figure
 nverts = nEdgesOnCell(cellid)
 
-closest_dist = 1.0e38
+closest_dist = 1.0e38   ! something really big
 closest_vertex = -1
 
 do i=1, nverts
