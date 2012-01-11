@@ -200,8 +200,6 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 ! scalar grid positions
 
-! TJH for ocean we may need verticesOnCell   inside a cell or not
-! TJH for ocean we may need ?IsBoundaryArray? 
 
 real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
 real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
@@ -222,6 +220,13 @@ integer,  allocatable :: verticesOnCell(:,:)
 integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
 integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
 real(r8), allocatable :: edgeNormalVectors(:,:)
+
+! Boundary information might be needed ... regional configuration?
+! Read if available.
+
+integer,  allocatable :: boundaryEdge(:,:)
+integer,  allocatable :: boundaryVertex(:,:)
+integer,  allocatable :: maxLevelCell(:)
 
 integer               :: model_size      ! the state vector length
 type(time_type)       :: model_timestep  ! smallest time to adv model
@@ -2680,6 +2685,26 @@ call nc_check(nf90_inq_varid(ncid, 'verticesOnCell', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
       'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
 
+! Get the boundary information if available. 
+
+if ( nf90_inq_varid(ncid, 'boundaryEdge', VarID) == NF90_NOERR ) then
+   allocate(boundaryEdge(nVertLevels,nEdges))
+   call nc_check(nf90_get_var( ncid, VarID, boundaryEdge), &
+      'get_grid', 'get_var boundaryEdge '//trim(grid_definition_filename))
+endif
+
+if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
+   allocate(boundaryVertex(nVertLevels,nVertices))
+   call nc_check(nf90_get_var( ncid, VarID, boundaryVertex), &
+      'get_grid', 'get_var boundaryVertex '//trim(grid_definition_filename))
+endif
+
+if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
+   allocate(maxLevelCell(nCells))
+   call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
+      'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
+endif
+
 call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
 
 ! A little sanity check
@@ -2704,6 +2729,12 @@ if ( debug > 7 ) then
    write(*,*)'yEdge             range ',minval(yEdge),             maxval(yEdge)
    write(*,*)'zEdge             range ',minval(zEdge),             maxval(zEdge)
    write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
+   if (allocated(boundaryEdge)) &
+   write(*,*)'boundaryEdge      range ',minval(boundaryEdge),      maxval(boundaryEdge)
+   if (allocated(boundaryVertex)) &
+   write(*,*)'boundaryVertex    range ',minval(boundaryVertex),    maxval(boundaryVertex)
+   if (allocated(maxLevelCell)) &
+   write(*,*)'maxLevelCell      range ',minval(maxLevelCell),      maxval(maxLevelCell)
 
 endif
 
