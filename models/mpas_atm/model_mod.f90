@@ -209,8 +209,12 @@ real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees)
 real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees)
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
-real(r8), allocatable :: zgridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
-real(r8), allocatable :: zgridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
+real(r8), allocatable :: zGridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
+real(r8), allocatable :: zGridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
+
+real(r8), allocatable :: zEdgeFace(:,:)   ! geometric height at edges faces  (nVertLevelsP1,nEdges)
+real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
+
 real(r8), allocatable :: zgridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
@@ -358,8 +362,12 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells)) 
-allocate(zgridFace(nVertLevelsP1, nCells))
-allocate(zgridCenter(nVertLevels, nCells))
+allocate(zGridFace(nVertLevelsP1, nCells))
+allocate(zGridCenter(nVertLevels, nCells))
+
+allocate(zEdgeFace(  nVertLevelsP1, nEdges))
+allocate(zEdgeCenter(nVertLevels,   nEdges))
+
 allocate(cellsOnVertex(vertexDegree, nVertices))
 allocate(nEdgesOnCell(nCells))
 allocate(edgesOnCell(maxEdges, nCells))
@@ -369,13 +377,18 @@ allocate(latEdge(nEdges), lonEdge(nEdges))
 allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
 allocate(xEdge(nVertices), yEdge(nVertices), zEdge(nVertices))
 
-! this reads in latCell, lonCell, zgridFace, cellsOnVertex
+! this reads in latCell, lonCell, zGridFace, cellsOnVertex
 call get_grid()
 
 ! read in vert cell face locations and then compute vertical center locations
 do kloc=1, nCells
  do iloc=1, nVertLevels
-   zgridCenter(iloc,kloc) = (zgridFace(iloc,kloc) + zgridFace(iloc+1,kloc))*0.5
+   zGridCenter(iloc,kloc) = (zGridFace(iloc,kloc) + zGridFace(iloc+1,kloc))*0.5_r8
+ enddo
+enddo
+do kloc=1, nEdges
+ do iloc=1, nVertLevels
+   zEdgeCenter(iloc,kloc) = (zEdgeFace(iloc,kloc) + zEdgeFace(iloc+1,kloc))*0.5_r8
  enddo
 enddo
               
@@ -566,36 +579,57 @@ if( myindx == -1 ) then
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
 
-! Now that we know the variable, find the cell 
+! Now that we know the variable, find the cell or edge
 
-! TJH FIXME ... add numedges support
-if (progvar(nf)%numcells == MISSING_I) then
-   write(*,*)'call for help ...'
-   stop
+if (     progvar(nf)%numcells /= MISSING_I) then
+   nxp = progvar(nf)%numcells
+elseif ( progvar(nf)%numedges /= MISSING_I) then
+   nxp = progvar(nf)%numedges
+else
+     write(string1,*) 'ERROR, ',trim(progvar(nf)%varname),' is not defined on edges or cells'
+     call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
-nxp = progvar(nf)%numcells
-nzp = progvar(nf)%numvertical
 
-iloc   = 1 + (myindx-1) / nzp  ! cell index
+nzp  = progvar(nf)%numvertical
+iloc = 1 + (myindx-1) / nzp    ! cell index
 kloc = myindx - (iloc-1)*nzp   ! vertical level index
 
-! the zgrid array contains the location of the cell top and bottom faces, so it has one 
+! the zGrid array contains the location of the cell top and bottom faces, so it has one 
 ! more value than the number of cells in each column.  for locations of cell centers
 ! you have to take the midpoint of the top and bottom face of the cell.
 
-if ( progvar(nf)%ZonHalf ) then
-   height = zgridCenter(kloc,iloc)
-   ! was: height = (zgrid(kloc,iloc) + zgrid(kloc+1,iloc))*0.5_r8
-else if (nzp <= 1) then
-   height = zgridFace(1,iloc)
+if (progvar(nf)%numedges /= MISSING_I) then
+   if ( progvar(nf)%ZonHalf ) then
+      height = zEdgeCenter(kloc,iloc)
+   else if (nzp <= 1) then
+      height = zEdgeFace(1,iloc)
+   else
+      height = zEdgeFace(kloc,iloc)
+   endif
 else
-   height = zgridFace(kloc,iloc)
+   if ( progvar(nf)%ZonHalf ) then
+      height = zGridCenter(kloc,iloc)
+   else if (nzp <= 1) then
+      height = zGridFace(1,iloc)
+   else
+      height = zGridFace(kloc,iloc)
+   endif
 endif
 
-if (nzp <= 1) then
-   location = set_location(lonCell(iloc),latCell(iloc), height, VERTISSURFACE)
-else
-   location = set_location(lonCell(iloc),latCell(iloc), height, VERTISHEIGHT)
+
+
+if (progvar(nf)%numedges /= MISSING_I) then
+   if (nzp <= 1) then
+      location = set_location(lonEdge(iloc),latEdge(iloc), height, VERTISSURFACE)
+   else
+      location = set_location(lonEdge(iloc),latEdge(iloc), height, VERTISHEIGHT)
+   endif
+else ! must be on cell centers
+   if (nzp <= 1) then
+      location = set_location(lonCell(iloc),latCell(iloc), height, VERTISSURFACE)
+   else
+      location = set_location(lonCell(iloc),latCell(iloc), height, VERTISHEIGHT)
+   endif
 endif
 
 if (debug > 9) then
@@ -966,7 +1000,7 @@ if(vert_is_height(location)) then
    ! Get the lower and upper bounds and fraction for each column
    interp_vals(:) = 0.0_r8
    do i = 1, 3
-      call find_height_bounds(lheight, nVertLevels, zgridCenter(:, tri_indices(i)), &
+      call find_height_bounds(lheight, nVertLevels, zGridCenter(:, tri_indices(i)), &
                               lower, upper, fract, ier)
       if(ier /= 0) then
          istatus = 12
@@ -1290,7 +1324,7 @@ else
 
    call nc_check(NF90_inq_varid(ncFileID, 'zgrid', VarID), &
                  'nc_write_model_atts', 'zgrid inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, zgridFace ), &
+   call nc_check(nf90_put_var(ncFileID, VarID, zGridFace ), &
                 'nc_write_model_atts', 'zgrid put_var '//trim(filename))
 
 endif
@@ -1564,8 +1598,8 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
-if (allocated(zgridFace))      deallocate(zgridFace)
-if (allocated(zgridCenter))    deallocate(zgridCenter)
+if (allocated(zGridFace))      deallocate(zGridFace)
+if (allocated(zGridCenter))    deallocate(zGridCenter)
 if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 
 end subroutine end_model
@@ -2540,7 +2574,7 @@ subroutine get_grid()
 !
 ! The file name comes from module storage ... namelist.
 ! This reads in the following arrays:
-!   latCell, lonCell, zgridFace, cellsOnVertex (all in module global storage)
+!   latCell, lonCell, zGridFace, cellsOnVertex (all in module global storage)
 
 
 integer  :: ncid, VarID
@@ -2563,8 +2597,13 @@ call nc_check(nf90_get_var( ncid, VarID, lonCell), &
 
 call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
       'get_grid', 'inq_varid zgrid '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zgridFace), &
+call nc_check(nf90_get_var( ncid, VarID, zGridFace), &
       'get_grid', 'get_var zgrid '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'zx', VarID), &
+      'get_grid', 'inq_varid zx '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, zEdgeFace), &
+      'get_grid', 'get_var zx '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
       'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
@@ -2602,6 +2641,9 @@ call nc_check(nf90_inq_varid(ncid, 'lonEdge', VarID), &
       'get_grid', 'inq_varid lonEdge '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, lonEdge), &
       'get_grid', 'get_var lonEdge '//trim(grid_definition_filename))
+
+latEdge = latEdge * rad2deg
+lonEdge = lonEdge * rad2deg
 
 call nc_check(nf90_inq_varid(ncid, 'xVertex', VarID), &
       'get_grid', 'inq_varid xVertex '//trim(grid_definition_filename))
@@ -2647,7 +2689,8 @@ if ( debug > 7 ) then
    write(*,*)
    write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
    write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
-   write(*,*)'zgrid             range ',minval(zgridFace),         maxval(zgridFace)
+   write(*,*)'zgrid             range ',minval(zGridFace),         maxval(zGridFace)
+   write(*,*)'zx                range ',minval(zEdgeFace),         maxval(zEdgeFace)
    write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
    write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
    write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
