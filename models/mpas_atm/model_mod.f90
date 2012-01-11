@@ -112,6 +112,8 @@ real(r8), parameter :: cv = 716.0_r8
 real(r8), parameter :: p0 = 100000.0_r8
 real(r8), parameter :: rcv = rgas/(cp-rgas)
 
+! FIXME: one of the example ocean files had a global attr with 6371220.0
+! instead of 1229.   ??
 real(r8), parameter :: radius = 6371229.0 ! meters
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -4244,6 +4246,17 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
+! FIXME: we could pass in the lower vert level here instead of
+! computing it.  lat/lon/vert could/should be packaged as a
+! location type.
+
+! FIXME: we need to do this on level N, then N+1, then do a
+! linear interpolation in the vertical.  that is NOT handled yet.
+
+! FIXME: we also need the actual height (in m) of the level
+! to adjust the xyz surface vector to be the actual elevation
+! of the edge at that level.
+
 subroutine compute_u_with_rbf(x, lat, lon, vert, verttype, zonal, uval)
 real(r8), intent(in)  :: x(:)
 real(r8), intent(in)  :: lat, lon, vert
@@ -4270,6 +4283,11 @@ integer  :: vertindex, index1, progindex, cellid
 ! skip the expensive computation.
 
 call find_surrounding_edges(lat, lon, nedges, edgelist)
+if (nedges <= 0) then
+   ! we are on a boundary, no interpolation
+   uval = MISSING_R8
+   return
+endif
 
 ! FIXME: need vert index for the vertical level here
 vertindex = 1  ! just for testing
@@ -4281,8 +4299,9 @@ vertindex = 1  ! just for testing
 
 progindex = get_index_from_varname('u')
 if (progindex < 0) then
-   print *, '"u" not in state vector, cannot compute RBF'
-   stop
+   ! cannot compute u if it isn't in the state vector
+   uval = MISSING_R8
+   return
 endif
 index1 = progvar(progindex)%index1
 
@@ -4290,6 +4309,13 @@ do i = 1, nedges
    xdata(i) = xEdge(edgelist(i))
    ydata(i) = yEdge(edgelist(i))
    zdata(i) = zEdge(edgelist(i))
+
+   ! FIXME: this xyz is on the surface - the code needs
+   ! the xyz of the edges up at the right vertical level.
+   ! we'll have to compute that and add it in here.
+
+   ! FIXME: this should be changed to be (3, edgeid) instead
+   !  of (edgeid, 3) to be more natural in the fortran storage order.
 
    do j=1, 3
       edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
@@ -4369,11 +4395,10 @@ if (vertexid < 0) then
    return
 endif
 
-! FIXME: add code here to check if vertex or cell ids are 
-! on the boundary for ocean or for regional atmosphere. 
-
 ! fill in the number of unique edges and fills the
-! edge list with the edge ids.
+! edge list with the edge ids.  the code that detects
+! boundary edges for the ocean or regional atmosphere
+! is incorporated here.  nedges can come back 0 in that case.
 call make_edge_list(vertexid, nedges, edge_list)
 
 end subroutine find_surrounding_edges
@@ -4476,6 +4501,9 @@ logical               :: inside_cell
 integer :: nverts, i, vertexid
 real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
 
+! FIXME: remove this once we've tested the following code.
+! for the global atmosphere it should always be true.  for
+! regional atmosphere and for the ocean, it can be false.
 inside_cell = .true.
 return
 
@@ -4519,6 +4547,9 @@ do i=1, nverts
 enddo
 
 inside_cell = .true.
+
+! see also:
+! http://tog.acm.org/resources/GraphicsGems/gems/RayPolygon.c
 
 end function inside_cell
 
@@ -4570,6 +4601,9 @@ end function closest_vertex
 
 subroutine make_edge_list(vertexid, nedges, edge_list)
 
+! FIXME: will need a vertical level number input arg here to detect
+! the boundary edges/vertices correctly.
+
 ! given a vertexid, look up the N cells which share it as
 ! a vertex, and then for those cells look up the edge ids.
 ! return a list with all edges listed exactly once (shared edges 
@@ -4601,11 +4635,27 @@ cellid_list(3) = cellsOnVertex(vertexid, 3)
 ! new edge is added.  check arrays for enough length before
 ! starting to work.
 
+
+! FIXME: the ocean files have:
+!  integer boundaryEdge(nEdges, nVertLevels)
+!  integer boundaryVertex(nVertices, nVertLevels)
+! as a first pass, if ANY of the edges or vertices are on
+! the boundary, punt and return 0 as the edge count.  later
+! once this is working, decide if a single boundary vertex or
+! edge is ok if it's the exterior of the edges we are including
+! and if it has good data values.
+
 listlen = 0
 do c=1, ncells
    edgecount = nEdgesOnCell(cellid_list(i))
    do e=1, edgecount
       nextedge = edgesOnCell(cellid_list(i), e)
+      ! FIXME: 
+      ! if (boundaryEdge(nextedge, vert)) then
+      !    nedges = 0
+      !    edge_list(:) = -1
+      !    return
+      ! endif
       found = .false.
       addloop: do l=1, listlen
          if (edge_list(l) == nextedge) then
