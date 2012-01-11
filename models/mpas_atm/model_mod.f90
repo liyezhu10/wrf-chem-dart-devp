@@ -3754,7 +3754,6 @@ ier = 3
 
 end subroutine find_pressure_bounds
 
-
 !------------------------------------------------------------------
 
 subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
@@ -3807,7 +3806,7 @@ end subroutine get_interp_pressure
 
 !------------------------------------------------------------------
 
-subroutine vert_interp(x, base_offset, tri_index, nlevs, lower, fract, val, ier)
+subroutine vert_interp(x, base_offset, cellid, nlevs, lower, fract, val, ier)
 
 ! Interpolates in vertical in column indexed by tri_index for a field
 ! with base_offset.  Vertical index is varying fastest here. Returns ier=0
@@ -3815,7 +3814,7 @@ subroutine vert_interp(x, base_offset, tri_index, nlevs, lower, fract, val, ier)
 
 real(r8), intent(in)  :: x(:)
 integer,  intent(in)  :: base_offset
-integer,  intent(in)  :: tri_index
+integer,  intent(in)  :: cellid
 integer,  intent(in)  :: nlevs
 integer,  intent(in)  :: lower
 real(r8), intent(in)  :: fract
@@ -3829,7 +3828,7 @@ real(r8) :: lx, ux
 ier = 0
 
 ! Get the value at the lower and upper points
-offset = base_offset + (tri_index - 1) * nlevs + lower - 1
+offset = base_offset + (cellid - 1) * nlevs + lower - 1
 lx = x(offset)
 ux = x(offset + 1)
 
@@ -3891,34 +3890,253 @@ end subroutine find_height_bounds
 
 !------------------------------------------------------------------
 
-subroutine find_vert_level(loc, ivar, lower, upper, fract, ier)
+subroutine find_vert_level(x, loc, ivar, lower, upper, fract, ier)
 
-! given what - cell center or edge?  maybe edge only?  return the
-! two level numbers that enclose the given vertical value.   this
-! is tricky since we only clearly know the heights in meters of the
+! given a location and var types, return the two level numbers that 
+! enclose the given vertical value plus the fraction between them.   
+
+! FIXME: right now,
+! this is tricky since we only know the heights in meters of the
 ! cell centers.  we're asking if they have the elevations of the
 ! edges or if we have to project from the planes defined by the
 ! two neighboring cells.  hopefully not.
 
+real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
 integer,             intent(in)  :: ivar
 integer,             intent(out) :: lower, upper
 real(r8),            intent(out) :: fract
 integer,             intent(out) :: ier
 
-! ok - the plan is to pass in the index into the progvar structure,
+real(r8) :: lat, lon, vert, tmp(3)
+integer  :: verttype, cellid, edgeid
+logical  :: isedge  ! .not. isedge means iscell
+integer  :: pt_base_offset, density_base_offset, qv_base_offset
+
+! ok - the plan is to take in: the index into the progvar structure,
 ! the location so we can extract the vert value and which vert flag.
 ! compute and return the lower and upper index level numbers that
 ! enclose this vert, along with the fract between them.  ier is set
 ! in case of error (e.g. outside the grid, on dry land, etc).
 
+! kinds we have to handle:
 !vert_is_undef,    VERTISUNDEF
 !vert_is_surface,  VERTISSURFACE
 !vert_is_level,    VERTISLEVEL
 !vert_is_pressure, VERTISPRESSURE
 !vert_is_height,   VERTISHEIGHT
 
+! unpack the location into local vars
+tmp = get_location(loc)
+lon  = tmp(1)
+lat  = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+
+! these first 3 types need no cell/edge location information.
+
+! no defined vertical location (e.g. vertically integrated vals)
+if (vert_is_undef(loc)) then
+   ier = 12
+   return
+endif
+
+! vertical is defined to be on the surface (level 1 here)
+if(vert_is_surface(loc)) then
+   lower = 1
+   upper = 2
+   fract = 0.0_r8
+   ier = 0
+   return
+endif
+
+! model level numbers (supports fractional levels)
+if(vert_is_level(loc)) then
+   ! FIXME: if this is W, the top is nVertLevels+1
+   if (vert > nVertLevels) then
+      ier = 12
+      return
+   endif
+   if (vert == nVertLevels) then
+      lower = nint(vert) - 1   ! round down
+      upper = nint(vert)
+      fract = 1.0_r8
+      ier = 0
+      return
+   endif
+   lower = aint(vert)   ! round down
+   upper = lower+1
+   fract = vert - lower
+   ier = 0
+   return
+endif
+
+! ok, now we need to know where we are in the grid for heights or pressures
+! as the vertical coordinate.
+
+! if we have a cell count, this variables is cell based.
+! if we don't, then it's edge based.
+if (progvar(ivar)%numcells /= MISSING_I) then
+   isedge = .false.
+else
+   isedge = .true.
+endif
+
+! find the cell/edge that contains this point.
+cellid = find_closest_cell_center(lat, lon)
+if (.not. inside_cell(cellid, lat, lon)) then
+   ier = 13   
+   return
+endif
+if (isedge) edgeid = find_closest_edge(cellid, lat, lon)
+
+! Vertical interpolation for pressure coordinates
+if(vert_is_pressure(loc) ) then 
+   ! Need to get base offsets for the potential temperature, density, and water 
+   ! vapor mixing fields in the state vector
+   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
+   call get_index_range(KIND_DENSITY, density_base_offset)
+   call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+   call find_pressure_bounds2(x, vert, cellid, nVertLevels, &
+         pt_base_offset, density_base_offset, qv_base_offset,  &
+         lower, upper, fract, ier)
+   ier = 0
+   return
+endif
+
+! grid is in height, so this needs to know which cell to index into
+! for the column of heights and call the bounds routine.
+if(vert_is_height(loc)) then
+   ! For height, can do simple vertical search for interpolation for now
+   ! Get the lower and upper bounds and fraction for each column
+   if (isedge) then
+      ! FIXME: needs to be zgridEdges(), not centers, using the edgeid we have
+      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+                              lower, upper, fract, ier)
+   else
+      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+                              lower, upper, fract, ier)
+   endif
+   return
+endif
+
+! Shouldn't ever fall out of the 'if' before returning
+ier = 3
+
 end subroutine find_vert_level
+
+!------------------------------------------------------------------
+
+subroutine find_pressure_bounds2(x, p, nbounds, cellid, &
+   pt_base_offset, density_base_offset, qv_base_offset, &
+   lower, upper, fract, ier)
+
+! Finds vertical interpolation indices and fraction for a quantity with 
+! pressure vertical coordinate. Loops through the height levels and
+! computes the corresponding pressure at the horizontal point.  nbounds is
+! the number of vertical levels in the potential temperature, density,
+! and water vapor grids.
+
+real(r8),  intent(in)  :: x(:)
+real(r8),  intent(in)  :: p
+integer,   intent(in)  :: cellid
+integer,   intent(in)  :: nbounds
+integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
+integer,   intent(out) :: lower, upper
+real(r8),  intent(out) :: fract
+integer,   intent(out) :: ier
+
+integer  :: i, gip_err
+real(r8) :: pressure(nbounds)
+
+! Default error return is 0
+ier = 0
+
+! Find the lowest pressure
+call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
+   cellid, 1, nbounds, pressure(1), gip_err)
+if(gip_err /= 0) then
+   ier = gip_err
+   return
+endif
+
+! Get the highest pressure level
+call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
+   cellid, nbounds, nbounds, pressure(nbounds), gip_err)
+if(gip_err /= 0) then
+   ier = gip_err
+   return
+endif
+
+! Check for out of the column range
+if(p > pressure(1) .or. p < pressure(nbounds)) then
+   ier = 2
+   return
+endif
+
+! Loop through the rest of the column from the bottom up
+do i = 2, nbounds
+   call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
+      cellid, i, nbounds, pressure(i), gip_err)
+   if(gip_err /= 0) then
+      ier = gip_err
+      return
+   endif
+
+   ! Is pressure between i-1 and i level?
+   if(p > pressure(i)) then
+      lower = i - 1
+      upper = i
+      ! FIXME: should this be interpolated in log(p)??  yes.
+      fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+      !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
+      return
+   endif
+
+end do
+
+! Shouldn't ever fall off end of loop
+ier = 3
+
+end subroutine find_pressure_bounds2
+
+!------------------------------------------------------------------
+
+subroutine get_interp_pressure2(x, pt_offset, density_offset, qv_offset, &
+   cellid, lev, nlevs, pressure, ier)
+
+! Finds the value of pressure at a given point at model level lev
+
+real(r8), intent(in)  :: x(:)
+integer,  intent(in)  :: pt_offset, density_offset, qv_offset
+integer,  intent(in)  :: cellid
+integer,  intent(in)  :: lev, nlevs
+real(r8), intent(out) :: pressure
+integer,  intent(out) :: ier
+
+integer  :: i, offset
+real(r8) :: pt, density, qv, tk
+
+
+! Get the values of potential temperature, density, and vapor 
+offset = (cellid - 1) * nlevs + lev - 1
+pt =      x(pt_offset + offset)
+density = x(density_offset + offset)
+qv =      x(qv_offset + offset)
+! Error if any of the values are missing; probably will be all or nothing
+if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
+   ier = 2
+   return
+endif
+
+! Get pressure at the cell center
+call compute_full_pressure(pt, density, qv, pressure, tk)
+
+! Default is no error
+ier = 0
+
+end subroutine get_interp_pressure2
+
 
 !------------------------------------------------------------------
 
@@ -4391,8 +4609,6 @@ real(r8),            intent(out) :: uval
 integer,             intent(out) :: ier
 
 
-real(r8) :: lat, lon, vert, tmp(3)
-integer  :: verttype
 integer, parameter :: listsize = 15
 logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j
@@ -4405,6 +4621,9 @@ real(r8) :: ureconstructzonal, ureconstructmeridional
 real(r8) :: datatangentplane(3,2)
 real(r8) :: coeffs_reconstruct(3,listsize)
 integer  :: vertindex, index1, progindex, cellid
+real(r8) :: lat, lon, vert, tmp(3), fract, lowval, uppval
+integer  :: verttype, lower, upper
+
 
 ! FIXME: make this cache the last value and if the location is
 ! the same as before and it's asking for V now instead of U,
@@ -4425,9 +4644,6 @@ if (nedges <= 0) then
    return
 endif
 
-! FIXME: need vert index for the vertical level here
-vertindex = 1  ! just for testing
-
 ! the code needs: nData == nedges
 ! xyz data == xyzEdge
 ! normalDirectionData == edgeNormalVectors
@@ -4441,6 +4657,9 @@ if (progindex < 0) then
    return
 endif
 index1 = progvar(progindex)%index1
+
+! need vert index for the vertical level
+call find_vert_level(x, loc, progindex, lower, upper, fract, ier)
 
 do i = 1, nedges
    xdata(i) = xEdge(edgelist(i))
@@ -4458,8 +4677,13 @@ do i = 1, nedges
       edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
    enddo
 
-   ! FIXME: needs to be right vertindex
-   veldata(i) = x(index1 + (edgelist(i)-1) * nVertLevels + vertindex-1)
+   lowval = x(index1 + (edgelist(i)-1) * nVertLevels + lower-1)
+   uppval = x(index1 + (edgelist(i)-1) * nVertLevels + upper-1)
+   if (vert_is_pressure(loc)) then
+      veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
+   else
+      veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
+   endif
 enddo
 
 
@@ -4574,7 +4798,7 @@ function find_closest_cell_center(lat, lon)
 ! 2D calculation only.
 
 real(r8), intent(in)  :: lat, lon
-real(r8)              :: find_closest_cell_center
+integer               :: find_closest_cell_center
 
 type(location_type) :: pointloc
 integer :: i, closest_cell, num_close
@@ -4619,6 +4843,47 @@ subroutine finalize_closest_center()
 call get_close_obs_destroy(cc_gc)
 
 end subroutine finalize_closest_center
+
+!------------------------------------------------------------
+
+function find_closest_edge(cellid, lat, lon)
+
+! given a cellid and a lat/lon, find which edge is closest
+! to the location.  2D calculation only.
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: lat, lon
+integer               :: find_closest_edge
+
+type(location_type) :: pointloc, edgeloc
+integer :: i, closest_edge, edgeid
+real(r8) :: closest_dist, dist
+
+pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
+
+closest_edge = -1
+closest_dist = 9.0e9  ! something large in radians
+nedges = nEdgesOnCell(cellid)
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   edgeloc = set_location(lonEdge(edgeid)*rad2deg, latEdge(edgeid)*rad2deg, 0.0_r8, VERTISSURFACE)
+   dist = get_dist(pointloc, edgeloc, no_vert = .true.)
+   if (dist < closest_dist) then
+      closest_dist = dist
+      closest_edge = edgeid
+   endif
+enddo
+ 
+! decide what to do if we don't find anything.
+if (closest_edge < 0) then
+   find_closest_edge = -1
+   return
+endif
+
+! this is the edge index for the closest edge center
+find_closest_edge = edgeid
+
+end function find_closest_edge
 
 !------------------------------------------------------------
 
