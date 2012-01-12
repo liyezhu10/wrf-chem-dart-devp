@@ -218,6 +218,7 @@ integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a tr
 integer,  allocatable :: verticesOnCell(:,:)
 
 integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
+integer,  allocatable :: cellsOnEdge(:,:) ! list of cells that bound each edge
 integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
 real(r8), allocatable :: edgeNormalVectors(:,:)
 
@@ -376,6 +377,7 @@ allocate(zEdgeCenter(nVertLevels,   nEdges))
 allocate(cellsOnVertex(vertexDegree, nVertices))
 allocate(nEdgesOnCell(nCells))
 allocate(edgesOnCell(maxEdges, nCells))
+allocate(cellsOnEdge(2, nEdges))
 allocate(verticesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 allocate(latEdge(nEdges), lonEdge(nEdges)) 
@@ -2637,6 +2639,11 @@ call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
       'get_grid', 'get_var edgesOnCell '//trim(grid_definition_filename))
 
+call nc_check(nf90_inq_varid(ncid, 'cellsOnEdge', VarID), &
+      'get_grid', 'inq_varid cellsOnEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, cellsOnEdge), &
+      'get_grid', 'get_var cellsOnEdge '//trim(grid_definition_filename))
+
 call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
       'get_grid', 'inq_varid latEdge '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, latEdge), &
@@ -2720,6 +2727,7 @@ if ( debug > 7 ) then
    write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
    write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
    write(*,*)'EdgesOnCell       range ',minval(EdgesOnCell),       maxval(EdgesOnCell)
+   write(*,*)'cellsOnEdge       range ',minval(cellsOnEdge),       maxval(cellsOnEdge)
    write(*,*)'latEdge           range ',minval(latEdge),           maxval(latEdge)
    write(*,*)'lonEdge           range ',minval(lonEdge),           maxval(lonEdge)
    write(*,*)'xVertex           range ',minval(xVertex),           maxval(xVertex)
