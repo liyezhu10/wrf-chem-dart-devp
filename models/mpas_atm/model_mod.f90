@@ -317,6 +317,7 @@ integer :: ncid, VarID, numdims, varsize, dimlen
 integer :: iunit, io, ivar, i, index1, indexN, iloc, kloc
 integer :: ss, dd
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
+integer :: cel1, cel2
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -393,9 +394,15 @@ do kloc=1, nCells
    zGridCenter(iloc,kloc) = (zGridFace(iloc,kloc) + zGridFace(iloc+1,kloc))*0.5_r8
  enddo
 enddo
+
+! FIXME: Currently assuming that each edge has 2 neighbour cells.  This will not be the case
+!        in the ocean, so we'd need to do some checking here and further refinement.
+!        zEdgeFace needs to be initialized.
 do kloc=1, nEdges
  do iloc=1, nVertLevels
-   zEdgeCenter(iloc,kloc) = (zEdgeFace(iloc,kloc) + zEdgeFace(iloc+1,kloc))*0.5_r8
+   cel1 = cellsOnEdge(1,kloc)
+   cel2 = cellsOnEdge(2,kloc)
+   zEdgeCenter(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
  enddo
 enddo
               
@@ -2607,11 +2614,6 @@ call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, zGridFace), &
       'get_grid', 'get_var zgrid '//trim(grid_definition_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'zx', VarID), &
-      'get_grid', 'inq_varid zx '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zEdgeFace), &
-      'get_grid', 'get_var zx '//trim(grid_definition_filename))
-
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
       'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
@@ -2722,7 +2724,6 @@ if ( debug > 7 ) then
    write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
    write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
    write(*,*)'zgrid             range ',minval(zGridFace),         maxval(zGridFace)
-   write(*,*)'zx                range ',minval(zEdgeFace),         maxval(zEdgeFace)
    write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
    write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
    write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
