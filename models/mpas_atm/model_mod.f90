@@ -229,10 +229,11 @@ integer,  allocatable :: boundaryEdge(:,:)
 integer,  allocatable :: boundaryVertex(:,:)
 integer,  allocatable :: maxLevelCell(:)
 
-integer               :: model_size      ! the state vector length
-type(time_type)       :: model_timestep  ! smallest time to adv model
-real(r8), allocatable :: ens_mean(:)     ! may be needed for forward ops
-
+integer               :: model_size          ! the state vector length
+type(time_type)       :: model_timestep      ! smallest time to adv model
+real(r8), allocatable :: ens_mean(:)         ! may be needed for forward ops
+logical               :: global_grid=.true. ! true = the grid is doubly periodic with no holes
+logical               :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
 
 !------------------------------------------------------------------
 ! The model analysis manager namelist variables
@@ -395,14 +396,23 @@ do kloc=1, nCells
  enddo
 enddo
 
-! FIXME: Currently assuming that each edge has 2 neighbour cells.  This will not be the case
-!        in the ocean, so we'd need to do some checking here and further refinement.
-!        zEdgeFace needs to be initialized.
+! FIXME: This code is supposed to check whether an edge has 2 neighbours or 1 neighbour and then
+!        compute the height accordingly.  HOWEVER, the array cellsOnEdge does not change with 
+!        depth, but it should as an edge may have 2 neighbour cells at the top but not at depth.
 do kloc=1, nEdges
  do iloc=1, nVertLevels
    cel1 = cellsOnEdge(1,kloc)
    cel2 = cellsOnEdge(2,kloc)
-   zEdgeCenter(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
+   if (cel1>0 .and. cel2>0) then
+      zEdgeCenter(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
+   else if (cel1>0) then
+      zEdgeCenter(iloc,kloc) = zGridCenter(iloc,cel1)
+   else if (cel2>0) then
+      zEdgeCenter(iloc,kloc) = zGridCenter(iloc,cel2)
+   else  !this is bad...
+      write(string1,*)'Edge ',kloc,' at vertlevel ',iloc,' has no neighbouring cells!'
+      call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
+   endif
  enddo
 enddo
               
@@ -543,6 +553,20 @@ if ( debug > 0 .and. do_output()) then
                                           nCells, nVertices, nVertLevels
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
+  if ( global_grid ) then
+     write(logfileunit, *)'static_init_model: grid is a global grid '
+     write(     *     , *)'static_init_model: grid is a global grid '
+  else
+     write(logfileunit, *)'static_init_model: grid has boundaries '
+     write(     *     , *)'static_init_model: grid has boundaries ' 
+  endif
+  if ( all_levels_exist_everywhere ) then
+     write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
+     write(     *     , *)'static_init_model: all cells have same number of vertical levels '
+  else
+     write(logfileunit, *)'static_init_model: cells have varying number of vertical levels ' 
+     write(     *     , *)'static_init_model: cells have varying number of vertical levels '
+  endif
 endif
 
 allocate( ens_mean(model_size) )
@@ -611,7 +635,7 @@ kloc = myindx - (iloc-1)*nzp   ! vertical level index
 ! the zGrid array contains the location of the cell top and bottom faces, so it has one 
 ! more value than the number of cells in each column.  for locations of cell centers
 ! you have to take the midpoint of the top and bottom face of the cell.
-
+! FIXME: zEdgeFace array not filled yet.
 if (progvar(nf)%numedges /= MISSING_I) then
    if ( progvar(nf)%ZonHalf ) then
       height = zEdgeCenter(kloc,iloc)
@@ -2695,11 +2719,14 @@ call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
       'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
 
 ! Get the boundary information if available. 
+! Assuming the existence of this variable is sufficient to determine if
+! the grid is defined everywhere or not.
 
 if ( nf90_inq_varid(ncid, 'boundaryEdge', VarID) == NF90_NOERR ) then
    allocate(boundaryEdge(nVertLevels,nEdges))
    call nc_check(nf90_get_var( ncid, VarID, boundaryEdge), &
       'get_grid', 'get_var boundaryEdge '//trim(grid_definition_filename))
+   global_grid = .false.
 endif
 
 if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
@@ -2712,6 +2739,7 @@ if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
    allocate(maxLevelCell(nCells))
    call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
       'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
+   all_levels_exist_everywhere = .false.
 endif
 
 call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
