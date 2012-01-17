@@ -45,6 +45,7 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_SURFACE_PRESSURE,   &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
+                             KIND_EDGE_NORMAL_SPEED,  &
                              KIND_TEMPERATURE,        &
                              KIND_U_WIND_COMPONENT,   &
                              KIND_V_WIND_COMPONENT,   &
@@ -200,13 +201,24 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 ! scalar grid positions
 
+! FIXME: we read in a lot of metadata about the grids.  if space becomes an
+! issue we could consider reading in only the x,y,z arrays for all the items
+! plus the radius, and then compute the lat/lon for locations needed by 
+! get_state_meta_data() on demand.  most of the computations we need to do
+! are actually easier in xyz coords (no issue with poles).
+
+! FIXME: it may be desirable to read in xCell(:), yCell(:), zCell(:)
+! to keep from having to compute them on demand, especially since we
+! have converted the radian lat/lon of the cell centers into degrees.
+! we have to convert back, then take a few sin and cos to get xyz.
+! time/space/accuracy tradeoff here.
 
 real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
 real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
-real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees)
-real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees)
-real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
-real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
+real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
+real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
+real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
+real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
 real(r8), allocatable :: zGridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
 real(r8), allocatable :: zGridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
 
@@ -232,7 +244,7 @@ integer,  allocatable :: maxLevelCell(:)
 integer               :: model_size          ! the state vector length
 type(time_type)       :: model_timestep      ! smallest time to adv model
 real(r8), allocatable :: ens_mean(:)         ! may be needed for forward ops
-logical               :: global_grid=.true. ! true = the grid is doubly periodic with no holes
+logical               :: global_grid = .true. ! true = the grid covers the sphere with no holes
 logical               :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
 
 !------------------------------------------------------------------
@@ -815,11 +827,12 @@ integer,             intent(out) :: istatus
 ! Local storage
 
 real(r8) :: loc_array(3), llon, llat, lheight, fract, v_interp
-integer  :: i, j, ivar, ier, lower, upper
+integer  :: i, j, ivar, ier, lower, upper, this_kind
 integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
 real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp
 integer  :: tri_indices(3), base_offset(num_kinds)
+logical  :: using_wind_edges
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -831,26 +844,35 @@ if ( .not. module_initialized ) call static_init_model
 interp_vals(:) = MISSING_R8     ! the DART bad value flag
 istatus = 99                ! unknown error
 
-! see if all variable kinds are in the state vector.  this sets an
+! see if all observation kinds are in the state vector.  this sets an
 ! error code and returns without a fatal error if any answer is no.
-! one exception:  if the vertical location is specified in pressure
+! exceptions:  if the vertical location is specified in pressure
 ! we end up computing the sensible temperature as part of converting
 ! to height (meters), so if the kind to be computed is sensible temp
 ! (which is not in state vector; potential temp is), go ahead and
 ! say yes, we know how to compute it.  if the vert is any other units
 ! then fail and let the calling code call in for the components
-! it needs to compute sensible temp itself.
-do i=1, num_kinds
+! it needs to compute sensible temp itself.  also, if the obs is a
+! wind (or ocean current) component, and the edge normal speeds are
+! in the state vector, we can do it.
+using_wind_edges = .false.
+oktointerp: do i=1, num_kinds
    ivar = get_progvar_index_from_kind(obs_kinds(i))
    if (ivar <= 0) then
-      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) then
-         continue;
-      else
+      ! exceptions 1 and 2:
+      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) cycle oktointerp
+      if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) then
+         ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
+         if (ivar > 0) then
+            using_wind_edges = .true.
+            cycle oktointerp
+         endif
+      endif
+
          istatus = 88            ! this kind not in state vector
          return
      endif
-   endif
-enddo
+enddo oktointerp
 
 ! Not prepared to do w interpolation at this time
 do i=1, num_kinds
@@ -870,10 +892,12 @@ if (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 
 
 ! Find the start and end offsets for these fields in the state vector x(:)
-! Call terminates if any obs_kind is not found
 do i=1, num_kinds
    if (obs_kinds(i) == KIND_TEMPERATURE) then
       base_offset(i) = 0  ! this won't be used in this case
+   elseif ((obs_kinds(i) == KIND_U_WIND_COMPONENT .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) &
+            .and. using_wind_edges) then
+      call get_index_range(KIND_EDGE_NORMAL_SPEED, base_offset(i))
    else
       call get_index_range(obs_kinds(i), base_offset(i))
    endif
@@ -881,25 +905,29 @@ enddo
 
 !  if (debug > 2) print *, 'base offset now ', base_offset(1)
 
-! FIXME: this needs to play well with multiple types in the kinds list
+! FIXME: this needs to play well with multiple types in the kinds list.
 ! for now do only the first one.  if 'u' is part of the state vector
 ! and if they are asking for U/V components, use the new RBF code.
 ! if u isn't in the state vector, default to trying to interpolate
 ! in the reconstructed U/V components at the cell centers.
-if ((obs_kinds(1) == KIND_U_WIND_COMPONENT) .or. &
-    (obs_kinds(1) == KIND_V_WIND_COMPONENT)) then
-   do i=1, num_kinds
+
+do i=1, num_kinds
+   if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. &
+       (obs_kinds(i) == KIND_V_WIND_COMPONENT)) then
       ivar = get_index_from_varname('u')
       if (ivar > 0) then
-         if (obs_kinds(1) == KIND_U_WIND_COMPONENT) then
-            call compute_u_with_rbf(x, location, .TRUE., interp_vals(1), istatus)
+         if (obs_kinds(i) == KIND_U_WIND_COMPONENT) then
+            call compute_u_with_rbf(x, location, .TRUE., interp_vals(i), istatus)
          else
-            call compute_u_with_rbf(x, location, .FALSE., interp_vals(1), istatus)
+            call compute_u_with_rbf(x, location, .FALSE., interp_vals(i), istatus)
          endif
          return
      endif
-   enddo
-endif
+   elseif (obs_kinds(i) /= KIND_TEMPERATURE) then
+      ivar = get_progvar_index_from_kind(obs_kinds(i))
+      call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
+   endif
+enddo
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
@@ -2859,6 +2887,7 @@ if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
    allocate(boundaryVertex(nVertLevels,nVertices))
    call nc_check(nf90_get_var( ncid, VarID, boundaryVertex), &
       'get_grid', 'get_var boundaryVertex '//trim(grid_definition_filename))
+   global_grid = .false.
 endif
 
 if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
@@ -4053,7 +4082,7 @@ end subroutine find_height_bounds
 
 !------------------------------------------------------------------
 
-subroutine find_vert_level(x, loc, ivar, lower, upper, fract, ier)
+subroutine find_vert_level(x, loc, oncenters, lower, upper, fract, ier)
 
 ! given a location and var types, return the two level numbers that 
 ! enclose the given vertical value plus the fraction between them.   
@@ -4066,18 +4095,17 @@ subroutine find_vert_level(x, loc, ivar, lower, upper, fract, ier)
 
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: ivar
+logical,             intent(in)  :: oncenters
 integer,             intent(out) :: lower, upper
 real(r8),            intent(out) :: fract
 integer,             intent(out) :: ier
 
 real(r8) :: lat, lon, vert, tmp(3)
 integer  :: verttype, cellid, edgeid
-logical  :: isedge  ! .not. isedge means iscell
 integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
-! ok - the plan is to take in: the index into the progvar structure,
-! the location so we can extract the vert value and which vert flag.
+! the plan is to take in: whether this var is on cell centers or edges,
+! and the location so we can extract the vert value and which vert flag.
 ! compute and return the lower and upper index level numbers that
 ! enclose this vert, along with the fract between them.  ier is set
 ! in case of error (e.g. outside the grid, on dry land, etc).
@@ -4137,13 +4165,6 @@ endif
 ! ok, now we need to know where we are in the grid for heights or pressures
 ! as the vertical coordinate.
 
-! if we have a cell count, this variables is cell based.
-! if we don't, then it's edge based.
-if (progvar(ivar)%numcells /= MISSING_I) then
-   isedge = .false.
-else
-   isedge = .true.
-endif
 
 ! find the cell/edge that contains this point.
 cellid = find_closest_cell_center(lat, lon)
@@ -4151,7 +4172,7 @@ if (.not. inside_cell(cellid, lat, lon)) then
    ier = 13   
    return
 endif
-if (isedge) edgeid = find_closest_edge(cellid, lat, lon)
+if (.not. oncenters) edgeid = find_closest_edge(cellid, lat, lon)
 
 ! Vertical interpolation for pressure coordinates
 if(vert_is_pressure(loc) ) then 
@@ -4172,12 +4193,11 @@ endif
 if(vert_is_height(loc)) then
    ! For height, can do simple vertical search for interpolation for now
    ! Get the lower and upper bounds and fraction for each column
-   if (isedge) then
-      ! FIXME: needs to be zgridEdges(), not centers, using the edgeid we have
+   if (oncenters) then
       call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
                               lower, upper, fract, ier)
    else
-      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+      call find_height_bounds(vert, nVertLevels, zgridEdge(:, edgeid), &
                               lower, upper, fract, ier)
    endif
    return
@@ -4753,16 +4773,147 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-! FIXME: we could pass in the lower vert level here instead of
-! computing it.  lat/lon/vert could/should be packaged as a
-! location type.
+! FIXME: the plan is to linearly interpolate each location in 
+! the vertical first, then do the horizontal interpolation.
+! i'm working on it.
 
-! FIXME: we need to do this on level N, then N+1, then do a
-! linear interpolation in the vertical.  that is NOT handled yet.
+subroutine compute_scalar_with_barycentric(x, loc, ival, dval, ier)
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in)  :: loc
+integer,             intent(in)  :: ival
+real(r8),            intent(out) :: dval
+integer,             intent(out) :: ier
 
-! FIXME: we also need the actual height (in m) of the level
-! to adjust the xyz surface vector to be the actual elevation
-! of the edge at that level.
+
+integer, parameter :: listsize = 30 
+integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid
+real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
+real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3)
+integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
+real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
+integer  :: verttype, lower, upper, c(3), vindex, v, vp1
+logical  :: inside, foundit
+
+
+! unpack the location into local vars
+tmp = get_location(loc)
+lon  = tmp(1)
+lat  = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+
+
+cellid = find_closest_cell_center(lat, lon)
+c(1) = cellid
+
+if (on_boundary(cellid)) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+! collect the neighboring cell ids and vertex numbers
+nedges = nEdgesOnCell(cellid)
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   if (cellsOnEdge(1, edgeid) /= cellid) then
+      neighborcells(i) = cellsOnEdge(1, edgeid)
+   else
+      neighborcells(i) = cellsOnEdge(2, edgeid)
+   endif
+   verts(i) = verticesOnCell(i, cellid) 
+enddo
+
+! closest vertex to given point.
+closest_vert = closest_vertex_ll(cellid, lat, lon)
+
+! collect the neighboring cell ids and vertex numbers
+! also note which index is the closest vert and start
+! search there.
+vindex = 1
+nedges = nEdgesOnCell(cellid)
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   if (cellsOnEdge(1, edgeid) /= cellid) then
+      neighborcells(i) = cellsOnEdge(1, edgeid)
+   else
+      neighborcells(i) = cellsOnEdge(2, edgeid)
+   endif
+   verts(i) = verticesOnCell(i, cellid) 
+   if (verts(i) == closest_vert) vindex = i
+enddo
+
+! get the cartesian coordinates in the cell plane for the closest center
+call latlon_to_xyz(lat, lon, t1(1), t1(2), t1(3))
+
+! and the rest of the centers
+do i = 1, nedges
+   call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
+      xdata(i), ydata(i), zdata(i))
+
+enddo
+
+! and the observation point
+call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+
+! find the cell-center-tri that encloses the obs point
+! figure out which way vertices go around cell?
+foundit = .false.
+findtri: do i=vindex, vindex+nedges
+   v = mod(vindex, nedges)
+   vp1 = mod(vindex+1, nedges)
+   t2(1) = xdata(v)
+   t2(2) = ydata(v)
+   t2(3) = zdata(v)
+   t3(1) = xdata(vp1)
+   t3(2) = ydata(vp1)
+   t3(3) = zdata(vp1)
+   call inside_triangle(t1, t2, t3, r, inside, p)
+   if (inside) then
+      ! p is the xyz of the intersection point in this plane
+      ! t2 and t3 are corners, v and vp1 are vert indices
+      ! which are same indices for cell centers
+      c(2) = v
+      c(3) = vp1
+      foundit = .true.
+      exit findtri  
+   endif
+enddo findtri
+if (.not. foundit) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+! need vert index for the vertical level
+call find_vert_level(x, loc, .true., lower, upper, fract, ier)
+
+! get the starting index in the state vector
+index1 = progvar(ival)%index1
+
+! go around triangle and interpolate in the vertical
+! t1, t2, t3 are the xyz of the cell centers
+! c(3) are the cell ids
+do i = 1, 3
+   lowval(i) = x(index1 + (c(i)-1) * nCells + lower-1)
+   uppval(i) = x(index1 + (c(i)-1) * nCells + upper-1)
+   if (vert_is_pressure(loc)) then
+      fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
+   else
+      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
+   endif
+enddo
+
+! now have vertically interpolated values at cell centers.
+! get weights and compute value at requested point.
+
+dval = 0.0_r8   ! FIXME: this is the return value
+
+ier = 0
+
+end subroutine compute_scalar_with_barycentric
+
+!------------------------------------------------------------
 
 subroutine compute_u_with_rbf(x, loc, zonal, uval, ier)
 real(r8),            intent(in)  :: x(:)
@@ -4772,7 +4923,7 @@ real(r8),            intent(out) :: uval
 integer,             intent(out) :: ier
 
 
-integer, parameter :: listsize = 15
+integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
 logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
@@ -4812,6 +4963,10 @@ endif
 ! normalDirectionData == edgeNormalVectors
 ! velocitydata = U field
 
+! need vert index for the vertical level
+call find_vert_level(x, loc, .false., lower, upper, fract, ier)
+if (ier /= 0) return
+
 progindex = get_index_from_varname('u')
 if (progindex < 0) then
    ! cannot compute u if it isn't in the state vector
@@ -4821,10 +4976,11 @@ if (progindex < 0) then
 endif
 index1 = progvar(progindex)%index1
 
-! need vert index for the vertical level
-call find_vert_level(x, loc, progindex, lower, upper, fract, ier)
-
 do i = 1, nedges
+  if (edgelist(i) > size(xEdge)) then
+    print *, i, edgelist(i), size(xEdge)
+    stop
+  endif
    xdata(i) = xEdge(edgelist(i))
    ydata(i) = yEdge(edgelist(i))
    zdata(i) = zEdge(edgelist(i))
@@ -4833,13 +4989,14 @@ do i = 1, nedges
    ! the xyz of the edges up at the right vertical level.
    ! we'll have to compute that and add it in here.
 
-   ! FIXME: this should be changed to be (3, edgeid) instead
-   !  of (edgeid, 3) to be more natural in the fortran storage order.
-
    do j=1, 3
-      edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
+      edgenormals(i, j) = edgeNormalVectors(j, edgelist(i))
    enddo
 
+!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nVertLevels, lower
+!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nVertLevels, upper
+!print *, 'totals = ', index1 + (edgelist(i)-1) * nVertLevels + lower-1, &
+!                      index1 + (edgelist(i)-1) * nVertLevels + upper-1
    lowval = x(index1 + (edgelist(i)-1) * nVertLevels + lower-1)
    uppval = x(index1 + (edgelist(i)-1) * nVertLevels + upper-1)
    if (vert_is_pressure(loc)) then
@@ -4893,13 +5050,7 @@ integer,  intent(out) :: nedges, edge_list(:)
 ! given an arbitrary lat/lon location, find the edges of the
 ! cells that share the nearest vertex.
 
-logical, save :: search_initialized = .false.
 integer :: cellid, vertexid
-
-if (.not. search_initialized) then
-   call init_closest_center()
-   search_initialized = .true.
-endif
 
 ! find the cell id that has a center point closest
 ! to the given point.
@@ -4913,8 +5064,8 @@ endif
 
 ! inside this cell, find the vertex id that the point
 ! is closest to.
-vertexid = closest_vertex(cellid, lat, lon)
-if (vertexid < 0) then
+vertexid = closest_vertex_ll(cellid, lat, lon)
+if (vertexid <= 0) then
    ! call error handler?  unexpected
    nedges = 0
    edge_list(:) = -1
@@ -4966,6 +5117,13 @@ integer               :: find_closest_cell_center
 type(location_type) :: pointloc
 integer :: i, closest_cell, num_close
 real(r8) :: closest_dist, dist
+logical, save :: search_initialized = .false.
+
+! do this exactly once.
+if (.not. search_initialized) then
+   call init_closest_center()
+   search_initialized = .true.
+endif
 
 pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
 
@@ -5029,7 +5187,7 @@ closest_dist = 9.0e9  ! something large in radians
 nedges = nEdgesOnCell(cellid)
 do i=1, nedges
    edgeid = edgesOnCell(i, cellid)
-   edgeloc = set_location(lonEdge(edgeid)*rad2deg, latEdge(edgeid)*rad2deg, 0.0_r8, VERTISSURFACE)
+   edgeloc = set_location(lonEdge(edgeid), latEdge(edgeid), 0.0_r8, VERTISSURFACE)
    dist = get_dist(pointloc, edgeloc, no_vert = .true.)
    if (dist < closest_dist) then
       closest_dist = dist
@@ -5050,7 +5208,120 @@ end function find_closest_edge
 
 !------------------------------------------------------------
 
+function on_boundary(cellid)
+
+! use the surface (level 1) to determine if any edges (or vertices?)
+! are on the boundary, and return true if so.   if the global flag
+! is set, skip all code and return false immediately.
+
+integer,  intent(in)  :: cellid
+logical               :: on_boundary
+
+! do this completely with topology of the grid.  if any of
+! the cell edges are marked as boundary edges, return no.
+! otherwise return yes.
+
+integer :: nedges, i, edgeid, vertical
+
+if (global_grid) then
+   on_boundary = .false.
+   return
+endif
+
+! how many edges (same # for verts) to check
+nedges = nEdgesOnCell(cellid)
+
+! go around the edges and check the boundary array.
+! if any are boundaries, return true.  else, false.
+
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+
+   vertical = 1
+
+   ! FIXME: this is an int array.  is it 0=false,1=true?
+   if (boundaryEdge(edgeid, vertical) > 0) then
+      on_boundary = .true.
+      return
+   endif
+
+enddo
+
+on_boundary = .false.
+
+end function on_boundary
+
+!------------------------------------------------------------
+
 function inside_cell(cellid, lat, lon)
+
+! this function no longer really determines if we are inside
+! the cell or not.  what it does do is determine if the nearest
+! cell is on the grid boundary in any way and says no if it is
+! a boundary.  if we have a flag saying this a global grid, we
+! can avoid doing any work and immediately return true.  for a
+! global atmosphere this is always so; for a regional atmosphere
+! and for the ocean (which does not have cells on land) this is
+! necessary test.
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: lat, lon
+logical               :: inside_cell
+
+! do this completely with topology of the grid.  if any of
+! the cell edges are marked as boundary edges, return no.
+! otherwise return yes.
+
+integer :: nedges, i, edgeid, vert
+real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
+
+! if we're on a global grid, skip all this code
+if (global_grid) then
+   inside_cell = .true.
+   return
+endif
+
+nedges = nEdgesOnCell(cellid)
+
+! go around the edges and check the boundary array.
+! if any are true, return false.  even if we are inside
+! this cell, we aren't going to be able to interpolate it
+! so shorten the code path.
+
+! FIXME: at some point we can be more selective and try to
+! interpolate iff the edges of the three cells which are
+! going to contribute edges to the RBF exist, even if some
+! of the other cell edges are on the boundary.  so this
+! decision means we won't be interpolating some obs that in
+! theory we have enough information to interpolate.  but it
+! is conservative for now - we certainly won't try to interpolate
+! outside the existing grid.
+
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+
+   ! FIXME: this is an int array.  is it 0=false,1=true?
+   ! BOTHER - we need the vert for this and we don't have it
+   ! and in fact can't compute it if the interpolation point
+   ! has pressure or height as its vertical coordinate.
+   vert = 1
+
+   if (boundaryEdge(edgeid, vert) > 0) then
+      inside_cell = .false.
+      return
+   endif
+
+enddo
+
+inside_cell = .true.
+
+end function inside_cell
+
+!------------------------------------------------------------
+
+function inside_cell0(cellid, lat, lon)
+
+! CURRENTLY UNUSED.
 
 ! Determine if the given lat/lon is inside the specified cell:
 ! 1. convert the point to x,y,z on plane defined by cell.
@@ -5061,7 +5332,7 @@ function inside_cell(cellid, lat, lon)
 
 integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
-logical               :: inside_cell
+logical               :: inside_cell0
 
 ! convert lat/lon to cartesian coordinates and then determine
 ! from the xyz vertices if this point is inside the cell.
@@ -5072,7 +5343,7 @@ real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
 ! FIXME: remove this once we've tested the following code.
 ! for the global atmosphere it should always be true.  for
 ! regional atmosphere and for the ocean, it can be false.
-inside_cell = .true.
+inside_cell0 = .true.
 return
 
 ! cartesian location of point on surface of sphere
@@ -5085,14 +5356,14 @@ nverts = nEdgesOnCell(cellid)
 ! the point.  if all the signs are the same it's inside.
 ! (or something like this.)
 do i=1, nverts
-   vertexid = verticesOnCell(cellid, i)
+   vertexid = verticesOnCell(i, cellid)
    v1(1) = xVertex(vertexid)
    v1(2) = yVertex(vertexid)
    v1(3) = zVertex(vertexid)
    if (i /= nverts) then
-      vertexid = verticesOnCell(cellid, i+1)
+      vertexid = verticesOnCell(i+1, cellid)
    else
-      vertexid = verticesOnCell(cellid, 1)
+      vertexid = verticesOnCell(1, cellid)
    endif
    v2(1) = xVertex(vertexid)
    v2(2) = yVertex(vertexid)
@@ -5108,64 +5379,76 @@ do i=1, nverts
    call vector_magnitude(r, m)
 
    if (m < 0.0_r8) then
-      inside_cell = .false.
+      inside_cell0 = .false.
       return
    endif
     
 enddo
 
-inside_cell = .true.
+inside_cell0 = .true.
 
 ! see also:
 ! http://tog.acm.org/resources/GraphicsGems/gems/RayPolygon.c
 
-end function inside_cell
+end function inside_cell0
 
 !------------------------------------------------------------
 
-function closest_vertex(cellid, lat, lon)
+function closest_vertex_ll(cellid, lat, lon)
 
 ! Return the vertex id of the closest one to the given point
-! Determine if the given lat/lon is inside the specified cell
+! this version uses lat/lon.  see closest_vertex_xyz for the
+! cartesian version.
 
 integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
-integer               :: closest_vertex
+integer               :: closest_vertex_ll
 
 integer :: nverts, i, closest, vertexid
 real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
 
-print *, "FIXME: implement closest_vertex"
-stop
+! use the same radius as MPAS for computing this
+call latlon_to_xyz(lat, lon, px, py, pz)
 
-! FIXME: verify that we want the point in the same plane
-! as the cell and not on the surface of the sphere.
+closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
 
-! this computes the point on the sphere, using the radius
-! we believe is used for all the x/y/z arrays in the MPAS file.
-call latlon_to_xyz_on_plane(lat, lon, cellid, px, py, pz)
+end function closest_vertex_ll
+
+!------------------------------------------------------------
+
+function closest_vertex_xyz(cellid, px, py, pz)
+
+! Return the vertex id of the closest one to the given point
+! see closest_vertex_ll for the lat/lon version (which calls this)
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: px, py, pz
+integer               :: closest_vertex_xyz
+
+integer :: nverts, i, closest, vertexid
+real(r8) :: distsq, closest_dist, x, y, z
 
 ! nedges and nverts is same in a closed figure
 nverts = nEdgesOnCell(cellid)
 
 closest_dist = 1.0e38   ! something really big
-closest_vertex = -1
+closest_vertex_xyz = -1
 
 do i=1, nverts
-   vertexid = verticesOnCell(cellid, i)
+   vertexid = verticesOnCell(i, cellid)
    x = xVertex(vertexid)
    y = yVertex(vertexid)
    z = zVertex(vertexid)
    distsq = (x * px) + (y * py) + (z * pz)
    if (distsq < closest_dist) then
       closest_dist = distsq
-      closest_vertex = vertexid
+      closest_vertex_xyz = vertexid
    endif
 enddo
 
-closest_vertex = vertexid
+closest_vertex_xyz = vertexid
 
-end function closest_vertex
+end function closest_vertex_xyz
 
 !------------------------------------------------------------
 
@@ -5184,7 +5467,7 @@ subroutine make_edge_list(vertexid, nedges, edge_list)
 integer, intent(in)  :: vertexid
 integer, intent(out) :: nedges, edge_list(:)
 
-integer :: edgecount, i, c, e, listlen, l, nextedge
+integer :: edgecount, c, e, listlen, l, nextedge
 integer :: ncells, cellid_list(3)
 logical :: found
 
@@ -5195,9 +5478,9 @@ logical :: found
 ! to include the ~12 second-nearest-cell-neighbors, you can
 ! change this code here.
 ncells = 3
-cellid_list(1) = cellsOnVertex(vertexid, 1)
-cellid_list(2) = cellsOnVertex(vertexid, 2)
-cellid_list(3) = cellsOnVertex(vertexid, 3)
+cellid_list(1) = cellsOnVertex(1, vertexid)
+cellid_list(2) = cellsOnVertex(2, vertexid)
+cellid_list(3) = cellsOnVertex(3, vertexid)
 
 ! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
 ! find the edge numbers.  add them to the list, skipping if
@@ -5207,8 +5490,8 @@ cellid_list(3) = cellsOnVertex(vertexid, 3)
 
 
 ! FIXME: the ocean files have:
-!  integer boundaryEdge(nEdges, nVertLevels)
-!  integer boundaryVertex(nVertices, nVertLevels)
+!  integer boundaryEdge(nVertLevels, nEdges)
+!  integer boundaryVertex(nVertLevels, nVertices)
 ! as a first pass, if ANY of the edges or vertices are on
 ! the boundary, punt and return 0 as the edge count.  later
 ! once this is working, decide if a single boundary vertex or
@@ -5217,9 +5500,9 @@ cellid_list(3) = cellsOnVertex(vertexid, 3)
 
 listlen = 0
 do c=1, ncells
-   edgecount = nEdgesOnCell(cellid_list(i))
+   edgecount = nEdgesOnCell(cellid_list(c))
    do e=1, edgecount
-      nextedge = edgesOnCell(cellid_list(i), e)
+      nextedge = edgesOnCell(e, cellid_list(c))
       ! FIXME: 
       ! if (boundaryEdge(nextedge, vert)) then
       !    nedges = 0
@@ -5298,6 +5581,75 @@ end subroutine xyz_to_latlon
 
 !------------------------------------------------------------
 
+subroutine inside_triangle(t1, t2, t3, s, inside, intp)
+
+! given 3 corners of a triangle and an xyz point, compute
+! whether the ray from the origin to s intersects the triangle
+! in the plane defined by the vertices.  sets t/f flag for inside
+! and returns intersection point in xyz if true.
+! Uses the parametric form description from:
+! http://en.wikipedia.org/wiki/Line-plane_intersection
+
+real(r8), intent(in)  :: t1(3), t2(3), t3(3)
+real(r8), intent(in)  :: s(3)
+logical,  intent(out) :: inside
+real(r8), intent(out) :: intp(3)
+
+real(r8) :: p(3,3)       ! first 3 vertices of cell, xyz
+real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
+real(r8) :: mi(3,3)      ! invert of m
+real(r8) :: vm           
+integer  :: i
+
+! put the 3 points into a matrix.
+do i=1, 3
+   p(i,1) = t1(i) 
+   p(i,2) = t2(i)
+   p(i,3) = t3(i)
+enddo
+
+m(1,1) = s(1)
+m(2,1) = p(1,2) - p(1,1)
+m(3,1) = p(1,3) - p(1,1)
+
+m(1,2) = s(2)
+m(2,2) = p(2,2) - p(2,1)
+m(3,2) = p(2,3) - p(2,1)
+
+m(1,3) = s(3)
+m(2,3) = p(3,2) - p(3,1)
+m(3,3) = p(3,3) - p(3,1)
+
+call invert3(m, mi)
+
+v = matmul(mi, s)
+
+! first be sure the triangle intersects the line
+! between [0,1].  then test that v(2) and v(3)
+! are both between [0,1], and that v(2)+v(3) <= 1.0
+! if all true, it is inside tri.
+if ((v(1) >= 0.0_r8 .and. v(1) <= 1.0_r8) .and. &
+    (v(2) >= 0.0_r8 .and. v(2) <= 0.0_r8) .and. &
+    (v(3) >= 0.0_r8 .and. v(3) <= 0.0_r8) .and. &
+    (v(2)+v(3) <= 1.0_r8)) then
+
+   inside = .true.
+   vm = 1.0_r8 - v(1)
+   intp(1) = s(1) * vm
+   intp(2) = s(2) * vm
+   intp(3) = s(3) * vm
+   return
+
+endif
+
+inside = .false.
+p = 0.0_r8
+intp = 0.0_r8
+
+end subroutine inside_triangle
+
+!------------------------------------------------------------
+
 subroutine latlon_to_xyz_on_plane(lat, lon, cellid, x, y, z)
 
 ! Given a lat, lon in degrees, and the id of a cell in the 
@@ -5338,7 +5690,7 @@ endif
 
 ! use first 3 verts to define plane
 do i=1, 3
-   vertexid = verticesOnCell(cellid, i)
+   vertexid = verticesOnCell(i, cellid)
 
    p(1,i) = xVertex(vertexid)
    p(2,i) = yVertex(vertexid)
