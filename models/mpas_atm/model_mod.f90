@@ -1109,15 +1109,16 @@ integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 
 ! for the dimensions and coordinate variables
 integer :: nCellsDimID
-integer :: nEdgesDimID
+integer :: nEdgesDimID, maxEdgesDimID
 integer :: nVerticesDimID
 integer :: VertexDegreeDimID
 integer :: nSoilLevelsDimID
 integer :: nVertLevelsDimID
 integer :: nVertLevelsP1DimID
 
+
 ! for the prognostic variables
-integer :: ivar, VarID
+integer :: ivar, VarID, mpasFileID
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -1136,6 +1137,8 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
 integer :: myndims
 
 character(len=128) :: filename
+
+real(r8), allocatable, dimension(:)   :: data1d
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1239,6 +1242,9 @@ else
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nEdges', &
           len = nEdges, dimid = nEdgesDimID),'nc_write_model_atts', 'nEdges def_dim '//trim(filename))
 
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='maxEdges', &
+          len = maxEdges, dimid = maxEdgesDimID),'nc_write_model_atts', 'maxEdges def_dim '//trim(filename))
+
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nVertices', &
           len = nVertices, dimid = nVerticesDimID),'nc_write_model_atts', &
                'nVertices def_dim '//trim(filename))
@@ -1267,8 +1273,6 @@ else
    call nc_check(nf90_def_var(ncFileID,name='lonCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'lonCell def_var '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID, VarID, 'type', 'x1d'),  &
-!                'nc_write_model_atts', 'lonCell type '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center longitudes'), &
                  'nc_write_model_atts', 'lonCell long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
@@ -1280,16 +1284,30 @@ else
    call nc_check(nf90_def_var(ncFileID,name='latCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'latCell def_var '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID, VarID, 'type', 'y1d'),  &
-!                'nc_write_model_atts', 'latCell type '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center latitudes'), &
                  'nc_write_model_atts', 'latCell long_name '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
-!                'nc_write_model_atts', 'latCell cartesian_axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
                  'nc_write_model_atts', 'latCell units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
                  'nc_write_model_atts', 'latCell valid_range '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='xCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'xCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center x cartesian coordinates'), &
+                 'nc_write_model_atts', 'xCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='yCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'yCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center y cartesian coordinates'), &
+                 'nc_write_model_atts', 'yCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='zCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'zCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center z cartesian coordinates'), &
+                 'nc_write_model_atts', 'zCell long_name '//trim(filename))
 
    ! Grid vertical information
    call nc_check(nf90_def_var(ncFileID,name='zgrid',xtype=nf90_double, &
@@ -1304,12 +1322,42 @@ else
    call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
                  'nc_write_model_atts', 'zgrid cartesian_axis '//trim(filename))
 
-   ! Grid vertical information
+   ! Vertex Longitudes
+   call nc_check(nf90_def_var(ncFileID,name='lonVertex', xtype=nf90_double, &
+                 dimids=nVerticesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'lonVertex def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'vertex longitudes'), &
+                 'nc_write_model_atts', 'lonVertex long_name '//trim(filename))
+
+   ! Vertex Latitudes
+   call nc_check(nf90_def_var(ncFileID,name='latVertex', xtype=nf90_double, &
+                 dimids=nVerticesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'latVertex def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'vertex latitudes'), &
+                 'nc_write_model_atts', 'latVertex long_name '//trim(filename))
+
+   ! Grid relationship information
+   call nc_check(nf90_def_var(ncFileID,name='nEdgesOnCell',xtype=nf90_int, &
+                 dimids=nCellsDimID ,varid=VarID), &
+                 'nc_write_model_atts', 'nEdgesOnCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid nEdgesOnCell'), &
+                 'nc_write_model_atts', 'nEdgesOnCell long_name '//trim(filename))
+
    call nc_check(nf90_def_var(ncFileID,name='cellsOnVertex',xtype=nf90_int, &
                  dimids=(/ VertexDegreeDimID, nVerticesDimID /) ,varid=VarID), &
                  'nc_write_model_atts', 'cellsOnVertex def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid cellsOnVertex'), &
                  'nc_write_model_atts', 'cellsOnVertex long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='verticesOnCell',xtype=nf90_int, &
+                 dimids=(/ maxEdgesDimID, nCellsDimID /) ,varid=VarID), &
+                 'nc_write_model_atts', 'verticesOnCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid verticesOnCell'), &
+                 'nc_write_model_atts', 'verticesOnCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='areaCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'areaCell def_var '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -1347,7 +1395,7 @@ else
    call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
    !----------------------------------------------------------------------------
-   ! Fill the coordinate variables
+   ! Fill the coordinate variables that DART needs and has locally 
    !----------------------------------------------------------------------------
 
    call nc_check(NF90_inq_varid(ncFileID, 'lonCell', VarID), &
@@ -1365,12 +1413,90 @@ else
    call nc_check(nf90_put_var(ncFileID, VarID, zGridFace ), &
                 'nc_write_model_atts', 'zgrid put_var '//trim(filename))
 
+   call nc_check(NF90_inq_varid(ncFileID, 'nEdgesOnCell', VarID), &
+                 'nc_write_model_atts', 'nEdgesOnCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, nEdgesOnCell ), &
+                'nc_write_model_atts', 'nEdgesOnCell put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'verticesOnCell', VarID), &
+                 'nc_write_model_atts', 'verticesOnCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, verticesOnCell ), &
+                'nc_write_model_atts', 'verticesOnCell put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'cellsOnVertex', VarID), &
+                 'nc_write_model_atts', 'cellsOnVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, cellsOnVertex ), &
+                'nc_write_model_atts', 'cellsOnVertex put_var '//trim(filename))
+
+   !----------------------------------------------------------------------------
+   ! Fill the coordinate variables needed for plotting only.
+   ! DART has not read these in, so we have to read them from the input file
+   ! and parrot them to the DART output file. 
+   !----------------------------------------------------------------------------
+
+   call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
+                 'nc_write_model_atts','open '//trim(grid_definition_filename))
+
+   allocate(data1d(nCells))
+   call nc_check(nf90_inq_varid(mpasFileID, 'xCell', VarID), &
+                 'nc_write_model_atts',     'xCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'xCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'xCell', VarID), &
+                 'nc_write_model_atts',     'xCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'xCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'yCell', VarID), &
+                 'nc_write_model_atts',     'yCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'yCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'yCell', VarID), &
+                 'nc_write_model_atts',     'yCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'yCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'zCell', VarID), &
+                 'nc_write_model_atts',     'zCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'zCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'zCell', VarID), &
+                 'nc_write_model_atts',     'zCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'zCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'areaCell', VarID), &
+                 'nc_write_model_atts',     'areaCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'areaCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'areaCell', VarID), &
+                 'nc_write_model_atts',     'areaCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'areaCell put_var '//trim(filename))
+   deallocate(data1d)
+
+   allocate(data1d(nVertices))
+   call nc_check(nf90_inq_varid(mpasFileID, 'lonVertex', VarID), &
+                 'nc_write_model_atts',     'lonVertex inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'lonVertex get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'lonVertex', VarID), &
+                 'nc_write_model_atts',     'lonVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'lonVertex put_var '//trim(filename))
+   
+   call nc_check(nf90_inq_varid(mpasFileID, 'latVertex', VarID), &
+                 'nc_write_model_atts',     'latVertex inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'latVertex get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'latVertex', VarID), &
+                 'nc_write_model_atts',     'latVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'latVertex put_var '//trim(filename))
+   deallocate(data1d)
+
+   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
 endif
-
-!-------------------------------------------------------------------------------
-! Fill the variables we can
-!-------------------------------------------------------------------------------
-
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open

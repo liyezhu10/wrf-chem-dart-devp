@@ -119,7 +119,9 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
+   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
+                                'RADIOSONDE_U_WIND_COMPONENT',
+                                'RADIOSONDE_V_WIND_COMPONENT',
    /
 
 &assim_model_nml
@@ -132,7 +134,7 @@
    grid_definition_filename     = '../data/mpas_output.2010-10-23_03:00:00.nc'
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 3600,
-   output_state_vector          = .true., 
+   output_state_vector          = .false., 
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
    debug = 8
@@ -265,12 +267,13 @@
 &model_mod_check_nml
    dart_input_file       = 'dart.ics',
    output_file           = 'check_me',
+   destroy_file          = 'replaceable.nc',
    advance_time_present  = .FALSE.,
    verbose               = .FALSE.,
-   test1thru             = 10,
+   test1thru             = 11,
    x_ind                 = 300,
    loc_of_interest       = 240.0, 0.0, 10000.0,
-   kind_of_interest      = 'KIND_TEMPERATURE',
+   kind_of_interest      = 'KIND_U_WIND_COMPONENT',
    interp_test_lonrange  = 0.0, 359.0,
    interp_test_dlon      = 1.0,
    interp_test_latrange  = -89.0, 89.0,

@@ -15,12 +15,12 @@ begin
 
   f = addfile("output.nc","r")
 
-  nEdgesOnCell = f->nEdgesOnCell(:)
+  nEdgesOnCell   = f->nEdgesOnCell(:)
   verticesOnCell = f->verticesOnCell(:,:)
-  lonCell = f->lonCell(:) * r2d
-  latCell = f->latCell(:) * r2d
-  lonVertex = f->lonVertex(:) * r2d
-  latVertex = f->latVertex(:) * r2d
+  lonCell        = f->lonCell(:) * r2d
+  latCell        = f->latCell(:) * r2d
+  lonVertex      = f->lonVertex(:) * r2d
+  latVertex      = f->latVertex(:) * r2d
 
   res                      = True
   res@gsnPaperOrientation  = "portrait"
@@ -53,11 +53,11 @@ begin
   ;    that uses the projection specified above, and over which we
   ;    can draw polygons
   ;
-  h   = f->areaCell(:)
-  sizes = dimsizes(h)
+  h      = f->areaCell(:)
+  sizes  = dimsizes(h)
   nCells = sizes(0)
-  xpoly = new((/6/), "double")
-  ypoly = new((/6/), "double")
+  xpoly  = new((/6/), "double")
+  ypoly  = new((/6/), "double")
   res@cnConstFLabelOn = False
   res@lbLabelBarOn = False
   map = gsn_csm_contour_map(wks,h,res)
@@ -65,14 +65,16 @@ begin
   ; This is the timestep index 
   t = stringtointeger(getenv("T"))
   t = 0
+  copyindex = 0
 
   ;
   ; Set the field to be plotted here
   ;
   pres = True
-  h   = f->qv(t,:,0)
-  minfld = min(h)
-  maxfld = max(h)
+  ; datmat   = f->uReconstructZonal(t,:,0)      for files without copies
+  datmat   = f->uReconstructZonal(t,copyindex,:,0)
+  minfld = min(datmat)
+  maxfld = max(datmat)
   fldrange = maxfld - minfld
   do iCell=0,nCells-1
   do i=0,nEdgesOnCell(iCell)-1
@@ -88,7 +90,7 @@ begin
         end if
      end if
   end do
-  pres@gsFillColor = doubletointeger(198*(h(iCell) - minfld)/fldrange+2)
+  pres@gsFillColor = doubletointeger(198*(datmat(iCell) - minfld)/fldrange+2)
   gsn_polygon(wks,map,xpoly(0:nEdgesOnCell(iCell)-1),ypoly(0:nEdgesOnCell(iCell)-1),pres);
   end do
 
