@@ -717,7 +717,7 @@ integer,             intent(out) :: istatus
 
 ! local storage
 
-integer  :: obs_kinds(3)
+integer  :: obs_kinds(3), ivar
 real(r8) :: values(3)
 
 ! call the normal interpolate code.  if it fails because
@@ -728,6 +728,21 @@ interp_val = MISSING_R8
 istatus    = 888888       ! must be positive (and integer)
 
 obs_kinds(1) = obs_type
+
+! debug only
+if (.false.) then
+   ivar = get_progvar_index_from_kind(obs_kinds(1))
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_DENSITY)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+endif
+
 
 call local_interpolate(x, location, 1, obs_kinds, values, istatus)
 if (istatus /= 88) then
@@ -752,6 +767,7 @@ if (obs_type == KIND_TEMPERATURE) then
    obs_kinds(3) = KIND_VAPOR_MIXING_RATIO
 
    call local_interpolate(x, location, 3, obs_kinds, values, istatus)
+!print *, '1 local interpolate returns istatus = ', istatus
    if (istatus /= 0) then
       ! this is for debugging - when we're confident the code is
       ! returning consistent values and rc codes, both these tests can
@@ -773,6 +789,7 @@ if (obs_type == KIND_TEMPERATURE) then
    return
 endif
 
+!print *, '2 local interpolate returns istatus = ', istatus
 
 ! add other cases here for kinds we want to handle
 ! if (istatus == 88) then
@@ -858,6 +875,7 @@ istatus = 99                ! unknown error
 using_wind_edges = .false.
 oktointerp: do i=1, num_kinds
    ivar = get_progvar_index_from_kind(obs_kinds(i))
+!print *, 'i, ivar = ', i, ivar
    if (ivar <= 0) then
       ! exceptions 1 and 2:
       if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) cycle oktointerp
@@ -923,9 +941,12 @@ do i=1, num_kinds
          endif
          return
      endif
-   elseif (obs_kinds(i) /= KIND_TEMPERATURE) then
+   endif
+   ! new code.  comment this out to drop down into the old code.
+   if (obs_kinds(i) /= KIND_TEMPERATURE) then
       ivar = get_progvar_index_from_kind(obs_kinds(i))
       call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
+      if (istatus /= 0) return
    endif
 enddo
 
@@ -1011,6 +1032,7 @@ endif
    call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
    call get_index_range(KIND_DENSITY, density_base_offset)
    call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+!print *, 'bases: t/rho/v = ', pt_base_offset, density_base_offset, qv_base_offset
    call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
          pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, &
          ltemp, utemp, ier)
@@ -3511,9 +3533,12 @@ end subroutine verify_state_variables
 
 !------------------------------------------------------------------
 
-subroutine dump_progvar(ivar)
+subroutine dump_progvar(ivar, x)
 
- integer, intent(in) :: ivar
+ integer,  intent(in)           :: ivar
+ real(r8), intent(in), optional :: x(:)
+
+! if present, x is a state vector.  dump the data min/max for this var.
 
 !%! type progvartype
 !%!    private
@@ -3576,12 +3601,22 @@ write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
 write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
 write(logfileunit,*) '  clamping    ',progvar(ivar)%clamping
 write(     *     ,*) '  clamping    ',progvar(ivar)%clamping
-write(logfileunit,*) '  range       ',progvar(ivar)%range
-write(     *     ,*) '  range       ',progvar(ivar)%range
+write(logfileunit,*) '  clmp range  ',progvar(ivar)%range
+write(     *     ,*) '  clmp range  ',progvar(ivar)%range
 do i = 1,progvar(ivar)%numdims
    write(logfileunit,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
    write(     *     ,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
 enddo
+
+if (present(x)) then
+   write(logfileunit, * )                 'min/max = ', &
+              minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
+              maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+   write(    *      , * )                 'min/max = ', &
+              minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
+              maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+endif
+
 end subroutine dump_progvar
 
 
@@ -4158,6 +4193,7 @@ if(vert_is_level(loc)) then
    lower = aint(vert)   ! round down
    upper = lower+1
    fract = vert - lower
+!print *, '1 lower, upper = ', lower, upper
    ier = 0
    return
 endif
@@ -4168,6 +4204,7 @@ endif
 
 ! find the cell/edge that contains this point.
 cellid = find_closest_cell_center(lat, lon)
+!print *, 'found closest cell center to ', lon, lat, ' which is ', cellid
 if (.not. inside_cell(cellid, lat, lon)) then
    ier = 13   
    return
@@ -4181,10 +4218,12 @@ if(vert_is_pressure(loc) ) then
    call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
    call get_index_range(KIND_DENSITY, density_base_offset)
    call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+!print *, '2bases: t/rho/v = ', pt_base_offset, density_base_offset, qv_base_offset
    call find_pressure_bounds2(x, vert, cellid, nVertLevels, &
          pt_base_offset, density_base_offset, qv_base_offset,  &
          lower, upper, fract, ier)
-   ier = 0
+
+!print *, '2 lower, upper, ier = ', lower, upper, ier
    return
 endif
 
@@ -4200,6 +4239,7 @@ if(vert_is_height(loc)) then
       call find_height_bounds(vert, nVertLevels, zgridEdge(:, edgeid), &
                               lower, upper, fract, ier)
    endif
+!print *, '3 lower, upper = ', lower, upper
    return
 endif
 
@@ -4238,6 +4278,7 @@ ier = 0
 ! Find the lowest pressure
 call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
    cellid, 1, nbounds, pressure(1), gip_err)
+!print *, 'find p bounds2, pr(1) = ', pressure(1), gip_err
 if(gip_err /= 0) then
    ier = gip_err
    return
@@ -4246,6 +4287,7 @@ endif
 ! Get the highest pressure level
 call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
    cellid, nbounds, nbounds, pressure(nbounds), gip_err)
+!print *, 'find p bounds2, pr(n) = ', pressure(nbounds), gip_err
 if(gip_err /= 0) then
    ier = gip_err
    return
@@ -4253,6 +4295,7 @@ endif
 
 ! Check for out of the column range
 if(p > pressure(1) .or. p < pressure(nbounds)) then
+!print *, 'find p bounds2, p, pr(1), pr(n) = ', p, pressure(1), pressure(nbounds)
    ier = 2
    return
 endif
@@ -4261,6 +4304,7 @@ endif
 do i = 2, nbounds
    call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
       cellid, i, nbounds, pressure(i), gip_err)
+!print *, 'find p bounds i, pr(i) = ', i, pressure(i), gip_err
    if(gip_err /= 0) then
       ier = gip_err
       return
@@ -4273,11 +4317,13 @@ do i = 2, nbounds
       ! FIXME: should this be interpolated in log(p)??  yes.
       fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
       !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
+!print *, "looping pressure col, p, pr(i), lower, upper, fract = ", p, pressure(i), lower, upper, fract
       return
    endif
 
 end do
 
+!print *, 'fell off end, find pressure bounds 2'
 ! Shouldn't ever fall off end of loop
 ier = 3
 
@@ -4311,6 +4357,8 @@ if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
    ier = 2
    return
 endif
+!print *, 'offset, pt, dens, qv = ', offset, pt, density, qv
+!print *, 'base pt, dens, qv = ', pt_offset, density_offset, qv_offset
 
 ! Get pressure at the cell center
 call compute_full_pressure(pt, density, qv, pressure, tk)
@@ -4355,6 +4403,8 @@ endif
 
 ! Search the list of triangles to see if (lon, lat) is in one
 call get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
+!print *, 'got triangle.  indices = ', indices
+   
 
 if(istatus /= 0) istatus = 2
 
@@ -4788,7 +4838,7 @@ integer,             intent(out) :: ier
 integer, parameter :: listsize = 30 
 integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3)
+real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), junk(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
 real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
 integer  :: verttype, lower, upper, c(3), vindex, v, vp1
@@ -4806,30 +4856,27 @@ verttype = nint(query_location(loc))
 cellid = find_closest_cell_center(lat, lon)
 c(1) = cellid
 
+!print *, 'scalar: asking for ', lon, lat
+!print *, 'scalar: closest center ', c(1), lonCell(c(1)), latCell(c(1))
 if (on_boundary(cellid)) then
    dval = MISSING_R8
    ier = 11
    return
 endif
 
-! collect the neighboring cell ids and vertex numbers
-nedges = nEdgesOnCell(cellid)
-do i=1, nedges
-   edgeid = edgesOnCell(i, cellid)
-   if (cellsOnEdge(1, edgeid) /= cellid) then
-      neighborcells(i) = cellsOnEdge(1, edgeid)
-   else
-      neighborcells(i) = cellsOnEdge(2, edgeid)
-   endif
-   verts(i) = verticesOnCell(i, cellid) 
-enddo
-
 ! closest vertex to given point.
 closest_vert = closest_vertex_ll(cellid, lat, lon)
+call xyz_to_latlon(xVertex(closest_vert), yVertex(closest_vert), zVertex(closest_vert), &
+                   junk(1), junk(2))
+!print *, 'scalar: closest vert ', closest_vert, junk(2), junk(1)
 
 ! collect the neighboring cell ids and vertex numbers
-! also note which index is the closest vert and start
-! search there.
+! this 2-step process avoids us having to read in the
+! cellsOnCells() array which i think we only need here.
+! if it comes up in more places, we can give up the space
+! and read it in and then this is a direct lookup.
+! also note which index is the closest vert and later on
+! we can start the triangle search there.
 vindex = 1
 nedges = nEdgesOnCell(cellid)
 do i=1, nedges
@@ -4841,55 +4888,92 @@ do i=1, nedges
    endif
    verts(i) = verticesOnCell(i, cellid) 
    if (verts(i) == closest_vert) vindex = i
-enddo
-
-! get the cartesian coordinates in the cell plane for the closest center
-call latlon_to_xyz(lat, lon, t1(1), t1(2), t1(3))
-
-! and the rest of the centers
-do i = 1, nedges
    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
       xdata(i), ydata(i), zdata(i))
+enddo
 
+do i=1, nedges
+  !print *, 'scalar: neighbor centers ', i, neighborcells(i), lonCell(neighborcells(i)), latCell(neighborcells(i))
+enddo
+do i=1, nedges
+  !print *, 'scalar: neighbor centers ', neighborcells(i), xdata(i), ydata(i), zdata(i)
+enddo
+do i=1, nedges
+   call xyz_to_latlon(xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i)), &
+                      junk(1), junk(2))
+  !print *, 'scalar: cell verts ', verts(i), junk(2), junk(1)
+enddo
+do i=1, nedges
+  !print *, 'scalar: cell verts ', i, verts(i), xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i))
+enddo
+
+!print *, 'scalar: index of closest vert ', vindex
+!print *, 'scalar: neighbor cellids ', neighborcells(1:nedges)
+
+! get the cartesian coordinates in the cell plane for the closest center
+call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
+!print *, 'scalar: xyz center ', t1
+
+
+! and the original edges
+do i = 1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   !print *, 'scalar: edge ', i, latEdge(edgeid), lonEdge(edgeid)
+enddo
+do i = 1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   !print *, 'scalar: edge ', i, xEdge(edgeid), yEdge(edgeid), zEdge(edgeid)
 enddo
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+!print *, 'scalar: obs ', r
 
 ! find the cell-center-tri that encloses the obs point
 ! figure out which way vertices go around cell?
 foundit = .false.
 findtri: do i=vindex, vindex+nedges
-   v = mod(vindex, nedges)
-   vp1 = mod(vindex+1, nedges)
+   v = mod(i, nedges)
+   vp1 = mod(i+1, nedges)
    t2(1) = xdata(v)
    t2(2) = ydata(v)
    t2(3) = zdata(v)
    t3(1) = xdata(vp1)
    t3(2) = ydata(vp1)
    t3(3) = zdata(vp1)
+!print *, 'scalar: checking tri ', c(1), v, vp1
    call inside_triangle(t1, t2, t3, r, inside, p)
+!print *, 'scalar: inside, p ', inside, p
    if (inside) then
       ! p is the xyz of the intersection point in this plane
       ! t2 and t3 are corners, v and vp1 are vert indices
       ! which are same indices for cell centers
       c(2) = v
       c(3) = vp1
+print  *, 'scalar: found it ', v, vp1
       foundit = .true.
       exit findtri  
    endif
 enddo findtri
 if (.not. foundit) then
+!print *, 'scalar: did not find inside any triangle'
    dval = MISSING_R8
    ier = 11
    return
 endif
 
+!print *, 'scalar: 3 cell ids ', c
+
 ! need vert index for the vertical level
 call find_vert_level(x, loc, .true., lower, upper, fract, ier)
+!print *, 'scalar: vert ', lower, upper, fract, ier
+if (ier /= 0) then
+   return
+endif
 
 ! get the starting index in the state vector
 index1 = progvar(ival)%index1
+!print *, 'scalar: index1 ', index1
 
 ! go around triangle and interpolate in the vertical
 ! t1, t2, t3 are the xyz of the cell centers
@@ -4967,6 +5051,8 @@ endif
 call find_vert_level(x, loc, .false., lower, upper, fract, ier)
 if (ier /= 0) return
 
+!print *, 'find_vert_level returns l, u, f = ', lower, upper, fract
+
 progindex = get_index_from_varname('u')
 if (progindex < 0) then
    ! cannot compute u if it isn't in the state vector
@@ -5008,6 +5094,7 @@ enddo
 
 
 cellid = find_closest_cell_center(lat, lon)
+!print *, 'found closest cell, id = ', cellid
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
 call latlon_to_xyz_on_plane(lat, lon, cellid, &
@@ -5119,6 +5206,8 @@ integer :: i, closest_cell, num_close
 real(r8) :: closest_dist, dist
 logical, save :: search_initialized = .false.
 
+real(r8) :: l(3)
+
 ! do this exactly once.
 if (.not. search_initialized) then
    call init_closest_center()
@@ -5133,16 +5222,20 @@ pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
 ! return the cell index number
 
 call loc_get_close_obs(cc_gc, pointloc, 0, cell_locs, dummy, num_close, close_ind)
+!print *, 'num close = ', num_close
 
 closest_cell = -1
-closest_dist = 9.0e9  ! something large
+closest_dist = 1.0e9_r8  ! something large in radians
 do i=1, num_close
+l = get_location(cell_locs(close_ind(i)))
    dist = get_dist(pointloc, cell_locs(close_ind(i)), no_vert = .true.)
+!print *, i, close_ind(i), l(1)*deg2rad, l(2)*deg2rad, dist
    if (dist < closest_dist) then
       closest_dist = dist
       closest_cell = close_ind(i)
    endif
 enddo
+!print *, 'closest ind, dist = ', closest_cell, dist
  
 ! decide what to do if we don't find anything.
 if (closest_cell < 0) then
@@ -5426,7 +5519,7 @@ real(r8), intent(in)  :: px, py, pz
 integer               :: closest_vertex_xyz
 
 integer :: nverts, i, closest, vertexid
-real(r8) :: distsq, closest_dist, x, y, z
+real(r8) :: distsq, closest_dist, x, y, z, dx, dy, dz
 
 ! nedges and nverts is same in a closed figure
 nverts = nEdgesOnCell(cellid)
@@ -5434,19 +5527,21 @@ nverts = nEdgesOnCell(cellid)
 closest_dist = 1.0e38   ! something really big
 closest_vertex_xyz = -1
 
+!print *, 'close: nverts ', nverts
+!print *, 'close: point ', px, py, pz
 do i=1, nverts
    vertexid = verticesOnCell(i, cellid)
-   x = xVertex(vertexid)
-   y = yVertex(vertexid)
-   z = zVertex(vertexid)
-   distsq = (x * px) + (y * py) + (z * pz)
+!print *, 'close: v ', i, xVertex(vertexid), yVertex(vertexid), zVertex(vertexid)
+   dx = xVertex(vertexid) - px
+   dy = yVertex(vertexid) - py
+   dz = zVertex(vertexid) - pz
+   distsq = (dx * dx) + (dy * dy) + (dz * dz)
+!print *, 'close: d ', dx, dy, dx, distsq
    if (distsq < closest_dist) then
       closest_dist = distsq
       closest_vertex_xyz = vertexid
    endif
 enddo
-
-closest_vertex_xyz = vertexid
 
 end function closest_vertex_xyz
 
@@ -5566,13 +5661,12 @@ real(r8), intent(out) :: lat, lon
 
 real(r8) :: rlat, rlon
 
-print *, "FIXME: implement xyz_to_latlon"
-stop
+! right now this is only needed for debugging messages.
+! the arc versions of routines are expensive.
 
-! only do this if we need it.
-
-rlat = 0.0_r8
-rlon = 0.0_r8
+rlat = PI/2.0_r8 - acos(z/radius)
+rlon = atan2(y,x)
+if (rlon < 0) rlon = rlon + PI*2
 
 lat = rlat * rad2deg
 lon = rlon * rad2deg
@@ -5621,8 +5715,12 @@ m(2,3) = p(3,2) - p(3,1)
 m(3,3) = p(3,3) - p(3,1)
 
 call invert3(m, mi)
+!print *, 'inside: m ', m
+!print *, 'inside: mi ', mi
 
-v = matmul(mi, s)
+v = matmul(mi, s) 
+!print *, 'inside: s ', s
+!print *, 'inside: v ', v
 
 ! first be sure the triangle intersects the line
 ! between [0,1].  then test that v(2) and v(3)
@@ -5944,6 +6042,7 @@ real(r8), intent(out) :: tk       ! return sensible temperature to caller
 tk = theta_to_tk(theta, rho, qv)
 pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
 
+!print *, 'compute_full_pressure: ', theta, rho, qv, pressure, tk
 end subroutine compute_full_pressure
 
 
