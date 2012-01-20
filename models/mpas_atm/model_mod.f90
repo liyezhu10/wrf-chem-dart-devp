@@ -304,6 +304,9 @@ integer :: triangle_start(num_reg_x, num_reg_y)
 integer :: triangle_num  (num_reg_x, num_reg_y) = 0
 integer, allocatable :: triangle_list(:)
 
+! FIXME: remove this once code working. for writing debug output only
+!integer :: debugunit = 77
+
 contains
 
 !==================================================================
@@ -586,6 +589,8 @@ allocate( ens_mean(model_size) )
 ! Initialize the interpolation data structures
 call init_interp()
 
+! FIXME: remove this
+!open(unit=debugunit, file="bob", action="write", recl=512)
 
 end subroutine static_init_model
 
@@ -4856,8 +4861,8 @@ verttype = nint(query_location(loc))
 cellid = find_closest_cell_center(lat, lon)
 c(1) = cellid
 
-!print *, 'scalar: asking for ', lon, lat
-!print *, 'scalar: closest center ', c(1), lonCell(c(1)), latCell(c(1))
+!write(debugunit, *) 'scalar: asking for ', lon, lat
+!write(debugunit, *) 'scalar: closest center ', c(1), lonCell(c(1)), latCell(c(1))
 if (on_boundary(cellid)) then
    dval = MISSING_R8
    ier = 11
@@ -4868,7 +4873,7 @@ endif
 closest_vert = closest_vertex_ll(cellid, lat, lon)
 call xyz_to_latlon(xVertex(closest_vert), yVertex(closest_vert), zVertex(closest_vert), &
                    junk(1), junk(2))
-!print *, 'scalar: closest vert ', closest_vert, junk(2), junk(1)
+!write(debugunit, *) 'scalar: closest vert ', closest_vert, junk(2), junk(1)
 
 ! collect the neighboring cell ids and vertex numbers
 ! this 2-step process avoids us having to read in the
@@ -4893,57 +4898,57 @@ do i=1, nedges
 enddo
 
 do i=1, nedges
-  !print *, 'scalar: neighbor centers ', i, neighborcells(i), lonCell(neighborcells(i)), latCell(neighborcells(i))
+  !write(debugunit, *) 'scalar: neighbor centers ', i, neighborcells(i), lonCell(neighborcells(i)), latCell(neighborcells(i))
 enddo
 do i=1, nedges
-  !print *, 'scalar: neighbor centers ', neighborcells(i), xdata(i), ydata(i), zdata(i)
+  !write(debugunit, *) 'scalar: neighbor centers ', neighborcells(i), xdata(i), ydata(i), zdata(i)
 enddo
 do i=1, nedges
    call xyz_to_latlon(xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i)), &
                       junk(1), junk(2))
-  !print *, 'scalar: cell verts ', verts(i), junk(2), junk(1)
+  !write(debugunit, *) 'scalar: cell verts ', verts(i), junk(2), junk(1)
 enddo
 do i=1, nedges
-  !print *, 'scalar: cell verts ', i, verts(i), xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i))
+  !write(debugunit, *) 'scalar: cell verts ', i, verts(i), xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i))
 enddo
 
-!print *, 'scalar: index of closest vert ', vindex
-!print *, 'scalar: neighbor cellids ', neighborcells(1:nedges)
+!write(debugunit, *) 'scalar: index of closest vert ', vindex
+!write(debugunit, *) 'scalar: neighbor cellids ', neighborcells(1:nedges)
 
 ! get the cartesian coordinates in the cell plane for the closest center
 call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
-!print *, 'scalar: xyz center ', t1
+!write(debugunit, *) 'scalar: xyz center ', t1
 
 
 ! and the original edges
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
-   !print *, 'scalar: edge ', i, latEdge(edgeid), lonEdge(edgeid)
+   !write(debugunit, *) 'scalar: edge ', i, latEdge(edgeid), lonEdge(edgeid)
 enddo
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
-   !print *, 'scalar: edge ', i, xEdge(edgeid), yEdge(edgeid), zEdge(edgeid)
+   !write(debugunit, *) 'scalar: edge ', i, xEdge(edgeid), yEdge(edgeid), zEdge(edgeid)
 enddo
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
-!print *, 'scalar: obs ', r
+!write(debugunit, *) 'scalar: obs ', r
 
 ! find the cell-center-tri that encloses the obs point
 ! figure out which way vertices go around cell?
 foundit = .false.
 findtri: do i=vindex, vindex+nedges
-   v = mod(i, nedges)
-   vp1 = mod(i+1, nedges)
+   v = mod(i-1, nedges)
+   vp1 = mod(i, nedges)
    t2(1) = xdata(v)
    t2(2) = ydata(v)
    t2(3) = zdata(v)
    t3(1) = xdata(vp1)
    t3(2) = ydata(vp1)
    t3(3) = zdata(vp1)
-!print *, 'scalar: checking tri ', c(1), v, vp1
+!write(debugunit, *) 'scalar: checking tri ', c(1), v, vp1
    call inside_triangle(t1, t2, t3, r, inside, p)
-!print *, 'scalar: inside, p ', inside, p
+!write(debugunit, *) 'scalar: inside, p ', inside, p
    if (inside) then
       ! p is the xyz of the intersection point in this plane
       ! t2 and t3 are corners, v and vp1 are vert indices
@@ -4956,7 +4961,7 @@ print  *, 'scalar: found it ', v, vp1
    endif
 enddo findtri
 if (.not. foundit) then
-!print *, 'scalar: did not find inside any triangle'
+!write(debugunit, *) 'scalar: did not find inside any triangle'
    dval = MISSING_R8
    ier = 11
    return
@@ -5675,73 +5680,87 @@ end subroutine xyz_to_latlon
 
 !------------------------------------------------------------
 
-subroutine inside_triangle(t1, t2, t3, s, inside, intp)
+subroutine inside_triangle(t0, t1, t2, s, inside, intp)
 
 ! given 3 corners of a triangle and an xyz point, compute
 ! whether the ray from the origin to s intersects the triangle
 ! in the plane defined by the vertices.  sets t/f flag for inside
 ! and returns intersection point in xyz if true.
-! Uses the parametric form description from:
-! http://en.wikipedia.org/wiki/Line-plane_intersection
 
-real(r8), intent(in)  :: t1(3), t2(3), t3(3)
+! Uses the parametric form description from:
+!  http://en.wikipedia.org/wiki/Line-plane_intersection
+! in this case, point a is the origin (0,0,0) point b is 's',
+! and points 0,1,2 are t0,t1,t2.  the vector [t,u,v] is 'v'.
+
+real(r8), intent(in)  :: t0(3), t1(3), t2(3)
 real(r8), intent(in)  :: s(3)
 logical,  intent(out) :: inside
 real(r8), intent(out) :: intp(3)
 
-real(r8) :: p(3,3)       ! first 3 vertices of cell, xyz
 real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
 real(r8) :: mi(3,3)      ! invert of m
-real(r8) :: vm           
+real(r8) :: scale
 integer  :: i
 
-! put the 3 points into a matrix.
-do i=1, 3
-   p(i,1) = t1(i) 
-   p(i,2) = t2(i)
-   p(i,3) = t3(i)
-enddo
+!write(debugunit, *) 'inside: t0 ', t0
+!write(debugunit, *) 'inside: t1 ', t1
+!write(debugunit, *) 'inside: t2 ', t2
+!write(debugunit, *) 'inside: s  ', s
 
-m(1,1) = s(1)
-m(2,1) = p(1,2) - p(1,1)
-m(3,1) = p(1,3) - p(1,1)
+! try scaling s by 20% to ensure that it cannot be
+! coincident with the plane.  this is probably overkill.
+scale = 1.2_r8
 
-m(1,2) = s(2)
-m(2,2) = p(2,2) - p(2,1)
-m(3,2) = p(2,3) - p(2,1)
+m(1,1) = 0.0_r8 - s(1)*scale
+m(2,1) = t1(1) - t0(1)
+m(3,1) = t2(1) - t0(1)
 
-m(1,3) = s(3)
-m(2,3) = p(3,2) - p(3,1)
-m(3,3) = p(3,3) - p(3,1)
+m(1,2) = 0.0_r8 - s(2)*scale
+m(2,2) = t1(2) - t0(2)
+m(3,2) = t2(2) - t0(2)
+
+m(1,3) = 0.0_r8 - s(3)*scale
+m(2,3) = t1(3) - t0(3)
+m(3,3) = t2(3) - t0(3)
 
 call invert3(m, mi)
-!print *, 'inside: m ', m
-!print *, 'inside: mi ', mi
+!write(debugunit, *) 'inside: m ', m(:,1)
+!write(debugunit, *) 'inside: m ', m(:,2)
+!write(debugunit, *) 'inside: m ', m(:,3)
+!write(debugunit, *) 'inside: mi ', mi(:,1)
+!write(debugunit, *) 'inside: mi ', mi(:,2)
+!write(debugunit, *) 'inside: mi ', mi(:,3)
+m = matmul(m, mi)
+!write(debugunit, *) 'inside: mxmi ', m(:, 1)
+!write(debugunit, *) 'inside: mxmi ', m(:, 2)
+!write(debugunit, *) 'inside: mxmi ', m(:, 3)
 
-v = matmul(mi, s) 
-!print *, 'inside: s ', s
-!print *, 'inside: v ', v
+!write(debugunit, *) 'inside: s ', s
+!write(debugunit, *) 'inside: sscale ', s*scale
+!write(debugunit, *) 'inside: t0 ', t0 
+!write(debugunit, *) 'inside: -t0 ', (-1.0_r8)*t0
+v = matmul(mi, 0.0_r8 - t0) 
+!write(debugunit, *) 'inside: v ', v
 
 ! first be sure the triangle intersects the line
 ! between [0,1].  then test that v(2) and v(3)
 ! are both between [0,1], and that v(2)+v(3) <= 1.0
 ! if all true, it is inside tri.
 if ((v(1) >= 0.0_r8 .and. v(1) <= 1.0_r8) .and. &
-    (v(2) >= 0.0_r8 .and. v(2) <= 0.0_r8) .and. &
-    (v(3) >= 0.0_r8 .and. v(3) <= 0.0_r8) .and. &
+    (v(2) >= 0.0_r8 .and. v(2) <= 1.0_r8) .and. &
+    (v(3) >= 0.0_r8 .and. v(3) <= 1.0_r8) .and. &
     (v(2)+v(3) <= 1.0_r8)) then
 
    inside = .true.
-   vm = 1.0_r8 - v(1)
-   intp(1) = s(1) * vm
-   intp(2) = s(2) * vm
-   intp(3) = s(3) * vm
+   intp(1) = s(1)*scale * v(1)
+   intp(2) = s(2)*scale * v(1)
+   intp(3) = s(3)*scale * v(1)
+!write(debugunit, *) 'inside: intp ', intp
    return
 
 endif
 
 inside = .false.
-p = 0.0_r8
 intp = 0.0_r8
 
 end subroutine inside_triangle
@@ -5891,7 +5910,7 @@ b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
 
 b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
 b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
-b(3,2) = a(3,1)*a(1,3) - a(1,1)*a(3,2)
+b(3,2) = a(3,1)*a(1,2) - a(1,1)*a(3,2)
 
 b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
 b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
