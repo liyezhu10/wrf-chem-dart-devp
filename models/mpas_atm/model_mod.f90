@@ -138,6 +138,7 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
+logical            :: use_new_code = .false.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -147,7 +148,8 @@ namelist /model_nml/             &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    calendar,                     &
-   debug
+   debug,                        &
+   use_new_code
 
 !------------------------------------------------------------------
 ! DART state vector are specified in the input.nml:mpas_vars_nml namelist.
@@ -305,7 +307,7 @@ integer :: triangle_num  (num_reg_x, num_reg_y) = 0
 integer, allocatable :: triangle_list(:)
 
 ! FIXME: remove this once code working. for writing debug output only
-!integer :: debugunit = 77
+integer :: debugunit = 77
 
 contains
 
@@ -550,7 +552,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ( debug > 0 ) call dump_progvar(ivar)
+   !if ( debug > 0 ) call dump_progvar(ivar)
 
 enddo
 
@@ -755,14 +757,17 @@ if (istatus /= 88) then
    ! returning consistent values and rc codes, both these tests can
    ! be removed for speed.  FIXME.
    if (istatus /= 0 .and. values(1) /= MISSING_R8) then
-      write(string1,*) 'interp routine returned a bad status but good value'
-      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+      write(string1,*) 'interp routine returned a bad status but not a MISSING_R8 value'
+      write(string2,*) 'value = ', values(1), ' istatus = ', istatus
+      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate, &
+                         text2=string2)
    endif
    if (istatus == 0 .and. values(1) == MISSING_R8) then
-      write(string1,*) 'interp routine returned a good status but bad value'
+      write(string1,*) 'interp routine returned a good status but set value to MISSING_R8'
       call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
    endif
    interp_val = values(1)
+if (debug > 5) print *, 'returning value ', interp_val
    return
 endif
 
@@ -897,6 +902,14 @@ oktointerp: do i=1, num_kinds
      endif
 enddo oktointerp
 
+!if (using_wind_edges .and. .not. use_new_code) then
+!   call error_handler(E_ERR,'local_interpolation', &
+!          'to use the "u" field on cell edges, use_new_code must be .true.', source, revision, revdate)
+!else if (.not. using_wind_edges .and. use_new_code) then
+!   call error_handler(E_ERR,'local_interpolation', &
+!          'to use the new code "u" must be in the state vector', source, revision, revdate)
+!endif 
+
 ! Not prepared to do w interpolation at this time
 do i=1, num_kinds
    if(obs_kinds(i) == KIND_VERTICAL_VELOCITY) then
@@ -934,9 +947,9 @@ enddo
 ! if u isn't in the state vector, default to trying to interpolate
 ! in the reconstructed U/V components at the cell centers.
 
-do i=1, num_kinds
-   if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. &
-       (obs_kinds(i) == KIND_V_WIND_COMPONENT)) then
+kindloop: do i=1, num_kinds
+   if (((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. &
+       (obs_kinds(i) == KIND_V_WIND_COMPONENT)) .and. use_new_code) then
       ivar = get_index_from_varname('u')
       if (ivar > 0) then
          if (obs_kinds(i) == KIND_U_WIND_COMPONENT) then
@@ -945,15 +958,22 @@ do i=1, num_kinds
             call compute_u_with_rbf(x, location, .FALSE., interp_vals(i), istatus)
          endif
          return
+     !else
+     !   call error_handler(E_ERR,'local_interpolation', &
+     !       'to use the new code "u" must be in the state vector', source, revision, revdate)
      endif
    endif
    ! new code.  comment this out to drop down into the old code.
-   if (obs_kinds(i) /= KIND_TEMPERATURE) then
-      ivar = get_progvar_index_from_kind(obs_kinds(i))
-      call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
-      if (istatus /= 0) return
+   if (use_new_code) then
+      if (obs_kinds(i) /= KIND_TEMPERATURE) then
+         ivar = get_progvar_index_from_kind(obs_kinds(i))
+         call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
+         if (istatus /= 0) return
+         cycle kindloop
+      endif
    endif
-enddo
+enddo kindloop
+if (use_new_code) return
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
@@ -1042,6 +1062,7 @@ endif
          pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, &
          ltemp, utemp, ier)
    if(ier /= 0) then
+      interp_vals = MISSING_R8
       istatus = 17
       return
    endif
@@ -2232,6 +2253,8 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+      print *, trim(varname), minval(data_1d_array), maxval(data_1d_array), &
+                 progvar(ivar)%index1, progvar(ivar)%indexN
       call prog_var_to_vector(data_1d_array, state_vector, ivar)
       deallocate(data_1d_array)
 
@@ -2243,6 +2266,8 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+      print *, trim(varname), minval(data_2d_array), maxval(data_2d_array), &
+                 progvar(ivar)%index1, progvar(ivar)%indexN
       call prog_var_to_vector(data_2d_array, state_vector, ivar)
       deallocate(data_2d_array)
 
@@ -2255,6 +2280,8 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+      print *, trim(varname), minval(data_3d_array), maxval(data_3d_array), &
+                 progvar(ivar)%index1, progvar(ivar)%indexN
       call prog_var_to_vector(data_3d_array, state_vector, ivar)
       deallocate(data_3d_array)
 
@@ -4255,7 +4282,7 @@ end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
-subroutine find_pressure_bounds2(x, p, nbounds, cellid, &
+subroutine find_pressure_bounds2(x, p, cellid, nbounds, &
    pt_base_offset, density_base_offset, qv_base_offset, &
    lower, upper, fract, ier)
 
@@ -4320,9 +4347,13 @@ do i = 2, nbounds
       lower = i - 1
       upper = i
       ! FIXME: should this be interpolated in log(p)??  yes.
-      fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
-      !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
-!print *, "looping pressure col, p, pr(i), lower, upper, fract = ", p, pressure(i), lower, upper, fract
+      if (pressure(i) == pressure(i-1)) then
+         fract = 0.0_r8
+      else
+         fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+         !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
+      endif
+!print *, "looping pr: i, p, pr(i), lower, upper, fract = ", i, p, pressure(i), lower, upper, fract
       return
    endif
 
@@ -4362,8 +4393,8 @@ if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
    ier = 2
    return
 endif
-!print *, 'offset, pt, dens, qv = ', offset, pt, density, qv
-!print *, 'base pt, dens, qv = ', pt_offset, density_offset, qv_offset
+!print *, 'offset: base pt, dens, qv = ', offset, pt_offset, density_offset, qv_offset
+!print *, 'vals: pt, dens, qv = ', pt, density, qv
 
 ! Get pressure at the cell center
 call compute_full_pressure(pt, density, qv, pressure, tk)
@@ -4923,7 +4954,7 @@ call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
 ! and the original edges
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
-   !write(debugunit, *) 'scalar: edge ', i, latEdge(edgeid), lonEdge(edgeid)
+   !write(debugunit, *) 'scalar: edge ', i, lonEdge(edgeid), latEdge(edgeid)
 enddo
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
@@ -4938,8 +4969,8 @@ call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
 ! figure out which way vertices go around cell?
 foundit = .false.
 findtri: do i=vindex, vindex+nedges
-   v = mod(i-1, nedges)
-   vp1 = mod(i, nedges)
+   v = mod(i-1, nedges) + 1
+   vp1 = mod(i, nedges) + 1
    t2(1) = xdata(v)
    t2(2) = ydata(v)
    t2(3) = zdata(v)
@@ -4953,9 +4984,9 @@ findtri: do i=vindex, vindex+nedges
       ! p is the xyz of the intersection point in this plane
       ! t2 and t3 are corners, v and vp1 are vert indices
       ! which are same indices for cell centers
-      c(2) = v
-      c(3) = vp1
-print  *, 'scalar: found it ', v, vp1
+      c(2) = neighborcells(v)
+      c(3) = neighborcells(vp1)
+!print  *, 'scalar: found it ', v, vp1
       foundit = .true.
       exit findtri  
    endif
@@ -4983,9 +5014,10 @@ index1 = progvar(ival)%index1
 ! go around triangle and interpolate in the vertical
 ! t1, t2, t3 are the xyz of the cell centers
 ! c(3) are the cell ids
+!print *, 'cell ids: ', c
 do i = 1, 3
-   lowval(i) = x(index1 + (c(i)-1) * nCells + lower-1)
-   uppval(i) = x(index1 + (c(i)-1) * nCells + upper-1)
+   lowval(i) = x(index1 + (c(i)-1) * nVertLevels + lower-1)
+   uppval(i) = x(index1 + (c(i)-1) * nVertLevels + upper-1)
    if (vert_is_pressure(loc)) then
       fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
    else
@@ -4996,7 +5028,8 @@ enddo
 ! now have vertically interpolated values at cell centers.
 ! get weights and compute value at requested point.
 
-dval = 0.0_r8   ! FIXME: this is the return value
+! FIXME: for now, use average of cell centers
+dval = sum(fdata) / 3.0_r8
 
 ier = 0
 
@@ -5709,18 +5742,18 @@ integer  :: i
 
 ! try scaling s by 20% to ensure that it cannot be
 ! coincident with the plane.  this is probably overkill.
-scale = 1.2_r8
+scale = 1.0_r8
 
 m(1,1) = 0.0_r8 - s(1)*scale
-m(2,1) = t1(1) - t0(1)
-m(3,1) = t2(1) - t0(1)
+m(1,2) = t1(1) - t0(1)
+m(1,3) = t2(1) - t0(1)
 
-m(1,2) = 0.0_r8 - s(2)*scale
+m(2,1) = 0.0_r8 - s(2)*scale
 m(2,2) = t1(2) - t0(2)
-m(3,2) = t2(2) - t0(2)
+m(2,3) = t2(2) - t0(2)
 
-m(1,3) = 0.0_r8 - s(3)*scale
-m(2,3) = t1(3) - t0(3)
+m(3,1) = 0.0_r8 - s(3)*scale
+m(3,2) = t1(3) - t0(3)
 m(3,3) = t2(3) - t0(3)
 
 call invert3(m, mi)
@@ -6061,7 +6094,7 @@ real(r8), intent(out) :: tk       ! return sensible temperature to caller
 tk = theta_to_tk(theta, rho, qv)
 pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
 
-!print *, 'compute_full_pressure: ', theta, rho, qv, pressure, tk
+!print *, 'compute_full_pressure: ', pressure, theta, rho, qv, tk
 end subroutine compute_full_pressure
 
 
