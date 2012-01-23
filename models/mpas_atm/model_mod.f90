@@ -138,7 +138,7 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
-logical            :: use_new_code = .false.
+logical            :: use_new_code = .true.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -4551,25 +4551,87 @@ end subroutine triangle_interp
 
 !------------------------------------------------------------
 
-subroutine get_barycentric_weights(lon, lat, clons, clats, weights)
+subroutine get_3d_weights(p, v1, v2, v3, weights)
 
-! Computes the barycentric weights for interpolating point (lon, lat) 
-! in a triangle with the given lon and lat corners.
+! Given a point p (x,y,z) inside a triangle, and the (x,y,z)
+! coordinates of the triangle corner points (v1, v2, v3), 
+! find the weights for a barycentric interpolation.  this
+! computation only needs two of the three coordinates, so figure
+! out which quadrant of the sphere the triangle is in and pick
+! the 2 axes which are the least planar:
+!  (x,y) near the poles,
+!  (y,z) near 0 and 180 longitudes near the equator,
+!  (x,z) near 90 and 270 longitude near the equator.
 
-real(r8), intent(in)  :: lon, lat, clons(3), clats(3)
+real(r8), intent(in)  :: p(3)
+real(r8), intent(in)  :: v1(3), v2(3), v3(3)
+real(r8), intent(out) :: weights(3)
+
+real(r8) :: lat, lon
+real(r8) :: cxs(3), cys(3)
+
+! FIXME: this costs - if we already have the lat/lon, just
+! pass them down?
+call xyz_to_latlon(p(1), p(2), p(3), lat, lon)
+
+! above or below 45 in latitude, where -90 < lat < 90:
+if (lat >= 45.0_r8 .or. lat <= -45.0_r8) then
+   cxs(1) = v1(1)
+   cxs(2) = v2(1)
+   cxs(3) = v3(1)
+   cys(1) = v1(2)
+   cys(2) = v2(2)
+   cys(3) = v3(2)
+   call get_barycentric_weights(p(1), p(2), cxs, cys, weights)
+   return
+endif
+
+! nearest 0 or 180 in longitude, where 0 < lon < 360:
+if ( lon <= 45.0_r8 .or. lon >= 315.0_r8 .or. &
+    (lon >= 135.0_r8 .and. lon <= 225.0_r8)) then
+   cxs(1) = v1(2)
+   cxs(2) = v2(2)
+   cxs(3) = v3(2)
+   cys(1) = v1(3)
+   cys(2) = v2(3)
+   cys(3) = v3(3)
+   call get_barycentric_weights(p(2), p(3), cxs, cys, weights)
+   return
+endif
+
+! last option, nearest 90 or 270 in lon:
+cxs(1) = v1(1)
+cxs(2) = v2(1)
+cxs(3) = v3(1)
+cys(1) = v1(3)
+cys(2) = v2(3)
+cys(3) = v3(3)
+call get_barycentric_weights(p(1), p(3), cxs, cys, weights)
+
+end subroutine get_3d_weights
+
+
+!------------------------------------------------------------
+
+subroutine get_barycentric_weights(x, y, cxs, cys, weights)
+
+! Computes the barycentric weights for a 2d interpolation point 
+! (x,y) in a 2d triangle with the given (cxs,cys) corners.
+
+real(r8), intent(in)  :: x, y, cxs(3), cys(3)
 real(r8), intent(out) :: weights(3)
 
 real(r8) :: denom
 
 ! Get denominator
-denom = (clats(2) - clats(3)) * (clons(1) - clons(3)) + &
-   (clons(3) - clons(2)) * (clats(1) - clats(3))
+denom = (cys(2) - cys(3)) * (cxs(1) - cxs(3)) + &
+   (cxs(3) - cxs(2)) * (cys(1) - cys(3))
 
-weights(1) = ((clats(2) - clats(3)) * (lon - clons(3)) + &
-   (clons(3) - clons(2)) * (lat - clats(3))) / denom
+weights(1) = ((cys(2) - cys(3)) * (x - cxs(3)) + &
+   (cxs(3) - cxs(2)) * (y - cys(3))) / denom
 
-weights(2) = ((clats(3) - clats(1)) * (lon - clons(3)) + &
-   (clons(1) - clons(3)) * (lat - clats(3))) / denom
+weights(2) = ((cys(3) - cys(1)) * (x - cxs(3)) + &
+   (cxs(1) - cxs(3)) * (y - cys(3))) / denom
 
 weights(3) = 1.0_r8 - weights(1) - weights(2)
 
@@ -4874,7 +4936,7 @@ integer,             intent(out) :: ier
 integer, parameter :: listsize = 30 
 integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), junk(3)
+real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), junk(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
 real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
 integer  :: verttype, lower, upper, c(3), vindex, v, vp1
@@ -4890,6 +4952,12 @@ verttype = nint(query_location(loc))
 
 
 cellid = find_closest_cell_center(lat, lon)
+if (cellid < 1) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+  
 c(1) = cellid
 
 !write(debugunit, *) 'scalar: asking for ', lon, lat
@@ -5027,9 +5095,17 @@ enddo
 
 ! now have vertically interpolated values at cell centers.
 ! get weights and compute value at requested point.
+call get_3d_weights(r, t1, t2, t3, weights)
+!print *, 'got 3d weights: weights = ', weights
+!print *, 'point loc               = ', r
+!print *, 'corner 1 loc            = ', t1
+!print *, 'corner 2 loc            = ', t2
+!print *, 'corner 3 loc            = ', t3
 
-! FIXME: for now, use average of cell centers
-dval = sum(fdata) / 3.0_r8
+dval = sum(weights * fdata)
+!print *, 'interp data values, low = ', lowval
+!print *, 'interp data values, hi  = ', uppval
+!print *, 'interp corner data      = ', fdata
 
 ier = 0
 
@@ -5132,6 +5208,11 @@ enddo
 
 
 cellid = find_closest_cell_center(lat, lon)
+if (cellid < 1) then
+   uval = MISSING_R8
+   ier = 11
+   return
+endif
 !print *, 'found closest cell, id = ', cellid
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
@@ -5560,6 +5641,7 @@ integer :: nverts, i, closest, vertexid
 real(r8) :: distsq, closest_dist, x, y, z, dx, dy, dz
 
 ! nedges and nverts is same in a closed figure
+!print *, 'cellid = ', cellid
 nverts = nEdgesOnCell(cellid)
 
 closest_dist = 1.0e38   ! something really big

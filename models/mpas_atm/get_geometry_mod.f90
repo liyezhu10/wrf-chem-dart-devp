@@ -76,8 +76,8 @@ module get_geometry_mod
     ! xHat and yHat are a local basis in the plane of the horizontal cell
     ! we arbitrarily choose xHat to point toward the first data point
     rHat = localVerticalUnitVectors
-    normalDotRHat = sum(normalDirectionData(iData,:)*rHat)
-    xHatPlane = normalDirectionData(iData,:) - normalDotRHat*rHat
+    normalDotRHat = sum(normalDirectionData(:,iData)*rHat)
+    xHatPlane = normalDirectionData(:,iData) - normalDotRHat*rHat
     call mpas_unit_vec_in_r3(xHatPlane)
 
     call mpas_cross_product_in_r3(rHat, xHatPlane, yHatPlane)

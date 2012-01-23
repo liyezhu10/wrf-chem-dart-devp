@@ -241,6 +241,7 @@ subroutine elgs (A,N,INDX)
 !
   DO J = 1, N-1
     PI1 = 0.0
+    K = J    ! nsc
     DO I = J, N
       PI = ABS(A(INDX(I),J))/C(INDX(I))
       IF (PI.GT.PI1) THEN

@@ -38,14 +38,14 @@ module get_reconstruct_mod
     integer, intent(in) :: nData
     real(kind=r8), intent(in)    :: xReconstruct, yReconstruct, zReconstruct
     real(kind=r8), dimension(nData), intent(in)    :: xData, yData, zData
-    real(kind=r8), dimension(nData,3), intent(in)  :: normalDirectionData
+    real(kind=r8), dimension(3,nData), intent(in)  :: normalDirectionData
     real(kind=r8), dimension(3,2), intent(in)      :: dataTangentPlane
     real(kind=r8), dimension(3,nData), intent(out) :: coeffs_reconstruct
 
     ! local vars
     real(kind=r8) :: r, cellCenter(3), alpha, tangentPlane(2,3), Reconstruct(3)
     real(kind=r8), allocatable, dimension(:,:) :: dataLocations, &
-      coeffs
+      coeffs, normals
     integer :: iData, nData8
 
 
@@ -54,6 +54,7 @@ module get_reconstruct_mod
 
     allocate(dataLocations(nData,3))
     allocate(coeffs(nData,3))
+    allocate(normals(nData,3))
 
     ! put reconstruct location into a vector
     Reconstruct(1) = xReconstruct
@@ -73,14 +74,17 @@ module get_reconstruct_mod
     enddo
     alpha = alpha/nData
 
+    normals(:,1) = normalDirectionData(1,:)
+    normals(:,2) = normalDirectionData(2,:)
+    normals(:,3) = normalDirectionData(3,:)
+
     tangentPlane(1,:) = dataTangentPlane(:,1)
     tangentPlane(2,:) = dataTangentPlane(:,2)
 
     ! the main call...
     nData8=nData
     call mpas_rbf_interp_func_3D_plane_vec_const_dir_comp_coeffs(nData8, &
-        dataLocations, &
-        normalDirectionData, &
+        dataLocations, normals, &
         Reconstruct, alpha, tangentPlane, coeffs)
       
     do iData=1,nData
@@ -89,6 +93,7 @@ module get_reconstruct_mod
 
     deallocate(dataLocations)
     deallocate(coeffs)
+    deallocate(normals)
 
   end subroutine get_reconstruct_init
 
