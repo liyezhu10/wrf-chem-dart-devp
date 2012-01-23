@@ -5125,7 +5125,7 @@ integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
 logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: edgenormals(listsize, 3)
+real(r8) :: edgenormals(3, listsize)
 real(r8) :: veldata(listsize)
 real(r8) :: xreconstruct, yreconstruct, zreconstruct
 real(r8) :: ureconstructx, ureconstructy, ureconstructz
@@ -5190,7 +5190,7 @@ do i = 1, nedges
    ! we'll have to compute that and add it in here.
 
    do j=1, 3
-      edgenormals(i, j) = edgeNormalVectors(j, edgelist(i))
+      edgenormals(j, i) = edgeNormalVectors(j, edgelist(i))
    enddo
 
 !print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nVertLevels, lower
