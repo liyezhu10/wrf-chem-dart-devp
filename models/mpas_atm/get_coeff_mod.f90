@@ -12,11 +12,23 @@
 ! $Date$
  
   use types_mod, only : r8
+  use utilities_mod, only : error_handler, E_ERR
+
   implicit none
 
   private
   save
   public :: mpas_rbf_interp_func_3D_plane_vec_const_dir_comp_coeffs
+
+! version controlled file description for error handling, do not edit
+
+   character(len=128), parameter :: &
+   source   = '$URL$', &
+   revision = '$Revision$', &
+   revdate  = '$Date$'
+
+
+  character(len=256) :: string1
 
   contains
 
@@ -73,20 +85,24 @@
     real(kind=r8), dimension(pointCount,2) :: planarUnitVectors
     real(kind=r8), dimension(2) :: planarDestinationPoint
 
-    real(kind=r8), dimension(:,:), pointer :: matrix, matrixCopy
-    real(kind=r8), dimension(:,:), pointer :: rhs, coeffs
+    real(kind=r8), dimension(:,:), pointer :: matrix, submatrix, matrixCopy
+    real(kind=r8), dimension(:,:), pointer :: rhs, subrhs, coeffs
     integer, dimension(:), pointer :: pivotIndices
 
     matrixSize = pointCount+2 ! space for constant vector in plane
 
     allocate(matrix(matrixSize,matrixSize))  
+    allocate(submatrix(pointCount,pointCount))
     allocate(matrixCopy(matrixSize,matrixSize))  
-    allocate(rhs(matrixSize,2))  
+    allocate(rhs(matrixSize,2))
+    allocate(subrhs(pointCount,2))
     allocate(coeffs(matrixSize,2))  
     allocate(pivotIndices(matrixSize)) 
 
     matrix = 0.0
+    submatrix = 0.0
     rhs = 0.0
+    subrhs = 0.0
     coeffs = 0.0
 
     do i = 1, pointCount
@@ -100,7 +116,10 @@
 
     call mpas_set_up_vector_dirichlet_rbf_matrix_and_rhs(pointCount, 2, &
       planarSourcePoints, planarUnitVectors, planarDestinationPoint, &
-      alpha, matrix(1:pointCount,1:pointCount), rhs(1:pointCount,:))
+      alpha, submatrix, subrhs)
+
+    matrix(1:pointCount,1:pointCount) = submatrix
+    rhs(1:pointCount,:) = subrhs
 
     do i = 1, pointCount
       matrix(i,pointCount+1:pointCount+2) = planarUnitVectors(i,:) 
@@ -120,9 +139,11 @@
         + planeBasisVectors(2,i)*coeffs(1:pointCount,2) 
     end do
 
-    deallocate(matrix)  
+    deallocate(matrix)
+    deallocate(submatrix)
     deallocate(matrixCopy)  
-    deallocate(rhs)  
+    deallocate(rhs)
+    deallocate(subrhs)
     deallocate(coeffs)  
     deallocate(pivotIndices)
 
@@ -241,7 +262,7 @@ subroutine elgs (A,N,INDX)
 !
   DO J = 1, N-1
     PI1 = 0.0
-    K = J    ! nsc
+    K = 0
     DO I = J, N
       PI = ABS(A(INDX(I),J))/C(INDX(I))
       IF (PI.GT.PI1) THEN
@@ -249,6 +270,12 @@ subroutine elgs (A,N,INDX)
         K   = I
       ENDIF
     END DO
+! This should never happen, but just in case:
+    IF (K == 0) THEN
+      write(string1,*)'K was never initialized!'
+      call error_handler(E_ERR,'elgs',string1,source,revision,revdate)
+    ENDIF
+
 !
 ! Interchange the rows via INDX(N) to record pivoting order
 !
