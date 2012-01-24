@@ -84,11 +84,11 @@ module get_geometry_mod
     call mpas_unit_vec_in_r3(yHatPlane) ! just to be sure...
     dataTangentPlane(:,1) = xHatPlane
     dataTangentPlane(:,2) = yHatPlane
-    write(6,*)
-    write(6,*) ' dataTangentPlane '
-    write(6,10) dataTangentPlane(:,1)
-    write(6,10) dataTangentPlane(:,2)
-    write(6,*)
+    !write(6,*)
+    !write(6,*) ' dataTangentPlane '
+    !write(6,10) dataTangentPlane(:,1)
+    !write(6,10) dataTangentPlane(:,2)
+    !write(6,*)
     10 format(3e20.10)
 
   end subroutine get_geometry

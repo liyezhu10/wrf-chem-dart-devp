@@ -223,11 +223,11 @@ real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original 
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
 real(r8), allocatable :: zGridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
 real(r8), allocatable :: zGridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
+real(r8), allocatable :: zGridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 
-real(r8), allocatable :: zEdgeFace(:,:)   ! geometric height at edges faces  (nVertLevelsP1,nEdges)
-real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
+!real(r8), allocatable :: zEdgeFace(:,:)   ! geometric height at edges faces  (nVertLevelsP1,nEdges)
+!real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
 
-real(r8), allocatable :: zgridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
 
@@ -305,9 +305,6 @@ integer, parameter :: max_reg_list_num = 100
 integer :: triangle_start(num_reg_x, num_reg_y)
 integer :: triangle_num  (num_reg_x, num_reg_y) = 0
 integer, allocatable :: triangle_list(:)
-
-! FIXME: remove this once code working. for writing debug output only
-integer :: debugunit = 77
 
 contains
 
@@ -390,8 +387,9 @@ allocate(latCell(nCells), lonCell(nCells))
 allocate(zGridFace(nVertLevelsP1, nCells))
 allocate(zGridCenter(nVertLevels, nCells))
 
-allocate(zEdgeFace(  nVertLevelsP1, nEdges))
-allocate(zEdgeCenter(nVertLevels,   nEdges))
+!allocate(zEdgeFace(  nVertLevelsP1, nEdges))
+!allocate(zEdgeCenter(nVertLevels,   nEdges))
+allocate(zGridEdge(nVertLevels,   nEdges))
 
 allocate(cellsOnVertex(vertexDegree, nVertices))
 allocate(nEdgesOnCell(nCells))
@@ -401,7 +399,7 @@ allocate(verticesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 allocate(latEdge(nEdges), lonEdge(nEdges)) 
 allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
-allocate(xEdge(nVertices), yEdge(nVertices), zEdge(nVertices))
+allocate(xEdge(nEdges), yEdge(nEdges), zEdge(nEdges))
 
 ! this reads in latCell, lonCell, zGridFace, cellsOnVertex
 call get_grid()
@@ -421,11 +419,11 @@ do kloc=1, nEdges
    cel1 = cellsOnEdge(1,kloc)
    cel2 = cellsOnEdge(2,kloc)
    if (cel1>0 .and. cel2>0) then
-      zEdgeCenter(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
+      zGridEdge(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
    else if (cel1>0) then
-      zEdgeCenter(iloc,kloc) = zGridCenter(iloc,cel1)
+      zGridEdge(iloc,kloc) = zGridCenter(iloc,cel1)
    else if (cel2>0) then
-      zEdgeCenter(iloc,kloc) = zGridCenter(iloc,cel2)
+      zGridEdge(iloc,kloc) = zGridCenter(iloc,cel2)
    else  !this is bad...
       write(string1,*)'Edge ',kloc,' at vertlevel ',iloc,' has no neighbouring cells!'
       call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
@@ -591,9 +589,6 @@ allocate( ens_mean(model_size) )
 ! Initialize the interpolation data structures
 call init_interp()
 
-! FIXME: remove this
-!open(unit=debugunit, file="bob", action="write", recl=512)
-
 end subroutine static_init_model
 
 
@@ -613,7 +608,7 @@ integer, optional,   intent(out) :: var_type
   
 ! Local variables
 
-integer  :: nxp, nzp, iloc, kloc, nf, n
+integer  :: nxp, nzp, iloc, vloc, nf, n
 integer  :: myindx
 real(r8) :: height
 
@@ -649,27 +644,25 @@ endif
 
 nzp  = progvar(nf)%numvertical
 iloc = 1 + (myindx-1) / nzp    ! cell index
-kloc = myindx - (iloc-1)*nzp   ! vertical level index
+vloc = myindx - (iloc-1)*nzp   ! vertical level index
 
 ! the zGrid array contains the location of the cell top and bottom faces, so it has one 
 ! more value than the number of cells in each column.  for locations of cell centers
 ! you have to take the midpoint of the top and bottom face of the cell.
-! FIXME: zEdgeFace array not filled yet.
 if (progvar(nf)%numedges /= MISSING_I) then
    if ( progvar(nf)%ZonHalf ) then
-      height = zEdgeCenter(kloc,iloc)
-   else if (nzp <= 1) then
-      height = zEdgeFace(1,iloc)
+      height = zGridEdge(vloc,iloc)
    else
-      height = zEdgeFace(kloc,iloc)
+      call error_handler(E_ERR, 'get_state_meta_data', 'no support for edges at face heights', &
+                         source, revision, revdate)
    endif
 else
    if ( progvar(nf)%ZonHalf ) then
-      height = zGridCenter(kloc,iloc)
+      height = zGridCenter(vloc,iloc)
    else if (nzp <= 1) then
       height = zGridFace(1,iloc)
    else
-      height = zGridFace(kloc,iloc)
+      height = zGridFace(vloc,iloc)
    endif
 endif
 
@@ -692,7 +685,7 @@ endif
 if (debug > 9) then
 
     write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
-    write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, kloc
+    write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, vloc
     write(*,'("                      LON/LAT/HGT: ",3(f12.3,2x))') lonCell(iloc), latCell(iloc), height
 
 endif
@@ -4154,11 +4147,8 @@ subroutine find_vert_level(x, loc, oncenters, lower, upper, fract, ier)
 ! given a location and var types, return the two level numbers that 
 ! enclose the given vertical value plus the fraction between them.   
 
-! FIXME: right now,
-! this is tricky since we only know the heights in meters of the
-! cell centers.  we're asking if they have the elevations of the
-! edges or if we have to project from the planes defined by the
-! two neighboring cells.  hopefully not.
+! FIXME:  this handles data at cell centers, at edges, but not
+! data on faces.
 
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
@@ -4241,7 +4231,14 @@ if (.not. inside_cell(cellid, lat, lon)) then
    ier = 13   
    return
 endif
-if (.not. oncenters) edgeid = find_closest_edge(cellid, lat, lon)
+! FIXME: here seems like where we should handle data on cell face centers
+if (.not. oncenters) then
+   edgeid = find_closest_edge(cellid, lat, lon)
+   !print *, 'found closest edge = ', edgeid
+   !print *, 'size of edge height array = ', shape(zGridEdge)
+   !print *, '(closest cellid id: ', cellid, ')'
+   !print *, 'size of center height array = ', shape(zGridCenter)
+endif
 
 ! Vertical interpolation for pressure coordinates
 if(vert_is_pressure(loc) ) then 
@@ -4265,10 +4262,10 @@ if(vert_is_height(loc)) then
    ! For height, can do simple vertical search for interpolation for now
    ! Get the lower and upper bounds and fraction for each column
    if (oncenters) then
-      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+      call find_height_bounds(vert, nVertLevels, zGridCenter(:, cellid), &
                               lower, upper, fract, ier)
    else
-      call find_height_bounds(vert, nVertLevels, zgridEdge(:, edgeid), &
+      call find_height_bounds(vert, nVertLevels, zGridEdge(:, edgeid), &
                               lower, upper, fract, ier)
    endif
 !print *, '3 lower, upper = ', lower, upper
@@ -4960,9 +4957,13 @@ endif
   
 c(1) = cellid
 
-!write(debugunit, *) 'scalar: asking for ', lon, lat
-!write(debugunit, *) 'scalar: closest center ', c(1), lonCell(c(1)), latCell(c(1))
 if (on_boundary(cellid)) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+if (inside_cell0(lat, lon, cellid)) then
    dval = MISSING_R8
    ier = 11
    return
@@ -4972,7 +4973,6 @@ endif
 closest_vert = closest_vertex_ll(cellid, lat, lon)
 call xyz_to_latlon(xVertex(closest_vert), yVertex(closest_vert), zVertex(closest_vert), &
                    junk(1), junk(2))
-!write(debugunit, *) 'scalar: closest vert ', closest_vert, junk(2), junk(1)
 
 ! collect the neighboring cell ids and vertex numbers
 ! this 2-step process avoids us having to read in the
@@ -4997,41 +4997,25 @@ do i=1, nedges
 enddo
 
 do i=1, nedges
-  !write(debugunit, *) 'scalar: neighbor centers ', i, neighborcells(i), lonCell(neighborcells(i)), latCell(neighborcells(i))
-enddo
-do i=1, nedges
-  !write(debugunit, *) 'scalar: neighbor centers ', neighborcells(i), xdata(i), ydata(i), zdata(i)
-enddo
-do i=1, nedges
    call xyz_to_latlon(xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i)), &
                       junk(1), junk(2))
-  !write(debugunit, *) 'scalar: cell verts ', verts(i), junk(2), junk(1)
-enddo
-do i=1, nedges
-  !write(debugunit, *) 'scalar: cell verts ', i, verts(i), xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i))
 enddo
 
-!write(debugunit, *) 'scalar: index of closest vert ', vindex
-!write(debugunit, *) 'scalar: neighbor cellids ', neighborcells(1:nedges)
 
 ! get the cartesian coordinates in the cell plane for the closest center
 call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
-!write(debugunit, *) 'scalar: xyz center ', t1
 
 
 ! and the original edges
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
-   !write(debugunit, *) 'scalar: edge ', i, lonEdge(edgeid), latEdge(edgeid)
 enddo
 do i = 1, nedges
    edgeid = edgesOnCell(i, cellid)
-   !write(debugunit, *) 'scalar: edge ', i, xEdge(edgeid), yEdge(edgeid), zEdge(edgeid)
 enddo
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
-!write(debugunit, *) 'scalar: obs ', r
 
 ! find the cell-center-tri that encloses the obs point
 ! figure out which way vertices go around cell?
@@ -5045,39 +5029,31 @@ findtri: do i=vindex, vindex+nedges
    t3(1) = xdata(vp1)
    t3(2) = ydata(vp1)
    t3(3) = zdata(vp1)
-!write(debugunit, *) 'scalar: checking tri ', c(1), v, vp1
    call inside_triangle(t1, t2, t3, r, inside, p)
-!write(debugunit, *) 'scalar: inside, p ', inside, p
    if (inside) then
       ! p is the xyz of the intersection point in this plane
       ! t2 and t3 are corners, v and vp1 are vert indices
       ! which are same indices for cell centers
       c(2) = neighborcells(v)
       c(3) = neighborcells(vp1)
-!print  *, 'scalar: found it ', v, vp1
       foundit = .true.
       exit findtri  
    endif
 enddo findtri
 if (.not. foundit) then
-!write(debugunit, *) 'scalar: did not find inside any triangle'
    dval = MISSING_R8
    ier = 11
    return
 endif
 
-!print *, 'scalar: 3 cell ids ', c
-
 ! need vert index for the vertical level
 call find_vert_level(x, loc, .true., lower, upper, fract, ier)
-!print *, 'scalar: vert ', lower, upper, fract, ier
 if (ier /= 0) then
    return
 endif
 
 ! get the starting index in the state vector
 index1 = progvar(ival)%index1
-!print *, 'scalar: index1 ', index1
 
 ! go around triangle and interpolate in the vertical
 ! t1, t2, t3 are the xyz of the cell centers
@@ -5096,16 +5072,8 @@ enddo
 ! now have vertically interpolated values at cell centers.
 ! get weights and compute value at requested point.
 call get_3d_weights(r, t1, t2, t3, weights)
-!print *, 'got 3d weights: weights = ', weights
-!print *, 'point loc               = ', r
-!print *, 'corner 1 loc            = ', t1
-!print *, 'corner 2 loc            = ', t2
-!print *, 'corner 3 loc            = ', t3
 
 dval = sum(weights * fdata)
-!print *, 'interp data values, low = ', lowval
-!print *, 'interp data values, hi  = ', uppval
-!print *, 'interp corner data      = ', fdata
 
 ier = 0
 
@@ -5155,6 +5123,9 @@ if (nedges <= 0) then
    ier = 18
    return
 endif
+!print *, 'obs lon, lat: ', lon, lat
+!print *, 'rbf: surrounding edge list, nedges = ', nedges
+!print *, edgelist(1:nedges)
 
 ! the code needs: nData == nedges
 ! xyz data == xyzEdge
@@ -5175,19 +5146,16 @@ if (progindex < 0) then
    return
 endif
 index1 = progvar(progindex)%index1
+!print *, 'valid offsets for u: ', index1, progvar(progindex)%indexN
 
 do i = 1, nedges
-  if (edgelist(i) > size(xEdge)) then
-    print *, i, edgelist(i), size(xEdge)
-    stop
-  endif
+   if (edgelist(i) > size(xEdge)) then
+      print *, 'edgelist has index larger than edge count', i, edgelist(i), size(xEdge)
+      stop
+   endif
    xdata(i) = xEdge(edgelist(i))
    ydata(i) = yEdge(edgelist(i))
    zdata(i) = zEdge(edgelist(i))
-
-   ! FIXME: this xyz is on the surface - the code needs
-   ! the xyz of the edges up at the right vertical level.
-   ! we'll have to compute that and add it in here.
 
    do j=1, 3
       edgenormals(j, i) = edgeNormalVectors(j, edgelist(i))
@@ -5199,11 +5167,14 @@ do i = 1, nedges
 !                      index1 + (edgelist(i)-1) * nVertLevels + upper-1
    lowval = x(index1 + (edgelist(i)-1) * nVertLevels + lower-1)
    uppval = x(index1 + (edgelist(i)-1) * nVertLevels + upper-1)
+!print *, 'lowval, uppval = ', lowval, uppval
    if (vert_is_pressure(loc)) then
-      veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
+      veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
+      !veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
    else
       veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
    endif
+!print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
 enddo
 
 
@@ -5218,6 +5189,9 @@ endif
 ! get the cartesian coordinates in the cell plane for the reconstruction point
 call latlon_to_xyz_on_plane(lat, lon, cellid, &
               xreconstruct,yreconstruct,zreconstruct)
+!print *, 'xyz on plane: ', xreconstruct,yreconstruct,zreconstruct
+!call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
+!print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
 
 ! call a simple subroutine to define vectors in the tangent plane
 call get_geometry(nedges, xdata, ydata, zdata, &
@@ -5234,6 +5208,9 @@ call get_reconstruct(nedges, lat, lon, &
               coeffs_reconstruct, on_a_sphere, veldata, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
+
+!print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
+!print *, 'XYZ vals from reconstruction: ', ureconstructx, ureconstructy, ureconstructz
 
 ! FIXME: it would be nice to return both and not have to call this
 ! code twice.  crap.
@@ -5261,7 +5238,12 @@ integer :: cellid, vertexid
 ! find the cell id that has a center point closest
 ! to the given point.
 cellid = find_closest_cell_center(lat, lon)
-
+if (cellid < 1) then
+   nedges = 0
+   edge_list(:) = -1
+   return
+endif
+   
 if (.not. inside_cell(cellid, lat, lon)) then
    nedges = 0
    edge_list(:) = -1
@@ -5358,6 +5340,7 @@ enddo
  
 ! decide what to do if we don't find anything.
 if (closest_cell < 0) then
+   if (debug > 5) print *, 'cannot find nearest cell to lon, lat: ', lon, lat
    find_closest_cell_center = -1
    return
 endif
@@ -5409,6 +5392,7 @@ enddo
  
 ! decide what to do if we don't find anything.
 if (closest_edge < 0) then
+   if (debug > 5) print *, 'cannot find nearest edge to lon, lat: ', lon, lat
    find_closest_edge = -1
    return
 endif
@@ -5531,7 +5515,7 @@ end function inside_cell
 
 !------------------------------------------------------------
 
-function inside_cell0(cellid, lat, lon)
+function inside_cell0(lat, lon, cellid)
 
 ! CURRENTLY UNUSED.
 
@@ -5542,8 +5526,8 @@ function inside_cell0(cellid, lat, lon)
 !    ever negative, you're outside and you can return.
 
 
-integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
+integer,  intent(in)  :: cellid
 logical               :: inside_cell0
 
 ! convert lat/lon to cartesian coordinates and then determine
@@ -5552,14 +5536,16 @@ logical               :: inside_cell0
 integer :: nverts, i, vertexid
 real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
 
-! FIXME: remove this once we've tested the following code.
-! for the global atmosphere it should always be true.  for
-! regional atmosphere and for the ocean, it can be false.
-inside_cell0 = .true.
-return
+! for the global atmosphere it should always be true. 
+! for regional atmosphere and for the ocean, it can be false.
+if (global_grid) then
+   inside_cell0 = .true.
+   return
+endif
 
 ! cartesian location of point on surface of sphere
-call latlon_to_xyz_on_plane(lat, lon, cellid, p(1), p(2), p(3))
+call latlon_to_xyz(lat, lon, p(1), p(2), p(3))
+!call latlon_to_xyz_on_plane(lat, lon, cellid, p(1), p(2), p(3))
 
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
@@ -5623,6 +5609,9 @@ real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
 call latlon_to_xyz(lat, lon, px, py, pz)
 
 closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
+if (closest_vertex_ll < 0) then
+   if (debug > 5) print *, 'cannot find nearest vertex to lon, lat: ', lon, lat
+endif
 
 end function closest_vertex_ll
 
@@ -5644,7 +5633,7 @@ real(r8) :: distsq, closest_dist, x, y, z, dx, dy, dz
 !print *, 'cellid = ', cellid
 nverts = nEdgesOnCell(cellid)
 
-closest_dist = 1.0e38   ! something really big
+closest_dist = 1.0e38   ! something really big; these are meters not radians
 closest_vertex_xyz = -1
 
 !print *, 'close: nverts ', nverts
@@ -5814,69 +5803,45 @@ real(r8), intent(out) :: intp(3)
 
 real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
 real(r8) :: mi(3,3)      ! invert of m
-real(r8) :: scale
 integer  :: i
 
-!write(debugunit, *) 'inside: t0 ', t0
-!write(debugunit, *) 'inside: t1 ', t1
-!write(debugunit, *) 'inside: t2 ', t2
-!write(debugunit, *) 'inside: s  ', s
 
-! try scaling s by 20% to ensure that it cannot be
-! coincident with the plane.  this is probably overkill.
-scale = 1.0_r8
-
-m(1,1) = 0.0_r8 - s(1)*scale
+m(1,1) = -s(1)
 m(1,2) = t1(1) - t0(1)
 m(1,3) = t2(1) - t0(1)
 
-m(2,1) = 0.0_r8 - s(2)*scale
+m(2,1) = -s(2)
 m(2,2) = t1(2) - t0(2)
 m(2,3) = t2(2) - t0(2)
 
-m(3,1) = 0.0_r8 - s(3)*scale
+m(3,1) = -s(3)
 m(3,2) = t1(3) - t0(3)
 m(3,3) = t2(3) - t0(3)
 
 call invert3(m, mi)
-!write(debugunit, *) 'inside: m ', m(:,1)
-!write(debugunit, *) 'inside: m ', m(:,2)
-!write(debugunit, *) 'inside: m ', m(:,3)
-!write(debugunit, *) 'inside: mi ', mi(:,1)
-!write(debugunit, *) 'inside: mi ', mi(:,2)
-!write(debugunit, *) 'inside: mi ', mi(:,3)
-m = matmul(m, mi)
-!write(debugunit, *) 'inside: mxmi ', m(:, 1)
-!write(debugunit, *) 'inside: mxmi ', m(:, 2)
-!write(debugunit, *) 'inside: mxmi ', m(:, 3)
 
-!write(debugunit, *) 'inside: s ', s
-!write(debugunit, *) 'inside: sscale ', s*scale
-!write(debugunit, *) 'inside: t0 ', t0 
-!write(debugunit, *) 'inside: -t0 ', (-1.0_r8)*t0
-v = matmul(mi, 0.0_r8 - t0) 
-!write(debugunit, *) 'inside: v ', v
+m = matmul(m, mi)
+
+v = matmul(mi, -t0) 
+
+intp = 0.0_r8
+inside = .false.
 
 ! first be sure the triangle intersects the line
-! between [0,1].  then test that v(2) and v(3)
-! are both between [0,1], and that v(2)+v(3) <= 1.0
-! if all true, it is inside tri.
-if ((v(1) >= 0.0_r8 .and. v(1) <= 1.0_r8) .and. &
-    (v(2) >= 0.0_r8 .and. v(2) <= 1.0_r8) .and. &
-    (v(3) >= 0.0_r8 .and. v(3) <= 1.0_r8) .and. &
-    (v(2)+v(3) <= 1.0_r8)) then
+! between [0,1].  compute the intersection point.
+! then test that v(2) and v(3) are both between 
+! [0,1], and that v(2)+v(3) <= 1.0 
+! if all true, intersection pt is inside tri.
+if (v(1) >= 0.0_r8 .and. v(1) <= 1.0_r8) then
+   intp(1) = s(1) * v(1)
+   intp(2) = s(2) * v(1)
+   intp(3) = s(3) * v(1)
 
-   inside = .true.
-   intp(1) = s(1)*scale * v(1)
-   intp(2) = s(2)*scale * v(1)
-   intp(3) = s(3)*scale * v(1)
-!write(debugunit, *) 'inside: intp ', intp
-   return
+   if ((v(2) >= 0.0_r8 .and. v(2) <= 1.0_r8) .and. &
+       (v(3) >= 0.0_r8 .and. v(3) <= 1.0_r8) .and. &
+       (v(2)+v(3) <= 1.0_r8)) inside = .true.
 
 endif
-
-inside = .false.
-intp = 0.0_r8
 
 end subroutine inside_triangle
 
@@ -5896,19 +5861,13 @@ integer,  intent(in)  :: cellid
 real(r8), intent(out) :: x, y, z
 
 integer  :: nverts, i, vertexid
-real(r8) :: rlat, rlon   ! in radians
 real(r8) :: s(3)         ! location of point on surface
 real(r8) :: p(3,3)       ! first 3 vertices of cell, xyz
-real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
-real(r8) :: mi(3,3)      ! invert of m
-real(r8) :: vm           
+real(r8) :: intp(3)      ! intersection point with plane
+logical  :: inside       ! if true, intersection is inside tri
 
-rlat = lat * deg2rad
-rlon = lat * deg2rad
 
-s(1) = radius * cos(rlon) * cos(rlat)
-s(2) = radius * sin(rlon) * cos(rlat)
-s(3) = radius * sin(rlat)
+call latlon_to_xyz(lat, lon, s(1), s(2), s(3))
 
 ! get the first 3 vertices to define plane
 ! intersect with sx,sy,sz to get answer
@@ -5929,32 +5888,13 @@ do i=1, 3
    p(3,i) = zVertex(vertexid)
 enddo
 
-m(1,1) = s(1)
-m(2,1) = p(1,2) - p(1,1)
-m(3,1) = p(1,3) - p(1,1)
+! in this case we don't care about inside this tri, just where
+! it intersects the plane.
+call inside_triangle(p(:,1), p(:,2), p(:,3), s, inside, intp)
 
-m(1,2) = s(2)
-m(2,2) = p(2,2) - p(2,1)
-m(3,2) = p(2,3) - p(2,1)
-
-m(1,3) = s(3)
-m(2,3) = p(3,2) - p(3,1)
-m(3,3) = p(3,3) - p(3,1)
-
-call invert3(m, mi)
-
-v = matmul(mi, s)
-
-if (v(1) >= 0 .and. v(1) <= 1) then
-   vm = 1.0_r8 - v(1)
-   x = s(1) * vm
-   y = s(2) * vm
-   z = s(3) * vm
-endif
-
-! not needed for intersection, but can be used if P is within
-! the triangle defined by the 3 points in the p array:
-! if (v(2) and v(3) are between [0,1] and if (v(2) + v(3) <= 1) then yes
+x = intp(1)
+y = intp(2)
+z = intp(3)
 
 end subroutine latlon_to_xyz_on_plane
 
