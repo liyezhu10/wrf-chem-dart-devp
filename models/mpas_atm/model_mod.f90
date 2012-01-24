@@ -4931,7 +4931,7 @@ integer,             intent(out) :: ier
 ! using barycentric weights to get the value at the interpolation point.
 
 integer, parameter :: listsize = 30 
-integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid
+integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), junk(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
@@ -5054,14 +5054,15 @@ endif
 
 ! get the starting index in the state vector
 index1 = progvar(ival)%index1
+nvert = progvar(ival)%numvertical
 
 ! go around triangle and interpolate in the vertical
 ! t1, t2, t3 are the xyz of the cell centers
 ! c(3) are the cell ids
 !print *, 'cell ids: ', c
 do i = 1, 3
-   lowval(i) = x(index1 + (c(i)-1) * nVertLevels + lower-1)
-   uppval(i) = x(index1 + (c(i)-1) * nVertLevels + upper-1)
+   lowval(i) = x(index1 + (c(i)-1) * nvert + lower-1)
+   uppval(i) = x(index1 + (c(i)-1) * nvert + upper-1)
    if (vert_is_pressure(loc)) then
       fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
    else
@@ -5091,7 +5092,7 @@ integer,             intent(out) :: ier
 
 integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
 logical, parameter :: on_a_sphere = .false.
-integer  :: nedges, edgelist(listsize), i, j
+integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(3, listsize)
 real(r8) :: veldata(listsize)
@@ -5146,6 +5147,7 @@ if (progindex < 0) then
    return
 endif
 index1 = progvar(progindex)%index1
+nvert = progvar(progindex)%numvertical
 !print *, 'valid offsets for u: ', index1, progvar(progindex)%indexN
 
 do i = 1, nedges
@@ -5161,12 +5163,12 @@ do i = 1, nedges
       edgenormals(j, i) = edgeNormalVectors(j, edgelist(i))
    enddo
 
-!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nVertLevels, lower
-!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nVertLevels, upper
-!print *, 'totals = ', index1 + (edgelist(i)-1) * nVertLevels + lower-1, &
-!                      index1 + (edgelist(i)-1) * nVertLevels + upper-1
-   lowval = x(index1 + (edgelist(i)-1) * nVertLevels + lower-1)
-   uppval = x(index1 + (edgelist(i)-1) * nVertLevels + upper-1)
+!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nvert, lower
+!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nvert, upper
+!print *, 'totals = ', index1 + (edgelist(i)-1) * nvert + lower-1, &
+!                      index1 + (edgelist(i)-1) * nvert + upper-1
+   lowval = x(index1 + (edgelist(i)-1) * nvert + lower-1)
+   uppval = x(index1 + (edgelist(i)-1) * nvert + upper-1)
 !print *, 'lowval, uppval = ', lowval, uppval
    if (vert_is_pressure(loc)) then
       veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
