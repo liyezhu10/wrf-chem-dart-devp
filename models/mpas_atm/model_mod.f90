@@ -4918,10 +4918,6 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-! FIXME: the plan is to linearly interpolate each location in 
-! the vertical first, then do the horizontal interpolation.
-! i'm working on it.
-
 subroutine compute_scalar_with_barycentric(x, loc, ival, dval, ier)
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
@@ -4929,6 +4925,10 @@ integer,             intent(in)  :: ival
 real(r8),            intent(out) :: dval
 integer,             intent(out) :: ier
 
+! compute the values at the correct vertical level for each
+! of the 3 cell centers defining a triangle that encloses the
+! the interpolation point, then interpolate once in the horizontal 
+! using barycentric weights to get the value at the interpolation point.
 
 integer, parameter :: listsize = 30 
 integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid
@@ -4963,7 +4963,7 @@ if (on_boundary(cellid)) then
    return
 endif
 
-if (inside_cell0(lat, lon, cellid)) then
+if (.not. inside_cell0(lat, lon, cellid)) then
    dval = MISSING_R8
    ier = 11
    return
