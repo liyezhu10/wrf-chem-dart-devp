@@ -489,9 +489,10 @@ endif
 write( ncfilename,'(a,a)')trim(output_file),'_interptest.nc'
 write(txtfilename,'(a,a)')trim(output_file),'_interptest.m'
 
-nlat  = nint(( interp_test_latrange(2) -  interp_test_latrange(1))/interp_test_dlat) + 1
-nlon  = nint(( interp_test_lonrange(2) -  interp_test_lonrange(1))/interp_test_dlon) + 1
-nvert = nint((interp_test_vertrange(2) - interp_test_vertrange(1))/interp_test_dvert) + 1
+! round down to avoid exceeding the specified range
+nlat  = aint(( interp_test_latrange(2) -  interp_test_latrange(1))/interp_test_dlat) + 1
+nlon  = aint(( interp_test_lonrange(2) -  interp_test_lonrange(1))/interp_test_dlon) + 1
+nvert = aint((interp_test_vertrange(2) - interp_test_vertrange(1))/interp_test_dvert) + 1
 
 iunit = open_file(trim(txtfilename), action='write')
 write(iunit,'(''missingvals = '',f12.4,'';'')')MISSING_R8
@@ -710,6 +711,9 @@ do zloc = 1, nVertLevels
    call model_interpolate(statevector, loc, KIND_V_WIND_COMPONENT, vhat(zloc,xloc), ios_out)
    if (ios_out /= 0) nFailedV = nFailedV + 1
 enddo
+if (mod(xloc, 100) == 0) then
+   print *, 'finished interpolating ', xloc, ' of ', nCells, ' cells'
+endif
 enddo
 
 write(*,*)'uReconstructed interpolations ',nCells*nVertLevels,'possible.'

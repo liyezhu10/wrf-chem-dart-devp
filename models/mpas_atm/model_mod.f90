@@ -243,11 +243,15 @@ integer,  allocatable :: boundaryEdge(:,:)
 integer,  allocatable :: boundaryVertex(:,:)
 integer,  allocatable :: maxLevelCell(:)
 
-integer               :: model_size          ! the state vector length
-type(time_type)       :: model_timestep      ! smallest time to adv model
 real(r8), allocatable :: ens_mean(:)         ! may be needed for forward ops
-logical               :: global_grid = .true. ! true = the grid covers the sphere with no holes
-logical               :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
+
+integer         :: model_size          ! the state vector length
+type(time_type) :: model_timestep      ! smallest time to adv model
+
+logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
+logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
+logical :: has_real_u = .false.        ! true = has original u on edges
+logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
 
 !------------------------------------------------------------------
 ! The model analysis manager namelist variables
@@ -544,6 +548,10 @@ do ivar = 1, nfields
    else
       progvar(ivar)%ZonHalf = .FALSE.
    endif
+
+   if (varname == 'u') has_real_u = .true.
+   if (varname == 'uReconstructZonal' .or. &
+       varname == 'uReconstructMeridional') has_uvreconstruct = .true.
 
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
@@ -852,7 +860,6 @@ integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
 real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp
 integer  :: tri_indices(3), base_offset(num_kinds)
-logical  :: using_wind_edges
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -875,33 +882,24 @@ istatus = 99                ! unknown error
 ! it needs to compute sensible temp itself.  also, if the obs is a
 ! wind (or ocean current) component, and the edge normal speeds are
 ! in the state vector, we can do it.
-using_wind_edges = .false.
+
 oktointerp: do i=1, num_kinds
    ivar = get_progvar_index_from_kind(obs_kinds(i))
-!print *, 'i, ivar = ', i, ivar
    if (ivar <= 0) then
       ! exceptions 1 and 2:
-      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) cycle oktointerp
+      ! FIXME: the new code cannot yet compute sensible temperature in one go.  fail for that.
+      ! remove the new code test once we add it.
+      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location) .and. &
+          .not. use_new_code) cycle oktointerp
       if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) then
          ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
-         if (ivar > 0) then
-            using_wind_edges = .true.
-            cycle oktointerp
-         endif
+         if (ivar > 0) cycle oktointerp
       endif
 
-         istatus = 88            ! this kind not in state vector
-         return
-     endif
+      istatus = 88            ! this kind not in state vector
+      return
+   endif
 enddo oktointerp
-
-!if (using_wind_edges .and. .not. use_new_code) then
-!   call error_handler(E_ERR,'local_interpolation', &
-!          'to use the "u" field on cell edges, use_new_code must be .true.', source, revision, revdate)
-!else if (.not. using_wind_edges .and. use_new_code) then
-!   call error_handler(E_ERR,'local_interpolation', &
-!          'to use the new code "u" must be in the state vector', source, revision, revdate)
-!endif 
 
 ! Not prepared to do w interpolation at this time
 do i=1, num_kinds
@@ -920,18 +918,6 @@ lheight   = loc_array(3)
 if (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 
 
-! Find the start and end offsets for these fields in the state vector x(:)
-do i=1, num_kinds
-   if (obs_kinds(i) == KIND_TEMPERATURE) then
-      base_offset(i) = 0  ! this won't be used in this case
-   elseif ((obs_kinds(i) == KIND_U_WIND_COMPONENT .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) &
-            .and. using_wind_edges) then
-      call get_index_range(KIND_EDGE_NORMAL_SPEED, base_offset(i))
-   else
-      call get_index_range(obs_kinds(i), base_offset(i))
-   endif
-enddo
-
 !  if (debug > 2) print *, 'base offset now ', base_offset(1)
 
 ! FIXME: this needs to play well with multiple types in the kinds list.
@@ -940,33 +926,44 @@ enddo
 ! if u isn't in the state vector, default to trying to interpolate
 ! in the reconstructed U/V components at the cell centers.
 
-kindloop: do i=1, num_kinds
-   if (((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. &
-       (obs_kinds(i) == KIND_V_WIND_COMPONENT)) .and. use_new_code) then
-      ivar = get_index_from_varname('u')
-      if (ivar > 0) then
+if (use_new_code) then
+   kindloop: do i=1, num_kinds
+      if ((obs_kinds(i) == KIND_U_WIND_COMPONENT .or. &
+           obs_kinds(i) == KIND_V_WIND_COMPONENT) .and. has_real_u) then
          if (obs_kinds(i) == KIND_U_WIND_COMPONENT) then
             call compute_u_with_rbf(x, location, .TRUE., interp_vals(i), istatus)
          else
             call compute_u_with_rbf(x, location, .FALSE., interp_vals(i), istatus)
          endif
-         return
-     !else
-     !   call error_handler(E_ERR,'local_interpolation', &
-     !       'to use the new code "u" must be in the state vector', source, revision, revdate)
-     endif
-   endif
-   ! new code.  comment this out to drop down into the old code.
-   if (use_new_code) then
-      if (obs_kinds(i) /= KIND_TEMPERATURE) then
+
+      else if (obs_kinds(i) /= KIND_TEMPERATURE) then
          ivar = get_progvar_index_from_kind(obs_kinds(i))
          call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
          if (istatus /= 0) return
-         cycle kindloop
+ 
+      else if (obs_kinds(i) == KIND_TEMPERATURE) then
+         print *, 'need to add case in new code for sensible temperature'
+         stop
+         ! need to get potential temp, pressure, qv here, but can
+         ! use same weights.  does this get pushed down into the
+         ! scalar code?
       endif
+   enddo kindloop
+   return
+endif
+
+!! start of original code - should be unneeded if we decide to
+!! use the new code.
+if (debug > 4) print *, 'using original interpolation code'
+
+! Find the start and end offsets for these fields in the state vector x(:)
+do i=1, num_kinds
+   if (obs_kinds(i) == KIND_TEMPERATURE) then
+      base_offset(i) = 0  ! this won't be used in this case
+   else
+      call get_index_range(obs_kinds(i), base_offset(i))
    endif
-enddo kindloop
-if (use_new_code) return
+enddo
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
@@ -4933,7 +4930,7 @@ integer,             intent(out) :: ier
 integer, parameter :: listsize = 30 
 integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), junk(3), weights(3)
+real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
 real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
 integer  :: verttype, lower, upper, c(3), vindex, v, vp1
@@ -4971,8 +4968,6 @@ endif
 
 ! closest vertex to given point.
 closest_vert = closest_vertex_ll(cellid, lat, lon)
-call xyz_to_latlon(xVertex(closest_vert), yVertex(closest_vert), zVertex(closest_vert), &
-                   junk(1), junk(2))
 
 ! collect the neighboring cell ids and vertex numbers
 ! this 2-step process avoids us having to read in the
@@ -4996,23 +4991,9 @@ do i=1, nedges
       xdata(i), ydata(i), zdata(i))
 enddo
 
-do i=1, nedges
-   call xyz_to_latlon(xVertex(verts(i)), yVertex(verts(i)), zVertex(verts(i)), &
-                      junk(1), junk(2))
-enddo
-
 
 ! get the cartesian coordinates in the cell plane for the closest center
 call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
-
-
-! and the original edges
-do i = 1, nedges
-   edgeid = edgesOnCell(i, cellid)
-enddo
-do i = 1, nedges
-   edgeid = edgesOnCell(i, cellid)
-enddo
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
@@ -5059,12 +5040,12 @@ nvert = progvar(ival)%numvertical
 ! go around triangle and interpolate in the vertical
 ! t1, t2, t3 are the xyz of the cell centers
 ! c(3) are the cell ids
-!print *, 'cell ids: ', c
 do i = 1, 3
    lowval(i) = x(index1 + (c(i)-1) * nvert + lower-1)
    uppval(i) = x(index1 + (c(i)-1) * nvert + upper-1)
    if (vert_is_pressure(loc)) then
-      fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
+      !fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
+      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
    else
       fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
    endif
@@ -5117,18 +5098,20 @@ lat = tmp(2)
 vert = tmp(3)
 verttype = nint(query_location(loc))
 
-call find_surrounding_edges(lat, lon, nedges, edgelist)
+call find_surrounding_edges(lat, lon, nedges, edgelist, cellid)
 if (nedges <= 0) then
    ! we are on a boundary, no interpolation
    uval = MISSING_R8
    ier = 18
    return
 endif
-!print *, 'obs lon, lat: ', lon, lat
+print *, 'obs lon, lat: ', lon, lat
 !print *, 'rbf: surrounding edge list, nedges = ', nedges
 !print *, edgelist(1:nedges)
+!print *, 'closest cell = ', cellid
 
-! the code needs: nData == nedges
+! the rbf code needs (their names == our names):
+! nData == nedges
 ! xyz data == xyzEdge
 ! normalDirectionData == edgeNormalVectors
 ! velocitydata = U field
@@ -5148,7 +5131,6 @@ if (progindex < 0) then
 endif
 index1 = progvar(progindex)%index1
 nvert = progvar(progindex)%numvertical
-!print *, 'valid offsets for u: ', index1, progvar(progindex)%indexN
 
 do i = 1, nedges
    if (edgelist(i) > size(xEdge)) then
@@ -5165,8 +5147,6 @@ do i = 1, nedges
 
 !print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nvert, lower
 !print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nvert, upper
-!print *, 'totals = ', index1 + (edgelist(i)-1) * nvert + lower-1, &
-!                      index1 + (edgelist(i)-1) * nvert + upper-1
    lowval = x(index1 + (edgelist(i)-1) * nvert + lower-1)
    uppval = x(index1 + (edgelist(i)-1) * nvert + upper-1)
 !print *, 'lowval, uppval = ', lowval, uppval
@@ -5176,21 +5156,17 @@ do i = 1, nedges
    else
       veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
    endif
-!print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
+print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
 enddo
 
 
-cellid = find_closest_cell_center(lat, lon)
-if (cellid < 1) then
-   uval = MISSING_R8
-   ier = 11
-   return
-endif
-!print *, 'found closest cell, id = ', cellid
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
 call latlon_to_xyz_on_plane(lat, lon, cellid, &
               xreconstruct,yreconstruct,zreconstruct)
+
+! FIXME: on plane is more expensive than just the intersection with the
+! sphere.  if it doesn't matter, use this one.
 !print *, 'xyz on plane: ', xreconstruct,yreconstruct,zreconstruct
 !call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
 !print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
@@ -5211,7 +5187,7 @@ call get_reconstruct(nedges, lat, lon, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
 
-!print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
+print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
 !print *, 'XYZ vals from reconstruction: ', ureconstructx, ureconstructy, ureconstructz
 
 ! FIXME: it would be nice to return both and not have to call this
@@ -5228,14 +5204,15 @@ end subroutine compute_u_with_rbf
 
 !------------------------------------------------------------
 
-subroutine find_surrounding_edges(lat, lon, nedges, edge_list)
+subroutine find_surrounding_edges(lat, lon, nedges, edge_list, cellid)
 real(r8), intent(in)  :: lat, lon
 integer,  intent(out) :: nedges, edge_list(:)
+integer,  intent(out) :: cellid
 
 ! given an arbitrary lat/lon location, find the edges of the
 ! cells that share the nearest vertex.
 
-integer :: cellid, vertexid
+integer :: vertexid
 
 ! find the cell id that has a center point closest
 ! to the given point.
