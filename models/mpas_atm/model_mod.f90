@@ -2424,13 +2424,13 @@ PROGVARLOOP : do ivar=1, nfields
       write(*,*)'statevector_to_analysis_file '//trim(varname)//' count is ',mycount(1:ncNdims)
    endif
 
+
    if (progvar(ivar)%numdims == 1) then
       allocate(data_1d_array(mycount(1)))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
       write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
-      call error_handler(E_MSG, '', string1, &
-                        source,revision,revdate)
+      call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
          where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
@@ -2438,8 +2438,7 @@ PROGVARLOOP : do ivar=1, nfields
 
          write(string1, *) 'after clamping min/max ', trim(varname), &
                             minval(data_1d_array), maxval(data_1d_array)
-         call error_handler(E_MSG, '', string1, &
-                           source,revision,revdate)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       endif
 
@@ -2454,8 +2453,7 @@ PROGVARLOOP : do ivar=1, nfields
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
       write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
-      call error_handler(E_MSG, '', string1, &
-                        source,revision,revdate)
+      call error_handler(E_MSG, '', trim(string1), source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
          where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
@@ -2463,10 +2461,10 @@ PROGVARLOOP : do ivar=1, nfields
 
          write(string1, *) 'after clamping min/max ', trim(varname), &
                             minval(data_2d_array), maxval(data_2d_array)
-         call error_handler(E_MSG, '', string1, &
-                           source,revision,revdate)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       endif
+
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
@@ -2479,8 +2477,7 @@ PROGVARLOOP : do ivar=1, nfields
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
       write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
-      call error_handler(E_MSG, '', string1, &
-                        source,revision,revdate)
+      call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
          where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
@@ -2488,8 +2485,7 @@ PROGVARLOOP : do ivar=1, nfields
 
          write(string1, *) 'after clamping min/max ', trim(varname), &
                             minval(data_3d_array), maxval(data_3d_array)
-         call error_handler(E_MSG, '', string1, &
-                           source,revision,revdate)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       endif
 
@@ -4764,8 +4760,8 @@ do i = 1, nVertices
 
 enddo
 
-if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
-if (do_output()) write(*,*)'triangle_num is ',maxval(triangle_num)
+!if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
+!if (do_output()) write(*,*)'triangle_num is ',maxval(triangle_num)
 
 ! Invert the temporary data structure. The total number of entries will be 
 ! the sum of the number of triangle cells for each regular cell. 
@@ -5207,7 +5203,7 @@ enddo
 ! sphere.  if it doesn't matter, use this one.
 !print *, 'xyz on plane: ', xreconstruct,yreconstruct,zreconstruct
 call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
-print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
+!print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
 
 !! FIXME: DEBUG, remove
 !if (lon == 270.00) then
