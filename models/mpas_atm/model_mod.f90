@@ -2243,8 +2243,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      print *, trim(varname), minval(data_1d_array), maxval(data_1d_array), &
-                 progvar(ivar)%index1, progvar(ivar)%indexN
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_1d_array, state_vector, ivar)
       deallocate(data_1d_array)
 
@@ -2256,8 +2259,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      print *, trim(varname), minval(data_2d_array), maxval(data_2d_array), &
-                 progvar(ivar)%index1, progvar(ivar)%indexN
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_2d_array, state_vector, ivar)
       deallocate(data_2d_array)
 
@@ -2270,8 +2276,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
-      print *, trim(varname), minval(data_3d_array), maxval(data_3d_array), &
-                 progvar(ivar)%index1, progvar(ivar)%indexN
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_3d_array, state_vector, ivar)
       deallocate(data_3d_array)
 
@@ -2419,9 +2428,19 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_1d_array(mycount(1)))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
-        where ( data_1d_array > progvar(ivar)%range(2) ) data_1d_array = progvar(ivar)%range(2)
+         where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
+         where ( data_1d_array > progvar(ivar)%range(2) ) data_1d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_1d_array), maxval(data_1d_array)
+         call error_handler(E_MSG, '', string1, &
+                           source,revision,revdate)
+
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
@@ -2434,9 +2453,19 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_2d_array(mycount(1), mycount(2)))
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
-        where ( data_2d_array > progvar(ivar)%range(2) ) data_2d_array = progvar(ivar)%range(2)
+         where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
+         where ( data_2d_array > progvar(ivar)%range(2) ) data_2d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_2d_array), maxval(data_2d_array)
+         call error_handler(E_MSG, '', string1, &
+                           source,revision,revdate)
+
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
@@ -2449,9 +2478,19 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_3d_array(mycount(1), mycount(2), mycount(3)))
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
-        where ( data_3d_array > progvar(ivar)%range(2) ) data_3d_array = progvar(ivar)%range(2)
+         where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
+         where ( data_3d_array > progvar(ivar)%range(2) ) data_3d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_3d_array), maxval(data_3d_array)
+         call error_handler(E_MSG, '', string1, &
+                           source,revision,revdate)
+
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
@@ -5072,7 +5111,7 @@ integer,             intent(out) :: ier
 
 
 integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
-logical, parameter :: on_a_sphere = .false.
+logical, parameter :: on_a_sphere = .true.
 integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(3, listsize)
@@ -5105,7 +5144,7 @@ if (nedges <= 0) then
    ier = 18
    return
 endif
-print *, 'obs lon, lat: ', lon, lat
+!print *, 'obs lon, lat: ', lon, lat
 !print *, 'rbf: surrounding edge list, nedges = ', nedges
 !print *, edgelist(1:nedges)
 !print *, 'closest cell = ', cellid
@@ -5156,20 +5195,27 @@ do i = 1, nedges
    else
       veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
    endif
-print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
+!print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
 enddo
 
 
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
-call latlon_to_xyz_on_plane(lat, lon, cellid, &
-              xreconstruct,yreconstruct,zreconstruct)
-
+!call latlon_to_xyz_on_plane(lat, lon, cellid, &
+!              xreconstruct,yreconstruct,zreconstruct)
 ! FIXME: on plane is more expensive than just the intersection with the
 ! sphere.  if it doesn't matter, use this one.
 !print *, 'xyz on plane: ', xreconstruct,yreconstruct,zreconstruct
-!call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
-!print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
+call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
+print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
+
+!! FIXME: DEBUG, remove
+!if (lon == 270.00) then
+!   print *, xreconstruct, yreconstruct, zreconstruct
+!   do i=1, nedges
+!      print *, xdata(i), ydata(i), zdata(i)
+!   enddo
+!endif
 
 ! call a simple subroutine to define vectors in the tangent plane
 call get_geometry(nedges, xdata, ydata, zdata, &
@@ -5182,12 +5228,12 @@ call get_reconstruct_init(nedges, xdata, ydata, zdata, &
               datatangentplane, coeffs_reconstruct)
 
 ! do the reconstruction
-call get_reconstruct(nedges, lat, lon, &
+call get_reconstruct(nedges, lat*deg2rad, lon*deg2rad, &
               coeffs_reconstruct, on_a_sphere, veldata, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
 
-print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
+!print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
 !print *, 'XYZ vals from reconstruction: ', ureconstructx, ureconstructy, ureconstructz
 
 ! FIXME: it would be nice to return both and not have to call this
