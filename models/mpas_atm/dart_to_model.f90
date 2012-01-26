@@ -67,7 +67,9 @@ character(len=256)    :: model_analysis_filename
 
 !----------------------------------------------------------------------
 
-call initialize_utilities(progname='dart_to_model', output_flag=verbose)
+call initialize_utilities(progname='dart_to_model')
+! if verbose is false, E_MSG won't get printed.  i'm not sure we want that.
+!call initialize_utilities(progname='dart_to_model', output_flag=verbose)
 
 ! Read the namelist to get the input filename. 
 
