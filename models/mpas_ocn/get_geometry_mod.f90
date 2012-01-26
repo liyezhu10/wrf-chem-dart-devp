@@ -7,9 +7,9 @@ module get_geometry_mod
 
 ! <next few lines under version control, do not edit>
 ! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/models/mpas_atm/get_geometry_mod.f90 $
-! $Id: get_geometry_mod.f90 5495 2012-01-10 23:55:37Z thoar $
-! $Revision: 5495 $
-! $Date: 2012-01-10 16:55:37 -0700 (Tue, 10 Jan 2012) $
+! $Id: get_geometry_mod.f90 5528 2012-01-24 17:34:35Z nancy $
+! $Revision: 5528 $
+! $Date: 2012-01-24 10:34:35 -0700 (Tue, 24 Jan 2012) $
 
    use types_mod, only : r8
 
@@ -76,19 +76,19 @@ module get_geometry_mod
     ! xHat and yHat are a local basis in the plane of the horizontal cell
     ! we arbitrarily choose xHat to point toward the first data point
     rHat = localVerticalUnitVectors
-    normalDotRHat = sum(normalDirectionData(iData,:)*rHat)
-    xHatPlane = normalDirectionData(iData,:) - normalDotRHat*rHat
+    normalDotRHat = sum(normalDirectionData(:,iData)*rHat)
+    xHatPlane = normalDirectionData(:,iData) - normalDotRHat*rHat
     call mpas_unit_vec_in_r3(xHatPlane)
 
     call mpas_cross_product_in_r3(rHat, xHatPlane, yHatPlane)
     call mpas_unit_vec_in_r3(yHatPlane) ! just to be sure...
     dataTangentPlane(:,1) = xHatPlane
     dataTangentPlane(:,2) = yHatPlane
-    write(6,*)
-    write(6,*) ' dataTangentPlane '
-    write(6,10) dataTangentPlane(:,1)
-    write(6,10) dataTangentPlane(:,2)
-    write(6,*)
+    !write(6,*)
+    !write(6,*) ' dataTangentPlane '
+    !write(6,10) dataTangentPlane(:,1)
+    !write(6,10) dataTangentPlane(:,2)
+    !write(6,*)
     10 format(3e20.10)
 
   end subroutine get_geometry

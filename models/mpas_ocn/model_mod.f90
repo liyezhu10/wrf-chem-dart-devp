@@ -45,6 +45,7 @@ use     obs_kind_mod, only : paramname_length,        &
                              KIND_SURFACE_PRESSURE,   &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
+                             KIND_EDGE_NORMAL_SPEED,  &
                              KIND_TEMPERATURE,        &
                              KIND_U_WIND_COMPONENT,   &
                              KIND_V_WIND_COMPONENT,   &
@@ -137,6 +138,7 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
+logical            :: use_new_code = .true.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -146,7 +148,8 @@ namelist /model_nml/             &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    calendar,                     &
-   debug
+   debug,                        &
+   use_new_code
 
 !------------------------------------------------------------------
 ! DART state vector are specified in the input.nml:mpas_vars_nml namelist.
@@ -200,24 +203,36 @@ integer :: nSoilLevels   = -1  ! Number of soil layers
 
 ! scalar grid positions
 
+! FIXME: we read in a lot of metadata about the grids.  if space becomes an
+! issue we could consider reading in only the x,y,z arrays for all the items
+! plus the radius, and then compute the lat/lon for locations needed by 
+! get_state_meta_data() on demand.  most of the computations we need to do
+! are actually easier in xyz coords (no issue with poles).
+
+! FIXME: it may be desirable to read in xCell(:), yCell(:), zCell(:)
+! to keep from having to compute them on demand, especially since we
+! have converted the radian lat/lon of the cell centers into degrees.
+! we have to convert back, then take a few sin and cos to get xyz.
+! time/space/accuracy tradeoff here.
 
 real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
 real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
-real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees)
-real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees)
-real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees)
-real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees)
+real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
+real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
+real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
+real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
 real(r8), allocatable :: zGridFace(:,:)   ! geometric height at cell faces   (nVertLevelsP1,nCells)
 real(r8), allocatable :: zGridCenter(:,:) ! geometric height at cell centers (nVertLevels,  nCells)
+real(r8), allocatable :: zGridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 
-real(r8), allocatable :: zEdgeFace(:,:)   ! geometric height at edges faces  (nVertLevelsP1,nEdges)
-real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
+!real(r8), allocatable :: zEdgeFace(:,:)   ! geometric height at edges faces  (nVertLevelsP1,nEdges)
+!real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
 
-real(r8), allocatable :: zgridEdge(:,:)   ! geometric height at edge centers (nVertLevels,  nEdges)
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
 
 integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
+integer,  allocatable :: cellsOnEdge(:,:) ! list of cells that bound each edge
 integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
 real(r8), allocatable :: edgeNormalVectors(:,:)
 
@@ -228,10 +243,15 @@ integer,  allocatable :: boundaryEdge(:,:)
 integer,  allocatable :: boundaryVertex(:,:)
 integer,  allocatable :: maxLevelCell(:)
 
-integer               :: model_size      ! the state vector length
-type(time_type)       :: model_timestep  ! smallest time to adv model
-real(r8), allocatable :: ens_mean(:)     ! may be needed for forward ops
+real(r8), allocatable :: ens_mean(:)         ! may be needed for forward ops
 
+integer         :: model_size          ! the state vector length
+type(time_type) :: model_timestep      ! smallest time to adv model
+
+logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
+logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
+logical :: has_real_u = .false.        ! true = has original u on edges
+logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
 
 !------------------------------------------------------------------
 ! The model analysis manager namelist variables
@@ -316,6 +336,7 @@ integer :: ncid, VarID, numdims, varsize, dimlen
 integer :: iunit, io, ivar, i, index1, indexN, iloc, kloc
 integer :: ss, dd
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
+integer :: cel1, cel2
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -370,17 +391,19 @@ allocate(latCell(nCells), lonCell(nCells))
 allocate(zGridFace(nVertLevelsP1, nCells))
 allocate(zGridCenter(nVertLevels, nCells))
 
-allocate(zEdgeFace(  nVertLevelsP1, nEdges))
-allocate(zEdgeCenter(nVertLevels,   nEdges))
+!allocate(zEdgeFace(  nVertLevelsP1, nEdges))
+!allocate(zEdgeCenter(nVertLevels,   nEdges))
+allocate(zGridEdge(nVertLevels,   nEdges))
 
 allocate(cellsOnVertex(vertexDegree, nVertices))
 allocate(nEdgesOnCell(nCells))
 allocate(edgesOnCell(maxEdges, nCells))
+allocate(cellsOnEdge(2, nEdges))
 allocate(verticesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 allocate(latEdge(nEdges), lonEdge(nEdges)) 
 allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
-allocate(xEdge(nVertices), yEdge(nVertices), zEdge(nVertices))
+allocate(xEdge(nEdges), yEdge(nEdges), zEdge(nEdges))
 
 ! this reads in latCell, lonCell, zGridFace, cellsOnVertex
 call get_grid()
@@ -391,9 +414,24 @@ do kloc=1, nCells
    zGridCenter(iloc,kloc) = (zGridFace(iloc,kloc) + zGridFace(iloc+1,kloc))*0.5_r8
  enddo
 enddo
+
+! FIXME: This code is supposed to check whether an edge has 2 neighbours or 1 neighbour and then
+!        compute the height accordingly.  HOWEVER, the array cellsOnEdge does not change with 
+!        depth, but it should as an edge may have 2 neighbour cells at the top but not at depth.
 do kloc=1, nEdges
  do iloc=1, nVertLevels
-   zEdgeCenter(iloc,kloc) = (zEdgeFace(iloc,kloc) + zEdgeFace(iloc+1,kloc))*0.5_r8
+   cel1 = cellsOnEdge(1,kloc)
+   cel2 = cellsOnEdge(2,kloc)
+   if (cel1>0 .and. cel2>0) then
+      zGridEdge(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
+   else if (cel1>0) then
+      zGridEdge(iloc,kloc) = zGridCenter(iloc,cel1)
+   else if (cel2>0) then
+      zGridEdge(iloc,kloc) = zGridCenter(iloc,cel2)
+   else  !this is bad...
+      write(string1,*)'Edge ',kloc,' at vertlevel ',iloc,' has no neighbouring cells!'
+      call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
+   endif
  enddo
 enddo
               
@@ -511,12 +549,16 @@ do ivar = 1, nfields
       progvar(ivar)%ZonHalf = .FALSE.
    endif
 
+   if (varname == 'u') has_real_u = .true.
+   if (varname == 'uReconstructZonal' .or. &
+       varname == 'uReconstructMeridional') has_uvreconstruct = .true.
+
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ( debug > 0 ) call dump_progvar(ivar)
+   !if ( debug > 0 ) call dump_progvar(ivar)
 
 enddo
 
@@ -534,13 +576,26 @@ if ( debug > 0 .and. do_output()) then
                                           nCells, nVertices, nVertLevels
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
+  if ( global_grid ) then
+     write(logfileunit, *)'static_init_model: grid is a global grid '
+     write(     *     , *)'static_init_model: grid is a global grid '
+  else
+     write(logfileunit, *)'static_init_model: grid has boundaries '
+     write(     *     , *)'static_init_model: grid has boundaries ' 
+  endif
+  if ( all_levels_exist_everywhere ) then
+     write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
+     write(     *     , *)'static_init_model: all cells have same number of vertical levels '
+  else
+     write(logfileunit, *)'static_init_model: cells have varying number of vertical levels ' 
+     write(     *     , *)'static_init_model: cells have varying number of vertical levels '
+  endif
 endif
 
 allocate( ens_mean(model_size) )
 
 ! Initialize the interpolation data structures
 call init_interp()
-
 
 end subroutine static_init_model
 
@@ -561,7 +616,7 @@ integer, optional,   intent(out) :: var_type
   
 ! Local variables
 
-integer  :: nxp, nzp, iloc, kloc, nf, n
+integer  :: nxp, nzp, iloc, vloc, nf, n
 integer  :: myindx
 real(r8) :: height
 
@@ -597,27 +652,25 @@ endif
 
 nzp  = progvar(nf)%numvertical
 iloc = 1 + (myindx-1) / nzp    ! cell index
-kloc = myindx - (iloc-1)*nzp   ! vertical level index
+vloc = myindx - (iloc-1)*nzp   ! vertical level index
 
 ! the zGrid array contains the location of the cell top and bottom faces, so it has one 
 ! more value than the number of cells in each column.  for locations of cell centers
 ! you have to take the midpoint of the top and bottom face of the cell.
-
 if (progvar(nf)%numedges /= MISSING_I) then
    if ( progvar(nf)%ZonHalf ) then
-      height = zEdgeCenter(kloc,iloc)
-   else if (nzp <= 1) then
-      height = zEdgeFace(1,iloc)
+      height = zGridEdge(vloc,iloc)
    else
-      height = zEdgeFace(kloc,iloc)
+      call error_handler(E_ERR, 'get_state_meta_data', 'no support for edges at face heights', &
+                         source, revision, revdate)
    endif
 else
    if ( progvar(nf)%ZonHalf ) then
-      height = zGridCenter(kloc,iloc)
+      height = zGridCenter(vloc,iloc)
    else if (nzp <= 1) then
       height = zGridFace(1,iloc)
    else
-      height = zGridFace(kloc,iloc)
+      height = zGridFace(vloc,iloc)
    endif
 endif
 
@@ -640,7 +693,7 @@ endif
 if (debug > 9) then
 
     write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
-    write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, kloc
+    write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, vloc
     write(*,'("                      LON/LAT/HGT: ",3(f12.3,2x))') lonCell(iloc), latCell(iloc), height
 
 endif
@@ -672,7 +725,7 @@ integer,             intent(out) :: istatus
 
 ! local storage
 
-integer  :: obs_kinds(3)
+integer  :: obs_kinds(3), ivar
 real(r8) :: values(3)
 
 ! call the normal interpolate code.  if it fails because
@@ -684,20 +737,38 @@ istatus    = 888888       ! must be positive (and integer)
 
 obs_kinds(1) = obs_type
 
+! debug only
+if (.false.) then
+   ivar = get_progvar_index_from_kind(obs_kinds(1))
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_DENSITY)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+   ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
+   if ( ivar > 0 .and. debug > 7 ) call dump_progvar(ivar, x)
+endif
+
+
 call local_interpolate(x, location, 1, obs_kinds, values, istatus)
 if (istatus /= 88) then
    ! this is for debugging - when we're confident the code is
    ! returning consistent values and rc codes, both these tests can
    ! be removed for speed.  FIXME.
    if (istatus /= 0 .and. values(1) /= MISSING_R8) then
-      write(string1,*) 'interp routine returned a bad status but good value'
-      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
+      write(string1,*) 'interp routine returned a bad status but not a MISSING_R8 value'
+      write(string2,*) 'value = ', values(1), ' istatus = ', istatus
+      call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate, &
+                         text2=string2)
    endif
    if (istatus == 0 .and. values(1) == MISSING_R8) then
-      write(string1,*) 'interp routine returned a good status but bad value'
+      write(string1,*) 'interp routine returned a good status but set value to MISSING_R8'
       call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
    endif
    interp_val = values(1)
+if (debug > 5) print *, 'returning value ', interp_val
    return
 endif
 
@@ -707,6 +778,7 @@ if (obs_type == KIND_TEMPERATURE) then
    obs_kinds(3) = KIND_VAPOR_MIXING_RATIO
 
    call local_interpolate(x, location, 3, obs_kinds, values, istatus)
+!print *, '1 local interpolate returns istatus = ', istatus
    if (istatus /= 0) then
       ! this is for debugging - when we're confident the code is
       ! returning consistent values and rc codes, both these tests can
@@ -728,6 +800,7 @@ if (obs_type == KIND_TEMPERATURE) then
    return
 endif
 
+!print *, '2 local interpolate returns istatus = ', istatus
 
 ! add other cases here for kinds we want to handle
 ! if (istatus == 88) then
@@ -782,7 +855,7 @@ integer,             intent(out) :: istatus
 ! Local storage
 
 real(r8) :: loc_array(3), llon, llat, lheight, fract, v_interp
-integer  :: i, j, ivar, ier, lower, upper
+integer  :: i, j, ivar, ier, lower, upper, this_kind
 integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
 real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp
@@ -798,26 +871,35 @@ if ( .not. module_initialized ) call static_init_model
 interp_vals(:) = MISSING_R8     ! the DART bad value flag
 istatus = 99                ! unknown error
 
-! see if all variable kinds are in the state vector.  this sets an
+! see if all observation kinds are in the state vector.  this sets an
 ! error code and returns without a fatal error if any answer is no.
-! one exception:  if the vertical location is specified in pressure
+! exceptions:  if the vertical location is specified in pressure
 ! we end up computing the sensible temperature as part of converting
 ! to height (meters), so if the kind to be computed is sensible temp
 ! (which is not in state vector; potential temp is), go ahead and
 ! say yes, we know how to compute it.  if the vert is any other units
 ! then fail and let the calling code call in for the components
-! it needs to compute sensible temp itself.
-do i=1, num_kinds
+! it needs to compute sensible temp itself.  also, if the obs is a
+! wind (or ocean current) component, and the edge normal speeds are
+! in the state vector, we can do it.
+
+oktointerp: do i=1, num_kinds
    ivar = get_progvar_index_from_kind(obs_kinds(i))
    if (ivar <= 0) then
-      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) then
-         continue;
-      else
-         istatus = 88            ! this kind not in state vector
-         return
-     endif
+      ! exceptions 1 and 2:
+      ! FIXME: the new code cannot yet compute sensible temperature in one go.  fail for that.
+      ! remove the new code test once we add it.
+      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location) .and. &
+          .not. use_new_code) cycle oktointerp
+      if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) then
+         ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
+         if (ivar > 0) cycle oktointerp
+      endif
+
+      istatus = 88            ! this kind not in state vector
+      return
    endif
-enddo
+enddo oktointerp
 
 ! Not prepared to do w interpolation at this time
 do i=1, num_kinds
@@ -836,8 +918,45 @@ lheight   = loc_array(3)
 if (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 
 
+!  if (debug > 2) print *, 'base offset now ', base_offset(1)
+
+! FIXME: this needs to play well with multiple types in the kinds list.
+! for now do only the first one.  if 'u' is part of the state vector
+! and if they are asking for U/V components, use the new RBF code.
+! if u isn't in the state vector, default to trying to interpolate
+! in the reconstructed U/V components at the cell centers.
+
+if (use_new_code) then
+   kindloop: do i=1, num_kinds
+      if ((obs_kinds(i) == KIND_U_WIND_COMPONENT .or. &
+           obs_kinds(i) == KIND_V_WIND_COMPONENT) .and. has_real_u) then
+         if (obs_kinds(i) == KIND_U_WIND_COMPONENT) then
+            call compute_u_with_rbf(x, location, .TRUE., interp_vals(i), istatus)
+         else
+            call compute_u_with_rbf(x, location, .FALSE., interp_vals(i), istatus)
+         endif
+
+      else if (obs_kinds(i) /= KIND_TEMPERATURE) then
+         ivar = get_progvar_index_from_kind(obs_kinds(i))
+         call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
+         if (istatus /= 0) return
+ 
+      else if (obs_kinds(i) == KIND_TEMPERATURE) then
+         print *, 'need to add case in new code for sensible temperature'
+         stop
+         ! need to get potential temp, pressure, qv here, but can
+         ! use same weights.  does this get pushed down into the
+         ! scalar code?
+      endif
+   enddo kindloop
+   return
+endif
+
+!! start of original code - should be unneeded if we decide to
+!! use the new code.
+if (debug > 4) print *, 'using original interpolation code'
+
 ! Find the start and end offsets for these fields in the state vector x(:)
-! Call terminates if any obs_kind is not found
 do i=1, num_kinds
    if (obs_kinds(i) == KIND_TEMPERATURE) then
       base_offset(i) = 0  ! this won't be used in this case
@@ -845,28 +964,6 @@ do i=1, num_kinds
       call get_index_range(obs_kinds(i), base_offset(i))
    endif
 enddo
-
-!  if (debug > 2) print *, 'base offset now ', base_offset(1)
-
-! FIXME: this needs to play well with multiple types in the kinds list
-! for now do only the first one.  if 'u' is part of the state vector
-! and if they are asking for U/V components, use the new RBF code.
-! if u isn't in the state vector, default to trying to interpolate
-! in the reconstructed U/V components at the cell centers.
-if ((obs_kinds(1) == KIND_U_WIND_COMPONENT) .or. &
-    (obs_kinds(1) == KIND_V_WIND_COMPONENT)) then
-   do i=1, num_kinds
-      ivar = get_index_from_varname('u')
-      if (ivar > 0) then
-         if (obs_kinds(1) == KIND_U_WIND_COMPONENT) then
-            call compute_u_with_rbf(x, location, .TRUE., interp_vals(1), istatus)
-         else
-            call compute_u_with_rbf(x, location, .FALSE., interp_vals(1), istatus)
-         endif
-         return
-     endif
-   enddo
-endif
 
 ! Find the indices of the three cell centers that surround this point in
 ! the horizontal along with the barycentric weights.
@@ -950,10 +1047,12 @@ endif
    call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
    call get_index_range(KIND_DENSITY, density_base_offset)
    call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+!print *, 'bases: t/rho/v = ', pt_base_offset, density_base_offset, qv_base_offset
    call find_pressure_bounds(x, lheight, tri_indices, weights, nVertLevels, &
          pt_base_offset, density_base_offset, qv_base_offset, lower, upper, fract, &
          ltemp, utemp, ier)
    if(ier /= 0) then
+      interp_vals = MISSING_R8
       istatus = 17
       return
    endif
@@ -1076,15 +1175,16 @@ integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 
 ! for the dimensions and coordinate variables
 integer :: nCellsDimID
-integer :: nEdgesDimID
+integer :: nEdgesDimID, maxEdgesDimID
 integer :: nVerticesDimID
 integer :: VertexDegreeDimID
 integer :: nSoilLevelsDimID
 integer :: nVertLevelsDimID
 integer :: nVertLevelsP1DimID
 
+
 ! for the prognostic variables
-integer :: ivar, VarID
+integer :: ivar, VarID, mpasFileID
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -1103,6 +1203,8 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
 integer :: myndims
 
 character(len=128) :: filename
+
+real(r8), allocatable, dimension(:)   :: data1d
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1206,6 +1308,9 @@ else
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nEdges', &
           len = nEdges, dimid = nEdgesDimID),'nc_write_model_atts', 'nEdges def_dim '//trim(filename))
 
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='maxEdges', &
+          len = maxEdges, dimid = maxEdgesDimID),'nc_write_model_atts', 'maxEdges def_dim '//trim(filename))
+
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nVertices', &
           len = nVertices, dimid = nVerticesDimID),'nc_write_model_atts', &
                'nVertices def_dim '//trim(filename))
@@ -1234,8 +1339,6 @@ else
    call nc_check(nf90_def_var(ncFileID,name='lonCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'lonCell def_var '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID, VarID, 'type', 'x1d'),  &
-!                'nc_write_model_atts', 'lonCell type '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center longitudes'), &
                  'nc_write_model_atts', 'lonCell long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
@@ -1247,16 +1350,30 @@ else
    call nc_check(nf90_def_var(ncFileID,name='latCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'latCell def_var '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID, VarID, 'type', 'y1d'),  &
-!                'nc_write_model_atts', 'latCell type '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center latitudes'), &
                  'nc_write_model_atts', 'latCell long_name '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
-!                'nc_write_model_atts', 'latCell cartesian_axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
                  'nc_write_model_atts', 'latCell units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
                  'nc_write_model_atts', 'latCell valid_range '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='xCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'xCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center x cartesian coordinates'), &
+                 'nc_write_model_atts', 'xCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='yCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'yCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center y cartesian coordinates'), &
+                 'nc_write_model_atts', 'yCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='zCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'zCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center z cartesian coordinates'), &
+                 'nc_write_model_atts', 'zCell long_name '//trim(filename))
 
    ! Grid vertical information
    call nc_check(nf90_def_var(ncFileID,name='zgrid',xtype=nf90_double, &
@@ -1271,12 +1388,42 @@ else
    call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
                  'nc_write_model_atts', 'zgrid cartesian_axis '//trim(filename))
 
-   ! Grid vertical information
+   ! Vertex Longitudes
+   call nc_check(nf90_def_var(ncFileID,name='lonVertex', xtype=nf90_double, &
+                 dimids=nVerticesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'lonVertex def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'vertex longitudes'), &
+                 'nc_write_model_atts', 'lonVertex long_name '//trim(filename))
+
+   ! Vertex Latitudes
+   call nc_check(nf90_def_var(ncFileID,name='latVertex', xtype=nf90_double, &
+                 dimids=nVerticesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'latVertex def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'vertex latitudes'), &
+                 'nc_write_model_atts', 'latVertex long_name '//trim(filename))
+
+   ! Grid relationship information
+   call nc_check(nf90_def_var(ncFileID,name='nEdgesOnCell',xtype=nf90_int, &
+                 dimids=nCellsDimID ,varid=VarID), &
+                 'nc_write_model_atts', 'nEdgesOnCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid nEdgesOnCell'), &
+                 'nc_write_model_atts', 'nEdgesOnCell long_name '//trim(filename))
+
    call nc_check(nf90_def_var(ncFileID,name='cellsOnVertex',xtype=nf90_int, &
                  dimids=(/ VertexDegreeDimID, nVerticesDimID /) ,varid=VarID), &
                  'nc_write_model_atts', 'cellsOnVertex def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid cellsOnVertex'), &
                  'nc_write_model_atts', 'cellsOnVertex long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='verticesOnCell',xtype=nf90_int, &
+                 dimids=(/ maxEdgesDimID, nCellsDimID /) ,varid=VarID), &
+                 'nc_write_model_atts', 'verticesOnCell def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid verticesOnCell'), &
+                 'nc_write_model_atts', 'verticesOnCell long_name '//trim(filename))
+
+   call nc_check(nf90_def_var(ncFileID,name='areaCell', xtype=nf90_double, &
+                 dimids=nCellsDimID, varid=VarID),&
+                 'nc_write_model_atts', 'areaCell def_var '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -1314,7 +1461,7 @@ else
    call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
    !----------------------------------------------------------------------------
-   ! Fill the coordinate variables
+   ! Fill the coordinate variables that DART needs and has locally 
    !----------------------------------------------------------------------------
 
    call nc_check(NF90_inq_varid(ncFileID, 'lonCell', VarID), &
@@ -1332,12 +1479,90 @@ else
    call nc_check(nf90_put_var(ncFileID, VarID, zGridFace ), &
                 'nc_write_model_atts', 'zgrid put_var '//trim(filename))
 
+   call nc_check(NF90_inq_varid(ncFileID, 'nEdgesOnCell', VarID), &
+                 'nc_write_model_atts', 'nEdgesOnCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, nEdgesOnCell ), &
+                'nc_write_model_atts', 'nEdgesOnCell put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'verticesOnCell', VarID), &
+                 'nc_write_model_atts', 'verticesOnCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, verticesOnCell ), &
+                'nc_write_model_atts', 'verticesOnCell put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'cellsOnVertex', VarID), &
+                 'nc_write_model_atts', 'cellsOnVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, cellsOnVertex ), &
+                'nc_write_model_atts', 'cellsOnVertex put_var '//trim(filename))
+
+   !----------------------------------------------------------------------------
+   ! Fill the coordinate variables needed for plotting only.
+   ! DART has not read these in, so we have to read them from the input file
+   ! and parrot them to the DART output file. 
+   !----------------------------------------------------------------------------
+
+   call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
+                 'nc_write_model_atts','open '//trim(grid_definition_filename))
+
+   allocate(data1d(nCells))
+   call nc_check(nf90_inq_varid(mpasFileID, 'xCell', VarID), &
+                 'nc_write_model_atts',     'xCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'xCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'xCell', VarID), &
+                 'nc_write_model_atts',     'xCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'xCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'yCell', VarID), &
+                 'nc_write_model_atts',     'yCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'yCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'yCell', VarID), &
+                 'nc_write_model_atts',     'yCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'yCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'zCell', VarID), &
+                 'nc_write_model_atts',     'zCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'zCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'zCell', VarID), &
+                 'nc_write_model_atts',     'zCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'zCell put_var '//trim(filename))
+
+   call nc_check(nf90_inq_varid(mpasFileID, 'areaCell', VarID), &
+                 'nc_write_model_atts',     'areaCell inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'areaCell get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'areaCell', VarID), &
+                 'nc_write_model_atts',     'areaCell inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'areaCell put_var '//trim(filename))
+   deallocate(data1d)
+
+   allocate(data1d(nVertices))
+   call nc_check(nf90_inq_varid(mpasFileID, 'lonVertex', VarID), &
+                 'nc_write_model_atts',     'lonVertex inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'lonVertex get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'lonVertex', VarID), &
+                 'nc_write_model_atts',     'lonVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'lonVertex put_var '//trim(filename))
+   
+   call nc_check(nf90_inq_varid(mpasFileID, 'latVertex', VarID), &
+                 'nc_write_model_atts',     'latVertex inq_varid ')
+   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'latVertex get_var ')
+   call nc_check(nf90_inq_varid(ncFileID,   'latVertex', VarID), &
+                 'nc_write_model_atts',     'latVertex inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, data1d ), &
+                 'nc_write_model_atts',     'latVertex put_var '//trim(filename))
+   deallocate(data1d)
+
+   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
 endif
-
-!-------------------------------------------------------------------------------
-! Fill the variables we can
-!-------------------------------------------------------------------------------
-
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -2018,6 +2243,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_1d_array, state_vector, ivar)
       deallocate(data_1d_array)
 
@@ -2029,6 +2259,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_2d_array, state_vector, ivar)
       deallocate(data_2d_array)
 
@@ -2041,6 +2276,11 @@ do ivar=1, nfields
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
+
+      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      call error_handler(E_MSG, '', string1, &
+                        source,revision,revdate)
+
       call prog_var_to_vector(data_3d_array, state_vector, ivar)
       deallocate(data_3d_array)
 
@@ -2184,13 +2424,22 @@ PROGVARLOOP : do ivar=1, nfields
       write(*,*)'statevector_to_analysis_file '//trim(varname)//' count is ',mycount(1:ncNdims)
    endif
 
+
    if (progvar(ivar)%numdims == 1) then
       allocate(data_1d_array(mycount(1)))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      call error_handler(E_MSG, '', string1, source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
-        where ( data_1d_array > progvar(ivar)%range(2) ) data_1d_array = progvar(ivar)%range(2)
+         where ( data_1d_array < progvar(ivar)%range(1) ) data_1d_array = progvar(ivar)%range(1)
+         where ( data_1d_array > progvar(ivar)%range(2) ) data_1d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_1d_array), maxval(data_1d_array)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
+
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
@@ -2203,10 +2452,19 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_2d_array(mycount(1), mycount(2)))
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      call error_handler(E_MSG, '', trim(string1), source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
-        where ( data_2d_array > progvar(ivar)%range(2) ) data_2d_array = progvar(ivar)%range(2)
+         where ( data_2d_array < progvar(ivar)%range(1) ) data_2d_array = progvar(ivar)%range(1)
+         where ( data_2d_array > progvar(ivar)%range(2) ) data_2d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_2d_array), maxval(data_2d_array)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
+
       endif
+
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
@@ -2218,9 +2476,17 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_3d_array(mycount(1), mycount(2), mycount(3)))
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
+      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      call error_handler(E_MSG, '', string1, source,revision,revdate)
+
       if ( progvar(ivar)%clamping ) then
-        where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
-        where ( data_3d_array > progvar(ivar)%range(2) ) data_3d_array = progvar(ivar)%range(2)
+         where ( data_3d_array < progvar(ivar)%range(1) ) data_3d_array = progvar(ivar)%range(1)
+         where ( data_3d_array > progvar(ivar)%range(2) ) data_3d_array = progvar(ivar)%range(2)
+
+         write(string1, *) 'after clamping min/max ', trim(varname), &
+                            minval(data_3d_array), maxval(data_3d_array)
+         call error_handler(E_MSG, '', string1, source,revision,revdate)
+
       endif
 
       call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
@@ -2605,11 +2871,6 @@ call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, zGridFace), &
       'get_grid', 'get_var zgrid '//trim(grid_definition_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'zx', VarID), &
-      'get_grid', 'inq_varid zx '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zEdgeFace), &
-      'get_grid', 'get_var zx '//trim(grid_definition_filename))
-
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
       'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
@@ -2636,6 +2897,11 @@ call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
       'get_grid', 'inq_varid edgesOnCell '//trim(grid_definition_filename))
 call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
       'get_grid', 'get_var edgesOnCell '//trim(grid_definition_filename))
+
+call nc_check(nf90_inq_varid(ncid, 'cellsOnEdge', VarID), &
+      'get_grid', 'inq_varid cellsOnEdge '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, cellsOnEdge), &
+      'get_grid', 'get_var cellsOnEdge '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
       'get_grid', 'inq_varid latEdge '//trim(grid_definition_filename))
@@ -2686,23 +2952,28 @@ call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
       'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
 
 ! Get the boundary information if available. 
+! Assuming the existence of this variable is sufficient to determine if
+! the grid is defined everywhere or not.
 
 if ( nf90_inq_varid(ncid, 'boundaryEdge', VarID) == NF90_NOERR ) then
    allocate(boundaryEdge(nVertLevels,nEdges))
    call nc_check(nf90_get_var( ncid, VarID, boundaryEdge), &
       'get_grid', 'get_var boundaryEdge '//trim(grid_definition_filename))
+   global_grid = .false.
 endif
 
 if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
    allocate(boundaryVertex(nVertLevels,nVertices))
    call nc_check(nf90_get_var( ncid, VarID, boundaryVertex), &
       'get_grid', 'get_var boundaryVertex '//trim(grid_definition_filename))
+   global_grid = .false.
 endif
 
 if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
    allocate(maxLevelCell(nCells))
    call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
       'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
+   all_levels_exist_everywhere = .false.
 endif
 
 call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
@@ -2715,11 +2986,11 @@ if ( debug > 7 ) then
    write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
    write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
    write(*,*)'zgrid             range ',minval(zGridFace),         maxval(zGridFace)
-   write(*,*)'zx                range ',minval(zEdgeFace),         maxval(zEdgeFace)
    write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
    write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
    write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
    write(*,*)'EdgesOnCell       range ',minval(EdgesOnCell),       maxval(EdgesOnCell)
+   write(*,*)'cellsOnEdge       range ',minval(cellsOnEdge),       maxval(cellsOnEdge)
    write(*,*)'latEdge           range ',minval(latEdge),           maxval(latEdge)
    write(*,*)'lonEdge           range ',minval(lonEdge),           maxval(lonEdge)
    write(*,*)'xVertex           range ',minval(xVertex),           maxval(xVertex)
@@ -3319,9 +3590,12 @@ end subroutine verify_state_variables
 
 !------------------------------------------------------------------
 
-subroutine dump_progvar(ivar)
+subroutine dump_progvar(ivar, x)
 
- integer, intent(in) :: ivar
+ integer,  intent(in)           :: ivar
+ real(r8), intent(in), optional :: x(:)
+
+! if present, x is a state vector.  dump the data min/max for this var.
 
 !%! type progvartype
 !%!    private
@@ -3384,12 +3658,22 @@ write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
 write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
 write(logfileunit,*) '  clamping    ',progvar(ivar)%clamping
 write(     *     ,*) '  clamping    ',progvar(ivar)%clamping
-write(logfileunit,*) '  range       ',progvar(ivar)%range
-write(     *     ,*) '  range       ',progvar(ivar)%range
+write(logfileunit,*) '  clmp range  ',progvar(ivar)%range
+write(     *     ,*) '  clmp range  ',progvar(ivar)%range
 do i = 1,progvar(ivar)%numdims
    write(logfileunit,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
    write(     *     ,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
 enddo
+
+if (present(x)) then
+   write(logfileunit, * )                 'min/max = ', &
+              minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
+              maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+   write(    *      , * )                 'min/max = ', &
+              minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
+              maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+endif
+
 end subroutine dump_progvar
 
 
@@ -3890,31 +4174,27 @@ end subroutine find_height_bounds
 
 !------------------------------------------------------------------
 
-subroutine find_vert_level(x, loc, ivar, lower, upper, fract, ier)
+subroutine find_vert_level(x, loc, oncenters, lower, upper, fract, ier)
 
 ! given a location and var types, return the two level numbers that 
 ! enclose the given vertical value plus the fraction between them.   
 
-! FIXME: right now,
-! this is tricky since we only know the heights in meters of the
-! cell centers.  we're asking if they have the elevations of the
-! edges or if we have to project from the planes defined by the
-! two neighboring cells.  hopefully not.
+! FIXME:  this handles data at cell centers, at edges, but not
+! data on faces.
 
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: ivar
+logical,             intent(in)  :: oncenters
 integer,             intent(out) :: lower, upper
 real(r8),            intent(out) :: fract
 integer,             intent(out) :: ier
 
 real(r8) :: lat, lon, vert, tmp(3)
 integer  :: verttype, cellid, edgeid
-logical  :: isedge  ! .not. isedge means iscell
 integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
-! ok - the plan is to take in: the index into the progvar structure,
-! the location so we can extract the vert value and which vert flag.
+! the plan is to take in: whether this var is on cell centers or edges,
+! and the location so we can extract the vert value and which vert flag.
 ! compute and return the lower and upper index level numbers that
 ! enclose this vert, along with the fract between them.  ier is set
 ! in case of error (e.g. outside the grid, on dry land, etc).
@@ -3967,6 +4247,7 @@ if(vert_is_level(loc)) then
    lower = aint(vert)   ! round down
    upper = lower+1
    fract = vert - lower
+!print *, '1 lower, upper = ', lower, upper
    ier = 0
    return
 endif
@@ -3974,21 +4255,22 @@ endif
 ! ok, now we need to know where we are in the grid for heights or pressures
 ! as the vertical coordinate.
 
-! if we have a cell count, this variables is cell based.
-! if we don't, then it's edge based.
-if (progvar(ivar)%numcells /= MISSING_I) then
-   isedge = .false.
-else
-   isedge = .true.
-endif
 
 ! find the cell/edge that contains this point.
 cellid = find_closest_cell_center(lat, lon)
+!print *, 'found closest cell center to ', lon, lat, ' which is ', cellid
 if (.not. inside_cell(cellid, lat, lon)) then
    ier = 13   
    return
 endif
-if (isedge) edgeid = find_closest_edge(cellid, lat, lon)
+! FIXME: here seems like where we should handle data on cell face centers
+if (.not. oncenters) then
+   edgeid = find_closest_edge(cellid, lat, lon)
+   !print *, 'found closest edge = ', edgeid
+   !print *, 'size of edge height array = ', shape(zGridEdge)
+   !print *, '(closest cellid id: ', cellid, ')'
+   !print *, 'size of center height array = ', shape(zGridCenter)
+endif
 
 ! Vertical interpolation for pressure coordinates
 if(vert_is_pressure(loc) ) then 
@@ -3997,10 +4279,12 @@ if(vert_is_pressure(loc) ) then
    call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
    call get_index_range(KIND_DENSITY, density_base_offset)
    call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+!print *, '2bases: t/rho/v = ', pt_base_offset, density_base_offset, qv_base_offset
    call find_pressure_bounds2(x, vert, cellid, nVertLevels, &
          pt_base_offset, density_base_offset, qv_base_offset,  &
          lower, upper, fract, ier)
-   ier = 0
+
+!print *, '2 lower, upper, ier = ', lower, upper, ier
    return
 endif
 
@@ -4009,14 +4293,14 @@ endif
 if(vert_is_height(loc)) then
    ! For height, can do simple vertical search for interpolation for now
    ! Get the lower and upper bounds and fraction for each column
-   if (isedge) then
-      ! FIXME: needs to be zgridEdges(), not centers, using the edgeid we have
-      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+   if (oncenters) then
+      call find_height_bounds(vert, nVertLevels, zGridCenter(:, cellid), &
                               lower, upper, fract, ier)
    else
-      call find_height_bounds(vert, nVertLevels, zgridCenter(:, cellid), &
+      call find_height_bounds(vert, nVertLevels, zGridEdge(:, edgeid), &
                               lower, upper, fract, ier)
    endif
+!print *, '3 lower, upper = ', lower, upper
    return
 endif
 
@@ -4027,7 +4311,7 @@ end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
-subroutine find_pressure_bounds2(x, p, nbounds, cellid, &
+subroutine find_pressure_bounds2(x, p, cellid, nbounds, &
    pt_base_offset, density_base_offset, qv_base_offset, &
    lower, upper, fract, ier)
 
@@ -4055,6 +4339,7 @@ ier = 0
 ! Find the lowest pressure
 call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
    cellid, 1, nbounds, pressure(1), gip_err)
+!print *, 'find p bounds2, pr(1) = ', pressure(1), gip_err
 if(gip_err /= 0) then
    ier = gip_err
    return
@@ -4063,6 +4348,7 @@ endif
 ! Get the highest pressure level
 call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
    cellid, nbounds, nbounds, pressure(nbounds), gip_err)
+!print *, 'find p bounds2, pr(n) = ', pressure(nbounds), gip_err
 if(gip_err /= 0) then
    ier = gip_err
    return
@@ -4070,6 +4356,7 @@ endif
 
 ! Check for out of the column range
 if(p > pressure(1) .or. p < pressure(nbounds)) then
+!print *, 'find p bounds2, p, pr(1), pr(n) = ', p, pressure(1), pressure(nbounds)
    ier = 2
    return
 endif
@@ -4078,6 +4365,7 @@ endif
 do i = 2, nbounds
    call get_interp_pressure2(x, pt_base_offset, density_base_offset, qv_base_offset, &
       cellid, i, nbounds, pressure(i), gip_err)
+!print *, 'find p bounds i, pr(i) = ', i, pressure(i), gip_err
    if(gip_err /= 0) then
       ier = gip_err
       return
@@ -4088,13 +4376,19 @@ do i = 2, nbounds
       lower = i - 1
       upper = i
       ! FIXME: should this be interpolated in log(p)??  yes.
-      fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
-      !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
+      if (pressure(i) == pressure(i-1)) then
+         fract = 0.0_r8
+      else
+         fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+         !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
+      endif
+!print *, "looping pr: i, p, pr(i), lower, upper, fract = ", i, p, pressure(i), lower, upper, fract
       return
    endif
 
 end do
 
+!print *, 'fell off end, find pressure bounds 2'
 ! Shouldn't ever fall off end of loop
 ier = 3
 
@@ -4128,6 +4422,8 @@ if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
    ier = 2
    return
 endif
+!print *, 'offset: base pt, dens, qv = ', offset, pt_offset, density_offset, qv_offset
+!print *, 'vals: pt, dens, qv = ', pt, density, qv
 
 ! Get pressure at the cell center
 call compute_full_pressure(pt, density, qv, pressure, tk)
@@ -4172,6 +4468,8 @@ endif
 
 ! Search the list of triangles to see if (lon, lat) is in one
 call get_triangle(lon, lat, num_inds, start_ind, indices, weights, istatus)
+!print *, 'got triangle.  indices = ', indices
+   
 
 if(istatus /= 0) istatus = 2
 
@@ -4282,25 +4580,87 @@ end subroutine triangle_interp
 
 !------------------------------------------------------------
 
-subroutine get_barycentric_weights(lon, lat, clons, clats, weights)
+subroutine get_3d_weights(p, v1, v2, v3, weights)
 
-! Computes the barycentric weights for interpolating point (lon, lat) 
-! in a triangle with the given lon and lat corners.
+! Given a point p (x,y,z) inside a triangle, and the (x,y,z)
+! coordinates of the triangle corner points (v1, v2, v3), 
+! find the weights for a barycentric interpolation.  this
+! computation only needs two of the three coordinates, so figure
+! out which quadrant of the sphere the triangle is in and pick
+! the 2 axes which are the least planar:
+!  (x,y) near the poles,
+!  (y,z) near 0 and 180 longitudes near the equator,
+!  (x,z) near 90 and 270 longitude near the equator.
 
-real(r8), intent(in)  :: lon, lat, clons(3), clats(3)
+real(r8), intent(in)  :: p(3)
+real(r8), intent(in)  :: v1(3), v2(3), v3(3)
+real(r8), intent(out) :: weights(3)
+
+real(r8) :: lat, lon
+real(r8) :: cxs(3), cys(3)
+
+! FIXME: this costs - if we already have the lat/lon, just
+! pass them down?
+call xyz_to_latlon(p(1), p(2), p(3), lat, lon)
+
+! above or below 45 in latitude, where -90 < lat < 90:
+if (lat >= 45.0_r8 .or. lat <= -45.0_r8) then
+   cxs(1) = v1(1)
+   cxs(2) = v2(1)
+   cxs(3) = v3(1)
+   cys(1) = v1(2)
+   cys(2) = v2(2)
+   cys(3) = v3(2)
+   call get_barycentric_weights(p(1), p(2), cxs, cys, weights)
+   return
+endif
+
+! nearest 0 or 180 in longitude, where 0 < lon < 360:
+if ( lon <= 45.0_r8 .or. lon >= 315.0_r8 .or. &
+    (lon >= 135.0_r8 .and. lon <= 225.0_r8)) then
+   cxs(1) = v1(2)
+   cxs(2) = v2(2)
+   cxs(3) = v3(2)
+   cys(1) = v1(3)
+   cys(2) = v2(3)
+   cys(3) = v3(3)
+   call get_barycentric_weights(p(2), p(3), cxs, cys, weights)
+   return
+endif
+
+! last option, nearest 90 or 270 in lon:
+cxs(1) = v1(1)
+cxs(2) = v2(1)
+cxs(3) = v3(1)
+cys(1) = v1(3)
+cys(2) = v2(3)
+cys(3) = v3(3)
+call get_barycentric_weights(p(1), p(3), cxs, cys, weights)
+
+end subroutine get_3d_weights
+
+
+!------------------------------------------------------------
+
+subroutine get_barycentric_weights(x, y, cxs, cys, weights)
+
+! Computes the barycentric weights for a 2d interpolation point 
+! (x,y) in a 2d triangle with the given (cxs,cys) corners.
+
+real(r8), intent(in)  :: x, y, cxs(3), cys(3)
 real(r8), intent(out) :: weights(3)
 
 real(r8) :: denom
 
 ! Get denominator
-denom = (clats(2) - clats(3)) * (clons(1) - clons(3)) + &
-   (clons(3) - clons(2)) * (clats(1) - clats(3))
+denom = (cys(2) - cys(3)) * (cxs(1) - cxs(3)) + &
+   (cxs(3) - cxs(2)) * (cys(1) - cys(3))
 
-weights(1) = ((clats(2) - clats(3)) * (lon - clons(3)) + &
-   (clons(3) - clons(2)) * (lat - clats(3))) / denom
+weights(1) = ((cys(2) - cys(3)) * (x - cxs(3)) + &
+   (cxs(3) - cxs(2)) * (y - cys(3))) / denom
 
-weights(2) = ((clats(3) - clats(1)) * (lon - clons(3)) + &
-   (clons(1) - clons(3)) * (lat - clats(3))) / denom
+weights(2) = ((cys(3) - cys(1)) * (x - cxs(3)) + &
+   (cxs(1) - cxs(3)) * (y - cys(3))) / denom
 
 weights(3) = 1.0_r8 - weights(1) - weights(2)
 
@@ -4400,8 +4760,8 @@ do i = 1, nVertices
 
 enddo
 
-if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
-if (do_output()) write(*,*)'triangle_num is ',maxval(triangle_num)
+!if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
+!if (do_output()) write(*,*)'triangle_num is ',maxval(triangle_num)
 
 ! Invert the temporary data structure. The total number of entries will be 
 ! the sum of the number of triangle cells for each regular cell. 
@@ -4590,16 +4950,153 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-! FIXME: we could pass in the lower vert level here instead of
-! computing it.  lat/lon/vert could/should be packaged as a
-! location type.
+subroutine compute_scalar_with_barycentric(x, loc, ival, dval, ier)
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in)  :: loc
+integer,             intent(in)  :: ival
+real(r8),            intent(out) :: dval
+integer,             intent(out) :: ier
 
-! FIXME: we need to do this on level N, then N+1, then do a
-! linear interpolation in the vertical.  that is NOT handled yet.
+! compute the values at the correct vertical level for each
+! of the 3 cell centers defining a triangle that encloses the
+! the interpolation point, then interpolate once in the horizontal 
+! using barycentric weights to get the value at the interpolation point.
 
-! FIXME: we also need the actual height (in m) of the level
-! to adjust the xyz surface vector to be the actual elevation
-! of the edge at that level.
+integer, parameter :: listsize = 30 
+integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid, nvert
+real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
+real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), weights(3)
+integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
+real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
+integer  :: verttype, lower, upper, c(3), vindex, v, vp1
+logical  :: inside, foundit
+
+
+! unpack the location into local vars
+tmp = get_location(loc)
+lon  = tmp(1)
+lat  = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+
+
+cellid = find_closest_cell_center(lat, lon)
+if (cellid < 1) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+  
+c(1) = cellid
+
+if (on_boundary(cellid)) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+if (.not. inside_cell0(lat, lon, cellid)) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+! closest vertex to given point.
+closest_vert = closest_vertex_ll(cellid, lat, lon)
+
+! collect the neighboring cell ids and vertex numbers
+! this 2-step process avoids us having to read in the
+! cellsOnCells() array which i think we only need here.
+! if it comes up in more places, we can give up the space
+! and read it in and then this is a direct lookup.
+! also note which index is the closest vert and later on
+! we can start the triangle search there.
+vindex = 1
+nedges = nEdgesOnCell(cellid)
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+   if (cellsOnEdge(1, edgeid) /= cellid) then
+      neighborcells(i) = cellsOnEdge(1, edgeid)
+   else
+      neighborcells(i) = cellsOnEdge(2, edgeid)
+   endif
+   verts(i) = verticesOnCell(i, cellid) 
+   if (verts(i) == closest_vert) vindex = i
+   call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
+      xdata(i), ydata(i), zdata(i))
+enddo
+
+
+! get the cartesian coordinates in the cell plane for the closest center
+call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
+
+! and the observation point
+call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+
+! find the cell-center-tri that encloses the obs point
+! figure out which way vertices go around cell?
+foundit = .false.
+findtri: do i=vindex, vindex+nedges
+   v = mod(i-1, nedges) + 1
+   vp1 = mod(i, nedges) + 1
+   t2(1) = xdata(v)
+   t2(2) = ydata(v)
+   t2(3) = zdata(v)
+   t3(1) = xdata(vp1)
+   t3(2) = ydata(vp1)
+   t3(3) = zdata(vp1)
+   call inside_triangle(t1, t2, t3, r, inside, p)
+   if (inside) then
+      ! p is the xyz of the intersection point in this plane
+      ! t2 and t3 are corners, v and vp1 are vert indices
+      ! which are same indices for cell centers
+      c(2) = neighborcells(v)
+      c(3) = neighborcells(vp1)
+      foundit = .true.
+      exit findtri  
+   endif
+enddo findtri
+if (.not. foundit) then
+   dval = MISSING_R8
+   ier = 11
+   return
+endif
+
+! need vert index for the vertical level
+call find_vert_level(x, loc, .true., lower, upper, fract, ier)
+if (ier /= 0) then
+   return
+endif
+
+! get the starting index in the state vector
+index1 = progvar(ival)%index1
+nvert = progvar(ival)%numvertical
+
+! go around triangle and interpolate in the vertical
+! t1, t2, t3 are the xyz of the cell centers
+! c(3) are the cell ids
+do i = 1, 3
+   lowval(i) = x(index1 + (c(i)-1) * nvert + lower-1)
+   uppval(i) = x(index1 + (c(i)-1) * nvert + upper-1)
+   if (vert_is_pressure(loc)) then
+      !fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
+      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
+   else
+      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
+   endif
+enddo
+
+! now have vertically interpolated values at cell centers.
+! get weights and compute value at requested point.
+call get_3d_weights(r, t1, t2, t3, weights)
+
+dval = sum(weights * fdata)
+
+ier = 0
+
+end subroutine compute_scalar_with_barycentric
+
+!------------------------------------------------------------
 
 subroutine compute_u_with_rbf(x, loc, zonal, uval, ier)
 real(r8),            intent(in)  :: x(:)
@@ -4609,11 +5106,11 @@ real(r8),            intent(out) :: uval
 integer,             intent(out) :: ier
 
 
-integer, parameter :: listsize = 15
-logical, parameter :: on_a_sphere = .false.
-integer  :: nedges, edgelist(listsize), i, j
+integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
+logical, parameter :: on_a_sphere = .true.
+integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: edgenormals(listsize, 3)
+real(r8) :: edgenormals(3, listsize)
 real(r8) :: veldata(listsize)
 real(r8) :: xreconstruct, yreconstruct, zreconstruct
 real(r8) :: ureconstructx, ureconstructy, ureconstructz
@@ -4636,18 +5133,29 @@ lat = tmp(2)
 vert = tmp(3)
 verttype = nint(query_location(loc))
 
-call find_surrounding_edges(lat, lon, nedges, edgelist)
+call find_surrounding_edges(lat, lon, nedges, edgelist, cellid)
 if (nedges <= 0) then
    ! we are on a boundary, no interpolation
    uval = MISSING_R8
    ier = 18
    return
 endif
+!print *, 'obs lon, lat: ', lon, lat
+!print *, 'rbf: surrounding edge list, nedges = ', nedges
+!print *, edgelist(1:nedges)
+!print *, 'closest cell = ', cellid
 
-! the code needs: nData == nedges
+! the rbf code needs (their names == our names):
+! nData == nedges
 ! xyz data == xyzEdge
 ! normalDirectionData == edgeNormalVectors
 ! velocitydata = U field
+
+! need vert index for the vertical level
+call find_vert_level(x, loc, .false., lower, upper, fract, ier)
+if (ier /= 0) return
+
+!print *, 'find_vert_level returns l, u, f = ', lower, upper, fract
 
 progindex = get_index_from_varname('u')
 if (progindex < 0) then
@@ -4657,41 +5165,53 @@ if (progindex < 0) then
    return
 endif
 index1 = progvar(progindex)%index1
-
-! need vert index for the vertical level
-call find_vert_level(x, loc, progindex, lower, upper, fract, ier)
+nvert = progvar(progindex)%numvertical
 
 do i = 1, nedges
+   if (edgelist(i) > size(xEdge)) then
+      print *, 'edgelist has index larger than edge count', i, edgelist(i), size(xEdge)
+      stop
+   endif
    xdata(i) = xEdge(edgelist(i))
    ydata(i) = yEdge(edgelist(i))
    zdata(i) = zEdge(edgelist(i))
 
-   ! FIXME: this xyz is on the surface - the code needs
-   ! the xyz of the edges up at the right vertical level.
-   ! we'll have to compute that and add it in here.
-
-   ! FIXME: this should be changed to be (3, edgeid) instead
-   !  of (edgeid, 3) to be more natural in the fortran storage order.
-
    do j=1, 3
-      edgenormals(i, j) = edgeNormalVectors(edgelist(i), j)
+      edgenormals(j, i) = edgeNormalVectors(j, edgelist(i))
    enddo
 
-   lowval = x(index1 + (edgelist(i)-1) * nVertLevels + lower-1)
-   uppval = x(index1 + (edgelist(i)-1) * nVertLevels + upper-1)
+!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nvert, lower
+!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nvert, upper
+   lowval = x(index1 + (edgelist(i)-1) * nvert + lower-1)
+   uppval = x(index1 + (edgelist(i)-1) * nvert + upper-1)
+!print *, 'lowval, uppval = ', lowval, uppval
    if (vert_is_pressure(loc)) then
-      veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
+      veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
+      !veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
    else
       veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
    endif
+!print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
 enddo
 
 
-cellid = find_closest_cell_center(lat, lon)
 
 ! get the cartesian coordinates in the cell plane for the reconstruction point
-call latlon_to_xyz_on_plane(lat, lon, cellid, &
-              xreconstruct,yreconstruct,zreconstruct)
+!call latlon_to_xyz_on_plane(lat, lon, cellid, &
+!              xreconstruct,yreconstruct,zreconstruct)
+! FIXME: on plane is more expensive than just the intersection with the
+! sphere.  if it doesn't matter, use this one.
+!print *, 'xyz on plane: ', xreconstruct,yreconstruct,zreconstruct
+call latlon_to_xyz(lat, lon, xreconstruct,yreconstruct,zreconstruct)
+!print *, 'xyz only: ', xreconstruct,yreconstruct,zreconstruct
+
+!! FIXME: DEBUG, remove
+!if (lon == 270.00) then
+!   print *, xreconstruct, yreconstruct, zreconstruct
+!   do i=1, nedges
+!      print *, xdata(i), ydata(i), zdata(i)
+!   enddo
+!endif
 
 ! call a simple subroutine to define vectors in the tangent plane
 call get_geometry(nedges, xdata, ydata, zdata, &
@@ -4704,10 +5224,13 @@ call get_reconstruct_init(nedges, xdata, ydata, zdata, &
               datatangentplane, coeffs_reconstruct)
 
 ! do the reconstruction
-call get_reconstruct(nedges, lat, lon, &
+call get_reconstruct(nedges, lat*deg2rad, lon*deg2rad, &
               coeffs_reconstruct, on_a_sphere, veldata, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
+
+!print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
+!print *, 'XYZ vals from reconstruction: ', ureconstructx, ureconstructy, ureconstructz
 
 ! FIXME: it would be nice to return both and not have to call this
 ! code twice.  crap.
@@ -4723,25 +5246,25 @@ end subroutine compute_u_with_rbf
 
 !------------------------------------------------------------
 
-subroutine find_surrounding_edges(lat, lon, nedges, edge_list)
+subroutine find_surrounding_edges(lat, lon, nedges, edge_list, cellid)
 real(r8), intent(in)  :: lat, lon
 integer,  intent(out) :: nedges, edge_list(:)
+integer,  intent(out) :: cellid
 
 ! given an arbitrary lat/lon location, find the edges of the
 ! cells that share the nearest vertex.
 
-logical, save :: search_initialized = .false.
-integer :: cellid, vertexid
-
-if (.not. search_initialized) then
-   call init_closest_center()
-   search_initialized = .true.
-endif
+integer :: vertexid
 
 ! find the cell id that has a center point closest
 ! to the given point.
 cellid = find_closest_cell_center(lat, lon)
-
+if (cellid < 1) then
+   nedges = 0
+   edge_list(:) = -1
+   return
+endif
+   
 if (.not. inside_cell(cellid, lat, lon)) then
    nedges = 0
    edge_list(:) = -1
@@ -4750,8 +5273,8 @@ endif
 
 ! inside this cell, find the vertex id that the point
 ! is closest to.
-vertexid = closest_vertex(cellid, lat, lon)
-if (vertexid < 0) then
+vertexid = closest_vertex_ll(cellid, lat, lon)
+if (vertexid <= 0) then
    ! call error handler?  unexpected
    nedges = 0
    edge_list(:) = -1
@@ -4803,6 +5326,15 @@ integer               :: find_closest_cell_center
 type(location_type) :: pointloc
 integer :: i, closest_cell, num_close
 real(r8) :: closest_dist, dist
+logical, save :: search_initialized = .false.
+
+real(r8) :: l(3)
+
+! do this exactly once.
+if (.not. search_initialized) then
+   call init_closest_center()
+   search_initialized = .true.
+endif
 
 pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
 
@@ -4812,19 +5344,24 @@ pointloc = set_location(lon, lat, 0.0_r8, VERTISSURFACE)
 ! return the cell index number
 
 call loc_get_close_obs(cc_gc, pointloc, 0, cell_locs, dummy, num_close, close_ind)
+!print *, 'num close = ', num_close
 
 closest_cell = -1
-closest_dist = 9.0e9  ! something large
+closest_dist = 1.0e9_r8  ! something large in radians
 do i=1, num_close
+l = get_location(cell_locs(close_ind(i)))
    dist = get_dist(pointloc, cell_locs(close_ind(i)), no_vert = .true.)
+!print *, i, close_ind(i), l(1)*deg2rad, l(2)*deg2rad, dist
    if (dist < closest_dist) then
       closest_dist = dist
       closest_cell = close_ind(i)
    endif
 enddo
+!print *, 'closest ind, dist = ', closest_cell, dist
  
 ! decide what to do if we don't find anything.
 if (closest_cell < 0) then
+   if (debug > 5) print *, 'cannot find nearest cell to lon, lat: ', lon, lat
    find_closest_cell_center = -1
    return
 endif
@@ -4866,7 +5403,7 @@ closest_dist = 9.0e9  ! something large in radians
 nedges = nEdgesOnCell(cellid)
 do i=1, nedges
    edgeid = edgesOnCell(i, cellid)
-   edgeloc = set_location(lonEdge(edgeid)*rad2deg, latEdge(edgeid)*rad2deg, 0.0_r8, VERTISSURFACE)
+   edgeloc = set_location(lonEdge(edgeid), latEdge(edgeid), 0.0_r8, VERTISSURFACE)
    dist = get_dist(pointloc, edgeloc, no_vert = .true.)
    if (dist < closest_dist) then
       closest_dist = dist
@@ -4876,6 +5413,7 @@ enddo
  
 ! decide what to do if we don't find anything.
 if (closest_edge < 0) then
+   if (debug > 5) print *, 'cannot find nearest edge to lon, lat: ', lon, lat
    find_closest_edge = -1
    return
 endif
@@ -4887,7 +5425,120 @@ end function find_closest_edge
 
 !------------------------------------------------------------
 
+function on_boundary(cellid)
+
+! use the surface (level 1) to determine if any edges (or vertices?)
+! are on the boundary, and return true if so.   if the global flag
+! is set, skip all code and return false immediately.
+
+integer,  intent(in)  :: cellid
+logical               :: on_boundary
+
+! do this completely with topology of the grid.  if any of
+! the cell edges are marked as boundary edges, return no.
+! otherwise return yes.
+
+integer :: nedges, i, edgeid, vertical
+
+if (global_grid) then
+   on_boundary = .false.
+   return
+endif
+
+! how many edges (same # for verts) to check
+nedges = nEdgesOnCell(cellid)
+
+! go around the edges and check the boundary array.
+! if any are boundaries, return true.  else, false.
+
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+
+   vertical = 1
+
+   ! FIXME: this is an int array.  is it 0=false,1=true?
+   if (boundaryEdge(edgeid, vertical) > 0) then
+      on_boundary = .true.
+      return
+   endif
+
+enddo
+
+on_boundary = .false.
+
+end function on_boundary
+
+!------------------------------------------------------------
+
 function inside_cell(cellid, lat, lon)
+
+! this function no longer really determines if we are inside
+! the cell or not.  what it does do is determine if the nearest
+! cell is on the grid boundary in any way and says no if it is
+! a boundary.  if we have a flag saying this a global grid, we
+! can avoid doing any work and immediately return true.  for a
+! global atmosphere this is always so; for a regional atmosphere
+! and for the ocean (which does not have cells on land) this is
+! necessary test.
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: lat, lon
+logical               :: inside_cell
+
+! do this completely with topology of the grid.  if any of
+! the cell edges are marked as boundary edges, return no.
+! otherwise return yes.
+
+integer :: nedges, i, edgeid, vert
+real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
+
+! if we're on a global grid, skip all this code
+if (global_grid) then
+   inside_cell = .true.
+   return
+endif
+
+nedges = nEdgesOnCell(cellid)
+
+! go around the edges and check the boundary array.
+! if any are true, return false.  even if we are inside
+! this cell, we aren't going to be able to interpolate it
+! so shorten the code path.
+
+! FIXME: at some point we can be more selective and try to
+! interpolate iff the edges of the three cells which are
+! going to contribute edges to the RBF exist, even if some
+! of the other cell edges are on the boundary.  so this
+! decision means we won't be interpolating some obs that in
+! theory we have enough information to interpolate.  but it
+! is conservative for now - we certainly won't try to interpolate
+! outside the existing grid.
+
+do i=1, nedges
+   edgeid = edgesOnCell(i, cellid)
+
+   ! FIXME: this is an int array.  is it 0=false,1=true?
+   ! BOTHER - we need the vert for this and we don't have it
+   ! and in fact can't compute it if the interpolation point
+   ! has pressure or height as its vertical coordinate.
+   vert = 1
+
+   if (boundaryEdge(edgeid, vert) > 0) then
+      inside_cell = .false.
+      return
+   endif
+
+enddo
+
+inside_cell = .true.
+
+end function inside_cell
+
+!------------------------------------------------------------
+
+function inside_cell0(lat, lon, cellid)
+
+! CURRENTLY UNUSED.
 
 ! Determine if the given lat/lon is inside the specified cell:
 ! 1. convert the point to x,y,z on plane defined by cell.
@@ -4896,9 +5547,9 @@ function inside_cell(cellid, lat, lon)
 !    ever negative, you're outside and you can return.
 
 
-integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
-logical               :: inside_cell
+integer,  intent(in)  :: cellid
+logical               :: inside_cell0
 
 ! convert lat/lon to cartesian coordinates and then determine
 ! from the xyz vertices if this point is inside the cell.
@@ -4906,14 +5557,16 @@ logical               :: inside_cell
 integer :: nverts, i, vertexid
 real(r8) :: v1(3), v2(3), p(3), vec1(3), vec2(3), r(3), m
 
-! FIXME: remove this once we've tested the following code.
-! for the global atmosphere it should always be true.  for
-! regional atmosphere and for the ocean, it can be false.
-inside_cell = .true.
-return
+! for the global atmosphere it should always be true. 
+! for regional atmosphere and for the ocean, it can be false.
+if (global_grid) then
+   inside_cell0 = .true.
+   return
+endif
 
 ! cartesian location of point on surface of sphere
-call latlon_to_xyz_on_plane(lat, lon, cellid, p(1), p(2), p(3))
+call latlon_to_xyz(lat, lon, p(1), p(2), p(3))
+!call latlon_to_xyz_on_plane(lat, lon, cellid, p(1), p(2), p(3))
 
 ! nedges and nverts is same
 nverts = nEdgesOnCell(cellid)
@@ -4922,14 +5575,14 @@ nverts = nEdgesOnCell(cellid)
 ! the point.  if all the signs are the same it's inside.
 ! (or something like this.)
 do i=1, nverts
-   vertexid = verticesOnCell(cellid, i)
+   vertexid = verticesOnCell(i, cellid)
    v1(1) = xVertex(vertexid)
    v1(2) = yVertex(vertexid)
    v1(3) = zVertex(vertexid)
    if (i /= nverts) then
-      vertexid = verticesOnCell(cellid, i+1)
+      vertexid = verticesOnCell(i+1, cellid)
    else
-      vertexid = verticesOnCell(cellid, 1)
+      vertexid = verticesOnCell(1, cellid)
    endif
    v2(1) = xVertex(vertexid)
    v2(2) = yVertex(vertexid)
@@ -4945,64 +5598,82 @@ do i=1, nverts
    call vector_magnitude(r, m)
 
    if (m < 0.0_r8) then
-      inside_cell = .false.
+      inside_cell0 = .false.
       return
    endif
     
 enddo
 
-inside_cell = .true.
+inside_cell0 = .true.
 
 ! see also:
 ! http://tog.acm.org/resources/GraphicsGems/gems/RayPolygon.c
 
-end function inside_cell
+end function inside_cell0
 
 !------------------------------------------------------------
 
-function closest_vertex(cellid, lat, lon)
+function closest_vertex_ll(cellid, lat, lon)
 
 ! Return the vertex id of the closest one to the given point
-! Determine if the given lat/lon is inside the specified cell
+! this version uses lat/lon.  see closest_vertex_xyz for the
+! cartesian version.
 
 integer,  intent(in)  :: cellid
 real(r8), intent(in)  :: lat, lon
-integer               :: closest_vertex
+integer               :: closest_vertex_ll
 
 integer :: nverts, i, closest, vertexid
 real(r8) :: distsq, closest_dist, x, y, z, px, py, pz
 
-print *, "FIXME: implement closest_vertex"
-stop
+! use the same radius as MPAS for computing this
+call latlon_to_xyz(lat, lon, px, py, pz)
 
-! FIXME: verify that we want the point in the same plane
-! as the cell and not on the surface of the sphere.
+closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
+if (closest_vertex_ll < 0) then
+   if (debug > 5) print *, 'cannot find nearest vertex to lon, lat: ', lon, lat
+endif
 
-! this computes the point on the sphere, using the radius
-! we believe is used for all the x/y/z arrays in the MPAS file.
-call latlon_to_xyz_on_plane(lat, lon, cellid, px, py, pz)
+end function closest_vertex_ll
+
+!------------------------------------------------------------
+
+function closest_vertex_xyz(cellid, px, py, pz)
+
+! Return the vertex id of the closest one to the given point
+! see closest_vertex_ll for the lat/lon version (which calls this)
+
+integer,  intent(in)  :: cellid
+real(r8), intent(in)  :: px, py, pz
+integer               :: closest_vertex_xyz
+
+integer :: nverts, i, closest, vertexid
+real(r8) :: distsq, closest_dist, x, y, z, dx, dy, dz
 
 ! nedges and nverts is same in a closed figure
+!print *, 'cellid = ', cellid
 nverts = nEdgesOnCell(cellid)
 
-closest_dist = 1.0e38   ! something really big
-closest_vertex = -1
+closest_dist = 1.0e38   ! something really big; these are meters not radians
+closest_vertex_xyz = -1
 
+!print *, 'close: nverts ', nverts
+!print *, 'close: point ', px, py, pz
 do i=1, nverts
-   vertexid = verticesOnCell(cellid, i)
-   x = xVertex(vertexid)
-   y = yVertex(vertexid)
-   z = zVertex(vertexid)
-   distsq = (x * px) + (y * py) + (z * pz)
+   vertexid = verticesOnCell(i, cellid)
+!print *, 'close: v ', i, xVertex(vertexid), yVertex(vertexid), zVertex(vertexid)
+   dx = xVertex(vertexid) - px
+   dy = yVertex(vertexid) - py
+   dz = zVertex(vertexid) - pz
+   distsq = (dx * dx) + (dy * dy) + (dz * dz)
+!print *, 'close: d ', dx, dy, dx, distsq
    if (distsq < closest_dist) then
       closest_dist = distsq
-      closest_vertex = vertexid
+      closest_vertex_xyz = vertexid
    endif
 enddo
 
-closest_vertex = vertexid
-
-end function closest_vertex
+end function closest_vertex_xyz
 
 !------------------------------------------------------------
 
@@ -5021,7 +5692,7 @@ subroutine make_edge_list(vertexid, nedges, edge_list)
 integer, intent(in)  :: vertexid
 integer, intent(out) :: nedges, edge_list(:)
 
-integer :: edgecount, i, c, e, listlen, l, nextedge
+integer :: edgecount, c, e, listlen, l, nextedge
 integer :: ncells, cellid_list(3)
 logical :: found
 
@@ -5032,9 +5703,9 @@ logical :: found
 ! to include the ~12 second-nearest-cell-neighbors, you can
 ! change this code here.
 ncells = 3
-cellid_list(1) = cellsOnVertex(vertexid, 1)
-cellid_list(2) = cellsOnVertex(vertexid, 2)
-cellid_list(3) = cellsOnVertex(vertexid, 3)
+cellid_list(1) = cellsOnVertex(1, vertexid)
+cellid_list(2) = cellsOnVertex(2, vertexid)
+cellid_list(3) = cellsOnVertex(3, vertexid)
 
 ! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
 ! find the edge numbers.  add them to the list, skipping if
@@ -5044,8 +5715,8 @@ cellid_list(3) = cellsOnVertex(vertexid, 3)
 
 
 ! FIXME: the ocean files have:
-!  integer boundaryEdge(nEdges, nVertLevels)
-!  integer boundaryVertex(nVertices, nVertLevels)
+!  integer boundaryEdge(nVertLevels, nEdges)
+!  integer boundaryVertex(nVertLevels, nVertices)
 ! as a first pass, if ANY of the edges or vertices are on
 ! the boundary, punt and return 0 as the edge count.  later
 ! once this is working, decide if a single boundary vertex or
@@ -5054,9 +5725,9 @@ cellid_list(3) = cellsOnVertex(vertexid, 3)
 
 listlen = 0
 do c=1, ncells
-   edgecount = nEdgesOnCell(cellid_list(i))
+   edgecount = nEdgesOnCell(cellid_list(c))
    do e=1, edgecount
-      nextedge = edgesOnCell(cellid_list(i), e)
+      nextedge = edgesOnCell(e, cellid_list(c))
       ! FIXME: 
       ! if (boundaryEdge(nextedge, vert)) then
       !    nedges = 0
@@ -5120,18 +5791,80 @@ real(r8), intent(out) :: lat, lon
 
 real(r8) :: rlat, rlon
 
-print *, "FIXME: implement xyz_to_latlon"
-stop
+! right now this is only needed for debugging messages.
+! the arc versions of routines are expensive.
 
-! only do this if we need it.
-
-rlat = 0.0_r8
-rlon = 0.0_r8
+rlat = PI/2.0_r8 - acos(z/radius)
+rlon = atan2(y,x)
+if (rlon < 0) rlon = rlon + PI*2
 
 lat = rlat * rad2deg
 lon = rlon * rad2deg
 
 end subroutine xyz_to_latlon
+
+!------------------------------------------------------------
+
+subroutine inside_triangle(t0, t1, t2, s, inside, intp)
+
+! given 3 corners of a triangle and an xyz point, compute
+! whether the ray from the origin to s intersects the triangle
+! in the plane defined by the vertices.  sets t/f flag for inside
+! and returns intersection point in xyz if true.
+
+! Uses the parametric form description from:
+!  http://en.wikipedia.org/wiki/Line-plane_intersection
+! in this case, point a is the origin (0,0,0) point b is 's',
+! and points 0,1,2 are t0,t1,t2.  the vector [t,u,v] is 'v'.
+
+real(r8), intent(in)  :: t0(3), t1(3), t2(3)
+real(r8), intent(in)  :: s(3)
+logical,  intent(out) :: inside
+real(r8), intent(out) :: intp(3)
+
+real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
+real(r8) :: mi(3,3)      ! invert of m
+integer  :: i
+
+
+m(1,1) = -s(1)
+m(1,2) = t1(1) - t0(1)
+m(1,3) = t2(1) - t0(1)
+
+m(2,1) = -s(2)
+m(2,2) = t1(2) - t0(2)
+m(2,3) = t2(2) - t0(2)
+
+m(3,1) = -s(3)
+m(3,2) = t1(3) - t0(3)
+m(3,3) = t2(3) - t0(3)
+
+call invert3(m, mi)
+
+m = matmul(m, mi)
+
+v = matmul(mi, -t0) 
+
+intp = 0.0_r8
+inside = .false.
+
+! first be sure the triangle intersects the line
+! between [0,1].  compute the intersection point.
+! then test that v(2) and v(3) are both between 
+! [0,1], and that v(2)+v(3) <= 1.0 
+! if all true, intersection pt is inside tri.
+if (v(1) >= 0.0_r8 .and. v(1) <= 1.0_r8) then
+   intp(1) = s(1) * v(1)
+   intp(2) = s(2) * v(1)
+   intp(3) = s(3) * v(1)
+
+   if ((v(2) >= 0.0_r8 .and. v(2) <= 1.0_r8) .and. &
+       (v(3) >= 0.0_r8 .and. v(3) <= 1.0_r8) .and. &
+       (v(2)+v(3) <= 1.0_r8)) inside = .true.
+
+endif
+
+end subroutine inside_triangle
 
 !------------------------------------------------------------
 
@@ -5149,19 +5882,13 @@ integer,  intent(in)  :: cellid
 real(r8), intent(out) :: x, y, z
 
 integer  :: nverts, i, vertexid
-real(r8) :: rlat, rlon   ! in radians
 real(r8) :: s(3)         ! location of point on surface
 real(r8) :: p(3,3)       ! first 3 vertices of cell, xyz
-real(r8) :: m(3,3), v(3) ! intermediates to compute intersection
-real(r8) :: mi(3,3)      ! invert of m
-real(r8) :: vm           
+real(r8) :: intp(3)      ! intersection point with plane
+logical  :: inside       ! if true, intersection is inside tri
 
-rlat = lat * deg2rad
-rlon = lat * deg2rad
 
-s(1) = radius * cos(rlon) * cos(rlat)
-s(2) = radius * sin(rlon) * cos(rlat)
-s(3) = radius * sin(rlat)
+call latlon_to_xyz(lat, lon, s(1), s(2), s(3))
 
 ! get the first 3 vertices to define plane
 ! intersect with sx,sy,sz to get answer
@@ -5175,39 +5902,20 @@ endif
 
 ! use first 3 verts to define plane
 do i=1, 3
-   vertexid = verticesOnCell(cellid, i)
+   vertexid = verticesOnCell(i, cellid)
 
    p(1,i) = xVertex(vertexid)
    p(2,i) = yVertex(vertexid)
    p(3,i) = zVertex(vertexid)
 enddo
 
-m(1,1) = s(1)
-m(2,1) = p(1,2) - p(1,1)
-m(3,1) = p(1,3) - p(1,1)
+! in this case we don't care about inside this tri, just where
+! it intersects the plane.
+call inside_triangle(p(:,1), p(:,2), p(:,3), s, inside, intp)
 
-m(1,2) = s(2)
-m(2,2) = p(2,2) - p(2,1)
-m(3,2) = p(2,3) - p(2,1)
-
-m(1,3) = s(3)
-m(2,3) = p(3,2) - p(3,1)
-m(3,3) = p(3,3) - p(3,1)
-
-call invert3(m, mi)
-
-v = matmul(mi, s)
-
-if (v(1) >= 0 .and. v(1) <= 1) then
-   vm = 1.0_r8 - v(1)
-   x = s(1) * vm
-   y = s(2) * vm
-   z = s(3) * vm
-endif
-
-! not needed for intersection, but can be used if P is within
-! the triangle defined by the 3 points in the p array:
-! if (v(2) and v(3) are between [0,1] and if (v(2) + v(3) <= 1) then yes
+x = intp(1)
+y = intp(2)
+z = intp(3)
 
 end subroutine latlon_to_xyz_on_plane
 
@@ -5278,7 +5986,7 @@ b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
 
 b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
 b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
-b(3,2) = a(3,1)*a(1,3) - a(1,1)*a(3,2)
+b(3,2) = a(3,1)*a(1,2) - a(1,1)*a(3,2)
 
 b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
 b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
@@ -5429,6 +6137,7 @@ real(r8), intent(out) :: tk       ! return sensible temperature to caller
 tk = theta_to_tk(theta, rho, qv)
 pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
 
+!print *, 'compute_full_pressure: ', pressure, theta, rho, qv, tk
 end subroutine compute_full_pressure
 
 
