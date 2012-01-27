@@ -5078,12 +5078,7 @@ nvert = progvar(ival)%numvertical
 do i = 1, 3
    lowval(i) = x(index1 + (c(i)-1) * nvert + lower-1)
    uppval(i) = x(index1 + (c(i)-1) * nvert + upper-1)
-   if (vert_is_pressure(loc)) then
-      !fdata(i) = exp(log(lowval(i))*(1.0_r8 - fract) + log(uppval(i))*fract)
-      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
-   else
-      fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
-   endif
+   fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
 enddo
 
 ! now have vertically interpolated values at cell centers.
@@ -5107,7 +5102,7 @@ integer,             intent(out) :: ier
 
 
 integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
-logical, parameter :: on_a_sphere = .true.
+logical, parameter :: on_a_sphere = .false.
 integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(3, listsize)
@@ -5185,12 +5180,7 @@ do i = 1, nedges
    lowval = x(index1 + (edgelist(i)-1) * nvert + lower-1)
    uppval = x(index1 + (edgelist(i)-1) * nvert + upper-1)
 !print *, 'lowval, uppval = ', lowval, uppval
-   if (vert_is_pressure(loc)) then
-      veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
-      !veldata(i) = exp(log(lowval)*(1.0_r8 - fract) + log(uppval)*fract)
-   else
-      veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
-   endif
+   veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
 !print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
 enddo
 
@@ -5307,8 +5297,11 @@ do i=1, nCells
    cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8, VERTISSURFACE)
 enddo
 
-! FIXME: should be smaller; now slightly less then 1/2 the sphere.
-call get_close_maxdist_init(cc_gc, PI* 0.95_r8)  
+! FIXME: should be as small as possible.  make it a namelist item?
+! for now, trying 1/8 sphere, should be able to do smaller.
+! definitely needs to be small for a regional grid.  the limit is
+! the size of the largest polygon.
+call get_close_maxdist_init(cc_gc, PI* 0.25_r8)  
 call get_close_obs_init(cc_gc, nCells, cell_locs)
 
 end subroutine init_closest_center
