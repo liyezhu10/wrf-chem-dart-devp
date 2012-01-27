@@ -83,6 +83,7 @@ real(r8), dimension(2) :: interp_test_vertrange = (/  1000.0, 30000.0 /)
 character(len=metadatalength) :: interp_test_vertcoord = 'VERTISHEIGHT'
 real(r8)               :: hscale               = 100.0_r8
 real(r8)               :: diff_threshold       = 100.0_r8
+integer                :: pointcount           = 10000
 
 namelist /exhaustion_nml/ dart_input_file, output_file, &
                         advance_time_present, verbose, &
@@ -91,7 +92,7 @@ namelist /exhaustion_nml/ dart_input_file, output_file, &
                         interp_test_dlat, interp_test_latrange, &
                         interp_test_dvert, interp_test_vertrange, &
                         interp_test_vertcoord, destroy_file, hscale, &
-                        diff_threshold
+                        diff_threshold, pointcount
 
 !----------------------------------------------------------------------
 ! other variables
@@ -120,52 +121,12 @@ type(location_type) :: loc
 ! program start
 !----------------------------------------------------------------------
 
-call initialize_utilities(progname='exhaustion')
-call set_calendar_type(GREGORIAN)
-
-! Initialize repeatable random sequence
-call init_random_seq(r)
-
-write(*,*)
-write(*,*)'Reading the namelist.'
-
-call find_namelist_in_file("input.nml", "exhaustion_nml", iunit)
-read(iunit, nml = exhaustion_nml, iostat = io)
-call check_namelist_read(iunit, io, "exhaustion_nml")
-
-! Record the namelist values used for the run
-if (do_nml_file()) write(nmlfileunit, nml=exhaustion_nml)
-if (do_nml_term()) write(     *     , nml=exhaustion_nml)
-
-call static_init_model()
-
-x_size = get_model_size()
-
-allocate(statevector(x_size))
-
-write(*,*)
-write(*,*)'Reading '//trim(dart_input_file)
-
-iunit = open_restart_read(dart_input_file)
-if ( advance_time_present ) then
-   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
-else
-   call aread_state_restart(model_time, statevector, iunit)
-endif
-call close_restart(iunit)
-
-call print_date( model_time,'exhaustion:model date')
-call print_time( model_time,'exhaustion:model time')
-
-
 call setup_interpolate()
 
 ios_out = test_interpolate(field)
 
-if ( ios_out == 0 ) then 
-   write(*,*)'test interpolate SUCCESS.'
-else
-   write(*,*)'test interpolate had ', ios_out, ' failures.'
+if ( ios_out /= 0 ) then 
+   print *, 'test interpolate had ', ios_out, ' failures.'
 endif
 
 call jitter_grid()
@@ -180,12 +141,9 @@ call output_interpolate()
 !call interpolate_vertices()
 !call interpolate_edges()
 
+call random_test(pointcount)
 
-deallocate(statevector)
-deallocate(lon, lat, vert)
-deallocate(field, jit_field, field_diff)
-deallocate(full_lon, full_lat, full_vert)
-
+call takedown_interpolate()
 
 call finalize_utilities()
 
@@ -204,12 +162,51 @@ subroutine setup_interpolate()
 
 integer :: ilon, jlat, kvert
 
+call initialize_utilities(progname='exhaustion')
+call set_calendar_type(GREGORIAN)
+
+! Initialize repeatable random sequence
+call init_random_seq(r)
+
+print *, ''
+print *, 'Reading the namelist.'
+
+call find_namelist_in_file("input.nml", "exhaustion_nml", iunit)
+read(iunit, nml = exhaustion_nml, iostat = io)
+call check_namelist_read(iunit, io, "exhaustion_nml")
+
+! Record the namelist values used for the run
+if (do_nml_file()) write(nmlfileunit, nml=exhaustion_nml)
+if (do_nml_term()) write(     *     , nml=exhaustion_nml)
+
+call static_init_model()
+
+x_size = get_model_size()
+
+allocate(statevector(x_size))
+
+print *, ' '
+print *, 'Reading '//trim(dart_input_file)
+
+iunit = open_restart_read(dart_input_file)
+if ( advance_time_present ) then
+   call aread_state_restart(model_time, statevector, iunit, adv_to_time)
+else
+   call aread_state_restart(model_time, statevector, iunit)
+endif
+call close_restart(iunit)
+
+call print_date( model_time,'exhaustion:model date')
+call print_time( model_time,'exhaustion:model time')
+
+
 if ((interp_test_dlon < 0.0_r8) .or. (interp_test_dlat < 0.0_r8)) then
-   write(*,*)'Skipping the rigorous interpolation test because one of'
+   write(*,*)'Error in interpolation test because one of'
    write(*,*)'interp_test_dlon,interp_test_dlat are < 0.0'
    write(*,*)'interp_test_dlon  = ',interp_test_dlon
    write(*,*)'interp_test_dlat  = ',interp_test_dlat
    write(*,*)'interp_test_dvert = ',interp_test_dvert
+   stop
 endif
 
 ! round down to avoid exceeding the specified range
@@ -220,6 +217,11 @@ nvert = aint((interp_test_vertrange(2) - interp_test_vertrange(1))/interp_test_d
 allocate(lon(nlon), lat(nlat), vert(nvert))
 allocate(full_lon(nlon,nlat,nvert), full_lat(nlon,nlat,nvert), full_vert(nlon,nlat,nvert))
 allocate(field(nlon,nlat,nvert), jit_field(nlon,nlat,nvert), field_diff(nlon,nlat,nvert))
+  
+print *, 'interpolating to a grid ranging from: '
+print *, nlon,  '  lons: ', interp_test_lonrange,  ' by ', interp_test_dlon
+print *, nlat,  '  lats: ', interp_test_latrange,  ' by ', interp_test_dlat
+print *, nvert, ' verts: ', interp_test_vertrange, ' by ', interp_test_dvert
 
 ! initialize the arrays
 
@@ -237,6 +239,7 @@ do ilon = 1, nlon
 end do
 
 
+print *, 'vertical coord is ', interp_test_vertcoord
 select case(trim(interp_test_vertcoord))
    case ('VERTISUNDEF')
       vertcoord = VERTISUNDEF
@@ -273,9 +276,74 @@ select case(trim(interp_test_vertcoord))
       call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
 end select
 
+print *, 'interpolating kind: ', kind_of_interest
 mykindindex = get_raw_obs_kind_index(kind_of_interest)
 
 end subroutine setup_interpolate
+
+!----------------------------------------------------------------------
+
+subroutine takedown_interpolate()
+
+deallocate(statevector)
+deallocate(lon, lat, vert)
+deallocate(field, jit_field, field_diff)
+deallocate(full_lon, full_lat, full_vert)
+
+end subroutine takedown_interpolate
+
+!----------------------------------------------------------------------
+
+function jitter_location(inloc)
+ type(location_type), intent(in)  :: inloc
+ type(location_type) :: jitter_location
+
+! take existing lat/lon/vert location and add small 
+! noise to each part of the coordinate.
+
+real(r8) :: x(3), lon, lat, vert
+real(r8) :: dellon, dellat, delvert, del
+
+
+x = get_location(inloc)
+lon = x(1)
+lat = x(2)
+vert = x(3)
+
+call jitter_point(lon, lat, vert, dellon, dellat, delvert)
+
+jitter_location = set_location(dellon, dellat, delvert, vertcoord)
+
+end function jitter_location
+
+!----------------------------------------------------------------------
+
+subroutine jitter_point(lon, lat, vert, dellon, dellat, delvert)
+ real(r8), intent(in ) :: lon, lat, vert
+ real(r8), intent(out) :: dellon, dellat, delvert
+
+! take existing lat/lon/vert location and add small 
+! noise to each part of the coordinate.
+
+real(r8) :: x(3), del
+
+
+del = (random_uniform(r) - 0.5_r8)  / hscale
+dellon = lon + del
+if (dellon <   0.0_r8) dellon = -dellon
+if (dellon > 360.0_r8) dellon = 360.0_r8 - (dellon - 360.0_r8)
+
+del = (random_uniform(r) - 0.5_r8)  / hscale
+dellat = lat + del
+if (dellat < -90.0_r8) dellat = -90.0_r8 - (dellat + 90.0_r8)
+if (dellat >  90.0_r8) dellat =  90.0_r8 - (dellat - 90.0_r8)
+
+del = (random_uniform(r) - 0.5_r8) * vscale
+delvert = vert + del
+if (delvert < vmin) delvert = vert + (delvert - vmin)
+if (delvert > vmax) delvert = vert - (delvert - vmax)
+
+end subroutine jitter_point
 
 !----------------------------------------------------------------------
 
@@ -285,7 +353,6 @@ subroutine jitter_grid()
 ! should call random number gen
 
 integer  :: ilon, jlat, kvert
-real(r8) :: del, dellon, dellat, delvert
 
 print *, 'jittering coordinates with +/- hscale, vscale: ', 0.5_r8 / hscale, 0.5_r8 / vscale
 
@@ -293,31 +360,17 @@ do ilon = 1, nlon
    do jlat = 1, nlat
       do kvert = 1, nvert
 
-         del = (random_uniform(r) - 0.5_r8)  / hscale
-         dellon = lon(ilon) + del
-         if (dellon <   0.0_r8) dellon = -lon(ilon)
-         if (dellon > 360.0_r8) dellon = 360.0_r8 - (lon(ilon) - 360.0_r8)
-
-         del = (random_uniform(r) - 0.5_r8)  / hscale
-         dellat = lat(jlat) + del
-         if (dellat < -90.0_r8) dellat = -90.0_r8 - (lat(jlat) + 90.0_r8)
-         if (dellat >  90.0_r8) dellat =  90.0_r8 - (lat(jlat) - 90.0_r8)
-
-         del = (random_uniform(r) - 0.5_r8) * vscale
-         delvert = vert(kvert) + del
-         if (delvert < vmin) delvert = vert(kvert) + (vert(kvert) - vmin)
-         if (delvert > vmax) delvert = vert(kvert) - (vert(kvert) - vmax)
-
-         full_lon (ilon, jlat, kvert) = dellon
-         full_lat (ilon, jlat, kvert) = dellat
-         full_vert(ilon, jlat, kvert) = delvert
+         call jitter_point(lon(ilon), lat(jlat), vert(kvert), &
+                           full_lon(ilon, jlat, kvert), &
+                           full_lat(ilon, jlat, kvert), &
+                           full_vert(ilon, jlat, kvert))
 
       enddo
    end do 
 end do
 
-print *, 'jittered field, min/max lon: ', minval(full_lon), maxval(full_lon)
-print *, 'jittered field, min/max lat: ', minval(full_lat), maxval(full_lat)
+print *, 'jittered field, min/max  lon: ', minval(full_lon),  maxval(full_lon)
+print *, 'jittered field, min/max  lat: ', minval(full_lat),  maxval(full_lat)
 print *, 'jittered field, min/max vert: ', minval(full_vert), maxval(full_vert)
 
 end subroutine jitter_grid
@@ -353,31 +406,20 @@ do ilon = 1, nlon
          if (compute_coords) then
             loc = set_location(lon(ilon), lat(jlat), vert(kvert), vertcoord)
          else
-            loc = set_location(flon(ilon,jlat,kvert), flat(ilon,jlat,kvert), fvert(ilon,jlat,kvert), vertcoord)
+            loc = set_location(flon(ilon,jlat,kvert), flat(ilon,jlat,kvert), &
+                               fvert(ilon,jlat,kvert), vertcoord)
          endif
 
          call model_interpolate(statevector, loc, mykindindex, f(ilon,jlat,kvert), ios_out)
 
-         if (ios_out /= 0) then
-           if (verbose) then
-              if (compute_coords) then
-                 write(string2,'(A,3(1x,i6),3(1x,f14.6))') 'ilon,jlat,kvert,lon,lat,vert ', &
-                                ilon,jlat,kvert,lon(ilon),lat(jlat),vert(kvert)
-              else
-                 write(string2,'(A,3(1x,i6),3(1x,f14.6))') 'ilon,jlat,kvert,lon,lat,vert ', &
-                                ilon,jlat,kvert,flon(ilon,jlat,kvert),flat(ilon,jlat,kvert),fvert(ilon,jlat,kvert)
-              endif
-              write(string1,*) 'interpolation return code was', ios_out
-              call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
-           endif
-           nfailed = nfailed + 1
-         endif
+         if (ios_out /= 0) call report_loc_badinterp(loc, ios_out, nfailed)
 
       enddo
    end do 
 end do
 
-write(*,*) 'total interpolations, num failed: ', nlon*nlat*nvert, nfailed
+print *, 'total interpolations, num failed: ', nlon*nlat*nvert, nfailed
+print *, ' '
 
 test_interpolate = nfailed
 
@@ -392,6 +434,10 @@ integer  :: ilon, jlat, kvert
 real(r8) :: v1, v2
 
 
+print *, ' '
+print *, 'checking and reporting differences larger than ', diff_threshold
+print *, ' '
+
 field_diff = f1 - f2
 
 do ilon = 1, nlon
@@ -400,9 +446,9 @@ do ilon = 1, nlon
          v1 = f1(ilon,jlat,kvert)
          v2 = f2(ilon,jlat,kvert)
          if (abs(v1 - v2) > diff_threshold) then
-            print *, lon(ilon), lat(jlat), vert(kvert), v1, ' vs '
-            print *, full_lon(ilon,jlat,kvert), full_lat(ilon,jlat,kvert), &
-                     full_vert(ilon,jlat,kvert), v2, ' = ', abs(v1-v2)
+            call report_diff(lon(ilon), lat(jlat), vert(kvert), &
+                             full_lon(ilon,jlat,kvert), full_lat(ilon,jlat,kvert), &
+                             full_vert(ilon,jlat,kvert), v1, v2)
          endif
          if (v1 == MISSING_R8 .or. v2 == MISSING_R8) then
             field_diff(ilon,jlat,kvert) = MISSING_R8
@@ -412,10 +458,135 @@ do ilon = 1, nlon
 end do
 
 
-print *, 'min, max diffs in data: ', minval(field_diff), maxval(field_diff)
+print *, 'min, max diffs in data: ', minval(field_diff, mask= field_diff /= MISSING_R8), &
+                                     maxval(field_diff)
 
 
 end subroutine check_diffs
+
+!----------------------------------------------------------------------
+
+subroutine random_test(n)
+ integer, intent(in) :: n
+
+integer :: i
+
+real(r8) :: x(3), lon, lat, vert
+real(r8) :: dellon, dellat, delvert, del
+real(r8) :: lonspan, latspan, vertspan
+real(r8) :: oval, jval
+type(location_type) :: original, jittered
+integer  :: oout, jout
+
+print *, ' '
+print *, 'starting random point test for ', n, ' points, '
+print *, 'checking and reporting differences larger than ', diff_threshold
+print *, ' '
+
+lonspan = interp_test_lonrange(2) - interp_test_lonrange(1)
+latspan = interp_test_latrange(2) - interp_test_latrange(1)
+vertspan = interp_test_vertrange(2) - interp_test_vertrange(1)
+
+do i=1, n
+
+   ! generate a random lon, lat, vert in range
+   
+   lon = (random_uniform(r) * lonspan) + interp_test_lonrange(1)
+   lat = (random_uniform(r) * latspan) + interp_test_latrange(1)
+   vert = (random_uniform(r) * vertspan) + interp_test_vertrange(1)
+   
+   original = set_location(lon, lat, vert, vertcoord)
+
+   
+   ! jitter it
+   
+   jittered = jitter_location(original)
+   
+   
+   ! interp both and compute difference
+   
+   call model_interpolate(statevector, original, mykindindex, oval, oout)
+   if (oout /= 0) then
+      call report_loc_badinterp(original, oout)
+      cycle
+   endif
+   
+   call model_interpolate(statevector, jittered, mykindindex, jval, jout)
+   if (jout /= 0) then
+      call report_loc_badinterp(jittered, jout)
+      cycle
+   endif
+   
+   ! if del > threshold, print all info
+   if (abs(oval - jval) > diff_threshold) call report_loc_diff(original, jittered, oval, jval)
+   
+   ! repeat
+!if (mod(n,1000) == 0) print *, 'random test, iteration ', i
+enddo
+
+end subroutine random_test
+
+!----------------------------------------------------------------------
+
+subroutine report_loc_badinterp(loc, rc, failcount)
+ type(location_type), intent(in)  :: loc
+ integer,             intent(in)  :: rc
+ integer, intent(inout), optional :: failcount
+
+real(r8) :: l(3)
+
+l = get_location(loc)
+
+call report_badinterp(l(1), l(2), l(3), rc, failcount)
+
+end subroutine report_loc_badinterp
+
+!----------------------------------------------------------------------
+
+subroutine report_badinterp(lon, lat, vert, rc, failcount)
+ real(r8), intent(in)              :: lon, lat, vert
+ integer,  intent(in)              :: rc
+ integer,  intent(inout), optional :: failcount
+
+write(string2,'(A,3(1x,f14.6))') 'lon,lat,vert ', lon, lat, vert
+write(string1,*) 'interpolation return code was', rc
+call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+
+
+if (present(failcount)) then
+   failcount = failcount + 1
+endif
+
+end subroutine report_badinterp
+
+!----------------------------------------------------------------------
+
+subroutine report_loc_diff(loc1, loc2, v1, v2)
+ type(location_type), intent(in) :: loc1, loc2
+ real(r8),            intent(in) :: v1, v2
+
+real(r8) :: l1(3), l2(3)
+
+l1 = get_location(loc1)
+l2 = get_location(loc2)
+
+call report_diff(l1(1), l1(2), l1(3), &
+                 l2(1), l2(2), l2(3), &
+                 v1, v2)
+
+end subroutine report_loc_diff
+
+!----------------------------------------------------------------------
+
+subroutine report_diff(lon1, lat1, vert1, lon2, lat2, vert2, v1, v2)
+ real(r8), intent(in) :: lon1, lat1, vert1, lon2, lat2, vert2
+ real(r8), intent(in) :: v1, v2
+
+print *, lon1, lat1, vert1, v1, ' vs '
+
+print *, lon2, lat2, vert2, v2, ' = ', abs(v1-v2)
+
+end subroutine report_diff
 
 !----------------------------------------------------------------------
 

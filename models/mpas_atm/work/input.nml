@@ -96,7 +96,7 @@
    vert_normalization_pressure = 100000.0,
    vert_normalization_height   = 10000.0,
    vert_normalization_level    = 20.0,
-   approximate_distance        = .true.,
+   approximate_distance        = .false.,
    nlon                        = 71,
    nlat                        = 36,
    output_box_info             = .false.,
@@ -138,6 +138,7 @@
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
    debug = 8
+   use_new_code                 = .true.,
    /
 
                           'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
@@ -282,3 +283,25 @@
    interp_test_dvert     = 2000.0,
    interp_test_vertcoord = 'VERTISHEIGHT'
    /
+
+&exhaustion_nml
+   dart_input_file       = 'dart.ud',
+   output_file           = 'exhaust',
+   advance_time_present  = .FALSE.,
+   verbose               = .FALSE.,
+   matlab_out            = .FALSE.,
+   netcdf_out            = .TRUE.,
+   kind_of_interest      = 'KIND_U_WIND_COMPONENT',
+   interp_test_lonrange  = 0.0, 360.0,
+   interp_test_dlon      = 1.0,
+   interp_test_latrange  = -89.0, 89.0,
+   interp_test_dlat      = 1.0,
+   interp_test_vertrange = 7000.0, 7000.0,
+   interp_test_dvert     = 1000.0,
+   interp_test_vertcoord = 'VERTISHEIGHT'
+   hscale                = 100.0
+   diff_threshold        = 2.0
+   pointcount            = 100000
+   /
+
+
