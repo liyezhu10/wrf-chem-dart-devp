@@ -5102,7 +5102,7 @@ integer,             intent(out) :: ier
 
 
 integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
-logical, parameter :: on_a_sphere = .false.
+logical, parameter :: on_a_sphere = .true.
 integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: edgenormals(3, listsize)
