@@ -4311,6 +4311,137 @@ end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
+subroutine find_vert_level2(x, loc, n, ids, oncenters, lower, upper, fract, ier)
+
+! given a location and 3 cell ids, return three sets of: 
+!  the two level numbers that enclose the given vertical 
+!  value plus the fraction between them for each of the 3 cell centers.   
+
+! FIXME:  this handles data at cell centers, at edges, but not
+! data on faces.
+
+real(r8),            intent(in)  :: x(:)
+type(location_type), intent(in)  :: loc
+integer,             intent(in)  :: n
+integer,             intent(in)  :: ids(n)
+logical,             intent(in)  :: oncenters
+integer,             intent(out) :: lower(n), upper(n)
+real(r8),            intent(out) :: fract(n)
+integer,             intent(out) :: ier
+
+real(r8) :: lat, lon, vert, tmp(3)
+integer  :: verttype, edgeid, i
+integer  :: pt_base_offset, density_base_offset, qv_base_offset
+
+! the plan is to take in: whether this var is on cell centers or edges,
+! and the location so we can extract the vert value and which vert flag.
+! compute and return the lower and upper index level numbers that
+! enclose this vert, along with the fract between them.  ier is set
+! in case of error (e.g. outside the grid, on dry land, etc).
+
+! kinds we have to handle:
+!vert_is_undef,    VERTISUNDEF
+!vert_is_surface,  VERTISSURFACE
+!vert_is_level,    VERTISLEVEL
+!vert_is_pressure, VERTISPRESSURE
+!vert_is_height,   VERTISHEIGHT
+
+! unpack the location into local vars
+tmp = get_location(loc)
+lon  = tmp(1)
+lat  = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+
+! these first 3 types need no cell/edge location information.
+
+! no defined vertical location (e.g. vertically integrated vals)
+if (vert_is_undef(loc)) then
+   ier = 12
+   return
+endif
+
+! vertical is defined to be on the surface (level 1 here)
+if(vert_is_surface(loc)) then
+   lower = 1
+   upper = 2
+   fract = 0.0_r8
+   ier = 0
+   return
+endif
+
+! model level numbers (supports fractional levels)
+if(vert_is_level(loc)) then
+   ! FIXME: if this is W, the top is nVertLevels+1
+   if (vert > nVertLevels) then
+      ier = 12
+      return
+   endif
+   if (vert == nVertLevels) then
+      lower = nint(vert) - 1   ! round down
+      upper = nint(vert)
+      fract = 1.0_r8
+      ier = 0
+      return
+   endif
+   lower = aint(vert)   ! round down
+   upper = lower+1
+   fract = vert - lower
+!print *, '1 lower, upper = ', lower, upper
+   ier = 0
+   return
+endif
+
+! ok, now we need to know where we are in the grid for heights or pressures
+! as the vertical coordinate.
+
+
+! Vertical interpolation for pressure coordinates
+if(vert_is_pressure(loc) ) then 
+   ! Need to get base offsets for the potential temperature, density, and water 
+   ! vapor mixing fields in the state vector
+   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
+   call get_index_range(KIND_DENSITY, density_base_offset)
+   call get_index_range(KIND_VAPOR_MIXING_RATIO, qv_base_offset)
+!print *, 'bases: t/rho/v = ', pt_base_offset, density_base_offset, qv_base_offset
+   do i=1, n
+      call find_pressure_bounds2(x, vert, ids(i), nVertLevels, &
+            pt_base_offset, density_base_offset, qv_base_offset,  &
+            lower(i), upper(i), fract(i), ier)
+!print *, 'i lower, upper, ier = ', i, lower(i), upper(i), ier
+      if (ier /= 0) return
+   enddo
+
+   return
+endif
+
+! grid is in height, so this needs to know which cell to index into
+! for the column of heights and call the bounds routine.
+if(vert_is_height(loc)) then
+   ! For height, can do simple vertical search for interpolation for now
+   ! Get the lower and upper bounds and fraction for each column
+   do i=1, n
+      if (oncenters) then
+         call find_height_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
+                                 lower(i), upper(i), fract(i), ier)
+      else
+         call find_height_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
+                                 lower(i), upper(i), fract(i), ier)
+      endif
+!print *, 'i lower, upper = ', i, lower(i), upper(i)
+      if (ier /= 0) return
+
+   enddo
+   return
+endif
+
+! Shouldn't ever fall out of the 'if' before returning
+ier = 3
+
+end subroutine find_vert_level2
+
+!------------------------------------------------------------------
+
 subroutine find_pressure_bounds2(x, p, cellid, nbounds, &
    pt_base_offset, density_base_offset, qv_base_offset, &
    lower, upper, fract, ier)
@@ -4382,7 +4513,7 @@ do i = 2, nbounds
          fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
          !fract = exp(log(p) - log(pressure(i-1))) / (log(pressure(i)) - log(pressure(i-1)))
       endif
-!print *, "looping pr: i, p, pr(i), lower, upper, fract = ", i, p, pressure(i), lower, upper, fract
+!print *, "returning pr: i, p, pr(i), lower, upper, fract = ", i, p, pressure(i), lower, upper, fract
       return
    endif
 
@@ -4967,8 +5098,8 @@ integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid, n
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
-real(r8) :: lat, lon, vert, tmp(3), fract, lowval(3), uppval(3), p(3)
-integer  :: verttype, lower, upper, c(3), vindex, v, vp1
+real(r8) :: lat, lon, vert, tmp(3), fract(3), lowval(3), uppval(3), p(3)
+integer  :: verttype, lower(3), upper(3), c(3), vindex, v, vp1
 logical  :: inside, foundit
 
 
@@ -5063,7 +5194,7 @@ if (.not. foundit) then
 endif
 
 ! need vert index for the vertical level
-call find_vert_level(x, loc, .true., lower, upper, fract, ier)
+call find_vert_level2(x, loc, 3, c, .true., lower, upper, fract, ier)
 if (ier /= 0) then
    return
 endif
@@ -5076,9 +5207,9 @@ nvert = progvar(ival)%numvertical
 ! t1, t2, t3 are the xyz of the cell centers
 ! c(3) are the cell ids
 do i = 1, 3
-   lowval(i) = x(index1 + (c(i)-1) * nvert + lower-1)
-   uppval(i) = x(index1 + (c(i)-1) * nvert + upper-1)
-   fdata(i) = lowval(i)*(1.0_r8 - fract) + uppval(i)*fract
+   lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
+   uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
+   fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
 enddo
 
 ! now have vertically interpolated values at cell centers.
