@@ -71,6 +71,7 @@ character (len = 129)  :: dart_input_file      = 'dart.ics'
 character (len = 129)  :: output_file          = 'check_me'
 logical                :: advance_time_present = .FALSE.
 logical                :: verbose              = .TRUE.
+logical                :: dojitter             = .TRUE.
 logical                :: matlab_out           = .FALSE.
 logical                :: netcdf_out           = .TRUE.
 character (len = 129)  :: kind_of_interest     = 'KIND_POTENTIAL_TEMPERATURE'
@@ -92,7 +93,7 @@ namelist /exhaustion_nml/ dart_input_file, output_file, &
                         interp_test_dlat, interp_test_latrange, &
                         interp_test_dvert, interp_test_vertrange, &
                         interp_test_vertcoord, destroy_file, hscale, &
-                        diff_threshold, pointcount
+                        diff_threshold, pointcount, dojitter
 
 !----------------------------------------------------------------------
 ! other variables
@@ -129,11 +130,13 @@ if ( ios_out /= 0 ) then
    print *, 'test interpolate had ', ios_out, ' failures.'
 endif
 
-call jitter_grid()
+if (dojitter) then
+   call jitter_grid()
 
-ios_out = test_interpolate(jit_field, full_lon, full_lat, full_vert)
-
-call check_diffs(field, jit_field)
+   ios_out = test_interpolate(jit_field, full_lon, full_lat, full_vert)
+   
+   call check_diffs(field, jit_field)
+endif
 
 call output_interpolate()
 
@@ -705,6 +708,7 @@ if (netcdf_out) then
    call nc_check(nf90_put_att(ncid, VarID, 'vertcoord', vertcoord ), &
               'test_interpolate', 'put_att field vertcoord '//trim(ncfilename))
    
+if (dojitter) then
    call nc_check(nf90_def_var(ncid=ncid, name='field_diff', xtype=nf90_double, &
            dimids=(/ nlonDimID, nlatDimID, nvertDimID /), varid=VarID2), 'test_interpolate', &
                     'field def_var '//trim(ncfilename))
@@ -718,6 +722,7 @@ if (netcdf_out) then
               'test_interpolate', 'put_att field vertcoord_string '//trim(ncfilename))
    call nc_check(nf90_put_att(ncid, VarID2, 'vertcoord', vertcoord ), &
               'test_interpolate', 'put_att field vertcoord '//trim(ncfilename))
+endif
    
    ! Leave define mode so we can fill the variables.
    call nc_check(nf90_enddef(ncid), &
@@ -732,8 +737,10 @@ if (netcdf_out) then
                  'test_interpolate','vert put_var '//trim(ncfilename))
    call nc_check(nf90_put_var(ncid, VarID, field), &
                  'test_interpolate','field put_var '//trim(ncfilename))
+if (dojitter) then
    call nc_check(nf90_put_var(ncid, VarID2, field_diff), &
                  'test_interpolate','field put_var '//trim(ncfilename))
+endif
    
    ! tidy up
    call nc_check(nf90_close(ncid), &

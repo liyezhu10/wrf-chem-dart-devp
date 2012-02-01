@@ -4322,11 +4322,10 @@ subroutine find_vert_level2(x, loc, n, ids, oncenters, lower, upper, fract, ier)
 
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: n
-integer,             intent(in)  :: ids(n)
+integer,             intent(in)  :: n, ids(:)
 logical,             intent(in)  :: oncenters
-integer,             intent(out) :: lower(n), upper(n)
-real(r8),            intent(out) :: fract(n)
+integer,             intent(out) :: lower(:), upper(:)
+real(r8),            intent(out) :: fract(:)
 integer,             intent(out) :: ier
 
 real(r8) :: lat, lon, vert, tmp(3)
@@ -4363,9 +4362,9 @@ endif
 
 ! vertical is defined to be on the surface (level 1 here)
 if(vert_is_surface(loc)) then
-   lower = 1
-   upper = 2
-   fract = 0.0_r8
+   lower(1:n) = 1
+   upper(1:n) = 2
+   fract(1:n) = 0.0_r8
    ier = 0
    return
 endif
@@ -4378,16 +4377,16 @@ if(vert_is_level(loc)) then
       return
    endif
    if (vert == nVertLevels) then
-      lower = nint(vert) - 1   ! round down
-      upper = nint(vert)
-      fract = 1.0_r8
+      lower(1:n) = nint(vert) - 1   ! round down
+      upper(1:n) = nint(vert)
+      fract(1:n) = 1.0_r8
       ier = 0
       return
    endif
-   lower = aint(vert)   ! round down
-   upper = lower+1
-   fract = vert - lower
-!print *, '1 lower, upper = ', lower, upper
+   lower(1:n) = aint(vert)   ! round down
+   upper(1:n) = lower+1
+   fract(1:n) = vert - lower
+!print *, 'vertislevel: vert, lower, upper, fract = ', vert, lower(1), upper(1), fract(1)
    ier = 0
    return
 endif
@@ -4424,11 +4423,12 @@ if(vert_is_height(loc)) then
       if (oncenters) then
          call find_height_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
                                  lower(i), upper(i), fract(i), ier)
+if(debug > 8)print *, 'i, id, fract, cell hts: = ', i, ids(i), lower(i)+fract(i), zGridCenter(lower(i), ids(i)), zGridCenter(upper(i), ids(i))
       else
          call find_height_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
                                  lower(i), upper(i), fract(i), ier)
+if(debug > 8)print *, 'i, id, fract, edge hts: = ', i, ids(i), lower(i)+fract(i), zGridEdge(lower(i), ids(i)), zGridEdge(upper(i), ids(i))
       endif
-!print *, 'i lower, upper = ', i, lower(i), upper(i)
       if (ier /= 0) return
 
    enddo
@@ -5094,7 +5094,7 @@ integer,             intent(out) :: ier
 ! using barycentric weights to get the value at the interpolation point.
 
 integer, parameter :: listsize = 30 
-integer  :: nedges, edgelist(listsize), i, j, neighborcells(maxEdges), edgeid, nvert
+integer  :: nedges, i, j, neighborcells(maxEdges), edgeid, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
@@ -5243,45 +5243,14 @@ real(r8) :: ureconstructx, ureconstructy, ureconstructz
 real(r8) :: ureconstructzonal, ureconstructmeridional
 real(r8) :: datatangentplane(3,2)
 real(r8) :: coeffs_reconstruct(3,listsize)
-integer  :: vertindex, index1, progindex, cellid
-real(r8) :: lat, lon, vert, tmp(3), fract, lowval, uppval
-integer  :: verttype, lower, upper
+integer  :: vertindex, index1, progindex, cellid, vertexid
+real(r8) :: lat, lon, vert, tmp(3), fract(listsize), lowval, uppval
+integer  :: verttype, lower(listsize), upper(listsize), ncells, celllist(listsize)
 
 
 ! FIXME: make this cache the last value and if the location is
 ! the same as before and it's asking for V now instead of U,
 ! skip the expensive computation.
-
-! unpack the location into local vars
-tmp = get_location(loc)
-lon = tmp(1)
-lat = tmp(2)
-vert = tmp(3)
-verttype = nint(query_location(loc))
-
-call find_surrounding_edges(lat, lon, nedges, edgelist, cellid)
-if (nedges <= 0) then
-   ! we are on a boundary, no interpolation
-   uval = MISSING_R8
-   ier = 18
-   return
-endif
-!print *, 'obs lon, lat: ', lon, lat
-!print *, 'rbf: surrounding edge list, nedges = ', nedges
-!print *, edgelist(1:nedges)
-!print *, 'closest cell = ', cellid
-
-! the rbf code needs (their names == our names):
-! nData == nedges
-! xyz data == xyzEdge
-! normalDirectionData == edgeNormalVectors
-! velocitydata = U field
-
-! need vert index for the vertical level
-call find_vert_level(x, loc, .false., lower, upper, fract, ier)
-if (ier /= 0) return
-
-!print *, 'find_vert_level returns l, u, f = ', lower, upper, fract
 
 progindex = get_index_from_varname('u')
 if (progindex < 0) then
@@ -5292,6 +5261,53 @@ if (progindex < 0) then
 endif
 index1 = progvar(progindex)%index1
 nvert = progvar(progindex)%numvertical
+
+! unpack the location into local vars
+tmp = get_location(loc)
+lon = tmp(1)
+lat = tmp(2)
+vert = tmp(3)
+verttype = nint(query_location(loc))
+if(debug > 8)print *, 'obs lon, lat: ', lon, lat
+
+call find_surrounding_edges(lat, lon, nedges, edgelist, cellid, vertexid)
+if (nedges <= 0) then
+   ! we are on a boundary, no interpolation
+   uval = MISSING_R8
+   ier = 18
+   return
+endif
+if(debug > 8)print *, 'rbf: surrounding edge list, nedges = ', nedges
+if(debug > 8)print *, edgelist(1:nedges)
+if(debug > 8)print *, 'closest cell, vertex = ', cellid, vertexid
+
+if (verttype == VERTISPRESSURE) then
+   ! get all cells which share any edges with the 3 cells which share
+   ! the closest vertex.
+   call make_cell_list(vertexid, 2, ncells, celllist)
+!   print *, 'make cell list: ncells = ', ncells
+!   print *, celllist(1:ncells)
+   call find_vert_level2(x, loc, ncells, celllist, .true., lower, upper, fract, ier)
+   if (ier /= 0) return
+
+   ! now have pressure at all cell centers - need to interp to get pressure
+   ! at edge centers.
+   call move_pressure_to_edges(ncells, celllist, lower, upper, fract, nedges, edgelist, ier)
+   if (ier /= 0) return
+
+else
+   ! need vert index for the vertical level
+   call find_vert_level2(x, loc, nedges, edgelist, .false., lower, upper, fract, ier)
+   if (ier /= 0) return
+endif
+
+!print *, 'find_vert_level returns fract = ', lower(1:nedges) + fract(1:nedges)
+
+! the rbf code needs (their names == our names):
+! nData == nedges
+! xyz data == xyzEdge
+! normalDirectionData == edgeNormalVectors
+! velocitydata = U field
 
 do i = 1, nedges
    if (edgelist(i) > size(xEdge)) then
@@ -5306,13 +5322,17 @@ do i = 1, nedges
       edgenormals(j, i) = edgeNormalVectors(j, edgelist(i))
    enddo
 
-!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nvert, lower
-!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nvert, upper
-   lowval = x(index1 + (edgelist(i)-1) * nvert + lower-1)
-   uppval = x(index1 + (edgelist(i)-1) * nvert + upper-1)
-!print *, 'lowval, uppval = ', lowval, uppval
-   veldata(i) = lowval*(1.0_r8 - fract) + uppval*fract
-!print *, 'veldata at right vert height for edge: ', i, edgelist(i), veldata(i)
+if(debug > 8)print *, 'edgelist(i):                ', edgelist(i)
+if(debug > 8)print *, 'normals:                    ', edgenormals(:, i)
+if(debug > 8)print *, 'xyz of edge center:         ', xdata(i), ydata(i), zdata(i)
+!print *, 'index1, edgelist(i), nVertLevels, lower = ', index1, edgelist(i), nvert, lower(i)
+!print *, 'index1, edgelist(i), nVertLevels, upper = ', index1, edgelist(i), nvert, upper(i)
+   lowval = x(index1 + (edgelist(i)-1) * nvert + lower(i)-1)
+   uppval = x(index1 + (edgelist(i)-1) * nvert + upper(i)-1)
+if(debug > 8)print *, 'lowval, uppval:             ', lowval, uppval
+   veldata(i) = lowval*(1.0_r8 - fract(i)) + uppval*fract(i)
+if(debug > 8)print *, 'veldata: ', veldata(i)
+! FIXME: can we project veldata onto U and V axes to debug this?
 enddo
 
 
@@ -5350,7 +5370,7 @@ call get_reconstruct(nedges, lat*deg2rad, lon*deg2rad, &
               ureconstructx, ureconstructy, ureconstructz, &
               ureconstructzonal, ureconstructmeridional)
 
-!print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
+if(debug > 8)print *, 'U,V vals from reconstruction: ', ureconstructzonal, ureconstructmeridional
 !print *, 'XYZ vals from reconstruction: ', ureconstructx, ureconstructy, ureconstructz
 
 ! FIXME: it would be nice to return both and not have to call this
@@ -5367,15 +5387,15 @@ end subroutine compute_u_with_rbf
 
 !------------------------------------------------------------
 
-subroutine find_surrounding_edges(lat, lon, nedges, edge_list, cellid)
+subroutine find_surrounding_edges(lat, lon, nedges, edge_list, cellid, vertexid)
 real(r8), intent(in)  :: lat, lon
 integer,  intent(out) :: nedges, edge_list(:)
-integer,  intent(out) :: cellid
+integer,  intent(out) :: cellid, vertexid
 
 ! given an arbitrary lat/lon location, find the edges of the
-! cells that share the nearest vertex.
-
-integer :: vertexid
+! cells that share the nearest vertex.  return the ids for the
+! closest cell center and closest vertex to save having to redo 
+! the search.
 
 ! find the cell id that has a center point closest
 ! to the given point.
@@ -5719,7 +5739,7 @@ do i=1, nverts
 
    call vector_cross_product(vec1, vec2, r)
 
-   call vector_magnitude(r, m)
+   m = vector_magnitude(r)
 
    if (m < 0.0_r8) then
       inside_cell0 = .false.
@@ -5830,6 +5850,7 @@ ncells = 3
 cellid_list(1) = cellsOnVertex(1, vertexid)
 cellid_list(2) = cellsOnVertex(2, vertexid)
 cellid_list(3) = cellsOnVertex(3, vertexid)
+if(debug > 8)print *, 'vertex id, 3 cells: ', vertexid, cellid_list(1:3)
 
 ! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
 ! find the edge numbers.  add them to the list, skipping if
@@ -5852,6 +5873,7 @@ do c=1, ncells
    edgecount = nEdgesOnCell(cellid_list(c))
    do e=1, edgecount
       nextedge = edgesOnCell(e, cellid_list(c))
+if(debug > 8)print *, 'cell, edge: ', cellid_list(c), nextedge
       ! FIXME: 
       ! if (boundaryEdge(nextedge, vert)) then
       !    nedges = 0
@@ -5875,6 +5897,146 @@ enddo
 nedges = listlen
 
 end subroutine make_edge_list
+
+!------------------------------------------------------------
+
+subroutine make_cell_list(vertexid, degree, ncells, cell_list)
+
+! FIXME: will need a vertical level number input arg here to detect
+! the boundary edges/vertices correctly.
+
+! given a vertexid and a degree, look up the N cells which 
+! share it as a vertex.   for degree 1, return the 3 cells
+! which share this vertex.  for degree 2, return the second-nearest
+! cells as well.  only handles degree 1 and 2.
+! returns a unique list of cells; duplicates are removed.
+! the cell_list output should be at least 10x the Ncells times
+! the degree to guarentee it will be large enough.
+
+integer, intent(in)  :: vertexid, degree
+integer, intent(out) :: ncells, cell_list(:)
+
+integer :: vertcount, c, c2, v, listlen, l, nextvert, nextcell
+logical :: found
+
+if (degree < 1 .or. degree > 2) then
+   call error_handler(E_ERR, 'make_cell_list', 'internal error, degree not 1 or 2', &
+                      source, revision, revdate)
+endif
+
+! use the cellsOnVertex() array to find the three cells
+! which share this vertex.  for degree 1, we are done.
+! for degree 2, search the vertices of these cells as well.
+
+cell_list(1) = cellsOnVertex(1, vertexid)
+cell_list(2) = cellsOnVertex(2, vertexid)
+cell_list(3) = cellsOnVertex(3, vertexid)
+
+if (degree == 1) then
+   ncells = 3
+   return
+endif
+
+
+! FIXME: the ocean files have:
+!  integer boundaryEdge(nVertLevels, nEdges)
+!  integer boundaryVertex(nVertLevels, nVertices)
+! as a first pass, if ANY of the edges or vertices are on
+! the boundary, punt and return 0 as the edge count.  later
+! once this is working, decide if a single boundary vertex or
+! edge is ok if it's the exterior of the edges we are including
+! and if it has good data values.
+
+listlen = 3
+do c=1, 3
+   vertcount = nEdgesOnCell(cell_list(c))
+   do v=1, vertcount
+      nextvert = verticesOnCell(v, cell_list(c))
+      ! FIXME: 
+      ! if (boundaryVertex(nextvert, vert)) then
+      !    ncells = 0
+      !    cell_list(:) = -1
+      !    return
+      ! endif
+      do c2=1, 3
+         nextcell = cellsOnVertex(c2, nextvert)
+         found = .false.
+         addloop: do l=1, listlen
+            if (cell_list(l) == nextcell) then
+               found = .true.
+               exit addloop
+            endif
+         enddo addloop
+         if ( .not. found) then
+            listlen = listlen + 1
+            cell_list(listlen) = nextcell
+         endif
+      enddo
+   enddo
+enddo
+
+ncells = listlen
+
+end subroutine make_cell_list
+
+!------------------------------------------------------------
+
+subroutine move_pressure_to_edges(ncells, celllist, lower, upper, fract, nedges, edgelist, ier)
+
+! given a list of n cell ids, and a list of edge ids, figure out which
+! cells are on either side of each edge and compute new lower, upper and fract values.
+! the lower, upper and fract lists match the cells on the way in, they match the
+! edges on the way out.
+
+integer,  intent(in)    :: ncells, celllist(:)
+integer,  intent(inout) :: lower(:), upper(:)
+real(r8), intent(inout) :: fract(:)
+integer,  intent(in)    :: nedges, edgelist(:)
+integer,  intent(out)   :: ier
+
+integer, parameter :: listsize = 30 
+real(r8) :: o_lower(listsize), o_fract(listsize)
+real(r8) :: x1, x2, x
+integer  :: i, j, k, e, c1, c2, c
+
+! save the originals; we are going to overwrite these arrays
+o_lower = lower
+o_fract = fract
+
+!print *, 'move_pressure_to_edges, ncells, nedges', ncells, nedges
+!print *, 'cells: ', celllist(1:ncells)
+!print *, 'edges: ', edgelist(1:nedges)
+!print *, 'fract: ', lower(1:ncells)+fract(1:ncells)
+
+do i=1, nedges
+   c1 = cellsOnEdge(1, edgelist(i))
+   c2 = cellsOnEdge(2, edgelist(i))
+!print *, 'i, cells', i, c1, c2
+   x1 = -1.0_r8
+   x2 = -1.0_r8
+   do c=1, ncells
+      if (celllist(c) == c1) then
+         x1 = o_lower(c) + o_fract(c)
+      endif
+      if (celllist(c) == c2) then
+         x2 = o_lower(c) + o_fract(c)
+      endif
+   enddo
+   if (x1 < 0.0_r8 .or. x2 < 0.0_r8) then
+      call error_handler(E_ERR, 'move_pressure_to_edges', 'cell id not found in list', &
+                         source, revision, revdate)
+   endif
+   ! FIXME: should this be a log interpolation since we know this is going
+   ! to be used for pressure only?
+   x = (x1 + x2) / 2.0_r8
+   lower(i) = aint(x)
+   upper(i) = lower(i) + 1
+   fract(i) = x - lower(i)
+enddo
+
+ier = 0
+
+end subroutine move_pressure_to_edges
 
 !------------------------------------------------------------
 
@@ -6045,16 +6207,16 @@ end subroutine latlon_to_xyz_on_plane
 
 !------------------------------------------------------------
 
-subroutine vector_magnitude(a, r)
+function vector_magnitude(a)
 
 ! Given a cartesian vector, compute the magnitude
 
 real(r8), intent(in)  :: a(3)
-real(r8), intent(out) :: r
+real(r8) :: vector_magnitude
 
-r = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
+vector_magnitude = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
 
-end subroutine vector_magnitude
+end function vector_magnitude
 
 !------------------------------------------------------------
 
@@ -6070,6 +6232,35 @@ r(2) = a(3)*b(1) - a(1)*b(3)
 r(3) = a(1)*b(2) - a(2)*b(1)
 
 end subroutine vector_cross_product
+
+!------------------------------------------------------------
+
+function vector_dot_product(a, b)
+
+! Given 2 cartesian vectors, compute the dot product of a . b
+
+real(r8), intent(in)  :: a(3), b(3)
+real(r8) :: vector_dot_product
+
+vector_dot_product = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
+
+end function vector_dot_product
+
+!------------------------------------------------------------
+
+subroutine vector_projection(a, b, r)
+
+! Given 2 cartesian vectors, project a onto b
+
+real(r8), intent(in)  :: a(3), b(3)
+real(r8), intent(out) :: r(3)
+
+real(r8) :: ab_over_bb
+
+ab_over_bb = vector_dot_product(a, b) / vector_dot_product(b, b)
+r = (ab_over_bb) * b
+
+end subroutine vector_projection
 
 !------------------------------------------------------------
 
