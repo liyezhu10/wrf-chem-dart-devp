@@ -65,6 +65,9 @@
    inf_sd_lower_bound          = 0.0,                     0.0
    /
 
+&mpi_utilities_nml
+   /
+
 &smoother_nml
    num_lags              = 0,
    start_from_restart    = .false.,
@@ -97,8 +100,8 @@
    vert_normalization_height   = 10000.0,
    vert_normalization_level    = 20.0,
    approximate_distance        = .false.,
-   nlon                        = 71,
-   nlat                        = 36,
+   nlon                        = 141,
+   nlat                        = 72,
    output_box_info             = .false.,
    print_box_level             = 0,
   /
@@ -137,8 +140,10 @@
    output_state_vector          = .false., 
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
-   debug = 8
+   debug                        = 0,
    use_new_code                 = .true.,
+   use_u_for_wind               = .true.
+   use_rbf_option               = 2
    /
 
                           'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
@@ -147,6 +152,8 @@
    mpas_state_variables = 
                           'theta',                 'KIND_POTENTIAL_TEMPERATURE',
                           'surface_pressure',      'KIND_SURFACE_PRESSURE'
+                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
+                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
                           'u',                     'KIND_EDGE_NORMAL_SPEED',
                           'w',                     'KIND_VERTICAL_VELOCITY',
                           'rho',                   'KIND_DENSITY',
