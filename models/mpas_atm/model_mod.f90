@@ -139,6 +139,8 @@ character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
 logical            :: use_new_code = .true.
+logical            :: use_u_for_wind = .false.
+integer            :: use_rbf_option = 2
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -149,7 +151,9 @@ namelist /model_nml/             &
    model_perturbation_amplitude, &
    calendar,                     &
    debug,                        &
-   use_new_code
+   use_new_code,                 &
+   use_u_for_wind,               &
+   use_rbf_option
 
 !------------------------------------------------------------------
 ! DART state vector are specified in the input.nml:mpas_vars_nml namelist.
@@ -929,7 +933,7 @@ if (debug > 5) print *, 'requesting interpolation at ', llon, llat, lheight
 if (use_new_code) then
    kindloop: do i=1, num_kinds
       if ((obs_kinds(i) == KIND_U_WIND_COMPONENT .or. &
-           obs_kinds(i) == KIND_V_WIND_COMPONENT) .and. has_real_u) then
+           obs_kinds(i) == KIND_V_WIND_COMPONENT) .and. has_real_u .and. use_u_for_wind) then
          if (obs_kinds(i) == KIND_U_WIND_COMPONENT) then
             call compute_u_with_rbf(x, location, .TRUE., interp_vals(i), istatus)
          else
@@ -2244,7 +2248,7 @@ do ivar=1, nfields
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
       call error_handler(E_MSG, '', string1, &
                         source,revision,revdate)
 
@@ -2260,7 +2264,7 @@ do ivar=1, nfields
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
       call error_handler(E_MSG, '', string1, &
                         source,revision,revdate)
 
@@ -2277,7 +2281,7 @@ do ivar=1, nfields
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
       call error_handler(E_MSG, '', string1, &
                         source,revision,revdate)
 
@@ -2429,7 +2433,7 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_1d_array(mycount(1)))
       call vector_to_prog_var(state_vector, ivar, data_1d_array)
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_1d_array), maxval(data_1d_array)
       call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
@@ -2452,7 +2456,7 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_2d_array(mycount(1), mycount(2)))
       call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_2d_array), maxval(data_2d_array)
       call error_handler(E_MSG, '', trim(string1), source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
@@ -2476,7 +2480,7 @@ PROGVARLOOP : do ivar=1, nfields
       allocate(data_3d_array(mycount(1), mycount(2), mycount(3)))
       call vector_to_prog_var(state_vector, ivar, data_3d_array)
 
-      write(string1, *) 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
+      write(string1, '(A,A32,2F16.7)') 'data min/max ', trim(varname), minval(data_3d_array), maxval(data_3d_array)
       call error_handler(E_MSG, '', string1, source,revision,revdate)
 
       if ( progvar(ivar)%clamping ) then
@@ -5231,8 +5235,8 @@ logical,             intent(in)  :: zonal
 real(r8),            intent(out) :: uval
 integer,             intent(out) :: ier
 
-
-integer, parameter :: listsize = 30  ! max edges is 10, times 3 cells
+! max edges we currently use is ~50, but overestimate for now
+integer, parameter :: listsize = 200 
 logical, parameter :: on_a_sphere = .true.
 integer  :: nedges, edgelist(listsize), i, j, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
@@ -5284,7 +5288,7 @@ if(debug > 8)print *, 'closest cell, vertex = ', cellid, vertexid
 if (verttype == VERTISPRESSURE) then
    ! get all cells which share any edges with the 3 cells which share
    ! the closest vertex.
-   call make_cell_list(vertexid, 2, ncells, celllist)
+   call make_cell_list(vertexid, 3, ncells, celllist)
 !   print *, 'make cell list: ncells = ', ncells
 !   print *, celllist(1:ncells)
    call find_vert_level2(x, loc, ncells, celllist, .true., lower, upper, fract, ier)
@@ -5397,6 +5401,10 @@ integer,  intent(out) :: cellid, vertexid
 ! closest cell center and closest vertex to save having to redo 
 ! the search.
 
+integer :: vertex_list(30), nedges1, edge_list1(300), c, i
+integer :: ncells, cell_list(150), nedgec, edgeid, nverts
+logical, save :: print_first = .true.
+
 ! find the cell id that has a center point closest
 ! to the given point.
 cellid = find_closest_cell_center(lat, lon)
@@ -5413,7 +5421,7 @@ if (.not. inside_cell(cellid, lat, lon)) then
 endif
 
 ! inside this cell, find the vertex id that the point
-! is closest to.
+! is closest to.  this is a return from this subroutine.
 vertexid = closest_vertex_ll(cellid, lat, lon)
 if (vertexid <= 0) then
    ! call error handler?  unexpected
@@ -5422,11 +5430,76 @@ if (vertexid <= 0) then
    return
 endif
 
-! fill in the number of unique edges and fills the
-! edge list with the edge ids.  the code that detects
-! boundary edges for the ocean or regional atmosphere
-! is incorporated here.  nedges can come back 0 in that case.
-call make_edge_list(vertexid, nedges, edge_list)
+nedges = 0
+edge_list = 0
+
+select case (use_rbf_option)
+  case (1)
+      ! fill in the number of unique edges and fills the
+      ! edge list with the edge ids.  the code that detects
+      ! boundary edges for the ocean or regional atmosphere
+      ! is incorporated here.  nedges can come back 0 in that case.
+      vertex_list(1) = vertexid
+      call make_edge_list_from_verts(1, vertex_list, nedges, edge_list)
+
+   case (2)
+      ! for all vertices of the enclosing cell, add the
+      ! edges which share this vertex.
+      nverts = nEdgesOnCell(cellid)
+      do i=1, nverts
+         vertex_list(i) = verticesOnCell(i, cellid)
+      enddo
+
+      ! fill in the number of unique edges and fills the
+      ! edge list with the edge ids.  the code that detects
+      ! boundary edges for the ocean or regional atmosphere
+      ! is incorporated here.  nedges can come back 0 in that case.
+      call make_edge_list_from_verts(nverts, vertex_list, nedges, edge_list)
+
+   case (3)
+      call make_cell_list(vertexid, 1, ncells, cell_list)
+
+      ! for all cells:
+      do c=1, ncells
+         ! for all vertices of the enclosing cell, add the
+         ! edges which share this vertex.
+         nverts = nEdgesOnCell(cell_list(c))
+         do i=1, nverts
+            vertex_list(i) = verticesOnCell(i, cell_list(c))
+         enddo
+   
+         ! fill in the number of unique edges and fills the
+         ! edge list with the edge ids.  the code that detects
+         ! boundary edges for the ocean or regional atmosphere
+         ! is incorporated here.  nedges can come back 0 in that case.
+         call make_edge_list_from_verts(nverts, vertex_list, nedges1, edge_list1)
+         call merge_edge_lists(nedges, edge_list, nedges1, edge_list1)
+      enddo
+
+   case (4)
+      ! this one gives the same edge list as case (2).  see what's faster.
+      nedgec = nEdgesOnCell(cellid)
+      do i=1, nedgec
+         edgeid = edgesOnCell(i, cellid)
+         if (cellsOnEdge(1, edgeid) /= cellid) then
+            cell_list(i) = cellsOnEdge(1, edgeid)
+         else
+            cell_list(i) = cellsOnEdge(2, edgeid)
+         endif
+      enddo
+      
+      call make_edge_list_from_cells(nedgec, cell_list, nedges, edge_list)
+
+   case default
+      call error_handler(E_ERR, 'find_surrounding_edges', 'bad use_rbf_option value', &
+                         source, revision, revdate)
+end select
+
+if (print_first) then
+   print *, 'number of edges found: ', nedges
+   print *, ' id: ', edge_list(1:nedges)
+   print_first = .false.
+endif
 
 end subroutine find_surrounding_edges
 
@@ -5451,8 +5524,10 @@ enddo
 ! FIXME: should be as small as possible.  make it a namelist item?
 ! for now, trying 1/8 sphere, should be able to do smaller.
 ! definitely needs to be small for a regional grid.  the limit is
-! the size of the largest polygon.
-call get_close_maxdist_init(cc_gc, PI* 0.25_r8)  
+! the size of the largest polygon.  try much smaller - roughly twice
+! the size of an average grid cell.
+!call get_close_maxdist_init(cc_gc, PI* 0.25_r8)  
+call get_close_maxdist_init(cc_gc, 0.10_r8)  
 call get_close_obs_init(cc_gc, nCells, cell_locs)
 
 end subroutine init_closest_center
@@ -5821,7 +5896,7 @@ end function closest_vertex_xyz
 
 !------------------------------------------------------------
 
-subroutine make_edge_list(vertexid, nedges, edge_list)
+subroutine make_edge_list_from_verts(nverts, vertex_list, nedges, edge_list)
 
 ! FIXME: will need a vertical level number input arg here to detect
 ! the boundary edges/vertices correctly.
@@ -5833,24 +5908,29 @@ subroutine make_edge_list(vertexid, nedges, edge_list)
 ! the edge_list output should be at least 10x the Ncells to 
 ! guarentee it will be large enough if all cells are disjoint.
 
-integer, intent(in)  :: vertexid
+integer, intent(in)  :: nverts, vertex_list(:)
 integer, intent(out) :: nedges, edge_list(:)
 
-integer :: edgecount, c, e, listlen, l, nextedge
-integer :: ncells, cellid_list(3)
+integer :: edgecount, c, e, listlen, l, nextedge, v
+integer :: ncells, cellid_list(3*nverts), v_base
 logical :: found
 
 ! use the cellsOnVertex() array to find the three cells
-! which share this vertex.  note that if we wanted to change
-! the number of edges - for example only return the 3 immediate
-! edges to this vertex, or if we wanted to expand the region
-! to include the ~12 second-nearest-cell-neighbors, you can
-! change this code here.
-ncells = 3
-cellid_list(1) = cellsOnVertex(1, vertexid)
-cellid_list(2) = cellsOnVertex(2, vertexid)
-cellid_list(3) = cellsOnVertex(3, vertexid)
-if(debug > 8)print *, 'vertex id, 3 cells: ', vertexid, cellid_list(1:3)
+! which share each input vertex.  the "edge list from cells"
+! subroutine has an input 'degree' which controls
+! how far from each vertex we go when collecting edges.
+! if we need it, this subroutine could be changed to have 
+! the same input option.  right now it is hardcoded to have
+! degree = 2
+ncells = 0
+do v=1, nverts
+   ncells = ncells + 3
+   v_base = (v-1) * 3
+   cellid_list(v_base+1) = cellsOnVertex(1, vertex_list(v))
+   cellid_list(v_base+2) = cellsOnVertex(2, vertex_list(v))
+   cellid_list(v_base+3) = cellsOnVertex(3, vertex_list(v))
+enddo
+if(debug > 8)print *, 'vertex ids, cell ids: ', vertex_list(1:nverts), cellid_list(1:ncells)
 
 ! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
 ! find the edge numbers.  add them to the list, skipping if
@@ -5896,7 +5976,106 @@ enddo
 
 nedges = listlen
 
-end subroutine make_edge_list
+end subroutine make_edge_list_from_verts
+
+!------------------------------------------------------------
+
+subroutine make_edge_list_from_cells(ncells, cellids, nedges, edge_list)
+
+! FIXME: will need a vertical level number input arg here to detect
+! the boundary edges/vertices correctly.
+
+! given a list of cellids, return a unique list of edges
+! the edge_list output should be at least ncells * maxedges long
+
+integer, intent(in)  :: ncells, cellids(:)
+integer, intent(out) :: nedges, edge_list(:)
+
+integer :: edgecount, c, e, listlen, l, nextedge
+logical :: found
+
+! use nEdgesOnCell(nCells) and edgesOnCell(nCells, 10) to
+! find the edge numbers.  add them to the list, skipping if
+! the edge is already there.  increment nedges each time a
+! new edge is added.  check arrays for enough length before
+! starting to work.
+
+
+! FIXME: the ocean files have:
+!  integer boundaryEdge(nVertLevels, nEdges)
+!  integer boundaryVertex(nVertLevels, nVertices)
+! as a first pass, if ANY of the edges or vertices are on
+! the boundary, punt and return 0 as the edge count.  later
+! once this is working, decide if a single boundary vertex or
+! edge is ok if it's the exterior of the edges we are including
+! and if it has good data values.
+
+listlen = 0
+do c=1, ncells
+   edgecount = nEdgesOnCell(cellids(c))
+   do e=1, edgecount
+      nextedge = edgesOnCell(e, cellids(c))
+if(debug > 8)print *, 'cell, edge: ', cellids(c), nextedge
+      ! FIXME: 
+      ! if (boundaryEdge(nextedge, vert)) then
+      !    nedges = 0
+      !    edge_list(:) = -1
+      !    return
+      ! endif
+      found = .false.
+      addloop: do l=1, listlen
+         if (edge_list(l) == nextedge) then
+            found = .true.
+            exit addloop
+         endif
+      enddo addloop
+      if ( .not. found) then
+         listlen = listlen + 1
+         edge_list(listlen) = nextedge
+      endif
+   enddo
+enddo
+
+nedges = listlen
+
+end subroutine make_edge_list_from_cells
+
+!------------------------------------------------------------
+
+subroutine merge_edge_lists(nedges1, edge_list1, nedges2, edge_list2)
+
+! FIXME: will need a vertical level number input arg here to detect
+! the boundary edges/vertices correctly.
+
+! given 2 edge lists, add any edges in list 2 that are not already
+! in list 2. edge_list1 needs to be at least nedges1+nedges2 in size
+! to guarentee it will be large enough if edge sets are disjoint.
+
+integer, intent(inout) :: nedges1, edge_list1(:)
+integer, intent(in)    :: nedges2, edge_list2(:)
+
+integer :: e, l, listlen
+logical :: found
+
+
+listlen = nedges1
+do e=1, nedges2
+   found = .false.
+   addloop: do l=1, listlen
+      if (edge_list1(l) == edge_list2(e)) then
+         found = .true.
+         exit addloop
+      endif
+   enddo addloop
+   if ( .not. found) then
+      listlen = listlen + 1
+      edge_list1(listlen) = edge_list2(e)
+   endif
+enddo
+
+nedges1 = listlen
+
+end subroutine merge_edge_lists
 
 !------------------------------------------------------------
 
@@ -5919,8 +6098,8 @@ integer, intent(out) :: ncells, cell_list(:)
 integer :: vertcount, c, c2, v, listlen, l, nextvert, nextcell
 logical :: found
 
-if (degree < 1 .or. degree > 2) then
-   call error_handler(E_ERR, 'make_cell_list', 'internal error, degree not 1 or 2', &
+if (degree < 1 .or. degree > 3) then
+   call error_handler(E_ERR, 'make_cell_list', 'internal error, must have 1 <= degree <= 3', &
                       source, revision, revdate)
 endif
 
@@ -5932,10 +6111,8 @@ cell_list(1) = cellsOnVertex(1, vertexid)
 cell_list(2) = cellsOnVertex(2, vertexid)
 cell_list(3) = cellsOnVertex(3, vertexid)
 
-if (degree == 1) then
-   ncells = 3
-   return
-endif
+ncells = 3
+if (degree == 1) return
 
 
 ! FIXME: the ocean files have:
@@ -5947,8 +6124,8 @@ endif
 ! edge is ok if it's the exterior of the edges we are including
 ! and if it has good data values.
 
-listlen = 3
-do c=1, 3
+listlen = ncells
+do c=1, ncells
    vertcount = nEdgesOnCell(cell_list(c))
    do v=1, vertcount
       nextvert = verticesOnCell(v, cell_list(c))
@@ -5967,6 +6144,38 @@ do c=1, 3
                exit addloop
             endif
          enddo addloop
+         if ( .not. found) then
+            listlen = listlen + 1
+            cell_list(listlen) = nextcell
+         endif
+      enddo
+   enddo
+enddo
+
+ncells = listlen
+if (degree == 2) return
+
+
+! degree 3:
+do c=1, ncells
+   vertcount = nEdgesOnCell(cell_list(c))
+   do v=1, vertcount
+      nextvert = verticesOnCell(v, cell_list(c))
+      ! FIXME: 
+      ! if (boundaryVertex(nextvert, vert)) then
+      !    ncells = 0
+      !    cell_list(:) = -1
+      !    return
+      ! endif
+      do c2=1, 3
+         nextcell = cellsOnVertex(c2, nextvert)
+         found = .false.
+         addloop2: do l=1, listlen
+            if (cell_list(l) == nextcell) then
+               found = .true.
+               exit addloop2
+            endif
+         enddo addloop2
          if ( .not. found) then
             listlen = listlen + 1
             cell_list(listlen) = nextcell
@@ -6011,7 +6220,7 @@ o_fract = fract
 do i=1, nedges
    c1 = cellsOnEdge(1, edgelist(i))
    c2 = cellsOnEdge(2, edgelist(i))
-!print *, 'i, cells', i, c1, c2
+!print *, 'i, edge, 2 neighboring cells', i, edgelist(i), c1, c2
    x1 = -1.0_r8
    x2 = -1.0_r8
    do c=1, ncells
@@ -6023,8 +6232,9 @@ do i=1, nedges
       endif
    enddo
    if (x1 < 0.0_r8 .or. x2 < 0.0_r8) then
+      write(string1, *) 'neither cell found in celllist', c1, c2, ' edge is ',  edgelist(i)
       call error_handler(E_ERR, 'move_pressure_to_edges', 'cell id not found in list', &
-                         source, revision, revdate)
+                         source, revision, revdate, text2=string1)
    endif
    ! FIXME: should this be a log interpolation since we know this is going
    ! to be used for pressure only?

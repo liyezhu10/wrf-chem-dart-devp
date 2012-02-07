@@ -141,6 +141,7 @@ endif
 call output_interpolate()
 
 !call interpolate_centers()
+
 !call interpolate_vertices()
 !call interpolate_edges()
 
@@ -551,9 +552,11 @@ subroutine report_badinterp(lon, lat, vert, rc, failcount)
  integer,  intent(in)              :: rc
  integer,  intent(inout), optional :: failcount
 
-write(string2,'(A,3(1x,f14.6))') 'lon,lat,vert ', lon, lat, vert
-write(string1,*) 'interpolation return code was', rc
-call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+if (verbose) then
+   write(string2,'(A,3(1x,f14.6))') 'lon,lat,vert ', lon, lat, vert
+   write(string1,*) 'interpolation return code was', rc
+   call error_handler(E_MSG,'test_interpolate',string1,source,revision,revdate,text2=string2)
+endif
 
 
 if (present(failcount)) then
@@ -758,7 +761,7 @@ end subroutine output_interpolate
 
 
 ! FIXME: repurpose this to simply interpolate to centers, edges, verts, etc
-! and diff them with ? to see if they are goofy.
+! and diff them with the original file to see if they are goofy.
 
 subroutine interpolate_centers()
 
