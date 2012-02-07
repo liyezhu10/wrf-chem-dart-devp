@@ -757,6 +757,7 @@ endif
 
 
 call local_interpolate(x, location, 1, obs_kinds, values, istatus)
+!print *, '0 local interpolate returns istatus = ', istatus
 if (istatus /= 88) then
    ! this is for debugging - when we're confident the code is
    ! returning consistent values and rc codes, both these tests can
@@ -859,11 +860,11 @@ integer,             intent(out) :: istatus
 ! Local storage
 
 real(r8) :: loc_array(3), llon, llat, lheight, fract, v_interp
-integer  :: i, j, ivar, ier, lower, upper, this_kind
+integer  :: i, j, ivar(1), ier, lower, upper, this_kind
 integer  :: pt_base_offset, density_base_offset, qv_base_offset
 
-real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp
-integer  :: tri_indices(3), base_offset(num_kinds)
+real(r8) :: weights(3), lower_interp, upper_interp, ltemp, utemp, values(3)
+integer  :: tri_indices(3), base_offset(num_kinds), tvars(3)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -888,16 +889,17 @@ istatus = 99                ! unknown error
 ! in the state vector, we can do it.
 
 oktointerp: do i=1, num_kinds
-   ivar = get_progvar_index_from_kind(obs_kinds(i))
-   if (ivar <= 0) then
+   ivar(1) = get_progvar_index_from_kind(obs_kinds(i))
+   if (ivar(1) <= 0) then
       ! exceptions 1 and 2:
       ! FIXME: the new code cannot yet compute sensible temperature in one go.  fail for that.
       ! remove the new code test once we add it.
-      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location) .and. &
-          .not. use_new_code) cycle oktointerp
+      !if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location) .and. &
+      !    .not. use_new_code) cycle oktointerp
+      if ((obs_kinds(i) == KIND_TEMPERATURE) .and. vert_is_pressure(location)) cycle oktointerp
       if ((obs_kinds(i) == KIND_U_WIND_COMPONENT) .or. obs_kinds(i) == KIND_V_WIND_COMPONENT) then
-         ivar = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
-         if (ivar > 0) cycle oktointerp
+         ivar(1) = get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED)
+         if (ivar(1) > 0 .and. use_u_for_wind) cycle oktointerp
       endif
 
       istatus = 88            ! this kind not in state vector
@@ -941,16 +943,21 @@ if (use_new_code) then
          endif
 
       else if (obs_kinds(i) /= KIND_TEMPERATURE) then
-         ivar = get_progvar_index_from_kind(obs_kinds(i))
-         call compute_scalar_with_barycentric(x, location, ivar, interp_vals(i), istatus)
+         ivar(1) = get_progvar_index_from_kind(obs_kinds(i))
+         call compute_scalar_with_barycentric(x, location, 1, ivar, interp_vals(i:i), istatus)
          if (istatus /= 0) return
  
       else if (obs_kinds(i) == KIND_TEMPERATURE) then
-         print *, 'need to add case in new code for sensible temperature'
-         stop
          ! need to get potential temp, pressure, qv here, but can
-         ! use same weights.  does this get pushed down into the
-         ! scalar code?
+         ! use same weights.  push this down into the scalar code for now.
+         tvars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+         tvars(2) = get_progvar_index_from_kind(KIND_DENSITY)
+         tvars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+
+         call compute_scalar_with_barycentric(x, location, 3, tvars, values, istatus)
+         if (istatus /= 0) return
+ 
+         interp_vals(i) = theta_to_tk(values(1), values(2), values(3))
       endif
    enddo kindloop
    return
@@ -5085,11 +5092,12 @@ end subroutine update_reg_list
 ! new code below here.  nsc 10jan2012
 !------------------------------------------------------------
 
-subroutine compute_scalar_with_barycentric(x, loc, ival, dval, ier)
+subroutine compute_scalar_with_barycentric(x, loc, n, ival, dval, ier)
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: ival
-real(r8),            intent(out) :: dval
+integer,             intent(in)  :: n
+integer,             intent(in)  :: ival(:)
+real(r8),            intent(out) :: dval(:)
 integer,             intent(out) :: ier
 
 ! compute the values at the correct vertical level for each
@@ -5098,7 +5106,7 @@ integer,             intent(out) :: ier
 ! using barycentric weights to get the value at the interpolation point.
 
 integer, parameter :: listsize = 30 
-integer  :: nedges, i, j, neighborcells(maxEdges), edgeid, nvert
+integer  :: nedges, i, j, k, neighborcells(maxEdges), edgeid, nvert
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: t1(3), t2(3), t3(3), r(3), fdata(3), weights(3)
 integer  :: vertindex, index1, progindex, cellid, verts(listsize), closest_vert
@@ -5197,30 +5205,33 @@ if (.not. foundit) then
    return
 endif
 
+! get weights for each vertex of the triangle
+call get_3d_weights(r, t1, t2, t3, weights)
+
 ! need vert index for the vertical level
 call find_vert_level2(x, loc, 3, c, .true., lower, upper, fract, ier)
 if (ier /= 0) then
    return
 endif
 
-! get the starting index in the state vector
-index1 = progvar(ival)%index1
-nvert = progvar(ival)%numvertical
-
-! go around triangle and interpolate in the vertical
-! t1, t2, t3 are the xyz of the cell centers
-! c(3) are the cell ids
-do i = 1, 3
-   lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
-   uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
-   fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
+do k=1, n
+   ! get the starting index in the state vector
+   index1 = progvar(ival(k))%index1
+   nvert = progvar(ival(k))%numvertical
+   
+   ! go around triangle and interpolate in the vertical
+   ! t1, t2, t3 are the xyz of the cell centers
+   ! c(3) are the cell ids
+   do i = 1, 3
+      lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
+      uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
+      fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
+   enddo
+   
+   ! now have vertically interpolated values at cell centers.
+   ! use weights to compute value at interp point.
+   dval(k) = sum(weights * fdata)
 enddo
-
-! now have vertically interpolated values at cell centers.
-! get weights and compute value at requested point.
-call get_3d_weights(r, t1, t2, t3, weights)
-
-dval = sum(weights * fdata)
 
 ier = 0
 
