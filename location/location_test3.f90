@@ -91,7 +91,6 @@ enddo
 
 call get_close_maxdist_init(cc_gc, maxdist)
 call get_close_obs_init(cc_gc, nl, loc1)
-call get_close_obs_initX(cc_gc, nl, loc1)
 
 call print_get_close_type(cc_gc)
 
@@ -118,7 +117,7 @@ do i = 1, nl
 
    call get_close_obs(cc_gc, loc2, 0, loc1, dummy, num_close, close_ind, dist)
    if (num_close > 0) then
-      print *, 'box num close = ', num_close
+      print *, 'num close = ', num_close
       do j=1, min(num_close, nl)
          print *, j, close_ind(j)
          if (close_ind(j) >= 1 .and. close_ind(j) <= nl) then
@@ -140,18 +139,6 @@ do i = 1, nl
    print *, 'nearest location index = ', near1index
    call write_location(0, loc1(near1index), charstring=buf)
    write(*,*) 'near loc ', trim(buf)
-
-   call get_close_obsX(cc_gc, loc2, 0, loc1, dummy, num_close, close_ind, dist)
-   if (num_close > 0) then
-      print *, 'oct num close = ', num_close
-      do j=1, min(num_close, nl)
-         print *, j, close_ind(j)
-         if (close_ind(j) >= 1 .and. close_ind(j) <= nl) then
-            call write_location(0, loc1(close_ind(j)), charstring=buf)
-            write(*,*) 'close obs loc ', trim(buf), dist(j)
-         endif
-      enddo
-   endif
 
 enddo
 
