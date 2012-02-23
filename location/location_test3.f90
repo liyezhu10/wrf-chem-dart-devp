@@ -120,10 +120,10 @@ do i = 1, nl
    if (num_close > 0) then
       print *, 'box num close = ', num_close
       do j=1, min(num_close, nl)
-         print *, i, close_ind(i)
-         if (close_ind(i) >= 1 .and. close_ind(i) <= nl) then
-            call write_location(0, loc1(close_ind(i)), charstring=buf)
-            write(*,*) 'close box loc ', trim(buf), dist(close_ind(i))
+         print *, j, close_ind(j)
+         if (close_ind(j) >= 1 .and. close_ind(j) <= nl) then
+            call write_location(0, loc1(close_ind(j)), charstring=buf)
+            write(*,*) 'close box loc ', trim(buf), dist(j)
          endif
       enddo
    endif
@@ -145,10 +145,10 @@ do i = 1, nl
    if (num_close > 0) then
       print *, 'oct num close = ', num_close
       do j=1, min(num_close, nl)
-         print *, i, close_ind(i)
-         if (close_ind(i) >= 1 .and. close_ind(i) <= nl) then
-            call write_location(0, loc1(close_ind(i)), charstring=buf)
-            write(*,*) 'close obs loc ', trim(buf), dist(close_ind(i))
+         print *, j, close_ind(j)
+         if (close_ind(j) >= 1 .and. close_ind(j) <= nl) then
+            call write_location(0, loc1(close_ind(j)), charstring=buf)
+            write(*,*) 'close obs loc ', trim(buf), dist(j)
          endif
       enddo
    endif

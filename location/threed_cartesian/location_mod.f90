@@ -49,14 +49,15 @@ type location_type
    real(r8) :: x, y, z
 end type location_type
 
-! FIXME: look at octrees - divide each dim in half until N numbers of filled 
+! This version supports both regularly spaced boxes, and octree division
+! of the space.  for octrees, divide each dim in half until N numbers of filled 
 ! boxes, or octree reaches some depth?  give some threshold where you don't
 ! divide a box with less than N points in it?
 
 ! contrast with kD-trees (divide along dimensions, not points), and there are
 ! two types of octrees - PR (point region) where the regions split at an
 ! explicit point, vs MX tree where the split is defined to be at the center
-! of the retion.
+! of the region.
 
 ! if the underlying geometry is spherical, there will be many many empty boxes 
 ! if we uniformly divide up space, and worse, existing locations will be 
@@ -74,8 +75,8 @@ end type octree_ptr
 type octree_type
    integer             :: count    ! count in this cube, -1 for non-terminal cube
    integer, pointer    :: index(:) ! list of indices in this cube, count long
-   type(octree_ptr), allocatable   :: children(:,:,:)  ! subcubes
-   type(octree_type), pointer   :: parent  ! who made you
+   type(octree_ptr), allocatable :: children(:,:,:)  ! subcubes
+   type(octree_type), pointer    :: parent           ! who made you
    type(location_type) :: llb      ! xyz of lower left bottom
    type(location_type) :: split    ! xyz of split point
    type(location_type) :: urt      ! xyz of upper right top
@@ -657,7 +658,7 @@ call find_box_ranges(gc, obs, num)
 gc%count = 0
 do i = 1, num
 
-print *, i, obs(i)%x, obs(i)%y, obs(i)%z
+!print *, i, obs(i)%x, obs(i)%y, obs(i)%z
    x_box(i) = floor((obs(i)%x - gc%bot_x) / gc%x_width) + 1
    if(x_box(i) > nx) x_box(i) = nx
    if(x_box(i) < 1)  x_box(i) = 1
@@ -671,8 +672,8 @@ print *, i, obs(i)%x, obs(i)%y, obs(i)%z
    if(z_box(i) < 1)  z_box(i) = 1
 
    gc%count(x_box(i), y_box(i), z_box(i)) = gc%count(x_box(i), y_box(i), z_box(i)) + 1
-print *, 'adding count to box ', x_box(i), y_box(i), z_box(i), &
-                                 gc%count(x_box(i), y_box(i), z_box(i))
+!print *, 'adding count to box ', x_box(i), y_box(i), z_box(i), &
+!                                 gc%count(x_box(i), y_box(i), z_box(i))
 end do
 
 ! Figure out where storage for each boxes members should begin
@@ -698,7 +699,7 @@ do i = 1, nx
       do k = 1, nz
 if (gc%count(i,j,k) > 0) print *, i,j,k, gc%count(i,j,k), gc%start(i,j,k)
          do l=1, gc%count(i,j,k)
-print *, l, gc%obs_box(l)
+!print *, l, gc%obs_box(l)
          enddo
       end do
    end do
@@ -773,13 +774,17 @@ r%count = num
 ! FIXME: do these need to be +/- maxdist here?  then coming into get_close()
 ! you can test to see if the base point is outside the bbox and exit.  a loc
 ! could be outside the list and yet within maxdist of a point in the list, so
-! i'm thinkng yes, min should be -maxdist and max should be +maxdist.
-r%llb = set_location(minval(locs(:)%x), minval(locs(:)%y), minval(locs(:)%z))
-r%urt = set_location(maxval(locs(:)%x), maxval(locs(:)%y), maxval(locs(:)%z))
+! i'm thinking yes, min should be -maxdist and max should be +maxdist.
+r%llb = set_location(minval(locs(:)%x)-gc%maxdist, &
+                     minval(locs(:)%y)-gc%maxdist, &
+                     minval(locs(:)%z)-gc%maxdist)
+r%urt = set_location(maxval(locs(:)%x)+gc%maxdist, &
+                     maxval(locs(:)%y)+gc%maxdist, &
+                     maxval(locs(:)%z)+gc%maxdist)
 ! for now, split is midpoint in each dim.  this does NOT have to be the case.
-r%split = set_location((r%urt%x - r%llb%x) / 2.0_r8, &
-                       (r%urt%y - r%llb%y) / 2.0_r8, &
-                       (r%urt%z - r%llb%z) / 2.0_r8)
+r%split = set_location((r%urt%x + r%llb%x) / 2.0_r8, &
+                       (r%urt%y + r%llb%y) / 2.0_r8, &
+                       (r%urt%z + r%llb%z) / 2.0_r8)
 
 ! initially everyone is in the original list
 allocate(r%index(num))
@@ -855,7 +860,7 @@ gc%start  = -1
 
 ! set the default value.
 gc%maxdist = maxdist
-print *, 'setting maxdist to ', maxdist
+!print *, 'setting maxdist to ', maxdist
 
 end subroutine get_close_maxdist_init
 
@@ -940,8 +945,8 @@ if(z_box > nz .or. z_box < 1 .or. z_box < 0) return
 ! figure out how many boxes need searching
 ! FIXME: if we support a variable maxdist, nboxes_X will need to
 ! be computed on the fly here instead of precomputed at init time.
-print *, 'nboxes x, y, z = ', gc%nboxes_x, gc%nboxes_y, gc%nboxes_z
-print *, 'base_loc in box ', x_box, y_box, z_box
+!print *, 'nboxes x, y, z = ', gc%nboxes_x, gc%nboxes_y, gc%nboxes_z
+!print *, 'base_loc in box ', x_box, y_box, z_box
 
 start_x = x_box - gc%nboxes_x
 if (start_x < 1) start_x = 1
@@ -958,10 +963,10 @@ if (start_z < 1) start_z = 1
 end_z = z_box + gc%nboxes_z
 if (end_z > nz) end_z = nz
 
-print *, 'looping from '
-print *, 'x: ', start_x, end_x
-print *, 'y: ', start_y, end_y
-print *, 'z: ', start_z, end_z
+!print *, 'looping from '
+!print *, 'x: ', start_x, end_x
+!print *, 'y: ', start_y, end_y
+!print *, 'z: ', start_z, end_z
 
 ! Next, loop through each box that is close to this box
 do i = start_x, end_x
@@ -980,12 +985,12 @@ do i = start_x, end_x
             ! Could avoid adding any that have nums lower than base_ob???
 
             t_ind = gc%obs_box(st - 1 + l)
-print *, 'l, t_ind = ', l, t_ind
+!print *, 'l, t_ind = ', l, t_ind
 
             ! Only compute distance if dist is present
             if(present(dist)) then
                this_dist = get_dist(base_obs_loc, obs(t_ind), base_obs_kind, obs_kind(t_ind))
-print *, 'this_dist = ', this_dist
+!print *, 'this_dist = ', this_dist
                ! If this obs' distance is less than cutoff, add it in list
                if(this_dist <= this_maxdist) then
                   num_close = num_close + 1
@@ -1093,61 +1098,14 @@ if(COMPARE_TO_CORRECT) then
 endif
 !--------------------------------------------------------------
 
-! is this right?  my plan:
-! go down as far as possible to find box the base obs is in
-! check +/- maxdist in all 3 dimensions.  if outside the 
-! immediate box but still inside the root cube, go up and
-! then down into neighboring boxes until the boundaries of
-! the neighbors completely enclose base +/- maxdist.
-! in this case, i don't think maxdist needs to be a constant;
-! we do need to know it if we want to make a simple test for
-! inside/outside the root cube, but in the search it could
-! be specified on the get_close() call or based on kind.
+! revised plan:
+! find min/max extents in each dim, +/- maxdist from base
+! and only descend lower in a branch if the region intersects
+! the range that this branch covers.  maxdist doesn't have to
+! be a constant in this case - it can be specified per search.
 
-r => gc%root
-
-! FIXME: assumes space spans points +/- maxdist in each dim
-if (.not. is_location_in_region(base_obs_loc, r%llb, r%urt)) return
-print *, 'location in region'
-
-r = find_child(r, base_obs_loc)
-print *, 'have child, count = ', r%count
-
-do i=1, r%count
-   t_ind = r%index(i)
-print *, i, 'next index = ', t_ind
-
-   ! Only compute distance if dist is present
-   if(present(dist)) then
-      this_dist = get_dist(base_obs_loc, obs(t_ind), base_obs_kind, obs_kind(t_ind))
-print *, 'this_dist = ', this_dist
-      ! If dist is present and this obs' distance is less than cutoff, add it in list
-      if(this_dist <= this_maxdist) then
-         num_close = num_close + 1
-         close_ind(num_close) = t_ind
-         dist(num_close) = this_dist
-print *, 'adding obs to list'
-      else
-print *, 'not adding obs to list, dist > maxdist', this_dist, this_maxdist
-      endif
-   else
-      ! Dist isn't present; add this ob to list without computing distance
-      num_close = num_close + 1
-      close_ind(num_close) = t_ind
-print *, 'adding obs to list, dist not present'
-   endif
-
-enddo
-
-! ok, you know the loc of the base point and now
-! the edges of this child cell (llb, urt). see if
-! any are within maxdist of the base.  if not, you
-! are done!  if so, is that edge the boundary of the
-! root cube?  if yes, you're done again.   if not,
-! we have to go up and back down into the cube on
-! that border and search there.  repeat until further
-! than maxdist from the base in all 3 dims.
-
+call collect_nearby(gc%root, base_obs_loc, gc%maxdist, obs, base_obs_kind, obs_kind, &
+                    num_close, close_ind, dist)
 
 !------------------------ Verify by comparing to exhaustive search --------------
 if(COMPARE_TO_CORRECT) then
@@ -1210,15 +1168,15 @@ gc%nboxes_z = aint((gc%maxdist + (gc%z_width-1)) / gc%z_width)
 
 
 if(COMPARE_TO_CORRECT) then
-   old_out = do_output()
-   call set_output(.true.)
-   write(errstring, *) 'x bot, top, width, nboxes ', gc%bot_x, gc%top_x, gc%x_width, gc%nboxes_x
-   call error_handler(E_MSG, 'find_box_ranges', errstring)
-   write(errstring, *) 'y bot, top, width, nboxes ', gc%bot_y, gc%top_y, gc%y_width, gc%nboxes_y
-   call error_handler(E_MSG, 'find_box_ranges', errstring)
-   write(errstring, *) 'z bot, top, width, nboxes ', gc%bot_z, gc%top_z, gc%z_width, gc%nboxes_z
-   call error_handler(E_MSG, 'find_box_ranges', errstring)
-   call set_output(old_out)
+!   old_out = do_output()
+!   call set_output(.true.)
+!   write(errstring, *) 'x bot, top, width, nboxes ', gc%bot_x, gc%top_x, gc%x_width, gc%nboxes_x
+!   call error_handler(E_MSG, 'find_box_ranges', errstring)
+!   write(errstring, *) 'y bot, top, width, nboxes ', gc%bot_y, gc%top_y, gc%y_width, gc%nboxes_y
+!   call error_handler(E_MSG, 'find_box_ranges', errstring)
+!   write(errstring, *) 'z bot, top, width, nboxes ', gc%bot_z, gc%top_z, gc%z_width, gc%nboxes_z
+!   call error_handler(E_MSG, 'find_box_ranges', errstring)
+!   call set_output(old_out)
 endif
 
 end subroutine find_box_ranges
@@ -1265,9 +1223,9 @@ do i=1,2
          nullify(c%index)
          c%llb = set_location(xl, yl, zl)
          c%urt = set_location(xu, yu, zu)
-         c%split = set_location((c%urt%x - c%llb%x) / 2.0_r8, &
-                                (c%urt%y - c%llb%y) / 2.0_r8, &
-                                (c%urt%z - c%llb%z) / 2.0_r8)
+         c%split = set_location((c%urt%x + c%llb%x) / 2.0_r8, &
+                                (c%urt%y + c%llb%y) / 2.0_r8, &
+                                (c%urt%z + c%llb%z) / 2.0_r8)
 
       enddo
    enddo
@@ -1409,11 +1367,11 @@ integer :: i, j, k
 
 ! until we get to the leaves, descend.
 do while(r%count < 0)
- print *, 'rcount = ', r%count
- print *, 'llb = ', r%llb%x, r%llb%y, r%llb%z
- print *, 'spl = ', r%split%x, r%split%y, r%split%z
- print *, 'urt = ', r%urt%x, r%urt%y, r%urt%z
- print *, 'loc = ', base_loc%x, base_loc%y, base_loc%z
+! print *, 'rcount = ', r%count
+! print *, 'llb = ', r%llb%x, r%llb%y, r%llb%z
+! print *, 'spl = ', r%split%x, r%split%y, r%split%z
+! print *, 'urt = ', r%urt%x, r%urt%y, r%urt%z
+! print *, 'loc = ', base_loc%x, base_loc%y, base_loc%z
    if (base_loc%x < r%split%x) then
       i = 1;
    else
@@ -1429,7 +1387,7 @@ do while(r%count < 0)
    else
       k = 2;
    endif
- print *, 'ijk= ', i,j,k
+! print *, 'ijk= ', i,j,k
 
    if (.not. allocated(r%children)) then
  print *, 'children array not allocated, stop'
@@ -1784,6 +1742,115 @@ integer :: i, j, k
    print *, '--end of block--'
 
 end subroutine print_tree
+
+!----------------------------------------------------------------------------
+
+function region_intersects_block(loc, maxdist, r)
+
+! Returns true if the base location +/- maxdist in each dime
+! intersects any part of the region defined by block r.
+
+logical                          :: region_intersects_block
+type(location_type), intent(in)  :: loc
+real(r8),            intent(in)  :: maxdist
+type(octree_type),   intent(in)  :: r
+
+type(location_type) :: llb, urt
+
+region_intersects_block = .false.
+
+llb = set_location(loc%x-maxdist, loc%y-maxdist, loc%z-maxdist)
+urt = set_location(loc%x+maxdist, loc%y+maxdist, loc%z+maxdist)
+
+if (r%urt%x < llb%x) return
+if (r%llb%x > urt%x) return
+
+if (r%urt%y < llb%y) return
+if (r%llb%y > urt%y) return
+
+if (r%urt%z < llb%z) return
+if (r%llb%z > urt%z) return
+
+region_intersects_block = .true.
+
+end function region_intersects_block
+
+!----------------------------------------------------------------------------
+
+recursive subroutine collect_nearby(r, base_loc, maxdist, loc_list, base_kind, kind_list, &
+                                   num_close, close_ind, dist)
+
+type(octree_type), intent(in) :: r
+type(location_type), intent(in)    :: base_loc, loc_list(:)
+integer,             intent(in)    :: base_kind, kind_list(:)
+real(r8),            intent(in)    :: maxdist
+integer,             intent(inout) :: num_close, close_ind(:)
+real(r8), optional,  intent(inout) :: dist(:)
+
+integer  :: i, j, k, t_ind
+real(r8) :: this_dist
+
+! revised plan:
+! find min/max extents in each dim, +/- maxdist from base
+! and only descend lower in a branch if the region intersects
+! the range that this branch covers.  maxdist doesn't have to
+! be a constant in this case - it can be specified per search.
+
+! if this block does not intersect the region around the point,
+! head back up.
+if (.not. region_intersects_block(base_loc, maxdist, r)) return
+!print *, 'location in/near region'
+
+! FIXME: cannot go all the way down to child here in one routine.
+! have to make a recursive routine to test each child one by one 
+! and descend if possible intersection.
+
+! if child node isn't a terminal node, test and either descend
+! or skip.  if terminal node, search for nearby points and add
+! them to the list if 'close enough'.
+
+if (r%count < 0) then
+
+   do i=1,2
+    do j=1,2
+     do k=1,2      
+        call collect_nearby(r%children(i,j,k)%p, base_loc, maxdist, loc_list, base_kind, kind_list, &
+                                   num_close, close_ind, dist)
+     enddo
+    enddo
+   enddo
+
+else
+
+   do i=1, r%count
+      t_ind = r%index(i)
+!print *, i, 'next index = ', t_ind
+
+      ! Only compute distance if dist is present
+      if(present(dist)) then
+         this_dist = get_dist(base_loc, loc_list(t_ind), base_kind, kind_list(t_ind))
+!print *, 'this_dist = ', this_dist
+         ! If dist is present and this obs' distance is less than cutoff, add it in list
+         if(this_dist <= maxdist) then
+            num_close = num_close + 1
+            close_ind(num_close) = t_ind
+            dist(num_close) = this_dist
+!print *, 'adding obs to list'
+         else
+!print *, 'not adding obs to list, dist > maxdist', this_dist, maxdist
+         endif
+      else
+         ! Dist isn't present; add this ob to list without computing distance
+         num_close = num_close + 1
+         close_ind(num_close) = t_ind
+!print *, 'adding obs to list, dist not present'
+      endif
+
+   enddo
+
+endif
+
+end subroutine collect_nearby
 
 !----------------------------------------------------------------------------
 
