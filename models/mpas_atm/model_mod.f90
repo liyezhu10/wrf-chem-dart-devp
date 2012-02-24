@@ -103,7 +103,7 @@ character(len=128), parameter :: &
    revision = '$Revision$', &
    revdate  = '$Date$'
 
-character(len=256) :: string1, string2
+character(len=256) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 ! Real (physical) constants as defined exactly in MPAS.
@@ -138,9 +138,22 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
-logical            :: use_new_code = .true.
-logical            :: use_u_for_wind = .false.
-integer            :: use_rbf_option = 2
+
+! if .false. use the original triangle search code, no rbf available.
+! if .true.  use search for closest vertex and has the rbf options
+logical :: use_new_code = .true.
+
+! if .false. use U/V reconstructed winds tri interp at centers for wind forward ops
+! if .true.  use edge normal winds (u) with RBF functs for wind forward ops
+logical :: use_u_for_wind = .false.
+
+! if using rbf, options 1,2,3 control how many points go into the rbf.
+! larger numbers are more points from further away
+integer :: use_rbf_option = 2
+
+! if .false. edge normal winds (u) should be in state vector and are written out directly
+! if .true.  edge normal winds (u) are updated based on U/V reconstructed winds
+logical :: update_u_from_reconstruct = .false.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -153,7 +166,8 @@ namelist /model_nml/             &
    debug,                        &
    use_new_code,                 &
    use_u_for_wind,               &
-   use_rbf_option
+   use_rbf_option,               &
+   update_u_from_reconstruct
 
 !------------------------------------------------------------------
 ! DART state vector are specified in the input.nml:mpas_vars_nml namelist.
@@ -594,6 +608,23 @@ if ( debug > 0 .and. do_output()) then
      write(logfileunit, *)'static_init_model: cells have varying number of vertical levels ' 
      write(     *     , *)'static_init_model: cells have varying number of vertical levels '
   endif
+endif
+
+! do some sanity checking here?
+if (use_new_code) then
+   if (update_u_from_reconstruct .and. .not. has_uvreconstruct) then
+      write(string1,*) 'update_u_from_reconstruct cannot be True'
+      write(string2,*) 'because state vector does not contain U/V reconstructed winds'
+      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate, &
+                         text2=string2)
+   endif
+   if (update_u_from_reconstruct .and. has_real_u) then
+      write(string1,*) 'edge normal winds (u) in MPAS file will be updated based on U/V reconstructed winds'
+      write(string2,*) 'and not from the real edge normal values in the state vector'
+      write(string3,*) 'because update_u_from_reconstruct is True'
+      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate, &
+                         text2=string2, text3=string3)
+   endif
 endif
 
 allocate( ens_mean(model_size) )
@@ -2391,9 +2422,16 @@ PROGVARLOOP : do ivar=1, nfields
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
 
-   if ( varname == 'uReconstructZonal' .or. &
-        varname == 'uReconstructMeridional' ) then
+   if (( varname == 'uReconstructZonal' .or. &
+         varname == 'uReconstructMeridional' ) .and. update_u_from_reconstruct ) then  
       call update_wind_components(ncFileID, state_vector)
+      cycle PROGVARLOOP
+   endif
+   if ( varname == 'u' .and. update_u_from_reconstruct ) then
+      write(string1, *) 'skipping update of edge normal winds (u) because'
+      write(string2, *) 'update_u_from_reconstruct is True'
+      call error_handler(E_MSG,'statevector_to_analysis_file',string1,&
+                         source,revision,revdate, text2=string2)
       cycle PROGVARLOOP
    endif
 
