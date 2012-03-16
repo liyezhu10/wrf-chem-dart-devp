@@ -58,15 +58,10 @@ function PlotEnsErrSpread( pinfo )
 % $Revision$
 % $Date$
 
-pinfo = CheckModelCompatibility(pinfo);
-
-% Get some information from the truth_file 
-tmodel      = nc_attget( pinfo.truth_file,nc_global,'model');
-tnum_times  = pinfo.truth_time(2) - pinfo.truth_time(1) + 1;
-
-% Get some information from the diagn_file 
-dmodel      = nc_attget( pinfo.diagn_file,nc_global,'model');
-dnum_times  = pinfo.diagn_time(2) - pinfo.diagn_time(1) + 1;
+pinfo  = CheckModelCompatibility(pinfo);
+Ntimes = pinfo.truth_time(2);
+tend   = pinfo.truth_time(1) + Ntimes - 1;
+times  = pinfo.dates(pinfo.truth_time(1):tend);
 
 % Get the indices for the true state, ensemble mean and spread
 % The metadata is queried to determine which "copy" is appropriate.
@@ -74,10 +69,7 @@ truth_index      = get_copy_index(pinfo.truth_file, 'true state' );
 ens_mean_index   = get_copy_index(pinfo.diagn_file, 'ensemble mean');
 ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
 
-% Get some useful plotting arrays
-times = nc_varget(pinfo.truth_file,'time', pinfo.truth_time(1)-1 , tnum_times);
-
-switch lower(tmodel)
+switch lower(pinfo.model)
 
    case '9var'
 
@@ -97,21 +89,21 @@ switch lower(tmodel)
             ivar = (i - 1)*3 + j;
 
             err         = total_err(ens_mean(:,ivar) , truth(:,ivar));  
-            errTotal    = sum(err)/dnum_times;
-            spreadTotal = sum(ens_spread(:,ivar))/dnum_times;
+            errTotal    = sum(err)/Ntimes;
+            spreadTotal = sum(ens_spread(:,ivar))/Ntimes;
             string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
             string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
-            fprintf('%s model Variable %d\n',tmodel,ivar)
+            fprintf('%s model Variable %d\n',pinfo.model,ivar)
 
             subplot(3, 1, j);
                plot(times,err, 'b', ...
                     times,ens_spread(:, ivar), 'r');
-               s1 = sprintf('%s model Var %d Ensemble Error Spread', tmodel, ivar);
+               s1 = sprintf('%s model Var %d Ensemble Error Spread', pinfo.model, ivar);
                title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
                legend(string1,string2,0)
                legend boxoff
-               xlabel(sprintf('model time (%d timesteps)',tnum_times))
+               xlabel(sprintf('model time (%d timesteps)',Ntimes))
                ylabel('distance')
          end
       end
@@ -130,19 +122,19 @@ switch lower(tmodel)
       for ivar = pinfo.var_inds,
             iplot = iplot + 1;
             err         = total_err(ens_mean(:,ivar) , truth(:,ivar));  
-            errTotal    = sum(err)/dnum_times;
-            spreadTotal = sum(ens_spread(:,ivar))/dnum_times;
+            errTotal    = sum(err)/Ntimes;
+            spreadTotal = sum(ens_spread(:,ivar))/Ntimes;
             string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
             string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
             subplot(length(pinfo.var_inds), 1, iplot);
                plot(times,err, 'b', ...
                     times,ens_spread(:, ivar), 'r');
-               s1 = sprintf('%s model Var %d Ensemble Error Spread', tmodel, ivar);
+               s1 = sprintf('%s model Var %d Ensemble Error Spread', pinfo.model, ivar);
                title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
                legend(string1,string2,0)
                legend boxoff
-               xlabel(sprintf('model time (%d timesteps)',tnum_times))
+               xlabel(sprintf('model time (%d timesteps)',Ntimes))
                ylabel('distance')
       end
 
@@ -150,37 +142,86 @@ switch lower(tmodel)
 
       clf;
 
-      truth      = GetCopy(pinfo.truth_file, truth_index,      pinfo, ...
-                           pinfo.truth_time(1), pinfo.truth_time(2)) ;
-      ens_mean   = GetCopy(pinfo.diagn_file, ens_mean_index,   pinfo, ...
-                           pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
-      ens_spread = GetCopy(pinfo.diagn_file, ens_spread_index, pinfo, ...
-                           pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
+      truth      = GetCopy('fname',pinfo.truth_file, 'varname', pinfo.var, ...
+                      'copyindex', truth_index, 'levelindex', pinfo.levelindex, ...
+                      'latindex', pinfo.latindex, 'lonindex', pinfo.lonindex, ...
+                      'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2)) ;
+
+      ens_mean   = GetCopy('fname',pinfo.diagn_file, 'varname', pinfo.var, ...
+                      'copyindex', ens_mean_index, 'levelindex', pinfo.levelindex, ...
+                      'latindex', pinfo.latindex, 'lonindex', pinfo.lonindex, ...
+                      'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+      ens_spread = GetCopy('fname',pinfo.diagn_file, 'varname', pinfo.var, ...
+                      'copyindex', ens_spread_index, 'levelindex', pinfo.levelindex, ...
+                      'latindex', pinfo.latindex, 'lonindex', pinfo.lonindex, ...
+                      'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
 
       subplot(2,1,1)
          PlotLocator(pinfo);
 
       subplot(2,1,2)
          err         = total_err(ens_mean, truth);  
-         errTotal    = sum(err)/dnum_times;
-         spreadTotal = sum(ens_spread)/dnum_times;
+         errTotal    = sum(err)/Ntimes;
+         spreadTotal = sum(ens_spread)/Ntimes;
          string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
          string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
          plot(times,err, 'b', times,ens_spread, 'r');
 
-         s1 = sprintf('Ensemble Mean Error, Ensemble Spread %s ''%s''',tmodel,pinfo.var);
+         s1 = sprintf('Ensemble Mean Error, Ensemble Spread %s ''%s''',pinfo.model,pinfo.var);
          s2 = sprintf('level %d lat %.2f lon %.2f', ...
                        pinfo.level, pinfo.latitude, pinfo.longitude);
          title({s1, s2, pinfo.diagn_file},'interpreter','none','fontweight','bold');
 
          legend(string1,string2,0);
          legend boxoff
-         xlabel(sprintf('model time (%d timesteps)',tnum_times));
+         xlabel(sprintf('model time (%d timesteps)',Ntimes));
+         ylabel('distance');
+
+   case {'mpas_atm'}
+
+      clf;
+
+      truth      = GetCopy('fname',pinfo.truth_file, 'varname', pinfo.var, ...
+                      'copyindex', truth_index, 'levelindex', pinfo.levelindex, ...
+                      'cellindex', pinfo.cellindex, ...
+                      'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2)) ;
+
+      ens_mean   = GetCopy('fname',pinfo.diagn_file, 'varname', pinfo.var, ...
+                      'copyindex', ens_mean_index, 'levelindex', pinfo.levelindex, ...
+                      'cellindex', pinfo.cellindex,  ...
+                      'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+      ens_spread = GetCopy('fname',pinfo.diagn_file, 'varname', pinfo.var, ...
+                      'copyindex', ens_spread_index, 'levelindex', pinfo.levelindex, ...
+                      'cellindex', pinfo.cellindex, ...
+                      'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+      subplot(2,1,1)
+         PlotLocator(pinfo);
+
+      subplot(2,1,2)
+         err         = total_err(ens_mean, truth);  
+         errTotal    = sum(err)/Ntimes;
+         spreadTotal = sum(ens_spread)/Ntimes;
+         string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
+         string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
+
+         plot(times,err, 'b', times,ens_spread, 'r');
+
+         s1 = sprintf('Ensemble Mean Error, Ensemble Spread %s ''%s''',pinfo.model,pinfo.var);
+         s2 = sprintf('level number %d lat %.2f lon %.2f', ...
+                       pinfo.level, pinfo.latCell(pinfo.cellindex), pinfo.lonCell(pinfo.cellindex));
+         title({s1, s2, pinfo.diagn_file},'interpreter','none','fontweight','bold');
+
+         legend(string1,string2,0);
+         legend boxoff
+         xlabel(sprintf('model time (%d timesteps)',Ntimes));
          ylabel('distance');
 
    otherwise
-      error('model %s unknown.',tmodel)
+      error('model %s unknown.',pinfo.model)
 end
 
 %======================================================================
@@ -189,35 +230,22 @@ end
 
 
 
-function var = GetCopy(fname, copyindex, pinfo, tstartind, tendind)
+function var = GetCopy(varargin)
 % Gets a time-series of a single specified copy of a prognostic variable
 % at a particular 3D location (level, lat, lon)
 
-myinfo.diagn_file = fname;
-myinfo.copyindex  = copyindex;
-myinfo.levelindex = pinfo.levelindex;
-myinfo.latindex   = pinfo.latindex;
-myinfo.lonindex   = pinfo.lonindex;
-[start, count]    = GetNCindices(myinfo,'diagn',pinfo.var);
-
-varinfo = nc_getvarinfo(fname,pinfo.var);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}))
-      case{'time'}
-         start(i) = tstartind - 1;
-         count(i) = tendind - tstartind + 1;
-         break
-      otherwise
-   end
+for i = 1:2:nargin,
+   eval(sprintf('pinfo.%s = varargin{i+1};',varargin{i}))
 end
-var = nc_varget(fname, pinfo.var, start, count);
+
+[start, count] = GetNCindices(pinfo,'fname',pinfo.varname);
+var            = nc_varget(pinfo.fname, pinfo.varname, start, count);
 
 
 
 function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');
    axis([0 360 -90 90])
-   worldmap;
+   continents;
    axis image
    grid on

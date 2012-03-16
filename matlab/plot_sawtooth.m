@@ -96,6 +96,12 @@ switch lower(pstruct.model)
       pstruct.copyindices = SetCopyID2(pstruct.prior_file);
       pstruct.copies      = length(pstruct.copyindices);
 
+   case 'mpas_atm'
+
+      pstruct = GetMPAS_ATMInfo(pstruct, prior_file, 'PlotSawtooth');
+      pstruct.copyindices = SetCopyID2(pstruct.prior_file);
+      pstruct.copies      = length(pstruct.copyindices);
+
    otherwise
 
       error('model %s not implemented yet', pstruct.model)

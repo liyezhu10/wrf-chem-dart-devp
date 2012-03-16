@@ -124,6 +124,10 @@ switch lower(pinfo.model)
 
       pinfo = GetTIEGCMInfo(pinfo, diagn_file, 'PlotCorrel');
 
+   case 'mpas_atm'
+
+      pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotCorrel');
+
    otherwise
 
       error('model %s not implemented yet', pinfo.model)

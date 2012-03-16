@@ -18,7 +18,6 @@ function pinfo_out = CheckModelCompatibility(arg1, arg2)
 % $Revision$
 % $Date$
 
-
 if (nargin == 1)      % better be a pinfo struct with at least these fields
   file1 = arg1.truth_file;  % string
   file2 = arg1.diagn_file;  % string
@@ -46,7 +45,6 @@ if (isempty(tmodel))
    error('%s has no ''model'' global attribute.',file1)
 end
 
-tnum_copies = dim_length(file1,'copy');
 tnum_times  = dim_length(file1,'time');
 times       = nc_varget( file1,'time');
 timeunits   = nc_attget( file1,'time','units');
@@ -66,7 +64,6 @@ if (isempty(dmodel))
    error('%s has no ''model'' global attribute.',file2)
 end
 
-dnum_copies = dim_length(file2,'copy');
 dnum_times  = dim_length(file2,'time');
 times       = nc_varget( file2,'time');
 timeunits   = nc_attget( file2,'time','units');
@@ -79,7 +76,7 @@ if ( dnum_vars <= 0 )
    error('Unable to determine resolution of %s.',file2)
 end
 
-% rudimentary bulletproofing
+%% rudimentary bulletproofing
 if (strcmp(tmodel,dmodel) ~= 1)
    fprintf('%s has model %s\n',file1,tmodel)
    fprintf('%s has model %s\n',file2,dmodel)
@@ -99,7 +96,7 @@ end
 % they then get used to extract the corresponding hyperslabs of data for
 % the matching times.
 
-% construct the pinfo struct in this function
+%% construct the pinfo struct in this function
 pinfo_out = timearray_intersect(pinfo_out, file1, file2, ttimes, dtimes);
 
 % fail here if the times had nothing in common.
@@ -115,14 +112,16 @@ if ( ( pinfo_out.truth_time(1) == -1 ) || ...
 end
 
 
-%----------------
+
+
+function pret = timearray_intersect(pinfo, file1, file2, times1, times2)
 % min1,max1 and min2,max2 are the index numbers of the intersection of the
 % two input arrays.  -1s in those numbers means no intersection.  1, length()
 % means identical (could add a separate flag to simplify the calling code).
-function pret = timearray_intersect(pinfo, file1, file2, times1, times2)
 
-% for floating point comparisons, must be within this (single precision)
-% roundoff
+%% for floating point comparisons, must be within this (single precision)
+%  roundoff
+
 epsilon = 0.0000001;
 
 % default return; no intersection
@@ -136,10 +135,10 @@ pret.diagn_time = [-1,-1];
 % a constant delta or not?  compute delta array and validate those match?
 % (to within an epsilon with floating pt roundoff)
 
-% check for the no-brainer case - identical time arrays.
-% watch out for the floating point compares, and the min/max are probably
-% redundant with the (1) and (l) comparisons, but until we put in checks
-% for monotonicity, it's a cheap safety check.
+%% check for the no-brainer case - identical time arrays.
+%  watch out for the floating point compares, and the min/max are probably
+%  redundant with the (1) and (l) comparisons, but until we put in checks
+%  for monotonicity, it's a cheap safety check.
 len = length(times1);
 if (   (length(times1) == length(times2)) ...
     && (abs(min(times1) - min(times2)) < epsilon) ...
@@ -151,8 +150,8 @@ if (   (length(times1) == length(times2)) ...
   return
 end
 
-% A is whichever array has the lower min.  this reduces the number of
-% cases below we have to check for.
+%% A is whichever array has the lower min.  this reduces the number of
+%  cases below we have to check for.
 if (min(times1) < min(times2))
   A = times1;
   B = times2;
@@ -161,9 +160,9 @@ else
   A = times2;
 end
 
-% precompute the data max, min, lengths using the A,B assignments
-% also, if differences are < epsilon, force equality to simplify
-% the comparison code below
+%% precompute the data max, min, lengths using the A,B assignments
+%  also, if differences are < epsilon, force equality to simplify
+%  the comparison code below
 lenA = length(A);
 lenB = length(B);
 minA = min(A);
@@ -174,14 +173,14 @@ if (abs(minA - minB) < epsilon) , minB = minA; end
 if (abs(maxA - minB) < epsilon) , minB = maxA; end
 if (abs(maxA - maxB) < epsilon) , maxB = maxA; end
 
-% case 1: disjoint regions; simply return here because 
-% return struct was initialized to the 'no intersection' case.
+%% case 1: disjoint regions; simply return here because 
+%  return struct was initialized to the 'no intersection' case.
 if ((minA < minB) && (maxA < minB))  
   return
 end
 
-% case 2: B fully contained in A; return corresponding index nums of overlap
-% include equal start & end points in this case.
+%% case 2: B fully contained in A; return corresponding index nums of overlap
+%  include equal start & end points in this case.
 if ((minA <= minB) && (maxB <= maxA)) 
   minI = find(abs(A - minB) < epsilon);
   maxI = find(abs(A - maxB) < epsilon);
@@ -195,8 +194,8 @@ else
   maxJ = find(abs(B - maxA) < epsilon);
 end
 
-% now map back to the original input order - this test must match exactly
-% the one used initially to assign A and B above.
+%% now map back to the original input order - this test must match exactly
+%  the one used initially to assign A and B above.
 if (min(times1) < min(times2))
   min1 = minI;
   max1 = maxI;
@@ -211,33 +210,39 @@ end
 
 % now put the indices in the return struct and we are done.
 pret.truth_time = [min1, max1-min1+1];   % start,count
-pret.diagn_time = [min2, min2-max2+1];   % start,count
+pret.diagn_time = [min2, max2-min2+1];   % start,count
 
 % return here
 
 
 function x = dim_length(fname,dimname)
+%% Check for the existence of the named dimension and return it
+% if it exists. If it does not, error out with a useful message. 
 
-y = nc_isvar(fname,dimname);
-if (y < 1) 
-   error('%s has no %s dimension/coordinate variable',fname,dimname)
+info = nc_info(fname);
+n    = length(dimname);
+x    = [];
+for i = 1:length(info.Dimension),
+   if ( strncmp(info.Dimension(i).Name, dimname, n) > 0 )
+      x = info.Dimension(i).Length;
+      break
+   end
 end
-bob = nc_getdiminfo(fname,dimname);
-x   = bob.Length;
 
+if isempty(x)   
+   error('%s has no dimension named %s',fname,dimname)
+end
 
 
 function [x,y] = ModelDimension(fname,modelname)
-% Check the base geometry of the grid
-x = 0;
-y = NaN;
+%% Check the base geometry of the grid
 
 switch lower(modelname)
 
    case 'wrf'
-      diminfo = nc_getdiminfo(fname,  'west_east_d01'); dnum_lons = diminfo.Length;
-      diminfo = nc_getdiminfo(fname,'south_north_d01'); dnum_lats = diminfo.Length;
-      diminfo = nc_getdiminfo(fname, 'bottom_top_d01'); dnum_lvls = diminfo.Length;
+      dnum_lons = dim_length(fname,  'west_east_d01');
+      dnum_lats = dim_length(fname,'south_north_d01');
+      dnum_lvls = dim_length(fname, 'bottom_top_d01');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 
@@ -268,6 +273,13 @@ switch lower(modelname)
       dnum_lvls = dim_length(fname,'ZG');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
+
+   case 'mpas_atm'
+
+      dnum_cells = dim_length(fname,'nCells');
+      dnum_lvls  = dim_length(fname,'nVertLevels');
+         x = 2;
+         y = [dnum_cells dnum_lvls];
 
    case 'lorenz_96_2scale'
       dnum_X = dim_length(fname,'Xdim');

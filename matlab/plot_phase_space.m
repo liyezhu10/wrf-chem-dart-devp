@@ -234,6 +234,10 @@ switch lower(pinfo.model)
 
       pinfo = GetMITgcm_oceanInfo(pinfo, fname, 'PlotPhaseSpace');
 
+   case 'mpas_atm'
+
+      pinfo = GetMPAS_ATMInfo(pinfo, fname, 'PlotPhaseSpace');
+
    case {'ikeda'}
 
       if (ishold), clear var1 var2 var3 ens_mem ltype; end

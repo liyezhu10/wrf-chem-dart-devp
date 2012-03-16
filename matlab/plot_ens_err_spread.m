@@ -40,6 +40,7 @@ end
 
 pinfo = CheckModelCompatibility(truth_file, diagn_file);
 vars  = CheckModel(truth_file);   % also gets default values for this model.
+pinfo = CombineStructs(pinfo,vars);
 
 switch lower(vars.model)
 
@@ -47,8 +48,6 @@ switch lower(vars.model)
 	 'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
 
       varid = SetVariableID(vars);
-      pinfo.truth_file = truth_file;
-      pinfo.diagn_file = diagn_file;
       pinfo.var        = varid.var;
       pinfo.var_inds   = varid.var_inds;
       %pinfo = struct('truth_file', truth_file, ...
@@ -63,25 +62,22 @@ switch lower(vars.model)
    case 'fms_bgrid'
 
       pinfo = GetBgridInfo(pinfo, truth_file, 'PlotEnsErrSpread');
-      pinfo.truth_file = truth_file;
-      pinfo.diagn_file = diagn_file;
 
    case 'cam'
 
-      pinfo = CombineStructs(pinfo,vars);
       pinfo = GetCamInfo(pinfo, truth_file, 'PlotEnsErrSpread');
 
    case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, truth_file, 'PlotEnsErrSpread');
-      pinfo.truth_file = truth_file;
-      pinfo.diagn_file = diagn_file;
 
    case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, truth_file, 'PlotEnsErrSpread');
-      pinfo.truth_file = truth_file;
-      pinfo.diagn_file = diagn_file;
+
+   case 'mpas_atm'
+
+      pinfo = GetMPAS_ATMInfo(pinfo, truth_file, 'PlotEnsErrSpread');
 
    otherwise
 

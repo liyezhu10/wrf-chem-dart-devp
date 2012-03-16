@@ -337,8 +337,8 @@ function PlotLocator(pinfo)
    axis image
    axis(axlims)
    if (axlims(2) < 0)
-       worldmap('hollow','dateline');
+       continents('hollow','dateline');
    else
-       worldmap('hollow','greenwich');
+       continents('hollow','greenwich');
    end
 

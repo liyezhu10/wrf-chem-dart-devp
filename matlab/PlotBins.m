@@ -123,7 +123,7 @@ switch lower(true_model)
          axis tight
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','mpas_atm'}
 
       % It is intended that all 3D models have all the required information
       % set in the corresponding Get<model>Info.m script.
@@ -174,7 +174,7 @@ for i = 1:length(varinfo.Dimension)
    switch( lower(varinfo.Dimension{i}))
       case{'time'}
          start(i) = pinfo.truth_time(1) - 1;
-         count(i) = pinfo.truth_time(2) - pinfo.truth_time(1) + 1;
+         count(i) = pinfo.truth_time(2);
          break
       otherwise
    end
@@ -186,7 +186,7 @@ var = nc_varget(pinfo.truth_file, pinfo.var, start, count);
 
 function var = GetEns(pinfo)
 % Gets a time-series of all copies of a prognostic variable 
-% at a particular 3D location (level, lat, lon).
+% at a particular location (level, cell).
 % Determining just the ensemble members (and not mean, spread ...)
 % is the hard part.
 
@@ -213,13 +213,19 @@ for i = 1:length(varinfo.Dimension)
    switch( lower(varinfo.Dimension{i}))
       case{'time'}
          start(i) = pinfo.diagn_time(1) - 1;
-         count(i) = pinfo.diagn_time(2) - pinfo.diagn_time(1) + 1;
+         count(i) = pinfo.diagn_time(2);
          break
       otherwise
    end
 end
 
-bob = nc_varget(pinfo.diagn_file, pinfo.var, start, count); % 'bob' is only 2D time-X-copy
+bob = nc_varget(pinfo.diagn_file, pinfo.var, start, count);
+% All the singleton dimensions get squeezed out.
+% If there is only one time, 'bob' is copy-X-time,
+% if there is more than one time, bob is time-X-copy
+if (pinfo.diagn_time(2) == 1)
+    bob = bob';
+end
 var = bob(:,copyindices);
 
 
@@ -229,5 +235,5 @@ var = bob(:,copyindices);
 function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');
    axis([0 360 -90 90]);
-   worldmap;
+   continents;
    

@@ -42,8 +42,6 @@ for i = 1:length(varinfo.Dimension)
    switch( lower(varinfo.Dimension{i}) )
       case 'time'
          num_times = varinfo.Size(i);
-      case 'copy'
-         num_copies = varinfo.Size(i);
       otherwise
          num_vars = varinfo.Size(i);
    end
@@ -123,11 +121,12 @@ switch(lower(model))
 
       nxny = nx*ny;
 
-      base_mem = Get1Ens( pinfo.fname, pinfo.base_var, pinfo.base_tmeind, ... 
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
-      comp_ens = GetEnsLevel( pinfo.fname,       pinfo.comp_var, ...
-                              pinfo.base_tmeind, pinfo.comp_lvlind);
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       nmembers = size(comp_ens,1);
 
@@ -152,11 +151,9 @@ switch(lower(model))
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('longitude (%s)',lonunits),'interpreter','none')
       ylabel(sprintf('latitude (%s)',latunits),'interpreter','none')
-      worldmap;
+      continents;
       axis image
-      h = colorbar; 
-      ax = get(h,'Position');
-     %set(h,'Position',[ax(1) ax(2) ax(3)/2 ax(4)]);
+      colorbar;
 
    case 'wrf'
 
@@ -192,16 +189,18 @@ switch(lower(model))
 
       % Get the actual goods ... and perform the correlation
 
-      base_mem = Get1Ens( pinfo.fname, pinfo.base_var, pinfo.base_tmeind, ... 
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+
       if (std(base_mem) == 0.0) 
           warning('%s at level %d lat %d lon %d time %s is a constant\n',pinfo.base_var,...
              pinfo.base_lvlind,pinfo.base_latind,pinfo.base_lonind,datestr(pinfo.base_time))
           error('Cannot calculate correlation coefficient with a constant.')
       end
       
-      comp_ens = GetEnsLevel( pinfo.fname,       pinfo.comp_var, ...
-                              pinfo.base_tmeind, pinfo.comp_lvlind);
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       if (std(comp_ens(:)) == 0.0) 
           warning('%s at level %d time %s is a constant\n',pinfo.comp_var,...
              pinfo.comp_lvlind, datestr(pinfo.base_time))
@@ -239,11 +238,9 @@ switch(lower(model))
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('longitude (%s)',lonunits),'interpreter','none')
       ylabel(sprintf('latitude (%s)',latunits),'interpreter','none')
-      worldmap;
+      continents;
       axis image
-      h = colorbar; 
-      ax = get(h,'Position');
-     %set(h,'Position',[ax(1) ax(2) ax(3)/2 ax(4)]);
+      colorbar; 
 
    case 'mitgcm_ocean'
 
@@ -272,10 +269,12 @@ switch(lower(model))
 
       nxny = nx*ny;
 
-      base_mem = Get1Ens( pinfo.fname, pinfo.base_var, pinfo.base_tmeind, ... 
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
-      comp_ens = GetEnsLevel( pinfo.fname,       pinfo.comp_var, ...
-                              pinfo.base_tmeind, pinfo.comp_lvlind);
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
       corr = zeros(nxny,1);
@@ -299,11 +298,9 @@ switch(lower(model))
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('longitude (%s)',lonunits),'interpreter','none')
       ylabel(sprintf('latitude (%s)',latunits),'interpreter','none')
-      worldmap;
+      continents;
       axis image
-      h = colorbar; 
-      ax = get(h,'Position');
-     %set(h,'Position',[ax(1) ax(2) ax(3)/2 ax(4)]);
+      colorbar; 
 
    case {'pe2lyr','cam'}
 
@@ -319,10 +316,12 @@ switch(lower(model))
 
       nxny     = nx*ny;
 
-      base_mem = Get1Ens( pinfo.fname, pinfo.base_var,    pinfo.base_tmeind, ... 
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
-      comp_ens = GetEnsLevel( pinfo.fname,       pinfo.comp_var, ...
-                              pinfo.base_tmeind, pinfo.comp_lvlind);
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
       corr = zeros(nxny,1);
@@ -346,9 +345,9 @@ switch(lower(model))
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('longitude (%s)',lonunits),'interpreter','none')
       ylabel(sprintf('latitude (%s)',latunits),'interpreter','none')
-      worldmap;
+      continents;
       axis image
-      h = colorbar; 
+      colorbar; 
 
    case {'tiegcm'}
 
@@ -367,10 +366,12 @@ switch(lower(model))
 
       nxny     = nx*ny;
 
-      base_mem = Get1Ens( pinfo.fname, pinfo.base_var,    pinfo.base_tmeind, ... 
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
-      comp_ens = GetEnsLevel( pinfo.fname,       pinfo.comp_var, ...
-                              pinfo.base_tmeind, pinfo.comp_lvlind);
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
       corr = zeros(nxny,1);
@@ -395,10 +396,55 @@ switch(lower(model))
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('longitude (%s)',lonunits),'interpreter','none')
       ylabel(sprintf('latitude (%s)',latunits),'interpreter','none')
-      worldmap('hollow','dateline');
+      continents('hollow','dateline');
       axis image
-      h = colorbar; 
+      colorbar; 
 
+   case {'mpas_atm'}
+
+      %% We are going to correlate one var/time/lvl/location  with
+      %  all other locations for a var/time/lvl   
+
+      clf;
+
+      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
+                    'cellindex', pinfo.base_cellindex );
+
+      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+                
+      [nmembers, nxny] = size(comp_ens);
+      corr             = zeros(nxny,1);
+
+      for i = 1:nxny,
+         x = corrcoef(base_mem, comp_ens(:, i));
+         corr(i) = x(1, 2);
+      end
+
+      %% here's the tricky part ... plotting the unstructured grid
+      
+      PlotMPAScells(pinfo.fname, corr)
+      hold on
+      plot(pinfo.lonCell(pinfo.base_cellindex), pinfo.latCell(pinfo.base_cellindex),'pb','MarkerSize',20);
+      hold off
+
+      s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %s', ...
+           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.latCell(pinfo.base_cellindex), pinfo.lonCell(pinfo.base_cellindex), ...
+           datestr(pinfo.base_time));
+
+      s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
+               pinfo.comp_var, pinfo.comp_lvl, nmembers); 
+      title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
+      xlabel(sprintf('longitude (%s)',pinfo.lonunits),'interpreter','none')
+      ylabel(sprintf('latitude (%s)',pinfo.latunits),'interpreter','none')
+      continents('hollow');
+      axis image
+      set(gca,'Clim',[-1 1])
+      axis([-10 370 -Inf Inf])
+      colorbar;
+      
    otherwise
 
       error('model %s not implemented yet', model)
@@ -410,51 +456,18 @@ end
 % helper functions
 %----------------------------------------------------------------------
 
-function slice = Get1Ens(fname, var, tmeind, lvlind, latind, lonind)
-% netcdf variable ordering is unimportant
-% Get1Ens retrieves all the ensemble members for a particular 4D 
-% location (time, level, lat, lon).
-% The ensemble members do not include the mean, spread, etc. 
-
-% find which are actual ensemble members
-metadata    = nc_varget(fname,'CopyMetaData');           % get all the metadata
-copyindices = strmatch('ensemble member',metadata); % find all 'member's
-
-if ( length(copyindices) == 1 && copyindices == 1 )
-   fprintf('%s has no valid ensemble members\n',fname)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
-   disp('must start with the character string ''ensemble member''')
-   disp('None of them in do in your file.')
-   fprintf('%s claims to have %d copies\n',fname, num_copies)
-   error('netcdf file has no ensemble members.')
-end
-
-pinfo.diagn_file = fname;
-pinfo.timeindex  = tmeind;
-pinfo.levelindex = lvlind;
-pinfo.latindex   = latind;
-pinfo.lonindex   = lonind;
-[start, count]   = GetNCindices(pinfo,'diagn',var);
-
-% Get all the ensemble members and just subset the copies we want.
-
-bob   = nc_varget(fname, var, start, count);
-slice = bob(copyindices);
-
-
-
-function slice = GetEnsLevel(fname, var, tmeind, lvlind)
-% netcdf variable ordering is unimportant, nominally [ time copy level lat lon ]
-% GetEnsLevel retrieves all the ensemble members for a particular time and level. 
+function slice = GetEnsemble(fname, varname, varargin)
+%% GetEnsemble retrieves all the ensemble members for a particular time and level. 
 %
-% The ensemble members do not include the mean, spread, etc. 
-% The level is returned as a [Nmem -by- NspatialLocations] matrix;
-% each row is an observation and each column is a (spatial)variable. 
-% should vectorize better.
+%  The ensemble members do not include the mean, spread, etc. 
 
+% Find the copy dimension
 % find which are actual ensemble members
-metadata    = nc_varget(fname,'CopyMetaData');           % get all the metadata
-copyindices = strmatch('ensemble member',metadata); % find all 'member's
+
+varinfo     = nc_getvarinfo(fname, varname);
+copydim     = find(strncmpi('copy',varinfo.Dimension,length('copy')) > 0);
+metadata    = nc_varget(fname,'CopyMetaData');
+copyindices = strmatch('ensemble member',metadata);
 
 if ( isempty(copyindices) )
    fprintf('%s has no valid ensemble members\n',fname)
@@ -465,21 +478,68 @@ if ( isempty(copyindices) )
    error('netcdf file has no ensemble members.')
 end
 
+% construct the appopriate hyperslabbing indices
+% modify the hyperslabbing to account for the ensemble members
+
 pinfo.diagn_file = fname;
-pinfo.timeindex  = tmeind;
-pinfo.levelindex = lvlind;
-[start, count]   = GetNCindices(pinfo,'diagn',var);
-
-bob        = nc_varget(fname, var, start, count);
-ted        = bob(copyindices,:,:);
-[nm,ny,nx] = size(ted);
-slice      = reshape(ted,[nm ny*nx]);
-
+for i = 1:2:(nargin-2),
+   eval(sprintf('pinfo.%s = varargin{i+1};',varargin{i}))   
+end
+[start, count] = GetNCindices(pinfo,'diagn',varname);
+start(copydim) = copyindices(1)-1;
+count(copydim) = length(copyindices);
+slice          = nc_varget(fname, varname, start, count);
 
 
-function PlotLocator(pinfo)
-   plot(pinfo.base_lon, pinfo.base_lat,'pb','MarkerSize',12,'MarkerFaceColor','b');
-   axis([0 360 -90 90])
-   worldmap
-   axis image
-   grid on
+
+
+function PlotMPAScells(fname,x)
+
+%% Get the plotting arrays
+%  for some reason, the lonCell,latCell stuff is [0,360] and the
+%  latVertex,lonVertex is [-pi,pi] ... daffy.
+
+nEdgesOnCell   = nc_varget(fname,'nEdgesOnCell');
+verticesOnCell = nc_varget(fname,'verticesOnCell');
+latVertex      = nc_varget(fname,'latVertex') * 180/pi; % cvrt to [-90,90]
+lonVertex      = nc_varget(fname,'lonVertex') * 180/pi; % cvrt to [-180,180]
+
+inds = lonVertex < 0;
+lonVertex(inds) = lonVertex(inds) + 360.0;
+
+%% Each Cell has some number of vertices
+
+nrows  = max( nEdgesOnCell);
+nCells = size(nEdgesOnCell,1);
+xpoly  = NaN(nrows,nCells);
+ypoly  = NaN(nrows,nCells);
+
+for iCell=1:nCells
+
+   n = nEdgesOnCell(iCell);
+
+   for i = 1:n
+      xpoly(i,iCell) = lonVertex(verticesOnCell(iCell,i));
+      ypoly(i,iCell) = latVertex(verticesOnCell(iCell,i));
+      if (i > 1)
+         if (abs(xpoly(i,iCell) - xpoly(1,iCell)) > 180.0)
+            if (xpoly(i,iCell) > xpoly(1,iCell))
+                xpoly(i,iCell) = xpoly(i,iCell) - 360.0;
+            else
+                xpoly(i,iCell) = xpoly(i,iCell) + 360.0;
+            end
+         end
+      end
+   end
+
+   % patch the pentagons up to hexagons
+   if (n < nrows)
+      xpoly(n+1:nrows,iCell) = xpoly(n,iCell);
+      ypoly(n+1:nrows,iCell) = ypoly(n,iCell);
+   end
+
+end
+
+h = patch(xpoly,ypoly,x');
+set(h,'LineStyle','none');
+

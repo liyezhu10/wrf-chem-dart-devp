@@ -173,7 +173,7 @@ function PlotLocator(pinfo)
    plot(pinfo.comp_lon, pinfo.comp_lat,'pr','MarkerSize',12,'MarkerFaceColor','r');
    hold off;
    axis([0 360 -90 90]);
-   worldmap;
+   continents;
    axis image
    grid on
 

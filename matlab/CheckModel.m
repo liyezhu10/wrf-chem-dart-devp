@@ -1,4 +1,4 @@
-function vars = CheckModel(fname);
+function vars = CheckModel(fname)
 %% CheckModel   tries to ensure that a netcdf file has what we expect. 
 %
 % vars is a structure containing a minimal amount of metadata about the netCDF file.
@@ -87,8 +87,7 @@ switch lower(model)
       time_step_seconds = nc_attget(fname, nc_global, 'model_time_step_seconds');
       num_model_vars    = nc_attget(fname, nc_global, 'model_num_state_vars');
 
-      num_vars      = dim_length(fname,'StateVariable'); % determine # of state varbls
-      StateVariable =  nc_varget(fname,'StateVariable');
+      num_vars = dim_length(fname,'StateVariable'); % determine # of state varbls
 
       % The only trick is to pick an equally-spaced subset of state 
       % variables for the default.
@@ -108,7 +107,11 @@ switch lower(model)
               'min_force_var',      1, 'max_force_var', num_vars - num_model_vars, ...
               'min_ens_mem',min(copy), 'max_ens_mem',   max(copy), ...
               'def_state_vars',def_state_vars, ...
-              'def_force_vars',def_force_vars);
+              'def_force_vars',def_force_vars, ...
+              'forcing',forcing, ...
+              'delta_t',delta_t, ...
+              'time_step_days', time_step_days, ...
+              'time_step_seconds', time_step_seconds);
 
       vars.fname = fname;
 
@@ -135,7 +138,8 @@ switch lower(model)
               'min_X_var',    min(Xdim), 'max_X_var',    max(Xdim), ...
               'min_Y_var',    min(Ydim), 'max_Y_var',    max(Ydim), ...
               'min_ens_mem',  min(copy), 'max_ens_mem',  max(copy), ...
-              'def_state_vars',def_X_inds);
+              'def_state_vars',def_X_inds, ...
+              'def_Y_inds', def_Y_inds);
 
       vars.fname = fname;
 
@@ -169,115 +173,6 @@ switch lower(model)
       vars.vars  = varnames;
       vars.fname = fname;
 
-   case 'fms_bgrid'
-
-      % A more robust way would be to use the netcdf low-level ops:
-      % bob = var(f);      % bob is a cell array of ncvars
-      % name(bob{1})       % is the variable name string
-      % bob{1}(:)          % is the value of the netcdf variable  (no offset/scale)
-
-      varnames = {'ps','t','u','v'};
-      num_vars = length(varnames);
-      nlevels  = dim_length(fname,'lev'); % determine # of state variables
-
-%     times  = nc_varget(fname,'time');
-%     TmpI   = nc_varget(fname,'TmpI');    % longitude
-%     TmpJ   = nc_varget(fname,'TmpJ');    % latitude
-%     levels = nc_varget(fname,'level');
-%     VelI   = nc_varget(fname,'VelI');    % longitude
-%     VelJ   = nc_varget(fname,'VelJ');    % latitude
-
-      vars = struct('model',model, ...
-              'num_state_vars',num_vars, ...
-              'num_ens_members',num_copies, ...
-              'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy));
-
-      vars.vars  = varnames;
-      vars.fname = fname;
-
-   case {'cam','tiegcm'}
-
-      varnames = get_DARTvars(fname);
-      num_vars = length(varnames);
-      nlevels  = dim_length(fname,'lev'); % determine # of state variables
-
-      vars = struct('model',model, ...
-              'num_state_vars',num_vars, ...
-              'num_ens_members',num_copies, ...
-              'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy) );
-
-      vars.vars  = varnames;
-      vars.fname = fname;
-
-   case 'pbl_1d'
-
-      % A more robust way would be to use the netcdf low-level ops:
-      % bob = var(f);     % bob is a cell array of ncvars
-      % name(bob{1})       % is the variable name string
-      % bob{1}(:)          % is the value of the netcdf variable  (no offset/scale)
-
-      num_vars = 22; % ps, t, u, v
-      z_level  = dim_length(fname, 'z_level'); % determine # of state variables
-      sl_level = dim_length(fname,'sl_level'); % determine # of state variables
-      times    = nc_varget(fname,'time');
-      z_level  = nc_varget(fname,'z_level');
-      sl_level = nc_varget(fname,'sl_level');
-
-      vars = struct('model',model, ...
-              'num_state_vars',num_vars, ...
-              'num_ens_members',num_copies, ...
-              'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy));
-
-      vars.fname = fname;
-
-   case 'pe2lyr'
-
-      % Since this is a 3D model, only the most rudimentary information
-      % is gathered here. Each plot requires different information,
-      % so there is a separate function (GetPe2lyrInfo.m) that gets
-      % the information for each specific plot type.
-
-      varnames = {'u','v','z'};
-      num_vars = length(varnames);
-
-      vars = struct('model',model, ...
-              'num_state_vars',num_vars, ...
-              'num_ens_members',num_copies, ...
-              'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy) );
-
-      vars.vars  = varnames;
-      vars.fname = fname;
-
-   case 'mitgcm_ocean'
-
-      % A more robust way would be to use the netcdf low-level ops:
-      % bob = var(f);     % bob is a cell array of ncvars
-      % name(bob{1})       % is the variable name string
-      % bob{1}(:)          % is the value of the netcdf variable  (no offset/scale)
-      % have not yet figured out a way to only use non-coordinate variables.
-
-      varnames = {'S','T','U','V','SSH'};
-      num_vars = length(varnames);
-      nlevels  = dim_length(fname,'ZG'); % determine # of state variables
-
-      vars = struct('model',model, ...
-              'num_state_vars',num_vars, ...
-              'num_ens_members',num_copies, ...
-              'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy) );
-
-      vars.vars  = varnames;
-      vars.fname = fname;
-
    case 'wrf'
 
       % requires a 'domain' and 'bottom_top_d01' dimension.
@@ -285,10 +180,8 @@ switch lower(model)
 
       varnames    = get_DARTvars(fname);
       num_vars    = length(varnames);
-      dinfo       = nc_getdiminfo(fname,'domain');
-      num_domains = dinfo.Length;
-      dinfo       = nc_getdiminfo(fname,'bottom_top_d01');
-      num_levels  = dinfo.Length;
+      num_domains = dim_length(fname,'domain');
+      num_levels  = dim_length(fname,'bottom_top_d01');
 
       vars = struct('model',model, ...
               'num_state_vars',num_vars, ...
@@ -301,7 +194,22 @@ switch lower(model)
 
       vars.vars  = varnames;
       vars.fname = fname;
+     
+   case {'cam','tiegcm','fms_bgrid','pe2lyr','mitgcm_ocean','pbl_1d','mpas_atm'}
 
+      varnames = get_DARTvars(fname);
+      num_vars = length(varnames);
+
+      vars = struct('model',model, ...
+              'num_state_vars',num_vars, ...
+              'num_ens_members',num_copies, ...
+              'time_series_length',num_times, ...
+              'min_ens_mem',min(copy), ...
+              'max_ens_mem',max(copy) );
+
+      vars.vars  = varnames;
+      vars.fname = fname;
+      
    otherwise
 
       error('model %s unknown',model)
@@ -309,14 +217,20 @@ switch lower(model)
 end
 
 
-
-
 function x = dim_length(fname,dimname)
+% Check for the existence of the named dimension and return it
+% if it exists. If it does not, error out with a useful message. 
 
-y = nc_isvar(fname,dimname);
-if (y < 1)
-   error('%s has no %s dimension/coordinate variable',fname,dimname)
+info = nc_info(fname);
+n    = length(dimname);
+x    = [];
+for i = 1:length(info.Dimension),
+   if ( strncmp(info.Dimension(i).Name, dimname, n) > 0 )
+      x = info.Dimension(i).Length;
+      break
+   end
 end
-bob = nc_getdiminfo(fname,dimname);
-x   = bob.Length;
 
+if isempty(x)
+   error('%s has no dimension named %s',fname,dimname)
+end

@@ -1,11 +1,11 @@
-function h = worldmap(ifill,lonorg,level)
-%% WORLDMAP  overlays the continents on an existing figure as a F(lon,lat).
+function h = continents(ifill,lonorg,level)
+%% CONTINENTS  overlays the continents on an existing figure as a F(lon,lat).
 %           The continents can be filled or "hollow".
 %
 %           This is not appropriate for use with a real MAP (i.e. anything
 %           other than a simple lon vs. lat plot)
 %
-% USAGE: worldmap([fill],[lonorigin],[level])
+% USAGE: continents([fill],[lonorigin],[level])
 %
 % fill == 'hollow' 		=> outline of landmasses (DEFAULT) 
 % fill == 'solid' 		=> solid black landmasses
@@ -28,9 +28,9 @@ function h = worldmap(ifill,lonorg,level)
 % imagesc(lons,lats,topo);		% CREATE SOME PLOT w/ true x,y limits
 % set(gca,'YDir','normal');		% CORRECT ORIENTATION
 %
-% worldmap;				% COASTLINES ONLY -- OR --
+% continents;				% COASTLINES ONLY -- OR --
 %
-% worldmap('solid');			% SOLID LANDMASSES
+% continents('solid');			% SOLID LANDMASSES
 %
 
 %% DART software - Copyright 2004 - 2011 UCAR. This open source software is

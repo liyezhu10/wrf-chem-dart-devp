@@ -48,6 +48,7 @@ if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); en
 
 pinfo = CheckModelCompatibility(truth_file,diagn_file);
 vars  = CheckModel(truth_file);   % also gets default values for this model.
+pinfo = CombineStructs(pinfo,vars);
 
 switch lower(vars.model)
 
@@ -55,8 +56,6 @@ switch lower(vars.model)
 	 'lorenz_04', 'forced_lorenz_96','ikeda','simple_advection'}
 
       varid = SetVariableID(vars);      % queries for variable IDs
-      pinfo.truth_file = truth_file;
-      pinfo.diagn_file = diagn_file;
       pinfo.var        = varid.var;
       pinfo.var_inds   = varid.var_inds;
       clear varid
@@ -67,7 +66,6 @@ switch lower(vars.model)
 
    case 'cam'
 
-      pinfo = CombineStructs(pinfo,vars);
       pinfo = GetCamInfo(pinfo, diagn_file, 'PlotBins');
 
    case 'pe2lyr'
@@ -77,6 +75,10 @@ switch lower(vars.model)
    case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotBins');
+
+   case 'mpas_atm'
+       
+      pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotBins');
 
    otherwise
 

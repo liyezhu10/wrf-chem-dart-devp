@@ -98,6 +98,10 @@ switch lower(pinfo.model)
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
 
+   case 'mpas_atm'
+
+      pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
+
    otherwise
 
       error('model %s not implemented yet', pinfo.model)
