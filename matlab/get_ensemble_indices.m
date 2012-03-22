@@ -43,16 +43,18 @@ if (state_var_index > num_vars)
    fprintf('you wanted variable %d\n', state_var_index)
 end
 
-metadata    = nc_varget(fname,'CopyMetaData');       % get all the metadata
-copyindices = strmatch('ensemble member',metadata);  % find all 'member's
+metastrings = nc_varget(fname,'CopyMetaData');
+if(size(metastrings,2) == 1), metastrings = metastrings'; end
+metadata    = cellstr(metastrings);
+copyindices = find(strncmpi('ensemble member',metadata,length('ensemble member')));
+
 if ( isempty(copyindices) )
-   fprintf('%s has no valid ensemble members\n',fname)
+   fprintf('%s has no ensemble members\n',fname)
    disp('To be a valid ensemble member, the CopyMetaData for the member')
    disp('must start with the character string ''ensemble member''')
-   disp('None of them in do in your file.')
-   fprintf('%s claims to have %d copies\n',fname, num_copies)
-   error('netcdf file has no ensemble members.')
+   error('%s has no ensemble members.',fname)
 end
+
 ens_num     = length(copyindices);
 
 % Get the whole thing and then return the ones we want.
