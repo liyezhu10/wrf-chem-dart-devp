@@ -42,17 +42,9 @@ end
 pinfo = CheckModel(diagn_file); % also gets default values for this model.
 
 if (exist(truth_file,'file')==2)
-
+   pinfo  = rmfield(pinfo,{'time','time_series_length','min_ens_mem','max_ens_mem'});
    MyInfo = CheckModelCompatibility(truth_file, diagn_file);
-
-   % Combine the information from CheckModel and CheckModelCompatibility
-   mynames = fieldnames(MyInfo);
-
-   for ifield = 1:length(mynames)
-      myname = mynames{ifield};
-      if ( isfield(pinfo,myname) ), warning('plot_ens_time_series: pinfo.%s already exists\n',myname); end
-      eval(sprintf('pinfo.%s = MyInfo.%s;',myname,myname));
-   end
+   pinfo  = CombineStructs(pinfo,MyInfo);
 else
    truth_file = [];
 end

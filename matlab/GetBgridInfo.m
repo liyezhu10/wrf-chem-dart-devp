@@ -28,7 +28,6 @@ if strcmp(lower(model),'fms_bgrid') ~= 1
 end
 
 copy   = nc_varget(fname,'copy');
-times  = nc_varget(fname,'time');
 levels = nc_varget(fname,'lev');
 TmpI   = nc_varget(fname,'TmpI');    % temperature/pressure grid longitude
 TmpJ   = nc_varget(fname,'TmpJ');    % temperature/pressure grid latitude
@@ -39,10 +38,13 @@ prognostic_vars  = {'ps','t','u','v'};
 
 % Coordinate between time types and dates
 
+times      = nc_varget(fname,'time');
 timeunits  = nc_attget(fname,'time','units');
 timebase   = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin = datenum(timebase(1),timebase(2),timebase(3));
 dates      = times + timeorigin;
+
+disp('GetBgridInfo should have time/dates already ...')
 
 switch lower(deblank(routine))
 
@@ -55,7 +57,7 @@ switch lower(deblank(routine))
 
       pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
+      pinfo = setfield(pinfo, 'time', dates);
       pinfo = setfield(pinfo, 'var', pgvar);
       pinfo = setfield(pinfo, 'level', level);
       pinfo = setfield(pinfo, 'levelindex', lvlind);
@@ -79,7 +81,7 @@ switch lower(deblank(routine))
 
       pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
+      pinfo = setfield(pinfo, 'time', dates);
       pinfo = setfield(pinfo, 'base_var', base_var);
       pinfo = setfield(pinfo, 'comp_var', comp_var);
       pinfo = setfield(pinfo, 'base_time', base_time);
@@ -110,7 +112,7 @@ switch lower(deblank(routine))
 
       pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
+      pinfo = setfield(pinfo, 'time', dates);
       pinfo = setfield(pinfo, 'base_var', base_var);
       pinfo = setfield(pinfo, 'comp_var', comp_var);
       pinfo = setfield(pinfo, 'base_time', base_time);
@@ -131,19 +133,15 @@ switch lower(deblank(routine))
    case 'plotsawtooth'
 
        pgvar          = GetVar(prognostic_vars);
-      [level, lvlind] = GetLevel(pgvar,levels);   % Determine level and index
+      [level, lvlind] = GetLevel(pgvar,levels);
       [lat  , latind] = GetLatitude( pgvar,TmpJ,VelJ);
       [lon  , lonind] = GetLongitude(pgvar,TmpI,VelI);
-      %[copy , lonind] = GetCopies(pgvar,copy);
       copyindices     = SetCopyID(fname);
       copy            = length(copyindices);
 
       pinfo = setfield(pinfo, 'model'         , model);
-      pinfo = setfield(pinfo, 'times'         , dates);
+      pinfo = setfield(pinfo, 'time'         , dates);
       pinfo = setfield(pinfo, 'var_names'     , pgvar);
-      %pinfo = setfield(pinfo, 'truth_file'    , []);
-      %pinfo = setfield(pinfo, 'prior_file'    , pinfo.prior_file);
-      %pinfo = setfield(pinfo, 'posterior_file', pinfo.posterior_file);
       pinfo = setfield(pinfo, 'level'         , level);
       pinfo = setfield(pinfo, 'levelindex'    , lvlind);
       pinfo = setfield(pinfo, 'latitude'      , lat);
@@ -188,7 +186,7 @@ switch lower(deblank(routine))
 
       pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
+      pinfo = setfield(pinfo, 'time', dates);
       pinfo = setfield(pinfo, 'var1name' ,var1);
       pinfo = setfield(pinfo, 'var2name' ,var2);
       pinfo = setfield(pinfo, 'var3name' ,var3);

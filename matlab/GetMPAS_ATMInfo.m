@@ -27,39 +27,35 @@ model = nc_attget(fname, nc_global, 'model');
 if strcmpi(model,'mpas_atm') ~= 1
    error('Not so fast, this is not a MPAS_ATM model.')
 end
+if strcmpi(pinfo_in.model,model) ~= 1
+   error('Not so fast, this is not a MPAS_ATM plotting structure.')
+end
 
 %% Get the domain information.
 
-varexist(fname, {'time','lonCell','latCell','areaCell'})
+varexist(fname, {'lonCell','latCell','areaCell'})
 
+pinfo.area     = nc_varget(fname,'areaCell');
 pinfo.lonCell  = nc_varget(fname,'lonCell');
 pinfo.latCell  = nc_varget(fname,'latCell');
-pinfo.latunits = nc_attget(fname,'latCell','units');
 pinfo.lonunits = nc_attget(fname,'lonCell','units');
-
-pinfo.area    = nc_varget(fname,'areaCell');
-
-%% Coordinate between time types and dates
-
-times       = nc_varget(fname,'time');
-timeunits   = nc_attget(fname,'time','units');
-timebase    = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
-timeorigin  = datenum(timebase(1),timebase(2),timebase(3));
-pinfo.dates = times + timeorigin;
+pinfo.latunits = nc_attget(fname,'latCell','units');
 
 %% code for each plot type
 
 switch lower(deblank(routine))
 
+    case {'plottotalerr'}
+
+      pinfo.fname      = fname;
+      
    case {'plotbins','plotenserrspread','plotensmeantimeseries','plotenstimeseries'}
 
-      pgvar           = GetVarString(pinfo_in.vars);
-      cellind         = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
-      [level, lvlind] = GetLevel(fname, pgvar);
+      pgvar            = GetVarString(pinfo_in.vars);
+      cellind          = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
+      [level, lvlind]  = GetLevel(fname, pgvar);
 
-      pinfo.model      = model;
       pinfo.fname      = fname;
-      pinfo.times      = pinfo.dates;
       pinfo.var        = pgvar;
       pinfo.level      = level;
       pinfo.levelindex = lvlind;
@@ -72,16 +68,14 @@ switch lower(deblank(routine))
       disp('Getting information for the ''base'' variable.')
       base_var                 = GetVarString(pinfo_in.vars);
       base_cellind             = GetClosestCell(base_var, pinfo.latCell, pinfo.lonCell);
-      [base_time, base_tmeind] = GetTime(pinfo.dates);
+      [base_time, base_tmeind] = GetTime(pinfo.time);
       [base_lvl,  base_lvlind] = GetLevel(fname, base_var);
 
       disp('Getting information for the ''comparison'' variable.')
       comp_var                 = GetVarString(pinfo_in.vars, base_var);
       [comp_lvl, comp_lvlind]  = GetLevel(fname, comp_var, base_lvl);
 
-      pinfo.model          = model;
       pinfo.fname          = fname;
-      pinfo.times          = pinfo.dates;
       pinfo.base_var       = base_var;
       pinfo.comp_var       = comp_var;
       pinfo.base_time      = base_time;
@@ -89,6 +83,8 @@ switch lower(deblank(routine))
       pinfo.base_lvl       = base_lvl;
       pinfo.base_lvlind    = base_lvlind;
       pinfo.base_cellindex = base_cellind;
+      pinfo.base_lat       = pinfo.latCell(base_cellind);
+      pinfo.base_lon       = pinfo.lonCell(base_cellind);
       pinfo.comp_lvl       = comp_lvl;
       pinfo.comp_lvlind    = comp_lvlind;
 
@@ -96,34 +92,30 @@ switch lower(deblank(routine))
 
       disp('Getting information for the ''base'' variable.')
        base_var                = GetVarString(pinfo_in.vars);
-       base_cellind            = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
-      [base_time, base_tmeind] = GetTime(pinfo.dates);
+       base_cellind            = GetClosestCell(base_var, pinfo.latCell, pinfo.lonCell);
+      [base_time, base_tmeind] = GetTime(pinfo.time);
       [base_lvl , base_lvlind] = GetLevel(fname, base_var);
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVarString(pinfo_in.vars,      base_var);
-       comp_cellind           = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell, base_cellind);
+       comp_cellind           = GetClosestCell(comp_var, pinfo.latCell, pinfo.lonCell, base_cellind);
       [comp_lvl, comp_lvlind] = GetLevel(fname, comp_var, base_lvl);
 
-      pinfo.model       = model;
-      pinfo.fname       = fname;
-      pinfo.times       = pinfo.dates;
-      pinfo.base_var    = base_var;
-      pinfo.comp_var    = comp_var;
-      pinfo.base_time   = base_time;
-      pinfo.base_tmeind = base_tmeind;
-      pinfo.base_lvl    = base_lvl;
-      pinfo.base_lvlind = base_lvlind;
-      pinfo.base_lat    = base_lat;
-      pinfo.base_latind = base_latind;
-      pinfo.base_lon    = base_lon;
-      pinfo.base_lonind = base_lonind;
-      pinfo.comp_lvl    = comp_lvl;
-      pinfo.comp_lvlind = comp_lvlind;
-      pinfo.comp_lat    = comp_lat;
-      pinfo.comp_latind = comp_latind;
-      pinfo.comp_lon    = comp_lon;
-      pinfo.comp_lonind = comp_lonind;
+      pinfo.fname          = fname;
+      pinfo.base_var       = base_var;
+      pinfo.comp_var       = comp_var;
+      pinfo.base_time      = base_time;
+      pinfo.base_tmeind    = base_tmeind;
+      pinfo.base_lvl       = base_lvl;
+      pinfo.base_lvlind    = base_lvlind;
+      pinfo.base_cellindex = base_cellind;
+      pinfo.base_lat       = pinfo.latCell(base_cellind);
+      pinfo.base_lon       = pinfo.lonCell(base_cellind);
+      pinfo.comp_lvl       = comp_lvl;
+      pinfo.comp_lvlind    = comp_lvlind;
+      pinfo.comp_cellindex = comp_cellind;
+      pinfo.comp_lat       = pinfo.latCell(comp_cellind);
+      pinfo.comp_lon       = pinfo.lonCell(comp_cellind);
 
    case 'plotsawtooth'
 
@@ -133,18 +125,15 @@ switch lower(deblank(routine))
       [copyindices, copymetadata] = SetCopyID2(pinfo_in.prior_file);
       copy                        = length(copyindices);
 
-      pinfo.model          = model;
       pinfo.truth_file     = pinfo_in.truth_file;
       pinfo.prior_file     = pinfo_in.prior_file;
       pinfo.posterior_file = pinfo_in.posterior_file;
-      pinfo.times          = pinfo.dates;
       pinfo.var_names      = pgvar;
       pinfo.level          = level;
       pinfo.levelindex     = lvlind;
-      pinfo.latitude       = lat;
-      pinfo.latindex       = latind;
-      pinfo.longitude      = lon;
-      pinfo.lonindex       = lonind;
+      pinfo.cellindex      = cellind;
+      pinfo.latitude       = pinfo.latCell(cellind);
+      pinfo.longitude      = pinfo.lonCell(cellind);
       pinfo.copies         = copy;
       pinfo.copyindices    = copyindices;
 
@@ -166,74 +155,59 @@ switch lower(deblank(routine))
       disp('Getting information for the ''X'' variable.')
        var1                   = GetVarString(pinfo_in.vars);
       [var1_lvl, var1_lvlind] = GetLevel(fname,var1);
-       var1_cellind           = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
+       var1_cellind           = GetClosestCell(var1, pinfo.latCell, pinfo.lonCell);
 
       disp('Getting information for the ''Y'' variable.')
        var2                   = GetVarString(pinfo_in.vars,        var1    );
       [var2_lvl, var2_lvlind] = GetLevel(fname,var2,var1_lvl);
-       var2_cellind           = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
+       var2_cellind           = GetClosestCell(var2, pinfo.latCell, pinfo.lonCell, var1_cellind);
 
       disp('Getting information for the ''Z'' variable.')
        var3                   = GetVarString(pinfo_in.vars,        var1    );
       [var3_lvl, var3_lvlind] = GetLevel(fname,var3,var1_lvl);
-       var3_cellind           = GetClosestCell(pgvar, pinfo.latCell, pinfo.lonCell);
+       var3_cellind           = GetClosestCell(var3, pinfo.latCell, pinfo.lonCell, var1_cellind);
 
       % query for ensemble member string
-      metadata   = nc_varget(fname,'CopyMetaData');
-      [N,M]      = size(metadata);
-      cell_array = mat2cell(metadata, ones(1,N), M);
-      ens_mem    = strtrim(cell_array{1});
-      str1 = sprintf('Input ensemble member metadata STRING. <cr> for ''%s''   ',ens_mem);
+      metastrings = nc_varget(fname,'CopyMetaData');
+      if(size(metastrings,2) == 1), metastrings = metastrings'; end
+      metadata    = cellstr(metastrings);
+      ens_mem     = strtrim(metadata{1});
+      str1 = sprintf('Input ensemble member metadata STRING. <cr> for ''%s''\n',ens_mem);
       s1   = input(str1,'s');
       if ~ isempty(s1), ens_mem = s1; end
 
       % query for line type
-      s1 = input('Input line type string. <cr> for ''k-''  ','s');
+      s1 = input('Input line type string. <cr> for ''k-''\n','s');
       if isempty(s1), ltype = 'k-'; else ltype = s1; end
 
-      pinfo.model       = model;
-      pinfo.fname       = fname;
-      pinfo.times       = pinfo.dates;
-      pinfo.var1name    = var1;
-      pinfo.var2name    = var2;
-      pinfo.var3name    = var3;
-      pinfo.var1_lvl    = var1_lvl;
-      pinfo.var1_lvlind = var1_lvlind;
-      pinfo.var1_lat    = var1_lat;
-      pinfo.var1_latind = var1_latind;
-      pinfo.var1_lon    = var1_lon;
-      pinfo.var1_lonind = var1_lonind;
-      pinfo.var2_lvl    = var2_lvl;
-      pinfo.var2_lvlind = var2_lvlind;
-      pinfo.var2_lat    = var2_lat;
-      pinfo.var2_latind = var2_latind;
-      pinfo.var2_lon    = var2_lon;
-      pinfo.var2_lonind = var2_lonind;
-      pinfo.var3_lvl    = var3_lvl;
-      pinfo.var3_lvlind = var3_lvlind;
-      pinfo.var3_lat    = var3_lat;
-      pinfo.var3_latind = var3_latind;
-      pinfo.var3_lon    = var3_lon;
-      pinfo.var3_lonind = var3_lonind;
-      pinfo.ens_mem     = ens_mem;
-      pinfo.ltype       = ltype;
+      pinfo.fname          = fname;
+      pinfo.var1name       = var1;
+      pinfo.var2name       = var2;
+      pinfo.var3name       = var3;
+      pinfo.var1_lvl       = var1_lvl;
+      pinfo.var1_lvlind    = var1_lvlind;
+      pinfo.var1_cellindex = var1_cellind;
+      pinfo.var1_lat       = pinfo.latCell(var1_cellind);
+      pinfo.var1_lon       = pinfo.lonCell(var1_cellind);
+      pinfo.var2_lvl       = var2_lvl;
+      pinfo.var2_lvlind    = var2_lvlind;
+      pinfo.var2_cellindex = var2_cellind;
+      pinfo.var2_lat       = pinfo.latCell(var2_cellind);
+      pinfo.var2_lon       = pinfo.lonCell(var2_cellind);
+      pinfo.var3_lvl       = var3_lvl;
+      pinfo.var3_lvlind    = var3_lvlind;
+      pinfo.var3_cellindex = var3_cellind;
+      pinfo.var3_lat       = pinfo.latCell(var3_cellind);
+      pinfo.var3_lon       = pinfo.lonCell(var3_cellind);
+      pinfo.ens_mem        = ens_mem;
+      pinfo.ltype          = ltype;
 
-   otherwise
+    otherwise
+       
+        error('%s unsupported for %s',routine, pinfo.model)
 
 end
 
-function domainid = GetDomainID(ndomains)
-%----------------------------------------------------------------------
-
-fprintf('There are %d domains. Default is to use domain %d.\n.',ndomains,ndomains)  
-fprintf('If this is OK, <cr>; If not, enter domain of interest:\n')
-domainid = input('(no syntax required)\n');
-
-if ~isempty(domainid), domainid = ndomains; end 
-
-if ( (domainid > 0) && (domainid <= ndomains)) 
-   error('domain must be between 1 and %d, you entered %d',ndomains,domainid)
-end
 
 
 function pgvar = GetVarString(prognostic_vars, defvar)
@@ -396,14 +370,3 @@ if ~ all(gotone)
    error('missing required variable ... exiting')
 end
 
-
-
-function x = varget(filename,varname)
-%% get a varible from the netcdf file, if it does not exist, 
-% do not die such a theatrical death ... return an empty.
-
-if ( nc_isvar(filename,varname) )
-   x = nc_varget(filename, varname);
-else
-   x = [];
-end

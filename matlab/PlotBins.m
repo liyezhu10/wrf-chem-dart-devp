@@ -39,13 +39,10 @@ function PlotBins(pinfo)
 % $Revision$
 % $Date$
 
-pinfo = CheckModelCompatibility(pinfo);
-
 % Get the state for the truth
 truth_index = get_copy_index(pinfo.truth_file,'true state');
-true_model  = nc_attget(pinfo.truth_file, nc_global, 'model');
 
-switch lower(true_model)
+switch lower(pinfo.model)
 
    case '9var'
 
@@ -62,7 +59,7 @@ switch lower(true_model)
             subplot(3, 1, j);
             bar(bins);
             title(sprintf('%s Variable %d for %s', ...
-                  true_model,ivar,pinfo.diagn_file), ...
+                  pinfo.model,ivar,pinfo.diagn_file), ...
                   'interpreter','none','fontweight','bold')
             xlabel('rank')
             ylabel('occurrence')
@@ -87,7 +84,7 @@ switch lower(true_model)
          subplot(length(pinfo.var_inds), 1, iplot);
          bar(bins);
          title(sprintf('%s Variable %d for %s', ...
-               true_model,ivar,pinfo.diagn_file), ...
+               pinfo.model,ivar,pinfo.diagn_file), ...
                'interpreter','none','fontweight','bold')
          xlabel('rank')
          ylabel('occurrence')
@@ -112,7 +109,7 @@ switch lower(true_model)
          subplot(length(pinfo.var_inds), 1, iplot);
          bar(bins);
          title(sprintf('%s Variable %s %d for %s', ...
-               true_model,pinfo.var, ivar,pinfo.diagn_file), ...
+               pinfo.model,pinfo.var, ivar,pinfo.diagn_file), ...
                'interpreter','none','fontweight','bold')
          xlabel('rank')
          ylabel('occurrence')
@@ -140,7 +137,7 @@ switch lower(true_model)
       bins  = rank_hist(ens, truth);
       bar(bins);
       title({ ...
-        sprintf('%s ''%s'' for %s ', true_model, pinfo.var, pinfo.diagn_file), ...
+        sprintf('%s ''%s'' for %s ', pinfo.model, pinfo.var, pinfo.diagn_file), ...
         sprintf('level %d lat %.2f lon %.2f',pinfo.level, pinfo.latitude, ...
                  pinfo.longitude)}, 'interpreter','none','fontweight','bold')
       xlabel('rank')
@@ -153,7 +150,7 @@ switch lower(true_model)
 
    otherwise
 
-      error('model %s unknown',true_model)
+      error('model %s unknown',pinfo.model)
 
 end
 
@@ -167,18 +164,9 @@ function var = GetCopy(pinfo)
 % Gets a time-series of a single specified 'true' copy of a prognostic variable 
 % at a particular 3D location (level, lat, lon)
 
+pinfo.tindex1  = pinfo.truth_time(1);
+pinfo.tcount   = pinfo.truth_time(2);
 [start, count] = GetNCindices(pinfo,'truth',pinfo.var);
-varinfo        = nc_getvarinfo(pinfo.truth_file, pinfo.var);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}))
-      case{'time'}
-         start(i) = pinfo.truth_time(1) - 1;
-         count(i) = pinfo.truth_time(2);
-         break
-      otherwise
-   end
-end
 
 var = nc_varget(pinfo.truth_file, pinfo.var, start, count);
 
@@ -186,50 +174,22 @@ var = nc_varget(pinfo.truth_file, pinfo.var, start, count);
 
 function var = GetEns(pinfo)
 % Gets a time-series of all copies of a prognostic variable 
-% at a particular location (level, cell).
-% Determining just the ensemble members (and not mean, spread ...)
-% is the hard part.
+% at a particular location (level, gridcell).
 
-% find which are actual ensemble members
-metadata    = nc_varget(pinfo.diagn_file,'CopyMetaData');       % get all the metadata
-copyindices = strmatch('ensemble member',metadata);  % find all 'member's
+pinfo.tindex1    = pinfo.diagn_time(1);
+pinfo.tcount     = pinfo.diagn_time(2);
+pinfo.copyindex1 = pinfo.ensemble_indices(1);
+pinfo.copycount  = length(pinfo.ensemble_indices);
+[start, count]   = GetNCindices(pinfo,'diagn',pinfo.var);
 
-if ( isempty(copyindices) )
-   fprintf('%s has no valid ensemble members\n',pinfo.diagn_file)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
-   disp('must start with the character string ''ensemble member''')
-   disp('None of them in do in your file.')
-   fprintf('%s claims to have %d copies\n',pinfo.diagn_file, size(metadata,1))
-   error('netcdf file has no ensemble members.')
-end
-ens_num     = length(copyindices);
-
-% Get all ensemble members, just return desired ones.
-% This makes fewer assumptions about variable shape.
-[start, count] = GetNCindices(pinfo,'diagn',pinfo.var);
-varinfo        = nc_getvarinfo(pinfo.diagn_file, pinfo.var);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}))
-      case{'time'}
-         start(i) = pinfo.diagn_time(1) - 1;
-         count(i) = pinfo.diagn_time(2);
-         break
-      otherwise
-   end
-end
-
-bob = nc_varget(pinfo.diagn_file, pinfo.var, start, count);
+var = nc_varget(pinfo.diagn_file, pinfo.var, start, count);
 % All the singleton dimensions get squeezed out.
 % If there is only one time, 'bob' is copy-X-time,
 % if there is more than one time, bob is time-X-copy
 if (pinfo.diagn_time(2) == 1)
-    bob = bob';
+    var = var';
 end
-var = bob(:,copyindices);
 
-
-% could/should check input for valid range, etc.
 
 
 function PlotLocator(pinfo)

@@ -98,6 +98,7 @@ end
 
 %% construct the pinfo struct in this function
 pinfo_out = timearray_intersect(pinfo_out, file1, file2, ttimes, dtimes);
+pinfo_out.time_series_length = length(pinfo_out.time);
 
 % fail here if the times had nothing in common.
 if ( ( pinfo_out.truth_time(1) == -1 ) || ...
@@ -147,6 +148,7 @@ if (   (length(times1) == length(times2)) ...
     && (times1(len) == times2(len)))
   pret.truth_time = [1,len];   % start/count
   pret.diagn_time = [1,len];   % start/count
+  pret.time       = times1;    % the common times in datenum-compatible form.
   return
 end
 
@@ -211,6 +213,7 @@ end
 % now put the indices in the return struct and we are done.
 pret.truth_time = [min1, max1-min1+1];   % start,count
 pret.diagn_time = [min2, max2-min2+1];   % start,count
+pret.time       = times1(min1:max1);     % the common times in datenum-compatible form.
 
 % return here
 

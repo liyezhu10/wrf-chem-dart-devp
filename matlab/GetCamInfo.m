@@ -31,14 +31,16 @@ end
 varexist(fname, {'copy','time'})
 
 copy   = nc_varget(fname,'copy');
-times  = nc_varget(fname,'time');
 
 % Coordinate between time types and dates
 
+times      = nc_varget(fname,'time');
 timeunits  = nc_attget(fname,'time','units');
 timebase   = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin = datenum(timebase(1),timebase(2),timebase(3));
 dates      = times + timeorigin;
+
+disp('GetCamInfo should have time/dates already ...')
 
 ilevel = nc_varget(fname,'ilev');    % interfaces
 levels = nc_varget(fname, 'lev');    % midpoints
@@ -58,7 +60,7 @@ switch lower(deblank(routine))
       [lon  , lonind] = GetLongitude(pgvar,lon);
 
       pinfo.model      = model;
-      pinfo.times      = dates;
+      pinfo.time       = dates;
       pinfo.var        = pgvar;
       pinfo.level      = level;
       pinfo.levelindex = lvlind;
@@ -82,7 +84,7 @@ switch lower(deblank(routine))
       [comp_lvl, comp_lvlind] = GetLevel(    comp_var,levels,    base_lvlind);
 
       pinfo.model       = model; 
-      pinfo.times       = dates;
+      pinfo.time        = dates;
       pinfo.base_var    = base_var;
       pinfo.comp_var    = comp_var;
       pinfo.base_time   = base_time;
@@ -113,7 +115,7 @@ switch lower(deblank(routine))
       [comp_lon, comp_lonind] = GetLongitude(comp_var,lon,base_lon);
 
       pinfo.model       = model;
-      pinfo.times       = dates;
+      pinfo.time        = dates;
       pinfo.base_var    = base_var;
       pinfo.comp_var    = comp_var;
       pinfo.base_time   = base_time;
@@ -141,7 +143,7 @@ switch lower(deblank(routine))
  %    [  lon, lonind] = GetCopies(pgvar,xxx);
 
       pinfo.model          = model;
-      pinfo.times          = dates;
+      pinfo.time           = dates;
       pinfo.var_names      = pgvar;
       pinfo.truth_file     = [];
       pinfo.prior_file     = pstruct.prior_file;
@@ -189,7 +191,7 @@ switch lower(deblank(routine))
       if isempty(s1), ltype = 'k-'; else ltype = s1; end
 
       pinfo.model       = model;
-      pinfo.times       = dates;
+      pinfo.time        = dates;
       pinfo.var1name    = var1;
       pinfo.var2name    = var2;
       pinfo.var3name    = var3;

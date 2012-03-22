@@ -39,23 +39,18 @@ if (exist('truth_file','var') ~= 1)
    end
 end
 
-pinfo = CheckModel(diagn_file); % also gets default values for this model.
+pinfo  = CheckModel(diagn_file); % also gets default values for this model.
 
 if (exist(truth_file,'file')==2)
 
-   MyInfo = CheckModelCompatibility(truth_file, diagn_file);
+   pinfo  = rmfield(pinfo,{'time_series_length','time','fname'});
+   vars   = CheckModelCompatibility(truth_file, diagn_file);
+   pinfo  = CombineStructs(pinfo,vars);
 
-   % Combine the information from CheckModel and CheckModelCompatibility
-   mynames = fieldnames(MyInfo);
-
-   for ifield = 1:length(mynames)
-      myname = mynames{ifield};
-      if ( isfield(pinfo,myname) ), warning('%s already exists in pinfo\n',myname); end
-      eval(sprintf('pinfo.%s = MyInfo.%s;',myname,myname));
-   end
 else
    truth_file = [];
 end
+
 pinfo.diagn_file = diagn_file;
 pinfo.truth_file = truth_file;
 

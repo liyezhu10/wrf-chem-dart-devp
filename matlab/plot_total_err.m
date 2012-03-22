@@ -32,13 +32,39 @@ end
 if ( exist(truth_file,'file') ~= 2 ), error('%s does not exist.',truth_file); end
 if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); end
 
-disp(sprintf('Comparing %s and \n          %s', truth_file, diagn_file))
+fprintf('Comparing %s and \n          %s\n', truth_file, diagn_file)
 
-pinfo = CheckModel(diagn_file);
-pinfo.truth_file = truth_file;
-pinfo.diagn_file = diagn_file;
+vars    = CheckModel(diagn_file);
+vars    = rmfield(vars,{'time','time_series_length','fname','min_ens_mem', ...
+                        'max_ens_mem','num_ens_members','ensemble_indices'});
+pinfo   = CheckModelCompatibility(truth_file,diagn_file);
+pinfo   = CombineStructs(pinfo, vars);
+clear vars
 
-% Temporal Intersection happens in PlotTotalErr:CheckModelCompatibility()
+switch lower(pinfo.model)
+    case{'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
+         'lorenz_04', 'forced_lorenz_96','ikeda','simple_advection'}
+
+     
+    case{'fms_bgrid'}
+        pinfo = GetBgridInfo(pinfo, diagn_file, 'PlotTotalErr');
+
+    case {'cam'}
+      pinfo = GetCamInfo(pinfo, diagn_file, 'PlotTotalErr');
+
+   case {'pe2lyr'}
+      pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotTotalErr');
+
+   case {'mitgcm_ocean'}
+      pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotTotalErr');
+
+   case {'mpas_atm'}
+      pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotTotalErr');
+
+   otherwise
+
+      error('%s not implemented yet', pinfo.model)
+end
 
 PlotTotalErr( pinfo );
 clear pinfo

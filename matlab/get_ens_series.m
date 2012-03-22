@@ -19,6 +19,10 @@ function ens = get_ens_series(fname, varname, state_var_index, tstartind, tendin
 % $Revision$
 % $Date$
 
+
+disp('get_ens_series is deprecated, use get_hyperslab() instead.')
+
+
 if (nargin == 3) 
   tstartind =  1;
   diminfo   = nc_getdiminfo(fname,'time');
@@ -43,19 +47,7 @@ if (state_var_index > num_vars)
    fprintf('you wanted variable %d\n', state_var_index)
 end
 
-metastrings = nc_varget(fname,'CopyMetaData');
-if(size(metastrings,2) == 1), metastrings = metastrings'; end
-metadata    = cellstr(metastrings);
-copyindices = find(strncmpi('ensemble member',metadata,length('ensemble member')));
-
-if ( isempty(copyindices) )
-   fprintf('%s has no ensemble members\n',fname)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
-   disp('must start with the character string ''ensemble member''')
-   error('%s has no ensemble members.',fname)
-end
-
-ens_num     = length(copyindices);
+[ens_num, copyindices] = get_ensemble_indices(fname);
 
 % Get the whole thing and then return the ones we want.
 % This is usually not too bad, as there are usually many more

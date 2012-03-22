@@ -46,16 +46,18 @@ end
 if ( exist(truth_file,'file') ~= 2 ), error('%s does not exist.',truth_file); end
 if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); end
 
+vars  = CheckModel(diagn_file);   % also gets default values for this model.
+vars  = rmfield(vars,{'time_series_length','time','fname'});
 pinfo = CheckModelCompatibility(truth_file,diagn_file);
-vars  = CheckModel(truth_file);   % also gets default values for this model.
 pinfo = CombineStructs(pinfo,vars);
+clear vars
 
-switch lower(vars.model)
+switch lower(pinfo.model)
 
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
 	 'lorenz_04', 'forced_lorenz_96','ikeda','simple_advection'}
 
-      varid = SetVariableID(vars);      % queries for variable IDs
+      varid = SetVariableID(pinfo);      % queries for variable IDs
       pinfo.var        = varid.var;
       pinfo.var_inds   = varid.var_inds;
       clear varid
@@ -87,4 +89,4 @@ switch lower(vars.model)
 end
 
 PlotBins(pinfo);
-clear vars
+

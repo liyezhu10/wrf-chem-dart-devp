@@ -49,14 +49,19 @@ if (exist('prior_file','var') ~=1)
    end
 end
 
-CheckModelCompatibility(prior_file, posterior_file);
-pstruct                = CheckModel(posterior_file);   % also gets default values
-pstruct.prior_file     = prior_file;
-pstruct.posterior_file = posterior_file;
-pstruct.diagn_file     = prior_file;
-pstruct.diagn_time     = [1 -1];
-pstruct.truth_file     = truth_file;
-pstruct.truth_time     = [1 -1];
+% CheckModelCompatibility assumes first file is 'truth', so the
+% components must be renamed in this context.
+
+vars    = CheckModelCompatibility(prior_file, posterior_file);
+vars.prior_time     = vars.truth_time;
+vars.posterior_time = vars.diagn_time;
+vars.prior_file     = prior_file;
+vars.posterior_file = posterior_file;
+vars = rmfield(vars,{'truth_file','diagn_file','truth_time','diagn_time'});
+
+pinfo   = CheckModel(posterior_file);
+pstruct = CombineStructs(pinfo,vars);
+pstruct.truth_file = truth_file;
 
 switch lower(pstruct.model)
 
@@ -99,8 +104,6 @@ switch lower(pstruct.model)
    case 'mpas_atm'
 
       pstruct = GetMPAS_ATMInfo(pstruct, prior_file, 'PlotSawtooth');
-      pstruct.copyindices = SetCopyID2(pstruct.prior_file);
-      pstruct.copies      = length(pstruct.copyindices);
 
    otherwise
 

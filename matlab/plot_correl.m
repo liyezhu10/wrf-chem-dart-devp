@@ -28,17 +28,13 @@ end
 
 if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); end
 
+pinfo       = CheckModel(diagn_file); 
+pinfo.fname = diagn_file;
+
 % check to make sure they are using a file with some ensemble members.
-
-diminfo    = nc_getdiminfo(diagn_file,'copy');
-num_copies = diminfo.Length; % determine # of ensemble members
-
-if (num_copies <= 3)
+if (pinfo.num_ens_members <= 3)
    error('Sorry -- %s does not have enough ensemble members to correlate.',diagn_file)
 end
-
-pinfo = CheckModel(diagn_file); 
-pinfo.fname = diagn_file;
 
 switch lower(pinfo.model)
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_04', ...
@@ -137,4 +133,4 @@ end
 pinfo
 
 PlotCorrel( pinfo );
-clear inputstring inds str1 vrbl vrbl_inds diminfo num_copies
+clear inputstring inds str1 vrbl vrbl_inds diminfo

@@ -23,40 +23,71 @@ function PlotJeffCorrel( pinfo )
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
-% Get some file-specific information.
-
-model      = nc_attget(pinfo.fname, nc_global, 'model');
-timeunits  = nc_attget(pinfo.fname, 'time',    'units');
-num_times  = dim_length(pinfo.fname,'time');
-num_copies = dim_length(pinfo.fname,'copy');
-
-switch lower(model)
+switch lower(pinfo.model)
 
    case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam'}
 
       clf;
 
-      base_mem = GetEns( pinfo.fname, pinfo.base_var, ...
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
-      comp_mem = GetEns( pinfo.fname, pinfo.comp_var, ...
-                    pinfo.comp_lvlind, pinfo.comp_latind, pinfo.comp_lonind );
-      nmembers = size(comp_mem,2);
+      base_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname', pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
+                     'latindex',pinfo.base_latind, 'lonindex',pinfo.base_lonind );
+      comp_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname', pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
+                     'latindex',pinfo.comp_latind, 'lonindex',pinfo.comp_lonind );
 
-      correl = jeff_correl(base_mem, pinfo.base_tmeind, comp_mem);
+      correl = jeff_correl(base_mem, comp_mem);
 
       subplot(2,1,1)
          PlotLocator(pinfo)
 
       subplot(2,1,2)
-         plot(pinfo.times,correl);
+         plot(pinfo.time, correl);
 
       s1 = sprintf('%s Correlation of ''%s'', T = %d, lvl = %d, lat = %.2f, lon=%.2f', ...
-          model, pinfo.base_var, pinfo.base_time, pinfo.base_lvl, ...
+          pinfo.model, pinfo.base_var, pinfo.base_time, pinfo.base_lvl, ...
           pinfo.base_lat, pinfo.base_lon);
 
       s2 = sprintf('with ''%s'', lvl = %d, lat = %.2f, lon= %.2f, %d ensemble members', ...
           pinfo.comp_var, pinfo.comp_lvl, pinfo.comp_lat, pinfo.comp_lon, ...
-          nmembers); 
+          pinfo.num_ens_members); 
+
+      title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
+      xdates(pinfo.time)
+      ylabel('correlation')
+      
+      % call out the time index in question, and put a corr==0 reference line.
+      ax = axis;
+      hold on;
+      plot([pinfo.base_time pinfo.base_time],[ -1 1 ],'k:', ...
+           [ax(1)         ax(2)],[  0 0 ],'k:')
+
+   case {'mpas_atm'}
+
+      clf;
+
+      base_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname', pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
+                     'cellindex',pinfo.base_cellindex);
+      comp_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname', pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
+                     'cellindex',pinfo.comp_cellindex);
+
+      correl = jeff_correl(base_mem, comp_mem);
+
+      subplot(2,1,1)
+         PlotLocator(pinfo)
+
+      subplot(2,1,2)
+         plot(pinfo.time, correl);
+
+      s1 = sprintf('%s Correlation of ''%s'', T = %d, lvl = %d, lat = %.2f, lon=%.2f', ...
+          pinfo.model, pinfo.base_var, pinfo.base_time, pinfo.base_lvl, ...
+          pinfo.base_lat, pinfo.base_lon);
+
+      s2 = sprintf('with ''%s'', lvl = %d, lat = %.2f, lon= %.2f, %d ensemble members', ...
+          pinfo.comp_var, pinfo.comp_lvl, pinfo.comp_lat, pinfo.comp_lon, ...
+          pinfo.num_ens_members); 
 
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       datetick('x','yyyymmmdd HH:MM')
@@ -67,7 +98,6 @@ switch lower(model)
       hold on;
       plot([pinfo.base_time pinfo.base_time],[ -1 1 ],'k:', ...
            [ax(1)         ax(2)],[  0 0 ],'k:')
-
 
    otherwise
 
@@ -83,8 +113,8 @@ switch lower(model)
       
       % The Time must be within range also.
       
-      if ( pinfo.base_time > num_times )
-         fprintf('%s only has %d output times\n', pinfo.fname, num_times)
+      if ( pinfo.base_time > pinfo.time_series_length )
+         fprintf('%s only has %d output times\n', pinfo.fname, pinfo.time_series_length)
          error('you wanted time # %d ', pinfo.base_time)
       end
       
@@ -98,17 +128,17 @@ switch lower(model)
       % Get 'standard' ensemble series 
        base_var = get_ens_series(pinfo.fname, pinfo.base_var,  pinfo.base_var_index);
       state_var = get_ens_series(pinfo.fname, pinfo.state_var, pinfo.state_var_index);
-      nmembers  = size(state_var,2);
+      pinfo.num_ens_members  = size(state_var,2);
 
       % perform a single correlation
-      correl = jeff_correl(base_var, pinfo.base_time, state_var);
+      correl = jeff_correl(base_var, state_var);
       
       clf; plot(correl);
       
       s1 = sprintf('%s Correlation of variable %s %d, T = %d, with variable %s %d', ...
-               model, pinfo.base_var, pinfo.base_var_index, pinfo.base_time, ...
+               pinfo.model, pinfo.base_var, pinfo.base_var_index, pinfo.base_time, ...
                       pinfo.state_var, pinfo.state_var_index);
-      s2 = sprintf('%d ensemble members', nmembers); 
+      s2 = sprintf('%d ensemble members', pinfo.num_ens_members); 
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel('time (timestep #)')
       ylabel('correlation')
@@ -128,42 +158,9 @@ end
 %======================================================================
 
 
-
 function x = dim_length(fname,dimname)
 bob = nc_getdiminfo(fname,dimname);
 x   = bob.Length;
-
-
-
-function var = GetEns( fname, varname, lvlind, latind, lonind)
-% Gets a time-series of all copies of a prognostic variable 
-% at a particular 3D location (level, lat, lon).
-% Determining just the ensemble members (and not mean, spread ...)
-% is the hard part.
-
-% find which are actual ensemble members
-metadata    = nc_varget(fname,'CopyMetaData');       % get all the metadata
-copyindices = strmatch('ensemble member',metadata);  % find all 'member's
-
-if ( isempty(copyindices) )
-   fprintf('%s has no valid ensemble members\n',fname)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
-   disp('must start with the character string ''ensemble member''')
-   disp('None of them in do in your file.')
-   fprintf('%s claims to have %d copies\n',fname, num_copies)
-   error('netcdf file has no ensemble members.')
-end
-ens_num     = length(copyindices);
-
-% Get all ensemble members, just return desired ones.
-myinfo.diagn_file = fname;
-myinfo.levelindex = lvlind;
-myinfo.latindex   = latind;
-myinfo.lonindex   = lonind;
-[start, count]    = GetNCindices(myinfo,'diagn',varname);
-
-bob = nc_varget(fname, varname, start, count); % 'bob' is only 2D 
-var = bob(:,copyindices);
 
 
 
@@ -177,3 +174,16 @@ function PlotLocator(pinfo)
    axis image
    grid on
 
+
+
+function xdates(dates)
+if (length(get(gca,'XTick')) > 6)
+   datetick('x','mm.dd.HH','keeplimits'); % 'mm/dd'
+   monstr = datestr(dates(1),31);
+   xlabelstring = sprintf('month/day/HH - %s start',monstr);
+else
+   datetick('x',31,'keeplimits'); %'yyyy-mm-dd HH:MM:SS'
+   monstr = datestr(dates(1),31);
+   xlabelstring = sprintf('%s start',monstr);
+end
+xlabel(xlabelstring)

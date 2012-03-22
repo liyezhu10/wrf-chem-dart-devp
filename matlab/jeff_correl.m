@@ -1,6 +1,5 @@
-function corr = ens_correl(base_var, base_time, state_var)
-%% ens_correl  Computes correlation of a variable at a time to a time series of
-% another variable (could be the same one)
+function corr = jeff_correl(base_var, state_var)
+%% jeff_correl  Computes the temporal evolution of the correlation of ...
 
 %% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -12,26 +11,15 @@ function corr = ens_correl(base_var, base_time, state_var)
 % $Revision$
 % $Date$
 
-%Extract sample of base at base time
-%base_ens = base_var(base_time, :);
+% create correlations at every timestep
+figure(9); clf; hold on;
 
-% size(base_var)
-% size(base_time)
-% size(state_var)
-% size(base_ens)
-
-% Loop through time to correlate with the other ensemble series
-figure(9);
-hold on;
 num_times = size(state_var, 1);
 for i = 1:num_times
    x = corrcoef(base_var(i, :), state_var(i, :));
    corr(i) = x(1, 2);
-%   plot(base_var(i, 1), state_var(i, 1), 'x');
-%   plot(base_var(i, :), state_var(i, :), 'x');
-%   plot(2, corr(i), 'x');
 end 
 
 plot(base_var(:, 1), state_var(:, 1));
+title('Correlation through time')
 
-figure(1);

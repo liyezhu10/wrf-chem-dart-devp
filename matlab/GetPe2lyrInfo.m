@@ -21,26 +21,21 @@ function pinfo = GetPe2lyrInfo(pinfo_in,fname,routine);
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
 pinfo  = pinfo_in;
-model  = nc_attget(fname,nc_global,'model');
+model  = nc_attget(fname, nc_global, 'model');
 
-if strcmp(lower(model),'pe2lyr') ~= 1
+if strcmpi(model,'pe2lyr') ~= 1
    error('Not so fast, this is not a pe2lyr model.')
+end
+if strcmpi(pinfo.model,'pe2lyr') ~= 1
+   error('Not so fast, this is not a pe2lyr plotting structure.')
 end
 
 copy   = nc_varget(fname,'copy');
-times  = nc_varget(fname,'time');
 levels = nc_varget(fname,'lev');
 lons   = nc_varget(fname,'lon');
 lats   = nc_varget(fname,'lat');
 
 prognostic_vars  = {'u','v','z'};
-
-% Coordinate between time types and dates
-
-timeunits  = nc_attget(fname,'time','units');
-timebase   = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
-timeorigin = datenum(timebase(1),timebase(2),timebase(3));
-dates      = times + timeorigin;
 
 switch lower(deblank(routine))
 
@@ -51,9 +46,7 @@ switch lower(deblank(routine))
       [lat  , latind] = GetLatitude( pgvar,lats);
       [lon  , lonind] = GetLongitude(pgvar,lons);
 
-      pinfo = setfield(pinfo, 'model'     , model );
       pinfo = setfield(pinfo, 'fname'     , fname );
-      pinfo = setfield(pinfo, 'times'     , dates );
       pinfo = setfield(pinfo, 'var'       , pgvar );
       pinfo = setfield(pinfo, 'level'     , level );
       pinfo = setfield(pinfo, 'levelindex', lvlind);
@@ -66,16 +59,15 @@ switch lower(deblank(routine))
 
       disp('Getting information for the ''base'' variable.')
        base_var                = GetVar(prognostic_vars);
-      [base_time, base_tmeind] = GetTime(     base_var,dates);
-      [base_lvl,  base_lvlind] = GetLevel(    base_var,levels);
-      [base_lat,  base_latind] = GetLatitude( base_var,lats);
-      [base_lon,  base_lonind] = GetLongitude(base_var,lons);
+      [base_time, base_tmeind] = GetTime(     base_var, pinfo.dates);
+      [base_lvl,  base_lvlind] = GetLevel(    base_var, levels);
+      [base_lat,  base_latind] = GetLatitude( base_var, lats);
+      [base_lon,  base_lonind] = GetLongitude(base_var, lons);
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVar(prognostic_vars,          base_var);
       [comp_lvl, comp_lvlind] = GetLevel(    comp_var,levels,    base_lvl);
 
-      pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
       pinfo = setfield(pinfo, 'base_var', base_var);
       pinfo = setfield(pinfo, 'comp_var', comp_var);
@@ -94,10 +86,10 @@ switch lower(deblank(routine))
 
       disp('Getting information for the ''base'' variable.')
        base_var                = GetVar(prognostic_vars);
-      [base_time, base_tmeind] = GetTime(     base_var,dates);
-      [base_lvl , base_lvlind] = GetLevel(    base_var,levels);
-      [base_lat , base_latind] = GetLatitude( base_var,lats);
-      [base_lon , base_lonind] = GetLongitude(base_var,lons);
+      [base_time, base_tmeind] = GetTime(     base_var, pinfo.dates);
+      [base_lvl , base_lvlind] = GetLevel(    base_var, levels);
+      [base_lat , base_latind] = GetLatitude( base_var, lats);
+      [base_lon , base_lonind] = GetLongitude(base_var, lons);
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVar(prognostic_vars,          base_var);
@@ -105,9 +97,7 @@ switch lower(deblank(routine))
       [comp_lat, comp_latind] = GetLatitude( comp_var,lats, base_lat);
       [comp_lon, comp_lonind] = GetLongitude(comp_var,lons, base_lon);
 
-      pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
       pinfo = setfield(pinfo, 'base_var', base_var);
       pinfo = setfield(pinfo, 'comp_var', comp_var);
       pinfo = setfield(pinfo, 'base_time', base_time);
@@ -131,16 +121,11 @@ switch lower(deblank(routine))
       [level, lvlind] = GetLevel(pgvar,levels);   % Determine level and index
       [lat  , latind] = GetLatitude( pgvar,lats);
       [lon  , lonind] = GetLongitude(pgvar,lons);
-      %[copy , lonind] = GetCopies(pgvar,copy);
       copyindices     = SetCopyID(fname);
       copy            = length(copyindices);
 
-      pinfo = setfield(pinfo, 'model'         , model);
-      pinfo = setfield(pinfo, 'times'         , dates);
       pinfo = setfield(pinfo, 'var_names'     , pgvar);
       pinfo = setfield(pinfo, 'truth_file'    , []);
-      %pinfo = setfield(pinfo, 'prior_file'    , pinfo.prior_file);
-      %pinfo = setfield(pinfo, 'posterior_file', pinfo.posterior_file);
       pinfo = setfield(pinfo, 'level'         , level);
       pinfo = setfield(pinfo, 'levelindex'    , lvlind);
       pinfo = setfield(pinfo, 'latitude'      , lat);
@@ -178,9 +163,7 @@ switch lower(deblank(routine))
       s1 = input('Input line type string. <cr> for ''k-''  ','s');
       if isempty(s1), ltype = 'k-'; else ltype = s1; end
 
-      pinfo = setfield(pinfo, 'model', model);
       pinfo = setfield(pinfo, 'fname', fname);
-      pinfo = setfield(pinfo, 'times', dates);
       pinfo = setfield(pinfo, 'var1name'   , var1);
       pinfo = setfield(pinfo, 'var2name'   , var2);
       pinfo = setfield(pinfo, 'var3name'   , var3);

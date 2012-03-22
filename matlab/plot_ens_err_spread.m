@@ -38,22 +38,20 @@ if (exist('diagn_file','var') ~=1)
    end
 end
 
+vars  = CheckModel(diagn_file);   % also gets default values for this model.
+vars  = rmfield(vars,{'min_ens_mem','max_ens_mem','fname','time','time_series_length'}); 
 pinfo = CheckModelCompatibility(truth_file, diagn_file);
-vars  = CheckModel(truth_file);   % also gets default values for this model.
 pinfo = CombineStructs(pinfo,vars);
+clear vars
 
-switch lower(vars.model)
+switch lower(pinfo.model)
 
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
 	 'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
 
-      varid = SetVariableID(vars);
-      pinfo.var        = varid.var;
-      pinfo.var_inds   = varid.var_inds;
-      %pinfo = struct('truth_file', truth_file, ...
-      %               'diagn_file', diagn_file, ...
-      %               'var'       , varid.var, ...
-      %               'var_inds'  , varid.var_inds);
+      varid          = SetVariableID(vars);
+      pinfo.var      = varid.var;
+      pinfo.var_inds = varid.var_inds;
 
       fprintf('Comparing %s and \n          %s\n', pinfo.truth_file, pinfo.diagn_file)
       fprintf('Using Variable %s IDs %s\n', pinfo.var,num2str(pinfo.var_inds))
@@ -81,12 +79,10 @@ switch lower(vars.model)
 
    otherwise
 
-      error('model %s not implemented yet', vars.model)
+      error('model %s not implemented yet', pinfo.model)
 
 end
 
 pinfo
 
 PlotEnsErrSpread( pinfo )
-
-clear vars

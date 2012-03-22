@@ -28,7 +28,6 @@ if (nargin == 4)
   tcount = -1;
 end
 
-num_times   = dim_length(fname,'time');
 num_copies  = dim_length(fname,'copy');
 num_vars    = dim_length(fname,'StateVariable');
 
@@ -46,19 +45,9 @@ end
 myinfo.diagn_file = fname;
 myinfo.copyindex  = copyindex;
 myinfo.stateindex = state_var;
+myinfo.tindex1    = tstart;
+myinfo.tcount     = tcount;
 [start, count]    = GetNCindices(myinfo, 'diagn', varname);
-
-varinfo = nc_getvarinfo(fname,varname);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}))
-      case{'time'}
-         start(i) = tstart-1;
-         count(i) = tcount;
-         break
-      otherwise
-   end
-end
 
 var_vec = nc_varget(fname, varname, start, count);
 

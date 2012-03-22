@@ -34,23 +34,21 @@ function PlotCorrel( pinfo )
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
-% Get some file-specific information.
-model      = nc_attget(pinfo.fname,nc_global,'model');
-varinfo    = nc_getvarinfo(pinfo.fname, pinfo.base_var);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}) )
-      case 'time'
-         num_times = varinfo.Size(i);
-      otherwise
-         num_vars = varinfo.Size(i);
-   end
-end
-
-switch(lower(model))
+switch(lower(pinfo.model))
 
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
 	 'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
+
+      % Get some file-specific information.
+      varinfo = nc_getvarinfo(pinfo.fname, pinfo.base_var);
+
+      % FIXME ... this isn't right in general
+      for i = 1:length(varinfo.Dimension)
+         switch( lower(varinfo.Dimension{i}) )
+            otherwise
+               num_vars = varinfo.Size(i);
+         end
+      end
 
       base_var_index = pinfo.base_var_index;
       base_time      = pinfo.base_time;
@@ -62,8 +60,8 @@ switch(lower(model))
       end
       
       % The Time must be within range also.
-      if ( base_time > num_times )
-         fprintf('%s only has %d output times\n', pinfo.fname, num_times)
+      if ( base_time > pinfo.time_series_length )
+         fprintf('%s only has %d output times\n', pinfo.fname, pinfo.time_series_length)
          error('you wanted time # %d ', base_time)
       end
       
@@ -71,7 +69,7 @@ switch(lower(model))
       base = get_ens_series(pinfo.fname, pinfo.base_var, base_var_index);
       
       % It is efficient to preallocate correl storage ... 
-      correl = zeros(num_vars,num_times);
+      correl = zeros(num_vars,pinfo.time_series_length);
       
       % Need to loop through all variables in the ensemble
       for i = 1:num_vars,
@@ -85,7 +83,7 @@ switch(lower(model))
       
       contour(correl,-1:0.2:1);
       s1 = sprintf('%s Correlation of variable %s index %d, T = %d', ...
-               model, pinfo.base_var, base_var_index, base_time);
+               pinfo.model, pinfo.base_var, base_var_index, base_time);
       s2 = sprintf('against all variables, all times, %d ensemble members', ...
                size(state_var,2)); 
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
@@ -121,11 +119,13 @@ switch(lower(model))
 
       nxny = nx*ny;
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+      comp_ens = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       nmembers = size(comp_ens,1);
@@ -143,7 +143,7 @@ switch(lower(model))
       plot(pinfo.base_lon, pinfo.base_lat, 'pk', ...
                  'MarkerSize',12,'MarkerFaceColor','k');
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %f', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
              pinfo.base_lat, pinfo.base_lon, pinfo.base_time);
 
       s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
@@ -189,7 +189,8 @@ switch(lower(model))
 
       % Get the actual goods ... and perform the correlation
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
@@ -199,8 +200,10 @@ switch(lower(model))
           error('Cannot calculate correlation coefficient with a constant.')
       end
       
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+      comp_ens = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+
       if (std(comp_ens(:)) == 0.0) 
           warning('%s at level %d time %s is a constant\n',pinfo.comp_var,...
              pinfo.comp_lvlind, datestr(pinfo.base_time))
@@ -230,7 +233,7 @@ switch(lower(model))
       plot(pinfo.base_lon, pinfo.base_lat, 'pk', ...
                  'MarkerSize',12,'MarkerFaceColor','k');
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %s', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
              pinfo.base_lat, pinfo.base_lon, datestr(pinfo.base_time));
 
       s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
@@ -269,11 +272,13 @@ switch(lower(model))
 
       nxny = nx*ny;
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+      comp_ens = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
@@ -290,7 +295,7 @@ switch(lower(model))
       plot(pinfo.base_lon, pinfo.base_lat, 'pk', ...
                  'MarkerSize',12,'MarkerFaceColor','k');
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %f', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
              pinfo.base_lat, pinfo.base_lon, pinfo.base_time);
 
       s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
@@ -316,11 +321,13 @@ switch(lower(model))
 
       nxny     = nx*ny;
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+      comp_ens = get_hyperslab( 'fname', pinfo.fname, 'varname', pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
@@ -337,7 +344,7 @@ switch(lower(model))
       plot(pinfo.base_lon, pinfo.base_lat, 'pk', ...
                  'MarkerSize',12,'MarkerFaceColor','k');
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %f', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
              pinfo.base_lat, pinfo.base_lon, pinfo.base_time);
 
       s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
@@ -366,11 +373,13 @@ switch(lower(model))
 
       nxny     = nx*ny;
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
+      comp_ens = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
       nmembers = size(comp_ens,1);
 
@@ -388,7 +397,7 @@ switch(lower(model))
       plot(pinfo.base_lon, pinfo.base_lat, 'pk', ...
                  'MarkerSize',12,'MarkerFaceColor','k');
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %f', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
              pinfo.base_lat, pinfo.base_lon, pinfo.base_time);
 
       s2 = sprintf('against ''%s'', entire level %d, same time, %d ensemble members', ...
@@ -407,12 +416,14 @@ switch(lower(model))
 
       clf;
 
-      base_mem = GetEnsemble( pinfo.fname, pinfo.base_var, ...
+      base_mem = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'cellindex', pinfo.base_cellindex );
-
-      comp_ens = GetEnsemble( pinfo.fname, pinfo.comp_var, ...
-                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+                
+      comp_ens = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.comp_var, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);    
                 
       [nmembers, nxny] = size(comp_ens);
       corr             = zeros(nxny,1);
@@ -430,7 +441,7 @@ switch(lower(model))
       hold off
 
       s1 = sprintf('%s Correlation of ''%s'', level %d, (%.2f,%.2f) T = %s', ...
-           model, pinfo.base_var, pinfo.base_lvl, ...
+           pinfo.model, pinfo.base_var, pinfo.base_lvl, ...
            pinfo.latCell(pinfo.base_cellindex), pinfo.lonCell(pinfo.base_cellindex), ...
            datestr(pinfo.base_time));
 
@@ -447,7 +458,7 @@ switch(lower(model))
       
    otherwise
 
-      error('model %s not implemented yet', model)
+      error('model %s not implemented yet', pinfo.model)
 
 end
 
@@ -455,42 +466,6 @@ end
 %----------------------------------------------------------------------
 % helper functions
 %----------------------------------------------------------------------
-
-function slice = GetEnsemble(fname, varname, varargin)
-%% GetEnsemble retrieves all the ensemble members for a particular time and level. 
-%
-%  The ensemble members do not include the mean, spread, etc. 
-
-% Find the copy dimension
-% find which are actual ensemble members
-
-varinfo     = nc_getvarinfo(fname, varname);
-copydim     = find(strncmpi('copy',varinfo.Dimension,length('copy')) > 0);
-metadata    = nc_varget(fname,'CopyMetaData');
-copyindices = strmatch('ensemble member',metadata);
-
-if ( isempty(copyindices) )
-   fprintf('%s has no valid ensemble members\n',fname)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
-   disp('must start with the character string ''ensemble member''')
-   disp('None of them in do in your file.')
-   fprintf('%s claims to have %d copies\n',fname, num_copies)
-   error('netcdf file has no ensemble members.')
-end
-
-% construct the appopriate hyperslabbing indices
-% modify the hyperslabbing to account for the ensemble members
-
-pinfo.diagn_file = fname;
-for i = 1:2:(nargin-2),
-   eval(sprintf('pinfo.%s = varargin{i+1};',varargin{i}))   
-end
-[start, count] = GetNCindices(pinfo,'diagn',varname);
-start(copydim) = copyindices(1)-1;
-count(copydim) = length(copyindices);
-slice          = nc_varget(fname, varname, start, count);
-
-
 
 
 function PlotMPAScells(fname,x)
