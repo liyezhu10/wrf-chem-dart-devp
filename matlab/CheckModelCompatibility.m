@@ -45,6 +45,7 @@ if (isempty(tmodel))
    error('%s has no ''model'' global attribute.',file1)
 end
 
+tvars       = get_DARTvars(file1);
 tnum_times  = dim_length(file1,'time');
 times       = nc_varget( file1,'time');
 timeunits   = nc_attget( file1,'time','units');
@@ -52,7 +53,7 @@ timebase    = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin  = datenum(timebase(1),timebase(2),timebase(3));
 ttimes      = times + timeorigin;
 
-[tnum_vars,tdims] = ModelDimension(file1,tmodel);
+[tnum_vars,~] = ModelDimension(file1,tmodel);
 if ( tnum_vars <= 0 )
    error('Unable to determine resolution of %s.',file1)
 end
@@ -64,6 +65,7 @@ if (isempty(dmodel))
    error('%s has no ''model'' global attribute.',file2)
 end
 
+dvars       = get_DARTvars(file2);
 dnum_times  = dim_length(file2,'time');
 times       = nc_varget( file2,'time');
 timeunits   = nc_attget( file2,'time','units');
@@ -71,7 +73,7 @@ timebase    = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin  = datenum(timebase(1),timebase(2),timebase(3));
 dtimes      = times + timeorigin;
 
-[dnum_vars,ddims] = ModelDimension(file2,dmodel);
+[dnum_vars,~] = ModelDimension(file2,dmodel);
 if ( dnum_vars <= 0 )
    error('Unable to determine resolution of %s.',file2)
 end
@@ -89,6 +91,14 @@ if (prod(tnum_vars) ~= prod(dnum_vars))
    fprintf('%s has %d state variables\n',file2,prod(dnum_vars))
    error('no No NO ... both files must have same shape of state variables.')
 end
+
+vars = cell(0);
+for i = 1:length(dvars),
+   if any(strcmpi(dvars(i),tvars))
+       vars(length(vars)+1) = dvars(i);
+   end
+end
+pinfo_out.vars = vars;
 
 % if the lengths of the time arrays did not match, this used to be an
 % error.  now we call a function to try to find any overlapping regions
