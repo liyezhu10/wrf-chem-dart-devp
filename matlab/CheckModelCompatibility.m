@@ -92,23 +92,18 @@ if (prod(tnum_vars) ~= prod(dnum_vars))
    error('no No NO ... both files must have same shape of state variables.')
 end
 
+% find the variables common to both files.
 vars = cell(0);
 for i = 1:length(dvars),
    if any(strcmpi(dvars(i),tvars))
        vars(length(vars)+1) = dvars(i);
    end
 end
-pinfo_out.vars = vars;
+pinfo_out.vars           = vars;
+pinfo_out.num_state_vars = length(vars);
 
-% if the lengths of the time arrays did not match, this used to be an
-% error.  now we call a function to try to find any overlapping regions
-% in the time arrays and pass them back up to the called in the pinfo struct.
-% they then get used to extract the corresponding hyperslabs of data for
-% the matching times.
-
-%% construct the pinfo struct in this function
+% Call a function to find the indices of theln - times common to both files.
 pinfo_out = timearray_intersect(pinfo_out, file1, file2, ttimes, dtimes);
-pinfo_out.time_series_length = length(pinfo_out.time);
 
 % fail here if the times had nothing in common.
 if ( ( pinfo_out.truth_time(1) == -1 ) || ...
@@ -122,6 +117,11 @@ if ( ( pinfo_out.truth_time(1) == -1 ) || ...
    error('These files have no timesteps in common')
 end
 
+% Set the array of the times common to both files.
+T1 = pinfo_out.truth_time(1);
+T2 = pinfo_out.truth_time(1) + pinfo_out.truth_time(2) - 1;
+pinfo_out.time = ttimes(T1:T2);
+pinfo_out.time_series_length = pinfo_out.truth_time(2);
 
 
 

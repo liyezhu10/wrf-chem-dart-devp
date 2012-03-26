@@ -34,18 +34,13 @@ if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); en
 
 fprintf('Comparing %s and \n          %s\n', truth_file, diagn_file)
 
-vars    = CheckModel(diagn_file);
-vars    = rmfield(vars,{'time','time_series_length','fname','min_ens_mem', ...
-                        'max_ens_mem','num_ens_members','ensemble_indices'});
+CheckModel(diagn_file); % make sure model is supported - no need for anything else.
 pinfo   = CheckModelCompatibility(truth_file,diagn_file);
-pinfo   = CombineStructs(pinfo, vars);
-clear vars
 
 switch lower(pinfo.model)
     case{'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
          'lorenz_04', 'forced_lorenz_96','ikeda','simple_advection'}
 
-     
     case{'fms_bgrid'}
         pinfo = GetBgridInfo(pinfo, diagn_file, 'PlotTotalErr');
 

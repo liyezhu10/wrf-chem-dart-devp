@@ -673,8 +673,8 @@ end
 function MPAS_ATMTotalError( pinfo )
 %% -------------------------------------------------------------------
 % Assume netcdf has only prognostic variables.
-% We are going to plot the total error (over a horizontal slice) 
-% for each variable and annotate an area-weighted total.
+% We are going to plot a time series of the total area-weighted error 
+% for each variable (all levels combined and considered equal).
 %---------------------------------------------------------------------
 
 tstart     = pinfo.truth_time(1);
@@ -747,29 +747,18 @@ for ivar=1:pinfo.num_state_vars,
 
    figure(ivar); clf;
 
-      switch lower(pinfo.vars{ivar})
-         case {'surface_pressure'}
-            plot(pinfo.time,          rms(:, 1), '-'); hold on;
-            plot(pinfo.time, spread_final(:, 1), '--');
+   rmsetot   = sum(rms,2);
+   spreadtot = sum(spread_final,2);
+   plot(pinfo.time, rmsetot,'-',pinfo.time, spreadtot,'--');
 
-            s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(         rms(:, 1)));
-            s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(spread_final(:, 1)));
-            
-          otherwise
-            plot(pinfo.time,          rms,'-'); hold on;
-            plot(pinfo.time, spread_final,'--');
+   s = {sprintf('time-mean Ensemble Mean error = %f', mean(rmsetot)), ...
+        sprintf('time-mean Ensemble Spread     = %f', mean(spreadtot))};
 
-            for i = 1:num_levels,
-               s{i       }     = sprintf('level %d error  %.3f', i,mean(         rms(:, i)));
-               s{i+num_levels} = sprintf('level %d spread %.3f', i,mean(spread_final(:, i)));
-            end
-      end
-
-      h = legend(s); legend(h,'boxoff')
-      grid on;
-      xdates(pinfo.time)
-      ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
-      title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
+   h = legend(s); legend(h,'boxoff')
+   grid on;
+   xdates(pinfo.time)
+   ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
+   title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
 
 end
 
