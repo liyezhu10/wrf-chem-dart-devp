@@ -114,7 +114,6 @@ if (isfield(pinfo,'cellindex'))
    cellN = 1;
 end
 
-
 % Determine shape of variable in question.
 
 varinfo = nc_getvarinfo(fname,varname);

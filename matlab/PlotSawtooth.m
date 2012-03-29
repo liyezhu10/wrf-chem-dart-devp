@@ -26,7 +26,7 @@ function PlotSawtooth( pinfo )
 % pinfo.prior_file     = 'Prior_Diag.nc';
 % pinfo.posterior_file = 'Posterior_Diag.nc';
 % pinfo.var            = 'state';
-% pinfo.var_inds       = [ 23 36 42 ]; 
+% pinfo.var_inds       = [ 23 36 42 ];
 % PlotSawtooth( pinfo );
 %
 % Example 2 ( fms_bgrid_model )
@@ -58,14 +58,14 @@ else
    truth = [];
 end
 
-%% Get some information from the prior_file 
+%% Get some information from the prior_file
 %  The metadata is queried to determine which "copy" is appropriate
 %  and a 'doubled up' x axis plotting array is created.
 
 prior.ens_mean_index = get_copy_index(pinfo.prior_file,     'ensemble mean');
  post.ens_mean_index = get_copy_index(pinfo.posterior_file, 'ensemble mean');
 
-x          = zeros(2,pinfo.time_series_length); 
+x          = zeros(2,pinfo.time_series_length);
 x(1,:)     = pinfo.time;
 x(2,:)     = pinfo.time;
 pinfo.xax  = x(:);
@@ -95,15 +95,14 @@ for ivar = pinfo.var_inds,
 
    % Get the data from the netcdf files
 
-   po_ens_mean = get_var_series(pinfo.posterior_file, pinfo.var, ...
-                 post.ens_mean_index, ivar, ...
-                 pinfo.posterior_time(1), pinfo.posterior_time(2));
-             
-   pr_ens_mean = get_var_series(pinfo.prior_file, pinfo.var, ...
-                 prior.ens_mean_index, ivar, ...
-                 pinfo.prior_time(1), pinfo.prior_time(2));
+   po_ens_mean = get_hyperslab('fname',pinfo.posterior_file, 'varname',pinfo.var, ...
+                 'copyindex',post.ens_mean_index, 'stateindex',ivar, ...
+                 'tindex1',pinfo.posterior_time(1), 'tcount',pinfo.posterior_time(2));
+   pr_ens_mean = get_hyperslab('fname',pinfo.prior_file, 'varname',pinfo.var, ...
+                 'copyindex',prior.ens_mean_index, 'stateindex',ivar, ...
+                 'tindex1',pinfo.prior_time(1), 'tcount',pinfo.prior_time(2));
 
-   % Now we paste them together in a clever way to show 
+   % Now we paste them together in a clever way to show
    % the effect of the assimilation
    ens_mean(1,:) = pr_ens_mean;
    ens_mean(2,:) = po_ens_mean;
@@ -112,27 +111,28 @@ for ivar = pinfo.var_inds,
    % Plot the true trajectory if it exists; the ens mean; annotate
 
    iplot = iplot + 1;
-   figure(iplot); clf; 
+   figure(iplot); clf;
 
-   if ( exist(pinfo.truth_file,'file') == 2 ) 
+   if ( exist(pinfo.truth_file,'file') == 2 )
 
-     true_trajectory = get_var_series(pinfo.truth_file, pinfo.var, truth.truth_index, ivar);
+     true_trajectory = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                       'copyindex',truth.truth_index, 'stateindex',ivar);
 
 	 plot(truth.time, true_trajectory, 'k-','linewidth',1.0); hold on;
 	 plot(pinfo.xax, a, 'k-','linewidth',2.0);
 	 legend('truth','ensemble mean')
-   else 
+   else
 	 plot(pinfo.xax, a, 'k-','linewidth',2.0); hold on;
 	 legend('ensemble mean')
    end
 
    ylabel(sprintf('''%s'' index %d', pinfo.var, ivar ))
-   xdates(pinfo.time)
-   title(sprintf('%s Trajectories',pinfo.model), ...  
+   xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
+   title(sprintf('%s Trajectories',pinfo.model), ...
                   'interpreter','none','fontweight','bold')
 
    % Now check to see if we are overlaying any individual ensemble members.
-   % if pinfo.copyindices = [], nothing happens. 
+   % if pinfo.copyindices = [], nothing happens.
 
    ens_colors = get(gca,'ColorOrder');   % trying to cycle through colors
    ncolors = size(ens_colors,1) - 1;     % last one is black, already used.
@@ -143,17 +143,19 @@ for ivar = pinfo.var_inds,
 
 	  str1 = deblank(metadata(imem,:));
       copy_index = get_copy_index(pinfo.prior_file, str1);
-      
-      po_series  = get_var_series(pinfo.posterior_file, pinfo.var, ...
-                       copy_index, ivar, pinfo.posterior_time(1), pinfo.posterior_time(2));
-      pr_series  = get_var_series(pinfo.prior_file,     pinfo.var, ...
-                       copy_index, ivar, pinfo.prior_time(1), pinfo.prior_time(2));
+
+      po_series  = get_hyperslab('fname',pinfo.posterior_file, 'varname',pinfo.var, ...
+                       'copyindex',copy_index, 'stateindex',ivar, ...
+                       'tindex1',pinfo.posterior_time(1), 'tcount',pinfo.posterior_time(2));
+      pr_series  = get_hyperslab('fname',pinfo.prior_file, 'varname',pinfo.var, ...
+                       'copyindex',copy_index, 'stateindex',ivar, ...
+                       'tindex1',pinfo.prior_time(1), 'tcount',pinfo.prior_time(2));
 
 	  ens_member(1,:) = pr_series;
 	  ens_member(2,:) = po_series;
 	  b               = ens_member(:);
 
-	  hold on; 
+	  hold on;
 	  memcolor = 1 + mod(nmem-1,ncolors); % cycles through colors [1,6]
 	  h = plot(pinfo.xax, b,'linewidth',0.5,'Color',ens_colors(memcolor,:));
 
@@ -181,33 +183,32 @@ for ivar = 1:length(var_names)
    figure(iplot); clf;
    ens_colors = get(gca,'ColorOrder');   % trying to cycle through colors
    ncolors    = size(ens_colors,1) - 1;  % last one is black, already used.
-   
-   vname = var_names{ivar};
-   
-   for i = 1:pinfo.copies
-       
-      %% multiple copies can get overlain on same axis
-      
-      imem = pinfo.copyindices(i);
-      
-      pinfo.tindex1   = pinfo.prior_time(1);
-      pinfo.tcount    = pinfo.prior_time(2);
-      pinfo.copyindex = pinfo.copyindices(i);
-      [start, count]  = GetNCindices(pinfo, 'prior', vname);
-      pr_series       = nc_varget(pinfo.prior_file, vname, start, count);
 
-      pinfo.tindex1   = pinfo.posterior_time(1);
-      pinfo.tcount    = pinfo.posterior_time(2);
-      [start, count]  = GetNCindices(pinfo, 'posterior', vname);
-      po_series       = nc_varget(pinfo.posterior_file, vname, start, count);
-      
+   vname = var_names{ivar};
+
+   for i = 1:pinfo.copies
+
+      %% multiple copies can get overlain on same axis
+
+      imem = pinfo.copyindices(i);
+
+      pr_series  = get_hyperslab('fname',pinfo.prior_file, 'varname',vname, ...
+                       'tindex1',pinfo.prior_time(1), 'tcount',pinfo.prior_time(2), ...
+                       'lonindex',pinfo.lonindex,'latindex',pinfo.latindex, ...
+                       'levelindex',pinfo.levelindex, 'copyindex',imem);
+
+      po_series  = get_hyperslab('fname',pinfo.posterior_file, 'varname',vname, ...
+                       'tindex1',pinfo.posterior_time(1), 'tcount',pinfo.posterior_time(2), ...
+                       'lonindex',pinfo.lonindex,'latindex',pinfo.latindex, ...
+                       'levelindex',pinfo.levelindex, 'copyindex',imem);
+
       % Paste Prior/Posterior into one series
 
       ens_member(1,:) = pr_series;
       ens_member(2,:) = po_series;
       b               = ens_member(:);
-      
-      hold on; 
+
+      hold on;
       memcolor = 1 + mod(i-1,ncolors); % cycles through colors [1,6]
 
       str1 = deblank(metadata(imem,:));
@@ -227,14 +228,13 @@ for ivar = 1:length(var_names)
    %% Plot the true trajectory if it exists
 
    if ( exist(pinfo.truth_file,'file') == 2 )      % plot it
-       
-      pinfo.tindex1   = truth.truth_time(1);
-      pinfo.tcount    = truth.truth_time(2);
-      pinfo.copyindex = truth.truth_index;
-      [start, count]  = GetNCindices(pinfo, 'truth', vname);
-      true_trajectory = nc_varget(pinfo.truth_file, vname, start, count);
 
-      h = plot(truth.time, true_trajectory, 'k-','linewidth',1.0); hold on;
+      true_trajectory  = get_hyperslab('fname',pinfo.truth_file, 'varname',vname, ...
+                       'tindex1',truth.truth_time(1), 'tcount',truth.truth_time(2), ...
+                       'lonindex',pinfo.lonindex,'latindex',pinfo.latindex, ...
+                       'levelindex',pinfo.levelindex, 'copyindex',truth.truth_index);
+
+      h = plot(truth.time, true_trajectory, 'k-*','linewidth',1.0); hold on;
 
       [~, ~, outh, outm] = legend;
       nlines             = length(outm);
@@ -248,7 +248,7 @@ for ivar = 1:length(var_names)
                   pinfo.latitude, pinfo.longitude, pinfo.levelindex ));
    set(h,'Interpreter','none')
    xdates(pinfo.time)
-   title(sprintf('%s Trajectories',pinfo.model), ...  
+   title(sprintf('%s Trajectories',pinfo.model), ...
                   'Interpreter','none','fontweight','bold')
    legend boxoff
 

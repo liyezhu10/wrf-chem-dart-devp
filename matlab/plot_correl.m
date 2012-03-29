@@ -28,8 +28,7 @@ end
 
 if ( exist(diagn_file,'file') ~= 2 ), error('%s does not exist.',diagn_file); end
 
-pinfo       = CheckModel(diagn_file); 
-pinfo.fname = diagn_file;
+pinfo = CheckModel(diagn_file);
 
 % check to make sure they are using a file with some ensemble members.
 if (pinfo.num_ens_members <= 3)

@@ -14,7 +14,8 @@ function state_vec = get_state_copy(fname, varname, copyindex, tstartind, tcount
 % $Date$
 
 
-disp('get_state_copy is deprecated, use get_hyperslab() instead.')
+disp('get_state_copy() is deprecated, use get_hyperslab() instead.')
+
 
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 

@@ -71,32 +71,34 @@ switch lower(pinfo.model)
             fprintf('plotting model %s Variable %d ...\n',pinfo.model,ivar)
             subplot(3, 1, j);
 
+            ens_mean    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'copyindex',ens_mean_index, 'stateindex',ivar, ...
+                              'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+            ens_members = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'stateindex',ivar, ...
+                              'copyindex1',pinfo.ensemble_indices(1), ...
+                              'copycount',pinfo.num_ens_members, ...
+                              'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+            h1 = plot(pinfo.time, ens_members, 'g'); hold on;
+            h2 = plot(pinfo.time, ens_mean, 'r', 'LineWidth',2.0);
+            h  = [h1(1), h2];
+            legendstr = {sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 'Ensemble Mean'};
+
             if (have_truth)
-               truth    = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                         pinfo.truth_time(1), pinfo.truth_time(2));
-               plot(pinfo.truth_times, truth,'b','LineWidth',2.0); hold on;
-               legendstr = 'True State';
-            end
+               truth    = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                              'copyindex',truth_index, 'stateindex',ivar, ...
+                              'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
 
-            ens_mean    = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
-            ens_members = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
-
-            plot(pinfo.time, ens_mean, 'r', 'LineWidth',2.0); hold on;
-            plot(pinfo.time, ens_members, 'g');
-            if (exist('legendstr','var'))
-                legend(legendstr, 'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
-               plot(pinfo.truth_times, truth,'b','LineWidth',2); % again, to put 'on top'
-            else
-               legend(           'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
+               h(3) = plot(pinfo.time, truth,'b','LineWidth',2.0);
+               legendstr{3} = 'True State';
             end
-            plot(pinfo.time,   ens_mean,'r','LineWidth',2.0);
 
             title(sprintf('%s Variable %d Ensemble Members of %s',...
                      pinfo.model, ivar, pinfo.diagn_file), ...
                      'interpreter','none','fontweight','bold');
-            xdates(pinfo.time)
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length)) 
+            legend(h,legendstr)
             legend boxoff
             hold off;
          end
@@ -111,32 +113,33 @@ switch lower(pinfo.model)
             iplot = iplot + 1;
             subplot(length(pinfo.var_inds), 1, iplot);
 
+            ens_mean    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'copyindex',ens_mean_index, 'stateindex',ivar, ...
+                              'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+            ens_members = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'stateindex',ivar, ...
+                              'copyindex1',pinfo.ensemble_indices(1), ...
+                              'copycount',pinfo.num_ens_members, ...
+                              'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+            h1 = plot(pinfo.time,ens_members,'g'); hold on;
+            h2 = plot(pinfo.time,   ens_mean,'r','LineWidth',2.0);
+            h = [h1(1), h2];
+            legendstr = {sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 'Ensemble Mean'};
+
             if (have_truth)
-               truth    = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                         pinfo.truth_time(1), pinfo.truth_time(2));
-               plot(pinfo.truth_times, truth,'b','LineWidth',2.0); hold on;
-               legendstr = 'True State';
+               truth    = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                              'copyindex',truth_index, 'stateindex',ivar, ...
+                              'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
+               h(3) = plot(pinfo.time, truth,'b','LineWidth',2.0);
+               legendstr{3} = 'True State';
             end
-
-            ens_mean    = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-            ens_members = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-
-            plot(pinfo.time,   ens_mean,'r','LineWidth',2.0); hold on;
-            plot(pinfo.time,ens_members,'g');
-            if (exist('legendstr','var'))
-               legend(legendstr, 'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
-               plot(pinfo.truth_times,   truth,'b','LineWidth',2); % again, to put 'on top'
-            else
-               legend(           'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
-            end
-            plot(pinfo.time,   ens_mean,'r','LineWidth',2.0); % again, to put 'on top'
 
             title(sprintf('%s Variable %d Ensemble Members of %s', ...
                   pinfo.model, ivar, pinfo.diagn_file), ...
                   'interpreter','none','fontweight','bold');
-            xdates(pinfo.time)
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length)) 
+            legend(h,legendstr)
             legend boxoff
             hold off;
       end
@@ -175,34 +178,40 @@ switch lower(pinfo.model)
             iplot = iplot + 1;
             subplot(length(pinfo.var_inds), 1, iplot);
 
+            ens_mean2   = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
+                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
+            ens_members2= get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
+                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
+
+            ens_mean    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'copyindex',ens_mean_index, 'stateindex',ivar, ...
+                              'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+            ens_members = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'stateindex',ivar, ...
+                              'copyindex1',pinfo.ensemble_indices(1), ...
+                              'copycount',pinfo.num_ens_members, ...
+                              'tindex1', pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+            h1 = plot(pinfo.time,ens_members,'g'); hold on;
+            h2 = plot(pinfo.time,   ens_mean,'r','LineWidth',2.0);
+            h = [h1(1), h2];
+            legendstr = {sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 'Ensemble Mean'};
+
             if (have_truth)
-               truth    = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                         pinfo.truth_time(1), pinfo.truth_time(2));
-               plot(pinfo.truth_times, truth,'b','LineWidth',2); hold on;
-               legendstr = 'True State';
+               truth    = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                              'copyindex',truth_index, 'stateindex',ivar, ...
+                              'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
+               h(3) = plot(pinfo.time, truth,'b','LineWidth',2.0);
+               legendstr{3} = 'True State';
             end
-
-            ens_mean    = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-            ens_members = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-
-            plot(pinfo.time,   ens_mean,'r','LineWidth',2); hold on;
-            plot(pinfo.time,ens_members,'g');
-
-            if (exist('legendstr','var'))
-               legend(legendstr, 'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
-               plot(pinfo.truth_times,   truth,'b','LineWidth',2); % again, to put 'on top'
-            else
-               legend(           'Ensemble Mean', sprintf('Ensemble Members (%d)',pinfo.num_ens_members), 0);
-            end
-            plot(pinfo.time,   ens_mean,'r','LineWidth',2.0); % again, to put 'on top'
 
             title(sprintf('%s %s varnum %d Ensemble Members of %s',...
                      pinfo.model, pinfo.var, ivar, pinfo.diagn_file), ...
                      'interpreter','none','fontweight','bold')
-            xdates(pinfo.time)
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length)) 
+            legend(legendstr)
             legend boxoff
+            hold off;
       end
 
    case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam'}
@@ -231,7 +240,7 @@ switch lower(pinfo.model)
          hmems = plot(pinfo.time, ens_members,'g-'); hold on;                 
          hmean = plot(pinfo.time, ens_mean,   'r-','LineWidth',2);
          legendstr = {sprintf('Ensemble Members (%d)',pinfo.num_ens_members),'Ensemble Mean'};
-         h = [hmems(1) hmean];
+         h = [hmems(1), hmean];
 
          if ( have_truth )
             truth    = get_hyperslab('fname',pinfo.truth_file, ...
@@ -240,9 +249,8 @@ switch lower(pinfo.model)
                        'latindex',pinfo.latindex, 'lonindex',pinfo.lonindex, ...
                        'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
 
-            ht = plot(pinfo.time, truth, 'b-','LineWidth',2);
-            h = [h ht];
-            legendstr(length(legendstr)+1) = {'True State'};
+            h(3) = plot(pinfo.time, truth, 'b-','LineWidth',2);
+            legendstr{3} = 'True State';
          end
          s1 = sprintf('%s model ''%s'' %s Ensemble Members ', ...
                     pinfo.model, pinfo.var, pinfo.diagn_file);
@@ -253,6 +261,7 @@ switch lower(pinfo.model)
          ylabel(varunits);
          legend(h,legendstr);
          legend boxoff
+         hold off;
     
     case {'mpas_atm'}
 
@@ -289,9 +298,8 @@ switch lower(pinfo.model)
                        'cellindex',pinfo.cellindex, ...
                        'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
                   
-            ht = plot(pinfo.time, truth, 'b-','LineWidth',2);
-            h = [h ht];
-            legendstr(length(legendstr)+1) = {'True State'};
+            h(3) = plot(pinfo.time, truth, 'b-','LineWidth',2);
+            legendstr{3} = 'True State';
          end
 
          s1 = sprintf('%s model ''%s'' %s Ensemble Members ', ...

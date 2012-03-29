@@ -68,12 +68,17 @@ switch lower(pinfo.model)
 
    case '9var'
 
-      truth      = get_state_copy(pinfo.truth_file, pinfo.var, truth_index, ...
-                                  pinfo.truth_time(1), pinfo.truth_time(2)) ;
-      ens_mean   = get_state_copy(pinfo.diagn_file, pinfo.var, ens_mean_index, ...
-                                  pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
-      ens_spread = get_state_copy(pinfo.diagn_file, pinfo.var, ens_spread_index, ...
-                                  pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
+      truth      = get_hyperslab('fname',pinfo.truth_file, ...
+                       'varname',pinfo.var, 'copyindex',truth_index, ...
+                       'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2)) ;
+
+      ens_mean   = get_hyperslab('fname',pinfo.diagn_file, ...
+                       'varname',pinfo.var, 'copyindex',ens_mean_index, ...
+                       'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
+
+      ens_spread = get_hyperslab('fname',pinfo.diagn_file, ...
+                       'varname',pinfo.var, 'copyindex',ens_spread_index, ...
+                       'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
 
       % Use three different figures with three subplots each
       for i = 1:3
@@ -97,7 +102,7 @@ switch lower(pinfo.model)
                title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
                legend(string1,string2,0)
                legend boxoff
-               xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length))
+               xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
                ylabel('distance')
          end
       end
@@ -128,7 +133,7 @@ switch lower(pinfo.model)
                title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
                legend(string1,string2,0)
                legend boxoff
-               xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length))
+               xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
                ylabel('distance')
       end
 
@@ -170,7 +175,7 @@ switch lower(pinfo.model)
 
          legend(string1,string2,0);
          legend boxoff
-         xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length));
+         xdates(pinfo.time);
          ylabel('distance');
 
    case {'mpas_atm'}

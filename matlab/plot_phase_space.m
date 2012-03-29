@@ -37,13 +37,13 @@
 % $Date$
 
 if (exist('fname','var') ~=1)
-   fname = input('Input name of netCDF file; <cr> for True_State.nc\n','s');
+   fname = input('Input name of netCDF file:\n<cr> for True_State.nc\n','s');
    if isempty(fname)
       fname = 'True_State.nc';
    end                                                                          
 else
    if isempty(fname), fname = 'True_State.nc'; end
-   s1 = input(sprintf('Input name of netCDF file. <cr> for  %s\n',fname),'s');
+   s1 = input(sprintf('Input name of netCDF file:\n<cr> for %s\n',fname),'s');
    if ~isempty(s1), fname = s1; end
 end 
 

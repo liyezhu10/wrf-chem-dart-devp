@@ -24,14 +24,15 @@
 % $Date$
 
 if (exist('truth_file','var') ~= 1)
-   truth_file = input('Input name of True State file; <cr> for True_State.nc\n','s');
+   disp('Input name of True State file:')
+   truth_file = input('<cr> for True_State.nc\n','s');
    if isempty(truth_file)
       truth_file = 'True_State.nc';
    end
 end
 
 if (exist('diagn_file','var') ~=1)
-   disp('Input name of prior or posterior diagnostics file;')
+   disp('Input name of prior or posterior diagnostics file:')
    diagn_file = input('<cr> for Prior_Diag.nc\n','s');
    if isempty(diagn_file)
       diagn_file = 'Prior_Diag.nc';
@@ -39,7 +40,7 @@ if (exist('diagn_file','var') ~=1)
 end
 
 vars  = CheckModel(diagn_file);   % also gets default values for this model.
-vars  = rmfield(vars,{'min_ens_mem','max_ens_mem','fname','time','time_series_length'}); 
+vars  = rmfield(vars,{'fname','time','time_series_length'}); 
 pinfo = CheckModelCompatibility(truth_file, diagn_file);
 pinfo = CombineStructs(pinfo,vars);
 clear vars
@@ -49,7 +50,7 @@ switch lower(pinfo.model)
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
 	 'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
 
-      varid          = SetVariableID(vars);
+      varid          = SetVariableID(pinfo);
       pinfo.var      = varid.var;
       pinfo.var_inds = varid.var_inds;
 

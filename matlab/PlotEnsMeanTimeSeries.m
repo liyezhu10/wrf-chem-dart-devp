@@ -55,8 +55,6 @@ ens_mean_index = get_copy_index(pinfo.diagn_file, 'ensemble mean');
 if ( exist(pinfo.truth_file,'file') == 2)
    have_truth  = 1;
    truth_index = get_copy_index(pinfo.truth_file, 'true state');
-   vars        = CheckModelCompatibility(pinfo);
-   pinfo       = CombineStructs(pinfo,vars);
 else
    have_truth  = 0;
    pinfo.diagn_time = [1 pinfo.time_series_length];
@@ -76,14 +74,16 @@ switch lower(pinfo.model)
 
             % If the truth is known ...
             if ( have_truth )
-               truth = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                      pinfo.truth_time(1), pinfo.truth_time(2));
+               truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                           'copyindex',truth_index, 'stateindex',ivar, ...
+                           'tindex1', pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
                plot(pinfo.time,truth,'b','LineWidth',1.0); hold on;
                legendstr = 'True State';
             end
 
-            ens_mean = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                      pinfo.diagn_time(1), pinfo.diagn_time(2));
+            ens_mean = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                           'copyindex',ens_mean_index, 'stateindex',ivar, ...
+                           'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
             plot(pinfo.time,ens_mean,'r','LineWidth',1.0)
 
             if (exist('legendstr','var'))
@@ -94,7 +94,7 @@ switch lower(pinfo.model)
 
             title(sprintf('%s Variable %d of %s',pinfo.model,ivar,pinfo.diagn_file), ...
                      'interpreter','none','fontweight','bold')
-            xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length))
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
             legend boxoff
             hold off;
          end
@@ -109,21 +109,23 @@ switch lower(pinfo.model)
             iplot = iplot + 1;
             subplot(length(pinfo.var_inds), 1, iplot);
 
-            ens_mean    = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
+            ens_mean    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                              'copyindex',ens_mean_index, 'stateindex', ivar, ...
+                              'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
             plot(pinfo.time, ens_mean, 'r');
             legend('Ensemble Mean',0);
 
             if ( have_truth )
-               truth = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                      pinfo.truth_time(1), pinfo.truth_time(2));
+               truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                           'copyindex',truth_index, 'stateindex',ivar, ...
+                           'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
                hold on; plot(pinfo.time,truth,'b'); hold off;
                legend('Ensemble Mean','True State',0);
             end
 
             s1 = sprintf('%s Variable %d',pinfo.model,ivar);
             title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
-            xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length))
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
             legend boxoff
       end
 
@@ -159,21 +161,23 @@ switch lower(pinfo.model)
       for ivar = pinfo.var_inds,
             iplot = iplot + 1;
             subplot(length(pinfo.var_inds), 1, iplot);
-            ens_mean = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
+            ens_mean = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                           'copyindex',ens_mean_index, 'stateindex',ivar, ...
+                           'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
             plot(pinfo.time, ens_mean, 'r')
             legend('Ensemble Mean',0)
 
             % Get the truth for this variable
             if (have_truth)
-               truth = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ivar, ...
-                                      pinfo.truth_time(1), pinfo.truth_time(2));
+               truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                           'copyindex',truth_index, 'stateindex',ivar, ...
+                           'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
                hold on; plot(pinfo.time,truth,'b'); hold off;
                legend('Ensemble Mean','True State',0)
             end
             s1 = sprintf('%s Variable %d',pinfo.model,ivar);
             title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
-            xlabel(sprintf('model time (%d timesteps)',pinfo.time_series_length))
+            xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
             legend boxoff
       end
 
@@ -181,25 +185,16 @@ switch lower(pinfo.model)
 
       clf;
 
-      varunits  = nc_attget(pinfo.fname, pinfo.var, 'units');
+      varunits  = nc_attget(pinfo.diagn_file, pinfo.var, 'units');
 
       subplot(2,1,1)
          PlotLocator(pinfo)
 
-      ens_mean    = GetCopy(pinfo.diagn_file, ens_mean_index,   pinfo , ...
-                            pinfo.diagn_time(1), pinfo.diagn_time(2)) ;
-
-      ens_mean2  = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
-                       'copyindex',ens_mean_index, 'levelindex',pinfo.levelindex, ...
-                       'latindex',pinfo.latindex, 'lonindex',pinfo.lonindex, ...
-                       'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
-                   
-                   if (sum(ens_mean(:) - ens_mean2(:)) == 0)
-                       disp('TIM ... can remove GetCopy call')
-                   else
-                       disp('TIM ... fix get_hyperslab call')
-                   end
-
+      ens_mean  = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                      'copyindex',ens_mean_index, 'levelindex',pinfo.levelindex, ...
+                      'latindex',pinfo.latindex, 'lonindex',pinfo.lonindex, ...
+                      'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
+                  
       subplot(2,1,2)
          plot(pinfo.time, ens_mean, 'r');
          legend('Ensemble Mean',0)
@@ -211,20 +206,12 @@ switch lower(pinfo.model)
          title({s1,s2,pinfo.diagn_file},'interpreter','none','fontweight','bold')
 
          if (have_truth)
-            truth = GetCopy(pinfo.truth_file, truth_index,      pinfo , ...
-                            pinfo.truth_time(1), pinfo.truth_time(2)) ;
 
-            truth2 = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
-                       'copyindex',truth_index, 'levelindex',pinfo.levelindex, ...
-                       'latindex',pinfo.latindex, 'lonindex',pinfo.lonindex, ...
-                       'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
-                   
-                   if (sum(truth(:) - truth2(:)) == 0)
-                       disp('TIM ... can remove GetCopy call')
-                   else
-                       disp('TIM ... fix get_hyperslab call')
-                   end
-                   
+            truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                      'copyindex',truth_index, 'levelindex',pinfo.levelindex, ...
+                      'latindex',pinfo.latindex, 'lonindex',pinfo.lonindex, ...
+                      'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
+                    
             hold on; plot(pinfo.time, truth,'b'); hold off;
             legend('Ensemble Mean','True State',0)
          end
@@ -237,7 +224,7 @@ switch lower(pinfo.model)
 
       clf;
 
-      varunits  = nc_attget(pinfo.fname, pinfo.var, 'units');
+      varunits  = nc_attget(pinfo.diagn_file, pinfo.var, 'units');
 
       subplot(2,1,1)
          PlotLocator(pinfo)
@@ -288,33 +275,6 @@ end
 %======================================================================
 % Subfunctions
 %======================================================================
-
-function var = GetCopy(fname, copyindex, pinfo, tstartind, tendind)
-% Gets a time-series of a single specified copy of a prognostic variable
-% at a particular 3D location (level, lat, lon)
-
-disp('PlotEnsMeanTimeSeries:GetCopy is deprecated, use get_hyperslab() instead.')
-
-myinfo.diagn_file = fname;
-myinfo.copyindex  = copyindex;
-myinfo.levelindex = pinfo.levelindex;
-myinfo.latindex   = pinfo.latindex;
-myinfo.lonindex   = pinfo.lonindex;
-[start, count]    = GetNCindices(myinfo,'diagn',pinfo.var);
-
-varinfo = nc_getvarinfo(fname,pinfo.var);
-
-for i = 1:length(varinfo.Dimension)
-   switch( lower(varinfo.Dimension{i}))
-      case{'time'}
-         start(i) = tstartind - 1;
-         count(i) = tendind - tstartind + 1;
-         break
-      otherwise
-   end
-end
-var = nc_varget(fname, pinfo.var, start, count);
-
 
 
 function PlotLocator(pinfo)

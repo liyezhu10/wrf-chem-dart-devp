@@ -23,6 +23,8 @@ function var_vec = get_var_series(fname, varname, copyindex, state_var, tstart, 
 
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
+disp('get_var_series() is deprecated, use get_hyperslab() instead.')
+
 if (nargin == 4)
   tstart =  1;
   tcount = -1;

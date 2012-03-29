@@ -133,20 +133,20 @@ switch lower(pinfo.model)
       % perform a single correlation
       correl = jeff_correl(base_var, state_var);
       
-      clf; plot(correl);
+      clf; plot(pinfo.time,correl);
       
-      s1 = sprintf('%s Correlation of variable %s %d, T = %d, with variable %s %d', ...
+      s1 = sprintf('%s Correlation of variable %s %d, timestep = %d, with variable %s %d', ...
                pinfo.model, pinfo.base_var, pinfo.base_var_index, pinfo.base_time, ...
                       pinfo.state_var, pinfo.state_var_index);
       s2 = sprintf('%d ensemble members', pinfo.num_ens_members); 
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
-      xlabel('time (timestep #)')
+      xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
       ylabel('correlation')
       
       % call out the time index in question, and put a corr==0 reference line.
       ax = axis;
       hold on;
-      plot([pinfo.base_time pinfo.base_time],[ -1 1 ],'k:', ...
+      plot([pinfo.time(pinfo.base_time) pinfo.time(pinfo.base_time)],[ -1 1 ],'k:', ...
            [ax(1)         ax(2)],[  0 0 ],'k:')
       
       %axis(ax)

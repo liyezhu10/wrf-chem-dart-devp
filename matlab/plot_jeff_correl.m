@@ -13,7 +13,7 @@
 % $Date$
 
 if (exist('fname','var') ~=1)
-   disp('Input name of file;')
+   disp('Input name of file:')
    fname = input('<cr> for Prior_Diag.nc\n','s');
    if isempty(fname)
       fname = 'Prior_Diag.nc';

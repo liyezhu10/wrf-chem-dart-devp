@@ -35,7 +35,7 @@ function PlotVarVarCorrel( pinfo )
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
-[num_times, num_copies, num_vars] = parse_varshape(pinfo.fname, pinfo.base_var);
+[num_times, ~, num_vars] = parse_varshape(pinfo.fname, pinfo.base_var);
 
 switch lower(pinfo.model)
 
@@ -135,27 +135,32 @@ switch lower(pinfo.model)
       end
       
       % Get 'standard' ensemble series 
-       base_var = get_ens_series(pinfo.fname, pinfo.base_var,  pinfo.base_var_index);
-      state_var = get_ens_series(pinfo.fname, pinfo.state_var, pinfo.state_var_index);
+      base_var  = get_hyperslab('fname',pinfo.fname, ...
+                      'varname',pinfo.base_var,  'stateindex',pinfo.base_var_index, ...
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+      state_var = get_hyperslab('fname',pinfo.fname, ...
+                      'varname',pinfo.state_var, 'stateindex',pinfo.state_var_index, ...
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+
       nmembers  = size(state_var,2);
 
       % perform a single correlation
       correl = ens_correl(base_var, pinfo.base_time, state_var);
       
-      clf; plot(correl);
+      clf; plot(pinfo.time,correl);
       
-      s1 = sprintf('%s Correlation of variable %s %d, T = %d, with variable %s %d', ...
+      s1 = sprintf('%s Correlation of variable %s %d, timestep = %d, with variable %s %d', ...
                pinfo.model, pinfo.base_var, pinfo.base_var_index, pinfo.base_time, ...
                       pinfo.state_var, pinfo.state_var_index);
       s2 = sprintf('%d ensemble members -- %s', nmembers, pinfo.fname); 
       title({s1,s2},'interpreter','none','fontweight','bold')
-      xlabel('time (timestep #)')
+      xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
       ylabel('correlation')
       
       % call out the time index in question, and put a corr==0 reference line.
       ax = axis;
       hold on;
-      plot([pinfo.base_time pinfo.base_time],[ -1 1 ],'k:', ...
+      plot([pinfo.time(pinfo.base_time) pinfo.time(pinfo.base_time)],[ -1 1 ],'k:', ...
            [ax(1)         ax(2)],[  0 0 ],'k:')
       
       %axis(ax)
@@ -201,7 +206,7 @@ function var = GetEns( fname, varname, lvlind, latind, lonind)
 
 disp('PlotVarVarCorrel:GetEns is deprecated, use get_hyperslab instead.')
 
-[ens_num, copyindices] = get_ensemble_indices(fname);
+[~, copyindices] = get_ensemble_indices(fname);
 
 % Get all ensemble members, just return desired ones.
 myinfo.diagn_file = fname;
@@ -237,4 +242,4 @@ else
    monstr = datestr(dates(1),31);
    xlabelstring = sprintf('%s start',monstr);
 end
-xlabel(xlabelstring
+xlabel(xlabelstring)
