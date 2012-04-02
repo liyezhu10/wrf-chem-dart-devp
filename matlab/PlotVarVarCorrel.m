@@ -43,10 +43,15 @@ switch lower(pinfo.model)
 
       clf;
 
-      base_mem = GetEns( pinfo.fname, pinfo.base_var, ...
-                    pinfo.base_lvlind, pinfo.base_latind, pinfo.base_lonind );
-      comp_mem = GetEns( pinfo.fname, pinfo.comp_var, ...
-                    pinfo.comp_lvlind, pinfo.comp_latind, pinfo.comp_lonind );
+      base_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname',pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'latindex',pinfo.base_latind, 'lonindex',pinfo.base_lonind );
+      comp_mem = get_hyperslab('fname', pinfo.fname, ...
+                     'varname',pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'latindex',pinfo.comp_latind, 'lonindex',pinfo.comp_lonind );
+
       nmembers = size(comp_mem,2);
 
       correl = ens_correl(base_mem, pinfo.base_tmeind, comp_mem);
@@ -55,7 +60,7 @@ switch lower(pinfo.model)
          PlotLocator(pinfo)
 
       subplot(2,1,2)
-         plot(pinfo.times,correl);
+         plot(pinfo.time,correl);
 
       s1 = sprintf('%s Correlation of ''%s'', T = %d, lvl = %d, lat = %.2f, lon=%.2f', ...
           pinfo.model, pinfo.base_var, pinfo.base_time, pinfo.base_lvl, ...
@@ -79,9 +84,11 @@ switch lower(pinfo.model)
       clf;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname',pinfo.base_var, ...
-                    'levelindex',pinfo.base_lvlind, 'cellindex',pinfo.base_cellindex);
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'levelindex',pinfo.base_lvlind, 'cellindex',pinfo.base_cellindex);
       comp_mem = get_hyperslab('fname', pinfo.fname, 'varname',pinfo.comp_var, ...
-                    'levelindex',pinfo.comp_lvlind, 'cellindex',pinfo.comp_cellindex);
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'levelindex',pinfo.comp_lvlind, 'cellindex',pinfo.comp_cellindex);
       nmembers = size(comp_mem,2);
 
       correl = ens_correl(base_mem, pinfo.base_tmeind, comp_mem);
@@ -90,7 +97,7 @@ switch lower(pinfo.model)
          PlotLocator(pinfo)
 
       subplot(2,1,2)
-         plot(pinfo.times,correl);
+         plot(pinfo.time,correl);
 
       s1 = sprintf('%s Correlation of ''%s'', T = %d, lvl = %d, lat = %.2f, lon=%.2f', ...
           pinfo.model, pinfo.base_var, pinfo.base_time, pinfo.base_lvl, ...
@@ -197,26 +204,6 @@ for i = 1:3  % only want/need the first 3 dimensions.
          n3 = varinfo.Size(i);
    end
 end
-
-
-
-function var = GetEns( fname, varname, lvlind, latind, lonind)
-% Gets a time-series of all copies of a prognostic variable 
-% at a particular 3D location (level, lat, lon).
-
-disp('PlotVarVarCorrel:GetEns is deprecated, use get_hyperslab instead.')
-
-[~, copyindices] = get_ensemble_indices(fname);
-
-% Get all ensemble members, just return desired ones.
-myinfo.diagn_file = fname;
-myinfo.levelindex = lvlind;
-myinfo.latindex   = latind;
-myinfo.lonindex   = lonind;
-[start, count]    = GetNCindices(myinfo,'diagn',varname);
-
-bob = nc_varget(fname, varname, start, count); % 'bob' is only 2D 
-var = bob(:,copyindices);
 
 
 

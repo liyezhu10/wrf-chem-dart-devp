@@ -89,7 +89,7 @@ switch lower(deblank(routine))
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVar(pinfo.vars, base_var);
-      [comp_lvl, comp_lvlind] = GetLevel(levels,   base_lvlind);
+      [comp_lvl, comp_lvlind] = GetLevel(comp_var, levels, base_lvlind);
       [comp_lat, comp_latind] = GetLatitude(lat,   base_lat);
       [comp_lon, comp_lonind] = GetLongitude(lon,  base_lon);
 
