@@ -6,21 +6,21 @@ function PlotBins(pinfo)
 % components.
 %
 % USAGE: PlotBins(pinfo)
-% 
+%
 % STRUCTURE COMPONENTS FOR low-order models
 % truth_file      name of netCDF DART file with copy tagged 'true state'
 % diagn_file      name of netCDF DART file with copy tagged 'ensemble mean'
 % var_inds        indices of state variables of interest
 %
 % Example 1 (Lorenz_96  model)
-%%-------------------------------------------------------- 
+%%--------------------------------------------------------
 % pinfo.truth_file = 'True_State.nc';
 % pinfo.diagn_file = 'Prior_Diag.nc';
 % pinfo.var_inds   = [3 4 36 39 22];
 % PlotBins( pinfo );
 %
 % Example 2 (FMS BGrid model)
-%%-------------------------------------------------------- 
+%%--------------------------------------------------------
 % pinfo.truth_file = 'True_State.nc';
 % pinfo.diagn_file = 'Prior_Diag.nc';
 % pinfo.var        = 'u';
@@ -38,6 +38,10 @@ function PlotBins(pinfo)
 % $Id$
 % $Revision$
 % $Date$
+
+if isempty(pinfo.num_ens_members)
+    error('no ensemble members in %s, cannot create rank histogram.',pinfo.diagn_file)
+end
 
 % Get the state for the truth
 truth_index = get_copy_index(pinfo.truth_file,'true state');
@@ -86,16 +90,16 @@ switch lower(pinfo.model)
                                ivar, pinfo.truth_time(1), pinfo.truth_time(2));
          ens2   = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
                                    pinfo.diagn_time(1), pinfo.diagn_time(2));
-                               
+
          truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
                      'copyindex',truth_index, 'stateindex',ivar, ...
-                     'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));                     
+                     'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
          ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                         'stateindex',ivar, ...
                         'copyindex1',pinfo.ensemble_indices(1), ...
                         'copycount',pinfo.num_ens_members, ...
                         'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
-                    
+
          bins  = rank_hist(ens, truth);
          subplot(length(pinfo.var_inds), 1, iplot);
          bar(bins);
@@ -121,16 +125,16 @@ switch lower(pinfo.model)
                                ivar, pinfo.truth_time(1), pinfo.truth_time(2));
          ens2   = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
                                    pinfo.diagn_time(1), pinfo.diagn_time(2));
-                               
+
          truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
                      'copyindex',truth_index, 'stateindex',ivar, ...
-                     'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));                      
+                     'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
          ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                         'stateindex',ivar, ...
                         'copyindex1',pinfo.ensemble_indices(1), ...
                         'copycount',pinfo.num_ens_members, ...
                         'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
-                    
+
          bins  = rank_hist(ens, truth);
          subplot(length(pinfo.var_inds), 1, iplot);
          bar(bins);
@@ -187,7 +191,7 @@ end
 
 
 function var = GetCopy(pinfo)
-% Gets a time-series of a single specified 'true' copy of a prognostic variable 
+% Gets a time-series of a single specified 'true' copy of a prognostic variable
 % at a particular 3D location (level, lat, lon)
 
 pinfo.tindex1  = pinfo.truth_time(1);
@@ -199,7 +203,7 @@ var = nc_varget(pinfo.truth_file, pinfo.var, start, count);
 
 
 function var = GetEns(pinfo)
-% Gets a time-series of all copies of a prognostic variable 
+% Gets a time-series of all copies of a prognostic variable
 % at a particular location (level, gridcell).
 
 pinfo.tindex1    = pinfo.diagn_time(1);
@@ -222,4 +226,4 @@ function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');
    axis([0 360 -90 90]);
    continents;
-   
+

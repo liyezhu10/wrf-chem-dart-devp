@@ -113,4 +113,4 @@ end
 pinfo
 
 PlotSawtooth( pinfo )
-clear pinfo pinfo
+

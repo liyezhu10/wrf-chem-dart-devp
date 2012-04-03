@@ -737,10 +737,6 @@ function MPAS_ATMTotalError( pinfo )
 % for each variable (all levels combined and considered equal).
 %---------------------------------------------------------------------
 
-tstart     = pinfo.truth_time(1);
-tcount     = pinfo.truth_time(2);
-dstart     = pinfo.diagn_time(1);
-dcount     = pinfo.diagn_time(2);
 num_times  = pinfo.time_series_length;
 
 % Get the indices for the true state, ensemble mean and spread
@@ -765,9 +761,14 @@ for ivar=1:pinfo.num_state_vars,
    fprintf('%s ...\n',s1)
 
    % Initialize storage for error averaging
-   num_levels   = FindNLevels(pinfo.truth_file, pinfo.vars{ivar});
-   rms          = zeros(num_times, num_levels);
-   spread_final = zeros(num_times, num_levels);
+   num_levels   = FindNLevels(   pinfo.truth_file, pinfo.vars{ivar});
+   num_locations= FindNLocations(pinfo.truth_file, pinfo.vars{ivar});
+   sqerr        = zeros(num_times, num_locations);
+   sqspread     = zeros(num_times, num_locations);
+
+   if (length(weights) ~= num_locations)
+      error('%s is not a cell-based quantity. Cannot apply weights.\n',pinfo.vars{ivar})
+   end
 
    %% Loop over all levels for this variable
    for ilevel = 1:num_levels,
@@ -795,20 +796,22 @@ for ivar=1:pinfo.num_state_vars,
           spread = spread';
       end
 
-      err        = total_err(              truth,    ens, weights);
-      err_spread = total_err(zeros(size(spread)), spread, weights);
-
-               rms(:, ilevel) = err;
-      spread_final(:, ilevel) = err_spread;
+      sqerr    = sqerr    + (truth - ens).^2;
+      sqspread = sqspread + spread .^2;
 
    end
+
+   clear truth ens spread
+
+   sqerr     = sqerr    / num_levels; % average of all levels
+   sqspread  = sqspread / num_levels;
+   rmsetot   = sqrt( sqerr    * weights );
+   spreadtot = sqrt( sqspread * weights );
 
    %% Plot the time-evolution for all levels on one figure.
 
    figure(ivar); clf;
 
-   rmsetot   = sum(rms,2);
-   spreadtot = sum(spread_final,2);
    plot(pinfo.time, rmsetot,'-',pinfo.time, spreadtot,'--');
 
    s = {sprintf('time-mean Ensemble Mean error = %f', mean(rmsetot)), ...
@@ -936,15 +939,35 @@ end
 
 
 
+function nlocations = FindNLocations(fname, varname)
+%%
+varinfo    = nc_getvarinfo(fname,varname);
+nlocations = [];
+
+for i = 1:length(varinfo.Dimension)
+   switch( lower(varinfo.Dimension{i}))
+      case{'ncells','nedges'}
+         nlocations = varinfo.Size(i);
+         break
+      otherwise
+   end
+end
+
+
+
 function xdates(dates)
-if (length(get(gca,'XTick')) > 6)
+ndates    = length(dates);
+daterange = dates(ndates) - dates(1);
+
+if ( (ndates < 5) && (daterange > 0.5))
+   set(gca,'XTick',dates)
+   datetick('x',31,'keeplimits','keepticks'); %'yyyy-mm-dd HH:MM:SS'
+elseif (length(get(gca,'XTick')) > 6)
    datetick('x','mm.dd.HH','keeplimits','keepticks');
    monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('month/day/HH - %s start',monstr);
+   xlabel(sprintf('month/day/HH - %s start',monstr));
 else
-   datetick('x',31,'keeplimits','keepticks'); %'yyyy-mm-dd HH:MM:SS'
-   monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('%s start',monstr);
+   datetick('x',31,'keeplimits','keepticks');
 end
-xlabel(xlabelstring)
+
 
