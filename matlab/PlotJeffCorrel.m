@@ -108,13 +108,17 @@ switch lower(pinfo.model)
          fprintf('%s only has %d state variables\n', pinfo.fname, num_vars)
          error('you wanted variable # %d ', pinfo.base_var_index)
       end
-      
-      % Get 'standard' ensemble series 
-       base_var = get_ens_series(pinfo.fname, pinfo.base_var,  pinfo.base_var_index);
-      state_var = get_ens_series(pinfo.fname, pinfo.state_var, pinfo.state_var_index);
-      pinfo.num_ens_members  = size(state_var,2);
 
-      % perform a single correlation
+      % Get 'standard' ensemble series 
+      base_var  = get_hyperslab('fname',pinfo.fname, ...
+                      'varname',pinfo.base_var, 'stateindex',pinfo.base_var_index, ...
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+
+      state_var = get_hyperslab('fname',pinfo.fname, ...
+                      'varname',pinfo.state_var, 'stateindex',pinfo.state_var_index, ...
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+
+      % perform correlation
       correl = jeff_correl(base_var, state_var);
       
       clf; plot(pinfo.time,correl);
