@@ -622,7 +622,7 @@ if (use_new_code) then
       write(string1,*) 'edge normal winds (u) in MPAS file will be updated based on U/V reconstructed winds'
       write(string2,*) 'and not from the real edge normal values in the state vector'
       write(string3,*) 'because update_u_from_reconstruct is True'
-      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate, &
+      call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate, &
                          text2=string2, text3=string3)
    endif
 endif
