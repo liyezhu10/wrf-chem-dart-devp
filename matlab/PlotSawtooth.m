@@ -275,14 +275,13 @@ end
 
 
 function xdates(dates)
-if (length(get(gca,'XTick')) > 6)
-   datetick('x','mm.dd.HH','keeplimits','keepticks'); % 'mm/dd'
-   monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('month/day/HH - %s start',monstr);
+if (length(dates) < 5)
+   set(gca,'XTick',dates);
+   datetick('x',31,'keepticks','keeplimits');
+   xlabel('Model date (YYYY-MM-DD HH:MM:SS)')
 else
-   datetick('x',31,'keeplimits','keepticks'); %'yyyy-mm-dd HH:MM:SS'
+   datetick('x','mm.dd.HH','keeplimits'); % 'mm/dd'
    monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('%s start',monstr);
+   xlabel(sprintf('month.day.HH - %s start',monstr))
 end
-xlabel(xlabelstring)
 

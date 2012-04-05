@@ -68,9 +68,6 @@ switch lower(pinfo.model)
 
       ens_mem_id = get_copy_index(pinfo.fname, pinfo.ens_mem);  % errors out if no ens_mem
 
-      x2= get_var_series(pinfo.fname, pinfo.var1name, ens_mem_id, pinfo.var1ind);
-      y2= get_var_series(pinfo.fname, pinfo.var2name, ens_mem_id, pinfo.var2ind);
-
       x = get_hyperslab('fname',pinfo.fname,       'varname',pinfo.var1name, ...
                         'copyindex',ens_mem_id, 'stateindex',pinfo.var1ind);
       y = get_hyperslab('fname',pinfo.fname,       'varname',pinfo.var2name, ...

@@ -1,4 +1,4 @@
-function CAMTotalError( pinfo )
+function BgridTotalError( pinfo )
 %% -------------------------------------------------------------------
 % Plot the total area-weighted error for each variable.
 %---------------------------------------------------------------------
@@ -13,17 +13,6 @@ function CAMTotalError( pinfo )
 % $Revision$
 % $Date$
 
-% Since the models are "compatible", get the info from either one.
-lons       = nc_varget(pinfo.truth_file, 'lon');
-gw         = nc_varget(pinfo.truth_file, 'gw');
-num_lons   = length(lons);
-
-% make a matrix of weights for each horizontal slice
-% ensure the gaussian weights sum to unity.
-[~,weights] = meshgrid(ones(1,num_lons),gw);
-weights     = weights/sum(weights(:));
-wts         = weights(:);
-
 % Get the indices for the true state, ensemble mean and spread
 % The metadata is queried to determine which "copy" is appropriate.
 truth_index      = get_copy_index(pinfo.truth_file, 'true state');
@@ -36,51 +25,63 @@ ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
 
 for ivar=1:pinfo.num_state_vars,
 
-   varname = pinfo.vars{ivar};
+   fprintf('Processing %s ...\n', pinfo.vars{ivar} )
+    
+   rmse     = zeros(pinfo.time_series_length,1);
+   sprd     = zeros(pinfo.time_series_length,1);
+   varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
 
-   rmse = zeros(pinfo.time_series_length,1);
-   sprd = zeros(pinfo.time_series_length,1);
+   % determine what grid the variable lives on
+   % determine the number of levels
+
+   nlevels = 1;
+
+   varinfo = nc_getvarinfo(pinfo.diagn_file,pinfo.vars{ivar});
+
+   for idim = 1:length(varinfo.Dimension),
+      dimname   = varinfo.Dimension{idim};
+      dimlength = varinfo.Size(idim);
+      switch lower(dimname)
+         case {'tmpj', 'velj'}
+            latitudes   = nc_varget(pinfo.diagn_file, dimname);
+         case {'tmpi', 'veli'}
+            longitudes  = nc_varget(pinfo.diagn_file, dimname);
+         case {'lev'}
+            nlevels     = dimlength; 
+      end
+   end
+
+   % Calculate weights for area-averaging.
+   weights = SphereWeights(latitudes, longitudes);
 
    for itime=1:pinfo.time_series_length,
    
-      fprintf('Processing %s timestep %d of %d ...\n', ...
-                varname, itime, pinfo.time_series_length)
-   
-      truth  = get_hyperslab('fname',pinfo.truth_file, 'varname',varname, ...
+      truth  = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.vars{ivar}, ...
                    'copyindex',truth_index, 'timeindex',pinfo.truth_time(1)+itime-1);
-      ens    = get_hyperslab('fname',pinfo.diagn_file, 'varname',varname, ...
+      ens    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
                    'copyindex',ens_mean_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
-      spread = get_hyperslab('fname',pinfo.diagn_file, 'varname',varname, ...
+      spread = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
                    'copyindex',ens_spread_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
-   
-      if (length(size(truth)) == 2)
-         nlev = 1;
-      elseif (length(size(truth)) == 3)
-         nlev = size(truth,3);
-      else
-         error('Dang, this cannot happen in CAM.')
-      end
 
       %% Calculate the weighted mean squared error for each level.
+      %  tensors come back [nlev,nlat,nlon] - or - [nlat,nlon]
 
-      msqe_Z = zeros(nlev,1);
-      sprd_Z = zeros(nlev,1);
-      
-      for ilevel=1:nlev,
+      sqerr  = (truth - ens).^2;
+      sqsprd =    spread    .^2;
 
-         slabS2E   = (truth(:,:,ilevel) - ens(:,:,ilevel)).^2;  % OK even if 2D iff ilevel = 1
-         XY_err    = sum(slabS2E(:) .* wts);
-         slabS2E   = spread(:,:,ilevel).^2;
-         XY_spread = sum(slabS2E(:) .* wts);
+      if (nlevels > 1) % take the mean over the first dimension
+         sqerr  = squeeze(mean(sqerr ,1));
+         sqsprd = squeeze(mean(sqsprd,1));
+      end
 
-         msqe_Z(ilevel) = XY_err;
-         sprd_Z(ilevel) = XY_spread;
+      %% Create the (weighted) mean squared error
 
-      end % loop over levels 
+      ms_err    = sum(sqerr(:)  .* weights);
+      ms_spread = sum(sqsprd(:) .* weights);
 
-      %% Take the square root of the mean of all levels
-      rmse(itime) = sqrt(mean(msqe_Z));
-      sprd(itime) = sqrt(mean(sprd_Z));
+      %% Take the square root of the mean squared error
+      rmse(itime) = sqrt(ms_err);
+      sprd(itime) = sqrt(ms_spread);
       
    end % loop over time
 
@@ -88,8 +89,6 @@ for ivar=1:pinfo.num_state_vars,
    % Each variable in its own figure window
    %-------------------------------------------------------------------
    figure(ivar); clf;
-      varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
-
       plot(pinfo.time,rmse,'-', pinfo.time,sprd,'--')
 
       s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(rmse));
@@ -107,6 +106,34 @@ end % loop around variables
 clear truth ens spread err XY_spread
 
 
+
+
+function weights = SphereWeights(lats,lons)
+%% SphereWeights creates [nlat*nlon,1] matrix of weights based on latitude
+%
+% lats,lons must be 1D arrays (in degrees)
+
+nlats = length(lats);
+nlons = length(lons);
+
+if ( numel(lats) ~= nlats )
+   disp('latitude array is of higher dimension than anticipated.')
+   error('Must be a vector.')
+end
+if ( numel(lons) ~= nlons )
+   disp('longitude array is of higher dimension than anticipated.')
+   error('Must be a vector.')
+end
+
+rads    = zeros(nlats,1);               % Ensure lats is a column vector,
+rads(:) = pi*lats/180.0;                % and convert to radians.
+wts     = cos( rads ) * ones(1,nlons);  % Results in a [nlat-x-nlon] matrix.
+wts     = wts ./ sum(wts(:));           % Normalize to unity.
+weights = wts(:);
+
+
+
+
 function xdates(dates)
 if (length(get(gca,'XTick')) > 6)
    datetick('x','mm.dd.HH','keeplimits'); % 'mm/dd'
@@ -118,3 +145,4 @@ else
    xlabelstring = sprintf('%s start',monstr);
 end
 xlabel(xlabelstring)
+

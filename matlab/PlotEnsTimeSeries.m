@@ -178,11 +178,6 @@ switch lower(pinfo.model)
             iplot = iplot + 1;
             subplot(length(pinfo.var_inds), 1, iplot);
 
-            ens_mean2   = get_var_series(pinfo.diagn_file, pinfo.var, ens_mean_index, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-            ens_members2= get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                         pinfo.diagn_time(1), pinfo.diagn_time(2));
-
             ens_mean    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                               'copyindex',ens_mean_index, 'stateindex',ivar, ...
                               'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2)) ;
@@ -209,7 +204,7 @@ switch lower(pinfo.model)
                      pinfo.model, pinfo.var, ivar, pinfo.diagn_file), ...
                      'interpreter','none','fontweight','bold')
             xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length)) 
-            legend(legendstr)
+            legend(h,legendstr)
             legend boxoff
             hold off;
       end
@@ -341,13 +336,13 @@ function PlotLocator(pinfo)
 
 
 function xdates(dates)
-if (length(get(gca,'XTick')) > 6)
+if (length(dates) < 5)
+   set(gca,'XTick',dates);
+   datetick('x',31,'keepticks','keeplimits');
+   xlabel('Model date (YYYY-MM-DD HH:MM:SS)')
+else
    datetick('x','mm.dd.HH','keeplimits'); % 'mm/dd'
    monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('month/day/HH - %s start',monstr);
-else
-   datetick('x',31,'keeplimits'); %'yyyy-mm-dd HH:MM:SS'
-   monstr = datestr(dates(1),31);
-   xlabelstring = sprintf('%s start',monstr);
+   xlabel(sprintf('month.day.HH - %s start',monstr))
 end
-xlabel(xlabelstring)
+

@@ -36,8 +36,6 @@ if (isempty(model))
    error('%s has no ''model'' global attribute.',fname)
 end
 
-copy = nc_varget(fname,'copy');
-
 switch lower(model)
 
    case {'9var','lorenz_63','lorenz_84','ikeda'}

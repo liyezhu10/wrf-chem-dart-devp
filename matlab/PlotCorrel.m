@@ -87,13 +87,13 @@ switch(lower(pinfo.model))
       disp('Please be patient ... this usually takes a bit ...')
       clf;
 
-      [cs,h] = contour(pinfo.time, 1:pinfo.num_state_vars, correl, contourlevels);
+      [cs,h] = contour(pinfo.time, 1:num_vars, correl, contourlevels);
  %    clabel(cs,h,'FontSize',12,'Color','k','Rotation',0);
       set(gca,'Clim',[-1 1])
       hold on; % highlight the reference state variable and time
-      plot(base_time,base_var_index,'kh','MarkerSize',12,'MarkerFaceColor','k')
+      plot(pinfo.time(base_time),base_var_index,'kh','MarkerSize',12,'MarkerFaceColor','k')
 
-      s1 = sprintf('%s Correlation of variable %s index %d, T = %d', ...
+      s1 = sprintf('%s Correlation of variable %s index %d, timestep = %d', ...
                pinfo.model, pinfo.base_var, base_var_index, base_time);
       s2 = sprintf('against all variables, all times, %d ensemble members', ...
                size(state_var,2));

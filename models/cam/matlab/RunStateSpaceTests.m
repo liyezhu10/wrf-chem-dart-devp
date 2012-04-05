@@ -43,7 +43,7 @@ end
  truth_file = 'True_State.nc';
  diagn_file = 'Prior_Diag.nc';
  vars1 = CheckModel(diagn_file);
- rmfield(vars1,{'time','time_series_length','fname'});
+ vars1 = rmfield(vars1,{'time','time_series_length','fname'});
  vars2 = CheckModelCompatibility(truth_file,diagn_file);
  pinfo = CombineStructs(vars1,vars2);
  pinfo.var = 'T';

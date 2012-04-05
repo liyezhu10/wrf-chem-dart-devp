@@ -29,12 +29,9 @@ if (interactive)
 end
 
  clear pinfo; close all; 
- pinfo.truth_file     = './True_State.nc';
- pinfo.diagn_file     = './Prior_Diag.nc';
- pinfo.model          = 'Forced_Lorenz_96';
+ pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+[pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var            = 'state';
- pinfo.truth_time     = [1 1000];
- pinfo.diagn_time     = [1 1000];
  pinfo.var_inds       = [1 13 27];
  
  clf; PlotBins(pinfo)
@@ -58,24 +55,7 @@ if (interactive)
 end
 
  clear pinfo; clf
- pinfo.model              =  'Forced_Lorenz_96';
- pinfo.def_var            =  'state';
- pinfo.num_state_vars     =  80;
- pinfo.num_model_vars     =  40;
- pinfo.num_force_vars     =  40;
- pinfo.num_ens_members    =  24;
- pinfo.time_series_length =  1000;
- pinfo.min_state_var      =  1;
- pinfo.max_state_var      =  80;
- pinfo.min_model_var      =  1;
- pinfo.max_model_var      =  40;
- pinfo.min_force_var      =  1;
- pinfo.max_force_var      =  40;
- pinfo.min_ens_mem        =  1;
- pinfo.max_ens_mem        =  24;
- pinfo.def_state_vars     =  [1 13 27];
- pinfo.def_force_vars     =  [41 53 67];
- pinfo.fname              =  'Prior_Diag.nc';
+ pinfo = CheckModel('Prior_Diag.nc');
  pinfo.base_var           =  'state';
  pinfo.base_var_index     =  30;
  pinfo.base_time          =  300;
@@ -120,19 +100,16 @@ if (interactive)
 end
 
  clear pinfo; close all
- pinfo.model              = 'Forced_Lorenz_96';
- pinfo.def_var            = 'state';
- pinfo.def_state_vars     = [1 13 27];
- pinfo.def_force_vars     = [41 53 67];
- pinfo.prior_file         = 'Prior_Diag.nc';
- pinfo.posterior_file     = 'Posterior_Diag.nc';
- pinfo.diagn_file         = 'Prior_Diag.nc';
- pinfo.diagn_time         = [1 -1];
- pinfo.truth_file         = 'True_State.nc';
- pinfo.truth_time         = [1 -1];
- pinfo.var                = 'state';
- pinfo.var_inds           = [1 20 40];
- pinfo.copyindices        = [7 12 17];
+ pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
+ pinfo.prior_time     = pinfo.truth_time;
+ pinfo.prior_file     = pinfo.truth_file;
+ pinfo.posterior_time = pinfo.diagn_time;
+ pinfo.posterior_file = pinfo.diagn_file;
+ pinfo.truth_file     = 'True_State.nc';
+ pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
+[pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.prior_file);
+ pinfo.var_inds       = [1 20 40];
+ pinfo.copyindices    = [7 12 17];
 
  PlotSawtooth(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotSawtooth'); pause
@@ -151,14 +128,10 @@ if (interactive)
 end
 
  clear pinfo; close all
- pinfo.model              = 'Forced_Lorenz_96';
+ pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
  pinfo.def_var            = 'state';
  pinfo.def_state_vars     = [1 13 27];
  pinfo.def_force_vars     = [41 53 67];
- pinfo.truth_file         = 'True_State.nc';
- pinfo.diagn_file         = 'Prior_Diag.nc';
- pinfo.truth_time         = [1 1000];
- pinfo.diagn_time         = [1 1000];
 
  PlotTotalErr(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotTotalErr'); pause
@@ -172,8 +145,7 @@ if (interactive)
 end
 
  clear pinfo; clf
- pinfo.fname           = 'Prior_Diag.nc';
- pinfo.model           = 'Forced_Lorenz_96';
+ pinfo  = CheckModel('Prior_Diag.nc');
  pinfo.base_var        = 'state';
  pinfo.state_var       = 'state';
  pinfo.base_var_index  = 30;
@@ -184,20 +156,12 @@ end
  fprintf('Finished %s pausing, hit any key\n','PlotVarVarCorrel'); pause
 
 %------------------------------------------------------------
-%plot_jeff_correl - virtually identical to plot_var_var_correl
+%plot_jeff_correl - identical inputs as plot_var_var_correl
 %------------------------------------------------------------
 if (interactive)
  clear; clf; plot_jeff_correl
  fprintf('Finished %s pausing, hit any key\n','plot_jeff_correl'); pause
 end
-
- clear pinfo; clf
- pinfo.fname           = 'Prior_Diag.nc';
- pinfo.base_var        = 'state';
- pinfo.state_var       = 'state';
- pinfo.base_var_index  = 20;
- pinfo.base_time       = 300;
- pinfo.state_var_index = 10;
 
  PlotJeffCorrel(pinfo)
 

@@ -78,10 +78,6 @@ switch lower(pinfo.model)
       %% Simply going to append X,Y together and treat as above.
 
       % Get the appropriate netcdf variables
-      tim2   = get_state_copy(pinfo.truth_file, 'X',     truth_index, ...
-                              pinfo.truth_time(1), pinfo.truth_time(2));
-      tom2   = get_state_copy(pinfo.truth_file, 'Y',     truth_index, ...
-                              pinfo.truth_time(1), pinfo.truth_time(2));
 
       tim    = get_hyperslab('fname',pinfo.truth_file, ...
                    'varname','X', 'copyindex',truth_index, ...
@@ -92,11 +88,6 @@ switch lower(pinfo.model)
 
       truth  = [tim tom];
 
-      tim2   = get_state_copy(pinfo.diagn_file, 'X',  ens_mean_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-      tom2   = get_state_copy(pinfo.diagn_file, 'Y',  ens_mean_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-
       tim    = get_hyperslab('fname',pinfo.diagn_file, ...
                    'varname','X', 'copyindex',ens_mean_index, ...
                    'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
@@ -105,11 +96,6 @@ switch lower(pinfo.model)
                    'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
       ens    = [tim tom];
-
-      tim2   = get_state_copy(pinfo.diagn_file, 'X',ens_spread_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-      tom2   = get_state_copy(pinfo.diagn_file, 'Y',ens_spread_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
 
       tim    = get_hyperslab('fname',pinfo.diagn_file, ...
                    'varname','X', 'copyindex',ens_spread_index, ...
@@ -150,13 +136,6 @@ switch lower(pinfo.model)
       num_model_vars    = nc_attget(pinfo.truth_file, nc_global, 'model_num_state_vars');
 
       % Get the appropriate netcdf variables
-
-      Whole_truth2 = get_state_copy(pinfo.truth_file, 'state',     truth_index, ...
-                              pinfo.truth_time(1), pinfo.truth_time(2));
-      Whole_ens2   = get_state_copy(pinfo.diagn_file, 'state',  ens_mean_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-      Whole_spread2= get_state_copy(pinfo.diagn_file, 'state',ens_spread_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
 
       Whole_truth  = get_hyperslab('fname',pinfo.truth_file, ...
                          'varname','state', 'copyindex',truth_index, ...
@@ -245,13 +224,6 @@ switch lower(pinfo.model)
 
          % Get the appropriate netcdf variables
 
-         truth2 = get_state_copy(pinfo.truth_file, varlist{ivar},     truth_index, ...
-                              pinfo.truth_time(1), pinfo.truth_time(2));
-         ens2   = get_state_copy(pinfo.diagn_file, varlist{ivar},  ens_mean_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-         spread2= get_state_copy(pinfo.diagn_file, varlist{ivar},ens_spread_index, ...
-                              pinfo.diagn_time(1), pinfo.diagn_time(2));
-
          truth  = get_hyperslab('fname',pinfo.truth_file, ...
                       'varname',varlist{ivar}, 'copyindex',truth_index, ...
                       'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
@@ -286,23 +258,23 @@ switch lower(pinfo.model)
       end
 
    case 'fms_bgrid'
-       %% GFDL bgrid model
+      %% GFDL bgrid model
 
       BgridTotalError( pinfo )
 
    case 'pe2lyr'
 
-       %% primitive equation 2 layer model
+      %% primitive equation 2 layer model
 
       Pe2lyrTotalError( pinfo )
 
    case 'pbl_1d'
-       %% planetary boundary layer column model
+      %% planetary boundary layer column model
 
       PBL1DTotalError( pinfo )
 
    case 'mitgcm_ocean'
-       %% MIT general circulation ocean model
+      %% MIT general circulation ocean model
 
       MITGCMOceanTotalError( pinfo )
 
@@ -361,134 +333,6 @@ xdates(pinfo.time)
 ylabel('mean (all levels) total error')
 axis([-Inf Inf 0 Inf])
 
-
-
-function BgridTotalError( pinfo )
-%% -------------------------------------------------------------------
-% netcdf has no state vector, it has prognostic variables.
-% We are going to plot the total error (over a horizontal slice)
-% for each variable and annotate an area-weighted total.
-%---------------------------------------------------------------------
-
-tstart = pinfo.truth_time(1);
-tcount = pinfo.truth_time(2);
-dstart = pinfo.diagn_time(1);
-dcount = pinfo.diagn_time(2);
-
-% Since the models are "compatible", get the info from either one.
-tlons     = nc_varget(pinfo.truth_file, 'TmpI'); num_tlons  = length(tlons );
-tlats     = nc_varget(pinfo.truth_file, 'TmpJ'); num_tlats  = length(tlats );
-vlons     = nc_varget(pinfo.truth_file, 'VelI'); num_vlons  = length(vlons );
-vlats     = nc_varget(pinfo.truth_file, 'VelJ'); num_vlats  = length(vlats );
-levels    = nc_varget(pinfo.truth_file, 'lev' ); num_levels = length(levels);
-num_times = pinfo.time_series_length;
-
-% Initialize storage for error averaging
-rms          = zeros(num_times, pinfo.num_state_vars, num_levels);
-spread_final = zeros(num_times, pinfo.num_state_vars, num_levels);
-
-% Get the indices for the true state, ensemble mean and spread
-% The metadata is queried to determine which "copy" is appropriate.
-truth_index      = get_copy_index(pinfo.truth_file, 'true state');
-ens_mean_index   = get_copy_index(pinfo.diagn_file, 'ensemble mean');
-ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
-
-% Calculate weights for area-averaging.
-twts = reshape(SphereWeights(tlons, tlats),1,num_tlats*num_tlons); % Temperature Grid
-vwts = reshape(SphereWeights(vlons, vlats),1,num_vlats*num_vlons); % Velocity    Grid
-
-% Can we afford to get the whole thing at once ???
-%----------------------------------------------------------------------
-% surface pressure has only one level.
-% Get2D   returns a   num_times x num_lats*num_lons   2Darray.
-%----------------------------------------------------------------------
-
-disp('Processing surface pressure ...')
-
-ivar   = 1;
-ilevel = 1;
-
-truth      = Get2D(pinfo.truth_file, 'ps',      truth_index, tstart, tcount);
-ens        = Get2D(pinfo.diagn_file, 'ps',   ens_mean_index, dstart, dcount);
-spread     = Get2D(pinfo.diagn_file, 'ps', ens_spread_index, dstart, dcount);
-
-err        = total_err(              truth,    ens, twts );
-err_spread = total_err(zeros(size(spread)), spread, twts );
-
-         rms(:,ivar,ilevel) = err;         % spatial mean
-spread_final(:,ivar,ilevel) = err_spread;  % spatial mean
-
-clear truth ens spread err err_spread
-
-%----------------------------------------------------------------------
-% temperature ...  num_times x num_levels x num_lats x num_lons
-% GetLevel returns a    num_times x num_lats*num_lons   2Darray.
-%----------------------------------------------------------------------
-
-for ilevel = 1:num_levels,     % Loop through all levels
-for ivar=2:pinfo.num_state_vars,
-
-   fprintf('Processing level %d of %d ...\n',ilevel,num_levels)
-   %-------------------------------------------------------------------
-   % all vars organized    num_times x num_levels x num_lats x num_lons
-   %-------------------------------------------------------------------
-
-   truth  = GetLevel(pinfo.truth_file, pinfo.vars{ivar},      truth_index, ilevel, tstart, tcount);
-   ens    = GetLevel(pinfo.diagn_file, pinfo.vars{ivar},   ens_mean_index, ilevel, dstart, dcount);
-   spread = GetLevel(pinfo.diagn_file, pinfo.vars{ivar}, ens_spread_index, ilevel, dstart, dcount);
-
-   switch lower(pinfo.vars{ivar})
-      case {'t'}
-         err        = total_err(              truth,    ens, twts);
-         err_spread = total_err(zeros(size(spread)), spread, twts);
-      otherwise
-         err        = total_err(              truth,    ens, vwts);
-         err_spread = total_err(zeros(size(spread)), spread, vwts);
-   end
-
-            rms(:, ivar, ilevel) = err;
-   spread_final(:, ivar, ilevel) = err_spread;
-
-end
-end % End of level loop
-
-clear truth ens spread err err_spread
-
-%----------------------------------------------------------------------
-% Each variable in its own figure window
-%----------------------------------------------------------------------
-for ivar=1:pinfo.num_state_vars,
-
-   figure(ivar); clf;
-
-      varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
-
-      s1 = sprintf('%s %s Ensemble Mean', pinfo.model,pinfo.vars{ivar});
-
-      switch lower(pinfo.vars{ivar})
-         case {'ps'}
-            plot(pinfo.time,          rms(:, ivar, 1), '-'); hold on;
-            plot(pinfo.time, spread_final(:, ivar, 1), '--');
-
-            s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(         rms(:, ivar, 1)));
-            s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(spread_final(:, ivar, 1)));
-         otherwise
-            plot(pinfo.time, squeeze(         rms(:, ivar, :)),'-'); hold on;
-            plot(pinfo.time, squeeze(spread_final(:, ivar, :)),'--');
-
-            for i = 1:num_levels,
-               s{i           } = sprintf('level %d error  %.3f', i,mean(         rms(:, ivar, i)));
-               s{i+num_levels} = sprintf('level %d spread %.3f', i,mean(spread_final(:, ivar, i)));
-            end
-      end
-
-      h = legend(s); legend(h,'boxoff')
-      grid on;
-      xdates(pinfo.time)
-      ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
-      title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
-
-end
 
 
 
@@ -637,24 +481,9 @@ end
 function Pe2lyrTotalError( pinfo )
 %% -------------------------------------------------------------------
 % netcdf has no state vector, it has prognostic variables.
-% We are going to plot the total error (over a horizontal slice)
-% for each variable and annotate an area-weighted total.
+% Plot the area-weighted total error for each variable and annotate a
+% time-mean value.
 %---------------------------------------------------------------------
-
-tstart = pinfo.truth_time(1);
-tcount = pinfo.truth_time(2);
-dstart = pinfo.diagn_time(1);
-dcount = pinfo.diagn_time(2);
-
-% Since the models are "compatible", get the info from either one.
-tlons     = nc_varget(pinfo.truth_file, 'lon' ); num_tlons  = length(tlons );
-tlats     = nc_varget(pinfo.truth_file, 'lat' ); num_tlats  = length(tlats );
-levels    = nc_varget(pinfo.truth_file, 'lev' ); num_levels = length(levels);
-num_times = pinfo.time_series_length;
-
-% Initialize storage for error averaging
-rms          = zeros(num_times, pinfo.num_state_vars, num_levels);
-spread_final = zeros(num_times, pinfo.num_state_vars, num_levels);
 
 % Get the indices for the true state, ensemble mean and spread
 % The metadata is queried to determine which "copy" is appropriate.
@@ -663,69 +492,69 @@ ens_mean_index   = get_copy_index(pinfo.diagn_file, 'ensemble mean');
 ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
 
 % Calculate weights for area-averaging.
-twts = reshape(SphereWeights(tlons, tlats),1,num_tlats*num_tlons);
+rads    = zeros(numel(pinfo.lats),1);
+rads(:) = pi*pinfo.lats/180.0;
+wts     = cos(rads) * ones(1,numel(pinfo.lons));
+wts     = wts ./ sum(wts(:));
+weights = wts(:);
 
 %----------------------------------------------------------------------
-% Trying not to assume we can get the whole 3D array at once.
-% GetLevel returns a    num_times x num_lats*num_lons   2Darray.
+%
 %----------------------------------------------------------------------
 
-for ilevel = 1:num_levels,     % Loop through all levels
 for ivar=1:pinfo.num_state_vars,
 
-   fprintf('Processing level %d of %d ...\n',ilevel,num_levels)
+   fprintf('Processing %s ...\n',pinfo.vars{ivar})
+   varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
+   rmse     = zeros(pinfo.time_series_length,1);
+   sprd     = zeros(pinfo.time_series_length,1);
+
    %%------------------------------------------------------------------
-   % all vars organized    num_times x num_levels x num_lats x num_lons
+   % all vars organized     num_levels x num_lats x num_lons
+   %-------------------------------------------------------------------
+   for itime = 1:pinfo.time_series_length,
+       
+      truth  = get_hyperslab('fname',pinfo.truth_file, ...
+               'varname',pinfo.vars{ivar}, 'copyindex',truth_index, ...
+               'timeindex',pinfo.truth_time(1)+itime-1);
+
+      ens    = get_hyperslab('fname',pinfo.diagn_file, ...
+               'varname',pinfo.vars{ivar}, 'copyindex',ens_mean_index, ...
+               'timeindex',pinfo.diagn_time(1)+itime-1);
+
+      spread = get_hyperslab('fname',pinfo.diagn_file, ...
+               'varname',pinfo.vars{ivar}, 'copyindex',ens_spread_index, ...
+               'timeindex',pinfo.diagn_time(1)+itime-1);
+
+      sqerr       = (truth - ens).^2;
+      sqsprd      =     spread   .^2;
+      flatsqerr   = squeeze(mean(sqerr,1));         % average over levels
+      flatsqsprd  = squeeze(mean(sqsprd,1));        % average over levels
+      ms_err      = sum(flatsqerr(:)  .* weights);
+      ms_spread   = sum(flatsqsprd(:) .* weights);
+      rmse(itime) = sqrt(ms_err);
+      sprd(itime) = sqrt(ms_spread);
+   end
+   
+   clear truth ens spread sqerr sqsprd flatsqerr flatsqsprd ms_err ms_spread
+
+   %-------------------------------------------------------------------
+   % Each variable in its own figure window
    %-------------------------------------------------------------------
 
-   truth  = GetLevel(pinfo.truth_file, pinfo.vars{ivar},      truth_index, ilevel, tstart, tcount);
-   ens    = GetLevel(pinfo.diagn_file, pinfo.vars{ivar},   ens_mean_index, ilevel, dstart, dcount);
-   spread = GetLevel(pinfo.diagn_file, pinfo.vars{ivar}, ens_spread_index, ilevel, dstart, dcount);
-
-   err        = total_err(              truth,    ens, twts);
-   err_spread = total_err(zeros(size(spread)), spread, twts);
-
-            rms(:, ivar, ilevel) = err;
-   spread_final(:, ivar, ilevel) = err_spread;
-
-end
-end % End of level loop
-
-clear truth ens spread err err_spread
-
-%%---------------------------------------------------------------------
-% Each variable in its own figure window
-%----------------------------------------------------------------------
-for ivar=1:pinfo.num_state_vars,
-
    figure(ivar); clf;
+   
+   plot(pinfo.time, rmse,'-', pinfo.time, sprd,'--');
+      
+   s1   = sprintf('%s Ensemble Mean for %s', pinfo.model,pinfo.vars{ivar});
+   s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(rmse));
+   s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(sprd));
 
-      varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
-
-      s1 = sprintf('%s %s Ensemble Mean for %s', pinfo.model,pinfo.vars{ivar});
-
-      switch lower(pinfo.vars{ivar})
-         case {'ps'}
-            plot(pinfo.time,          rms(:, ivar, 1), '-'); hold on;
-            plot(pinfo.time, spread_final(:, ivar, 1), '--');
-
-            s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(         rms(:, ivar, 1)));
-            s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(spread_final(:, ivar, 1)));
-         otherwise
-            plot(pinfo.time, squeeze(         rms(:, ivar, :)),'-'); hold on;
-            plot(pinfo.time, squeeze(spread_final(:, ivar, :)),'--');
-
-            for i = 1:num_levels,
-               s{i           } = sprintf('level %d error  %.3f', i,mean(         rms(:, ivar, i)));
-               s{i+num_levels} = sprintf('level %d spread %.3f', i,mean(spread_final(:, ivar, i)));
-            end
-      end
-
-      h = legend(s); legend(h,'boxoff')
-      grid on;
-      xdates(pinfo.time)
-      ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
-      title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
+   h = legend(s); legend(h,'boxoff')
+   grid on;
+   xdates(pinfo.time)
+   ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
+   title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
 
 end
 
@@ -956,18 +785,13 @@ end
 
 
 function xdates(dates)
-ndates    = length(dates);
-daterange = dates(ndates) - dates(1);
-
-if ( (ndates < 5) && (daterange > 0.5))
-   set(gca,'XTick',dates)
-   datetick('x',31,'keeplimits','keepticks'); %'yyyy-mm-dd HH:MM:SS'
-elseif (length(get(gca,'XTick')) > 6)
-   datetick('x','mm.dd.HH','keeplimits','keepticks');
-   monstr = datestr(dates(1),31);
-   xlabel(sprintf('month/day/HH - %s start',monstr));
+if (length(dates) < 5)
+   set(gca,'XTick',dates);
+   datetick('x',31,'keepticks','keeplimits');
+   xlabel('Model date (YYYY-MM-DD HH:MM:SS)')
 else
-   datetick('x',31,'keeplimits','keepticks');
+   datetick('x','mm.dd.HH','keeplimits'); % 'mm/dd'
+   monstr = datestr(dates(1),31);
+   xlabel(sprintf('month.day.HH - %s start',monstr))
 end
-
 

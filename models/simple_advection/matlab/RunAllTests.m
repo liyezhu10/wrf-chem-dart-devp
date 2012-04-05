@@ -29,11 +29,8 @@ if (interactive)
 end
 
  clear pinfo; close all; 
- pinfo.truth_file     = './True_State.nc';
- pinfo.diagn_file     = './Prior_Diag.nc';
- pinfo.model          = 'simple_advection';
- pinfo.truth_time     = [1 1000];
- pinfo.diagn_time     = [1 1000];
+ pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+[pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var            = 'concentration';
  pinfo.var_inds       = [1 5 10];
  
@@ -58,18 +55,7 @@ if (interactive)
 end
 
  clear pinfo; clf
- pinfo.model              = 'simple_advection';
- pinfo.num_ens_members    = 24;
- pinfo.min_ens_mem        = 1;
- pinfo.max_ens_mem        = 24;
- pinfo.time_series_length = 1000;
- pinfo.model_size         = 50;
- pinfo.def_var            = 'concentration';
- pinfo.min_state_var      = 1;
- pinfo.max_state_var      = 10;
- pinfo.def_state_vars     = [1 3 7];
- pinfo.num_vars           = 5;
- pinfo.fname              = 'Prior_Diag.nc';
+ pinfo = CheckModel('Prior_Diag.nc');
  pinfo.base_var           = 'concentration';
  pinfo.base_var_index     = 3;
  pinfo.base_time          = 250;
@@ -87,6 +73,7 @@ end
 
  clear pinfo; clf
  pinfo.fname    = 'Posterior_Diag.nc';
+ pinfo.model    = 'simple_advection';
  pinfo.var1name = 'concentration';
  pinfo.var2name = 'source';
  pinfo.var3name = 'wind';
@@ -113,11 +100,14 @@ if (interactive)
 end
 
  clear pinfo; close all
- pinfo.model          = 'simple_advection';
- pinfo.prior_file     = 'Prior_Diag.nc';
- pinfo.posterior_file = 'Posterior_Diag.nc';
+ pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
+ pinfo.prior_time     = pinfo.truth_time;
+ pinfo.prior_file     = pinfo.truth_file;
+ pinfo.posterior_time = pinfo.diagn_time;
+ pinfo.posterior_file = pinfo.diagn_file;
  pinfo.truth_file     = 'True_State.nc';
- pinfo.truth_time     = [1 -1];
+ pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
+ [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.prior_file);
  pinfo.var            = 'wind';
  pinfo.var_inds       = [2 8];
  pinfo.copyindices    = [7 12 17];
@@ -139,11 +129,7 @@ if (interactive)
 end
 
  clear pinfo; close all
- pinfo.model              = 'simple_advection';
- pinfo.truth_file         = 'True_State.nc';
- pinfo.diagn_file         = 'Prior_Diag.nc';
- pinfo.truth_time         = [1 1000];
- pinfo.diagn_time         = [1 1000];
+ pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
 
  PlotTotalErr(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotTotalErr'); pause
@@ -157,8 +143,7 @@ if (interactive)
 end
 
  clear pinfo; clf
- pinfo.fname           = 'Prior_Diag.nc';
- pinfo.model           = 'simple_advection';
+ pinfo  = CheckModel('Prior_Diag.nc');
  pinfo.base_var        = 'concentration';
  pinfo.state_var       = 'source';
  pinfo.base_var_index  = 4;
@@ -175,14 +160,6 @@ if (interactive)
  clear; clf; plot_jeff_correl
  fprintf('Finished %s pausing, hit any key\n','plot_jeff_correl'); pause
 end
-
- clear pinfo; clf
- pinfo.fname           = 'Prior_Diag.nc';
- pinfo.base_var        = 'concentration';
- pinfo.state_var       = 'source';
- pinfo.base_var_index  = 2;
- pinfo.base_time       = 500;
- pinfo.state_var_index = 10;
 
  PlotJeffCorrel(pinfo)
 

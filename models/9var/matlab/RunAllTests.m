@@ -31,13 +31,9 @@ if (interactive)
 end
 
  clear pinfo; close all; 
- pinfo.truth_file     = './True_State.nc';
- pinfo.diagn_file     = './Prior_Diag.nc';
- pinfo.model          = '9var';
- pinfo.var            = 'state';
- pinfo.truth_time     = [1 1000];
- pinfo.diagn_time     = [1 1000];
- pinfo.var_inds       = [1 2 3 4 5 6 7 8 9];
+ pinfo          = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+ pinfo.var      = 'state';
+ pinfo.var_inds = [1 2 3 4 5 6 7 8 9];
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  
  close all; PlotBins(pinfo)
@@ -64,13 +60,7 @@ if (interactive)
 end
 
  clear pinfo;
- pinfo.model              = '9var';
- pinfo.def_var            = 'state';
- pinfo.num_state_vars     = 9;
- pinfo.min_state_var      = 1;
- pinfo.max_state_var      = 9;
- pinfo.def_state_vars     = [1 2 3 4 5 6 7 8 9];
- pinfo.fname              = './Prior_Diag.nc';
+ pinfo                    = CheckModel('Prior_Diag.nc');
  pinfo.base_var           = 'state';
  pinfo.base_var_index     = 4;
  pinfo.base_time          = 34;

@@ -86,10 +86,6 @@ switch lower(pinfo.model)
       clf; iplot = 0;
       for ivar = pinfo.var_inds,
          iplot = iplot + 1;
-         truth2 = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ...
-                               ivar, pinfo.truth_time(1), pinfo.truth_time(2));
-         ens2   = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                   pinfo.diagn_time(1), pinfo.diagn_time(2));
 
          truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
                      'copyindex',truth_index, 'stateindex',ivar, ...
@@ -120,12 +116,7 @@ switch lower(pinfo.model)
       clf; iplot = 0;
       for ivar = pinfo.var_inds,
          iplot = iplot + 1;
-
-         truth2 = get_var_series(pinfo.truth_file, pinfo.var, truth_index, ...
-                               ivar, pinfo.truth_time(1), pinfo.truth_time(2));
-         ens2   = get_ens_series(pinfo.diagn_file, pinfo.var, ivar, ...
-                                   pinfo.diagn_time(1), pinfo.diagn_time(2));
-
+         
          truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
                      'copyindex',truth_index, 'stateindex',ivar, ...
                      'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
@@ -157,8 +148,15 @@ switch lower(pinfo.model)
 
       clf;
 
-      truth = GetCopy(pinfo);
-      ens   = GetEns( pinfo);
+      truth = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.var, ...
+                  'levelindex',pinfo.levelindex, 'copyindex',truth_index, ...
+                  'lonindex',pinfo.lonindex, 'latindex',pinfo.latindex, ...
+                  'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
+      ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
+                  'levelindex',pinfo.levelindex, ...
+                  'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
+                  'lonindex',pinfo.lonindex, 'latindex',pinfo.latindex, ...
+                  'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
       subplot(2,1,1)
          PlotLocator(pinfo)
@@ -188,39 +186,6 @@ end
 %======================================================================
 % Subfunctions
 %======================================================================
-
-
-function var = GetCopy(pinfo)
-% Gets a time-series of a single specified 'true' copy of a prognostic variable
-% at a particular 3D location (level, lat, lon)
-
-pinfo.tindex1  = pinfo.truth_time(1);
-pinfo.tcount   = pinfo.truth_time(2);
-[start, count] = GetNCindices(pinfo,'truth',pinfo.var);
-
-var = nc_varget(pinfo.truth_file, pinfo.var, start, count);
-
-
-
-function var = GetEns(pinfo)
-% Gets a time-series of all copies of a prognostic variable
-% at a particular location (level, gridcell).
-
-pinfo.tindex1    = pinfo.diagn_time(1);
-pinfo.tcount     = pinfo.diagn_time(2);
-pinfo.copyindex1 = pinfo.ensemble_indices(1);
-pinfo.copycount  = length(pinfo.ensemble_indices);
-[start, count]   = GetNCindices(pinfo,'diagn',pinfo.var);
-
-var = nc_varget(pinfo.diagn_file, pinfo.var, start, count);
-% All the singleton dimensions get squeezed out.
-% If there is only one time, 'bob' is copy-X-time,
-% if there is more than one time, bob is time-X-copy
-if (pinfo.diagn_time(2) == 1)
-    var = var';
-end
-
-
 
 function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');

@@ -17,6 +17,7 @@ else
    interactive = 0;
 end
 
+figure(1)
 if (interactive)
  plot_bins
  fprintf('Finished %s pausing, hit any key\n','plot_bins'); pause
@@ -28,13 +29,9 @@ if (interactive)
  fprintf('Finished %s pausing, hit any key\n','plot_ens_mean_time_series'); pause
 end
 
- clear pinfo; close all; 
- pinfo.truth_file  = 'True_State.nc';
- pinfo.diagn_file  = 'Prior_Diag.nc';
- pinfo.truth_time  = [1 2];
- pinfo.diagn_time  = [1 2];
- pinfo.model       = 'FMS_Bgrid';
- pinfo.fname       = 'Prior_Diag.nc';
+ clear pinfo 
+ pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+[pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var         = 'u';
  pinfo.level       = 2;
  pinfo.levelindex  = 2;
@@ -43,12 +40,14 @@ end
  pinfo.latitude    = 42.00;
  pinfo.latindex    = 22;
 
- close all; PlotBins(pinfo)
+ figure(1)
+ PlotBins(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotBins'); pause
 
  clf; PlotEnsErrSpread(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotEnsErrSpread'); pause
 
+ pinfo.fname       = 'Prior_Diag.nc';
  clf; PlotEnsTimeSeries(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotEnsTimeSeries'); pause
 
@@ -59,19 +58,12 @@ end
 %plot_correl
 %------------------------------------------------------------
 if (interactive)
- clear; clf; plot_correl
+ clear diagn_file ; clf; plot_correl
  fprintf('Finished %s pausing, hit any key\n','plot_correl'); pause
 end
 
  clear pinfo; clf
- pinfo.model              = 'FMS_Bgrid';
- pinfo.num_state_vars     = 4;
- pinfo.num_ens_members    = 24;
- pinfo.time_series_length = 2;
- pinfo.min_ens_mem        = 1;
- pinfo.max_ens_mem        = 24;
- pinfo.vars               = {'ps'  't'  'u'  'v'};
- pinfo.fname              = 'Prior_Diag.nc';
+ pinfo = CheckModel('Prior_Diag.nc');
  pinfo.base_var           = 't';
  pinfo.comp_var           = 'u';
  pinfo.base_time          = 0;
@@ -92,7 +84,7 @@ end
 %plot_phase_space
 %------------------------------------------------------------
 if (interactive)
- clear; clf; plot_phase_space
+ clear fname ; clf; plot_phase_space
  fprintf('Finished %s pausing, hit any key\n','plot_phase_space'); pause
 end
 
@@ -135,28 +127,30 @@ end
 %plot_sawtooth
 %------------------------------------------------------------
 if (interactive)
- clear; close all; plot_sawtooth
+ figure(1)
+ clear truth_file posterior_file prior_file; plot_sawtooth
  fprintf('Finished %s pausing, hit any key\n','plot_sawtooth'); pause
 end
 
- clear pinfo; close all
- pinfo.model              = 'FMS_Bgrid';
- pinfo.vars               = {'ps'  't'  'u'  'v'};
- pinfo.truth_file         = 'True_State.nc';
- pinfo.prior_file         = 'Prior_Diag.nc';
- pinfo.posterior_file     = 'Posterior_Diag.nc';
- pinfo.var_names          = 'u';
- pinfo.level              = 3;
- pinfo.levelindex         = 3;
- pinfo.latitude           = 42.0000;
- pinfo.longitude          = 258.0000;
- pinfo.latindex           = 22;
- pinfo.lonindex           = 43;
- pinfo.copies             = 3;
- pinfo.copyindices        = [7 12 17];
- pinfo.truth_time         = [1 2];
- pinfo.prior_times        = [1 2];
- pinfo.posterior_times    = [1 2];
+ figure(1)
+ clear pinfo
+ pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
+ pinfo.prior_time     = pinfo.truth_time;
+ pinfo.prior_file     = pinfo.truth_file;
+ pinfo.posterior_time = pinfo.diagn_time;
+ pinfo.posterior_file = pinfo.diagn_file;
+ pinfo.truth_file     = 'True_State.nc';
+ pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
+[pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.prior_file);
+ pinfo.var_names      = 'ps';
+ pinfo.level          = 1;
+ pinfo.levelindex     = 1;
+ pinfo.latitude       = 39.0;
+ pinfo.latindex       = 22;
+ pinfo.longitude      = 255.0;
+ pinfo.lonindex       = 43;
+ pinfo.copyindices    = [7 12 17]
+ pinfo.copies         = length(pinfo.copyindices);
 
  PlotSawtooth(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotSawtooth'); pause
@@ -170,22 +164,14 @@ end
 %plot_total_err
 %------------------------------------------------------------
 if (interactive)
- clear; close all; plot_total_err
+ figure(1)
+ clear truth_file diagn_file; plot_total_err
  fprintf('Finished %s pausing, hit any key\n','plot_total_err'); pause
 end
 
- clear pinfo; close all
- pinfo.model              = 'FMS_Bgrid';
- pinfo.num_state_vars     = 4;
- pinfo.num_ens_members    = 24;
- pinfo.time_series_length = 2;
- pinfo.min_ens_mem        = 1;
- pinfo.max_ens_mem        = 24;
- pinfo.vars               = {'ps'  't'  'u'  'v'};
- pinfo.truth_file         = 'True_State.nc';
- pinfo.diagn_file         = 'Prior_Diag.nc';
- pinfo.truth_time         = [1 2];
- pinfo.diagn_time         = [1 2];
+ figure(1)
+ clear pinfo
+ pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
 
  PlotTotalErr(pinfo)
  fprintf('Finished %s pausing, hit any key\n','PlotTotalErr'); pause
@@ -194,25 +180,23 @@ end
 %plot_var_var_correl
 %------------------------------------------------------------
 if (interactive)
- clear; clf; plot_var_var_correl
+ clear fname; clf; plot_var_var_correl
  fprintf('Finished %s pausing, hit any key\n','plot_var_var_correl'); pause
 end
 
  clear pinfo; clf
- pinfo.fname       = 'Prior_Diag.nc';
+ pinfo  = CheckModel('Prior_Diag.nc');
  pinfo.model       = 'FMS_Bgrid';
  pinfo.base_var    = 't';
  pinfo.comp_var    = 'u';
  pinfo.base_time   = 0;
  pinfo.base_tmeind = 1;
-
  pinfo.base_lvl    = 4;
  pinfo.base_lat    = -39.0000;
  pinfo.base_lon    = 183.0000;
  pinfo.base_latind = 9;
  pinfo.base_lvlind = 4;
  pinfo.base_lonind = 31;
-
  pinfo.comp_lvl    = 2;
  pinfo.comp_lat    = 42.0000;
  pinfo.comp_lon    = 258.0000;
@@ -227,7 +211,7 @@ end
 %plot_jeff_correl - virtually identical to plot_var_var_correl
 %------------------------------------------------------------
 if (interactive)
- clear; clf; plot_jeff_correl
+ clear fname; clf; plot_jeff_correl
  fprintf('Finished %s pausing, hit any key\n','plot_jeff_correl'); pause
 end
 
