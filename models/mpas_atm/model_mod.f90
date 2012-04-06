@@ -588,10 +588,10 @@ model_size = progvar(nfields)%indexN
 if ( debug > 0 .and. do_output()) then
   write(logfileunit,*)
   write(     *     ,*)
-  write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
-                                          nCells, nVertices, nVertLevels
-  write(     *     ,'(" static_init_model: nCells, nVertices, nVertLevels =",3(1x,i6))') &
-                                          nCells, nVertices, nVertLevels
+  write(logfileunit,'(" static_init_model: nCells, nEdges, nVertices, nVertLevels =",4(1x,i6))') &
+                                          nCells, nEdges, nVertices, nVertLevels
+  write(     *     ,'(" static_init_model: nCells, nEdges, nVertices, nVertLevels =",4(1x,i6))') &
+                                          nCells, nEdges, nVertices, nVertLevels
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
   if ( global_grid ) then
@@ -1377,7 +1377,7 @@ else
    ! Create the (empty) Coordinate Variables and the Attributes
    !----------------------------------------------------------------------------
 
-   ! Grid Longitudes
+   ! Cell Longitudes
    call nc_check(nf90_def_var(ncFileID,name='lonCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'lonCell def_var '//trim(filename))
@@ -1388,7 +1388,7 @@ else
    call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
                  'nc_write_model_atts', 'lonCell valid_range '//trim(filename))
 
-   ! Grid Latitudes
+   ! Cell Latitudes
    call nc_check(nf90_def_var(ncFileID,name='latCell', xtype=nf90_double, &
                  dimids=nCellsDimID, varid=VarID),&
                  'nc_write_model_atts', 'latCell def_var '//trim(filename))
@@ -1443,6 +1443,20 @@ else
                  'nc_write_model_atts', 'latVertex def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'vertex latitudes'), &
                  'nc_write_model_atts', 'latVertex long_name '//trim(filename))
+
+   ! Edge Longitudes
+   call nc_check(nf90_def_var(ncFileID,name='lonEdge', xtype=nf90_double, &
+                 dimids=nEdgesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'lonEdge def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'edge longitudes'), &
+                 'nc_write_model_atts', 'lonEdge long_name '//trim(filename))
+
+   ! Edge Latitudes
+   call nc_check(nf90_def_var(ncFileID,name='latEdge', xtype=nf90_double, &
+                 dimids=nEdgesDimID, varid=VarID),&
+                 'nc_write_model_atts', 'latEdge def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'edge latitudes'), &
+                 'nc_write_model_atts', 'latEdge long_name '//trim(filename))
 
    ! Grid relationship information
    call nc_check(nf90_def_var(ncFileID,name='nEdgesOnCell',xtype=nf90_int, &
@@ -1515,6 +1529,16 @@ else
                  'nc_write_model_atts', 'latCell inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, latCell ), &
                 'nc_write_model_atts', 'latCell put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'lonEdge', VarID), &
+                 'nc_write_model_atts', 'lonEdge inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, lonEdge ), &
+                'nc_write_model_atts', 'lonEdge put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'latEdge', VarID), &
+                 'nc_write_model_atts', 'latEdge inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, latEdge ), &
+                'nc_write_model_atts', 'latEdge put_var '//trim(filename))
 
    call nc_check(NF90_inq_varid(ncFileID, 'zgrid', VarID), &
                  'nc_write_model_atts', 'zgrid inq_varid '//trim(filename))
