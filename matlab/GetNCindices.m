@@ -95,6 +95,12 @@ if (isfield(pinfo,'stateindex'))
    state1 = pinfo.stateindex - 1;
    stateN = 1;
 end
+if (isfield(pinfo,'state1'))
+   state1 = pinfo.state1 - 1;
+end
+if (isfield(pinfo,'statecount'))
+   stateN = pinfo.statecount;
+end
 if (isfield(pinfo,'copyindex'))
    copy1 = pinfo.copyindex - 1;
    copyN = 1;
