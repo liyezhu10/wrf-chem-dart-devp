@@ -1268,7 +1268,7 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revision',revision), &
            'nc_write_model_atts', 'revision put '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
            'nc_write_model_atts', 'revdate put '//trim(filename))
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'model' ), &
+call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'MPAS_OCN' ), &
            'nc_write_model_atts', 'model put '//trim(filename))
 
 !-------------------------------------------------------------------------------
