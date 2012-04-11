@@ -1,18 +1,15 @@
 function RunStateSpaceTests(dummy)
 %% RunStateSpaceTests.m
 
-%------------------------------------------------------------
-% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % <next few lines under version control, do not edit>
-% $URL:
-% https://subversion.ucar.edu/DAReS/DART/branches/mpas/models/cam/matlab/RunStateSpaceTests.m $
+% $URL$
 % $Id$
 % $Revision$
 % $Date$
-%------------------------------------------------------------
 
 if (nargin() > 0)
    interactive = 1;
@@ -20,26 +17,25 @@ else
    interactive = 0;
 end
 
+figure(1)
 if (interactive)
  fprintf('Starting %s\n','plot_bins');
- plot_bins
+ clear truth_file diagn_file; close all; plot_bins
  fprintf('Finished %s ... pausing, hit any key\n','plot_bins'); pause
-
  fprintf('Starting %s\n','plot_ens_err_spread');
  plot_ens_err_spread
  fprintf('Finished %s ... pausing, hit any key\n','plot_ens_err_spread'); pause
-
  fprintf('Starting %s\n','plot_ens_time_series');
  plot_ens_time_series
  fprintf('Finished %s ... pausing, hit any key\n','plot_ens_time_series'); pause
-
  fprintf('Starting %s\n','plot_ens_mean_time_series');
  plot_ens_mean_time_series
  fprintf('Finished %s ... pausing, hit any key\n','plot_ens_mean_time_series'); pause
 end
 
- clear pinfo; close all; 
- 
+ fprintf('Starting %s\n','PlotBins');
+ clear pinfo; close all;
+
  truth_file = 'True_State.nc';
  diagn_file = 'Prior_Diag.nc';
  vars1 = CheckModel(diagn_file);
@@ -53,34 +49,36 @@ end
  pinfo.level      = 3.5;
  pinfo.longitude  = 254.5;
  pinfo.latitude   = 39.92;
+ pinfo.fname      = diagn_file;
  clear vars1 vars2
- 
- fprintf('Starting %s\n','PlotBins');
- close all; PlotBins(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotBins'); pause
+
+ PlotBins(pinfo)
+ fprintf('Finished %s ... pausing, hit any key\n','PlotBins'); pause
 
  fprintf('Starting %s\n','PlotEnsErrSpread');
  close all; PlotEnsErrSpread(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsErrSpread'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsErrSpread'); pause
 
  fprintf('Starting %s\n','PlotEnsTimeSeries');
  close all; PlotEnsTimeSeries(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsTimeSeries'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsTimeSeries'); pause
 
  fprintf('Starting %s\n','PlotEnsMeanTimeSeries');
  close all; PlotEnsMeanTimeSeries(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsMeanTimeSeries'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsMeanTimeSeries'); pause
 
-%------------------------------------------------------------
-%plot_correl
+%% ----------------------------------------------------------
+% plot_correl
 %------------------------------------------------------------
 if (interactive)
- fprintf('Starting %s\n','plot_correl');
- clear; close all; plot_correl
- fprintf('Finished %s pausing, hit any key\n','plot_correl'); pause
+ fprintf('Starting %s\n', 'plot_correl');
+ clear diagn_file; close all; plot_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_correl'); pause
 end
 
- clear pinfo;
+ fprintf('Starting %s\n','PlotCorrel');
+ clear pinfo; clf
+
  pinfo                    = CheckModel('Prior_Diag.nc');
  pinfo.time               = nc_varget(pinfo.fname,'time');
  pinfo.time_series_length = length(pinfo.time);
@@ -97,21 +95,22 @@ end
  pinfo.comp_lvlind        =  pinfo.base_lvlind;
  pinfo.comp_lvl           =  pinfo.base_lvl;
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
- 
- fprintf('Starting %s\n','PlotCorrel');
- PlotCorrel(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotCorrel'); pause
 
-%------------------------------------------------------------
-%plot_phase_space
+ PlotCorrel(pinfo)
+ fprintf('Finished %s ... pausing, hit any key\n','PlotCorrel'); pause
+
+%% -----------------------------------------------------------
+% plot_phase_space
 %------------------------------------------------------------
 if (interactive)
  fprintf('Starting %s\n','plot_phase_space');
- clear; close all; plot_phase_space
- fprintf('Finished %s pausing, hit any key\n','plot_phase_space'); pause
+ clear fname; close all; plot_phase_space
+ fprintf('Finished %s ... pausing, hit any key\n','plot_phase_space'); pause
 end
 
+ fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
+
  pinfo              = CheckModel('Prior_Diag.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
  pinfo.var1name     = 'T';
@@ -138,29 +137,29 @@ end
  pinfo.ens_mem      = 'ensemble mean';
  pinfo.ltype        = 'k-';
 
- fprintf('Starting %s\n','PlotPhaseSpace');
  PlotPhaseSpace(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotPhaseSpace'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotPhaseSpace'); pause
 
-%------------------------------------------------------------
-%plot_reg_factor
+%% ----------------------------------------------------------
+% plot_reg_factor
 %------------------------------------------------------------
 % plot_reg_factor
 
-%------------------------------------------------------------
-%plot_sawtooth
+%% ----------------------------------------------------------
+% plot_sawtooth
 %------------------------------------------------------------
 if (interactive)
  fprintf('Starting %s\n','plot_sawtooth');
- clear; close all; plot_sawtooth
- fprintf('Finished %s pausing, hit any key\n','plot_sawtooth'); pause
+ clear truth_file posterior_file prior_file; close all; plot_sawtooth
+ fprintf('Finished %s ... pausing, hit any key\n','plot_sawtooth'); pause
 end
 
- clear pinfo; clf
+ fprintf('Starting %s\n','PlotSawtooth');
+ clear pinfo; close all
 
- truth_file     = 'True_State.nc';
- prior_file     = 'Prior_Diag.nc';
- posterior_file = 'Posterior_Diag.nc';
+ truth_file       = 'True_State.nc';
+ prior_file       = 'Prior_Diag.nc';
+ posterior_file   = 'Posterior_Diag.nc';
  pinfo = CheckModelCompatibility(prior_file,posterior_file);
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.posterior_time = pinfo.diagn_time;
@@ -169,7 +168,7 @@ end
  pinfo.posterior_file = posterior_file;
  pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(prior_file);
- pinfo.var_names  = 'PS';
+ pinfo.var_names   = 'PS';
  pinfo.levelindex  = 1;
  pinfo.latindex    = 93;
  pinfo.lonindex    = 182;
@@ -179,48 +178,49 @@ end
  pinfo.copies      = 3;
  pinfo.copyindices = [1 10 50];
 
- fprintf('Starting %s\n','PlotSawtooth');
  PlotSawtooth(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotSawtooth'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotSawtooth'); pause
 
-%------------------------------------------------------------
-%plot_smoother_err
+%% -----------------------------------------------------------
+% plot_smoother_err
 %------------------------------------------------------------
 % plot_smoother_err
 
-%------------------------------------------------------------
-%plot_total_err
+%% ----------------------------------------------------------
+% plot_total_err
 %------------------------------------------------------------
 if (interactive)
  fprintf('Starting %s\n','plot_total_err');
- clear; close all; plot_total_err
- fprintf('Finished %s pausing, hit any key\n','plot_total_err'); pause
+ clear truth_file diagn_file; close all; plot_total_err
+ fprintf('Finished %s ... pausing, hit any key\n','plot_total_err'); pause
 end
 
+ fprintf('Starting %s\n','PlotTotalErr');
  clear pinfo; clf
 
  truth_file = 'True_State.nc';
  diagn_file = 'Prior_Diag.nc';
- vars1 = CheckModel(diagn_file);
+ vars1      = CheckModel(diagn_file);
  rmfield(vars1,{'time','time_series_length','fname'});
- vars2 = CheckModelCompatibility(truth_file,diagn_file);
- pinfo = CombineStructs(vars1,vars2);
+ vars2      = CheckModelCompatibility(truth_file,diagn_file);
+ pinfo      = CombineStructs(vars1,vars2);
  pinfo.num_state_vars = 2; % just do the first two
 
- fprintf('Starting %s\n','PlotTotalErr');
  PlotTotalErr(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotTotalErr'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotTotalErr'); pause
 
-%------------------------------------------------------------
-%plot_var_var_correl
+%% ----------------------------------------------------------
+% plot_var_var_correl
 %------------------------------------------------------------
 if (interactive)
  fprintf('Starting %s\n','plot_var_var_correl');
- clear; close all; plot_var_var_correl
- fprintf('Finished %s pausing, hit any key\n','plot_var_var_correl'); pause
+ clear fname; close all; plot_var_var_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_var_var_correl'); pause
 end
 
+ fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
+
  diagn_file = 'Prior_Diag.nc';
  pinfo = CheckModel(diagn_file);
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
@@ -241,27 +241,25 @@ end
  pinfo.comp_lon           = pinfo.base_lon;
  pinfo.comp_lonind        = pinfo.base_lonind;
 
- fprintf('Starting %s\n','PlotVarVarCorrel');
  PlotVarVarCorrel(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotVarVarCorrel'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotVarVarCorrel'); pause
 
-%------------------------------------------------------------
-%plot_jeff_correl - correlation evolution
+%% ----------------------------------------------------------
+% plot_jeff_correl - correlation evolution
 %------------------------------------------------------------
 if (interactive)
  fprintf('Starting %s\n','plot_jeff_correl');
- clear; close all; plot_jeff_correl
- fprintf('Finished %s pausing, hit any key\n','plot_jeff_correl'); pause
+ clear fname; close all; plot_jeff_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_jeff_correl'); pause
 end
 
- figure(1); clf
+ fprintf('Starting %s\n','PlotJeffCorrel');
 
  % Largely uses same pinfo as PlotVarVarCorrel
  pinfo = rmfield(pinfo,'base_tmeind');
  pinfo.comp_lonind  = 54;
  pinfo.comp_lon     = 74.53;
 
- fprintf('Starting %s\n','PlotJeffCorrel');
  PlotJeffCorrel(pinfo)
  fprintf('Finished %s\n','PlotJeffCorrel')
 

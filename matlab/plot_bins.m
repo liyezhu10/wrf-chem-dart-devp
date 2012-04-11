@@ -71,6 +71,10 @@ switch lower(pinfo.model)
 
       pinfo = GetCamInfo(pinfo, diagn_file, 'PlotBins');
 
+   case 'wrf'
+
+      pinfo = GetWRFInfo(pinfo, diagn_file, 'PlotBins');
+
    case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotBins');

@@ -66,6 +66,10 @@ switch lower(pinfo.model)
 
       pinfo = GetCamInfo(pinfo, truth_file, 'PlotEnsErrSpread');
 
+   case 'wrf'
+
+      pinfo = GetWRFInfo(pinfo, truth_file, 'PlotEnsErrSpread');
+
    case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, truth_file, 'PlotEnsErrSpread');

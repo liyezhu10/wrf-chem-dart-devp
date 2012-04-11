@@ -19,17 +19,23 @@ end
 
 figure(1)
 if (interactive)
- plot_bins
- fprintf('Finished %s pausing, hit any key\n','plot_bins'); pause
+ fprintf('Starting %s\n','plot_bins');
+ clear truth_file diagn_file; close all; plot_bins
+ fprintf('Finished %s ... pausing, hit any key\n','plot_bins'); pause
+ fprintf('Starting %s\n','plot_ens_err_spread');
  plot_ens_err_spread
- fprintf('Finished %s pausing, hit any key\n','plot_ens_err_spread'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','plot_ens_err_spread'); pause
+ fprintf('Starting %s\n','plot_ens_time_series');
  plot_ens_time_series
- fprintf('Finished %s pausing, hit any key\n','plot_ens_time_series'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','plot_ens_time_series'); pause
+ fprintf('Starting %s\n','plot_ens_mean_time_series');
  plot_ens_mean_time_series
- fprintf('Finished %s pausing, hit any key\n','plot_ens_mean_time_series'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','plot_ens_mean_time_series'); pause
 end
 
- clear pinfo 
+ fprintf('Starting %s\n','PlotBins');
+ clear pinfo; close all;
+
  pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var         = 'u';
@@ -39,30 +45,35 @@ end
  pinfo.lonindex    = 43;
  pinfo.latitude    = 42.00;
  pinfo.latindex    = 22;
+ pinfo.fname       = pinfo.diagn_file;
 
- figure(1)
  PlotBins(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotBins'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotBins'); pause
 
- clf; PlotEnsErrSpread(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsErrSpread'); pause
+ fprintf('Starting %s\n','PlotEnsErrSpread');
+ close all; PlotEnsErrSpread(pinfo)
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsErrSpread'); pause
 
- pinfo.fname       = 'Prior_Diag.nc';
- clf; PlotEnsTimeSeries(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsTimeSeries'); pause
+ fprintf('Starting %s\n','PlotEnsTimeSeries');
+ close all; PlotEnsTimeSeries(pinfo)
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsTimeSeries'); pause
 
- clf; PlotEnsMeanTimeSeries(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotEnsMeanTimeSeries'); pause
+ fprintf('Starting %s\n','PlotEnsMeanTimeSeries');
+ close all; PlotEnsMeanTimeSeries(pinfo)
+ fprintf('Finished %s ... pausing, hit any key\n','PlotEnsMeanTimeSeries'); pause
 
-%------------------------------------------------------------
-%plot_correl
+%% ----------------------------------------------------------
+% plot_correl
 %------------------------------------------------------------
 if (interactive)
- clear diagn_file ; clf; plot_correl
- fprintf('Finished %s pausing, hit any key\n','plot_correl'); pause
+ fprintf('Starting %s\n', 'plot_correl');
+ clear diagn_file; close all; plot_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_correl'); pause
 end
 
+ fprintf('Starting %s\n','PlotCorrel');
  clear pinfo; clf
+
  pinfo = CheckModel('Prior_Diag.nc');
  pinfo.base_var           = 't';
  pinfo.comp_var           = 'u';
@@ -78,17 +89,20 @@ end
  pinfo.comp_lvlind        = 2;
 
  PlotCorrel(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotCorrel'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotCorrel'); pause
 
-%------------------------------------------------------------
-%plot_phase_space
+%% -----------------------------------------------------------
+% plot_phase_space
 %------------------------------------------------------------
 if (interactive)
- clear fname ; clf; plot_phase_space
- fprintf('Finished %s pausing, hit any key\n','plot_phase_space'); pause
+ fprintf('Starting %s\n','plot_phase_space');
+ clear fname; close all; plot_phase_space
+ fprintf('Finished %s ... pausing, hit any key\n','plot_phase_space'); pause
 end
 
+ fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
+
  pinfo.fname       = 'True_State.nc';
  pinfo.model       = 'FMS_Bgrid';
  pinfo.var1name    = 'ps';
@@ -116,24 +130,25 @@ end
  pinfo.ltype       = 'k-';
  
  PlotPhaseSpace(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotPhaseSpace'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotPhaseSpace'); pause
 
-%------------------------------------------------------------
-%plot_reg_factor
+%% ----------------------------------------------------------
+% plot_reg_factor
 %------------------------------------------------------------
 % plot_reg_factor
 
-%------------------------------------------------------------
-%plot_sawtooth
+%% ----------------------------------------------------------
+% plot_sawtooth
 %------------------------------------------------------------
 if (interactive)
- figure(1)
- clear truth_file posterior_file prior_file; plot_sawtooth
- fprintf('Finished %s pausing, hit any key\n','plot_sawtooth'); pause
+ fprintf('Starting %s\n','plot_sawtooth');
+ clear truth_file posterior_file prior_file; close all; plot_sawtooth
+ fprintf('Finished %s ... pausing, hit any key\n','plot_sawtooth'); pause
 end
 
- figure(1)
- clear pinfo
+ fprintf('Starting %s\n','PlotSawtooth');
+ clear pinfo; close all
+
  pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.prior_file     = pinfo.truth_file;
@@ -153,38 +168,42 @@ end
  pinfo.copies         = length(pinfo.copyindices);
 
  PlotSawtooth(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotSawtooth'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotSawtooth'); pause
 
-%------------------------------------------------------------
-%plot_smoother_err
+%% -----------------------------------------------------------
+% plot_smoother_err
 %------------------------------------------------------------
 % plot_smoother_err
 
-%------------------------------------------------------------
-%plot_total_err
+%% ----------------------------------------------------------
+% plot_total_err
 %------------------------------------------------------------
 if (interactive)
- figure(1)
- clear truth_file diagn_file; plot_total_err
- fprintf('Finished %s pausing, hit any key\n','plot_total_err'); pause
+ fprintf('Starting %s\n','plot_total_err');
+ clear truth_file diagn_file; close all; plot_total_err
+ fprintf('Finished %s ... pausing, hit any key\n','plot_total_err'); pause
 end
 
- figure(1)
- clear pinfo
+ fprintf('Starting %s\n','PlotTotalErr');
+ clear pinfo; clf
+
  pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
 
  PlotTotalErr(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotTotalErr'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotTotalErr'); pause
 
-%------------------------------------------------------------
-%plot_var_var_correl
+%% ----------------------------------------------------------
+% plot_var_var_correl
 %------------------------------------------------------------
 if (interactive)
- clear fname; clf; plot_var_var_correl
- fprintf('Finished %s pausing, hit any key\n','plot_var_var_correl'); pause
+ fprintf('Starting %s\n','plot_var_var_correl');
+ clear fname; close all; plot_var_var_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_var_var_correl'); pause
 end
 
+ fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
+
  pinfo  = CheckModel('Prior_Diag.nc');
  pinfo.model       = 'FMS_Bgrid';
  pinfo.base_var    = 't';
@@ -205,15 +224,18 @@ end
  pinfo.comp_lonind = 43;
 
  PlotVarVarCorrel(pinfo)
- fprintf('Finished %s pausing, hit any key\n','PlotVarVarCorrel'); pause
+ fprintf('Finished %s ... pausing, hit any key\n','PlotVarVarCorrel'); pause
 
-%------------------------------------------------------------
-%plot_jeff_correl - virtually identical to plot_var_var_correl
+%% ----------------------------------------------------------
+% plot_jeff_correl - correlation evolution
 %------------------------------------------------------------
 if (interactive)
- clear fname; clf; plot_jeff_correl
- fprintf('Finished %s pausing, hit any key\n','plot_jeff_correl'); pause
+ fprintf('Starting %s\n','plot_jeff_correl');
+ clear fname; close all; plot_jeff_correl
+ fprintf('Finished %s ... pausing, hit any key\n','plot_jeff_correl'); pause
 end
 
+ fprintf('Starting %s\n','PlotJeffCorrel');
  PlotJeffCorrel(pinfo)
+ fprintf('Finished %s\n','PlotJeffCorrel')
 

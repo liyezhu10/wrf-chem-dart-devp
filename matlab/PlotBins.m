@@ -141,7 +141,7 @@ switch lower(pinfo.model)
          axis tight
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','mpas_atm'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf','mpas_atm'}
 
       % It is intended that all 3D models have all the required information
       % set in the corresponding Get<model>Info.m script.
@@ -189,6 +189,14 @@ end
 
 function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');
-   axis([0 360 -90 90]);
-   continents;
+   axlims = axis;
+   axlims = axlims + [-20 20 -20 20];
+   grid on
+   axis image
+   axis(axlims)
+   if (axlims(2) < 0)
+       continents('hollow','dateline');
+   else
+       continents('hollow','greenwich');
+   end
 

@@ -52,7 +52,7 @@ end
 
 % CheckModelCompatibility assumes first file is 'truth', so the
 % components must be renamed in this context.
-
+vars     = CheckModel(prior_file);
 pinfo    = CheckModelCompatibility(prior_file, posterior_file);
 pinfo.prior_time     = pinfo.truth_time;
 pinfo.posterior_time = pinfo.diagn_time;
@@ -61,6 +61,7 @@ pinfo.prior_file     = prior_file;
 pinfo.posterior_file = posterior_file;
 pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(prior_file);
+pinfo = CombineStructs(vars, pinfo);
 
 switch lower(pinfo.model)
 
@@ -71,10 +72,8 @@ switch lower(pinfo.model)
       % determine which variable IDs (locations), as well as
       % determine which ensemble members to plot.
 
-      pinfo             = SetVariableID(pinfo);
-      pinfo.var         = pinfo.var;
-      pinfo.var_inds    = pinfo.var_inds;
-      pinfo.copyindices = SetCopyID(prior_file);
+      pinfo                = SetVariableID(pinfo);
+      pinfo.copyindices    = SetCopyID(prior_file);
 
    case 'fms_bgrid'
 

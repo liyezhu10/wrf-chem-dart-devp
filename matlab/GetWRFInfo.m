@@ -31,7 +31,7 @@ end
 
 %% Get the domain-independent information.
 
-varexist(fname, {'copy',};
+varexist(fname, {'copy'});
 copy       = nc_varget(fname,'copy');
 
 %% Get 'optional' variables.
@@ -238,7 +238,7 @@ switch lower(deblank(routine))
       pinfo.ens_mem     = ens_mem;
       pinfo.ltype       = ltype;
 
-   otherwise
+    otherwise
 
 end
 

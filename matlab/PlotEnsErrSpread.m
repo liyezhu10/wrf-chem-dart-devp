@@ -142,7 +142,7 @@ switch lower(pinfo.model)
                ylabel('distance')
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf'}
 
       clf;
 
@@ -235,10 +235,17 @@ end
 
 function PlotLocator(pinfo)
    plot(pinfo.longitude,pinfo.latitude,'pb','MarkerSize',12,'MarkerFaceColor','b');
-   axis([0 360 -90 90])
-   continents;
-   axis image
+   axlims = axis;
+   axlims = axlims + [-20 20 -20 20];
    grid on
+   axis image
+   axis(axlims)
+   if (axlims(2) < 0)
+       continents('hollow','dateline');
+   else
+       continents('hollow','greenwich');
+   end
+
    
    
 function xdates(dates)

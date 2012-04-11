@@ -62,7 +62,7 @@ switch lower(pinfo.model)
       errTotal   = sum(err)/pinfo.time_series_length;
       spreadTotal= sum(err_spread)/pinfo.time_series_length;
       string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
-      string2 = ['time-mean Ensemble Spread Total Error = ' num2str(spreadTotal)];
+      string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
       clf;
       plot(pinfo.time,err, 'b', pinfo.time,err_spread, 'r');
@@ -113,8 +113,8 @@ switch lower(pinfo.model)
       err_spread = total_err(zeros(size(spread)), spread);
       errTotal   = sum(err)/pinfo.time_series_length;
       spreadTotal= sum(err_spread)/pinfo.time_series_length;
-      string1 = sprintf('time-mean Ensemble Mean   Total Error = %f',errTotal);
-      string2 = sprintf('time-mean Ensemble Spread Total Error = %f',spreadTotal);
+      string1 = sprintf('time-mean Ensemble Mean Total Error = %f',errTotal);
+      string2 = sprintf('time-mean Ensemble Spread = %f',spreadTotal);
 
       clf;
       plot(pinfo.time,err, 'b', pinfo.time,err_spread, 'r');
@@ -167,7 +167,7 @@ switch lower(pinfo.model)
       errTotal   = sum(err)/pinfo.time_series_length;
       spreadTotal= sum(err_spread)/pinfo.time_series_length;
       string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
-      string2 = ['time-mean Ensemble Spread Total Error = ' num2str(spreadTotal)];
+      string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
       clf; subplot(2,1,1);
 
@@ -197,7 +197,7 @@ switch lower(pinfo.model)
       errTotal   = sum(err)/pinfo.time_series_length;
       spreadTotal= sum(err_spread)/pinfo.time_series_length;
       string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
-      string2 = ['time-mean Ensemble Spread Total Error = ' num2str(spreadTotal)];
+      string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
       subplot(2,1,2)
 
@@ -243,7 +243,7 @@ switch lower(pinfo.model)
          errTotal   = sum(err)/pinfo.time_series_length;
          spreadTotal= sum(err_spread)/pinfo.time_series_length;
          string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
-         string2 = ['time-mean Ensemble Spread Total Error = ' num2str(spreadTotal)];
+         string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
 
          figure(ivar); clf(ivar);
          plot(pinfo.time,err, 'b', pinfo.time,err_spread, 'r');
@@ -277,11 +277,16 @@ switch lower(pinfo.model)
       %% MIT general circulation ocean model
 
       MITGCMOceanTotalError( pinfo )
-
+      
    case 'cam'
       %% community (global) general circulation atmosphere model
 
       CAMTotalError( pinfo )
+      
+   case 'wrf'
+      %% weather and research forecasting model
+
+      WRFTotalError( pinfo )
 
    case 'mpas_atm'
       %% unstructured grid atmosphere model
@@ -456,7 +461,7 @@ for ivar=1:pinfo.num_state_vars,
             plot(pinfo.time,          rms(:, ivar, 1), '-'); hold on;
             plot(pinfo.time, spread_final(:, ivar, 1), '--');
 
-            s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(         rms(:, ivar, 1)));
+            s{1} = sprintf('time-mean Ensemble Mean Total Error = %f', mean(         rms(:, ivar, 1)));
             s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(spread_final(:, ivar, 1)));
          otherwise
             plot(pinfo.time, squeeze(         rms(:, ivar, :)),'-'); hold on;
@@ -547,7 +552,7 @@ for ivar=1:pinfo.num_state_vars,
    plot(pinfo.time, rmse,'-', pinfo.time, sprd,'--');
       
    s1   = sprintf('%s Ensemble Mean for %s', pinfo.model,pinfo.vars{ivar});
-   s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(rmse));
+   s{1} = sprintf('time-mean Ensemble Mean Total Error  = %f', mean(rmse));
    s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(sprd));
 
    h = legend(s); legend(h,'boxoff')
@@ -643,8 +648,8 @@ for ivar=1:pinfo.num_state_vars,
 
    plot(pinfo.time, rmsetot,'-',pinfo.time, spreadtot,'--');
 
-   s = {sprintf('time-mean Ensemble Mean error = %f', mean(rmsetot)), ...
-        sprintf('time-mean Ensemble Spread     = %f', mean(spreadtot))};
+   s = {sprintf('time-mean Ensemble Mean Total Error = %f', mean(rmsetot)), ...
+        sprintf('time-mean Ensemble Spread = %f', mean(spreadtot))};
 
    h = legend(s); legend(h,'boxoff')
    grid on;

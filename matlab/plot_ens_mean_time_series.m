@@ -47,6 +47,7 @@ if (exist(truth_file,'file')==2)
    pinfo  = rmfield(pinfo,{'time_series_length','time','fname'});
    vars   = CheckModelCompatibility(truth_file, diagn_file);
    pinfo  = CombineStructs(pinfo,vars);
+   clear vars
 
 else
    truth_file = [];

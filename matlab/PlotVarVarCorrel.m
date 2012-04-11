@@ -208,14 +208,21 @@ end
 
 
 function PlotLocator(pinfo)
+
    plot(pinfo.base_lon, pinfo.base_lat,'pb','MarkerSize',12,'MarkerFaceColor','b');
    hold on;
    plot(pinfo.comp_lon, pinfo.comp_lat,'pr','MarkerSize',12,'MarkerFaceColor','r');
    hold off;
-   axis([0 360 -90 90]);
-   continents;
-   axis image
+   axlims = axis;
+   axlims = axlims + [-20 20 -20 20];
    grid on
+   axis image
+   axis(axlims)
+   if (axlims(2) < 0)
+       continents('hollow','dateline');
+   else
+       continents('hollow','greenwich');
+   end
 
 
 

@@ -41,66 +41,54 @@ switch(lower(pinfo.model))
    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
 	 'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
 
-      % Get some file-specific information.
-      varinfo = nc_getvarinfo(pinfo.fname, pinfo.base_var);
-
-      % FIXME ... this isn't right in general
-      for i = 1:length(varinfo.Dimension)
-         switch( lower(varinfo.Dimension{i}) )
-            otherwise
-               num_vars = varinfo.Size(i);
-         end
-      end
-
-      base_var_index = pinfo.base_var_index;
-      base_time      = pinfo.base_time;
-
       % The Base Variable Index must be a valid state variable
-      if ( base_var_index > num_vars )
-         fprintf('%s only has %d state variables\n', pinfo.fname, num_vars)
-         error('you wanted variable # %d ', base_var_index)
+      if ( pinfo.base_var_index > pinfo.num_state_vars )
+         fprintf('%s only has %d state variables\n', pinfo.fname, pinfo.num_state_vars)
+         error('you wanted variable # %d ', pinfo.base_var_index)
       end
 
       % The Time must be within range also.
-      if ( base_time > pinfo.time_series_length )
+      if ( pinfo.base_time > pinfo.time_series_length )
          fprintf('%s only has %d output times\n', pinfo.fname, pinfo.time_series_length)
-         error('you wanted time # %d ', base_time)
+         error('you wanted time # %d ', pinfo.base_time)
       end
 
       % Get 'standard' ensemble series
-      base  = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
+      base = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
                   'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
-                  'stateindex',base_var_index);
+                  'stateindex',pinfo.base_var_index);
 
+      % Get (potentially large) state.
+      state_var = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
+                  'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
+                  'state1',pinfo.min_state_var,'statecount',pinfo.num_state_vars);
+      
       % It is efficient to preallocate correl storage ...
-      correl = zeros(num_vars,pinfo.time_series_length);
+      correl = zeros(pinfo.num_state_vars,pinfo.time_series_length);
 
       % Need to loop through all variables in the ensemble
-      for i = 1:num_vars,
-         state_var  = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-                      'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
-                      'stateindex',i);
-         correl(i, :) = ens_correl(base, base_time, state_var);
+      for i = 1:pinfo.num_state_vars,
+         correl(i, :) = ens_correl(base, pinfo.base_time, state_var(:,:,i));
       end
 
       % Now for the plotting part ...
       disp('Please be patient ... this usually takes a bit ...')
       clf;
 
-      [cs,h] = contour(pinfo.time, 1:num_vars, correl, contourlevels);
+      [cs,h] = contour(pinfo.time, 1:pinfo.num_state_vars, correl, contourlevels);
  %    clabel(cs,h,'FontSize',12,'Color','k','Rotation',0);
       set(gca,'Clim',[-1 1])
       hold on; % highlight the reference state variable and time
-      plot(pinfo.time(base_time),base_var_index,'kh','MarkerSize',12,'MarkerFaceColor','k')
+      plot(pinfo.time(pinfo.base_time), pinfo.base_var_index,'kh','MarkerSize',12,'MarkerFaceColor','k')
 
       s1 = sprintf('%s Correlation of variable %s index %d, timestep = %d', ...
-               pinfo.model, pinfo.base_var, base_var_index, base_time);
+               pinfo.model, pinfo.base_var, pinfo.base_var_index, pinfo.base_time);
       s2 = sprintf('against all variables, all times, %d ensemble members', ...
                size(state_var,2));
       title({s1,s2,pinfo.fname},'interpreter','none','fontweight','bold')
       xlabel(sprintf('model "days" (%d timesteps)',pinfo.time_series_length))
       ylabel('state variable (index)')
-      set(gca,'YTick',1:num_vars)
+      set(gca,'YTick',1:pinfo.num_state_vars)
       colorbar
 
 
@@ -195,6 +183,7 @@ switch(lower(pinfo.model))
 
       inds = (lonmat < 0); % Convert to 0,360 to minimize dateline probs.
       lonmat(inds) = lonmat(inds) + 360.0;
+      if (pinfo.base_lon < 0), pinfo.base_lon = pinfo.base_lon + 360.0; end
 
       % Get the actual goods ... and perform the correlation
 
