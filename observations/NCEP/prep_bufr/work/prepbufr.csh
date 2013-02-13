@@ -6,6 +6,10 @@
 #
 # $Id$
 #
+#**************************************************************
+# MODIFIED BY Arthur Mizzi SO daily=no PROCESSES ONLY SINGLE TIME LEVEL
+#**************************************************************
+#
 #--------------------------------------------------------------
 # DESCRIPTION:
 #
@@ -39,8 +43,10 @@
 # each 6-hour input file will be converted to a single 6-hour output file.
 # this script still processes a day's worth of files at a time even if
 # daily is 'no' - it just makes 4 individual files per day.
+#
+# SCRIPT MODIFIED SO daily=no PROCESSES ONE TIME LEVEL ONLY
 
-set    daily = yes
+set    daily = no
 
 # if daily is 'no' and zeroZ is 'yes', input files at 0Z will be translated 
 # into output files also marked 0Z.  otherwise, they will be named with the 
@@ -86,10 +92,10 @@ if ($commline == 'yes') then
   set beginday = $argv[3]
   set endday   = $argv[4]
 else
-  set year     = 2010
-  set month    = 12
-  set beginday = 22
-  set endday   = 22
+  set year     = ${DT_YYYY}
+  set month    = ${DT_MM}
+  set beginday = ${DT_DD}
+  set endday   = ${DT_DD}
 endif
 
 # directory where the BUFR files are located.  the script assumes the
@@ -111,86 +117,15 @@ endif
 # 'oyear', 'omm', 'odd', 'ohh' are the original date, if the day, month, 
 # and/or year have rolled over.
 
-set BUFR_dir = ../data
+#set BUFR_dir = ../data
+set BUFR_dir = ${ASIM_DIR}/prep_bufr
 
 # directory where DART prepbufr programs are located, relative
 # to the directory where this script is going to be executed.
-set DART_exec_dir = ../exe
+set DART_exec_dir = ${DART_DIR}/observations/NCEP/prep_bufr/exe
 
 # END USER SET PARAMETERS
 #--------------------------------------------------------------
-
-set days_in_mo = (31 28 31 30 31 30 31 31 30 31 30 31)
-# leap years: year 2000 requires that you do even the centuries right
-if (($year %   4) == 0) @ days_in_mo[2] = $days_in_mo[2] + 1
-if (($year % 100) == 0) @ days_in_mo[2] = $days_in_mo[2] - 1
-if (($year % 400) == 0) @ days_in_mo[2] = $days_in_mo[2] + 1
-
-
-
-# save original year in case we roll over the year
-set oyear = $year
-@ oyy = $year % 100
-
-# Loop over days
-set day = $beginday
-set last = $endday
-while ( $day <= $last )
-
-   # clear any old intermediate (text) files
-   rm -f temp_obs prepqm.in prepqm.out 
-
-   # save a copy of the original day and month, in case we roll over below,
-   # in both single/double digit format and guarenteed 2 digit format.
-   set oday = $day
-   set odd  = $day
-   if ($odd < 10) set odd = 0$odd
-   set omonth = $month
-   set omm    = $month
-   if ($omm < 10) set omm = 0$omm
-
-   # convert 1 days worth (data from 3:01Z to 3:00Z of the next day) 
-   # of BUFR files into a single intermediate file if 'daily' is set to true; 
-   # into 4 6-hour files otherwise.
-   set h = 0
-   set next_day = not
-   # daily files need to pull out observations at exactly 3Z from the next day.
-   # non-daily files should process up to hour 24, one for one with the inputs.
-   while ( (($h < 30) && ($daily == yes)) || (($h < 24) && ($daily == no)) )
-      @ h  = $h + 6
-      @ hh = $h % 24
-      @ dd = $day + ($h / 24)
-      @ yy = $year % 100
-      set mm = $month
-
-      # special handling for the end of the day, month, year
-      if ($hh == 0 || ($hh > 0 && $next_day == yes) ) then
-         set next_day = yes
-         if ($dd > $days_in_mo[$month]) then
-            # next month
-            # signal that this is the last day to do
-            set last = 0
-            set dd = 1
-            @ mm++
-            if ($mm > 12) then
-               if ($mm > 12 && $hh == 0) then
-                 @ year ++
-               endif
-               # next year
-               set mm = 1
-               @ yy = $year % 100
-            endif
-         endif
-      endif
-
-      # format the date for filename construction, guarenteed 2 digits
-      if ($yy < 10) set yy = 0$yy
-      if ($mm < 10) set mm = 0$mm
-      if ($dd < 10) set dd = 0$dd
-      if ($hh < 10) set hh = 0$hh
-      set ohh = $h   # hour not modulo 24
-      if ($h < 10)  set ohh = 0$h
-
 
       # the prepqm input files.  match general naming pattern with the
       # data time encoded in the filename.  if the pattern of the filename
@@ -198,7 +133,8 @@ while ( $day <= $last )
       # fix the BUFR_in line below to match what you have.  if the file is
       # gzipped, you can leave it and this program will unzip it before
       # processing it.
-      set BUFR_in = ${BUFR_dir}/${year}${mm}/prepqm${yy}${mm}${dd}${hh}
+
+      set BUFR_in = ${BUFR_dir}/${YYYY}${MM}/prepqm${DT_YY}${MM}${DD}${HH}
 
       if ( -e ${BUFR_in} ) then
          echo "copying ${BUFR_in} into prepqm.in"
@@ -238,48 +174,23 @@ while ( $day <= $last )
          rm -f prepqm.bigendian
       endif
 
-      if ($h == 30) then
-         # get any obs exactly at 3Z from the 6Z file of the next day using a
-         # modified prepbufr program, since 6 hour assimilation windows 
-         # centered on 6Z, 12Z, etc would be 03:01Z-09:00Z, 09:01Z-15:00Z, etc.
-         # obs exactly at 03Z need to be part of the same file which spans 
-         # 21:01Z-03:00Z.   both of these prepbufr programs also add 24h to 
-         # any time after midnight, so the hours in the output files run
-         # from 3.016 hours to 27.000 hours.  (the ascii intermediate files
-         # do not contain day numbers, but probably should and then the hours
-         # can run from a normal 0Z to 23:59Z.)
-         ${DART_exec_dir}/prepbufr_03Z.x
-      else
-         ${DART_exec_dir}/prepbufr.x
-      endif
-
-      if ($daily == 'yes') then
-         cat prepqm.out >>! temp_obs
-         rm -f prepqm.out
-      else
-         if ($zeroZ == 'yes') then
-            # if 0Z, output named with current day and 0Z
-            set BUFR_out = ${BUFR_dir}/${year}${mm}/temp_obs.${year}${mm}${dd}${hh}
-         else
+      ${DART_exec_dir}/prepbufr.x
+      set BUFR_out = ${BUFR_dir}/${YYYY}${MM}/temp_obs.${YYYY}${MM}${DD}${HH}
+      if (${DT_HH} == 0) then
+         if ($zeroZ == 'no') then
             # if 0Z, output named with previous day and 24Z
-            set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}${ohh}
+            set l_date=${PAST_DATE}
+            set l_yyyy=${PAST_YYYY}
+            set l_mm=${PAST_MM}
+            set l_dd=${PAST_DD}
+            set l_hh=24
+            set BUFR_out = ${BUFR_dir}/${YYYY}${MM}/temp_obs.${l_yyyy}${l_mm}${l_dd}${l_hh}
          endif
-         echo "moving output to ${BUFR_out}"
-         mv -fv prepqm.out ${BUFR_out}
       endif
-   end
-
-   if ($daily == 'yes') then
-      # use the original dates without rollover
-      set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}
       echo "moving output to ${BUFR_out}"
-      mv -fv temp_obs ${BUFR_out}
-   endif
+      mv -fv prepqm.out ${BUFR_out}
 
    rm -f prepqm.in
-
-   @ day++
-end
 
 exit 0
 
