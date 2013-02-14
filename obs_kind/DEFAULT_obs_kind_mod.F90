@@ -260,7 +260,8 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_NEUTRON_INTENSITY           = 129, &
     KIND_CANOPY_WATER                = 130, &
-    KIND_GROUND_HEAT_FLUX            = 131
+    KIND_GROUND_HEAT_FLUX            = 131, &
+    KIND_VERTICAL_TEC                = 132
 
 ! AFAJ ++
 ! Kinds for IASI chemistry

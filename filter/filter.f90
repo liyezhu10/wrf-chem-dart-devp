@@ -23,6 +23,11 @@ use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,     
                                  delete_seq_tail, replace_obs_values, replace_qc,            &
                                  destroy_obs_sequence, get_qc_meta_data
 use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
+! AFAJ ++ 
+! Modified to add get_obs_kind
+use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
+                                 get_obs_kind
+! AFAJ --
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                  operator(-), print_time
 use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
@@ -53,6 +58,9 @@ use smoother_mod,         only : smoother_read_restart, advance_smoother,       
                                  init_smoother, do_smoothing, smoother_mean_spread,          &
                                  smoother_assim, filter_state_space_diagnostics,             &
                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
+! AFAJ ++
+use obs_kind_mod,         only : IASI_O3_RETRIEVAL
+! AFAJ --
 
 
 !------------------------------------------------------------------------------
@@ -1341,6 +1349,10 @@ real(r8)              :: obs_prior_mean, obs_prior_var, obs_val, obs_err_var
 real(r8)              :: rvalue(1)
 logical               :: do_outlier, good_forward_op
 
+! AFAJ ++
+integer               :: index_number
+type(obs_def_type)    :: obs_def
+! AFAJ --
 
 ! Assume that mean and spread have been computed if needed???
 ! Assume that things are copy complete???
@@ -1404,6 +1416,11 @@ do j = 1, obs_ens_handle%my_num_vars
    ! find the min and max istatus values across all ensemble members.  these are
    ! either set by dart code, or returned by the model-specific model_interpolate() 
    ! routine, or by forward operator code in obs_def_xxx_mod files.
+! AFAJ ++
+   call get_obs_from_key(seq, keys(j),observation)
+   call get_obs_def(observation, obs_def)
+   index_number = get_obs_kind(obs_def)
+! AFAJ --
    forward_max = nint(maxval(forward_op_ens_handle%copies(1:ens_size, j)))
    forward_min = nint(minval(forward_op_ens_handle%copies(1:ens_size, j)))
 
@@ -1446,17 +1463,28 @@ do j = 1, obs_ens_handle%my_num_vars
          error = obs_prior_mean - obs_val
          diff_sd = sqrt(obs_prior_var + obs_err_var)
          ratio = abs(error / diff_sd)
-         if(ratio > outlier_threshold) then
-            ! FIXME: proposed enhancement to dart qc values - differentiate
-            ! between obs thrown out for being outlier - assim vs eval.
-            !if(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) == 0) then 
+! AFAJ ++
+! Change the threshold for special obs -- hardwired for now
+!         write(msgstring, *) 'AFAJ DEBUG ', index_number, IASI_O3_RETRIEVAL, ratio
+!         call error_handler(E_MSG,'obs_space_diagnostics',msgstring,source,revision,revdate)
+         if (index_number == IASI_O3_RETRIEVAL ) then
+            if (ratio > 5.0_r8 ) then
+!               call trace_message('AFAJ RATIO')
                obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
-            !else
-            !   obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 8    ! was eval only
-            !endif
-         endif
+            endif
+         else
+            if(ratio > outlier_threshold) then
+! FIXME: proposed enhancement to dart qc values - differentiate
+! between obs thrown out for being outlier - assim vs eval.
+!               if (obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) == 0) then 
+                   obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
+!               else
+!                  obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 8    ! was eval only
+!               endif
+             endif
+          endif   
+! AFAJ --
       endif
-
    else
       ! For failed posterior, only update qc if prior successful
       if(forward_max > 0) then
