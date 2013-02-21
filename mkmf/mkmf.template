@@ -67,7 +67,7 @@ LD = ifort
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdf
-FFLAGS  = -O2 -ftz -vec-report0 $(INCS)
+FFLAGS  = -O2 -ftz -vec-report0 -mcmodel=medium -shared-intel $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:

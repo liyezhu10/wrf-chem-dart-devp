@@ -264,7 +264,7 @@ integer, parameter, public :: &
     KIND_VERTICAL_TEC                = 132
 
 ! AFAJ ++
-! Kinds for IASI chemistry
+! Kinds for chemistry
 integer, parameter, public :: &
     KIND_O3_COLUMN                   = 151, &
     KIND_CO                          = 152, &
@@ -290,7 +290,32 @@ integer, parameter, public :: &
     KIND_MACR                        = 172, &
     KIND_GLYALD                      = 173, &
     KIND_C10H16                      = 174, &
-    KIND_O3                          = 175
+    KIND_O3                          = 175, &
+!
+    KIND_CO_MIXING_RATIO             = 176, &
+    KIND_MOPITT_CO                   = 177, &
+    KIND_AOD                         = 178, &
+    KIND_CB1                         = 179, &
+    KIND_CB2                         = 180, &
+    KIND_OC1                         = 181, &
+    KIND_OC2                         = 182, &
+    KIND_DMS                         = 183, &
+    KIND_DST01                       = 184, &
+    KIND_DST02                       = 185, &
+    KIND_DST03                       = 186, &
+    KIND_DST04                       = 187, &
+    KIND_SO4                         = 188, &
+    KIND_SSLT01                      = 189, &
+    KIND_SSLT02                      = 190, &
+    KIND_SSLT03                      = 191, &
+    KIND_SSLT04                      = 192, &
+    KIND_DST05                       = 193, &
+    KIND_TAUAER1                     = 194, &
+    KIND_TAUAER2                     = 195, &
+    KIND_TAUAER3                     = 196, &
+    KIND_TAUAER4                     = 197, &
+    KIND_PM10                        = 198, &
+    KIND_PM25                        = 199
 ! AFAJ --
 
 !! PRIVATE ONLY TO THIS MODULE. see comment below near the max_obs_specific
@@ -299,7 +324,7 @@ integer, parameter, public :: &
 ! AFAJ ++
 ! modify max_obs_generic
 !integer, parameter :: max_obs_generic = 130
-integer, parameter :: max_obs_generic = 175
+integer, parameter :: max_obs_generic = 199
 ! AFAJ --
 
 !----------------------------------------------------------------------------
@@ -580,6 +605,31 @@ obs_kind_names(172) = obs_kind_type(KIND_MACR, 'KIND_MACR')
 obs_kind_names(173) = obs_kind_type(KIND_GLYALD, 'KIND_GLYALD')
 obs_kind_names(174) = obs_kind_type(KIND_C10H16, 'KIND_C10H16')
 obs_kind_names(175) = obs_kind_type(KIND_O3, 'KIND_O3')
+!
+obs_kind_names(176) = obs_kind_type(KIND_CO_MIXING_RATIO, 'KIND_CO_MIXING_RATIO')
+obs_kind_names(177) = obs_kind_type(KIND_MOPITT_CO, 'KIND_MOPITT_CO')
+obs_kind_names(178) = obs_kind_type(KIND_AOD, 'KIND_AOD')
+obs_kind_names(179) = obs_kind_type(KIND_CB1, 'KIND_CB1')
+obs_kind_names(180) = obs_kind_type(KIND_CB2, 'KIND_CB2')
+obs_kind_names(181) = obs_kind_type(KIND_OC1, 'KIND_OC1')
+obs_kind_names(182) = obs_kind_type(KIND_OC2, 'KIND_OC2')
+obs_kind_names(183) = obs_kind_type(KIND_DMS, 'KIND_DMS')
+obs_kind_names(184) = obs_kind_type(KIND_DST01, 'KIND_DST01')
+obs_kind_names(185) = obs_kind_type(KIND_DST02, 'KIND_DST02')
+obs_kind_names(186) = obs_kind_type(KIND_DST03, 'KIND_DST03')
+obs_kind_names(187) = obs_kind_type(KIND_DST04, 'KIND_DST04')
+obs_kind_names(188) = obs_kind_type(KIND_SO4, 'KIND_SO4')
+obs_kind_names(189) = obs_kind_type(KIND_SSLT01, 'KIND_SSLT01')
+obs_kind_names(190) = obs_kind_type(KIND_SSLT02, 'KIND_SSLT02')
+obs_kind_names(191) = obs_kind_type(KIND_SSLT03, 'KIND_SSLT03')
+obs_kind_names(192) = obs_kind_type(KIND_SSLT04, 'KIND_SSLT04')
+obs_kind_names(193) = obs_kind_type(KIND_DST05, 'KIND_DST05')
+obs_kind_names(194) = obs_kind_type(KIND_TAUAER1, 'KIND_TAUAER1')
+obs_kind_names(195) = obs_kind_type(KIND_TAUAER2, 'KIND_TAUAER2')
+obs_kind_names(196) = obs_kind_type(KIND_TAUAER3, 'KIND_TAUAER3')
+obs_kind_names(197) = obs_kind_type(KIND_TAUAER4, 'KIND_TAUAER4')
+obs_kind_names(198) = obs_kind_type(KIND_PM10, 'KIND_PM10')
+obs_kind_names(199) = obs_kind_type(KIND_PM25, 'KIND_PM25')
 ! AFAJ --
 
 ! count here, then output below

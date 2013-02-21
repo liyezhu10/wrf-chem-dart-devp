@@ -59,7 +59,7 @@ use smoother_mod,         only : smoother_read_restart, advance_smoother,       
                                  smoother_assim, filter_state_space_diagnostics,             &
                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
 ! AFAJ ++
-use obs_kind_mod,         only : IASI_O3_RETRIEVAL
+use obs_kind_mod,         only : IASI_O3_RETRIEVAL, MOPITT_CO_RETRIEVAL, MODIS_AOD_RETRIEVAL
 ! AFAJ --
 
 
@@ -1464,12 +1464,13 @@ do j = 1, obs_ens_handle%my_num_vars
          diff_sd = sqrt(obs_prior_var + obs_err_var)
          ratio = abs(error / diff_sd)
 ! AFAJ ++
+! APM: This is the IASI_O3_RETRIEVAL code
 ! Change the threshold for special obs -- hardwired for now
 !         write(msgstring, *) 'AFAJ DEBUG ', index_number, IASI_O3_RETRIEVAL, ratio
 !         call error_handler(E_MSG,'obs_space_diagnostics',msgstring,source,revision,revdate)
          if (index_number == IASI_O3_RETRIEVAL ) then
             if (ratio > 5.0_r8 ) then
-!               call trace_message('AFAJ RATIO')
+!               call trace_message('AFAJ IASI O3 RATIO')
                obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
             endif
          else
@@ -1483,6 +1484,49 @@ do j = 1, obs_ens_handle%my_num_vars
 !               endif
              endif
           endif   
+!
+! APM: This is the MOPITT_CO_RETRIEVAL code
+! Change the threshold for special obs -- hardwired for now
+!         write(msgstring, *) 'AFAJ DEBUG ', index_number, MOPITT_CO_RETRIEVAL, ratio
+!         call error_handler(E_MSG,'obs_space_diagnostics',msgstring,source,revision,revdate)
+         if (index_number == MOPITT_CO_RETRIEVAL ) then
+            if (ratio > 5.0_r8 ) then
+!               call trace_message('AFAJ MOPITT CO RATIO')
+               obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
+            endif
+         else
+            if(ratio > outlier_threshold) then
+! FIXME: proposed enhancement to dart qc values - differentiate
+! between obs thrown out for being outlier - assim vs eval.
+!               if (obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) == 0) then 
+                   obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
+!               else
+!                  obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 8    ! was eval only
+!               endif
+             endif
+          endif   
+!
+! APM: This is the MODIS_AOD_RETRIEVAL code
+! Change the threshold for special obs -- hardwired for now
+!         write(msgstring, *) 'AFAJ DEBUG ', index_number, MODIS_AOD_RETRIEVAL, ratio
+!         call error_handler(E_MSG,'obs_space_diagnostics',msgstring,source,revision,revdate)
+         if (index_number == MODIS_AOD_RETRIEVAL ) then
+            if (ratio > 3.0_r8 ) then
+!               call trace_message('AFAJ MODIS AOD RATIO')
+               obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
+            endif
+         else
+            if(ratio > outlier_threshold) then
+! FIXME: proposed enhancement to dart qc values - differentiate
+! between obs thrown out for being outlier - assim vs eval.
+!               if (obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) == 0) then 
+                   obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7    ! would have been assim
+!               else
+!                  obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 8    ! was eval only
+!               endif
+             endif
+          endif   
+
 ! AFAJ --
       endif
    else
