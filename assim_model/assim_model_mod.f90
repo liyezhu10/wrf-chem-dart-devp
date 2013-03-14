@@ -699,7 +699,6 @@ real(r8),           intent(out) :: obs_vals
 integer,            intent(out) :: istatus 
 
 istatus = 0
-
 call model_interpolate(x, location, loctype, obs_vals, istatus)
 
 end subroutine interpolate
