@@ -266,6 +266,10 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_VERTICAL_TEC                = 132  ! total electron content
 
+! more kinds for land snow cover (Ally Toure)
+integer, parameter, public :: &
+    KIND_BRIGHTNESS_TEMPERATURE      = 133  ! brightness temperature
+
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
 !! possibly of interest to other models with Chemistry species.
@@ -565,6 +569,7 @@ obs_kind_names(129) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_IN
 obs_kind_names(130) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
 obs_kind_names(131) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
 obs_kind_names(132) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
+obs_kind_names(133) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
 
 obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
 obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')
