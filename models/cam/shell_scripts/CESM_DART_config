@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# DART $Id: CESM_DART_config 6392 2013-08-12 16:10:09Z thoar $
 
 # ---------------------
 # Purpose
@@ -15,8 +15,8 @@
 # using one of the DART scripts, this script should be staged in the
 # CASEROOT directory automatically, and DARTROOT is set at that time.
 #
-# POP is the only active model component.
-# CESM starts and stops to allow for POP to assimilate every 24 hours.
+# CAM is the only active model component.
+# CESM starts and stops to allow for CAM to assimilate every 6 hours.
 #
 # This script will build the DART executables if they are not found.
 #
@@ -51,7 +51,7 @@ endif
 
 source ./Tools/ccsm_getenv
 
-set num_instances = $NINST_OCN
+set num_instances = $NINST_ATM
 
 # DARTROOT is set by the DART CESM_configure scripts. Under certain
 # situations, you may need to set this manually. It should reference the
@@ -109,7 +109,7 @@ end
 # because it defines what observation types are supported.
 # ==============================================================================
 
-foreach MODEL ( POP )
+foreach MODEL ( cam )
    set targetdir = $DARTROOT/models/$MODEL/work
    if ( ! -x $targetdir/filter ) then
       echo ""
@@ -143,10 +143,11 @@ else
    echo ""
 endif
 
-${COPY} ${DARTROOT}/models/POP/shell_scripts/st_archive.sh           Tools/
-${COPY} ${DARTROOT}/models/POP/shell_scripts/assimilate.csh          .
-${COPY} ${DARTROOT}/models/POP/shell_scripts/perfect_model.csh       .
-${COPY} ${DARTROOT}/shell_scripts/shell_exit.sh                      .
+${COPY} ${DARTROOT}/models/cam/shell_scripts/st_archive.sh       Tools/
+${COPY} ${DARTROOT}/models/cam/shell_scripts/no_assimilate.csh   .
+${COPY} ${DARTROOT}/models/cam/shell_scripts/assimilate.csh      .
+${COPY} ${DARTROOT}/models/cam/shell_scripts/perfect_model.csh   .
+${COPY} ${DARTROOT}/shell_scripts/shell_exit.sh                  .
 
 # ==============================================================================
 # Stage the DART executables in the CESM execution root directory: EXEROOT
@@ -171,11 +172,11 @@ if [[ -e input.nml ]]; then
    fi
 fi
 
-${COPY} ${DARTROOT}/models/POP/work/pop_to_dart       ${EXEROOT}/.
-${COPY} ${DARTROOT}/models/POP/work/dart_to_pop       ${EXEROOT}/.
-${COPY} ${DARTROOT}/models/POP/work/filter            ${EXEROOT}/.
-${COPY} ${DARTROOT}/models/POP/work/perfect_model_obs ${EXEROOT}/.
-${COPY} ${DARTROOT}/models/POP/work/input.nml         ${CASEROOT}/.
+${COPY} ${DARTROOT}/models/cam/work/cam_to_dart       ${EXEROOT}/.
+${COPY} ${DARTROOT}/models/cam/work/dart_to_cam       ${EXEROOT}/.
+${COPY} ${DARTROOT}/models/cam/work/filter            ${EXEROOT}/.
+${COPY} ${DARTROOT}/models/cam/work/perfect_model_obs ${EXEROOT}/.
+${COPY} ${DARTROOT}/models/cam/work/input.nml         ${CASEROOT}/.
 
 # The first time this is executed, the update namelist script does not exist.
 
@@ -205,11 +206,12 @@ cat << EndOfText >! update_dart_namelists
 # using the variables set in that script
 
 # Ensure that the input.nml ensemble size matches the number of instances.
-# WARNING: the output observation sequence files contain ALL ensemble members.
+# WARNING: the output files contain ALL ensemble members ==> BIG
 
 ex input.nml <<ex_end
-g;ens_size ;s;= .*;= ${NINST_OCN};
-g;num_output_obs_members ;s;= .*;= ${NINST_OCN};
+g;ens_size ;s;= .*;= ${NINST_ATM};
+g;num_output_state_members ;s;= .*;= ${NINST_ATM};
+g;num_output_obs_members ;s;= .*;= ${NINST_ATM};
 wq
 ex_end
 
@@ -267,14 +269,14 @@ end
 # ==============================================================================
 # INFLATION : Initial setup for the default inflation scenario.
 # ==============================================================================
-# POP may use adaptive state-space prior inflation. The initial settings
+# CAM usually uses adaptive state-space prior inflation. The initial settings
 # are in the filter_nml and ... during an assimilation experiment, the output
 # from one assimilation is the input for the next. To facilitate this operationally,
 # it is useful to specify an initial file of inflation values for the first
 # assimilation step. However, I can think of no general way to do this. The
 # utility that creates the initial inflation values (fill_inflation_restart)
-# needs the model size from model_mod. To get that, DART/POP needs
-# files which we generally don't have at this stage of the game (it exists after
+# needs the model size from model_mod. To get that, CAM needs a 'cam_phis.nc'
+# file which we generally don't have at this stage of the game (it exists after
 # a model advance). So ... until I think of something better ... I am making a
 # cookie file that indicates this is the very first assimilation. If this
 # cookie file exists, the assimilate.csh script will make the inflation restart
@@ -285,11 +287,11 @@ end
 # IMPORTANT: If you stage your own inflation file, you must REMOVE the cookie
 # file from the RUNDIR directory.
 
-date >! ${RUNDIR}/pop_inflation_cookie
+date >! ${RUNDIR}/cam_inflation_cookie
 
 # ==============================================================================
 # Creating the code to add to the *.run script to call DART.
-# If there is one instance ... we MUST be running a perfect_model experiment.
+# If there is one instance ... we COULD be running a perfect_model experiment.
 # If there are many instances ... we MUST be assimilating.
 # The number of instances dictates what DART script will be used.
 # ==============================================================================
@@ -312,7 +314,13 @@ endif
 
 grep 'SUCCESSFUL TERMINATION' $CplLogFile
 if ( $status == 0 ) then
-   ${CASEROOT}/DARTSCRIPTNAME
+
+   # If you want to simply run CESM, use 'no_assimilate.csh'
+   # If you want to use DART, use 'DARTSCRIPTNAME'
+   # You can only use one of the two.
+
+   ${CASEROOT}/no_assimilate.csh
+#  ${CASEROOT}/DARTSCRIPTNAME
 
    if ( $status == 0 ) then
       echo "`date` -- DART HAS FINISHED"
@@ -339,10 +347,12 @@ endif
 # modify the "here" document to call the logical DART script.
 
 if ( $num_instances == 1 ) then
-   sed -e "s#DARTSCRIPTNAME#perfect_model.csh#" < temp.$$ >! add_to_run.txt
+   set DARTscript = perfect_model.csh
 else
-   sed -e "s#DARTSCRIPTNAME#assimilate.csh#" < temp.$$ >! add_to_run.txt
+   set DARTscript = assimilate.csh
 endif
+
+sed -e "s#DARTSCRIPTNAME#${DARTscript}#" < temp.$$ >! add_to_run.txt
 
 # Now that the "here" document is created,
 # determine WHERE to insert it -- ONLY IF it is not already there.
@@ -383,24 +393,45 @@ chmod 0744 ${CASE}.run
 # What to do next
 # ==============================================================================
 
-echo "Time to check the DART configuration:"
-echo ""
-echo "1) Modify what you need to in the DART namelists. These are "
-echo "   ${CASEROOT}/input.nml"
-echo ""
-echo "2) If you have recompiled any part of the DART system, 'refresh_dart_files'"
-echo "   will copy them into the correct places."
-echo ""
-echo "3) Make sure the observation directory names in assimilate.csh match"
-echo "   those on your system, and submit the CESM job in the normal way."
-echo ""
-echo "4) Inflation files? Observation files for the time of interest?"
-echo ""
+
+cat << EndOfText >! DART_instructions.txt
+
+-------------------------------------------------------------------------
+
+Check the DART configuration:
+
+1) The default behavior is to _not_ invoke DART and simply run CESM.
+   We recommend that you make sure this works before proceeding.
+
+2) When you want to run DART, edit the ${CASE}.run script to
+   reference "$DARTscript" instead of "no_assimilate.csh".
+
+3) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
+
+4) If you have recompiled any part of the DART system, 'refresh_dart_files'
+   will copy them into the correct places.
+
+5) If you stage your own inflation files, make sure you read the INFLATION section
+   in ${CASEROOT}/CESM_DART_config
+
+6) Make sure the observation directory names in $DARTscript match
+   those on your system.
+
+7) Submit the CESM job in the normal way.
+
+8) You can use ${CASEROOT}/stage_cesm_files
+    to stage files to restart a run.
+
+-------------------------------------------------------------------------
+
+EndOfText
+
+cat DART_instructions.txt
 
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
+# $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/CESM/shell_scripts/CESM_DART_config $
+# $Revision: 6392 $
+# $Date: 2013-08-12 10:10:09 -0600 (Mon, 12 Aug 2013) $
 

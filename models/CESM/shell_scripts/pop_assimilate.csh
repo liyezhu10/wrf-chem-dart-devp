@@ -9,9 +9,10 @@
 # This block is an attempt to localize all the machine-specific
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
+# Search below for TIMECHECK to see what times this script will
+# assimilate.
 
 echo "`date` -- BEGIN POP_ASSIMILATE"
-echo "this version assimilates only when hour is 0Z"
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
@@ -65,7 +66,6 @@ set ensemble_size = ${NINST_OCN}
 set FILE = `head -n 1 rpointer.ocn_0001.restart`
 set FILE = $FILE:t
 set FILE = $FILE:r
-set MYCASE = `echo $FILE | sed -e "s#\..*##"`
 set OCN_DATE_EXT = `echo $FILE:e`
 set OCN_DATE     = `echo $FILE:e | sed -e "s#-# #g"`
 set OCN_YEAR     = `echo $OCN_DATE[1] | bc`
@@ -84,8 +84,15 @@ echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
 # restart configuration for pop (data_assim or rest).
 #-------------------------------------------------------------------------
 
+## TIMECHECK:
 ${REMOVE} ${CASEROOT}/user_nl_pop2_*back
-if ( $OCN_HOUR != 0 ) then
+if ( $OCN_HOUR == 0 ) then
+   echo "Hour is $OCN_HOUR so we are assimilating the ocean"
+   foreach nml ( ${CASEROOT}/user_nl_pop2_* )
+      ${MOVE} $nml ${nml}.back
+      sed -e "s/'rest'/'data_assim'/" ${nml}.back >! $nml
+   end
+else
    echo "Hour is not 0Z so we are skipping the ocean assimilation"
    foreach nml ( ${CASEROOT}/user_nl_pop2_* )
       ${MOVE} $nml ${nml}.back
@@ -93,12 +100,6 @@ if ( $OCN_HOUR != 0 ) then
    end
    echo "`date` -- END POP_ASSIMILATE"
    exit 0
-else
-   echo "Hour is $OCN_HOUR so we are assimilating the ocean"
-   foreach nml ( ${CASEROOT}/user_nl_pop2_* )
-      ${MOVE} $nml ${nml}.back
-      sed -e "s/'rest'/'data_assim'/" ${nml}.back >! $nml
-   end
 endif
 
 #-------------------------------------------------------------------------
@@ -373,7 +374,7 @@ while ( ${member} <= ${ensemble_size} )
    # make sure there are no old output logs hanging around
    $REMOVE output.${member}.pop_to_dart
 
-   set OCN_RESTART_FILENAME = `printf ${MYCASE}.pop_%04d.r.${OCN_DATE_EXT}.nc  ${member}`
+   set OCN_RESTART_FILENAME = `printf ${CASE}.pop_%04d.r.${OCN_DATE_EXT}.nc  ${member}`
    set     OCN_NML_FILENAME = `printf pop2_in_%04d        ${member}`
    set     DART_IC_FILENAME = `printf filter_ics.%04d     ${member}`
    set    DART_RESTART_FILE = `printf filter_restart.%04d ${member}`
