@@ -20,26 +20,29 @@ use      utilities_mod, only : initialize_utilities, finalize_utilities, &
                                open_file, close_file, find_namelist_in_file, &
                                check_namelist_read, nmlfileunit, get_unit, &
                                do_nml_file, do_nml_term, get_next_filename, &
-                               error_handler, E_ERR, E_MSG
+                               error_handler, E_ERR, E_MSG, file_exist
 
 use   time_manager_mod, only : time_type, set_calendar_type, set_date, get_date, &
                                operator(>=), increment_time, set_time, get_time, &
                                operator(-), operator(+), GREGORIAN, &
                                print_time, print_date
 
-use       location_mod, only : VERTISUNDEF
-
 use   obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                                static_init_obs_sequence, init_obs, write_obs_seq, & 
-                               init_obs_sequence, get_num_obs, & 
-                               set_copy_meta_data, set_qc_meta_data
+                               init_obs_sequence, get_num_obs, set_obs_def, & 
+                               set_copy_meta_data, set_qc_meta_data, &
+                               set_obs_values, set_qc
 
-use  obs_utilities_mod, only : create_3d_obs, add_obs_to_seq
+use        obs_def_mod, only : obs_def_type, set_obs_def_kind, &
+                               set_obs_def_location, set_obs_def_time, &
+                               set_obs_def_error_variance, set_obs_def_key
 
-use       obs_kind_mod, only : KIND_BRIGHTNESS_TEMPERATURE
-
-use EASE_utilities_mod, only : get_grid_dims, ezlh_inverse, deconstruct_filename, &
-                               read_ease_Tb
+use            location_mod, only : VERTISSURFACE, set_location
+use       obs_utilities_mod, only : add_obs_to_seq
+use            obs_kind_mod, only : AMSRE_BRIGHTNESS_T
+use obs_def_brightnessT_mod, only : set_amsre_metadata
+use      EASE_utilities_mod, only : get_grid_dims, ezlh_inverse, read_ease_Tb, &
+                                    deconstruct_filename
 
 implicit none
 
@@ -68,11 +71,13 @@ integer            :: ifile, istatus
 character(len=256), dimension(max_num_input_files) :: filename_seq_list
 
 ! information gleaned from filenaming convention
-integer          :: iyear, idoy, channel
+integer          :: iyear, idoy
 character(len=2) :: gridarea
 character(len=1) :: passdir
 character(len=1) :: polarization
 logical          :: is_time_file
+real(r8)         :: footprint
+real             :: frequency   ! real type to match EASE type
 
 character(len=256) :: input_line
 character(len=256) :: msgstring1,msgstring2,msgstring3
@@ -80,13 +85,14 @@ character(len=256) :: msgstring1,msgstring2,msgstring3
 integer :: oday, osec, iocode, iunit, otype
 integer :: year, month, day, hour, minute, second
 integer :: num_copies, num_qc, max_obs
+integer :: landcode = 0  ! FIXME ... totally bogus for now
            
-logical  :: file_exist, first_obs
+logical  :: first_obs
 
 ! The EASE grid is a 2D array of 16 bit unsigned integers
 integer, allocatable, dimension(:,:) :: Tb
 integer, dimension(2) :: ndims
-integer :: nrows, ncols, irow, icol
+integer :: key, nrows, ncols, irow, icol
 
 real(r8) :: temp, terr, qc
 real     :: rlat, rlon
@@ -115,20 +121,12 @@ if (do_nml_term()) write(     *     , nml=ease_grid_to_obs_nml)
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
 write(*,*)' There are ',num_input_files,' input files.'
 
-
-! TJH FIXME ... using 1 input file
-! TJH FIXME ... using 1 input file
-num_input_files = 1
-! TJH FIXME ... using 1 input file
-! TJH FIXME ... using 1 input file
-
-
 ! need some basic information from the first file
 istatus = deconstruct_filename( filename_seq_list(1), &
-             gridarea, iyear, idoy, passdir, channel, polarization, is_time_file)
+             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
 if (istatus /= 0) then
    write(msgstring2,*) 'filename nonconforming'
-   call error_handler(E_ERR, 'main', trim(filename_seq_list(ifile)), &
+   call error_handler(E_ERR, 'main', trim(filename_seq_list(1)), &
                  source, revision, revdate, text2=msgstring2)
 endif
 
@@ -176,9 +174,16 @@ FileLoop: do ifile = 1,num_input_files
    call error_handler(E_MSG, 'main', msgstring1, text2 = trim(filename_seq_list(ifile)))
 
    istatus = deconstruct_filename( filename_seq_list(ifile), &
-             gridarea, iyear, idoy, passdir, channel, polarization, is_time_file)
+             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
    if (istatus /= 0) then
       call error_handler(E_ERR, 'main', 'filename nonconforming', &
+             source, revision, revdate, text2= trim(filename_seq_list(ifile)))
+   endif
+
+   if (gridarea(2:2) == 'L') then
+      footprint = 25.0_r8  ! EASE grid is 25km resolution
+   else
+      call error_handler(E_ERR, 'main', 'unknown footprint', &
              source, revision, revdate, text2= trim(filename_seq_list(ifile)))
    endif
 
@@ -202,37 +207,37 @@ FileLoop: do ifile = 1,num_input_files
    ! Fills up matrix of brightness temperatures
    iocode = read_ease_Tb(filename_seq_list(ifile), iunit, Tb)
 
-   ! FIXME ... check row/col vs. col/row
-   ROWLOOP: do irow=1,nrows
    COLLOOP: do icol=1,ncols
+   ROWLOOP: do irow=1,nrows
 
-      if ( Tb(irow,icol) == 0 ) cycle COLLOOP
+      if ( Tb(irow,icol) == 0 ) cycle ROWLOOP
 
       ! Convert icol,irow to lat/lon using EASE routine
-      iocode = ezlh_inverse(gridarea, real(icol), real(irow), rlat, rlon)
-      if (iocode /= 0) cycle COLLOOP
+      ! Intentional conversion between row-major and column-major nomenclature
+      iocode = ezlh_inverse(gridarea, real(irow), real(icol), rlat, rlon)
+      if (iocode /= 0) cycle ROWLOOP
 
-      if ( verbose) then
-         write(*,*)'icol,irow,lat,lon',icol,irow,rlat,rlon
-      endif
+      ! if ( verbose) then
+      !    write(*,*)'icol,irow,lat,lon',icol,irow,rlat,rlon
+      ! endif
 
-      ! check the lat/lon values to see if they are ok
-      if ( rlat >  90.0 .or. rlat <  -90.0 ) cycle COLLOOP
-      if ( rlon <   0.0 .or. rlon >  360.0 ) cycle COLLOOP
-   
-      ! if lon comes in between -180 and 180, use these lines instead:
-      !if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle COLLOOP
-      !if ( lon < 0.0_r8 )  lon = lon + 360.0_r8 ! changes into 0-360
+      ! ensure the lat/lon values are in range
+      if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle ROWLOOP
+      if ( rlon > 180.0_r8 .or. rlon < -180.0_r8 ) cycle ROWLOOP
+      if ( rlon < 0.0_r8 ) rlon = rlon + 360.0_r8 ! changes into 0-360
    
       ! make an obs derived type, and then add it to the sequence
-      ! TJH FIXME ... polarization, frequency ... metadata
       temp = real(Tb(irow,icol),r8) / 10.0_r8
-      call create_3d_obs(real(rlat,r8), real(rlon,r8), 0.0_r8, VERTISUNDEF, temp, &
-                            KIND_BRIGHTNESS_TEMPERATURE, terr, oday, osec, qc, obs)
+      terr = 2.0_r8   ! temps are [200,300] so this is about one percent
+
+      call set_amsre_metadata(key, real(frequency,r8), footprint, polarization, landcode)
+
+      call create_3d_obs(real(rlat,r8), real(rlon,r8), 0.0_r8, VERTISSURFACE, temp, &
+                            AMSRE_BRIGHTNESS_T, terr, oday, osec, qc, key, obs)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
-   enddo COLLOOP
    enddo ROWLOOP
+   enddo COLLOOP
 
 enddo FileLoop
 
@@ -257,6 +262,7 @@ character(len=*),               intent(in)  :: input_list
 character(len=*), dimension(:), intent(out) :: output_list
 integer                                     :: Check_Input_Files
 
+character(len=256) :: ladjusted
 integer, parameter :: MAXLINES = 1000
 integer :: iline
 
@@ -279,7 +285,15 @@ FileNameLoop: do iline = 1,MAXLINES ! a lot of lines
       exit FileNameLoop
    else
       Check_Input_Files = Check_Input_Files + 1
-      output_list(Check_Input_Files) = adjustl(input_line)
+
+      ladjusted = adjustl(input_line)
+      if ( file_exist(trim(ladjusted)) ) then
+         output_list(Check_Input_Files) = trim(ladjusted)
+      else
+         write(msgstring1,*)'file does not exist.'
+         call error_handler(E_ERR,'Check_Input_Files',&
+          msgstring1,source,revision,revdate,text2=trim(ladjusted))
+      endif
    endif
 
 enddo FileNameLoop
@@ -290,6 +304,56 @@ if (Check_Input_Files >= MAXLINES-1 ) then
 endif
 
 end function Check_Input_Files
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   create_3d_obs - subroutine that is used to create an observation
+!                   type from observation data.  
+!
+!   NOTE: assumes the code is using the threed_sphere locations module, 
+!         that the observation has a single data value and a single
+!         qc value.
+!
+!    lat   - latitude of observation
+!    lon   - longitude of observation
+!    vval  - vertical coordinate
+!    vkind - kind of vertical coordinate (pressure, level, etc)
+!    obsv  - observation value
+!    okind - observation kind
+!    oerr  - observation error
+!    day   - gregorian day
+!    sec   - gregorian second
+!    qc    - quality control value
+!    key   - index to metadata in obs_def_COSMOS_mod arrays
+!    obs   - observation type
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, key, obs)
+integer,        intent(in)    :: okind, vkind, day, sec
+real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
+integer,        intent(in)    :: key
+type(obs_type), intent(inout) :: obs
+
+real(r8)              :: obs_val(1), qc_val(1)
+type(obs_def_type)    :: obs_def
+
+call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
+call set_obs_def_kind(obs_def, okind)
+call set_obs_def_time(obs_def, set_time(sec, day))
+call set_obs_def_error_variance(obs_def, oerr * oerr)
+call set_obs_def_key(obs_def, key)
+call set_obs_def(obs, obs_def)
+
+obs_val(1) = obsv
+call set_obs_values(obs, obs_val)
+qc_val(1)  = qc
+call set_qc(obs, qc_val)
+
+end subroutine create_3d_obs
+
 
 
 end program ease_grid_to_obs

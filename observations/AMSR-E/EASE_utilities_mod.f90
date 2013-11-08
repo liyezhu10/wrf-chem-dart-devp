@@ -52,29 +52,6 @@ contains
 !
 !==========================================================================
 
-function get_grid_dims( grid )
-character(len=*), intent(in) :: grid
-integer, dimension(2)        :: get_grid_dims
-
-integer :: cols, rows
-
-get_grid_dims(:) = -1  ! a bad error code
-
-if ((grid(1:1) == 'N') .or. (grid(1:1) == 'S')) then
-   cols = l_ncols
-   rows = l_nrows
-else if (grid(1:1) == 'M') then
-   cols = h_ncols
-   rows = h_nrows
-else
-   print *, 'get_grid_dims: unknown projection: ', grid
-   return
-endif
-
-get_grid_dims(1) = rows
-get_grid_dims(2) = cols
-
-end function get_grid_dims
 
 !--------------------------------------------------------------------------
 function ezlh_convert (grid, lat, lon, r, s)
@@ -275,12 +252,12 @@ end function ezlh_inverse
 
 
 
-function deconstruct_filename(filename,gridarea,iyear,idoy,passdir,channel,polarization,is_time_file)
+function deconstruct_filename(filename,gridarea,iyear,idoy,passdir,freq,polarization,is_time_file)
 character(len=*), intent(in)  :: filename
 character(len=2), intent(out) :: gridarea
 integer,          intent(out) :: iyear, idoy
 character(len=1), intent(out) :: passdir
-integer,          intent(out) :: channel
+real,             intent(out) :: freq
 character(len=1), intent(out) :: polarization
 logical,          intent(out) :: is_time_file
 integer                       :: deconstruct_filename
@@ -316,12 +293,13 @@ integer                       :: deconstruct_filename
 ! character(len=2), intent(out) :: gridarea
 ! integer,          intent(out) :: iyear, idoy
 ! character(len=1), intent(out) :: passdir
-! integer,          intent(out) :: channel
 ! character(len=1), intent(out) :: polarization
 ! integer                       :: deconstruct_filename
 
-integer :: i, ipos, nchars, iocode
+integer :: i, ipos, nchars, iocode, channel
 character(len=512) :: myfile
+integer, parameter :: nfreq = 6
+real, parameter, dimension(nfreq) :: actualF = (/ 6.9, 10.7, 18.7, 23.8, 36.5, 89.0 /)
 
 deconstruct_filename = 0
 
@@ -330,7 +308,7 @@ gridarea     = 'xx'
 iyear        = 0
 idoy         = 0
 passdir      = 'x'
-channel      = 0
+freq         = 0.0
 polarization = 'x'
 is_time_file = .false.
 
@@ -360,6 +338,27 @@ endif
 
 deconstruct_filename = iocode
 
+! Check for failure and exit early 
+if (deconstruct_filename /= 0 ) return
+
+! Relate the integer frequencies to the actual frequencies.
+! The actual frequencies are:
+! (6.9 GHz, 10.7 GHz, 18.7 GHz, 23.8 GHz, 36.5 GHz, and 89.0 GHz)
+! The 'channel' values: 06, 10, 18, 23, 36, 89 
+
+freq = 0.0
+FREQUENCY: do i = 1,nfreq
+   if ( abs(real(channel) - actualF(i)) < 1.0 ) then
+      freq = actualF(i)
+      exit FREQUENCY
+   endif
+enddo FREQUENCY
+
+if (freq == 0.0) then
+   deconstruct_filename = -99
+   return
+endif
+
 ! Sanity check
 if ( 1 == 0 ) then
    write(*,*)'The salient part of the filename is ',myfile(ipos:nchars)
@@ -368,6 +367,7 @@ if ( 1 == 0 ) then
    write(*,*)'idoy         is ',idoy
    write(*,*)'passdir      is ',passdir
    write(*,*)'channel      is ',channel
+   write(*,*)'frequency    is ',freq
    write(*,*)'polarization is ',polarization
    write(*,*)'time file    is ',is_time_file
    write(*,*)
@@ -397,17 +397,69 @@ integer,                 intent(in)  :: iunit
 integer, dimension(:,:), intent(out) :: Tb
 integer                              :: read_ease_Tb
 
-integer :: nrows, ncols
+integer, parameter :: i2 = SELECTED_INT_KIND(4) ! +/- 32767
+
+integer(i2), allocatable, dimension(:,:) :: datmat
+integer :: irow, icol, nrows, ncols, iocode
 
 nrows = size(Tb,1)
 ncols = size(Tb,2)
+allocate(datmat(nrows,ncols))
 
-Tb(:,:) = 2730
+open(unit=iunit, file=trim(filename), access='direct', &
+          form='unformatted', recl=2*nrows*ncols, iostat=iocode)
 
-write(*,*)'read_ease_Tb unfinished ...'
+read(iunit,rec=1,iostat=iocode) datmat
 
+close(iunit)
+
+! Convert unsigned 16 bit integers to signed 32 bit integers
+! unsigned 16 bit [0,65535]  2^16 = 65536
+do irow = 1,nrows
+do icol = 1,ncols
+   Tb(irow,icol) = IAND(INT(datmat(irow,icol)),65535)
+enddo
+enddo
+
+!--------------------------------------------------------------------------------
+! Sanity check block ... 
+! write it out as an unformatted write so I can read it in matlab
+! PASSED 8 Nov 2013 ... see matlab/Check_EASE_data.m
+!
+! open(unit=iunit, file="sanity_check.ieee", form='unformatted')
+! write(iunit) nrows,ncols
+! write(iunit) Tb
+! close(iunit)
+!--------------------------------------------------------------------------------
+
+! write(*,*)'i2 max possible is ',HUGE(datmat)
 end function read_ease_Tb
 
+
+
+function get_grid_dims( grid )
+character(len=*), intent(in) :: grid
+integer, dimension(2)        :: get_grid_dims
+
+integer :: cols, rows
+
+get_grid_dims(:) = -1  ! a bad error code
+
+if ((grid(1:1) == 'N') .or. (grid(1:1) == 'S')) then
+   cols = l_ncols
+   rows = l_nrows
+else if (grid(1:1) == 'M') then
+   cols = h_ncols
+   rows = h_nrows
+else
+   print *, 'get_grid_dims: unknown projection: ', grid
+   return
+endif
+
+get_grid_dims(1) = rows
+get_grid_dims(2) = cols
+
+end function get_grid_dims
 
 
 end module

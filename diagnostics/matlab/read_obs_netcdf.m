@@ -89,6 +89,12 @@ t              = t + timeorigin;
 
 obsstruct.timestring = timestring;
 
+%% If there is one ObsType, coerce the stupid strings to be shaped right.
+
+if (length(ObsTypes) == 1)
+   ObsTypeStrings = {strvcat(ObsTypeStrings)'};
+end
+
 %% Echo summary if requested
 
 if ( verbose > 0 )
