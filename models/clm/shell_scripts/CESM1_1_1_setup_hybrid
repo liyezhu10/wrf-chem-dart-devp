@@ -136,7 +136,7 @@ setenv caseroot     /glade/p/work/${USER}/cases/${case}
 setenv exeroot      /glade/scratch/${USER}/${case}/bld
 setenv rundir       /glade/scratch/${USER}/${case}/run
 setenv archdir      /glade/scratch/${USER}/archive/${case}
-setenv dartroot     /glade/u/home/${USER}/svn/DART/trunk
+setenv dartroot     /glade/u/home/${USER}/work/DART/Tb
 
 # ==============================================================================
 # configure settings
