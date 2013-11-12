@@ -23,9 +23,17 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     ! need to pass metadata and ensemble index to interpolate. This is terrible.
-!     call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, istatus, &
-!     (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
+!     ! This operator reads information from a CLM restart file, whose contents
+!     ! are not modified by the assimilation process. There is no point doing
+!     ! the posterior call as it returns the same value as the prior.
+!     ! Need to pass metadata and ensemble index to interpolate. Terrible.
+!     if (isprior) then
+!        call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, istatus, &
+!        (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
+!     else
+!        obs_val = MISSING_R8
+!        istatus = 1
+!     endif
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 

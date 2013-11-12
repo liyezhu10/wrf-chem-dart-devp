@@ -409,7 +409,16 @@ allocate(datmat(nrows,ncols))
 open(unit=iunit, file=trim(filename), access='direct', &
           form='unformatted', recl=2*nrows*ncols, iostat=iocode)
 
+if (iocode /= 0) then
+   write(*,*)'read_ease_Tb failed to open ',trim(filename) 
+   stop
+endif
+
 read(iunit,rec=1,iostat=iocode) datmat
+if (iocode /= 0) then
+   write(*,*)'read_ease_Tb failed to read ',trim(filename) 
+   stop
+endif
 
 close(iunit)
 
@@ -430,9 +439,16 @@ enddo
 ! write(iunit) nrows,ncols
 ! write(iunit) Tb
 ! close(iunit)
+! write(*,*)'i2 max possible is ',HUGE(datmat)
+! if ( HUGE(datmat) /= 32767 ) then
+!    write(*,*)'ERROR ... run matlab/CheckEASE_data.m to see if Tb read correctly.'
+!    write(*,*)'ERROR ... run matlab/CheckEASE_data.m to see if Tb read correctly.'
+!    stop
+! endif
 !--------------------------------------------------------------------------------
 
-! write(*,*)'i2 max possible is ',HUGE(datmat)
+read_ease_Tb = 0 ! successful finish
+
 end function read_ease_Tb
 
 

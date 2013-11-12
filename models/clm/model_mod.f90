@@ -484,7 +484,7 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
+if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are')
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
@@ -532,7 +532,8 @@ call get_sparse_dims(ncid, clm_restart_filename, 'open')
 
 allocate(grid1d_ixy(Ngridcell), grid1d_jxy(Ngridcell))
 allocate(land1d_ixy(Nlandunit), land1d_jxy(Nlandunit), land1d_wtxy(Nlandunit))
-allocate(cols1d_ixy(Ncolumn),   cols1d_jxy(Ncolumn)  , cols1d_wtxy(Ncolumn), cols1d_ityplun(Ncolumn))
+allocate(cols1d_ixy(Ncolumn),   cols1d_jxy(Ncolumn))
+allocate(cols1d_wtxy(Ncolumn),  cols1d_ityplun(Ncolumn))
 allocate(pfts1d_ixy(Npft),      pfts1d_jxy(Npft)     , pfts1d_wtxy(Npft))
 allocate(levtot(Nlevtot))
 if (Nlevsno > 0) allocate(zsno(Nlevsno,Ncolumn))
@@ -928,16 +929,20 @@ do ivar=1, nfields
    else
 
       write(string1,*)'variables of rank ',progvar(ivar)%numdims,' are unsupported.'
-      write(string2,*)trim(progvar(ivar)%varname),' is dimensioned ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-      call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate, text2=string2)
+      write(string2,*)trim(progvar(ivar)%varname),' is dimensioned ',&
+                           progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+      call error_handler(E_ERR,'static_init_model', string1, source, revision, &
+                         revdate, text2=string2)
 
    endif
 
    indx = indx - 1
    if (indx /= progvar(ivar)%indexN ) then
-      write(string1,*)'variable ',trim(progvar(ivar)%varname),' is supposed to end at index ',progvar(ivar)%indexN
+      write(string1,*)'variable ',trim(progvar(ivar)%varname), &
+       ' is supposed to end at index ',progvar(ivar)%indexN
       write(string2,*)'it ends at index ',indx
-      call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'static_init_model', string1, source, revision, &
+                         revdate, text2=string2)
    endif
 
 enddo
@@ -1656,7 +1661,8 @@ else
       else
 
          write(string1,*)'do not know how to handle CLM variables with more than 2 dimensions'
-         write(string2,*)trim(progvar(ivar)%varname),'has shape', progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+         write(string2,*)trim(progvar(ivar)%varname),'has shape', &
+                              progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
          call error_handler(E_ERR,'nc_write_model_vars',string1,source,revision,revdate)
 
       endif
@@ -1800,8 +1806,6 @@ character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: ncid
 character(len=256) :: myerrorstring
-integer :: fixme = 7000   ! intentionally declaring here so value
-                          ! persists across calls.
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1896,15 +1900,6 @@ do ivar=1, nfields
       ni = progvar(ivar)%dimlens(1)
       allocate(data_1d_array(ni))
       call DART_get_var(ncid, varname, data_1d_array)
-
-      ! TJH FIXME DEBUG TEST
-      ! Trying to force a gridpoint that will be affected to have
-      ! MISSING values so we can test the block that aborts the update
-      ! if some or any of the ensemble members have a missing value.
-
- !    write(*,*)trim(progvar(ivar)%varname),'replacing ',data_1d_array(fixme),'with',MISSING_R8, 'element',fixme
- !    data_1d_array(fixme) = MISSING_R8
- !    fixme = fixme + 1
 
       do i = 1, ni
          state_vector(indx) = data_1d_array(i)
@@ -2246,7 +2241,8 @@ elseif (obs_kind == KIND_BRIGHTNESS_TEMPERATURE ) then
    if (present(optionals)) then
       call get_brightness_temperature(model_time, location, optionals, interp_val, istatus)
    else
-      write(string1, '(''Tb obs at lon,lat ('',f12.6,'','',f12.6,'') has no metadata.'')') llon, llat
+      write(string1, '(''Tb obs at lon,lat ('',f12.6,'','',f12.6,'') has no metadata.'')') &
+                                  llon, llat
       write(string2,*)'cannot call model_interpolate() for Tb without metadata argument.'
       call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate,text2=string2)
    endif
@@ -2345,8 +2341,10 @@ gridlatj = latinds(1)
 gridloni = loninds(1)
 
 if ((debug > 5) .and. do_output()) then
-   write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',loc_lon,LON(gridloni),gridloni
-   write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',loc_lat,LAT(gridlatj),gridlatj
+   write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
+                  loc_lon,LON(gridloni),gridloni
+   write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
+                  loc_lat,LAT(gridlatj),gridlatj
 endif
 
 ! If there is no vertical component, the problem is greatly simplified.
@@ -2479,8 +2477,10 @@ gridlatj = latinds(1)
 gridloni = loninds(1)
 
 if ((debug > 4) .and. do_output()) then
-   write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ',loc_lon,LON(gridloni),gridloni,loc_lev
-   write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ',loc_lat,LAT(gridlatj),gridlatj,loc_lev
+   write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ', &
+              loc_lon,LON(gridloni),gridloni,loc_lev
+   write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ', &
+              loc_lat,LAT(gridlatj),gridlatj,loc_lev
 endif
 
 ! Determine the level 'above' and 'below' the desired vertical
@@ -2508,7 +2508,8 @@ else
 endif
 
 if ((debug > 4) .and. do_output()) then
-   write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev',loc_lev,'>= depthabove',depthabove
+   write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev', &
+                   loc_lev,'>= depthabove',depthabove
 endif
 
 ! Determine how many elements can contribute to the gridcell value.
@@ -3782,8 +3783,10 @@ real(r4), allocatable, dimension(:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid')
-call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, xtype=xtype), 'get_var_1d', 'inquire_variable')
-call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), 'get_var_1d', 'inquire_dimension')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, xtype=xtype), &
+    'get_var_1d', 'inquire_variable')
+call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
+    'get_var_1d', 'inquire_dimension')
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
@@ -3937,15 +3940,18 @@ real(r4), allocatable, dimension(:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_2d', 'inq_varid')
-call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, xtype=xtype), 'get_var_2d', 'inquire_variable')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, xtype=xtype), &
+    'get_var_2d', 'inquire_variable')
 
 if ( (numdims /= 2)  ) then
    write(string1,*) trim(varname)//' is not a 2D variable as expected.'
    call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
 endif
 
-call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), 'get_var_2d', 'inquire_dimension 1')
-call nc_check(nf90_inquire_dimension(ncid, dimIDs(2), len=dimlens(2)), 'get_var_2d', 'inquire_dimension 2')
+call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
+    'get_var_2d', 'inquire_dimension 1')
+call nc_check(nf90_inquire_dimension(ncid, dimIDs(2), len=dimlens(2)), &
+    'get_var_2d', 'inquire_dimension 2')
 
 if ( (size(var2d,1) /= dimlens(1))  .or. (size(var2d,2) /= dimlens(2)) ) then
    write(string1,*) trim(varname)//' has shape ', dimlens(1), dimlens(2)
@@ -4159,6 +4165,7 @@ endif
 end subroutine SetLocatorArrays
 
 
+
 function get_ncols_in_gridcell(ilon,ilat)
 integer, intent(in) :: ilon, ilat
 integer :: get_ncols_in_gridcell
@@ -4166,6 +4173,7 @@ integer :: get_ncols_in_gridcell
 get_ncols_in_gridcell = gridCellInfo(ilon,ilat)%ncols
 
 end function get_ncols_in_gridcell
+
 
 
 subroutine get_colids_in_gridcell(ilon,ilat,colids)
@@ -4182,6 +4190,7 @@ endif
 end subroutine get_colids_in_gridcell
 
 
+
 subroutine update_water_table_depth( ivar, state_vector, ncFileID, filename, dart_time)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
@@ -4194,13 +4203,13 @@ character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: dart_time
 
 ! temp space to hold data while we are writing it
-integer :: i, ni, nj
-real(r8), allocatable, dimension(:)         :: wa,wt,zwt
+integer :: i, ni
+real(r8), allocatable, dimension(:) :: wa,wt,zwt
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
 integer         :: VarID, ncNdims, dimlen
-type(time_type) :: file_time
+type(time_type) :: file_time ! FIXME ... check that dart_time and file_time agree
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -4264,32 +4273,42 @@ if ( .not. module_initialized ) call static_init_model
             'update_water_table_depth', 'put_var '//trim(varname))
 
    ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID),'update_water_table_depth', 'redef '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
-                 'update_water_table_depth', 'modified '//trim(varname))
-   call nc_check(nf90_enddef(ncfileID),'update_water_table_depth','state enddef '//trim(filename))
+   call nc_check(nf90_Redef(ncFileID), &
+           'update_water_table_depth', 'redef '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
+           'update_water_table_depth', 'modified '//trim(varname))
+   call nc_check(nf90_enddef(ncfileID), &
+           'update_water_table_depth','state enddef '//trim(filename))
 
    ! Stuff the updated WA values into the CLM netCDF file. 
 
-   call nc_check(nf90_inq_varid(ncFileID, 'WA', VarID), 'update_water_table_depth', 'inq_varid WA')
-   call nc_check(nf90_put_var(ncFileID, VarID, wa), 'update_water_table_depth', 'put_var WA')
+   call nc_check(nf90_inq_varid(ncFileID, 'WA', VarID), &
+           'update_water_table_depth', 'inq_varid WA '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, wa), &
+           'update_water_table_depth', 'put_var WA '//trim(filename))
 
    ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID),'update_water_table_depth', 'redef '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
-                 'update_water_table_depth', 'modified WA')
-   call nc_check(nf90_enddef(ncfileID),'update_water_table_depth','state enddef '//trim(filename))
+   call nc_check(nf90_Redef(ncFileID), &
+           'update_water_table_depth', 'redef '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
+           'update_water_table_depth', 'modified WA '//trim(filename))
+   call nc_check(nf90_enddef(ncfileID), &
+           'update_water_table_depth','state enddef '//trim(filename))
 
    ! Stuff the updated WT values into the CLM netCDF file. 
 
-   call nc_check(nf90_inq_varid(ncFileID, 'WT', VarID), 'update_water_table_depth', 'inq_varid WT')
-   call nc_check(nf90_put_var(ncFileID, VarID, wt), 'update_water_table_depth', 'put_var WT')
+   call nc_check(nf90_inq_varid(ncFileID, 'WT', VarID), &
+           'update_water_table_depth', 'inq_varid WT '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, wt), &
+           'update_water_table_depth', 'put_var WT '//trim(filename))
 
    ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID),'update_water_table_depth', 'redef '//trim(filename))
+   call nc_check(nf90_Redef(ncFileID), &
+           'update_water_table_depth', 'redef '//trim(filename))
    call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
-                 'update_water_table_depth', 'modified WT')
-   call nc_check(nf90_enddef(ncfileID),'update_water_table_depth','state enddef '//trim(filename))
+           'update_water_table_depth', 'modified WT '//trim(filename))
+   call nc_check(nf90_enddef(ncfileID), &
+           'update_water_table_depth','state enddef '//trim(filename))
 
    deallocate(zwt, wa, wt)
 
@@ -4365,7 +4384,7 @@ ncols    = get_ncols_in_gridcell(ilon,ilat)
 ! Early return if there are no CLM columns at this location.
 ! Forward operator returns 'failed', but life goes on.
 if (ncols == 0) then
-   if ((debug > 0) .and. do_output()) then
+   if ((debug > 3) .and. do_output()) then
       write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has no CLM columns - skipping.'
       write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
       call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
@@ -4382,7 +4401,7 @@ call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 ! FIXME Presently skipping gridcells with lakes.
 ! get_column_snow() must also modified to use bulk snow formulation for lakes.
 if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
-   if ((debug > 0) .and. do_output()) then
+   if ((debug > 1) .and. do_output()) then
       write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
       write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
       call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
@@ -4578,9 +4597,10 @@ integer               :: varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount
 
 ! Get the (scalar) number of active snow layers for this column.
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), 'get_column_snow', 'inq_varid SNLSNO')
+call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), &
+        'get_column_snow', 'inq_varid SNLSNO'//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, snlsno, start=(/ snow_column /), count=(/ 1 /)), &
-              'get_column_snow', 'get_var SNLSNO')
+        'get_column_snow', 'get_var SNLSNO '//trim(filename))
 
 nlayers = abs(snlsno(1))
 
@@ -4596,9 +4616,10 @@ snowcolumn%propconst = 0.5     ! aux_ins(5) proportionality between grain size &
 
 ! Get the ground temperature for this column.
 ! double T_GRND(column); long_name = "ground temperature" ; units = "K" ;
-call nc_check(nf90_inq_varid(ncid,'T_GRND', varid), 'get_column_snow', 'inq_varid T_GRND')
+call nc_check(nf90_inq_varid(ncid,'T_GRND', varid), &
+        'get_column_snow', 'inq_varid T_GRND '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, t_grnd, start=(/ snow_column /), count=(/ 1 /)), &
-              'get_column_snow', 'get_var T_GRND')
+        'get_column_snow', 'get_var T_GRND '//trim(filename))
 
 ! FIXME ... lake columns use a bulk formula for snow
 if (cols1d_ityplun(snow_column) == LAKE ) return ! we are a lake
@@ -4611,17 +4632,20 @@ allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot))
 ncstart = (/ 1, snow_column /)
 nccount = (/ nlevtot,   1   /)
 
-call nc_check(nf90_inq_varid(ncid,'T_SOISNO', varid), 'get_column_snow', 'inq_varid T_SOISNO')
+call nc_check(nf90_inq_varid(ncid,'T_SOISNO', varid), &
+        'get_column_snow', 'inq_varid T_SOISNO '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, t_soisno, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var T_SOISNO')
+        'get_column_snow', 'get_var T_SOISNO '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ', varid), 'get_column_snow', 'inq_varid H2OSOI_LIQ')
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ', varid), &
+        'get_column_snow', 'inq_varid H2OSOI_LIQ '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, h2osoi_liq, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var H2OSOI_LIQ')
+        'get_column_snow', 'get_var H2OSOI_LIQ '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), 'get_column_snow', 'inq_varid H2OSOI_ICE')
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), &
+        'get_column_snow', 'inq_varid H2OSOI_ICE '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var H2OSOI_ICE')
+        'get_column_snow', 'get_var H2OSOI_ICE '//trim(filename))
 
 ! double   DZSNO(column, levsno); long_name = "snow layer thickness"        ; units = "m" ;
 ! double    ZSNO(column, levsno); long_name = "snow layer depth"            ; units = "m" ;
@@ -4632,21 +4656,25 @@ allocate(dzsno(nlevsno), zsno(nlevsno), zisno(nlevsno), snw_rds(nlevsno))
 ncstart = (/ 1, snow_column /)
 nccount = (/ nlevsno,   1   /)
 
-call nc_check(nf90_inq_varid(ncid,'DZSNO', varid), 'get_column_snow', 'inq_varid DZSNO')
+call nc_check(nf90_inq_varid(ncid,'DZSNO', varid), &
+        'get_column_snow', 'inq_varid DZSNO '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, dzsno, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var DZSNO')
+        'get_column_snow', 'get_var DZSNO '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'ZSNO', varid), 'get_column_snow', 'inq_varid ZSNO')
+call nc_check(nf90_inq_varid(ncid,'ZSNO', varid), &
+        'get_column_snow', 'inq_varid ZSNO '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, zsno, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var ZSNO')
+        'get_column_snow', 'get_var ZSNO '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'ZISNO', varid), 'get_column_snow', 'inq_varid ZISNO')
+call nc_check(nf90_inq_varid(ncid,'ZISNO', varid), &
+        'get_column_snow', 'inq_varid ZISNO '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, zisno, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var ZISNO')
+        'get_column_snow', 'get_var ZISNO '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'snw_rds', varid), 'get_column_snow', 'inq_varid snw_rds')
+call nc_check(nf90_inq_varid(ncid,'snw_rds', varid), &
+        'get_column_snow', 'inq_varid snw_rds '//trim(filename))
 call nc_check(nf90_get_var(  ncid, varid, snw_rds, start=ncstart, count=nccount), &
-     'get_column_snow', 'get_var snw_rds')
+        'get_column_snow', 'get_var snw_rds '//trim(filename))
 
 ! Print a summary so far
 if ((debug > 3) .and. do_output()) then

@@ -5,7 +5,7 @@
 %%-------------------------------------------------------------------------------
 % Read what I wrote from the fortran program
 %--------------------------------------------------------------------------------
-fid = fopen('/Users/thoar/svn/DART/Tb/observations/AMSR-E/work/sanity_check.ieee','rb');
+fid = fopen('/glade/p/work/thoar/DART/Tb/observations/AMSR-E/work/sanity_check.ieee','rb');
 
 bob = fread(fid,1,'int32');
 nrows = fread(fid,1,'int32') 
@@ -20,7 +20,7 @@ fclose(fid);
 %%-------------------------------------------------------------------------------
 % Read the original data
 %--------------------------------------------------------------------------------
-AMSR = '/Users/thoar/Desktop/EASE_Grid/2011_north/ID2r3-AMSRE-NL2011001A.v03.06H';
+AMSR = '/glade/p/image/Observations/land/EASE_Grid/2004_north/ID2r3-AMSRE-NL2004004A.v03.89V';
 fid  = fopen(AMSR,'rb');
 Tb   = fread(fid,[nrows,ncols],'uint16');
 fclose(fid)
@@ -47,16 +47,17 @@ mydiff = datmat - Tb;
 [min(datmat(:)) max(datmat(:))] 
 [min(mydiff(:)) max(mydiff(:))] 
 
-
-figure(3); clf
-fname         = '/Users/thoar/svn/DART/Tb/observations/AMSR-E/work/obs_epoch_001.nc';
-ObsTypeString = 'AMSRE_BRIGHTNESS_T';
-region        = [0 360 0 90 -Inf Inf];
-CopyString    = 'observation';
-QCString      = 'Data QC';
-maxgoodQC     = 2;
-verbose       = 1;   % anything > 0 == 'true'
-twoup         = 0;   % anything > 0 == 'true'
- 
-bob = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, QCString, maxgoodQC, verbose, twoup);
+if ( 1 == 2 )
+   figure(3); clf
+   fname         = '/Users/thoar/svn/DART/Tb/observations/AMSR-E/work/obs_epoch_001.nc';
+   ObsTypeString = 'AMSRE_BRIGHTNESS_T';
+   region        = [0 360 0 90 -Inf Inf];
+   CopyString    = 'observation';
+   QCString      = 'Data QC';
+   maxgoodQC     = 2;
+   verbose       = 1;   % anything > 0 == 'true'
+   twoup         = 0;   % anything > 0 == 'true'
+    
+   bob = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, QCString, maxgoodQC, verbose, twoup);
+end
 
