@@ -201,7 +201,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -221,6 +221,13 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
+
+if (present(optionals)) then
+! This is a terrible way to break the DART interfaces.
+! I had to do it for a quick fix for CLM, but I'm not happy about it.
+endif
+
 
 ! This should be the result of the interpolation of a
 ! given kind (itype) of variable at the given location.

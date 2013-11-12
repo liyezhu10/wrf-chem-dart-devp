@@ -10,7 +10,7 @@ module assim_model_mod
 ! add capabilities needed by the standard assimilation methods.
 
 use    types_mod, only : r8, digits12
-use location_mod, only : location_type, read_location, &
+use location_mod, only : location_type, read_location, write_location, &
                          LocationDims, LocationName, LocationLName
 use time_manager_mod, only : time_type, get_time, read_time, write_time,                &
                              THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP, NO_CALENDAR, &
@@ -675,7 +675,7 @@ end subroutine copy_assim_model
 
 
 
-subroutine interpolate(x, location, loctype, obs_vals, istatus)
+subroutine interpolate(x, location, loctype, obs_vals, istatus, optionals )
 !---------------------------------------------------------------------
 !
 ! Interpolates from the state vector in an assim_model_type to the
@@ -685,6 +685,8 @@ subroutine interpolate(x, location, loctype, obs_vals, istatus)
 ! entire observation side of the class tree. Reconsider this at a 
 ! later date (JLA, 15 July, 2002). loctype for now is an integer that
 ! specifies what sort of variable from the model should be interpolated.
+!
+! TJH 11/11/13 ... totally breaking everything for temp support for CLM
 
 implicit none
 
@@ -693,10 +695,11 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: loctype
 real(r8),           intent(out) :: obs_vals
 integer,            intent(out) :: istatus 
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 istatus = 0
 
-call model_interpolate(x, location, loctype, obs_vals, istatus)
+call model_interpolate(x, location, loctype, obs_vals, istatus, optionals)
 
 end subroutine interpolate
 

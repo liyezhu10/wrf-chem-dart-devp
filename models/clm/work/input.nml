@@ -140,7 +140,6 @@
 
 
 &obs_def_brightnessT_nml
-   casename    = 'cesm_standard',
    debug       = .true.
    /
 
@@ -167,6 +166,7 @@
 # The definitions for most of the DART kinds are in obs_def_tower_mod.f90
 
 &model_nml
+   casename                     = 'cesm_standard',
    clm_restart_filename         = 'clm_restart.nc',
    clm_history_filename         = 'clm_history.nc',
    assimilation_period_days     = 2,
@@ -174,7 +174,7 @@
    model_perturbation_amplitude = 0.2,
    output_state_vector          = .false.,
    calendar                     = 'Gregorian',
-   debug                        = 0,
+   debug                        = 1,
    clm_state_variables          = 'frac_sno',    'KIND_SNOWCOVER_FRAC',
                                   'H2OSNO',      'KIND_SNOW_WATER',
                                   'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',

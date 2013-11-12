@@ -29,16 +29,11 @@ use   time_manager_mod, only : time_type, set_calendar_type, set_date, get_date,
 
 use   obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                                static_init_obs_sequence, init_obs, write_obs_seq, & 
-                               init_obs_sequence, get_num_obs, set_obs_def, & 
-                               set_copy_meta_data, set_qc_meta_data, &
-                               set_obs_values, set_qc
-
-use        obs_def_mod, only : obs_def_type, set_obs_def_kind, &
-                               set_obs_def_location, set_obs_def_time, &
-                               set_obs_def_error_variance, set_obs_def_key
+                               init_obs_sequence, get_num_obs, &
+                               set_copy_meta_data, set_qc_meta_data
 
 use            location_mod, only : VERTISSURFACE, set_location
-use       obs_utilities_mod, only : add_obs_to_seq
+use       obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 use            obs_kind_mod, only : AMSRE_BRIGHTNESS_T
 use obs_def_brightnessT_mod, only : set_amsre_metadata
 use      EASE_utilities_mod, only : get_grid_dims, ezlh_inverse, read_ease_Tb, &
@@ -233,7 +228,7 @@ FileLoop: do ifile = 1,num_input_files
       call set_amsre_metadata(key, real(frequency,r8), footprint, polarization, landcode)
 
       call create_3d_obs(real(rlat,r8), real(rlon,r8), 0.0_r8, VERTISSURFACE, temp, &
-                            AMSRE_BRIGHTNESS_T, terr, oday, osec, qc, key, obs)
+                            AMSRE_BRIGHTNESS_T, terr, oday, osec, qc, obs, key)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
    enddo ROWLOOP
@@ -304,56 +299,6 @@ if (Check_Input_Files >= MAXLINES-1 ) then
 endif
 
 end function Check_Input_Files
-
-
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-!   create_3d_obs - subroutine that is used to create an observation
-!                   type from observation data.  
-!
-!   NOTE: assumes the code is using the threed_sphere locations module, 
-!         that the observation has a single data value and a single
-!         qc value.
-!
-!    lat   - latitude of observation
-!    lon   - longitude of observation
-!    vval  - vertical coordinate
-!    vkind - kind of vertical coordinate (pressure, level, etc)
-!    obsv  - observation value
-!    okind - observation kind
-!    oerr  - observation error
-!    day   - gregorian day
-!    sec   - gregorian second
-!    qc    - quality control value
-!    key   - index to metadata in obs_def_COSMOS_mod arrays
-!    obs   - observation type
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, key, obs)
-integer,        intent(in)    :: okind, vkind, day, sec
-real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
-integer,        intent(in)    :: key
-type(obs_type), intent(inout) :: obs
-
-real(r8)              :: obs_val(1), qc_val(1)
-type(obs_def_type)    :: obs_def
-
-call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
-call set_obs_def_kind(obs_def, okind)
-call set_obs_def_time(obs_def, set_time(sec, day))
-call set_obs_def_error_variance(obs_def, oerr * oerr)
-call set_obs_def_key(obs_def, key)
-call set_obs_def(obs, obs_def)
-
-obs_val(1) = obsv
-call set_obs_values(obs, obs_val)
-qc_val(1)  = qc
-call set_qc(obs, qc_val)
-
-end subroutine create_3d_obs
-
 
 
 end program ease_grid_to_obs

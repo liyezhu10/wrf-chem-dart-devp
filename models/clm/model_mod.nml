@@ -1,4 +1,5 @@
 &model_nml
+   casename                     = 'clm_dart',
    clm_restart_filename         = 'clm_restart.nc',
    clm_history_filename         = 'clm_history.nc',
    assimilation_period_days     = 1,

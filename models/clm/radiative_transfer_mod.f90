@@ -3081,6 +3081,69 @@ K_WV = KH2O+DKAPPA
 END SUBROUTINE WVABSORB
 
 
+
+
+subroutine test_ss_model()
+
+use utilities_mod, only : logfileunit
+use     types_mod, only : r4
+
+! test THE forward observation operator
+
+integer, parameter :: N_FREQ = 1  ! observations come in one frequency at a time
+integer, parameter :: N_POL  = 2  ! code automatically computes both polarizations
+integer   :: nlayers              ! number of snow levels - 5 in this case
+character :: pol                  ! observation polarization [H,V]
+
+! variables required by ss_snow() routine
+real(r4), allocatable, dimension(:,:) :: y ! 2D array
+real(r4) :: aux_ins(5) ! properties: [nlyrs, ground_T, soilsat, poros, proportionality]
+integer  :: ctrl(4)        ! N_LYRS, N_AUX_INS, N_SNOW_INS, N_FREQ
+real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
+real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
+real(r4) :: tb_ubc(N_POL,N_FREQ) ! UPPER BOUNDARY CONDITION BRIGHTNESS TEMPERATURE
+real(r4) :: tb_out(N_POL,N_FREQ) ! brightness temperature
+
+tetad(:) = 55.0   ! AMSR-E incidence angle
+freq(:)  = 89.0   ! test frequency (GHz)
+pol      = 'H'    ! test polarization
+nlayers  = 5      ! 5 snow layers in test
+
+allocate( y(nlayers,5) ) ! snow layers -x- 5 properties
+
+tb_ubc(:,N_FREQ) = (/ 2.7, 2.7 /)  ! two polarizations
+
+ctrl(1) = nlayers
+ctrl(2) = 0         ! not used as far as I can tell
+ctrl(3) = 5
+ctrl(4) = N_FREQ
+
+aux_ins(1) = real(nlayers,r4)
+aux_ins(2) = 271.1123
+aux_ins(3) = 0.3
+aux_ins(4) = 0.4
+aux_ins(5) = 0.5_r4
+
+y(:,1) = (/   0.6213,   0.2071,   0.1033,   0.0497,   0.0200 /) ! snow thickness (meters)
+y(:,2) = (/ 270.5943, 150.7856,  96.1940,  66.4903,  58.0377 /) ! density (kg/m3)
+y(:,3) = (/  93.1651,  84.0811,  67.6715,  66.8529,  65.6391 /) / 1000000.0_r4  ! grain diameter (m)
+y(:,4) = (/   0.0000,   0.0000,   0.0000,   0.0000,   0.0000 /) ! liquid water fraction
+y(:,5) = (/ 266.1220, 256.7763, 247.9525, 240.4609, 235.8929 /) ! temperature (K)
+
+! the tb_out array contains the calculated brightness temperature outputs
+! at each polarization (rows) and frequency (columns).
+
+call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+
+write(     *     ,*)'ss_model() TEST: tb_out is ',tb_out,' should be  205.9256 206.9057'
+write(logfileunit,*)'ss_model() TEST: tb_out is ',tb_out,' should be  205.9256 206.9057'
+
+deallocate( y )
+
+end subroutine test_ss_model
+
+
+
 end module radiative_transfer_mod
 
 ! <next few lines under version control, do not edit>

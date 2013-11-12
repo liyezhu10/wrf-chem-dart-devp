@@ -12,7 +12,8 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!  use obs_def_brightnessT_mod, only : read_amsre_metadata, &
+!  use obs_def_brightnessT_mod, only : get_amsre_metadata, &
+!                                      read_amsre_metadata, &
 !                                      write_amsre_metadata, &
 !                                      interactive_amsre_metadata
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
@@ -22,7 +23,9 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     continue
+!     ! need to pass metadata and ensemble index to interpolate. This is terrible.
+!     call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, istatus, &
+!     (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
@@ -102,7 +105,7 @@ type(amsre_metadata) :: missing_metadata
 
 character(len=8), parameter :: AMSRESTRING = 'amsr-e'
 character(len=8), parameter ::  IGBPSTRING = 'igbp'
-real(r4),         parameter :: AMSRE_inc_angle = 55.0_r4 ! incidence angle (degrees)
+real(r8),         parameter :: AMSRE_inc_angle = 55.0_r8 ! incidence angle (degrees)
 
 integer, SAVE :: MAXamsrekey = 300000  ! 1 day, NH 25km, 1 freq, 1 pol 
 integer, SAVE ::    amsrekey = 0       ! useful length of metadata arrays
@@ -110,8 +113,6 @@ integer, SAVE ::    amsrekey = 0       ! useful length of metadata arrays
 !----------------------------------------------------------------------
 ! no namelist items
 !----------------------------------------------------------------------
-
-logical :: debug = .false.
 
 !----------------------------------------------------------------------
 ! This function name will be a problem if cosmos and amsrE are needed
@@ -163,27 +164,34 @@ end subroutine set_amsre_metadata
 !======================================================================
 
 
-subroutine get_amsre_metadata(key, frequency, footprint, polarization, landcovercode)
+function get_amsre_metadata(key)
 
 ! Query the metadata in module storage for a particular observation.
-! This can be useful for post-processing routines, etc.
+! encoding the polarization is required because Fortran is picky.
+! realval = real('H',r8)   works fine, but the inverse does not:
+! charval = char(int(realval)) ... FAILS ... so I decided to encode
+! Horizontal polarizations as a positive value, and
+! Vertical polarizations as a negative value.
 
-integer,   intent(in)  :: key
-real(r8),  intent(out) :: frequency, footprint
-character, intent(out) :: polarization
-integer,   intent(out) :: landcovercode
+integer,    intent(in) :: key
+real(r8), dimension(5) :: get_amsre_metadata
 
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure the desired key is within the length of the metadata arrays.
 call key_within_range(key,'get_amsre_metadata')
 
-frequency     = observation_metadata(key)%frequency
-footprint     = observation_metadata(key)%footprint
-polarization  = observation_metadata(key)%polarization
-landcovercode = observation_metadata(key)%landcovercode
+get_amsre_metadata(1)  = real(observation_metadata(key)%landcovercode,r8)
+get_amsre_metadata(2)  =      observation_metadata(key)%frequency
+get_amsre_metadata(3)  =      observation_metadata(key)%footprint
+if (observation_metadata(key)%polarization == 'H') then
+   get_amsre_metadata(4)  = 1.0_r8
+else
+   get_amsre_metadata(4)  = -1.0_r8
+endif
+get_amsre_metadata(5)  =      AMSRE_inc_angle
 
-end subroutine get_amsre_metadata
+end function get_amsre_metadata
 
 
 !======================================================================
@@ -271,20 +279,34 @@ integer,           intent(in)           :: key
 integer,           intent(in)           :: ifile
 character(len=*),  intent(in), optional :: fform
 
-real(r8)          :: frequency, footprint
-character         :: polarization
-integer           :: landcovercode
+
+real(r8), dimension(5) :: metadata
+real(r8)  :: frequency, footprint, incidence_angle
+character :: polarization
+integer   :: landcovercode
+
 
 if ( .not. module_initialized ) call initialize_module
 
 ! given the index into the local metadata arrays - retrieve
-! the metadata for this particular observation.
+! the metadata for this particular observation. All AMSR-E observations
+! have the same incidence angle, so that is not written.
 
-call get_amsre_metadata(key, frequency, footprint, polarization, landcovercode)
+metadata = get_amsre_metadata(key)
+
+landcovercode   =      int(metadata(1))
+frequency       =          metadata(2)
+footprint       =          metadata(3)
+if (metadata(4) > 0.0_r8 ) then
+   polarization = 'H'
+else
+   polarization = 'V'
+endif
+incidence_angle =          metadata(5)
 
 if ( ascii_file_format(fform)) then
    write(ifile, *) trim(AMSRESTRING)
-   write(ifile, '(f8.2,2x,f8.2,2x,A)') frequency, footprint, polarization
+   write(ifile, '(f8.2,1x,f8.2,1x,A)') frequency, footprint, polarization
    write(ifile, *) trim(IGBPSTRING)
    write(ifile, '(i8)') landcovercode
 else
