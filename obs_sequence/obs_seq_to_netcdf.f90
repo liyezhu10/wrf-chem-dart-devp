@@ -78,7 +78,7 @@ integer :: num_copies, num_qc, num_obs, max_num_obs, obs_seq_file_id
 
 integer :: num_obs_kinds
 
-character(len=256) :: obs_seq_read_format
+character(len=64) :: obs_seq_read_format
 logical :: pre_I_format
 
 logical :: out_of_range, is_there_one, keeper

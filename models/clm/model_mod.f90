@@ -4749,9 +4749,6 @@ integer,          intent(in)  :: instance
 type(time_type),  intent(in)  :: state_time
 character(len=*), intent(out) :: filename
 
-! TJH FIXME need to determine ensemble size somehow ...
-integer :: ens_size
-
 integer :: year, month, day, hour, minute, second
 
 100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
@@ -4762,24 +4759,23 @@ second = second + minute*60 + hour*3600
 
 write(filename,110) trim(casename),year,month,day,second
 
-! Check if in a perfect model scenario
-if( file_exist(filename) ) then
-   ens_size = 1
-   if ( (debug > 0) .and. do_output()) then
+if( file_exist(filename) ) then ! perfect model scenario
+
+   if ( (debug > 99) .and. do_output()) then
       write(string1,*)'Running in a perfect model configuration with ',trim(filename)
       call error_handler(E_MSG, 'model_mod:build_clm_instance_filename', string1)
    endif
-   return
-endif
 
-! 'normal' situation
-write(filename,100) trim(casename),instance,year,month,day,second
-if( file_exist(filename) ) then
-   return
-else
-   write(string1,*)'Unable to create viable CLM restart filename:'
-   call error_handler(E_ERR, 'model_mod:build_clm_instance_filename', &
-        string1, text2=trim(filename))
+else ! multi-instance scenario
+
+   write(filename,100) trim(casename),instance,year,month,day,second
+
+   if( .not. file_exist(filename) ) then
+      write(string1,*)'Unable to create viable CLM restart filename:'
+      call error_handler(E_ERR, 'model_mod:build_clm_instance_filename', &
+           string1, text2=trim(filename))
+   endif
+
 endif
 
 end subroutine build_clm_instance_filename
