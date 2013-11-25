@@ -2775,7 +2775,7 @@ end function nc_write_model_vars
 ! model_interpolate section
 
 
-   subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+   subroutine model_interpolate(x, location, obs_type, interp_val, istatus, optionals)
 !=======================================================================
 !
 
@@ -2784,6 +2784,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_type
 integer,            intent(out) :: istatus
 real(r8),           intent(out) :: interp_val
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 integer  :: i, vstatus
 real(r8) :: bot_lon, top_lon, delta_lon,                                &
@@ -3053,6 +3054,9 @@ end if
 ! other routines to calculate the ps arrays for themselves
 ! Currently (10/26/06) this flag is not used.
 ! ps(1,1) = MISSING_R8
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 end subroutine model_interpolate
 

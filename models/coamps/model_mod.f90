@@ -700,12 +700,14 @@ contains
   !   OUT obs_val           interpolated value
   !   OUT interp_status     status of interpolation (0 is success)
   subroutine model_interpolate(x, location, obs_type, obs_val, &
-                               interp_status)
+                               interp_status, optionals)
     real(r8), dimension(:), intent(in) :: x
     type(location_type),    intent(in) :: location
     integer,                intent(in) :: obs_type
     real(r8),              intent(out) :: obs_val
     integer,               intent(out) :: interp_status
+    real(r8), dimension(:), optional, intent(in) :: optionals
+
 
     logical :: successful_interpolation
 
@@ -720,6 +722,10 @@ contains
       obs_val = MISSING_R8
       interp_status = 1
     end if
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
+
   end subroutine model_interpolate
 
   ! ens_mean_for_model

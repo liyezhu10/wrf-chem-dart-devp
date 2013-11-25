@@ -218,7 +218,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -238,11 +238,15 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! Default for successful return
 istatus = 0
 
 obs_val = MISSING_R8 ! Just to satisfy the INTENT(OUT)
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 end subroutine model_interpolate
 

@@ -236,7 +236,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Interpolates from state vector x to the location. It's not particularly
@@ -254,6 +254,8 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
+
 character(128), save :: file_obs
 integer :: myid, i, locid, junk, err
 integer, save :: instance = 0
@@ -310,6 +312,9 @@ enddo
 !-- Linear interpolation --
 !--       obs(x) + d(obs)/dx * (Delta-x)
 obs_val = obs_x(locid) + dobsdx(locid) * (x(locid) - x_obs(locid))
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 end subroutine model_interpolate
 

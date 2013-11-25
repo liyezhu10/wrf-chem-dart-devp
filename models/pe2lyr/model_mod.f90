@@ -314,21 +314,24 @@ end subroutine get_state_meta_data
 
 !#######################################################################
 
-subroutine model_interpolate(x, location, mytype, obs_val, istatus)
+subroutine model_interpolate(x, location, mytype, obs_val, istatus, optionals)
 
 implicit none
-
 
 real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 integer,             intent(in) :: mytype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 integer  :: lon_below, lon_above, lat_below, lat_above, i
 real :: bot_lon, top_lon, delta_lon, bot_lat, top_lat
 real :: lon_fract, lat_fract, val(2, 2), temp_lon, a(2)
 real :: lon, lat, level, lon_lat_lev(3)
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! All interpolations okay for now
 istatus = 0

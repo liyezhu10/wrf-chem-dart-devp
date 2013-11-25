@@ -744,12 +744,13 @@ end subroutine init_time
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus, optionals)
  real(r8),            intent(in) :: x(:)
  type(location_type), intent(in) :: location
  integer,             intent(in) :: obs_type
  real(r8),           intent(out) :: interp_val
  integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! Model interpolate will interpolate any state variable (S, T, U, V, PSURF) to
 ! the given location given a state vector. The type of the variable being
@@ -767,6 +768,9 @@ integer        :: hstatus
 logical        :: convert_to_ssh
 
 if ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! print data min/max values
 if (debug > 2) call print_ranges(x)

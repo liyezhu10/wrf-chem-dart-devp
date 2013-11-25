@@ -397,7 +397,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Interpolates a value of the state vector x to the specified
@@ -411,6 +411,10 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
  
 end subroutine model_interpolate
 

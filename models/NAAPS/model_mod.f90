@@ -355,7 +355,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, interp_val, istatus)
+subroutine model_interpolate(x, location, itype, interp_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -375,6 +375,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: interp_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
   real(r8)         :: loc_array(3), llon, llat
   real(r8)         :: lheight
@@ -383,6 +384,9 @@ integer,            intent(out) :: istatus
   integer          :: iloc, jloc, kloc
 
   IF ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! Let's assume failure.  Set return val to missing, then the code can
 ! just set istatus to something indicating why it failed, and return.

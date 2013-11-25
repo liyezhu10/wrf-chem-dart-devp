@@ -299,7 +299,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -319,6 +319,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 integer  :: i, vstatus, which_vert
 integer  :: lat_below, lat_above, lon_below, lon_above
@@ -326,7 +327,11 @@ real(r8) :: lon_fract, temp_lon, lat_fract
 real(r8) :: lon, lat, height, lon_lat_lev(3)
 real(r8) :: bot_lon, top_lon, delta_lon, bot_lat, top_lat
 real(r8) :: val(2,2), a(2)
+
 if ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! Default for successful return
 istatus = 0

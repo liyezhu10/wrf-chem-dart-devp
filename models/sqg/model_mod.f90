@@ -485,7 +485,7 @@ end subroutine init_time
 
 !========================================================================
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !-----------------------------------------------------------------
 ! Interpolates from state vector x to the location and returns obs_val.
 ! istatus = 0 suggests interpolation went ok, 1 means something went wrong.
@@ -496,11 +496,15 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 real(r8) :: lon, lat, lev, lon_lat_lev(3)
 real(r8) :: bot_lon, top_lon, delta_lon, bot_lat, top_lat, delta_lat
 real(r8) :: temp_lon, lon_fract, lat_fract, val(2,2), a(2)
 integer  :: lon_below, lon_above, lat_below, lat_above, level, i
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! Assume all interpolations okay for now
 istatus = 0

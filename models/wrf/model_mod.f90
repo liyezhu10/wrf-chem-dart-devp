@@ -901,7 +901,7 @@ end subroutine get_state_meta_data
 
 !#######################################################################
 
-subroutine model_interpolate(x, location, obs_kind, obs_val, istatus)
+subroutine model_interpolate(x, location, obs_kind, obs_val, istatus, optionals)
 
 ! This is the main forward operator subroutine for WRF.
 ! Given an ob (its DART location and kind), the corresponding model
@@ -935,6 +935,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_kind
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! local
 logical, parameter  :: debug = .false.
@@ -974,6 +975,9 @@ logical             :: is_lev0
 
 ! local var for terrain elevation check for surface stations 
 real(r8)            :: mod_sfc_elevation 
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! Initialize stuff
 istatus = 0

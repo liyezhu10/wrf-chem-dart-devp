@@ -2028,7 +2028,7 @@ end subroutine sv_to_restart_file
 !############################################################################
 
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus, optionals)
 
 ! Passed variables
 
@@ -2037,6 +2037,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
   integer,             intent(in)  :: obs_type
   real(r8),            intent(out) :: interp_val
   integer,             intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! Local storage
 
@@ -2048,6 +2049,9 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
   real(r8)         :: xi, yi, xf, yf, zf, q1, q2, vt, vb
 
   IF ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! Let's assume failure.  Set return val to missing, then the code can
 ! just set istatus to something indicating why it failed, and return.

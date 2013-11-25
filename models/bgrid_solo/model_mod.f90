@@ -1149,13 +1149,14 @@ end subroutine get_state_meta_data
 
 
 
-recursive subroutine model_interpolate(x, location, itype, obs_val, istatus)
+recursive subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 
 real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),            intent(out):: obs_val
 integer,             intent(out):: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 integer :: num_lons, num_lats, lon_below, lon_above, lat_below, lat_above, i
 real(r8) :: bot_lon, top_lon, delta_lon, bot_lat, top_lat, delta_lat
@@ -1275,6 +1276,9 @@ obs_val = lat_fract * a(2) + (1.0 - lat_fract) * a(1)
 ! the return codes are always "good" i.e. zero
 !
 ! normally set istatus here 
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 end subroutine model_interpolate
 

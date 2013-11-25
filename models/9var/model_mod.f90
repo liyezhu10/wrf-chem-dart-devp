@@ -479,7 +479,7 @@ end function get_model_time_step
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !---------------------------------------------------------------------
 !
 ! Interpolates from state vector x to the location. It's not particularly
@@ -498,6 +498,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 integer  :: lower_index, upper_index
 real(r8) :: lctn, lctnfrac
@@ -517,6 +518,9 @@ if(upper_index > model_size) upper_index = upper_index - model_size
 
 lctnfrac = lctn - int(lctn)
 obs_val = (1.0_r8 - lctnfrac) * x(lower_index) + lctnfrac * x(upper_index)
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 end subroutine model_interpolate
 

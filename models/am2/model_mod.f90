@@ -769,13 +769,14 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
 
   ! ----------------------------------------------------------------------------
 
-  subroutine model_interpolate(x, location, itype, obs_val, istatus)
+  subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
     real(r8),            intent(in) :: x(:)
     type(location_type), intent(in) :: location
     integer,             intent(in) :: itype
     real(r8),           intent(out) :: obs_val
     integer,            intent(out) :: istatus
-    !
+    real(r8), dimension(:), optional, intent(in) :: optionals
+
     ! Given a state vector, a location, and a model state variable type,
     ! interpolates the state variable field to that location and returns
     ! the value in obs_val. The istatus variable should be returned as
@@ -1080,6 +1081,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
       end if ! Check for valid latitude
     end if ! Check for valid variable
 
+  if (present(optionals)) &
+     call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
   end subroutine model_interpolate
 

@@ -1577,7 +1577,7 @@ end subroutine statevector_to_restart_file
 !############################################################################
 
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus, optionals)
 
 ! Passed variables
 
@@ -1586,6 +1586,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
   integer,             intent(in)  :: obs_type
   real(r8),            intent(out) :: interp_val
   integer,             intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! Local storage
 
@@ -1704,6 +1705,9 @@ interp_val = (1 - lon_fract) * line(1) + lon_fract * line(2)
 
 ! All good.
   istatus = 0
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 return
 end subroutine model_interpolate

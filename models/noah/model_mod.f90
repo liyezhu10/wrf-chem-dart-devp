@@ -604,7 +604,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -620,6 +620,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 real(r8)               :: loc_lon, loc_lat, loc_depth
 real(r8), dimension(3) :: loc
@@ -627,6 +628,9 @@ integer,  dimension(1) :: loninds, latinds
 integer                :: gridloni, gridlatj, zlev, n, ivar, indx
 
 if ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 ! FIXME - for the single column case - there is no obvious way to
 ! determine the extent of the domain ... EVERYTHING matches.

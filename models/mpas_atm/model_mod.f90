@@ -875,7 +875,7 @@ end subroutine get_state_meta_data
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus, optionals)
 
 ! given a state vector, a location, and a KIND_xxx, return the
 ! interpolated value at that location, and an error code.  0 is success,
@@ -903,6 +903,7 @@ type(location_type), intent(in)  :: location
 integer,             intent(in)  :: obs_type
 real(r8),            intent(out) :: interp_val
 integer,             intent(out) :: istatus
+real(r8), dimension(:), optional, intent(in) :: optionals
 
 ! local storage
 
@@ -914,6 +915,9 @@ logical  :: goodkind
 real(r8) :: values(3), lpres, loc_array(3)
 
 if ( .not. module_initialized ) call static_init_model
+
+if (present(optionals)) &
+   call error_handler(E_MSG, 'model_interpolate', 'ignoring optional argument' )
 
 interp_val = MISSING_R8
 istatus    = 99           ! must be positive (and integer)
