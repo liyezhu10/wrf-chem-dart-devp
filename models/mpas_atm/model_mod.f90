@@ -161,7 +161,7 @@ type(xyz_location_type), allocatable :: cell_locs(:)
 ! variables which are in the module namelist
 integer            :: vert_localization_coord = VERTISHEIGHT
 integer            :: assimilation_period_days = 0
-integer            :: assimilation_period_seconds = 60
+integer            :: assimilation_period_seconds = 21600
 real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
 real(r8)           :: highest_obs_pressure_mb   = 100.0_r8    ! do not assimilate obs higher than this level.
 real(r8)           :: sfc_elev_max_diff = -1.0_r8    ! do not assimilate if |model - station| height is larger than this [m].
@@ -170,8 +170,8 @@ logical            :: log_p_vert_interp = .true.     ! if true, interpolate vert
 integer            :: debug = 0   ! turn up for more and more debug messages
 integer            :: xyzdebug = 0
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
-character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
+character(len=256) :: model_analysis_filename = 'mpas_init.nc'
+character(len=256) :: grid_definition_filename = 'mpas_init.nc'
 
 ! if .false. use U/V reconstructed winds tri interp at centers for wind forward ops
 ! if .true.  use edge normal winds (u) with RBF functs for wind forward ops
@@ -207,7 +207,8 @@ namelist /model_nml/             &
    use_rbf_option,               &
    update_u_from_reconstruct,    &
    use_increments_for_u_update,  &
-   highest_obs_pressure_mb
+   highest_obs_pressure_mb,      &
+   sfc_elev_max_diff
 
 ! DART state vector contents are specified in the input.nml:&mpas_vars_nml namelist.
 integer, parameter :: max_state_variables = 80
@@ -2046,10 +2047,10 @@ if (.not. horiz_dist_only) then
   else if (base_which /= vert_localization_coord) then
       call vert_convert(ens_mean, base_obs_loc, base_obs_kind, ztypeout, istatus1)
       if(debug > 5) then
-      call write_location(0,base_obs_loc,charstring=string1)
-      call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
-  endif
-endif
+         call write_location(0,base_obs_loc,charstring=string1)
+         call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
+     endif
+   endif
 endif
 
 if (istatus1 == 0) then
@@ -2073,6 +2074,7 @@ if (istatus1 == 0) then
       if (.not. horiz_dist_only) then
           if (local_obs_which /= vert_localization_coord) then
               call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), ztypeout, istatus2)
+              obs_loc(t_ind) = local_obs_loc
           else
               istatus2 = 0
           endif
