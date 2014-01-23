@@ -59,8 +59,8 @@ The multi-instance capability is very new to CESM and we are in close collaborat
 the CESM developers to make using DART with CESM as easy as possible. While we strive to
 keep DART requirements out of the model code, there are a few SourceMods needed to run
 DART from within CESM. The SourceMods are available at
-<a href="http://www.image.ucar.edu/pub/DART/CESM/DART_SourceMods_cesm1_1_1.tar">
-http://www.image.ucar.edu/pub/DART/CESM/DART_SourceMods_cesm1_1_1.tar</a> and should be 
+<a href="http://www.image.ucar.edu/pub/DART/CESM/DART_SourceMods_cesm1_1_1_24Oct2013.tar">
+http://www.image.ucar.edu/pub/DART/CESM/DART_SourceMods_cesm1_1_1_24Oct2013.tar</a> and should be 
 unpacked into your HOME directory. They will create a <em class=file>~/cesm_1_1_1</em> 
 directory with the appropriate SourceMods structure. The ensuing scripts require these
 SourceMods and expect them to be in your HOME directory.
@@ -71,6 +71,14 @@ evolved into scripts. These scripts are not intended to be a 'black box'; you wi
 read and understand them and modify them to your own purpose. They are heavily commented --
 in keeping with their origins as a set of notes. If you would like to offer suggestions on
 how to improve those notes - please send them to dart@ucar.edu - we'd love to hear them.
+<br />
+<br />
+<strong>NOTE:</strong> When running CESM with a single instance,
+the CLM file names have a different structure than when running in the multi-instance
+configuration. <em class=program>CESM1_1_1_setup_hybrid</em> is almost identical
+to <em class=program>CESM1_1_1_setup_pmo</em>, differing only in the treatment
+of the file names and the staging of a few files that may be needed for an 
+effective assimilation.
 </P>
 <TABLE border=0 cellpadding=5 width=100% summary='script description'>
 <THEAD align=left>
@@ -79,7 +87,7 @@ how to improve those notes - please send them to dart@ucar.edu - we'd love to he
 </THEAD>
 <TBODY valign=top>
 
-<TR><TD><a href="shell_scripts/CESM1_1_1_pmo_setup">CESM1_1_1_pmo_setup</a></TD>
+<TR><TD><a href="shell_scripts/CESM1_1_1_setup_pmo">CESM1_1_1_setup_pmo</a></TD>
     <TD>runs a single instance of CLM to harvest synthetic observations for an OSSE or
         "perfect model" experiment. It requires a single CLM state from a previous
         experiment and uses a specified DATM stream for forcing. This parallels an
@@ -91,7 +99,7 @@ how to improve those notes - please send them to dart@ucar.edu - we'd love to he
     </TD>
 </TR>
 
-<TR><TD><a href="shell_scripts/CESM1_1_1_hybrid_initial">CESM1_1_1_hybrid_initial</a></TD>
+<TR><TD><a href="shell_scripts/CESM1_1_1_setup_hybrid">CESM1_1_1_setup_hybrid</a></TD>
     <TD>runs a multi-instance CLM experiment and can be used to perform a free run or
         'open loop' experiment. By default, each CLM instance uses a unique DATM forcing.
         This script also has almost nothing to do with DART. There is one (trivial) 
@@ -103,8 +111,8 @@ how to improve those notes - please send them to dart@ucar.edu - we'd love to he
 
 <TR><TD><a href="shell_scripts/CESM_DART_config">CESM_DART_config</a></TD>
     <TD>augments a CESM case with the bits and pieces required to run DART.
-        When either <em class=program>CESM1_1_1_pmo_setup</em> or 
-        <em class=program>CESM1_1_1_hybrid_initial</em> gets executed, 
+        When either <em class=program>CESM1_1_1_setup_pmo</em> or 
+        <em class=program>CESM1_1_1_setup_hybrid</em> gets executed, 
         <em class=program>CESM_DART_config</em> gets copied to the CESM "caseroot" 
         directory. It is designed such that you can execute it at any time during a CESM
         experiment.  When you do execute it, it will build the DART executables and copy
@@ -123,6 +131,7 @@ or harvest observations for a perfect model experiment
 are designed to work on several compute platforms although they require configuration,
 mainly to indicate the location of the DART observation sequence files on your system.
 </P>
+
 
 <H2>Pertinent details of the CLM gridcell.</H2>
 
@@ -146,7 +155,10 @@ mainly to indicate the location of the DART observation sequence files on your s
     observation metadata has information about land use/land cover, it can
     be used to select only those patches that are appropriate. Otherwise,
     an area-weighted average of ALL patches in the gridcell is used to 
-    calculate the observation value for that location.
+    calculate the observation value for that location. If you have configured
+    CLM to run at a single location, this should not be a problem. If you
+    are running globally, be aware that CLM is not designed to run at 
+    1km grids, for example.
     </TD>
 </TR>
 </TABLE>
@@ -173,6 +185,45 @@ mainly to indicate the location of the DART observation sequence files on your s
     <em class=file>.h1.</em> history file needed for any particular time.
 </P>
 
+<H2>Running a 'perfect model' (OSSSE) experiment with CLM.</H2>
+
+<P> DART does not advance CLM. CESM is responsible for that. DART requires a CLM
+    restart file at every time an observation is desired. It is up to you to run CESM
+    such that it stops when you want to harvest the observations.
+    <br />
+    <br />
+    A single instance of the CLM state is completely sufficient for running DART's
+    <em class=program>perfect_model_obs</em> program. DART provides a template CESM
+    setup script (<em class=program>CESM1_1_1_setup_pmo</em>) and a script
+    (<em class=program>perfect_model.csh</em>) to execute the DART programs 
+    required to harvest the observations. The input observation sequence files
+    must be created a priori and staged in a location that must be made available
+    to the <em class=program>perfect_model.csh</em> script.
+
+
+<OL>
+<LI> Create the input observation sequence files for the entire timeframe of interest.
+    </LI>
+<LI> chop a single file into daily bits
+    </LI>
+<LI> Make sure BASEOBSDIR in <em class=program>perfect_model.csh</em> is correct.
+    </LI>
+<LI> Set up and run <em class=program>CESM1_1_1_setup_pmo</em>
+    </LI>
+<LI> Check the output observation sequence files. If correct, move them
+     to an appropriate location with the names expected by <em class=program>filter.csh</em>
+    </LI>
+<LI> change CONTINUE_RUN to TRUE, resubmit to XXX, and 
+    </LI>
+<LI> If crossing year boundaries and using your own stream files, change the 
+     stream text files during the annual transitions .
+    </LI>
+<LI> Set up and run <em class=program>CESM1_1_1_setup_hybrid</em>
+    </LI>
+<LI> Check everything before resubmitting
+    </LI>
+</OL>
+</P>
 
 <!--===================== DESCRIPTION OF A NAMELIST =====================-->
 
