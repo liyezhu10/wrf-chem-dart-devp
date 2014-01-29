@@ -268,17 +268,17 @@ integer, parameter, public :: &
 
 ! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
-    KIND_NEUTRON_INTENSITY           = 160, &
-    KIND_CANOPY_WATER                = 161, &
-    KIND_GROUND_HEAT_FLUX            = 162
+    KIND_NEUTRON_INTENSITY           = 140, &
+    KIND_CANOPY_WATER                = 141, &
+    KIND_GROUND_HEAT_FLUX            = 142
 
 ! more kinds for TIEGCM Alex Chartier 
 integer, parameter, public :: &
-    KIND_VERTICAL_TEC                = 163  ! total electron content
+    KIND_VERTICAL_TEC                = 143  ! total electron content
 
 ! more kinds for land snow cover (Ally Toure)
 integer, parameter, public :: &
-    KIND_BRIGHTNESS_TEMPERATURE      = 133  ! brightness temperature
+    KIND_BRIGHTNESS_TEMPERATURE      = 150  ! brightness temperature
 
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
@@ -580,11 +580,12 @@ obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITRO
 obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
 obs_kind_names(129) = obs_kind_type(KIND_FPAR                  ,'KIND_FPAR')
 
-obs_kind_names(160) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
-obs_kind_names(161) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
-obs_kind_names(162) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
-obs_kind_names(163) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
-obs_kind_names(133) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
+obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
+obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
+obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
+obs_kind_names(143) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
+
+obs_kind_names(150) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
 
 obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
 obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')

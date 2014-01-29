@@ -6,25 +6,27 @@
 #
 # DART $Id$
 
-# Split a long file into "daily" files which start at 12:00:01 Z the
-# previous day and end at 12:00:00 on the day that matches the day in the
-# filename.
+# THIS VERSION IS USEFUL FOR FLUX OBSERVATIONS FOR CLM.
+# split file(s) into "daily" files which start at 00:00Z
+# the previous day and end the same (previous) day at 23:59Z.
+# The date in the filename is the date/time at which CLM stops.
+# The CLM history file has fluxes for the PREVIOUS 24 hours.
 
 # -----------------------------------------------------------------------------
 # set the first and last days to be split.
 # depending on the window and the input file,
 # the data from outside these bounds may be needed.
 
-start_year=2001
-start_month=1
-start_day=1
+start_year=2004
+start_month=01
+start_day=01
 
-end_year=2001
-end_month=3
+end_year=2004
+end_month=12
 end_day=31
 
 # end of things you should have to set in this script IFF you are
-# content to have 'daily' files with observations +/- 12 hours from
+# content to have 'daily' files with observations 
 # date in the filename.
 
 # -----------------------------------------------------------------------------
@@ -45,8 +47,6 @@ day2=`echo   $end_day     | bc`
 # make sure there is an initial input.nml for advance_time
 # input.nml gets overwritten in the subsequent loop.
 cp -f  ../work/input.nml.template input.nml || exit -1
-ln -sf ../work/clm_history.nc             . || exit -2
-ln -sf ../work/clm_restart.nc             . || exit -3
 
 # these outputs from advance time (with the -g flag) are 2 integers:
 # gregorian_day_number seconds
