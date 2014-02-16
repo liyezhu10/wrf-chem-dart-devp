@@ -23,9 +23,9 @@
 
 
 &level4_to_obs_nml
-   text_input_file = '../data/USHa12003_L4_h.txt',
+   text_input_file = '/g/data1/xa5/ljr599/DART/observations/Ameriflux/work/data/Ha1_0405/USHa12004_L4_h.txt',
    obs_out_file    = 'obs_seq.out',
-   year            = 2003,
+   year            = 2004,
    timezoneoffset  = -6,
    latitude        =  42.5378,
    longitude       = -72.1715,

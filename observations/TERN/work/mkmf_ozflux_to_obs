@@ -1,0 +1,18 @@
+#!/bin/csh
+#
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: mkmf_level4_to_obs 6363 2013-08-01 19:48:45Z nancy $
+
+../../../mkmf/mkmf -p ozflux_to_obs -t ../../../mkmf/mkmf.template   \
+ -a "../../.." path_names_ozflux_to_obs
+
+exit $status
+
+# <next few lines under version control, do not edit>
+# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/trunk/observations/Ameriflux/work/mkmf_level4_to_obs $
+# $Revision: 6363 $
+# $Date: 2013-08-02 05:48:45 +1000 (Fri, 02 Aug 2013) $
+
