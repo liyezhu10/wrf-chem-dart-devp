@@ -17,58 +17,37 @@ set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case be*:
-      # NCAR "bluefire"
-      set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
 
-      set BASEOBSDIR = /glade/proj3/image/Observations/FluxTower
-      set  LAUNCHCMD = mpirun.lsf
+set   MOVE = 'mv -fv'
+set   COPY = 'cp -fv --preserve=timestamps'
+set   LINK = 'ln -fvs'
+set REMOVE = 'rm -fr'
+
+echo ""
+echo "running on host "`hostname`
+echo ""
+
+switch ("`hostname`")
+   case r*:
+      # NCI "raijin"
+      set BASEOBSDIR = /g/data/xa5/tjh551/observations/land
+      set  LAUNCHCMD = mpirun
    breaksw
 
    case ys*:
       # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /glade/p/image/Observations/land
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
-
-   case lone*:
-      # UT lonestar
-      set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
-
-      set BASEOBSDIR = ${WORK}/DART/observations/snow/work/obs_seqs
       set  LAUNCHCMD = mpirun.lsf
    breaksw
 
    case la*:
       # LBNL "lawrencium"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /your/observation/directory/here
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
 
    default:
       # NERSC "hopper"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
       set  LAUNCHCMD = "aprun -n $NTASKS"
    breaksw
@@ -407,22 +386,9 @@ set LND_HISTORY_FILENAME = ${CASE}.clm2_0001.h0.${LND_DATE_EXT}.nc
 ${LINK} ../$LND_RESTART_FILENAME clm_restart.nc
 ${LINK} ../$LND_HISTORY_FILENAME clm_history.nc
 
-# On yellowstone, you can explore task layouts with the following:
-if ( $?LSB_PJL_TASK_GEOMETRY ) then
-   setenv ORIGINAL_LAYOUT "${LSB_PJL_TASK_GEOMETRY}"
-
-   # setenv GEOMETRY_32_1NODE \
-   #    "{(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31)}";
-   # setenv LSB_PJL_TASK_GEOMETRY "${GEOMETRY_32_1NODE}"
-endif
-
 echo "`date` -- BEGIN FILTER"
 ${LAUNCHCMD} ${EXEROOT}/filter || exit -7
 echo "`date` -- END FILTER"
-
-if ( $?LSB_PJL_TASK_GEOMETRY ) then
-   setenv LSB_PJL_TASK_GEOMETRY "${ORIGINAL_LAYOUT}"
-endif
 
 ${MOVE} Prior_Diag.nc      ../clm_Prior_Diag.${LND_DATE_EXT}.nc
 ${MOVE} Posterior_Diag.nc  ../clm_Posterior_Diag.${LND_DATE_EXT}.nc

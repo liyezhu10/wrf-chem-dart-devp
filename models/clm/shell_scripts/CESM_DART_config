@@ -288,7 +288,7 @@ if ($CplLogFile == "") then
    echo 'ERROR: DART will not be attempted.'
    setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
    setenv EXITCODE -1
-   mpirun.lsf ${CASEROOT}/shell_exit.sh
+   ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
    exit -1
 endif
 
@@ -297,7 +297,7 @@ if ( $status == 0 ) then
 
 #  If you want to use DART, uncomment the line with 'DARTSCRIPTNAME',
 #  otherwise, CESM is running as usual.
-#  ${CASEROOT}/DARTSCRIPTNAME
+   ${CASEROOT}/DARTSCRIPTNAME
 
    if ( $status == 0 ) then
       echo "`date` -- DART HAS FINISHED"
@@ -305,7 +305,7 @@ if ( $status == 0 ) then
       echo "`date` -- DART ERROR - ABANDON HOPE"
       setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
       setenv EXITCODE -3
-      mpirun.lsf ${CASEROOT}/shell_exit.sh
+      ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
       exit -3
    endif
 else
@@ -313,7 +313,7 @@ else
    echo 'ERROR: DART will not be attempted.'
    setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
    setenv EXITCODE -2
-   mpirun.lsf ${CASEROOT}/shell_exit.sh
+   ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
    exit -2
 endif
 
@@ -377,26 +377,24 @@ cat << EndOfText >! DART_instructions.txt
 
 Check the DART configuration:
 
-1) The default behavior is to _not_ invoke DART and simply run CESM.
-   We recommend that you make sure this works before proceeding.
-
-2) When you want to run DART, make sure the ${CASE}.run script
+1) When you want to run DART, make sure the ${CASE}.run script
    references "$DARTscript".
 
-3) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
+2) Modify what you need to in the DART namelist file, i.e. 
+   ${CASEROOT}/input.nml
 
-4) If you have recompiled any part of the DART system, 'refresh_dart_files'
+3) If you have recompiled any part of the DART system, 'refresh_dart_files'
    will copy them into the correct places.
 
-5) If you stage your own inflation files, make sure you read the INFLATION section
+4) If you stage your own inflation files, make sure you read the INFLATION section
    in ${CASEROOT}/CESM_DART_config
 
-6) Make sure the observation directory names in $DARTscript match
+5) Make sure the observation directory names in $DARTscript match
    those on your system.
 
-7) Submit the CESM job in the normal way.
+6) Submit the CESM job in the normal way.
 
-8) You can use ${CASEROOT}/stage_cesm_files
+7) You can use ${CASEROOT}/stage_cesm_files
     to stage files to restart a run.
 
 -------------------------------------------------------------------------

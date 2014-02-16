@@ -273,7 +273,7 @@
 
 &obs_diag_nml
    obs_sequence_name = '',
-   obs_sequence_list = 'obs_seq_files.txt',
+   obs_sequence_list = 'fileList.txt',
    first_bin_center =  2004, 1,  1, 0, 0, 0 ,
    last_bin_center  =  2004, 1,  8, 0, 0, 0 ,
    bin_separation   =     0, 0,  1, 0, 0, 0 ,

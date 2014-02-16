@@ -178,10 +178,29 @@ endif
 
 !----------------------------------------------------------------------
 ! read the data for the requested arrays.
+!       float Soil_Moisture_from_C_band(Xtrack, Track) ;
+!                Soil_Moisture_from_C_band:long_name = "AMSRv05 Soil Moisture (6.9GHz)" ;
+!                Soil_Moisture_from_C_band:units = "[m3 m-3]" ;
+!                Soil_Moisture_from_C_band:_FillValue = -9999.f ;
+!                Soil_Moisture_from_C_band:actual_range = -99.f, 99.f ;
+!                Soil_Moisture_from_C_band:coordinates = "lat lon" ;
+!                Soil_Moisture_from_C_band:grid_mapping = "wgs84" ;
+!                Soil_Moisture_from_C_band:gain = "0.01" ;
+!        float Soil_Moisture_Error_from_C_band(Xtrack, Track) ;
+!                Soil_Moisture_Error_from_C_band:long_name = "AMSRv05 Soil Moisture Error (6.9GHz)" ;
+!                Soil_Moisture_Error_from_C_band:units = "[m3 m-3]" ;
+!                Soil_Moisture_Error_from_C_band:_FillValue = -9999.f ;
+!                Soil_Moisture_Error_from_C_band:actual_range = -99.f, 50.f ;
+!                Soil_Moisture_Error_from_C_band:coordinates = "lat lon" ;
+!                Soil_Moisture_Error_from_C_band:grid_mapping = "wgs84" ;
+!                Soil_Moisture_Error_from_C_band:gain = "0.01" ;
+!
 !----------------------------------------------------------------------
 
-call get_variable(input_file, ncid, 'soil_moisture_c', datmat)
-call get_variable(input_file, ncid,      'sm_c_error', obserr)
+! call get_variable(input_file, ncid, 'soil_moisture_c', datmat)
+! call get_variable(input_file, ncid,      'sm_c_error', obserr)
+call get_variable(input_file, ncid, 'Soil_Moisture_from_C_band', datmat)
+call get_variable(input_file, ncid, 'Soil_Moisture_Error_from_C_band', obserr)
 
 ! extract time of observation into gregorian day, sec.
 call get_time(time_obs, osec, oday)
@@ -225,7 +244,7 @@ Latitude:  do ilat = 1, nlat
 
    ! FIXME ... this comes in some percent ... NOAH is m^3/m^3, CLM is kg/m^2
    obs_value = datmat(ilat,ilon) ! FIXME ... convert to
-   obs_error = 10.0_r8           ! FIXME ... units
+   obs_error = obserr(ilat,ilon) ! FIXME ... units
 
    ! make an obs derived type, and then add it to the sequence
    call create_3d_obs(lat(ilat), lon(ilon), vert, VERTISHEIGHT, obs_value, &

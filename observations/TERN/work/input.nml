@@ -27,7 +27,7 @@
    text_input_file = '/g/data1/xa5/DINGO/HowardSprings/Advanced_processed_data_HowardSprings_v11.csv',
    obs_out_file    = 'obs_seq.HowardSprings.out',
    timezoneoffset  = +9.5,
-   latitude        =  -12.49520,
+   latitude        = -12.49520,
    longitude       = 131.15,
    elevation       = 64,
    flux_height     = 23,

@@ -94,8 +94,6 @@
 #
 # ==============================================================================
 
-
-
 # ==============================================================================
 # case options:
 #
@@ -135,13 +133,13 @@ setenv cesmtag              cesm1_1_1
 # dartroot        Location of the root of _your_ DART installation
 # ==============================================================================
 
-setenv mach         yellowstone
-setenv cesmroot     /glade/p/cesm/cseg/collections/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/${case}
-setenv rundir       /glade/scratch/${USER}/${case}/run
-setenv exeroot      /glade/scratch/${USER}/${case}/bld
-setenv archdir      /glade/scratch/${USER}/archive/${case}
-setenv dartroot     /glade/u/home/${USER}/svn/DART/trunk
+setenv mach         raijin
+setenv cesmroot     /short/xa5/eMAST/CESM/$cesmtag
+setenv caseroot     /short/xa5/${USER}/cases/${case}
+setenv rundir       /short/xa5/${USER}/${case}/run
+setenv exeroot      /short/xa5/${USER}/${case}/bld
+setenv archdir      /short/xa5/${USER}/archive/${case}
+setenv dartroot     /g/data/xa5/${USER}/DART
 
 # ==============================================================================
 # configure settings:
@@ -184,8 +182,7 @@ setenv TRUTHinstance 23
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/scratch/afox/archive/$refcase/rest/${reftimestamp}
-
+setenv stagedir /g/data/xa5/DART/ensembles/rest/${reftimestamp}
 
 # ==============================================================================
 # runtime settings:
@@ -245,9 +242,9 @@ setenv stop_n              24
 #      took less than 2 minutes on yellowstone.
 # ==============================================================================
 
-setenv ACCOUNT      P8685xxxx
-setenv queue        economy
-setenv timewall     0:10
+setenv ACCOUNT      xa5
+setenv queue        normal
+setenv timewall     00:10:00
 
 # ==============================================================================
 # standard commands:
@@ -268,15 +265,14 @@ switch ("`hostname`")
       set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -fvs'
       set REMOVE = '/usr/local/bin/rm -fr'
-
    breaksw
+
    default:
       # NERSC "hopper", NWSC "yellowstone"
       set   MOVE = '/bin/mv -fv'
       set   COPY = '/bin/cp -fv --preserve=timestamps'
       set   LINK = '/bin/ln -fvs'
       set REMOVE = '/bin/rm -fr'
-
    breaksw
 endsw
 
@@ -289,7 +285,6 @@ endsw
 # want to change before doing a real science run.
 # ==============================================================================
 # ==============================================================================
-
 
 # ==============================================================================
 # Make sure the CESM directories exist.
@@ -373,27 +368,42 @@ endif
 
 cd ${caseroot}
 
-source ./Tools/ccsm_getenv || exit -2
-
-# MAX_TASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
-@ ptile = $MAX_TASKS_PER_NODE / 2
-@ nthreads = 1
-
-# Save a copy for debug purposes
+# Save an original copy of the 'stock' resources for debug purposes
 foreach FILE ( *xml )
    if ( ! -e        ${FILE}.original ) then
       ${COPY} $FILE ${FILE}.original
    endif
 end
 
-   # This is a decent layout for a single instance run.
-   @ atm_tasks = $ptile * 4
-   @ lnd_tasks = $ptile * 4
-   @ ice_tasks = $ptile
-   @ ocn_tasks = $ptile
-   @ cpl_tasks = $ptile
-   @ glc_tasks = $ptile
-   @ rof_tasks = $ptile * 4
+source ./Tools/ccsm_getenv || exit -2
+
+# MAX_TASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
+@ ptile = $MAX_TASKS_PER_NODE / 2
+@ nthreads = 1
+
+if ($num_instances <= 4) then
+
+   # This is only for the purpose of debugging the code.
+   @ atm_tasks = $ptile * $num_instances * 4
+   @ lnd_tasks = $ptile * $num_instances * 4
+   @ ice_tasks = $ptile * $num_instances
+   @ ocn_tasks = $ptile * $num_instances
+   @ cpl_tasks = $ptile * $num_instances
+   @ glc_tasks = $ptile * $num_instances
+   @ rof_tasks = $ptile * $num_instances * 4
+
+else
+
+   # This works, but a more efficient layout should be used
+   @ atm_tasks = $ptile * $num_instances * 2
+   @ lnd_tasks = $ptile * $num_instances * 2
+   @ ice_tasks = $ptile * $num_instances
+   @ ocn_tasks = $ptile * $num_instances
+   @ cpl_tasks = $ptile * $num_instances
+   @ glc_tasks = $ptile * $num_instances
+   @ rof_tasks = $ptile * $num_instances * 2
+
+endif
 
 # echo "task partitioning ... perhaps ... atm // ocn // lnd+ice+glc+rof"
 # presently, all components run 'serially' - one after another.
@@ -465,7 +475,8 @@ echo ""
 ./xmlchange CONTINUE_RUN=FALSE
 ./xmlchange RESUBMIT=$resubmit
 
-./xmlchange PIO_TYPENAME=pnetcdf
+./xmlchange PIO_TYPENAME=netcdf
+./xmlchange MPI_RUN_COMMAND=mpirun
 
 # The river transport model ON is useful only when using an active ocean or
 # land surface diagnostics. Setting ROF_GRID to 'null' turns off the RTM.
@@ -473,20 +484,20 @@ echo ""
 
 ./xmlchange ROF_GRID='null'
 ./xmlchange CLM_CONFIG_OPTS='-bgc cn'
+./xmlchange DOUT_S_ROOT=${archdir}
+./xmlchange DOUT_S_SAVE_INT_REST_FILES=FALSE
+./xmlchange DOUT_L_MSROOT="csm/${case}"
+./xmlchange DOUT_L_HTAR=FALSE
 
 if ($short_term_archiver == 'off') then
    ./xmlchange DOUT_S=FALSE
 else
    ./xmlchange DOUT_S=TRUE
-   ./xmlchange DOUT_S_ROOT=${archdir}
-   ./xmlchange DOUT_S_SAVE_INT_REST_FILES=FALSE
 endif
 if ($long_term_archiver == 'off') then
    ./xmlchange DOUT_L_MS=FALSE
 else
    ./xmlchange DOUT_L_MS=TRUE
-   ./xmlchange DOUT_L_MSROOT="csm/${case}"
-   ./xmlchange DOUT_L_HTAR=FALSE
 endif
 
 # level of debug output, 0=minimum, 1=normal, 2=more, 3=too much, valid values: 0,1,2,3 (integer)
@@ -522,7 +533,7 @@ source Tools/ccsm_getenv
 set BATCH = `echo $BATCHSUBMIT | sed 's/ .*$//'`
 switch ( $BATCH )
    case bsub*:
-      # NCAR "bluefire", "yellowstone"
+      # LSF queueing system
       set TIMEWALL=`grep BSUB ${case}.run | grep -e '-W' `
       set    QUEUE=`grep BSUB ${case}.run | grep -e '-q' `
       sed -e "s/$TIMEWALL[3]/$timewall/" \
@@ -532,8 +543,17 @@ switch ( $BATCH )
           chmod 755       ${case}.run
    breaksw
 
-   default:
+   case qsub*:
+      # PBS queueing system
+      set TIMEWALL=`grep PBS ${case}.run | grep -e 'walltime' | sed 's/=/ /g'`
+      set    QUEUE=`grep PBS ${case}.run | grep -e '-q' `
+      sed -e "s/$TIMEWALL[$#TIMEWALL]/$timewall/" \
+          -e "s/$QUEUE[$#QUEUE]/$queue/" < ${case}.run >! temp.$$
+          ${MOVE} temp.$$ ${case}.run
+          chmod 755       ${case}.run
+   breaksw
 
+   default:
    breaksw
 endsw
 
@@ -884,41 +904,48 @@ endif
 # What to do next
 # ==============================================================================
 
-echo ""
-echo "Time to check the case."
-echo ""
-echo "1) cd ${rundir}"
-echo "   and check the compatibility between the namelists/pointer"
-echo "   files and the files that were staged."
-echo ""
-echo "2) cd ${caseroot}"
-echo "   (on yellowstone) If the ${case}.run script still contains:"
-echo '   #BSUB -R "select[scratch_ok > 0]"'
-echo "   around line 9, delete it."
-echo ""
-echo "3) The case is initially configured to NOT INVOKE ANY DART CODE."
-echo "   When you are ready to generate synthetic observations, configure and execute"
-echo "   the ${caseroot}/CESM_DART_config script."
-echo ""
-echo "4) Verify the contents of env_run.xml and submit the CESM job:"
-echo "   ./${case}.submit"
-echo ""
-echo "5) After the job has run, check to make sure it worked."
-echo ""
-echo "6) To extend the run in $stop_n '"$stop_option"' steps,"
-echo "   change the env_run.xml variables:"
-echo ""
-echo "   ./xmlchange CONTINUE_RUN=TRUE"
-echo "   ./xmlchange RESUBMIT=<number_of_cycles_to_run>"
-echo ""
-echo "   and"
-echo "   ./${case}.submit"
-echo ""
-echo "Check the streams listed in the streams text files.  If more or different"
-echo 'dates need to be added, then do this in the $CASEROOT/user_*files*'
-echo "then invoke 'preview_namelists' so you can check the information in the"
-echo "CaseDocs or ${rundir} directories."
-echo ""
+cat << EndOfText >! CESM_pmo_instructions.txt
+
+-------------------------------------------------------------------------
+
+Time to check the case.
+
+1) cd ${rundir}
+   and check the compatibility between the namelists/pointer
+   files and the files that were staged. Make sure the links are valid.
+
+2) Check the streams listed in the streams text files.
+   If more or different dates need to be added, then do this in the 
+   $CASEROOT/user_*files*
+   and invoke 'preview_namelists' so you can check the information in the
+   CaseDocs and/or ${rundir} directories.
+
+3) OPTIONAL: If/when you are ready to generate synthetic observations, configure
+   and execute the ${caseroot}/CESM_DART_config script. Also check
+   ${caseroot}/[input.nml,perfect_model.csh]
+
+4) Verify the contents of ${caseroot}/env_run.xml and submit the CESM job:
+   ./${case}.submit
+
+5) After the job has run, check to make sure it worked.
+
+6) To extend the run in $stop_n '"$stop_option"' steps,
+   change the env_run.xml variables:
+
+   ./xmlchange CONTINUE_RUN=TRUE
+   ./xmlchange RESUBMIT=<number_of_cycles_to_run>
+
+   and
+
+   ./${case}.submit
+
+Good Luck!
+
+-------------------------------------------------------------------------
+
+EndOfText
+
+cat CESM_pmo_instructions.txt
 
 exit 0
 

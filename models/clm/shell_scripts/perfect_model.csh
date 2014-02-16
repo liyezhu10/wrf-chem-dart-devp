@@ -17,57 +17,39 @@ set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case be*:
-      # NCAR "bluefire"
-      set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
 
-      set BASEOBSDIR = /glade/proj3/image/Observations/FluxTower
+      set   MOVE = 'mv -fv'
+      set   COPY = 'cp -fv --preserve=timestamps'
+      set   LINK = 'ln -fvs'
+      set REMOVE = 'rm -fr'
+
+echo ""
+echo "running on host "`hostname`
+echo ""
+
+switch ("`hostname`")
+   case r*:
+      # NCI "raijin"
+      set BASEOBSDIR = /g/data/xa5/tjh551/observations/land
    breaksw
 
    case ys*:
       # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /glade/p/image/Observations/land
-   breaksw
-
-   case lone*:
-      # UT lonestar
-      set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
-
-      set BASEOBSDIR = ${WORK}/DART/observations/snow/work/obs_seqs
    breaksw
 
    case la*:
       # LBNL "lawrencium"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /your/observation/directory/here
    breaksw
 
    default:
       # NERSC "hopper"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
       set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
    breaksw
 endsw
+
+set ensemble_size = ${NINST_LND}
 
 #-------------------------------------------------------------------------
 # Determine time of model state ... from file name
