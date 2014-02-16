@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: $
+# DART $Id$
 
 ../../../mkmf/mkmf -p netcdf_to_obs -t ../../../mkmf/mkmf.template \
  -a "../../.." path_names_netcdf_to_obs
@@ -12,7 +12,7 @@
 exit $status
 
 # <next few lines under version control, do not edit>
-# $URL: $
-# $Revision: $
-# $Date: $
+# $URL$
+# $Revision$
+# $Date$
 

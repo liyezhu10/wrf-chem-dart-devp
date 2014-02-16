@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: makedaily.sh 6768 2014-01-29 22:10:32Z thoar $
+# DART $Id$
 
 # THIS VERSION IS USEFUL FOR FLUX OBSERVATIONS FOR CLM.
 # split file(s) into "daily" files which start at 00:00Z
@@ -160,7 +160,7 @@ done
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/trunk/models/clm/shell_scripts/makedaily.sh $
-# $Revision: 6768 $
-# $Date: 2014-01-30 09:10:32 +1100 (Thu, 30 Jan 2014) $
+# $URL$
+# $Revision$
+# $Date$
 

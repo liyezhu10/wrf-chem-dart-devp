@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: $
+! $Id$
 
 program netcdf_to_obs
 
@@ -73,9 +73,9 @@ implicit none
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: $"
-character(len=32 ), parameter :: revision = "$Revision: $"
-character(len=128), parameter :: revdate  = "$Date: $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -386,7 +386,7 @@ end function decode_filename
 end program netcdf_to_obs
 
 ! <next few lines under version control, do not edit>
-! $URL: $
-! $Id: $
-! $Revision: $
-! $Date: $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
