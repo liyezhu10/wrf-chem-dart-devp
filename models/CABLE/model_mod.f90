@@ -89,7 +89,7 @@ type(location_type), allocatable :: state_loc(:)
 ! things which can/should be in the model_nml
 
 integer :: nfields
-integer, parameter :: max_state_variables = 40
+integer, parameter :: max_state_variables = 10
 integer, parameter :: num_state_table_columns = 2
 character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
@@ -187,29 +187,18 @@ INTERFACE get_state_time
      MODULE PROCEDURE get_state_time_fname
 END INTERFACE
 
-contains
-
 !==================================================================
-
+contains
+!==================================================================
 
 
 subroutine static_init_model()
 !------------------------------------------------------------------
-!
 ! Called to do one time initialization of the model.
 
 real(r8) :: x_loc
 
-character(len=NF90_MAX_NAME)          :: varname
-character(len=paramname_length)       :: kind_string
-integer :: ncid, VarID, dimlen, varsize
-integer :: iunit, io, ivar
-integer :: i, j, xi, xj, index1, indexN, indx
-integer :: ss, dd
-
-integer  :: spvalINT
-real(r4) :: spvalR4
-real(r8) :: spvalR8
+integer :: i, iunit, io
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -287,11 +276,8 @@ end subroutine static_init_model
 
 
 
-
 subroutine init_conditions(x)
 !------------------------------------------------------------------
-! subroutine init_conditions(x)
-!
 ! Returns a model state vector, x, that is some sort of appropriate
 ! initial condition for starting up a long integration of the model.
 ! At present, this is only used if the namelist parameter
@@ -310,8 +296,6 @@ end subroutine init_conditions
 
 subroutine adv_1step(x, time)
 !------------------------------------------------------------------
-! subroutine adv_1step(x, time)
-!
 ! Does a single timestep advance of the model. The input value of
 ! the vector x is the starting condition and x is updated to reflect
 ! the changed state after a timestep. The time argument is intent
@@ -328,8 +312,7 @@ subroutine adv_1step(x, time)
 real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
-
-write(string1,*)'DART should not be trying to advance cable'
+write(string1,*)'DART should not be trying to advance CABLE as a subroutine.'
 call error_handler(E_ERR,'adv_1step',string1,source,revision,revdate)
 
 ! just so suppress compiler warnings. code unreachable
@@ -341,9 +324,7 @@ end subroutine adv_1step
 
 function get_model_size()
 !------------------------------------------------------------------
-!
-! Returns the size of the model as an integer. Required for all
-! applications.
+! Returns the size of the model as an integer. 
 
 integer :: get_model_size
 
@@ -355,7 +336,6 @@ end function get_model_size
 
 subroutine init_time(time)
 !------------------------------------------------------------------
-!
 ! Companion interface to init_conditions. Returns a time that is somehow
 ! appropriate for starting up a long integration of the model.
 ! At present, this is only used if the namelist parameter
@@ -375,7 +355,6 @@ end subroutine init_time
 
 subroutine model_interpolate(x, location, itype, obs_val, istatus)
 !------------------------------------------------------------------
-!
 ! Given a state vector, a location, and a model state variable type,
 ! interpolates the state variable field to that location and returns
 ! the value in obs_val. The istatus variable should be returned as
@@ -404,6 +383,9 @@ obs_val = MISSING_R8
 ! Using distinct positive values for different types of errors can be
 ! useful in diagnosing problems.
 istatus = 1
+
+write(string1,*)'routine not written.'
+call error_handler(E_MSG,'model_interpolate',string1,source,revision,revdate)
 
 end subroutine model_interpolate
 
@@ -442,17 +424,16 @@ integer,             intent(out), optional :: var_type
 location = set_location_missing()
 if (present(var_type)) var_type = 0
 
+write(string1,*)'routine not written.'
+call error_handler(E_MSG,'get_state_meta_data',string1,source,revision,revdate)
+
 end subroutine get_state_meta_data
 
 
 
 subroutine end_model()
 !------------------------------------------------------------------
-!
-! Does any shutdown and clean-up needed for model. Can be a NULL
-! INTERFACE if the model has no need to clean up storage, etc.
-
-! good style ... perhaps you could deallocate stuff (from static_init_model?).
+! Does any shutdown and clean-up needed for model.
 
 deallocate(state_loc, ens_mean)
 deallocate(mland_lats, mland_lons, nap, patchfrac, zse, snowd)
@@ -464,43 +445,13 @@ end subroutine end_model
 
 function nc_write_model_atts( ncFileID ) result (ierr)
 !------------------------------------------------------------------
-! TJH 24 Oct 2006 -- Writes the model-specific attributes to a netCDF file.
+! TJH 18 Feb 2014 -- Writes the model-specific attributes to a netCDF file.
 !     This includes coordinate variables and some metadata, but NOT
-!     the model state vector. We do have to allocate SPACE for the model
-!     state vector, but that variable gets filled as the model advances.
-!
-! As it stands, this routine will work for ANY model, with no modification.
-!
-! The simplest possible netCDF file would contain a 3D field
-! containing the state of 'all' the ensemble members. This requires
-! three coordinate variables -- one for each of the dimensions
-! [model_size, ensemble_member, time]. A little metadata is useful,
-! so we can also create some 'global' attributes.
-! This is what is implemented here.
-!
-! Once the simplest case is working, this routine (and nc_write_model_vars)
-! can be extended to create a more logical partitioning of the state vector,
-! fundamentally creating a netCDF file with variables that are easily
-! plotted. The bgrid model_mod is perhaps a good one to view, keeping
-! in mind it is complicated by the fact it has two coordinate systems.
-! There are stubs in this template, but they are only stubs.
-!
-! TJH 29 Jul 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
+!     the actual model state vector.
 !
 ! assim_model_mod:init_diag_output uses information from the location_mod
 !     to define the location dimension and variable ID. All we need to do
 !     is query, verify, and fill ...
-!
-! Typical sequence for adding new dimensions,variables,attributes:
-! NF90_OPEN             ! open existing netCDF dataset
-!    NF90_redef         ! put into define mode
-!    NF90_def_dim       ! define additional dimensions (if any)
-!    NF90_def_var       ! define variables: from name, type, and dims
-!    NF90_put_att       ! assign attribute values
-! NF90_ENDDEF           ! end definitions: leave define mode
-!    NF90_put_var       ! provide values for variable
-! NF90_CLOSE            ! close: save updated netCDF dataset
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
 integer              :: ierr          ! return value of function
@@ -750,27 +701,7 @@ end function nc_write_model_atts
 
 function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
 !------------------------------------------------------------------
-! TJH 24 Oct 2006 -- Writes the model variables to a netCDF file.
-!
-! TJH 29 Jul 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
-!
-! For the lorenz_96 model, each state variable is at a separate location.
-! that's all the model-specific attributes I can think of ...
-!
-! assim_model_mod:init_diag_output uses information from the location_mod
-!     to define the location dimension and variable ID. All we need to do
-!     is query, verify, and fill ...
-!
-! Typical sequence for adding new dimensions,variables,attributes:
-! NF90_OPEN             ! open existing netCDF dataset
-!    NF90_redef         ! put into define mode
-!    NF90_def_dim       ! define additional dimensions (if any)
-!    NF90_def_var       ! define variables: from name, type, and dims
-!    NF90_put_att       ! assign attribute values
-! NF90_ENDDEF           ! end definitions: leave define mode
-!    NF90_put_var       ! provide values for variable
-! NF90_CLOSE            ! close: save updated netCDF dataset
+! TJH 18 Feb 2014 -- Writes the model variables to a netCDF file.
 
 integer,                intent(in) :: ncFileID      ! netCDF file identifier
 real(r8), dimension(:), intent(in) :: statevec
@@ -923,7 +854,6 @@ end function nc_write_model_vars
 
 subroutine pert_model_state(state, pert_state, interf_provided)
 !------------------------------------------------------------------
-!
 ! Perturbs a model state for generating initial ensembles.
 ! The perturbed state is returned in pert_state.
 ! A model may choose to provide a NULL INTERFACE by returning
@@ -947,22 +877,22 @@ end subroutine pert_model_state
 
 
 
-
 subroutine ens_mean_for_model(ens_mean)
 !------------------------------------------------------------------
-! Not used in low-order models
+! There are some models that require a mean value over all ensemble
+! members.
 
 real(r8), intent(in) :: ens_mean(:)
 
 end subroutine ens_mean_for_model
 
 
+
 !==================================================================
 ! PUBLIC interfaces that aren't required by the DART code but are
 ! generally useful for other related utility programs.
-! (less necessary for small models; generally used for larger models
-! with predefined file formats and control structures.)
 !==================================================================
+
 
 
 subroutine cable_state_to_dart_vector(filename, state_vector, state_time)
@@ -977,11 +907,12 @@ real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: state_time
 
 ! temp space to hold data while we are reading it
-integer  :: i, j, ni, nj, ivar, indx
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 
+integer :: i, j, ni, nj, ivar, indx
 integer :: ncid, dimid, ncNdims, VarID, dimlen
+
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
 integer :: ind1,ind2
@@ -1024,7 +955,7 @@ do ivar=1, nfields
       write(string1, *) 'netCDF rank of '//trim(varname)//' does not match derived type knowledge'
       write(string2, *) 'netCDF rank is ',ncNdims,' expected ',progvar(ivar)%numdims
       call error_handler(E_ERR,'cable_state_to_dart_vector', string1, &
-                        source,revision,revdate,text2=string2)
+                 source,revision,revdate,text2=string2)
    endif
 
    ! Check the shape of the variable
@@ -1036,8 +967,10 @@ do ivar=1, nfields
             'cable_state_to_dart_vector', string1)
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(string3),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
-         call error_handler(E_ERR,'cable_state_to_dart_vector',string1,source,revision,revdate)
+         write(string1,*) trim(string3),' dim/dimlen ',i,dimlen,' not ',&
+                                        progvar(ivar)%dimlens(i)
+         call error_handler(E_ERR, 'cable_state_to_dart_vector', string1, &
+                    source, revision, revdate)
       endif
 
    enddo
@@ -1115,6 +1048,7 @@ ncid = 0
 end subroutine cable_state_to_dart_vector
 
 
+
 subroutine dart_vector_to_model_file(state_vector, filename, statedate)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
@@ -1154,11 +1088,11 @@ call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
 
 file_time = get_state_time(ncid)
 
-if ( file_time /= model_time ) then
-   call print_time(model_time,'DART  current time',logfileunit)
-   call print_time(file_time, 'CABLE current time',logfileunit)
-   call print_time(model_time,'DART  current time')
-   call print_time(file_time, 'CABLE current time')
+if ( file_time /=  statedate ) then
+   call print_time(statedate,'DART  current time',logfileunit)
+   call print_time(file_time,'CABLE current time',logfileunit)
+   call print_time(statedate,'DART  current time')
+   call print_time(file_time,'CABLE current time')
    write(string1,*)trim(filename),' current time /= model time. FATAL error.'
    call error_handler(E_ERR,'dart_vector_to_model_file',string1,source,revision,revdate)
 endif
@@ -1254,11 +1188,10 @@ call error_handler(E_MSG,'dart_vector_to_model_file',string1,source,revision,rev
 end subroutine dart_vector_to_model_file
 
 
-!------------------------------------------------------------------
 
 
 subroutine get_cable_restart_filename( filename )
-
+!------------------------------------------------------------------
 character(len=*), intent(OUT) :: filename
 
 if ( .not. module_initialized ) call static_init_model
@@ -1268,7 +1201,9 @@ filename = trim(cable_restart_filename)
 end subroutine get_cable_restart_filename
 
 
-!------------------------------------------------------------------
+!==================================================================
+! PRIVATE interfaces
+!==================================================================
 
 
 function get_state_time_ncid( ncid )
@@ -1285,19 +1220,16 @@ character(len=256) :: unitstring
 
 type(time_type) :: base_time, curr_time
 
-
-if ( .not. module_initialized ) call static_init_model
-
 call nc_check(nf90_inq_varid(ncid, 'time', VarID), 'get_state_time_ncid', &
-                      &  'inq_varid time '//trim(cable_restart_filename))
+                  'inq_varid time '//trim(cable_restart_filename))
 call nc_check(nf90_get_var(  ncid, VarID, model_seconds), 'get_state_time_ncid', &
-                      &            'get_var rst_curr_ymd '//trim(cable_restart_filename))
+                  'get_var rst_curr_ymd '//trim(cable_restart_filename))
 
 if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
    call nc_check( nf90_get_att(ncid, VarID, 'units' , unitstring), &
            'get_state_time_ncid', 'get_att units '//trim(string2))
 else
-   write(string1,*) 'cannot get time base from  file <', trim(cable_restart_filename),'>.'
+   write(string1,*) 'cannot get time base from <', trim(cable_restart_filename),'>.'
    call error_handler(E_ERR,'get_state_time_ncid',string1,source,revision,revdate)
 endif
 
@@ -1311,19 +1243,15 @@ get_state_time_ncid = curr_time + base_time
 end function get_state_time_ncid
 
 
-!------------------------------------------------------------------
-
 
 function get_state_time_fname(filename)
 !------------------------------------------------------------------
 ! the static_init_model ensures that the cable namelists are read.
-!
+
 type(time_type) :: get_state_time_fname
 character(len=*), intent(in) :: filename
 
-integer         :: ncid
-
-if ( .not. module_initialized ) call static_init_model
+integer :: ncid
 
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
@@ -1340,23 +1268,25 @@ call nc_check(nf90_close(ncid),'get_state_time_fname', 'close '//trim(filename))
 end function get_state_time_fname
 
 
-!------------------------------------------------------------------
-
 
 subroutine verify_state_variables( state_variables, filename, ngood)
+!------------------------------------------------------------------
+! routine that uses the user input list of variables and populates
+! the local structures with the metadata required for interpreting
+! the DART state vector.
 
 character(len=*), dimension(:),   intent(in)  :: state_variables
 character(len=*),                 intent(in)  :: filename
 integer,                          intent(out) :: ngood
 
-integer :: index1, indexN, ivar, nrows, ncols
+integer :: i, index1, indexN, ivar, nrows, ncols
 integer :: ncid, VarID, dimlen, varsize
-integer :: i
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+
 character(len=NF90_MAX_NAME) :: varname
 character(len=NF90_MAX_NAME) :: dartstr
 character(len=obstypelength) :: kind_string
 character(len=obstypelength) :: dimname
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 
 integer  :: spvalINT
 real(r4) :: spvalR4
@@ -1378,7 +1308,8 @@ MyLoop : do i = 1, nrows
    variable_table(i,1) = trim(varname)
    variable_table(i,2) = trim(dartstr)
 
-   if ( variable_table(i,1) == ' ' .and. variable_table(i,2) == ' ' ) exit MyLoop ! Found end of list.
+   ! If we are at the end of the input, finis.
+   if ( variable_table(i,1) == ' ' .and. variable_table(i,2) == ' ' ) exit MyLoop
 
    if ( variable_table(i,1) == ' ' .or. variable_table(i,2) == ' ' ) then
       string1 = 'model_nml:cable_state_variables not fully specified'
@@ -1394,24 +1325,28 @@ MyLoop : do i = 1, nrows
    ! Make sure DART kind is valid
 
    if( get_raw_obs_kind_index(dartstr) < 0 ) then
-      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
+      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') &
+            trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif
 
    ! Record the contents of the DART state vector
 
    if ((debug > 0) .and. do_output()) then
-      write(logfileunit,*)'variable ',i,' is ',trim(variable_table(i,1)), ' ', trim(variable_table(i,2))
-      write(     *     ,*)'variable ',i,' is ',trim(variable_table(i,1)), ' ', trim(variable_table(i,2))
+      write(logfileunit,*)'variable ',i,' is ',trim(variable_table(i,1)), &
+                                          ' ', trim(variable_table(i,2))
+      write(     *     ,*)'variable ',i,' is ',trim(variable_table(i,1)), &
+                                          ' ', trim(variable_table(i,2))
    endif
 
    ngood = ngood + 1
 enddo MyLoop
 
 if (ngood == nrows) then
-   string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
+   string1 = 'WARNING: There is a possibility you need to increase "max_state_variables"'
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_MSG, 'verify_state_variables', string1, &
+                      source, revision, revdate, text2=string2)
 endif
 
 ! Now that we know that the variables exist, read their shapes, etc.
@@ -1464,9 +1399,7 @@ do ivar = 1, ngood
       progvar(ivar)%units = 'unknown'
    endif
 
-   ! Saving any FillValue, missing_value attributes so I can use it when I read and write ...
-   ! CESM1_1_1 ... no attributes in the restart file for rank1 or greater
-   ! variables.
+   ! Saving FillValue, missing_value attributes for the read / write ...
 
    if (progvar(ivar)%xtype == NF90_INT) then
        if (nf90_get_att(ncid, VarID, '_FillValue'    , spvalINT) == NF90_NOERR) then
@@ -1528,65 +1461,65 @@ end subroutine verify_state_variables
 
 
 
-
-
 subroutine state_report()
+!------------------------------------------------------------------
 
 integer :: ivar
 
 do ivar = 1,nfields
 
-      write(logfileunit,*)
-      write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
-      write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
-      write(logfileunit,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
-      write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
-      write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
-      write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
-      write(logfileunit,*) '  index1      ',progvar(ivar)%index1
-      write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
-      write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
-      write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
-      write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
-      write(logfileunit,*) '  spvalR8     ',progvar(ivar)%spvalR8
-      write(logfileunit,*) '  missingINT  ',progvar(ivar)%missingINT
-      write(logfileunit,*) '  missingR4   ',progvar(ivar)%missingR4
-      write(logfileunit,*) '  missingR8   ',progvar(ivar)%missingR8
-      write(logfileunit,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-      write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
+   write(logfileunit,*)
+   write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
+   write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
+   write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
+   write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
+   write(logfileunit,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
+   write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
+   write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+   write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
+   write(logfileunit,*) '  index1      ',progvar(ivar)%index1
+   write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
+   write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
+   write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
+   write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
+   write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
+   write(logfileunit,*) '  spvalR8     ',progvar(ivar)%spvalR8
+   write(logfileunit,*) '  missingINT  ',progvar(ivar)%missingINT
+   write(logfileunit,*) '  missingR4   ',progvar(ivar)%missingR4
+   write(logfileunit,*) '  missingR8   ',progvar(ivar)%missingR8
+   write(logfileunit,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
+   write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
 
-      write(     *     ,*)
-      write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
-      write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
-      write(     *     ,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
-      write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
-      write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
-      write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
-      write(     *     ,*) '  index1      ',progvar(ivar)%index1
-      write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
-      write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
-      write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
-      write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4
-      write(     *     ,*) '  spvalR8     ',progvar(ivar)%spvalR8
-      write(     *     ,*) '  missingINT  ',progvar(ivar)%missingINT
-      write(     *     ,*) '  missingR4   ',progvar(ivar)%missingR4
-      write(     *     ,*) '  missingR8   ',progvar(ivar)%missingR8
-      write(     *     ,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-      write(     *     ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
+   write(     *     ,*)
+   write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
+   write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
+   write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
+   write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
+   write(     *     ,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
+   write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
+   write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+   write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
+   write(     *     ,*) '  index1      ',progvar(ivar)%index1
+   write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
+   write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
+   write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
+   write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
+   write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4
+   write(     *     ,*) '  spvalR8     ',progvar(ivar)%spvalR8
+   write(     *     ,*) '  missingINT  ',progvar(ivar)%missingINT
+   write(     *     ,*) '  missingR4   ',progvar(ivar)%missingR4
+   write(     *     ,*) '  missingR8   ',progvar(ivar)%missingR8
+   write(     *     ,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
+   write(     *     ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
 
 enddo
 
 end subroutine state_report
 
 
+
 subroutine read_metadata( restart_filename, history_filename )
-!
+!------------------------------------------------------------------
 ! Some stuff can be read from the restart file, some stuff from the history file
 ! The restart file does not have the latitude or longitude arrays for the gridcells.
 ! We need that if we hope to have enough metadata to define a rectangular grid
@@ -1596,7 +1529,6 @@ character(len=*), intent(in) :: restart_filename
 character(len=*), intent(in) :: history_filename
 
 integer :: i, ncid, dimid, VarID, numdims, dimlen, xtype
-character(len=NF90_MAX_NAME) :: varname
 character(len=NF90_MAX_NAME) :: dartstr
 character(len=obstypelength) :: kind_string
 character(len=obstypelength) :: dimname
@@ -1693,6 +1625,7 @@ end subroutine read_metadata
 
 
 subroutine fill_local_metadata( ngood )
+!------------------------------------------------------------------
 ! Create the metadata arrays that are the same shape as the state vector.
 ! The metadata arrays will provide the ability to determine what grid cell is the parent
 ! of the state vector index in question ... as well as the actual surface area.
@@ -1835,6 +1768,7 @@ end subroutine fill_local_metadata
 
 
 subroutine get_var_1d(ncid, varname, var1d)
+!------------------------------------------------------------------
 ! This function will return a R8 array with the netCDF attributes applied.
 ! scale_factor, offset will be applied,
 ! missing_value, _FillValue will be replaced by the DART missing value ...
@@ -1895,17 +1829,9 @@ if (xtype == NF90_INT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -1928,17 +1854,9 @@ elseif (xtype == NF90_FLOAT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -1959,17 +1877,9 @@ elseif (xtype == NF90_DOUBLE) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -1992,6 +1902,7 @@ end subroutine get_var_1d
 
 
 subroutine get_var_2d(ncid, varname, var2d)
+!------------------------------------------------------------------
 ! This function will return a R8 array with the netCDF attributes applied.
 ! scale_factor, offset will be applied,
 ! missing_value, _FillValue will be replaced by the DART missing value ...
@@ -2003,7 +1914,7 @@ subroutine get_var_2d(ncid, varname, var2d)
 ! missing_value
 ! When scale_factor and add_offset are used for packing, the value(s) of the missing_value
 ! attribute should be specified in the domain of the data in the file (the packed data),
-! so that missing values can be detected before the scale_factor and add_offset are applied.
+! so that missing values can be detected before the scale_factor & add_offset are applied.
 !
 ! scale_factor
 ! If present for a variable, the data are to be multiplied by this factor after the data
@@ -2061,17 +1972,9 @@ if (xtype == NF90_INT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -2094,17 +1997,9 @@ elseif (xtype == NF90_FLOAT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -2125,17 +2020,9 @@ elseif (xtype == NF90_DOUBLE) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1,source,revision,revdate)
-   endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
    io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
@@ -2225,8 +2112,6 @@ endif
 end subroutine vector_to_1d_prog_var
 
 
-!------------------------------------------------------------------
-
 
 subroutine vector_to_2d_prog_var(x, ivar, data_2d_array, ncid)
 !------------------------------------------------------------------
@@ -2306,7 +2191,7 @@ end subroutine vector_to_2d_prog_var
 
 
 subroutine define_var_dims(ivar, ncid, memberdimid, unlimiteddimid, ndims, dimids)
-
+!------------------------------------------------------------------
 integer,               intent(in)  :: ivar, ncid, memberdimid, unlimiteddimid
 integer,               intent(out) :: ndims
 integer, dimension(:), intent(out) :: dimids
@@ -2317,8 +2202,8 @@ ndims = 0
 
 do i = 1,progvar(ivar)%numdims
 
-   call nc_check(nf90_inq_dimid(ncid=ncid, name=progvar(ivar)%dimnames(i), dimid=mydimid), &
-                           'define_var_dims','inq_dimid '//trim(progvar(ivar)%dimnames(i)))
+   call nc_check(nf90_inq_dimid(ncid=ncid,name=progvar(ivar)%dimnames(i),dimid=mydimid), &
+          'define_var_dims','inq_dimid '//trim(progvar(ivar)%dimnames(i)))
 
    ndims         = ndims + 1
    dimids(ndims) = mydimid
@@ -2347,6 +2232,8 @@ endif
 
 return
 end subroutine define_var_dims
+
+
 
 !===================================================================
 ! End of model_mod
