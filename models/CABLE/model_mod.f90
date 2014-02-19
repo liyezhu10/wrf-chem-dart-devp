@@ -74,7 +74,8 @@ public :: get_model_size,         &
 ! the model_mod code.
 public :: cable_state_to_dart_vector, &
           dart_vector_to_model_file, &
-          get_cable_restart_filename
+          get_cable_restart_filename, &
+          get_time_origin
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -93,6 +94,7 @@ integer, parameter :: max_state_variables = 10
 integer, parameter :: num_state_table_columns = 2
 character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
+integer, dimension(6) :: cable_state_yyyymmddhhmmss = 0
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.2
@@ -100,13 +102,13 @@ logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: cable_restart_filename = 'cable_restart.nc'
-character(len=256) :: cable_history_filename = 'cable_history.nc'
+character(len=256) :: cable_gridinfo_filename = 'cable_history.nc'
 character(len=obstypelength) :: cable_variables(max_state_variables*num_state_table_columns) = ' '
-
 
 namelist /model_nml/            &
    cable_restart_filename,      &
-   cable_history_filename,      &
+   cable_gridinfo_filename,      &
+   cable_state_yyyymmddhhmmss,  &  ! the restart files dont know, really 
    output_state_vector,         &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
@@ -163,12 +165,17 @@ integer,  allocatable, dimension(:) :: latjxy ! latitude  index of parent gridce
 real(r8), allocatable, dimension(:) :: levels ! depth
 real(r8), allocatable, dimension(:) :: pfrac  ! fraction of vegetated grid cell area
 
+! There are at most mvtype (17) patches per gridcell, one per veg type.
+! the gridcell info file has variables to relate the patch to the parent
+! gridcell. 
+
 character(len=256) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 integer         :: model_size      ! the state vector length
 type(time_type) :: model_time      ! valid time of the model state
 type(time_type) :: time_step       ! smallest time to adv model
+type(time_type) :: cable_origin    ! the basis of the CABLE time variable
 
 real(r8), allocatable, dimension(:) :: ens_mean ! may be needed for forward ops
 
@@ -185,6 +192,7 @@ END INTERFACE
 INTERFACE get_state_time
      MODULE PROCEDURE get_state_time_ncid
      MODULE PROCEDURE get_state_time_fname
+     MODULE PROCEDURE get_state_time_array
 END INTERFACE
 
 !==================================================================
@@ -214,9 +222,10 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are')
-if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+! These values always get recorded in the output diagnostic files.
+if ((debug > 1) .and. do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are')
+if ((debug > 1) .and. do_output()) write(logfileunit, nml=model_nml)
+if ((debug > 1) .and. do_output()) write(     *     , nml=model_nml)
 
 !---------------------------------------------------------------
 ! Set the time step ... causes cable namelists to be read.
@@ -224,8 +233,10 @@ if (do_output()) write(     *     , nml=model_nml)
 
 call set_calendar_type( calendar )   ! comes from model_mod_nml
 
-model_time = get_state_time(cable_restart_filename)
-time_step  = set_time(assimilation_period_seconds, assimilation_period_days)
+cable_origin = read_time_origin(cable_restart_filename)
+!model_time  = get_state_time(cable_restart_filename)
+model_time   = get_state_time(cable_state_yyyymmddhhmmss)
+time_step    = set_time(assimilation_period_seconds, assimilation_period_days)
 
 call print_date(model_time,'model date is ')
 call print_time(model_time,'model time is ')
@@ -246,7 +257,7 @@ call verify_state_variables( cable_variables, cable_restart_filename, nfields )
 !---------------------------------------------------------------
 ! Read all the model metadata
 
-call read_metadata( cable_restart_filename, cable_history_filename )
+call read_metadata( cable_restart_filename, cable_gridinfo_filename )
 
 model_size = progvar(nfields)%indexN
 
@@ -932,6 +943,7 @@ call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
               'cable_state_to_dart_vector','open '//trim(filename))
 
 state_time = get_state_time(ncid)
+state_time = model_time ! FIXME ... at present the restart files do not have a reliable time
 
 if (do_output()) call print_time(state_time,'time in CABLE file '//trim(filename))
 if (do_output()) call print_date(state_time,'date in CABLE file '//trim(filename))
@@ -1087,6 +1099,7 @@ call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
 ! time won't be consistent with the rest of the file.
 
 file_time = get_state_time(ncid)
+file_time = model_time ! FIXME ... at present the restart files do not have a reliable time
 
 if ( file_time /=  statedate ) then
    call print_time(statedate,'DART  current time',logfileunit)
@@ -1201,9 +1214,63 @@ filename = trim(cable_restart_filename)
 end subroutine get_cable_restart_filename
 
 
+
+function get_time_origin()
+!------------------------------------------------------------------
+! return the origin of the time variable in a netCDF file.
+type(time_type) :: get_time_origin
+
+if ( .not. module_initialized ) call static_init_model
+
+get_time_origin = cable_origin
+
+end function get_time_origin
+
+
+
 !==================================================================
 ! PRIVATE interfaces
 !==================================================================
+
+
+
+function read_time_origin( filename )
+!------------------------------------------------------------------
+! return the origin of the time variable in a netCDF file.
+
+character(len=*), intent(in) :: filename
+type(time_type) :: read_time_origin
+
+integer :: ncid, VarID, year, month, day, hour, minute, second
+character(len=256) :: unitstring
+
+if ( .not. file_exist(filename) ) then
+   write(string1,*) 'cannot open file ', trim(filename),' for reading.'
+   call error_handler(E_ERR,'read_time_origin',string1,source,revision,revdate)
+endif
+
+call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+                  'read_time_origin', 'open '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid, 'time', VarID), 'read_time_origin', &
+                  'inq_varid time '//trim(cable_restart_filename))
+
+if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
+   call nc_check( nf90_get_att(ncid, VarID, 'units' , unitstring), &
+           'read_time_origin', 'get_att units '//trim(string2))
+else
+   write(string1,*) 'cannot get time base from <', trim(cable_restart_filename),'>.'
+   call error_handler(E_ERR,'read_time_origin',string1,source,revision,revdate)
+endif
+
+read(unitstring,'(14x,i4,5(1x,i2))'),year,month,day,hour,minute,second
+
+read_time_origin = set_date(year, month, day, hour, minute, second)
+
+call nc_check(nf90_close(ncid),'read_time_origin', 'close '//trim(filename))
+
+end function read_time_origin
+
 
 
 function get_state_time_ncid( ncid )
@@ -1266,6 +1333,17 @@ get_state_time_fname = get_state_time_ncid(ncid)
 call nc_check(nf90_close(ncid),'get_state_time_fname', 'close '//trim(filename))
 
 end function get_state_time_fname
+
+
+
+function get_state_time_array( x )
+!------------------------------------------------------------------
+integer, dimension(6), intent(in) :: x
+type(time_type) :: get_state_time_array
+
+get_state_time_array = set_date(x(1), x(2), x(3), x(4), x(5), x(6))
+
+end function get_state_time_array
 
 
 
@@ -1332,7 +1410,7 @@ MyLoop : do i = 1, nrows
 
    ! Record the contents of the DART state vector
 
-   if ((debug > 0) .and. do_output()) then
+   if ((debug > 7) .and. do_output()) then
       write(logfileunit,*)'variable ',i,' is ',trim(variable_table(i,1)), &
                                           ' ', trim(variable_table(i,2))
       write(     *     ,*)'variable ',i,' is ',trim(variable_table(i,1)), &
@@ -1453,7 +1531,7 @@ do ivar = 1, ngood
 
 enddo
 
-call state_report()
+if ((debug > 1) .and. do_output()) call state_report()
 
 call nc_check(nf90_close(ncid),'verify_state_variables','close '//trim(filename))
 

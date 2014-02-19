@@ -42,8 +42,8 @@
 #PBS -P xa5
 #PBS -N perfect
 #PBS -q express
-#PBS -l ncpus=8
-#PBS -l mem=16gb
+#PBS -l ncpus=16
+#PBS -l mem=30gb
 #PBS -l walltime=00:10:00
 #PBS -j oe
 
@@ -80,7 +80,7 @@ else if ($?PBS_QUEUE) then
 
    source /etc/csh.cshrc
    module purge
-   module load pbs openmpi
+   module load pbs openmpi nco
 
 else
 
@@ -178,6 +178,11 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
  ${LINK} ${CABLEEXEDIR}/cable-mpi             .  || exit 2
  ${COPY} ${DARTDIR}/data/restart_in_gpcc.nc   .  || exit 2
  ${COPY} ${DARTDIR}/data/cable.nml            .  || exit 2
+
+# This is the time to put the desired time in the CABLE restart file
+# and make sure the forcing files are for the right year.
+# The CABLE restart files only have a 'time since the start of the run',
+# they don't really have an absolute time.
 
 #-----------------------------------------------------------------------------
 # Check that everything moved OK, and the table is set.

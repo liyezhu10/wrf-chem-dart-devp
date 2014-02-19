@@ -29,7 +29,8 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time
 use        model_mod, only : static_init_model, dart_vector_to_model_file, &
-                             get_model_size, get_cable_restart_filename
+                             get_model_size, get_cable_restart_filename, &
+                             get_time_origin
 
 implicit none
 
@@ -52,9 +53,11 @@ namelist /dart_to_cable_nml/ dart_to_cable_input_file, &
 !----------------------------------------------------------------------
 
 character(len=256)    :: cable_restart_filename
-integer               :: iunit, io, x_size
+integer               :: iunit, io, x_size, newunit
 type(time_type)       :: model_time, adv_to_time
+type(time_type)       :: cable_origin, temp_time
 real(r8), allocatable :: statevector(:)
+integer               :: days, seconds, currentseconds, futureseconds
 
 !----------------------------------------------------------------------
 
@@ -91,6 +94,32 @@ iunit = open_restart_read(dart_to_cable_input_file)
 
 if ( advance_time_present ) then
    call aread_state_restart(model_time, statevector, iunit, adv_to_time)
+
+   ! FIXME convey the advance_to_time to CABLE 
+   ! There is more to do. Convert the model_time and adv_to_time to
+   ! the units of the "time" variable in the restart file (same as the
+   ! atmospheric forcing file). Those will be used to construct a call
+   ! to ncks to subset the gigantic forcing files in to ones that are
+   ! appropriate for this particular model advance.
+
+   cable_origin = get_time_origin()   ! from the restart file, essentially
+
+   ! figure out the current model time 
+   temp_time = model_time - cable_origin
+   call get_time(temp_time, seconds, days)
+   currentseconds = seconds + days*86400
+
+   ! figure out the advance-to-time time 
+   temp_time = adv_to_time - cable_origin
+   call get_time(temp_time, seconds, days)
+   futureseconds = seconds + days*86400
+
+   newunit = open_file('time_control.txt',action='rewind')
+   write(newunit,*)currentseconds
+   write(newunit,*)futureseconds
+   call print_date( model_time,'dart_to_cable:DART   model date',newunit)
+   call print_date(adv_to_time,'dart_to_cable:DART desired date',newunit)
+
 else
    call aread_state_restart(model_time, statevector, iunit)
 endif
@@ -106,21 +135,17 @@ call dart_vector_to_model_file(statevector, cable_restart_filename, model_time)
 ! Log what we think we're doing, and exit.
 !----------------------------------------------------------------------
 
-call print_date( model_time,'dart_to_cable:cable  model date')
-call print_time( model_time,'dart_to_cable:DART model time')
-call print_date( model_time,'dart_to_cable:cable  model date',logfileunit)
-call print_time( model_time,'dart_to_cable:DART model time',logfileunit)
+call print_date( model_time,'dart_to_cable:cable model date')
+call print_time( model_time,'dart_to_cable:DART  model time')
+call print_date( model_time,'dart_to_cable:cable model date',logfileunit)
+call print_time( model_time,'dart_to_cable:DART  model time',logfileunit)
 
 if ( advance_time_present ) then
-   call error_handler(E_MSG,'dart_to_cable','warning: DART not configured to advance cable', &
-            source, revision, revdate)
    call print_time(adv_to_time,'dart_to_cable:advance_to time')
    call print_date(adv_to_time,'dart_to_cable:advance_to date')
    call print_time(adv_to_time,'dart_to_cable:advance_to time',logfileunit)
    call print_date(adv_to_time,'dart_to_cable:advance_to date',logfileunit)
 endif
-
-! FIXME convey the advance_to_time to CABLE 
 
 call finalize_utilities('dart_to_cable')
 

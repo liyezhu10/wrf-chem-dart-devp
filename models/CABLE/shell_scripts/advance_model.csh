@@ -60,9 +60,6 @@ echo ':wq'                    >> ex_commands
 ( ex input.nml < ex_commands ) >& /dev/null
 \rm -f ex_commands
 
-echo 'listing now that the table has been set ...'
-ls -l
-
 # Loop through each state
 set           state_copy = 1
 set ensemble_member_line = 1
@@ -74,6 +71,8 @@ while($state_copy <= $num_states)
    set input_file      = `head -n $input_file_line      ../${control_file} | tail -n 1`
    set output_file     = `head -n $output_file_line     ../${control_file} | tail -n 1`
 
+   echo "advancing ensemble member $ensemble_member ..."
+
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by CABLE.
    # We are going to take a CABLE netCDF restart file and simply overwrite the
@@ -82,30 +81,75 @@ while($state_copy <= $num_states)
    #----------------------------------------------------------------------
 
    # The EXPECTED DART filter restart_out_file_name is 'dart_restart'
-   # The dart_to_cable_nml:advance_time_present = .TRUE. must be set
+   # The dart_to_cable_nml:advance_time_present = .TRUE. must be set;
+   # this is the purpose of the ex_commands earlier.
 
    ln -sfv ../${input_file} dart_restart || exit 2
 
-   set CABLEFILE = `printf restart_in_gpcc.%03d.nc ${ensemble_member}`
+   set CABLEFILE = `printf restart_in_gpcc.%04d.nc ${ensemble_member}`
    ln -sfv ../${CABLEFILE} restart_in_gpcc.nc || exit 2
    
    ../dart_to_cable || exit 2
 
-   # Extract just the forcing for the model advance we need
-   # use something from dart_to_cable ... does it produce a command
-   # we can feed to ncks, for example
+   # Extract just the forcing for the model advance we need.
+   # dart_to_cable produces a file "time_control.txt" that has
+   # the forcing times we need to advance CABLE. We use them
+   # to extract what we need with ncks.
+   #
+   #cat time_control.txt 
+   #     31622400
+   #     31708800
+   # dart_to_cable:DART   model date 1981 Jan 01 00:00:00
+   # dart_to_cable:DART desired date 1981 Jan 02 00:00:00
+
+   set t1 = `head -n 1 time_control.txt`
+   set tN = `head -n 2 time_control.txt | tail -n 1`
+
+   # gswpfile%rainf = '/short/xa5/CABLE-AUX/GPCC-CABLE/prcp_hr_1980-19801x1.nc'
+   # gswpfile%LWdown= '/short/xa5/CABLE-AUX/GPCC-CABLE/dlwrf_hr_1980-19801x1.nc'
+   # gswpfile%SWdown= '/short/xa5/CABLE-AUX/GPCC-CABLE/dswrf_hr_1980-19801x1.nc'
+   # gswpfile%PSurf = '/short/xa5/CABLE-AUX/GPCC-CABLE/pres_hr_1980-19801x1.nc'
+   # gswpfile%Qair  = '/short/xa5/CABLE-AUX/GPCC-CABLE/shum_hr_1980-19801x1.nc'
+   # gswpfile%Tair  = '/short/xa5/CABLE-AUX/GPCC-CABLE/tas_hr_1980-19801x1.nc'
+   # gswpfile%wind  = '/short/xa5/CABLE-AUX/GPCC-CABLE/wind_hr_1980-19801x1.nc'
+
+   foreach FILE ( rainf LWdown SWdown PSurf Qair Tair wind )
+
+      set FILESTRING=`grep "gswpfile%$FILE" cable.nml | sed -e "s#[='\\!]# #g"`
+      set FILENAME=$FILESTRING[$#FILESTRING]
+      set FILETAIL=$FILENAME:t
+
+      # This actually subsets the files and makes local files.
+
+      ncks -O -d time,${t1}.,${tN}. ${FILENAME} subset_${FILETAIL}
+
+      # This changes the namelist to use the local files.
+      
+      grep -v "gswpfile%$FILE" cable.nml | grep -v '&end' >! cabletemp.nml
+      echo "   gswpfile%$FILE = '"subset_${FILETAIL}"'"   >> cabletemp.nml
+      echo '&end'                                         >> cabletemp.nml
    
-   # cat cable_in.DART cable_in.part2 >! cable_in
+      mv cabletemp.nml cable.nml   
+
+   end
 
    #----------------------------------------------------------------------
    # Block 3: Run CABLE
+   # casafile%cnpipool    = 'output/cnppool1979.csv'
    # filename%restart_in  = './restart_in_gpcc.nc'
    # filename%restart_out = './restart_out.nc'
    #----------------------------------------------------------------------
 
-   echo "mpi variable is ${MPI}"
+   mkdir -p output
 
-   ${MPI} ../cable-mpi
+   set CNIPOOLSTRING=`grep "casafile%cnpipool" cable.nml | sed -e "s#[='\\!]# #g"`
+   set CNIPOOLFILE=$CNIPOOLSTRING[$#CNIPOOLSTRING]
+  
+   ln -sfv /short/xa5/CABLE-EXE/$CNIPOOLFILE output/.
+
+   echo "mpi will run with the following command <${MPICMD}>"
+
+   ${MPICMD} ../cable-mpi
 
    set cablestatus = $status
    if ( $cablestatus != 0 ) then
@@ -113,6 +157,9 @@ while($state_copy <= $num_states)
       echo "ERROR - ensemble member $ensemble_member did not complete successfully" 
       exit 3 
    endif
+
+   # FIXME if cable completes correctly, the carbon pool file must be used.
+   # this means the casafile%cnpipool variable must point to the new file.
    
    #----------------------------------------------------------------------
    # Block 4: Convert the CABLE model output to form needed by DART

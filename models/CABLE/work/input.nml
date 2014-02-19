@@ -156,7 +156,8 @@
 
 &model_nml
    cable_restart_filename       = 'restart_in_gpcc.nc',
-   cable_history_filename       = 'cable_history.nc',
+   cable_gridinfo_filename      = '/short/xa5/CABLE-AUX/offline/gridinfo_CSIRO_1x1_modified.nc',
+   cable_state_yyyymmddhhmmss   = 1980,1,1,0,0,0,
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
@@ -176,7 +177,7 @@
 
 &dart_to_cable_nml
    dart_to_cable_input_file   = 'dart_restart',
-   advance_time_present     = .false.
+   advance_time_present       = .true.
    /
 
 
