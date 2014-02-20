@@ -18,7 +18,7 @@ program cable_to_dart
 !         <edit cable_to_dart_output_file in input.nml:cable_to_dart_nml>
 !         cable_to_dart
 !
-! author: Tim Hoar 12 July 2011
+! author: Tim Hoar 20 February 2014
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8

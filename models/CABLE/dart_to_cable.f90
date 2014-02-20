@@ -18,7 +18,7 @@ program dart_to_cable
 !         Typically, only temporary files like 'assim_model_state_ic' have
 !         an 'advance_to_time'.
 !
-! author: Tim Hoar 12 July 2011
+! author: Tim Hoar 20 February 2014
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
