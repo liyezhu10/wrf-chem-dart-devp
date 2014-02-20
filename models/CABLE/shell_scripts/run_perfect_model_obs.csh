@@ -8,7 +8,7 @@
 #
 # Top level script to generate observations and a TRUE state.
 #
-# This script only processes a single 
+# This script only processes a single
 # observation file.  Still fairly complex; requires a raft of
 # data files and most of them are in hardcoded locations.
 #
@@ -17,17 +17,17 @@
 # the filesystem performance and data file size.
 #
 # The script moves the necessary files to the current directory - in DART
-# nomenclature, this will be called CENTRALDIR. 
+# nomenclature, this will be called CENTRALDIR.
 # After everything is confirmed to have been assembled, it is possible
-# to edit the data, data.cal, and input.nml files for the specifics of 
+# to edit the data, data.cal, and input.nml files for the specifics of
 # the experiment; as well as allow final configuration of a 'nodelist' file.
 #
-# Once the 'table is set', all that remains is to start/submit the 
-# 'runme_filter' script. That script will spawn 'filter' as a 
-# parallel job on the appropriate nodes; each of these tasks will 
+# Once the 'table is set', all that remains is to start/submit the
+# 'runme_filter' script. That script will spawn 'filter' as a
+# parallel job on the appropriate nodes; each of these tasks will
 # call a separate model_advance.csh when necessary.
 #
-# The central directory is where the scripts reside and where script and 
+# The central directory is where the scripts reside and where script and
 # program I/O are expected to happen.
 #-----------------------------------------------------------------------------
 #
@@ -48,7 +48,7 @@
 #PBS -j oe
 
 #----------------------------------------------------------------------
-# Turns out the scripts are a lot more flexible if you don't rely on 
+# Turns out the scripts are a lot more flexible if you don't rely on
 # the queuing-system-specific variables -- so I am converting them to
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
@@ -108,7 +108,7 @@ echo "${JOBNAME} ($JOBID) running       on $MYHOST"
 echo "${JOBNAME} ($JOBID) started   at "`date`
 echo
 
-env | sort 
+env | sort
 
 echo
 
@@ -124,9 +124,9 @@ cd ${TMPDIR}
 set CENTRALDIR = `pwd`
 set myname = $0          # this is the name of this script
 
-# some systems don't like the -v option to any of the following 
+# some systems don't like the -v option to any of the following
 
-set OSTYPE = `uname -s` 
+set OSTYPE = `uname -s`
 switch ( ${OSTYPE} )
    case IRIX64:
       setenv REMOVE 'rm -rf'
@@ -179,17 +179,38 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
  ${COPY} ${DARTDIR}/data/restart_in_gpcc.nc   .  || exit 2
  ${COPY} ${DARTDIR}/data/cable.nml            .  || exit 2
 
-# This is the time to put the desired time in the CABLE restart file
-# and make sure the forcing files are for the right year.
-# The CABLE restart files only have a 'time since the start of the run',
-# they don't really have an absolute time.
-
 #-----------------------------------------------------------------------------
 # Check that everything moved OK, and the table is set.
 # Convert a CABLE file 'restart_in_gpcc.nc' to a DART ics file 'perfect_ics'
 #-----------------------------------------------------------------------------
 
+# This is the time to put the desired time in the CABLE restart file
+# and make sure the forcing files are for the right year.
+# The CABLE restart files only have a 'time since the start of the run',
+# they don't really have an absolute time.
+
+# Ensure that input.nml:cable_to_dart_nml:replace_cable_time
+# is correct for this context.
+
+ echo '1'                       >! ex_commands
+ echo '/cable_to_dart_nml'      >> ex_commands
+ echo '/replace_cable_time'     >> ex_commands
+ echo ':s/\.false\./\.true\./'  >> ex_commands
+ echo ':wq'                     >> ex_commands
+
+ ( ex input.nml < ex_commands ) >& /dev/null
+
  ./cable_to_dart || exit 3
+
+ # Safeguard against having the wrong setting in general
+
+ echo '1'                       >! ex_commands
+ echo '/cable_to_dart_nml'      >> ex_commands
+ echo '/replace_cable_time'     >> ex_commands
+ echo ':s/\.true\./\.false\./'  >> ex_commands
+ echo ':wq'                     >> ex_commands
+ ( ex input.nml < ex_commands ) >& /dev/null
+ \rm -f ex_commands
 
  ${MOVE} dart_ics perfect_ics
 

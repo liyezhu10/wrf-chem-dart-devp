@@ -153,11 +153,11 @@
    netCDF_large_file_support  = .true.
    /
 
+   cable_gridinfo_filename      = '/short/xa5/CABLE-AUX/offline/gridinfo_CSIRO_1x1_modified.nc',
 
 &model_nml
    cable_restart_filename       = 'restart_in_gpcc.nc',
-   cable_gridinfo_filename      = '/short/xa5/CABLE-AUX/offline/gridinfo_CSIRO_1x1_modified.nc',
-   cable_state_yyyymmddhhmmss   = 1980,1,1,0,0,0,
+   cable_gridinfo_filename      = '../data/gridinfo_CSIRO_1x1_modified.nc',
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
@@ -170,10 +170,21 @@
                                   'snowd',  'KIND_SNOW_WATER'
    /
 
+
+# cable_to_dart 
+# The atmospheric forcing file I have starts at 1980,1,1,2,30,0
+# When staging an experiment, set replace_cable_time to .true.
+# but it should be .false. in general.
+
 &cable_to_dart_nml
+   replace_cable_time         = .false.
+   cable_state_yyyymmddhhmmss = 1980,1,1,2,30,0,
    cable_to_dart_output_file  = 'dart_ics'
    /
 
+# dart_to_cable
+# When assimilating, advance_time_present is .true.
+# When general testing ... it is usually .false.
 
 &dart_to_cable_nml
    dart_to_cable_input_file   = 'dart_restart',

@@ -30,7 +30,6 @@ use    utilities_mod, only : register_module, error_handler, nc_check, &
                              find_namelist_in_file, check_namelist_read, &
                              E_ERR, E_MSG, logfileunit, file_exist
 
-
 use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,   &
                              KIND_SOIL_MOISTURE,      &
                              KIND_LIQUID_WATER,       &
@@ -94,21 +93,19 @@ integer, parameter :: max_state_variables = 10
 integer, parameter :: num_state_table_columns = 2
 character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
-integer, dimension(6) :: cable_state_yyyymmddhhmmss = 0
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.2
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: cable_restart_filename = 'cable_restart.nc'
-character(len=256) :: cable_gridinfo_filename = 'cable_history.nc'
+character(len=256) :: cable_restart_filename = 'restart_in_gpcc.nc'
+character(len=256) :: cable_gridinfo_filename = 'gridinfo_CSIRO_1x1_modified.nc'
 character(len=obstypelength) :: cable_variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
    cable_restart_filename,      &
-   cable_gridinfo_filename,      &
-   cable_state_yyyymmddhhmmss,  &  ! the restart files dont know, really 
+   cable_gridinfo_filename,     &
    output_state_vector,         &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
@@ -157,11 +154,13 @@ real(r8), allocatable, dimension(:) :: zse        ! depth of each soil layer
 real(r8), allocatable, dimension(:) :: mland_lats
 real(r8), allocatable, dimension(:) :: mland_lons
 integer,  allocatable, dimension(:) :: nap  ! number of active patches
-integer,  allocatable, dimension(:) :: patchfrac  ! fraction of vegetated grid cell area
+integer,  allocatable, dimension(:) :: patchfrac ! fraction of vegetated grid cell area
+integer,  allocatable, dimension(:) :: lat_index ! latitude index for each patch
+integer,  allocatable, dimension(:) :: lon_index ! latitude index for each patch
 
 ! These are the lookup table equivalents of the location metadata
-integer,  allocatable, dimension(:) :: lonixy ! longitude index of parent gridcell
-integer,  allocatable, dimension(:) :: latjxy ! latitude  index of parent gridcell
+integer,  allocatable, dimension(:) :: lonixy ! longitude index of gridcell
+integer,  allocatable, dimension(:) :: latjxy ! latitude  index of gridcell
 real(r8), allocatable, dimension(:) :: levels ! depth
 real(r8), allocatable, dimension(:) :: pfrac  ! fraction of vegetated grid cell area
 
@@ -234,8 +233,7 @@ if ((debug > 1) .and. do_output()) write(     *     , nml=model_nml)
 call set_calendar_type( calendar )   ! comes from model_mod_nml
 
 cable_origin = read_time_origin(cable_restart_filename)
-!model_time  = get_state_time(cable_restart_filename)
-model_time   = get_state_time(cable_state_yyyymmddhhmmss)
+model_time   = get_state_time(cable_restart_filename)
 time_step    = set_time(assimilation_period_seconds, assimilation_period_days)
 
 call print_date(model_time,'model date is ')
@@ -943,7 +941,6 @@ call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
               'cable_state_to_dart_vector','open '//trim(filename))
 
 state_time = get_state_time(ncid)
-state_time = model_time ! FIXME ... at present the restart files do not have a reliable time
 
 if (do_output()) call print_time(state_time,'time in CABLE file '//trim(filename))
 if (do_output()) call print_date(state_time,'date in CABLE file '//trim(filename))
@@ -1099,7 +1096,6 @@ call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
 ! time won't be consistent with the rest of the file.
 
 file_time = get_state_time(ncid)
-file_time = model_time ! FIXME ... at present the restart files do not have a reliable time
 
 if ( file_time /=  statedate ) then
    call print_time(statedate,'DART  current time',logfileunit)
@@ -1596,7 +1592,7 @@ end subroutine state_report
 
 
 
-subroutine read_metadata( restart_filename, history_filename )
+subroutine read_metadata( restart_filename, gridinfo_filename )
 !------------------------------------------------------------------
 ! Some stuff can be read from the restart file, some stuff from the history file
 ! The restart file does not have the latitude or longitude arrays for the gridcells.
@@ -1604,7 +1600,7 @@ subroutine read_metadata( restart_filename, history_filename )
 ! and populate it with values. (so we can plot a field of 'soil moisture' for example)
 
 character(len=*), intent(in) :: restart_filename
-character(len=*), intent(in) :: history_filename
+character(len=*), intent(in) :: gridinfo_filename
 
 integer :: i, ncid, dimid, VarID, numdims, dimlen, xtype
 character(len=NF90_MAX_NAME) :: dartstr

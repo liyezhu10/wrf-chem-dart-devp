@@ -50,13 +50,18 @@ cp -pv ../input.nml . || exit 1
 
 # Try to ensure that the input.nml has the required value for
 # dart_to_cable_nml:advance_time_present for this context.
+# Also make sure that DART is not altering the time in the CABLE files.
+# cable_to_dart_nml:replace_cable_time for this context.
 
-echo '1'                      >! ex_commands
-echo '/dart_to_cable_nml'     >> ex_commands
-echo '/advance_time_present'  >> ex_commands
-echo ':s/\.false\./\.true\./' >> ex_commands
-echo ':wq'                    >> ex_commands
-
+echo '1'                       >! ex_commands
+echo '/dart_to_cable_nml'      >> ex_commands
+echo '/advance_time_present'   >> ex_commands
+echo ':s/\.false\./\.true\./'  >> ex_commands
+echo '1'                       >> ex_commands
+echo '/cable_to_dart_nml'      >> ex_commands
+echo '/replace_cable_time'     >> ex_commands
+echo ':s/\.true\./\.false\./'  >> ex_commands
+echo ':wq'                     >> ex_commands
 ( ex input.nml < ex_commands ) >& /dev/null
 \rm -f ex_commands
 
@@ -102,8 +107,8 @@ while($state_copy <= $num_states)
    # dart_to_cable:DART   model date 1981 Jan 01 00:00:00
    # dart_to_cable:DART desired date 1981 Jan 02 00:00:00
 
-   set t1 = `head -n 1 time_control.txt`
-   set tN = `head -n 2 time_control.txt | tail -n 1`
+   @ t1 = `head -n 1 time_control.txt` - 1
+   @ tN = `head -n 2 time_control.txt | tail -n 1` + 1
 
    # gswpfile%rainf = '/short/xa5/CABLE-AUX/GPCC-CABLE/prcp_hr_1980-19801x1.nc'
    # gswpfile%LWdown= '/short/xa5/CABLE-AUX/GPCC-CABLE/dlwrf_hr_1980-19801x1.nc'

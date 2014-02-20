@@ -95,14 +95,15 @@ iunit = open_restart_read(dart_to_cable_input_file)
 if ( advance_time_present ) then
    call aread_state_restart(model_time, statevector, iunit, adv_to_time)
 
-   ! FIXME convey the advance_to_time to CABLE 
-   ! There is more to do. Convert the model_time and adv_to_time to
-   ! the units of the "time" variable in the restart file (same as the
-   ! atmospheric forcing file). Those will be used to construct a call
-   ! to ncks to subset the gigantic forcing files in to ones that are
-   ! appropriate for this particular model advance.
+   ! Convert the model_time and adv_to_time to the units of the "time" 
+   ! variable in the restart file (same as the atmospheric forcing file).
+   ! Those will be used to construct a call to ncks to subset the forcing 
+   ! files in to ones that are appropriate for this particular model advance.
+   !
+   ! The restart file time:units attribute MUST MATCH
+   ! the forcing file time:units attribute. IMPORTANT.
 
-   cable_origin = get_time_origin()   ! from the restart file, essentially
+   cable_origin = get_time_origin()
 
    ! figure out the current model time 
    temp_time = model_time - cable_origin
