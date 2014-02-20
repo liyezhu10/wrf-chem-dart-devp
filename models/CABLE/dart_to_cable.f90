@@ -86,6 +86,11 @@ write(*,'(''dart_to_cable:converting DART file '',A, &
       &'' to cable restart file '',A)') &
      trim(dart_to_cable_input_file), trim(cable_restart_filename)
 
+write(logfileunit,*)
+write(logfileunit,'(''dart_to_cable:converting DART file '',A, &
+      &'' to cable restart file '',A)') &
+     trim(dart_to_cable_input_file), trim(cable_restart_filename)
+
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
 !----------------------------------------------------------------------
@@ -136,9 +141,9 @@ call dart_vector_to_model_file(statevector, cable_restart_filename, model_time)
 ! Log what we think we're doing, and exit.
 !----------------------------------------------------------------------
 
-call print_date( model_time,'dart_to_cable:cable model date')
+call print_date( model_time,'dart_to_cable:CABLE model date')
 call print_time( model_time,'dart_to_cable:DART  model time')
-call print_date( model_time,'dart_to_cable:cable model date',logfileunit)
+call print_date( model_time,'dart_to_cable:CABLE model date',logfileunit)
 call print_time( model_time,'dart_to_cable:DART  model time',logfileunit)
 
 if ( advance_time_present ) then

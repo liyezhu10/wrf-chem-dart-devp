@@ -80,7 +80,7 @@ else if ($?PBS_QUEUE) then
 
    source /etc/csh.cshrc
    module purge
-   module load pbs openmpi nco
+   module load pbs openmpi nco netcdf
 
 else
 
@@ -175,9 +175,10 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # Get the CABLE executable, control files, and data files.
 #-----------------------------------------------------------------------------
 
- ${LINK} ${CABLEEXEDIR}/cable-mpi             .  || exit 2
- ${COPY} ${DARTDIR}/data/restart_in_gpcc.nc   .  || exit 2
- ${COPY} ${DARTDIR}/data/cable.nml            .  || exit 2
+ ${LINK} ${CABLEEXEDIR}/cable-mpi                         .  || exit 2
+ ${COPY} ${DARTDIR}/data/restart_in_gpcc.nc               .  || exit 2
+ ${COPY} ${DARTDIR}/data/gridinfo_CSIRO_1x1_modified.nc   .  || exit 2
+ ${COPY} ${DARTDIR}/data/cable.nml                        .  || exit 2
 
 #-----------------------------------------------------------------------------
 # Check that everything moved OK, and the table is set.

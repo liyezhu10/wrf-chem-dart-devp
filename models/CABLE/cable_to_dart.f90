@@ -24,7 +24,7 @@ program cable_to_dart
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             E_ERR, error_handler, nc_check, file_exist
+                             E_ERR, error_handler, nc_check, file_exist, logfileunit
 use        model_mod, only : get_model_size, cable_state_to_dart_vector, &
                              get_cable_restart_filename, static_init_model
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
@@ -88,6 +88,11 @@ write(*,'(''cable_to_dart:converting cable restart file '',A, &
       &'' to DART file '',A)') &
        trim(cable_restart_filename), trim(cable_to_dart_output_file)
 
+write(logfileunit,*)
+write(logfileunit,'(''cable_to_dart:converting cable restart file '',A, &
+      &'' to DART file '',A)') &
+       trim(cable_restart_filename), trim(cable_to_dart_output_file)
+
 if ( replace_cable_time ) call replace_timestamp( cable_restart_filename )
 
 !----------------------------------------------------------------------
@@ -106,6 +111,8 @@ call close_restart(iunit)
 
 call print_date(model_time, str='cable_to_dart:CABLE model date')
 call print_time(model_time, str='cable_to_dart:DART  model time')
+call print_date(model_time, str='cable_to_dart:CABLE model date',iunit=logfileunit)
+call print_time(model_time, str='cable_to_dart:DART  model time',iunit=logfileunit)
 
 call finalize_utilities('cable_to_dart')
 
@@ -192,8 +199,8 @@ call nc_check(nf90_put_var(ncid, VarID, seconds), &
 
 call nc_check(nf90_close(ncid),'replace_timestamp','close '//trim(filename))
 
-call print_date(time_desired, str='cable_to_dart:overrride:new CABLE model date')
-call print_time(time_desired, str='cable_to_dart:overrride:new CABLE model time')
+call print_date(time_desired, str='cable_to_dart: OVERRRIDE : NEW CABLE model date')
+call print_time(time_desired, str='cable_to_dart: OVERRRIDE : NEW CABLE model time')
 
 end subroutine replace_timestamp
 

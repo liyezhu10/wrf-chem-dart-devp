@@ -72,7 +72,7 @@ public :: get_model_size,         &
 ! utility programs that are tightly tied to the other parts of
 ! the model_mod code.
 public :: cable_state_to_dart_vector, &
-          dart_vector_to_model_file, &
+          dart_vector_to_model_file,  &
           get_cable_restart_filename, &
           get_time_origin
 
@@ -103,15 +103,15 @@ character(len=256) :: cable_restart_filename = 'restart_in_gpcc.nc'
 character(len=256) :: cable_gridinfo_filename = 'gridinfo_CSIRO_1x1_modified.nc'
 character(len=obstypelength) :: cable_variables(max_state_variables*num_state_table_columns) = ' '
 
-namelist /model_nml/            &
-   cable_restart_filename,      &
-   cable_gridinfo_filename,     &
-   output_state_vector,         &
-   assimilation_period_days,    &  ! for now, this is the timestep
-   assimilation_period_seconds, &
-   model_perturbation_amplitude,&
-   calendar,                    &
-   debug,                       &
+namelist /model_nml/             &
+   cable_restart_filename,       &
+   cable_gridinfo_filename,      &
+   output_state_vector,          &
+   assimilation_period_days,     & ! for now, this is the timestep
+   assimilation_period_seconds,  &
+   model_perturbation_amplitude, &
+   calendar,                     &
+   debug,                        &
    cable_variables
 
 !------------------------------------------------------------------
@@ -149,18 +149,24 @@ integer :: Nmp_patch ! number of patches in a gridcell
 integer :: Nsoil     ! number of soil layers
 integer :: Nsnow     ! number of snow layers
 
+integer :: Nlongitude   ! number of longitudes cells
+integer :: Nlatitude    ! number of latitudes cells
+
+real(r8), allocatable, dimension(:,:) :: area
+real(r8), allocatable, dimension(:) :: longitude
+real(r8), allocatable, dimension(:) :: latitude
 real(r8), allocatable, dimension(:) :: snowd      ! Liquid water eqivalent snow depth
 real(r8), allocatable, dimension(:) :: zse        ! depth of each soil layer
 real(r8), allocatable, dimension(:) :: mland_lats
 real(r8), allocatable, dimension(:) :: mland_lons
-integer,  allocatable, dimension(:) :: nap  ! number of active patches
+integer,  allocatable, dimension(:) :: nap       ! number of active patches
 integer,  allocatable, dimension(:) :: patchfrac ! fraction of vegetated grid cell area
-integer,  allocatable, dimension(:) :: lat_index ! latitude index for each patch
-integer,  allocatable, dimension(:) :: lon_index ! latitude index for each patch
+integer,  allocatable, dimension(:) :: lat_index ! parent latitude index of each patch
+integer,  allocatable, dimension(:) :: lon_index ! parent latitude index of each patch
 
 ! These are the lookup table equivalents of the location metadata
-integer,  allocatable, dimension(:) :: lonixy ! longitude index of gridcell
-integer,  allocatable, dimension(:) :: latjxy ! latitude  index of gridcell
+integer,  allocatable, dimension(:) :: lonixy ! parent longitude index of gridcell
+integer,  allocatable, dimension(:) :: latjxy ! parent latitude  index of gridcell
 real(r8), allocatable, dimension(:) :: levels ! depth
 real(r8), allocatable, dimension(:) :: pfrac  ! fraction of vegetated grid cell area
 
@@ -202,8 +208,6 @@ contains
 subroutine static_init_model()
 !------------------------------------------------------------------
 ! Called to do one time initialization of the model.
-
-real(r8) :: x_loc
 
 integer :: i, iunit, io
 
@@ -269,17 +273,6 @@ allocate(ens_mean(model_size))
 allocate(lonixy(model_size), latjxy(model_size), levels(model_size), pfrac(model_size))
 
 call fill_local_metadata( nfields )
-
-! Define the locations of the model state variables
-! naturally, this can be done VERY differently for more complicated models.
-! set_location() is different for 1D vs. 3D models, not surprisingly.
-do i = 1, model_size
-   x_loc = (i - 1.0_r8) / model_size
-   ! must do one of these:
-   !state_loc(i) =  set_location(x_loc)
-   !state_loc(i) =  set_location(x_loc,y_loc,v_loc,v_type)
-end do
-
 
 end subroutine static_init_model
 
@@ -447,6 +440,7 @@ subroutine end_model()
 deallocate(state_loc, ens_mean)
 deallocate(mland_lats, mland_lons, nap, patchfrac, zse, snowd)
 deallocate(lonixy, latjxy, levels, pfrac)
+deallocate(latitude, longitude, area, lat_index, lon_index)
 
 end subroutine end_model
 
@@ -467,16 +461,18 @@ integer              :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
-integer :: StateVarDimID   ! netCDF pointer to state variable dimension (model size)
+integer :: DimIDstate   ! netCDF pointer to state variable dimension (model size)
 integer :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
 integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimited)
 integer :: DimIDmland, DimIDmp_patch, DimIDsoil, DimIDsnow
+integer :: DimIDlatitude, DimIDlongitude
 integer :: myndims
 integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
 
 integer :: StateVarVarID   ! netCDF pointer to state variable coordinate array
 integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 integer :: VarIDlatitude, VarIDlongitude, VarIDnap, VarIDpatchfrac, VarIDzse, VarID
+integer :: VarIDlonixy, VarIDlatjxy
 
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
@@ -523,7 +519,7 @@ endif
 ! Define the model size / state variable dimension / whatever ...
 !-------------------------------------------------------------------------------
 call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable',  &
-        len=model_size, dimid=StateVarDimID), 'nc_write_model_atts', 'def_dim state')
+        len=model_size, dimid=DimIDstate), 'nc_write_model_atts', 'def_dim state')
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='mland',  &
         len=Nmland, dimid=DimIDmland), 'nc_write_model_atts', 'def_dim Nmland')
@@ -536,6 +532,12 @@ call nc_check(nf90_def_dim(ncid=ncFileID, name='soil',  &
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='snow',  &
         len=Nsnow, dimid=DimIDsnow), 'nc_write_model_atts', 'def_dim Nsnow')
+
+call nc_check(nf90_def_dim(ncid=ncFileID, name='latitude',  &
+        len=Nlatitude, dimid=DimIDlatitude), 'nc_write_model_atts', 'def_dim Nlatitude')
+
+call nc_check(nf90_def_dim(ncid=ncFileID, name='longitude',  &
+        len=Nlongitude, dimid=DimIDlongitude), 'nc_write_model_atts', 'def_dim Nlongitude')
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes
@@ -557,12 +559,12 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model','template'), &
                           'nc_write_model_atts', 'put_att model')
 
 call nc_check(nf90_def_var(ncid=ncFileID,name='latitude', xtype=NF90_FLOAT, &
-        dimids=DimIDmland,varid=VarIDlatitude),'nc_write_model_atts','def_var latitude')
+        dimids=DimIDlatitude,varid=VarIDlatitude),'nc_write_model_atts','def_var latitude')
 call nc_check(nf90_put_att(ncFileID, VarIDlatitude,'units','degrees_north'), &
         'nc_write_model_atts', 'put_att latitude long_name')
 
 call nc_check(nf90_def_var(ncid=ncFileID,name='longitude', xtype=NF90_FLOAT, &
-        dimids=DimIDmland,varid=VarIDlongitude),'nc_write_model_atts','def_var longitude')
+        dimids=DimIDlongitude,varid=VarIDlongitude),'nc_write_model_atts','def_var longitude')
 call nc_check(nf90_put_att(ncFileID, VarIDlongitude,'units','degrees_east'), &
         'nc_write_model_atts', 'put_att longitude long_name')
 
@@ -597,7 +599,7 @@ if ( output_state_vector ) then
 
   ! Define the state vector coordinate variable and some attributes.
    call nc_check(nf90_def_var(ncid=ncFileID,name='StateVariable', xtype=NF90_INT, &
-                              dimids=StateVarDimID, varid=StateVarVarID), &
+                              dimids=DimIDstate, varid=StateVarVarID), &
                              'nc_write_model_atts', 'def_var StateVariable')
    call nc_check(nf90_put_att(ncFileID, StateVarVarID,'long_name','State Variable ID'), &
                              'nc_write_model_atts', 'put_att StateVariable long_name')
@@ -608,10 +610,22 @@ if ( output_state_vector ) then
 
    ! Define the actual (3D) state vector, which gets filled as time goes on ...
    call nc_check(nf90_def_var(ncid=ncFileID, name='state', xtype=NF90_REAL, &
-                 dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
+                 dimids = (/ DimIDstate, MemberDimID, unlimitedDimID /), &
                  varid=StateVarID), 'nc_write_model_atts', 'def_var state')
    call nc_check(nf90_put_att(ncFileID, StateVarID, 'long_name', 'model state or fcopy'), &
                              'nc_write_model_atts', 'put_att state long_name')
+
+   call nc_check(nf90_def_var(ncid=ncFileID,name='lonixy', xtype=NF90_FLOAT, &
+           dimids=DimIDstate,varid=VarIDlonixy),'nc_write_model_atts','def_var lonixy')
+   call nc_check(nf90_put_att(ncFileID, VarIDlonixy,'long_name', &
+           'longitude gridcell index for each patch'), &
+           'nc_write_model_atts', 'put_att lonixy long_name')
+
+   call nc_check(nf90_def_var(ncid=ncFileID,name='latjxy', xtype=NF90_FLOAT, &
+           dimids=DimIDstate,varid=VarIDlatjxy),'nc_write_model_atts','def_var latjxy')
+   call nc_check(nf90_put_att(ncFileID, VarIDlatjxy,'long_name', &
+           'latitude gridcell index for each patch'), &
+           'nc_write_model_atts', 'put_att latjxy long_name')
 
    ! Leave define mode so we can fill variables.
    call nc_check(nf90_enddef(ncfileID), 'nc_write_model_atts', 'enddef')
@@ -619,11 +633,27 @@ if ( output_state_vector ) then
    ! Fill the metadata variables
    call nc_check(nf90_put_var(ncFileID, StateVarVarID, (/ (i,i=1,model_size) /)), &
                                     'nc_write_model_atts', 'put_var state')
+   call nc_check(nf90_put_var(ncFileID, VarIDlonixy, lonixy), &
+                                    'nc_write_model_atts', 'put_var lonixy')
+   call nc_check(nf90_put_var(ncFileID, VarIDlatjxy, latjxy), &
+                                    'nc_write_model_atts', 'put_var latjxy')
 else
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
    !----------------------------------------------------------------------------
+
+   call nc_check(nf90_def_var(ncid=ncFileID,name='lon_index', xtype=NF90_INT, &
+           dimids=DimIDmp_patch,varid=VarIDlonixy),'nc_write_model_atts','def_var lon_index')
+   call nc_check(nf90_put_att(ncFileID, VarIDlonixy,'long_name', &
+           'longitude gridcell index for each patch'), &
+           'nc_write_model_atts', 'put_att lon_index long_name')
+
+   call nc_check(nf90_def_var(ncid=ncFileID,name='lat_index', xtype=NF90_INT, &
+           dimids=DimIDmp_patch,varid=VarIDlatjxy),'nc_write_model_atts','def_var lat_index')
+   call nc_check(nf90_put_att(ncFileID, VarIDlatjxy,'long_name', &
+           'latitude gridcell index for each patch'), &
+           'nc_write_model_atts', 'put_att lat_index long_name')
 
    do ivar=1, nfields
 
@@ -684,12 +714,17 @@ else
    ! Leave define mode so we can fill variables.
    call nc_check(nf90_enddef(ncfileID), 'nc_write_model_atts', 'enddef')
 
+   call nc_check(nf90_put_var(ncFileID, VarIDlonixy, lon_index), &
+                                    'nc_write_model_atts', 'put_var lon_index')
+   call nc_check(nf90_put_var(ncFileID, VarIDlatjxy, lat_index), &
+                                    'nc_write_model_atts', 'put_var lat_index')
+
 endif
 
-call nc_check(nf90_put_var(ncFileID, VarIDlatitude, mland_lats), &
-                                    'nc_write_model_atts', 'put_var mland_lats')
-call nc_check(nf90_put_var(ncFileID, VarIDlongitude, mland_lons), &
-                                    'nc_write_model_atts', 'put_var mland_lons')
+call nc_check(nf90_put_var(ncFileID, VarIDlatitude, latitude), &
+                                    'nc_write_model_atts', 'put_var latitude')
+call nc_check(nf90_put_var(ncFileID, VarIDlongitude, longitude), &
+                                    'nc_write_model_atts', 'put_var longitude')
 call nc_check(nf90_put_var(ncFileID, VarIDnap, nap), &
                                     'nc_write_model_atts', 'put_var nap')
 call nc_check(nf90_put_var(ncFileID, VarIDpatchfrac, patchfrac), &
@@ -920,7 +955,7 @@ real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 
 integer :: i, j, ni, nj, ivar, indx
-integer :: ncid, dimid, ncNdims, VarID, dimlen
+integer :: ncid, ncNdims, VarID, dimlen
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
@@ -1191,11 +1226,7 @@ enddo UPDATE
 call nc_check(nf90_close(ncid),'dart_vector_to_model_file','close '//trim(filename))
 ncid = 0
 
-write(string1,*)'dart_vector_to_model_file needs to be checked'
-call error_handler(E_MSG,'dart_vector_to_model_file',string1,source,revision,revdate)
-
 end subroutine dart_vector_to_model_file
-
 
 
 
@@ -1603,8 +1634,6 @@ character(len=*), intent(in) :: restart_filename
 character(len=*), intent(in) :: gridinfo_filename
 
 integer :: i, ncid, dimid, VarID, numdims, dimlen, xtype
-character(len=NF90_MAX_NAME) :: dartstr
-character(len=obstypelength) :: kind_string
 character(len=obstypelength) :: dimname
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 
@@ -1621,53 +1650,34 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 ! integer,  allocatable, dimension(:) :: snowd
 
 call nc_check(nf90_open(trim(restart_filename), NF90_NOWRITE, ncid), &
-                  'read_metadata', 'open '//trim(restart_filename))
+        'read_metadata', 'open '//trim(restart_filename))
 
 call nc_check(nf90_inq_dimid(ncid, 'mland', dimid), &
-         'read_metadata','inq_dimid mland '//trim(restart_filename))
+        'read_metadata','inq_dimid mland '//trim(restart_filename))
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nmland), &
-                  'get_history_dims','inquire_dimension mland '//trim(restart_filename))
+        'read_metadata','inquire_dimension mland '//trim(restart_filename))
 
 call nc_check(nf90_inq_dimid(ncid, 'mp_patch', dimid), &
-         'read_metadata','inq_dimid mp_patch '//trim(restart_filename))
+        'read_metadata','inq_dimid mp_patch '//trim(restart_filename))
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nmp_patch), &
-                  'get_history_dims','inquire_dimension mp_patch '//trim(restart_filename))
+        'read_metadata','inquire_dimension mp_patch '//trim(restart_filename))
 
 call nc_check(nf90_inq_dimid(ncid, 'soil', dimid), &
-         'read_metadata','inq_dimid soil '//trim(restart_filename))
+        'read_metadata','inq_dimid soil '//trim(restart_filename))
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nsoil), &
-                  'get_history_dims','inquire_dimension soil '//trim(restart_filename))
+        'read_metadata','inquire_dimension soil '//trim(restart_filename))
 
 call nc_check(nf90_inq_dimid(ncid, 'snow', dimid), &
-         'read_metadata','inq_dimid snow '//trim(restart_filename))
+        'read_metadata','inq_dimid snow '//trim(restart_filename))
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nsnow), &
-                  'get_history_dims','inquire_dimension snow '//trim(restart_filename))
+        'read_metadata','inquire_dimension snow '//trim(restart_filename))
 
-allocate(  mland_lats(Nmland))
-allocate(  mland_lons(Nmland))
-allocate(         nap(Nmland))
+allocate(  mland_lats(Nmland))  ! FIXME ... may not use this
+allocate(  mland_lons(Nmland))  ! FIXME ... may not use this
+allocate(         nap(Nmland))  ! FIXME ... may not use this
 allocate(patchfrac(Nmp_patch))
 allocate(    snowd(Nmp_patch))
 allocate(         zse(Nsoil))
-
-! FIXME ... check shapes of everything ...
-
-! call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=numdims,xtype=xtype),&
-!         'read_metadata', 'inquire   '//trim(string3))
-! call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), name=dimname, len=Nmland), &
-!         'read_metadata', 'inqure dimension '//trim(string3))
-
-string3 = 'latitude '//trim(restart_filename)
-call nc_check(nf90_inq_varid(ncid, 'latitude', VarID), &
-        'read_metadata', 'inq_varid '//trim(string3))
-call nc_check(nf90_get_var(ncid, VarID, mland_lats), &
-        'read_metadata', 'get_var'//trim(string3))
-
-string3 = 'longitude '//trim(restart_filename)
-call nc_check(nf90_inq_varid(ncid, 'longitude', VarID), &
-        'read_metadata', 'inq_varid '//trim(string3))
-call nc_check(nf90_get_var(ncid, VarID, mland_lons), &
-        'read_metadata', 'get_var'//trim(string3))
 
 string3 = 'nap '//trim(restart_filename)
 call nc_check(nf90_inq_varid(ncid, 'nap', VarID), &
@@ -1692,6 +1702,72 @@ string3 = 'zse '//trim(restart_filename)
 call nc_check(nf90_inq_varid(ncid, 'zse', VarID), &
         'read_metadata', 'inq_varid '//trim(string3))
 call nc_check(nf90_get_var(ncid, VarID, zse), &
+        'read_metadata', 'get_var'//trim(string3))
+
+call nc_check(nf90_close(ncid),'read_metadata','close '//trim(restart_filename))
+
+! Read the stuff from the gridinfo file to relate patches to parent gridcells
+! and the gridcells themselves.
+
+call nc_check(nf90_open(trim(gridinfo_filename), NF90_NOWRITE, ncid), &
+        'read_metadata', 'open '//trim(gridinfo_filename))
+
+call nc_check(nf90_inq_dimid(ncid, 'mp_patch', dimid), &
+        'read_metadata','inq_dimid mp_patch '//trim(gridinfo_filename))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nmp_patch), &
+        'read_metadata','inquire_dimension mp_patch '//trim(gridinfo_filename))
+
+call nc_check(nf90_inq_dimid(ncid, 'longitude', dimid), &
+        'read_metadata','inq_dimid longitude '//trim(gridinfo_filename))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nlongitude), &
+        'read_metadata','inquire_dimension longitude '//trim(gridinfo_filename))
+
+call nc_check(nf90_inq_dimid(ncid, 'latitude', dimid), &
+        'read_metadata','inq_dimid latitude '//trim(gridinfo_filename))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nlatitude), &
+        'read_metadata','inquire_dimension latitude '//trim(gridinfo_filename))
+
+allocate(lat_index(Nmp_patch) )
+allocate(lon_index(Nmp_patch) )
+allocate( latitude(Nlatitude) )
+allocate(longitude(Nlongitude))
+allocate(area(Nlongitude,Nlatitude))
+
+string3 = 'lat_index '//trim(gridinfo_filename)
+call nc_check(nf90_inq_varid(ncid, 'lat_index', VarID), &
+        'read_metadata', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, lat_index), &
+        'read_metadata', 'get_var'//trim(string3))
+
+! FIXME ... check shapes of everything ...
+! example call ...
+call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=numdims,xtype=xtype),&
+        'read_metadata', 'inquire   '//trim(string3))
+call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), name=dimname, len=dimlen), &
+        'read_metadata', 'inqure dimension '//trim(string3))
+
+string3 = 'lon_index '//trim(gridinfo_filename)
+call nc_check(nf90_inq_varid(ncid, 'lon_index', VarID), &
+        'read_metadata', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, lon_index), &
+        'read_metadata', 'get_var'//trim(string3))
+
+string3 = 'latitude '//trim(gridinfo_filename)
+call nc_check(nf90_inq_varid(ncid, 'latitude', VarID), &
+        'read_metadata', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, latitude), &
+        'read_metadata', 'get_var'//trim(string3))
+
+string3 = 'longitude '//trim(gridinfo_filename)
+call nc_check(nf90_inq_varid(ncid, 'longitude', VarID), &
+        'read_metadata', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, longitude), &
+        'read_metadata', 'get_var'//trim(string3))
+
+string3 = 'area '//trim(gridinfo_filename)
+call nc_check(nf90_inq_varid(ncid, 'area', VarID), &
+        'read_metadata', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, area), &
         'read_metadata', 'get_var'//trim(string3))
 
 end subroutine read_metadata
@@ -1734,35 +1810,11 @@ do ivar=1, ngood
       SELECT CASE ( trim(progvar(ivar)%dimnames(1)) )
          CASE ("mp_patch")
             do i = 1, progvar(ivar)%dimlens(1)
-!              xi             = grid1d_ixy(i)
-!              xj             = grid1d_jxy(i) ! always unity if unstructured
-!              if (unstructured) then
-!                 lonixy(  indx) = xi
-!                 latjxy(  indx) = xi
-!                 landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi)
-!              else
-                  lonixy(indx) = i        ! FIXME
-                  latjxy(indx) = i        ! FIXME
-                  pfrac( indx) = patchfrac(i)
-!              endif
+               lonixy(indx) = lon_index(i)
+               latjxy(indx) = lat_index(i)
+               pfrac( indx) = patchfrac(i)
                indx = indx + 1
             enddo
-
-!        CASE ("plant_carbon_pools")
-!           do i = 1, progvar(ivar)%dimlens(1)
-!              xi             = cols1d_ixy(i)
-!              xj             = cols1d_jxy(i) ! always unity if unstructured
-!              if (unstructured) then
-!                 lonixy(  indx) = xi
-!                 latjxy(  indx) = xi
-!                 landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * cols1d_wtxy(i)
-!              else
-!                 lonixy(  indx) = xi
-!                 latjxy(  indx) = xj
-!                 landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * cols1d_wtxy(i)
-!              endif
-!              indx = indx + 1
-!           enddo
 
 !        CASE ("soil_carbon_pools")
 !           do i = 1, progvar(ivar)%dimlens(1)
@@ -1802,18 +1854,10 @@ do ivar=1, ngood
          CASE ("mp_patch")
 !           if ((debug > 0) .and. do_output()) write(*,*)'length grid1d_ixy ',size(grid1d_ixy)
             do j = 1, progvar(ivar)%dimlens(2)
-!              xi = grid1d_ixy(j)
-!              xj = grid1d_jxy(j) ! always unity if unstructured
                do i = 1, progvar(ivar)%dimlens(1)
-!                 if (unstructured) then
-!                    lonixy(  indx) = xi
-!                    latjxy(  indx) = xi
-!                    landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi)
-!                 else
-                     lonixy(indx) = i
-                     latjxy(indx) = j
-                     pfrac( indx) = patchfrac(j)
-!                 endif
+                  lonixy(indx) = lon_index(i)
+                  latjxy(indx) = lat_index(i)
+                  pfrac( indx) = patchfrac(i)
                   indx = indx + 1
                enddo
             enddo

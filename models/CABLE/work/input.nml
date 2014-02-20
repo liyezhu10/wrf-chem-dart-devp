@@ -157,7 +157,7 @@
 
 &model_nml
    cable_restart_filename       = 'restart_in_gpcc.nc',
-   cable_gridinfo_filename      = '../data/gridinfo_CSIRO_1x1_modified.nc',
+   cable_gridinfo_filename      = 'gridinfo_CSIRO_1x1_modified.nc',
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
@@ -177,7 +177,7 @@
 # but it should be .false. in general.
 
 &cable_to_dart_nml
-   replace_cable_time         = .false.
+   replace_cable_time         = .true.
    cable_state_yyyymmddhhmmss = 1980,1,1,2,30,0,
    cable_to_dart_output_file  = 'dart_ics'
    /

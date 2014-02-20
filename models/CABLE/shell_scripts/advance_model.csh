@@ -89,11 +89,11 @@ while($state_copy <= $num_states)
    # The dart_to_cable_nml:advance_time_present = .TRUE. must be set;
    # this is the purpose of the ex_commands earlier.
 
-   ln -sfv ../${input_file} dart_restart || exit 2
-
    set CABLEFILE = `printf restart_in_gpcc.%04d.nc ${ensemble_member}`
-   ln -sfv ../${CABLEFILE} restart_in_gpcc.nc || exit 2
-   
+   ln -sfv ../${CABLEFILE} restart_in_gpcc.nc  || exit 2
+   ln -sfv ../gridinfo_CSIRO_1x1_modified.nc . || exit 2
+   ln -sfv ../${input_file}       dart_restart || exit 2
+
    ../dart_to_cable || exit 2
 
    # Extract just the forcing for the model advance we need.
@@ -163,14 +163,16 @@ while($state_copy <= $num_states)
       exit 3 
    endif
 
+   echo "model advanced to "
+   ncdump -v time restart_out.nc
+   echo
+
    # FIXME if cable completes correctly, the carbon pool file must be used.
    # this means the casafile%cnpipool variable must point to the new file.
    
    #----------------------------------------------------------------------
    # Block 4: Convert the CABLE model output to form needed by DART
    #----------------------------------------------------------------------
-
-   ls -lrt
 
    mv -v restart_out.nc restart_in_gpcc.nc
 
@@ -203,7 +205,8 @@ cd ..
 
 # Remove the filter_control file to signal completion
 # Is there a need for any sleeps to avoid trouble on completing moves here?
-\rm -rf $control_file
+#\rm -rf $control_file
+\mv $control_file old_control_file.$$
 
 exit 0
 
