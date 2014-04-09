@@ -14,10 +14,9 @@
 !SNOW_WATER,                     KIND_SNOW_WATER,               COMMON_CODE
 !MODIS_SNOWCOVER_FRAC,           KIND_SNOWCOVER_FRAC,           COMMON_CODE
 !MODIS_LEAF_AREA_INDEX,          KIND_LEAF_AREA_INDEX,          COMMON_CODE
+!MODIS_FPAR,                     KIND_FPAR,                     COMMON_CODE
 !LEAF_CARBON,                    KIND_LEAF_CARBON,              COMMON_CODE
 !LEAF_AREA_INDEX,                KIND_LEAF_AREA_INDEX,          COMMON_CODE
-!MODIS_LEAF_AREA_INDEX,          KIND_LEAF_AREA_INDEX,          COMMON_CODE
-!MODIS_FPAR,                     KIND_FPAR,                     COMMON_CODE
 !TOWER_AIR_TEMPERATURE,          KIND_TEMPERATURE,              COMMON_CODE
 !TOWER_SOIL_TEMPERATURE,         KIND_TEMPERATURE,              COMMON_CODE
 !TOWER_U_WIND_COMPONENT,         KIND_U_WIND_COMPONENT,         COMMON_CODE
@@ -27,7 +26,6 @@
 !TOWER_LATENT_HEAT_FLUX,         KIND_LATENT_HEAT_FLUX
 !TOWER_SENSIBLE_HEAT_FLUX,       KIND_SENSIBLE_HEAT_FLUX
 !TOWER_NETC_ECO_EXCHANGE,        KIND_NET_CARBON_PRODUCTION
-!MODIS_FPAR,                     KIND_FPAR,                     COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
 !-----------------------------------------------------------------------------
