@@ -78,7 +78,7 @@ integer :: num_copies, num_qc, num_obs, max_num_obs, obs_seq_file_id
 
 integer :: num_obs_kinds
 
-character(len=64) :: obs_seq_read_format
+character(len=stringlength) :: obs_seq_read_format
 logical :: pre_I_format
 
 logical :: out_of_range, is_there_one, keeper
@@ -146,8 +146,8 @@ type(time_type) :: obs_time
 real(digits12)  :: mytime
 integer         :: seconds, days
 
-character(len=256) :: ncName, calendarstring
-character(len=256) :: string1, string2, string3
+character(len=stringlength) :: ncName, calendarstring
+character(len=512) :: string1, string2, string3
 
 !=======================================================================
 ! Get the party started
