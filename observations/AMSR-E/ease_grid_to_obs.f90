@@ -20,7 +20,8 @@ use      utilities_mod, only : initialize_utilities, finalize_utilities, &
                                open_file, close_file, find_namelist_in_file, &
                                check_namelist_read, nmlfileunit, get_unit, &
                                do_nml_file, do_nml_term, get_next_filename, &
-                               error_handler, E_ERR, E_MSG, file_exist
+                               error_handler, E_ERR, E_MSG, file_exist, &
+                               find_textfile_dims
 
 use   time_manager_mod, only : time_type, set_calendar_type, set_date, get_date, &
                                operator(>=), increment_time, set_time, get_time, &
@@ -53,17 +54,16 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=256) :: input_file_list = 'file_list.txt'
 character(len=256) :: obs_out_file = 'obs_seq.out'
 logical            :: verbose = .false.
+integer            :: max_num_input_files = 500
 
 namelist /ease_grid_to_obs_nml/ &
-         input_file_list, obs_out_file, verbose
+         input_file_list, obs_out_file, verbose, max_num_input_files
 
 !----------------------------------------------------------------
 
-! max_num_input_files : max number of input files to be processed
-integer, parameter :: max_num_input_files = 500
 integer            :: num_input_files = 0  ! actual number of files
 integer            :: ifile, istatus
-character(len=256), dimension(max_num_input_files) :: filename_seq_list
+character(len=256), allocatable, dimension(:) :: filename_seq_list
 
 ! information gleaned from filenaming convention
 integer          :: iyear, idoy
@@ -77,8 +77,7 @@ real             :: frequency   ! real type to match EASE type
 character(len=256) :: input_line
 character(len=256) :: msgstring1,msgstring2,msgstring3
 
-integer :: oday, osec, iocode, iunit, otype
-integer :: year, month, day, hour, minute, second
+integer :: oday, osec, iocode, iunit
 integer :: num_copies, num_qc, max_obs
 integer :: landcode = 0  ! FIXME ... totally bogus for now
            
@@ -94,7 +93,7 @@ real     :: rlat, rlon
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: cal_day0, time_obs, prev_time
+type(time_type)         :: time_obs, prev_time
 
 !----------------------------------------------------------------
 ! start of executable code
@@ -112,6 +111,20 @@ call check_namelist_read(iunit, iocode, "ease_grid_to_obs_nml")
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=ease_grid_to_obs_nml)
 if (do_nml_term()) write(     *     , nml=ease_grid_to_obs_nml)
+
+call find_textfile_dims(input_file_list, num_input_files)
+if (num_input_files > max_num_input_files) then
+   write(msgstring1,*) 'Found ',num_input_files,' input files in ',trim(input_file_list)
+   write(msgstring2,*) 'Greater than "max_num_input_files" in input namelist (', max_num_input_files, ').'
+   write(msgstring3,*) 'If you mean it, change "max_num_input_files" in the ease_grid_to_obs_nml.'
+   call error_handler(E_ERR, 'main', msgstring1, source, revision, revdate, &
+              text2=msgstring2, text3=msgstring3)
+elseif (num_input_files > 0) then
+   allocate(filename_seq_list(num_input_files))
+else
+   write(msgstring1,*) 'Found no valid filenames in ',trim(input_file_list)
+   call error_handler(E_ERR, 'main', msgstring1, source, revision, revdate) 
+endif
 
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
 write(*,*)' There are ',num_input_files,' input files.'
@@ -242,7 +255,7 @@ if ( get_num_obs(obs_seq) > 0 ) then
    call write_obs_seq(obs_seq, obs_out_file)
 endif
 
-deallocate(Tb)
+deallocate(Tb,filename_seq_list)
 
 ! end of main program
 call finalize_utilities()
@@ -258,7 +271,6 @@ character(len=*), dimension(:), intent(out) :: output_list
 integer                                     :: Check_Input_Files
 
 character(len=256) :: ladjusted
-integer, parameter :: MAXLINES = 1000
 integer :: iline
 
 Check_Input_files = -1
@@ -266,7 +278,7 @@ Check_Input_files = -1
 iunit = open_file(trim(input_list), 'formatted', 'read')
 
 Check_Input_Files = 0
-FileNameLoop: do iline = 1,MAXLINES ! a lot of lines 
+FileNameLoop: do iline = 1,size(output_list) ! a lot of lines 
 
    ! read in entire text line into a buffer
    read(iunit, "(A)", iostat=iocode) input_line
@@ -292,11 +304,6 @@ FileNameLoop: do iline = 1,MAXLINES ! a lot of lines
    endif
 
 enddo FileNameLoop
-
-if (Check_Input_Files >= MAXLINES-1 ) then
-   write(msgstring1,*)'Too many files to process. Increase MAXLINES and try again.'
-   call error_handler(E_ERR,'Check_Input_Files',msgstring1,source,revision,revdate)
-endif
 
 end function Check_Input_Files
 
