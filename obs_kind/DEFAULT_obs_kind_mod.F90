@@ -263,7 +263,8 @@ integer, parameter, public :: &
     KIND_STEM_NITROGEN               = 126, &
     KIND_LEAF_NITROGEN               = 127, &
     KIND_WATER_TABLE_DEPTH           = 128, &
-    KIND_FPAR                        = 129
+    KIND_FPAR                        = 129, &
+    KIND_SOIL_ICE                    = 130
 
 ! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
@@ -574,6 +575,7 @@ obs_kind_names(126) = obs_kind_type(KIND_STEM_NITROGEN         ,'KIND_STEM_NITRO
 obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITROGEN')
 obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
 obs_kind_names(129) = obs_kind_type(KIND_FPAR                  ,'KIND_FPAR')
+obs_kind_names(130) = obs_kind_type(KIND_SOIL_ICE              ,'KIND_SOIL_ICE')
 
 obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
 obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
