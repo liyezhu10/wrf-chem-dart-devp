@@ -1480,39 +1480,39 @@ else
    endif
 
    call nc_check(nf90_inq_varid(ncFileID, 'cols1d_ixy', VarID), &
-           'nc_write_model_atts', 'put_var cols1d_ixy '//trim(filename))
+                'nc_write_model_atts', 'put_var cols1d_ixy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, cols1d_ixy ), &
-                       'nc_write_model_atts', 'cols1d_ixy put_var '//trim(filename))
+                'nc_write_model_atts', 'cols1d_ixy put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'cols1d_jxy', VarID), &
-           'nc_write_model_atts', 'put_var cols1d_jxy '//trim(filename))
+                'nc_write_model_atts', 'put_var cols1d_jxy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, cols1d_jxy ), &
-                       'nc_write_model_atts', 'cols1d_jxy put_var '//trim(filename))
+                'nc_write_model_atts', 'cols1d_jxy put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'cols1d_wtxy', VarID), &
-           'nc_write_model_atts', 'put_var cols1d_wtxy '//trim(filename))
+                'nc_write_model_atts', 'put_var cols1d_wtxy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, cols1d_wtxy ), &
-                       'nc_write_model_atts', 'cols1d_wtxy put_var '//trim(filename))
+                'nc_write_model_atts', 'cols1d_wtxy put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'cols1d_ityplun', VarID), &
-           'nc_write_model_atts', 'put_var cols1d_ityplun '//trim(filename))
+                'nc_write_model_atts', 'put_var cols1d_ityplun '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, cols1d_ityplun ), &
-                       'nc_write_model_atts', 'cols1d_ityplun put_var '//trim(filename))
+                'nc_write_model_atts', 'cols1d_ityplun put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'pfts1d_ixy', VarID), &
-           'nc_write_model_atts', 'put_var pfts1d_ixy '//trim(filename))
+                'nc_write_model_atts', 'put_var pfts1d_ixy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, pfts1d_ixy ), &
-                       'nc_write_model_atts', 'pfts1d_ixy put_var '//trim(filename))
+                'nc_write_model_atts', 'pfts1d_ixy put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'pfts1d_jxy', VarID), &
-           'nc_write_model_atts', 'put_var pfts1d_jxy '//trim(filename))
+                'nc_write_model_atts', 'put_var pfts1d_jxy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, pfts1d_jxy ), &
-                       'nc_write_model_atts', 'pfts1d_jxy put_var '//trim(filename))
+                'nc_write_model_atts', 'pfts1d_jxy put_var '//trim(filename))
 
    call nc_check(nf90_inq_varid(ncFileID, 'pfts1d_wtxy', VarID), &
-           'nc_write_model_atts', 'put_var pfts1d_wtxy '//trim(filename))
+                'nc_write_model_atts', 'put_var pfts1d_wtxy '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, pfts1d_wtxy ), &
-                       'nc_write_model_atts', 'pfts1d_wtxy put_var '//trim(filename))
+                'nc_write_model_atts', 'pfts1d_wtxy put_var '//trim(filename))
 
 endif
 
@@ -3822,10 +3822,10 @@ real(r4), allocatable, dimension(:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid')
-call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, 
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
               xtype=xtype), 'get_var_1d', 'inquire_variable')
 call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
-                            'get_var_1d', 'inquire_dimension')
+              'get_var_1d', 'inquire_dimension')
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
@@ -4207,9 +4207,27 @@ end subroutine SetLocatorArrays
 
 subroutine update_water_table_depth( ivar, state_vector, ncFileID, filename, dart_time)
 !------------------------------------------------------------------
-! Writes the current time and state variables from a dart state
-! vector (1d array) into a clm netcdf restart file.
+! 'ivar' points to ZWT portion of the DART state vector, which has
+! been updated by the assimilation at this point.
 !
+! ZWT is calculated from WA and WT ... so we have to update those
+! CLM variables based on the new ZWT from the assimilation.
+! Simply updating ZWT will have no effect because upon restart
+! CLM will calculate ZWT given the same old WA and WT.
+!
+! So, this routine updates WA and WT based on the new ZWT.
+!
+! As defined in the CLM restart files:
+! double WA(column) ;
+!         WA:long_name = "water in the unconfined aquifer" ;
+!         WA:units = "mm" ;
+! double WT(column) ;
+!         WT:long_name = "total water storage" ;
+!         WT:units = "mm" ;
+! double ZWT(column) ;
+!         ZWT:long_name = "water table depth" ;
+!         ZWT:units = "m" ;
+
 integer,          intent(in) :: ivar
 real(r8),         intent(in) :: state_vector(:)
 integer,          intent(in) :: ncFileID
@@ -4222,109 +4240,141 @@ real(r8), allocatable, dimension(:) :: wa,wt,zwt
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
-integer         :: VarID, ncNdims, dimlen
+integer :: VarID, ncNdims, dimlen
 type(time_type) :: file_time ! FIXME ... check that dart_time and file_time agree
 
-if ( .not. module_initialized ) call static_init_model
+! TJH FIXME ... this algorithm is insufficient. Sean Swenson advised
+! TJH FIXME ... that I should look into the code of the soil hydrology module
+! TJH FIXME ... cesm1_1_1/models/lnd/clm/src/biogeophys/SoilHydrologyMod.F90
+! TJH FIXME ... for implementation. It gets more complicated when the water table
+! TJH FIXME ... is more than the aquifer can hold and it starts wetting the soil.
 
-   varname = trim(progvar(ivar)%varname)
-   string2 = trim(filename)//' '//trim(varname)
+! The simple test is to read in one file and write it out and compare
+! to the original. No assimilation involved. Result:
+!
+! WA has min/max differences of -8.7606 0.00361754  (mm)
+! WT has min/max differences of -131.581 1020.34    (mm)
+!
+! TJH FIXME ... So ... no dice.
+! TJH FIXME ... Routine will error out until a better algorithm is in place.
 
-   ! Ensure netCDF variable is conformable with progvar quantity.
-   ! The TIME and Copy dimensions are intentionally not queried
-   ! by looping over the dimensions stored in the progvar type.
+! TJH FIXME ... AFTER TESTING, REMOVE THIS CHECK.
+write(string1,*)'WARNING: This routine is fundamentally untested.'
+write(string2,*)'WARNING: Exercise great care and check results thoroughly.'
+call error_handler(E_ERR, 'update_water_table_depth', string1, &
+                      source, revision, revdate, text2=string2)
 
-   call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
-            'update_water_table_depth', 'inq_varid '//trim(string2))
+varname = trim(progvar(ivar)%varname)
+string2 = trim(filename)//' '//trim(varname)
 
-   call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'update_water_table_depth', 'inquire '//trim(string2))
+! Ensure netCDF variable is conformable with progvar quantity.
+! The TIME and Copy dimensions are intentionally not queried
+! by looping over the dimensions stored in the progvar type.
 
-   DimCheck : do i = 1,progvar(ivar)%numdims
+call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+        'update_water_table_depth', 'inq_varid '//trim(string2))
 
-      write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
-      call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
-            'update_water_table_depth', string1)
+call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
+        'update_water_table_depth', 'inquire '//trim(string2))
 
-      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
-         write(string2,*)' but it should be.'
-         call error_handler(E_ERR, 'update_water_table_depth', string1, &
-                         source, revision, revdate, text2=string2)
-      endif
+DimCheck : do i = 1,progvar(ivar)%numdims
 
-   enddo DimCheck
+   write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
+   call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
+           'update_water_table_depth', string1)
 
-   ! When called with a 4th argument, vector_to_prog_var() replaces the DART
-   ! missing code with the value in the corresponding variable in the netCDF file.
-   ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
+   if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+      write(string1,*)trim(string2),' dim/dimlen ',i,dimlen,&
+                      ' not ',progvar(ivar)%dimlens(i)
+      write(string2,*)' but it should be.'
+      call error_handler(E_ERR, 'update_water_table_depth', string1, &
+                      source, revision, revdate, text2=string2)
+   endif
 
-   ni = progvar(ivar)%dimlens(1)   ! number of CLM columns, in this context
+enddo DimCheck
 
-   allocate(zwt(ni), wa(ni), wt(ni))
+ni = progvar(ivar)%dimlens(1)   ! number of CLM columns, in this context
 
-   call vector_to_prog_var(state_vector, ivar, zwt, ncFileID)
+allocate(zwt(ni), wa(ni), wt(ni))
 
-   ! The zwt() is the ZWT for all the columns.
+! Default values from 
+! cesm1_1_1/models/lnd/clm/src/main/mkarbinitMod.F90 
+! FIXME ... should we read WA,WT originally and then update ...
+! WA,WT have non-missing values in lake columns (the default ... 5000.0).
 
-    do i = 1,ni
-       if ( zwt(i) < 3.8019_r8 ) then
-          wa(i) = 5000.0_r8  ! mm
-          wt(i) = 5000.0_r8 + (3.8019 - zwt(i))*400.0_r8
-       else
-          wa(i) = (25.0_r8 - (zwt(i) - 3.8019_r8))*200.0_r8
-          wt(i) = wa(i)
-       endif
-    enddo
+wa(:)  = 5000.0_r8
+wt(:)  = 5000.0_r8
+zwt(:) = 0.0_r8
 
-   write(*,*)'min/max of zwt is ',minval(zwt), maxval(zwt)
-   write(*,*)'min/max of  wa is ',minval( wa), maxval( wa)
-   write(*,*)'min/max of  wt is ',minval( wt), maxval( wt)
+! When called with a 4th argument, vector_to_prog_var() replaces the DART
+! missing code with the value in the corresponding variable in the netCDF file.
+! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
 
-   ! Stuff the updated ZWT values into the CLM netCDF file. 
+call vector_to_prog_var(state_vector, ivar, zwt, ncFileID)
 
-   call nc_check(nf90_put_var(ncFileID, VarID, zwt), &
-            'update_water_table_depth', 'put_var '//trim(varname))
+PARTITION: do i = 1,ni
 
-   ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID), &
-           'update_water_table_depth', 'redef '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
-           'update_water_table_depth', 'modified '//trim(varname))
-   call nc_check(nf90_enddef(ncfileID), &
-           'update_water_table_depth','state enddef '//trim(filename))
+   if (cols1d_ityplun(i) == LAKE) cycle PARTITION
 
-   ! Stuff the updated WA values into the CLM netCDF file. 
+   if ( zwt(i) == progvar(ivar)%spvalr8 ) then
+         wa(i)  = progvar(ivar)%spvalr8
+         wt(i)  = progvar(ivar)%spvalr8
+         write(*,*)'FIXME hammering the value of wa, wt for column ',i
 
-   call nc_check(nf90_inq_varid(ncFileID, 'WA', VarID), &
-           'update_water_table_depth', 'inq_varid WA '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, wa), &
-           'update_water_table_depth', 'put_var WA '//trim(filename))
+   elseif ( zwt(i) < 3.8019_r8 ) then
+      wa(i) = 5000.0_r8  ! mm
+      wt(i) = 5000.0_r8 + (3.8019_r8 - zwt(i))*400.0_r8
+   else
+      wa(i) = (25.0_r8 - (zwt(i) - 3.8019_r8))*200.0_r8
+      wt(i) = wa(i)
+   endif
 
-   ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID), &
-           'update_water_table_depth', 'redef '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
-           'update_water_table_depth', 'modified WA '//trim(filename))
-   call nc_check(nf90_enddef(ncfileID), &
-           'update_water_table_depth','state enddef '//trim(filename))
+enddo PARTITION
 
-   ! Stuff the updated WT values into the CLM netCDF file. 
+! Stuff the updated ZWT values into the CLM netCDF file. 
 
-   call nc_check(nf90_inq_varid(ncFileID, 'WT', VarID), &
-           'update_water_table_depth', 'inq_varid WT '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, wt), &
-           'update_water_table_depth', 'put_var WT '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, zwt), &
+         'update_water_table_depth', 'put_var '//trim(varname))
 
-   ! Make note that the variable has been updated by DART
-   call nc_check(nf90_Redef(ncFileID), &
-           'update_water_table_depth', 'redef '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
-           'update_water_table_depth', 'modified WT '//trim(filename))
-   call nc_check(nf90_enddef(ncfileID), &
-           'update_water_table_depth','state enddef '//trim(filename))
+! Make note that the variable has been updated by DART
+! call nc_check(nf90_Redef(ncFileID), &
+!         'update_water_table_depth', 'redef '//trim(filename))
+! call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
+!         'update_water_table_depth', 'modified '//trim(varname))
+! call nc_check(nf90_enddef(ncfileID), &
+!         'update_water_table_depth','state enddef '//trim(filename))
 
-   deallocate(zwt, wa, wt)
+! Stuff the updated WA values into the CLM netCDF file. 
+
+call nc_check(nf90_inq_varid(ncFileID, 'WA', VarID), &
+        'update_water_table_depth', 'inq_varid WA '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, wa), &
+        'update_water_table_depth', 'put_var WA '//trim(filename))
+
+! Make note that the variable has been updated by DART
+! call nc_check(nf90_Redef(ncFileID), &
+!         'update_water_table_depth', 'redef '//trim(filename))
+! call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'), &
+!         'update_water_table_depth', 'modified WA '//trim(filename))
+! call nc_check(nf90_enddef(ncfileID), &
+!         'update_water_table_depth','state enddef '//trim(filename))
+
+! Stuff the updated WT values into the CLM netCDF file. 
+
+call nc_check(nf90_inq_varid(ncFileID, 'WT', VarID), &
+        'update_water_table_depth', 'inq_varid WT '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, wt), &
+        'update_water_table_depth', 'put_var WT '//trim(filename))
+
+! Make note that the variable has been updated by DART
+! call nc_check(nf90_Redef(ncFileID), &
+!         'update_water_table_depth', 'redef '//trim(filename))
+! call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
+!         'update_water_table_depth', 'modified WT '//trim(filename))
+! call nc_check(nf90_enddef(ncfileID), &
+!         'update_water_table_depth','state enddef '//trim(filename))
+
+deallocate(zwt, wa, wt)
 
 end subroutine update_water_table_depth
 
