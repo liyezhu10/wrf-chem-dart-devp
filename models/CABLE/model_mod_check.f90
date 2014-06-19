@@ -198,6 +198,7 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 6) then
+   write(*,*)
    write(*,*)'Testing find_closest_gridpoint()'
    if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 endif
@@ -301,9 +302,8 @@ real(r8), dimension(LocationDims) :: rloc
 character(len=32) :: kind_name
 logical :: matched
 
-write(*,*)
-write(*,'(''Checking for the indices into the state vector that are at'')')
-write(*,'(''lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
+write(*,'(''find_closest_gridpoint:Checking for the indices into the state vector that are at'')')
+write(*,'(''find_closest_gridpoint:lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
 
 allocate( thisdist(get_model_size()) )
 thisdist  = 9999999999.9_r8         ! really far away
@@ -342,7 +342,7 @@ enddo
 closest = minval(thisdist)
 
 if (.not. matched) then
-   write(*,*)'No state vector elements of type '//trim(kind_of_interest)
+   write(*,*)'find_closest_gridpoint:No state vector elements of type '//trim(kind_of_interest)
    return
 endif
 
@@ -356,7 +356,7 @@ do i = 1,get_model_size()
       rloc      = get_location(loc1)
       if (nint(rloc(3)) == nint(rlev)) then
          kind_name = get_raw_obs_kind_name(var_type)
-         write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
+         write(*,'(''find_closest_gridpoint:lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
              rloc, i, trim(kind_name)
          matched = .true.
       endif
@@ -365,7 +365,7 @@ do i = 1,get_model_size()
 enddo
 
 if ( .not. matched ) then
-   write(*,*)'Nothing matched the vertical.'
+   write(*,*)'find_closest_gridpoint:Nothing matched the vertical.'
 endif
 
 deallocate( thisdist )

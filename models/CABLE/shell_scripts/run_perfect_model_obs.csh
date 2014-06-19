@@ -77,10 +77,12 @@ else if ($?PBS_QUEUE) then
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
    setenv MPICMD      "mpirun -np $NCPUS"
+   setenv TASKS_PER_NODE $NCPUS
 
    source /etc/csh.cshrc
    module purge
    module load pbs openmpi nco netcdf
+
 
 else
 
@@ -92,7 +94,7 @@ else
    setenv JOBNAME     cable
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
-   setenv MYHOST      $host
+   setenv MYHOST      $HOST
 
 endif
 
@@ -106,10 +108,6 @@ echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
 echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
 echo "${JOBNAME} ($JOBID) running       on $MYHOST"
 echo "${JOBNAME} ($JOBID) started   at "`date`
-echo
-
-env | sort
-
 echo
 
 #----------------------------------------------------------------------
@@ -154,66 +152,113 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # Set variables containing various directory names where we will GET things
 #-----------------------------------------------------------------------------
 
- set     DARTDIR = /g/data/xa5/${USER}/DART/TERN/models/CABLE
- set CABLEEXEDIR = /short/xa5/CABLE-EXE
- set    CABLEDIR = /short/xa5/CABLE-AUX
+set     DARTDIR = /g/data/xa5/${USER}/DART/TERN/models/CABLE
+set CABLEEXEDIR = /short/xa5/CABLE-EXE
+# set    CABLEDIR = /short/xa5/CABLE-AUX
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
 #-----------------------------------------------------------------------------
 
- ${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 1
- ${COPY} ${DARTDIR}/work/dart_to_cable              . || exit 1
- ${COPY} ${DARTDIR}/work/cable_to_dart              . || exit 1
+${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 1
+${COPY} ${DARTDIR}/work/dart_to_cable              . || exit 1
+${COPY} ${DARTDIR}/work/cable_to_dart              . || exit 1
 
- ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 1
 
- ${COPY} ${DARTDIR}/observations/obs_seq.in         . || exit 1
- ${COPY} ${DARTDIR}/work/input.nml                  . || exit 1
+${COPY} ${DARTDIR}/observations/obs_seq.in         . || exit 1
+${COPY} ${DARTDIR}/work/input.nml                  . || exit 1
+
+# If possible, use the round-robin approach to deal out the tasks.
+# This results in better memory management.
+
+if ($?TASKS_PER_NODE) then
+   if ($#TASKS_PER_NODE > 0) then
+      ${COPY} input.nml input.nml.$$
+      sed -e "s#layout.*#layout = 2#" \
+          -e "s#tasks_per_node.*#tasks_per_node = $TASKS_PER_NODE#" input.nml.$$ >! input.nml
+      ${REMOVE} input.nml.$$
+   endif
+endif
 
 #-----------------------------------------------------------------------------
 # Get the CABLE executable, control files, and data files.
+# The cnpipool file must be a local filename
+# The cnpepool file must be a local filename
 #-----------------------------------------------------------------------------
 
- ${LINK} ${CABLEEXEDIR}/cable-mpi                         .  || exit 2
- ${COPY} ${DARTDIR}/data/restart_in_gpcc.nc               .  || exit 2
- ${COPY} ${DARTDIR}/data/gridinfo_CSIRO_1x1_modified.nc   .  || exit 2
- ${COPY} ${DARTDIR}/data/cable.nml                        .  || exit 2
+${LINK} ${CABLEEXEDIR}/cable-mpi                          .  || exit 2
+${COPY} ${CABLEEXEDIR}/cable.nml                          .  || exit 2
+
+# FIXME ... remove all the comments from the cable.nml
+
+set STRING=`grep "casafile%cnpipool" cable.nml | sed -e "s#[='\\!]# #g"`
+set CNIPOOLFILE=$STRING[$#STRING]
+set STRING=`grep "casafile%cnpepool" cable.nml | sed -e "s#[='\\!]# #g"`
+set CNEPOOLFILE=$STRING[$#STRING]
+set STRING=`grep "filename%type" cable.nml | sed -e "s#[='\\!]# #g"`
+set GRIDINFO=$STRING[$#STRING]
+set STRING=`grep "gswpfile%rainf" cable.nml | sed -e "s#[='\\!]# #g"`
+set ATMOSFILE=$STRING[$#STRING]
+
+${LINK} ${GRIDINFO}                   CABLE_gridinfo.nc         || exit 2
+${LINK} ${ATMOSFILE}                  CABLE_time_steps.nc       || exit 2
+${COPY} ${CABLEEXEDIR}/${CNIPOOLFILE} CABLE_poolcnp_in.0001.csv || exit 2
+${COPY} ${CABLEEXEDIR}/restart_in.nc  CABLE_restart.0001.nc     || exit 2
+
+if ( ! -e ${CABLEEXEDIR}/${CNIPOOLFILE} ) then
+   echo "ERROR: cable.nml casafile%cnpipool file does not exist"
+   echo "ERROR: expected ${CABLEEXEDIR}/${CNIPOOLFILE}"
+   exit 2
+endif
+
+if ( ! -e ${GRIDINFO} ) then
+   echo "ERROR: cable.nml filename%type gridinfo file does not exist"
+   echo "ERROR: expected ${GRIDINFO}"
+   exit 2
+endif
+
+if ( ! -e ${ATMOSFILE} ) then
+   echo "ERROR: cable.nml gspfile%rainf forcing file does not exist"
+   echo "ERROR: we use it to get the 'time' variable so we can compute kstart,kend."
+   echo "ERROR: expected ${ATMOSFILE}"
+   exit 2
+endif
 
 #-----------------------------------------------------------------------------
 # Check that everything moved OK, and the table is set.
-# Convert a CABLE file 'restart_in_gpcc.nc' to a DART ics file 'perfect_ics'
+# Convert a CABLE file 'restart_in.nc' to a DART ics file 'perfect_ics'
 #-----------------------------------------------------------------------------
+
+${LINK} CABLE_restart.0001.nc    CABLE_restart.nc
 
 # This is the time to put the desired time in the CABLE restart file
 # and make sure the forcing files are for the right year.
-# The CABLE restart files only have a 'time since the start of the run',
-# they don't really have an absolute time.
 
 # Ensure that input.nml:cable_to_dart_nml:replace_cable_time
 # is correct for this context.
 
- echo '1'                       >! ex_commands
- echo '/cable_to_dart_nml'      >> ex_commands
- echo '/replace_cable_time'     >> ex_commands
- echo ':s/\.false\./\.true\./'  >> ex_commands
- echo ':wq'                     >> ex_commands
+echo '1'                       >! ex_commands
+echo '/cable_to_dart_nml'      >> ex_commands
+echo '/replace_cable_time'     >> ex_commands
+echo ':s/\.true\./\.false\./'  >> ex_commands
+echo ':wq'                     >> ex_commands
 
- ( ex input.nml < ex_commands ) >& /dev/null
+( ex input.nml < ex_commands ) >& /dev/null
 
- ./cable_to_dart || exit 3
+./cable_to_dart || exit 3
 
- # Safeguard against having the wrong setting in general
+# Safeguard against having the wrong setting in general
 
- echo '1'                       >! ex_commands
- echo '/cable_to_dart_nml'      >> ex_commands
- echo '/replace_cable_time'     >> ex_commands
- echo ':s/\.true\./\.false\./'  >> ex_commands
- echo ':wq'                     >> ex_commands
- ( ex input.nml < ex_commands ) >& /dev/null
- \rm -f ex_commands
+echo '1'                       >! ex_commands
+echo '/cable_to_dart_nml'      >> ex_commands
+echo '/replace_cable_time'     >> ex_commands
+echo ':s/\.true\./\.false\./'  >> ex_commands
+echo ':wq'                     >> ex_commands
+( ex input.nml < ex_commands ) >& /dev/null
+\rm -f ex_commands
 
- ${MOVE} dart_ics perfect_ics
+${MOVE} dart_ics perfect_ics
 
 #-----------------------------------------------------------------------------
 # Run perfect_model_obs ... harvest the observations to populate obs_seq.out
@@ -221,11 +266,12 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # with the ensemble member ID tacked on - must provide both.
 #-----------------------------------------------------------------------------
 
- ${LINK} restart_in_gpcc.nc restart_in_gpcc.0001.nc
+# ${LINK} CABLE_restart.nc     CABLE_restart.0001.nc
+# ${LINK} CABLE_poolcnp_in.csv CABLE_poolcnp_in.0001.csv
 
- ./perfect_model_obs || exit 4
+./perfect_model_obs || exit 4
 
- echo "${JOBNAME} ($JOBID) finished at "`date`
+echo "${JOBNAME} ($JOBID) finished at "`date`
 
 #-----------------------------------------------------------------------------
 # Move the output to storage after filter completes.
@@ -237,18 +283,17 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 # all the files have finished being written.
 #-----------------------------------------------------------------------------
 
- echo "Listing contents of CENTRALDIR before archiving"
- ls -l
+echo "Listing contents of CENTRALDIR before archiving"
+ls -l
 
 exit
 
-${MOVE} restart_in_gpcc.nc.0001    ${EXPERIMENT}/perfect/restart_in_gpcc.nc
+${MOVE} DART_restart_in.0001.nc    ${EXPERIMENT}/perfect/DART_restart_in.nc
 ${MOVE} cable.nml                  ${EXPERIMENT}/perfect
 ${MOVE} obs_seq.out                ${EXPERIMENT}/perfect
 ${MOVE} True_State.nc              ${EXPERIMENT}/perfect
 ${MOVE} perfect_restart            ${EXPERIMENT}/perfect
 
-${MOVE} tiegcm_out_1               ${EXPERIMENT}/perfect/tiegcm_out
 ${MOVE} dart_log.out               ${EXPERIMENT}/perfect
 ${MOVE} dart_log.nml               ${EXPERIMENT}/perfect
 # Good style dictates that you save the scripts so you can see what worked.

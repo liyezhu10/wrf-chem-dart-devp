@@ -1,4 +1,4 @@
-netcdf gridinfo_CSIRO_1x1_modified {
+netcdf CABLE_gridinfo {
 dimensions:
 	longitude = 360 ;
 	latitude = 150 ;

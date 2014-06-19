@@ -1,4 +1,4 @@
-netcdf restart_in_gpcc {
+netcdf restart_in {
 dimensions:
 	mland = 15238 ;
 	mp_patch = 15238 ;
@@ -380,7 +380,7 @@ variables:
 		za_tq:missing_value = -1.e+33f ;
 
 // global attributes:
-		:Production = "2014/01/31 at 15:38:24" ;
+		:Production = "2014/06/18 at 13:50:21" ;
 		:Source = "CABLE LSM restart file" ;
 		:CABLE_input_file = "" ;
 }

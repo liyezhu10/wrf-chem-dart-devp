@@ -48,21 +48,24 @@ cd       ${temp_dir}
 cp -pv ../cable.nml . || exit 1
 cp -pv ../input.nml . || exit 1
 
+# FIXME ... rip out all comment lines and everything past the bang
+#
 # Try to ensure that the input.nml has the required value for
 # dart_to_cable_nml:advance_time_present for this context.
-# Also make sure that DART is not altering the time in the CABLE files.
-# cable_to_dart_nml:replace_cable_time for this context.
 
 echo '1'                       >! ex_commands
 echo '/dart_to_cable_nml'      >> ex_commands
 echo '/advance_time_present'   >> ex_commands
 echo ':s/\.false\./\.true\./'  >> ex_commands
-echo '1'                       >> ex_commands
-echo '/cable_to_dart_nml'      >> ex_commands
-echo '/replace_cable_time'     >> ex_commands
-echo ':s/\.true\./\.false\./'  >> ex_commands
 echo ':wq'                     >> ex_commands
 ( ex input.nml < ex_commands ) >& /dev/null
+\rm -f ex_commands
+
+echo '1'                       >! ex_commands
+echo '/output%averaging'       >> ex_commands
+echo ':s/monthly/daily/'       >> ex_commands
+echo ':wq'                     >> ex_commands
+( ex cable.nml < ex_commands ) >& /dev/null
 \rm -f ex_commands
 
 # Loop through each state
@@ -88,69 +91,48 @@ while($state_copy <= $num_states)
    # The EXPECTED DART filter restart_out_file_name is 'dart_restart'
    # The dart_to_cable_nml:advance_time_present = .TRUE. must be set;
    # this is the purpose of the ex_commands earlier.
+   # specified in cable.nml$filename%restart_in (should be a local filename)
+   # gridinfo file is specified in cable.nml$filename%type (can be anything)
 
-   set CABLEFILE = `printf restart_in_gpcc.%04d.nc ${ensemble_member}`
-   ln -sfv ../${CABLEFILE} restart_in_gpcc.nc  || exit 2
-   ln -sfv ../gridinfo_CSIRO_1x1_modified.nc . || exit 2
-   ln -sfv ../${input_file}       dart_restart || exit 2
+   set STRING=`grep "filename%restart_in" cable.nml | sed -e "s#[='\\!]# #g"`
+   set CABLEIN=$STRING[$#STRING]
+   set STRING=`grep "filename%restart_out" cable.nml | sed -e "s#[='\\!]# #g"`
+   set CABLEOUT=$STRING[$#STRING]
+   set STRING=`grep "filename%type" cable.nml | sed -e "s#[='\\!]# #g"`
+   set GRIDINFO=$STRING[$#STRING]
+   set STRING=`grep "casafile%cnpipool" cable.nml | sed -e "s#[='\\!]# #g"`
+   set CNIPOOLFILE=$STRING[$#STRING]
+   set STRING=`grep "casafile%cnpepool" cable.nml | sed -e "s#[='\\!]# #g"`
+   set CNEPOOLFILE=$STRING[$#STRING]
+   set STRING=`grep "gswpfile%rainf" cable.nml | sed -e "s#[='\\!]# #g"`
+   set TIME_FILE=$STRING[$#STRING]
+
+   set CABLEFILE = `printf CABLE_restart.%04d.nc     ${ensemble_member}`
+   set  CNPIFILE = `printf CABLE_poolcnp_in.%04d.csv ${ensemble_member}`
+
+   ln -sfv    ${TIME_FILE}   CABLE_time_file.nc   || exit 2
+   ln -sfv    ${GRIDINFO}    CABLE_gridinfo.nc    || exit 2
+   cp -fv  ../${CABLEFILE}   CABLE_restart.nc     || exit 2
+   cp -fv  ../${CNPIFILE}    CABLE_poolcnp_in.csv || exit 2
+   cp -fv  ../${input_file}  dart_restart         || exit 2
 
    ../dart_to_cable || exit 2
 
-   # Extract just the forcing for the model advance we need.
-   # dart_to_cable produces a file "time_control.txt" that has
-   # the forcing times we need to advance CABLE. We use them
-   # to extract what we need with ncks.
-   #
-   #cat time_control.txt 
-   #     31622400
-   #     31708800
-   # dart_to_cable:DART   model date 1981 Jan 01 00:00:00
-   # dart_to_cable:DART desired date 1981 Jan 02 00:00:00
-
-   @ t1 = `head -n 1 time_control.txt` - 1
-   @ tN = `head -n 2 time_control.txt | tail -n 1` + 1
-
-   # gswpfile%rainf = '/short/xa5/CABLE-AUX/GPCC-CABLE/prcp_hr_1980-19801x1.nc'
-   # gswpfile%LWdown= '/short/xa5/CABLE-AUX/GPCC-CABLE/dlwrf_hr_1980-19801x1.nc'
-   # gswpfile%SWdown= '/short/xa5/CABLE-AUX/GPCC-CABLE/dswrf_hr_1980-19801x1.nc'
-   # gswpfile%PSurf = '/short/xa5/CABLE-AUX/GPCC-CABLE/pres_hr_1980-19801x1.nc'
-   # gswpfile%Qair  = '/short/xa5/CABLE-AUX/GPCC-CABLE/shum_hr_1980-19801x1.nc'
-   # gswpfile%Tair  = '/short/xa5/CABLE-AUX/GPCC-CABLE/tas_hr_1980-19801x1.nc'
-   # gswpfile%wind  = '/short/xa5/CABLE-AUX/GPCC-CABLE/wind_hr_1980-19801x1.nc'
-
-   foreach FILE ( rainf LWdown SWdown PSurf Qair Tair wind )
-
-      set FILESTRING=`grep "gswpfile%$FILE" cable.nml | sed -e "s#[='\\!]# #g"`
-      set FILENAME=$FILESTRING[$#FILESTRING]
-      set FILETAIL=$FILENAME:t
-
-      # This actually subsets the files and makes local files.
-
-      ncks -O -d time,${t1}.,${tN}. ${FILENAME} subset_${FILETAIL}
-
-      # This changes the namelist to use the local files.
-      
-      grep -v "gswpfile%$FILE" cable.nml | grep -v '&end' >! cabletemp.nml
-      echo "   gswpfile%$FILE = '"subset_${FILETAIL}"'"   >> cabletemp.nml
-      echo '&end'                                         >> cabletemp.nml
-   
-      mv cabletemp.nml cable.nml   
-
-   end
+   echo "25 48" >! timestep.txt # FIXME ... hardwired for testing
 
    #----------------------------------------------------------------------
    # Block 3: Run CABLE
    # casafile%cnpipool    = 'output/cnppool1979.csv'
-   # filename%restart_in  = './restart_in_gpcc.nc'
+   # casafile%cnpepool    = 'output/cnppool1979.csv'
+   # filename%restart_in  = './restart_in.nc'
    # filename%restart_out = './restart_out.nc'
+   #
+   # restart_in.nc and ${CABLEIN} may be the same name ... 
    #----------------------------------------------------------------------
 
    mkdir -p output
-
-   set CNIPOOLSTRING=`grep "casafile%cnpipool" cable.nml | sed -e "s#[='\\!]# #g"`
-   set CNIPOOLFILE=$CNIPOOLSTRING[$#CNIPOOLSTRING]
-  
-   ln -sfv /short/xa5/CABLE-EXE/$CNIPOOLFILE output/.
+   mv -fv CABLE_restart.nc     ${CABLEIN}        || exit 3
+   mv -fv CABLE_poolcnp_in.csv ${CNIPOOLFILE}    || exit 3
 
    echo "mpi will run with the following command <${MPICMD}>"
 
@@ -164,29 +146,27 @@ while($state_copy <= $num_states)
    endif
 
    echo "model advanced to "
-   ncdump -v time restart_out.nc
+   ncdump -v time ${CABLEOUT}
    echo
 
-   # FIXME if cable completes correctly, the carbon pool file must be used.
-   # this means the casafile%cnpipool variable must point to the new file.
-   
    #----------------------------------------------------------------------
    # Block 4: Convert the CABLE model output to form needed by DART
    #----------------------------------------------------------------------
-
-   mv -v restart_out.nc restart_in_gpcc.nc
 
    # cable_to_dart reads the restart file after the model advance and writes
    # out an updated DART 'initial conditions' file. This initial conditions
    # file contains a header with the valid time of the ensuing model state.
    # The cable restart files contain the valid time of the model state.
 
+   ln -sf ${CABLEOUT} CABLE_restart.nc
+
    ../cable_to_dart || exit 4
 
    # The (new,updated) DART restart file name is called 'dart_ics'
    # Move the updated files back to 'centraldir'
-   mv -v dart_ics            ../${output_file} || exit 4
-   mv -v restart_in_gpcc.nc  ../${CABLEFILE}   || exit 4
+   mv -v dart_ics       ../${output_file} || exit 4
+   mv -v ${CABLEOUT}    ../${CABLEFILE}   || exit 4
+   mv -v ${CNEPOOLFILE} ../${CNIPOOLFILE}
 
    # bookkeeping
 
@@ -194,10 +174,8 @@ while($state_copy <= $num_states)
    @ ensemble_member_line = $ensemble_member_line + 3
    @ input_file_line = $input_file_line + 3
    @ output_file_line = $output_file_line + 3
-end
 
-# must communicate the time_manager_nml:stop_count 
-# cp -pv cablegc_in.DART ../cable_in
+end
 
 # Change back to original directory and get rid of temporary directory
 cd ..

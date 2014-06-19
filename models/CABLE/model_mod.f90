@@ -217,7 +217,7 @@ subroutine static_init_model()
 !------------------------------------------------------------------
 ! Called to do one time initialization of the model.
 
-integer :: i, iunit, io
+integer :: iunit, io
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -1356,6 +1356,7 @@ subroutine find_gridcell_Npatches(varstring)
 ! which gridcells have multiple patches
 !
 ! This routine simply tells me which gridcells are 'interesting'
+! The information is written to stdout ... 
 
 character(len=*), intent(in) :: varstring ! 'wb', 'ts', 'tgg', etc.
 
@@ -1378,12 +1379,15 @@ do indexi = progvar(ivar)%index1, progvar(ivar)%indexN
    countmat(i,j) = countmat(i,j) + 1
 enddo
 
-write(*,*)'exploring '//trim(varstring)
+if (do_output()) then
+   write(*,*)
+   write(*,*)'Determining which gridcells have multiple patches for '//trim(varstring)
+endif
 
 do j = 1,Nlatitude
 do i = 1,Nlongitude
 
-   if ( countmat(i,j) > 1) then
+   if ((countmat(i,j) > 1) .and. do_output()) then
       write(*,'(''gridcell'',2(1x,i8),'' has '',i6,'' patches at lon/lat'',2(1x,f12.7))') &
                 i,j,countmat(i,j),longitude(i),latitude(j)
    endif
@@ -1391,11 +1395,11 @@ do i = 1,Nlongitude
 enddo
 enddo
 
-if ( all(countmat <= 1) ) then
-   write(*,*)'All gridcells have at most 1 patch.'
-endif
+if ((all(countmat <= 1)) .and. do_output()) write(*,*)'All gridcells have at most 1 patch.'
 
 deallocate(countmat)
+
+if (do_output()) write(*,*)  ! a blank line 
 
 end subroutine find_gridcell_Npatches
 
@@ -1436,7 +1440,7 @@ integer,  dimension(:), allocatable :: counter
 
 ! interpolation variables
 
-real(r8) :: x0,xx,x1,y0,y,y1
+real(r8) :: x0,xx,x1,y0,y1
 integer  :: iabove, ibelow
 
 if ( .not. module_initialized ) call static_init_model
@@ -2018,9 +2022,7 @@ subroutine read_metadata( restart_filename, gridinfo_filename )
 character(len=*), intent(in) :: restart_filename
 character(len=*), intent(in) :: gridinfo_filename
 
-integer :: i, ncid, dimid, VarID, numdims, dimlen, xtype
-character(len=obstypelength) :: dimname
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+integer :: ncid, dimid, VarID
 
 ! These are module storage variables set by this routine
 ! integer :: Nmland    ! number of land cells
@@ -2633,6 +2635,11 @@ endif
 
 ! Replace the DART fill value with the original value and apply any clamping.
 ! Get the 'original' variable from the netcdf file.
+
+! FIXME ... checkme, really ... the org_array could be r4 ...
+! we save the original sp_val, missing values, .... do these translate
+! correctly ... Should we have multiple vector_to_1d_prog_var routines for each
+! type ...
 
 if (present(ncid)) then
 

@@ -58,6 +58,7 @@ type(time_type)       :: model_time, adv_to_time
 type(time_type)       :: cable_origin, temp_time
 real(r8), allocatable :: statevector(:)
 integer               :: days, seconds, currentseconds, futureseconds
+integer               :: kstart, kend
 
 !----------------------------------------------------------------------
 
@@ -125,6 +126,19 @@ if ( advance_time_present ) then
    write(newunit,*)futureseconds
    call print_date( model_time,'dart_to_cable:DART   model date',newunit)
    call print_date(adv_to_time,'dart_to_cable:DART desired date',newunit)
+   call close_file(newunit)
+
+   ! Determine the indices of the forcing file that are needed to run.
+   ! Yingping: "There is a limitation to the values of kstart or kend. 
+   ! Kstart has to be the first time step of a day and kend has to be the 
+   ! last time step of a day. If a model time step is hourly, therefore 
+   ! possible values are 1, 25, 37.. for kstart, and 24, 48, 72 .. for kend.
+   ! FIXME ... hardcoding for now ...
+   kstart = 25
+   kend = 48
+   newunit = open_file('timestep.txt',action='rewind')
+   write(newunit,*)kstart, kend
+   call close_file(newunit)
 
 else
    call aread_state_restart(model_time, statevector, iunit)
@@ -154,6 +168,35 @@ if ( advance_time_present ) then
 endif
 
 call finalize_utilities('dart_to_cable')
+
+!===============================================================================
+contains
+!===============================================================================
+
+subroutine get_cable_time_array(kstart,kend)
+! The time control for CABLE is a simple pair of integers that
+! index into the time array of the gspwfile 'time' variable.
+! We have to read that time array to figure out how to start/stop
+! the model advance.
+
+integer, intent(out) :: kstart, kend
+
+! Read cable.nml into a variable
+! find the lines with the gswpfile variables ...
+! make sure all the files have the same time variable
+! read the time variable & units, convert to DART time_type array
+! figure out the indices and return
+
+!   gswpfile%rainf  = '/short/xa5/CABLE-AUX/GPCC-CABLE/prcp_hr_1980-19801x1.nc'
+!   gswpfile%LWdown = '/short/xa5/CABLE-AUX/GPCC-CABLE/dlwrf_hr_1980-19801x1.nc'
+!   gswpfile%SWdown = '/short/xa5/CABLE-AUX/GPCC-CABLE/dswrf_hr_1980-19801x1.nc'
+!   gswpfile%PSurf  = '/short/xa5/CABLE-AUX/GPCC-CABLE/pres_hr_1980-19801x1.nc'
+!   gswpfile%Qair   = '/short/xa5/CABLE-AUX/GPCC-CABLE/shum_hr_1980-19801x1.nc'
+!   gswpfile%Tair   = '/short/xa5/CABLE-AUX/GPCC-CABLE/tas_hr_1980-19801x1.nc'
+!   gswpfile%wind   = '/short/xa5/CABLE-AUX/GPCC-CABLE/wind_hr_1980-19801x1.nc'
+ 
+end subroutine get_cable_time_array
+
 
 end program dart_to_cable
 

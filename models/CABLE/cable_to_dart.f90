@@ -46,12 +46,9 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-logical               :: replace_cable_time         = .false.
-integer, dimension(6) :: cable_state_yyyymmddhhmmss = 0
 character(len=128)    :: cable_to_dart_output_file  = 'dart_ics'
 
-namelist /cable_to_dart_nml/ cable_to_dart_output_file, &
-              replace_cable_time, cable_state_yyyymmddhhmmss
+namelist /cable_to_dart_nml/ cable_to_dart_output_file
 
 !----------------------------------------------------------------------
 ! global storage
@@ -93,8 +90,6 @@ write(logfileunit,'(''cable_to_dart:converting cable restart file '',A, &
       &'' to DART file '',A)') &
        trim(cable_restart_filename), trim(cable_to_dart_output_file)
 
-if ( replace_cable_time ) call replace_timestamp( cable_restart_filename )
-
 !----------------------------------------------------------------------
 ! get to work
 !----------------------------------------------------------------------
@@ -115,94 +110,6 @@ call print_date(model_time, str='cable_to_dart:CABLE model date',iunit=logfileun
 call print_time(model_time, str='cable_to_dart:DART  model time',iunit=logfileunit)
 
 call finalize_utilities('cable_to_dart')
-
-
-contains
-
-
-subroutine replace_timestamp( filename )
-
-character(len=*), intent(in) :: filename
-
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-integer               :: ncid, VarID, ncNdims, dimlen
-integer               :: iyear, imonth, iday, ihour, imin, isec
-character(len=128)    :: unitstring, string1, string2
-type(time_type)       :: time_base, time_desired, time_offset
-integer, dimension(1) :: seconds
-
-! Check that the input file exists ...
-
-if ( .not. file_exist(filename) ) then
-   write(string1,*)'Cannot open file ', trim(filename),' for WRITING.'
-   call error_handler(E_ERR,'replace_timestamp',string1,source,revision,revdate)
-endif
-
-call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
-        'replace_timestamp','open '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid, 'time', VarID), &
-        'replace_timestamp', 'inq_varid time'//trim(filename))
-
-call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=ncNdims), &
-        'replace_timestamp', 'inquire time'//trim(filename))
-
-if (ncNdims /= 1) then
-   write(string1,*)'time variable has unexpected rank.'
-   write(string2,*)'expected 1, got ',ncNdims
-   call error_handler(E_ERR, &
-        'replace_timestamp', string1, source, revision, revdate, text2=string2)
-endif
-
-call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlen), &
-        'replace_timestamp', trim(string1))
-
-if (dimlen /= 1) then
-   write(string1,*)'time variable has unexpected length.'
-   write(string2,*)'expected 1, got ',dimlen
-   call error_handler(E_ERR, &
-        'replace_timestamp', string1, source, revision, revdate, text2=string2)
-endif
-
-! FIXME check for reasonable input values - although set_date does that.
-
-iyear  = cable_state_yyyymmddhhmmss(1)
-imonth = cable_state_yyyymmddhhmmss(2)
-iday   = cable_state_yyyymmddhhmmss(3)
-ihour  = cable_state_yyyymmddhhmmss(4)
-imin   = cable_state_yyyymmddhhmmss(5)
-isec   = cable_state_yyyymmddhhmmss(6)
-
-write(unitstring,'(''seconds since '',i4.4,''-01-01 00:00:00'')') iyear
-
-! replace units string
-call nc_check(nf90_Redef(ncid), 'replace_timestamp','redef '//trim(filename))
-call nc_check(nf90_put_att(ncid, VarID,'units',trim(unitstring)),&
-        'replace_timestamp','put_att units '//trim(filename))
-call nc_check(nf90_put_att(ncid, VarID,'DART','redefined by DART'),&
-        'replace_timestamp', 'put att DART '//trim(filename))
-
-call nc_check(nf90_enddef(ncid), 'replace_timestamp', 'enddef')
-
-! calculate and replace value
-
-time_base    = set_date(iyear, 1, 1, 0, 0, 0)
-time_desired = set_date(iyear, imonth, iday, ihour, imin, isec)
-time_offset  = time_desired - time_base
-
-call get_time(time_offset,isec,iday)
-
-seconds(1) = iday * 86400 + isec
-
-call nc_check(nf90_put_var(ncid, VarID, seconds), &
-        'replace_timestamp', 'put_var time'//trim(filename))
-
-call nc_check(nf90_close(ncid),'replace_timestamp','close '//trim(filename))
-
-call print_date(time_desired, str='cable_to_dart: OVERRRIDE : NEW CABLE model date')
-call print_time(time_desired, str='cable_to_dart: OVERRRIDE : NEW CABLE model time')
-
-end subroutine replace_timestamp
 
 end program cable_to_dart
 
