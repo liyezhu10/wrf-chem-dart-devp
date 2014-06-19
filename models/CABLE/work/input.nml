@@ -191,6 +191,7 @@
 
 &dart_to_cable_nml
    dart_to_cable_input_file   = 'dart_restart'
+   cable_time_file            = 'CABLE_time_file.nc'
    advance_time_present       = .true.
    /
 

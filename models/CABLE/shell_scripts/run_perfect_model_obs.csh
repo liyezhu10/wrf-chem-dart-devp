@@ -198,11 +198,8 @@ set STRING=`grep "casafile%cnpepool" cable.nml | sed -e "s#[='\\!]# #g"`
 set CNEPOOLFILE=$STRING[$#STRING]
 set STRING=`grep "filename%type" cable.nml | sed -e "s#[='\\!]# #g"`
 set GRIDINFO=$STRING[$#STRING]
-set STRING=`grep "gswpfile%rainf" cable.nml | sed -e "s#[='\\!]# #g"`
-set ATMOSFILE=$STRING[$#STRING]
 
 ${LINK} ${GRIDINFO}                   CABLE_gridinfo.nc         || exit 2
-${LINK} ${ATMOSFILE}                  CABLE_time_steps.nc       || exit 2
 ${COPY} ${CABLEEXEDIR}/${CNIPOOLFILE} CABLE_poolcnp_in.0001.csv || exit 2
 ${COPY} ${CABLEEXEDIR}/restart_in.nc  CABLE_restart.0001.nc     || exit 2
 
@@ -215,13 +212,6 @@ endif
 if ( ! -e ${GRIDINFO} ) then
    echo "ERROR: cable.nml filename%type gridinfo file does not exist"
    echo "ERROR: expected ${GRIDINFO}"
-   exit 2
-endif
-
-if ( ! -e ${ATMOSFILE} ) then
-   echo "ERROR: cable.nml gspfile%rainf forcing file does not exist"
-   echo "ERROR: we use it to get the 'time' variable so we can compute kstart,kend."
-   echo "ERROR: expected ${ATMOSFILE}"
    exit 2
 endif
 

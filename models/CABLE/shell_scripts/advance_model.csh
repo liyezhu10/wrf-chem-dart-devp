@@ -118,8 +118,6 @@ while($state_copy <= $num_states)
 
    ../dart_to_cable || exit 2
 
-   echo "25 48" >! timestep.txt # FIXME ... hardwired for testing
-
    #----------------------------------------------------------------------
    # Block 3: Run CABLE
    # casafile%cnpipool    = 'output/cnppool1979.csv'

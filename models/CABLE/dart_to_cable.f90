@@ -21,16 +21,24 @@ program dart_to_cable
 ! author: Tim Hoar 20 February 2014
 !----------------------------------------------------------------------
 
-use        types_mod, only : r8
+use        types_mod, only : r8, digits12
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit, open_file, close_file, &
-                             error_handler, E_MSG
+                             logfileunit, open_file, close_file, nc_check, &
+                             file_exist, error_handler, E_MSG, E_ERR
+
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
-use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time
+
+use time_manager_mod, only : time_type, print_time, print_date, get_time, set_date, &
+                             set_time, operator(-), operator(+), operator(==)
+
 use        model_mod, only : static_init_model, dart_vector_to_model_file, &
                              get_model_size, get_cable_restart_filename, &
                              get_time_origin
+
+use typesizes
+use netcdf
 
 implicit none
 
@@ -40,24 +48,25 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+character(len=512) :: string1, string2, string3
+
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_cable_input_file = 'dart_restart'
-logical               :: advance_time_present   = .false.
+character(len=256) :: dart_to_cable_input_file = 'dart_restart'
+character(len=256) :: cable_time_file = 'CABLE_time_file.nc'
+logical            :: advance_time_present   = .false.
 
 namelist /dart_to_cable_nml/ dart_to_cable_input_file, &
-                           advance_time_present
+                           cable_time_file, advance_time_present
 
 !----------------------------------------------------------------------
 
 character(len=256)    :: cable_restart_filename
 integer               :: iunit, io, x_size, newunit
 type(time_type)       :: model_time, adv_to_time
-type(time_type)       :: cable_origin, temp_time
 real(r8), allocatable :: statevector(:)
-integer               :: days, seconds, currentseconds, futureseconds
 integer               :: kstart, kend
 
 !----------------------------------------------------------------------
@@ -101,43 +110,18 @@ iunit = open_restart_read(dart_to_cable_input_file)
 if ( advance_time_present ) then
    call aread_state_restart(model_time, statevector, iunit, adv_to_time)
 
-   ! Convert the model_time and adv_to_time to the units of the "time" 
-   ! variable in the restart file (same as the atmospheric forcing file).
-   ! Those will be used to construct a call to ncks to subset the forcing 
-   ! files in to ones that are appropriate for this particular model advance.
-   !
-   ! The restart file time:units attribute MUST MATCH
-   ! the forcing file time:units attribute. IMPORTANT.
-
-   cable_origin = get_time_origin()
-
-   ! figure out the current model time 
-   temp_time = model_time - cable_origin
-   call get_time(temp_time, seconds, days)
-   currentseconds = seconds + days*86400
-
-   ! figure out the advance-to-time time 
-   temp_time = adv_to_time - cable_origin
-   call get_time(temp_time, seconds, days)
-   futureseconds = seconds + days*86400
-
-   newunit = open_file('time_control.txt',action='rewind')
-   write(newunit,*)currentseconds
-   write(newunit,*)futureseconds
-   call print_date( model_time,'dart_to_cable:DART   model date',newunit)
-   call print_date(adv_to_time,'dart_to_cable:DART desired date',newunit)
-   call close_file(newunit)
-
    ! Determine the indices of the forcing file that are needed to run.
    ! Yingping: "There is a limitation to the values of kstart or kend. 
    ! Kstart has to be the first time step of a day and kend has to be the 
    ! last time step of a day. If a model time step is hourly, therefore 
    ! possible values are 1, 25, 37.. for kstart, and 24, 48, 72 .. for kend.
-   ! FIXME ... hardcoding for now ...
-   kstart = 25
-   kend = 48
+
+   call get_cable_time_array(model_time, adv_to_time, kstart, kend)
+
    newunit = open_file('timestep.txt',action='rewind')
    write(newunit,*)kstart, kend
+   call print_date( model_time,'dart_to_cable:DART   model date',newunit)
+   call print_date(adv_to_time,'dart_to_cable:DART desired date',newunit)
    call close_file(newunit)
 
 else
@@ -169,32 +153,122 @@ endif
 
 call finalize_utilities('dart_to_cable')
 
+deallocate(statevector)
+
 !===============================================================================
 contains
 !===============================================================================
 
-subroutine get_cable_time_array(kstart,kend)
+subroutine get_cable_time_array(time1,time2,indx1,indx2)
+
 ! The time control for CABLE is a simple pair of integers that
 ! index into the time array of the gspwfile 'time' variable.
 ! We have to read that time array to figure out how to start/stop
 ! the model advance.
 
-integer, intent(out) :: kstart, kend
+type(time_type), intent(in)  :: time1, time2
+integer,         intent(out) :: indx1, indx2
 
-! Read cable.nml into a variable
-! find the lines with the gswpfile variables ...
-! make sure all the files have the same time variable
-! read the time variable & units, convert to DART time_type array
-! figure out the indices and return
+integer :: ncid, TimeDimID, VarID, ntimes, i
+integer :: year, month, day, hour, minute, second
+character(len=256) :: unitstring
 
-!   gswpfile%rainf  = '/short/xa5/CABLE-AUX/GPCC-CABLE/prcp_hr_1980-19801x1.nc'
-!   gswpfile%LWdown = '/short/xa5/CABLE-AUX/GPCC-CABLE/dlwrf_hr_1980-19801x1.nc'
-!   gswpfile%SWdown = '/short/xa5/CABLE-AUX/GPCC-CABLE/dswrf_hr_1980-19801x1.nc'
-!   gswpfile%PSurf  = '/short/xa5/CABLE-AUX/GPCC-CABLE/pres_hr_1980-19801x1.nc'
-!   gswpfile%Qair   = '/short/xa5/CABLE-AUX/GPCC-CABLE/shum_hr_1980-19801x1.nc'
-!   gswpfile%Tair   = '/short/xa5/CABLE-AUX/GPCC-CABLE/tas_hr_1980-19801x1.nc'
-!   gswpfile%wind   = '/short/xa5/CABLE-AUX/GPCC-CABLE/wind_hr_1980-19801x1.nc'
- 
+real(digits12), dimension(:), allocatable :: time_array, seconds
+integer, dimension(:), allocatable :: days
+
+type(time_type) :: time_origin, curr_time, test_time
+
+if ( .not. file_exist(cable_time_file) ) then
+   write(string1,*) 'cannot open file ', trim(cable_time_file),' for reading.'
+   call error_handler(E_ERR,'get_cable_time_array',string1,source,revision,revdate)
+endif
+
+call nc_check(nf90_open(trim(cable_time_file), NF90_NOWRITE, ncid), &
+              'get_cable_time_array','open '//trim(cable_time_file))
+
+! Get the length of the time dimension
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
+            'get_cable_time_array', 'inq_dimid '//trim(string3))
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=ntimes), &
+            'get_cable_time_array', 'inq_dimid '//trim(string3))
+
+allocate(time_array(ntimes), days(ntimes), seconds(ntimes))
+
+! read the time variable
+call nc_check(nf90_inq_varid(ncid, 'time', VarID), &
+            'get_cable_time_array', 'inq_varid '//trim(string3))
+call nc_check(nf90_get_var(ncid, VarID, time_array), &
+            'get_cable_time_array', 'get_var'//trim(string3))
+
+! read the time units/base
+if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
+   call nc_check( nf90_get_att(ncid, VarID, 'units' , unitstring), &
+           'get_cable_time_array', 'get_att units '//trim(string2))
+else
+   write(string1,*) 'cannot get time base from <', trim(cable_time_file),'>.'
+   call error_handler(E_ERR,'get_cable_time_array',string1,source,revision,revdate)
+endif
+
+read(unitstring,'(14x,i4,5(1x,i2))'),year,month,day,hour,minute,second
+time_origin = set_date(year, month, day, hour, minute, second)
+
+! make sure that the time array is just 'seconds' and not fractional days'
+if (index(unitstring,'seconds since') > 0) then
+   write(*,*)'Methinks we have seconds since'
+   days    = 0
+   seconds = time_array
+elseif (index(unitstring,'days since') >0) then
+   write(*,*)'Methinks we have fractional days'
+   days    = nint(time_array)
+   seconds = (time_array - real(days,digits12))*86400.0_digits12
+else
+   write(string1,*) 'unknown time base from <', trim(cable_time_file),'>.'
+   call error_handler(E_ERR, 'get_cable_time_array', string1, &
+                 source, revision, revdate, text2=trim(unitstring))
+endif
+
+indx1 = -1
+indx2 = -1
+
+! indx1 (AKA 'kstart') is the timestep AFTER the time that matches.
+FindKstart : do i = 1,ntimes-1
+
+   curr_time = set_time(nint(seconds(i)), days(i))
+   test_time = curr_time + time_origin
+   if (test_time == time1) then
+      indx1 = i + 1
+      exit FindKstart
+   endif
+
+enddo FindKstart
+
+if (indx1 < 1) then
+   call print_date(time1,'Cannot find starting date of',logfileunit)
+   call print_date(time1,'Cannot find starting date of')
+   write(string1,*) 'cannot find start date in', trim(cable_time_file),'>.'
+   call error_handler(E_ERR,'get_cable_time_array',string1,source,revision,revdate)
+endif
+
+FindKend : do i = indx1,ntimes
+
+   curr_time = set_time(nint(seconds(i)), days(i))
+   test_time = curr_time + time_origin
+   if (test_time == time2) then
+      indx2 = i
+      exit FindKend
+   endif
+
+enddo FindKend
+
+if (indx2 < 1) then
+   call print_date(time1,'Cannot find ending date of',logfileunit)
+   call print_date(time1,'Cannot find ending date of')
+   write(string1,*) 'cannot find end date in', trim(cable_time_file),'>.'
+   call error_handler(E_ERR,'get_cable_time_array',string1,source,revision,revdate)
+endif
+
+deallocate(time_array, days, seconds)
+
 end subroutine get_cable_time_array
 
 
