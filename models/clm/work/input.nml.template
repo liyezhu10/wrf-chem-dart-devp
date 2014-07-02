@@ -133,7 +133,7 @@
 # the CLM namelist for the .h1. files.
 &obs_def_tower_nml
    casename    = '../clm_dart',
-   hist_nhtfrq = -HISTORY_OUTPUT_INTERVAL,
+   hist_nhtfrq = -24,
    debug       = .false.
    /
 
@@ -162,8 +162,8 @@
 &model_nml
    clm_restart_filename         = 'clm_restart.nc',
    clm_history_filename         = 'clm_history.nc',
-   assimilation_period_days     = 2,
-   assimilation_period_seconds  = 3600,
+   assimilation_period_days     = 1,
+   assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
    output_state_vector          = .false.,
    calendar                     = 'Gregorian',
@@ -178,23 +178,6 @@
                                   'leafc',       'KIND_LEAF_CARBON',
                                   'leafn',       'KIND_LEAF_NITROGEN',
    /
-
-                                  'livecrootc',  'KIND_ROOT_CARBON',
-                                  'deadcrootc',  'KIND_ROOT_CARBON',
-                                  'livestemc',   'KIND_STEM_CARBON',
-                                  'deadstemc',   'KIND_STEM_CARBON',
-                                  'frootn',      'KIND_ROOT_NITROGEN',
-                                  'livecrootn',  'KIND_ROOT_NITROGEN',
-                                  'deadcrootn',  'KIND_ROOT_NITROGEN',
-                                  'livestemn',   'KIND_STEM_NITROGEN',
-                                  'deadstemn',   'KIND_STEM_NITROGEN',
-                                  'litr1c',      'KIND_LEAF_CARBON',
-                                  'litr2c',      'KIND_LEAF_CARBON',
-                                  'litr3c',      'KIND_LEAF_CARBON',
-                                  'soil1c',      'KIND_SOIL_CARBON',
-                                  'soil2c',      'KIND_SOIL_CARBON',
-                                  'soil3c',      'KIND_SOIL_CARBON',
-                                  'soil4c',      'KIND_SOIL_CARBON',
 
   frac_sno  is needed for the forward operator
   H2OSNO is updated by the filter,
@@ -275,11 +258,11 @@
 &obs_diag_nml
    obs_sequence_name = '',
    obs_sequence_list = 'obs_seq_files.txt',
-   first_bin_center =  2004, 1,  1, 0, 0, 0 ,
-   last_bin_center  =  2004, 1,  8, 0, 0, 0 ,
-   bin_separation   =     0, 0,  1, 0, 0, 0 ,
-   bin_width        =     0, 0,  1, 0, 0, 0 ,
-   time_to_skip     =     0, 0,  0, 0, 0, 0 ,
+   first_bin_center =  2002,11, 2, 0, 0, 0 ,
+   last_bin_center  =  2003,02, 1, 0, 0, 0 ,
+   bin_separation   =     0, 0, 1, 0, 0, 0 ,
+   bin_width        =     0, 0, 1, 0, 0, 0 ,
+   time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
    trusted_obs      = 'null',
    Nregions   = 4,
@@ -288,7 +271,7 @@
    latlim1    =   -90.0,     0.0,  -90.0,  -90.0,
    latlim2    =     0.0,    90.0,   90.0,   90.0,
    reg_names  = 'South', 'North', 'East', 'West',
-   hlevel_edges =  0.0, 1.0, 2.0, 5.0, 10.0, 40.0,
+   hlevel     =  0.0,  0.05, 0.1, 0.2, 0.50, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0,
    print_mismatched_locs = .false.,
    create_rank_histogram = .true.,
    outliers_in_histogram = .true.,
@@ -299,12 +282,17 @@
 
 &obs_sequence_tool_nml
    filename_seq      = '',
-   filename_seq_list = 'pieces.txt',
-   filename_out      = 'obs_seq.combined',
+   filename_seq_list = 'olist',
+   filename_out      = 'OUTDIR/obs_seq.YYYY-MM-DD-SSSSS',
    print_only        = .false.,
    gregorian_cal     = .true.,
-   synonymous_qc_list = 'COSMOS QC','Ameriflux QC'
-   /
+   first_obs_days    = DART1D,
+   first_obs_seconds = DART1S,
+   last_obs_days     = DARTND,
+   last_obs_seconds  = DARTNS,
+   edit_qc_metadata  = .true.,
+   new_qc_metadata   = 'Original QC',
+/
 
 
 &schedule_nml
