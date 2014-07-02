@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program closest_member_tool
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Program to overwrite the time on each ensemble in a restart file.
 
@@ -16,12 +12,11 @@ use types_mod,         only : r8
 use time_manager_mod,  only : time_type, set_time_missing,               &
                               operator(/=), print_time
  
-use utilities_mod,     only : register_module, do_output,                &
-                              error_handler, nmlfileunit, E_MSG, E_ERR,  &
-                              timestamp, find_namelist_in_file,          &
-                              check_namelist_read, logfileunit,          &
-                              do_nml_file, do_nml_term, open_file, close_file
-                                
+use utilities_mod,     only : register_module, find_namelist_in_file,        &
+                              error_handler, nmlfileunit, E_MSG, E_ERR,      &
+                              check_namelist_read, do_nml_file, do_nml_term, &
+                              open_file, close_file
+
 use  location_mod,     only : location_type
 
 use  obs_kind_mod,     only : get_num_raw_obs_kinds, get_raw_obs_kind_index, &
@@ -30,8 +25,7 @@ use  obs_kind_mod,     only : get_num_raw_obs_kinds, get_raw_obs_kind_index, &
 use  sort_mod,         only : slow_index_sort
 
 use assim_model_mod,   only : static_init_assim_model, get_model_size,   &
-                              open_restart_read, open_restart_write,     &
-                              awrite_state_restart, aread_state_restart, &
+                              open_restart_read, aread_state_restart,    &
                               close_restart, get_state_meta_data
 
 use mpi_utilities_mod, only : initialize_mpi_utilities, task_count,     &
@@ -41,10 +35,10 @@ use mpi_utilities_mod, only : initialize_mpi_utilities, task_count,     &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 integer               :: iunit, model_size, io, ens, i, j, kindindex
 integer, allocatable  :: index_list(:)
@@ -348,11 +342,7 @@ function compute_diff(target, candidate, arraysize)
 
  real(r8) :: compute_diff
 
-integer  :: i
-real(r8) :: val, r, diff, biggest, val2
 real(r8), allocatable :: adiff(:)
-integer  :: hist(5)
-character(len=72) :: tbuf
 
 ! new strategy:  compute an array of differences and sum them at the end.
 ! try to use array operations when possible.  useindex() is a logical array
@@ -419,3 +409,9 @@ end function compute_diff
 
 
 end program closest_member_tool
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

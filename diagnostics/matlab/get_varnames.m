@@ -1,5 +1,5 @@
 function bob = get_varnames(fname)
-%% get_varnames returns JUST the 'atmospheric' variable names in the netCDF file - ie - not the coordinate variables.
+%% get_varnames returns NON-coordinate variables.
 %
 % the result is a cell array of strings ... must use {} notation to address elements.
 %
@@ -10,15 +10,11 @@ function bob = get_varnames(fname)
 % nvars = length(varnames);
 % disp(sprintf('first atmospheric variable (of %d) is %s',nvars,varnames{1}))
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 fileinfo    = nc_info(fname);
 Nvarnames   = length(fileinfo.Dataset);
@@ -46,7 +42,7 @@ for i = 1:Nvarnames
 end
 
 if (isempty(inds))
-   error('No atmospheric variables in %s',name(f))
+   error('There are only coordinate variables in %s',fname)
 end
 
 % coerce just the names into a cell array 
@@ -54,3 +50,10 @@ end
 for i = 1:length(inds)
    bob{i} = fileinfo.Dataset(inds(i)).Name;
 end
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
+

@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program perfect_model_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Program to build an obs_sequence file from simulated observations.
 
@@ -26,10 +22,9 @@ use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,     
                                  write_obs_seq, get_num_obs, init_obs, assignment(=),       &
                                  static_init_obs_sequence, get_num_qc, read_obs_seq_header, &
                                  set_qc_meta_data, get_expected_obs, delete_seq_head,       &
-                                 delete_seq_tail, set_obs_def, destroy_obs, destroy_obs_sequence
+                                 delete_seq_tail, destroy_obs, destroy_obs_sequence
 
-use      obs_def_mod,     only : obs_def_type, get_obs_def_error_variance, &
-                                 set_obs_def_error_variance, get_obs_def_time
+use      obs_def_mod,     only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
 use    obs_model_mod,     only : move_ahead, advance_state, set_obs_model_trace
 use  assim_model_mod,     only : static_init_assim_model, get_model_size,                    &
                                  aget_initial_condition, netcdf_file_type, init_diag_output, &
@@ -40,15 +35,16 @@ use mpi_utilities_mod,    only : task_count, task_sync
 use   random_seq_mod,     only : random_seq_type, init_random_seq, random_gaussian
 use ensemble_manager_mod, only : init_ensemble_manager, write_ensemble_restart,              &
                                  end_ensemble_manager, ensemble_type, read_ensemble_restart, &
-                                 get_my_num_copies, get_ensemble_time
+                                 get_my_num_copies, get_ensemble_time, prepare_to_write_to_vars,      &
+                                 prepare_to_read_from_vars
 
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! Module storage for message output
 character(len=129) :: msgstring
@@ -314,10 +310,12 @@ AdvanceTime: do
 
    call trace_message('After  setup for next group of observations')
 
+   call prepare_to_read_from_vars(ens_handle)
+
    ! Output the true state to the netcdf file
    if((output_interval > 0) .and. &
       (time_step_number / output_interval * output_interval == time_step_number)) then
- 
+
       call trace_message('Before updating truth diagnostics file')
       call aoutput_diagnostics(StateUnit, ens_handle%time(1), ens_handle%vars(:, 1), 1)
       call trace_message('After  updating truth diagnostics file')
@@ -347,7 +345,7 @@ AdvanceTime: do
 
       ! Compute the observations from the state
       call get_expected_obs(seq, keys(j:j), &
-         1, ens_handle%vars(:, 1), ens_handle%time(1), &
+         1, ens_handle%vars(:, 1), ens_handle%time(1), .true., &
          true_obs(1:1), istatus, assimilate_this_ob, evaluate_this_ob)
 
       ! Get the observational error covariance (diagonal at present)
@@ -474,6 +472,8 @@ integer         :: secs, days
 
 ! First initialize the ensemble manager storage, only 1 copy for perfect
 call init_ensemble_manager(ens_handle, 1, model_size, 1)
+
+call prepare_to_write_to_vars(ens_handle)
 
 ! If not start_from_restart, use model to get ics for state and time
 if(.not. start_from_restart) then
@@ -632,3 +632,9 @@ end subroutine print_obs_time
 
 
 end program perfect_model_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -33,15 +33,11 @@ function obsstruct = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, .
 %
 % bob = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, QCString, maxgoodQC, verbose, twoup);
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (exist(fname,'file') ~= 2)
    error('%s does not exist.',fname)
@@ -118,8 +114,8 @@ else
 
    % choose a symbol size based on the number of obs to plot.
 
-   if (length(obsstruct.obs) > 1000) 
-      pstruct.scalearray = scaleme(obsstruct.obs, 36);
+   if (length(obsstruct.obs) < 1000) 
+      pstruct.scalearray = scaleme(obsstruct.obs, 30);
    else
       pstruct.scalearray = 128.0 * ones(size(obsstruct.obs));
    end
@@ -412,4 +408,10 @@ set(gca,'CLim',clim)
 hb = colorbar;
 set(get(hb,'YLabel'),'String',pstruct.colorbarstring,'Interpreter','none')
 view(0,90)
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
 

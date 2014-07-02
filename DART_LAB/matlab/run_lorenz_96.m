@@ -24,15 +24,11 @@ function varargout = run_lorenz_96(varargin)
 % See also: gaussian_product, oned_model, oned_ensemble, twod_ensemble, 
 %           run_lorenz_63
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -398,8 +394,19 @@ else
       for i = 1:MODEL_SIZE
          obs_prior = temp_ens(i, :);
          obs(i) = handles.true_state(time, i) + obs_sd * randn;
+
          % Compute the increments for observed variable
-         [obs_increments, err] = obs_increment_eakf(obs_prior, obs(i), obs_error_var);
+         switch filter_type
+            case 'EAKF'
+               [obs_increments, err] = ...
+                  obs_increment_eakf(obs_prior, obs(i), obs_error_var);
+            case 'EnKF'
+               [obs_increments, err] = ...
+                  obs_increment_enkf(obs_prior, obs(i), obs_error_var);
+            case 'RHF'
+               [obs_increments, err] = ...
+                  obs_increment_rhf(obs_prior, obs(i), obs_error_var);
+         end
 
          % Regress the increments onto each of the state variables
          for j = 1:MODEL_SIZE
@@ -756,4 +763,9 @@ function ens_mean_rms = rms_error(truth, ens)
 
 ens_mean = mean(squeeze(ens)');
 ens_mean_rms = sqrt(sum((truth - ens_mean).^2) / size(truth, 2));
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
 

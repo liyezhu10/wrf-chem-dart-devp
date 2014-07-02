@@ -29,15 +29,11 @@ function PlotBins(pinfo)
 % pinfo.longitude  = 45.67;
 % PlotBins( pinfo );
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if isempty(pinfo.num_ens_members)
     error('no ensemble members in %s, cannot create rank histogram.',pinfo.diagn_file)
@@ -61,7 +57,7 @@ switch lower(pinfo.model)
                         'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
             ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                         'stateindex',ivar, ...
-                        'copyindex1',pinfo.ensemble_indices(1), ...
+                        'copy1',pinfo.ensemble_indices(1), ...
                         'copycount',pinfo.num_ens_members, ...
                         'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
@@ -92,7 +88,7 @@ switch lower(pinfo.model)
                      'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
          ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                         'stateindex',ivar, ...
-                        'copyindex1',pinfo.ensemble_indices(1), ...
+                        'copy1',pinfo.ensemble_indices(1), ...
                         'copycount',pinfo.num_ens_members, ...
                         'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
@@ -122,7 +118,7 @@ switch lower(pinfo.model)
                      'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
          ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                         'stateindex',ivar, ...
-                        'copyindex1',pinfo.ensemble_indices(1), ...
+                        'copy1',pinfo.ensemble_indices(1), ...
                         'copycount',pinfo.num_ens_members, ...
                         'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
@@ -141,7 +137,7 @@ switch lower(pinfo.model)
          axis tight
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf','mpas_atm'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf','mpas_atm','mpas_ocn','sqg'}
 
       % It is intended that all 3D models have all the required information
       % set in the corresponding Get<model>Info.m script.
@@ -154,7 +150,7 @@ switch lower(pinfo.model)
                   'tindex1',pinfo.truth_time(1), 'tcount',pinfo.truth_time(2));
       ens   = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.var, ...
                   'levelindex',pinfo.levelindex, ...
-                  'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
+                  'copy1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
                   'lonindex',pinfo.lonindex, 'latindex',pinfo.latindex, ...
                   'tindex1',pinfo.diagn_time(1), 'tcount',pinfo.diagn_time(2));
 
@@ -199,4 +195,10 @@ function PlotLocator(pinfo)
    else
        continents('hollow','greenwich');
    end
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
 

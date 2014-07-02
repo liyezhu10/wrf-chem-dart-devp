@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module model_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !------------------------------------------------------------------
 !
@@ -80,10 +76,10 @@ public :: model_type,             &
           read_TIEGCM_namelist
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! define model parameters
@@ -153,8 +149,6 @@ real(r8), allocatable                 :: ens_mean(:)
                                       !  read in from "tiegcm_s.nc")
 !integer                              :: vert_localization_coord = VERTISHEIGHT
 
-namelist /model_nml/ output_state_vector, state_num_3d, state_num_1d
-
 logical                               :: output_state_vector = .false.
                                       ! .true.  results in a "state-vector" netCDF file
                                       ! .false. results in a "prognostic-var" netCDF file
@@ -162,8 +156,10 @@ logical                               :: first_pert_call = .true.
 type(random_seq_type)                 :: random_seq
 !------------------------------------------------------------------
 
-character(len = 129) :: msgstring
+character(len = 129) :: msgstring, msgstring2, msgstring3
 logical, save :: module_initialized = .false.
+
+namelist /model_nml/ output_state_vector, state_num_3d, state_num_1d
 
 contains
 
@@ -400,18 +396,25 @@ else                        ! North of top lat
    lat_fract = 1.0_r8
 endif
 
+! TJH FIXME ... this model_interpolate needs to support KIND_GEOPOTENTIAL_HEIGHT
+! in order to be able to use obs_def_upper_atm_mod:get_expected_gnd_gps_vtec()
+
+if ( itype == KIND_GEOPOTENTIAL_HEIGHT ) then
+   call error_handler(E_ERR,'KIND_GEOPOTENTIAL_HEIGHT currently unsupported',source, revision, revdate) 
+endif
+
 ! Now, need to find the values for the four corners
-                     call get_val(val(1, 1), x, lon_below, lat_below, height, itype, vstatus)
-   if (vstatus /= 1) call get_val(val(1, 2), x, lon_below, lat_above, height, itype, vstatus)
-   if (vstatus /= 1) call get_val(val(2, 1), x, lon_above, lat_below, height, itype, vstatus)
-   if (vstatus /= 1) call get_val(val(2, 2), x, lon_above, lat_above, height, itype, vstatus)
+                  call get_val(val(1, 1), x, lon_below, lat_below, height, itype, vstatus)
+if (vstatus /= 1) call get_val(val(1, 2), x, lon_below, lat_above, height, itype, vstatus)
+if (vstatus /= 1) call get_val(val(2, 1), x, lon_above, lat_below, height, itype, vstatus)
+if (vstatus /= 1) call get_val(val(2, 2), x, lon_above, lat_above, height, itype, vstatus)
 
 
 ! istatus   meaning                  return expected obs?   assimilate?
 ! 0         obs and model are fine;  yes                    yes
 ! 1         fatal problem;           no                     no
 ! 2         exclude valid obs        yes                    no
-!
+
 istatus = vstatus
 if(istatus /= 1) then
    do i = 1, 2
@@ -2449,8 +2452,13 @@ endif
 end subroutine get_close_obs
 
 
-
 !===================================================================
 ! End of model_mod
 !===================================================================
 end module model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

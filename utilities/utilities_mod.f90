@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module utilities_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !-----------------------------------------------------------------------
 !
@@ -141,7 +137,7 @@ module utilities_mod
 !
 !-----------------------------------------------------------------------
 
-use types_mod, only : r8, PI
+use types_mod, only : r4, r8, digits12, i4, i8, PI
 use netcdf
 
 implicit none
@@ -180,17 +176,17 @@ public :: file_exist, get_unit, open_file, close_file, timestamp,           &
 ! with this job when you exit.  in the non-mpi case, it just calls exit.
 interface
  subroutine exit_all(exitval)
-  integer :: exitval
+  integer, intent(in) :: exitval
  end subroutine exit_all
 end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
-character(len = 169) :: msgstring
+character(len=512) :: msgstring
 
 !----------------------------------------------------------------
 ! Namelist input with default values
@@ -199,8 +195,8 @@ character(len = 169) :: msgstring
 integer            :: TERMLEVEL      = E_ERR   
 
 ! default log and namelist output filenames
-character(len=129) :: logfilename    = 'dart_log.out'
-character(len=129) :: nmlfilename    = 'dart_log.nml'
+character(len=256) :: logfilename    = 'dart_log.out'
+character(len=256) :: nmlfilename    = 'dart_log.nml'
 
 ! output each module subversion details
 logical            :: module_details = .true.  
@@ -226,8 +222,8 @@ contains
    ! integer :: logfileunit -- public module variable
    integer :: iunit, io
 
-   character(len=129) :: lname
-
+   character(len=256) :: lname
+   character(len=512) :: string1,string2,string3
 
       if ( module_initialized ) then ! nothing to do
 
@@ -349,6 +345,25 @@ contains
             if (do_nml_term()) write(     *     , nml=utilities_nml)
          endif
 
+         ! Record the values used for variable types:
+         if (do_output_flag .and. print_debug) then
+        
+            write(     *     ,*)  ! a little whitespace is nice
+            write(logfileunit,*)  ! a little whitespace is nice
+
+            write(string1,*)'..  digits12 is ',digits12
+            write(string2,*)'r8       is ',r8
+            write(string3,*)'r4       is ',r4
+            call error_handler(E_DBG, 'initialize_utilities', string1, &
+                               source, revision, revdate, text2=string2, text3=string3)
+
+            write(string1,*)'..  integer  is ',kind(iunit) ! any integer variable will do
+            write(string2,*)'i8       is ',i8
+            write(string3,*)'i4       is ',i4
+            call error_handler(E_DBG, 'initialize_utilities', string1, &
+                               source, revision, revdate, text2=string2, text3=string3)
+         endif
+
       endif
 
    contains
@@ -396,6 +411,9 @@ contains
    end subroutine initialize_utilities
 
 
+!#######################################################################
+
+
    subroutine finalize_utilities(progname)
    character(len=*), intent(in), optional :: progname
    ! integer :: logfileunit -- private module variable
@@ -423,9 +441,9 @@ contains
          endif 
       endif
 
-      close(logfileunit)
+      call close_file(logfileunit)
       if ((nmlfileunit /= logfileunit) .and. (nmlfileunit /= -1)) then
-         close(nmlfileunit)
+         call close_file(nmlfileunit)
       endif
 
       module_initialized = .false.
@@ -434,6 +452,7 @@ contains
 
 
 !#######################################################################
+
 
    subroutine register_module(src, rev, rdate)
    character(len=*), intent(in) :: src, rev, rdate
@@ -461,7 +480,9 @@ contains
 
    end subroutine register_module
 
+
 !#######################################################################
+
 
    subroutine timestamp(string1,string2,string3,pos)
 
@@ -490,7 +511,9 @@ contains
 
    end subroutine timestamp
 
+
 !#######################################################################
+
 
    function file_exist (file_name)
 
@@ -506,7 +529,9 @@ contains
 
    end function file_exist
 
+
 !#######################################################################
+
 
    function get_unit () result (iunit)
 
@@ -531,7 +556,9 @@ contains
 
    end function get_unit
 
+
 !#######################################################################
+
 
    subroutine dump_unit_attributes(iunit) 
 !--------------------------------------------------------------------------------
@@ -543,7 +570,9 @@ contains
       integer, intent(in) :: iunit
 
       logical :: exists, connected, named_file
-      character(len=129) :: file_name, srname, str1
+      character(len=256) :: file_name
+      character(len=512) :: str1
+      character(len=32)  :: srname
       character(len=32)  :: ynu     ! YES, NO, UNDEFINED ... among others
       integer :: ios, reclen, nextrecnum
 
@@ -660,7 +689,9 @@ contains
 
    end subroutine dump_unit_attributes
 
+
 !#######################################################################
+
 
    subroutine error_mesg (routine, message, level)
 
@@ -696,7 +727,9 @@ contains
 
    end subroutine error_mesg
 
+
 !#######################################################################
+
 
   subroutine error_handler(level, routine, text, src, rev, rdate, aut, text2, text3 )
 !----------------------------------------------------------------------
@@ -706,10 +739,10 @@ contains
 implicit none
 
 integer, intent(in) :: level
-character(len = *), intent(in) :: routine, text
-character(len = *), intent(in), optional :: src, rev, rdate, aut, text2, text3
+character(len=*), intent(in) :: routine, text
+character(len=*), intent(in), optional :: src, rev, rdate, aut, text2, text3
 
-character(len = 8) :: taskstr
+character(len=8) :: taskstr
 
 if ( .not. module_initialized ) call initialize_utilities
 
@@ -862,7 +895,9 @@ if( level >= TERMLEVEL ) call exit_all( 99 )
 
 end subroutine error_handler
 
+
 !#######################################################################
+
 
    function open_file (fname, form, action) result (iunit)
 
@@ -964,39 +999,41 @@ end subroutine error_handler
 
       if (rc /= 0) then
          write(msgstring,*)'Cannot open file "'//trim(fname)//'" for '//trim(act)
-         call error_handler(E_ERR, msgstring, source, revision, revdate)
+         call error_handler(E_ERR, 'open_file: ', msgstring, source, revision, revdate)
       endif
    endif
 
    end function open_file
 
+
 !#######################################################################
+
 
    subroutine print_version_number (iunit, routine, version)
 
 ! *** prints routine name and version number to a log file ***
 !
 !    in:  iunit    = unit number to direct output
-!         routine = routine name (character, max len = 20)
-!         version = version name or number (character, max len = 8)
+!         routine = routine name (character, max len=20)
+!         version = version name or number (character, max len=8)
 
    integer,          intent(in) :: iunit
    character(len=*), intent(in) :: routine, version
 
    integer           :: n
-   character(len=20) :: name
+   character(len=20) :: myname
    character(len=8)  :: vers
 
    if ( .not. module_initialized ) call initialize_utilities
    if ( .not. do_output_flag) return
 
-     n = min(len(routine),20); name = adjustl(routine(1:n))
-     n = min(len(version), 8); vers = adjustl(version(1:n))
+     n = min(len(routine),20); myname = adjustl(routine(1:n))
+     n = min(len(version), 8); vers   = adjustl(version(1:n))
 
      if (iunit > 0) then
-         write (iunit,10) name, vers
+         write (iunit,10) myname, vers
      else
-         write (*,10) name, vers
+         write (*,10) myname, vers
      endif
 
   10 format (/,60('-'),  &
@@ -1008,7 +1045,9 @@ end subroutine error_handler
 
    end subroutine print_version_number
 
+
 !#######################################################################
+
 
    subroutine write_time (unit, label, string1, string2, string3, tz, brief)
 
@@ -1090,7 +1129,9 @@ end subroutine error_handler
 
    end subroutine write_time
 
+
 !#######################################################################
+
 
    subroutine set_output (doflag)
 
@@ -1113,6 +1154,7 @@ end subroutine error_handler
 
 !#######################################################################
 
+
    function do_output ()
 
 ! *** return whether output should be written from this task ***
@@ -1126,7 +1168,9 @@ end subroutine error_handler
 
    end function do_output
 
+
 !#######################################################################
+
 
    subroutine set_nml_output (nmlstring)
 
@@ -1171,6 +1215,7 @@ end subroutine error_handler
 
 !#######################################################################
 
+
    function do_nml_file ()
 
 ! *** return whether nml should be written to nml file
@@ -1188,7 +1233,9 @@ end subroutine error_handler
 
    end function do_nml_file
 
+
 !#######################################################################
+
 
    function do_nml_term ()
 
@@ -1206,6 +1253,7 @@ end subroutine error_handler
    endif
 
    end function do_nml_term
+
 
 !#######################################################################
 
@@ -1232,8 +1280,9 @@ end subroutine error_handler
 subroutine close_file(iunit)
 !-----------------------------------------------------------------------
 !
-! Closes the given unit_number. If the file is already closed, 
-! nothing happens. Pretty dramatic, eh?
+! Closes the given unit_number if that unit is open.
+! Not an error to call on an already closed unit.
+! Will print a message if the status of the unit cannot be determined.
 !
 
 integer, intent(in) :: iunit
@@ -1245,17 +1294,16 @@ if ( .not. module_initialized ) call initialize_utilities
 
 inquire (unit=iunit, opened=open, iostat=ios)
 if ( ios /= 0 ) then
-   print *,'Dagnabbit. Cannot inquire about unit # ',iunit
-   print *,'Error status was ',ios
-   print *,'Hoping for the best and continuing.'
+   write(msgstring,*)'Unable to determine status of file unit ', iunit
+   call error_handler(E_MSG, 'close_file: ', msgstring, source, revision, revdate)
 endif
 
 if (open) close(iunit)
 
 end subroutine close_file
 
-!#######################################################################
 
+!#######################################################################
 
 
 subroutine find_namelist_in_file(namelist_file_name, nml_name, iunit, &
@@ -1265,18 +1313,18 @@ subroutine find_namelist_in_file(namelist_file_name, nml_name, iunit, &
 ! Opens namelist_file_name if it exists on unit iunit, error if it
 ! doesn't exist.
 ! Searches file for a line containing ONLY the string
-! &nml_name, for instance &filter_nml. If found, rewinds the file and
+! &nml_name, for instance &filter_nml. If found, backs up one record and
 ! returns true. Otherwise, error message and terminates
 !
 
-character(len = *), intent(in) :: namelist_file_name
-character(len = *), intent(in) :: nml_name
-integer, intent(out)           :: iunit
-logical, intent(in), optional :: write_to_logfile_in
+character(len=*),  intent(in)  :: namelist_file_name
+character(len=*),  intent(in)  :: nml_name
+integer,           intent(out) :: iunit
+logical, optional, intent(in)  :: write_to_logfile_in
 
-character(len = 169) :: nml_string, test_string, string1
-integer              :: io
-logical              :: write_to_logfile
+character(len=256) :: nml_string, test_string, string1
+integer            :: io
+logical            :: write_to_logfile
 
 
 ! Decide if there is a logfile or not
@@ -1321,7 +1369,7 @@ if(file_exist(trim(namelist_file_name))) then
          call to_upper(string1)
 
          if(trim(string1) == trim(test_string)) then
-            rewind(iunit)
+            backspace(iunit)
             return
          endif
 
@@ -1350,7 +1398,6 @@ end subroutine find_namelist_in_file
 !#######################################################################
 
 
-
 subroutine check_namelist_read(iunit, iostat_in, nml_name, &
    write_to_logfile_in)
 !-----------------------------------------------------------------------
@@ -1360,10 +1407,10 @@ subroutine check_namelist_read(iunit, iostat_in, nml_name, &
 !
 
 integer,            intent(in) :: iunit, iostat_in
-character(len = *), intent(in) :: nml_name
+character(len=*), intent(in) :: nml_name
 logical, intent(in), optional :: write_to_logfile_in
 
-character(len=159) :: nml_string
+character(len=256) :: nml_string
 integer            :: io
 logical            :: write_to_logfile
 
@@ -1376,7 +1423,7 @@ if(iostat_in == 0) then
    call close_file(iunit)
 else
    ! If it wasn't successful, print the line on which it failed  
-   BACKSPACE iunit
+   backspace(iunit)
    read(iunit, '(A)', iostat = io) nml_string
    ! A failure in this read means that the namelist started but never terminated
    ! Result was falling off the end, so backspace followed by read fails
@@ -1396,15 +1443,6 @@ else
       endif
    else
       ! Didn't fall off end so bad entry in the middle of namelist
-      ! TEMP HELP FOR USERS; remove after next release
-      if (len(nml_name) >= 10) then
-         if ((nml_name(1:10) == 'filter_nml') .and. (index(nml_string,'inf_start_from_restart') > 0)) then
-            write(msgstring, *) 'inf_start_from_restart obsolete'
-            call error_handler(E_MSG, 'filter_nml: ', msgstring)
-            write(msgstring, *) 'use inf_initial_from_restart and inf_sd_initial_from_restart'
-            call error_handler(E_MSG, 'filter_nml: ', msgstring)
-         endif 
-      endif 
       write(msgstring, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
       if(write_to_logfile) then
          call error_handler(E_ERR, 'check_namelist_read', msgstring, &
@@ -1423,14 +1461,16 @@ endif
 
 end subroutine check_namelist_read
 
+
 !#######################################################################
+
 
    subroutine nc_check(istatus, subr_name, context)
       integer, intent (in)                   :: istatus
       character(len=*), intent(in)           :: subr_name
       character(len=*), intent(in), optional :: context
   
-      character(len=129) :: error_msg
+      character(len=512) :: error_msg
   
       ! if no error, nothing to do here.  we are done.
       if( istatus == nf90_noerr) return
@@ -1455,6 +1495,7 @@ end subroutine check_namelist_read
 
 !#######################################################################
 
+
 subroutine to_upper( string )
 ! Converts 'string' to uppercase
 character(len=*), intent(INOUT) :: string
@@ -1471,7 +1512,9 @@ enddo
 
 end subroutine to_upper
 
+
 !#######################################################################
+
 
 subroutine find_textfile_dims( fname, nlines, linelen )
 ! Determines the number of lines and maximum line length
@@ -1483,7 +1526,7 @@ integer, optional, intent(OUT) :: linelen
 integer :: i, maxlen, mylen, ios, funit
 
 character(len=1024) :: oneline
-character(len=129)  :: error_msg
+character(len=512)  :: error_msg
 
 ! if there is no file, return -1 for both counts
 if (.not. file_exist(fname)) then
@@ -1520,7 +1563,9 @@ if (present(linelen)) linelen = maxlen
 
 end subroutine find_textfile_dims
 
+
 !#######################################################################
+
 
 subroutine file_to_text( fname, textblock )
 !
@@ -1573,7 +1618,9 @@ call close_file(funit)
 
 end subroutine file_to_text
 
+
 !#######################################################################
+
 
 function get_next_filename( listname, index )
 
@@ -1582,7 +1629,7 @@ function get_next_filename( listname, index )
 !
 character(len=*),  intent(in) :: listname
 integer,           intent(in) :: index
-character(len=128)            :: get_next_filename
+character(len=256)            :: get_next_filename
 
 integer :: i, ios, funit
 
@@ -1606,7 +1653,7 @@ enddo PARSELOOP
 ! check for length problems
 if (len_trim(string) > len(get_next_filename)) then
    call error_handler(E_ERR, 'get_next_filename', &
-                      'maximum filename length of 128 exceeded', &
+                      'maximum filename length of 256 exceeded', &
                       source, revision, revdate)   
 endif
 
@@ -1615,19 +1662,26 @@ call close_file(funit)
 
 end function get_next_filename
 
+
 !#######################################################################
 
-function is_longitude_between (lon, minlon, maxlon, doradians)
+
+function is_longitude_between (lon, minlon, maxlon, doradians, newlon)
 
 !  uniform way to treat longitude ranges, in degrees, on a globe.
 !  returns true if lon is between min and max, starting at min
 !  and going EAST until reaching max.  wraps across 0 longitude.
 !  if min == max, all points are inside.  includes edges.
 !  if optional arg doradians is true, do computation in radians 
-!  between 0 and 2*PI instead of 360.
+!  between 0 and 2*PI instead of 360.   if given, return the
+!  'lon' value possibly + 360 (or 2PI) which can be used for averaging
+!  or computing on a consistent set of longitude values.  after the
+!  computation is done if the answer is > 360 (or 2PI), subtract that
+!  value to get back into the 0 to 360 (or 2PI) range.
 
-real(r8), intent(in)           :: lon, minlon, maxlon
-logical,  intent(in), optional :: doradians
+real(r8), intent(in)            :: lon, minlon, maxlon
+logical,  intent(in),  optional :: doradians
+real(r8), intent(out), optional :: newlon
 logical :: is_longitude_between
 
 real(r8) :: minl, maxl, lon2, circumf
@@ -1637,15 +1691,34 @@ if (present(doradians)) then
   if (doradians) circumf = TWOPI
 endif
 
+! ensure the valid region boundaries are between 0 and one circumference
+! (must use modulo() and not mod() so negative vals are handled ok)
 minl = modulo(minlon, circumf)
 maxl = modulo(maxlon, circumf)
 
+! boundary points are included in the valid region so if min=max 
+! the 'region' is the entire globe and you can return early.
 if (minl == maxl) then
-   is_longitude_between = .true.  ! entire globe
+   is_longitude_between = .true. 
+   if (present(newlon)) newlon = lon
    return
 endif
 
+! ensure the test point is between 0 and one circumference
 lon2  = modulo(lon, circumf)
+
+! here's where the magic happens:
+! minl will be bigger than maxl if the region of interest crosses the prime 
+! meridian (longitude = 0).  in this case add one circumference to the 
+! eastern boundary so maxl is guarenteed to be larger than minl (and valid 
+! values are now between 0 and 2 circumferences).  
+!
+! if the test point longitude is west of the minl boundary add one circumference
+! to it as well before testing against the bounds.  values that were east of 
+! longitude 0 but west of maxl will now be shifted so they are again correctly 
+! within the new range; values that were west of the prime meridian but east 
+! of minl will stay in range; values west of minl and east of maxl will be 
+! correctly shifted out of range.
 
 if (minl > maxl) then
    maxl = maxl + circumf
@@ -1654,11 +1727,24 @@ endif
 
 is_longitude_between = ((lon2 >= minl) .and. (lon2 <= maxl))
 
+! if requested, return the value that was tested against the bounds, which 
+! will always be between 0 and 2 circumferences and monotonically increasing
+! from minl to maxl.  if the region of interest doesn't cross longitude 0
+! this value will be the same as the input value.  if the region does
+! cross longitude 0 this value will be between 0 and 2 circumferences.
+! it's appropriate for averaging values together or comparing them against
+! other values returned from this routine with a simple greater than or less
+! than without further computation for longitude 0.  to convert the values
+! back into the range from 0 to one circumference, compare it to the
+! circumference and if larger, subtract one circumference from the value.
+
+if (present(newlon)) newlon = lon2
 
 end function is_longitude_between 
 
 
 !#######################################################################
+
 
 function next_file(fname,ifile)
 !----------------------------------------------------------------------
@@ -1683,11 +1769,11 @@ character(len=len(fname)) :: dir_name
 
 integer,            SAVE :: filenum = 0
 integer,            SAVE :: dir_prec = 0
-character(len=129), SAVE :: dir_base
-character(len=129), SAVE :: filename
+character(len=256), SAVE :: dir_base
+character(len=256), SAVE :: filename
 character(len=129), SAVE :: dir_ext
 
-integer :: slashindex, splitindex, i, strlen
+integer :: slashindex, splitindex, i, strlen, ios
 
 if (len(fname) > len(dir_base) ) then
    write(msgstring,*)'input filename not guaranteed to fit in local variables'
@@ -1743,8 +1829,13 @@ if (ifile == 1) then ! First time through ... find things.
          dir_base   = dir_name(1:splitindex-1)
          dir_ext    = dir_name(splitindex+1:slashindex-1)
          dir_prec   = slashindex - splitindex - 1
-
-         read(dir_ext,*) filenum
+    
+         read(dir_ext,*,iostat=ios) filenum
+         if(ios /= 0) then
+            ! Directory has an '_' separating two alphabetic parts
+            ! Nothing to increment.
+            filenum = -1
+         endif
       endif
 
    else ! we have one single file - on the first trip through
@@ -1778,6 +1869,7 @@ endif
 
 end function next_file
 
+
 !#######################################################################
 
 
@@ -1788,8 +1880,6 @@ function ascii_file_format(fform)
 
 character(len=*), intent(in), optional :: fform
 logical                                :: ascii_file_format
-
-character(len=129) :: lj_fform ! Left Justified version of optional argument 
 
 ! Returns .true. for formatted/ascii file, .false. is unformatted/binary
 ! Defaults (if fform not specified) to formatted/ascii.
@@ -1802,17 +1892,7 @@ if ( .not. present(fform)) then
    return
 endif
 
-! Check to make sure we don't put 10lbs of stuff in a 5lb bag
-
-if (len(fform) > len(lj_fform)) then
-   write(msgstring,*)'fform is long: increase len of lj_fform to ',&
-                     len(fform),' and recompile.'
-   call error_handler(E_ERR,'ascii_file_format', msgstring, source, revision, revdate)
-endif
-
-lj_fform = adjustl(fform)
-
-SELECT CASE (trim(lj_fform))
+SELECT CASE (fform)
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       ascii_file_format = .false.
    CASE DEFAULT
@@ -1828,3 +1908,8 @@ end function ascii_file_format
 
 end module utilities_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

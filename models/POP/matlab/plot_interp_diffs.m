@@ -20,15 +20,11 @@ function plot_interp_diffs(ugrid_file, tgrid_file)
 %    plot_interp_diffs(ugrid_file, tgrid_file)
 %
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 u_org = read_file(ugrid_file);
 t_org = read_file(tgrid_file);
@@ -72,4 +68,9 @@ chunk.nx     = sum(abs(diff(chunk.lats)) > 20) + 1;  % looking for big jumps
 chunk.ny     = length(chunk.lons) / chunk.nx;
 chunk.datmat = reshape(chunk.vals, chunk.ny, chunk.nx);
 chunk.string = sprintf('min/max is %f %f',min(chunk.vals), max(chunk.vals));
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
 

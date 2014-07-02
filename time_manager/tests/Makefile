@@ -1,12 +1,8 @@
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# <next few lines under version control, do not edit>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
+# DART $Id$
 
 # get the flag settings from the mkmf template directly
 
@@ -26,20 +22,25 @@ clean:
 	rm -fr $(OBJS) $(MODS) $(EXES) timetest.o $(LOGS)
 
 timetest: $(OBJS) timetest.o
-	ifort -o timetest timetest.o $(OBJS) $(LDFLAGS)
+	$(FC) -o timetest timetest.o $(OBJS) $(LDFLAGS)
 
 types_mod.o: ../../common/types_mod.f90
-	ifort -c ../../common/types_mod.f90 $(FFLAGS)
+	$(FC) -c ../../common/types_mod.f90 $(FFLAGS)
 
 null_mpi_utilities_mod.o: ../../mpi_utilities/null_mpi_utilities_mod.f90 types_mod.o
-	ifort -c ../../mpi_utilities/null_mpi_utilities_mod.f90 $(FFLAGS)
+	$(FC) -c ../../mpi_utilities/null_mpi_utilities_mod.f90 $(FFLAGS)
 
 utilities_mod.o: ../../utilities/utilities_mod.f90 types_mod.o
-	ifort -c ../../utilities/utilities_mod.f90 $(FFLAGS)
+	$(FC) -c ../../utilities/utilities_mod.f90 $(FFLAGS)
 
 time_manager_mod.o: ../time_manager_mod.f90 utilities_mod.o types_mod.o
-	ifort -c ../time_manager_mod.f90 $(FFLAGS)
+	$(FC) -c ../time_manager_mod.f90 $(FFLAGS)
 
 timetest.o: timetest.f90 time_manager_mod.o
-	ifort -c timetest.f90 $(FFLAGS)
+	$(FC) -c timetest.f90 $(FFLAGS)
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

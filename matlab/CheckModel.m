@@ -7,15 +7,11 @@ function vars = CheckModel(fname)
 % fname = 'Prior_Diag.nc';
 % vars = CheckModel(fname)
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
@@ -84,7 +80,7 @@ switch lower(model)
 
       vars.fname = fname;
 
-   case 'forced_lorenz_96'
+   case {'forced_lorenz_96'}
 
       % This model has the state variables replicated, so there is a difference
       % between num_state_vars and the length of the state variable.
@@ -124,7 +120,7 @@ switch lower(model)
 
       vars.fname = fname;
 
-   case 'lorenz_96_2scale'
+   case {'lorenz_96_2scale'}
 
       num_X  = dim_length(fname,'Xdim'); % # of X variables
       Xdim   =  nc_varget(fname,'Xdim');
@@ -154,7 +150,7 @@ switch lower(model)
 
       vars.fname = fname;
 
-   case 'simple_advection'
+   case {'simple_advection'}
 
       num_locs = dim_length(fname,'loc1d'); % # of X variables
       loc1d    =  nc_varget(fname,'loc1d');
@@ -185,7 +181,7 @@ switch lower(model)
       vars.vars  = varnames;
       vars.fname = fname;
 
-   case 'wrf'
+   case {'wrf'}
 
       % requires a 'domain' and 'bottom_top_d01' dimension.
       % without both of these, it will fail in an ugly fashion.
@@ -221,13 +217,15 @@ switch lower(model)
               'num_state_vars',num_vars, ...
               'num_ens_members',num_copies, ...
               'time_series_length',num_times, ...
-              'min_ens_mem',min(copy), ...
-              'max_ens_mem',max(copy) );
+              'num_ens_members',ens_size, ...
+              'ensemble_indices',ens_indices, ...
+              'min_ens_mem',ens_indices(1), ...
+              'max_ens_mem',ens_indices(ens_size) );
 
       vars.vars  = varnames;
       vars.fname = fname;
 
-   case {'cam','tiegcm','fms_bgrid','pe2lyr','mitgcm_ocean','pbl_1d','mpas_atm'}
+   case {'cam','tiegcm','fms_bgrid','pe2lyr','mitgcm_ocean','pbl_1d','mpas_atm','sqg'}
 
       varnames = get_DARTvars(fname);
       num_vars = length(varnames);
@@ -239,6 +237,8 @@ switch lower(model)
               'num_copies',num_copies, ...
               'num_ens_members',ens_size, ...
               'ensemble_indices',ens_indices, ...
+              'min_ens_mem',ens_indices(1), ...
+              'max_ens_mem',ens_indices(ens_size), ...
               'time',dates, ...
               'time_series_length',num_times);
 
@@ -269,3 +269,10 @@ end
 if isempty(x)
    error('%s has no dimension named %s',fname,dimname)
 end
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
+

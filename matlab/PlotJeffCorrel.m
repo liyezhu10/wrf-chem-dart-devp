@@ -10,31 +10,27 @@ function PlotJeffCorrel( pinfo )
 %
 % pinfo is a model-dependent structure.
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
 switch lower(pinfo.model)
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam','sqg'}
 
       clf;
 
       base_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname', pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
-                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'latindex',pinfo.base_latind, 'lonindex',pinfo.base_lonind );
       comp_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname', pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
-                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'latindex',pinfo.comp_latind, 'lonindex',pinfo.comp_lonind );
 
       correl = jeff_correl(base_mem, comp_mem);
@@ -63,11 +59,11 @@ switch lower(pinfo.model)
 
       base_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname', pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
-                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'cellindex',pinfo.base_cellindex);
       comp_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname', pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
-                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'cellindex',pinfo.comp_cellindex);
 
       correl = jeff_correl(base_mem, comp_mem);
@@ -112,11 +108,11 @@ switch lower(pinfo.model)
       % Get 'standard' ensemble series
       base_var  = get_hyperslab('fname',pinfo.fname, ...
                       'varname',pinfo.base_var, 'stateindex',pinfo.base_var_index, ...
-                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+                      'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
 
       state_var = get_hyperslab('fname',pinfo.fname, ...
                       'varname',pinfo.state_var, 'stateindex',pinfo.state_var_index, ...
-                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+                      'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
 
       % perform correlation
       correl = jeff_correl(base_var, state_var);
@@ -175,3 +171,10 @@ else
    xlabelstring = sprintf('%s start',monstr);
 end
 xlabel(xlabelstring)
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
+

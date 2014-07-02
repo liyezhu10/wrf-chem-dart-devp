@@ -1,35 +1,31 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module obs_model_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
-use types_mod,            only : r8
 use utilities_mod,        only : register_module, error_handler,     &
                                  E_ERR, E_MSG, E_WARN,               &
-                                 get_unit, file_exist, do_output, set_output
+                                 get_unit, file_exist, set_output
 use assim_model_mod,      only : aget_closest_state_time_to, get_model_time_step, &
                                  open_restart_write, open_restart_read,           &
                                  awrite_state_restart, close_restart, adv_1step,  &
                                  aread_state_restart
-use obs_sequence_mod,     only : obs_sequence_type, obs_type, get_obs_from_key,      &
+use obs_sequence_mod,     only : obs_sequence_type, obs_type,  &
                                  get_obs_def, init_obs, destroy_obs, get_num_copies, &
                                  get_num_qc, get_first_obs, get_next_obs_from_key,   &
                                  get_obs_time_range
 use obs_def_mod,          only : obs_def_type, get_obs_def_time
-use time_manager_mod,     only : time_type, set_time, get_time, print_time,   &
-                                 operator(/=), operator(>), operator(-),      &
+use time_manager_mod,     only : time_type, set_time, get_time,                       &
+                                 operator(/=), operator(>), operator(-),              &
                                  operator(/), operator(+), operator(<), operator(==), &
                                  operator(<=), operator(>=)
-use ensemble_manager_mod, only : get_ensemble_time, ensemble_type
-use mpi_utilities_mod,    only : my_task_id, task_sync, task_count, block_task, &
-                                 sum_across_tasks, shell_execute
+use ensemble_manager_mod, only : get_ensemble_time, ensemble_type, map_task_to_pe, &
+                                 prepare_to_update_vars
+use mpi_utilities_mod,    only : my_task_id, task_sync, block_task, &
+                                 sum_across_tasks, shell_execute, my_task_id
 
 implicit none
 private
@@ -37,10 +33,10 @@ private
 public :: move_ahead, advance_state, set_obs_model_trace, have_members
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized  = .false.
 integer :: print_timestamps    = 0
@@ -132,6 +128,15 @@ if (.not. have_members(ens_handle, ens_size)) return
 ! it is possible we are at the end of the observations and there in fact
 ! is no need to advance.  if so, can return.
 
+! ens_handle%my_pe 0 does the output.
+! Don't want two pes outputing if task 0 also has a copy
+! FIMXE Commment 
+if ( map_task_to_pe(ens_handle, 0) >= ens_handle%num_copies .and. &
+   ens_handle%my_pe == 0 .and. my_task_id() /= 0) then
+  call set_output(.true.)
+endif
+
+
 ! Initialize a temporary observation type to use
 ! after here, must delete observation before returning.
 call init_obs(observation, get_num_copies(seq), get_num_qc(seq))
@@ -149,6 +154,11 @@ endif
 if (leaving_early) then
    ! need to destroy obs here before returning
    call destroy_obs(observation)
+
+   if (ens_handle%my_pe == 0 .and. my_task_id() /= 0) then
+    call set_output(.false.)
+   endif
+
    return
 endif
 
@@ -275,6 +285,9 @@ next_ens_time = time2
 ! Release the storage associated with the observation temp variable
 call destroy_obs(observation)
 
+if (ens_handle%my_pe == 0 .and. my_task_id() /= 0) then
+  call set_output(.false.)
+endif
 
 end subroutine move_ahead
 
@@ -345,6 +358,8 @@ ENSEMBLE_MEMBERS: do i = 1, ens_handle%my_num_copies
 
    ! Ok, this task does need to advance something. 
    need_advance = 1
+
+   call prepare_to_update_vars(ens_handle)
 
    ! Increment number of ensemble member copies I have.
    my_num_state_copies = my_num_state_copies + 1
@@ -670,3 +685,9 @@ end function have_members
 !--------------------------------------------------------------------
 
 end module obs_model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

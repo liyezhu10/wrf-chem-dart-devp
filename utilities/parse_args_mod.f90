@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module parse_args_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 use utilities_mod, only : error_handler, E_ERR
 
@@ -17,7 +13,7 @@ use utilities_mod, only : error_handler, E_ERR
 ! a line of input read from a terminal/stdin, as opposed to using the
 ! (non-standard) fortran argc command line arg parsing.
 !
-! the intended use would be: 
+! an intended use could be: 
 !   % echo "a b c" | program
 ! or
 !   % cat file
@@ -28,16 +24,24 @@ use utilities_mod, only : error_handler, E_ERR
 !   a b c
 !   EOF
 !
+! OR:
+!
+!   read(unitnum, "(A256)") line
+!   call get_args_from_string(line, wordcount, words)
+!
+! the limit on the number of words and the length of each string
+! is determined by the 'words' character array that is passed in.
+! it should have already been allocated by the caller.
 !---------------------------------------------------------------------
 
 implicit none
 private
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 public :: get_args_from_string
 
@@ -137,3 +141,8 @@ end subroutine
 
 end module parse_args_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

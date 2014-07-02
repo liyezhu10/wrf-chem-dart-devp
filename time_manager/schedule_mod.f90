@@ -1,27 +1,20 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module schedule_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
 use        types_mod, only : missing_i, digits12
 
-use    utilities_mod, only : error_handler, E_DBG, E_MSG, E_WARN, E_ERR, &
+use    utilities_mod, only : error_handler, E_ERR, &
                              register_module, nmlfileunit, do_output,    &
                              check_namelist_read, find_namelist_in_file, &
                              do_nml_file, do_nml_term
 
 use time_manager_mod, only : time_type, set_calendar_type, get_calendar_type, &
-                             set_time, set_date, get_time, get_date,          &
-                             print_time, print_date,                          &
-                             THIRTY_DAY_MONTHS, JULIAN, GREGORIAN,            &
-                             NOLEAP, NO_CALENDAR, GREGORIAN_MARS, SOLAR_MARS, & 
+                             set_time, set_date, get_time, print_time, print_date, &
                              operator(*), operator(+), operator(-),           &
                              operator(>), operator(<), operator(/),           &
                              operator(/=), operator(<=)
@@ -37,10 +30,10 @@ private
 !=======================================================================
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 type schedule_type
    private
@@ -311,3 +304,9 @@ function get_schedule_length(schedule)
 end function
 
 end module schedule_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -38,15 +38,11 @@ function varargout = oned_model(varargin)
 % See also: gaussian_product, oned_ensemble, twod_ensemble, run_lorenz_63, 
 %           run_lorenz_96
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 % Last Modified by GUIDE v2.5 27-Aug-2009 08:54:05
 
@@ -156,18 +152,18 @@ xlabel('Timestep', 'FontSize', 14);
 ylabel('Kurtosis', 'FontSize', 14);
 
 % Compute initial kurtosis
-handles.kurtosis = kurtosis(handles.ens);
+handles.kurtosis = kurt(handles.ens);
 
 % Fourth and fifth subplot are for rank histogram
 handles.r4 = subplot(4, 2, 7);
 ylabel('Frequency');
 xlabel('Rank');
-title 'Prior Rank Histogram'
+title 'Prior Rank Histogram';
 
 handles.r5 = subplot(4, 2, 8);
 ylabel('Frequency');
 xlabel('Rank');
-title 'Posterior Rank Histogram'
+title 'Posterior Rank Histogram';
 
 % Update handles structure
 guidata(hObject, handles);
@@ -415,7 +411,7 @@ end
 % Update moments
 handles.error = abs(mean(handles.ens));
 handles.spread = mean(abs(handles.ens - mean(handles.ens)));
-handles.kurtosis = kurtosis(handles.ens);
+handles.kurtosis = kurt(handles.ens);
 
 % Update handles structure
 guidata(hObject, handles);
@@ -452,14 +448,14 @@ subplot(handles.r4);
 bar(handles.prior_rank(1:ens_size + 1));
 ylabel('Frequency');
 xlabel('Rank');
-title 'Prior Rank Histogram'
+title 'Prior Rank Histogram';
 axis tight;
 
 subplot(handles.r5);
 bar(handles.posterior_rank(1:ens_size + 1));
 ylabel('Frequency');
 xlabel('Rank');
-title 'Posterior Rank Histogram'
+title 'Posterior Rank Histogram';
 axis tight;
 
 % Update handles structure
@@ -533,7 +529,7 @@ xlabel('Timestep', 'FontSize', 14);
 ylabel('Kurtosis', 'FontSize', 14);
 
 % Compute initial kurtosis
-handles.kurtosis = kurtosis(handles.ens);
+handles.kurtosis = kurt(handles.ens);
 
 % Reset focus to the menu gui window
 [gcbo_h, gcbo_fig] = gcbo;
@@ -642,7 +638,7 @@ if(handles.ready_to_advance)
 
    % Plot the segement for the prior kurtosis
    subplot(handles.r3);
-   prior_kurtosis= kurtosis(ens_new);
+   prior_kurtosis= kurt(ens_new);
    plot([handles.time_step - 1 + 0.1, handles.time_step - 0.1], ...
       [handles.kurtosis, prior_kurtosis], 'r');
    handles.kurtosis= prior_kurtosis; 
@@ -656,9 +652,9 @@ if(handles.ready_to_advance)
    % Update the rank data
    subplot(handles.r4);
    ens_rank = get_ens_rank(ens_new, 0);
-   fprintf([sprintf('\ntimestep %d bin edges are ',handles.time_step), ...
-            num2str(sort([-Inf ens_new Inf]),'%10.4f'),'\n'])
-   fprintf('timestep %d bin/"rank" is %d\n',handles.time_step, ens_rank)
+   %fprintf([sprintf('\ntimestep %d bin edges are ',handles.time_step), ...
+   %         num2str(sort([-Inf ens_new Inf]),'%10.4f'),'\n'])
+   %fprintf('timestep %d bin/"rank" is %d\n',handles.time_step, ens_rank)
 
    % Plot the latest rank entry as a different color
    temp_rank(:, 1) = handles.prior_rank(1:handles.ens_size + 1);
@@ -815,7 +811,7 @@ else
 
    ylabel('Frequency');
    xlabel('Rank');
-   title 'Posterior Rank Histogram'
+   title 'Posterior Rank Histogram';
    axis tight;
 
    % Update the permanent storage of the rank values
@@ -843,7 +839,7 @@ else
    handles.spread= post_spread;
 
    % Plot the segment for the updated kurtosis
-   post_kurtosis= kurtosis(new_ens);
+   post_kurtosis= kurt(new_ens);
    subplot(handles.r3);
    plot([handles.time_step - 0.1, handles.time_step + 0.1], ...
       [handles.kurtosis, post_kurtosis], 'r');
@@ -1020,4 +1016,9 @@ set(handles.edit7,            'Enable', 'On');
 set(handles.popupmenu1,       'Enable', 'On');
 
 
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
 

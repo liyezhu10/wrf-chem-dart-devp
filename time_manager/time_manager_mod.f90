@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module time_manager_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 use     types_mod, only : missing_i, digits12, i8
 use utilities_mod, only : error_handler, E_DBG, E_MSG, E_WARN, E_ERR, &
@@ -92,10 +88,10 @@ public :: time_manager_init, print_time, print_date
 public :: write_time, read_time, interactive_time
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! Global data to define calendar type
 integer, parameter :: THIRTY_DAY_MONTHS = 1,      JULIAN = 2, &
@@ -173,9 +169,12 @@ write(errstring,*)'seconds, days are ',seconds, days_in,' cannot be negative'
 if(seconds < 0 .or. days_in < 0) &
    call error_handler(E_ERR,'set_time',errstring,source,revision,revdate)
 
-! Make sure seconds greater than a day are fixed up
+! Make sure seconds greater than a day are fixed up.
+! Extra parens to force the divide before the multiply are REQUIRED 
+! on some compilers to prevent them from combining constants first 
+! which makes the expression always return 0.
 
-set_time%seconds = seconds - seconds / (60*60*24) * (60*60*24)
+set_time%seconds = seconds - (seconds / (60*60*24)) * (60*60*24)
 
 ! Check for overflow on days before doing operation
 
@@ -1121,7 +1120,7 @@ type(time_type), intent(in)  :: time
 integer,         intent(out) :: second, minute, hour, day, month, year
 
 integer :: t
-integer :: num_days, iyear, days_this_year
+integer :: num_days
 
 ! "base_year" for Mars will be defined as 1 (earliest wrfout file has year = 1)
 integer, parameter :: base_year= 1
@@ -3152,7 +3151,7 @@ if ( .not. module_initialized ) call time_manager_init
 
 call get_time(timestamp, seconds, days)
 
-generate_seed = iand((secs_day * days) + seconds, z'FFFFFFFF')
+generate_seed = iand((secs_day * days) + seconds, z'00000000FFFFFFFF')
 
 end function generate_seed
 
@@ -3233,3 +3232,8 @@ end subroutine time_index_sort
 
 end module time_manager_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

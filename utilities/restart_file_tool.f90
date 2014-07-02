@@ -1,28 +1,21 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program restart_file_tool
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
 ! Program to overwrite the time on each ensemble in a restart file.
 
-use types_mod,           only : r8
-use time_manager_mod,    only : time_type, operator(<), operator(==),      &
-                                set_time_missing, set_time,                &
-                                operator(/=), print_time, print_date,      &
-                                set_calendar_type, GREGORIAN, NO_CALENDAR, &
-                                get_calendar_type
+use time_manager_mod,    only : time_type, operator(<), operator(==), &
+                                set_time_missing, set_time,           &
+                                operator(/=), print_time, print_date, &
+                                set_calendar_type, GREGORIAN
 
-use utilities_mod,       only : register_module, do_output,                &
-                                error_handler, nmlfileunit, E_MSG, E_ERR,  &
-                                timestamp, find_namelist_in_file,          &
-                                check_namelist_read, logfileunit,          &
+use utilities_mod,       only : register_module, error_handler, nmlfileunit, &
+                                E_MSG, E_ERR, find_namelist_in_file,         &
+                                check_namelist_read, logfileunit,            &
                                 do_nml_file, do_nml_term
                                 
 use assim_model_mod,     only : static_init_assim_model, get_model_size,   &
@@ -30,20 +23,20 @@ use assim_model_mod,     only : static_init_assim_model, get_model_size,   &
                                 awrite_state_restart, aread_state_restart, &
                                 close_restart
 
-use ensemble_manager_mod, only : init_ensemble_manager, ensemble_type,     &
-                                 put_copy, get_copy
+use ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, &
+                                 prepare_to_write_to_vars
 
-use mpi_utilities_mod,    only : initialize_mpi_utilities, task_count,     &
+use mpi_utilities_mod,    only : initialize_mpi_utilities, task_count, &
                                  finalize_mpi_utilities
 
 
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 integer                 :: iunit, model_size, io, member
 type(ensemble_type)     :: ens_handle
@@ -188,6 +181,7 @@ if (one_by_one) then
 
    ! Initialize the ens manager with enough room for a single ensemble member.
    call init_ensemble_manager(ens_handle, num_copies=1, num_vars=model_size)
+   call prepare_to_write_to_vars(ens_handle)
 
    do member=1, ens_size
  
@@ -241,6 +235,7 @@ else
    ! Initialize the ens manager with enough room for all ensemble members.
    ! Either read, write, or both will need this.
    call init_ensemble_manager(ens_handle, num_copies=ens_size, num_vars=model_size)
+   call prepare_to_write_to_vars(ens_handle)
 
    ! make the defaults be a single filename, and overwrite them below if
    ! there are individual files.
@@ -403,3 +398,9 @@ endif
 end subroutine print_temporal
 
 end program restart_file_tool
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

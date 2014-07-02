@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 #
 # Shell script to run the WRF model from DART input.
 # where the model advance is executed as a separate process.
@@ -267,7 +267,7 @@ while($state_copy <= $num_states)
          set keylist = ( $keylist $key )
       end
 
-      set keys = `echo $keylist | sort`
+      set keys = `echo $keylist | fmt -1 | sort -n`
 
    else  #  idealized WRF with non-specified BCs
 

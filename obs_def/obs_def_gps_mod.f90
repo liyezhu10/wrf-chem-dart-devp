@@ -1,6 +1,8 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 ! Note:  This version has a namelist item for the max number of
 ! gps observations that can be read in, but it is currently commented out.
@@ -50,29 +52,18 @@
 ! BEGIN DART PREPROCESS MODULE CODE
 module obs_def_gps_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
 use        types_mod, only : r8, missing_r8, RAD2DEG, DEG2RAD, PI
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
-                             file_exist, open_file, close_file, nmlfileunit, &
-                             check_namelist_read, find_namelist_in_file, &
-                             do_output, do_nml_file, do_nml_term, &
+use    utilities_mod, only : register_module, error_handler, E_ERR, &
+                             nmlfileunit, check_namelist_read,      &
+                             find_namelist_in_file, do_nml_file, do_nml_term, &
                              ascii_file_format
 use     location_mod, only : location_type, set_location, get_location, &
-                             write_location, read_location, vert_is_height, &
+                             vert_is_height, &
                              VERTISHEIGHT
-use time_manager_mod, only : time_type, read_time, write_time, &
-                             set_time, set_time_missing, interactive_time
 use  assim_model_mod, only : interpolate
 
-use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, &
-                             KIND_V_WIND_COMPONENT, KIND_SURFACE_PRESSURE, &
-                             KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY, &
-                             KIND_PRESSURE, KIND_GPSRO
+use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY, &
+                             KIND_PRESSURE
 
 implicit none
 private
@@ -81,10 +72,10 @@ public :: set_gpsro_ref, get_gpsro_ref, write_gpsro_ref, read_gpsro_ref, &
           get_expected_gpsro_ref, interactive_gpsro_ref
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 
@@ -686,3 +677,9 @@ end  subroutine carte2geo
 end module obs_def_gps_mod
 
 ! END DART PREPROCESS MODULE CODE
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

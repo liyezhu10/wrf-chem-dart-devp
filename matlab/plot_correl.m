@@ -8,15 +8,11 @@
 %              of information ... the model types are determined and
 %              additional user input may be queried.
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (exist('diagn_file','var') ~=1)
    disp('Input name of prior or posterior diagnostics file;')
@@ -95,37 +91,41 @@ switch lower(pinfo.model)
       fprintf('Correlating variable %s index %d at time %d.\n', ...
            pinfo.base_var,pinfo.base_var_index, pinfo.base_time)
 
-   case 'fms_bgrid'
+   case {'fms_bgrid'}
 
       pinfo = GetBgridInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'cam'
+   case {'cam'}
 
       pinfo = GetCamInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'clm'
+   case {'clm'}
 
       pinfo = GetClmInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'wrf'
+   case {'wrf'}
 
       pinfo = GetWRFInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'pe2lyr'
+   case {'pe2lyr'}
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'mitgcm_ocean'
+   case {'mitgcm_ocean'}
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'tiegcm'
+   case {'tiegcm'}
 
       pinfo = GetTIEGCMInfo(pinfo, diagn_file, 'PlotCorrel');
 
-   case 'mpas_atm'
+   case {'mpas_atm'}
 
       pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotCorrel');
+
+   case {'sqg'}
+
+      pinfo = GetSqgInfo(pinfo, diagn_file, 'PlotCorrel');
 
    otherwise
 
@@ -137,3 +137,10 @@ pinfo
 
 PlotCorrel( pinfo );
 clear inputstring inds str1 vrbl vrbl_inds diminfo
+
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$
+
