@@ -3,15 +3,11 @@ function slab = get_hyperslab(varargin)
 % Retrieves a particular copy of a state vector from a file whose
 % full or relative path is specified in the file argument.
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/matlab/get_hyperslab.m $
-% $Id: get_hyperslab.m 5616 2012-03-22 22:42:39Z thoar $
-% $Revision: 5616 $
-% $Date: 2012-03-22 16:42:39 -0600 (Thu, 22 Mar 2012) $
+% DART $Id: get_hyperslab.m 6265 2013-06-13 19:38:46Z thoar $
 
 for i = 1:2:nargin,
    eval(sprintf('pinfo.%s = varargin{i+1};',varargin{i}))
@@ -26,4 +22,10 @@ if (sum(isfinite(slab(:))) == 0)
    pinfo
    error('%s %s has all missing values ... exiting.', pinfo.fname, pinfo.varname)
 end
+
+
+% <next few lines under version control, do not edit>
+% $URL: https://subversion.ucar.edu/DAReS/DART/trunk/matlab/get_hyperslab.m $
+% $Revision: 6265 $
+% $Date: 2013-06-13 13:38:46 -0600 (Thu, 13 Jun 2013) $
 

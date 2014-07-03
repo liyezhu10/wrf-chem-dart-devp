@@ -1,6 +1,11 @@
 #!/bin/csh -f
 #
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
 #
+# DART $Id$
+ 
 #===========================================================================
 # Convert a bunch of Ameriflux tower files
 #===========================================================================
@@ -45,7 +50,7 @@ foreach YEAR ( 2004 2005 2006 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USBar${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USBar.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USBar.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -5,
    latitude        =  44.0646397,
@@ -65,7 +70,7 @@ end
 
 
 #===========================================================================
-# Barrow Arctic Science Sonsortium [Alaska]
+# Barrow Arctic Science Consortium [Alaska]
 # lon/lat = -156.62588,71.322525
 # station height = 1 m
 # instrument height =  1.9 m
@@ -78,7 +83,7 @@ foreach YEAR ( 1999      2001 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USBrw${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USBrw.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USBrw.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -9,
    latitude        =  71.322525,
@@ -110,7 +115,7 @@ foreach YEAR (           1992 1993 1994 1995 1996 1997 1998 1999 \
 
 &level4_to_obs_nml
    text_input_file = '../data/USHa1${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USHa1.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USHa1.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -5,
    latitude        =  42.5377556,
@@ -142,7 +147,7 @@ foreach YEAR (                                         1998 1999 \
 
 &level4_to_obs_nml
    text_input_file = '../data/USNR1${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USNR1.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USNR1.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -7,
    latitude        =  40.0328778,
@@ -173,7 +178,7 @@ foreach YEAR ( 1999 2000 2001 2002 2003 2004 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USSP3${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USSP3.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USSP3.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -5,
    latitude        =  29.7547667,
@@ -204,7 +209,7 @@ foreach YEAR ( 2004 2005 2006 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USSRM${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USSRM.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USSRM.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -7,
    latitude        =  31.82143,
@@ -235,7 +240,7 @@ foreach YEAR ( 1999 2000 2001 2002 2003 2004 2005 2006 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USWCr${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USWcr.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USWcr.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -6,
    latitude        =  45.80592667,
@@ -266,7 +271,7 @@ foreach YEAR ( 1998 1999 2000 2001 2002      2004 2005 2006 )
 
 &level4_to_obs_nml
    text_input_file = '../data/USWrc${YEAR}_L4_h.txt',
-   obs_out_file    = '/glade/proj3/image/Observations/FluxTower/obs_seq.USWrc.${YEAR}',
+   obs_out_file    = '/glade/p/image/Observations/FluxTower/obs_seq.USWrc.${YEAR}',
    year            = ${YEAR},
    timezoneoffset  = -8,
    latitude        =  45.82048889,
@@ -282,4 +287,11 @@ EOF
    ./level4_to_obs || exit 8
 
 end
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

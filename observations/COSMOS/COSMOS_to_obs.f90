@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program COSMOS_to_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -66,14 +62,11 @@ use netcdf
 
 implicit none
 
-!-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-!-----------------------------------------------------------------------
-
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -351,12 +344,13 @@ subroutine decode_header(iunit)
 ! Reads the first line of the header and parses the information.
 ! I should break the line into words and match which word with each
 ! desired string. But not today ...
-! FIXME ... decode the header ... do not assume ...
+! FIXME ... decode the header ... do not assume ... 
+!    Ameriflux/level_4_to_obs.f90 is a good place to start. 
+!    Must count whitespace gaps instead of commas for word delineation.
 !
 !YYYY-MM-DD HH:MM  MOD PROBE PRESS  SCALE SANPE INTEN OTHER CORR ERR
 !2010-06-02 19:12 2555 1.000 0.990 02.066 2.486 1.030 1.000 2954 058
 !2010-06-02 20:13 2593 1.000 0.987 02.066 2.486 1.030 1.000 2989 058
-!
 
 integer, intent(in) :: iunit
 
@@ -609,3 +603,9 @@ end function find_site_index
 
 
 end program COSMOS_to_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

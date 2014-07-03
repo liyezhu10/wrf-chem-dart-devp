@@ -1,16 +1,10 @@
-!============================================================
-! <next few lines under version control, D O  N O T  E D I T>
-! $Date$
-! $Author$
-! $Revision$
-! $Id$
-!============================================================
+! This code is not protected by the DART copyright agreement.
+! DART $Id$
 
 !============================================================
 ! a module to be used with spectral surface-based models.
 !============================================================
 
-!============================================================
 MODULE spectral_mod
 
     implicit none
@@ -77,4 +71,11 @@ MODULE spectral_mod
     type(derivative_operators) :: d_oper
 
 END MODULE spectral_mod
+
 !============================================================
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -40,7 +40,7 @@ data bin_end/ 9.000_r8, 15.000_r8, 21.000_r8, 27.000_r8, 27.000_r8/
 ! Declare namelist parameters
 ! ----------------------------------------------------------------------
         
-integer :: year = 2003, month =1, day =1, hour =0
+integer :: year = 2003, month =1, day =1, tot_days = 31
 integer :: max_num = 800000, select_obs = 0
 character(len = 129) :: ObsBase = 'temp_obs.'
 logical :: ADPUPA = .false., AIRCAR = .false., AIRCFT = .false., &
@@ -60,7 +60,7 @@ logical  :: include_specific_humidity = .true.,  &
             include_relative_humidity = .false., &
             include_dewpoint          = .false.
 
-namelist /ncepobs_nml/ year, month, day, hour, max_num, select_obs,  &
+namelist /ncepobs_nml/ year, month, day, tot_days, max_num, select_obs,  &
         ObsBase, ADPUPA, AIRCAR, AIRCFT, SATEMP, SFCSHP, ADPSFC, SATWND, &
         obs_U, obs_V, obs_T, obs_PS, obs_QV, daily_file, lon1, lon2, & 
         lat1, lat2, obs_time, include_specific_humidity, &
@@ -92,30 +92,37 @@ call static_init_obs_sequence()
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "ncepobs_nml", iunit)
 read(iunit, nml = ncepobs_nml, iostat = io)
-day1=day
-!call check_namelist_read(iunit, io, "ncepobs_nml")
+call check_namelist_read(iunit, io, "ncepobs_nml")
 
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(logfileunit, nml=ncepobs_nml)
 if (do_nml_term()) write(     *     , nml=ncepobs_nml)
 
+! Loop through the days interested.
+
+do ii = 1, tot_days
+ 
+  day1 = day + ii - 1
+
   ! define observation filename
   write(obsdate, '(i4.4,i2.2,i2.2)') year, month, day1
 
   ! set the obs sequence of the day (daily or 6 hourly)
+  if(daily_file) then
+    kbeg = 5
+    kend = 5
+    output_name = 'obs_seq'//obsdate
+  else
+    kbeg = 1
+    kend = 4
+  endif
 
-    if (hour==0 .or. hour==24) then
-      kkk=4
-      hour1 = obstime(4)
-    else if (hour==6) then
-      kkk=1
-      hour1 = obstime(1)
-    else if (hour==12) then
-      kkk=2
-      hour1 = obstime(2)
-    else if (hour==18) then
-      kkk=3
-      hour1 = obstime(3)
+  do kkk = kbeg, kend
+
+    if (daily_file) then
+      hour1 = ''
+    else
+      hour1 = obstime(kkk)
     end if
 
     seq = real_obs_sequence(year, month, day1, hour1, max_num, select_obs, &
@@ -125,11 +132,15 @@ if (do_nml_term()) write(     *     , nml=ncepobs_nml)
          bin_end(kkk), lon1, lon2, lat1, lat2, obs_time)
 
     ! output the daily sequence to a file
-    output_name = 'obs_seq'//obsdate//obstime(kkk)
+    if(.not. daily_file) output_name = 'obs_seq'//obsdate//obstime(kkk)
     call write_obs_seq(seq, output_name)
 
     ! release the memory of the seq.
     call destroy_obs_sequence(seq)
+
+  enddo
+
+enddo
 
 call error_handler(E_MSG,'create_real_obs','Finished successfully.',source,revision,revdate)
 call finalize_utilities()

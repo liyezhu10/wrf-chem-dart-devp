@@ -1,17 +1,15 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! <next few lines under version control, D O  N O T  E D I T>
-! $URL$
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
 ! $Id$
-! $Revision$
-! $Date$
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+program write_sqg_restart
 
 !============================================================
 ! read in the model state from a netCDF file and write out 
 ! to a DART readable restart file
 !============================================================
-
-program write_sqg_restart
 
    use        types_mod, only : r8
    use    utilities_mod, only : initialize_utilities, finalize_utilities
@@ -24,8 +22,13 @@ program write_sqg_restart
 
    implicit none
 
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
+
    integer :: model_unit, model_size, model_days, model_seconds
-   integer :: j
 
    real(r8), allocatable, dimension(:)     :: model_state
    real,     allocatable, dimension(:,:)   :: thxyB, thxyT
@@ -48,19 +51,16 @@ program write_sqg_restart
    print*, 'Enter model time in DAYS, SECONDS [eg. 0 0]: '
    read*, model_days, model_seconds
 
-   ! open a output file to write to:
    model_unit = open_restart_write('sqgRestart')
-   ! set model time in the output restart file:
    model_time = set_time(model_seconds, model_days)
-   ! get model size:
    model_size = get_model_size()
-   ! get model static data:
    sqg_static = get_model_static_data()
 
    ! allocate space for all variables:
    allocate( model_state(model_size) )
    allocate( theta(2*kmax,2*lmax,2)  )
-   allocate( thxyB(2*kmax,2*lmax) ) ; allocate( thxyT(2*kmax,2*lmax) )
+   allocate( thxyB(2*kmax,2*lmax) )
+   allocate( thxyT(2*kmax,2*lmax) )
 
    ! read in the theta fields from the netCDF file:
    call init(infile,thxyB,thxyT)
@@ -71,7 +71,8 @@ program write_sqg_restart
    endif
 
    ! convert theta into DART state-vector:
-   theta(:,:,1) = thxyB ; theta(:,:,2) = thxyT
+   theta(:,:,1) = thxyB
+   theta(:,:,2) = thxyT
    call sqg_to_dart(theta,model_state)
 
    ! write to the file:
@@ -135,3 +136,9 @@ subroutine toggle_base_state(thxyB,thxyT,sqg_static,operation)
 end subroutine toggle_base_state
 
 end program write_sqg_restart
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -1,10 +1,10 @@
 #!/bin/tcsh 
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 
 # The FORCE options are not optional. 
 # the VERBOSE options are useful for debugging.
@@ -112,7 +112,7 @@ foreach FILE ( prior post )
    # These files may or may not exist. This causes some complexity.
    # So - we look for the 'newest' and use it. And Pray.
 
-   (ls -rt1 ../${FILE}_inflate.*.restart.* | tail -1 >! latestfile) > & /dev/null
+   (ls -rt1 ../${FILE}_inflate.*.restart.* | tail -n 1 >! latestfile) > & /dev/null
    set nfiles = `cat latestfile | wc -l`
 
    if ( $nfiles > 0 ) then
@@ -134,9 +134,9 @@ end
 # At the end of the block, we have DART restart files  filter_ics.[1-N]
 #
 # DART namelist settings appropriate/required:
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-# &ensemble_manager_nml: single_restart_file_in  = '.false.'
-# &naaps_to_dart_nml:      naaps_to_dart_output_file = 'dart.ud',
+# &ensemble_manager_nml: single_restart_file_in    = '.false.'
+# &filter_nml:           restart_in_file_name      = 'filter_ics'
+# &naaps_to_dart_nml:    naaps_to_dart_output_file = 'dart_ics',
 #-------------------------------------------------------------------------
 
 set member = 1
@@ -154,7 +154,7 @@ while ( $member <= $ensemble_size )
    # the slash in the filename screws up 'sed' ... unless
    set DART_IC_FILE = `printf ../filter_ics.%04d $member`
 
-   sed -e "s#dart.ud#${DART_IC_FILE}#" < ../input.nml.template >! tmp.nml
+   sed -e "s#dart_ics#${DART_IC_FILE}#" < ../input.nml.template >! tmp.nml
    sed -e "s#MEMBER_NUMBER#$member#" < tmp.nml >! input.nml
    $REMOVE tmp.nml
 
@@ -229,10 +229,10 @@ end
 # Block 3: Update the naaps restart files ... simultaneously ...
 #
 # DART namelist settings required:
-# &filter_nml:           restart_out_file_name  = 'filter_restart'
-# &ensemble_manager_nml: single_restart_file_in = '.false.'
-# &dart_to_naaps_nml:    dart_to_naaps_input_file = 'dart.ic',
-# &dart_to_naaps_nml:    advance_time_present   = .false.
+# &ensemble_manager_nml: single_restart_file_in   = '.false.'
+# &filter_nml:           restart_out_file_name    = 'filter_restart'
+# &dart_to_naaps_nml:    dart_to_naaps_input_file = 'dart_restart',
+# &dart_to_naaps_nml:    advance_time_present     = .false.
 #-------------------------------------------------------------------------
 
 set member = 1
@@ -248,7 +248,7 @@ while ( $member <= $ensemble_size )
    cd $MYTEMPDIR
 
    set DART_RESTART_FILE = `printf ../filter_restart.%04d $member`
-   sed -e "s#dart.ic#${DART_RESTART_FILE}#" < ../input.nml.template >! tmp.nml
+   sed -e "s#dart_restart#${DART_RESTART_FILE}#" < ../input.nml.template >! tmp.nml
    sed -e "s#MEMBER_NUMBER#$member#" < tmp.nml >! input.nml
    $REMOVE tmp.nml
 

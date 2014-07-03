@@ -1,15 +1,9 @@
-!
 ! This code may (or may not) be part of the MPAS distribution,
 ! So it is not protected by the DART copyright agreement.
 !
+! DART $Id: get_reconstruct_mod.f90 6256 2013-06-12 16:19:10Z thoar $
 
 module get_reconstruct_mod
-
-! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/models/mpas_atm/get_reconstruct_mod.f90 $
-! $Id: get_reconstruct_mod.f90 5526 2012-01-23 18:41:38Z nancy $
-! $Revision: 5526 $
-! $Date: 2012-01-23 11:41:38 -0700 (Mon, 23 Jan 2012) $
 
   use types_mod, only : r8
   use get_coeff_mod
@@ -158,3 +152,9 @@ module get_reconstruct_mod
   end subroutine get_reconstruct
 
 end module get_reconstruct_mod
+
+! <next few lines under version control, do not edit>
+! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/mpas_ocn/get_reconstruct_mod.f90 $
+! $Id: get_reconstruct_mod.f90 6256 2013-06-12 16:19:10Z thoar $
+! $Revision: 6256 $
+! $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $

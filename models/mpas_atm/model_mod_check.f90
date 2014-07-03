@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program model_mod_check
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: test routines
@@ -46,10 +42,10 @@ use typesizes
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=256) :: string1, string2
 
@@ -58,7 +54,7 @@ character(len=256) :: string1, string2
 !------------------------------------------------------------------
 
 character (len = 129)  :: destroy_file         = 'temp_analysis_file.nc'
-character (len = 129)  :: dart_input_file      = 'dart.ics'
+character (len = 129)  :: dart_input_file      = 'dart_ics'
 character (len = 129)  :: output_file          = 'check_me'
 logical                :: advance_time_present = .FALSE.
 logical                :: verbose              = .FALSE.
@@ -775,3 +771,9 @@ end subroutine interpolate_to_center
 
 
 end program model_mod_check
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

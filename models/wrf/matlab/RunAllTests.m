@@ -1,15 +1,11 @@
 function RunAllTests(dummy)
 %% RunAllTests.m
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/models/wrf/matlab/RunAllTests.m $
-% $Id: RunAllTests.m 5686 2012-04-11 00:01:13Z thoar $
-% $Revision: 5686 $
-% $Date: 2012-04-10 18:01:13 -0600 (Tue, 10 Apr 2012) $
+% DART $Id: RunAllTests.m 6265 2013-06-13 19:38:46Z thoar $
 
 if (nargin() > 0)
    interactive = 1;
@@ -272,4 +268,9 @@ end
  clf
  PlotJeffCorrel(pinfo)
  fprintf('Finished %s\n','PlotJeffCorrel')
+
+% <next few lines under version control, do not edit>
+% $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/wrf/matlab/RunAllTests.m $
+% $Revision: 6265 $
+% $Date: 2013-06-13 13:38:46 -0600 (Thu, 13 Jun 2013) $
 

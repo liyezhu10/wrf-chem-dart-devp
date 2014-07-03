@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module xyz_location_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! A subset of the 3d cartesian locations module which only does 'nearest point'
 ! computations.  It has a limited set of interfaces to initialize the search struct
@@ -30,10 +26,10 @@ public :: xyz_location_type, xyz_get_location, xyz_set_location, &
           xyz_find_nearest, xyz_get_close_obs_destroy, xyz_get_dist, xyz_get_ll_location
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 type xyz_location_type
    private
@@ -153,14 +149,14 @@ end subroutine initialize_module
 
 !----------------------------------------------------------------------------
 
-function xyz_get_dist(loc1, loc2, kind1, kind2)
+function xyz_get_dist(loc1, loc2, type1, kind2)
 
 ! returns the distance between 2 locations 
 
-! In spite of the names, the 3rd and 4th argument are actually specific types
-! (e.g. RADIOSONDE_TEMPERATURE, AIRCRAFT_TEMPERATURE).  The types are part of
+! the 3rd name is a specific type, the 4th is a generic kind.
+! These types/kinds are part of
 ! the interface in case user-code wants to do a more sophisticated distance
-! calculation based on the base or target types.  In the usual case this
+! calculation based on the base type or target kind.  In the usual case this
 ! code still doesn't use the types, but there's an undocumented feature that
 ! allows you to maintain the original vertical normalization even when
 ! changing the cutoff distance in the horizontal.  For that to work we
@@ -168,8 +164,8 @@ function xyz_get_dist(loc1, loc2, kind1, kind2)
 ! 
 
 type(xyz_location_type), intent(in) :: loc1, loc2
-integer, optional,   intent(in) :: kind1, kind2
-real(r8)                        :: xyz_get_dist
+integer, optional,       intent(in) :: type1, kind2
+real(r8)                            :: xyz_get_dist
 
 real(r8) :: x_dif, y_dif, z_dif
 
@@ -671,3 +667,9 @@ end subroutine find_nearest_boxes
 !----------------------------------------------------------------------------
 
 end module xyz_location_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

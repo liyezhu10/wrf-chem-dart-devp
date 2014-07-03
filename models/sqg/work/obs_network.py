@@ -1,12 +1,7 @@
 #!/usr/bin/env python
-
-#############################################################
-# <next few lines under version control, D O  N O T  E D I T>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
-#############################################################
+#
+# This code is not protected by the DART copyright agreement.
+# DART $Id: obs_network.py 6269 2013-06-13 21:40:55Z thoar $
 
 __author__    = "Rahul Mahajan"
 __email__     = "rahul.mahajan@nasa.gov"
@@ -200,3 +195,11 @@ if ( clean ):
 
 if (verbose): print 'all done ...'
 sys.exit(0)
+
+#############################################################
+# <next few lines under version control, do not edit>
+# $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/sqg/work/obs_network.py $
+# $Revision: 6269 $
+# $Date: 2013-06-13 15:40:55 -0600 (Thu, 13 Jun 2013) $
+#############################################################
+

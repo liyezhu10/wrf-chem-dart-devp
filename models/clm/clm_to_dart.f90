@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program clm_to_dart
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: interface between clm and DART
@@ -26,7 +22,7 @@ program clm_to_dart
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
-use    utilities_mod, only : initialize_utilities, timestamp, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
 use        model_mod, only : get_model_size, restart_file_to_sv, &
                              get_clm_restart_filename
@@ -36,10 +32,10 @@ use time_manager_mod, only : time_type, print_time, print_date
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! namelist parameters with default values.
@@ -53,7 +49,6 @@ namelist /clm_to_dart_nml/ clm_to_dart_output_file
 ! global storage
 !----------------------------------------------------------------------
 
-logical               :: verbose = .TRUE.
 integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
@@ -61,7 +56,7 @@ character(len=256)    :: clm_restart_filename
 
 !======================================================================
 
-call initialize_utilities(progname='clm_to_dart', output_flag=verbose)
+call initialize_utilities(progname='clm_to_dart')
 
 !----------------------------------------------------------------------
 ! Read the namelist to get the output filename.
@@ -92,13 +87,15 @@ iunit = open_restart_write(clm_to_dart_output_file)
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
-!----------------------------------------------------------------------
-! When called with 'end', timestamp will call finalize_utilities()
-!----------------------------------------------------------------------
-
 call print_date(model_time, str='clm_to_dart:clm  model date')
 call print_time(model_time, str='clm_to_dart:DART model time')
-call timestamp(string1=source, pos='end')
+
+call finalize_utilities('clm_to_dart')
 
 end program clm_to_dart
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

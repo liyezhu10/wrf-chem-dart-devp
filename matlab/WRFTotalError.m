@@ -3,15 +3,11 @@ function WRFTotalError( pinfo )
 % Plot the total area-weighted error for each variable.
 %---------------------------------------------------------------------
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/matlab/WRFTotalError.m $
-% $Id: WRFTotalError.m 5686 2012-04-11 00:01:13Z thoar $
-% $Revision: 5686 $
-% $Date: 2012-04-10 18:01:13 -0600 (Tue, 10 Apr 2012) $
+% DART $Id: WRFTotalError.m 6265 2013-06-13 19:38:46Z thoar $
 
 % Get the indices for the true state, ensemble mean and spread
 % The metadata is queried to determine which "copy" is appropriate.
@@ -89,3 +85,10 @@ else
    xlabelstring = sprintf('%s start',monstr);
 end
 xlabel(xlabelstring)
+
+
+% <next few lines under version control, do not edit>
+% $URL: https://subversion.ucar.edu/DAReS/DART/trunk/matlab/WRFTotalError.m $
+% $Revision: 6265 $
+% $Date: 2013-06-13 13:38:46 -0600 (Thu, 13 Jun 2013) $
+

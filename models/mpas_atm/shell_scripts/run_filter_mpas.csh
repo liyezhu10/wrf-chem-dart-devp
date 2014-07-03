@@ -1,4 +1,11 @@
 #!/bin/csh
+#
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: run_filter_mpas.csh 6256 2013-06-12 16:19:10Z thoar $
+#
 ##############################################################################################
 #
 #  driver_filter_mpas.csh
@@ -638,3 +645,11 @@ EOF
 end
 
 echo Cycling is done for ${expname}. Script exiting normally.
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/mpas_atm/shell_scripts/run_filter_mpas.csh $
+# $Revision: 6256 $
+# $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+

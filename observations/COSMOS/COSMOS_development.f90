@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program COSMOS_development
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -62,14 +58,11 @@ use netcdf
 
 implicit none
 
-!-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-!-----------------------------------------------------------------------
-
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -79,8 +72,8 @@ character(len=256) :: site_metadata_file = 'COSMIC_parlist.nc'
 character(len=128) :: text_input_file = 'textdata.input'
 character(len=128) :: obs_out_file    = 'obs_seq.out'
 character(len=128) :: sitename        = 'missing'
-integer            :: year
-real(r8)           :: maxgoodqc       = 3
+integer            :: year            = -1
+real(r8)           :: maxgoodqc       = 3.0_r8
 logical            :: verbose         = .false.
 
 namelist /COSMOS_development_nml/ site_metadata_file, text_input_file, &
@@ -603,3 +596,10 @@ end function find_site_index
 
 
 end program COSMOS_development
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+
