@@ -150,6 +150,7 @@ set *Prior_Diag.*.nc;                                                           
 set *Posterior_Diag.*.nc;                                                                                             dispose ifiles_n ${sta}/dart/hist $*
 set *obs_seq.*.out;                                                                                                   dispose ifiles_n ${sta}/dart/hist $*
 set *obs_seq.*.final;                                                                                                 dispose ifiles_n ${sta}/dart/hist $*
+set *obs_seq.*.perfect;                                                                                               dispose ifiles_n ${sta}/dart/hist $*
 set *pr*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
 set *po*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
 
@@ -159,7 +160,6 @@ while [ $IDX -le $NINST_ATM ]
 do
     get_inst_suffix $IDX $NINST_ATM
     set atm${inst_suffix}.log.*;                                                                                                   dispose ifiles_n ${sta}/atm/logs $*
-#   set cam_initial_${IDX}.nc;            latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_n ${sta}/atm/rest $*
     set ${CASE}.cam*${inst_suffix}.r.*;   latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/atm/rest $*
     set ${CASE}.cam*${inst_suffix}.rs.*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/atm/rest $*
     set ${CASE}.cam*${inst_suffix}.ra.*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/atm/rest $*
@@ -195,7 +195,7 @@ do
     set ${CASE}.wrf.h3aux01.*;                                                                                                     dispose ifiles_n ${sta}/atm/hist $*
     set ${CASE}.wrf.h3aux02.*;                                                                                                     dispose ifiles_n ${sta}/atm/hist $*
     set ${CASE}.wrf.h3aux03.*;                                                                                                     dispose ifiles_n ${sta}/atm/hist $*
- 
+
     IDX=`expr $IDX + 1`
 done
 
@@ -329,11 +329,11 @@ echo "st_archive.sh: copied last successful step into ${sta2}/${dname} for safek
 cp ${sta}/rest/${dname}/* .
 
 
-# now possibly delete the current contents of the restart dir so 
+# now possibly delete the current contents of the restart dir so
 # it won't be picked up by the long term archiver.  the diagnostic
 # files are saved for all times, but these are the restart files
 # needed to start a new model advance. if you try to save every
-# set of restart files you will be archiving a very very very 
+# set of restart files you will be archiving a very very very
 # large amount of data.
 
 # dname: YYYY-MM-DD-SSSSS
@@ -347,7 +347,7 @@ month=`echo $dname | cut -b6-7`
 # if you want to save more often (or less) alter the test here
 # using the time variables from immediately above.
 
-# approximately the last day of each month: all months except feb have 30 days, 
+# approximately the last day of each month: all months except feb have 30 days,
 # and all febs have a 28th.  save the 10th, 20th, and "last" day of each month.
 if [[ $month == 02 ]]; then lastday=28; else lastday=30; fi
 
@@ -355,7 +355,7 @@ if [[ $secs == 00000 && ($day == 10 || $day == 20 || $day == $lastday) ]]; then
   echo "st_archive: PRESERVING contents of restart ${dname}"
 else
   echo "st_archive: DELETING contents of restart ${dname}"
-  rm -rf ${sta}/rest/${dname} 
+  rm -rf ${sta}/rest/${dname}
   touch ${sta}/rest/${dname}_removed
 fi
 
