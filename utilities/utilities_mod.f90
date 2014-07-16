@@ -176,7 +176,7 @@ public :: file_exist, get_unit, open_file, close_file, timestamp,           &
 ! with this job when you exit.  in the non-mpi case, it just calls exit.
 interface
  subroutine exit_all(exitval)
-  integer :: exitval
+  integer, intent(in) :: exitval
  end subroutine exit_all
 end interface
 
@@ -441,9 +441,9 @@ contains
          endif 
       endif
 
-      close(logfileunit)
+      call close_file(logfileunit)
       if ((nmlfileunit /= logfileunit) .and. (nmlfileunit /= -1)) then
-         close(nmlfileunit)
+         call close_file(nmlfileunit)
       endif
 
       module_initialized = .false.
@@ -999,7 +999,7 @@ end subroutine error_handler
 
       if (rc /= 0) then
          write(msgstring,*)'Cannot open file "'//trim(fname)//'" for '//trim(act)
-         call error_handler(E_ERR, msgstring, source, revision, revdate)
+         call error_handler(E_ERR, 'open_file: ', msgstring, source, revision, revdate)
       endif
    endif
 
@@ -1280,8 +1280,9 @@ end subroutine error_handler
 subroutine close_file(iunit)
 !-----------------------------------------------------------------------
 !
-! Closes the given unit_number. If the file is already closed, 
-! nothing happens. Pretty dramatic, eh?
+! Closes the given unit_number if that unit is open.
+! Not an error to call on an already closed unit.
+! Will print a message if the status of the unit cannot be determined.
 !
 
 integer, intent(in) :: iunit
@@ -1293,9 +1294,8 @@ if ( .not. module_initialized ) call initialize_utilities
 
 inquire (unit=iunit, opened=open, iostat=ios)
 if ( ios /= 0 ) then
-   print *,'Dagnabbit. Cannot inquire about unit # ',iunit
-   print *,'Error status was ',ios
-   print *,'Hoping for the best and continuing.'
+   write(msgstring,*)'Unable to determine status of file unit ', iunit
+   call error_handler(E_MSG, 'close_file: ', msgstring, source, revision, revdate)
 endif
 
 if (open) close(iunit)
@@ -1313,14 +1313,14 @@ subroutine find_namelist_in_file(namelist_file_name, nml_name, iunit, &
 ! Opens namelist_file_name if it exists on unit iunit, error if it
 ! doesn't exist.
 ! Searches file for a line containing ONLY the string
-! &nml_name, for instance &filter_nml. If found, rewinds the file and
+! &nml_name, for instance &filter_nml. If found, backs up one record and
 ! returns true. Otherwise, error message and terminates
 !
 
-character(len=*), intent(in) :: namelist_file_name
-character(len=*), intent(in) :: nml_name
-integer, intent(out)           :: iunit
-logical, intent(in), optional :: write_to_logfile_in
+character(len=*),  intent(in)  :: namelist_file_name
+character(len=*),  intent(in)  :: nml_name
+integer,           intent(out) :: iunit
+logical, optional, intent(in)  :: write_to_logfile_in
 
 character(len=256) :: nml_string, test_string, string1
 integer            :: io
@@ -1369,7 +1369,7 @@ if(file_exist(trim(namelist_file_name))) then
          call to_upper(string1)
 
          if(trim(string1) == trim(test_string)) then
-            rewind(iunit)
+            backspace(iunit)
             return
          endif
 
@@ -1423,7 +1423,7 @@ if(iostat_in == 0) then
    call close_file(iunit)
 else
    ! If it wasn't successful, print the line on which it failed  
-   BACKSPACE iunit
+   backspace(iunit)
    read(iunit, '(A)', iostat = io) nml_string
    ! A failure in this read means that the namelist started but never terminated
    ! Result was falling off the end, so backspace followed by read fails
@@ -1443,15 +1443,6 @@ else
       endif
    else
       ! Didn't fall off end so bad entry in the middle of namelist
-      ! TEMP HELP FOR USERS; remove after next release
-      if (len(nml_name) >= 10) then
-         if ((nml_name(1:10) == 'filter_nml') .and. (index(nml_string,'inf_start_from_restart') > 0)) then
-            write(msgstring, *) 'inf_start_from_restart obsolete'
-            call error_handler(E_MSG, 'filter_nml: ', msgstring)
-            write(msgstring, *) 'use inf_initial_from_restart and inf_sd_initial_from_restart'
-            call error_handler(E_MSG, 'filter_nml: ', msgstring)
-         endif 
-      endif 
       write(msgstring, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
       if(write_to_logfile) then
          call error_handler(E_ERR, 'check_namelist_read', msgstring, &
@@ -1890,8 +1881,6 @@ function ascii_file_format(fform)
 character(len=*), intent(in), optional :: fform
 logical                                :: ascii_file_format
 
-character(len=len(fform)) :: lj_fform ! Left Justified version of optional argument 
-
 ! Returns .true. for formatted/ascii file, .false. is unformatted/binary
 ! Defaults (if fform not specified) to formatted/ascii.
 
@@ -1903,9 +1892,7 @@ if ( .not. present(fform)) then
    return
 endif
 
-lj_fform = adjustl(fform)
-
-SELECT CASE (trim(lj_fform))
+SELECT CASE (fform)
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       ascii_file_format = .false.
    CASE DEFAULT

@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../mkmf/mkmf -p test_random_gsl -t ../../mkmf/mkmf.template   \
- -a "../../" path_names_test_random_gsl
+../../../mkmf/mkmf -p obs_selection -t ../../../mkmf/mkmf.template \
+ -a "../../.." $* path_names_obs_selection
 
 exit $status
 
