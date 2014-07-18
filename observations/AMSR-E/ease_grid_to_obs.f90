@@ -37,8 +37,10 @@ use            location_mod, only : VERTISSURFACE, set_location
 use       obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 use            obs_kind_mod, only : AMSRE_BRIGHTNESS_T
 use obs_def_brightnessT_mod, only : set_amsre_metadata
+
 use      EASE_utilities_mod, only : get_grid_dims, ezlh_inverse, read_ease_Tb, &
-                                    deconstruct_filename
+                                    deconstruct_filename, read_ease_TIM, &
+                                    EASE_MISSING
 
 implicit none
 
@@ -64,6 +66,7 @@ namelist /ease_grid_to_obs_nml/ &
 integer            :: num_input_files = 0  ! actual number of files
 integer            :: ifile, istatus
 character(len=256), allocatable, dimension(:) :: filename_seq_list
+character(len=256) :: time_file_name
 
 ! information gleaned from filenaming convention
 integer          :: iyear, idoy
@@ -77,7 +80,7 @@ real             :: frequency   ! real type to match EASE type
 character(len=256) :: input_line
 character(len=256) :: msgstring1,msgstring2,msgstring3
 
-integer :: oday, osec, iocode, iunit
+integer :: oday, osec, fday, fsec, iocode, iunit
 integer :: num_copies, num_qc, max_obs
 integer :: landcode = 0  ! FIXME ... totally bogus for now
            
@@ -85,6 +88,7 @@ logical  :: first_obs
 
 ! The EASE grid is a 2D array of 16 bit unsigned integers
 integer, allocatable, dimension(:,:) :: Tb
+integer, allocatable, dimension(:,:) :: Obs_Minutes
 integer, dimension(2) :: ndims
 integer :: key, nrows, ncols, irow, icol
 
@@ -93,7 +97,7 @@ real     :: rlat, rlon
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: time_obs, prev_time
+type(time_type)         :: file_time, time_obs, prev_time
 
 !----------------------------------------------------------------
 ! start of executable code
@@ -131,7 +135,8 @@ write(*,*)' There are ',num_input_files,' input files.'
 
 ! need some basic information from the first file
 istatus = deconstruct_filename( filename_seq_list(1), &
-             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
+             gridarea, iyear, idoy, passdir, frequency, polarization, &
+             is_time_file, time_file_name)
 if (istatus /= 0) then
    write(msgstring2,*) 'filename nonconforming'
    call error_handler(E_ERR, 'main', trim(filename_seq_list(1)), &
@@ -142,7 +147,7 @@ ndims = get_grid_dims(gridarea)
 nrows = ndims(1)
 ncols = ndims(2)
 
-allocate( Tb(nrows,ncols) )
+allocate( Tb(nrows,ncols), Obs_Minutes(nrows,ncols) )
 
 ! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
@@ -182,7 +187,8 @@ FileLoop: do ifile = 1,num_input_files
    call error_handler(E_MSG, 'main', msgstring1, text2 = trim(filename_seq_list(ifile)))
 
    istatus = deconstruct_filename( filename_seq_list(ifile), &
-             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
+             gridarea, iyear, idoy, passdir, frequency, polarization, &
+             is_time_file, time_file_name)
    if (istatus /= 0) then
       call error_handler(E_ERR, 'main', 'filename nonconforming', &
              source, revision, revdate, text2= trim(filename_seq_list(ifile)))
@@ -195,19 +201,21 @@ FileLoop: do ifile = 1,num_input_files
              source, revision, revdate, text2= trim(filename_seq_list(ifile)))
    endif
 
-   ! FIXME - crude time information at this point
    ! put date into a dart time format
-   ! calculate first day of the year, then add in day-of-year
-   time_obs = set_date(iyear,1,1,0,0,0)
-   call get_time(time_obs, osec, oday)
-   time_obs = set_time(osec, oday+idoy-1)
-   call get_time(time_obs, osec, oday)
+   ! calculate first day of the year, then add in day-of-year from the file name
+   file_time = set_date(iyear,1,1,0,0,0)
+   call get_time(file_time, fsec, fday)
+   file_time = set_time(fsec, fday+idoy-1)
+   call get_time(file_time, fsec, fday)
 
    if (verbose) then
       write(*,*)trim(filename_seq_list(ifile))
-      call print_date(time_obs, str='file date is')
-      call print_time(time_obs, str='file time is')
+      call print_date(file_time, str='file date is')
+      call print_time(file_time, str='file time is')
    endif
+
+   ! Read the time for each observation (minutes since filetime)
+   iocode = read_ease_TIM(time_file_name, iunit, Obs_Minutes)
 
    ! Ignoring time files for now
    if ( is_time_file ) cycle FileLoop
@@ -218,16 +226,21 @@ FileLoop: do ifile = 1,num_input_files
    COLLOOP: do icol=1,ncols
    ROWLOOP: do irow=1,nrows
 
-      if ( Tb(irow,icol) == 0 ) cycle ROWLOOP
+      if (          Tb(irow,icol) == 0            ) cycle ROWLOOP
+      if ( Obs_Minutes(irow,icol) == EASE_MISSING ) cycle ROWLOOP
+
+      ! Create the time of the observation by adding the base time
+      ! for all the obs in the file to the number of minutes from the
+      ! *.TIM file. Convert to DART time type and back to automatically
+      ! make sure the number of seconds is [0,86400] etc.
+
+      time_obs = set_time(fsec + Obs_Minutes(irow,icol)*60, fday)
+      call get_time(time_obs, osec, oday)
 
       ! Convert icol,irow to lat/lon using EASE routine
       ! Intentional conversion between row-major and column-major nomenclature
       iocode = ezlh_inverse(gridarea, real(irow), real(icol), rlat, rlon)
       if (iocode /= 0) cycle ROWLOOP
-
-      ! if ( verbose) then
-      !    write(*,*)'icol,irow,lat,lon',icol,irow,rlat,rlon
-      ! endif
 
       ! ensure the lat/lon values are in range
       if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle ROWLOOP

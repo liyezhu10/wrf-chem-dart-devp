@@ -8,6 +8,8 @@ public :: ezlh_convert, ezlh_inverse
 public :: get_grid_dims
 public :: deconstruct_filename
 public :: read_ease_Tb
+public :: read_ease_TIM
+public :: EASE_MISSING
 
 ! This routine came from http://nsidc.org/data/ease/tools.html#geo_data_files
 ! as ezlconv.f ... and was converted to F90 and put in a module by TJH.
@@ -27,6 +29,7 @@ integer, parameter :: l_nrows = 721
 integer, parameter :: l_ncols = 721
 integer, parameter :: h_nrows = 586
 integer, parameter :: h_ncols = 1383
+integer, parameter :: EASE_MISSING = -32768
 
 contains
 
@@ -252,15 +255,17 @@ end function ezlh_inverse
 
 
 
-function deconstruct_filename(filename,gridarea,iyear,idoy,passdir,freq,polarization,is_time_file)
-character(len=*), intent(in)  :: filename
-character(len=2), intent(out) :: gridarea
-integer,          intent(out) :: iyear, idoy
-character(len=1), intent(out) :: passdir
-real,             intent(out) :: freq
-character(len=1), intent(out) :: polarization
-logical,          intent(out) :: is_time_file
-integer                       :: deconstruct_filename
+function deconstruct_filename(filename, gridarea, iyear, idoy, &
+                passdir, freq, polarization, is_time_file, time_file_name)
+character(len=*), intent(in)    :: filename
+character(len=2), intent(out)   :: gridarea
+integer,          intent(out)   :: iyear, idoy
+character(len=1), intent(out)   :: passdir
+real,             intent(out)   :: freq
+character(len=1), intent(out)   :: polarization
+logical,          intent(out)   :: is_time_file
+character(len=*), intent(inout) :: time_file_name
+integer                         :: deconstruct_filename
 
 ! http://nsidc.org/data/docs/daac/nsidc0301_amsre_gridded_tb.gd.html#namingconvention
 ! EASE_utilities_modSE-Grid brightness temperature data files are named 
@@ -332,8 +337,10 @@ endif
 if (myfile(nchars-2:nchars) == 'TIM') then
    is_time_file = .true.
    read(myfile(ipos:nchars),100,iostat=iocode)gridarea,iyear,idoy,passdir
+   time_file_name = myfile
 else
    read(myfile(ipos:nchars),200,iostat=iocode)gridarea,iyear,idoy,passdir,channel,polarization
+   time_file_name = myfile(1:nchars-3)//'TIM'
 endif
 
 deconstruct_filename = iocode
@@ -410,13 +417,13 @@ open(unit=iunit, file=trim(filename), access='direct', &
           form='unformatted', recl=2*nrows*ncols, iostat=iocode)
 
 if (iocode /= 0) then
-   write(*,*)'read_ease_Tb failed to open ',trim(filename) 
+   write(*,*)'read_ease_Tb failed to open [',trim(filename)//']'
    stop
 endif
 
 read(iunit,rec=1,iostat=iocode) datmat
 if (iocode /= 0) then
-   write(*,*)'read_ease_Tb failed to read ',trim(filename) 
+   write(*,*)'read_ease_Tb failed to read [',trim(filename)//']'
    stop
 endif
 
@@ -450,6 +457,80 @@ enddo
 read_ease_Tb = 0 ! successful finish
 
 end function read_ease_Tb
+
+
+
+
+function read_ease_TIM(filename, iunit, time_matrix)
+! Data are 2-byte signed integers, little-endian byte-order, 
+! indicating time of data acquisition as minutes since midnight 
+! (0:00 UTC) of the date of the enclosing file. The values 
+! in the time files range from 0 to 1440, with the 
+! value -32768 indicating missing data.
+! See more at
+! http://nsidc.org/data/docs/daac/nsidc0301_amsre_gridded_tb.gd.html
+
+character(len=*),        intent(in)  :: filename
+integer,                 intent(in)  :: iunit
+integer, dimension(:,:), intent(out) :: time_matrix
+integer                              :: read_ease_TIM
+
+integer, parameter :: i2 = SELECTED_INT_KIND(4)
+
+integer(i2), allocatable, dimension(:,:) :: datmat
+integer :: irow, icol, nrows, ncols, iocode
+
+nrows = size(time_matrix,1)
+ncols = size(time_matrix,2)
+allocate(datmat(nrows,ncols))
+
+open(unit=iunit, file=trim(filename), access='direct', &
+          form='unformatted', recl=2*nrows*ncols, iostat=iocode)
+
+if (iocode /= 0) then
+   write(*,*)'read_ease_TIM failed to open [',trim(filename)//']'
+   stop
+endif
+
+read(iunit,rec=1,iostat=iocode) datmat
+if (iocode /= 0) then
+   write(*,*)'read_ease_TIM failed to read [',trim(filename)//']'
+   stop
+endif
+
+close(iunit)
+
+! preserve to output so I can mess around with datmat to check
+! for endian issues. If checks pass, 'time_matrix' will be returned.
+
+time_matrix = datmat
+
+! Put in rudimentary check to see if the endian is correct
+! by checking values/bounds, etc. Replace any missing values
+! with a positive value and then check for ANY negative values
+! or any values greater than 1440. Not bulletproof, but pretty good.
+
+where (datmat == EASE_MISSING) datmat = 0
+
+if (any(datmat < 0)) then
+   write(*,*)'ERROR: read_ease_TIM read [',trim(filename)//']'
+   write(*,*)'ERROR:   encountered out-of-range values (negative)'
+   write(*,*)'ERROR:   most likely an endian problem.' 
+   write(*,*)'ERROR:   The files are little-endian.'
+   stop
+endif
+
+if (any(datmat > 1440)) then
+   write(*,*)'ERROR: read_ease_TIM read [',trim(filename)//']'
+   write(*,*)'ERROR:   encountered out-of-range values ( > 1440 )'
+   write(*,*)'ERROR:   most likely an endian problem.' 
+   write(*,*)'ERROR:   The files are little-endian.'
+   stop
+endif
+
+read_ease_TIM = 0 ! successful finish
+
+end function read_ease_TIM
 
 
 
