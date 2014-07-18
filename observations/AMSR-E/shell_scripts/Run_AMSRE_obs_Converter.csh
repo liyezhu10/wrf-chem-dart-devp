@@ -1,11 +1,5 @@
 #!/bin/tcsh -f
 #
-# I wrote a wrapper code to get AMSRE EASE-grid 301 data and convert
-# them into observation sequence for DART( see attached). But
-# unfortunately the code is not doing the conversion and I cannot
-# figure out what the problem. I would really appreciate if you can
-# take a look at the code and help me debug it.
-#
 # Download the AMSRE data with:
 #
 # wget -t 0 -T 120 -c -r -nH --cut-dirs=4 \
@@ -32,10 +26,22 @@ cd ${AMSRE_WORKDIR}
 \cp -v ${DART_DIR}/input.nml        .
 \cp -v ${DART_DIR}/ease_grid_to_obs .
 
-@ YEAR = 2003
-@ DOY = 1
+# Set DOY equal to the first day-of-year of interest.
+# Set NDAYS equal to the number of days to convert.
+# Keep in mind it takes a LONG time to convert 1 day of
+# all frequencies, polarizations, passes. For the NH alone,
+# this takes more than 40 minutes and results in 6.3+ MILLION
+# observations - for a single day! 
 
-while ($DOY <= 1)
+@ YEAR = 2003
+@ DOY = 120
+@ NDAYS = 1
+
+# do not change iday.
+
+@ IDAY = 1
+
+while ($IDAY <= $NDAYS)
 
    set FileBaseDate = `printf ID2r1-AMSRE-ML%04d%03d $YEAR $DOY`
 
@@ -91,6 +97,7 @@ while ($DOY <= 1)
    endif
 
    @ DOY ++
+   @ IDAY ++
 
 end
 
