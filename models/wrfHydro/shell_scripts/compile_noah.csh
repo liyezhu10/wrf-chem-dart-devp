@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: compile_noah.csh 6256 2013-06-12 16:19:10Z thoar $
+# DART $Id$
  
 
 gfortran  -ffree-form -ffree-line-length-none -g -O2 -O0 -fconvert=big-endian \
@@ -25,7 +25,7 @@ gfortran  -ffree-form -ffree-line-length-none -g -O2 -O0 -fconvert=big-endian \
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/shell_scripts/compile_noah.csh $
-# $Revision: 6256 $
-# $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+# $URL$
+# $Revision$
+# $Date$
 

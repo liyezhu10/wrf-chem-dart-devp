@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: model_mod.f90 6256 2013-06-12 16:19:10Z thoar $
+! $Id$
 
 ! interface for wrfHydro 
 ! This is modeled on an earlier noah interface, so the term noah maybe used when wrfHydro is more appropriate.
@@ -91,9 +91,9 @@ public :: model_to_dart_vector, &           ! edit this file to reflect
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 6256 $"
-character(len=128), parameter :: revdate  = "$Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 integer :: nfields
 ! The NSOLDX (number of soil layers) parameter comes from the NOAH source code. We need it
@@ -3145,7 +3145,7 @@ end subroutine get_model_timestepping
 end module model_mod
 
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
-! $Id: model_mod.f90 6256 2013-06-12 16:19:10Z thoar $
-! $Revision: 6256 $
-! $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

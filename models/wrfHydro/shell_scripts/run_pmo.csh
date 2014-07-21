@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: run_pmo.csh 6256 2013-06-12 16:19:10Z thoar $
+# DART $Id$
 #
 # This is an example script for how to run a perfect_model experiment.
 # All the required files have been staged in CENTRALDIR and the namelists
@@ -56,7 +56,7 @@ endif
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/shell_scripts/run_pmo.csh $
-# $Revision: 6256 $
-# $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+# $URL$
+# $Revision$
+# $Date$
 

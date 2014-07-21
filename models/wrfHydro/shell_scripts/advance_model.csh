@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: advance_model.csh 6256 2013-06-12 16:19:10Z thoar $
+# DART $Id$
 #
 # Standard script for use in assimilation applications
 # where the model advance is executed as a separate process.
@@ -243,7 +243,7 @@ cd ..
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/shell_scripts/advance_model.csh $
-# $Revision: 6256 $
-# $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+# $URL$
+# $Revision$
+# $Date$
 

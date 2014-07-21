@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: model_mod_check.f90 6311 2013-07-17 22:04:54Z thoar $
+! $Id$
 
 program model_mod_check
 
@@ -34,9 +34,9 @@ implicit none
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod_check.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 6311 $"
-character(len=128), parameter :: revdate  = "$Date: 2013-07-17 16:04:54 -0600 (Wed, 17 Jul 2013) $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! The namelist variables
@@ -361,7 +361,7 @@ end subroutine find_closest_gridpoint
 end program model_mod_check
 
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod_check.f90 $
-! $Id: model_mod_check.f90 6311 2013-07-17 22:04:54Z thoar $
-! $Revision: 6311 $
-! $Date: 2013-07-17 16:04:54 -0600 (Wed, 17 Jul 2013) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

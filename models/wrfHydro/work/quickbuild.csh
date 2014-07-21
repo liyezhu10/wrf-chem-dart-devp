@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: quickbuild.csh 6256 2013-06-12 16:19:10Z thoar $
+# DART $Id$
 #
 # Script to manage the compilation of all components for this model;
 # executes a known "perfect model" experiment using an existing
@@ -150,7 +150,7 @@ echo ' for mpich run "mpd" once, then "runme_filter"'
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/work/quickbuild.csh $
-# $Revision: 6256 $
-# $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+# $URL$
+# $Revision$
+# $Date$
 
