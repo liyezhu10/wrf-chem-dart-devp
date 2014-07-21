@@ -394,19 +394,8 @@ else
       for i = 1:MODEL_SIZE
          obs_prior = temp_ens(i, :);
          obs(i) = handles.true_state(time, i) + obs_sd * randn;
-
          % Compute the increments for observed variable
-         switch filter_type
-            case 'EAKF'
-               [obs_increments, err] = ...
-                  obs_increment_eakf(obs_prior, obs(i), obs_error_var);
-            case 'EnKF'
-               [obs_increments, err] = ...
-                  obs_increment_enkf(obs_prior, obs(i), obs_error_var);
-            case 'RHF'
-               [obs_increments, err] = ...
-                  obs_increment_rhf(obs_prior, obs(i), obs_error_var);
-         end
+         [obs_increments, err] = obs_increment_eakf(obs_prior, obs(i), obs_error_var);
 
          % Regress the increments onto each of the state variables
          for j = 1:MODEL_SIZE

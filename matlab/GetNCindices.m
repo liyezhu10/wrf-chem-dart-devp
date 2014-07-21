@@ -267,10 +267,10 @@ for i = 1:ndims
                  'ilev','nver','levt','levs'}
                start(i) = level1;
                count(i) = levelN;
-           case {'tmpj','sout','slat'}
+           case {'tmpj','sout'}
                start(i) = lat1;
                count(i) = latN;
-           case {'tmpi','west','slon'}
+           case {'tmpi','west'}
                start(i) = lon1;
                count(i) = lonN;
            case {'stat','xdim','ydim','loc1'}

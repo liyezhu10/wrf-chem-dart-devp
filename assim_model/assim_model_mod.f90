@@ -10,17 +10,18 @@ module assim_model_mod
 ! add capabilities needed by the standard assimilation methods.
 
 use    types_mod, only : r8, digits12
-use location_mod, only : location_type, read_location, LocationDims
-use time_manager_mod, only : time_type, get_time, read_time, write_time,           &
-                             THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP,         &
-                             operator(<), operator(>), operator(+), operator(-),   &
-                             operator(/), operator(*), operator(==), operator(/=), &
-                             get_calendar_type
+use location_mod, only : location_type, read_location, &
+                         LocationDims, LocationName, LocationLName
+use time_manager_mod, only : time_type, get_time, read_time, write_time,                &
+                             THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP, NO_CALENDAR, &
+                             operator(<), operator(>), operator(+), operator(-),        &
+                             operator(/), operator(*), operator(==), operator(/=),      &
+                             get_calendar_type, print_time
 use utilities_mod, only : get_unit, close_file, register_module, error_handler,    &
-                          E_ERR, E_WARN, E_MSG, E_DBG, nmlfileunit,                &
-                          dump_unit_attributes, find_namelist_in_file,             &
+                          E_ERR, E_WARN, E_MSG, E_DBG, logfileunit, nmlfileunit,   &
+                          do_output, dump_unit_attributes, find_namelist_in_file,  &
                           check_namelist_read, nc_check, do_nml_file, do_nml_term, &
-                          find_textfile_dims, file_to_text, set_output,            &
+                          find_textfile_dims, file_to_text, timestamp, set_output, &
                           ascii_file_format, set_output
 use     model_mod, only : get_model_size, static_init_model, get_state_meta_data,  &
                           get_model_time_step, model_interpolate, init_conditions, &
@@ -396,6 +397,10 @@ endif
 call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFileID%fname))               
 !-------------------------------------------------------------------------------
 
+!write(logfileunit,*)trim(ncFileID%fname), ' is ncid ',ncFileID%ncid
+!write(logfileunit,*)'ncFileID%NtimesMAX is ',ncFileID%NtimesMAX
+!write(logfileunit,*)'ncFileID%Ntimes    is ',ncFileID%Ntimes
+
 end function init_diag_output
 
 
@@ -766,7 +771,10 @@ subroutine awrite_state_restart(model_time, model_state, funit, target_time)
 ! Write a restart file given a model extended state and a unit number 
 ! opened to the restart file. (Need to reconsider what is passed to 
 ! identify file or if file can even be opened within this routine).
-
+! The output includes at the top
+! (optionally) target_time: nseconds, ndays
+!               model_time: nseconds, ndays
+! (formats specified in write_time)
 implicit none
 
 type(time_type), intent(in)           :: model_time

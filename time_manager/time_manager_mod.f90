@@ -3052,8 +3052,8 @@ end function read_time
 subroutine write_time(file_unit, time, form, ios_out)
 !------------------------------------------------------------------------
 ! The time is expected to be written as either 
-! an unformatted binary (form == "unformatted")
-! or free-format ascii (form /= "unformatted")
+! an unformatted binary (form == "unformatted : write(file_unit, iostat = io) secs, days) )
+! or free-format ascii (form /= "unformatted" : write(file_unit,'(i6,1x,i10)', iostat = io) secs, days)
 ! If ios_out is specified, do not call error handler here, 
 ! but return so a better context message can be generated.
 

@@ -69,15 +69,18 @@ LD = pgf90
 # uncomment the following line and set value to where lib and include
 # are found for the netcdf files that match this compiler.
 #
-# NETCDF = /opt/local
+NETCDF = /usr/local/netcdf4
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-FFLAGS  = -O $(INCS)
+#FFLAGS  = -O -g -Mbounds $(INCS)
+## these suggested for debugging by wei
+#FFLAGS  = -O -g -Mbounds $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this for flags:
-#FFLAGS = -g -C -Ktrap=fp -pc 64 $(INCS)
+#FFLAGS = -g -C -Ktrap=fp -Mbounds $(INCS)
+FFLAGS = -g -C -Mbounds $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$

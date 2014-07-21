@@ -42,11 +42,13 @@ dispose() {
 #
 #result is returned in $inst_suffix
 get_inst_suffix() {
+#   echo "get_inst_suffixa $1 $2 ${inst_suffix}"
     if [ $2 -eq 1 ]; then   # only one instance of this component
 	inst_suffix=""
     else                    # multiple instances of this component
         inst_suffix=`printf _%04d $1`
     fi
+#   echo "get_inst_suffixb $1 $2 ${inst_suffix}"
 }
 
 echo ""
@@ -64,7 +66,7 @@ sta=${DOUT_S_ROOT}/.sta-$$-`date +%Y%m%d%H%M%S%N`
 mkdir -p ${sta} 2> /dev/null
 
 if [ $? -ne 0 ]; then
-    echo "st_archive.sh: error, unable to create short-term archive directory ${sta}"
+    echo "st_archive.sh: error, unable to create short-term archive directory .sta"
     echo "st_archive.sh: exiting"
     exit 1
 fi
@@ -108,11 +110,6 @@ if [ -z "$NINST_GLC" ]; then
     export NINST_GLC=1
 fi
 
-if [ -z "$NINST_WAV" ]; then
-    echo "st_archive.sh: warning, NINST_WAV not set -- using 1 instance"
-    export NINST_WAV=1
-fi
-
 #create directory for restart files
 set ${CASE}.cpl.r.*
 cplfile=`ls -rt $* 2> /dev/null | tail -1`
@@ -139,12 +136,12 @@ fi
 mv $* ${sta}/rest/${dname}
 
 set cpl.log.*;                                                                                                        dispose ifiles_n ${sta}/cpl/logs $*
-set cesm*.log.*;                                                                                                      dispose ifiles_n ${sta}/cpl/logs $*
+set ccsm*.log.*;                                                                                                      dispose ifiles_n ${sta}/cpl/logs $*
 set ${CASE}.cpl.r.*;         latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/cpl/rest $*
 set ${CASE}.cpl.h* ;                                                                                                  dispose ifiles_n ${sta}/cpl/hist $*
 
 
-# DART assimilation-related files
+# TJH FIXME possible tweaking - remove assimilate_dir/member_* directories? anything else?
 set assimilate_???/*/*dart_log.*;                                                                                     dispose ifiles_n ${sta}/dart/logs $*
 set assimilate_???/*/output.*;                                                                                        dispose ifiles_n ${sta}/dart/logs $*
 set *dart_log.*;                                                                                                      dispose ifiles_n ${sta}/dart/logs $*
@@ -154,12 +151,8 @@ set *Posterior_Diag.*.nc;                                                       
 set *obs_seq.*.out;                                                                                                   dispose ifiles_n ${sta}/dart/hist $*
 set *obs_seq.*.final;                                                                                                 dispose ifiles_n ${sta}/dart/hist $*
 set *obs_seq.*.perfect;                                                                                               dispose ifiles_n ${sta}/dart/hist $*
-set cam_*pr*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
-set cam_*po*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
-set clm_*pr*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
-set clm_*po*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
-set pop_*pr*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
-set pop_*po*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
+set *pr*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
+set *po*inflate_restart*;  latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null;   dispose ifiles_n ${sta}/dart/rest $*
 
 
 IDX=1
@@ -312,21 +305,6 @@ do
     IDX=`expr $IDX + 1`
 done
 
-
-IDX=1
-while [ $IDX -le $NINST_WAV ]
-do
-    get_inst_suffix $IDX $NINST_WAV
-    set wav${inst_suffix}.log.*;                                                                                                     dispose ifiles_n ${sta}/wav/logs $*
-    set ${CASE}.ww3${inst_suffix}.r.[0-9]*; latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/wav/rest $*
-    set ${CASE}.ww3${inst_suffix}.h*;                                                                                                dispose ifiles_n ${sta}/wav/hist $*
-    set ${CASE}.ww3${inst_suffix}.i.*;                                                                                               dispose ifiles_y ${sta}/wav/init $*
-    set ${CASE}.dwav${inst_suffix}.r.* ;    latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/wav/rest $*
-    set ${CASE}.dwav${inst_suffix}.rs* ;    latest=`ls -rt $* 2> /dev/null | tail -1`; mv $latest ${sta}/rest/${dname} 2> /dev/null; dispose ifiles_y ${sta}/wav/rest $*
-    set ${CASE}.dwav${inst_suffix}.h.* ;                                                                                             dispose ifiles_n ${sta}/wav/hist $*
-    IDX=`expr $IDX + 1`
-done
-
 # changes for DART assimilation runs.  stopping the model every day
 # (or every 6 hours) results in too much output to be archived.
 # keep every Nth restart, as well as the previous restart until
@@ -349,6 +327,7 @@ echo "st_archive.sh: copied last successful step into ${sta2}/${dname} for safek
 
 # copy back the required files for next restart
 cp ${sta}/rest/${dname}/* .
+
 
 # now possibly delete the current contents of the restart dir so
 # it won't be picked up by the long term archiver.  the diagnostic
@@ -380,19 +359,17 @@ else
   touch ${sta}/rest/${dname}_removed
 fi
 
+# rm the .hv files because they have no unique time stamp.
+rm -rf ${sta}/ocn/hist/${CASE}.pop.*.hv.nc
+
+
 # end of DART changes
 
 
 # make files visible again in the archive directory so they
 # are eligible again for the long term archiver to save.
-if mv ${sta}/* ${DOUT_S_ROOT}; then
-    rm -fr ${sta}
-else
-    echo "st_archive.sh: error, final move command unsuccessful"
-    echo "               some short-term archive data may be in ${sta}"
-    echo "st_archive.sh: exiting"
-    exit 1
-fi
+mv ${sta}/* ${DOUT_S_ROOT}
+rm -fr ${sta}
 
 echo "st_archive.sh: short-term archiving completed successfully"
 

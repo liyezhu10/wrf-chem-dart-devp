@@ -119,10 +119,6 @@ switch lower(pinfo.model)
 
       pinfo = GetSqgInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'tiegcm'}
-
-      pinfo = GetTIEGCMInfo(pinfo, fname, 'PlotVarVarCorrel');
-
    otherwise
 
       error('model %s not implemented yet', pinfo.model)

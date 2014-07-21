@@ -13,10 +13,10 @@ use     location_mod, only : location_type, set_location, get_location,  &
                              get_close_maxdist_init, get_close_obs_init, &
                              get_close_obs
 
-use    utilities_mod, only : register_module, do_nml_file, do_nml_term,    &
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
                              nmlfileunit, find_namelist_in_file,           &
-                             check_namelist_read, nc_check
-
+                             check_namelist_read, nc_check, do_output,     &
+                             do_nml_file, do_nml_term
 
 implicit none
 private
