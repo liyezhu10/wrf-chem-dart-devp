@@ -56,7 +56,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=256) :: input_file_list = 'file_list.txt'
 character(len=256) :: obs_out_file = 'obs_seq.out'
 logical            :: verbose = .false.
-integer            :: max_num_input_files = 500
+integer            :: max_num_input_files = 10
 
 namelist /ease_grid_to_obs_nml/ &
          input_file_list, obs_out_file, verbose, max_num_input_files

@@ -10,9 +10,9 @@
 # set AMSRE_WORKDIR = /gpfsm/dnb31/atoure/DART/observations/AMSR-E
 
 # Directories for Tim
-set   RAW_OBS_DIR = /glade/scratch/thoar/AMSR-E
-set AMSRE_WORKDIR = /glade/scratch/thoar/AMSR-E/work
-set      DART_DIR = /glade/p/work/thoar/DART/Tb/observations/AMSR-E/work
+set   RAW_OBS_DIR = /Users/thoar/Desktop/EASE_Grid/2011_north
+set AMSRE_WORKDIR = /Users/thoar/Desktop/EASE_Grid/temp
+set      DART_DIR = /Users/thoar/svn/DART/Tb/observations/AMSR-E/work
 
 set nonomatch
 
@@ -33,38 +33,41 @@ cd ${AMSRE_WORKDIR}
 # this takes more than 40 minutes and results in 6.3+ MILLION
 # observations - for a single day! 
 
-@ YEAR = 2003
-@ DOY = 120
-@ NDAYS = 1
+@ YEAR = 2011
+@ DOY = 5
+@ NDAYS = 4
+set FREQ = 89V
+set FBASE = ID2r3-AMSRE-NL
 
-# do not change iday.
+# do not change anything below this line
 
 @ IDAY = 1
 
 while ($IDAY <= $NDAYS)
 
-   set FileBaseDate = `printf ID2r1-AMSRE-ML%04d%03d $YEAR $DOY`
+   set FileBaseDate = `printf %s%04d%03d ${FBASE} $YEAR $DOY`
 
-   echo "looking for ${RAW_OBS_DIR}/${YEAR}/${FileBaseDate}*[HV]"
-   \ls -1 ${RAW_OBS_DIR}/${YEAR}/${FileBaseDate}*[HV] >! file_list.txt
+   echo "looking for ${RAW_OBS_DIR}/${YEAR}/${FileBaseDate}*"
+   \ls -1 ${RAW_OBS_DIR}/${YEAR}/${FileBaseDate}* >! file_list.$$
+
+   # subset just the frequency of interest 
+
+   grep $FREQ file_list.$$ >! file_list.txt
 
    if ( ! -z file_list.txt ) then
 
        echo "Input files are:"
        cat file_list.txt
 
-       #The format of name of Date_output_file the has to be:yyyy-mm-dd-00000
-       # BUT the actual filename date must be THE NEXT DAY for CLM/DART
-       # i.e. the data for April 22nd must be in a file named April 23rd
-       @ tomorrow = $DOY + 1
-       set FILEDATE = `date -d "$YEAR-01-01 +$tomorrow days -1 day" "+%F"`
-       echo "FILEDATE is $FILEDATE"
-       set Date_output_file = ${FILEDATE}-00000
+       # The date format of the output file name has to be yyyy-mm-dd-00000
+       # (in part, because the files always pertain to midnight)
+       # The files are stored in directories named YYYYMM
 
-       # specify sub-dir of processed data,
-       # data in the same month are stored in "/YYYYMM/"
-       #Get month and day using $DOY and $YEAR
-       set YYYYMM=`date -d "$YEAR-01-01 +$DOY days -1 day" "+%Y%m"`
+       set FILE_YYYYMMDD = `date -v${YEAR}y -v1m -v1d -v+${DOY}d -v-1d "+%Y-%m-%d"`
+       set FILE_YYYYMM   = `date -v${YEAR}y -v1m -v1d -v+${DOY}d -v-1d "+%Y-%m"`
+       set YYYYMM = `echo $FILE_YYYYMM | sed 's/-//'`
+
+       echo "FILE_YYYYMMDD is $FILE_YYYYMMDD"
        echo "YYYYMM is $YYYYMM"
 
        set Output_Obs_dir = "DART_OBS_SEQ/${YYYYMM}"
@@ -75,6 +78,7 @@ while ($IDAY <= $NDAYS)
        endif
 
        # specify output Output_fileName, format: obs_seq.yyyy-mm-dd-00000.out
+       set Date_output_file = ${FILE_YYYYMMDD}-00000
        set Output_fileName = "obs_seq.${Date_output_file}.out"
        set Full_Output_fileName = "${RAW_OBS_DIR}/${Output_Obs_dir}/${Output_fileName}"
        echo "Full_Output_fileName = $Full_Output_fileName"

@@ -115,7 +115,7 @@ character(len=8), parameter :: AMSRESTRING = 'amsr-e'
 character(len=8), parameter ::  IGBPSTRING = 'igbp'
 real(r8),         parameter :: AMSRE_inc_angle = 55.0_r8 ! incidence angle (degrees)
 
-integer, SAVE :: MAXamsrekey = 300000  ! 1 day, NH 25km, 1 freq, 1 pol 
+integer, SAVE :: MAXamsrekey = 625000  ! 1 day, NH 25km, 1 freq, 1 pol, both passes
 integer, SAVE ::    amsrekey = 0       ! useful length of metadata arrays
 
 !----------------------------------------------------------------------
