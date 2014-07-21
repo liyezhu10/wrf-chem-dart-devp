@@ -1,0 +1,2212 @@
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 25 19
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_1d_state_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 25 19
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 27 45
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ 
+ INPUT model files follow:
+ ERROR FROM:
+  routine: preprocess
+  message:  input_files  does NOT exist (and must).
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/preprocess/preprocess.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 30 32
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 30 32
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 31  4
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:                                     'SNOWH',     'KIND_SNOW_THICKNESS', in namelist model_nml
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 36 20
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  cannot open LSM restart file restart.nc for reading.
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 36 43
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:                                     'SNOWH',     'KIND_SNOW_THICKNESS', in namelist model_nml
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 15 37 53
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  cannot open LSM restart file restart.nc for reading.
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16  8  4
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  cannot open HYDRO restart file restart.hdyro.nc for reading.
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16  8 19
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  cannot open HYDRO namelist file hydro.namelist for reading.
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 10  0
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:  out_dt = 360 ! minutes in namelist HYDRO_nlist
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 11 24
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:  out_dt = 360 ! minutes in namelist HYDRO_nlist
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 11 32
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:  out_dt = 360 in namelist HYDRO_nlist
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 12 49
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:  ZSOIL8(1) = -0.10 in namelist HYDRO_nlist
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 15 30
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  cannot open file DOMAIN/wrfinput_d03 for reading.
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 16 39
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  unsupported noah namelist settings
+  message: ...  restart_frequency_hours must be equal to the noah_timstep
+  message: ...  the only configuration supported is for hourly timesteps
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 18 11
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: static_init_model
+  message:  unsupported noah namelist settings
+  message: ...  restart_frequency_hours must be equal to the noah_timstep
+  message: ...  the only configuration supported is for hourly timesteps
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/models/noah/model_mod.f90 $
+  file revision: $Revision: 6256 $
+  revision date: $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 18 32
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  5 30 16 19 43
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10  2 47
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 14 21
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 14 57
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 18  5
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 20 11
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 22 31
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 24 19
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 25  6
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 25 15
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 25 48
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 25 57
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 49  7
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 50 20
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 50 28
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 51  7
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 51 19
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 10 52 17
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11  9 25
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11  9 34
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 12 13
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 14 19
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 53  7
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 53  7
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 53 31
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 54 49
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ QLINK2
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "QLINK2" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 55 12
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ KIND_STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "KIND_STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 58 34
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:                             = '../../../obs_def/obs_def_streamflow_mod.f90' in namelist preprocess_nml
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 59 35
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 59 35
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 11 59 58
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ KIND_STREAM_FLOW
+ Evaluate_these_obs_types
+ SMC
+ ERROR FROM:
+  routine: initialize_module
+  message:  "KIND_STREAM_FLOW" from obs_kind_nml is not a legal observation kind to assimilate
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/obs_kind/DEFAULT_obs_kind_mod.F90 $
+  file revision: $Revision: 6667 $
+  revision date: $Date: 2013-12-10 16:54:28 -0700 (Tue, 10 Dec 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12  4 35
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12  4 35
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12 32 47
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12 39 56
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12 40 55
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 12 56 57
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+ variable            1  is smc   KIND_SOIL_MOISTURE
+ variable            2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable            3  is qlink2   KIND_STREAM_FLOW
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 13  2  4
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+ variable            1  is smc   KIND_SOIL_MOISTURE
+ variable            2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable            3  is qlink2   KIND_STREAM_FLOW
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 13 39 12
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+ variable            1  is smc   KIND_SOIL_MOISTURE
+ variable            2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable            3  is qlink2   KIND_STREAM_FLOW
+
+ SMC variable number            1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                  5
+   dimnames    west_east                       soil_layers_stag                south_north                     Time                            
+   dimlens              268           4         260           1
+   numdims                4
+   varsize           278720
+   index1                 1
+   indexN            278720
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+
+ SNOWH variable number            2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            278721
+   indexN            348400
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+
+ SNEQV variable number            3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            348401
+   indexN            418080
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+
+ LAI variable number            4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            418081
+   indexN            487760
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+
+ WA variable number            5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            487761
+   indexN            557440
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+
+ smc variable number            6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              depth                           
+   dimlens              268         260           4
+   numdims                3
+   varsize           278720
+   index1            557441
+   indexN            836160
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+
+ sfcheadrt variable number            7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              
+   dimlens              268         260
+   numdims                2
+   varsize            69680
+   index1            836161
+   indexN            905840
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+
+ qlink2 variable number            8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        link1d
+   stagger     -
+   xtype                  5
+   dimnames    links                           
+   dimlens           208214
+   numdims                1
+   varsize           208214
+   index1            905841
+   indexN           1114054
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            290
+   kind_string KIND_STREAM_FLOW                
+   grid        link1d
+ model_mod_check Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 13 39 12
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 13 52 40
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+ variable            1  is smc   KIND_SOIL_MOISTURE
+ variable            2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable            3  is qlink2   KIND_STREAM_FLOW
+
+ SMC variable number            1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                  5
+   dimnames    west_east                       soil_layers_stag                south_north                     Time                            
+   dimlens              268           4         260           1
+   numdims                4
+   varsize           278720
+   index1                 1
+   indexN            278720
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+
+ SNOWH variable number            2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            278721
+   indexN            348400
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+
+ SNEQV variable number            3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            348401
+   indexN            418080
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+
+ LAI variable number            4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            418081
+   indexN            487760
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+
+ WA variable number            5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            487761
+   indexN            557440
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+
+ smc variable number            6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              depth                           
+   dimlens              268         260           4
+   numdims                3
+   varsize           278720
+   index1            557441
+   indexN            836160
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+
+ sfcheadrt variable number            7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              
+   dimlens              268         260
+   numdims                2
+   varsize            69680
+   index1            836161
+   indexN            905840
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+
+ qlink2 variable number            8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        link1d
+   stagger     -
+   xtype                  5
+   dimnames    links                           
+   dimlens           208214
+   numdims                1
+   varsize           208214
+   index1            905841
+   indexN           1114054
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            290
+   kind_string KIND_STREAM_FLOW                
+   grid        link1d
+ model_mod_check Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 13 52 41
+ --------------------------------------
+
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 20 57 59
+ Program preprocess
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+ 
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 20 57 59
+ Program preprocess
+ --------------------------------------
+ 
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 20 58 52
+ Program preprocess
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+ 
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 20 58 52
+ Program preprocess
+ --------------------------------------
+ 
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 40 20
+ Program model_mod_check
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants 
+  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable             1  is SMC   KIND_SOIL_MOISTURE
+ variable             2  is SNOWH   KIND_SNOW_THICKNESS
+ variable             3  is SNEQV   KIND_SNOW_WATER
+ variable             4  is LAI   KIND_LEAF_AREA_INDEX
+ variable             5  is WA   KIND_WATER_TABLE_DEPTH
+ variable             1  is smc   KIND_SOIL_MOISTURE
+ variable             2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable             3  is qlink2   KIND_STREAM_FLOW
+ 
+ SMC variable number             1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                   5
+   dimnames    west_east                       soil_layers_stag                
+ south_north                     Time                            
+   dimlens               268            4          260            1
+   numdims                 4
+   varsize            278720
+   index1                  1
+   indexN             278720
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+ 
+ SNOWH variable number             2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             278721
+   indexN             348400
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+ 
+ SNEQV variable number             3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             348401
+   indexN             418080
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+ 
+ LAI variable number             4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             418081
+   indexN             487760
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+ 
+ WA variable number             5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             487761
+   indexN             557440
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+ 
+ smc variable number             6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+ depth                           
+   dimlens               268          260            4
+   numdims                 3
+   varsize            278720
+   index1             557441
+   indexN             836160
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+ 
+ sfcheadrt variable number             7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+   dimlens               268          260
+   numdims                 2
+   varsize             69680
+   index1             836161
+   indexN             905840
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+ 
+ qlink2 variable number             8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        link1d
+   stagger     -
+   xtype                   5
+   dimnames    links                           
+   dimlens            208214
+   numdims                 1
+   varsize            208214
+   index1             905841
+   indexN            1114054
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             290
+   kind_string KIND_STREAM_FLOW                
+   grid        link1d
+ model_mod_check Finished successfully.
+ 
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 40 21
+ --------------------------------------
+ 
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 41 24
+ Program model_mod_check
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants 
+  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable             1  is SMC   KIND_SOIL_MOISTURE
+ variable             2  is SNOWH   KIND_SNOW_THICKNESS
+ variable             3  is SNEQV   KIND_SNOW_WATER
+ variable             4  is LAI   KIND_LEAF_AREA_INDEX
+ variable             5  is WA   KIND_WATER_TABLE_DEPTH
+ variable             1  is smc   KIND_SOIL_MOISTURE
+ variable             2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable             3  is qlink2   KIND_STREAM_FLOW
+ 
+ SMC variable number             1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                   5
+   dimnames    west_east                       soil_layers_stag                
+ south_north                     Time                            
+   dimlens               268            4          260            1
+   numdims                 4
+   varsize            278720
+   index1                  1
+   indexN             278720
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+ 
+ SNOWH variable number             2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             278721
+   indexN             348400
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+ 
+ SNEQV variable number             3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             348401
+   indexN             418080
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+ 
+ LAI variable number             4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             418081
+   indexN             487760
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+ 
+ WA variable number             5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             487761
+   indexN             557440
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+ 
+ smc variable number             6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+ depth                           
+   dimlens               268          260            4
+   numdims                 3
+   varsize            278720
+   index1             557441
+   indexN             836160
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+ 
+ sfcheadrt variable number             7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+   dimlens               268          260
+   numdims                 2
+   varsize             69680
+   index1             836161
+   indexN             905840
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+ 
+ qlink2 variable number             8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        link1d
+   stagger     -
+   xtype                   5
+   dimnames    links                           
+   dimlens            208214
+   numdims                 1
+   varsize            208214
+   index1             905841
+   indexN            1114054
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             290
+   kind_string KIND_STREAM_FLOW                
+   grid        link1d
+ model_mod_check Finished successfully.
+ 
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 41 25
+ --------------------------------------
+ 
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 42 55
+ Program model_mod_check
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants 
+  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable             1  is SMC   KIND_SOIL_MOISTURE
+ variable             2  is SNOWH   KIND_SNOW_THICKNESS
+ variable             3  is SNEQV   KIND_SNOW_WATER
+ variable             4  is LAI   KIND_LEAF_AREA_INDEX
+ variable             5  is WA   KIND_WATER_TABLE_DEPTH
+ variable             1  is smc   KIND_SOIL_MOISTURE
+ variable             2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable             3  is qlink2   KIND_STREAM_FLOW
+ 
+ SMC variable number             1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                   5
+   dimnames    west_east                       soil_layers_stag                
+ south_north                     Time                            
+   dimlens               268            4          260            1
+   numdims                 4
+   varsize            278720
+   index1                  1
+   indexN             278720
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+ 
+ SNOWH variable number             2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             278721
+   indexN             348400
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+ 
+ SNEQV variable number             3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             348401
+   indexN             418080
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+ 
+ LAI variable number             4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             418081
+   indexN             487760
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+ 
+ WA variable number             5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                   5
+   dimnames    west_east                       south_north                     
+ Time                            
+   dimlens               268          260            1
+   numdims                 3
+   varsize             69680
+   index1             487761
+   indexN             557440
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+ 
+ smc variable number             6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+ depth                           
+   dimlens               268          260            4
+   numdims                 3
+   varsize            278720
+   index1             557441
+   indexN             836160
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind              24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+ 
+ sfcheadrt variable number             7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                   5
+   dimnames    ix                              iy                              
+   dimlens               268          260
+   numdims                 2
+   varsize             69680
+   index1             836161
+   indexN             905840
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+ 
+ qlink2 variable number             8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        link1d
+   stagger     -
+   xtype                   5
+   dimnames    links                           
+   dimlens            208214
+   numdims                 1
+   varsize            208214
+   index1             905841
+   indexN            1114054
+   minvalue        0.000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             290
+   kind_string KIND_STREAM_FLOW                
+   grid        link1d
+ model_mod_check Finished successfully.
+ 
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 21 42 56
+ --------------------------------------
+ 
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 16 44 36
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 16 44 36
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 16 57 34
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  2 16 57 34
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 10 55 57
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ get_hrldas_constants  get_hrldas_constants() not verified for multiple gridcells.
+ get_hydro_constants  get_hydro_constants() not verified.
+ Assimilate_these_obs_types
+ STREAM_FLOW
+ Evaluate_these_obs_types
+ SOIL_MOISTURE
+ variable            1  is SMC   KIND_SOIL_MOISTURE
+ variable            2  is SNOWH   KIND_SNOW_THICKNESS
+ variable            3  is SNEQV   KIND_SNOW_WATER
+ variable            4  is LAI   KIND_LEAF_AREA_INDEX
+ variable            5  is WA   KIND_WATER_TABLE_DEPTH
+ variable            1  is smc   KIND_SOIL_MOISTURE
+ variable            2  is sfcheadrt   KIND_SURFACE_HEAD
+ variable            3  is qlink2   KIND_STREAM_FLOW
+
+ SMC variable number            1
+   long_name   SMC
+   component   LSM
+   units       -
+   MemoryOrder XZY
+   grid        
+   stagger     Z
+   xtype                  5
+   dimnames    west_east                       soil_layers_stag                south_north                     Time                            
+   dimlens              268           4         260           1
+   numdims                4
+   varsize           278720
+   index1                 1
+   indexN            278720
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        
+
+ SNOWH variable number            2
+   long_name   SNOWH
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            278721
+   indexN            348400
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            107
+   kind_string KIND_SNOW_THICKNESS             
+   grid        
+
+ SNEQV variable number            3
+   long_name   SNEQV
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            348401
+   indexN            418080
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            108
+   kind_string KIND_SNOW_WATER                 
+   grid        
+
+ LAI variable number            4
+   long_name   LAI
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            418081
+   indexN            487760
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            117
+   kind_string KIND_LEAF_AREA_INDEX            
+   grid        
+
+ WA variable number            5
+   long_name   WA
+   component   LSM
+   units       -
+   MemoryOrder XY
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    west_east                       south_north                     Time                            
+   dimlens              268         260           1
+   numdims                3
+   varsize            69680
+   index1            487761
+   indexN            557440
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            128
+   kind_string KIND_WATER_TABLE_DEPTH          
+   grid        
+
+ smc variable number            6
+   long_name   smc
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse3d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              depth                           
+   dimlens              268         260           4
+   numdims                3
+   varsize           278720
+   index1            557441
+   indexN            836160
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind             24
+   kind_string KIND_SOIL_MOISTURE              
+   grid        coarse3d
+
+ sfcheadrt variable number            7
+   long_name   sfcheadrt
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        coarse2d
+   stagger     -
+   xtype                  5
+   dimnames    ix                              iy                              
+   dimlens              268         260
+   numdims                2
+   varsize            69680
+   index1            836161
+   indexN            905840
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            291
+   kind_string KIND_SURFACE_HEAD               
+   grid        coarse2d
+
+ qlink2 variable number            8
+   long_name   qlink2
+   component   HYDRO
+   units       -
+   MemoryOrder -
+   grid        
+   stagger     -
+   xtype                  5
+   dimnames    links                           
+   dimlens           208214
+   numdims                1
+   varsize           208214
+   index1            905841
+   indexN           1114054
+   minvalue       0.0000000000000000     
+   maxvalue       1.7976931348623157E+308
+   dart_kind            290
+   kind_string KIND_STREAM_FLOW                
+   grid        
+ model_mod_check Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 10 55 58
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 12  8 40
+ Program model_mod_check
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ ERROR FROM:
+  routine: check_namelist_read
+  message:  INVALID NAMELIST ENTRY:                                     'SNOWH',     'KIND_SNOW_THICKNESS', in namelist model_nml
+  
+  source file: $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Lanai/utilities/utilities_mod.f90 $
+  file revision: $Revision: 6333 $
+  revision date: $Date: 2013-07-30 14:17:26 -0600 (Tue, 30 Jul 2013) $
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 12 12  8
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 12 12  8
+ Program preprocess
+ --------------------------------------
+
+
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 12 13  3
+ Program preprocess
+ --------------------------------------
+
+ set_nml_output Echo NML values to log file only
+ Path names of default obs_def and obs_kind modules
+ ../../../obs_def/DEFAULT_obs_def_mod.F90
+ ../../../obs_kind/DEFAULT_obs_kind_mod.F90
+ Path names of output obs_def and obs_kind modules
+ ../../../obs_def/obs_def_mod.f90
+ ../../../obs_kind/obs_kind_mod.f90
+ INPUT obs_def files follow:
+ ../../../obs_def/obs_def_tower_mod.f90
+ ../../../obs_def/obs_def_streamflow_mod.f90
+ INPUT model files follow:
+ preprocess Finished successfully.
+
+ --------------------------------------
+ Finished ... at YYYY MM DD HH MM SS = 
+                 2014  6  3 12 13  3
+ Program preprocess
+ --------------------------------------
+
