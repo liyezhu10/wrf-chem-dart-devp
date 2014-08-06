@@ -23,8 +23,9 @@ endif
 
 cd ${AMSRE_WORKDIR}
 
-\cp -v ${DART_DIR}/input.nml        .
-\cp -v ${DART_DIR}/ease_grid_to_obs .
+\cp -v ${DART_DIR}/input.nml        . || exit 1
+\cp -v ${DART_DIR}/ease_grid_to_obs . || exit 2
+\cp -v ${DART_DIR}/advance_time     . || exit 3
 
 # Set DOY equal to the first day-of-year of interest.
 # Set NDAYS equal to the number of days to convert.
@@ -61,14 +62,12 @@ while ($IDAY <= $NDAYS)
 
        # The date format of the output file name has to be yyyy-mm-dd-00000
        # (in part, because the files always pertain to midnight)
-       # The files are stored in directories named YYYYMM
+       # We must convert the day-of-year to month-day since the files are 
+       # stored in directories named YYYYMM
 
-       set FILE_YYYYMMDD = `date -v${YEAR}y -v1m -v1d -v+${DOY}d -v-1d "+%Y-%m-%d"`
-       set FILE_YYYYMM   = `date -v${YEAR}y -v1m -v1d -v+${DOY}d -v-1d "+%Y-%m"`
+       set FILE_YYYYMMDD = `echo ${YEAR}010100 +${DOY}d-1d -f ccyy-mm-dd | ./advance_time`
+       set FILE_YYYYMM   = `echo ${YEAR}010100 +${DOY}d-1d -f ccyy-mm    | ./advance_time`
        set YYYYMM = `echo $FILE_YYYYMM | sed 's/-//'`
-
-       echo "FILE_YYYYMMDD is $FILE_YYYYMMDD"
-       echo "YYYYMM is $YYYYMM"
 
        set Output_Obs_dir = "DART_OBS_SEQ/${YYYYMM}"
        echo "The processed data dir is " $Output_Obs_dir
