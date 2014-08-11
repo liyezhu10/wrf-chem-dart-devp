@@ -94,7 +94,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 logical            :: module_initialized = .false.
-character(len=129) :: string1, string2
+character(len=512) :: string1, string2
 
 !----------------------------------------------------------------------
 ! Metadata for AMSR-E observations.

@@ -105,11 +105,11 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 logical            :: module_initialized = .false.
 logical            :: unstructured = .false.
-character(len=129) :: string1, string2, string3
+character(len=512) :: string1, string2, string3
 integer            :: nlon, nlat, ntime, ens_size
 type(time_type)    :: initialization_time
 
-character(len=129), allocatable, dimension(:) :: fname
+character(len=256), allocatable, dimension(:) :: fname
 integer,            allocatable, dimension(:) :: ncid
 real(r8),           allocatable, dimension(:) :: lon, lat, area
 real(digits12),     allocatable, dimension(:) :: rtime
