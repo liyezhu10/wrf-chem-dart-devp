@@ -156,7 +156,8 @@ integer  :: i, j, io, ncunit
 
 type(time_type) :: obs_time, no_time, last_possible_time
 
-character(len=256) :: ncName, string1, string2, string3
+character(len=256) :: ncName
+character(len=512) :: string1, string2, string3
 
 ! ~# of degrees for 1/2 meter at Earth equator 
 ! 360 deg-earth/(40000 km-earth * 1000m-km)
@@ -1210,8 +1211,8 @@ end Function InitNetCDF
 
 
 subroutine WriteNetCDF(ncid, fname, voxels)
-integer,                     intent(in) :: ncid
-character(len=*),            intent(in) :: fname
+integer,                        intent(in) :: ncid
+character(len=*),               intent(in) :: fname
 type(voxel_type), dimension(:), intent(in) :: voxels
 
 integer :: DimID, ntimes, voxelindex, days, secs, i
@@ -1352,7 +1353,7 @@ end subroutine CloseNetCDF
 
 
 subroutine initialize_voxels(Nvoxels, myvoxels)
-integer,                                  intent(in)  :: Nvoxels
+integer,                                     intent(in)  :: Nvoxels
 type(voxel_type), allocatable, dimension(:), intent(out) :: myvoxels
 
 integer :: i

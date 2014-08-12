@@ -75,9 +75,9 @@ integer                 :: total_num_inserted, base_index, next_base_index
 integer                 :: max_num_obs, file_id, this_type
 logical, allocatable    :: type_wanted(:)
 integer                 :: first_seq, num_good_called, num_good_searched
-character(len = 129)    :: read_format, meta_data
+character(len=129)      :: read_format, meta_data
 logical                 :: pre_I_format, cal
-character(len = 255)    :: msgstring, msgstring1, msgstring2, msgstring3
+character(len=512)      :: msgstring, msgstring1, msgstring2, msgstring3
 
 
 !----------------------------------------------------------------
@@ -93,13 +93,13 @@ integer                          :: obs_def_count
 integer                          :: print_every_nth_obs = 100
 
 
-character(len = 129) :: filename_seq(max_num_input_files) = ''
-character(len = 129) :: filename_seq_list = ''
-character(len = 129) :: filename_out  = 'obs_seq.processed'
-logical              :: process_file(max_num_input_files)
+character(len=256) :: filename_seq(max_num_input_files) = ''
+character(len=256) :: filename_seq_list = ''
+character(len=256) :: filename_out  = 'obs_seq.processed'
+logical            :: process_file(max_num_input_files)
 
-character(len = 129) :: selections_file = 'obsdef_mask.txt'
-logical              :: selections_is_obs_seq = .false.
+character(len=256) :: selections_file = 'obsdef_mask.txt'
+logical            :: selections_is_obs_seq = .false.
 
 ! max differences allowed when deciding a location is the same
 real(r8) :: latlon_tolerance      = 0.000001 ! horizontal, degrees
@@ -598,13 +598,13 @@ subroutine compare_metadata(seq1, seq2, fname1, fname2)
 ! qc entries, seq1 has already been edited and only 2 needs the editing
 ! applied.  before they were completely symmetric.
 
- type(obs_sequence_type), intent(IN) :: seq1, seq2
- character(len=*), optional :: fname1, fname2
+type(obs_sequence_type),    intent(in) :: seq1, seq2
+character(len=*), optional, intent(in) :: fname1, fname2
 
 integer :: num_copies1, num_qc1
 integer :: num_copies2, num_qc2
 integer :: num_copies , num_qc, i
-character(len=129) :: str1, str2
+character(len=metadatalength) :: str1, str2
 
 num_copies1 = get_num_copies(seq1)
 num_qc1     = get_num_qc(    seq1)
@@ -692,7 +692,7 @@ subroutine print_obs_seq(seq_in, filename)
 ! stop times, and metadata strings and counts.
 
 type(obs_sequence_type), intent(in) :: seq_in
-character(len=*), intent(in)        :: filename
+character(len=*),        intent(in) :: filename
 
 type(obs_type)          :: obs, next_obs
 type(obs_def_type)      :: this_obs_def
@@ -881,11 +881,11 @@ subroutine print_metadata(seq1, fname1)
 ! print out the metadata strings, trimmed
 !
 
-type(obs_sequence_type), intent(in) :: seq1
-character(len=*), optional :: fname1
+type(obs_sequence_type),    intent(in) :: seq1
+character(len=*), optional, intent(in) :: fname1
 
 integer :: num_copies , num_qc, i
-character(len=129) :: str1
+character(len=metadatalength) :: str1
 
 num_copies = get_num_copies(seq1)
 num_qc     = get_num_qc(    seq1)

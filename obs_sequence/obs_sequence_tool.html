@@ -144,21 +144,21 @@ given.  If non-zero must match the given input file list length.
 </TD></TR>
 
 <TR><TD>filename_seq</TD>
-    <TD>character(len=129), dimension(500)</TD>
+    <TD>character(len=256), dimension(500)</TD>
     <TD>The array of names of the observation sequence files to process.
 With the F90 namelist mechanism it is only necessary to specify the names
 you are going to use, not all.
 </TD></TR>
 
 <TR><TD>filename_seq_list</TD>
-    <TD>character(len=129)</TD>
+    <TD>character(len=256)</TD>
     <TD>The name of a text file which contains, one per line,
 the names of the observation sequence files to process.  You can only specify
 one of filename_seq OR filename_seq_list, not both.
 </TD></TR>
 
 <TR><TD>filename_out</TD>
-    <TD>character(len=129)</TD>
+    <TD>character(len=256)</TD>
     <TD>The name of the resulting output observation sequence file.
 </TD></TR>
 
