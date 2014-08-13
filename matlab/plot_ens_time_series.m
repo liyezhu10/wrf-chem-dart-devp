@@ -95,6 +95,11 @@ switch lower(pinfo.model)
 
       pinfo = GetSqgInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
 
+   case {'wrfhydro'}
+
+      pinfo = GetWrfHydroInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
+      
+      
    otherwise
 
       error('model %s not implemented yet', pinfo.model)

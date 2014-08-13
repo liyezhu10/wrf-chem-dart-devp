@@ -48,6 +48,19 @@
 %                               the model developers are free to supply whatever functions
 %                               or scripts they deem useful.
 
+% These routines were written before MATLAB had native netcdf
+% support. They use the mexcdf library found here:
+% http://mexcdf.sourceforge.net/
+% Example for 2012b:
+% download mexcdf and cd to that dir in matlab. Then issue the
+% following commands:
+%  unzip('mexcdf.r4053.zip')  
+%  addpath ([pwd '/mexcdf/mexnc']);
+%  addpath ([pwd '/mexcdf/snctools']);
+%  test_snctools()
+% this fails for me after the critical part... jlm
+
+
 %% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download

@@ -29,7 +29,8 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              error_handler, E_ERR
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, get_date, &
-                             set_time, operator(+), operator(-), operator(<=)
+                             set_time, operator(+), operator(-), operator(<=), & 
+                             operator(<)
 use        model_mod, only : static_init_model, dart_vector_to_model_files, &
                              get_model_size, get_lsm_restart_filename, &
                              get_hydro_restart_filename, & 
@@ -154,38 +155,41 @@ if ( advance_time_present ) then
    nexttimestep    = set_time(   noah_timestep, 0)
    forcingtimestep = set_time(forcing_timestep, 0)
    nfiles = 0
-   TIMELOOP: do while (mytime <= adv_to_time)
-      nfiles = nfiles + 1
-      mytime = mytime + nexttimestep
+
+   TIMELOOP: do while (mytime < adv_to_time)  
+         nfiles = nfiles + 1
+         mytime = mytime + nexttimestep
    enddo TIMELOOP
 
    if (get_debug_level() > 0) &
    write(*,*)'needed ',nfiles,' LDASIN files to get from model_time to adv_to_time.'
 
-   iunit = open_file('noah_advance_information.txt',form='formatted',action='write')
-   call print_date(  model_time,'dart_to_noah:noah  model      date',iunit)
-   call print_date( adv_to_time,'dart_to_noah:noah  advance_to_date',iunit)
-   write(iunit,'(''khour  = '',i6)') nfiles-1
+   iunit = open_file('wrfHydro_advance_information.txt',form='formatted',action='write')
+   call print_date(  model_time,'dart_to_wrfHydro:wrfHydro  model      date',iunit)
+   call print_date( adv_to_time,'dart_to_wrfHydro:wrfHydro  advance_to_date',iunit)
+   write(iunit,'(''khour  = '',i6)') nfiles
    write(iunit,'(''nfiles = '',i6)') nfiles
 
    mytime = model_time
 
    do ifile = 1,nfiles
       ! The model time is one noah_timestep (which must be equal to RESTART_FREQUENCY_HOURS)
-      ! behind the file names needed.
-
+      ! behind the file names needed. So add another timestep for the hrldas restart file name.
       mytime = mytime + nexttimestep
 
       call get_date(mytime,year,month,day,hour,minute,second)
 
       ! TJH FIXME - what happens to seconds ...
+      ! we only seem to run at time resolutions of hours for wrfHydro.... jlm
       if ((minute == 0) .and. (second == 0)) then
          write(datestring,'(i4.4,3(i2.2))')year,month,day,hour
       else
          write(datestring,'(i4.4,4(i2.2))')year,month,day,hour,minute
       endif
 
-      write(iunit,'(a)')trim(datestring)//'.LDASIN_DOMAIN1'
+      ! we dont know the final character on this file name. I'm going to leave it off 
+      ! and let advance_model match against files in the FORCING/ directory.
+      write(iunit,'(a)')trim(datestring)//'.LDASIN_DOMAIN'
    enddo
 
    call close_file(iunit)
@@ -197,16 +201,16 @@ end if
 !----------------------------------------------------------------------
 
 if (get_debug_level() > 0) then
-   call print_date( model_time,'dart_to_noah:noah model date')
-   call print_time( model_time,'dart_to_noah:DART model time')
-   call print_date( model_time,'dart_to_noah:noah model date',logfileunit)
-   call print_time( model_time,'dart_to_noah:DART model time',logfileunit)
+   call print_date( model_time,'dart_to_wrfHydro:wrfHydro model date')
+   call print_time( model_time,'dart_to_wrfHydro:DART model time')
+   call print_date( model_time,'dart_to_wrfHydro:wrfHydro model date',logfileunit)
+   call print_time( model_time,'dart_to_wrfHydro:DART model time',logfileunit)
 
    if ( advance_time_present ) then
-      call print_time(adv_to_time,'dart_to_noah:advance_to time')
-      call print_date(adv_to_time,'dart_to_noah:advance_to date')
-      call print_time(adv_to_time,'dart_to_noah:advance_to time',logfileunit)
-      call print_date(adv_to_time,'dart_to_noah:advance_to date',logfileunit)
+      call print_time(adv_to_time,'dart_to_wrfHydro:advance_to time')
+      call print_date(adv_to_time,'dart_to_wrfHydro:advance_to date')
+      call print_time(adv_to_time,'dart_to_wrfHydro:advance_to time',logfileunit)
+      call print_date(adv_to_time,'dart_to_wrfHydro:advance_to date',logfileunit)
    endif
 endif
 
