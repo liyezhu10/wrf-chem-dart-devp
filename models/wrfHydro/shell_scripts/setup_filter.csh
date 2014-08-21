@@ -73,6 +73,7 @@
 #                      |
 #                      + restart.iEns.nc        (iEns is a 4 character integer, e.g. 0010)
 #                      + restart.hydro.iEns.nc
+#                      +(o) restart.assimOnly.iEns.nc
 
 #               +(r) OUTPUT/
 #                      |
@@ -80,6 +81,7 @@
 #                              |
 #                              +(a) RESTART.yyyymmddhh.DOMAIN*.iEns.nc
 #                              +(a) HYDRO_RST.yyyy-mm-dd_hh:00_DOMAIN*.iEns.nc
+#                              +(o) RESTART_assimOnly.yyyymmddhh.iEns.nc
 #                              +(a) *.LDASOUT_DOMAIN*.iEns.nc
 #                              +(a) *.LSMOUT_DOMAIN*.iEns
 #                              +(a) *.RTOUT_DOMAIN*.iEns
@@ -105,16 +107,19 @@
 
 #               +(ca) restart.nc
 #               +(ca) restart.hydro.nc
+#               +(cao) restart.assimOnly.nc
 #               +(ca) restart.iEns.nc
 #               +(ca) restart.hydro.iEns.nc
+#               +(cao) restart.assimOnly.iEns.nc
 #               +(ca) filter_ics.iEns
 
 #               +(x) advance_temp.pid/  (where the actual model runs are performed)
 #                      |
 #                      + *.TBL  -> can be symlinks to ../../PARAMS.* or copies.
 
-#                      + restart.nc -> ../restart.iEns.nc -> (see below) (for the current iEns)
-#                      + restart.hydro.nc -> ../restart.hydro.iEns.nc  -> (see below)
+#                      + restart.nc -> ../restart.iEns.nc -> (see this filebelow) (for current iEns)
+#                      + restart.hydro.nc -> ../restart.hydro.iEns.nc  -> (see this file below)
+#                      + restart.assimOnly.nc -> ../restart.assimOnly.iEns.nc  -> (see file below)
 
 #               | (output spew of restart files and output files)
 #               | (these symlinks go to advance_temp.pid, impyling that model restarts are 
@@ -123,6 +128,8 @@
 #               +(a) restart.iEns.nc -> latest integDir/RESTART.yyyymmddhh.DOMAIN*.iEns.nc 
 #               +(a) restart.hydro.iEns.nc -> 
 #                               latest integDir/HYDRO_RST.yyyy-mm-dd_hh:00_DOMAIN*.iEns.nc
+#               +(a) restart.assimOnly.iEns.nc -> 
+#                               latest integDir/RESTART.yyyymmddhh.iEns.nc
 
 #               
 
@@ -349,7 +356,7 @@ end
 
 #==============================================================================
 echo
-echo DART Scripts
+echo "DART Scripts"
 foreach FILE ( run_filter.csh advance_model.csh )
    if ( -e ${FILE} && ! $forceCopyDartScripts )  then
       echo "Using existing $FILE"
@@ -372,8 +379,6 @@ end
 #    advance_model.csh for the first model advance.
 #
 
-
-
 # link to the useful script for creating initial ensembles. 
 ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh .
 
@@ -393,6 +398,8 @@ if (! -e ${ensembleDir} ) then
     exit 1
 endif 
 
+
+
 #===============================================================================
 # Set the date in the namelist.hrldas to match that of the first restart file.
 # (because there's no error generate - only bogus output where there is no forcing.).
@@ -411,8 +418,8 @@ wq
 ex_end
 
 ##===============================================================================
-set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^h]* | wc -l`
-set lsmFileList = `ls -1 ${ensembleDir}/restart.[^h]*`
+set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^ha]* | wc -l`
+set lsmFileList = `ls -1 ${ensembleDir}/restart.[^ha]*`
 
 set   nHydroFiles = `ls -1 ${ensembleDir}/*hydro* | wc -l`
 set hydroFileList = `ls -1 ${ensembleDir}/*hydro*`
@@ -420,14 +427,38 @@ set hydroFileList = `ls -1 ${ensembleDir}/*hydro*`
 echo $nLsmFiles
 echo $nHydroFiles
 
+## From the namelist determine if the noAssim restarts are needed. 
+## The line could be commented out (default is blank in model_mod.f90) or set to ''.
+set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | wc -l`
+set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | \
+                         cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
+set assimOnly_active = 0
+if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
+
+if ($assimOnly_active) then 
+    set   nAssimOnlyFiles = `ls -1 ${ensembleDir}/*assimOnly* | wc -l`
+    set assimOnlyFileList = `ls -1 ${ensembleDir}/*assimOnly*`
+    echo $nAssimOnlyFiles
+endif 
+
 if ( $nLsmFiles !~ $nHydroFiles ) then
     echo "The number of LSM and HYDRO restart files do NOT match in $ensembleDir"
     exit 8
 endif 
 
+if ($assimOnly_active) then
+    if ( $nLsmFiles !~ $nAssimOnlyFiles ) then
+	echo "The number of LSM and assimOnly restart files do NOT match in $ensembleDir"
+	exit 8
+    endif
+endif 
+
 echo "The inital emsemble restart files:"
 echo $lsmFileList
 echo $hydroFileList
+if ($assimOnly_active) then 
+    echo $assimOnlyFileList
+endif 
 
 # Convert initial condition restart files to to DART initial condition files.
 # This is the last step in advance_model, so these are expected at start of filter.
@@ -440,18 +471,25 @@ set initEnsOutDir = OUTPUT/initial_restarts
 while ($ifile <= $nLsmFiles)
     @ ensemble_member = $ensemble_member + 1
     set fext = `printf %04d $ensemble_member`
+    
+    # make initial conditions for DART
+    \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc
+    \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc
+    if ( $assimOnly_active ) \
+	\ln -svf ${ensembleDir}/restart.assimOnly.$fext.nc restart.assimOnly.nc
 
-   # make initial conditions for DART
-   \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc
-   \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc
-   ./wrfHydro_to_dart                     || exit 9
-   ${MOVE} dart_ics filter_ics.$fext      || exit 10 #??where are the naming assumptions explained??
-   #${MOVE} dart_ics assim_model_state_ic.$fext      || exit 10
+    ./wrfHydro_to_dart                     || exit 9
+    ${MOVE} dart_ics filter_ics.$fext      || exit 10 #??where are the naming assumptions explained??
+    #${MOVE} dart_ics assim_model_state_ic.$fext      || exit 10
     
     \cp ${ensembleDir}/restart.$fext.nc $initEnsOutDir/restart.$fext.nc 
-    \cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc 
     \ln -sf  $initEnsOutDir/restart.$fext.nc .
+    \cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc 
     \ln -sf  $initEnsOutDir/restart.hydro.$fext.nc .
+    if ( $assimOnly_active ) then 
+	\cp ${ensembleDir}/restart.assimOnly.$fext.nc $initEnsOutDir/restart.assimOnly.$fext.nc 
+	\ln -sf  $initEnsOutDir/restart.assimOnly.$fext.nc .
+    endif
 
    @ ifile = $ifile + 1
 end

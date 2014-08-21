@@ -33,7 +33,9 @@ use time_manager_mod, only : time_type, print_time, print_date, get_date, &
                              operator(<)
 use        model_mod, only : static_init_model, dart_vector_to_model_files, &
                              get_model_size, get_lsm_restart_filename, &
+                             get_lsm_restart_filename, &
                              get_hydro_restart_filename, & 
+                             get_assimOnly_restart_filename, & 
                              get_model_timestepping, get_debug_level
 
 implicit none
@@ -60,7 +62,7 @@ namelist /dart_to_wrfHydro_nml/ dart_to_wrfHydro_input_file, &
 ! global storage
 !----------------------------------------------------------------------
 
-character(len=20)     :: lsm_restart_filename, hydro_restart_filename
+character(len=20)     :: lsm_restart_filename, hydro_restart_filename, assimOnly_restart_filename
 integer               :: ifile, nfiles, iunit, io, x_size
 type(time_type)       :: model_time, adv_to_time, mytime
 type(time_type)       :: forcingtimestep, nexttimestep
@@ -93,6 +95,7 @@ call check_namelist_read(iunit, io, "dart_to_wrfHydro_nml")
 
 call get_lsm_restart_filename( lsm_restart_filename )
 call get_hydro_restart_filename( hydro_restart_filename )
+call get_assimOnly_restart_filename( assimOnly_restart_filename )
 
 write(*,*)
 write(*,'(''dart_to_wrfHydro:converting DART file <'',A, &
@@ -122,7 +125,9 @@ call close_restart(iunit)
 ! write the updated state to the wrfHydro restart file.
 !----------------------------------------------------------------------
 call dart_vector_to_model_files(statevector, &
-                               lsm_restart_filename, hydro_restart_filename, &
+                               lsm_restart_filename, &
+                               hydro_restart_filename, &
+                               assimOnly_restart_filename, &
                                model_time, skip_variables)
 
 !----------------------------------------------------------------------

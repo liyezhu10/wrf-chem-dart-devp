@@ -20,6 +20,7 @@
      hydro_model_active           = .true.
      lsm_netcdf_filename          = 'restart.nc'
      hydro_netcdf_filename        = 'restart.hydro.nc'
+     assimOnly_netcdf_filename    = 'restart.assimOnly.nc'
      assimilation_period_days     =    0
      assimilation_period_seconds  = 3600
      model_perturbation_amplitude = 0.0
@@ -28,6 +29,7 @@
      hydro_state_variables        = 'sh2ox',      'KIND_SOIL_LIQUID_WATER',
                                     'qlink1',     'KIND_STREAM_FLOW',
                                     'z_gwsubbas', 'KIND_DEEP_GROUNDWATER_LEVEL',
+     assimOnly_state_variables    = 'precipMult', 'KIND_1D_PARAMETER'
   /
 
 &wrfHydro_to_dart_nml

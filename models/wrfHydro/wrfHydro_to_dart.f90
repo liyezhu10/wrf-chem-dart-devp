@@ -28,7 +28,9 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 use        model_mod, only : static_init_model, get_model_size, model_to_dart_vector, &
-                             get_lsm_restart_filename, get_hydro_restart_filename, get_debug_level
+                             get_lsm_restart_filename, get_hydro_restart_filename, &
+                             get_assimOnly_restart_filename, &
+                             get_debug_level
 
 implicit none
 
@@ -50,7 +52,7 @@ namelist /wrfHydro_to_dart_nml/ wrfHydro_to_dart_output_file
 integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
-character(len=256)    :: lsm_restart_filename, hydro_restart_filename
+character(len=256)    :: lsm_restart_filename, hydro_restart_filename, assimOnly_restart_filename
 
 !======================================================================
 call initialize_utilities(progname='wrfHydro_to_dart')
@@ -70,6 +72,7 @@ call check_namelist_read(iunit, io, "wrfHydro_to_dart_nml")
 
 call get_lsm_restart_filename( lsm_restart_filename )
 call get_hydro_restart_filename( hydro_restart_filename )
+call get_assimOnly_restart_filename( assimOnly_restart_filename )
 
 !----------------------------------------------------------------------
 ! Read the restart and return the DART state vector.
@@ -86,7 +89,9 @@ write(logfileunit,'(''wrfHydro_to_dart:converting noah restart file <'',A, &
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-call model_to_dart_vector(lsm_restart_filename, hydro_restart_filename, &
+call model_to_dart_vector(lsm_restart_filename, &
+                          hydro_restart_filename, &
+                          assimOnly_restart_filename, &
                           statevector, model_time)
 
 ! Output the DART state vector (apriori)

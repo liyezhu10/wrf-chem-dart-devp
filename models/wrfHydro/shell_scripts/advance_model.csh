@@ -46,8 +46,6 @@ set   num_states = $2
 set control_file = $3
 
 
-
-
 #----------------------------------------------------------------------
 # Block 1: copy necessary input files/executables/files common
 #          to all model advances to a clean, temporary directory.
@@ -70,12 +68,23 @@ cd       $temp_dir  || exit 1
 \cp ../hydro.namelist .
 \cp ../input.nml .   ## i'm not seeing this used here but it might be used by filter.
 
-## Get parameters.
+# Get parameters.
 foreach FILE ( ../PARAMS.gathered/* ) 
     echo $FILE
 #   \cp -v ../$FILE . || exit 2 ## these dont change so link them instead.
     \ln -sf $FILE . || exit 2  
 end
+
+# From the namelist determine if the noAssim restarts are needed. 
+# The line could be commented out (default is blank in model_mod.f90) or set to ''.
+set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | wc -l`
+set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | \
+                         cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
+set assimOnly_active = 0
+if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
+# assimOnly variables dont necessarily mean perturbed forcing?
+# for now the do mean perturbed forcing...
+# eventually may want to list the variables in the file and set flags based on these. 
 
 #-------------------------------------------------------------------------------
 # Loop through each state
@@ -93,29 +102,30 @@ while($state_copy <= $num_states)
     set instance        = `printf "%04d" $ensemble_member`
 
     #-------------------------------------------------------------------
-    # Block 2: copy/convert the DART state vector to something the 
-    #          model can ingest.
-    #
-    #          * remove any NOAH scraps from previous advances
+    # Block 2: dart_to_wrfHydro
+    #          * remove scraps from previous advances
     #          * copy/link ensemble-member-specific files
     #          * convey the advance-to-time to the model
-    #          * convert the DART state vector to model format 
+    #          * dart_to_wrfHydro: convert the DART state vector to model format
     #-------------------------------------------------------------------
 
     echo "advance_model.csh block 2 converting ensemble member $instance"
 
     # clean up from last advance
     # some of these must be copied at some point?? for diagnostics?
-    \rm -f  restart.nc  restart.hydro.nc dart_restart  wrfHydro_advance_information.txt
+    \rm -f  restart.nc  restart.hydro.nc  dart_restart  restart.assimOnly.nc
+    \rm -f wrfHydro_advance_information.txt
     \rm -f  HYDRO_RST.*  RESTART.* 
-    # if perturbed forgins are used, there will be *LDASIN_DOMAIN* here. see below.
+    # if perturbed forcings are used, there will be *LDASIN_DOMAIN* here. see below.
     \rm -f  *.LDASOUT_DOMAIN*  *LDASIN_DOMAIN*
     \rm -f  *.LSMOUT_DOMAIN*  *.RTOUT_DOMAIN*  *.CHRTOUT*  *.CHANOBS*  frxst_pts_out.txt
-    \rm -f  qstrmvol*  diag_hydro.*  stderr.txt stdout.txt  GW_*.txt  *.GW_DOMAIN1 
+    \rm -f  qstrmvol*  diag_hydro.*  stderr.txt stdout.txt  GW_*.txt  *.GW_DOMAIN*
  
     # need the wrfHydro restart files for the output of dart_to_wrfHydro
     \ln -sv ../restart.$instance.nc  restart.nc   || exit 2
     \ln -sv ../restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
+    if ( $assimOnly_active ) \
+	\ln -sv ../restart.assimOnly.$instance.nc  restart.assimOnly.nc   || exit 2
 
     # the input file is the name of the dart_restart.instance? 
     # There must be reasons for being cryptic.
@@ -183,28 +193,32 @@ ex_end
     set numfiles      = `echo $numfilestring[$#numfilestring]`
     set skipNlines    = `echo $numfilestring[1]`
 
-    # For PERTURBED FORCING ONLY
-    # using perturbed forcing will require altering the namelist.hrldas to sepcify the path. 
-    # sketch of how to do it:
-    # if it's desirable to keep the perturbed forcings (for diagnostics), then the perturbed
-    # forcings should not be in the current dir as it must be deleted. 
-    # Create ../FORCING.perturbed/yyyymmddhh.iEns.LDASIN_DOMAIN* where the final character 
+    #-------------------------------------------------------------------
+    # Block 2.5: PERTURBED FORCING 
+    #
+    # It may be desirable to keep the perturbed forcings (for diagnostics or smoother?).
+    # Here you can exercise that choice. If kept, perturbed forcings will be stored to
+    # ../FORCING.perturbed/yyyymmddhh.iEns.LDASIN_DOMAIN* where the final character 
     # is the same as in ../FORCING/yyyymmddhh.LDASIN_DOMAIN*. 
-    # If the files are to be kept, then link, else move the file to ./yyyymmddhh.LDASIN_DOMAIN* 
-    # which
-    # 
+    # If cycling or re-running is performed for previous timesteps after each analysis, 
+    # this may become more complex, with the forcing at a given time actually depending 
+    # on the time of the analysis. (That is the forcing is changing as the analysis moves
+    # into the future). But Im' not going to worry about that yet. 
+    #
+    # Create the forcings in the current directory and only move if they are to be kept.  
     # The FORGING.perturbed/* filenames should have date and the instance/nnnn should be specified.  
-
-    # I'm not yet clear where the perturbed forcings will be created. Since I want to do a 
-    # precip multiplier, it should be after filter and after dart_to_wrfHydro but before the 
-    # advance. So perhaps it's a separate exectuable which is triggered here if there's a third 
-    # restart file created by dart_to_wrfHydro which contains precip multipliers. 
-    # right now not using this, so this is in a false if statement
+    # then symlinked to remove this.
+    ## Alter the namelist.hrldas to point INDIR='./'
 
     #This hasnt been tested yet. 
+    if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
     set false = 0
     if ( $false ) then 
 
+	## The name of the forcing file is conveniently supplied in 
+	## wrfHydro_advance_information.txt. Though ( fix ) the times in the 2 top lines
+	## seem wrong.
+	
 	@ ifile = 1
 	while ($ifile <= $numfiles)
 	    @ linenum = $skipNlines + $ifile
@@ -212,7 +226,7 @@ ex_end
 	    set FDATE = `echo $FNAME | sed -e "s#[.,']# #g"`
 	    set FDATE = `echo $FDATE[1]`
 
-	    set FFILE = `\ls ../FORCING.perturbed/$DATE.$instance.LDASIN_DOMAIN*`
+	    set FFILE = `\ls ../FORCING/$FDATE.LDASIN_DOMAIN*`
 	    set FFILElocal = `echo $FFILE | \cut -d'/' -f3 | \cut -d'.' -f1,3`
 	    \ln -s $FFILE ${FFILElocal}
 	    # \mv $FFILE $FFILE.local if we dont want to keep the perturbed forcings
@@ -220,7 +234,13 @@ ex_end
 	    @ ifile = $ifile + 1
 	end
 
-	## also need to cange the location of the input of the input in the namelist.hrldas
+	## get this file and multiply it by the precip multiplier in the corresponding 
+	## assimOnlyfile and save in run dir with appropriate name
+
+	## change the location of the input in the namelist.hrldas
+	
+	## need to update the timestamp in the restart.
+	## the timestamp should match that of the forcing file??
 
     endif 
     
