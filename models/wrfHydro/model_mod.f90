@@ -301,6 +301,7 @@ type progvartype
    character(len=paramname_length) :: kind_string
 end type progvartype
 
+!! jlm fixme? can't this be allocated to the appropriate size after reading input.nml?
 type(progvartype), dimension(MAX_STATE_VARIABLES) :: progvar
 
 ! State/'progvar' location information is stored here!
@@ -947,17 +948,26 @@ do igrid = 1, size(grids)
 enddo
 
 ! Make sure we are [0,360] and [-90,90]
-! The poles are easy.
-
-where (state_lat < -90.0_r8) state_lat = -90.0_r8
-where (state_lat >  90.0_r8) state_lat =  90.0_r8
-
-where (state_lon <   0.0_r8) state_lon = state_lon + 360.0_r8
-where (state_lon > 360.0_r8) state_lon = state_lon - 360.0_r8
+! jlm fixme I thin it's better to require these to be done for the 
+! individdual coordinate systems upon read than now, just in the state
+! vector because the coords read in get pushed to the Post/Prior diagnostic files. 
+! I think it's better to throw an error here than to correct one, since it may leave
+! inconsistencies in the output.
+!where (state_lat < -90.0_r8) state_lat = -90.0_r8
+!where (state_lat >  90.0_r8) state_lat =  90.0_r8
+!where (state_lon <   0.0_r8) state_lon = state_lon + 360.0_r8
+!where (state_lon > 360.0_r8) state_lon = state_lon - 360.0_r8
 if (any(state_lon < 0.0_r8)) then
-   write(string1,*)'longitudes in "state_lon" still negative.'
+   write(string1,*)'longitudes in "state_lon" still negative.' // &
+                   ' Please fix these immediately upon reading in the coordinates or prior.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
+if (any(state_lat < -90.0_r8) .OR. any(state_lat > 90.0_r8) ) then
+   write(string1,*)'Latitudes in "state_lat" outside [-90,90].' // &
+                   ' Please fix these immediatley upon reading in the coordinates or prior.'
+   call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+endif
+
 
 allocate(state_loc(model_size))
 do iState=1,model_size
@@ -1131,18 +1141,15 @@ subroutine model_interpolate(x, location, itype, obs_val, istatus)
   closestInd = closestIndArr(1) + index1 - 1
   
   obs_val = x( closestInd )
-  print*,obs_val
   
   if (obs_val /= MISSING_R8) istatus = 0
   
   if ( (do_output()) .and. debug > 20 ) then
      write(*,*)'model_interpolate : progvar%kind_string is ',trim(progvar(ivar)%kind_string)
      write(*,*)'model_interpolate : state index         is ',closestInd
-     write(*,*)'model_interpolate : value               is ',obs_val
-     
+     write(*,*)'model_interpolate : value               is ',obs_val     
      call write_location(n,state_loc(closestInd),charstring=string1)
      write(*,*)'state location ',trim(string1)
-
      call write_location(n,location,charstring=string1)
      write(*,*)'observation location ',trim(string1)
   endif
@@ -1485,6 +1492,11 @@ function nc_write_model_atts( ncFileID ) result (ierr)
      !----------------------------------------------------------
      !! I dont particularly like these variable names but I'm using the conventions in 
      !! the wrfHydro HYDRO_RST files
+
+     !! Check which grids are actually being used and only output those. 
+print*,'-------------------------------------------------------------------'
+print*,progvar%grid     
+
      !! coarse grid
      call nc_check(nf90_def_dim(ncid=ncFileID, name='ix', len=west_east, dimid=ixDimID),&
           'nc_write_model_atts','ix def_dim '//trim(filename))
@@ -2997,6 +3009,9 @@ call nc_check(nf90_inq_varid(iunit, 'XLAT', VarID), &
 call nc_check(nf90_get_var(iunit, VarID, xlat, &
                   start=ncstart(1:numdims), count=nccount(1:numdims)), &
                   'get_hrldas_constants', 'get_var XLAT '//trim(filename))
+where (xlat < -90.0_r8) xlat = -90.0_r8
+where (xlat >  90.0_r8) xlat =  90.0_r8
+
 
 end subroutine get_hrldas_constants
 
@@ -3065,8 +3080,8 @@ subroutine get_hydro_constants(filename)
   call nc_check(nf90_get_var(iunit, VarID, hlong, &
        start=ncstart(1:numdims), count=nccount(1:numdims)), &
        'get_hydro_constants', 'get_var LONGITUDE '//trim(filename))
-  where(xlong < 0.0_r8) xlong = xlong + 360.0_r8
-  where(xlong == 360.0_r8) xlong = 0.0_r8
+  where(hlong < 0.0_r8) hlong = hlong + 360.0_r8
+  where(hlong == 360.0_r8) hlong = 0.0_r8
 
   !get the latitudes
   call nc_check(nf90_inq_varid(iunit, 'LATITUDE', VarID), &
@@ -3074,7 +3089,8 @@ subroutine get_hydro_constants(filename)
   call nc_check(nf90_get_var(iunit, VarID, hlat, &
        start=ncstart(1:numdims), count=nccount(1:numdims)), &
        'get_hydro_constants', 'get_var LATITUDE '//trim(filename))
-
+  where (hlat < -90.0_r8) hlat = -90.0_r8
+  where (hlat >  90.0_r8) hlat =  90.0_r8
 
   !get the channelgrid
   ! i'm doing this exactly to match how it's done in the wrfHydro code 
@@ -3435,9 +3451,6 @@ subroutine getChannelCoords(filename, iunit, numdims, ncstart, nccount)
      end do
   end do
   deallocate(channelGrid_in, LAKE_MSKRT_in, DIRECTION_in, ELRT_in)
-
-  !lonFlip = hlong !jxrt-j+1)
-  !latFlip = hlat  !jxrt-j+1)
 
   ! subset to the 1D channel network as presented in the hydro restart file.
   n_link = sum(channelGrid_in*0+1, mask = channelGrid .ge. 0)
