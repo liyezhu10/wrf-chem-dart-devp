@@ -189,7 +189,7 @@ integer            :: HRLDAS_ini_typ = 0
 integer            :: SNOW_assim = 0
 
 !! only Noah
-real(r8), dimension(NSOLDX) :: zsoil8
+real(r8), dimension(NSOLDX) :: zsoil
 integer            :: subwindow_xstart = 1
 integer            :: subwindow_ystart = 1
 integer            :: subwindow_xend = 0
@@ -221,7 +221,7 @@ namelist /NOAHLSM_OFFLINE/ hrldas_constants_file, indir, outdir, &
      restart_filename_requested, kday, khour, forcing_timestep, &
      noah_timestep, output_timestep, restart_frequency_hours, split_output_count, &
      nsoil, zlvl, iz0tlnd, sfcdif_option, update_snow_from_forcing, &
-     FORC_TYP, GEO_STATIC_FLNM, HRLDAS_ini_typ, SNOW_assim, zsoil8, &
+     FORC_TYP, GEO_STATIC_FLNM, HRLDAS_ini_typ, SNOW_assim, zsoil, &
      subwindow_xstart, subwindow_ystart, subwindow_xend, subwindow_yend, zlvl_wind, &
      MMF_RUNOFF_FILE, DYNAMIC_VEG_OPTION, CANOPY_STOMATAL_RESISTANCE_OPTION, BTR_OPTION, &
      RUNOFF_OPTION, SURFACE_DRAG_OPTION, FROZEN_SOIL_OPTION, SUPERCOOLED_WATER_OPTION, &
@@ -252,7 +252,7 @@ integer            :: HIRES_OUT = 2
 integer            :: order_to_write = 1
 integer            :: TERADJ_SOLAR = 0
 !! integer            :: NSOIL=4  !! repeated but equal
-!! real(r8), dimension(NSOLDX) :: zsoil  !! repeated for Noah, but equal
+real(r8), dimension(NSOLDX) :: zsoil8  !! repeated for Noah, but equal
 integer            :: DXRT = 100
 integer            :: AGGFACTRT = 10
 integer            :: DTRT = 2
@@ -414,7 +414,8 @@ assimOnly_active = ( (trim(assimOnly_state_variables(1,1)) .NE. '') .AND. &
                      (trim(assimOnly_netcdf_filename) .NE. '') )
 if (assimOnly_active) then 
    if ( .not. file_exist(assimOnly_netcdf_filename) ) then
-      write(string1,*) 'cannot open assimOnly restart file ', trim(assimOnly_netcdf_filename),' for reading.'
+      write(string1,*) 'cannot open assimOnly restart file ', & 
+                        trim(assimOnly_netcdf_filename),' for reading.'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
 endif 
@@ -429,6 +430,12 @@ if (hydro_model_active) then
    read(iunit, nml = HYDRO_nlist, iostat = io)
    call check_namelist_read(iunit, io, 'HYDRO_nlist')
 endif
+
+! If the zsoils dont match between the models, throw an error
+if( .NOT.  all( zsoil == zsoil8 )) then
+      write(string1,*) 'soils in the two restart files are not identical '
+      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+endif 
 
 ! Record the NOAH namelist
 if (do_nml_file()) write(nmlfileunit, nml=NOAHLSM_OFFLINE)
@@ -561,14 +568,13 @@ endif
 !! hydro.namelist, so we'll enforce this when removing the LSM copy.
 allocate(keepLsmVars0(n_lsm_fields))
 keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)
-lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SMC') .OR. &
+lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_M') .OR. &
                                             (lsm_state_variables(1,:) .eq. 'SH2O') )
 
 hydroSmcPresent = 0
 if (hydro_model_active) then
    hydroSmcPresent =  sum( (/ (i, i=1,n_hydro_fields) /), &
-                          mask = (hydro_state_variables(1,:) .eq. 'smc') .OR. &
-                                 (hydro_state_variables(1,:) .eq. 'sh2ox'))
+                          mask = (hydro_state_variables(1,:) .eq. 'sh2ox') )
 endif
 
 if (lsmSmcPresent > 0 .and. hydroSmcPresent > 0) then
@@ -908,7 +914,7 @@ do igrid = 1, size(grids)
                         dumGridLon(index) = xlong(ilon, ilat)
                         dumGridLat(index) = xlat(ilon, ilat)
                      endif
-                     dumGridLevel(index) = zsoil8(ilev)
+                     dumGridLevel(index) = zsoil(ilev)
                      index = index + 1
                   end do              !Z
                end do               !Y
@@ -1494,8 +1500,8 @@ function nc_write_model_atts( ncFileID ) result (ierr)
      !! the wrfHydro HYDRO_RST files
 
      !! Check which grids are actually being used and only output those. 
-print*,'-------------------------------------------------------------------'
-print*,progvar%grid     
+!print*,'-------------------------------------------------------------------'
+!print*,progvar%grid     use this... TBD soon, fixme jlm
 
      !! coarse grid
      call nc_check(nf90_def_dim(ncid=ncFileID, name='ix', len=west_east, dimid=ixDimID),&
@@ -1714,7 +1720,7 @@ print*,progvar%grid
      ! subsurface
      call nc_check(nf90_inq_varid(ncFileID, 'depth', VarID), &
           'nc_write_model_atts', 'inq_varid depth '//trim(filename))
-     call nc_check(nf90_put_var(ncFileID, VarID, zsoil8(1:nsoil)), &
+     call nc_check(nf90_put_var(ncFileID, VarID, zsoil(1:nsoil)), &
           'nc_write_model_atts', 'put_var depth '//trim(filename))
 
      ! link indices X
@@ -2910,7 +2916,6 @@ function get_state_time(ncid, filename, timeindex)
   endif
 
   ! Get all the Time strings, use the last one.
-
   call nc_check(nf90_inq_varid(ncid, 'Times', VarID), &
        'get_state_time', 'inq_varid Times '//trim(filename))
 
@@ -2925,7 +2930,7 @@ function get_state_time(ncid, filename, timeindex)
   ! FIXME ... Check to see what timestamp is appropriate.
   timestep       = set_time(noah_timestep, 0)
   filetime       = set_date(year, month, day, hours=hour, minutes=minute, seconds=second)
-  get_state_time = filetime - timestep
+  get_state_time = filetime !- timestep/2?? ! still some uncertainty here
 
   if (present(timeindex)) timeindex = ntimes
 

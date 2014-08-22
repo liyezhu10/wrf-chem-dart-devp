@@ -216,6 +216,10 @@ set REMOVE = '/bin/rm -fr'
 ## mkdir?
 
 #===============================================================================
+#Check the overall dir structure
+
+
+#===============================================================================
 # Clean up previous runs
 # Destroy all previous output for the sake of clarity.
 \rm -rf OUTPUT
@@ -295,7 +299,8 @@ if ( "$lsmModel" == "noah" ) then
 	echo "MISSING directory in working dir: ${dir}/"
 	exit 3
     endif 
-    foreach FILE ( GENPARM.TBL  LANDUSE.TBL  SOILPARM.TBL  URBPARM.TBL  VEGPARM.TBL )
+    #foreach FILE ( GENPARM.TBL  LANDUSE.TBL  SOILPARM.TBL  URBPARM.TBL  VEGPARM.TBL )
+    foreach FILE ( GENPARM.TBL  SOILPARM.TBL  URBPARM.TBL  VEGPARM.TBL )
 	if (! -e ${dir}/${FILE} )  then
 	    echo "MISSING file: ${dir}/${FILE}"
 	    exit 4
@@ -381,6 +386,8 @@ end
 
 # link to the useful script for creating initial ensembles. 
 ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh .
+ln -svf ${dartDir}/shell_scripts/randomSeq.rsh .
+ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd.csh .
 
 # where the ensemble of initial conditions are located
 set ensembleDir = ${centralDir}/initialEnsemble
@@ -394,30 +401,11 @@ if (! -e ${ensembleDir} ) then
     \mkdir $ensembleDir
     echo "ENSEMBLE initial condition files have not been established (in the proper location)."
     echo "Please populate or link:  ${centralDir}/${ensembleDir}"
-    echo "~/DART/wrfHydro/models/wrfHydro/shell_scripts/mk_initial_ens.csh might help!"
+    echo "mk_initial_ens.csh might help!"
+    echo "run_initial_ens_fwd.csh might also help!"
     exit 1
 endif 
 
-
-
-#===============================================================================
-# Set the date in the namelist.hrldas to match that of the first restart file.
-# (because there's no error generate - only bogus output where there is no forcing.).
-set restartFileTime = `ncdump -v Times $ensembleDir/restart.0001.nc | tail -2 | head -1 | cut -d'"' -f2`
-set restartFileYyyy = `echo $restartFileTime | cut -d- -f1`
-set restartFileMm = `echo $restartFileTime | cut -d- -f2`
-set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
-set restartFileHh = `echo $restartFileTime | cut -d_ -f2 | cut -d: -f1`
-
-ex namelist.hrldas <<ex_end
-g;START_YEAR;s;= .*;= $restartFileYyyy;
-g;START_MONTH;s;= .*;= $restartFileMm;
-g;START_DAY;s;= .*;= $restartFileDd;
-g;START_HOUR;s;= .*;= $restartFileHh;
-wq
-ex_end
-
-##===============================================================================
 set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^ha]* | wc -l`
 set lsmFileList = `ls -1 ${ensembleDir}/restart.[^ha]*`
 
@@ -426,6 +414,13 @@ set hydroFileList = `ls -1 ${ensembleDir}/*hydro*`
 
 echo $nLsmFiles
 echo $nHydroFiles
+
+if ( ! $nLsmFiles | ! $nHydroFiles) then
+    echo "No initial restart files provided"
+    echo "mk_initial_ens.csh might help!"
+    echo "run_initial_ens_fwd.csh might also help!"
+    exit 1
+endif 
 
 ## From the namelist determine if the noAssim restarts are needed. 
 ## The line could be commented out (default is blank in model_mod.f90) or set to ''.
@@ -460,6 +455,24 @@ if ($assimOnly_active) then
     echo $assimOnlyFileList
 endif 
 
+#===============================================================================
+# Set the date in the namelist.hrldas to match that of the first restart file.
+# (because there's no error generate - only bogus output where there is no forcing.).
+set restartFileTime = `ncdump -v Times $ensembleDir/restart.0001.nc | tail -2 | head -1 | cut -d'"' -f2`
+set restartFileYyyy = `echo $restartFileTime | cut -d- -f1`
+set restartFileMm = `echo $restartFileTime | cut -d- -f2`
+set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
+set restartFileHh = `echo $restartFileTime | cut -d_ -f2 | cut -d: -f1`
+
+ex namelist.hrldas <<ex_end
+g;START_YEAR;s;= .*;= $restartFileYyyy;
+g;START_MONTH;s;= .*;= $restartFileMm;
+g;START_DAY;s;= .*;= $restartFileDd;
+g;START_HOUR;s;= .*;= $restartFileHh;
+wq
+ex_end
+
+#===============================================================================
 # Convert initial condition restart files to to DART initial condition files.
 # This is the last step in advance_model, so these are expected at start of filter.
 # Also move the inital restarts to the OUTPUT directory, as they will be updated
