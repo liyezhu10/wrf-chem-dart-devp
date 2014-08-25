@@ -2043,10 +2043,10 @@ if (.not. horiz_dist_only) then
   else if (base_which /= vert_localization_coord) then
       call vert_convert(ens_mean, base_obs_loc, base_obs_kind, ztypeout, istatus1)
       if(debug > 5) then
-      call write_location(0,base_obs_loc,charstring=string1)
-      call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
-  endif
-endif
+         call write_location(0,base_obs_loc,charstring=string1)
+         call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
+     endif
+   endif
 endif
 
 if (istatus1 == 0) then
@@ -2070,6 +2070,7 @@ if (istatus1 == 0) then
       if (.not. horiz_dist_only) then
           if (local_obs_which /= vert_localization_coord) then
               call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), ztypeout, istatus2)
+              obs_loc(t_ind) = local_obs_loc
           else
               istatus2 = 0
           endif
@@ -4865,8 +4866,8 @@ do i = 2, nbounds
       if (pressure(i) == pressure(i-1)) then
          fract = 0.0_r8
       else if (log_p_vert_interp) then
-         fract = exp((log(p) - log(pressure(i-1))) / &
-                    (log(pressure(i)) - log(pressure(i-1))))
+         fract = (log(p) - log(pressure(i-1))) / &
+                 (log(pressure(i)) - log(pressure(i-1)))
       else
          fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
       endif
