@@ -235,8 +235,40 @@ mkdir OUTPUT
 \rm -f  Posterior_Diag.nc
 \rm -f  Prior_Diag.nc
 
+
+#==============================================================================
+# Check for required  files and dirs (excluding parameters)
+foreach FILE ( obs_seq.out input.nml wrf_hydro.exe namelist.hrldas hydro.namelist DOMAIN FORCING )
+    if (! -e ${FILE} ) then
+      echo "MISSING file: ${centralDir}/${FILE}"
+      exit 2
+   endif
+end
+
+
 #===============================================================================
 # Enforce some common sense namelist settings. 
+
+## require restart.nc
+set MYSTRING = `grep RESTART_FILENAME_REQUESTED namelist.hrldas | grep -v !`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
+set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
+if ($WRFINPUT !~ 'restart.nc' & $WRFINPUT !~ './restart.nc' ) then
+    echo "The restart file (restart.nc) appears improperly specified in namelist.hrldas"
+    exit 2
+endif 
+
+## require restart.hydro.nc
+set MYSTRING = `grep RESTART_FILE hydro.namelist | grep -v !`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
+set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
+if ($WRFINPUT !~ 'restart.hydro.nc' & $WRFINPUT !~ './restart.hydro.nc' ) then
+    echo "The restart file (restart.hydro.nc) appears improperly specified in hydro.namelist"
+    exit 2
+endif 
+
 
 # GEO FILES
 # handled by symlinks now so none of this is necessary and this is not
@@ -265,14 +297,6 @@ mkdir OUTPUT
 # echo "Master atmospheric netCDF forcing file(s) coming from $FORCINGDIR"
 
 
-#==============================================================================
-# Check for required  files and dirs (excluding parameters)
-foreach FILE ( obs_seq.out input.nml wrf_hydro.exe namelist.hrldas hydro.namelist DOMAIN FORCING )
-    if (! -e ${FILE} ) then
-      echo "MISSING file: ${centralDir}/${FILE}"
-      exit 2
-   endif
-end
 
 #==============================================================================
 # Parameters.

@@ -25,6 +25,10 @@ set endDd   = $3
 set inDir   = $4
 if ($#argv == 5) set ppn = $5
 if(! $?ppn) set ppn = 16
+if($ppn > 16) then 
+    echo "Right now only configured to use a single node, setting ppn=16."
+    set ppn = 16
+endif 
 
 ## this was if I had decided to make the entire script a torque script.
 ##  it had to be interactive and i think the solution below is slightly preferable.

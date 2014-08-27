@@ -37,7 +37,8 @@ use    utilities_mod, only : register_module, error_handler, nc_check,         &
      find_namelist_in_file, check_namelist_read,       &
      file_exist, find_textfile_dims, file_to_text
 
-use     obs_kind_mod, only : KIND_SOIL_MOISTURE,    &        !! = 24
+use     obs_kind_mod, only : &
+     KIND_SOIL_MOISTURE,    &        !! = 24
      KIND_SURFACE_HEAD,     &        !! = 291  !! i'm sure i added these inappropriately
      KIND_STREAM_FLOW,      &        !! = 290
      KIND_DEEP_GROUNDWATER_LEVEL, &  !! = 292
@@ -495,6 +496,8 @@ call get_hrldas_constants(hrldas_constants_file)
 if (hydro_model_active) then
    !  though all non-soil variables are "surface" it may be advisable to extract elevation at this point?
    !     for localization routines?
+   ! **** NOTE that all variables from this file (Fulldom) must  ****
+   ! ****      be FLIPPED in y to match the noah/wrf model.      ****
    call get_hydro_constants(GEO_FINEGRID_FLNM) !!
    !! global variables defining the aggregation/disaggregation dimension
    !! these are always xyz since they are for dis/agg wrfHydro variables 
@@ -2204,6 +2207,10 @@ integer  :: ncid, ncNdims, dimlen, VarID
 integer  :: ncidLsm, ncidHydro, ncidAssimOnly, ncomponents
 integer  :: i, indx1, indx2, indx3, indx4, indx, ivar, ntimes, ifile
 
+! jlm fixme 2 variables for extreme debugging
+!real(r8), dimension(3)  :: dumLoc
+!integer  :: ii
+
 real(r8), allocatable, dimension(:)       :: data_1d_array
 real(r8), allocatable, dimension(:,:)     :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)   :: data_3d_array
@@ -2415,6 +2422,13 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
            source,revision,revdate,text2=string2)
 
    endif
+
+! jlm fixme - extreme debugging
+!do ii = progvar(ivar)%index1, progvar(ivar)%indexN 
+!   dumLoc = get_location( state_loc(ii) )
+!   state_vector(ii) = dumLoc(2)  ! lon, lat, ele
+!end do
+! end extreme debugging
 
    indx = indx - 1
    if ( indx /= progvar(ivar)%indexN ) then
@@ -3095,14 +3109,18 @@ subroutine get_hydro_constants(filename)
 !    n_hlat, n_hlong, n_link, n_basn, basnMask
 !    hlong, hlat, linkLat, linkLong
 
+! **** NOTE that all variables from this file (Fulldom) must  ****
+! ****      be FLIPPED in y to match the noah/wrf model.      ****
+
 character(len=*), intent(in) :: filename
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, ncstart, nccount
 character(len=NF90_MAX_NAME)          :: dimname
-integer, allocatable, dimension(:,:) ::  basnGrid ! local dummy before subsetting
+integer, allocatable, dimension(:,:) ::  basnGrid
+real(r8), allocatable, dimension(:,:) ::  hlongFlip, hlatFlip ! local dummies
 integer, allocatable, dimension(:) ::  basnMaskTmp
 real(r8), allocatable, dimension(:) ::  channelLon1D, channelLat1D
-integer :: i, iunit, DimID, VarID, numdims, dimlen, xtype
+integer :: i, ii, jj, iunit, DimID, VarID, numdims, dimlen, xtype
 integer :: indx, indx1, indx2, indx3, indx4, dumSum
 
 call nc_check(nf90_open(adjustl(filename), NF90_NOWRITE, iunit), &
@@ -3118,8 +3136,13 @@ call nc_check(nf90_inq_dimid(iunit, 'x', DimID), &
 call nc_check(nf90_inquire_dimension(iunit, DimID, len=n_hlong), &
      'get_hydro_constants','inquire_dimension x '//trim(filename))
 
-allocate(hlong(n_hlong, n_hlat), hlat(n_hlong, n_hlat)) !! module allocation
-allocate(basnGrid(n_hlong, n_hlat))  !! local allocation
+!! module allocation
+allocate(hlong(n_hlong, n_hlat), &
+         hlat(n_hlong, n_hlat)) 
+!! local allocation
+allocate( basnGrid(n_hlong, n_hlat), &
+         hlongFlip(n_hlong, n_hlat), &
+          hlatFlip(n_hlong, n_hlat))
 
 ! Require that the xlong and xlat are the same shape.??
 call nc_check(nf90_inq_varid(iunit, 'LONGITUDE', VarID), &
@@ -3163,23 +3186,27 @@ call nc_check(nf90_get_var(iunit, VarID, hlat, &
 where (hlat < -90.0_r8) hlat = -90.0_r8
 where (hlat >  90.0_r8) hlat =  90.0_r8
 
-!get the channelgrid
-! i'm doing this exactly to match how it's done in the wrfHydro code 
-! (line 1044 of /home/jamesmcc/WRF_Hydro/ndhms_wrf_hydro/trunk/NDHMS/Routing/module_HYDRO_io.F)
-! so that the output set of inidces correspond to the grid in the Fulldom file 
-! and therefore these can be used to grab other channel attributes in that file. 
-! but the code is really long so I've put it in a module subroutine. 
-call getChannelCoords(filename, iunit, numdims, ncstart, nccount)
+! Flip the longitues and latitudes
+do ii=1,n_hlong
+   do jj=1,n_hlat
+      hlongFlip(ii,jj) = hlong(ii,n_hlat-jj+1)
+      hlatFlip(ii,jj) =  hlat(ii,n_hlat-jj+1)
+   end do
+end do
+hlong = hlongFlip
+hlat  = hlatFlip
+deallocate(hlongFlip, hlatFlip)
 
-! get the basin grid
+! get the basin grid - this wont need flipped as unique values are  
+! packed in to a 1D array without geolocaiton information.
 call nc_check(nf90_inq_varid(iunit, 'basn_msk', VarID), &
      'get_hydro_constants','inq_varid basn_msk '//trim(filename))
 call nc_check(nf90_get_var(iunit, VarID, basnGrid, &
      start=ncstart(1:numdims), count=nccount(1:numdims)), &
      'get_hydro_constants', 'get_var basn_msk '//trim(filename))
 
-
-! subset to the 1D channel network as presented in the hydro restart file. 
+! make it a 1D array of single values
+! qeustion is how to localize this, since it has no coordinates.
 allocate(basnMaskTmp(maxval(basnGrid)))
 basnMaskTmp(:) = -9999
 indx2=0
@@ -3195,6 +3222,17 @@ where(basnMaskTmp .ne. -9999)
    basnMask(:) = basnMaskTmp
 end where
 deallocate(basnMaskTmp)
+
+
+!get the channelgrid
+! i'm doing this exactly to match how it's done in the wrfHydro code 
+! (line 1044 of /home/jamesmcc/WRF_Hydro/ndhms_wrf_hydro/trunk/NDHMS/Routing/module_HYDRO_io.F)
+! so that the output set of inidces correspond to the grid in the Fulldom file 
+! and therefore these can be used to grab other channel attributes in that file. 
+! but the code is really long so I've put it in a module subroutine. 
+! Dont need to flip lat and lon in this (already done) but will flip other vars from Fulldom file.
+call getChannelCoords(filename, iunit, numdims, ncstart, nccount)
+
 
 call nc_check(nf90_close(iunit), 'get_hydro_constants '//trim(filename))
 
@@ -3461,7 +3499,6 @@ integer                               :: IXRT,JXRT
 real(r4), allocatable, dimension(:,:) :: ELRT, ELRT_in
 integer,  allocatable, dimension(:,:) :: DIRECTION, LAKE_MSKRT, channelGrid
 integer,  allocatable, dimension(:,:) :: DIRECTION_in, LAKE_MSKRT_in, channelGrid_in
-real(r4), allocatable, dimension(:,:) :: lonFlip, latFlip
 
 integer :: VarID, tmp, cnt, i, j, jj
 character(len=155) :: header
@@ -3474,12 +3511,9 @@ character(len=155) :: header
 ! allocate the local variables
 ! these grid ones have to be flipped on y.
 allocate(channelGrid_in(n_hlong,n_hlat), LAKE_MSKRT_in(n_hlong,n_hlat), &
-     DIRECTION_in(n_hlong,n_hlat),       ELRT_in(n_hlong,n_hlat), &
-     lonFlip(n_hlong,n_hlat),       latFlip(n_hlong,n_hlat))
-
+           DIRECTION_in(n_hlong,n_hlat),       ELRT_in(n_hlong,n_hlat) )
 allocate(   channelGrid(n_hlong,n_hlat),    LAKE_MSKRT(n_hlong,n_hlat), &
-     DIRECTION(n_hlong,n_hlat),          ELRT(n_hlong,n_hlat))
-
+              DIRECTION(n_hlong,n_hlat),          ELRT(n_hlong,n_hlat) )
 
 call nc_check(nf90_inq_varid(iunit, 'CHANNELGRID', VarID), &
      'getChannelCoords','inq_varid CHANNELGRID '//trim(filename))
@@ -3512,11 +3546,9 @@ jxrt = n_hlat
 do i=1,ixrt
    do j=1,jxrt
       channelGrid(i,j) = channelGrid_in(i,jxrt-j+1)
-      LAKE_MSKRT(i,j) =  LAKE_MSKRT_in(i,jxrt-j+1)
-      DIRECTION(i,j) =   DIRECTION_in(i,jxrt-j+1)
-      ELRT(i,j) =        ELRT_in(i,jxrt-j+1)
-      lonFlip(i,j) =          hlong(i,jxrt-j+1)
-      latFlip(i,j) =           hlat(i,jxrt-j+1)
+      LAKE_MSKRT(i,j)  =  LAKE_MSKRT_in(i,jxrt-j+1)
+      DIRECTION(i,j)   =   DIRECTION_in(i,jxrt-j+1)
+      ELRT(i,j)        =        ELRT_in(i,jxrt-j+1)
    end do
 end do
 deallocate(channelGrid_in, LAKE_MSKRT_in, DIRECTION_in, ELRT_in)
@@ -3564,62 +3596,62 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  (CHANNELGRID(i,j+1).ge.0) ) then !North
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1  !! again have to match the flip
             else if ((DIRECTION(i, j) .eq. 128) .and. (i + 1 .le. IXRT) &
                  .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i+1,j+1).ge.0) ) then !North East
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 1) .and. (i + 1 .le. IXRT) &
                  .and. (CHANNELGRID(i+1,j).ge.0) ) then !East
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 2) .and. (i + 1 .le. IXRT) &
                  .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i+1,j-1).ge.0) ) then !south east
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 4) .and. (j - 1 .ne. 0).and.(CHANNELGRID(i,j-1).ge.0) ) then !due south
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 8) .and. (i - 1 .gt. 0) &
                  .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i-1,j-1).ge.0)) then !south west
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 16) .and. (i - 1 .gt. 0).and.(CHANNELGRID(i-1,j).ge.0) ) then !West
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else if ((DIRECTION(i, j) .eq. 32) .and. (i - 1 .gt. 0) &
                  .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i-1,j+1).ge.0) ) then !North West
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
             else
@@ -3645,8 +3677,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  (CHANNELGRID(i,j+1) .lt. 0))) then !North
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point N"
@@ -3658,8 +3690,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  (CHANNELGRID(i + 1, j + 1).lt.0))) then !North East
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point NE"
@@ -3667,8 +3699,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  ((DIRECTION(i, j) .eq. 1) .and. (i<ixrt) .and. (CHANNELGRID(i + 1, j) .lt. 0))) then !East
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point E"
@@ -3677,8 +3709,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  .or. ((DIRECTION(i, j) .eq. 2) .and. (i<ixrt .and. j>1) .and.(CHANNELGRID(i + 1, j - 1) .lt.0))) then !south east
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point SE"
@@ -3686,8 +3718,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  ((DIRECTION(i, j) .eq. 4) .and. (j>1) .and.(CHANNELGRID(i, j - 1) .lt. 0))) then !due south
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point S"
@@ -3696,8 +3728,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  .or.  ((DIRECTION(i, j).eq.8).and. (i>1 .and. j>1) .and.(CHANNELGRID(i - 1, j - 1).lt.0))) then !south west
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point SW"
@@ -3705,8 +3737,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  .or.((DIRECTION(i, j).eq.16) .and. (i>1) .and.(CHANNELGRID(i - 1, j).lt.0))) then !West
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point W"
@@ -3715,8 +3747,8 @@ elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
                  .or.  ((DIRECTION(i, j).eq.32) .and. (i>1 .and. j<jxrt) .and.(CHANNELGRID(i - 1, j + 1).lt.0))) then !North West
                cnt = cnt + 1
                !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = latFlip(i,j)
-               linkLong(cnt) = lonFlip(i,j)
+               linkLat(cnt) = hlat(i,j)
+               linkLong(cnt) = hlong(i,j)
                channelIndsX(cnt) = i
                channelIndsY(cnt) = jxrt-j+1
                print *, "Pour Point NW"
@@ -3728,7 +3760,7 @@ endif
 
 !close(79)
 
-deallocate(channelGrid, LAKE_MSKRT, DIRECTION, ELRT, lonFlip, latFlip)
+deallocate(channelGrid, LAKE_MSKRT, DIRECTION, ELRT)
 
 if (cnt .ne. n_link) then
    write(string1,*) 'Error with number of links in the channel grid.'
