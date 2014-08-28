@@ -11,22 +11,30 @@ program model_mod_check
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, error_handler, E_MSG
+
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, &
-                             VERTISHEIGHT, VERTISSURFACE
+                             VERTISHEIGHT, VERTISSURFACE, &
+                             get_close_maxdist_init, get_close_obs_init, get_close_obs, &
+                             get_close_obs_destroy
+
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_SOIL_MOISTURE, KIND_LATENT_HEAT_FLUX
+
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
                              init_diag_output, finalize_diag_output
+
 use time_manager_mod, only : time_type, read_time, get_time, set_time,  &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
+
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
                              model_interpolate
 
@@ -42,12 +50,12 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129) :: input_file  = 'dart_ics'
-character (len = 129) :: output_file = 'check_me'
-logical               :: advance_time_present = .FALSE.
-logical               :: verbose              = .FALSE.
-integer               :: test1thru = -1
-integer               :: x_ind = -1
+character(len=129)     :: input_file  = 'dart_ics'
+character(len=129)     :: output_file = 'check_me'
+logical                :: advance_time_present = .FALSE.
+logical                :: verbose              = .FALSE.
+integer                :: test1thru = -1
+integer                :: x_ind = -1
 real(r8), dimension(3) :: loc_of_interest = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
@@ -192,6 +200,8 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 6) then
+   write(*,*)
+   write(*,*)'Testing find_closest_gridpoint()'
    if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
 endif
 
@@ -216,19 +226,19 @@ if (test1thru > 9) then
    endif
 
 
-   write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_LATENT_HEAT_FLUX'
+!  write(*,*)
+!  write(*,*)'Testing model_interpolate() with KIND_LATENT_HEAT_FLUX'
 
-   loc = set_location(loc_of_interest(1), &
-                      loc_of_interest(2), &
-                      loc_of_interest(3), VERTISSURFACE)
-   call model_interpolate(statevector, loc, KIND_LATENT_HEAT_FLUX, interp_val, ios_out)
+!  loc = set_location(loc_of_interest(1), &
+!                     loc_of_interest(2), &
+!                     loc_of_interest(3), VERTISSURFACE)
+!  call model_interpolate(statevector, loc, KIND_LATENT_HEAT_FLUX, interp_val, ios_out)
 
-   if ( ios_out == 0 ) then
-      write(*,*)'model_interpolate : value is ',interp_val
-   else
-      write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
-   endif
+!  if ( ios_out == 0 ) then
+!     write(*,*)'model_interpolate : value is ',interp_val
+!  else
+!     write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
+!  endif
 
 endif
 
@@ -275,6 +285,8 @@ real(r8), dimension(LocationDims) :: rloc
 character(len=32) :: kind_name
 logical :: matched
 
+character(len=512)  :: string1, string2, string3
+
 ! Check user input ... if there is no 'vertical' ...
 if ( (count(loc_of_interest /= 0.0_r8) < 3) .or. &
      (LocationDims < 3 ) ) then
@@ -319,6 +331,13 @@ do i = 1,get_model_size()
       loc0        = set_location(rlon, rlat, rlev, which_vert)
       thisdist(i) = get_dist( loc1, loc0, no_vert= .true. )
       matched     = .true.
+
+      call write_location(0,loc0,charstring=string1)
+      call write_location(0,loc1,charstring=string2)
+      write(*,*)'index ',i,' is ',thisdist(i),' away '
+      write(*,*)'   test  location '//trim(string1)
+      write(*,*)'   model location '//trim(string2)
+      write(*,*)' '
    endif
 
 enddo
@@ -330,6 +349,9 @@ if (.not. matched) then
    return
 endif
 
+write(*,*)'The closest (horizontal) distance is ',closest
+write(*,'(''test loc is lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
+
 ! Now that we know the distances ... report
 
 matched = .false.
@@ -340,7 +362,7 @@ do i = 1,get_model_size()
       rloc      = get_location(loc1)
 !     if (rloc(3) == rlev) then
          kind_name = get_raw_obs_kind_name(dart_kind)
-         write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
+         write(*,'(''            lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
              rloc, i, trim(kind_name)
          matched = .true.
 !     endif

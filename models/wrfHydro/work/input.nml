@@ -20,13 +20,13 @@
      hydro_model_active           = .true.
      lsm_netcdf_filename          = 'restart.nc'
      hydro_netcdf_filename        = 'restart.hydro.nc'
-     assimOnly_netcdf_filename    = 'restart.assimOnly.nc'
+     assimOnly_netcdf_filename    = ''
      assimilation_period_days     =    0
      assimilation_period_seconds  = 3600
      model_perturbation_amplitude = 0.0
      output_state_vector          = .false.
      debug                        = 100
-     hydro_state_variables        = 'sh2ox',      'KIND_SOIL_LIQUID_WATER',
+     hydro_state_variables        = 'sh2ox',      'KIND_SOIL_MOISTURE',
                                     'qlink1',     'KIND_STREAM_FLOW',
                                     'z_gwsubbas', 'KIND_DEEP_GROUNDWATER_LEVEL',
      assimOnly_state_variables    = 'precipMult', 'KIND_1D_PARAMETER'
@@ -151,8 +151,8 @@
   /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'STREAM_FLOW'
-   evaluate_these_obs_types   = 'SOIL_MOISTURE'
+   assimilate_these_obs_types = 'SOIL_MOISTURE'
+   evaluate_these_obs_types   = ''
   /
 
 &preprocess_nml
@@ -174,7 +174,7 @@
    vert_normalization_pressure = 100000.0
    vert_normalization_height   = 10000.0
    vert_normalization_level    = 20.0
-   approximate_distance        = .true.
+   approximate_distance        = .false.
    nlon                        = 71
    nlat                        = 36
    output_box_info             = .false.
@@ -251,9 +251,9 @@
    output_file          = "check_me_out"
    advance_time_present = .FALSE.
    verbose              = .TRUE.
-   test1thru            = 7
-   x_ind                = 4
+   test1thru            = 10
+   x_ind                = 80000
    kind_of_interest     = 'KIND_SOIL_MOISTURE'
-   loc_of_interest      = 287.5, 82.48, -2.00
+   loc_of_interest      = 254.54, 40.0, -2.00
   /
 
