@@ -1954,25 +1954,9 @@ end subroutine dart_vector_to_model_file
 function get_state_time(ncid, filename, timeindex)
 !------------------------------------------------------------------
 ! The restart netcdf files have the time of the state.
-! We are always using the 'most recent' which is, by defn, the last one.
-!
-! The way the HRLDAS driver works is a bit wonky.
-! The time in the restart file is NOT the time at which the state is valid.
-! It is one noah_timestep AHEAD of the valid time.
-!
-! for instance, if the noah_timestep is 3600 seconds, the restart_frequency_hours is 1,
-! and the filename is RESTART.2004010102_DOMAIN1 the
-!
-!        Time = UNLIMITED ; // (blah_blah_blah currently)
-!        DateStrLen = 19 ;
-!variables:
-!        char Times(Time, DateStrLen) ;
-!
-! Times =
-!  '2004-01-01_02:00:00' ;
-!
-! BUT - the data is for the previous noah_timestep ... i.e. 2004-01-01_01:00:00
-! No kidding.
+! If the model integrates for an hour from 00 to 01, the restart
+! file has timestamp 01. The valid time can be considered the middle 
+! of the integration period. 
 
 type(time_type) :: get_state_time
 integer,           intent(in)  :: ncid

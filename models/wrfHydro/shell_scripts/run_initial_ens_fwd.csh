@@ -51,7 +51,7 @@ set wd = `pwd`
 echo wd: $wd
 
 # parse the inDir for the date
-set inDirDate = `echo $inDir | cut -d. -f2`
+set inDirDate = `echo $inDir | cut -d. -f3`
 set startYyyy = `echo $inDirDate | cut -c1-4`
 set startMm = `echo $inDirDate | cut -c5-6`
 set startDd = `echo $inDirDate | cut -c7-8`
@@ -72,14 +72,13 @@ echo "End Date: $endYyyy $endMm $endDd"
 echo "Number of hours to advance: $newKhour"
 echo "Output path: $outPath"
 echo "Number of ensemble members: $num_states"
-
 # the following follows advance_model.csh to some degree.
 
 # mv restarts from output to here
 \mkdir -p $outPath || exit 1  
 # but actually run here
-\mkdir -p RUN.$outPath || exit 1
-cd RUN.$outPath
+\mkdir -p RUNS.$outPath || exit 1
+cd RUNS.$outPath
 
 ## get the name lists
 \cp ../namelist.hrldas .
@@ -141,6 +140,8 @@ while($state_copy <= $num_states)
     set restartFileMm = `echo $restartFileTime | cut -d- -f2`
     set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
     set restartFileHh = `echo $restartFileTime | cut -d_ -f2 | cut -d: -f1`
+
+## also need to check for /change  output dir for noah??
 
 ex namelist.hrldas <<ex_end
 g;KHOUR ;s;= .*;= $numadvances;
@@ -216,7 +217,6 @@ ex_end
 end
 
 cd ..
-rm -rf RUN.$outPath
 
 
 exit 0

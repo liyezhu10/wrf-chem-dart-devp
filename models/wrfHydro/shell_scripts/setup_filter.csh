@@ -93,7 +93,9 @@
 
 #               +(o) FORCING.perturbed/  (required if perturbing forcing)
 #                      |
-#                      + yyyymmddhh.iEns.LDASIN_DOMAIN*
+#                      + ensemble.iEns
+#                              |
+#                              +yyyymmddhh.iEns.LDASIN_DOMAIN*
 
 #               +(o) OBSERVATIONS -> ../OBSERVATIONS
 
@@ -174,12 +176,12 @@ set setupFilterSource = ${dartDir}/shell_scripts/setup_filter.csh
 set setupFilterTarget = setup_filter.csh
 if ( -e $setupFilterTarget ) then 
     if ( `diff -q $setupFilterSource $setupFilterTarget` !~ '' ) then 
-	cp $setupFilterSource $setupFilterTarget
+	\cp $setupFilterSource $setupFilterTarget
 	echo "Updating this script: TRY AGAIN!"
 	exit 1
     endif 
 else 
-    cp $setupFilterSource $setupFilterTarget
+    \cp $setupFilterSource $setupFilterTarget || exit 1
 endif 
 
 #==============================================================================
@@ -248,13 +250,17 @@ end
 
 #===============================================================================
 # Enforce some common sense namelist settings. 
+# This might seem fussy but it will generally save alot of time in getting 
+# everything setup correctly.
+# (Note a more modern shell could define a function to take care of the following 
+# repetition. Im happy to move to bash if anyone else wants to help.)
 
 ## require restart.nc
 set MYSTRING = `grep RESTART_FILENAME_REQUESTED namelist.hrldas | grep -v !`
 set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
-if ($WRFINPUT !~ 'restart.nc' & $WRFINPUT !~ './restart.nc' ) then
+set restartFile = `echo $MYSTRING[$#MYSTRING]`
+if ($restartFile !~ 'restart.nc' & $restartFile !~ './restart.nc' ) then
     echo "The restart file (restart.nc) appears improperly specified in namelist.hrldas"
     exit 2
 endif 
@@ -263,39 +269,91 @@ endif
 set MYSTRING = `grep RESTART_FILE hydro.namelist | grep -v !`
 set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
-if ($WRFINPUT !~ 'restart.hydro.nc' & $WRFINPUT !~ './restart.hydro.nc' ) then
+set hydroRestartFile = `echo $MYSTRING[$#MYSTRING]`
+if ($hydroRestartFile !~ 'restart.hydro.nc' & $hydroRestartFile !~ './restart.hydro.nc' ) then
     echo "The restart file (restart.hydro.nc) appears improperly specified in hydro.namelist"
     exit 2
 endif 
 
+## require KHOUR = 1
+## I need to look into why this causes absolutely crazy behaviour where the 
+## filter assimilates all obs at once and doesnt try to advance the mode.
+set MYSTRING = `grep -i KHOUR namelist.hrldas | grep -v !`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
+set KHOUR = `echo $MYSTRING[$#MYSTRING]`
+if ($KHOUR !~ '1') then
+    echo "KHOUR needs to be == 1 or you will hate life and filter will be crazy."
+    exit 2
+endif 
 
-# GEO FILES
-# handled by symlinks now so none of this is necessary and this is not
-# the appropriate place to check. perhaps this code should move to 
-# setup_filter.csh as I'm not currently checking the geofiles
-# This is how the "wrfintput" file was handled for noah.
-#set MYSTRING = `grep HRLDAS_CONSTANTS_FILE namelist.hrldas`
-#set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
-#set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-#set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
-#\ln -sv $WRFINPUT .
-# do the same for geo_* and Full*?
+## require rst_dt = 1
+set MYSTRING = `grep -i rst_dt hydro.namelist | grep -v !`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
+set rstDt = `echo $MYSTRING[$#MYSTRING]`
+if ($rstDt !~ '60') then
+    echo "rstDt needs to be == 60."
+    exit 2
+endif 
 
+# The following actually need to be tested from with a directory created at the current level
+## might do something to make sure this dosent/exist is unique... 
+
+# WRFINPUT
+set MYSTRING = `grep HRLDAS_CONSTANTS_FILE namelist.hrldas`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
+set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
 
 # FORCING 
-# Extract the directory containing the forcing files used to create the LDASIN files.
-# This script uses logic that requires ALL of the hourly forcing files
-# to be concatenated into a single netCDF file that uses 'time' as the unlimited
-# dimension. The required time slices are extracted from this single netCDF file
-# into the filenames expected by NOAH. Since each ensemble member generally gets
-# a unique atmospheric forcing, this helps minimize the number of files. 
-#set MYSTRING   = `grep INDIR namelist.hrldas`
-#set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
-#set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
-#set FORCINGDIR = `echo $MYSTRING[$#MYSTRING]`
-# echo "Master atmospheric netCDF forcing file(s) coming from $FORCINGDIR"
+set MYSTRING   = `grep INDIR namelist.hrldas`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set FORCINGDIR = `echo $MYSTRING[$#MYSTRING]`
 
+# geo file for LSM
+set MYSTRING   = `grep GEO_STATIC_FLNM namelist.hrldas`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set geoFile    = `echo $MYSTRING[$#MYSTRING]`
+
+# geo file in hydro
+set MYSTRING   = `grep GEO_STATIC_FLNM hydro.namelist`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set geoFileHydro = `echo $MYSTRING[$#MYSTRING]`
+
+# Fulldom/finegrid file in hydro
+set MYSTRING   = `grep GEO_FINEGRID_FLNM hydro.namelist`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set fineGridFile = `echo $MYSTRING[$#MYSTRING]`
+
+## gw basin file, but only if it's set
+set MYSTRING   = `grep gwbasmskfil hydro.namelist`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set gwBasFile = `echo $MYSTRING[$#MYSTRING]`
+
+set MYSTRING   = `grep GWBASESWCRT hydro.namelist`
+set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
+set gwBasSwitch = `echo $MYSTRING[$#MYSTRING]`
+
+\mkdir tmpTestDir   || exit 2
+cd tmpTestDir || exit 2
+foreach file ( $WRFINPUT $FORCINGDIR $geoFile $geoFileHydro $fineGridFile $gwBasFile)
+    if (! -e ${file} ) then
+	if( $file == $gwBasFile & $gwBasSwitch == '0' ) continue
+	echo $file 'Does NOT Exist as specified in a namelist'
+	cd ..
+	rm -rf tmpTestDir
+	exit 3
+    endif
+end
+cd ..
+rm -rf tmpTestDir || exit 3
 
 
 #==============================================================================
@@ -330,7 +388,7 @@ if ( "$lsmModel" == "noah" ) then
 	    exit 4
 	endif
 	echo "Copying ${dir}/${FILE} to $paramsGathered"
-        ${COPY} ${dir}/${FILE} $paramsGathered
+        ${COPY} ${dir}/${FILE} $paramsGathered || exit 4
     end
 endif 
 
@@ -347,7 +405,7 @@ if ( "$lsmModel" == "noahmp" ) then
 	    exit 6
 	endif
 	echo "Copying ${dir}/${FILE} to $paramsGathered"
-        ${COPY} ${dir}/${FILE} $paramsGathered
+        ${COPY} ${dir}/${FILE} $paramsGathered || exit 6
     end
 endif 
 
@@ -365,36 +423,36 @@ foreach FILE ( CHANPARM.TBL GWBUCKPARM.TBL HYDRO.TBL LAKEPARM.TBL )
 	exit 7
     endif
     echo "Copying ${dir}/${FILE} to $paramsGathered"
-    ${COPY} ${dir}/${FILE} $paramsGathered
+    ${COPY} ${dir}/${FILE} $paramsGathered || exit 7
 end 
 
 #==============================================================================
 echo
 echo "DART Executable Builds"
-foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter restart_file_tool )
+foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter wakeup_filter restart_file_tool obs_sequence_tool )
     if ( -e ${FILE} && ! $forceCopyDartBuilds )  then
 	echo "Using existing $FILE"
     else
 	if(! -e ${dartDir}/work/${FILE} ) then 
 	    echo "MISSING file: ${dartDir}/work/${FILE}"
-	    exit 5
+	    exit 7
 	endif
-	${COPY} ${dartDir}/work/${FILE} . 
+	${COPY} ${dartDir}/work/${FILE} . || exit 7
    endif
 end
 
 #==============================================================================
 echo
 echo "DART Scripts"
-foreach FILE ( run_filter.csh advance_model.csh )
+foreach FILE ( run_filter.csh advance_model.csh gregorian_time )
    if ( -e ${FILE} && ! $forceCopyDartScripts )  then
       echo "Using existing $FILE"
    else
 	if(! -e ${dartDir}/shell_scripts/${FILE}) then
 	    echo "MISSING file: ${dartDir}/shell_scripts/${FILE}"
-	    exit 6
+	    exit 7
 	endif 
-	${COPY} ${dartDir}/shell_scripts/${FILE} .
+	${COPY} ${dartDir}/shell_scripts/${FILE} . || exit 7
    endif
 end
 
@@ -409,9 +467,9 @@ end
 #
 
 # link to the useful script for creating initial ensembles. 
-ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh .
-ln -svf ${dartDir}/shell_scripts/randomSeq.rsh .
-ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd.csh .
+ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh . || exit 7
+ln -svf ${dartDir}/shell_scripts/randomSeq.rsh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd.csh .  || exit 7
 
 # where the ensemble of initial conditions are located
 set ensembleDir = ${centralDir}/initialEnsemble
@@ -422,12 +480,12 @@ echo 'ensembleDir =' $ensembleDir
 if (! -e ${ensembleDir} ) then 
     echo
     echo "CREATING $ensembleDir"
-    \mkdir $ensembleDir
+    \mkdir $ensembleDir  || exit 7
     echo "ENSEMBLE initial condition files have not been established (in the proper location)."
     echo "Please populate or link:  ${centralDir}/${ensembleDir}"
     echo "mk_initial_ens.csh might help!"
     echo "run_initial_ens_fwd.csh might also help!"
-    exit 1
+    exit 8
 endif 
 
 set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^ha]* | wc -l`
@@ -443,7 +501,7 @@ if ( ! $nLsmFiles | ! $nHydroFiles) then
     echo "No initial restart files provided"
     echo "mk_initial_ens.csh might help!"
     echo "run_initial_ens_fwd.csh might also help!"
-    exit 1
+    exit 8
 endif 
 
 ## From the namelist determine if the noAssim restarts are needed. 
@@ -472,12 +530,23 @@ if ($assimOnly_active) then
     endif
 endif 
 
-echo "The inital emsemble restart files:"
+echo "The inital ensemble restart files:"
 echo $lsmFileList
 echo $hydroFileList
 if ($assimOnly_active) then 
     echo $assimOnlyFileList
 endif 
+
+#===============================================================================
+if ($assimOnly_active) then
+    \rm -rf FORCING.perturbed || exit 9
+    \mkdir FORCING.perturbed  || exit 9
+    cd FORCING.perturbed  || exit 9
+    foreach ii ( `seq $nAssimOnlyFiles` )
+      \mkdir ensemble.`printf "%04d" $ii`  || exit 9
+    end
+    cd .. || exit 9
+endif
 
 #===============================================================================
 # Set the date in the namelist.hrldas to match that of the first restart file.
@@ -502,7 +571,7 @@ ex_end
 # Also move the inital restarts to the OUTPUT directory, as they will be updated
 # by dart_to_wrfHydro
 set initEnsOutDir = OUTPUT/initial_restarts
-\mkdir -p $initEnsOutDir
+\mkdir -p $initEnsOutDir || exit 9
 @ ifile = 1
 @ ensemble_member = 0
 while ($ifile <= $nLsmFiles)
@@ -510,22 +579,23 @@ while ($ifile <= $nLsmFiles)
     set fext = `printf %04d $ensemble_member`
     
     # make initial conditions for DART
-    \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc
-    \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc
+    \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc  || exit 9
+    \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc   || exit 9
     if ( $assimOnly_active ) \
-	\ln -svf ${ensembleDir}/restart.assimOnly.$fext.nc restart.assimOnly.nc
+	\ln -svf ${ensembleDir}/restart.assimOnly.$fext.nc restart.assimOnly.nc   || exit 9
 
     ./wrfHydro_to_dart                     || exit 9
     ${MOVE} dart_ics filter_ics.$fext      || exit 10 #??where are the naming assumptions explained??
     #${MOVE} dart_ics assim_model_state_ic.$fext      || exit 10
     
-    \cp ${ensembleDir}/restart.$fext.nc $initEnsOutDir/restart.$fext.nc 
+    \cp ${ensembleDir}/restart.$fext.nc $initEnsOutDir/restart.$fext.nc   || exit 10
     \ln -sf  $initEnsOutDir/restart.$fext.nc .
-    \cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc 
-    \ln -sf  $initEnsOutDir/restart.hydro.$fext.nc .
+    \cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc  || exit 10
+    \ln -sf  $initEnsOutDir/restart.hydro.$fext.nc .  || exit 10
     if ( $assimOnly_active ) then 
-	\cp ${ensembleDir}/restart.assimOnly.$fext.nc $initEnsOutDir/restart.assimOnly.$fext.nc 
-	\ln -sf  $initEnsOutDir/restart.assimOnly.$fext.nc .
+	\cp ${ensembleDir}/restart.assimOnly.$fext.nc $initEnsOutDir/restart.assimOnly.$fext.nc \
+	    || exit 10
+	\ln -sf  $initEnsOutDir/restart.assimOnly.$fext.nc . || exit 10
     endif
 
    @ ifile = $ifile + 1
@@ -548,7 +618,6 @@ ex_end
 # DART needs a copy of the NOAH restart file to determine the sizes
 # of the state vector components. We are going to LEAVE the final
 # ensemble member restart file linked to the expected restart file name.
-
 
 
 #==============================================================================

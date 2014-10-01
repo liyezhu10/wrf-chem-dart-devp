@@ -29,7 +29,7 @@
 # Read DART/doc/html/filter_async_modes.html and the mpi_intro.html
 # for an overview.
 #
-# An example layout of of the control and input files would be helpful. These links 
+# jlm An example layout of control and input files would be helpful. These links 
 # dont provide much (quick) insight on that.
 #
 # This script has 4 logical 'blocks':
@@ -45,7 +45,6 @@ set      process = $1
 set   num_states = $2
 set control_file = $3
 
-
 #----------------------------------------------------------------------
 # Block 1: copy necessary input files/executables/files common
 #          to all model advances to a clean, temporary directory.
@@ -59,7 +58,7 @@ set control_file = $3
 set temp_dir = 'advance_temp'$process
 
 # Create a clean temporary directory and go there
-# \rm -rf  $temp_dir  || exit 1
+\rm -rf  $temp_dir  || exit 1
 \mkdir -p $temp_dir  || exit 1
 cd       $temp_dir  || exit 1
 
@@ -141,6 +140,7 @@ while($state_copy <= $num_states)
 	echo "ERROR: dart_to_noah failed for member $ensemble_member"
 	echo "ERROR: dart_to_noah failed for member $ensemble_member"
 	echo "ERROR: dart_to_noah failed for member $ensemble_member"
+        exit 1
     endif
 
     # This next two parts are based on using one-hour forcing files
@@ -179,7 +179,7 @@ wq
 ex_end
 
     echo '******************************************************************************'
-    grep START_ namelist.hrldas
+    grep START_ namelist.hrldas | grep -v !
     echo '******************************************************************************'
 
     # The forcing has to be for the NEXT "FORCING_TIMESTEP", apparently.
@@ -212,8 +212,8 @@ ex_end
 
     #This hasnt been tested yet. 
     if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
-    set false = 0
-    if ( $false ) then 
+
+    if ( $assimOnly_active ) then 
 
 	## The name of the forcing file is conveniently supplied in 
 	## wrfHydro_advance_information.txt. Though ( fix ) the times in the 2 top lines
@@ -227,20 +227,35 @@ ex_end
 	    set FDATE = `echo $FDATE[1]`
 
 	    set FFILE = `\ls ../FORCING/$FDATE.LDASIN_DOMAIN*`
-	    set FFILElocal = `echo $FFILE | \cut -d'/' -f3 | \cut -d'.' -f1,3`
-	    \ln -s $FFILE ${FFILElocal}
-	    # \mv $FFILE $FFILE.local if we dont want to keep the perturbed forcings
+	    set FFILElocal = `echo $FFILE | \cut -d'/' -f3`
+
+	    echo $FFILE
+	    echo $FFILElocal
+
+	    ## get the precip multiplier out of the restart.assimOnly.nc file.
+	    ## this will only work for scalar precip! 
+	    set precipMult = `ncks -H -v precipMult ../restart.assimOnly.${instance}.nc \
+                              | head -1 | cut -d= -f2`
+
+	    ## multiply and put the restulting file in the right place
+            ncap2 -s "RAINRATE=RAINRATE*${precipMult}" \
+                     $FFILE ../FORCING.perturbed/ensemble.${instance}/$FFILElocal
+
+	    ## change the location of the input in the namelist.hrldas
+	    ## maybe this could be done elsewhere, outside loop, but it's lightweight.
+ex namelist.hrldas <<ex_end
+g;INDIR;s;= .*;= "../FORCING.perturbed/ensemble.${instance}/";
+wq
+ex_end
+
+	    ## need to update the timestamp in the restart.
+	    ## the timestamp should match that of the forcing file??
+	    ## jlm - fixme
 
 	    @ ifile = $ifile + 1
 	end
 
-	## get this file and multiply it by the precip multiplier in the corresponding 
-	## assimOnlyfile and save in run dir with appropriate name
-
-	## change the location of the input in the namelist.hrldas
 	
-	## need to update the timestamp in the restart.
-	## the timestamp should match that of the forcing file??
 
     endif 
     
@@ -254,7 +269,8 @@ ex_end
     #-------------------------------------------------------------------
     echo "advance the model"
     ## i just want the model to be quiet so I can focus on the DART output
-    ../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    mpirun -np 2 ../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    #../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
     \rm -f /tmp/jamesmccWfrHydroEnsOutputJunk.$process
 
     @ lsm_status = `\ls -1 RESTART*DOMAIN* | wc -l`
@@ -284,9 +300,6 @@ ex_end
     #          rename files to reflect the ensemble member ID
     #-------------------------------------------------------------------
 
-    ###### !!!!! THIS WILL CHANGE WHEN WE STOP RUNNING EXTRA STEPS TO GET RESTART FILES !!!!!!!
-
-    # ** Remove undesired output caused by HRLDAS**
     # Do this before setting up the next run as there is an unwatned hydro restart file.
 
     # Determine model integration period of interest (which may contain multiple indiv
@@ -312,6 +325,9 @@ ex_end
     foreach outFile ( *.LDASOUT_DOMAIN* *.LSMOUT_DOMAIN* *.RTOUT_DOMAIN* *.CHRTOUT* *.CHANOBS* )
 	\mv $outFile ${integDirCurrent}/${outFile}.${instance}.nc
     end 
+
+    ## These are the parameters which were used in the model advance. 
+    if ( $assimOnly_active ) cp restart.assimOnly.nc $integDirCurrent/.
 
     # Set the new/latest restart for ingest to dart
     set RESTARTlsm = `\ls -1  RESTART* | \tail -1`
@@ -353,7 +369,7 @@ cd ..
 
 \rm -rf $control_file
 
-exit 0
+exit 
 
 # <next few lines under version control, do not edit>
 # $URL$

@@ -109,7 +109,10 @@ write(logfileunit,'(''dart_to_wrfHydro:converting DART file <'',A, &
 
 
 !----------------------------------------------------------------------
-! Reads the valid time, the state, and the target time.
+! Reads the valid time, the state, and the target time. 
+! JLM fixme - from DART? we need to be explicit about in/out of time 
+! and which component it pertains to. model_time seems to be dart_time.
+! I need to check this when I have time. 
 !----------------------------------------------------------------------
 x_size = get_model_size()
 allocate(statevector(x_size))
@@ -156,9 +159,10 @@ if ( advance_time_present ) then
    endif
 
    ! figure out how many timesteps between adv_to_time and model_time
-   mytime          = model_time
+   !! jlm fixme - mytime?  huh?
    nexttimestep    = set_time(   noah_timestep, 0)
    forcingtimestep = set_time(forcing_timestep, 0)
+   mytime          = model_time
    nfiles = 0
 
    TIMELOOP: do while (mytime < adv_to_time)  
@@ -175,12 +179,10 @@ if ( advance_time_present ) then
    write(iunit,'(''khour  = '',i6)') nfiles
    write(iunit,'(''nfiles = '',i6)') nfiles
 
-   mytime = model_time
+   mytime = model_time  !! why???? my=hrldas, model=dart???? this needs to be explicit
 
    do ifile = 1,nfiles
-      ! The model time is one noah_timestep (which must be equal to RESTART_FREQUENCY_HOURS)
-      ! behind the file names needed. So add another timestep for the hrldas restart file name.
-      mytime = mytime + nexttimestep
+      mytime = mytime + nexttimestep 
 
       call get_date(mytime,year,month,day,hour,minute,second)
 

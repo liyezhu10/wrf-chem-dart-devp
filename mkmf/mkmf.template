@@ -76,11 +76,12 @@ LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 #FFLAGS  = -O -g -Mbounds $(INCS)
 ## these suggested for debugging by wei
 #FFLAGS  = -O -g -Mbounds $(INCS)
+FFLAGS  = -O $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this for flags:
 #FFLAGS = -g -C -Ktrap=fp -Mbounds $(INCS)
-FFLAGS = -g -C -Mbounds $(INCS)
+#FFLAGS = -g -C -Mbounds $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$
