@@ -22,6 +22,13 @@ use time_manager_mod, only : time_type, set_time, set_date, get_time,          &
      operator(>),  operator(<), operator(/),           &
      operator(/=), operator(<=)
 
+! TJH FIXME ... to accomodate the fact that watersheds are 'close' but not physically
+! 'close' - we need to have a function that returns the watershed ID for any arbitrary
+! location. Our local get_close_obs() can then get everything within the (large) 
+! localization radius and for all locations in different watersheds - make them very 
+! far away. get_close() is used not only state vector elements, but also for 
+! observations close to a location.
+
 use     location_mod, only : location_type, get_dist, query_location,          &
      get_close_maxdist_init, get_close_type,           &
      set_location, get_location, horiz_dist_only,      &
@@ -37,15 +44,17 @@ use    utilities_mod, only : register_module, error_handler, nc_check,         &
      find_namelist_in_file, check_namelist_read,       &
      file_exist, find_textfile_dims, file_to_text
 
-use     obs_kind_mod, only : &
-     KIND_SOIL_MOISTURE,    &        !! = 24
-     KIND_SURFACE_HEAD,     &        !! = 291  !! i'm sure i added these inappropriately
-     KIND_STREAM_FLOW,      &        !! = 290
-     KIND_DEEP_GROUNDWATER_LEVEL, &  !! = 292
-     KIND_LEAF_AREA_INDEX,  &        !! = 117
-     KIND_SNOW_THICKNESS,   &        !! = 107
-     KIND_SNOW_WATER,       &        !! = 108
-     KIND_SNOWCOVER_FRAC,   &        !! = 109
+use    obs_kind_mod, only : &
+     KIND_SOIL_MOISTURE,    &
+     KIND_SURFACE_HEAD,     &
+     KIND_STREAM_FLOW,      &
+     KIND_STREAM_HEIGHT,    &
+     KIND_STREAM_CHAN_VOLUME,  &
+     KIND_DEEP_GROUNDWATER_LEVEL, &
+     KIND_LEAF_AREA_INDEX,  &
+     KIND_SNOW_THICKNESS,   &
+     KIND_SNOW_WATER,       &
+     KIND_SNOWCOVER_FRAC,   &
      KIND_2D_PARAMETER,     &        !! eg precip multiplier, soil texture parameter
      KIND_GEOPOTENTIAL_HEIGHT, &     !! maybe be used for model_interpolate
      paramname_length,      &
@@ -53,6 +62,14 @@ use     obs_kind_mod, only : &
 
 use mpi_utilities_mod, only: my_task_id
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
+
+!nc -- module_map_utils split the declarations of PROJ_* into a separate module called
+!nc --   misc_definitions_module 
+use               map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
+                                    ij_to_latlon, gridwind_to_truewind
+
+use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
+                                    PROJ_CYL
 
 use typesizes
 use netcdf
@@ -63,7 +80,8 @@ private
 ! required by DART code - will be called from filter and other
 ! DART executables.  interfaces to these routines are fixed and
 ! cannot be changed in any way.
-public :: get_model_size,         &
+public :: &
+     get_model_size,         &
      adv_1step,              &
      get_state_meta_data,    &
      model_interpolate,      &
@@ -84,7 +102,8 @@ public :: get_model_size,         &
 ! utility programs that are tightly tied to the other parts of
 ! the model_mod code.
 
-public :: model_to_dart_vector,            & 
+public :: &
+     model_to_dart_vector,            & 
      dart_vector_to_model_files,      & 
      get_lsm_restart_filename,        &     
      get_hydro_restart_filename,      &   
@@ -115,7 +134,7 @@ character(len=128)    :: lsm_model_choice             = 'noahMP'
 logical               :: hydro_model_active           = .true.
 character(len=256)    :: lsm_netcdf_filename          = 'restart.nc'
 character(len=256)    :: hydro_netcdf_filename        = 'restart.hydro.nc'
-character(len=128)    :: assimOnly_netcdf_filename    = ''  !! intentionally blank
+character(len=256)    :: assimOnly_netcdf_filename    = ''  !! intentionally blank
 integer               :: assimilation_period_days     = 0
 integer               :: assimilation_period_seconds  = 3600
 real(r8)              :: model_perturbation_amplitude = 0.2
@@ -125,9 +144,10 @@ integer               :: debug    = 0  ! turn up for more and more debug message
 ! These are the state variables to be considered in DART.
 ! jlm - How does one specify if a certain parameter set should be considered as uncertain? skip in model_nml?
 character(len=obstypelength), allocatable, dimension(:,:) :: all_state_variables
-character(len=obstypelength), dimension(:,:) :: lsm_state_variables(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) = ' '
-character(len=obstypelength), dimension(:,:) :: hydro_state_variables(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) = ' '
-character(len=obstypelength), dimension(:,:) :: assimOnly_state_variables(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) = ' '
+character(len=obstypelength), dimension(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) :: lsm_state_variables = ' '
+character(len=obstypelength), dimension(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) :: hydro_state_variables = ' '
+character(len=obstypelength), dimension(NUM_STATE_TABLE_COLUMNS,MAX_STATE_VARIABLES) :: assimOnly_state_variables = ' '
+
 
 namelist /model_nml/ lsm_model_choice, hydro_model_active,         &
      lsm_netcdf_filename, hydro_netcdf_filename, assimOnly_netcdf_filename,  &
@@ -175,7 +195,7 @@ integer            :: output_timestep  = -999
 integer            :: restart_frequency_hours = -999
 integer            :: split_output_count = 1
 
-integer            :: nsoil
+integer            :: nsoil ! number of soil layers in use.
 
 real(r8)           :: zlvl
 
@@ -236,7 +256,8 @@ real(r8) :: ZLVL_URBAN = 15.0
 namelist /URBAN_OFFLINE/ UCMCALL,  ZLVL_URBAN
 
 !! &HYDRO_nlist
-!! i note repeated varaibles and specific issues here
+!! The noah and noahMP models have some same/repeated variables in their respective namelists.
+!! I note repeated varaibles and any related issues here.
 integer            :: sys_cpl = 1  !! this is hrldas, should be enforced
 !! character(len=256) :: GEO_STATIC_FLNM = "" !! repeated in the two namelists, but equal
 character(len=256) :: GEO_FINEGRID_FLNM = ""
@@ -396,28 +417,31 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 
 ! Check to make sure the required LSM input files exist
 if ( .not. file_exist(lsm_netcdf_filename) ) then
-   write(string1,*) 'cannot open LSM restart file ', trim(lsm_netcdf_filename),' for reading.'
+   write(string1,*) 'cannot open LSM restart file [', trim(lsm_netcdf_filename),'] for reading.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
 if ( .not. file_exist(lsm_namelist_filename) ) then
-   write(string1,*) 'cannot open LSM namelist file ', trim(lsm_namelist_filename),' for reading.'
+   write(string1,*) 'cannot open LSM namelist file [', trim(lsm_namelist_filename),'] for reading.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
 ! Check to make sure the required HYDRO input files exist
 if (hydro_model_active) then
    if ( .not. file_exist(hydro_netcdf_filename) ) then
-      write(string1,*) 'cannot open HYDRO restart file ', trim(hydro_netcdf_filename),' for reading.'
+      write(string1,*) 'cannot open HYDRO restart file [', trim(hydro_netcdf_filename),'] for reading.'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
    if ( .not. file_exist(hydro_namelist_filename) ) then
-      write(string1,*) 'cannot open HYDRO namelist file ', trim(hydro_namelist_filename),' for reading.'
+      write(string1,*) 'cannot open HYDRO namelist file [', trim(hydro_namelist_filename),'] for reading.'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
 endif
-! check to make sure that the required assimOnly input/restart files exist. 
+
+! Determine if the "assimOnly" or parameter component of the assimilation is active based on 
+! two namelist variables. 
 assimOnly_active = ( (trim(assimOnly_state_variables(1,1)) .ne. '') .and. &
      (trim(assimOnly_netcdf_filename) .ne. '') )
 if (assimOnly_active) then 
+   ! check to make sure that the required assimOnly input/restart file exists. 
    if ( .not. file_exist(assimOnly_netcdf_filename) ) then
       write(string1,*) 'cannot open assimOnly restart file ', & 
            trim(assimOnly_netcdf_filename),' for reading.'
@@ -438,19 +462,26 @@ endif
 
 ! If the zsoils dont match between the models, throw an error
 if (trim(lsm_model_choice) .eq. 'noah') then
-   if( .not.  all( zsoil == zsoil8 )) then
+   if( .not.  all( zsoil(1:nsoil) == zsoil8(1:nsoil) )) then
       write(string1,*) 'soils layer specifications in the two namelist files are not identical '
-      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+      write(string2,*) 'zsoil   from noah  [',trim(lsm_namelist_filename),']'
+      write(string3,*) 'zsoil8  from hydro [',trim(hydro_namelist_filename),']'
+      call error_handler(E_ERR, 'static_init_model', string1, &
+                 source, revision, revdate, text2=string2, text3=string3)
    endif
 endif
+
 if (trim(lsm_model_choice) .eq. 'noahMP') then
    allocate(zsoilComp(nsoil))
    do i = 1,nsoil
       zsoilComp(i) = -1*sum(soil_thick_input(1:i))
    enddo
    if( .not.  all( zsoil8(1:nsoil) == zsoilComp(1:nsoil) )) then
-      write(string1,*) 'soils layer specifications in the two namelist files are not identical '
-      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+      write(string1,*) 'soil layer specifications in the two namelist files are not identical '
+      write(string2,*) 'zsoil   from noahMP [',trim(lsm_namelist_filename),']'
+      write(string3,*) 'zsoil8  from hydro  [',trim(hydro_namelist_filename),']'
+      call error_handler(E_ERR, 'static_init_model', string1, &
+                 source, revision, revdate, text2=string2, text3=string3)
    endif
    deallocate(zsoilComp)
 endif 
@@ -464,9 +495,10 @@ if (hydro_model_active) then
    if (do_nml_term()) write(     *     , nml=HYDRO_nlist)
 end if
 
-! Check to make sure the NOAH constants file exists
+! Check to make sure the hrldasconstants file exists
 if ( .not. file_exist(hrldas_constants_file) ) then
-   write(string1,*) 'cannot open file ', trim(hrldas_constants_file),' for reading.'
+   write(string1,*) &
+      'cannot open NOAH constants file [',trim(hrldas_constants_file),'] for reading.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
 
@@ -477,7 +509,9 @@ if ( (kday             < 0    ) .or. &
      (noah_timestep    /= 3600) .or. &
      (output_timestep  /= 3600) .or. &
      (restart_frequency_hours /= 1) ) then
-   write(string3,*)'the only configuration supported is for hourly timesteps (kday, khour, forcing_timestep==3600, noah_timestep=3600, outpu_timestep=3600, restart_frequency_hours=1)'
+   write(string3,*)'the only configuration supported is for hourly timesteps &
+               &(kday, khour, forcing_timestep==3600, noah_timestep=3600, &
+               &output_timestep=3600, restart_frequency_hours=1)'
    write(string2,*)'restart_frequency_hours must be equal to the noah_timestep'
    write(string1,*)'unsupported noah namelist settings'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate,&
@@ -498,6 +532,11 @@ if (hydro_model_active) then
    !! these are always xyz since they are for dis/agg wrfHydro variables 
    fine3dShape = (/ n_hlong, n_hlat, nsoil /)  !! for disaggregating
    coarse3dShape = (/ west_east, south_north, nsoil /) !! for reaggregating
+else
+   ! TJH FIXME fine3dShape coarse3dShape are used later ... even when (logically) hydro_model_active may be false.
+   ! JLM fixme - that shouldnt happen since there's no "fine" grid for disag.
+   fine3dShape   = (/ n_hlong, n_hlat, nsoil /)  !! for disaggregating
+   coarse3dShape = (/ west_east, south_north, nsoil /) !! for reaggregating
 endif
 
 ! The time_step in terms of a time type must also be initialized.
@@ -516,12 +555,11 @@ if (do_output() .and. (debug > 0)) then
 endif
 
 ! Make sure the number of soil layers is as we expect
+! Check that LSM and hydro have the same sub-surface dimensions
 call nc_check(nf90_inq_dimid(iunit_lsm, 'soil_layers_stag', dimIDs(1)), &
      'static_init_model','inq_dimid soil_layers_stag '//trim(lsm_netcdf_filename))
 call nc_check(nf90_inquire_dimension(iunit_lsm, dimIDs(1), len=nLayers), &
      'static_init_model','inquire_dimension soil_layers_stag '//trim(lsm_netcdf_filename))
-
-! Same for hydro
 if (hydro_model_active) then
    call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, iunit_hydro), &
         'static_init_model', 'open '//trim(hydro_netcdf_filename))
@@ -538,8 +576,8 @@ if (nsoil /= nLayers .or. nsoil /= n_hydro_layers) then
    if (nsoil /= nLayers) write(string1,*) 'Expected ',nsoil,' soil layers ', &
         trim(lsm_netcdf_filename),' has ',nLayers
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
-   if (n_hydro_layers /= nLayers) write(string1,*) 'LSM and HYDRO components do not have the same ', &
-        'number of soil layers.'
+   if (n_hydro_layers /= nLayers) &
+      write(string1,*) 'LSM and HYDRO components do not have the same number of soil layers.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
 
@@ -626,7 +664,8 @@ if (hydro_model_active) then
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    end if
    if (any(hydro_state_variables .eq. 'sfcheadrt')) then
-      write(string1,*) 'cannot yet adjust surface head (sfcheadrt) in the hydro model - need to implement (dis)aggreation'
+      write(string1,*) 'cannot yet adjust surface head (sfcheadrt) in the hydro model - &
+                       &need to implement (dis)aggreation'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
 endif
@@ -678,15 +717,15 @@ FILL_PROGVAR : do ivar = 1, nfields
    progvar(ivar)%maxlevels   = 0  !jlm fix this
 
 
-   string2 = 'LSM restart file - '//varname !trim(lsm_netcdf_filename)//' '//trim(varname)
-   iunit = iunit_lsm  !! terse man's else statement
    if (component .eq. 'HYDRO') then
       iunit = iunit_hydro
-      string2 = 'Hydro Restart File - '//trim(varname) ! trim(hydro_netcdf_filename)//'-'//trim(varname)
-   end if
-   if (component .eq. 'assimOnly') then 
+      string2 = 'Hydro Restart File - '//trim(varname)
+   elseif (component .eq. 'assimOnly') then 
       iunit = iunit_assimOnly
-      string2 = 'assimOnly Restart File - '//trim(varname) ! trim(hydro_netcdf_filename)//'-'//trim(varname)
+      string2 = 'assimOnly Restart File - '//trim(varname)
+   else
+      iunit = iunit_lsm
+      string2 = 'LSM restart file - '//varname
    end if
 
    call nc_check(nf90_inq_varid(iunit, trim(varname), VarID), &
@@ -794,8 +833,10 @@ FILL_PROGVAR : do ivar = 1, nfields
       if(progvar(ivar)%numdims == 1) progvar(ivar)%MemoryOrder = 'X'
       if(progvar(ivar)%numdims == 2) progvar(ivar)%MemoryOrder = 'XY'
       if(progvar(ivar)%numdims == 3) then 
-         ! jlm fixme - use dimname instead of length
+         ! jlm fixme - use dimname instead of length - or just use lsm_model_choice
+         ! This is Noah
          if (progvar(ivar)%dimlens(3) .eq. nsoil) progvar(ivar)%MemoryOrder = 'XYZ'
+         ! This is NoahMP
          if (progvar(ivar)%dimlens(2) .eq. nsoil) progvar(ivar)%MemoryOrder = 'XZY'
       endif
    endif
@@ -804,7 +845,7 @@ FILL_PROGVAR : do ivar = 1, nfields
 
    if ( (do_output()) .and. debug > 10 ) then
       write(logfileunit,*)
-      write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
+      write(logfileunit,*) 'variable number ', ivar, ' is ',trim(progvar(ivar)%varname)
       write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
       write(logfileunit,*) '  component   ',trim(progvar(ivar)%component)
       write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
@@ -812,20 +853,22 @@ FILL_PROGVAR : do ivar = 1, nfields
       write(logfileunit,*) '  grid        ',trim(progvar(ivar)%grid)
       write(logfileunit,*) '  GridMemOrd  ',trim(progvar(ivar)%gridMemOrd)
       write(logfileunit,*) '  stagger     ',trim(progvar(ivar)%stagger)
-      write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
       write(logfileunit,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
       write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
       write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+      write(logfileunit,*) '  maxlevels   ',progvar(ivar)%maxlevels
+      write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
       write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
       write(logfileunit,*) '  index1      ',progvar(ivar)%index1
       write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
+      write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
+      write(logfileunit,*) '  restriction ',progvar(ivar)%rangeRestricted
       write(logfileunit,*) '  minvalue    ',progvar(ivar)%minvalue
       write(logfileunit,*) '  maxvalue    ',progvar(ivar)%maxvalue
-      write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
       write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
 
       write(     *     ,*)
-      write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
+      write(     *     ,*) 'variable number ', ivar, ' is ',trim(progvar(ivar)%varname)
       write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
       write(     *     ,*) '  component   ',trim(progvar(ivar)%component)
       write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
@@ -833,27 +876,35 @@ FILL_PROGVAR : do ivar = 1, nfields
       write(     *     ,*) '  grid        ',trim(progvar(ivar)%grid)
       write(     *     ,*) '  GridMemOrd  ',trim(progvar(ivar)%gridMemOrd)
       write(     *     ,*) '  stagger     ',trim(progvar(ivar)%stagger)
-      write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
       write(     *     ,*) '  dimnames    ',progvar(ivar)%dimnames(1:progvar(ivar)%numdims)
       write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
       write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+      write(     *     ,*) '  maxlevels   ',progvar(ivar)%maxlevels
+      write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
       write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
       write(     *     ,*) '  index1      ',progvar(ivar)%index1
       write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
+      write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
+      write(     *     ,*) '  restriction ',progvar(ivar)%rangeRestricted
       write(     *     ,*) '  minvalue    ',progvar(ivar)%minvalue
       write(     *     ,*) '  maxvalue    ',progvar(ivar)%maxvalue
-      write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
       write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
    endif
 
    ! sets up for next variable
-   index1                    = index1 + varsize
+   index1 = index1 + varsize
 
 enddo FILL_PROGVAR
 
-call nc_check(nf90_close(iunit_lsm), 'static_init_model', 'close '//trim(lsm_netcdf_filename))
+call nc_check(nf90_close(iunit_lsm), 'static_init_model', &
+                  'close '//trim(lsm_netcdf_filename))
 if (hydro_model_active) then
-   call nc_check(nf90_close(iunit_hydro), 'static_init_model', 'close '//trim(hydro_netcdf_filename))
+   call nc_check(nf90_close(iunit_hydro), 'static_init_model', &
+                      'close '//trim(hydro_netcdf_filename))
+end if
+if (assimOnly_active) then
+   call nc_check(nf90_close(iunit_assimOnly), 'static_init_model', &
+                     'close '//trim(assimOnly_netcdf_filename))
 end if
 
 model_size = progvar(nfields)%indexN
