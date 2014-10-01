@@ -1,5 +1,4 @@
-#! /usr/local.net/R-3.0.1/bin/Rscript --vanilla
-###/opt/R/bin/Rscript --vanilla
+#! /opt/R/bin/Rscript --vanilla
 
 ## Avoid shell arithimetic:
 ## you can pass arguments as text calculations you'd like R to perform.
