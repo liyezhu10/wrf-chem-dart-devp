@@ -568,7 +568,7 @@ subroutine set_obs(seq, obs, key_in)
 
 type(obs_sequence_type), intent(inout) :: seq
 type(obs_type),          intent(in)    :: obs
-integer, optional,       intent(in)    :: key_in
+integer,                 intent(in), optional :: key_in
 
 integer :: key
 
@@ -591,12 +591,12 @@ end subroutine set_obs
 subroutine get_obs_time_range(seq, time1, time2, key_bounds, num_keys, out_of_range, obs)
 
 ! Add other options for getting the first time to minimize search
-type(obs_sequence_type),  intent(in)  :: seq
-type(time_type),          intent(in)  :: time1, time2
-integer,                  intent(out) :: key_bounds(2)
-integer,                  intent(out) :: num_keys
-logical,                  intent(out) :: out_of_range
-type(obs_type), optional, intent(in)  :: obs
+type(obs_sequence_type), intent(in)  :: seq
+type(time_type),         intent(in)  :: time1, time2
+integer,                 intent(out) :: key_bounds(2)
+integer,                 intent(out) :: num_keys
+logical,                 intent(out) :: out_of_range
+type(obs_type),          intent(in), optional :: obs
 
 type(time_type)    :: cur_time
 type(obs_def_type) :: obs_def
@@ -686,9 +686,9 @@ end subroutine get_time_range_keys
 
 subroutine insert_obs_in_seq(seq, obs, prev_obs)
 
-type(obs_sequence_type),  intent(inout) :: seq
-type(obs_type),           intent(inout) :: obs
-type(obs_type), optional, intent(in)    :: prev_obs
+type(obs_sequence_type), intent(inout) :: seq
+type(obs_type),          intent(inout) :: obs
+type(obs_type),          intent(in), optional :: prev_obs
 
 type(time_type) :: obs_time, current_time
 integer :: prev, next, current
@@ -866,9 +866,9 @@ end subroutine append_obs_to_seq
 !subroutine insert_obs_group_in_seq(seq, obs_grp, prev_obs)
 
 ! Insert a group of observations from the same time into a sequence
-!type(obs_sequence_type),  intent(inout) :: seq
-!type(obs_type),           intent(inout) :: obs
-!type(obs_type), optional, intent(in)    :: prev_obs
+!type(obs_sequence_type), intent(inout) :: seq
+!type(obs_type),          intent(inout) :: obs
+!type(obs_type),          intent(in), optional :: prev_obs
 !
 !end subroutine insert_obs_group_in_seq
 
