@@ -37,6 +37,8 @@
 
 # This is appropriate for a days worth of flux tower observations
 # the obs in the file end 1 second before the time in the name.
+# If you are using these obs with CLM, ending 1 second before is appropriate.
+# 2003-07-23-00000 is DART 147030 00000
 # 2004-01-01-00000 is DART 147192 00000
 &obs_sequence_tool_nml
    filename_seq       = ''
