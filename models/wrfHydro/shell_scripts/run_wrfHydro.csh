@@ -1,12 +1,17 @@
 #!/bin/csh
 
-set ppn = $1
-set instance = $2
+set instance = $1
+#set ppe = $1
 
-touch wrfHydroStillWorking.dum
+# Touch wrfHydroStillWorking.dum is done at the top level of control to avoid lag
+# resulting in too many cores being used.
 
-mpirun -np $ppn ../../wrf_hydro.exe >& wrfHydroOutput.${instance} 
+if ( `readlink ../../wrf_hydro.exe | grep serial | wc -l` ) then 
+    ../../wrf_hydro.exe >& wrfHydroOutput.${instance} 
+else 
+    mpirun -np 1 ../../wrf_hydro.exe >& wrfHydroOutput.${instance} 
+endif 
 
-\rm wrfHydroStillWorking.dum
+\rm -f wrfHydroStillWorking.dum
 
 exit 0

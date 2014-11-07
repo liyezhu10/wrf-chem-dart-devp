@@ -86,7 +86,7 @@ if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
 # eventually may want to list the variables in the file and set flags based on these. 
 
 #-------------------------------------------------------------------------------
-# Loop through each state
+# Loop through each state / ensemble member
 set state_copy = 1
 # These reference line number in the control file.
 set ensemble_member_line = 1
@@ -113,7 +113,7 @@ while($state_copy <= $num_states)
     # clean up from last advance
     # some of these must be copied at some point?? for diagnostics?
     \rm -f  restart.nc  restart.hydro.nc  dart_restart  restart.assimOnly.nc
-    \rm -f wrfHydro_advance_information.txt
+    \rm -f  wrfHydro_advance_information.txt
     \rm -f  HYDRO_RST.*  RESTART.* 
     # if perturbed forcings are used, there will be *LDASIN_DOMAIN* here. see below.
     \rm -f  *.LDASOUT_DOMAIN*  *LDASIN_DOMAIN*
@@ -126,6 +126,19 @@ while($state_copy <= $num_states)
     if ( $assimOnly_active ) \
 	\ln -sv ../restart.assimOnly.$instance.nc  restart.assimOnly.nc   || exit 2
 
+    if ( $assimOnly_active ) then 
+	## these guys depend on their initial values in call to apply_assimOnly
+	## e.g. need to know the original geo_finegrid file to copy and modify it.
+	\cp ../namelist.hrldas .
+	\cp ../hydro.namelist .
+        # Since parameter files are potentially altered in assimOnly,
+	# refresh and dont use symlinks.
+	foreach FILE ( ../PARAMS.gathered/* ) 
+	    echo $FILE
+	    \cp -v --remove-destination $FILE . || exit 2 ## these might change so dont link
+	end
+    endif
+
     # the input file is the name of the dart_restart.instance? 
     # There must be reasons for being cryptic.
     \ln -sv ../$input_file           dart_restart || exit 2
@@ -133,7 +146,8 @@ while($state_copy <= $num_states)
     # push the assimilation back to the model
     # This modifies
     # restart.nc -> ../restart.$instance.nc
-    # restart.hydro.nc -> ../restart.hydro$instance.nc
+    # restart.hydro.nc -> ../restart.hydro.$instance.nc
+    # restart.assimOnly.nc -> ../restart.assimOnly.$instance.nc
     ../dart_to_wrfHydro                          || exit 2
 
     if ( ! -e wrfHydro_advance_information.txt ) then
@@ -155,11 +169,7 @@ while($state_copy <= $num_states)
     set numadvances   = `echo $numadvancestr[$#numadvancestr]`
 
 # seems most efficient to only write restarts after the desired advance. 
-# but this coul/would? wreak havoc on our currently inept mechanism for getting restarts
-# (which is to advance a single hour past the last integration period - which
-#  may not correspond to the restart frequency).
-# plus there is a check for a single restart file below. 
-# also not tested for RESTART_FREQUENCY_HOURS
+# todo?
 
     ## ALSO have to keep the start time in hrldas abreast of the advancing.
     ## else the forcing data seems to have no effect.
@@ -179,6 +189,7 @@ wq
 ex_end
 
     echo '******************************************************************************'
+    echo ' Ensemble member:' $instance
     grep START_ namelist.hrldas | grep -v !
     echo '******************************************************************************'
 
@@ -194,71 +205,14 @@ ex_end
     set skipNlines    = `echo $numfilestring[1]`
 
     #-------------------------------------------------------------------
-    # Block 2.5: PERTURBED FORCING 
-    #
-    # It may be desirable to keep the perturbed forcings (for diagnostics or smoother?).
-    # Here you can exercise that choice. If kept, perturbed forcings will be stored to
-    # ../FORCING.perturbed/yyyymmddhh.iEns.LDASIN_DOMAIN* where the final character 
-    # is the same as in ../FORCING/yyyymmddhh.LDASIN_DOMAIN*. 
-    # If cycling or re-running is performed for previous timesteps after each analysis, 
-    # this may become more complex, with the forcing at a given time actually depending 
-    # on the time of the analysis. (That is the forcing is changing as the analysis moves
-    # into the future). But Im' not going to worry about that yet. 
-    #
-    # Create the forcings in the current directory and only move if they are to be kept.  
-    # The FORGING.perturbed/* filenames should have date and the instance/nnnn should be specified.  
-    # then symlinked to remove this.
-    ## Alter the namelist.hrldas to point INDIR='./'
-
-    #This hasnt been tested yet. 
-    if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
-
+    # Block 2.5: AssimOnly Assimilation State Variables.
     if ( $assimOnly_active ) then 
+      cp ../apply_assimOnly.csh .
+      ./apply_assimOnly.csh
+      set failure = $?
+      if ( $failure ) exit 22
+    endif    
 
-	## The name of the forcing file is conveniently supplied in 
-	## wrfHydro_advance_information.txt. Though ( fix ) the times in the 2 top lines
-	## seem wrong.
-	
-	@ ifile = 1
-	while ($ifile <= $numfiles)
-	    @ linenum = $skipNlines + $ifile
-	    set FNAME = `\head -$linenum wrfHydro_advance_information.txt | tail -1`
-	    set FDATE = `echo $FNAME | sed -e "s#[.,']# #g"`
-	    set FDATE = `echo $FDATE[1]`
-
-	    set FFILE = `\ls ../FORCING/$FDATE.LDASIN_DOMAIN*`
-	    set FFILElocal = `echo $FFILE | \cut -d'/' -f3`
-
-	    echo $FFILE
-	    echo $FFILElocal
-
-	    ## get the precip multiplier out of the restart.assimOnly.nc file.
-	    ## this will only work for scalar precip! 
-	    set precipMult = `ncks -H -v precipMult ../restart.assimOnly.${instance}.nc \
-                              | head -1 | cut -d= -f2`
-
-	    ## multiply and put the restulting file in the right place
-            ncap2 -s "RAINRATE=RAINRATE*${precipMult}" \
-                     $FFILE ../FORCING.perturbed/ensemble.${instance}/$FFILElocal
-
-	    ## change the location of the input in the namelist.hrldas
-	    ## maybe this could be done elsewhere, outside loop, but it's lightweight.
-ex namelist.hrldas <<ex_end
-g;INDIR;s;= .*;= "../FORCING.perturbed/ensemble.${instance}/";
-wq
-ex_end
-
-	    ## need to update the timestamp in the restart.
-	    ## the timestamp should match that of the forcing file??
-	    ## jlm - fixme
-
-	    @ ifile = $ifile + 1
-	end
-
-	
-
-    endif 
-    
     #-------------------------------------------------------------------
     # Block 3: advance the model
     #          In this case, we are saving the run-time messages to
@@ -269,8 +223,12 @@ ex_end
     #-------------------------------------------------------------------
     echo "advance the model"
     ## i just want the model to be quiet so I can focus on the DART output
-    mpirun -np 2 ../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
-    #../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    if ( `readlink ../wrf_hydro.exe | grep serial | wc -l` ) then 
+        ../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    else
+	mpirun -np 4 ../wrf_hydro.exe &> /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    endif 
+
     \rm -f /tmp/jamesmccWfrHydroEnsOutputJunk.$process
 
     @ lsm_status = `\ls -1 RESTART*DOMAIN* | wc -l`
@@ -359,7 +317,6 @@ end  ## loop over ensemble members for this process.
 # Change back to original directory and get rid of temporary directory.
 # If all goes well, there should be no need to keep this directory.
 # If you are debugging, you may want to keep this directory. 
-
 cd ..
 \rm -rf $temp_dir
 
@@ -369,7 +326,13 @@ cd ..
 
 \rm -rf $control_file
 
-exit 
+## if parameters in the geoFineFile were edited clean up that file. 
+if ($?geoFineFileSrc) then
+    \cp $geoFineFileOrig $geoFineFile
+    \rm -f $geoFineFileOrig
+endif 
+
+exit 0
 
 # <next few lines under version control, do not edit>
 # $URL$

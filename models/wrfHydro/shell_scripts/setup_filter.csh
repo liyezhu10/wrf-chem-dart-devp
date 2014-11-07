@@ -224,7 +224,8 @@ set REMOVE = '/bin/rm -fr'
 #===============================================================================
 # Clean up previous runs
 # Destroy all previous output for the sake of clarity.
-\rm -rf OUTPUT
+mv OUTPUT OUTPUT.DESTROYING
+\rm -rf OUTPUT.DESTROYING &
 mkdir OUTPUT
 
 \rm -rf advance_temp*
@@ -233,7 +234,12 @@ mkdir OUTPUT
 \rm -f  dart_log.*
 \rm -f  filter_control*
 \rm -f  filter_ics.*
+\rm -f  filter_lock*
+\rm -f  filter.log
+\rm -f  filter_to_model.lock
+\rm -f  filter_restart.*
 \rm -f  restart*.nc
+\rm -f  model_to_filter.lock
 \rm -f  Posterior_Diag.nc
 \rm -f  Prior_Diag.nc
 
@@ -256,8 +262,8 @@ end
 # repetition. Im happy to move to bash if anyone else wants to help.)
 
 ## require restart.nc
-set MYSTRING = `grep RESTART_FILENAME_REQUESTED namelist.hrldas | grep -v !`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `grep RESTART_FILENAME_REQUESTED namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set restartFile = `echo $MYSTRING[$#MYSTRING]`
 if ($restartFile !~ 'restart.nc' & $restartFile !~ './restart.nc' ) then
@@ -266,8 +272,8 @@ if ($restartFile !~ 'restart.nc' & $restartFile !~ './restart.nc' ) then
 endif 
 
 ## require restart.hydro.nc
-set MYSTRING = `grep RESTART_FILE hydro.namelist | grep -v !`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `grep RESTART_FILE hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set hydroRestartFile = `echo $MYSTRING[$#MYSTRING]`
 if ($hydroRestartFile !~ 'restart.hydro.nc' & $hydroRestartFile !~ './restart.hydro.nc' ) then
@@ -278,8 +284,8 @@ endif
 ## require KHOUR = 1
 ## I need to look into why this causes absolutely crazy behaviour where the 
 ## filter assimilates all obs at once and doesnt try to advance the mode.
-set MYSTRING = `grep -i KHOUR namelist.hrldas | grep -v !`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `grep -i KHOUR namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set KHOUR = `echo $MYSTRING[$#MYSTRING]`
 if ($KHOUR !~ '1') then
@@ -288,8 +294,9 @@ if ($KHOUR !~ '1') then
 endif 
 
 ## require rst_dt = 1
-set MYSTRING = `grep -i rst_dt hydro.namelist | grep -v !`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+#set MYSTRING = `grep -i rst_dt hydro.namelist | egrep -v '^[!]'`
+set MYSTRING = `grep -i rst_dt hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set rstDt = `echo $MYSTRING[$#MYSTRING]`
 if ($rstDt !~ '60') then
@@ -301,43 +308,43 @@ endif
 ## might do something to make sure this dosent/exist is unique... 
 
 # WRFINPUT
-set MYSTRING = `grep HRLDAS_CONSTANTS_FILE namelist.hrldas`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING = `grep HRLDAS_CONSTANTS_FILE namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
 
 # FORCING 
-set MYSTRING   = `grep INDIR namelist.hrldas`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep INDIR namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set FORCINGDIR = `echo $MYSTRING[$#MYSTRING]`
 
 # geo file for LSM
-set MYSTRING   = `grep GEO_STATIC_FLNM namelist.hrldas`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep GEO_STATIC_FLNM namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set geoFile    = `echo $MYSTRING[$#MYSTRING]`
 
 # geo file in hydro
-set MYSTRING   = `grep GEO_STATIC_FLNM hydro.namelist`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep GEO_STATIC_FLNM hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set geoFileHydro = `echo $MYSTRING[$#MYSTRING]`
 
 # Fulldom/finegrid file in hydro
-set MYSTRING   = `grep GEO_FINEGRID_FLNM hydro.namelist`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep GEO_FINEGRID_FLNM hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set fineGridFile = `echo $MYSTRING[$#MYSTRING]`
 
 ## gw basin file, but only if it's set
-set MYSTRING   = `grep gwbasmskfil hydro.namelist`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep gwbasmskfil hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set gwBasFile = `echo $MYSTRING[$#MYSTRING]`
 
-set MYSTRING   = `grep GWBASESWCRT hydro.namelist`
-set MYSTRING   = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set MYSTRING   = `grep GWBASESWCRT hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set gwBasSwitch = `echo $MYSTRING[$#MYSTRING]`
 
@@ -347,6 +354,8 @@ foreach file ( $WRFINPUT $FORCINGDIR $geoFile $geoFileHydro $fineGridFile $gwBas
     if (! -e ${file} ) then
 	if( $file == $gwBasFile & $gwBasSwitch == '0' ) continue
 	echo $file 'Does NOT Exist as specified in a namelist'
+	echo "Note that the path is relative to inside a directory within the calling level." 
+	echo "You may need to make the symlink here (e.g: ln -s $file . )?"
 	cd ..
 	rm -rf tmpTestDir
 	exit 3
@@ -399,7 +408,7 @@ if ( "$lsmModel" == "noahmp" ) then
 	echo "MISSING directory: ${dir}"
 	exit 5
     endif 
-    foreach FILE ( DISTR_HYDRO_CAL_PARMS.TBL GENPARM.TBL MPTABLE.TBL SOILPARM.TBL URBPARM.TBL VEGPARM.TBL )
+    foreach FILE ( GENPARM.TBL MPTABLE.TBL SOILPARM.TBL URBPARM.TBL VEGPARM.TBL )
 	if (! -e ${dir}/${FILE} )  then
 	    echo "MISSING file: ${dir}/${FILE}"
 	    exit 6
@@ -429,7 +438,8 @@ end
 #==============================================================================
 echo
 echo "DART Executable Builds"
-foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter wakeup_filter restart_file_tool obs_sequence_tool )
+foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter wakeup_filter \
+		restart_file_tool obs_sequence_tool create_obs_sequence )
     if ( -e ${FILE} && ! $forceCopyDartBuilds )  then
 	echo "Using existing $FILE"
     else
@@ -444,7 +454,7 @@ end
 #==============================================================================
 echo
 echo "DART Scripts"
-foreach FILE ( run_filter.csh advance_model.csh gregorian_time )
+foreach FILE ( run_filter.csh advance_model.csh  gregorian_time )
    if ( -e ${FILE} && ! $forceCopyDartScripts )  then
       echo "Using existing $FILE"
    else
@@ -467,9 +477,16 @@ end
 #
 
 # link to the useful script for creating initial ensembles. 
-ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh . || exit 7
+#ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh . || exit 7 phasing out
+ln -svf ${dartDir}/shell_scripts/perturb_restarts.csh . || exit 7
 ln -svf ${dartDir}/shell_scripts/randomSeq.rsh .  || exit 7
 ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd_noQsub.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/apply_assimOnly.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/run_wrfHydro.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/setup_ensemble_run.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/log_meta_wrfHydro.csh .  || exit 7
+ln -svf ${dartDir}/shell_scripts/subset_obs_seq.csh .  || exit 7
 
 # where the ensemble of initial conditions are located
 set ensembleDir = ${centralDir}/initialEnsemble
@@ -506,7 +523,7 @@ endif
 
 ## From the namelist determine if the noAssim restarts are needed. 
 ## The line could be commented out (default is blank in model_mod.f90) or set to ''.
-set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | wc -l`
+set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_state_variables | wc -l`
 set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | \
                          cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
 set assimOnly_active = 0
@@ -632,12 +649,26 @@ ex_end
 #${dartDir}/shell_scripts/listDirFollowLinks.sh .. >> ${logFile}
 
 echo
-echo "centralDir is ${centralDir}"
-echo "Configure     ${centralDir}/input.nml"
-echo "Configure     ${centralDir}/namelist.hrldas"
-echo "Configure     ${centralDir}/hydro.namelist"
-echo "execute       ${centralDir}/run_filter.csh"
+echo "!==============================================================================!"
+echo "! Ready to    ./run_filter.csh   <or>   qsub run_filter.csh                    !"
+echo "!                                                                              !"
+echo "! Double check the following basics are correct for this run:                  !"
+echo "!                                                                              !"
 echo
+egrep 'ens_size' input.nml | head -1 | tr -d ' \t' | tr '=' '\n'
+## there is an implied line break here by the next command
+egrep 'KIND_' input.nml | tr -d ' \t' | egrep -v '^[!\]' | grep -v 'kind_of_interest' | tr '=' '\n' | sed "s/^assimOnly/\nassimOnly/" | sed "s/^hydro_state/\nhydro_state/" | sed "s/^lsm_state/\nlsm_state/"
+echo
+egrep 'skip_variables' input.nml | tr -d ' \t' | tr '=' '\n'
+echo
+egrep 'assimilate_these_obs_types' input.nml | tr -d ' \t' | tr '=' '\n'
+echo
+egrep 'evaluate_these_obs_types' input.nml | tr -d ' \t' | tr '=' '\n'
+echo
+set nInfZeros = `egrep 'inf_' input.nml | head -1 | cut -d'=' -f2 | tr ',' '\n' | grep '0' | wc -l`
+if ( $nInfZeros < 2 ) egrep 'inf_' input.nml
+echo "!                                                                              !"
+echo "!==============================================================================!"
 
 exit 0
 

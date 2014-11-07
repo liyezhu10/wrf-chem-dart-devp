@@ -32,19 +32,13 @@
 ## -e <arg>  filename for standard error
 ## -o <arg>  filename for standard out
 ## -q <arg>   Queue name (small, medium, long, verylong)
-## -l nodes=xx:ppn=2   requests BOTH processors on the node. On both bangkok
-##                     and calgary, there is no way to 'share' the processors
-##                     on the node with another job, so you might as well use
-##                     them both. (ppn == Processors Per Node)
+## -l nodes=1:ppn=1   (ppn == Processors Per Node)
 ##=============================================================================
-#PBS -N filter
+#PBS -N run_filter
 #PBS -r n
 #PBS -e filter.err
 #PBS -o filter.log
-##PBS -q dedicated
-#PBS -l nodes=1:ppn=5
-## jlm - is this setup the case on hydro-c1? I doubt it. if so, nothing will ever run.
-## as many nodes are often completely taken with runs.
+#PBS -l nodes=1:ppn=16,walltime=168:00:00
 
 ####################################################################
 ####################################################################
@@ -100,6 +94,8 @@ set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 set ADVANCESTRING = `grep -A 42 filter_nml input.nml | grep adv_ens_command | grep -v '!'`
 set ADV_CMD  = `echo $ADVANCESTRING | cut -d= -f2 | tr -d '"'`
 
+echo $ADV_CMD
+
 echo parallel_model: $parallel_model
 
 # A common strategy for the beginning is to check for the existence of
@@ -113,14 +109,13 @@ if ($?PBS_O_WORKDIR) then
     #####################################################################
     # PBS has a list of processors in a file whose name is (PBS_NODEFILE)
     echo "PBS - using mpirun for execution"
-
     # each filter task advances the ensembles, each running on 1 proc.
-    if ( "$parallel_model" == "false" ) then
+    if ( "$parallel_model" == "false" ) then  ## async==2
 
       mpirun ./filter
 
-    else
-
+    else  ## async==4
+   
     # filter runs in parallel until time to do a model advance,
     # and then this script starts up the modelxxx jobs, each one
     # running in parallel. then it runs wakeup_filter to wake
@@ -195,7 +190,7 @@ else
     #echo "node5:2" >> $MYNODEFILE
     #echo "node3:2" >> $MYNODEFILE
     #echo "node1:2" >> $MYNODEFILE
-    setenv NUM_PROCS 2
+    setenv NUM_PROCS 8
     set MPIRUN = '/opt/openmpi/bin/mpirun'
     set MPICMD = "$MPIRUN -np $NUM_PROCS"
     # -machinefile $MYNODEFILE"
@@ -237,7 +232,6 @@ else
 	  # and also giving an example calling seq in input.nml
 	  # e.g.: mpirun -np $NUM_PROCS ?
           echo "calling model advance now:"
-echo $ADV_CMD
           ${ADV_CMD} 0 ${NUM_ENS} filter_control00000 || exit 9
 
           echo "restarting filter."

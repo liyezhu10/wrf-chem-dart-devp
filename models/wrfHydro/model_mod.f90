@@ -46,6 +46,7 @@ use    utilities_mod, only : register_module, error_handler, nc_check,         &
 
 use    obs_kind_mod, only : &
      KIND_SOIL_MOISTURE,    &
+     KIND_SOIL_LIQUID_WATER,    &
      KIND_SURFACE_HEAD,     &
      KIND_STREAM_FLOW,      &
      KIND_STREAM_HEIGHT,    &
@@ -63,13 +64,14 @@ use    obs_kind_mod, only : &
 use mpi_utilities_mod, only: my_task_id
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
+!jlm - these come from wrf.
 !nc -- module_map_utils split the declarations of PROJ_* into a separate module called
 !nc --   misc_definitions_module 
-use               map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
-                                    ij_to_latlon, gridwind_to_truewind
+!use               map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
+!                                    ij_to_latlon, gridwind_to_truewind
 
-use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
-                                    PROJ_CYL
+!use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
+!                                    PROJ_CYL
 
 use typesizes
 use netcdf
@@ -353,8 +355,9 @@ real(r8), allocatable, dimension(:) :: linkLat, linkLong, channelIndsX, channelI
 real(r8), allocatable, dimension(:) :: basnMask, basnLon, basnLat
 integer :: south_north, west_east, n_hlong, n_hlat, n_link, n_basn
 integer, dimension(3)               :: fine3dShape, coarse3dShape
-
-real(R8), dimension(:,:,:), allocatable :: sice, sh2oMaxRt, sh2oWltRt !! set by calling disagSmc
+!! set by calling disagSh2ox, these dont really need to be allocatable...
+real(R8), dimension(:,:,:), allocatable :: smc, sice, sh2oMaxRt, sh2oWltRt
+real(R8), dimension(:,:),   allocatable ::  smcWlt1, smcMax1
 
 
 interface vector_to_prog_var
@@ -623,7 +626,7 @@ endif
 allocate(keepLsmVars0(n_lsm_fields))
 keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)
 ! use any( )  jlm fixme
-lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_M') .or. &
+lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_W') .or. &
      (lsm_state_variables(1,:) .eq. 'SH2O') )
 
 hydroSmcPresent = 0
@@ -635,7 +638,7 @@ endif
 
 if (lsmSmcPresent > 0 .and. hydroSmcPresent > 0) then
    if (rst_typ /= 1) then
-      write(string1,*) 'Seems BAD: Using hydro SMC by rst_type != 1!'
+      write(string1,*) 'Seems BAD: Using hydro SMC but rst_type != 1!'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
    allocate(keepLsmVars(n_lsm_fields-1))
@@ -716,7 +719,6 @@ FILL_PROGVAR : do ivar = 1, nfields
    progvar(ivar)%dimnames    = ' '
    progvar(ivar)%maxlevels   = 0  !jlm fix this
 
-
    if (component .eq. 'HYDRO') then
       iunit = iunit_hydro
       string2 = 'Hydro Restart File - '//trim(varname)
@@ -761,23 +763,68 @@ FILL_PROGVAR : do ivar = 1, nfields
 
    ! This is fundamentally hardcoded clamping. See WRF/model_mod.f90 for a namelist-driven
    ! example.  It would be nice to use the netCDF file valid_range attribute ...
+   ! JLM - It would be nice if this information were somehow built into the OBS_KIND, since that's
+   ! required anyway. I'd prefer not to have another namelist.
    !
    ! if the variable is bounded, then we need to know how to restrict it.
    ! rangeRestricted == 0 is unbounded
    ! rangeRestricted == 1 is bounded below
-   ! rangeRestricted == 2 is bounded above           ( TJH unsupported )
-   ! rangeRestricted == 3 is bounded above and below ( TJH unsupported )
-   !! havent appropriately sorted this out yet. jlm -does affect 'dart restarts' missing values.
-   if ( varname == 'QFX' .or. varname=='HFX' ) then
-      progvar(ivar)%rangeRestricted = 0
-      progvar(ivar)%minvalue        = -1.0_r8*huge(0.0_r8)
-      progvar(ivar)%maxvalue        = huge(0.0_r8)
-   else
-      progvar(ivar)%rangeRestricted = 0
-      progvar(ivar)%minvalue        = 0.0_r8
-      progvar(ivar)%maxvalue        = huge(0.0_r8)
-   endif
+   ! rangeRestricted == 2 is bounded above           
+   ! rangeRestricted == 3 is bounded above and below 
+   ! rangeRestricted == 4 means apply nonscalar restrictions to this field as 
+   !                    coded in vector_to_nd_progvar for the appropriate dimension. 
 
+   progvar(ivar)%rangeRestricted = 0
+   progvar(ivar)%minvalue        = -1.0_r8*huge(0.0_r8)
+   progvar(ivar)%maxvalue        = huge(0.0_r8)
+
+   ! set minvalue for certain variables which deserve it.
+   if ( varname == 'SNODEP'  .or. &    ! noah
+        varname == 'WEASD'   .or. &
+        varname == 'SNOWH'   .or. &    ! noahMP
+        varname == 'SNEQV'   .or. &
+        varname == 'SNOWC'   .or. &
+        varname == 'LAI'     .or. &
+        varname == 'WA'      .or. &
+        varname == 'qlink1'  .or. &    ! hydro
+        varname == 'hlink'   .or. &
+        varname == 'cvol'    .or. &
+        varname == 'z_gwsubbas'   .or. &
+        varname == 'precipMult'   .or. &    ! assimOnly
+        varname == 'OVROUGHRTFAC' .or. &
+        varname == 'RETDEPRTFAC'  .or. &
+        varname == 'gwCoeff'     .or. &
+        varname == 'gwExpon'          &
+        ) then
+      progvar(ivar)%rangeRestricted = 1
+      ! Most vars have minvalue of 0.
+      progvar(ivar)%minvalue     = 0
+      ! Write exceptions here, this is a dummy example.
+      if ( varname == 'degKelvin' ) progvar(ivar)%minvalue     = -273.15
+   end if
+
+   ! set maxvalue for those deserving variables. 
+   if ( varname == 'OVROUGHRTFAC' .or. &   ! assimOnly
+        varname == 'RETDEPRTFAC'  .or. &
+        varname == 'gwCoeff'     .or. &
+        varname == 'gwExpon'          &
+        ) then
+      progvar(ivar)%rangeRestricted = progvar(ivar)%rangeRestricted + 2
+      progvar(ivar)%maxvalue        = 14.2  !! total dummy. 
+      if ( varname == 'OVROUGHRTFAC' ) progvar(ivar)%maxvalue = 20. ! fairly arbitrary
+      if ( varname == 'RETDEPRTFAC' )  progvar(ivar)%maxvalue = 20.
+      if ( varname == 'gwCoeff' ) progvar(ivar)%maxvalue = 1000 ! fairly arbitrary
+      if ( varname == 'gwExpon' )  progvar(ivar)%maxvalue = 1000
+   end if
+
+   ! specify if array bounds are to be used. 
+   if ( varname == 'SOIL_W' .or. &   ! noah
+        varname == 'SH2O'   .or. &   ! noahMP
+        varname == 'sh2ox'       &   ! hydro
+        ) then
+      progvar(ivar)%rangeRestricted = 4
+   end if
+   
    ! These variables have a Time dimension. We only want the most recent time.
    varsize = 1
    dimlen  = 1
@@ -1903,6 +1950,9 @@ end function nc_write_model_atts
 
 !===============================================================================
 function nc_write_model_vars( ncFileID, state_vec, copyindex, timeindex ) result (ierr)
+! JLM - This writes the Prior_Diag.nc and Posterior_Diag.nc files?? That should 
+!       be stated. Maybe this does other things?
+!
 ! All errors are fatal, so the return code is always '0 == normal'
 !
 ! assim_model_mod:init_diag_output uses information from the location_mod
@@ -2427,7 +2477,7 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
          !! disags liquid water content (sh2oRt) into module memory for use elsewhere.
          write(logfileunit,*)"Disaggregating HYDRO liquid soil moisture."
          write(     *     ,*)"Disaggregating HYDRO liquid soil moisture."
-         call disagSmc(data_3d_array) 
+         call disagSh2ox(data_3d_array) 
       else 
          call nc_check(nf90_get_var(ncid, VarID, data_3d_array,  &
               start=ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
@@ -2509,7 +2559,7 @@ end subroutine model_to_dart_vector
 
 
 !===============================================================================-------------
-subroutine disagSmc(sh2oRt)
+subroutine disagSh2ox(sh2oRt)
 ! Disaggregating of sh2ox can be done simply using weights.
 ! HOWEVER, we would like to physically constrain perturbations to sh2ox using
 ! the wilt and max water holding of the soil and the amount of ice in a given
@@ -2517,7 +2567,7 @@ subroutine disagSmc(sh2oRt)
 ! total soil moisture: smc, smcrt
 ! liquid soil moisture: sh2ox, sh2oxrt
 ! ice soil moisture: sice
-! coarse res, 2D, total soil moisture wilt and max soil water: smcwlt1, smcmax1
+! coarse res, 2D, total soil moisture wilt and max soil water: smcWlt1, smcMax1
 ! fine res, 3D, *liquid* soil moisture wilt and max soil water: sh2oWltRt, sh2oxMaxRt (adjusted for ice)
 ! sh2owgts: weigts to disagg to routing domain.
 
@@ -2527,16 +2577,16 @@ subroutine disagSmc(sh2oRt)
 
 
 !! IN/OUT
-real(R8), dimension(:,:,:), allocatable, intent(inout) :: sh2oRt
+real(R8), dimension(n_hlong,n_hlat,nsoil), intent(out) :: sh2oRt
 
-!! global to share with aggSmc
+!! global to share with aggSh2ox
 !! real(R8), dimension(:,:,:), allocatable :: sice  !! global
-!!real(R8), dimension(:,:,:), ALLOCATABLE :: sh2oMaxRt, sh2oWltRt !! global
-
-real(R8), dimension(:,:), allocatable   :: smcwlt1, smcmax1
+!! real(R8), dimension(:,:,:), ALLOCATABLE :: sh2oMaxRt, sh2oWltRt !! global
+!! real(R8), dimension(west_east,south_north)   :: smcWlt1, smcMax1
 
 !! read from hydro restart file.
-real(R8), dimension(:,:,:), allocatable :: smc, sh2ox, sh2oWgt
+real(R8), dimension(west_east,south_north,nsoil) :: sh2ox
+real(R8), dimension(n_hlong,n_hlat,nsoil) :: sh2oWgt
 
 !local
 real(R8)           :: WATHOLDCAP
@@ -2555,44 +2605,43 @@ iyrt = n_hlat
 !nsoil=nsoil
 aggfactrt = n_hlong/west_east
 
-allocate(smcWlt1(ix, iy), smcMax1(ix, iy))
-allocate(smc(ix, iy, nsoil),sh2ox(ix, iy, nsoil))
-allocate(sh2owgt(ixrt,iyrt,nsoil))
-
 !! global scope variables, so be more careful
-!! allocated here but deallocated in aggSmc. These should not be allocated when arriving here...
+!! allocated here but deallocated in aggSh2ox. These should not be allocated when arriving here...
+if (.not. allocated(smcWlt1))  allocate(smcWlt1(west_east,south_north))
+if (.not. allocated(smcMax1))  allocate(smcMax1(west_east,south_north))
 if (.not. allocated(sh2oWltRt)) allocate(sh2oWltRt(ixrt,iyrt,nsoil))
 if (.not. allocated(sh2oMaxRt)) allocate(sh2oMaxRt(ixrt,iyrt,nsoil))
-if (.not. allocated(sice)    ) allocate(    sice(ix,  iy,  nsoil))
+if (.not. allocated(smc)    )   allocate(      smc(ix,  iy,  nsoil))
+if (.not. allocated(sice)    )  allocate(     sice(ix,  iy,  nsoil))
 
 !! open the hydro restart file
 call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, ncid), &
-     'disagSmc', 'open '//trim(hydro_netcdf_filename))
+     'disagSh2ox', 'open '//trim(hydro_netcdf_filename))
 
 !! SMC
-errString    = 'disagSmc: smc'
+errString    = 'disagSh2ox: smc'
 call nc_check(nf90_inq_varid(ncid, 'smc', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smc), 'disagSmc', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smc), 'disagSh2ox', 'get_var: '//trim(errString))
 
 !! sh2ox
-errString    = 'disagSmc: sh2ox'
+errString    = 'disagSh2ox: sh2ox'
 call nc_check(nf90_inq_varid(ncid, 'sh2ox', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, sh2ox),'disagSmc', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, sh2ox),'disagSh2ox', 'get_var: '//trim(errString))
 
-!! smcwlt1
-errString    = 'disagSmc: smcwlt1'
+!! smcWlt1
+errString    = 'disagSh2ox: smcWlt1'
 call nc_check(nf90_inq_varid(ncid, 'smcwlt1', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smcwlt1),'disagSmc', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smcWlt1),'disagSh2ox', 'get_var: '//trim(errString))
 
-!! smcmax1
-errString    = 'disagSmc: smcmax1'
+!! smcMax1
+errString    = 'disagSh2ox: smcmax1'
 call nc_check(nf90_inq_varid(ncid, 'smcmax1', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smcmax1),'disagSmc', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smcMax1),'disagSh2ox', 'get_var: '//trim(errString))
 
 !! sh2owgt
-errString    = 'disagSmc: sh2owgt'
+errString    = 'disagSh2ox: sh2owgt'
 call nc_check(nf90_inq_varid(ncid, 'sh2owgt', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, sh2owgt),'disagSmc', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, sh2owgt),'disagSh2ox', 'get_var: '//trim(errString))
 
 !! close the hydro restart file
 call nc_check(nf90_close(ncid), 'static_init_model', 'close '//trim(hydro_netcdf_filename))
@@ -2645,10 +2694,8 @@ do J=1,JX  !! also know as y
 end do !JX
 
 
-deallocate(smcWlt1, smcMax1, smc, sh2ox, sh2owgt)
 
-
-end subroutine disagSmc
+end subroutine disagSh2ox
 !===============================================================================-------------
 
 
@@ -2689,7 +2736,6 @@ real(r8), allocatable, dimension(:,:,:)     :: smcAgg, smcAggWeights
 
 ! variables related to screwing around with soil moisture states
 integer :: varidSh2ox, ncNdimsSh2ox
-real(R8),dimension(:,:,:),allocatable :: dum !! dum to disagSmc to init global sh2oWltRt and sh2oMaxRt
 integer, dimension(NF90_MAX_VAR_DIMS) :: mycountSh2ox, mystartSh2ox
 
 if ( .not. module_initialized ) call static_init_model
@@ -2742,7 +2788,7 @@ hydro_time = lsm_time  !! dummy for now
 !! jlm fix - can now get the time for hydro and should also have the 
 !! time in the restart.assimOnly.nc as well. 
 
-if ( lsm_time /= dart_time ) then ! .or. hydro_time /= dart_time ) then
+if ( lsm_time /= dart_time ) then 
    if ( lsm_time /= dart_time ) then
       call print_time(dart_time,'DART current time',logfileunit)
       call print_time(lsm_time,'LSM current time',logfileunit)
@@ -2859,55 +2905,73 @@ UPDATE : do ivar=1, nfields
                              progvar(ivar)%dimlens(2), &
                              progvar(ivar)%dimlens(3)) )
 
+      ! This applies physical limits 
       call vector_to_prog_var(state_vector, ivar, data_3d_array,limit=.true.)
+      ! In the case sh2ox, range restriction applies only to the high res field only. 
+      ! However, the above range restriction is not applied to low resolution  
+      ! "diagnostic" variables, such as smc in smc = sh2ox + sice. 
+      ! How to handle that? Doing this currently in aggSh2ox. 
+      ! Generally, I think range restriction needs to be a separate subroutine which 
+      ! is not embedded in vector_to_prog_var. Vector_to_prog_var should do only that, 
+      ! then (somthing named like) restrict_var_ranges should be called, then 
+      ! the variable(s) should be written to file. 
 
+      ! Ad hoc handling of "dual resolution" variable
+      ! Aggregate then put weights and coarseRes liquid soil moisture in the restart. 
+      ! Should this be moved to vector_to_3d_prog_var? also have to deal with change of 
+      ! resolution above and somehow with writing the weights here. 
       if (trim(varname) .eq. 'sh2ox') then
 
-         !! constrain the liquid soil moisture on high-res grid using
-         !! the wilt and  max which assume ice is NOT adjusted.
-         if ( (.not. allocated(sh2oWltRt)) .or. (.not. allocated(sh2oMaxRt)) ) then
-            allocate(dum(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
-            call disagSmc(dum)  !! this sets the
-            deallocate(dum)
-            data_3d_array = max( min( data_3d_array, sh2oMaxRt ), sh2oWltRt )
-         endif
-
-         !! spatially aggregate and solve the weights.
+         ! sh2ox is properly constrained in vector_to_prog_var (...,limit=.true.).
+         ! However it lives as coarse res soil moisture and weights in the restart files. 
+         ! Spatially aggregate and solve the weights and the total soil moisture. 
          allocate(smcAgg(coarse3dShape(1),coarse3dShape(2),coarse3dShape(3)), &
               smcAggWeights(fine3dShape(1),fine3dShape(2),fine3dShape(3)) )
-         call aggSmc(data_3d_array, smcAgg, smcAggWeights)
-
+         call aggSh2ox(data_3d_array, smcAgg, smcAggWeights)
          deallocate(data_3d_array)
          allocate(data_3d_array(coarse3dShape(1),coarse3dShape(2),coarse3dShape(3)))
          !! sh2ox = smcAgg
          data_3d_array = smcAgg
          deallocate(smcAgg)
+
          varidSh2ox = varid !! this will be written to file after this if statment
          ncNdimsSh2ox = ncNdims
-
+         
          !! output sh2owgts to the ncid file
          !! i'm kinda cheating by not doing all the dimension checks...
          varname = 'sh2owgt'
          mycount(1:3)=fine3dShape(1:3)
-
          string2 = trim(filename)//' '//trim(varname)  ! for diagnostics
          call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
               'dart_vector_to_model_files', 'inq_varid '//trim(string2))
          call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
               'dart_vector_to_model_files', 'inquire '//trim(string2))
-
-         !print*,shape(smcAggWeights)
-         !print*,mycount(1:3)
-
          call nc_check(nf90_put_var(ncFileID, VarID, smcAggWeights, &
               start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
               'dart_vector_to_model_files', 'put_var '//trim(string2))
-
          ! Make note that the variable has been updated by DART
          call nc_check(nf90_Redef(ncFileID),'dart_vector_to_model_files', 'redef '//trim(filename))
          call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
               'dart_vector_to_model_files', 'modified '//trim(varname))
          call nc_check(nf90_enddef(ncfileID),'dart_vector_to_model_files','state enddef '//trim(filename))
+
+         !! output smc to the ncid file. still not doing the dim checks. Note this is coarse res.
+         varname = 'smc'
+         mycount(1:3)=coarse3dShape(1:3)
+         string2 = trim(filename)//' '//trim(varname)  ! for diagnostics
+         call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+              'dart_vector_to_model_files', 'inq_varid '//trim(string2))
+         call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
+              'dart_vector_to_model_files', 'inquire '//trim(string2))
+         call nc_check(nf90_put_var(ncFileID, VarID, smc, &
+              start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+              'dart_vector_to_model_files', 'put_var '//trim(string2))
+         ! Make note that the variable has been updated by DART
+         call nc_check(nf90_Redef(ncFileID),'dart_vector_to_model_files', 'redef '//trim(filename))
+         call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
+              'dart_vector_to_model_files', 'modified '//trim(varname))
+         call nc_check(nf90_enddef(ncfileID),'dart_vector_to_model_files','state enddef '//trim(filename))
+
 
          !! reset the current variable to sh2ox
          varname = 'sh2ox'
@@ -2944,10 +3008,11 @@ ncFileID = 0
 
 end subroutine dart_vector_to_model_files
 
-!===============================================================================-------------
-subroutine aggSmc(sh2oRtIn, sh2ox, sh2owgt)
+!===============================================================================
+subroutine aggSh2ox(sh2oRtIn, sh2ox, sh2owgt)
 ! Taken from HYDRO_drv/module_HYDRO_drv.F near line 536
-! NOTE I renamed: smcrt->sh2oRt, smcWltRt->sh2oWltRt, and smcMaxRt->sh2oMaxRt compared to that code
+! NOTE I renamed: smcrt->sh2oRt, smcWltRt->sh2oWltRt, and 
+!                 smcMaxRt->sh2oMaxRt compared to that code
 
 ! Here we are updating (lsm grid:) sh2ox & smc and (rt grid:) sh2owgt
 ! requires (rt grid:) smcrt, sh2oRt, sh2oWltRt, sh2oMaxRt and (lsm grid:) sice
@@ -2957,28 +3022,42 @@ subroutine aggSmc(sh2oRtIn, sh2ox, sh2owgt)
 real(R8), dimension(:,:,:), intent(in)  :: sh2oRtIn
 
 ! liquid water content on the low res grid
-real(R8), dimension(:,:,:), allocatable, intent(out) :: sh2ox
+real(R8), dimension(west_east,south_north,nsoil), intent(out) :: sh2ox
 ! weights to disaggregate 
-real(R8), dimension(:,:,:), allocatable, intent(out) :: sh2owgt
+real(R8), dimension(n_hlong,n_hlat,nsoil),        intent(out) :: sh2owgt
 
 ! local
-real(r8), dimension(:), allocatable      :: sh2oaggrt
-real(r8), dimension(:,:,:), allocatable :: sh2oRt
-integer            :: i, j, ix, jx, krt, ixxrt, jyyrt
+real(r8), dimension(nsoil)                     :: sh2oaggrt
+real(r8), dimension(n_hlong,n_hlat,nsoil)      :: sh2oRt
+integer            :: i, j, ix, jx, krt, ixxrt, jyyrt, ss
 integer            :: AGGFACXRT, AGGFACYRT, AGGFACTRT
 
-allocate(sh2oaggrt(nsoil))
-allocate(sh2ox(west_east, south_north, nsoil), &
-         sh2owgt(n_hlong, n_hlat, nsoil), &
-         sh2oRt(n_hlong, n_hlat, nsoil) )
 
 jx = south_north
 ix = west_east
 aggfactrt = n_hlong/west_east
 
 sh2oRt = sh2oRtIn
+
+!---------------------------------------------------------------------
+! The following block could be done here, but it is done in 
+! vector_to_3d_prog_var instead because that's the place constraints 
+! are placed on assim state vectors prior to writing to file. 
+!---------------------------------------------------------------------
+! This happens because disaggregation happens in wrfHydro_to_dart
+! but                     aggregation happens in dart_to_wrfHydro
+! so these variables are lost from memory in the meanwhile b/c 
+! these are different programs. Here, disaggregation is happening on 
+! the prior (just as in wrfHydro_to_dart) because the fields are all read 
+! from file. The soil moisture is different but not used, while all the other
+! fields are the same (sice, sh2oWltRt, and sh2oMaxRt).
+!if ((.not. allocated(sh2oWltRt)) .or. (.not. allocated(sh2oMaxRt))) then
+!   call disagSh2ox(sh2oRt)  !! This allocates and calculates both of these
+!   sh2oRt = sh2oRtIn
+!end if
 ! These constraints use the sice to constrain the liquid fraction.
-sh2oRt = max( min( sh2oRt,  sh2oMaxRt ), sh2oWltRt )
+!sh2oRt = max( min( sh2oRt,  sh2oMaxRt ), sh2oWltRt )
+!---------------------------------------------------------------------
 
 do J=1,JX
    do I=1,IX
@@ -3023,9 +3102,14 @@ do J=1,JX
    end do
 end do
 
-deallocate(sh2oaggrt, sh2oRt)
+!! update smc = sice + sh2ox at the lsm/coarse grid resolution.
+!! calculate sice
+smc=sh2ox+sice
+do ss=1,nsoil
+   smc(:,:,ss) = max( min(smc(:,:,ss), smcMax1), smcWlt1)
+end do
 
-end subroutine aggSmc
+end subroutine aggSh2ox
 !===============================================================================-------------
 
 
@@ -3445,6 +3529,11 @@ if (present(limit)) then
       elseif (progvar(ivar)%rangeRestricted == 3) then
          where(data_1d_array < progvar(ivar)%minvalue) data_1d_array = progvar(ivar)%minvalue
          where(data_1d_array > progvar(ivar)%maxvalue) data_1d_array = progvar(ivar)%maxvalue
+      elseif (progvar(ivar)%rangeRestricted == 3) then
+         write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
+         write(string2, *)'No code written to restrict its range, however.'
+         call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
+              source, revision, revdate, text2=string2)
       endif
    endif
 endif
@@ -3492,6 +3581,11 @@ if (present(limit)) then
       elseif (progvar(ivar)%rangeRestricted == 3) then
          where(data_2d_array < progvar(ivar)%minvalue) data_2d_array = progvar(ivar)%minvalue
          where(data_2d_array > progvar(ivar)%maxvalue) data_2d_array = progvar(ivar)%maxvalue
+      elseif (progvar(ivar)%rangeRestricted == 3) then
+         write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
+         write(string2, *)'No code written to restrict its range, however.'
+         call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
+              source, revision, revdate, text2=string2)
       endif
    endif
 endif
@@ -3517,6 +3611,7 @@ integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
 logical,  optional,         intent(in)  :: limit
 
+real(R8),dimension(:,:,:),allocatable :: dum !! dum to disagSh2ox to init global sh2oWltRt and sh2oMaxRt
 integer :: i,j,k,ii
 
 ! unpack the right part of the DART state vector into a 3D array.
@@ -3541,6 +3636,30 @@ if (present(limit)) then
       elseif (progvar(ivar)%rangeRestricted == 3) then
          where(data_3d_array < progvar(ivar)%minvalue) data_3d_array = progvar(ivar)%minvalue
          where(data_3d_array > progvar(ivar)%maxvalue) data_3d_array = progvar(ivar)%maxvalue
+      elseif (progvar(ivar)%rangeRestricted == 4) then
+         if (trim(progvar(ivar)%varname) == 'sh2ox') then 
+            ! Constrain the liquid soil moisture on high-res grid using
+            ! the wilt and  max which assume ice is NOT adjusted.       
+            ! This "if block" sets sh2oWltRt and sh2oMaxRt if they happen to be unallocated
+            ! which happens every time because disaggregation happens in wrfHydro_to_dart
+            ! but                                 aggregation happens in dart_to_wrfHydro
+            ! so these variables are lost from memory in the meanwhile b/c 
+            ! these are different programs. Here, disaggregation is happening on 
+            ! the prior (just as in wrfHydro_to_dart) because the fields are all read 
+            ! from file. The soil moisture is different but not used, while all the other
+            ! fields are the same (sice, sh2oWltRt, and sh2oMaxRt).
+            if ( (.not. allocated(sh2oWltRt)) .or. (.not. allocated(sh2oMaxRt)) ) then
+               allocate(dum(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
+               call disagSh2ox(dum)  
+               deallocate(dum)
+            endif
+            data_3d_array = max( min( data_3d_array, sh2oMaxRt ), sh2oWltRt )
+         else 
+            write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
+            write(string2, *)'No code written to restrict its range, however.'
+            call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
+                 source, revision, revdate, text2=string2)
+         endif
       endif
    endif
 endif
@@ -3652,7 +3771,7 @@ end do
 if ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option .ne. 3) then
    ! not routing on grid, read from file
    write(string1, *)'Reach based routing not currently enabled in DART.'
-   call error_handler(E_ERR,'vector_to_3d_prog_var', string1, &
+   call error_handler(E_ERR,'getChannelCoords', string1, &
         source, revision, revdate, text2=string1)
 
 elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then

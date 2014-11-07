@@ -9,9 +9,11 @@
 # the inputDir should be of the form initialEnsemble.yyyymmdd.scheme 
 # so that the start time can be grabbed from it.
 
+## note, configure for both qsub and without (see run_filter.csh)
 
+#-----------------------------------------------------------
 if ($#argv != 5 & $#argv != 6) then
-    echo "Usage: endYyyy endMm endDD endHH inDir(relative to DARTdir) ppn"
+    echo "Usage: endYyyy endMm endDD endHH inDir(relative to calling dir) ppn"
     exit 1
 endif
 set endYyyy = $1
@@ -20,168 +22,147 @@ set endDd   = $3
 set endHh   = $4
 set inDir   = $5
 
-echo endYyyy: $endYyyy
-echo endMm: $endMm
-echo endDd: $endDd
-echo endHh: $endHh
-echo inDir: $inDir
-if ($#argv == 5) set ppn = $6
+if ($#argv == 6) set ppn = $6
 if(! $?ppn) set ppn = 1
 if($ppn > 16) then 
-    echo "Right now only configured to use a single node, setting ppn=1."
-    set ppn = 1
+    echo "Right now only configured to use a single node, setting ppn=8."
+    set ppn = 8
 endif 
 
-set wd = `pwd`
-echo wd: $wd
+#-----------------------------------------------------------
+## Examine the contents of the inDir and its internal consistency
+## The number of restart files.
+set nLsmRestarts       = \
+    `ls -1 $inDir/restart* | egrep 'restart.[0-9]*.nc' | wc -l`
+set nHydroRestarts     = \
+    `ls -1 $inDir/restart.hydro* | egrep 'restart.hydro.[0-9]*.nc' | wc -l`
+set nAssimOnlyRestarts = \
+    `ls -1 $inDir/restart.assimOnly* | egrep 'restart.assimOnly.[0-9]*.nc' | wc -l`
+@ assimOnlyActive = ( $nAssimOnlyRestarts != 0 )
+if ( $nLsmRestarts != $nHydroRestarts ) then 
+    echo "The number of LSM restart files does not match the number of hydro restart files."
+    exit 1
+endif
 
-# parse the inDir for the date
-set inDirDate = `echo $inDir | cut -d. -f3`
-set startYyyy = `echo $inDirDate | cut -c1-4`
-set startMm = `echo $inDirDate | cut -c5-6`
-set startDd = `echo $inDirDate | cut -c7-8`
+if ( $assimOnlyActive ) then 
+    if ( $nLsmRestarts != $nAssimOnlyRestarts ) then
+	echo "The number of LSM restart files does not match the number of assimOnly restart files."
+	exit 1
+    endif
+endif
 
-echo inDirDate: $inDirDate
-echo startYyyy: $startYyyy
-echo startMm: $startMm
-echo startDd: $startDd
+set nEns = $nLsmRestarts
 
-set startDateSec = `date -d "UTC $startYyyy-$startMm-$startDd" +%s`
-set endDateSec = `date -d "UTC $endYyyy-$endMm-$endDd $endHh hour" +%s`
+## Check that they *all* have the same restart times.
+set restartTime = `ncdump -v Times $inDir/restart.0001.nc | tail -2 | head -1 | cut -d'"' -f2`
+foreach iEns ( `seq 1 $nEns` )
+    set iEnsFmt      = `printf "%04d" $iEns`
+    set rstTimeLsm = \
+	`ncdump -v Times $inDir/restart.${iEnsFmt}.nc | tail -2 | head -1 | cut -d'"' -f2`
+    set rstTimeHydro = \
+	`ncdump -h $inDir/restart.hydro.${iEnsFmt}.nc | grep Restart_ | cut -d'=' -f2 | tr -d ' ";'`
+    if ( $assimOnlyActive ) then 
+    set rstTimeAssimOnly = \
+	`ncdump -h $inDir/restart.assimOnly.${iEnsFmt}.nc | grep Restart_ | cut -d'=' -f2 | tr -d ' ";'`
+    endif 
+    if ( $restartTime != $rstTimeLsm       |  \
+         $restartTime != $rstTimeHydro     ) then 
+	 echo "There are non-matching restart times between the lsm or hydro restart files."
+	 exit 2
+    endif
+    if ( $assimOnlyActive ) then 
+	if ( $restartTime != $rstTimeAssimOnly ) then 
+	    echo "There are non-matching restart times between the lsm and assimOnly restart files."
+	    exit 2
+	endif 
+    endif
+end
+
+# Set the restart time
+set startYyyy = `echo $restartTime | cut -d- -f1`
+set startMm   = `echo $restartTime | cut -d- -f2`
+set startDd   = `echo $restartTime | cut -d- -f3 | cut -d_ -f1`
+set startHh   = `echo $restartTime | cut -d_ -f2 | cut -d: -f1`
+
+# Calculate the khour from the restart time and supplied end time
+set startDateSec = `date -ud "UTC $startYyyy-$startMm-$startDd $startHh hour" +%s`
+set endDateSec = `date -ud "UTC $endYyyy-$endMm-$endDd $endHh hour" +%s`
 @ newKhour = ($endDateSec - $startDateSec) / 3600
-echo $newKhour
 
+# The output path
+set outPath = ensembleRun.$startYyyy$startMm$startDd-$endYyyy$endMm$endDd
 
-set outPath = initialEnsembleWFlow.$startYyyy$startMm$startDd-$endYyyy$endMm$endDd.`echo $inDir | cut -d. -f3`
-
-set num_states = `ls $inDir/restart.hydro.*.nc -1 | wc -l`
-
-
-echo "Start Date: $startYyyy $startMm $startDd"
-echo "End Date: $endYyyy $endMm $endDd"
+# All setup. Print the details. 
+echo "Start Date: $startYyyy $startMm $startDd $startHh"
+echo "End Date  : $endYyyy $endMm $endDd $endHh"
 echo "Number of hours to advance: $newKhour"
-echo "Run dir: RUNS.$outPath"
-echo "Input dir: $inDir"
-echo "Number of ensemble members: $num_states"
+echo "Number of ensemble members: $nEns"
+echo "assimOnlyActive: $assimOnlyActive"
+echo "Input dir     : $inDir"
+echo "Output/Run dir: $outPath"
+echo "ppn : $ppn"
 
-
-# run all ensembles within this dir
-\mkdir -p RUNS.$outPath || exit 1
-cd RUNS.$outPath
+# Run ensembles within this dir
+\mkdir -p $outPath || exit 1
+cd $outPath
 ln -sf ../$inDir .  ## make this symlink so it's clear what these runs started from. 
-
-
-## generate the random mean of each perturbation
-#echo "../randomSeq.rsh uniform $num_states .5 1.5"
-echo "../randomSeq.rsh uniform $num_states 1 1"
-\cp ../randomSeq.rsh .
-#set randomMeans = `./randomSeq.rsh uniform $num_states .5 2`
-set randomMeans = `./randomSeq.rsh uniform $num_states 1 1`
-echo The random mean precip multipliers:
-echo $randomMeans
 
 ## get the name lists
 \cp ../namelist.hrldas .
 \cp ../hydro.namelist .
-
 \ln -sf ../DOMAIN .
 
-## deal with name list time. this requires a restrat file
-\ln -sv $inDir/restart.0001.nc  restart.nc   || exit 2
-set numadvances = $newKhour
 # Have to match the start time in hrldas with the restart files,
 # else the forcing data seems to have no effect.
-set restartFileTime = `ncdump -v Times restart.nc | tail -2 | head -1 | cut -d'"' -f2`
-set restartFileYyyy = `echo $restartFileTime | cut -d- -f1`
-set restartFileMm = `echo $restartFileTime | cut -d- -f2`
-set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
-set restartFileHh = `echo $restartFileTime | cut -d_ -f2 | cut -d: -f1`
- ## wont actually use this restart file
-\rm restart.nc
-
 ex namelist.hrldas <<ex_end
-g;KHOUR ;s;= .*;= $numadvances;
-g;START_YEAR;s;= .*;= $restartFileYyyy;
-g;START_MONTH;s;= .*;= $restartFileMm;
-g;START_DAY;s;= .*;= $restartFileDd;
-g;START_HOUR;s;= .*;= $restartFileHh;
+g;KHOUR ;s;= .*;= $newKhour;
+g;START_YEAR;s;= .*;= $startYyyy;
+g;START_MONTH;s;= .*;= $startMm;
+g;START_DAY;s;= .*;= $startDd;
+g;START_HOUR;s;= .*;= $startHh;
 wq
 ex_end
+# Note that the namelists used for dat assume the restart files are
+# named restart.nc and restart.hydro.nc, so that specification in the
+# namelist dosent need need edited to reflect the restart time.
 
+\cp ../setup_ensemble_run.csh .
 
-# Loop through each state /ensemble member
-set state_copy = 1
-while($state_copy <= $num_states)
+#===============================================================================
+# Loop through the ensemble members
+set iEns = 1
+while($iEns <= $nEns)
 
-    set instance        = `printf "%04d" $state_copy`
-    echo "ensemble member: $instance"
+    set iEnsFmt        = `printf "%04d" $iEns`
+    echo "ensemble member: $iEnsFmt"
 
-    if ( `ls -1 ensemble.*/wrfHydroStillWorking.dum | wc -l` > 10 ) echo 'Waiting for processors...'
-    while ( `ls -1 ensemble.*/wrfHydroStillWorking.dum | wc -l` > 10 )
+    ## the rest of the insde of this loop could be put in a separate file to || it.
+    ## can save time when many forcing files are to be adjusted
+    if ( `ls -1 ensemble.*/wrfHydroStillWorking.dum | wc -l` >= $ppn ) then
+	echo ' ********** Waiting for processors... ********** '
+	echo ' ********** Waiting for processors... ********** '
+	echo ' ********** Waiting for processors... ********** '
+    endif
+    while ( `ls -1 ensemble.*/wrfHydroStillWorking.dum | wc -l` >= $ppn )
 	sleep 1
     end
    
-    \mkdir ensemble.${instance}
-    cd ensemble.${instance}
+    set ensDir = ensemble.${iEnsFmt}
+    \mkdir $ensDir
+    ## this control file gets cleaned up in run_wrfHydro.csh
+    touch $ensDir/wrfHydroStillWorking.dum
 
-    ## get the name lists
-    \cp ../namelist.hrldas .
-    \cp ../hydro.namelist .
-    
-    # Get parameters.
-    foreach FILE ( ../../PARAMS.gathered/* ) 
-	echo $FILE
-	\ln -sf $FILE . || exit 2  
-    end
-    # need the wrfHydro restart files for the individual ensemble members
-    \ln -sv ../$inDir/restart.$instance.nc  restart.nc   || exit 2
-    \ln -sv ../$inDir/restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
+    ./setup_ensemble_run.csh $inDir $iEnsFmt $assimOnlyActive &
 
+    @ iEns++
 
-    ## Perturb forcing 
-    ## (0. outside this loop (state_copy) define a uniform random sequence of mean precip adjustment)
-    ## 1. Edit the path to the forcing dir in the namelist.hrldas.
-ex namelist.hrldas <<ex_end
-g;INDIR ;s;= .*;= "FORCING.perturbed.spinup/";
-wq
-ex_end
-
-    ## 2. for all forcing files in the time period
-    @ firstForcingFileInd = `\ls -1 ../../FORCING/ | \grep -n $startYyyy$startMm${startDd}00 | \
-                             cut -d: -f1`
-    set forcingFiles = `\ls -1 ../../FORCING/ | \tail -n+$firstForcingFileInd | \head -$numadvances`
-    ## 3. use the mean precip adjustment to define a sequence of normal errors about that mean
-    ## through time. (use randomSeq.rsh, which computes text so you dont have to do it in shell)
-    #set timePerts = `../../randomSeq.rsh uniform $numadvances \
-    #      		"$randomMeans[$state_copy]*(1-.1)" \
-    #                   "$randomMeans[$state_copy]*(1+.1)"`
-    set timePerts = `../../randomSeq.rsh uniform $numadvances $randomMeans[$state_copy] \
-			    $randomMeans[$state_copy]`
-
-
-    @ countForc=1
-    \mkdir FORCING.perturbed.spinup
-    foreach fForcing ( $forcingFiles )
-	##  multiply the precip in the copy using ncap2 and write a  
-	##     copy to ../../FORCING.perturbed.spinup.iEns.endYyyyendMmendDd 
-	set iPerturb = $timePerts[$countForc]
-
-	ncap2 -s "RAINRATE=RAINRATE*${iPerturb}" ../../FORCING/$fForcing \
-		 FORCING.perturbed.spinup/$fForcing
-
-	@ countForc++
-    end 
-
-    cp ../../run_wrfHydro.csh .
-    ./run_wrfHydro.csh $ppn $instance &
-
-    ## clean up the forcing
-#    \rm -rf FORCING.perturbed.spinup
-
-    
-    cd ../
-    @ state_copy++
 end
+
+## we dont want this script to finish until all the runs are complete. 
+while ( `ls -1 ensemble.*/wrfHydroStillWorking.dum | wc -l` > 0  )
+    sleep 1
+end
+
 
 
 exit 0

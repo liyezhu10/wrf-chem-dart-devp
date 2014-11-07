@@ -1,20 +1,33 @@
 #!/bin/csh
+#===============================================================================
+# This script runs an ensemble forward in time. 
+# The script can use perturbed forcing/parameters?
 
+# Notes / Todo
+# 1. Runs have to start and end on midnight currently.
+# 2. Tried to make the entire script a torque job but I think using ex in a 
+#    non-interactive terminal causes issues/failure. Trying new approach where
+#    a torque script is cat'd to a file which is then run. 
+
+#---------------------------------------------------------------------
+## One application:
 # Because streamflow cannot simply be perturbed, 
 # this script takes a perturbed inital state and runs if forward
 # with(?) or without perturbed forcing to generate an 
 # ensemble of streamflow at an initial time.
 
-# input arguments endYyyy endMm endDD endHH inDir
+#===============================================================================
+# Calling directory:
+#
+# Input:
+# Input arguments: endYyyy endMm endDD endHH inDir
 # the inputDir should be of the form initialEnsemble.yyyymmdd.scheme 
 # so that the start time can be grabbed from it.
+#
+# Output:
+#===============================================================================
 
-##note these have to start and end on midnight currently.
-
-# Tried to make the entire script a torque job (which required the folloing,
-# commented block of code), but I think using ex in a non-interactive terminal
-# causes issues/failure. Trying new approach where a torque script is cat'd
-# then run. wish me luck... 
+# Parse the input arguments
 if ($#argv != 4 & $#argv != 5) then
     echo "Usage: endYyyy endMm endDD inDir <ppn>"
     exit 1
@@ -26,21 +39,9 @@ set inDir   = $4
 if ($#argv == 5) set ppn = $5
 if(! $?ppn) set ppn = 16
 if($ppn > 16) then 
-    echo "Right now only configured to use a single node, setting ppn=16."
+    echo "ppn > 16, not allowed. Setting ppn=16."
     set ppn = 16
 endif 
-
-## this was if I had decided to make the entire script a torque script.
-##  it had to be interactive and i think the solution below is slightly preferable.
-#if (! $?endYyyy | ! $?endMm | ! $?endDd | ! $?inDir | ! $?wd) then
-#    echo Example usage: qsub -I -x -v endYyyy=2012,endMm=07,endDd=06,inDir=initialEnsemble.20120705.Global/,wd=\`pwd\` \`pwd\`/run_initial_ens_fwd.csh 
-#    if (! $?endYyyy) echo missing argument: endYyyy
-#    if (! $?endMm) echo missing argument: endMm
-#    if (! $?endDd) echo missing argument: endDd 
-#    if (! $?inDir)  echo missing argument: inDir
-#    if (! $?wd)  echo missing argument: wd (working directory, usually \`pwd\`)
-#    exit 1
-#endif
 
 echo endYyyy: $endYyyy
 echo endMm: $endMm
