@@ -1,4 +1,4 @@
-# Template for GNU gfortran on Linux or Mac OSX
+# template for PGI f90 Compiler on Linux workstations or clusters
 #
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -9,53 +9,46 @@
 # typical use with mkmf
 # mkmf -t mkmf.template.xxxx ...
 #
+# NETCDF and LIBS need to be customized for your site
 #
-# Suggested debugging flags:
-#  -g                  add debugging information to executable
-#  -fbacktrace         runtime errors try to print out a stack backtrace
-#  -fbounds-check      add runtime-checking for out-of-range array indices
-#  -ffpe-trap=invalid,zero,overflow
-#                      stop on floating point errors
+# if you switch between machines frequently, you can leave
+# the NETCDF variable unset here and set it in your environment.
 #
-#  earlier versions of this mkmf file listed 'precision' as one of the options on
-#  the fpe-trap line.  this is not recommended anymore as some of the gfortran internal
-#  routines will trap, as well as some perfectly valid DART computations.
+# FFLAGS   useful for benchmarking
+#    -Ktrap=fp               trap floating point exceptions and EXIT
+#    -pc 64                  use 64bit register precision (useful for comparison)
+#    -v                      verbose compile
+#    -O0                     no optimization
 #
-# Generally not needed but possibly useful for non-DART code:
+# FFLAGS   useful for speed
+#    -fastsse                'general optimal flags for SSE, SSE2 chipsets'
+#    -Minline
+#    -Knoieee                don't perform IEEE arithmetic (faster, see note)
+#    -Minfo=loop,inline      emit info about loop optmztn and inlining to stderr
 #
-# -ffree-form          forces input file to be read as free format regardless
-#                      of what file extension it has.
+# FFLAGS   useful for non-conforming code
+#    -Mr8                    promote all reals to real*8
+#    -Mextend                Allow source lines up to 132 characters
+#    -Mfixed                 Assume fixed-format source
+#    -Mfree                  Assume free-format source
+#    -Mbyteswapio            turn big_endian to little_endian or vice-versa
 #
-# -fdefault-real-8     force all real variables to be real*8.  not needed for DART code
-#                      since all real variables in DART are declared with a size.
+# NOTE: 'noieee' "... produces results that differ from the correctly rounded
+#                     result by no more than 3 units in the last place."
 #
-#    NOTE: Some previous versions of the gfortran compiler (including 4.1.2)
-#    changed the record marker size to 8 bytes, which made binary files written
-#    with the 'unformatted' option unreadable by programs compiled with other
-#    compilers.  Later versions of the compiler changed the default back to 4 bytes.
-#    If you have a version that defaults to 8 byte record markers, use this 
-#    compile time flag:
-#       -frecord-marker=4
-#    If you have files written by older versions of the gfortran compiler that
-#    cannot be read now, try this compile time flag:
-#       -frecord-marker=8 
+# DIRECT ACCESS ... reclen ... should be in units of 'bytes'.
+#                   If runtime environment parameter FTNOPT is set to "vaxio",
+#                   the units are number of words.
 #
-# Convert big-endian or little-endian binary files at runtime:
+# If you add the -Mprof=func flag to get profiling information, you must
+# add it to both FFLAGS and LDFLAGS.
 #
-# setenv GFORTRAN_CONVERT_UNIT 'big_endian'
-#    Treats ALL units as big_endian
-#
-# setenv GFORTRAN_CONVERT_UNIT 'big_endian;native:10-20'
-#    Treats units 10-20 as big_endian but the rest are 'native' 
-#
-# for more information on unit conversions:
-# http://gcc.gnu.org/onlinedocs/gfortran/GFORTRAN_005fCONVERT_005fUNIT.html#GFORTRAN_005fCONVERT_005fUNIT
-#
+# IF YOU HAVE MORE CURRENT COMPILER INFORMATION, PLEASE SHARE IT WITH US.
 
 MPIFC = mpif90
 MPILD = mpif90
-FC = gfortran
-LD = gfortran
+FC = pgf90
+LD = pgf90
 
 # DISCUSSION ABOUT NETCDF. DART works with both V3 and V4 flavors of netCDF.
 # Some V4 installations also require the HDF5 libraries. Some don't.
@@ -76,14 +69,19 @@ LD = gfortran
 # uncomment the following line and set value to where lib and include
 # are found for the netcdf files that match this compiler.
 #
-# NETCDF = /usr/local/netcdf4
+NETCDF = /usr/local/netcdf4
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-# FFLAGS  = -O2 -ffree-line-length-none $(INCS)
+#FFLAGS  = -O -g -Mbounds $(INCS)
+## these suggested for debugging by wei
+#FFLAGS  = -O -g -Mbounds $(INCS)
+FFLAGS  = -O $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
-FFLAGS = -g -Wunused -ffree-line-length-none -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
+# for development or debugging, use this for flags:
+#FFLAGS = -g -C -Ktrap=fp -Mbounds $(INCS)
+#FFLAGS = -g -C -Mbounds $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$
