@@ -14,9 +14,8 @@
 
 module obs_kind_mod
 
-use    utilities_mod, only : register_module, error_handler,  &
-                             E_ERR, E_MSG, E_WARN,               &
-                             logfileunit, find_namelist_in_file, &
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_WARN,  &
+                             logfileunit, find_namelist_in_file,             &
                              check_namelist_read, do_output, ascii_file_format
 
 implicit none
@@ -263,17 +262,25 @@ integer, parameter, public :: &
     KIND_ROOT_NITROGEN               = 125, &
     KIND_STEM_NITROGEN               = 126, &
     KIND_LEAF_NITROGEN               = 127, &
-    KIND_WATER_TABLE_DEPTH           = 128
+    KIND_WATER_TABLE_DEPTH           = 128, &
+    KIND_FPAR                        = 129, &
+    KIND_TOTAL_WATER_STORAGE         = 130
+
+! more kinds for land snow cover (Ally Toure)
+integer, parameter, public :: &
+    KIND_BRIGHTNESS_TEMPERATURE      = 131, &
+    KIND_VEGETATION_TEMPERATURE      = 132, &
+    KIND_CANOPY_HEIGHT               = 133
 
 ! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
-    KIND_NEUTRON_INTENSITY           = 129, &
-    KIND_CANOPY_WATER                = 130, &
-    KIND_GROUND_HEAT_FLUX            = 131
+    KIND_NEUTRON_INTENSITY           = 140, &
+    KIND_CANOPY_WATER                = 141, &
+    KIND_GROUND_HEAT_FLUX            = 142
 
 ! more kinds for TIEGCM Alex Chartier 
 integer, parameter, public :: &
-    KIND_VERTICAL_TEC                = 132  ! total electron content
+    KIND_VERTICAL_TEC                = 143  ! total electron content
 
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
@@ -582,10 +589,16 @@ obs_kind_names(125) = obs_kind_type(KIND_ROOT_NITROGEN         ,'KIND_ROOT_NITRO
 obs_kind_names(126) = obs_kind_type(KIND_STEM_NITROGEN         ,'KIND_STEM_NITROGEN')
 obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITROGEN')
 obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
-obs_kind_names(129) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
-obs_kind_names(130) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
-obs_kind_names(131) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
-obs_kind_names(132) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
+obs_kind_names(129) = obs_kind_type(KIND_FPAR                  ,'KIND_FPAR')
+obs_kind_names(130) = obs_kind_type(KIND_TOTAL_WATER_STORAGE   ,'KIND_TOTAL_WATER_STORAGE')
+obs_kind_names(131) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
+obs_kind_names(132) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')
+obs_kind_names(133) = obs_kind_type(KIND_CANOPY_HEIGHT,        'KIND_CANOPY_HEIGHT')
+
+obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
+obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
+obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
+obs_kind_names(143) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
 
 obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
 obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')
@@ -645,7 +658,7 @@ do i = 1, max_obs_specific
    num_kind_evaluate = i
 end do
 
-if (do_output()) then
+if (do_output() .and. (num_kind_assimilate > 0 .or. num_kind_evaluate > 0)) then
    write(*, *) '------------------------------------------------------'
    write(*, *)
 

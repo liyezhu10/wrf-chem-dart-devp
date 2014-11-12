@@ -103,9 +103,6 @@ real(r8), allocatable :: special_vert_norm(:,:)  ! if doing per-type
 ! PAR For efficiency for small cases might want to fill tables as needed
 real(r8) :: my_sin(-630:630), my_cos(-630:630), my_acos(-1000:1000)
 
-! If maxdist stays the same, don't need to do box distance calculations
-integer :: last_maxdist = -1.0
-
 ! Option for verification using exhaustive search
 logical :: COMPARE_TO_CORRECT = .false.    ! normally false
 
@@ -195,7 +192,7 @@ if (num_tasks_insensitive) then
 endif
 
 ! Make sure that the number of longitudes, nlon, for get_close_obs is odd
-if(nlon / 2 * 2 == nlon) then
+if((nlon / 2) * 2 == nlon) then
    call error_handler(E_ERR, 'initialize_module', 'nlon must be odd', &
       source, revision, revdate)
 endif
