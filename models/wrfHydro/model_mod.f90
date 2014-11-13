@@ -64,15 +64,6 @@ use    obs_kind_mod, only : &
 use mpi_utilities_mod, only: my_task_id
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-!jlm - these come from wrf.
-!nc -- module_map_utils split the declarations of PROJ_* into a separate module called
-!nc --   misc_definitions_module 
-!use               map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
-!                                    ij_to_latlon, gridwind_to_truewind
-
-!use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
-!                                    PROJ_CYL
-
 use typesizes
 use netcdf
 
@@ -260,6 +251,7 @@ namelist /URBAN_OFFLINE/ UCMCALL,  ZLVL_URBAN
 !! &HYDRO_nlist
 !! The noah and noahMP models have some same/repeated variables in their respective namelists.
 !! I note repeated varaibles and any related issues here.
+
 integer            :: sys_cpl = 1  !! this is hrldas, should be enforced
 !! character(len=256) :: GEO_STATIC_FLNM = "" !! repeated in the two namelists, but equal
 character(len=256) :: GEO_FINEGRID_FLNM = ""
@@ -389,7 +381,7 @@ real(r8), allocatable, dimension(:) :: dumGridLon, dumGridLat, dumGridLevel
 real(r8), allocatable, dimension(:) :: zsoilComp  
 integer  :: VarID, dimlen, varsize
 integer  :: iunit, io, ivar, iunit_lsm, iunit_hydro, iunit_assimOnly, igrid, iState
-integer  :: ilat, ilon, ilev, index,  i, index1
+integer  :: ilat, ilon, ilev, myindex,  i, index1
 integer  :: nLayers, n_lsm_fields, n_hydro_layers, n_hydro_fields, n_assimOnly_fields
 integer  :: dumNLon, dumNLat, dumSize, wp, dumNumDims, lsmSmcPresent, hydroSmcPresent
 integer, allocatable, dimension(:)  :: whichVars, keepLsmVars0, keepLsmVars
@@ -398,7 +390,6 @@ integer  :: whVar1
 character(len=32), allocatable, dimension(:) :: uniqueGridMemOrd
 character(len=32) :: dumGridMemOrd
 integer  :: nUniqueGrids
-
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -427,6 +418,7 @@ if ( .not. file_exist(lsm_namelist_filename) ) then
    write(string1,*) 'cannot open LSM namelist file [', trim(lsm_namelist_filename),'] for reading.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
+
 ! Check to make sure the required HYDRO input files exist
 if (hydro_model_active) then
    if ( .not. file_exist(hydro_netcdf_filename) ) then
@@ -456,6 +448,7 @@ endif
 call find_namelist_in_file(lsm_namelist_filename, 'NOAHLSM_OFFLINE', iunit)
 read(iunit, nml = NOAHLSM_OFFLINE, iostat = io)
 call check_namelist_read(iunit, io, 'NOAHLSM_OFFLINE')
+
 ! Read the hydro namelist
 if (hydro_model_active) then
    call find_namelist_in_file(hydro_namelist_filename, 'HYDRO_nlist', iunit)
@@ -476,8 +469,9 @@ endif
 
 if (trim(lsm_model_choice) .eq. 'noahMP') then
    allocate(zsoilComp(nsoil))
+   zsoilComp = zsoil8*0-999   ! TJH FIXME i.e. -999 ?
    do i = 1,nsoil
-      zsoilComp(i) = -1*sum(soil_thick_input(1:i))
+      zsoilComp(i) = -1.0_r8 * sum(soil_thick_input(1:i))
    enddo
    if( .not.  all( zsoil8(1:nsoil) == zsoilComp(1:nsoil) )) then
       write(string1,*) 'soil layer specifications in the two namelist files are not identical '
@@ -492,6 +486,7 @@ endif
 ! Record the NOAH namelist
 if (do_nml_file()) write(nmlfileunit, nml=NOAHLSM_OFFLINE)
 if (do_nml_term()) write(     *     , nml=NOAHLSM_OFFLINE)
+
 ! Record the hydro namelist
 if (hydro_model_active) then
    if (do_nml_file()) write(nmlfileunit, nml=HYDRO_nlist)
@@ -526,8 +521,8 @@ endif
 call get_hrldas_constants(hrldas_constants_file)
 
 if (hydro_model_active) then
-   !  though all non-soil variables are "surface" it may be advisable to extract elevation at this point?
-   !     for localization routines?
+   !  though all non-soil variables are "surface" it may be advisable to extract 
+   ! elevation at this point?  for localization routines?
    ! **** NOTE that all variables from this file (Fulldom) must  ****
    ! ****      be FLIPPED in y to match the noah/wrf model.      ****
    call get_hydro_constants(GEO_FINEGRID_FLNM) !!
@@ -563,6 +558,7 @@ call nc_check(nf90_inq_dimid(iunit_lsm, 'soil_layers_stag', dimIDs(1)), &
      'static_init_model','inq_dimid soil_layers_stag '//trim(lsm_netcdf_filename))
 call nc_check(nf90_inquire_dimension(iunit_lsm, dimIDs(1), len=nLayers), &
      'static_init_model','inquire_dimension soil_layers_stag '//trim(lsm_netcdf_filename))
+
 if (hydro_model_active) then
    call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, iunit_hydro), &
         'static_init_model', 'open '//trim(hydro_netcdf_filename))
@@ -574,16 +570,14 @@ else
    n_hydro_layers = nLayers
 endif
 
-! Check that LSM and hydro have the same sub-surface dimensions
 if (nsoil /= nLayers .or. nsoil /= n_hydro_layers) then
-   if (nsoil /= nLayers) write(string1,*) 'Expected ',nsoil,' soil layers ', &
-        trim(lsm_netcdf_filename),' has ',nLayers
+   if (nsoil /= nLayers) write(string1,*) 'Expected ',nsoil,' soil layers [', &
+        trim(lsm_netcdf_filename),'] has ',nLayers
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    if (n_hydro_layers /= nLayers) &
       write(string1,*) 'LSM and HYDRO components do not have the same number of soil layers.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
-
 
 !---------------------------------------------------------------
 ! Compile the list of NOAH variables to use in the creation
@@ -610,7 +604,6 @@ if (assimOnly_active) then
         assimOnly_state_variables, n_assimOnly_fields)
 endif
 
-
 !! Dealing with soil mositure is complicated by
 !!  1) duplication between LSM and HYDRO restarts
 !!  2) change of scale from LSM to HYDRO involves several additional restart
@@ -623,8 +616,9 @@ endif
 !! we will write these back in to both restart files, it's not necessary if rst_typ=1 in the
 !! hydro.namelist). Getting rid of one copy essentially means we are assuming rst_typ=1 in
 !! hydro.namelist, so we'll enforce this when removing the LSM copy.
+
 allocate(keepLsmVars0(n_lsm_fields))
-keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)
+keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)   ! TJH do you mean 1, i=1,n_lsm_fields ... summing ...
 ! use any( )  jlm fixme
 lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_W') .or. &
      (lsm_state_variables(1,:) .eq. 'SH2O') )
@@ -642,7 +636,7 @@ if (lsmSmcPresent > 0 .and. hydroSmcPresent > 0) then
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
    allocate(keepLsmVars(n_lsm_fields-1))
-   keepLsmVars = pack( keepLsmVars0, mask = keepLsmVars0 /= lsmSmcPresent )
+   keepLsmVars = pack( keepLsmVars0, mask = (keepLsmVars0 /= lsmSmcPresent) )
    if (do_output() .and. (debug > 0)) then
       write(logfileunit,*)
       write(     *     ,*)
@@ -655,12 +649,12 @@ else
 end if
 n_lsm_fields = size(keepLsmVars)
 
-
 ! 2) deal with change of spatial resolution (disag) for liquid soil moisture in the
 !    hydro restart file. Soil ice is not treated by the hydro model, so it's not allowed
 !    as an uncertain state. (Would have to adjust in the LSM instead).
 !    Right now this only deals with soil moisture, it may be desirable to add other variables
 !    within this section(?).
+
 if (hydro_model_active) then
    if (any(hydro_state_variables .eq. 'smc')) then
       write(string1,*) 'cannot adjust total soil moisture (smc) in the hydro model'
@@ -829,16 +823,20 @@ FILL_PROGVAR : do ivar = 1, nfields
    varsize = 1
    dimlen  = 1
    DimensionLoop : do i = 1,progvar(ivar)%numdims
+
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
+
       call nc_check(nf90_inquire_dimension(iunit, dimIDs(i), name=dimname, len=dimlen), &
            'static_init_model', string1)
+
+      ! These variables have a Time dimension. We only want the most recent time.
       if ((trim(dimname) == 'Time') .or. (trim(dimname) == 'time')) dimlen = 1
+
       ! the hack on the following line allows us to change dimensions from file storage to 
       ! disaggregated dimensions for hydro sh2ox and use the disaggregated in the assim.
       ! use dimnames to identify changing the size instead... jlm fixme
       if (trim(component) .eq. 'HYDRO' .and. &  
            trim(varname) .eq. 'sh2ox') dimlen = fine3dShape(i)
-      
       progvar(ivar)%dimlens(i) = dimlen
       progvar(ivar)%dimnames(i) = trim(dimname)
       varsize = varsize * dimlen
@@ -851,6 +849,8 @@ FILL_PROGVAR : do ivar = 1, nfields
    ! Determine the grid type, but fill the matching state vectors outside this loop.
    ! FIXME jlm - what if the different grids are of equal size? 
    ! Use dimension names instead of size.
+   ! FIXME TJH - the dimnames are supposed to cover that.
+
    dumNumDims = progvar(ivar)%numdims
    if (progvar(ivar)%component == 'LSM') dumNumDims = dumNumDims-1  !LSM has time dim of length 1
    if (dumNumDims .eq. 1) then
@@ -872,11 +872,14 @@ FILL_PROGVAR : do ivar = 1, nfields
    endif
 
    ! Memory ORDER
+   ! TJH doesn't this change if the variable comes from noah vs. noahMP
+
    if( nf90_inquire_attribute(    iunit, VarID, 'MemoryOrder') == NF90_NOERR )  then
       call nc_check( nf90_get_att(iunit, VarID, 'MemoryOrder' , progvar(ivar)%MemoryOrder), &
            'static_init_model', 'get_att MemoryOrder '//trim(string2))
    else
       progvar(ivar)%MemoryOrder = ''   ! lazy else statment
+      ! TJH could be a parameter ... or something ... true or ...
       if(progvar(ivar)%numdims == 1) progvar(ivar)%MemoryOrder = 'X'
       if(progvar(ivar)%numdims == 2) progvar(ivar)%MemoryOrder = 'XY'
       if(progvar(ivar)%numdims == 3) then 
@@ -967,6 +970,11 @@ model_size = progvar(nfields)%indexN
 allocate(state_lon(model_size),state_lat(model_size),state_level(model_size))
 !-------------------------------------------------------------------------------
 ! Fill the dart/state coordinate vectors: state_lon, state_lat, and state_level (also elevation?)
+! TJH FIXME - I cannot envision a scenario where the elevation relative to the geoid would be useful.
+
+! TJH left off here ... 
+! The filling of the coordinate vectors is highly sensitive to the manner in which the 
+! variables are packed into the state vector.
 
 ! Make a unique list of progvar%gridMemOrd
 allocate(uniqueGridMemOrd(nfields))
@@ -1032,18 +1040,18 @@ do igrid = 1, nUniqueGrids
 
          dumSize=dumNLon*dumNLat
          allocate(dumGridLon(dumSize),dumGridLat(dumSize),dumGridLevel(dumSize))
-         index=1
+         myindex=1
          do ilat=1,dumNLat    !Y
          do ilon=1,dumNLon    !X
             if (trim(progvar(whVar1)%grid) .eq. 'fine2d') then
-               dumGridLon(index) = hlong(ilon, ilat)
-               dumGridLat(index) =  hlat(ilon, ilat)
+               dumGridLon(myindex) = hlong(ilon, ilat)
+               dumGridLat(myindex) =  hlat(ilon, ilat)
             endif
             if (trim(progvar(whVar1)%grid) .eq. 'coarse2d') then
-               dumGridLon(index) = xlong(ilon, ilat)
-               dumGridLat(index) =  xlat(ilon, ilat)
+               dumGridLon(myindex) = xlong(ilon, ilat)
+               dumGridLat(myindex) =  xlat(ilon, ilat)
             endif
-            index = index + 1
+            myindex = myindex + 1
          end do              !X
          end do              !Y
          dumGridLevel = dumGridLat*0.0_R8 ! surface
@@ -1064,7 +1072,7 @@ do igrid = 1, nUniqueGrids
 
          dumSize=dumNLon*dumNLat*nsoil
          allocate(dumGridLon(dumSize),dumGridLat(dumSize),dumGridLevel(dumSize))
-         index=1
+         myindex=1
          
          ! XYZ order - Noah or HYDRO
          if (trim(progvar(whVar1)%MemoryOrder) .eq. 'XYZ') then           
@@ -1072,15 +1080,15 @@ do igrid = 1, nUniqueGrids
             do ilat=1,dumNLat   !Y
             do ilon=1,dumNLon   !X
                if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
-                  dumGridLon(index) = hlong(ilon, ilat)
-                  dumGridLat(index) =  hlat(ilon, ilat)            
+                  dumGridLon(myindex) = hlong(ilon, ilat)
+                  dumGridLat(myindex) =  hlat(ilon, ilat)            
                endif
                if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
-                  dumGridLon(index) = xlong(ilon, ilat)
-                  dumGridLat(index) =  xlat(ilon, ilat)
+                  dumGridLon(myindex) = xlong(ilon, ilat)
+                  dumGridLat(myindex) =  xlat(ilon, ilat)
                endif
-               dumGridLevel(index) = zsoil8(ilev)
-               index = index + 1
+               dumGridLevel(myindex) = zsoil8(ilev)
+               myindex = myindex + 1
             end do              !X
             end do              !Y
             end do              !Z
@@ -1092,16 +1100,16 @@ do igrid = 1, nUniqueGrids
             do ilev=1,nsoil     !Z
             do ilon=1,dumNLon   !X
                if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
-                  dumGridLon(index) = hlong(ilon, ilat)
-                  dumGridLat(index) =  hlat(ilon, ilat)
+                  dumGridLon(myindex) = hlong(ilon, ilat)
+                  dumGridLat(myindex) =  hlat(ilon, ilat)
                endif
                if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
-                  dumGridLon(index) = xlong(ilon, ilat)
-                  dumGridLat(index) =  xlat(ilon, ilat)
+                  dumGridLon(myindex) = xlong(ilon, ilat)
+                  dumGridLat(myindex) =  xlat(ilon, ilat)
                endif
-               dumGridLevel(index) = zsoil8(ilev)
-               !dumGridLevel(index) = -1*sum(soil_thick_input(1:ilev))
-               index = index + 1
+               dumGridLevel(myindex) = zsoil8(ilev)
+               !dumGridLevel(myindex) = -1*sum(soil_thick_input(1:ilev))
+               myindex = myindex + 1
             end do             !X
             end do             !Z
             end do             !Y
@@ -2222,38 +2230,46 @@ end function get_debug_level
 !===============================================================================
 subroutine verify_state_variables( ncid, filename, stateVarList, ngood )
 ! for an ncfile handle and name, return the number of good variables.
-integer,                          intent(in)  :: ncid
-character(len=*),                 intent(in)  :: filename
-character(len=obstypelength), dimension(2,MAX_STATE_VARIABLES),  intent(in)  :: stateVarList
-integer,                          intent(out) :: ngood
+integer,                      intent(in)  :: ncid
+character(len=*),             intent(in)  :: filename
+character(len=obstypelength), intent(in)  :: stateVarList(:,:)
+integer,                      intent(out) :: ngood
+
 integer :: i, VarID
 character(len=NF90_MAX_NAME) :: varname, dartstr
 
 ngood = 0
-MyLoop : do i = 1, MAX_STATE_VARIABLES
-   varname    = trim(stateVarList(1,i))
-   dartstr    = trim(stateVarList(2,i))
+MyLoop : do i = 1, size(stateVarList,2)
+   varname = trim(stateVarList(1,i))
+   dartstr = trim(stateVarList(2,i))
+
    if ( varname == ' ' .and. dartstr == ' ' ) exit MyLoop ! Found end of list.
-   if ( varname == ' ' .or. dartstr == ' ' ) then
+
+   if ( varname == ' ' .or.  dartstr == ' ' ) then
       string1 = 'model_nml:stateVarList not fully specified'
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+      string2 = 'reading from ['//trim(filename)//']'
+      call error_handler(E_ERR,'verify_state_variables', string1, &
+              source, revision, revdate, text2=string2)
    endif
+
    ! Make sure variable exists in netCDF file
    write(string1,'(''there is no variable '',a,'' in '',a)') trim(varname), trim(filename)
    call nc_check(NF90_inq_varid(ncid, trim(varname), VarID), &
         'verify_state_variables', trim(string1))
+
    ! Make sure DART kind is valid
    if( get_raw_obs_kind_index(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif
+
    ! Record the contents of the DART state vector
    if (do_output() .and. (debug > 0)) then
       if(i==1) then
          write(logfileunit,*)''
          write(     *     ,*)''
-         write(logfileunit,*)'Variables in: ',trim(filename)
-         write(     *     ,*)'Variables in: ',trim(filename)
+         write(logfileunit,*)'Variables in: [',trim(filename),']'
+         write(     *     ,*)'Variables in: [',trim(filename),']'
       end if
       write(logfileunit,*)'variable ',i,' is ',trim(varname), '   ', trim(dartstr)
       write(     *     ,*)'variable ',i,' is ',trim(varname), '   ', trim(dartstr)
