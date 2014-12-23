@@ -13,10 +13,9 @@ contains
 
 !-------------------------------------------------------
 !> returns true/false depending on whether you should read this copy
-function query_read_copy(c, temp)
+function query_read_copy(c)
 
 integer, intent(in) :: c !< copy number
-integer, intent(in) :: temp !< test of xcode conflicts
 logical             :: query_read_copy
 
 if (c > size(read_copies) ) then
