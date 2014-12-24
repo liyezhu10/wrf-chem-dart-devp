@@ -4,6 +4,16 @@
 !
 ! $Id$
 
+!*******
+! Notes for Netcdf IO branch
+! namelist options to be created:
+! direct_netcdf_read = .true.     - read/write state to netcdf file
+!        This is going to read/write inlflation from a netcdf file too
+! Smoother not allowed with direct netcdf read ( for the initial implimentaiton)
+! Extra copies are for holding the prior diagnostic information
+! so you can write it at the end
+!*******
+
 program filter
 
 !------------------------------------------------------------------------------
@@ -213,8 +223,16 @@ endif
 write(msgstring, '(A,I5)') 'running with an ensemble size of ', ens_size
 call error_handler(E_MSG,'filter:', msgstring, source, revision, revdate)
 
-! See if smoothing is turned on
-ds = do_smoothing()
+
+if (direct_netcdf_read) then ! switch off the smoother
+   ds = .false.
+   if (do_smoothing()) then
+      write(msgstring, '(A)') 'smoother not supported with direct netcdf read'
+      call error_handler(E_ERR, 'filter:', msgstring, source, revision, revdate)
+   endif
+else ! See if smoothing is turned on
+   ds = do_smoothing()
+endif
 
 ! Make sure inflation options are legal
 do i = 1, 2
@@ -239,12 +257,26 @@ if(inf_flavor(2) == 1) call error_handler(E_ERR, 'filter_main', &
    'Posterior observation space inflation (type 1) not supported', source, revision, revdate)
 
 ! Setup the indices into the ensemble storage
+if (direct_netcdf_read) then
+   num_extras = 10  ! six plus spare copies
+else
+   num_extras = 6
+endif
+
+! state
 ENS_MEAN_COPY        = ens_size + 1
 ENS_SD_COPY          = ens_size + 2
 PRIOR_INF_COPY       = ens_size + 3
 PRIOR_INF_SD_COPY    = ens_size + 4
 POST_INF_COPY        = ens_size + 5
 POST_INF_SD_COPY     = ens_size + 6
+ ! Aim: to hang on to the prior_inf_copy which would have been written to the Prior_Diag.nc - and others if we need them
+SPARE_COPY_MEAN       = ens_size + 7
+SPARE_COPY_SPREAD     = ens_size + 8
+SPARE_COPY_INF_MEAN   = ens_size + 9
+SPARE_COPY_INF_SPREAD = ens_size + 10
+
+! observation
 OBS_ERR_VAR_COPY     = ens_size + 1
 OBS_VAL_COPY         = ens_size + 2
 OBS_KEY_COPY         = ens_size + 3
@@ -272,6 +304,9 @@ call trace_message('Before setting up space for ensembles')
 ! Allocate model size storage and ens_size storage for metadata for outputting ensembles
 model_size = get_model_size()
 
+! set up ensemble HK WATCH OUT putting this here.
+call init_ensemble_manager(ens_handle, ens_size + num_extras, model_size)
+
 ! Have ens_mean on all processors for distance computations, really don't want to do this
 allocate(ens_mean(model_size))
 
@@ -287,8 +322,17 @@ call timestamp_message('Before reading in ensemble restart files')
 ! Set a time type for initial time if namelist inputs are not negative
 call filter_set_initial_time(time1)
 
-! Read in restart files and initialize the ensemble storage
-call filter_read_restart(ens_handle, time1, model_size)
+! set up arrays for which copies to read/write
+call setup_read_write(ens_size + num_extras)
+
+! HK Moved initializing inflation to before read of netcdf restarts so you can read the restarts
+! and inflation files in one step.
+! Read of regular filter restarts, is done before adaptive inflate because there is a transpose in adaptive_
+! inflate_init if you read regular inflation file
+if (.not. direct_netcdf_read ) then ! expecting DART restart files
+   call filter_read_restart(ens_handle, time1, model_size)
+endif
+
 
 ! Read in or initialize smoother restarts as needed
 if(ds) then
@@ -304,7 +348,10 @@ allow_missing = get_missing_ok_status()
 
 call trace_message('Before initializing inflation')
 
-! Initialize the adaptive inflation module
+! Initialize the adaptive inflation module 
+! Reading inflation files here 
+! need to turn on read copies for netcdf read
+! HK Have a look at the adaptive inflate from the rma branch
 call adaptive_inflate_init(prior_inflate, inf_flavor(1), inf_initial_from_restart(1), &
    inf_sd_initial_from_restart(1), inf_output_restart(1), inf_deterministic(1),       &
    inf_in_file_name(1), inf_out_file_name(1), inf_diag_file_name(1), inf_initial(1),  &
@@ -329,24 +376,31 @@ endif
 
 call trace_message('After  initializing inflation')
 
+! Read in restart files and initialize the ensemble storage
+call turn_read_copy_on(1, ens_size) ! need to read all restart copies
+if (direct_netcdf_read) then
+   call filter_read_restart_direct(ens_handle, time1, ens_size) 
+endif
+
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
 
 ! Initialize the output sequences and state files and set their meta data
-if(my_task_id() == 0) then
+! Is there a problem if every task creates the meta data?
+!if(my_task_id() == 0) then
    call filter_generate_copy_meta_data(seq, prior_inflate, &
       PriorStateUnit, PosteriorStateUnit, in_obs_copy, output_state_mean_index, &
       output_state_spread_index, prior_obs_mean_index, posterior_obs_mean_index, &
       prior_obs_spread_index, posterior_obs_spread_index)
    if(ds) call smoother_gen_copy_meta_data(num_output_state_members, output_inflation)
-else
-   output_state_mean_index = 0
-   output_state_spread_index = 0
-   prior_obs_mean_index = 0
-   posterior_obs_mean_index = 0
-   prior_obs_spread_index = 0 
-   posterior_obs_spread_index = 0
-endif
+!else
+!   output_state_mean_index = 0
+!   output_state_spread_index = 0
+!   prior_obs_mean_index = 0
+!   posterior_obs_mean_index = 0
+!   prior_obs_spread_index = 0
+!   posterior_obs_spread_index = 0
+!endif
 
 call timestamp_message('After  initializing output files')
 call     trace_message('After  initializing output files')
@@ -556,6 +610,7 @@ AdvanceTime : do
 
    ! Do prior state space diagnostic output as required
    ! Use ens_mean which is declared model_size for temp storage in diagnostics
+   ! HK need option here to stop and write diagnoistic files or not
    if ((output_interval > 0) .and. &
        (time_step_number / output_interval * output_interval == time_step_number)) then
       call trace_message('Before prior state space diagnostics')
@@ -774,11 +829,29 @@ call trace_message('After  writing inflation restart files if required')
 
 ! Output a restart file if requested
 call trace_message('Before writing state restart files if requested')
-if(output_restart) &
-   call write_ensemble_restart(ens_handle, restart_out_file_name, 1, ens_size)
-if(output_restart_mean) &
-   call write_ensemble_restart(ens_handle, trim(restart_out_file_name)//'.mean', &
+
+
+call turn_write_copy_on(1,ens_size) ! restarts
+! Prior_Diag copies - write spare copies
+if (query_diag_mean()) call turn_write_copy_on(SPARE_COPY_MEAN)
+if (query_diag_spread()) call turn_write_copy_on(SPARE_COPY_SPREAD)
+if (query_diag_inf_mean()) call turn_write_copy_on(SPARE_COPY_INF_MEAN)
+if (query_diag_inf_spread()) call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+
+! Posterior Diag 
+call turn_write_copy_on(ENS_MEAN_COPY) ! mean
+call turn_write_copy_on(ENS_SD_COPY) ! sd
+call turn_write_copy_on(POST_INF_COPY) ! posterior inf mean
+call turn_write_copy_on(POST_INF_SD_COPY) ! posterior inf sd
+
+if(direct_netcdf_read) then
+   call filter_write_restart_direct(ens_handle)
+else ! write
+   if(ouput_restart) call filter_write_restart(ens_handle)
+   if(output_restart_mean) &
+      call write_ensemble_restart(ens_handle, trim(restart_out_file_name)//'.mean', &
                                ENS_MEAN_COPY, ENS_MEAN_COPY, .true.)
+endif
 
 if(ds) call smoother_write_restart(1, ens_size)
 call trace_message('After  writing state restart files if requested')
@@ -885,11 +958,13 @@ endif
 
 
 ! Set up diagnostic output for model state, if output is desired
-PriorStateUnit     = init_diag_output('Prior_Diag', &
+! HK This is where the diagnoistic files are created. Compare to the rma branch
+if (my_task_id()==0) then
+   PriorStateUnit     = init_diag_output('Prior_Diag', &
                         'prior ensemble state', num_state_copies, state_meta)
-PosteriorStateUnit = init_diag_output('Posterior_Diag', &
+   PosteriorStateUnit = init_diag_output('Posterior_Diag', &
                         'posterior ensemble state', num_state_copies, state_meta)
-
+endif
 
 ! Set the metadata for the observations.
 
@@ -950,6 +1025,9 @@ call static_init_obs_sequence()
 call trace_message('Before init_model call')
 call static_init_assim_model()
 call trace_message('After  init_model call')
+call state_vector_io_init()
+call trace_message('After  init_stat_vector_io call')
+
 
 end subroutine filter_initialize_modules_used
 
@@ -1198,25 +1276,84 @@ endif
 
 end subroutine filter_set_window_time
 
+!------------------------------------------------------------------
+!> Read the restart information directly from the model output
+!> netcdf file
+!> Which routine should find model size?
+!> 
+subroutine filter_read_restart_direct(state_ens_handle, time, ens_size)!, model_size)
+
+type(ensemble_type), intent(inout) :: state_ens_handle
+type(time_type),     intent(inout) :: time
+integer,             intent(in)    :: ens_size
+!integer,             intent(out)   :: model_size
+
+integer                         :: model_size
+character(len=256), allocatable :: variable_list(:) !< does this need to be module storage
+integer                         :: dart_index !< where to start in state_ens_handle%copies
+integer                         :: num_domains !< number of input files to read
+integer                         :: domain !< loop index
+integer                         :: domain_size !< number of state elements in a domain
+integer                         :: num_variables_in_state
+
+! to start with, assume same variables in each domain - this will not always be the case
+! If they are not in a domain, just set lengths to zero?
+call variables_domains(num_variables_in_state, num_domains)
+call io_filenames_init(ens_size, num_domains, inf_in_file_name, inf_out_file_name)
+
+allocate(variable_list(num_variables_in_state))
+
+variable_list = fill_variable_list(num_variables_in_state)
+
+! need to know number of domains
+call initialize_arrays_for_read(num_variables_in_state, num_domains) 
+
+if (single_restart_file_in) then ! is this the correct flag to check?
+   call get_state_variable_info(num_variables_in_state)
+else
+   model_size = 0
+   do domain = 1, num_domains
+      netcdf_filename = info_file_name(domain)
+      call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
+      model_size = model_size + domain_size
+   enddo
+endif
+
+! read time from input file if time not set in namelist
+if(init_time_days < 0) then
+   time = get_model_time(restart_files_in(1,1)) ! Any of the restarts?
+endif
+
+state_ens_handle%time = time
+
+! read in the data and transpose
+dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_transpose
+do domain = 1, num_domains
+   call read_transpose(state_ens_handle, restart_in_file_name, domain, dart_index)
+enddo
+
+deallocate(variable_list)
+
+! Need Temporary print of initial model time?
+
+end subroutine filter_read_restart_direct
+
 !-------------------------------------------------------------------------
 
-subroutine filter_read_restart(ens_handle, time, model_size)
+subroutine filter_read_restart(state_ens_handle, time, model_size)
 
-type(ensemble_type), intent(inout) :: ens_handle
+type(ensemble_type), intent(inout) :: state_ens_handle
 type(time_type),     intent(inout) :: time
 integer,             intent(in)    :: model_size
 
 integer :: days, secs
 
-! First initialize the ensemble manager storage
-! Need enough copies for ensemble plus mean, spread, and any inflates
-! Copies are ensemble, ensemble mean, variance inflation and inflation s.d.
-! AVOID COPIES FOR INFLATION IF STATE SPACE IS NOT IN USE; NEEDS WORK
-!!!if(prior_inflate%flavor >= 2) then
-   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 1)
-!!!else
-!!!   call init_ensemble_manager(ens_handle, ens_size + 2, model_size, 1)
-!!!endif
+!> @todo Do you need to think about domains?
+integer :: num_domains
+
+num_domains = 1
+
+call io_filenames_init(ens_size, num_domains, inf_in_file_name, inf_out_file_name)
 
 if (do_output()) then
    if (start_from_restart) then
@@ -1230,7 +1367,7 @@ endif
 
 ! Only read in initial conditions for actual ensemble members
 if(init_time_days >= 0) then
-   call read_ensemble_restart(ens_handle, 1, ens_size, &
+   call read_ensemble_restart(state_ens_handle, 1, ens_size, &
       start_from_restart, restart_in_file_name, time)
    if (do_output()) then
       call get_time(time, secs, days)
@@ -1240,13 +1377,13 @@ if(init_time_days >= 0) then
       call error_handler(E_MSG,'filter_read_restart:',msgstring,source,revision,revdate)
    endif
 else
-   call read_ensemble_restart(ens_handle, 1, ens_size, &
+   call read_ensemble_restart(state_ens_handle, 1, ens_size, &
       start_from_restart, restart_in_file_name)
-   if (ens_handle%my_num_copies > 0) time = ens_handle%time(1)
+   if (state_ens_handle%my_num_copies > 0) time = state_ens_handle%time(1)
 endif
 
 ! Temporary print of initial model time
-if(ens_handle%my_pe == 0) then
+if(state_ens_handle%my_pe == 0) then
    ! FIXME for the future: if pe 0 is not task 0, pe 0 can not print debug messages
    call get_time(time, secs, days)
    write(msgstring, *) 'initial model time of 1st ensemble member (days,seconds) ',days,secs
@@ -1254,6 +1391,41 @@ if(ens_handle%my_pe == 0) then
 endif
 
 end subroutine filter_read_restart
+
+!-------------------------------------------------------------------------
+!> write the restart information into a DART restart file.
+subroutine filter_write_restart(state_ens_handle)
+
+type(ensemble_type) :: state_ens_handle
+
+! Is this needed?
+!call all_copies_to_all_vars(state_ens_handle)
+
+call write_ensemble_restart(state_ens_handle, restart_out_file_name, 1, ens_size)
+
+
+end subroutine filter_write_restart
+
+!-------------------------------------------------------------------------
+!> write the restart information directly into the model netcdf file.
+subroutine filter_write_restart_direct(state_ens_handle)
+
+type(ensemble_type), intent(inout) :: state_ens_handle
+
+integer :: dart_index !< where to start in state_ens_handle%copies
+integer :: num_variables_in_state
+integer :: num_domains
+integer :: domain !< loop index
+
+call variables_domains(num_variables_in_state, num_domains)
+
+! transpose and write out the data
+dart_index = 1
+do domain = 1, num_domains
+   call transpose_write(state_ens_handle, restart_out_file_name, domain, dart_index)
+enddo
+
+end subroutine filter_write_restart_direct
 
 !-------------------------------------------------------------------------
 
