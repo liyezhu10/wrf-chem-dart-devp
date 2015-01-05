@@ -51,7 +51,7 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           broadcast_copy,             prepare_to_write_to_vars, prepare_to_write_to_copies, &
           prepare_to_read_from_vars,  prepare_to_read_from_copies, prepare_to_update_vars,  &
           prepare_to_update_copies,   print_ens_handle,                                 &
-          map_task_to_pe,             map_pe_to_task
+          map_task_to_pe,             map_pe_to_task,           single_restart_file_in
 
 type ensemble_type
    !DIRECT ACCESS INTO STORAGE IS USED TO REDUCE COPYING: BE CAREFUL
@@ -117,7 +117,7 @@ integer  :: communication_configuration = 1
 ! task layout options:
 integer  :: layout = 1 ! default to my_pe = my_task_id(). Layout2 assumes that the user knows the correct tasks_per_node
 integer  :: tasks_per_node = 1 ! default to 1 if the user does not specify a number of tasks per node.
-logical  :: debug = .false.
+logical  :: debug = .true.
 
 namelist / ensemble_manager_nml / single_restart_file_in,  &
                                   single_restart_file_out, &
@@ -1123,19 +1123,19 @@ endif
 ! Error checking, but can't return early in case only some of the
 ! MPI tasks need to transpose.  Only if all N tasks say this is an
 ! unneeded transpose can we skip it.
-if (ens_handle%valid == VALID_BOTH) then
-   if (flag_unneeded_transposes) then
-      write(msgstring, *) 'task ', my_task_id(), ' ens_handle ', ens_handle%id_num
-      call error_handler(E_MSG, 'all_vars_to_all_copies', &
-           'vars & copies both valid, transpose not needed for this task', &
-            source, revision, revdate, text2=msgstring)
-   endif
-else if (ens_handle%valid /= VALID_VARS) then
-   write(msgstring, *) 'ens_handle ', ens_handle%id_num
-   call error_handler(E_ERR, 'all_vars_to_all_copies', &
-        'last access not var-complete', source, revision, revdate, &
-         text2=msgstring)
-endif
+! if (ens_handle%valid == VALID_BOTH) then
+!    if (flag_unneeded_transposes) then
+!       write(msgstring, *) 'task ', my_task_id(), ' ens_handle ', ens_handle%id_num
+!       call error_handler(E_MSG, 'all_vars_to_all_copies', &
+!            'vars & copies both valid, transpose not needed for this task', &
+!             source, revision, revdate, text2=msgstring)
+!    endif
+! else if (ens_handle%valid /= VALID_VARS) then
+!    write(msgstring, *) 'ens_handle ', ens_handle%id_num
+!    call error_handler(E_ERR, 'all_vars_to_all_copies', &
+!         'last access not var-complete', source, revision, revdate, &
+!          text2=msgstring)
+! endif
 
 ens_handle%valid = VALID_BOTH
 

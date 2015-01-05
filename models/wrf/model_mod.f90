@@ -20,8 +20,8 @@ use         types_mod, only : r8, deg2rad, missing_r8, ps0, earth_radius, &
                               gas_constant, gas_constant_v, gravity, pi,  &
                               digits12
 
-use  time_manager_mod, only : time_type, set_time, set_calendar_type, GREGORIAN
-
+use  time_manager_mod, only : time_type, set_time, set_calendar_type, GREGORIAN, &
+                              set_date
 use      location_mod, only : location_type, get_location, set_location, &
                               horiz_dist_only, &
                               LocationDims, LocationName, LocationLName, &
@@ -106,7 +106,12 @@ public ::  get_model_size,                    &
            get_close_obs,                     &
            ens_mean_for_model,                &
            get_close_maxdist_init,            &
-           get_close_obs_init
+           get_close_obs_init,                &
+           variables_domains,                 &
+           fill_variable_list,                &
+           info_file_name,                    &
+           construct_file_name_in,            &
+           get_model_time            
 
 !  public stubs 
 public ::  adv_1step,       &
@@ -8488,7 +8493,100 @@ function compute_geometric_height(geopot, lat)
 
 end function compute_geometric_height
 
+!--------------------------------------------------------------------
+!> pass number of variables in the state out to filter 
+subroutine variables_domains(num_variables_in_state, num_doms)
 
+integer, intent(out) :: num_variables_in_state
+integer, intent(out) :: num_doms !< number of domains
+
+num_variables_in_state = wrf%dom(1)%number_of_wrf_variables !> @todo massive assumption same variables in ea     ch domain
+num_doms = num_domains
+
+end subroutine variables_domains
+
+!--------------------------------------------------------------------
+!> pass variable list to filter
+function fill_variable_list(num_variables_in_state)
+
+integer            :: num_variables_in_state
+character(len=256) :: fill_variable_list(num_variables_in_state)
+
+fill_variable_list = wrf_state_variables(1,1:num_variables_in_state)
+
+end function fill_variable_list
+
+!--------------------------------------------------------------------
+!> construct info filename for get_state_variable_info
+function info_file_name(domain)
+
+integer, intent(in) :: domain
+character(len=256)  :: info_file_name
+
+write(info_file_name, '(A, i2.2, A)') 'wrfinput_d', domain
+
+end function info_file_name
+
+!--------------------------------------------------------------------
+!> construct restart file name for reading
+!> model time for CESM format?
+function construct_file_name_in(stub, domain, copy)
+
+character(len=512), intent(in) :: stub
+integer,            intent(in) :: domain
+integer,            intent(in) :: copy
+character(len=1024)            :: construct_file_name_in
+
+!write(construct_file_name, '(A, i2.2, A, i2.2, A)') TRIM(stub), domain, '.', copy, '.nc'
+if (copy < 10) then
+   write(construct_file_name_in, '(A, i1.1, A, i2.2)') TRIM(stub), copy, '/wrfinput_d', domain
+else
+   write(construct_file_name_in, '(A, i2.2, A, i2.2)') TRIM(stub), copy, '/wrfinput_d', domain
+endif
+
+end function construct_file_name_in
+
+!--------------------------------------------------------------------
+!> read the time from the input file
+!> stolen from wrf_to_dart.f90
+function get_model_time(filename)
+
+character(len=1024), intent(in) :: filename
+integer                         :: year, month, day, hour, minute, second
+integer                         :: ret !< netcdf return code
+integer                         :: ndims, dimids(2), ivtype, ncid, var_id
+character(len=80)               :: varname
+character(len=19)               :: timestring
+integer                         :: i,  idims(2)
+
+type(time_type) :: get_model_time
+
+
+call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
+                  'opening', filename )
+
+call nc_check( nf90_inq_varid(ncid, "Times", var_id), 'wrf_to_dart', &
+               'inq_varid Times' )
+call nc_check( nf90_inquire_variable(ncid, var_id, varname, xtype=ivtype, &
+               ndims=ndims, dimids=dimids), 'wrf_to_dart', &
+               'inquire_variable Times' )
+
+do i=1,ndims ! isnt this just 1?
+   call nc_check( nf90_inquire_dimension(ncid, dimids(i), &
+                   len=idims(i)),'wrf_to_dart','inquire_dimensions Times' )
+enddo
+
+call nc_check( nf90_get_var(ncid, var_id, timestring, &
+               start = (/ 1, idims(2) /)), 'wrf_to_dart','get_var Times' )
+
+call get_wrf_date(timestring, year, month, day, hour, minute, second)
+get_model_time = set_date(year, month, day, hour, minute, second)
+
+
+call nc_check( nf90_close(ncid) , 'closing', filename)
+
+end function get_model_time
+!--------------------------------------------------------------------
 
 end module model_mod
 
