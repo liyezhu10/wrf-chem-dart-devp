@@ -280,12 +280,10 @@ PRIOR_INF_COPY       = ens_size + 3
 PRIOR_INF_SD_COPY    = ens_size + 4
 POST_INF_COPY        = ens_size + 5
 POST_INF_SD_COPY     = ens_size + 6
-if (direct_netcdf_read) then
-   SPARE_COPY_MEAN       = ens_size + 7
-   SPARE_COPY_SPREAD     = ens_size + 8
-   SPARE_COPY_INF_MEAN   = ens_size + 9
-   SPARE_COPY_INF_SPREAD = ens_size + 10
-endif
+SPARE_COPY_MEAN       = ens_size + 7
+SPARE_COPY_SPREAD     = ens_size + 8
+SPARE_COPY_INF_MEAN   = ens_size + 9
+SPARE_COPY_INF_SPREAD = ens_size + 10
 OBS_ERR_VAR_COPY     = ens_size + 1
 OBS_VAL_COPY         = ens_size + 2
 OBS_KEY_COPY         = ens_size + 3
@@ -585,6 +583,15 @@ AdvanceTime : do
       call trace_message('After  prior inflation damping and prep')
    endif
 
+   if (direct_netcdf_read) then
+      ! Store inflation mean copy in the spare copy.
+      ! The spare copy is left alone until the end. Shoving in four spare copies for now
+      ens_handle%copies(SPARE_COPY_MEAN, :)       = ens_handle%copies(ENS_MEAN_COPY, :)
+      ens_handle%copies(SPARE_COPY_SPREAD, :)     = ens_handle%copies(ENS_SD_COPY, :)
+      ens_handle%copies(SPARE_COPY_INF_MEAN, :)   = ens_handle%copies(PRIOR_INF_COPY, :)
+      ens_handle%copies(SPARE_COPY_INF_SPREAD, :) = ens_handle%copies(PRIOR_INF_SD_COPY, :)
+   endif
+
    ! Back to state space for forward operator computations
    call all_copies_to_all_vars(ens_handle) 
 
@@ -633,7 +640,7 @@ AdvanceTime : do
          model_size, num_output_state_members, &
          output_state_mean_index, output_state_spread_index, &
          output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+         prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, direct_netcdf_read)
       call timestamp_message('After  prior state space diagnostics')
       call trace_message('After  prior state space diagnostics')
    endif
@@ -745,7 +752,7 @@ AdvanceTime : do
          model_size, num_output_state_members, output_state_mean_index, &
          output_state_spread_index, &
          output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
+         post_inflate, POST_INF_COPY, POST_INF_SD_COPY, direct_netcdf_read)
       ! Cyclic storage for lags with most recent pointed to by smoother_head
       ! ens_mean is passed to avoid extra temp storage in diagnostics
 

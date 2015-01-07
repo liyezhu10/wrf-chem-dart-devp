@@ -282,10 +282,6 @@ if(inf_flavor >= 2) then
    ! depends on when the code that changes the values imposes the limits.)
    if (mean_from_restart) then
 
-      ! find min sd on processor
-      minmax_mean(1) = minval(ens_handle%copies(ss_inflate_index, :))
-      minmax_mean(2) = maxval(ens_handle%copies(ss_inflate_index, :))
-
       call get_copy_owner_index(ss_inflate_index, owner, owners_index)
       ! if inflation array is already on PE0, just figure out the
       ! largest value in the array and we're done.
@@ -311,10 +307,6 @@ if(inf_flavor >= 2) then
 
 
    if (sd_from_restart) then
-
-      ! find min sd on processor
-      minmax_mean(1) = minval(ens_handle%copies(ss_inflate_sd_index, :))
-      minmax_mean(2) = maxval(ens_handle%copies(ss_inflate_sd_index, :))
 
       call get_copy_owner_index(ss_inflate_sd_index, owner, owners_index)
       ! if inflation sd array is already on PE0, just figure out the
@@ -371,7 +363,20 @@ else if(inf_flavor == 1) then
    minmax_mean(:) = inflate_handle%inflate
    minmax_sd(:)   = inflate_handle%sd
 
+else if(inf_flavor == 0 .and. direct_netcdf_read) then ! load up the vars array.  This is done at write time for dart restart files
+   if(trim(label)=='Prior') then
+      call get_copy_owner_index(ss_inflate_index, owner, owners_index)
+      if (ens_handle%my_pe == owner) ens_handle%vars(:, owners_index) = 1
+      call get_copy_owner_index(ss_inflate_sd_index, owner, owners_index)
+      if (ens_handle%my_pe == owner) ens_handle%vars(:, owners_index) = 0
+   else
+      call get_copy_owner_index(ss_inflate_index, owner, owners_index)
+      if (ens_handle%my_pe == owner) ens_handle%vars(:, owners_index) = 1
+      call get_copy_owner_index(ss_inflate_sd_index, owner, owners_index)
+      if (ens_handle%my_pe == owner) ens_handle%vars(:, owners_index) = 0
+   endif
 endif
+
 
 ! Write to log file what kind of inflation is being used.
 ! This used to be at the start, but if you are starting from a restart
