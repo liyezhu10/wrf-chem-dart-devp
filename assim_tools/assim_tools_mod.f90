@@ -57,7 +57,8 @@ use assim_model_mod,      only : get_state_meta_data, get_close_maxdist_init,   
 implicit none
 private
 
-public :: filter_assim, set_assim_tools_trace, get_missing_ok_status
+public :: filter_assim, set_assim_tools_trace, get_missing_ok_status, &
+          test_state_copies
 
 ! Indicates if module initialization subroutine has been called yet
 logical :: module_initialized = .false.
@@ -767,6 +768,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       endif
    endif
 
+   !call test_state_copies(ens_handle, 'beforeupdates')
+
    ! Loop through to update each of my state variables that is potentially close
    STATE_UPDATE: do j = 1, num_close_states
       state_index = close_state_ind(j)
@@ -900,6 +903,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       endif
 
    end do STATE_UPDATE
+   !call test_state_copies(ens_handle, 'after_state_updates')
+
    !------------------------------------------------------
 
    ! Now everybody updates their obs priors (only ones after this one)
@@ -2583,6 +2588,57 @@ end do
 call sum_across_tasks(local_count, count_close)
 
 end function count_close
+
+!===========================================================
+! TEST FUNCTIONS BELOW THIS POINT
+!-----------------------------------------------------------
+!--------------------------------------------------------
+!> dump out the copies array for the state ens handle
+subroutine test_state_copies(state_ens_handle, information)
+
+type(ensemble_type), intent(in) :: state_ens_handle
+character(len=*),        intent(in) :: information
+
+character*20  :: task_str !< string to hold the task number
+character*129 :: file_copies !< output file name
+integer :: i
+
+write(task_str, '(i10)') state_ens_handle%my_pe
+file_copies = TRIM('statecopies_'  // TRIM(ADJUSTL(information)) // '.' // TRIM(ADJUSTL(task_str)))
+open(15, file=file_copies, status ='unknown')
+
+do i = 1, state_ens_handle%num_copies -8
+   write(15, *) state_ens_handle%copies(i,:)
+enddo
+
+close(15)
+
+end subroutine test_state_copies
+
+!--------------------------------------------------------
+!> dump out the distances calculated in get_close_obs_distrib
+subroutine test_close_obs_dist(distances, num_close)
+
+real(r8), intent(in) :: distances(:) !> array of distances calculated in get_close
+integer,  intent(in) :: num_close !> number of close obs
+
+character*20  :: task_str !> string to hold the task number
+character*129 :: file_dist !> output file name
+integer :: i
+
+write(task_str, '(i10)') my_task_id()
+file_dist = TRIM('distances'   // TRIM(ADJUSTL(task_str)))
+open(15, file=file_dist, status ='unknown')
+
+write(15, *) num_close
+
+do i = 1, num_close
+   !write(15, *) distances(i)
+enddo
+
+close(15)
+
+end subroutine test_close_obs_dist
 
 !--------------------------------------------------------------------
 

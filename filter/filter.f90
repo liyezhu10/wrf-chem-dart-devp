@@ -26,7 +26,7 @@ use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, 
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
                                  ens_mean_for_model, end_assim_model
-use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status
+use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status, test_state_copies
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
                                  ensemble_type, get_copy, get_my_num_copies, put_copy,       &
@@ -52,8 +52,8 @@ use smoother_mod,         only : smoother_read_restart, advance_smoother,       
                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
 use state_vector_io_mod,  only : state_vector_io_init, netcdf_filename, setup_read_write,    &
                                  turn_read_copy_on, get_state_variable_info,                 &
-                                 initialize_arrays_for_read, read_transpose,                 &
-                                 transpose_write, turn_write_copy_on, state_vector_io_init
+                                 initialize_arrays_for_read, read_restart_netcdf,                 &
+                                 write_restart_netcdf, turn_write_copy_on, state_vector_io_init
 use io_filenames_mod,     only : restart_files_in, io_filenames_init, query_diag_mean,       &
                                  query_diag_spread, query_diag_inf_mean,                     &
                                  query_diag_inf_spread
@@ -393,6 +393,9 @@ if (direct_netcdf_read) then
    call filter_read_restart_direct(ens_handle, time1, ens_size)
 endif
 
+!call all_vars_to_all_copies(ens_handle)
+!call test_state_copies(ens_handle, 'after_read')
+
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
 
@@ -595,6 +598,8 @@ AdvanceTime : do
       seq, keys, obs_val_index, input_qc_index, num_obs_in_set, &
       OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
       isprior=.true.)
+   !call all_vars_to_all_copies(obs_ens_handle)
+   !call test_obs_copies(obs_ens_handle, 'prior')
 
    ! Although they are integer, keys are one 'copy' of obs ensemble 
    ! (the last one?)
@@ -653,12 +658,16 @@ AdvanceTime : do
    call     trace_message('Before observation assimilation')
    call timestamp_message('Before observation assimilation')
 
+   !call test_state_copies(ens_handle, 'before_filter_assim')
+
    call filter_assim(ens_handle, obs_ens_handle, seq, keys, &
       ens_size, num_groups, obs_val_index, prior_inflate, &
       ENS_MEAN_COPY, ENS_SD_COPY, &
       PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
       OBS_MEAN_START, OBS_MEAN_END, OBS_VAR_START, &
       OBS_VAR_END, inflate_only = .false.)
+
+   !call test_state_copies(ens_handle, 'after_filter_assim')
 
    call timestamp_message('After  observation assimilation')
    call     trace_message('After  observation assimilation')
@@ -815,6 +824,8 @@ AdvanceTime : do
    call trace_message('Bottom of main advance time loop')
 end do AdvanceTime
 
+!call test_state_copies(ens_handle, 'last')
+
 call trace_message('End of main filter assimilation loop, starting cleanup', 'filter:', -1)
 
 call trace_message('Before finalizing diagnostics files')
@@ -966,12 +977,10 @@ endif
 
 
 ! Set up diagnostic output for model state, if output is desired
-if (my_task_id() == 0) then
-   PriorStateUnit     = init_diag_output('Prior_Diag', &
-                           'prior ensemble state', num_state_copies, state_meta)
-   PosteriorStateUnit = init_diag_output('Posterior_Diag', &
-                           'posterior ensemble state', num_state_copies, state_meta)
-endif
+PriorStateUnit     = init_diag_output('Prior_Diag', &
+                        'prior ensemble state', num_state_copies, state_meta)
+PosteriorStateUnit = init_diag_output('Posterior_Diag', &
+                        'posterior ensemble state', num_state_copies, state_meta)
 
 ! Set the metadata for the observations.
 
@@ -1950,7 +1959,6 @@ endif
 
 end subroutine print_obs_time
 
-!-------------------------------------------------------------------------
 !------------------------------------------------------------------
 !> Read the restart information directly from the model output
 !> netcdf file
@@ -2002,9 +2010,9 @@ endif
 state_ens_handle%time = time
 
 ! read in the data and transpose
-dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_transpose
+dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_restart_netcdf
 do domain = 1, num_domains
-   call read_transpose(state_ens_handle, restart_in_file_name, domain, dart_index)
+   call read_restart_netcdf(state_ens_handle, restart_in_file_name, domain, dart_index)
 enddo
 
 deallocate(variable_list)
@@ -2012,22 +2020,6 @@ deallocate(variable_list)
 ! Need Temporary print of initial model time?
 
 end subroutine filter_read_restart_direct
-
-subroutine filter_write_restart(state_ens_handle)
-
-type(ensemble_type) :: state_ens_handle
-
-! allocating storage space in ensemble manager
-allocate(state_ens_handle%vars(state_ens_handle%num_vars, state_ens_handle%my_num_copies))
-
-call all_copies_to_all_vars(state_ens_handle)
-
-call write_ensemble_restart(state_ens_handle, restart_out_file_name, 1, ens_size)
-
-! deallocate whole state storage
-deallocate(state_ens_handle%vars)
-
-end subroutine filter_write_restart
 
 !-------------------------------------------------------------------------
 !> write the restart information directly into the model netcdf file.
@@ -2044,9 +2036,9 @@ call variables_domains(num_variables_in_state, num_domains)
 
 ! transpose and write out the data
 dart_index = 1
-!jdo domain = 1, num_domains
-!j   call transpose_write(state_ens_handle, restart_out_file_name, domain, dart_index)
-!jenddo
+do domain = 1, num_domains
+   call write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index)
+enddo
 
 end subroutine filter_write_restart_direct
 
@@ -2131,6 +2123,32 @@ select case (this_obs_type)
 end select
 
 end function failed_outlier
+
+!==================================================================
+! TEST FUNCTIONS BELOW THIS POINT
+!------------------------------------------------------------------
+!> dump out obs_copies to file
+subroutine test_obs_copies(obs_ens_handle, information)
+
+type(ensemble_type), intent(in) :: obs_ens_handle
+character(len=*),    intent(in) :: information
+
+character*20  :: task_str !< string to hold the task number
+character*129 :: file_obscopies !< output file name
+integer :: i
+
+write(task_str, '(i10)') obs_ens_handle%my_pe
+file_obscopies = TRIM('obscopies_' // TRIM(ADJUSTL(information)) // TRIM(ADJUSTL(task_str)))
+open(15, file=file_obscopies, status ='unknown')
+
+do i = 1, obs_ens_handle%num_copies - 4
+   write(15, *) obs_ens_handle%copies(i,:)
+enddo
+
+close(15)
+
+end subroutine test_obs_copies
+
 
 !-------------------------------------------------------------------------
 

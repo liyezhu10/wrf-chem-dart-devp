@@ -117,7 +117,7 @@ integer  :: communication_configuration = 1
 ! task layout options:
 integer  :: layout = 1 ! default to my_pe = my_task_id(). Layout2 assumes that the user knows the correct tasks_per_node
 integer  :: tasks_per_node = 1 ! default to 1 if the user does not specify a number of tasks per node.
-logical  :: debug = .true.
+logical  :: debug = .false.
 
 namelist / ensemble_manager_nml / single_restart_file_in,  &
                                   single_restart_file_out, &
