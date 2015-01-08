@@ -18,7 +18,8 @@ use    utilities_mod, only : initialize_utilities, nc_check, &
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE
+                             KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE, &
+                             KIND_BRIGHTNESS_TEMPERATURE
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -71,6 +72,8 @@ type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
 real(r8) :: interp_val
+
+real(r8), dimension(6) :: metadata
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information.
@@ -264,6 +267,27 @@ if (test1thru > 9) then
    call model_interpolate(statevector, loc, KIND_SOIL_TEMPERATURE, interp_val, ios_out)
 
    if ( ios_out == 0 ) then
+      write(*,*)'model_interpolate : value is ',interp_val
+   else
+      write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
+   endif
+
+
+   write(*,*)
+   write(*,*)'Testing model_interpolate() with KIND_BRIGHTNESS_TEMPERATURE'
+
+   ! igbp type = 23
+   ! frequency = 37.5
+   ! footprint = 54.0
+   ! polarization  > 0.0 => H
+   ! angle = 55.0
+   ! ensemble_index = 20
+
+   metadata = (/ 23.0, 37.5, 54.0, 1.0, 55.0, 20.0 /)
+
+   call model_interpolate(statevector, loc, KIND_BRIGHTNESS_TEMPERATURE, interp_val, ios_out, metadata)
+
+   if ( ios_out == 0 ) then 
       write(*,*)'model_interpolate : value is ',interp_val
    else
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
