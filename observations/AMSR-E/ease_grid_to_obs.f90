@@ -284,7 +284,7 @@ character(len=*), dimension(:), intent(out) :: output_list
 integer                                     :: Check_Input_Files
 
 character(len=256) :: ladjusted
-integer :: iline
+integer :: iline, fnamelen
 
 Check_Input_files = -1
 
@@ -304,9 +304,17 @@ FileNameLoop: do iline = 1,size(output_list) ! a lot of lines
       ! Normal end of file
       exit FileNameLoop
    else
-      Check_Input_Files = Check_Input_Files + 1
 
       ladjusted = adjustl(input_line)
+      fnamelen  = len_trim(ladjusted)
+
+      ! Remove any file with a .TIM extension.
+      ! These are TIME files, not data files.
+
+      if ( ladjusted(fnamelen-2:fnamelen) == 'TIM' ) cycle FileNameLoop
+
+      Check_Input_Files = Check_Input_Files + 1
+
       if ( file_exist(trim(ladjusted)) ) then
          output_list(Check_Input_Files) = trim(ladjusted)
       else
