@@ -23,7 +23,7 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     ! This operator reads information from a CLM restart file, whose contents
+!     ! This operator reads information from a CLM history file, whose contents
 !     ! are not modified by the assimilation process. There is no point doing
 !     ! the posterior call as it returns the same value as the prior.
 !     ! Need to pass metadata and ensemble index to interpolate. Terrible.
