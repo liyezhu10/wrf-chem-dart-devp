@@ -468,7 +468,7 @@ end subroutine smoother_mean_spread
 
 subroutine filter_state_space_diagnostics(curr_ens_time, out_unit, ens_handle, model_size, &
             num_output_state_members, output_state_mean_index, output_state_spread_index, &
-           output_inflation, temp_ens, ENS_MEAN_COPY, ENS_SD_COPY, inflate, INF_COPY, INF_SD_COPY, direct_netcdf_read)
+           output_inflation, temp_ens, ENS_MEAN_COPY, ENS_SD_COPY, inflate, INF_COPY, INF_SD_COPY, skeleton_diagnostic_file)
 
 type(time_type),             intent(in)    :: curr_ens_time
 type(netcdf_file_type),      intent(inout) :: out_unit
@@ -480,14 +480,14 @@ real(r8),                    intent(out)   :: temp_ens(model_size)
 type(adaptive_inflate_type), intent(in)    :: inflate
 integer,                     intent(in)    :: ENS_MEAN_COPY, ENS_SD_COPY, INF_COPY, INF_SD_COPY
 logical,                     intent(in)    :: output_inflation
-logical,                     intent(in)    :: direct_netcdf_read
+logical,                     intent(in)    :: skeleton_diagnostic_file
 
 type(time_type) :: temp_time
 integer         :: ens_offset, j
 
 ! Assumes that mean and spread have already been computed
 
-if (direct_netcdf_read) then ! just write the time?
+if (skeleton_diagnostic_file) then ! just write the time?
    !if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens_little, output_state_mean_index) 
 else
 

@@ -53,8 +53,6 @@ use utilities_mod,        only : error_handler, E_ERR, nc_check, check_namelist_
 
 use assim_model_mod,      only : get_model_size, aread_state_restart, awrite_state_restart, &
                                  open_restart_read, open_restart_write, close_restart
-! should you go through assim_model_mod?
-!use model_mod,            only : read_file_name, write_file_name
 
 use time_manager_mod,     only : time_type
 
@@ -68,11 +66,6 @@ use copies_on_off_mod
 
 
 implicit none
-
-interface get_state_variable_info
-   module procedure get_state_variable_info
-   module procedure get_state_variable_info_lorenz96
-end interface
 
 interface turn_read_copy_on
    module procedure turn_read_copy_on_single
@@ -223,16 +216,6 @@ call nc_check(ret, 'get_state_variable_info', 'closing')
 end subroutine get_state_variable_info
 
 !-------------------------------------------------
-!> tempory lorenz_96 variable info
-subroutine get_state_variable_info_lorenz96(n)
-
-integer, intent(in) :: n !< number of state variables
-
-variable_sizes(:,:) = 1
-
-end subroutine get_state_variable_info_lorenz96
-
-!-------------------------------------------------
 !> Get netcdf variable ids
 subroutine get_variable_ids(variable_names, domain, variable_ids)
 
@@ -376,13 +359,15 @@ dart_index = starting_point
 end subroutine read_restart_netcdf
 
 !-------------------------------------------------
-!> write directly to netcdf file from %vars
-subroutine write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index)
+!> Write directly to netcdf file from %vars
+!> The suffix argument can be used when writing state members for the prior
+subroutine write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index, suffix)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
 character(len=129),  intent(in)    :: restart_out_file_name
 integer,             intent(in)    :: domain
 integer,             intent(inout) :: dart_index
+character(len=*),    intent(in)    :: suffix
 
 integer :: i
 integer :: start_var, end_var !< start/end variables in a read block
@@ -414,7 +399,7 @@ COPIES : do c = 1, state_ens_handle%my_num_copies
 
    ! writers open netcdf output file. This is a copy of the input file
    if ( query_write_copy(my_copy)) then
-         netcdf_filename_out = restart_files_out((my_copy), domain)
+         netcdf_filename_out = trim(restart_files_out((my_copy), domain)) // suffix
       if (create_restarts) then ! How do you want to do create restarts
          call create_state_output(netcdf_filename_out, domain)
       else
@@ -458,57 +443,6 @@ enddo COPIES
 dart_index = starting_point
 
 end subroutine write_restart_netcdf
-
-!-------------------------------------------------
-!> Calculate how many variables to read in one go.
-function calc_end_var(start_var, domain)
-
-integer              :: calc_end_var !< end variable index
-integer, intent(in)  :: start_var !< start variable index
-integer, intent(in)  :: domain
-
-integer :: i, count
-integer, allocatable :: num_elements(:) !< cummulative size
-
-allocate(num_elements(num_state_variables - start_var + 1))
-
-calc_end_var = num_state_variables ! assume you can fit them all to start with
-
-count = 0
-
-do i = 1, num_state_variables - start_var + 1
-   num_elements(i) = sum(variable_sizes(start_var:start_var + count, domain))
-   count = count + 1
-enddo
-
-count = 1
-do i = start_var, num_state_variables
-
-   if (start_var == num_state_variables) then
-      calc_end_var = num_state_variables
-      exit
-   endif
-
-   if (count >= num_state_variables) then
-      calc_end_var = num_state_variables
-      exit
-   endif
-
-   if(count + 1> size(num_elements)) then
-      calc_end_var = num_state_variables
-      exit
-   endif
-
-   if (num_elements(count+1) >= limit_mem ) then
-      calc_end_var =  i
-      exit
-   endif
-   count = count + 1
-enddo
-
-deallocate(num_elements)
-
-end function calc_end_var
 
 !-------------------------------------------------
 !> Read in variables from start_var to end_var
@@ -668,143 +602,6 @@ do i = start_var, end_var
 enddo
 
 end subroutine write_variables
-
-!-------------------------------------------------
-!> Find pes for loop indices
-subroutine get_pe_loops(pe, ens_size, group_size, recv_start, recv_end, send_start, send_end)
-
-integer, intent(in)  :: pe
-integer, intent(in)  :: ens_size
-integer, intent(out) :: group_size !< size of the group I am in
-integer, intent(out) :: recv_start !< for RECIEVING_PE_LOOP
-integer, intent(out) :: recv_end !< for RECIEVING_PE_LOOP
-integer, intent(out) :: send_start !< for RECEIVE_FROM_EACH_LOOP
-integer, intent(out) :: send_end !< for RECEIVE_FROM_EACH_LOOP
-
-group_size = get_group_size(pe, ens_size)
-
-if ( limit_procs > task_count() ) limit_procs = task_count()
-if (my_task_id() == 0) print*, 'limit_procs', limit_procs, 'limit_mem', limit_mem
-
-! limit_procs needs to be greater than ens_size
-
-if( group_size > limit_procs ) then ! last group is large because of odd numbers
-   recv_start = ((task_count() / limit_procs) - 1) * limit_procs
-else
-   recv_start = (pe / limit_procs ) * limit_procs
-endif
-
-recv_end = recv_start + group_size -1
-
-send_start  = recv_start
-send_end = send_start + ens_size -1
-
-end subroutine get_pe_loops
-
-!-------------------------------------------------
-!> Find group size for processor limited transpose
-!> groups are 1:n, n+1:m, m+1:l ...
-function get_group_size(pe, ens_size)
-
-integer, intent(in)  :: pe
-integer, intent(in)  :: ens_size
-integer              :: get_group_size
-
-integer :: num_groups
-integer :: remainder
-
-num_groups = task_count() / limit_procs
-
-remainder = mod(task_count(), limit_procs)
-
-if ( remainder > 0 ) then ! the last group has a diffent size
-
-   if ( remainder < ens_size) then ! need to join the last two groups together
-
-      if ( (pe + 1) > limit_procs*(num_groups - 1) ) then
-         get_group_size = remainder + limit_procs
-      else
-         get_group_size = limit_procs
-      endif
-
-   else ! last group is smaller than the rest
-
-      if ( (pe + 1 ) > limit_procs*num_groups ) then ! pe is a member of the last group
-         get_group_size = remainder
-      else
-         get_group_size = limit_procs
-      endif
-
-   endif
-
-else ! all same size
-   get_group_size = limit_procs
-endif
-
-end function get_group_size
-
-!-------------------------------------------------------
-!> Find i, the start point in var_block for a given recv_pe
-function find_start_point(recv_pe, start_rank)
-
-integer, intent(in)  :: recv_pe !< the receiver
-integer, intent(in)  :: start_rank !< the pe that owns the 1st element of the var_block
-integer              :: find_start_point
-
-if (start_rank < recv_pe) then
-   find_start_point = recv_pe - start_rank + 1
-elseif(start_rank > recv_pe) then
-   find_start_point = recv_pe + task_count() - start_rank + 1
-else ! recv_pe = start_rank
-   find_start_point = 1
-endif
-
-end function find_start_point
-
-!------------------------------------------------------
-!> finds number of elements in the state already
-function sum_variables_below(start_var, domain)
-
-integer, intent(in) :: start_var
-integer, intent(in) :: domain
-integer             :: sum_variables_below
-
-integer :: i
-
-sum_variables_below = 0
-
-do i = 1, domain -1
-   sum_variables_below = sum(variable_sizes(:, i)) ! whole domain below
-enddo
-
-sum_variables_below = sum_variables_below + sum(variable_sizes(1:start_var-1, domain))
-
-
-end function sum_variables_below
-
-!------------------------------------------------------
-!> Given a group, finds the total number of tasks from group 1
-!> up to and including that group
-function cumulative_tasks(group, ens_size)
-
-integer, intent(in) :: group
-integer, intent(in) :: ens_size !< for get group size
-integer             :: cumulative_tasks
-
-integer :: i
-
-cumulative_tasks = 0
-
-! what if you give it a group > num_groups? Or a negative group?
-
-do i = 1, group - 1
-   cumulative_tasks = cumulative_tasks + limit_procs
-enddo
-
-! just in case group is the last group
-cumulative_tasks = cumulative_tasks + get_group_size(group*limit_procs -1, ens_size)
-
-end function cumulative_tasks
 
 !-------------------------------------------------------
 !> Adding space for an unlimited dimension in the dimesion arrays
