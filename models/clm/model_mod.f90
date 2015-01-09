@@ -147,7 +147,7 @@ integer, parameter :: BOUNDED_ABOVE = 2 ! ... maximum, but no minimum
 integer, parameter :: BOUNDED_BOTH  = 3 ! ... minimum and maximum
 
 integer :: nfields
-integer, parameter :: max_state_variables = 40
+integer, parameter :: max_state_variables = 80
 integer, parameter :: num_state_table_columns = 6
 character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
@@ -166,6 +166,7 @@ integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.2
 logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
+character(len=32)  :: radiative_transfer_model = 'none'
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: clm_restart_filename = 'clm_restart.nc'
 character(len=256) :: clm_history_filename = 'clm_history.nc'
@@ -183,6 +184,7 @@ namelist /model_nml/            &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
+   radiative_transfer_model,    &
    calendar,                    &
    debug,                       &
    clm_variables
@@ -224,17 +226,21 @@ type(progvartype), dimension(max_state_variables) :: progvar
 
 type snowprops
    private
-   integer  :: nlayers         ! aux_ins(1)
-   real(r4) :: t_grnd          ! aux_ins(2) ground temperature [K]
-   real(r4) :: soilsat         ! aux_ins(3) soil saturation [fraction]
-   real(r4) :: soilporos       ! aux_ins(4) soil porosity [fraction]
-   real(r4) :: propconst       ! aux_ins(5) proportionality between grain size & correlation length.
+   integer  :: nlayers
+   real(r4) :: t_grnd          ! ground temperature [K]
+   real(r4) :: soilsat         ! soil saturation [fraction]
+   real(r4) :: soilporos       ! soil porosity [fraction]
+   real(r4) :: propconst       ! proportionality between grain size & correlation length.
+   real(r4) :: h2osoi_vol      ! volumetric soil water [mm3/mm3]
+   real(r4) :: lai_value       ! leaf area index average over timestep [ m2/m2]
+   real(r4) :: t_veg           ! vegetation temperature [K]
+
    integer  :: nprops          ! [thickness, density, diameter, liqwater, temperature]
-   real(r4), pointer, dimension(:) :: thickness      !  LAYER THICKNESS [M]
-   real(r4), pointer, dimension(:) :: density        !  LAYER DENSITY [KG/M3]
-   real(r4), pointer, dimension(:) :: grain_radius   !  LAYER GRAIN RADIUS [M]
-   real(r4), pointer, dimension(:) :: liquid_water   !  LAYER LIQUID WATER CONTENT [FRAC]
-   real(r4), pointer, dimension(:) :: temperature    !  LAYER TEMPERATURE [K]
+   real(r4), pointer, dimension(:) :: thickness      !  layer thickness [M]
+   real(r4), pointer, dimension(:) :: density        !  layer density [KG/M3]
+   real(r4), pointer, dimension(:) :: grain_radius   !  layer grain radius [M]
+   real(r4), pointer, dimension(:) :: liquid_water   !  layer liquid water content [frac]
+   real(r4), pointer, dimension(:) :: temperature    !  layer temperature [K]
 end type snowprops
 
 type(snowprops) :: snowcolumn
@@ -273,6 +279,21 @@ real(r8), allocatable ::  AREA1D(:),   LANDFRAC1D(:)   ! unstructured grid
 real(r8), allocatable ::  AREA2D(:,:), LANDFRAC2D(:,:) ! 2D grid
 
 logical :: unstructured = .false.
+
+type gridcellquantities
+   private
+   real(r4) :: tv     !      TV(time, lat, lon); "vegetation temperature"; units = "K" ;
+   real(r4) :: tlai   !    TLAI(time, lat, lon); "total projected leaf area index"; units = "none" ;
+   real(r4) :: pbot   !    PBOT(time, lat, lon); "atmospheric pressure"; units = "Pa" ;
+   real(r4) :: tbot   !    TBOT(time, lat, lon); "atmospheric air temperature" ;units = "K" ;
+   real(r4) :: tsa    !     TSA(time, lat, lon); "2m air temperature" ;
+   real(r4) :: rh2m_r !  RH2M_R(time, lat, lon); "Rural 2m specific humidity"; units = "%" ;
+   real(r4) :: h2osoi !  H2OSOI(time, levgrnd, lat, lon); "volumetric soil water"; units = "mm3/mm3" ;
+   real(r4) :: moist0 ! absolute humidity (g/m^3)
+   integer  :: month
+end type gridcellquantities
+
+type(gridcellquantities) :: historyvals
 
 !------------------------------------------------------------------------------
 ! Things that come from the CLM restart file.
@@ -514,6 +535,8 @@ if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values 
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
+! FIXME ... check if radiative_transfer_model has a valid setting ...
+
 !---------------------------------------------------------------
 ! Set the time step ... causes clm namelists to be read.
 ! Ensures model_timestep is multiple of 'dynamics_timestep'
@@ -591,6 +614,9 @@ do ivar = 1, nfields
    call SetVariableAttributes(ivar)
 
    ! Open the file for each variable and get dimensions, etc.
+   ! TJH FIXME ... performance improvement if we just open all 3 netcdf files
+   ! and query the right one. As the number of variables increases, the
+   ! repeated open/close may become costly.
 
    call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid), &
               'static_init_model','open '//trim(progvar(ivar)%origin))
@@ -682,7 +708,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ((debug > 0) .and. do_output()) then
+   if ((debug > 1) .and. do_output()) then
       write(logfileunit,*)
       write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
       write(logfileunit,*) '  filename    ',trim(progvar(ivar)%origin)
@@ -745,7 +771,7 @@ enddo
 
 model_size = progvar(nfields)%indexN
 
-if ((debug > 0) .and. do_output()) then
+if ((debug > 1) .and. do_output()) then
   write(logfileunit, *)
   write(logfileunit,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
   write(logfileunit, *)'model_size = ', model_size
@@ -867,7 +893,7 @@ do ivar=1, nfields
       ! In the ncdump output, dimension 2 is the leftmost dimension.
       ! Only dimension 2 matters for the weights.
 
-      if ((debug > 8) .and. do_output()) then
+      if ((debug > 0) .and. do_output()) then
          write(*,*)
          write(*,*)'variable ',trim(progvar(ivar)%varname)
          write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
@@ -4796,8 +4822,8 @@ ni = progvar(ivar)%dimlens(1)   ! number of CLM columns, in this context
 
 allocate(zwt(ni), wa(ni), wt(ni))
 
-! Default values from 
-! cesm1_1_1/models/lnd/clm/src/main/mkarbinitMod.F90 
+! Default values from
+! cesm1_1_1/models/lnd/clm/src/main/mkarbinitMod.F90
 ! FIXME ... should we read WA,WT originally and then update ...
 ! WA,WT have non-missing values in lake columns (the default ... 5000.0).
 
@@ -4830,7 +4856,7 @@ PARTITION: do i = 1,ni
 
 enddo PARTITION
 
-! Stuff the updated ZWT values into the CLM netCDF file. 
+! Stuff the updated ZWT values into the CLM netCDF file.
 
 call nc_check(nf90_put_var(ncFileID, VarID, zwt), &
          'update_water_table_depth', 'put_var '//trim(varname))
@@ -4843,7 +4869,7 @@ call nc_check(nf90_put_var(ncFileID, VarID, zwt), &
 ! call nc_check(nf90_enddef(ncfileID), &
 !         'update_water_table_depth','state enddef '//trim(filename))
 
-! Stuff the updated WA values into the CLM netCDF file. 
+! Stuff the updated WA values into the CLM netCDF file.
 
 call nc_check(nf90_inq_varid(ncFileID, 'WA', VarID), &
         'update_water_table_depth', 'inq_varid WA '//trim(filename))
@@ -4858,7 +4884,7 @@ call nc_check(nf90_put_var(ncFileID, VarID, wa), &
 ! call nc_check(nf90_enddef(ncfileID), &
 !         'update_water_table_depth','state enddef '//trim(filename))
 
-! Stuff the updated WT values into the CLM netCDF file. 
+! Stuff the updated WT values into the CLM netCDF file.
 
 call nc_check(nf90_inq_varid(ncFileID, 'WT', VarID), &
         'update_water_table_depth', 'inq_varid WT '//trim(filename))
@@ -4886,7 +4912,8 @@ subroutine get_brightness_temperature(state_time, location, metadata, obs_val, i
 ! be part of the DART state vector. They are currently directly harvested from the CLM
 ! restart file. As such, the posteriors are not informative.
 
-use   radiative_transfer_mod, only : ss_model
+use rtm_memls_ss_mod,   only : ss_model
+use rtm_memls_ssva_mod, only : ssva_rtm
 
 type(time_type),        intent(in)  :: state_time      ! valid time of DART state
 type(location_type),    intent(in)  :: location        ! observation location
@@ -4896,26 +4923,26 @@ integer,                intent(out) :: istatus         ! status of the calculati
 
 integer,  parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer,  parameter :: N_POL  = 2  ! code automatically computes both polarizations
-real(r8), parameter :: density_h2o = 1000.0_r8 ! Water density Kg/m3
+real(r8), parameter :: DENSITY_H2O = 1000.0_r8 ! Water density Kg/m3
 
 ! variables required by ss_snow() routine
 real(r4), allocatable, dimension(:,:) :: y ! 2D array of snow properties
 real(r4) :: aux_ins(5)     ! [nsnowlyrs, ground_T, soilsat, poros, proportionality]
-integer  :: ctrl(4)        ! [n_lyrs, n_aux_ins, n_snow_ins, n_freq]
+integer  :: ctrl(8)        ! [n_lyrs, n_aux_ins, n_snow_ins, n_freq, VEG_SWITCH1,2,3, ATM_SWITCH]
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
 real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_ubc(N_POL,N_FREQ) ! upper boundary condition brightness temperature
 real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
-! support variables 
+! support variables
 integer                             :: ncid
-character(len=256)                  :: filename
+character(len=256)                  :: restart_filename, history_filename
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
 real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
 real(r8)  :: loc_lon, loc_lat
-    
+
 integer   :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
 integer   :: ilon, ilat, icol, ncols
 
@@ -4926,6 +4953,16 @@ real(r8)  :: frequency       ! observation frequency
 real(r8)  :: footprint       ! observation footprint
 character :: polarization    ! observation polarization
 real(r8)  :: incidence_angle ! satellite incidence angle
+
+integer, parameter :: VEG_SWITCH1 = 0
+integer, parameter :: VEG_SWITCH2 = 0
+integer, parameter :: VEG_SWITCH3 = 1
+integer, parameter :: ATM_SWITCH  = 1
+
+real(r4), dimension(7) :: vegdata
+real(r4), dimension(4) :: atmosdata
+real(r4), dimension(4) :: can_tran3_in
+real(r4) :: lai
 
 istatus  = 1
 obs_val  = MISSING_R8
@@ -4971,18 +5008,18 @@ if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
    return
 endif
 
-! TJH FIXME - no bulletproofing on order ... 
-   landcovercode   =  int(metadata(1))
-   frequency       =      metadata(2)
-   footprint       =      metadata(3)
-   if ( metadata(4) > 0.0_r8 ) then
-      polarization    = 'H'
-   else
-      polarization    = 'V'
-   endif
-   incidence_angle =      metadata(5)
-   ens_index       =  int(metadata(6))
+! TJH FIXME - no bulletproofing on order ...
 
+landcovercode   =  int(metadata(1))
+frequency       =      metadata(2)
+footprint       =      metadata(3)
+if ( metadata(4) > 0.0_r8 ) then
+   polarization = 'H'
+else
+   polarization = 'V'
+endif
+incidence_angle =      metadata(5)
+ens_index       =  int(metadata(6))
 
 if ((debug > 99) .and. do_output()) then
    write(*,*)'TJH debug ... computing gridcell   ',ilon,ilat
@@ -4999,33 +5036,53 @@ tetad(:) = incidence_angle
 freq(:)  = frequency
 
 ! need to know which restart file to use to harvest information
-call build_clm_instance_filename(ens_index, state_time, filename)
-call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-              'get_brightness_temperature','open '//trim(filename))
+call build_clm_instance_filename(ens_index, 'r', state_time, restart_filename)
+call nc_check(nf90_open(trim(restart_filename), NF90_NOWRITE, ncid), &
+              'get_brightness_temperature','open '//trim(restart_filename))
+
+! need to know which history file to use to harvest information
+call build_clm_instance_filename(ens_index, 'h0', state_time, history_filename)
+
+call get_gridcell_values(trim(history_filename), ilon, ilat, state_time, historyvals)
 
 ! Loop over all columns in the gridcell that has the right location.
 
-SNOWCOLS : do icol = 1,ncols
+ALLCOLUMNS : do icol = 1,ncols
 
    weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of column
-   call get_column_snow(ncid, filename, columns_to_get(icol)) ! allocates snowcolumn
+   call get_column_snow(ncid, restart_filename, columns_to_get(icol)) ! allocates snowcolumn
 
    if ( (debug > 2) .and. do_output() ) then
       if (snowcolumn%nlayers < 1) then
          write(string1, *) 'column (',columns_to_get(icol),') has no snow'
          call error_handler(E_MSG,'get_brightness_temperature',string1)
       else
-         write(*,*)'nprops   ',snowcolumn%nprops
-         write(*,*)'nlayers  ',snowcolumn%nlayers
-         write(*,*)'t_grnd   ',snowcolumn%t_grnd
-         write(*,*)'soilsat  ',snowcolumn%soilsat
-         write(*,*)'soilpor  ',snowcolumn%soilporos
-         write(*,*)'proconst ',snowcolumn%propconst
-         write(*,*)'thickness',snowcolumn%thickness
-         write(*,*)'density  ',snowcolumn%density
-         write(*,*)'radius   ',snowcolumn%grain_radius
-         write(*,*)'liqwater ',snowcolumn%liquid_water
-         write(*,*)'temp     ',snowcolumn%temperature
+         write(*,*)'======== FROM RESTART FILES ==========='
+         write(*,*)'snowcolumn%nlayers  ',snowcolumn%nlayers
+         write(*,*)'snowcolumn%t_grnd   ',snowcolumn%t_grnd
+         write(*,*)'snowcolumn%soilsat  ',snowcolumn%soilsat
+         write(*,*)'snowcolumn%soilpor  ',snowcolumn%soilporos
+         write(*,*)'snowcolumn%proconst ',snowcolumn%propconst
+         write(*,*)'snowcolumn%h2osoi_vol ',snowcolumn%h2osoi_vol
+         write(*,*)'snowcolumn%lai_value ',snowcolumn%lai_value
+         write(*,*)'snowcolumn%t_veg     ',snowcolumn%t_veg
+         write(*,*)'snowcolumn%nprops   ',snowcolumn%nprops
+         write(*,*)'snowcolumn%thickness',snowcolumn%thickness
+         write(*,*)'snowcolumn%density  ',snowcolumn%density
+         write(*,*)'snowcolumn%radius   ',snowcolumn%grain_radius
+         write(*,*)'snowcolumn%liqwater ',snowcolumn%liquid_water
+         write(*,*)'snowcolumn%temp     ',snowcolumn%temperature
+
+         write(*,*)'======== FROM HISTORY FILES ==========='
+         write(*,*)'historyvals%tv     ',historyvals%tv     ! vegetation temperature [K]
+         write(*,*)'historyvals%tlai   ',historyvals%tlai   ! total projected LAI [-]
+         write(*,*)'historyvals%pbot   ',historyvals%pbot   ! atmospheric pressure [mbar]
+         write(*,*)'historyvals%tbot   ',historyvals%tbot   ! atmospheric air temperature [K]
+         write(*,*)'historyvals%tsa    ',historyvals%tsa    ! 2m air temperature [K]
+         write(*,*)'historyvals%h2osoi ',historyvals%h2osoi ! volumetric soil water [mm3/mm3]
+         write(*,*)'historyvals%moist0 ',historyvals%moist0 ! absolute humidity [g.m-^3]
+         write(*,*)'historyvals%rh2m_r ',historyvals%rh2m_r ! specific humidity [%]
+         write(*,*)'historyvals%month  ',historyvals%month  ! month of the year
       endif
    endif
 
@@ -5040,12 +5097,16 @@ SNOWCOLS : do icol = 1,ncols
    ctrl(2) = 0              ! not used as far as I can tell
    ctrl(3) = snowcolumn%nprops
    ctrl(4) = N_FREQ
+   ctrl(5) = VEG_SWITCH1
+   ctrl(6) = VEG_SWITCH2
+   ctrl(7) = VEG_SWITCH3
+   ctrl(8) = ATM_SWITCH
 
    aux_ins(1) = real(snowcolumn%nlayers,r4)
    aux_ins(2) = snowcolumn%t_grnd
    aux_ins(3) = snowcolumn%soilsat
    aux_ins(4) = snowcolumn%soilporos
-   aux_ins(5) = 0.5_r4                ! FIXME - hardwired
+   aux_ins(5) = 0.5_r4                ! FIXME ALLY   should this be hardwired
 
    !-------------------------------------------------------------------
    ! Ally's description of the y(:,4) variable.
@@ -5053,36 +5114,70 @@ SNOWCOLS : do icol = 1,ncols
    !               -->  m2  is surface area
    ! LWC 'kg/m2' by water density 'kg/m3', we get depth
    ! of liquid water (m). Then, (depth of liquid water (m) / depth of snowpack (m))
-   ! provides the fraction of LWC (m water/m snowpack). 
-   ! Since, both liquid water and snowpack has same surface area (m2), 
+   ! provides the fraction of LWC (m water/m snowpack).
+   ! Since, both liquid water and snowpack has same surface area (m2),
    ! we can also express it as 'm3/m3'.
 
    allocate( y(ctrl(1), snowcolumn%nprops) )
+
+   ! FIXME ... the aux_ins array changes for each RTM ...
 
    if ( aux_ins(1) > 0 ) then
       y(:,1)  = snowcolumn%thickness
       y(:,2)  = snowcolumn%density
       y(:,3)  = snowcolumn%grain_radius * 2.0_r4 / 1000000.0_r4 ! need meters (from microns)
-      y(:,4)  = snowcolumn%liquid_water / (density_h2o * snowcolumn%thickness)
+      y(:,4)  = snowcolumn%liquid_water / (DENSITY_H2O * snowcolumn%thickness)
       y(:,5)  = snowcolumn%temperature
    else ! dummy values for bare ground
       y(:,:)  = 0.0_r4
    endif
 
-   ! FIXME Ally ... if you have a better way to specify/determine,
-   ! tb_ubc do it here. Call your atmospheric model to calculate it.
+   !assume sky temperature to be simply cosmic radiation, 2.7 K
    tb_ubc(:,N_FREQ) = (/ 2.7_r4, 2.7_r4 /)
 
    ! If the landcovercode indicates that you want to use
    ! a different radiative transfer model ... implement it here.
    ! this will involve changing the following 'if' statement.
 
-   if (landcovercode >= 0 ) then
+   if ( radiative_transfer_model == 'memls' ) then
+
+      vegdata(1) =  5.1   ! canopy height [m]
+      vegdata(2) = snowcolumn%t_veg  - 273.15 ! convert from K into deg C
+      vegdata(3) = 0.5    ! gravimetric water content [frac]
+      vegdata(4) = 8      ! salinity, promilles
+      vegdata(5) = 0.1E-2 ! needle thickness / diameter [m]
+      vegdata(6) = 0.8E-2 ! needle length [m]
+      vegdata(7) =12456   ! needle number density [#/m^-3]
+
       ! the tb_out array contains the calculated brightness temperature outputs
       ! at each polarization (rows) and frequency (columns).
       call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+
    else
+
       ! call to alternative radiative transfer model goes here.
+      ! define canopy parameters
+
+      vegdata(1) =  5.1   ! canopy height [m]
+      vegdata(2) = snowcolumn%t_veg  - 273.15 ! convert from K into deg C
+      vegdata(3) = 0.5    ! gravimetric water content [frac]
+
+      !define canopy parameters
+      can_tran3_in(1) = 0.62 ! b1_can(1) = 0.62 !H 0.62 used in Huang et al. (2008) for both pol
+      can_tran3_in(2) = 0.62 ! b1_can(2) = 0.62 !V
+
+      can_tran3_in(3) = -0.4 !x_can(1) = -0.4 !H -1.08 for wheat (stem-dominated)
+                             ! and -1.38 for soybean (leaf-dominated)
+      can_tran3_in(4) = -0.4 !x_can(2) = -0.4 !V from Jackson and Schmugge (1991)
+
+      !define atmosphere model input data
+      atmosdata(1) = historyvals%tbot    !ground level atmospheric temperature in K
+      atmosdata(2) = historyvals%pbot    !ground level atmospheric pressure in mbar
+      atmosdata(3) = historyvals%moist0  !ground level water vapor in atmosphere in g/m3
+      atmosdata(4) = historyvals%month   !month of year
+
+      call ssva_rtm(ctrl, freq(1), tetad, y, snowcolumn%lai_value, tb_ubc, aux_ins, &
+                    vegdata, can_tran3_in, atmosdata, tb_out)
    endif
 
    if ((debug > 2) .and. do_output()) then
@@ -5098,9 +5193,9 @@ SNOWCOLS : do icol = 1,ncols
    deallocate( y )
    call destroy_column_snow()
 
-enddo SNOWCOLS
+enddo ALLCOLUMNS
 
-call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(filename))
+call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(restart_filename))
 
 ! FIXME ... account for heterogeneity somehow ...
 ! must aggregate all columns in the gridcell
@@ -5137,18 +5232,18 @@ subroutine get_column_snow(ncid, filename, snow_column )
 ! The snow over lakes is wholly contained in the bulk formulation variables
 ! as opposed to the snow layer variables.
 
-
-! float WATSAT(levgrnd, lat, lon) ;
-!       WATSAT:long_name = "saturated soil water content (porosity)" ;
-!       WATSAT:units = "mm3/mm3" ;
-!       WATSAT:_FillValue = 1.e+36f ;
-!       WATSAT:missing_value = 1.e+36f ;
+real(r8),parameter :: DENH2O  = 1.000e3_R8      ! density of fresh water  kg/m^3
+real(r8),parameter :: DENICE  = 0.917e3_R8      ! density of ice          kg/m^3
 
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: filename
 integer,          intent(in)  :: snow_column
 
+real(r8) :: T_VEG(1)      ! Vegetation temperature
+real(r8) :: LAIP_VALUE(1) ! LAI
 real(r8) :: t_grnd(1) ! ground temperature
+real(r8) :: h2osoi_vol(1) ! Soil top-layer volumetric liquid water
+
 integer  :: snlsno(1) ! number of snow layers
 
 real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
@@ -5157,6 +5252,9 @@ real(r8), allocatable, dimension(:) :: dzsno, zsno, zisno, snw_rds
 integer               :: varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount
 
+real(r8) :: scalez = 0.025_r8   ! Soil layer thickness discretization (m)
+real(r8) :: zsoi(1:nlevgrnd)    !soil z  (layers)
+real(r8) :: dzsoi(1:nlevgrnd)   !soil dz (thickness)
 ! Get the (scalar) number of active snow layers for this column.
 call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), &
         'get_column_snow', 'inq_varid SNLSNO'//trim(filename))
@@ -5166,9 +5264,6 @@ call nc_check(nf90_get_var(  ncid, varid, snlsno, start=(/ snow_column /), count
 nlayers = abs(snlsno(1))
 
 ! Set some return values
-! FIXME ... soilsat   is a hardwired value
-! FIXME ... soilporos is a hardwired value
-! FIXME ... propconst is a hardwired value
 snowcolumn%nprops    = 5
 snowcolumn%nlayers   = nlayers
 snowcolumn%soilsat   = 0.3     ! aux_ins(3) soil saturation [fraction]
@@ -5237,6 +5332,28 @@ call nc_check(nf90_inq_varid(ncid,'snw_rds', varid), &
 call nc_check(nf90_get_var(  ncid, varid, snw_rds, start=ncstart, count=nccount), &
         'get_column_snow', 'get_var snw_rds '//trim(filename))
 
+! double T_VEG(pft); long_name = "vegetation eemperature"; units = "K" ;
+call nc_check(nf90_inq_varid(ncid,'T_VEG', varid), &
+        'get_column_snow', 'inq_varid T_VEG '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, T_VEG, start=ncstart, count=nccount), &
+        'get_column_snow', 'get_var T_VEG '//trim(filename))
+
+! double LAIP_VALUE(pft); "leaf area index average over timestep";  units = "m2/m2" ;
+call nc_check(nf90_inq_varid(ncid,'LAIP_VALUE', varid), &
+        'get_column_snow', 'inq_varid LAIP_VALUE '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, LAIP_VALUE, start=ncstart, count=nccount), &
+        'get_column_snow', 'get_var LAIP_VALUE '//trim(filename))
+
+! The following have to be read from the history files
+!1) float TV(time, lat, lon) ;   "vegetation temperature"; units = "K" ;
+!2) float TLAI(time, lat, lon);  "total projected leaf area index";units = "none" ;
+!3) float PBOT(time, lat, lon);  "atmospheric pressure"; units = "Pa" ;
+!4 a) float TBOT(time, lat, lon);  "atmospheric air temperature" ;units = "K" ;
+!4 b)%TSA: "2m air temperature" ;
+!5) float RH2M_R(time, lat, lon);"Rural 2m specific humidity"; units = "%" ;
+!5) float RH2M(time, lat, lon);" 2m specific humidity"; units = "%" ;
+!6) float H2OSOI(time, levgrnd, lat, lon); "volumetric soil water"; units = "mm3/mm3" ;
+
 ! Print a summary so far
 if ((debug > 3) .and. do_output()) then
    write(*,*)'get_column_snow: raw CLM data for column ',snow_column
@@ -5248,6 +5365,48 @@ if ((debug > 3) .and. do_output()) then
    write(*,*)'  zsno       :',       zsno(1:nlevsno)
    write(*,*)'  zisno      :',      zisno(1:nlevsno)
    write(*,*)'  snw_rds    :',    snw_rds(1:nlevsno)
+   write(*,*)'  Vegetation temp :', T_VEG
+   write(*,*)'  lai        :', LAIP_VALUE
+endif
+
+! ------------------------------------------------------------
+! Compute the 'volumetric soil water' units = "mm3/mm3" ;
+! From  h2osoi_liq and h2osoi_ice ( H2OSOI_ICE H2OSOI_LIQ)
+! ------------------------------------------------------------
+! The code is adapted from:
+! https://secure.ntsg.umt.edu/viewvc/bgc/clm3_6_43/models/lnd/clm/src/main/iniTimeConst.F90?view=markup
+
+! Soil layers and interfaces (assumed same for all non-lake patches)
+! "0" refers to soil surface and "nlevsoi" refers to the bottom of model soil
+
+do ij = 1, nlevgrnd
+   zsoi(ij) = scalez*(exp(0.5_r8*(ij-0.5_r8))-1._r8)    !node depths
+enddo
+
+dzsoi(1) = 0.5_r8*(zsoi(1)+zsoi(2))             !thickness b/n two interfaces
+do ij = 2,nlevgrnd-1
+   dzsoi(ij)= 0.5_r8*(zsoi(ij+1)-zsoi(ij-1))
+enddo
+dzsoi(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
+
+if ((debug > 3) .and. do_output()) then
+   write(*,*)'lthickness       = ',dzsoi, ' m'
+   write(*,*)'size(lthickness) = ',size(dzsoi)
+   write(*,*)'nlevsno+1 = ', nlevsno+1
+endif
+
+!This part of of the code is from:
+!models/lnd/clm/src/biogeophys/BiogeophysRestMod.F90
+
+h2osoi_vol = h2osoi_liq(nlevsno+1)/(dzsoi(1)*DENH2O) &
+           + h2osoi_ice(nlevsno+1)/(dzsoi(1)*DENICE)
+
+if ((debug > 3) .and. do_output()) then
+   write(*,*)'  size(h2osoi_liq)       :', size(h2osoi_liq)
+   write(*,*)'  size(h2osoi_vol)       :', size(h2osoi_vol)
+   write(*,*)'  h2osoi_liq             :', h2osoi_liq(nlevsno+1)
+   write(*,*)'  h2osoi_ice             :', h2osoi_ice(nlevsno+1)
+   write(*,*)'  h2osoi_vol             :', h2osoi_vol
 endif
 
 allocate( snowcolumn%thickness(nlayers)     , &
@@ -5258,7 +5417,10 @@ allocate( snowcolumn%thickness(nlayers)     , &
 
 ! Fill the output array ... finally
 
-snowcolumn%t_grnd = t_grnd(1)
+snowcolumn%t_grnd     = t_grnd(1)
+snowcolumn%lai_value  = LAIP_VALUE(1)
+snowcolumn%t_veg      = T_VEG(1)
+snowcolumn%h2osoi_vol = h2osoi_vol(1)
 
 ij = 0
 do ilayer = (nlevsno-nlayers+1),nlevsno
@@ -5294,6 +5456,7 @@ snowcolumn%t_grnd    = 0.0_r4
 snowcolumn%soilsat   = 0.0_r4
 snowcolumn%soilporos = 0.0_r4
 snowcolumn%propconst = 0.0_r4
+snowcolumn%h2osoi_vol  = 0.0_r4
 
 end subroutine destroy_column_snow
 
@@ -5301,24 +5464,25 @@ end subroutine destroy_column_snow
 !======================================================================
 
 
-subroutine build_clm_instance_filename(instance, state_time, filename)
+subroutine build_clm_instance_filename(instance, flavor, state_time, filename)
 ! If the instance is 1, it could be a perfect model scenario
 ! or it could be the first instance of many. CESM has a different
 ! naming scheme for these.
 
 integer,          intent(in)  :: instance
+character(len=*), intent(in)  :: flavor
 type(time_type),  intent(in)  :: state_time
 character(len=*), intent(out) :: filename
 
 integer :: year, month, day, hour, minute, second
 
-100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
-110 format (A,'.clm2'      ,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+100 format (A,'.clm2_',I4.4,'.',A,'.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+110 format (A,'.clm2'      ,'.',A,'.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
 
 call get_date(state_time, year, month, day, hour, minute, second)
 second = second + minute*60 + hour*3600
 
-write(filename,110) trim(casename),year,month,day,second
+write(filename,110) trim(casename),trim(flavor),year,month,day,second
 
 if( file_exist(filename) ) then ! perfect model scenario
 
@@ -5329,17 +5493,153 @@ if( file_exist(filename) ) then ! perfect model scenario
 
 else ! multi-instance scenario
 
-   write(filename,100) trim(casename),instance,year,month,day,second
+   write(filename,100) trim(casename),instance,trim(flavor),year,month,day,second
 
    if( .not. file_exist(filename) ) then
-      write(string1,*)'Unable to create viable CLM restart filename:'
+      write(string1,*)'Unable to create viable CLM filename:'
       call error_handler(E_ERR, 'model_mod:build_clm_instance_filename', &
-           string1, text2=trim(filename))
+           string1, text2=trim(filename), text3='does not exist.')
    endif
 
 endif
 
 end subroutine build_clm_instance_filename
+
+
+
+subroutine get_gridcell_values(filename, ilon, ilat, state_time, values)
+character(len=*),         intent(in)  :: filename
+integer,                  intent(in)  :: ilon
+integer,                  intent(in)  :: ilat
+type(time_type),          intent(in)  :: state_time
+type(gridcellquantities), intent(out) :: values
+
+! type gridcellquantities
+! private
+! real(r4) :: tv     !      TV(time, lat, lon); "vegetation temperature"; units = "K" ;
+! real(r4) :: tlai   !    TLAI(time, lat, lon); "total projected leaf area index"; units = "none" ;
+! real(r4) :: pbot   !    PBOT(time, lat, lon); "atmospheric pressure"; units = "Pa" ;
+! real(r4) :: tbot   !    TBOT(time, lat, lon); "atmospheric air temperature" ;units = "K" ;
+! real(r4) :: tsa    !     TSA(time, lat, lon); "2m air temperature" ;
+! real(r4) :: rh2m_r !  RH2M_R(time, lat, lon); "Rural 2m specific humidity"; units = "%" ;
+! real(r4) :: h2osoi !  H2OSOI(time, levgrnd, lat, lon); "volumetric soil water"; units = "mm3/mm3" ;
+! integer  :: month
+! end type gridcellquantities
+
+integer :: iyear, imonth, iday, ihour, iminute, isecond
+integer :: itime
+integer :: ncid, varid
+integer, dimension(3) :: ncstart, nccount
+integer, dimension(4) :: ncstart2, nccount2
+real(r4), dimension(1) :: slab
+
+! Constant to  compute water vapour saturation pressure (Pa)
+real(r4), parameter :: AA_MOIST0 = 6.1162
+real(r4), parameter :: MM_MOIST0 = 7.5892
+real(r4), parameter :: TN_MOIST0 = 240.71
+real(r4), dimension(15) :: slab2
+!real(r4), dimension(15) :: h2osoi_vol2
+!real(r4), dimension(15) :: h2osoi
+!real(r4) :: LAIP_VALUE(1) ! LAI
+
+real(r4) :: T_degreeC, p_ws, p_w, rh2m_tmp
+
+! set the month ... from the valid time of the model state
+
+call get_date(state_time, iyear, imonth, iday, ihour, iminute, isecond)
+values%month = imonth
+
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+              'get_gridcell_values','open '//trim(filename))
+
+! FIXME ALLY ... determine the time in the history file closest to the model time
+itime = 1 ! if your history files always have 1 timestep, this is not a problem.
+
+ncstart = (/ ilon, ilat, itime /)
+nccount = (/    1,    1,     1 /)
+ncstart2 = (/ ilon, ilat,        1,   itime /)
+nccount2 = (/    1,    1, nlevgrnd,       1 /)
+
+call nc_check(nf90_inq_varid(ncid,'TV', varid), &
+        'get_gridcell_values', 'inq_varid TV '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var TV '//trim(filename))
+values%tv = slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'TLAI', varid), &
+        'get_gridcell_values', 'inq_varid TLAI '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var TLAI '//trim(filename))
+values%tlai = slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'PBOT', varid), &
+        'get_gridcell_values', 'inq_varid PBOT '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var PBOT '//trim(filename))
+!convert from Pa ===>  (mbar)
+values%pbot = 0.01*slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'TBOT', varid), &
+        'get_gridcell_values', 'inq_varid TBOT '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var TBOT '//trim(filename))
+values%tbot = slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'TSA', varid), &
+        'get_gridcell_values', 'inq_varid TSA '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var TSA '//trim(filename))
+values%tsa = slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'RH2M_R', varid), &
+        'get_gridcell_values', 'inq_varid RH2M_R '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var RH2M_R '//trim(filename))
+values%rh2m_r = slab(1)
+
+call nc_check(nf90_inq_varid(ncid,'RH2M', varid), &
+        'get_gridcell_values', 'inq_varid RH2M '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab, start=ncstart, count=nccount), &
+        'get_gridcell_values', 'get_var RH2M '//trim(filename))
+rh2m_tmp = slab(1)
+
+!  This one has an extra dimension so I created  slab2, ncstart2, nccount2
+call nc_check(nf90_inq_varid(ncid,'H2OSOI', varid), &
+        'get_gridcell_values', 'inq_varid H2OSOI '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, slab2, start=ncstart2, count=nccount2), &
+        'get_gridcell_values', 'get_var H2OSOI '//trim(filename))
+values%h2osoi = slab2(1)
+
+call nc_check(nf90_close(ncid),'get_gridcell_values','close '//trim(filename))
+
+!--------------------------------------------------------------------------------
+!Compute absolute humidity (g/m^3) (from VAISALA, "Humidity Conversion Formulas")
+!----------------------------------------------------------------------------
+!a) compute water vapour saturation pressure (Pa)
+!   following parameter values can be used for the air temperature range
+!   from -20 to 50 degreeC
+T_degreeC = values%tbot - 273.15;
+p_ws      = 100*AA_MOIST0*10**((MM_MOIST0*T_degreeC)/(T_degreeC + TN_MOIST0));
+!b) compute vapour pressure (Pa)
+p_w       = p_ws*rh2m_tmp/100;
+!c) compute absolute humidity (g/m^3)
+values%moist0  = 2.16679*p_w/(values%tbot); !moist0 = 7.5 [G/M^3]ground level water vapour (g/m^3)
+
+if ((debug > 0) .and. do_output()) then
+   write(*,*)
+   write(*,*)trim(filename),' values for gridcell ',ilon,ilat
+   write(*,*)'tv     is ',values%tv
+   write(*,*)'tlai   is ',values%tlai
+   write(*,*)'pbot   is ',values%pbot,' mbar'
+   write(*,*)'tbot   is ',values%tbot
+   write(*,*)'tsa    is ',values%tsa
+   write(*,*)'moist0 is ',values%moist0
+   write(*,*)'rh2m_r is ',values%rh2m_r
+   write(*,*)'h2osoi is ',values%h2osoi
+   write(*,*)'month  is ',values%month
+endif
+
+end subroutine get_gridcell_values
 
 
 
