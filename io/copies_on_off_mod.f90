@@ -111,14 +111,23 @@ end subroutine turn_read_copies_off
 
 !-------------------------------------------------------
 !> Turn off copies to write
-subroutine turn_write_copies_off(c1, c2)
+subroutine turn_write_copy_off_range(c1, c2)
 
 integer, intent(in) :: c1 !< start copy to write
 integer, intent(in) :: c2 !< end copy to write
 
 write_copies(c1:c2) = .false.
 
-end subroutine turn_write_copies_off
+end subroutine turn_write_copy_off_range
+
+!-------------------------------------------------------
+!> Turn off copies to write
+subroutine turn_write_copy_off_single(c)
+
+integer, intent(in) :: c
+write_copies(c) = .false.
+
+end subroutine turn_write_copy_off_single
 
 !-------------------------------------------------------
 

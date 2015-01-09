@@ -272,8 +272,6 @@ if(inf_flavor >= 2) then
 
    endif
 
-   ! HK what do you do with the min max of inflation?
-
    ! this block figures out what the min/max value of the mean/sd is
    ! if we are reading in the values from a restart file.  it is used
    ! in diagnostic output so it needs to get to PE0.  we also could check it

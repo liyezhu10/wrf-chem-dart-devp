@@ -84,6 +84,10 @@ interface turn_write_copy_on
    module procedure turn_write_copy_on_range
 end interface
 
+interface turn_write_copy_off
+   module procedure turn_write_copy_off_single
+   module procedure turn_write_copy_off_range
+end interface
 
 private
 
@@ -95,7 +99,7 @@ public :: state_vector_io_init, &
           netcdf_filename_out, &
           setup_read_write, &
           turn_read_copy_on, turn_write_copy_on, &
-          turn_read_copies_off, turn_write_copies_off
+          turn_read_copies_off, turn_write_copy_off
 
 integer :: ret !< netcdf return code
 integer :: ncfile !< netcdf input file identifier
