@@ -13,11 +13,11 @@ module model_mod
 ! interface and look for NULL INTERFACE). 
 
 ! Modules that are absolutely required for use are listed
-use        types_mod, only : r8, MISSING_R8
-use time_manager_mod, only : time_type, set_time
 use     location_mod, only : location_type,      get_close_maxdist_init, &
                              get_close_obs_init, get_close_obs, set_location, &
                              set_location_missing
+use        types_mod, only : r8, MISSING_R8
+use time_manager_mod, only : time_type, set_time
 use    utilities_mod, only : register_module, error_handler, nc_check, &
                              E_ERR, E_MSG
                              ! nmlfileunit, do_output, do_nml_file, do_nml_term,  &

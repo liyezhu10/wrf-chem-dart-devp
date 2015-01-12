@@ -54,7 +54,7 @@ integer            :: ncid(max_dom), var_id, id, iunit, dart_unit
 
 ! set this to .true. to print out debug information while running.
 ! verbose - not normally useful to have on.
-logical :: debug = .false.
+logical :: debug = .true.
 
 ! this can be useful to have on.  it prints a oneliner for each field
 ! with the data min/max.  out of range values are a clue things are bad.

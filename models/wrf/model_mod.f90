@@ -67,6 +67,8 @@ use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                               get_raw_obs_kind_index, get_num_raw_obs_kinds, &
                               get_raw_obs_kind_name
 
+
+
 ! FIXME:
 ! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
 ! and kind KIND_CLOUD_ICE should be KIND_ICE_MIXING_RATIO, but for backwards
@@ -108,7 +110,7 @@ public ::  get_model_size,                    &
            get_close_maxdist_init,            &
            get_close_obs_init,                &
            variables_domains,                 &
-           fill_variable_list,                &
+           get_state_variables,               &
            info_file_name,                    &
            construct_file_name_in,            &
            get_model_time            
@@ -8500,21 +8502,21 @@ subroutine variables_domains(num_variables_in_state, num_doms)
 integer, intent(out) :: num_variables_in_state
 integer, intent(out) :: num_doms !< number of domains
 
-num_variables_in_state = wrf%dom(1)%number_of_wrf_variables !> @todo massive assumption same variables in ea     ch domain
+num_variables_in_state = wrf%dom(1)%number_of_wrf_variables !> @todo massive assumption same variables in each domain
 num_doms = num_domains
 
 end subroutine variables_domains
 
 !--------------------------------------------------------------------
 !> pass variable list to filter
-function fill_variable_list(num_variables_in_state)
+function get_state_variables(num_variables_in_state)
 
 integer            :: num_variables_in_state
-character(len=256) :: fill_variable_list(num_variables_in_state)
+character(len=256) :: get_state_variables(num_variables_in_state)
 
-fill_variable_list = wrf_state_variables(1,1:num_variables_in_state)
+get_state_variables = wrf_state_variables(1,1:num_variables_in_state)
 
-end function fill_variable_list
+end function get_state_variables
 
 !--------------------------------------------------------------------
 !> construct info filename for get_state_variable_info

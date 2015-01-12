@@ -9,25 +9,25 @@ module assim_model_mod
 ! This module is used to wrap around the basic portions of existing dynamical models to
 ! add capabilities needed by the standard assimilation methods.
 
-use    types_mod, only : r8, digits12
-use location_mod, only : location_type, read_location, LocationDims
-use time_manager_mod, only : time_type, get_time, read_time, write_time,           &
-                             THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP,         &
-                             operator(<), operator(>), operator(+), operator(-),   &
-                             operator(/), operator(*), operator(==), operator(/=), &
+use    types_mod,     only : r8, digits12
+use location_mod,     only : location_type, read_location, LocationDims
+use time_manager_mod, only : time_type, get_time, read_time, write_time,             &
+                             THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP,           &
+                             operator(<), operator(>), operator(+), operator(-),     &
+                             operator(/), operator(*), operator(==), operator(/=),   &
                              get_calendar_type
-use utilities_mod, only : get_unit, close_file, register_module, error_handler,    &
-                          E_ERR, E_WARN, E_MSG, E_DBG, nmlfileunit,                &
-                          dump_unit_attributes, find_namelist_in_file,             &
-                          check_namelist_read, nc_check, do_nml_file, do_nml_term, &
-                          find_textfile_dims, file_to_text, set_output,            &
-                          ascii_file_format, set_output
-use     model_mod, only : get_model_size, static_init_model, get_state_meta_data,  &
-                          get_model_time_step, model_interpolate, init_conditions, &
-                          init_time, adv_1step, end_model, nc_write_model_atts,    &
-                          nc_write_model_vars, pert_model_state,                   &
-                          get_close_maxdist_init, get_close_obs_init,              &
-                          get_close_obs, ens_mean_for_model
+use utilities_mod,   only : get_unit, close_file, register_module, error_handler,    &
+                            E_ERR, E_WARN, E_MSG, E_DBG, nmlfileunit,                &
+                            dump_unit_attributes, find_namelist_in_file,             &
+                            check_namelist_read, nc_check, do_nml_file, do_nml_term, &
+                            find_textfile_dims, file_to_text, set_output,            &
+                            ascii_file_format, set_output
+use     model_mod,   only : get_model_size, static_init_model, get_state_meta_data,  &
+                            get_model_time_step, model_interpolate, init_conditions, &
+                            init_time, adv_1step, end_model, nc_write_model_atts,    &
+                            nc_write_model_vars, pert_model_state,                   &
+                            get_close_maxdist_init, get_close_obs_init,              &
+                            get_close_obs, ens_mean_for_model, get_state_variables
 
 implicit none
 private
@@ -1572,7 +1572,6 @@ end select
 end function nc_write_calendar_atts
 
 
-!
 !===================================================================
 ! End of assim_model_mod
 !===================================================================

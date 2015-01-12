@@ -218,14 +218,14 @@
    model_advance_file  = .true.,
    adv_mod_command     = './wrf.exe',
    dart_restart_name   = 'dart_wrf_vector',
-   print_data_ranges   = .false.,
-   debug               = .false.
+   print_data_ranges   = .true.,
+   debug               = .true.
    / 
 
 &wrf_to_dart_nml
    dart_restart_name   = 'dart_wrf_vector',
    print_data_ranges   = .false.,
-   debug               = .false.
+   debug               = .true.
    / 
 
 &utilities_nml
