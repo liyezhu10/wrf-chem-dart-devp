@@ -896,14 +896,15 @@ call trace_message('After  writing inflation restart files if required')
 ! Output a restart file if requested
 call trace_message('Before writing state restart files if requested')
 if (output_restart) call turn_write_copy_on(1,ens_size) ! restarts
+if (num_output_state_members > 0) call turn_write_copy_on(1, num_output_state_members)
 
 ! Prior_Diag  
 if (num_output_state_members == 0) then
-   call turn_write_copy_on(SPARE_COPY_MEAN)
-   call turn_write_copy_on(SPARE_COPY_SPREAD)
+   call turn_write_copy_on(SPARE_COPY_MEAN) ! Prior mean
+   call turn_write_copy_on(SPARE_COPY_SPREAD) ! Prior sd
    if (output_inflation) then
-      call turn_write_copy_on(SPARE_COPY_INF_MEAN)
-      call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+      call turn_write_copy_on(SPARE_COPY_INF_MEAN) ! Prior inflation mean
+      call turn_write_copy_on(SPARE_COPY_INF_SPREAD) ! Prior inflation sd
    endif
 endif
 
