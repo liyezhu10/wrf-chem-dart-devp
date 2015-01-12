@@ -78,7 +78,7 @@ allocate(restart_files_out(num_files, num_domains))
 
 do dom = 1, num_domains
    do i = 1, ens_size  ! restarts
-      restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
+      restart_files_in (i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
       restart_files_out(i, dom) = construct_file_name_out(restart_out_stub, dom, i)
    enddo
 enddo
@@ -86,39 +86,39 @@ enddo
 ! input extras
 do dom = 1, num_domains
    ! mean -never used
-   write(restart_files_in(ens_size + 1, dom), '(A, i2.2, A)') 'mean_copy_d', dom, '.nc'
+   write(restart_files_in(ens_size + 1, dom), '(A, i2.2, A)'   ) 'mean_copy_d'                   , dom, '.nc'
    ! sd -never used
-   write(restart_files_in(ens_size + 2, dom), '(A, i2.2, A)') 'sd_copy_d',   dom, '.nc'
+   write(restart_files_in(ens_size + 2, dom), '(A, i2.2, A)'   ) 'sd_copy_d'                     , dom, '.nc'
    ! prior inf copy
    write(restart_files_in(ens_size + 3, dom), '(A, A, i2.2, A)') trim(inflation_in(1)), '_mean_d', dom, '.nc'
    ! prior inf sd copy
-   write(restart_files_in(ens_size + 4, dom), '(A, A, i2.2, A)') trim(inflation_in(1)), '_sd_d', dom, '.nc'
+   write(restart_files_in(ens_size + 4, dom), '(A, A, i2.2, A)') trim(inflation_in(1)), '_sd_d'  , dom, '.nc'
    ! post inf copy
    write(restart_files_in(ens_size + 5, dom), '(A, A, i2.2, A)') trim(inflation_in(2)), '_mean_d', dom, '.nc'
    ! post inf sd copy
-   write(restart_files_in(ens_size + 6, dom), '(A, A, i2.2, A)') trim(inflation_in(2)), '_sd_d', dom, '.nc'
+   write(restart_files_in(ens_size + 6, dom), '(A, A, i2.2, A)') trim(inflation_in(2)), '_sd_d'  , dom, '.nc'
 enddo
 
 ! output extras
 do dom = 1, num_domains
    ! mean
-   write(restart_files_out(ens_size + 1, dom), '(A, i2.2, A)') 'Output/copy1'
+   write(restart_files_out(ens_size + 1 , dom), '(A, i2.2, A)'   ) 'Output/copy1'
    ! sd
-   write(restart_files_out(ens_size + 2, dom), '(A, i2.2, A)') 'Output/copy2'
+   write(restart_files_out(ens_size + 2 , dom), '(A, i2.2, A)'   ) 'Output/copy2'
    ! prior inf copy
-   write(restart_files_out(ens_size + 3, dom), '(A, A, i2.2, A)') 'Output/copy3'
+   write(restart_files_out(ens_size + 3 , dom), '(A, A, i2.2, A)') 'Output/copy3'
    ! prior inf sd copy
-   write(restart_files_out(ens_size + 4, dom), '(A, A, i2.2, A)') 'Output/copy4'
+   write(restart_files_out(ens_size + 4 , dom), '(A, A, i2.2, A)') 'Output/copy4'
    ! post inf copy
-   write(restart_files_out(ens_size + 5, dom), '(A, A, i2.2, A)') 'Output/copy5'
+   write(restart_files_out(ens_size + 5 , dom), '(A, A, i2.2, A)') 'Output/copy5'
    ! post inf sd copy
-   write(restart_files_out(ens_size + 6, dom), '(A, A, i2.2, A)') 'Output/copy6'
+   write(restart_files_out(ens_size + 6 , dom), '(A, A, i2.2, A)') 'Output/copy6'
 
    ! Storage for copies that would have gone in the Prior_diag.nc if we were to write it
-   write(restart_files_out(ens_size + 7, dom), '(A, i2.2, A)') 'Output/copy7'
-   write(restart_files_out(ens_size + 8, dom), '(A, i2.2, A)') 'Output/copy8'
-   write(restart_files_out(ens_size + 9, dom), '(A, i2.2, A)') 'Output/copy9'
-   write(restart_files_out(ens_size + 10, dom), '(A, i2.2, A)') 'Output/copy10'
+   write(restart_files_out(ens_size + 7 , dom), '(A, i2.2, A)'   ) 'Output/copy7'
+   write(restart_files_out(ens_size + 8 , dom), '(A, i2.2, A)'   ) 'Output/copy8'
+   write(restart_files_out(ens_size + 9 , dom), '(A, i2.2, A)'   ) 'Output/copy9'
+   write(restart_files_out(ens_size + 10, dom), '(A, i2.2, A)'   ) 'Output/copy10'
 
 
 enddo

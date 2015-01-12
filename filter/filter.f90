@@ -25,7 +25,9 @@ use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, 
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 ens_mean_for_model, end_assim_model
+                                 ens_mean_for_model, end_assim_model,                        &
+                                 get_variable_list, get_info_file_name, get_time_from_file,    &
+                                 get_variables_domains
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status, &
                                  test_state_copies
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
@@ -57,7 +59,6 @@ use state_vector_io_mod,  only : state_vector_io_init, netcdf_filename, setup_re
                                  write_restart_netcdf, turn_write_copy_on,                   &
                                  turn_write_copy_off, state_vector_io_init
 use io_filenames_mod,     only : restart_files_in, io_filenames_init
-use io_netcdf_mod,        only : get_variable_list, get_info_file_name, get_model_time, get_variables_domains
 
 
 !------------------------------------------------------------------------------
@@ -2084,7 +2085,6 @@ call io_filenames_init(ens_size, num_domains, inf_in_file_name, inf_out_file_nam
 allocate(variable_list(num_variables_in_state))
 
 variable_list = get_variable_list(num_variables_in_state)
-write(*,*) "VARIABLE LIST :: ", variable_list
 
 ! need to know number of domains
 call initialize_arrays_for_read(num_variables_in_state, num_domains) 
@@ -2105,7 +2105,7 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 ! read time from input file if time not set in namelist
 write(*,*) '*********** restart_file_in(1,1)', restart_files_in(1,1)
 if(init_time_days < 0) then
-   time = get_model_time(restart_files_in(1,1)) ! Any of the restarts?
+   time = get_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
 endif
 
 state_ens_handle%time = time

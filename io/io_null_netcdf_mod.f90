@@ -22,7 +22,6 @@ module io_netcdf_mod
 
 use utilities_mod,    only : do_nml_file, nmlfileunit, do_nml_term, check_namelist_read, &
                              find_namelist_in_file, nc_check
-use model_mod,        only : get_state_variables, variables_domains !> need to remove
 use time_manager_mod, only : time_type, set_date !> idealy would not have these here
 use netcdf
 
@@ -47,8 +46,6 @@ function get_variable_list(num_variables_in_state)
 integer             :: num_variables_in_state
 character(len=256)  :: get_variable_list(num_variables_in_state)
 
-get_variable_list = get_state_variables(num_variables_in_state)
-
 end function get_variable_list
 
 !--------------------------------------------------------------------
@@ -58,46 +55,13 @@ function get_info_file_name(domain)
 integer, intent(in) :: domain
 character(len=265)  :: get_info_file_name
 
-write(get_info_file_name, '(A,i2.2, A)') 'wrfinput_d', domain
-
 end function get_info_file_name
 
 !--------------------------------------------------------------------
 !> read the time from the input file
-!> stolen from wrf_to_dart.f90  
 function get_model_time(filename) 
 
 character(len=1024), intent(in) :: filename
-integer                         :: year, month, day, hour, minute, second
-integer                         :: ret !< netcdf return code
-integer                         :: ndims, dimids(2), ivtype, ncid, var_id
-character(len=80)               :: varname
-character(len=19)               :: timestring
-integer                         :: i,  idims(2)
-
-type(time_type) :: get_model_time
-
-
-call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
-               'opening'    , filename )
-call nc_check( nf90_inq_varid(ncid, "Times", var_id),   &
-               'get_model_time', 'inq_varid Times' )
-call nc_check( nf90_inquire_variable(ncid, var_id, varname, xtype=ivtype, ndims=ndims, dimids=dimids), &
-               'get_model_time', 'inquire_variable Times' )
-
-do i=1,ndims ! isnt this just 1?
-   call nc_check( nf90_inquire_dimension(ncid, dimids(i), len=idims(i)), &
-                  'get_model_time','inquire_dimensions Times' )
-enddo
-
-call nc_check( nf90_get_var(ncid, var_id, timestring, start = (/ 1, idims(2) /)), &
-              'get_model_time','get_var Times' )
-
-call get_date(timestring, year, month, day, hour, minute, second)
-
-get_model_time = set_date(year, month, day, hour, minute, second)
-
-call nc_check( nf90_close(ncid) , 'closing', filename)
 
 end function get_model_time
 
@@ -107,8 +71,6 @@ subroutine get_variables_domains(num_variables_in_state, num_doms)
 
 integer, intent(out) :: num_variables_in_state
 integer, intent(out) :: num_doms !< number of domains
-
-call variables_domains(num_variables_in_state, num_doms)
 
 end subroutine get_variables_domains
 

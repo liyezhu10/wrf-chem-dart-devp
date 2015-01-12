@@ -44,29 +44,31 @@ use  mpi_utilities_mod, only : my_task_id
 
 use     random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
-use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                              KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, &
-                              KIND_SPECIFIC_HUMIDITY, KIND_SURFACE_ELEVATION, &
-                              KIND_PRESSURE, KIND_VERTICAL_VELOCITY, &
-                              KIND_DENSITY, KIND_FLASH_RATE_2D, &
-                              KIND_RAINWATER_MIXING_RATIO, KIND_HAIL_MIXING_RATIO, &
-                              KIND_GRAUPEL_MIXING_RATIO, KIND_SNOW_MIXING_RATIO, &
-                              KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE, &
-                              KIND_CONDENSATIONAL_HEATING, KIND_VAPOR_MIXING_RATIO, &
-                              KIND_ICE_NUMBER_CONCENTRATION, KIND_GEOPOTENTIAL_HEIGHT, &
-                              KIND_POTENTIAL_TEMPERATURE, KIND_SOIL_MOISTURE, &
-                              KIND_DROPLET_NUMBER_CONCENTR, KIND_SNOW_NUMBER_CONCENTR, &
-                              KIND_RAIN_NUMBER_CONCENTR, KIND_GRAUPEL_NUMBER_CONCENTR, &
-                              KIND_HAIL_NUMBER_CONCENTR, KIND_HAIL_VOLUME, &
-                              KIND_GRAUPEL_VOLUME, KIND_DIFFERENTIAL_REFLECTIVITY, &
-                              KIND_RADAR_REFLECTIVITY, KIND_POWER_WEIGHTED_FALL_SPEED, &
-                              KIND_SPECIFIC_DIFFERENTIAL_PHASE, &
-                              KIND_VORTEX_LAT, KIND_VORTEX_LON, &
-                              KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
-                              KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
-                              get_raw_obs_kind_index, get_num_raw_obs_kinds, &
-                              get_raw_obs_kind_name
+use      obs_kind_mod,  only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
+                               KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, &
+                               KIND_SPECIFIC_HUMIDITY, KIND_SURFACE_ELEVATION, &
+                               KIND_PRESSURE, KIND_VERTICAL_VELOCITY, &
+                               KIND_DENSITY, KIND_FLASH_RATE_2D, &
+                               KIND_RAINWATER_MIXING_RATIO, KIND_HAIL_MIXING_RATIO, &
+                               KIND_GRAUPEL_MIXING_RATIO, KIND_SNOW_MIXING_RATIO, &
+                               KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE, &
+                               KIND_CONDENSATIONAL_HEATING, KIND_VAPOR_MIXING_RATIO, &
+                               KIND_ICE_NUMBER_CONCENTRATION, KIND_GEOPOTENTIAL_HEIGHT, &
+                               KIND_POTENTIAL_TEMPERATURE, KIND_SOIL_MOISTURE, &
+                               KIND_DROPLET_NUMBER_CONCENTR, KIND_SNOW_NUMBER_CONCENTR, &
+                               KIND_RAIN_NUMBER_CONCENTR, KIND_GRAUPEL_NUMBER_CONCENTR, &
+                               KIND_HAIL_NUMBER_CONCENTR, KIND_HAIL_VOLUME, &
+                               KIND_GRAUPEL_VOLUME, KIND_DIFFERENTIAL_REFLECTIVITY, &
+                               KIND_RADAR_REFLECTIVITY, KIND_POWER_WEIGHTED_FALL_SPEED, &
+                               KIND_SPECIFIC_DIFFERENTIAL_PHASE, &
+                               KIND_VORTEX_LAT, KIND_VORTEX_LON, &
+                               KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
+                               KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
+                               get_raw_obs_kind_index, get_num_raw_obs_kinds, &
+                               get_raw_obs_kind_name
 
+!use netcdf_io,         only : get_variable_list, get_info_filename               &
+!                              get_model_time, get_variable_domains
 
 
 ! FIXME:
@@ -110,7 +112,7 @@ public ::  get_model_size,                    &
            get_close_maxdist_init,            &
            get_close_obs_init,                &
            variables_domains,                 &
-           get_state_variables,               &
+           fill_variable_list,                &
            info_file_name,                    &
            construct_file_name_in,            &
            get_model_time            
@@ -8509,14 +8511,14 @@ end subroutine variables_domains
 
 !--------------------------------------------------------------------
 !> pass variable list to filter
-function get_state_variables(num_variables_in_state)
+function fill_variable_list(num_variables_in_state)
 
 integer            :: num_variables_in_state
-character(len=256) :: get_state_variables(num_variables_in_state)
+character(len=256) :: fill_variable_list(num_variables_in_state)
 
-get_state_variables = wrf_state_variables(1,1:num_variables_in_state)
+fill_variable_list = wrf_state_variables(1,1:num_variables_in_state)
 
-end function get_state_variables
+end function fill_variable_list
 
 !--------------------------------------------------------------------
 !> construct info filename for get_state_variable_info
