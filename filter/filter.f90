@@ -2103,6 +2103,7 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 ! - endif
 
 ! read time from input file if time not set in namelist
+write(*,*) '*********** restart_file_in(1,1)', restart_files_in(1,1)
 if(init_time_days < 0) then
    time = get_model_time(restart_files_in(1,1)) ! Any of the restarts?
 endif
