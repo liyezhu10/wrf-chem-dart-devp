@@ -26,10 +26,9 @@ use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, 
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
                                  ens_mean_for_model, end_assim_model,                        &
-                                 get_variable_list, get_info_file_name, get_time_from_file,    &
-                                 get_variables_domains
-use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status, &
-                                 test_state_copies
+                                 fill_variable_list, info_file_name, get_model_time_from_file,&
+                                 variables_domains
+use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status, test_state_copies
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
                                  ensemble_type, get_copy, get_my_num_copies, put_copy,       &
@@ -412,7 +411,7 @@ if (direct_netcdf_read) then
 endif
 
 !call all_vars_to_all_copies(ens_handle)
-!call test_state_copies(ens_handle, 'after_read2')
+!call test_state_copies(ens_handle, 'after_read')
 
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
@@ -2079,12 +2078,12 @@ integer                         :: num_variables_in_state
 
 ! to start with, assume same variables in each domain - this will not always be the case
 ! If they are not in a domain, just set lengths to zero?
-call get_variables_domains(num_variables_in_state, num_domains)
+call variables_domains(num_variables_in_state, num_domains)
 call io_filenames_init(ens_size, num_domains, inf_in_file_name, inf_out_file_name)
 
 allocate(variable_list(num_variables_in_state))
 
-variable_list = get_variable_list(num_variables_in_state)
+variable_list = fill_variable_list(num_variables_in_state)
 
 ! need to know number of domains
 call initialize_arrays_for_read(num_variables_in_state, num_domains) 
@@ -2094,18 +2093,17 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 ! - else
     model_size = 0
     do domain = 1, num_domains
-       netcdf_filename = get_info_file_name(domain)
+       netcdf_filename = info_file_name(domain)
+       write(*,*) 'netcdf_filename :: ', netcdf_filename 
        call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
        model_size = model_size + domain_size
-!       write(*,*) 'netcdf_filename :: ', netcdf_filename
-!       write(*,*) 'model_size      :: ', model_size
     enddo
 ! - endif
 
 ! read time from input file if time not set in namelist
-write(*,*) '*********** restart_file_in(1,1)', restart_files_in(1,1)
 if(init_time_days < 0) then
-   time = get_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
+       write(*,*) 'restart_files_in :: ', restart_files_in(1,1) 
+   time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
 endif
 
 state_ens_handle%time = time
@@ -2135,8 +2133,7 @@ integer           :: num_variables_in_state
 integer           :: num_domains
 integer           :: domain !< loop index
 
-! returns the number of variables in state and number of domains
-call get_variables_domains(num_variables_in_state, num_domains)
+call variables_domains(num_variables_in_state, num_domains)
 
 if(present(label)) then
    suffix = '_' // label
