@@ -130,8 +130,8 @@
   /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
-                                'RADIOSONDE_U_WIND_COMPONENT'
+   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
+                                'RADIOSONDE_U_WIND_COMPONENT',
                                 'RADIOSONDE_V_WIND_COMPONENT'
   /
 
@@ -158,35 +158,35 @@
    highest_obs_pressure_mb      = -1.0
   /
 
-!                          'theta',                 'KIND_POTENTIAL_TEMPERATURE'
-!                          'surface_pressure',      'KIND_SURFACE_PRESSURE'
-!                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT'
-!                          'uReconstructMeridional','KIND_V_WIND_COMPONENT'
-!                          'u',                     'KIND_EDGE_NORMAL_SPEED'
-!                          'w',                     'KIND_VERTICAL_VELOCITY'
-!                          'rho',                   'KIND_DENSITY'
-!                          'qv',                    'KIND_VAPOR_MIXING_RATIO'
-!                          'qc',                    'KIND_CLOUDWATER_MIXING_RATIO'
-!                          'qr',                    'KIND_RAINWATER_MIXING_RATIO'
-!                          'qi',                    'KIND_ICE_MIXING_RATIO'
-!                          'qs',                    'KIND_SNOW_MIXING_RATIO'
-!                          'qg',                    'KIND_GRAUPEL_MIXING_RATIO'
-!                          'rho',                   'KIND_DENSITY'
-!                          'salinity',              'KIND_SALINITY'
+!                          'theta',                 'KIND_POTENTIAL_TEMPERATURE',
+!                          'surface_pressure',      'KIND_SURFACE_PRESSURE',
+!                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
+!                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
+!                          'u',                     'KIND_EDGE_NORMAL_SPEED',
+!                          'w',                     'KIND_VERTICAL_VELOCITY',
+!                          'rho',                   'KIND_DENSITY',
+!                          'qv',                    'KIND_VAPOR_MIXING_RATIO',
+!                          'qc',                    'KIND_CLOUDWATER_MIXING_RATIO',
+!                          'qr',                    'KIND_RAINWATER_MIXING_RATIO',
+!                          'qi',                    'KIND_ICE_MIXING_RATIO',
+!                          'qs',                    'KIND_SNOW_MIXING_RATIO',
+!                          'qg',                    'KIND_GRAUPEL_MIXING_RATIO',
+!                          'rho',                   'KIND_DENSITY',
+!                          'salinity',              'KIND_SALINITY',
 !                          'temperature',           'KIND_TEMPERATURE'
 
 &mpas_vars_nml
    mpas_state_variables =
-                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT'
-                          'uReconstructMeridional','KIND_V_WIND_COMPONENT'
-                          'theta',                 'KIND_POTENTIAL_TEMPERATURE'
-                          'surface_pressure',      'KIND_SURFACE_PRESSURE'
-                          'w',                     'KIND_VERTICAL_VELOCITY'
-                          'rho',                   'KIND_DENSITY'
+                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
+                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
+                          'theta',                 'KIND_POTENTIAL_TEMPERATURE',
+                          'surface_pressure',      'KIND_SURFACE_PRESSURE',
+                          'w',                     'KIND_VERTICAL_VELOCITY',
+                          'rho',                   'KIND_DENSITY',
                           'qv',                    'KIND_VAPOR_MIXING_RATIO'
 
-   mpas_state_bounds    = 'qv','0.0','NULL','CLAMP'
-                          'qc','0.0','NULL','CLAMP'
+   mpas_state_bounds    = 'qv','0.0','NULL','CLAMP',
+                          'qc','0.0','NULL','CLAMP',
                           'qr','0.0','NULL','CLAMP'
   /
 
@@ -215,11 +215,14 @@
    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90'
    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90'
   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90'
-   input_files             = '../../../obs_def/obs_def_reanalysis_bufr_mod.f90'
-                             '../../../obs_def/obs_def_altimeter_mod.f90'
-                             '../../../obs_def/obs_def_gts_mod.f90'
-                             '../../../obs_def/obs_def_metar_mod.f90'
-                             '../../../obs_def/obs_def_gps_mod.f90'
+   input_files             = '../../../obs_def/obs_def_reanalysis_bufr_mod.f90',
+                             '../../../obs_def/obs_def_altimeter_mod.f90',
+                             '../../../obs_def/obs_def_gts_mod.f90',
+                             '../../../obs_def/obs_def_metar_mod.f90',
+                             '../../../obs_def/obs_def_gps_mod.f90',
+                             '../../../obs_def/obs_def_vortex_mod.f90', 
+                             '../../../obs_def/obs_def_rel_humidity_mod.f90', 
+                             '../../../obs_def/obs_def_dew_point_mod.f90'
   /
 
 &obs_sequence_tool_nml
@@ -388,8 +391,8 @@
   /
 
 &obs_seq_coverage_nml
+   obs_sequences     = ''
    obs_sequence_list = 'obs_coverage_list.txt'
-   obs_sequence_name = ''
    obs_of_interest   = 'RADIOSONDE_TEMPERATURE', 'RADIOSONDE_U_WIND_COMPONENT', 'RADIOSONDE_V_WIND_COMPONENT'
    textfile_out      = 'obsdef_mask.txt'
    netcdf_out        = 'obsdef_mask.nc'
@@ -420,13 +423,46 @@
    calendar              = "Gregorian"
   /
 
-&obs_seq_verify_nml
+# one of the other, but not both
+   obs_sequences = 'obs_seq.final.2008060100', 'obs_seq.final.2008060112'
    obs_sequence_list = 'obs_forecast_list.txt'
-   obs_sequence_name = ''
-   station_template  = 'obsdef_mask.nc'
+&obs_seq_verify_nml
+   obs_sequences     = ''
+   obs_sequence_list = 'obs_forecast_list.txt'
+   input_template    = 'obsdef_mask.nc'
    netcdf_out        = 'forecast.nc'
    obtype_string     = 'RADIOSONDE_TEMPERATURE'
+   print_every       = 20000
    verbose           = .true.
    debug             = .false.
   /
+
+&mpas_obs_preproc_nml
+   static_mpas_filename     = 'mpas_init.nc'
+   file_name_input          = 'obs_seq.old'
+   file_name_output         = 'obs_seq.new'
+   include_sig_data         = .true.
+   superob_aircraft         = .false.
+   superob_sat_winds        = .false.
+   sfc_elevation_check      = .false.
+   overwrite_ncep_sfc_qc    = .false.
+   overwrite_ncep_satwnd_qc = .false.
+   aircraft_pres_int        = 2500.0
+   sat_wind_pres_int        = 2500.0
+   sfc_elevation_tol        = 300.0
+   obs_pressure_top         = 0.0
+   obs_height_top           = 2.0e10
+   max_num_obs              = 1000000
+   sonde_extra              = 'obs_seq.rawin'
+   metar_extra              = 'obs_seq.metar'
+   acars_extra              = 'obs_seq.acars'
+   land_sfc_extra           = 'obs_seq.land_sfc'
+   marine_sfc_extra         = 'obs_seq.marine'
+   sat_wind_extra           = 'obs_seq.satwnd'
+   profiler_extra           = 'obs_seq.profiler'
+   trop_cyclone_extra       = 'obs_seq.tc'
+   gpsro_extra              = 'obs_seq.gpsro'
+   tc_sonde_radii           = -1.0
+   overwrite_obs_time       = .false.
+/
 
