@@ -67,9 +67,6 @@ use      obs_kind_mod,  only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                                get_raw_obs_kind_index, get_num_raw_obs_kinds, &
                                get_raw_obs_kind_name
 
-!use netcdf_io,         only : get_variable_list, get_info_filename               &
-!                              get_model_time, get_variable_domains
-
 
 ! FIXME:
 ! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
@@ -115,7 +112,7 @@ public ::  get_model_size,                    &
            fill_variable_list,                &
            info_file_name,                    &
            construct_file_name_in,            &
-           get_model_time            
+           get_model_time_from_file
 
 !  public stubs 
 public ::  adv_1step,       &
@@ -8553,7 +8550,7 @@ end function construct_file_name_in
 !--------------------------------------------------------------------
 !> read the time from the input file
 !> stolen from wrf_to_dart.f90
-function get_model_time(filename)
+function get_model_time_from_file(filename)
 
 character(len=1024), intent(in) :: filename
 integer                         :: year, month, day, hour, minute, second
@@ -8563,7 +8560,7 @@ character(len=80)               :: varname
 character(len=19)               :: timestring
 integer                         :: i,  idims(2)
 
-type(time_type) :: get_model_time
+type(time_type) :: get_model_time_from_file
 
 
 call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
@@ -8584,12 +8581,12 @@ call nc_check( nf90_get_var(ncid, var_id, timestring, &
                start = (/ 1, idims(2) /)), 'wrf_to_dart','get_var Times' )
 
 call get_wrf_date(timestring, year, month, day, hour, minute, second)
-get_model_time = set_date(year, month, day, hour, minute, second)
+get_model_time_from_file = set_date(year, month, day, hour, minute, second)
 
 
 call nc_check( nf90_close(ncid) , 'closing', filename)
 
-end function get_model_time
+end function get_model_time_from_file
 !--------------------------------------------------------------------
 
 end module model_mod

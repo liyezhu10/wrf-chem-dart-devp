@@ -67,20 +67,6 @@ use copies_on_off_mod
 
 implicit none
 
-interface turn_read_copy_on
-   module procedure turn_read_copy_on_single
-   module procedure turn_read_copy_on_range
-end interface
-
-interface turn_write_copy_on
-   module procedure turn_write_copy_on_single
-   module procedure turn_write_copy_on_range
-end interface
-
-interface turn_write_copy_off
-   module procedure turn_write_copy_off_single
-   module procedure turn_write_copy_off_range
-end interface
 
 private
 

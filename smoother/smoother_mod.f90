@@ -488,60 +488,60 @@ integer         :: ens_offset, j
 ! Assumes that mean and spread have already been computed
 
 if (skeleton_diagnostic_file) then ! just write the time?
-   !if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens_little, output_state_mean_index) 
+   if(my_task_id() == 0) call aoutput_diagnostics(out_unit, skeleton_diagnostic_file, curr_ens_time, temp_ens, output_state_mean_index)
 else
 
-! must have called init_smoother() before using this routine
-if ( .not. module_initialized ) then
-   write(errstring, *)'cannot be called before init_smoother() called'
-   call error_handler(E_ERR,'smoother_state_space_diagnostics',errstring,source,revision,revdate)
-endif
-
-! Output ensemble mean
-call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_MEAN_COPY, temp_ens)
-if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens,  &
-   output_state_mean_index)
-
-! Output ensemble spread
-call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_SD_COPY, temp_ens) 
-if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens, &
-   output_state_spread_index)
-
-! Compute the offset for copies of the ensemble
-ens_offset = 2
-
-! Output state diagnostics as required: NOTE: Prior has been inflated
-do j = 1, num_output_state_members
-   ! Get this state copy to task 0; then output it
-   call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, j, temp_ens, temp_time)
-   if(my_task_id() == 0) call aoutput_diagnostics( out_unit, temp_time, temp_ens, ens_offset + j)
-end do
-
-! Unless specifically asked not to, output inflation
-if (output_inflation) then
-   ! Output the spatially varying inflation if used
-   if(do_varying_ss_inflate(inflate) .or. do_single_ss_inflate(inflate)) then
-      call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, INF_COPY, temp_ens)
-   else
-      ! Output inflation value as 1 if not in use (no inflation)
-      temp_ens = 1.0_r8
+   ! must have called init_smoother() before using this routine
+   if ( .not. module_initialized ) then
+      write(errstring, *)'cannot be called before init_smoother() called'
+      call error_handler(E_ERR,'smoother_state_space_diagnostics',errstring,source,revision,revdate)
    endif
 
-   if(my_task_id() == 0) call aoutput_diagnostics(out_unit,  curr_ens_time, temp_ens, &
-     ens_offset + num_output_state_members + 1)  
+   ! Output ensemble mean
+   call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_MEAN_COPY, temp_ens)
+   if(my_task_id() == 0) call aoutput_diagnostics(out_unit, skeleton_diagnostic_file, curr_ens_time, temp_ens,  &
+      output_state_mean_index)
+
+   ! Output ensemble spread
+   call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_SD_COPY, temp_ens)
+   if(my_task_id() == 0) call aoutput_diagnostics(out_unit, skeleton_diagnostic_file, curr_ens_time, temp_ens, &
+      output_state_spread_index)
+
+   ! Compute the offset for copies of the ensemble
+   ens_offset = 2
+
+   ! Output state diagnostics as required: NOTE: Prior has been inflated
+   do j = 1, num_output_state_members
+      ! Get this state copy to task 0; then output it
+      call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, j, temp_ens, temp_time)
+      if(my_task_id() == 0) call aoutput_diagnostics( out_unit, skeleton_diagnostic_file, temp_time, temp_ens, ens_offset + j)
+   end do
+
+   ! Unless specifically asked not to, output inflation
+   if (output_inflation) then
+      ! Output the spatially varying inflation if used
+      if(do_varying_ss_inflate(inflate) .or. do_single_ss_inflate(inflate)) then
+         call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, INF_COPY, temp_ens)
+      else
+         ! Output inflation value as 1 if not in use (no inflation)
+         temp_ens = 1.0_r8
+      endif
+
+      if(my_task_id() == 0) call aoutput_diagnostics(out_unit,  skeleton_diagnostic_file, curr_ens_time, temp_ens, &
+         ens_offset + num_output_state_members + 1)
 
 
-   if(do_varying_ss_inflate(inflate) .or. do_single_ss_inflate(inflate)) then
-      call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, INF_SD_COPY, temp_ens)
-   else
-      ! Output inflation sd as 0 if not in use
-      temp_ens = 0.0_r8
+      if(do_varying_ss_inflate(inflate) .or. do_single_ss_inflate(inflate)) then
+         call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, INF_SD_COPY, temp_ens)
+      else
+         ! Output inflation sd as 0 if not in use
+         temp_ens = 0.0_r8
+      endif
+
+      if(my_task_id() == 0) call aoutput_diagnostics(out_unit, skeleton_diagnostic_file, curr_ens_time, temp_ens, &
+         ens_offset + num_output_state_members + 2) 
+
    endif
-
-   if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens, &
-      ens_offset + num_output_state_members + 2) 
-
-endif
 
 endif
 

@@ -114,7 +114,7 @@ logical  :: trace_execution          = .false.
 logical  :: silence                  = .false.
 
 ! - read/write state to netcdf file
-logical  :: direct_netcdf_read = .true.
+logical  :: direct_netcdf_read = .false.
 ! - this is going to read/write inflation from a netcdf file too
 ! - smoother not allowed with direct netcdf read ( for the initial
 ! - implementation.  Extra copies are for holding the prior diagnostic information
@@ -220,7 +220,7 @@ integer                 :: num_extras
 real(r8), allocatable   :: ens_mean(:)
 
 logical                 :: ds, all_gone, allow_missing
-
+logical                 :: spare_copies
 
 call filter_initialize_modules_used()
 
@@ -281,10 +281,15 @@ endif
 if(inf_flavor(2) == 1) call error_handler(E_ERR, 'filter_main', &
    'Posterior observation space inflation (type 1) not supported', source, revision, revdate)
 
-
+spare_copies = .false.
 if (direct_netcdf_read) then
-   if(num_output_state_members == 0) then
-      num_extras = 10
+   if (skeleton_diagnostic_files .or. (.not. diagnostic_files)) then ! may need spare copies
+      if(num_output_state_members == 0) then
+         num_extras = 10
+         spare_copies = .true.
+      else ! need to write prior information at diagnostic point anyway.
+         num_extras = 6
+      endif
    else
       num_extras = 6
    endif
@@ -353,7 +358,6 @@ call setup_read_write(ens_size + num_extras)
 ! Read of regular filter restarts, is done before adaptive inflate because there is a transpose in adaptive_
 ! inflate_init if you read regular inflation file
 if (direct_netcdf_read ) then ! expecting DART restart files
-   ! set up ensemble HK WATCH OUT putting this here.
    call init_ensemble_manager(ens_handle, ens_size + num_extras, model_size)
 else
    call filter_read_restart(ens_handle, time1, model_size)
@@ -410,8 +414,8 @@ if (direct_netcdf_read) then
    call filter_read_restart_direct(ens_handle, time1, ens_size)
 endif
 
-!call all_vars_to_all_copies(ens_handle)
-!call test_state_copies(ens_handle, 'after_read')
+call all_vars_to_all_copies(ens_handle)
+call test_state_copies(ens_handle, 'after_read')
 
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
@@ -602,7 +606,7 @@ AdvanceTime : do
       call trace_message('After  prior inflation damping and prep')
    endif
 
-   if (direct_netcdf_read .and. (num_output_state_members == 0) ) then
+   if (spare_copies) then
       ! Store inflation mean copy in the spare copy.
       ! The spare copy is left alone until the end. Shoving in four spare copies for now
       ens_handle%copies(SPARE_COPY_MEAN, :)       = ens_handle%copies(ENS_MEAN_COPY, :)
@@ -610,6 +614,8 @@ AdvanceTime : do
       ens_handle%copies(SPARE_COPY_INF_MEAN, :)   = ens_handle%copies(PRIOR_INF_COPY, :)
       ens_handle%copies(SPARE_COPY_INF_SPREAD, :) = ens_handle%copies(PRIOR_INF_SD_COPY, :)
    endif
+
+   call test_state_copies(ens_handle, 'prior_diag')
 
    ! Back to state space for forward operator computations
    call all_copies_to_all_vars(ens_handle) 
@@ -651,35 +657,39 @@ AdvanceTime : do
 
    ! Do prior state space diagnostic output as required
    ! write prior netcdf files if needed
-   if (direct_netcdf_read .and. (num_output_state_members > 0) ) then
-      ! write prior files
-      call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
-      call turn_write_copy_on(1, num_output_state_members)
-      call turn_write_copy_on(ENS_MEAN_COPY)
-      call turn_write_copy_on(ENS_SD_COPY)
-      if (output_inflation) then
-         call turn_write_copy_on(PRIOR_INF_COPY)
-         call turn_write_copy_on(PRIOR_INF_SD_COPY)
-      endif
-      call filter_write_restart_direct(ens_handle, 'prior')
-   endif
+   if ((output_interval > 0) .and. &
+      (time_step_number / output_interval * output_interval == time_step_number)) then
 
-   if (diagnostic_files) then
-      ! Use ens_mean which is declared model_size for temp storage in diagnostics
-      if ((output_interval > 0) .and. &
-         (time_step_number / output_interval * output_interval == time_step_number)) then
+      if (direct_netcdf_read .and. (num_output_state_members > 0) ) then
+         if (skeleton_diagnostic_files .or. (.not. diagnostic_files)) then
+            ! write prior files
+            call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
+            call turn_write_copy_on(1, num_output_state_members)
+            call turn_write_copy_on(ENS_MEAN_COPY)
+            call turn_write_copy_on(ENS_SD_COPY)
+            if (output_inflation) then
+               call turn_write_copy_on(PRIOR_INF_COPY)
+               call turn_write_copy_on(PRIOR_INF_SD_COPY)
+            endif
+            call filter_write_restart_direct(ens_handle, 'prior')
+         endif
+      endif
+
+      if (diagnostic_files) then
+         ! Use ens_mean which is declared model_size for temp storage in diagnostics
          call trace_message('Before prior state space diagnostics')
          call timestamp_message('Before prior state space diagnostics')
          call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit, ens_handle, &
-            model_size, num_output_state_members, &
-            output_state_mean_index, output_state_spread_index, &
-            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-            prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, skeleton_diagnostic_files)
+               model_size, num_output_state_members, &
+               output_state_mean_index, output_state_spread_index, &
+               output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+               prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, skeleton_diagnostic_files)
          call timestamp_message('After  prior state space diagnostics')
          call trace_message('After  prior state space diagnostics')
       endif
+
    endif
-  
+
    call trace_message('Before observation space diagnostics')
    ! Do prior observation space diagnostics and associated quality control
    call obs_space_diagnostics(obs_ens_handle, forward_op_ens_handle, ens_size, &
@@ -898,55 +908,56 @@ call trace_message('Before writing state restart files if requested')
 if (output_restart) call turn_write_copy_on(1,ens_size) ! restarts
 if (num_output_state_members > 0) call turn_write_copy_on(1, num_output_state_members)
 
-! Prior_Diag  
-if (num_output_state_members == 0) then
-   call turn_write_copy_on(SPARE_COPY_MEAN) ! Prior mean
-   call turn_write_copy_on(SPARE_COPY_SPREAD) ! Prior sd
-   if (output_inflation) then
-      call turn_write_copy_on(SPARE_COPY_INF_MEAN) ! Prior inflation mean
-      call turn_write_copy_on(SPARE_COPY_INF_SPREAD) ! Prior inflation sd
+if (diagnostic_files) then
+
+   ! Prior_Diag spare copies
+   if (spare_copies) then
+      call turn_write_copy_on(SPARE_COPY_MEAN) ! Prior mean
+      call turn_write_copy_on(SPARE_COPY_SPREAD) ! Prior sd
+      if (output_inflation) then
+         call turn_write_copy_on(SPARE_COPY_INF_MEAN) ! Prior inflation mean
+         call turn_write_copy_on(SPARE_COPY_INF_SPREAD) ! Prior inflation sd
+      endif
    endif
-endif
 
-! Posterior Diag
-call turn_write_copy_on(ENS_MEAN_COPY) ! mean
-call turn_write_copy_on(ENS_SD_COPY) ! sd
-if (output_inflation) then
-   call turn_write_copy_on(POST_INF_COPY) ! posterior inf mean
-   call turn_write_copy_on(POST_INF_SD_COPY) ! posterior inf sd
-endif
+   ! Posterior Diag
+   call turn_write_copy_on(ENS_MEAN_COPY) ! mean
+   call turn_write_copy_on(ENS_SD_COPY) ! sd
+   if (output_inflation) then
+      call turn_write_copy_on(POST_INF_COPY) ! posterior inf mean
+      call turn_write_copy_on(POST_INF_SD_COPY) ! posterior inf sd
+   endif
 
-! output inflation
-if (inf_output_restart(1)) then
-   call turn_write_copy_on(PRIOR_INF_COPY)
-   call turn_write_copy_on(PRIOR_INF_SD_COPY)
-endif
+   ! output inflation
+   if (inf_output_restart(1)) then
+      call turn_write_copy_on(PRIOR_INF_COPY)
+      call turn_write_copy_on(PRIOR_INF_SD_COPY)
+   endif
 
-if (inf_output_restart(2)) then 
-   call turn_write_copy_on(POST_INF_COPY)
-   call turn_write_copy_on(POST_INF_SD_COPY)
-endif
+   if (inf_output_restart(2)) then
+      call turn_write_copy_on(POST_INF_COPY)
+      call turn_write_copy_on(POST_INF_SD_COPY)
+   endif
 
-if (.not. diagnostic_files) then ! Glen mode
-! still not addressing problem of writting out inflation sd 
+else ! Glen mode
+! still not addressing problem of writing out inflation sd
 
-   call turn_write_copy_off(ENS_MEAN_COPY, SPARE_COPY_INF_SPREAD) ! assumes contiguous
+   call turn_write_copy_off(ENS_MEAN_COPY, ens_size + num_extras) ! assumes contiguous
 
    if(output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
 
-   if (num_output_state_members == 0) then ! write spare copies
+   if (spare_copies) then ! write spare copies
+         call turn_write_copy_on(SPARE_COPY_MEAN) ! Prior mean
+         call turn_write_copy_on(SPARE_COPY_SPREAD) ! Prior sd
       if ((inf_flavor(1) > 0) .and. output_inflation) then ! prior diag inflation
          call turn_write_copy_on(SPARE_COPY_INF_MEAN)
          call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
       endif
-   elseif(num_output_state_members > 0) then
-      call turn_write_copy_off(SPARE_COPY_INF_MEAN)
-      call turn_write_copy_off(SPARE_COPY_INF_SPREAD)
    endif
 
    if ((inf_flavor(1) > 0) .and. inf_output_restart(1)) then ! prior inflation
-      call turn_write_copy_on(POST_INF_COPY)
-      call turn_write_copy_on(POST_INF_SD_COPY)
+      call turn_write_copy_on(PRIOR_INF_COPY)
+      call turn_write_copy_on(PRIOR_INF_SD_COPY)
    endif
 
    if ((inf_flavor(2) > 0) .and. inf_output_restart(2)) then ! posterior inflation
@@ -2088,21 +2099,17 @@ variable_list = fill_variable_list(num_variables_in_state)
 ! need to know number of domains
 call initialize_arrays_for_read(num_variables_in_state, num_domains) 
 
-! - if (single_restart_file_in) then ! is this the correct flag to check?
-! -    call get_state_variable_info(num_variables_in_state)
-! - else
-    model_size = 0
-    do domain = 1, num_domains
-       netcdf_filename = info_file_name(domain)
-       write(*,*) 'netcdf_filename :: ', netcdf_filename 
-       call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
-       model_size = model_size + domain_size
-    enddo
-! - endif
+model_size = 0
+do domain = 1, num_domains
+   netcdf_filename = info_file_name(domain)
+   write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
+   call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
+   model_size = model_size + domain_size
+enddo
 
 ! read time from input file if time not set in namelist
 if(init_time_days < 0) then
-       write(*,*) 'restart_files_in :: ', restart_files_in(1,1) 
+       write(*,*) 'restart_files_in :: ', trim(restart_files_in(1,1))
    time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
 endif
 

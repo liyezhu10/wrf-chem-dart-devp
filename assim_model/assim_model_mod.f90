@@ -1081,10 +1081,14 @@ type(netcdf_file_type), intent(inout) :: ncFileID
 type(assim_model_type), intent(in) :: state
 integer, optional,      intent(in) :: copy_index
 
+
+logical :: skeleton ! to create empty diagnostic files
+skeleton = .false.
+
 if(present(copy_index)) then
-   call aoutput_diagnostics(ncFileID, state%time, state%state_vector, copy_index)
+   call aoutput_diagnostics(ncFileID, skeleton, state%time, state%state_vector, copy_index)
 else
-   call aoutput_diagnostics(ncFileID, state%time, state%state_vector)
+   call aoutput_diagnostics(ncFileID, skeleton, state%time, state%state_vector)
 endif
 
 end subroutine output_diagnostics
@@ -1092,7 +1096,7 @@ end subroutine output_diagnostics
 
 
 
-subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index)
+subroutine aoutput_diagnostics(ncFileID, skeleton, model_time, model_state, copy_index)
 !-------------------------------------------------------------------
 ! Outputs the "state" to the supplied netCDF file. 
 !
@@ -1118,6 +1122,7 @@ use netcdf
 implicit none
 
 type(netcdf_file_type), intent(inout) :: ncFileID
+logical,           intent(in) :: skeleton ! to create empty diagnostic files
 type(time_type),   intent(in) :: model_time
 real(r8),          intent(in) :: model_state(:)
 integer, optional, intent(in) :: copy_index
@@ -1148,7 +1153,9 @@ endif
 ! model_mod:nc_write_model_vars knows nothing about assim_model_types,
 ! so we must pass the components.
 
-i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex) 
+if( .not. skeleton ) then
+   i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex)
+endif
 
 end subroutine aoutput_diagnostics
 
