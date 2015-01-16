@@ -414,8 +414,8 @@ if (direct_netcdf_read) then
    call filter_read_restart_direct(ens_handle, time1, ens_size)
 endif
 
-call all_vars_to_all_copies(ens_handle)
-call test_state_copies(ens_handle, 'after_read')
+!call all_vars_to_all_copies(ens_handle)
+!call test_state_copies(ens_handle, 'after_read')
 
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
@@ -615,7 +615,7 @@ AdvanceTime : do
       ens_handle%copies(SPARE_COPY_INF_SPREAD, :) = ens_handle%copies(PRIOR_INF_SD_COPY, :)
    endif
 
-   call test_state_copies(ens_handle, 'prior_diag')
+   !call test_state_copies(ens_handle, 'prior_diag')
 
    ! Back to state space for forward operator computations
    call all_copies_to_all_vars(ens_handle) 
@@ -1150,9 +1150,11 @@ call trace_message('Before init_model call')
 call static_init_assim_model()
 call trace_message('After init_model call')
 
-call trace_message('Before  init_state_vector_io call')
-call state_vector_io_init()
-call trace_message('After  init_state_vector_io call')
+if (direct_netcdf_read) then
+   call trace_message('Before  state_vector_io_init')
+   call state_vector_io_init()
+   call trace_message('After  state_vector_io_init')
+endif
 
 end subroutine filter_initialize_modules_used
 
@@ -2101,15 +2103,15 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 
 model_size = 0
 do domain = 1, num_domains
-   netcdf_filename = info_file_name(domain)
-   write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
+   netcdf_filename = info_file_name(domain) !first restart
+   !write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
    call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
    model_size = model_size + domain_size
 enddo
 
 ! read time from input file if time not set in namelist
 if(init_time_days < 0) then
-       write(*,*) 'restart_files_in :: ', trim(restart_files_in(1,1))
+   !write(*,*) 'restart_files_in :: ', trim(restart_files_in(1,1))
    time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
 endif
 
