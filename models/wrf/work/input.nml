@@ -256,6 +256,14 @@
    max_gpsro_obs = 100000,
    / 
 
+&state_vector_io_nml
+   create_restarts = .false.
+   /   
+
+&io_filenames_nml
+   restart_in_stub = 'advance_temp'
+   restart_out_stub = 'filter_restart'
+
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
 # year   month   day   hour   minute   second
