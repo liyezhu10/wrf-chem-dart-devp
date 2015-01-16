@@ -6,14 +6,18 @@
 #
 # SET TIME INFORMATION
   export START_DATE=2008060106
-  export END_DATE=2008063006
-#  export START_DATE=2008061218
-#  export END_DATE=2008061218
+  export END_DATE=2008063018
+#  export START_DATE=2008070106
+#  export END_DATE=2008080100
+#  export START_DATE=2008070100
+#  export END_DATE=2008070100
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
 # SYSTEM SPECIFIC SETTINGS
   export PROCS=8
+  export NL_APM_SCALE=1.
+  export NL_APM_SCALE_SW=.FALSE.
 #
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
@@ -25,11 +29,19 @@
   export CODE_DIR=/glade/p/work/mizzi/TRUNK
   export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
   export ASIM_DIR=/glade/scratch/mizzi/MOPITT_OBSSEQ_COMB
-  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Std_SVD
-  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Trc_Ret
-  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Ret_DA
-  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_no_rot1
-  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_no_rot1_bloc
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Std_SVD
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Trc_Ret
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Ret_DA
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_Rev
+  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_Rev_bloc
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_no_rot1
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_no_rot1_bloc
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_bloc
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_DBL
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_DBL_bloc
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_scale
+#  export RET_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA_DBL_Rev
 #
 # DEPENDENT DIRECTORIES
   export HYBRID_DIR=${ROOT_DIR}/HYBRID_TRUNK
@@ -101,10 +113,18 @@
         cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
         cp ${DART_DIR}/models/wrf_chem/work/obs_sequence_tool ./.
         cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
-        if [[ ! -e obs_seq_MET_${L_DATE}.out ]]; then 
+        if [[ -e ${DATA_DIR}/obs_MET/${L_DATE}/obs_seq_${L_DATE}.out ]]; then 
            cp ${DATA_DIR}/obs_MET/${L_DATE}/obs_seq_${L_DATE}.out ./obs_seq_MET_${L_DATE}.out
+        else 
+           echo 'APM: File missing '${DATA_DIR}/obs_MET/${L_DATE}/obs_seq_${L_DATE}.out
+           exit 
         fi
-        cp ${RET_OBS_DIR}/obs_seq_mopitt_${D_DATE} ./obs_seq_MOP_${L_DATE}.out
+        if [[ -e ${RET_OBS_DIR}/obs_seq_mopitt_${D_DATE} ]]; then
+           cp ${RET_OBS_DIR}/obs_seq_mopitt_${D_DATE} ./obs_seq_MOP_${L_DATE}.out
+        else
+           echo 'APM: File missing '${RET_OBS_DIR}/obs_seq_mopitt_${D_DATE}
+           exit 
+        fi
 #
 # CALCULATE GREGORIAN TIMES FOR START AND END OF ASSIMILAtION WINDOW
         export ASIM_MIN_DATE=$($BUILD_DIR/da_advance_time.exe $L_DATE -$ASIM_WINDOW 2>/dev/null)
@@ -133,6 +153,16 @@
         export NL_MAX_LON=310.
         rm input.nml
         ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+        rm -rf obs_def_apm.nml
+        cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
+/
+EOF
+#
         ./obs_sequence_tool
 #        if [[ ! -d ${DATA_DIR}/obs_MOPITT/${L_DATE} ]]; then mkdir -p ${DATA_DIR}/obs_MOPITT/${L_DATE}; fi
         mkdir -p ${DATA_DIR}/obs_MOPCOMB/${L_DATE}

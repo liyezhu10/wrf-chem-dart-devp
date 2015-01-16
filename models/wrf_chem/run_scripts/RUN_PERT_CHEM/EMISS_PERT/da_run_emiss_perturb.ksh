@@ -18,8 +18,8 @@ export MEM_START=1
 export USE_HSI=false
 #
 # TIME DATA:
-export START_DATE=2008061200
-export END_DATE=2008061223
+export START_DATE=2008070200
+export END_DATE=2008070223
 export DATE=${START_DATE}
 export YYYY=$(echo $DATE | cut -c1-4)
 export MM=$(echo $DATE | cut -c5-6)

@@ -25,10 +25,17 @@ export BUILD_DIR=/glade/p/work/mizzi/TRUNK/${WRFDA_VERSION}/var/build
 #export EXP_DIR=MOPCOMB_Exp_3_MgDA_20M_p10p00
 #export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_p10p30_loc
 #
-#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_loc_p10p30
-export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_bar_p10p30
 #export EXP_DIR=MOPCOMB_Exp_3_MgDA_20M_100km_p10p00
 #export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_loc_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_bar_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_loc_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_bloc_p10p30
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p75
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p50
+#export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_bloc_p10p30
+export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_NV_p10p30
 #
 #export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_p10p00
 #export EXP_DIR=MOPCOMB_Exp_2_MgDA_20M_p10p30

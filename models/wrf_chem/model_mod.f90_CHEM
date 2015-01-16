@@ -63,13 +63,12 @@ use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                               KIND_SPECIFIC_DIFFERENTIAL_PHASE, &
                               KIND_VORTEX_LAT, KIND_VORTEX_LON, &
                               KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
-                              KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
-                              get_raw_obs_kind_index, get_num_raw_obs_kinds, &
-                              get_raw_obs_kind_name
+                              KIND_SKIN_TEMPERATURE, KIND_LANDMASK
 ! APM/AFAJ ++
 ! Mods for IASI chemistry
-use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN, 
-                              KIND_MOPITT_CO_RETRIEVAL, KIND_IASI_CO_RETRIEVAL, KIND_IASI_O3, &
+use      obs_kind_mod, only : IASI_O3_RETRIEVAL, MOPITT_CO_RETRIEVAL, MOPITT_CO_COLUMN, &
+                              MODIS_AOD_RETRIEVAL, &
+                              KIND_O3_COLUMN, KIND_CO, KIND_O3, &
                               KIND_NO, KIND_NO2, KIND_HNO3, KIND_HNO4, &
                               KIND_N2O5, KIND_PAN, KIND_MEK, KIND_ALD, KIND_CH3O2, &
                               KIND_C3H8, KIND_C2H6, KIND_ACET, KIND_HCHO, KIND_C2H4, &
@@ -83,9 +82,10 @@ use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN,
                               KIND_SSLT04, &
                               KIND_DST05, &
                               KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM10, KIND_PM25 
+                              KIND_PM10, KIND_PM25, & 
 ! APM/AFAJ --
-
+                              get_raw_obs_kind_index, get_num_raw_obs_kinds, &
+                              get_raw_obs_kind_name
 ! FIXME:
 ! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
 ! and kind KIND_CLOUD_ICE should be KIND_ICE_MIXING_RATIO, but for backwards
@@ -306,6 +306,228 @@ TYPE wrf_static_data_for_dart
    integer :: type_u10, type_v10, type_t2, type_th2, type_q2, &
               type_ps, type_mu, type_tsk, type_tslb, type_sh2o, &
               type_smois, type_2dflash
+
+! FIXME:
+! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
+! and kind KIND_CLOUD_ICE should be KIND_ICE_MIXING_RATIO, but for backwards
+! compatibility with other models, they remain as is for now.  at the next
+! major dart release, the names will be made consistent.
+! ditto KIND_ICE_NUMBER_CONCENTRATION, which should be KIND_ICE_NUMBER_CONCENTR
+! to be consistent with the other concentration names.
+
+!nc -- module_map_utils split the declarations of PROJ_* into a separate module called
+!nc --   misc_definitions_module 
+use         map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
+                              ij_to_latlon, gridwind_to_truewind
+
+use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
+                                    PROJ_CYL
+
+use netcdf
+use typesizes
+
+implicit none
+private
+
+
+!-----
+! DART requires 16 specific public interfaces from model_mod.f90 -- Note
+!   that the last four are simply "stubs" since WRF currently requires use
+!   of system called shell scripts to advance the model.
+
+public ::  get_model_size,                    &
+           get_state_meta_data,               &
+           model_interpolate,                 &
+           get_model_time_step,               &
+           static_init_model,                 &
+           pert_model_state,                  &
+           nc_write_model_atts,               &
+           nc_write_model_vars,               &
+           get_close_obs,                     &
+           ens_mean_for_model,                &
+           get_close_maxdist_init,            &
+           get_close_obs_init
+
+!  public stubs 
+public ::  adv_1step,       &
+           end_model,       &
+           init_time,       &
+           init_conditions
+
+!-----
+! Here is the appropriate place for other users to make additional routines
+!   contained within model_mod available for public use:
+public ::  get_number_domains,       &
+           get_wrf_static_data,      &
+           model_pressure,           &
+           model_height,             &
+           pres_to_zk,               &
+           height_to_zk,             &
+           get_domain_info,          &
+           get_wrf_state_variables,  &
+           fill_default_state_table, &
+           read_wrf_dimensions,      &
+           get_number_of_wrf_variables, &
+           get_variable_bounds,         &
+           set_variable_bound_defaults, &
+           get_variable_size_from_file, &
+           trans_3Dto1D, trans_1Dto3D, &
+           trans_2Dto1D, trans_1Dto2D, &
+           get_wrf_date, set_wrf_date, &
+           height_diff_check
+
+! public parameters
+public :: max_state_variables, &
+          num_state_table_columns, &
+          num_bounds_table_columns
+
+! types
+public :: wrf_dom, wrf_static_data_for_dart
+
+
+!-----------------------------------------------------------------------
+! version controlled file description for error handling, do not edit
+character(len=128), parameter :: &
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/models/wrf/model_mod.f90 $", &
+   revision = "$Revision: 5771 $", &
+   revdate  = "$Date: 2012-07-05 10:13:54 -0600 (Thu, 05 Jul 2012) $"
+
+! miscellaneous
+integer, parameter :: max_state_variables = 100
+integer, parameter :: num_state_table_columns = 5
+integer, parameter :: num_bounds_table_columns = 4
+
+!-----------------------------------------------------------------------
+! Model namelist parameters with default values.
+!
+! center_search_half_length:  half length (in meter) of the searching box to locate 
+!                             minimum pressure at a grid point
+! center_spline_scale: coarse grid to spline interp. fine grid ratio
+!-----------------------------------------------------------------------
+
+logical :: output_state_vector     = .false.  ! output prognostic variables
+logical :: default_state_variables = .true.   ! use default state list?
+character(len=129) :: wrf_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
+character(len=129) :: wrf_state_bounds(num_bounds_table_columns,max_state_variables) = 'NULL'
+integer :: num_domains          = 1
+integer :: calendar_type        = GREGORIAN
+integer :: assimilation_period_seconds = 21600
+! Max height a surface obs can be away from the actual model surface
+! and still be accepted (in meters)
+real (kind=r8) :: sfc_elev_max_diff  = -1.0_r8   ! could be something like 200.0_r8
+real (kind=r8) :: center_search_half_length = 500000.0_r8
+real(r8) :: circulation_pres_level = 80000.0_r8
+real(r8) :: circulation_radius     = 108000.0_r8
+integer :: center_spline_grid_scale = 10
+integer :: vert_localization_coord = VERTISHEIGHT
+! Allow observations above the surface but below the lowest sigma level.
+logical :: allow_obs_below_vol = .false.
+! Do the interpolation of pressure values only after taking the log (.true.)
+! vs doing a linear interpolation directly in pressure units (.false.)
+logical :: log_vert_interp  = .true.
+logical :: log_horz_interpM = .false.
+logical :: log_horz_interpQ = .false.
+!nc -- we are adding these to the model.nml until they appear in the NetCDF files
+logical :: polar = .false.         ! wrap over the poles
+logical :: periodic_x = .false.    ! wrap in longitude or x
+logical :: periodic_y = .false.    ! used for single column model, wrap in y
+!JPH -- single column model flag 
+logical :: scm        = .false.    ! using the single column model
+
+! obsolete items; ignored by this code. 
+! non-backwards-compatible change. should be removed, 
+! but see note below about namelist.
+integer :: num_moist_vars
+logical :: surf_obs, soil_data, h_diab
+
+! adv_mod_command moved to dart_to_wrf namelist; ignored here.
+character(len = 72) :: adv_mod_command = ''
+
+! num_moist_vars, surf_obs, soil_data, h_diab, and adv_mod_command
+! are IGNORED no matter what their settings in the namelist are.
+! they are obsolete, but removing them here will cause a fatal error
+! until users remove them from their input.nml files as well.
+namelist /model_nml/ output_state_vector, num_moist_vars, &
+                     num_domains, calendar_type, surf_obs, soil_data, h_diab, &
+                     default_state_variables, wrf_state_variables, &
+                     wrf_state_bounds, sfc_elev_max_diff, &
+                     adv_mod_command, assimilation_period_seconds, &
+                     allow_obs_below_vol, vert_localization_coord, &
+                     center_search_half_length, center_spline_grid_scale, &
+                     circulation_pres_level, circulation_radius, polar, &
+                     periodic_x, periodic_y, scm
+
+real(r8), allocatable :: ens_mean(:)
+
+! if you need to check backwards compatibility, set this to .true.
+! otherwise, leave it as false to use the more correct geometric height
+logical :: use_geopotential_height = .false.
+
+character(len = 20) :: wrf_nml_file = 'namelist.input'
+logical :: have_wrf_nml_file = .false.
+integer :: num_obs_kinds = 0
+logical, allocatable :: in_state_vector(:)
+
+!-----------------------------------------------------------------------
+
+! Private definition of domain map projection use by WRF
+
+!nc -- added in CASSINI and CYL according to module_map_utils convention
+!JPH -- change variable name from map_sphere to more specific map_latlon
+integer, parameter :: map_latlon = 0, map_lambert = 1, map_polar_stereo = 2, map_mercator = 3
+integer, parameter :: map_cassini = 6, map_cyl = 5
+
+! Private definition of model variable types
+
+real (kind=r8), PARAMETER    :: kappa = 2.0_r8/7.0_r8 ! gas_constant / cp
+real (kind=r8), PARAMETER    :: ts0 = 300.0_r8        ! Base potential temperature for all levels.
+
+!---- private data ----
+
+! Got rid of surf_var as global private variable for model_mod and just defined it locally
+!   within model_interpolate
+
+TYPE wrf_static_data_for_dart
+
+   integer  :: bt, bts, sn, sns, we, wes, sls
+   real(r8) :: dx, dy, dt, p_top
+   integer  :: map_proj
+   real(r8) :: cen_lat,cen_lon
+   type(proj_info) :: proj
+
+   ! Boundary conditions -- hopefully one day these will be in the global attributes of the
+   !   input NetCDF file ("periodic_x" and "polar" are namelist items in the &bdy_control
+   !   section of a standard WRF "namelist.input" file), but for now we have included them
+   !   in the "model_nml" group of DART's own "input.nml".  Above, their default values are
+   !   both set to .true. (indicating a global domain). 
+   logical  :: periodic_x
+   logical  :: periodic_y
+   logical  :: polar
+   logical  :: scm
+
+   integer  :: domain_size
+   integer  :: localization_coord
+   real(r8), dimension(:),     pointer :: znu, dn, dnw, zs, znw
+   real(r8), dimension(:,:),   pointer :: mub, hgt
+   real(r8), dimension(:,:),   pointer :: latitude, latitude_u, latitude_v
+   real(r8), dimension(:,:),   pointer :: longitude, longitude_u, longitude_v
+   real(r8), dimension(:,:,:), pointer :: phb
+
+   ! NEWVAR:  Currently you have to add a new type here if you want to use
+   ! NEWVAR:  a WRF variable which is not one of these types.  This will go
+   ! NEWVAR:  away eventually, we hope.  Search for NEWVAR for other places
+   ! NEWVAR:  the code has to change.
+
+   ! JPH local variables to hold type indices
+   integer :: type_u, type_v, type_w, type_t, type_qv, type_qr, type_hdiab, &
+              type_qndrp, type_qnsnow, type_qnrain, type_qngraupel, type_qnice, &
+              type_qc, type_qg, type_qi, type_qs, type_gz, type_refl, type_fall_spd, &
+              type_dref, type_spdp, type_qh, type_qnhail, type_qhvol, type_qgvol
+
+   integer :: type_u10, type_v10, type_t2, type_th2, type_q2, &
+              type_ps, type_mu, type_tsk, type_tslb, type_sh2o, &
+              type_smois, type_2dflash
+
 ! APM/AFAJ ++
    integer :: type_o3_column, type_o3, type_co, type_no, &
               type_no2, type_hno3, &
@@ -351,7 +573,6 @@ character(len=129) :: errstring, msgstring2, msgstring3
    integer  :: kaod, zk_aod
    real(r8) :: aod1,aod2,aod3,aod4,aod5,ang
 ! APM/AFAJ --
-
 contains
 
 !#######################################################################
@@ -1134,7 +1355,6 @@ else
       ! Ob is by pressure: get corresponding mass level zloc from
       ! computed column pressure profile
       call get_model_pressure_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_p)
-
       ! get pressure vertical co-ordinate
       call pres_to_zk(xyz_loc(3), v_p, wrf%dom(id)%bt,zloc,is_lev0)
       if(debug .and. obs_kind /= KIND_SURFACE_PRESSURE) &
@@ -1203,12 +1423,7 @@ else
       ! function returns a logical where .true. means the obs station elevation
       ! 'passed' the height check. Here, if a height check fails, set an istatus
       ! of '1' and bail out of this routine. 
-!
-! APM ++++
-! Add test for obs_kind /= surface pressure to facilitate recovery of state surface pressure
-      if ( sfc_elev_max_diff >= 0 .and. obs_kind /= KIND_SURFACE_PRESSURE) then
-! APM ----
-!
+      if ( sfc_elev_max_diff >= 0 ) then
       ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
               boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
@@ -3101,167 +3316,6 @@ else
                          dx*real(wrf%dom(id)%land(ur(1), ur(2))) )
 
       endif
-
-! APM/AFAJ ++
-   !-----------------------------------------------------
-   ! 1.za IASI O3 Retrieval (O3)
-
-   else if( obs_kind == KIND_O3 ) then
-      if ( wrf%dom(id)%type_o3 >= 0 ) then
-
-   ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_o3 ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_o3 ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_o3 ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_o3, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-               print*, 'model_mod.f90 :: model_interpolate :: getCorners O3 rc = ', rc
-         
-   ! Interpolation for the O3 field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_o3)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_o3)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_o3)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_o3)
-
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! hard wired for IASI
-            if (k < 33) then          
-   ! Interpolation for the O3 field at level k+1
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_o3)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_o3)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_o3)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_o3)         
-
-               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            else
-               fld(2) = fld(1)
-            endif
-            fld = max(0.0_r8, fld)
-         endif
-      endif
-! APM/AFAJ --
-!
-! APM/AFAJ ++
-   !-----------------------------------------------------
-   ! 1.zb MOPITT CO Retrieval (CO)
-
-   else if( obs_kind == KIND_CO ) then
-      if ( wrf%dom(id)%type_co >= 0 ) then
-! APM: MOPITT CHECK
-!         print *, 'APM i,j,k : ',i,j,k 
-!         print *, "APM:i ",boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_co) 
-!         print *, "APM:j ",boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_co) 
-!         print *, "APM:k ",boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_co)     
-
-   ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_co ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_co ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_co ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_co, ll, ul, lr, ur, rc )
-               
-            if ( rc .ne. 0 ) then
-               print*, 'model_mod.f90 :: model_interpolate :: getCorners CO rc = ', rc
-               call abort
-            endif 
-        
-   ! Interpolation for the CO field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_co)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_co)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_co)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_co)
-
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: is_lev0 ', is_lev0
-!            print *, 'APM: k, fld1',k,fld(1)
-
-   ! Interpolation for the CO field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_co)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_co)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_co)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_co)         
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: k+1 fld2',k+1,fld(2)
-         endif
-      endif
-! APM/AFAJ --
-!
-! APM/AFAJ ++
-   !-----------------------------------------------------
-
-   ! 1.zc Aerosol Optical Depth (TAUAER1, TAUAER2, TAUAER3, TAUAER4)
-   !      added by AFAJ Ave Arellano for AOD assimilation
-   !      currently we do not have AOD that exactly match the wavelength
-   !      of MODIS 550nm. we will use instead the TAU at 400 and 600 nm 
-   !      1) get the total AOD for TAUAER2 and TAUAER3 (vertical integral)
-   !      2) calculate ang=log(tau300/tau999)/log(999/300)
-   !      3) tau550=tau400*( (0.4/0.55)^ang)
-   !      FOR NOW, USE TAUAER3 (600nm) APPROXIMATING 550nm
-   !      SINCE IT REQUIRES THE INTERACTION BETWEEN 4 TAU FIELDS
-
-   else if( obs_kind == KIND_AOD ) then
-     
-         if ( wrf%dom(id)%type_tauaer1 >= 0 .and. wrf%dom(id)%type_tauaer2 >= 0 .and. &
-              wrf%dom(id)%type_tauaer3 >= 0 .and. wrf%dom(id)%type_tauaer4 >= 0) then
-
-   ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer3 ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer3 ) ) then
-         
-               call getCorners(i, j, id, wrf%dom(id)%type_tauaer3, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners TAUAER3 rc = ', rc
-
-               zk_aod = 40 !wrf%dom(id)%bt
-               aod1 = 0.0_r8
-               aod2 = 0.0_r8
-               aod3 = 0.0_r8
-               aod4 = 0.0_r8
-               aod5 = 0.0_r8
-               do kaod = 1, zk_aod
-   ! Interpolation for the TAUAER1 field
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer1)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer1)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer1)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer1)
-
-                  aod1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER2 field
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer2)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer2)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer2)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer2)
-
-                  aod2 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER3 field
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer3)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer3)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer3)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer3)
-
-                  aod3 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER4 field
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer4)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer4)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer4)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer4)
-
-                  aod4 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-                  if ( (aod1 > 0.0_r8) .and. (aod4 > 0.0_r8) ) then
-                     ang = log(aod1/aod4)/1.2030 
-                     aod5 = aod5 + aod2*((0.7273)**ang)*10.0_r8
-                  endif
-            enddo
-            fld(1) = aod5
-            endif
-         endif
-! APM/AFAJ --
 
    !-----------------------------------------------------
    ! If obs_kind is not negative (for identity obs), or if it is not one of the above 15
@@ -6950,7 +7004,124 @@ if (istatus1 == 0) then
       else
          dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
       endif
-
+! APM/AFAJ ++
+! Chem/Met interaction mods:
+!     When commented:   Met obs update Chem and Met state variables
+!                       and Chem obs update Chem and Met state variables.
+! 
+!     When uncommented: Met obs update only Met state variables
+!                       and Chem obs update only Chem state variables.
+!
+!      if ((base_obs_kind.ne.IASI_O3_RETRIEVAL)          .and. &
+!          (base_obs_kind.ne.MOPITT_CO_RETRIEVAL)        .and. &
+!          (base_obs_kind.ne.MOPITT_CO_COLUMN)           .and. &
+!          (base_obs_kind.ne.MODIS_AOD_RETRIEVAL)        &
+!                                                ) then
+!         if ( (obs_kind(t_ind).ne.KIND_O3_COLUMN)       .and. &
+!              (obs_kind(t_ind).ne.KIND_CO)              .and. &
+!              (obs_kind(t_ind).ne.KIND_NO)              .and. &
+!              (obs_kind(t_ind).ne.KIND_NO2)             .and. &
+!              (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
+!              (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
+!              (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
+!              (obs_kind(t_ind).ne.KIND_PAN)             .and. &
+!              (obs_kind(t_ind).ne.KIND_MEK)             .and. &
+!              (obs_kind(t_ind).ne.KIND_ALD)             .and. &
+!              (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
+!              (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
+!              (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
+!              (obs_kind(t_ind).ne.KIND_ACET)            .and. &
+!              (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
+!              (obs_kind(t_ind).ne.KIND_C2H4)            .and. &
+!              (obs_kind(t_ind).ne.KIND_C3H6)            .and. &
+!              (obs_kind(t_ind).ne.KIND_TOL)             .and. &
+!              (obs_kind(t_ind).ne.KIND_MVK)             .and. &
+!              (obs_kind(t_ind).ne.KIND_BIGALK)          .and. &
+!              (obs_kind(t_ind).ne.KIND_ISOPR)           .and. &
+!              (obs_kind(t_ind).ne.KIND_MACR)            .and. &
+!              (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
+!              (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
+!              (obs_kind(t_ind).ne.KIND_O3)              .and. &
+!              (obs_kind(t_ind).ne.KIND_AOD)             .and. &
+!              (obs_kind(t_ind).ne.KIND_CB1)             .and. &
+!              (obs_kind(t_ind).ne.KIND_CB2)             .and. &
+!              (obs_kind(t_ind).ne.KIND_OC1)             .and. &
+!              (obs_kind(t_ind).ne.KIND_OC2)             .and. &
+!              (obs_kind(t_ind).ne.KIND_DMS)             .and. &
+!              (obs_kind(t_ind).ne.KIND_DST01)           .and. &
+!              (obs_kind(t_ind).ne.KIND_DST02)           .and. &
+!              (obs_kind(t_ind).ne.KIND_DST03)           .and. &
+!              (obs_kind(t_ind).ne.KIND_DST04)           .and. &
+!              (obs_kind(t_ind).ne.KIND_DST05)           .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
+!              (obs_kind(t_ind).ne.KIND_SO2)             .and. &
+!              (obs_kind(t_ind).ne.KIND_SO4)             .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER1)         .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER4)         &
+!                                               ) then
+!              dist(k) = dist(k)
+!         else
+!              dist(k) = 1.0e9
+!         endif
+!      else
+!         if ( (obs_kind(t_ind).ne.KIND_O3_COLUMN)  .and. &
+!              (obs_kind(t_ind).ne.KIND_CO)         .and. &
+!              (obs_kind(t_ind).ne.KIND_NO)         .and. &
+!              (obs_kind(t_ind).ne.KIND_NO2)        .and. &
+!              (obs_kind(t_ind).ne.KIND_HNO3)       .and. &
+!              (obs_kind(t_ind).ne.KIND_HNO4)       .and. &
+!              (obs_kind(t_ind).ne.KIND_N2O5)       .and. &
+!              (obs_kind(t_ind).ne.KIND_PAN)        .and. &
+!              (obs_kind(t_ind).ne.KIND_MEK)        .and. &
+!              (obs_kind(t_ind).ne.KIND_ALD)        .and. &
+!              (obs_kind(t_ind).ne.KIND_CH3O2)      .and. &
+!              (obs_kind(t_ind).ne.KIND_C3H8)       .and. &
+!              (obs_kind(t_ind).ne.KIND_C2H6)       .and. &
+!              (obs_kind(t_ind).ne.KIND_ACET)       .and. &
+!              (obs_kind(t_ind).ne.KIND_HCHO)       .and. &
+!              (obs_kind(t_ind).ne.KIND_C2H4)       .and. &
+!              (obs_kind(t_ind).ne.KIND_C3H6)       .and. &
+!              (obs_kind(t_ind).ne.KIND_TOL)        .and. &
+!              (obs_kind(t_ind).ne.KIND_MVK)        .and. &
+!              (obs_kind(t_ind).ne.KIND_BIGALK)     .and. &
+!              (obs_kind(t_ind).ne.KIND_ISOPR)      .and. &
+!              (obs_kind(t_ind).ne.KIND_MACR)       .and. &
+!              (obs_kind(t_ind).ne.KIND_GLYALD)     .and. &
+!              (obs_kind(t_ind).ne.KIND_C10H16)     .and. &
+!              (obs_kind(t_ind).ne.KIND_O3)         .and. &
+!              (obs_kind(t_ind).ne.KIND_AOD)        .and. &
+!              (obs_kind(t_ind).ne.KIND_CB1)        .and. &
+!              (obs_kind(t_ind).ne.KIND_CB2)        .and. &
+!              (obs_kind(t_ind).ne.KIND_OC1)        .and. &
+!              (obs_kind(t_ind).ne.KIND_OC2)        .and. &
+!              (obs_kind(t_ind).ne.KIND_DMS)        .and. &
+!              (obs_kind(t_ind).ne.KIND_DST01)      .and. &
+!              (obs_kind(t_ind).ne.KIND_DST02)      .and. &
+!              (obs_kind(t_ind).ne.KIND_DST03)      .and. &
+!              (obs_kind(t_ind).ne.KIND_DST04)      .and. &
+!              (obs_kind(t_ind).ne.KIND_DST05)      .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT01)     .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT02)     .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT03)     .and. &
+!              (obs_kind(t_ind).ne.KIND_SSLT04)     .and. &
+!              (obs_kind(t_ind).ne.KIND_SO2)        .and. &
+!              (obs_kind(t_ind).ne.KIND_SO4)        .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER1)    .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER2)    .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER3)    .and. &
+!              (obs_kind(t_ind).ne.KIND_TAUAER4)    &
+!                                               ) then
+!              dist(k) = 1.0e9
+!         else
+!              dist(k) = dist(k)
+!         endif
+!      endif
+! APM/AFAJ --
    end do
 endif
 

@@ -6,8 +6,8 @@
 ############################################################################### 
 #
 # Define experiment parameters
-export START_DATE=2008061006
-export END_DATE=2008061318
+export START_DATE=2008060106
+export END_DATE=2008063000
 export DOMAIN=01
 export DELETE_FLG=false
 export NUM_MEMBERS=20
@@ -44,8 +44,8 @@ export JOB_CLASS=small
 export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30
 export DIR_NAME=MOPCOMB_Exp_3_MgDA_20M_p10p00
 #
-export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
 export DATA_DIR=/glade/scratch/mizzi/AVE_TEST_DATA
+export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
 #
 export RUN_DIR=/glade/scratch/mizzi/DART_OBS_DIAG/${DIR_NAME}
 export TRUNK_DIR=/glade/p/work/mizzi/TRUNK

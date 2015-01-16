@@ -5,27 +5,31 @@
   export DO_CREATE_ASCII_TO_DART=true
 #
 # set time data
-  export START_DATE=2008060106
-  export END_DATE=2008063000
+#  export START_DATE=2008060106
+#  export END_DATE=2008063000
+  export START_DATE=2008070106
+  export START_DATE=2008072906
+  export END_DATE=2008073118
   export TIME_INC=6
 #
 # system settings
   export PROCS=8
+  export USE_HSI=false
 #
 # set paths
   export WRFDA_VER=WRFDAv3.4_dmpar
   export WRF_VER=WRFv3.4_dmpar
-  export DART_VER=DART_ORIG
+  export DART_VER=DART_CHEM
 #
 # independent directories
   export CODE_DIR=/glade/p/work/mizzi/TRUNK
-  export DATA_DIR=/glade/scratch/mizzi/AVE_TEST_DATA/obs
-  export HSI_DATA_DIR=/MIZZI/AVE_TEST_DATA/obs
+  export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_MET
+  export HSI_DATA_DIR=/MIZZI/AVE_TEST_DATA/obs_MET
   export ASIM_DIR=/glade/scratch/mizzi/dart_assim
   export RUN_ROOT=/glade/scratch/mizzi
 #
 # dependent directories
-  export HYBRID_DIR=${CODE_DIR}/HYBRID_TRUNK
+  export HYBRID_DIR=/glade/p/work/mizzi/HYBRID_TRUNK
   export WRF_DIR=${CODE_DIR}/${WRF_VER}
   export VAR_DIR=${CODE_DIR}/${WRFDA_VER}
   export BUILD_DIR=${VAR_DIR}/var/build
@@ -67,7 +71,7 @@
         cd ${RUN_ROOT}        
         if [[ -d ${ASIM_DIR}/prep_bufr ]]; then 
            cd ${ASIM_DIR}/prep_bufr
-           rm -rf *.*
+           rm -rf *
         else
            mkdir -p ${ASIM_DIR}/prep_bufr
            cd ${ASIM_DIR}/prep_bufr
@@ -82,16 +86,21 @@
            export LL_MM=$(echo $LL_DATE | cut -c5-6)
            export LL_DD=$(echo $LL_DATE | cut -c7-8)
            export LL_HH=$(echo $LL_DATE | cut -c9-10)
-           hsi get prepqm${LL_YY}${LL_MM}${LL_DD}${LL_HH} : ${HSI_DATA_DIR}/${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}/prepbufr.gdas.${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}.wo40.be
+           if ${USE_HSI}; then
+              hsi get prepqm${LL_YY}${LL_MM}${LL_DD}${LL_HH} : ${HSI_DATA_DIR}/${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}/prepbufr.gdas.${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}.wo40.be
+           else
+             cp ${DATA_DIR}/${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}/prepbufr.gdas.${LL_YYYY}${LL_MM}${LL_DD}${LL_HH}.wo40.be prepqm${LL_YY}${LL_MM}${LL_DD}${LL_HH}
+           fi  
            export P_DATE=${LL_DATE}
            export LL_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${TIME_INC} 2>/dev/null)  
         done
 #
 # get DART input.nml
+        rm -rf input.nml
         cp ${DART_DIR}/observations/NCEP/prep_bufr/work/input.nml ./.
 #
 # run prepbufr to ascii converter
-        ${DART_DIR}/observations/NCEP/prep_bufr/work/prepbufr.csh
+        ${DART_DIR}/observations/NCEP/prep_bufr/work/prepbufr.csh ${DT_YYYY} ${DT_MM} ${DT_DD} ${DT_DD} ${DART_DIR}/observations/NCEP/prep_bufr/exe
         cd ${RUN_ROOT}
      fi
 #
@@ -99,7 +108,7 @@
         cd ${RUN_ROOT}
         if [[ -d ${ASIM_DIR}/ascii_to_obs ]]; then 
            cd ${ASIM_DIR}/ascii_to_obs
-           rm -rf *.*
+           rm -rf *
         else
            mkdir -p ${ASIM_DIR}/ascii_to_obs
            cd ${ASIM_DIR}/ascii_to_obs

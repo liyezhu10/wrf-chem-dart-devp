@@ -7,8 +7,9 @@
 #
 # Define experiment parameters
 export W_START_DATE=2008060106
-export W_START_DATE=2008061200
-export W_END_DATE=2008063000
+export W_START_DATE=2008063018
+#export W_START_DATE=2008070100
+#export W_END_DATE=2008072418
 export W_INITIAL_DATE=2008060106
 export W_INITIAL_FILE_DATE=2008-06-01_06:00:00
 export W_FIRST_FILTER_DATE=2008060112
@@ -16,6 +17,11 @@ export W_CYCLE_PERIOD=6
 export W_FCST_PERIOD=6
 export W_RUN_INITIAL=false
 export W_EXPERIMENT=Ex2_Mg_p10p30_100km_loc
+export NL_APM_SCALE=1.
+export NL_APM_SCALE_SW=.FALSE.
+export W_PROJ_NUMBER=P19010000
+export W_PROJ_NUMBER=NNES0003
+export W_PROJ_NUMBER=NACD0002
 #   
 # Define directories
 export W_PROJECT_DIR=/glade/p/work/mizzi

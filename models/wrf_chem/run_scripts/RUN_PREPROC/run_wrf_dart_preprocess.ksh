@@ -5,12 +5,14 @@ export PROJ_NUMBER=P19010000
 #
 # set switches
   export DO_WRF_DART_PREPROC=true
+  export NL_APM_SCALE=1.
+  export NL_APM_SCALE_SW=.FALSE.
 #
 # set time data (greg day, sec: 148805, 64800)
   export START_DATE=2008060106
-  export END_DATE=2008063000
-#  export START_DATE=2008061218
-#  export END_DATE=2008061218
+  export END_DATE=2008063018
+#  export START_DATE=2008070100
+#  export END_DATE=2008073118
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
@@ -44,10 +46,80 @@ export PROJ_NUMBER=P19010000
 #  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_filt
 #  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_filt
 #
-  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1
-  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1
-  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_filt
-  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_filt
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_bloc
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_no_rot1_bloc_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_bloc
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_bloc_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_scale
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_scale
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_scale_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_scale_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_bloc_DBL
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_bloc_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_Rev
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_Rev
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_Rev_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_DBL_Rev_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_bloc
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPCOMB_Mig_DA_Rev_bloc_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_IASCOMB_O3_Mig_DA
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_IASCOMB_O3_Mig_DA
+#  export OUTPUT_DIR=${DATA_DIR}/obs_IASCOMB_O3_Mig_DA_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_IASCOMB_O3_Mig_DA_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_bloc
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_bloc_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_filt
+#
+#  export INPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_bloc
+#  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_bloc
+#  export OUTPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_bloc_filt
+#  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_Mig_DA_DBL_bloc_filt
+#
+  export INPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_O3_Mig_DA
+  export HSI_INPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_O3_Mig_DA
+  export OUTPUT_DIR=${DATA_DIR}/obs_MOPnIAS_CO_O3_Mig_DA_filt
+  export HSI_OUTPUT_DIR=${HSI_DATA_DIR}/obs_MOPnIAS_CO_O3_Mig_DA_filt
 #
   export WRF_DIR=${CODE_DIR}/${WRF_VER}
   export WRFDA_DIR=${CODE_DIR}/${WRFDA_VER}
@@ -55,7 +127,7 @@ export PROJ_NUMBER=P19010000
   export DART_DIR=${CODE_DIR}/${DART_VER}
   export DART_WRF_CHEM=${DART_DIR}/models/wrf_chem/work
   mkdir -p ${OUTPUT_DIR}
-  hsi "mkdir -p ${HSI_OUTPUT_DIR}"
+#  hsi "mkdir -p ${HSI_OUTPUT_DIR}"
 #
 # make run directory and go to it
   if [[ ! -d ${RUN_DIR} ]]; then 
@@ -105,6 +177,15 @@ export PROJ_NUMBER=P19010000
      else
         cp ${INPUT_DIR}/${L_DATE}/obs_seq_comb_${L_DATE}.out obs_seq.old
      fi
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+        rm -rf obs_def_apm.nml
+        cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
+/
+EOF
 #
 # Create job script 
      if [[ -f job.ksh ]]; then rm -rf job.ksh; fi

@@ -287,6 +287,64 @@ integer, parameter, public :: &
 !! possibly of interest to other models with Chemistry species.
 !! DO NOT USE numbers between 151-250 without talking to me, please?  (nancy)
 
+! APM ++
+! Kinds for chemistry for Arthur P. Mizzi
+integer, parameter, public :: &
+    KIND_O3                          = 151, &
+    KIND_O3_COLUMN                   = 152, &
+    KIND_CO                          = 153, &
+    KIND_CO_COLUMN                   = 154, &
+    KIND_NO                          = 155, &
+    KIND_NO2                         = 156, &
+    KIND_HNO3                        = 157, &
+    KIND_HNO4                        = 158, &
+    KIND_N2O5                        = 159, &
+    KIND_PAN                         = 160, &
+    KIND_MEK                         = 161, &
+    KIND_ALD                         = 162, &
+    KIND_CH3O2                       = 163, &
+    KIND_C3H8                        = 164, &
+    KIND_C2H6                        = 165, &
+    KIND_ACET                        = 166, &
+    KIND_HCHO                        = 167, &
+    KIND_C2H4                        = 168, &
+    KIND_C3H6                        = 169, &
+    KIND_TOL                         = 170, &
+    KIND_MVK                         = 171, &
+    KIND_BIGALK                      = 172, &
+    KIND_ISOPR                       = 173, &
+    KIND_MACR                        = 174, &
+    KIND_GLYALD                      = 175, &
+    KIND_C10H16                      = 176, &
+!
+    KIND_MOPITT_CO_RETRIEVAL         = 177, &
+    KIND_IASI_CO_RETRIEVAL           = 178, &
+    KIND_IASI_O3                     = 179, &
+    KIND_AOD                         = 180, &
+    KIND_CB1                         = 181, &
+    KIND_CB2                         = 182, &
+    KIND_OC1                         = 183, &
+    KIND_OC2                         = 184, &
+    KIND_DMS                         = 185, &
+    KIND_DST01                       = 186, &
+    KIND_DST02                       = 187, &
+    KIND_DST03                       = 188, &
+    KIND_DST04                       = 189, &
+    KIND_DST05                       = 190, &
+    KIND_SO4                         = 191, &
+    KIND_SSLT01                      = 192, &
+    KIND_SSLT02                      = 193, &
+    KIND_SSLT03                      = 194, &
+    KIND_SSLT04                      = 195, &
+    KIND_TAUAER1                     = 196, &
+    KIND_TAUAER2                     = 197, &
+    KIND_TAUAER3                     = 198, &
+    KIND_TAUAER4                     = 199, &
+    KIND_PM10                        = 200, &
+    KIND_PM25                        = 201, &
+    KIND_MODIS_AOD_RETRIEVAL         = 202
+! APM --
+
 ! kinds for GITM (Alexey Morozov)
 integer, parameter, public :: &
   KIND_TEMPERATURE_ELECTRON          = 251, &
@@ -585,7 +643,64 @@ obs_kind_names(130) = obs_kind_type(KIND_TOTAL_WATER_STORAGE   ,'KIND_TOTAL_WATE
 obs_kind_names(131) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
 obs_kind_names(132) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')
 obs_kind_names(133) = obs_kind_type(KIND_CANOPY_HEIGHT,        'KIND_CANOPY_HEIGHT')
-
+!
+! APM ++
+! Kinds for IASI chemistry
+obs_kind_names(151) = obs_kind_type(KIND_O3, 'KIND_O3')
+obs_kind_names(152) = obs_kind_type(KIND_O3_COLUMN, 'KIND_O3_COLUMN')
+obs_kind_names(153) = obs_kind_type(KIND_CO, 'KIND_CO')
+obs_kind_names(154) = obs_kind_type(KIND_CO_COLUMN, 'KIND_CO_COLUMN')
+obs_kind_names(155) = obs_kind_type(KIND_NO, 'KIND_NO')
+obs_kind_names(156) = obs_kind_type(KIND_NO2, 'KIND_NO2')
+obs_kind_names(157) = obs_kind_type(KIND_HNO3, 'KIND_HNO3')
+obs_kind_names(158) = obs_kind_type(KIND_HNO4, 'KIND_HNO4')
+obs_kind_names(159) = obs_kind_type(KIND_N2O5, 'KIND_N2O5')
+obs_kind_names(160) = obs_kind_type(KIND_PAN, 'KIND_PAN')
+obs_kind_names(161) = obs_kind_type(KIND_MEK, 'KIND_MEK')
+obs_kind_names(162) = obs_kind_type(KIND_ALD, 'KIND_ALD')
+obs_kind_names(163) = obs_kind_type(KIND_CH3O2, 'KIND_CH3O2')
+obs_kind_names(164) = obs_kind_type(KIND_C3H8, 'KIND_C3H8')
+obs_kind_names(165) = obs_kind_type(KIND_C2H6, 'KIND_C2H6')
+obs_kind_names(166) = obs_kind_type(KIND_ACET, 'KIND_ACET')
+obs_kind_names(167) = obs_kind_type(KIND_HCHO, 'KIND_HCHO')
+obs_kind_names(168) = obs_kind_type(KIND_C2H4, 'KIND_C2H4')
+obs_kind_names(169) = obs_kind_type(KIND_C3H6, 'KIND_C3H6')
+obs_kind_names(170) = obs_kind_type(KIND_TOL, 'KIND_TOL')
+obs_kind_names(171) = obs_kind_type(KIND_MVK, 'KIND_MVK')
+obs_kind_names(172) = obs_kind_type(KIND_BIGALK, 'KIND_BIGALK')
+obs_kind_names(173) = obs_kind_type(KIND_ISOPR, 'KIND_ISOPR')
+obs_kind_names(174) = obs_kind_type(KIND_MACR, 'KIND_MACR')
+obs_kind_names(175) = obs_kind_type(KIND_GLYALD, 'KIND_GLYALD')
+obs_kind_names(176) = obs_kind_type(KIND_C10H16, 'KIND_C10H16')
+!
+obs_kind_names(177) = obs_kind_type(KIND_MOPITT_CO_RETRIEVAL, 'KIND_MOPITT_CO_RETRIEVAL')
+obs_kind_names(178) = obs_kind_type(KIND_IASI_CO_RETRIEVAL, 'KIND_IASI_CO_RETRIEVAL')
+obs_kind_names(179) = obs_kind_type(KIND_IASI_O3, 'KIND_IASI_O3')
+obs_kind_names(180) = obs_kind_type(KIND_AOD, 'KIND_AOD')
+obs_kind_names(181) = obs_kind_type(KIND_CB1, 'KIND_CB1')
+obs_kind_names(182) = obs_kind_type(KIND_CB2, 'KIND_CB2')
+obs_kind_names(183) = obs_kind_type(KIND_OC1, 'KIND_OC1')
+obs_kind_names(184) = obs_kind_type(KIND_OC2, 'KIND_OC2')
+obs_kind_names(185) = obs_kind_type(KIND_DMS, 'KIND_DMS')
+obs_kind_names(186) = obs_kind_type(KIND_DST01, 'KIND_DST01')
+obs_kind_names(187) = obs_kind_type(KIND_DST02, 'KIND_DST02')
+obs_kind_names(188) = obs_kind_type(KIND_DST03, 'KIND_DST03')
+obs_kind_names(189) = obs_kind_type(KIND_DST04, 'KIND_DST04')
+obs_kind_names(190) = obs_kind_type(KIND_DST05, 'KIND_DST05')
+obs_kind_names(191) = obs_kind_type(KIND_SO4, 'KIND_SO4')
+obs_kind_names(192) = obs_kind_type(KIND_SSLT01, 'KIND_SSLT01')
+obs_kind_names(193) = obs_kind_type(KIND_SSLT02, 'KIND_SSLT02')
+obs_kind_names(194) = obs_kind_type(KIND_SSLT03, 'KIND_SSLT03')
+obs_kind_names(195) = obs_kind_type(KIND_SSLT04, 'KIND_SSLT04')
+obs_kind_names(196) = obs_kind_type(KIND_TAUAER1, 'KIND_TAUAER1')
+obs_kind_names(197) = obs_kind_type(KIND_TAUAER2, 'KIND_TAUAER2')
+obs_kind_names(198) = obs_kind_type(KIND_TAUAER3, 'KIND_TAUAER3')
+obs_kind_names(199) = obs_kind_type(KIND_TAUAER4, 'KIND_TAUAER4')
+obs_kind_names(200) = obs_kind_type(KIND_PM10, 'KIND_PM10')
+obs_kind_names(201) = obs_kind_type(KIND_PM25, 'KIND_PM25')
+obs_kind_names(202) = obs_kind_type(KIND_MODIS_AOD_RETRIEVAL, 'KIND_MODIS_AOD_RETRIEVAL')
+!
+! APM --
 obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
 obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
 obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')

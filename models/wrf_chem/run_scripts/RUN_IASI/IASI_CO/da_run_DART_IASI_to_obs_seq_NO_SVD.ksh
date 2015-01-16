@@ -4,10 +4,8 @@
 # TO SETUP AN ENVIRONMENT TO CONVERT OBSERVATIONS TO obs_seq.
 #
 # SET TIME INFORMATION
-  export START_DATE=2008060118
-  export END_DATE=2008063006
-#  export START_DATE=2008061218
-#  export END_DATE=2008061218
+  export START_DATE=2008060106
+  export END_DATE=2008063018
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
@@ -22,9 +20,9 @@
 #
 # INDEPENDENT DIRECTORIES
   export ROOT_DIR=/glade/p/work/mizzi
-  export DATA_DIR=/glade/p/acd/mizzi/for_arthur/IASI/proc_files
+  export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_IASI_CO_DnN_dat_No_SVD
   export ASIM_DIR=/glade/scratch/mizzi/IASI_to_OBSSEQ
-  export OBS_IASI_DIR=/glade/p/acd/mizzi/for_arthur/IASI/proc_files
+  export OBS_IASI_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_IASI_CO_DnN_Mig_DA_DBL
 #
 # DEPENDENT DIRECTORIES
   export CODE_DIR=${ROOT_DIR}/TRUNK
@@ -127,10 +125,13 @@
 #
 # COPY OUTPUT TO ARCHIVE LOCATION
         export IASI_FILE=iasi_obs_seq${D_DATE}
-        cp ${IASI_FILE} ${OBS_IASI_DIR}/obs_seq_iasi_${D_DATE}
+        if [[ -e ${IASI_FILE} ]]; then
+           cp ${IASI_FILE} ${OBS_IASI_DIR}/obs_seq_iasi_${D_DATE}
+        else
+           touch ${OBS_IASI_DIR}/NO_DATA_${D_DATE}
+        fi
 #
 # LOOP TO NEXT DAY AND TIME 
-     export P_DATE=${L_DATE}
-     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${TIME_INC} 2>/dev/null)  
+     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${TIME_INC} 2>/dev/null)  
   done 
 exit

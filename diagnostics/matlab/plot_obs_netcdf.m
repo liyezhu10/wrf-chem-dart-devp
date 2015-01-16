@@ -202,6 +202,9 @@ else
       pstruct.axis = [xmin xmax ymin ymax zmin zmax];
       pstruct.str1 = sprintf('%s level (%.2f - %.2f)',obsstruct.ObsTypeString,zmin,zmax);
 
+%APM The plot_3D statement causes the crash - openCL not installed correctly
+%obsstruct=0
+%return
       plot_3D(obsstruct, pstruct);
 
    end
@@ -215,6 +218,8 @@ else
    end
 
 end
+obsstruct=0
+return
 
 %% Create graphic of spatial distribution of 'flagged' observations & their QC value.
 %

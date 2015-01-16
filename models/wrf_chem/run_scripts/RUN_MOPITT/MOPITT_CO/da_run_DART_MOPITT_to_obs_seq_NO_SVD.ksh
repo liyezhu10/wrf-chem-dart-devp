@@ -5,9 +5,7 @@
 #
 # SET TIME INFORMATION
   export START_DATE=2008060106
-  export END_DATE=2008063006
-#  export START_DATE=2008061218
-#  export END_DATE=2008061218
+  export END_DATE=2008063018
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
@@ -22,8 +20,8 @@
 #
 # INDEPENDENT DIRECTORIES
   export ROOT_DIR=/glade/p/work/mizzi
-  export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_MOPITT_dat_No_SVD
-#  export DATA_DIR=/glade/p/acd/mizzi/for_arthur/MOPITT/proc_files
+#  export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_MOPITT_dat_No_SVD
+  export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA/obs_MOPITT_CO_DnN_dat_No_SVD
   export ASIM_DIR=/glade/scratch/mizzi/MOPITT_to_OBSSEQ
   export OBS_MOPITT_DIR=/glade/p/acd/mizzi/for_arthur/MOPITT/proc_files
 #
@@ -129,7 +127,6 @@
         cp ${MOPITT_FILE} ${OBS_MOPITT_DIR}/obs_seq_mopitt_${D_DATE}
 #
 # LOOP TO NEXT DAY AND TIME 
-     export P_DATE=${L_DATE}
-     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${TIME_INC} 2>/dev/null)  
+     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${TIME_INC} 2>/dev/null)  
   done 
 exit

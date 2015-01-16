@@ -25,7 +25,8 @@ export WRF_VER=WRFv3.4_dmpar
 export DART_VER=DART_CHEM
 #
 # Set job submission parameters
-export PROJ_NUMBER=P19010000
+#export PROJ_NUMBER=P19010000
+export PROJ_NUMBER=NACD0002
 export TIME_LIMIT=0:10
 export NUM_TASKS=32
 export TASKS_PER_NODE=8
@@ -34,12 +35,11 @@ export SINGLE_FILE=false
 #
 # EXPERIMENT DETAILS:
 #export INITIAL_DATE=2008061800
-export INITIAL_DATE=2008060200
-export FINAL_DATE=2008060200
-#export INITIAL_DATE=2008062900
-#export FINAL_DATE=2008063018
+export INITIAL_DATE=2008072806
+export FINAL_DATE=2008073118
 export NUM_MEMBERS=20
-export NUM_PROCS=export MEM_START=1
+export NUM_PROCS=8
+export MEM_START=1
 export REGION=dart_test
 export NNXP=101
 export NNYP=41
@@ -427,7 +427,6 @@ EOF
    bsub -K < job.ksh 
 #   mpirun -np ${NUM_PROCS} ./geogrid.exe
 fi
-exit
 #
 # LOOP THROUGH DATES TO CREATE INPUT FILES
 while [[ ${DATE} -le ${FINAL_DATE} ]] ; do 

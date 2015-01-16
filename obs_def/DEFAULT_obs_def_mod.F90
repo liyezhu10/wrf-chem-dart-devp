@@ -452,6 +452,14 @@ character(len=5)  :: header
 integer           :: o_index
 logical           :: is_ascii
 character(len=32) :: fileformat   ! here for backwards compatibility only
+! APM +++   
+real                :: apm_scale
+integer             :: apm_kind_ind
+character(len=32)   :: apm_kind_name
+character(len=129)  :: msgstring
+logical             :: apm_scale_sw
+namelist /obs_def_apm_nml/ apm_scale,apm_scale_sw
+! APM ---
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -525,7 +533,22 @@ if (is_ascii) then
 else
    read(ifile)    obs_def%error_variance
 endif
-
+!                                                                                                                  !! APM +++
+! Code to scale the obs error
+! Open and read namelist data
+open(unit=210,file='obs_def_apm.nml',form='formatted', &
+status='old',action='read')
+read(210,obs_def_apm_nml)
+!write(msgstring, *) 'APM: apm_scale=', apm_scale,apm_scale_sw
+!call error_handler(E_MSG,'read_obs_def_', msgstring, source, revision, revdate)
+close(210)
+apm_kind_ind=get_obs_kind(obs_def)
+apm_kind_name=get_obs_kind_name(apm_kind_ind)
+if (apm_scale_sw.eq..TRUE. .and. trim(apm_kind_name).eq.'MOPITT_CO_RETRIEVAL') then
+    obs_def%error_variance = apm_scale*apm_scale*obs_def%error_variance
+endif
+! APM ___
+!
 end subroutine read_obs_def
 
 !----------------------------------------------------------------------------

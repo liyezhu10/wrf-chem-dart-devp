@@ -99,6 +99,10 @@ integer  :: output_interval     = 1
 integer  :: num_groups          = 1
 real(r8) :: outlier_threshold   = -1.0_r8
 logical  :: enable_special_outlier_code = .false.
+!
+! APM: +++
+real(r8) :: special_outlier_threshold   = -1.0_r8
+! APM: ---
 real(r8) :: input_qc_threshold  = 3.0_r8
 logical  :: output_forward_op_errors = .false.
 logical  :: output_timestamps        = .false.
@@ -144,6 +148,10 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
    silence
+!
+! APM: +++
+namelist /filter_apm_nml/ special_outlier_threshold
+! APM: ---
 
 
 !----------------------------------------------------------------
@@ -193,6 +201,19 @@ call filter_initialize_modules_used()
 call find_namelist_in_file("input.nml", "filter_nml", iunit)
 read(iunit, nml = filter_nml, iostat = io)
 call check_namelist_read(iunit, io, "filter_nml")
+
+!
+! APM: +++
+! Read special outlier threshold from filter_apm_nml
+if (enable_special_outlier_code) then
+   open(unit=210,file='filter_apm.nml',form='formatted', &
+   status='old',action='read')
+   read(210,filter_apm_nml)
+   write(msgstring, *) 'APM: special_outlier_threshold=', special_outlier_threshold
+   call error_handler(E_MSG,'filter_main', msgstring, source, revision, revdate)
+   close(210)
+endif
+! APM: ---
 
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
@@ -1558,8 +1579,10 @@ do j = 1, obs_ens_handle%my_num_vars
          ! obs type for this obs.
          ! the function should return .true. if this is an outlier, .false. if it is ok.
          if (enable_special_outlier_code) then
-            failed = failed_outlier(ratio, outlier_threshold, obs_ens_handle, &
-                                    OBS_KEY_COPY, j, seq)
+! APM: +++ (modified to add special_outlier_threshold)
+            failed = failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
+                                    obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: ---
          else 
             failed = (ratio > outlier_threshold)
          endif
@@ -1865,8 +1888,10 @@ endif
 end subroutine print_obs_time
 
 !-------------------------------------------------------------------------
-
-function failed_outlier(ratio, outlier_threshold, obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: +++ (modified to add special_outlier_threshold)
+function failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
+                        obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: ---
 
 ! return true if the observation value is too far away from the ensemble mean
 ! and should be rejected and not assimilated.
@@ -1877,6 +1902,9 @@ use obs_kind_mod         ! this allows you to use all the types available
 
 real(r8),                intent(in) :: ratio
 real(r8),                intent(in) :: outlier_threshold
+! APM: +++
+real(r8),                intent(in) :: special_outlier_threshold
+! APM: ---
 type(ensemble_type),     intent(in) :: obs_ens_handle
 integer,                 intent(in) :: OBS_KEY_COPY
 integer,                 intent(in) :: j
@@ -1919,8 +1947,14 @@ this_obs_type = get_obs_kind(obs_def)
 ! to make decisions.  you have the observation so any other part (e.g. the
 ! time, the value, the error) is available to you as well.
 
-select case (this_obs_type)
-
+select case(this_obs_type) 
+   case (MOPITT_CO_RETRIEVAL)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+!
 ! example of specifying a different threshold value for one obs type:
 !   case (RADIOSONDE_TEMPERATURE)
 !      if (ratio > some_other_value) then
@@ -1928,7 +1962,7 @@ select case (this_obs_type)
 !      else
 !         failed_outlier = .false.
 !      endif
-
+!
 ! accept all values of this observation type no matter how far
 ! from the ensemble mean:
 !   case (AIRCRAFT_U_WIND_COMPONENT, AIRCRAFT_V_WIND_COMPONENT)
@@ -1940,7 +1974,6 @@ select case (this_obs_type)
       else
          failed_outlier = .false.
       endif
-
 end select
 
 end function failed_outlier

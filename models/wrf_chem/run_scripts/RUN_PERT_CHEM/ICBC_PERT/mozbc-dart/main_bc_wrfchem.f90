@@ -94,6 +94,7 @@
 !-----------------------------------------------------------------
 !     read control variables
 !-----------------------------------------------------------------
+      print *, 'APM: in mozbc'
       spc_map(:) = ' ' 
       read(*,nml=control,iostat=istat)
       if( istat /= 0 ) then

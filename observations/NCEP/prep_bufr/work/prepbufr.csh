@@ -40,7 +40,7 @@
 # this script still processes a day's worth of files at a time even if
 # daily is 'no' - it just makes 4 individual files per day.
 
-set    daily = yes
+set    daily = no
 
 # if daily is 'no' and zeroZ is 'yes', input files at 0Z will be translated 
 # into output files also marked 0Z.  otherwise, they will be named with the 
@@ -57,13 +57,13 @@ set zeroZ = no
 # it is not needed for ibm power systems.  any value other than 'yes' will
 # skip the convert step.
 
-set  convert = yes 
+set  convert = no 
 
 # if block is 'yes', then the cword program will be run to convert an
 # unblocked file into a blocked one.  this is not required for recent
 # prepbufr files, but older ones may require it.
 
-set block = no
+set block = yes
 
 # starting year, month, day, and ending day.  this script does not allow
 # you to do more than a single month at a time, but does handle the last
@@ -78,7 +78,7 @@ set block = no
 # then set commline to 'yes'.  otherwise, set the year, month, and days 
 # directly in the variables below.
 
-set commline = no
+set commline = yes
 
 if ($commline == 'yes') then
   set year     = $argv[1]
@@ -86,10 +86,10 @@ if ($commline == 'yes') then
   set beginday = $argv[3]
   set endday   = $argv[4]
 else
-  set year     = 2010
-  set month    = 12
-  set beginday = 22
-  set endday   = 22
+  set year     = ${DT_YYYY}
+  set month    = ${DT_MM}
+  set beginday = ${DT_DD}
+  set endday   = ${DT_DD}
 endif
 
 # directory where the BUFR files are located.  the script assumes the
@@ -111,11 +111,14 @@ endif
 # 'oyear', 'omm', 'odd', 'ohh' are the original date, if the day, month, 
 # and/or year have rolled over.
 
-set BUFR_dir = ../data
+#set BUFR_dir = ../data
+set BUFR_dir = ${ASIM_DIR}/prep_bufr
 
 # directory where DART prepbufr programs are located, relative
 # to the directory where this script is going to be executed.
 set DART_exec_dir = ../exe
+#set DART_exec_dir = ${DART_DIR}/observations/NCEP/prep_bufr/exe
+set DART_exec_dir = $argv[5]
 
 # END USER SET PARAMETERS
 #--------------------------------------------------------------
@@ -198,7 +201,8 @@ while ( $day <= $last )
       # fix the BUFR_in line below to match what you have.  if the file is
       # gzipped, you can leave it and this program will unzip it before
       # processing it.
-      set BUFR_in = ${BUFR_dir}/${year}${mm}/prepqm${yy}${mm}${dd}${hh}
+#      set BUFR_in = ${BUFR_dir}/${year}${mm}/prepqm${yy}${mm}${dd}${hh}
+      set BUFR_in = ${BUFR_dir}/prepqm${yy}${mm}${dd}${hh}
 
       if ( -e ${BUFR_in} ) then
          echo "copying ${BUFR_in} into prepqm.in"
@@ -259,10 +263,12 @@ while ( $day <= $last )
       else
          if ($zeroZ == 'yes') then
             # if 0Z, output named with current day and 0Z
-            set BUFR_out = ${BUFR_dir}/${year}${mm}/temp_obs.${year}${mm}${dd}${hh}
+#            set BUFR_out = ${BUFR_dir}/${year}${mm}/temp_obs.${year}${mm}${dd}${hh}
+            set BUFR_out = ${BUFR_dir}/temp_obs.${year}${mm}${dd}${hh}
          else
             # if 0Z, output named with previous day and 24Z
-            set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}${ohh}
+#            set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}${ohh}
+            set BUFR_out = ${BUFR_dir}/temp_obs.${oyear}${omm}${odd}${ohh}
          endif
          echo "moving output to ${BUFR_out}"
          mv -fv prepqm.out ${BUFR_out}
@@ -271,7 +277,8 @@ while ( $day <= $last )
 
    if ($daily == 'yes') then
       # use the original dates without rollover
-      set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}
+#      set BUFR_out = ${BUFR_dir}/${oyear}${omm}/temp_obs.${oyear}${omm}${odd}
+      set BUFR_out = ${BUFR_dir}/temp_obs.${oyear}${omm}${odd}
       echo "moving output to ${BUFR_out}"
       mv -fv temp_obs ${BUFR_out}
    endif

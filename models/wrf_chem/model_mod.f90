@@ -67,15 +67,14 @@ use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                               get_raw_obs_kind_index, get_num_raw_obs_kinds, &
                               get_raw_obs_kind_name
 ! APM/AFAJ ++
-! Mods for IASI chemistry
-use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN, 
+! Mods for chemistry
+use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN, &
                               KIND_MOPITT_CO_RETRIEVAL, KIND_IASI_CO_RETRIEVAL, KIND_IASI_O3, &
                               KIND_NO, KIND_NO2, KIND_HNO3, KIND_HNO4, &
                               KIND_N2O5, KIND_PAN, KIND_MEK, KIND_ALD, KIND_CH3O2, &
                               KIND_C3H8, KIND_C2H6, KIND_ACET, KIND_HCHO, KIND_C2H4, &
                               KIND_C3H6, KIND_TOL, KIND_MVK, KIND_BIGALK, KIND_ISOPR, &
                               KIND_MACR, KIND_GLYALD, KIND_C10H16, &
-                              KIND_MOPITT_CO, KIND_CO_MIXING_RATIO, &
                               KIND_AOD, &
                               KIND_CB1, KIND_CB2, KIND_OC1, KIND_OC2, &
                               KIND_DMS, KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
@@ -83,7 +82,7 @@ use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN,
                               KIND_SSLT04, &
                               KIND_DST05, &
                               KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM10, KIND_PM25 
+                              KIND_PM10, KIND_PM25, KIND_MODIS_AOD_RETRIEVAL 
 ! APM/AFAJ --
 
 ! FIXME:
@@ -3146,7 +3145,7 @@ else
 !
 ! APM/AFAJ ++
    !-----------------------------------------------------
-   ! 1.zb MOPITT CO Retrieval (CO)
+   ! 1.zb MOPITT and IASI CO Retrieval (CO)
 
    else if( obs_kind == KIND_CO ) then
       if ( wrf%dom(id)%type_co >= 0 ) then
@@ -3191,7 +3190,6 @@ else
 !
 ! APM/AFAJ ++
    !-----------------------------------------------------
-
    ! 1.zc Aerosol Optical Depth (TAUAER1, TAUAER2, TAUAER3, TAUAER4)
    !      added by AFAJ Ave Arellano for AOD assimilation
    !      currently we do not have AOD that exactly match the wavelength

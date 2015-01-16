@@ -213,7 +213,7 @@ foreach file ($files)
     set date  = `echo $file | cut -d_ -f3`
     set secs  = `echo $file | cut -d_ -f4`
     set ensno = `echo $file | cut -d_ -f5`
-    set bdy_file = "wrfbdy_d01_${date}_${secs}.e${ensno}"
+    set bdy_file = "wrfbdy_d01.${date}_${secs}.e${ensno}"
     if( ! -e $bdy_file ) then
       echo "File $bdy_file not found; $prog terminating"
       exit -1
@@ -224,6 +224,7 @@ end
 if( -e wrfinput_d01 ) then
   rm -f wrfinput_d01
 endif
+
 if( $bnd_typ == BC ) then
   set inp_file = `ls wrfinput_d01_*`
   echo $inp_file
@@ -233,12 +234,14 @@ if( $bnd_typ == BC ) then
     exit -1
   endif
 endif
+
 if( -e wrfbdy_d01 ) then
   rm -f wrfbdy_d01
 endif
 #---------------------------------------
 #  loop over files
 #---------------------------------------
+
 foreach file ($files)
   if( $bnd_typ == IC || $bnd_typ == BOTH ) then
 #---------------------------------------
@@ -253,7 +256,7 @@ foreach file ($files)
       set date  = `echo $file | cut -d_ -f3`
       set secs  = `echo $file | cut -d_ -f4`
       set ensno = `echo $file | cut -d_ -f5`
-      set bdy_file = "wrfbdy_d01_${date}_${secs}.e${ensno}"
+      set bdy_file = "wrfbdy_d01.${date}_${secs}.e${ensno}"
       ln -s $bdy_file wrfbdy_d01 >& /dev/null
       if( $status ) then
         echo "Failed to link $bdy_file to wrfbdy_d01"

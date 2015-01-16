@@ -28,7 +28,7 @@ export LBC_FREQ=3
 # Define special directory names
 export EMISSIONS_DIR=chem_static_100km_p00
 export WPB_RC_DIR=wpb_rc_chem_100km_p10
-export OBS_SEQ_DIR=obs_MOPCOMB_Mig_DA_filt_A
+export OBS_SEQ_DIR=obs_MOPCOMB_Mig_DA_filt
 export OBS_SEQ_FLNAME=obs_seq_comb_filtered_
 #
 # Special skips
@@ -79,8 +79,8 @@ export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
 #
 # Set job submission parameters
-export PROJ_NUMBER=P19010000
-export TIME_LIMIT_FILTER=1:59
+export PROJ_NUMBER=${W_PROJ_NUMBER}
+export TIME_LIMIT_FILTER=3:59
 export TIME_LIMIT_WRF=0:59
 export NUM_TASKS=32
 export TASKS_PER_NODE=8
@@ -322,10 +322,8 @@ if ${RUN_CREATE_NAMELISTS}; then
 #
 # &assim_tools_nml
    export NL_CUTOFF=0.1
-   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_O3_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
+   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
    export NL_SAMPLING_ERROR_CORRECTION=.true.
-#   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.05   ! AFAJ
-#   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.025   ! APM
    export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1
    export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
 #
@@ -467,7 +465,7 @@ if ${RUN_CREATE_NAMELISTS}; then
                        '${DART_DIR}/obs_def/obs_def_gps_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
-                       '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
+                       '${DART_DIR}/obs_def/obs_def_IASI_CO_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_MODIS_AOD_mod.f90'"
 #
@@ -1227,6 +1225,15 @@ EOF
          cat <<EOF > filter_apm.nml
 &filter_apm_nml
 special_outlier_threshold=${NL_SPECIAL_OUTLIER_THRESHOLD}
+/
+EOF
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+         rm -rf obs_def_apm.nml
+         cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
 /
 EOF
 #

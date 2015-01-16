@@ -14,8 +14,11 @@ export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export DART_VER=DART_CHEM
 #
 # EXPERIMENT DETAILS:
-export START_DATE=2008061218
-export END_DATE=2008061218
+export START_DATE=2008063006
+export START_DATE=2008070100
+export START_DATE=2008071100
+export END_DATE=2008073118
+export END_DATE=2008072718
 export NUM_MEMBERS=20
 export MEM_START=1
 export FCST_RANGE=6
@@ -95,6 +98,10 @@ while [[ ${DATE} -le ${END_DATE} ]] ; do
    cp ${DART_PERT_DIR}/set0 ./.
    cp ${DART_PERT_DIR}/set00 ./.
 #
+# SELECT MOZART DATA FILE
+  if [[ ${MM} -eq 06 ]]; then export MOZART_DATA=h0001.nc; fi
+  if [[ ${MM} -eq 07 ]]; then export MOZART_DATA=h0002.nc; fi
+#
 # CREATE INPUT FILES
    rm -rf mozbc.both.inp
    cat << EOF > mozbc.both.inp
@@ -104,7 +111,7 @@ do_ic     = .true.
 domain    = 1
 dir_wrf  = '${RUN_DIR}/${DATE}/'
 dir_moz = '${DART_PERT_DIR}/MOZART/'
-fn_moz  = 'h0001.nc'
+fn_moz  = '${MOZART_DATA}'
 def_missing_var = .true.
 met_file_prefix  = 'met_em'
 met_file_suffix  = '.nc'
@@ -141,7 +148,7 @@ do_ic     = .true.
 domain    = 1
 dir_wrf  = '${RUN_DIR}/${DATE}/'
 dir_moz = '${DART_PERT_DIR}/MOZART/'
-fn_moz  = 'h0001.nc'
+fn_moz  = '${MOZART_DATA}'
 def_missing_var = .true.
 met_file_prefix  = 'met_em'
 met_file_suffix  = '.nc'
@@ -155,7 +162,7 @@ do_ic     = .false.
 domain    = 1
 dir_wrf  = '${RUN_DIR}/${DATE}/'
 dir_moz = '${DART_PERT_DIR}/MOZART/'
-fn_moz  = 'h0001.nc'
+fn_moz  = '${MOZART_DATA}'
 def_missing_var = .true.
 met_file_prefix  = 'met_em'
 met_file_suffix  = '.nc'

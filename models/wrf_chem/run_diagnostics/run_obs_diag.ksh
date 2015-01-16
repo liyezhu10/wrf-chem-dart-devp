@@ -1,4 +1,3 @@
-
 #!/bin/ksh -x
 ###############################################################################
 #
@@ -9,12 +8,15 @@
 # Define experiment parameters
 export START_DATE=2008061006
 export START_DATE=2008060112
-export END_DATE=2008062112
+export END_DATE=2008061500
 export END_DATE=2008062900
+#export END_DATE=2008061118
 #
 #export START_DATE=2008060112
 #export END_DATE=2008060200
 #
+export NL_APM_SCALE=1.
+export NL_APM_SCALE_SW=.FALSE.
 export DOMAIN=01
 export NUM_MEMBERS=20
 export CYCLE_PERIOD=6
@@ -56,13 +58,30 @@ export JOB_CLASS=small
 #export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30_loc
 #export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30
 #
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_a_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_1_p10p30
 #export DIR_NAME=MOPCOMB_Exp_3_MgDA_20M_100km_p10p00
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_p10p30
-export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_a_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_b_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_1_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_2_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_loc_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_bloc_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bloc_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p75
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p50
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p60
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p55
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_NV_p10p30
+#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_bloc_p10p30
+export DIR_NAME=MOPCOMB_Exp_2_Mg_XXXnIAS_20M_100km_p10p30
+export DIR_NAME=MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_p10p30
+export DIR_NAME=MOPCOMB_Exp_2_Mg_MOPnXXX_20M_100km_p10p30
+export DIR_NAME=MOPCOMB_Exp_2_MgDA_ROE_p75_20M_100km_p10p30
+export DIR_NAME=IASCOMB_O3_Exp_2_MgDA_20M_100km_p10p30/
+#
 #
 # Independent path settings
 export SCRATCH_DIR=/glade/scratch/mizzi
@@ -77,6 +96,7 @@ export TRUNK_DIR=${PROJECT_DIR}/TRUNK
 export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
 export HSI_DATA_DIR=${HSI_DIR}/AVE_TEST_DATA
 export SAVE_DIR=${SCRATCH_DIR}/DART_TEST_AVE/${DIR_NAME}
+#export SAVE_DIR=${ACD_DIR}/DART_TEST_AVE/${DIR_NAME}
 export HSI_SAVE_DIR=${HSI_DIR}/DART_TEST_AVE/${DIR_NAME}
 #
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
@@ -279,8 +299,8 @@ export NL_PRINT_TABLE=.false.
 #
 # &assim_tools_nml
    export NL_CUTOFF=0.1
-   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_O3_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
-   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.025
+   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
+   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.025
 #
 # &ensemble_manager_nml
    export NL_SINGLE_RESTART_FILE_IN=.false.       
@@ -393,7 +413,6 @@ export NL_PRINT_TABLE=.false.
                        '${DART_DIR}/obs_def/obs_def_gps_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
-                       '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90'"
 #
 # &obs_kind_nml
@@ -408,8 +427,9 @@ export NL_PRINT_TABLE=.false.
                                       'AIRCRAFT_TEMPERATURE',
                                       'SAT_U_WIND_COMPONENT',
                                       'SAT_V_WIND_COMPONENT',
-                                      'IASI_O3_RETRIEVAL',
-                                      'MOPITT_CO_RETRIEVAL'"
+                                      'MOPITT_CO_RETRIEVAL',
+                                      'IASI_CO_RETRIEVAL',
+                                      'IASI_O3_RETRIEVAL'"
 #
 # &replace_wrf_fields_nml
    export NL_FIELDNAMES="'SNOWC',
@@ -436,6 +456,16 @@ ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 ###############################################################################
 #
 cd ${RUN_DIR}
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+         rm -rf obs_def_apm.nml
+         cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
+/
+EOF
+#
 ./obs_diag
 #
 # Remove work/run files
@@ -447,5 +477,3 @@ rm -rf input.nml
 rm -rf LargeInnov.txt
 rm -rf obs_diag
 exit
-
-

@@ -16,7 +16,7 @@ export INITIAL_FILE_DATE=2008-06-10_12:00:00
 export FIRST_FILTER_DATE=${INITIAL_DATE}
 export COLD_START_LIMIT=2
 export DOMAIN=01
-export NUM_MEMBERS=40
+export NUM_MEMBERS=20
 export CYCLE_PERIOD=6
 export DBL_CYCLE_PERIOD=12
 export FCST_PERIOD=6
@@ -37,6 +37,9 @@ export RUN_INITIAL_WRFCHEM=true
 export RUN_FILTER=true
 export RUN_WRFCHEM=true
 export RUN_ARCHIVE=true
+#
+export NL_APM_SCALE=1.
+export NL_APM_SCALE_SW=.FALSE.
 #
 # Define warm start run options
 export RUN_WARM=false
@@ -66,18 +69,14 @@ if [[ ! ${RUN_WARM} == true ]]; then
 fi
 #
 # Define use options
-export USE_HSI=true
+export USE_HSI=false
 export USE_DART_INFL=true
 #
 # Define special directory names
-export EMISSIONS_DIR=chem_static
-export WPB_RC_DIR=wpb_rc_barre
-export WPB_RC_DIR=wpb_rc_chem_N20S05
+export EMISSIONS_DIR=chem_static_100km_p30
+export WPB_RC_DIR=wpb_rc_chem_100km_p10
 export OBS_SEQ_DIR=obs
-export OBS_SEQ_DIR=obs_MOPCOMB_Std_SVD
-export OBS_SEQ_DIR=obs_MOPCOMB_Std_SVD_filt
-export OBS_SEQ_DIR=obs_MOPCOMB_Trc_Ret
-export OBS_SEQ_DIR=obs_MOPCOMB_Trc_Ret_filt
+export OBS_SEQ_DIR=obs_MOPCOMB_Mig_DA_filt
 export OBS_SEQ_FLNAME=obs_seq_comb_
 export OBS_SEQ_FLNAME=obs_seq_comb_filtered_
 export OBS_SEQ_OUT_NAME=obs_seq_perf_
@@ -90,21 +89,22 @@ export WRFDA_VER=WRFDAv3.4_dmpar
 #
 # Set job submission parameters
 export PROJ_NUMBER=P19010000
+export PROJ_NUMBER=NNES0003
+export PROJ_NUMBER=NACD0002
 export TIME_LIMIT_FILTER=1:40
 export TIME_LIMIT_PERFM=1:40
 export TIME_LIMIT_WRF=1:40
 export NUM_TASKS=32
 export TASKS_PER_NODE=16
-export JOB_CLASS_FILTER=small
-export JOB_CLASS_PERFM=small
-export JOB_CLASS_WRF=small
+export JOB_CLASS_FILTER=regular
+export JOB_CLASS_PERFM=regular
+export JOB_CLASS_WRF=regular
 #
 # Define independent directory paths
 export TRUNK_DIR=/glade/p/work/mizzi/TRUNK
 export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
 export HSI_DATA_DIR=/MIZZI/AVE_TEST_DATA
-export RC_DIR=rc_barre
-export RC_DIR=rc_chem_N20S05
+export RC_DIR=rc_chem_100km_p10
 export RUN_DIR=/glade/scratch/mizzi/PERFECT_MODEL
 export HSI_RUN_DIR=/MIZZI/PERFECT_MODEL
 #
@@ -432,17 +432,17 @@ while [[ ${L_DATE} -lt ${END_DATE} ]]; do
    export NL_TIME_STEP_FRACT_DEN=1
    export NL_MAX_DOM=1
    export NL_S_WE=1
-   export NL_E_WE=271
+   export NL_E_WE=101
    export NL_S_SN=1
-   export NL_E_SN=101
+   export NL_E_SN=41
    export NL_E_VERT=34
    export NL_P_TOP_REQUESTED=1000
    export NL_INTERP_TYPE=1
    export NL_T_EXTRAP_TYPE=1
    export NL_NUM_METGRID_LEVELS=27
    export NL_NUM_METGRID_SOIL_LEVELS=4
-   export NL_DX=36000.0
-   export NL_DY=36000.0
+   export NL_DX=100000.0
+   export NL_DY=100000.0
    export NL_GRID_ID=1
    export NL_PARENT_ID=0
    export NL_I_PARENT_START=0
@@ -483,6 +483,7 @@ while [[ ${L_DATE} -lt ${END_DATE} ]]; do
    export NL_CU_DIAG=1
    export NL_PROGN=0
    export NL_CUGD_AVEDX=1
+   export NL_NUM_LAND_CAT=24
 #
 # DYNAMICS
    export NL_USE_BASEPARAM_FR_NML=.true.
@@ -852,6 +853,15 @@ EOF
       rm input.nml
       ${DART_DIR}/models/wrf_chem/namelist_scripts/WRFCHEM/wrfchem_create_namelist.input.ksh
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+         rm -rf obs_def_apm.nml
+         cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
+/
+EOF
 #     
 # Create job script 
       rm perfm_*.out
@@ -1140,8 +1150,8 @@ EOF
             export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
          done
       else
-         export LL_DATE=${L_DATE}
-         while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+         export LL_DATE=${PAST_DATE}
+         while [[ ${LL_DATE} -le ${L_DATE} ]]; do
             export LL_YY=`echo ${LL_DATE} | cut -c1-4`
             export LL_MM=`echo ${LL_DATE} | cut -c5-6`
             export LL_DD=`echo ${LL_DATE} | cut -c7-8`
@@ -1172,10 +1182,62 @@ EOF
       let IMEM=1
       while [[ ${IMEM} -le ${NUM_MEMBERS} ]]; do
          export KMEM=${IMEM}
+         export CMEM=${IMEM}
          if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
-         if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; fi
-         if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; fi
-#    
+         if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
+         if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
+#
+# APM: START NEW CODE FOR WRFCHEM_RUN_DIR/MEMBER_XXX
+#
+# Copy the wrfchem static chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
+         cd ${CENTRALDIR}/WRFCHEM_RUN
+         if [[ ! -d MEMBER_${KMEM} ]]; then
+            mkdir -p ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+            cd ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+         else
+            cd ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+         fi
+         rm -rf wrfbiochemi_*
+         rm -rf wrfchemi_*
+         rm -rf wrffirechemi_*
+         cp ${CENTRALDIR}/advance_time ./.
+         cp ${CENTRALDIR}/input.nml ./.
+         if ${USE_HSI}; then
+            hsi get wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
+         else
+            cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
+         fi
+#
+# Copy the wrfchem time dependent chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
+         if ${USE_HSI}; then
+            export LL_DATE=${L_DATE}
+            while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+               export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+               export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+               export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+               export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+               export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+               hsi get wrfchemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
+               hsi get wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
+               export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
+            done
+         else
+            export LL_DATE=${L_DATE}
+            while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+               export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+               export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+               export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+               export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+               export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
+               export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
+            done
+         fi
+         cd ${CENTRALDIR}
+#
+# APM: END NEW CODE FOR WRFCHEM_RUN_DIR/MEMBER_XXX
+#
 # Create filter control file
          if [[ -f filter_control_${KMEM} ]]; then rm -rf filter_control_${KMEM}; fi
          touch filter_control_${KMEM} 
@@ -1386,6 +1448,15 @@ EOF
       export NL_PRINT_DATA_RANGES=.false.
       rm input.nml
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
+#
+# Make obs_def_apm_nml for apm_scale to adjust observation error variance
+      rm -rf obs_def_apm.nml
+      cat <<EOF > obs_def_apm.nml
+&obs_def_apm_nml
+apm_scale=${NL_APM_SCALE}
+apm_scale_sw=${NL_APM_SCALE_SW}
+/
+EOF
 #
 # APM: modify for submission to geyser or caldera
 # Create job script
@@ -1730,9 +1801,61 @@ EOF
       let IMEM=1
       while [[ ${IMEM} -le ${NUM_MEMBERS} ]]; do
          export KMEM=${IMEM}
+         export CMEM=${IMEM}
          if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
-         if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; fi
-         if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; fi
+         if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
+         if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
+#
+# APM: START NEW CODE FOR WRFCHEM_RUN_DIR/MEMBER_XXX
+#
+# Copy the wrfchem static chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
+         cd ${CENTRALDIR}/WRFCHEM_RUN
+         if [[ ! -d MEMBER_${KMEM} ]]; then
+            mkdir -p ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+            cd ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+         else
+            cd ${CENTRALDIR}/WRFCHEM_RUN/MEMBER_${KMEM}
+         fi
+         rm -rf wrfbiochemi_*
+         rm -rf wrfchemi_*
+         rm -rf wrffirechemi_*
+         cp ${CENTRALDIR}/advance_time ./.
+         cp ${CENTRALDIR}/input.nml ./.
+         if ${USE_HSI}; then
+            hsi get wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
+         else
+            cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
+         fi
+#
+# Copy the wrfchem time dependent chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
+         if ${USE_HSI}; then
+            export LL_DATE=${L_DATE}
+            while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+               export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+               export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+               export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+               export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+               export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+               hsi get wrfchemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
+               hsi get wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
+               export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
+            done
+         else
+            export LL_DATE=${L_DATE}
+            while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+               export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+               export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+               export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+               export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+               export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
+               export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
+            done
+         fi
+         cd ${CENTRALDIR}
+#
+# APM: END NEW CODE FOR WRFCHEM_RUN_DIR/MEMBER_XXX
 #
 # Create filter control file
          if [[ -f filter_control_${KMEM} ]]; then rm -rf filter_control_${KMEM}; fi
