@@ -257,7 +257,6 @@
    / 
 
 &state_vector_io_nml
-   create_restarts = .false.
    /   
 
 &io_filenames_nml
