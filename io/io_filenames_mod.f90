@@ -80,9 +80,9 @@ allocate(restart_files_out(num_files, num_domains, 2)) ! for prior and posterior
 do dom = 1, num_domains
    do i = 1, ens_size  ! restarts
       restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
-      restart_files_out(i, dom, 1) = construct_file_name_out(restart_out_stub, dom, i)
       write(extension, '(i4.4)') i
-      restart_files_out(i, dom, 2) = 'prior_member' // extension
+      restart_files_out(i, dom, 1) = 'prior_member.' // extension
+      restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
    enddo
 enddo
 

@@ -876,18 +876,10 @@ call trace_message('After  writing inflation restart files if required')
 
 ! Output a restart file if requested
 call trace_message('Before writing state restart files if requested')
-if (output_restart) call turn_write_copy_on(1,ens_size) ! restarts
-if (num_output_state_members > 0) call turn_write_copy_on(1, num_output_state_members)
+if (output_restart)      call turn_write_copy_on(1,ens_size) ! restarts
+if (output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
 
 if (diagnostic_files) then
-
-   ! Posterior Diag
-   call turn_write_copy_on(ENS_MEAN_COPY) ! mean
-   call turn_write_copy_on(ENS_SD_COPY) ! sd
-   if (output_inflation) then
-      call turn_write_copy_on(POST_INF_COPY) ! posterior inf mean
-      call turn_write_copy_on(POST_INF_SD_COPY) ! posterior inf sd
-   endif
 
    ! output inflation
    if (inf_output_restart(1)) then
@@ -2056,7 +2048,8 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 
 model_size = 0
 do domain = 1, num_domains
-   netcdf_filename = info_file_name(domain) !first restart
+   !netcdf_filename = info_file_name(domain) !first restart
+   netcdf_filename = restart_files_in(1,1)
    !write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
    call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
    model_size = model_size + domain_size

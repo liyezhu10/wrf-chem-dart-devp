@@ -8557,7 +8557,7 @@ integer,            intent(in) :: domain
 integer,            intent(in) :: copy
 character(len=1024)            :: construct_file_name_out
 
-write(construct_file_name_out, '(A,  A, i2.2, A, i2.2)') TRIM(stub), '_d', domain, '.', copy
+write(construct_file_name_out, '(A,  A, i2.2, A, i4.4)') TRIM(stub), '_d', domain, '.', copy
 
 end function construct_file_name_out
 

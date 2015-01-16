@@ -213,6 +213,7 @@ if(inf_flavor >= 2) then
 
 
    endif
+
    ! Now, if one or both values come from the namelist (i.e. is a single static
    ! value), write or overwrite the arrays here.
    if (.not. mean_from_restart .or. .not. sd_from_restart) then
@@ -268,6 +269,7 @@ if(inf_flavor >= 2) then
 
    endif
 
+   if (.not. direct_netcdf_read) then
    ! this block figures out what the min/max value of the mean/sd is
    ! if we are reading in the values from a restart file.  it is used
    ! in diagnostic output so it needs to get to PE0.  we also could check it
@@ -322,8 +324,9 @@ if(inf_flavor >= 2) then
             call send_to(map_pe_to_task(ens_handle, 0), minmax_sd)
          endif
       endif
-      
-  endif
+
+   endif
+   endif
    
 
 !------ Block for obs. space inflation initialization ------
@@ -484,17 +487,8 @@ if(inflate_handle%output_restart) then
 
       if (.not. direct_netcdf_read ) then
 
-         ! allocating storage space in ensemble manager
-         !  - should this be in ensemble_manager
-         allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
-
-         call all_copies_to_all_vars(ens_handle)
-
          call write_ensemble_restart(ens_handle, inflate_handle%out_file_name, &
             ss_inflate_index, ss_inflate_sd_index, force_single_file = .true.)
-
-         ! deallocate whole state storage - should this be in ensemble_manager 
-         deallocate(ens_handle%vars)
 
       endif
 
