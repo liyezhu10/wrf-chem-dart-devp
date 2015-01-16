@@ -411,7 +411,7 @@ call trace_message('After  initializing inflation')
 call turn_read_copy_on(1, ens_size) ! need to read all restart copies
 
 if (direct_netcdf_read) then
-   call filter_read_restart_direct(ens_handle, time1, ens_size)
+   call filter_read_restart_direct(ens_handle, time1)
 endif
 
 !call all_vars_to_all_copies(ens_handle)
@@ -944,7 +944,9 @@ else ! Glen mode
 
    call turn_write_copy_off(ENS_MEAN_COPY, ens_size + num_extras) ! assumes contiguous
 
-   if(output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
+   ! always ouput the mean and standard deviation
+   call turn_write_copy_on(ENS_MEAN_COPY)
+   call turn_write_copy_on(ENS_SD_COPY)
 
    if (spare_copies) then ! write spare copies
          call turn_write_copy_on(SPARE_COPY_MEAN) ! Prior mean
@@ -2074,11 +2076,10 @@ end subroutine print_obs_time
 !> netcdf file
 !> Which routine should find model size?
 !> 
-subroutine filter_read_restart_direct(state_ens_handle, time, ens_size)!, model_size)
+subroutine filter_read_restart_direct(state_ens_handle, time)!, model_size)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
 type(time_type),     intent(inout) :: time
-integer,             intent(in)    :: ens_size
 !integer,             intent(out)   :: model_size
 
 integer                         :: model_size

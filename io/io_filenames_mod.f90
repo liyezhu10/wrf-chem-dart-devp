@@ -22,7 +22,7 @@ module io_filenames_mod
 
 use utilities_mod, only : do_nml_file, nmlfileunit, do_nml_term, check_namelist_read, &
                           find_namelist_in_file
-use model_mod,     only : construct_file_name_in
+use model_mod,     only : construct_file_name_in, construct_file_name_out
 
 implicit none
 
@@ -41,8 +41,8 @@ integer, parameter :: max_num_files = 5000
 character(len=2048), allocatable :: restart_files_in(:,:), restart_files_out(:,:)
 
 ! Namelist options
-character(len=512) :: restart_in_stub  = 'wrfinput.nc'
-character(len=512) :: restart_out_stub = '/Output/wrfinput.nc'
+character(len=512) :: restart_in_stub  = 'input'
+character(len=512) :: restart_out_stub = 'output'
 
 
 ! Should probably get num_domains, num_restarts from elsewhere. In here for now
@@ -54,7 +54,7 @@ contains
 !> read namelist and set up filename arrays
 subroutine io_filenames_init(ens_size, num_domains, inflation_in, inflation_out)
 
-integer, intent(in) :: ens_size
+integer, intent(in) :: ens_size ! ensemble size + extras
 integer, intent(in) :: num_domains
 integer :: iunit, io
 integer :: dom, num_files, i
@@ -71,7 +71,7 @@ call check_namelist_read(iunit, io, "io_filenames_nml")
 if (do_nml_file()) write(nmlfileunit, nml=io_filenames_nml)
 if (do_nml_term()) write(     *     , nml=io_filenames_nml)
 
-num_files = ens_size + 10 !> @toto
+num_files = ens_size + 10 !> @todo
 
 allocate(restart_files_in(num_files, num_domains))
 allocate(restart_files_out(num_files, num_domains))
@@ -86,9 +86,9 @@ enddo
 ! input extras
 do dom = 1, num_domains
    ! mean -never used
-   write(restart_files_in(ens_size + 1, dom), '(A, i2.2, A)') 'mean_copy_d', dom, '.nc'
+   write(restart_files_in(ens_size + 1, dom), '(A, i2.2, A)') 'mean_d', dom, '.nc'
    ! sd -never used
-   write(restart_files_in(ens_size + 2, dom), '(A, i2.2, A)') 'sd_copy_d',   dom, '.nc'
+   write(restart_files_in(ens_size + 2, dom), '(A, i2.2, A)') 'sd_d',   dom, '.nc'
    ! prior inf copy
    write(restart_files_in(ens_size + 3, dom), '(A, A, i2.2, A)') trim(inflation_in(1)), '_mean_d', dom, '.nc'
    ! prior inf sd copy
@@ -102,23 +102,23 @@ enddo
 ! output extras
 do dom = 1, num_domains
    ! mean
-   write(restart_files_out(ens_size + 1, dom), '(A, i2.2, A)') 'Output/copy1'
+   write(restart_files_out(ens_size + 1, dom), '(A, i2.2, A)') 'mean_d', dom, '.nc'
    ! sd
-   write(restart_files_out(ens_size + 2, dom), '(A, i2.2, A)') 'Output/copy2'
+   write(restart_files_out(ens_size + 2, dom), '(A, i2.2, A)') 'sd_d', dom, '.nc'
    ! prior inf copy
-   write(restart_files_out(ens_size + 3, dom), '(A, A, i2.2, A)') 'Output/copy3'
+   write(restart_files_out(ens_size + 3, dom), '(A, A, i2.2, A)') trim(inflation_out(1)), '_mean_d', dom, '.nc'
    ! prior inf sd copy
-   write(restart_files_out(ens_size + 4, dom), '(A, A, i2.2, A)') 'Output/copy4'
+   write(restart_files_out(ens_size + 4, dom), '(A, A, i2.2, A)') trim(inflation_out(1)), '_sd_d', dom, '.nc'
    ! post inf copy
-   write(restart_files_out(ens_size + 5, dom), '(A, A, i2.2, A)') 'Output/copy5'
+   write(restart_files_out(ens_size + 5, dom), '(A, A, i2.2, A)') trim(inflation_out(2)), '_mean_d', dom, '.nc'
    ! post inf sd copy
-   write(restart_files_out(ens_size + 6, dom), '(A, A, i2.2, A)') 'Output/copy6'
+   write(restart_files_out(ens_size + 6, dom), '(A, A, i2.2, A)') trim(inflation_out(2)), '_sd_d', dom, '.nc'
 
    ! Storage for copies that would have gone in the Prior_diag.nc if we were to write it
-   write(restart_files_out(ens_size + 7, dom), '(A, i2.2, A)') 'Output/copy7'
-   write(restart_files_out(ens_size + 8, dom), '(A, i2.2, A)') 'Output/copy8'
-   write(restart_files_out(ens_size + 9, dom), '(A, i2.2, A)') 'Output/copy9'
-   write(restart_files_out(ens_size + 10, dom), '(A, i2.2, A)') 'Output/copy10'
+   write(restart_files_out(ens_size + 7, dom), '(A, i2.2, A)') 'copy7'
+   write(restart_files_out(ens_size + 8, dom), '(A, i2.2, A)') 'copy8'
+   write(restart_files_out(ens_size + 9, dom), '(A, i2.2, A)') 'copy9'
+   write(restart_files_out(ens_size + 10, dom), '(A, i2.2, A)') 'copy10'
 
 
 enddo
@@ -132,20 +132,6 @@ subroutine end_io_filenames()
 deallocate(restart_files_in, restart_files_out)
 
 end subroutine end_io_filenames
-
-
-!--------------------------------------------------------------------
-!> construct restart file name for writing
-function construct_file_name_out(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_out
-
-write(construct_file_name_out, '(A,  A, i2.2, A, i2.2)') TRIM(stub), '_d', domain, '.', copy
-
-end function construct_file_name_out
 
 !----------------------------------
 !> @}
