@@ -653,7 +653,7 @@ AdvanceTime : do
             call turn_write_copy_on(ENS_SD_COPY)
             if (output_inflation) then
                call turn_write_copy_on(PRIOR_INF_COPY)
-               call turn_write_copy_on(PRIOR_INF_SD_COPY)
+               !call turn_write_copy_on(PRIOR_INF_SD_COPY)
             endif
             call filter_write_restart_direct(ens_handle, isprior = .true.)
 
