@@ -19,11 +19,9 @@ use ensemble_manager_mod, only : ensemble_type, read_ensemble_restart, write_ens
                                  get_copy_owner_index, prepare_to_write_to_vars,                &
                                  prepare_to_read_from_vars, prepare_to_update_vars,             &
                                  map_pe_to_task, all_vars_to_all_copies, all_copies_to_all_vars
-use mpi_utilities_mod,    only : my_task_id, send_to, receive_from, datasize
+use mpi_utilities_mod,    only : my_task_id, send_to, receive_from
 
 use state_vector_io_mod,  only : turn_read_copy_on, turn_write_copy_on
-
-use mpi
 
 implicit none
 private
@@ -101,8 +99,6 @@ logical,                     intent(in)    :: direct_netcdf_read
 character(len = 128) :: det, tadapt, sadapt, akind, rsread, nmread
 integer  :: restart_unit, io, owner, owners_index
 real(r8) :: minmax_mean(2), minmax_sd(2)
-
-integer  :: ierr !> for mpi_reduce call
 
 integer :: junk_int, domain
 

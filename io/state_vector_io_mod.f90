@@ -9,41 +9,12 @@
 !> Don't want to go to the filesystem twice wrf => wrf_to_dart => dart => dart_to_wrf \n
 !> Get a list of variables in the state \n
 !> Get info about their dimenions \n
-!> Every tasks needs the dimensions of each state variable to calculate
-!> what it is going to recieve in the IO transpose
-!> \par Aim:
-!>
-!>To limit the transpose in two ways:
-!>
-!>1. Limit how much of the state vector you can read at once.
-!>2. Limit the number of tasks involved in a transpose.
-!>
-!>What you (potentially) gain from this:
-!>
-!>* Don't have to have the whole state vector.
-!>* Don't have to use a parallel IO library.
-!>
-!>If limit 1 > state vector size and limit 2 > number of tasks, you have the regular transpose, except you are reading directly from a netcdf file, not a dart state vector
-!> file.
-!>
-!> * Reading with limited processors is easy, because you just have muliple readers
-!> duplicating the read.
-!> * Writing with limitied processors is a bit more involved because it is no longer
-!> simply duplicate work.  Every processor has something it needs to contribute to 
-!> the write. Thus, there is a second stage of data aggregation if limit_procs <
-!> task_count.
 
 module state_vector_io_mod
 
-!> \defgroup state_vector_io state_vector_io
-!> Contains all the routines and variables to deal with a limited tranpose
-!> You can limit the transpose by memory using <code>limit_mem</code> and by
-!> processors using <code> limit_procs </code>
-!> @{
+use types_mod,            only : r8, MISSING_R8, digits12
 
-use types_mod,            only : r8, MISSING_R8
-
-use mpi_utilities_mod,    only : task_count, send_to, receive_from, my_task_id, datasize
+use mpi_utilities_mod,    only : task_count, send_to, receive_from, my_task_id
 
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task
 
@@ -58,15 +29,12 @@ use time_manager_mod,     only : time_type
 
 use netcdf
 
-use mpi
-
 use io_filenames_mod,     only : restart_files_in, restart_files_out, io_filenames_init
 
 use copies_on_off_mod
 
 
 implicit none
-
 
 private
 
@@ -87,9 +55,10 @@ character(len=256) :: netcdf_filename !< needs to be different for each task
 character(len=256) :: netcdf_filename_out !< needs to be different for each task
 integer, parameter :: MAXDIMS = NF90_MAX_VAR_DIMS 
 
-integer,            allocatable :: variable_ids(:, :)
-integer,            allocatable :: variable_sizes(:, :)
+integer,   allocatable :: variable_ids(:, :)
+integer,   allocatable :: variable_sizes(:, :)
 integer,   allocatable :: dimensions_and_lengths(:, :, :) !< number of dimensions and length of each dimension
+
 integer :: num_state_variables
 integer :: num_domains
 
@@ -104,13 +73,10 @@ character(len=256), allocatable :: dim_names(:, :, :)
 character(len=256), allocatable :: global_variable_names(:)
 
 ! namelist variables with default values
-! Aim: to have the regular transpose as the default
-integer :: limit_mem = 2147483640!< This is the number of elements (not bytes) so you don't have times the number by 4 or 8
-integer :: limit_procs = 100000!< how many processors you want involved in each transpose.
 logical :: create_restarts = .true. ! what if the restart files exist?
 logical :: time_unlimited = .true. ! You need to keep track of the time.
 
-namelist /  state_vector_io_nml / limit_mem, limit_procs, create_restarts, time_unlimited
+namelist /  state_vector_io_nml / create_restarts, time_unlimited
 
 contains
 
@@ -187,12 +153,6 @@ if(my_task_id() == 0) then
    do i = 1, n
       print*, i, 'variable_sizes', variable_sizes(i, domain), trim(variable_names(i))
    enddo
-endif
-
-if ( any(variable_sizes(:, domain)>limit_mem) ) then
-   print*, 'memory limit = ', limit_mem
-   print*, variable_sizes
-   call error_handler(E_ERR, 'get_state_variable_info', 'netcdf variables larger than memory limit')
 endif
 
 ! close netcdf file
@@ -300,7 +260,6 @@ copies_read = 0
 
 COPIES: do c = 1, state_ens_handle%my_num_copies
 
-   ! what to do if a variable is larger than the memory limit?
    start_var = 1 ! read first variable first
    starting_point = dart_index ! position in state_ens_handle%copies vars?
    my_copy = state_ens_handle%my_copies(c)
@@ -534,10 +493,10 @@ do i = 1, num_state_variables ! loop around state variables
    ! double or single precision?
    ndims = dimensions_and_lengths(i, 1, dom)
 
-   if (datasize == mpi_real4) then
-      xtype = nf90_real
-   else
+   if (r8 == digits12) then ! datasize = MPI_REAL8  ! What should we be writing?
       xtype = nf90_double
+   else
+      xtype = nf90_real
    endif
 
    ret = nf90_def_var(ncfile_out, trim(global_variable_names(i)), xtype=xtype, dimids=dimIds(i, 1:ndims, dom), varid=new_varid)
@@ -627,5 +586,4 @@ deallocate(local_dimensions_and_lengths, local_copy_dimIds)
 end subroutine shift_dimension_arrays
 
 !-------------------------------------------------------
-!> @}
 end module state_vector_io_mod
