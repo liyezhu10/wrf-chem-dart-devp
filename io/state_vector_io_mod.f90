@@ -292,13 +292,13 @@ end subroutine read_restart_netcdf
 !-------------------------------------------------
 !> Write directly to netcdf file from %vars
 !> The suffix argument can be used when writing state members for the prior
-subroutine write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index, suffix)
+subroutine write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index, isprior)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
 character(len=129),  intent(in)    :: restart_out_file_name
 integer,             intent(in)    :: domain
 integer,             intent(inout) :: dart_index
-character(len=*),    intent(in)    :: suffix
+logical,             intent(in)    :: isprior
 
 integer :: i
 integer :: start_var, end_var !< start/end variables in a read block
@@ -327,7 +327,11 @@ COPIES : do c = 1, state_ens_handle%my_num_copies
 
    ! writers open netcdf output file. This is a copy of the input file
    if ( query_write_copy(my_copy)) then
-         netcdf_filename_out = trim(restart_files_out((my_copy), domain)) // suffix
+         if(isprior) then
+            netcdf_filename_out = trim(restart_files_out((my_copy), domain, 1))
+         else
+            netcdf_filename_out = trim(restart_files_out((my_copy), domain, 2))
+         endif
       if (create_restarts) then ! How do you want to do create restarts
          call create_state_output(netcdf_filename_out, domain)
       else

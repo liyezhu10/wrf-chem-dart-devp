@@ -112,6 +112,7 @@ public ::  get_model_size,                    &
            fill_variable_list,                &
            info_file_name,                    &
            construct_file_name_in,            &
+           construct_file_name_out,            &
            get_model_time_from_file
 
 !  public stubs 
@@ -8546,6 +8547,20 @@ else
 endif
 
 end function construct_file_name_in
+
+!--------------------------------------------------------------------
+!> construct restart file name for writing
+function construct_file_name_out(stub, domain, copy)
+
+character(len=512), intent(in) :: stub
+integer,            intent(in) :: domain
+integer,            intent(in) :: copy
+character(len=1024)            :: construct_file_name_out
+
+write(construct_file_name_out, '(A,  A, i2.2, A, i2.2)') TRIM(stub), '_d', domain, '.', copy
+
+end function construct_file_name_out
+
 
 !--------------------------------------------------------------------
 !> read the time from the input file
