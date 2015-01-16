@@ -73,7 +73,7 @@ character(len=256), allocatable :: dim_names(:, :, :)
 character(len=256), allocatable :: global_variable_names(:)
 
 ! namelist variables with default values
-logical :: create_restarts = .true. ! what if the restart files exist?
+logical :: create_restarts = .false. ! what if the restart files exist?
 logical :: time_unlimited = .true. ! You need to keep track of the time.
 
 namelist /  state_vector_io_nml / create_restarts, time_unlimited
@@ -239,11 +239,6 @@ integer :: ending_point
 integer :: ens_size !< ensemble size
 integer :: remainder
 integer :: start_rank
-integer :: group_size
-integer :: recv_start, recv_end
-integer :: send_start, send_end
-integer :: ensemble_member !< the ensmeble_member you are receiving.
-integer :: dummy_loop
 integer :: my_copy !< which copy a pe is reading, starting from 0 to match pe
 integer :: c !< copies_read loop index
 integer :: copies_read
@@ -261,7 +256,7 @@ copies_read = 0
 COPIES: do c = 1, state_ens_handle%my_num_copies
 
    start_var = 1 ! read first variable first
-   starting_point = dart_index ! position in state_ens_handle%copies vars?
+   starting_point = dart_index ! position in state_ens_handle%vars
    my_copy = state_ens_handle%my_copies(c)
 
    ! open netcdf file
@@ -279,25 +274,16 @@ COPIES: do c = 1, state_ens_handle%my_num_copies
    ending_point = starting_point + block_size -1
 
    if (query_read_copy(my_copy)) then
-      allocate(var_block(block_size))
-      call read_variables(var_block, 1, num_state_variables, domain)
-      state_ens_handle%vars(starting_point:ending_point, c) = var_block
-   endif
-
-   if (query_read_copy(my_copy)) then
-      deallocate(var_block)
-   endif
-
-   ! update starting point
-   starting_point = starting_point + block_size
-
-   ! close netcdf file
-   if (query_read_copy(my_copy)) then
+      call read_variables(state_ens_handle%vars(starting_point:ending_point, c), 1, num_state_variables, domain)
+      ! close netcdf file
       ret = nf90_close(ncfile)
       call nc_check(ret, 'read_restart_netcdf closing', netcdf_filename)
    endif
 
 enddo COPIES
+
+! update starting point
+starting_point = starting_point + block_size
 
 dart_index = starting_point
 
@@ -317,13 +303,10 @@ character(len=*),    intent(in)    :: suffix
 integer :: i
 integer :: start_var, end_var !< start/end variables in a read block
 integer :: my_pe !< task or pe?
-integer :: recv_pe, sending_pe
-real(r8), allocatable :: var_block(:) !< for reading in variables
 integer :: num_vars !< number of variables in a block
 integer :: starting_point!< position in state_ens_handle%copies
 integer :: ending_point
 integer :: ens_size !< ensemble size
-integer :: ensemble_member
 integer :: dummy_loop, j
 integer :: my_copy !< which copy a pe is reading, starting from 0 to match pe
 integer :: c !< copies_read loop index
@@ -359,31 +342,20 @@ COPIES : do c = 1, state_ens_handle%my_num_copies
       endif
    endif
 
-   !if ((my_task_id() == 0) .and. (c == 1 )) print*, 'start_var, end_var', start_var, end_var
    num_vars = sum(variable_sizes(1:num_state_variables, domain))
 
    ending_point = starting_point + num_vars -1
 
    if (query_write_copy(my_copy)) then
-      allocate(var_block(num_vars))
-      var_block = state_ens_handle%vars(starting_point:ending_point, c)
-   endif
-
-   if ( query_write_copy(my_copy)) then
-      call write_variables(var_block, 1, num_state_variables, domain)
-      deallocate(var_block)
-   endif
-
-   ! update starting point
-   starting_point = starting_point + num_vars
-
-   ! close netcdf file
-   if (query_write_copy(my_copy)) then
+      call write_variables(state_ens_handle%vars(starting_point:ending_point, c), 1, num_state_variables, domain)
       ret = nf90_close(ncfile_out)
       call nc_check(ret, 'write_restart_netcdf', 'closing')
    endif
 
 enddo COPIES
+
+! update starting point
+starting_point = starting_point + num_vars
 
 dart_index = starting_point
 
