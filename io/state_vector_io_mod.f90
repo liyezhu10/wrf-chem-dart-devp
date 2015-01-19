@@ -253,10 +253,12 @@ my_pe = state_ens_handle%my_pe
 
 copies_read = 0
 
+starting_point = dart_index ! position in state_ens_handle%vars
+block_size = 0
+
 COPIES: do c = 1, state_ens_handle%my_num_copies
 
    start_var = 1 ! read first variable first
-   starting_point = dart_index ! position in state_ens_handle%vars
    my_copy = state_ens_handle%my_copies(c)
 
    ! open netcdf file
@@ -320,9 +322,11 @@ type(time_type) :: ens_time
 ens_size = state_ens_handle%num_copies ! have the extras incase you want to read inflation restarts
 my_pe = state_ens_handle%my_pe
 
+starting_point = dart_index ! position in state_ens_handle%copies
+num_vars = 0
+
 COPIES : do c = 1, state_ens_handle%my_num_copies
 
-   starting_point = dart_index ! position in state_ens_handle%copies
    my_copy = state_ens_handle%my_copies(c)
 
    ! writers open netcdf output file. This is a copy of the input file
