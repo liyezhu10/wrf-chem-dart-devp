@@ -644,18 +644,20 @@ AdvanceTime : do
          call timestamp_message('After  prior state space diagnostics')
          call trace_message('After  prior state space diagnostics')
 
-      else ! Glen mode
+      else
+            if (direct_netcdf_read) then ! Glen mode
 
-            ! write prior files
-            call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
-            call turn_write_copy_on(1, num_output_state_members)
-            call turn_write_copy_on(ENS_MEAN_COPY)
-            call turn_write_copy_on(ENS_SD_COPY)
-            if (output_inflation) then
-               call turn_write_copy_on(PRIOR_INF_COPY)
-               !call turn_write_copy_on(PRIOR_INF_SD_COPY)
+               ! write prior files
+               call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
+               call turn_write_copy_on(1, num_output_state_members)
+               call turn_write_copy_on(ENS_MEAN_COPY)
+               call turn_write_copy_on(ENS_SD_COPY)
+               if (output_inflation) then
+                  call turn_write_copy_on(PRIOR_INF_COPY)
+                  !call turn_write_copy_on(PRIOR_INF_SD_COPY)
+               endif
+               call filter_write_restart_direct(ens_handle, isprior = .true.)
             endif
-            call filter_write_restart_direct(ens_handle, isprior = .true.)
 
       endif
 
