@@ -7,9 +7,11 @@
 module dart_gcom_mod
 
 use        types_mod, only : r8, rad2deg, PI, SECPERDAY
+
 use time_manager_mod, only : time_type, get_date, set_date, get_time, set_time, &
                              set_calendar_type, get_calendar_string, &
                              print_date, print_time, operator(==), operator(-)
+
 use    utilities_mod, only : get_unit, open_file, close_file, file_exist, &
                              register_module, error_handler, nc_check, &
                              find_namelist_in_file, check_namelist_read, &
@@ -22,10 +24,15 @@ use netcdf
 implicit none
 private
 
-public :: get_gcom_calendar, set_model_time_step, &
-          get_horiz_grid_dims, get_vert_grid_dim, &
-          read_horiz_grid, read_topography, read_vert_grid, &
-          write_gcom_namelist, get_gcom_restart_filename
+public :: get_gcom_calendar,   &
+          set_model_time_step, &
+          get_horiz_grid_dims, &
+          get_vert_grid_dim,   &
+          read_horiz_grid,     &
+          read_topography,     &
+          read_vert_grid,      &
+          write_gcom_namelist, &
+          get_gcom_restart_filename
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -33,10 +40,10 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: msgstring
+character(len=512) :: msgstring
 logical, save :: module_initialized = .false.
 
-character(len=256) :: ic_filename      = 'gcom.r.nc'
+character(len=256) :: ic_filename      = 'gcom_geometry.nc'
 !character(len=256) :: restart_filename = 'dart_gcom_mod_restart_filename_not_set'
 
 ! set this to true if you want to print out the current time
@@ -167,60 +174,30 @@ contains
 !======================================================================
 
 
+!-----------------------------------------------------------------------
+!>
+!> Read GCOM control information
+
 subroutine initialize_module
-!------------------------------------------------------------------
+
 integer :: iunit, io
 
-! Read GCOM calendar information
-! In 'restart' mode, this is primarily the calendar type and 'stop'
-! information. The time attributes of the restart file override 
-! the namelist time information. 
+! call find_namelist_in_file('gcom_in', 'time_manager_nml', iunit)
+! read(iunit, nml = time_manager_nml, iostat = io)
+! call check_namelist_read(iunit, io, 'time_manager_nml')
 
-call find_namelist_in_file('gcom_in', 'time_manager_nml', iunit)
-read(iunit, nml = time_manager_nml, iostat = io)
-call check_namelist_read(iunit, io, 'time_manager_nml')
-
-! FIXME : Real observations are always GREGORIAN dates ...
-! but stomping on that here gets in the way of running
-! a perfect_model experiment for pre-1601 AD cases.
-
-! STOMP if ( allow_leapyear ) then
-   call set_calendar_type('gregorian')
-! STOMP else
-! STOMP    call set_calendar_type('noleap')
-! STOMP endif
+call set_calendar_type('gregorian')
 
 ! Read GCOM I/O information (for restart file ... grid dimensions)
 ! Read GCOM initial information (for input/restart filename)
 
-call find_namelist_in_file('gcom_in', 'io_nml', iunit)
-read(iunit, nml = io_nml, iostat = io)
-call check_namelist_read(iunit, io, 'io_nml')
+! call find_namelist_in_file('gcom_in', 'io_nml', iunit)
+! read(iunit, nml = io_nml, iostat = io)
+! call check_namelist_read(iunit, io, 'io_nml')
 
-call find_namelist_in_file('gcom_in', 'init_ts_nml', iunit)
-read(iunit, nml = init_ts_nml, iostat = io)
-call check_namelist_read(iunit, io, 'init_ts_nml')
-
-! Is it a pointer file or not ...
-!if ( luse_pointer_files ) then
-!
-!   restart_filename = trim(pointer_filename)//'.restart'
-!
-!   if ( .not. file_exist(restart_filename) ) then
-!      msgstring = 'gcom_in:pointer file '//trim(restart_filename)//' not found'
-!      call error_handler(E_ERR,'initialize_module', &
-!             msgstring, source, revision, revdate)
-!   endif
-!
-!   iunit = open_file(restart_filename,'formatted')
-!   read(iunit,'(A)')ic_filename
-!
-!   restart_filename = ' '  
-!   write(*,*)'DEBUG ... pointer filename dereferenced to ',trim(ic_filename )
-!
-!else
-!   ic_filename = trim(init_ts_file)//'.'//trim(init_ts_file_fmt)
-!endif
+! call find_namelist_in_file('gcom_in', 'init_ts_nml', iunit)
+! read(iunit, nml = init_ts_nml, iostat = io)
+! call check_namelist_read(iunit, io, 'init_ts_nml')
 
 ! Make sure we have a GCOM restart file (for grid dims)
 if ( .not. file_exist(ic_filename) ) then
@@ -229,21 +206,6 @@ if ( .not. file_exist(ic_filename) ) then
           msgstring, source, revision, revdate)
 endif
 
-! Read GCOM restart information (for model timestepping)
-call find_namelist_in_file('gcom_in', 'restart_nml', iunit)
-read(iunit, nml = restart_nml, iostat = io)
-call check_namelist_read(iunit, io, 'restart_nml')
-
-! Read GCOM domain information (for lon wrapping or not)
-call find_namelist_in_file('gcom_in', 'domain_nml', iunit)
-read(iunit, nml = domain_nml, iostat = io)
-call check_namelist_read(iunit, io, 'domain_nml')
-
-! Read GCOM grid information (for grid filenames)
-call find_namelist_in_file('gcom_in', 'grid_nml', iunit)
-read(iunit, nml = grid_nml, iostat = io)
-call check_namelist_read(iunit, io, 'grid_nml')
-
 module_initialized = .true.
 
 ! Print module information to log file and stdout.
@@ -251,16 +213,15 @@ call register_module(source, revision, revdate)
 
 end subroutine initialize_module
 
-
+!xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+!-----------------------------------------------------------------------
+!>
+!> Read the lon, lat grid size from the restart netcdf file.
+!> The actual grid file is a binary file with no header information.
+!>
+!> The file name comes from module storage ... namelist.
 
 subroutine get_horiz_grid_dims(Nx, Ny)
-!------------------------------------------------------------------
-! subroutine get_horiz_grid_dims(Nx, Ny)
-!
-! Read the lon, lat grid size from the restart netcdf file.
-! The actual grid file is a binary file with no header information.
-!
-! The file name comes from module storage ... namelist.
 
 integer, intent(out) :: Nx   ! Number of Longitudes
 integer, intent(out) :: Ny   ! Number of Latitudes
@@ -307,16 +268,20 @@ call nc_check(nf90_inquire_dimension(grid_id, dimid, len=Ny), &
 call nc_check(nf90_close(grid_id), &
          'get_horiz_grid_dims','close '//trim(ic_filename) )
 
+msgstring = 'gcom_in:init_ts_file '//trim(ic_filename)//' not found'
+call error_handler(E_ERR,'initialize_module', &
+          msgstring, source, revision, revdate)
+
 end subroutine get_horiz_grid_dims
 
 
+!xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+!-----------------------------------------------------------------------
+!>
+!> count the number of lines in the ascii file to figure out max
+!> number of vert blocks.
 
-  subroutine get_vert_grid_dim(Nz)
-!------------------------------------------------------------------
-! subroutine get_vert_grid_dim(Nz)
-!
-! count the number of lines in the ascii file to figure out max
-! number of vert blocks.
+subroutine get_vert_grid_dim(Nz)
 
 integer, intent(out) :: Nz
 
@@ -329,14 +294,16 @@ call find_textfile_dims(vert_grid_file, Nz, linelen)
 end subroutine get_vert_grid_dim
 
 
+!xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+!-----------------------------------------------------------------------
+!>
+!> the initialize_module ensures that the GCOM namelists are read and 
+!> the DART time manager gets the GCOM calendar setting.
+!>
+!> Then, the DART time manager is queried to return what it knows ...
    
 subroutine get_gcom_calendar(calstring)
-!------------------------------------------------------------------
-! the initialize_module ensures that the GCOM namelists are read and 
-! the DART time manager gets the GCOM calendar setting.
-!
-! Then, the DART time manager is queried to return what it knows ...
-!
+
 character(len=*), INTENT(OUT) :: calstring
 
 if ( .not. module_initialized ) call initialize_module
@@ -346,13 +313,15 @@ call get_calendar_string(calstring)
 end subroutine get_gcom_calendar
 
 
+!xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+!-----------------------------------------------------------------------
+!>
+!> the initialize_module ensures that the GCOM namelists are read.
+!> The restart times in the gcom_in&restart_nml are used to define
+!> appropriate assimilation timesteps.
 
 function set_model_time_step()
-!------------------------------------------------------------------
-! the initialize_module ensures that the GCOM namelists are read.
-! The restart times in the gcom_in&restart_nml are used to define
-! appropriate assimilation timesteps.
-!
+
 type(time_type) :: set_model_time_step
 
 if ( .not. module_initialized ) call initialize_module
@@ -373,12 +342,13 @@ endif
 end function set_model_time_step
 
 
-
+!-----------------------------------------------------------------------
+!>
 
 subroutine write_gcom_namelist(model_time, adv_to_time)
-!------------------------------------------------------------------
-!
-type(time_type), INTENT(IN) :: model_time, adv_to_time
+
+type(time_type), intent(in) :: model_time
+type(time_type), intent(in) :: adv_to_time
 type(time_type) :: offset
 
 integer :: iunit, secs, days
@@ -417,15 +387,18 @@ close(iunit)
 end subroutine write_gcom_namelist
 
 
+!-----------------------------------------------------------------------
+!>
+!> Open and read the binary grid file
 
-  subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
-!------------------------------------------------------------------
-! subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
-!
-! Open and read the binary grid file
+subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
 
-integer,                    intent(in)  :: nx, ny
-real(r8), dimension(nx,ny), intent(out) :: ULAT, ULON, TLAT, TLON
+integer,  intent(in)  :: nx
+integer,  intent(in)  :: ny
+real(r8), intent(out) :: ULAT(nx,ny)
+real(r8), intent(out) :: ULON(nx,ny)
+real(r8), intent(out) :: TLAT(nx,ny)
+real(r8), intent(out) :: TLON(nx,ny)
 
 !real(r8), dimension(nx,ny) :: &
 !     HTN ,  &! length (cm) of north edge of T box
@@ -487,15 +460,18 @@ where (TLAT >  90.0_r8) TLAT =  90.0_r8
 end subroutine read_horiz_grid
 
 
-  subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
-!------------------------------------------------------------------
-! subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
-!
-! mimic GCOM grid.F90:calc_tpoints(), but for one big block.
+!-----------------------------------------------------------------------
+!>
+!> mimic GCOM grid.F90:calc_tpoints(), but for one big block.
 
-integer,                    intent( in) :: nx, ny
-real(r8), dimension(nx,ny), intent( in) :: ULAT, ULON
-real(r8), dimension(nx,ny), intent(out) :: TLAT, TLON
+subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
+
+integer,  intent( in) :: nx
+integer,  intent( in) :: ny
+real(r8), intent( in) :: ULAT(nx,ny)
+real(r8), intent( in) :: ULON(nx,ny)
+real(r8), intent(out) :: TLAT(nx,ny)
+real(r8), intent(out) :: TLON(nx,ny)
 
 integer  :: i, j
 real(r8) :: xc,yc,zc,xs,ys,zs,xw,yw,zw   ! Cartesian coordinates for
@@ -603,15 +579,16 @@ endif
 end subroutine calc_tpoints
 
 
+!-----------------------------------------------------------------------
+!>
+!> Open and read the binary topography file
 
-  subroutine read_topography(nx, ny, KMT, KMU)
-!------------------------------------------------------------------
-! subroutine read_topography(nx, ny, KMT, KMU)
-!
-! Open and read the binary topography file
+subroutine read_topography(nx, ny, KMT, KMU)
 
-integer,                   intent(in)  :: nx, ny
-integer, dimension(nx,ny), intent(out) :: KMT, KMU
+integer, intent(in)  :: nx
+integer, intent(in)  :: ny
+integer, intent(out) :: KMT(nx,ny)
+integer, intent(out) :: KMU(nx,ny)
 
 integer  :: i, j, topo_unit, reclength
 
@@ -645,18 +622,18 @@ enddo
 end subroutine read_topography
 
 
+!-----------------------------------------------------------------------
+!>
+!> Open and read the ASCII vertical grid information
+!> 
+!> The vert grid file is ascii, with 3 columns/line:
+!>    cell thickness(in cm)   cell center(in m)   cell bottom(in m)
 
-  subroutine read_vert_grid(nz, ZC, ZG)
-!------------------------------------------------------------------
-! subroutine read_vert_grid(nz, ZC, ZG)
-!
-! Open and read the ASCII vertical grid information
-!
-! The vert grid file is ascii, with 3 columns/line:
-!    cell thickness(in cm)   cell center(in m)   cell bottom(in m)
+subroutine read_vert_grid(nz, ZC, ZG)
 
 integer,  intent(in)  :: nz
-real(r8), intent(out) :: ZC(nz), ZG(nz)
+real(r8), intent(out) :: ZC(nz)
+real(r8), intent(out) :: ZG(nz)
 
 integer  :: iunit, i, ios
 real(r8) :: depth
@@ -689,11 +666,12 @@ enddo
 end subroutine read_vert_grid
 
 
-!------------------------------------------------------------------
-
+!-----------------------------------------------------------------------
+!>
 
 subroutine get_gcom_restart_filename( filename )
-character(len=*), intent(OUT) :: filename
+
+character(len=*), intent(out) :: filename
 
 if ( .not. module_initialized ) call initialize_module
 

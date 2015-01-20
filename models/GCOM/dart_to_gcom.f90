@@ -1,4 +1,4 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2015 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
@@ -19,17 +19,22 @@ program dart_to_gcom
 !         Typically, only temporary files like 'assim_model_state_ic' have
 !         an 'advance_to_time'.
 !
-! author: Tim Hoar 25 Jun 09, revised 12 July 2010
+! author: Tim Hoar 20 Jan 2015
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit
+                             logfileunit, error_handler, E_MSG
+
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
+
 use time_manager_mod, only : time_type, print_time, print_date, operator(-)
-use        model_mod, only : static_init_model, sv_to_restart_file, &
+
+use        model_mod, only : static_init_model, dart_vector_to_restart_file, &
                              get_model_size, get_gcom_restart_filename
+
 use     dart_gcom_mod, only : write_gcom_namelist
 
 implicit none
@@ -44,18 +49,20 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_gcom_input_file   = 'dart_restart'
-logical               :: advance_time_present     = .false.
+character(len=256) :: dart_to_gcom_input_file  = 'dart_restart'
+logical            :: advance_time_present     = .false.
 
 namelist /dart_to_gcom_nml/ dart_to_gcom_input_file, &
-                           advance_time_present
+                            advance_time_present
 
 !----------------------------------------------------------------------
 
 integer               :: iunit, io, x_size
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
-character (len = 128) :: gcom_restart_filename = 'no_gcom_restart_file'
+character(len=128)    :: gcom_restart_filename = 'no_gcom_restart_file'
+
+character(len=512) :: string1, string2
 
 !----------------------------------------------------------------------
 
@@ -79,10 +86,9 @@ call check_namelist_read(iunit, io, "dart_to_gcom_nml")
 
 call get_gcom_restart_filename( gcom_restart_filename )
 
-write(*,*)
-write(*,'(''dart_to_gcom:converting DART file '',A, &
-      &'' to GCOM restart file '',A)') &
-     trim(dart_to_gcom_input_file), trim(gcom_restart_filename)
+write(string1,*)'converting DART file ', trim(dart_to_gcom_input_file)
+write(string2,*)'to GCOM restart file ', trim(gcom_restart_filename)
+call error_handler(E_MSG,'dart_to_gcom',string1,text1=string2)
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
@@ -103,7 +109,7 @@ call close_restart(iunit)
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
-call sv_to_restart_file(statevector, gcom_restart_filename, model_time)
+call dart_vector_to_restart_file(statevector, gcom_restart_filename, model_time)
 
 if ( advance_time_present ) then
    call write_gcom_namelist(model_time, adv_to_time)

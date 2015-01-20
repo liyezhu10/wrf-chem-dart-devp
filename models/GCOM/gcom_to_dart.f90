@@ -1,4 +1,4 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2015 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
@@ -18,15 +18,20 @@ program gcom_to_dart
 !         <edit gcom_to_dart_output_file in input.nml:gcom_to_dart_nml>
 !         gcom_to_dart
 !
-! author: Tim Hoar 6/24/09
+! author: Tim Hoar 20 January 2015
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
-                             find_namelist_in_file, check_namelist_read
-use        model_mod, only : restart_file_to_sv, static_init_model, &
+                             find_namelist_in_file, check_namelist_read, &
+                             error_handler, E_MSG
+
+use        model_mod, only : restart_file_to_dart_vector, static_init_model, &
                              get_model_size, get_gcom_restart_filename
+
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
+
 use time_manager_mod, only : time_type, print_time, print_date
 
 use netcdf
@@ -42,7 +47,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-character (len = 128) :: gcom_to_dart_output_file  = 'dart_ics'
+character(len=256) :: gcom_to_dart_output_file  = 'dart_ics'
 
 namelist /gcom_to_dart_nml/ gcom_to_dart_output_file
 
@@ -53,7 +58,7 @@ namelist /gcom_to_dart_nml/ gcom_to_dart_output_file
 integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
-character (len = 128) :: gcom_restart_filename = 'no_gcom_restart_filename' 
+character(len=256)    :: gcom_restart_filename = 'no_gcom_restart_filename' 
 
 !----------------------------------------------------------------------
 
@@ -76,10 +81,9 @@ call check_namelist_read(iunit, io, "gcom_to_dart_nml") ! closes, too.
 
 call get_gcom_restart_filename( gcom_restart_filename )
 
-write(*,*)
-write(*,'(''gcom_to_dart:converting GCOM restart file '',A, &
-      &'' to DART file '',A)') &
-       trim(gcom_restart_filename), trim(gcom_to_dart_output_file)
+write(string1,*)'converting GCOM restart file ', trim(gcom_restart_filename)
+write(string2,*)'                to DART file ', trim(gcom_to_dart_output_file)
+call error_handler(E_MSG,'gcom_to_dart',string1,text1=string2)
 
 !----------------------------------------------------------------------
 ! Now that we know the names, get to work.
@@ -87,7 +91,7 @@ write(*,'(''gcom_to_dart:converting GCOM restart file '',A, &
 
 x_size = get_model_size()
 allocate(statevector(x_size))
-call restart_file_to_sv(gcom_restart_filename, statevector, model_time) 
+call restart_file_to_dart_vector(gcom_restart_filename, statevector, model_time) 
 
 iunit = open_restart_write(gcom_to_dart_output_file)
 

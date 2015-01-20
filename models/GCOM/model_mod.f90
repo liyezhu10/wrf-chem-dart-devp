@@ -10,7 +10,8 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 
-use        types_mod, only : r4, r8, SECPERDAY, MISSING_R8, MISSING_I, rad2deg, PI
+use        types_mod, only : r4, r8, SECPERDAY, MISSING_R8, MISSING_I, &
+                             rad2deg, PI, obstypelength, metadatalength
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date,                           &
@@ -21,14 +22,14 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              VERTISHEIGHT, get_location, vert_is_height,       &
-                             vert_is_level, vert_is_surface,                   &
-                             loc_get_close_obs => get_close_obs, get_close_type
+                             vert_is_level, vert_is_surface, get_close_type,   &
+                             loc_get_close_obs => get_close_obs
 
-use    utilities_mod, only : register_module, error_handler,                   &
-                             E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, do_output, to_upper,                    &
-                             find_namelist_in_file, check_namelist_read,       &
-                             open_file, file_exist, find_textfile_dims,        &
+use    utilities_mod, only : register_module, logfileunit, get_unit,     &
+                             error_handler, E_ERR, E_WARN, E_MSG,        &
+                             nc_check, do_output, to_upper,              &
+                             find_namelist_in_file, check_namelist_read, &
+                             open_file, file_exist, find_textfile_dims,  &
                              file_to_text, do_output
 
 use     obs_kind_mod, only : KIND_TEMPERATURE,          &
@@ -46,7 +47,7 @@ use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
 use     dart_gcom_mod, only: set_model_time_step,                              &
                              get_horiz_grid_dims, get_vert_grid_dim,           &
-                             read_horiz_grid, read_topography, read_vert_grid
+                             read_horiz_grid, read_vert_grid, read_topography 
 
 use typesizes
 use netcdf
@@ -94,6 +95,25 @@ logical, save :: module_initialized = .false.
 ! Storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
 
+! Codes for restricting the range of a variable
+integer, parameter :: BOUNDED_NONE  = 0 ! ... unlimited range
+integer, parameter :: BOUNDED_BELOW = 1 ! ... minimum, but no maximum
+integer, parameter :: BOUNDED_ABOVE = 2 ! ... maximum, but no minimum
+integer, parameter :: BOUNDED_BOTH  = 3 ! ... minimum and maximum
+
+! Variables pertaining to the makeup of the DART vector
+integer :: nfields
+integer, parameter :: max_state_variables = 40
+integer, parameter :: num_state_table_columns = 5
+character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
+
+! Codes for interpreting the columns of the variable_table
+integer, parameter :: VT_VARNAMEINDX = 1 ! ... variable name
+integer, parameter :: VT_KINDINDX    = 2 ! ... DART kind
+integer, parameter :: VT_MINVALINDX  = 3 ! ... minimum value if any
+integer, parameter :: VT_MAXVALINDX  = 4 ! ... maximum value if any
+integer, parameter :: VT_STATEINDX   = 5 ! ... update (state) or not
+
 ! things which can/should be in the model_nml
 logical  :: output_state_vector = .true.
 integer  :: assimilation_period_days = 1
@@ -103,6 +123,7 @@ logical  :: update_dry_cell_walls = .false.
 integer  :: debug = 0   ! turn up for more and more debug messages
 character(len=256) :: gcom_restart_file  = 'gcom_restart.nc'
 character(len=256) :: gcom_geometry_file = 'gcom_geometry.nc'
+character(len=obstypelength) :: gcom_variables(max_state_variables*num_state_table_columns) = ' '
 
 ! FIXME: currently the update_dry_cell_walls namelist value DOES
 ! NOTHING.  it needs additional code to detect the cells which are
@@ -116,7 +137,8 @@ namelist /model_nml/             &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    update_dry_cell_walls,        &
-   debug
+   debug,                        &
+   gcom_variables
 
 !------------------------------------------------------------------
 !
@@ -125,12 +147,7 @@ namelist /model_nml/             &
 ! S, T are 3D arrays, located at cell centers.  U,V are at grid cell corners.
 ! PSURF is a 2D field (X,Y only).  The Z direction is downward.
 !
-! FIXME: proposed change 1: we put SSH first, then T,U,V, then S, then
-!                           any optional tracers, since SSH is the only 2D
-!                           field; all tracers are 3D.  this simplifies the
-!                           mapping to and from the vars to state vector.
-!
-! FIXME: proposed change 2: we make this completely namelist driven,
+! FIXME: proposed change : we make this completely namelist driven,
 !                           both contents and order of vars.  this should
 !                           wait until restart files are in netcdf format,
 !                           to avoid problems with incompatible namelist
@@ -140,11 +157,11 @@ namelist /model_nml/             &
 
 integer, parameter :: n3dfields = 4
 integer, parameter :: n2dfields = 1
-integer, parameter :: nfields   = n3dfields + n2dfields
+! integer, parameter :: nfields   = n3dfields + n2dfields
 
 ! (the absoft compiler likes them to all be the same length during declaration)
 ! we trim the blanks off before use anyway, so ...
-character(len=128) :: progvarnames(nfields) = (/'SALT ','TEMP ','UVEL ','VVEL ','PSURF'/)
+character(len=128) :: progvarnames(5) = (/'SALT ','TEMP ','UVEL ','VVEL ','PSURF'/)
 
 integer, parameter :: S_index     = 1
 integer, parameter :: T_index     = 2
@@ -152,7 +169,7 @@ integer, parameter :: U_index     = 3
 integer, parameter :: V_index     = 4
 integer, parameter :: PSURF_index = 5
 
-integer :: start_index(nfields)
+integer :: start_index(5) ! TJH FIXME this gets replaced 
 
 ! Grid parameters - the values will be read from a
 ! standard GCOM namelist and filled in here.
@@ -182,6 +199,36 @@ type(time_type) :: model_time, model_timestep
 
 integer :: model_size    ! the state vector length
 
+! Everything needed to describe a variable
+
+type progvartype
+   private
+   character(len=NF90_MAX_NAME) :: varname
+   character(len=NF90_MAX_NAME) :: long_name
+   character(len=NF90_MAX_NAME) :: units
+   character(len=obstypelength), dimension(NF90_MAX_VAR_DIMS) :: dimnames
+   integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
+   integer  :: numdims
+   integer  :: maxlevels
+   integer  :: xtype
+   integer  :: varsize     ! prod(dimlens(1:numdims))
+   integer  :: index1      ! location in dart state vector of first occurrence
+   integer  :: indexN      ! location in dart state vector of last  occurrence
+   integer  :: dart_kind
+   integer  :: rangeRestricted
+   real(r8) :: minvalue
+   real(r8) :: maxvalue
+   integer  :: spvalINT, missingINT
+   real(r4) :: spvalR4, missingR4
+   real(r8) :: spvalR8, missingR8
+   logical  :: has_fill_value      ! intended for future use
+   logical  :: has_missing_value   ! intended for future use
+   character(len=obstypelength) :: kind_string
+   character(len=512) :: origin    ! the file it came from
+   logical  :: update
+end type progvartype
+
+type(progvartype), dimension(max_state_variables) :: progvar
 
 INTERFACE vector_to_prog_var
       MODULE PROCEDURE vector_to_2d_prog_var
@@ -230,8 +277,6 @@ integer, allocatable :: u_dipole_lat_list(:), t_dipole_lat_list(:)
 
 ! Need to check for pole quads: for now we are not interpolating in them
 integer :: pole_x, t_pole_y, u_pole_y
-
-
 
 ! Have a global variable saying whether this is dipole or regular lon-lat grid
 ! This should be initialized static_init_model. Code to do this is below.
