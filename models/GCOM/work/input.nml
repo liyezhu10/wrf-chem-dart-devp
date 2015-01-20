@@ -329,3 +329,15 @@
    verbose    = .false.
   /
 
+
+&model_mod_check_nml
+   input_file           = "dart_ics"
+   output_file          = "check_me_out"
+   advance_time_present = .FALSE.
+   verbose              = .TRUE.
+   test1thru            = 1
+   x_ind                = 720
+   kind_of_interest     = 'KIND_SALINITY'
+   loc_of_interest      = 287.5, 82.48, 0.35
+   /
+
