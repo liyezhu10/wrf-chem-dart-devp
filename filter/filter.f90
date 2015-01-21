@@ -92,6 +92,8 @@ integer  :: last_obs_seconds    = -1
 ! Assimilation window; defaults to model timestep size.
 integer  :: obs_window_days     = -1
 integer  :: obs_window_seconds  = -1
+! Turn on quad filter 
+logical  :: quad_filter         = .true.
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -135,7 +137,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
    first_obs_days, first_obs_seconds, last_obs_days, last_obs_seconds,              &
-   obs_window_days, obs_window_seconds, enable_special_outlier_code,                &
+   obs_window_days, obs_window_seconds, quad_filter, enable_special_outlier_code,   &
    num_output_state_members, num_output_obs_members, output_restart_mean,           &
    output_interval, num_groups, outlier_threshold, trace_execution,                 &
    input_qc_threshold, output_forward_op_errors, output_timestamps,                 &
@@ -484,9 +486,9 @@ AdvanceTime : do
    ! obs_error_variance, observed value, key from sequence, global qc, 
    ! then mean for each group, then variance for each group
    TOTAL_OBS_COPIES = ens_size + 4 + 2*num_groups
-   call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 1)
+   call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 1, quad_filter_in = quad_filter)
    ! Also need a qc field for copy of each observation
-   call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 1)
+   call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 1, quad_filter_in = quad_filter)
 
    ! Allocate storage for the keys for this number of observations
    allocate(keys(num_obs_in_set))
@@ -948,7 +950,7 @@ call static_init_obs_sequence()
 
 ! Initialize the model class data now that obs_sequence is all set up
 call trace_message('Before init_model call')
-call static_init_assim_model()
+call static_init_assim_model(quad_filter)
 call trace_message('After  init_model call')
 
 end subroutine filter_initialize_modules_used
@@ -1213,9 +1215,9 @@ integer :: days, secs
 ! Copies are ensemble, ensemble mean, variance inflation and inflation s.d.
 ! AVOID COPIES FOR INFLATION IF STATE SPACE IS NOT IN USE; NEEDS WORK
 !!!if(prior_inflate%flavor >= 2) then
-   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 1)
+   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 1, quad_filter_in = quad_filter)
 !!!else
-!!!   call init_ensemble_manager(ens_handle, ens_size + 2, model_size, 1)
+!!!   call init_ensemble_manager(ens_handle, ens_size + 2, model_size, 1, quad_filter_in = quad_filter)
 !!!endif
 
 if (do_output()) then
