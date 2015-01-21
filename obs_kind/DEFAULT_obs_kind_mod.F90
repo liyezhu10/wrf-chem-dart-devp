@@ -288,6 +288,10 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_VERTICAL_TEC                = 143  ! total electron content
 
+! kind for the Quad Filter 
+integer, parameter, public :: &
+    KIND_QUAD_FILTER_SQUARED_ERROR   = 144 
+
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
 !! possibly of interest to other models with Chemistry species.
@@ -596,6 +600,7 @@ obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_IN
 obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
 obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
 obs_kind_names(143) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
+obs_kind_names(144) = obs_kind_type(KIND_QUAD_FILTER_SQUARED_ERROR ,'KIND_QUAD_FILTER_SQUARED_ERROR')
 
 obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
 obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')
