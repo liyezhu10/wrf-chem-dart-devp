@@ -9,7 +9,7 @@ module assim_model_mod
 ! This module is used to wrap around the basic portions of existing dynamical models to
 ! add capabilities needed by the standard assimilation methods.
 
-use    types_mod, only : r8, digits12
+use    types_mod, only : r8, digits12, missing_r8
 use location_mod, only : location_type, read_location, LocationDims
 use time_manager_mod, only : time_type, get_time, read_time, write_time,           &
                              THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP,         &
@@ -22,12 +22,15 @@ use utilities_mod, only : get_unit, close_file, register_module, error_handler, 
                           check_namelist_read, nc_check, do_nml_file, do_nml_term, &
                           find_textfile_dims, file_to_text, set_output,            &
                           ascii_file_format, set_output
-use     model_mod, only : get_model_size, static_init_model, get_state_meta_data,  &
+use     model_mod, only : models_get_model_size => get_model_size,                 &
+                          static_init_model,                                       &
+                          models_get_state_meta_data => get_state_meta_data,       &
                           get_model_time_step, model_interpolate, init_conditions, &
                           init_time, adv_1step, end_model, nc_write_model_atts,    &
                           nc_write_model_vars, pert_model_state,                   &
                           get_close_maxdist_init, get_close_obs_init,              &
                           get_close_obs, ens_mean_for_model
+use  obs_kind_mod, only : KIND_QUAD_FILTER_SQUARED_ERROR
 
 implicit none
 private
@@ -36,8 +39,8 @@ public :: static_init_assim_model, init_diag_output, get_model_size,            
           get_closest_state_time_to, get_initial_condition, get_state_meta_data,           &
           get_model_time, get_model_state_vector, copy_assim_model, interpolate,           &
           set_model_time, set_model_state_vector, write_state_restart, read_state_restart, &
-          output_diagnostics, end_assim_model, assim_model_type, init_diag_input,          &
-          input_diagnostics, get_diag_input_copy_meta_data, init_assim_model,              &
+          output_diagnostics, end_assim_model, assim_model_type,                           &
+          input_diagnostics, init_assim_model,                                             &
           finalize_diag_output, aoutput_diagnostics,                                       &
           aread_state_restart, aget_closest_state_time_to, awrite_state_restart,           &
           pert_model_state, netcdf_file_type, nc_append_time, nc_write_calendar_atts,      &
@@ -183,6 +186,57 @@ call static_init_model()
 
 end subroutine static_init_assim_model
 
+
+!---------------
+
+function get_model_size()
+
+integer :: get_model_size
+
+integer :: m
+
+! Intercepts the model_mods get_model_size and multiplies by 2 for quad filter
+m = models_get_model_size()
+
+if(quad_filter) m = 2*m
+
+get_model_size = m
+
+end function get_model_size
+
+
+!---------------
+
+subroutine get_state_meta_data(index_in, location, var_type)
+
+integer,             intent(in)  :: index_in
+type(location_type), intent(out) :: location
+integer,             intent(out), optional :: var_type
+
+integer :: pair_index
+
+! For a quad filter, need to account for fact that pairs of state are together
+if(quad_filter) then
+   ! Find out location of the pair with default
+   pair_index = (index_in + 1) / 2
+   if(present(var_type)) then
+      call models_get_state_meta_data(pair_index, location, var_type)
+      ! If it is the pseudo-state (even index) then return kind
+      if((index_in / 2) * 2 == index_in) var_type = KIND_QUAD_FILTER_SQUARED_ERROR
+   else
+      call models_get_state_meta_data(pair_index, location)
+   endif
+else
+   if(present(var_type)) then
+      call models_get_state_meta_data(index_in, location, var_type)
+   else
+      call models_get_state_meta_data(index_in, location)
+   endif
+endif
+
+end subroutine get_state_meta_data
+
+!---------------
 
 
 function init_diag_output(FileName, global_meta_data, &
@@ -434,7 +488,7 @@ end function finalize_diag_output
 
 
 
-function init_diag_input(file_name, global_meta_data, model_size, copies_of_field_per_time)
+function init_diag_input(file_name, global_meta_data, model_size_out, copies_of_field_per_time)
 !--------------------------------------------------------------------------
 !
 ! Initializes a model state diagnostic file for input. A file id is
@@ -445,7 +499,7 @@ implicit none
 integer :: init_diag_input, io
 character(len = *), intent(in)  :: file_name
 character(len = *), intent(out) :: global_meta_data
-integer,            intent(out) :: model_size, copies_of_field_per_time
+integer,            intent(out) :: model_size_out, copies_of_field_per_time
 
 if ( .not. module_initialized ) call static_init_assim_model()
 
@@ -465,7 +519,7 @@ if (io /= 0) then
 endif
 
 ! Read the model size
-read(init_diag_input, *, iostat = io) model_size
+read(init_diag_input, *, iostat = io) model_size_out
 if (io /= 0) then
    write(msgstring,*) 'unable to read expected integer from diag input file ', &
                        trim(file_name), ' for model_size'
@@ -872,7 +926,7 @@ integer,         intent(in)             :: funit
 type(time_type), optional, intent(out) :: target_time
 
 character(len = 16) :: open_format
-integer :: ios, int1, int2
+integer :: ios, int1, int2, i, indx, state_size
 
 if ( .not. module_initialized ) call static_init_assim_model()
 
@@ -920,6 +974,25 @@ if ( ios /= 0 ) then
 
    write(msgstring,*)'read error is : ',ios
    call error_handler(E_ERR,'aread_state_restart',msgstring,source,revision,revdate)
+endif
+
+if(quad_filter) then
+! For the quad filter, need to distribute the state into pairs
+! Odd elements get original state, even state set to missing_r8
+! Start by making sure that the array size is same as model size at this point
+   state_size = get_model_size()
+   if(size(model_state) /= state_size) then
+      write(msgstring,*) 'size of model_state ', size(model_state), &
+         '  not equal to get_model_size ', state_size
+      call error_handler(E_ERR,'aread_state_restart',msgstring,source,revision,revdate)
+   else
+      do i = state_size, 2, -2
+         indx = i / 2
+         model_state(i - 1) = model_state(indx)
+         model_state(i) = missing_r8
+      enddo
+   endif
+
 endif
 
 end subroutine aread_state_restart
