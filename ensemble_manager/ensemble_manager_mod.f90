@@ -924,7 +924,7 @@ subroutine set_up_ens_distribution(ens_handle)
 
 type (ensemble_type),  intent(inout)  :: ens_handle
 
-integer :: num_per_pe_below, num_left_over, num_pairs, i
+integer :: num_per_pe_below, num_left_over, num_pairs, my_num_pairs, i, not_used_here
 
    ! Option 1 and 2: Maximum separation for both vars and copies
    ! Compute the total number of copies I'll get for var complete
@@ -951,13 +951,14 @@ elseif(ens_handle%distribution_type == 2) then
    ! Figure out how many pairs each pe gets first following logic above for half the size
    ! Might want an error check to confirm that num_vars is in fact even
    num_pairs = ens_handle%num_vars / 2
-   num_per_pe_below = ens_handle%num_vars / num_pes
+   num_per_pe_below = num_pairs / num_pes
    num_left_over = num_pairs - num_per_pe_below * num_pes
    if(num_left_over >= (ens_handle%my_pe + 1)) then
-      ens_handle%my_num_vars = num_per_pe_below + 1
+      my_num_pairs = num_per_pe_below + 1
    else
-      ens_handle%my_num_vars = num_per_pe_below
+      my_num_pairs = num_per_pe_below
    endif
+   ens_handle%my_num_vars = 2 * my_num_pairs
    
 else
    ! Only 1 and 2 defined; PUT AN ERROR HERE
@@ -976,7 +977,7 @@ ens_handle%vars = MISSING_R8
 ens_handle%copies = MISSING_R8
 
 ! Fill out the number of my members
-call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
+call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, not_used_here)
 
 ! Initialize times to missing
 ! This is only initializing times for pes that have ensemble copies
@@ -985,7 +986,8 @@ do i = 1, ens_handle%my_num_copies
 end do
 
 ! Fill out the number of my vars
-call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i)
+call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, not_used_here, &
+   ens_handle%distribution_type)
 
 end subroutine set_up_ens_distribution
 
@@ -1011,7 +1013,7 @@ end subroutine get_copy_owner_index
 
 !-----------------------------------------------------------------
 
-subroutine get_var_owner_index(var_number, owner, owners_index)
+subroutine get_var_owner_index(var_number, owner, owners_index, distribution_type)
 
 ! Given the var number, returns which PE stores it when var complete
 ! and its index in that pes local storage. Depends on distribution_type
@@ -1019,30 +1021,46 @@ subroutine get_var_owner_index(var_number, owner, owners_index)
 
 integer, intent(in)  :: var_number
 integer, intent(out) :: owner, owners_index
+integer, intent(in)  :: distribution_type
 
-integer :: div
+integer :: div, pair_number
 
-! Asummes distribution type 1
-div = (var_number - 1) / num_pes
-owner = var_number - div * num_pes - 1
-owners_index = div + 1
+if(distribution_type == 1) then
+   div = (var_number - 1) / num_pes
+   owner = var_number - div * num_pes - 1
+   owners_index = div + 1
+elseif(distribution_type == 2) then
+   ! Distribution type 2 has pairs of state
+   pair_number = (var_number + 1) / 2
+   div = (pair_number - 1) / num_pes
+   owner = pair_number - div * num_pes - 1
+   owners_index = div + 1
+else
+   ! Put in an error statement
+endif
 
 end subroutine get_var_owner_index
 
 !-----------------------------------------------------------------
 
-function get_max_num_vars(num_vars)
-!!!function get_max_num_vars(num_vars, distribution_type)
+!!!function get_max_num_vars(num_vars)
+function get_max_num_vars(num_vars, distribution_type)
 
 ! Returns the largest number of vars that are on any pe when copy complete.
-! Depends on distribution_type with only option 1 currently implemented.
+! Depends on distribution_type with only option 1 and 2 currently implemented.
 ! Used to get size for creating storage to receive a list of the vars on a pe.
 
 integer             :: get_max_num_vars
 integer, intent(in) :: num_vars
-!!!integer, intent(in) :: distribution_type
+integer, intent(in) :: distribution_type
 
-get_max_num_vars = num_vars / num_pes + 1
+if(distribution_type == 1 .or. distribution_type == 2) then
+   ! The maximum number of vars per pe is the same for both distribution type 1 and 2
+   get_max_num_vars = num_vars / num_pes + 1
+else
+   ! Put in error check someday, maybe?
+endif
+   
 
 end function get_max_num_vars
 
@@ -1065,8 +1083,8 @@ end function get_max_num_copies
 
 !-----------------------------------------------------------------
 
-subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
-!!!subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, distribution_type)
+!!!subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
+subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, distribution_type)
 
 ! Returns a list of the vars stored by process pe when copy complete
 ! and the number of these vars.
@@ -1075,23 +1093,51 @@ subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
 
 integer,   intent(in)     :: num_vars, pe
 integer,   intent(out)    :: var_list(:), pes_num_vars
-!!!integer, intent(in) :: distribution_type
+integer, intent(in) :: distribution_type
 
-integer :: num_per_pe_below, num_left_over, i
+integer :: num_per_pe_below, num_left_over, pes_num_pairs, num_pairs, current_pair, i
 
-! Figure out number of vars stored by pe
-num_per_pe_below = num_vars / num_pes
-num_left_over = num_vars - num_per_pe_below * num_pes
-if(num_left_over >= (pe + 1)) then
-   pes_num_vars = num_per_pe_below + 1
+if(distribution_type == 1) then
+   ! Figure out number of vars stored by pe
+   num_per_pe_below = num_vars / num_pes
+   num_left_over = num_vars - num_per_pe_below * num_pes
+   if(num_left_over >= (pe + 1)) then
+      pes_num_vars = num_per_pe_below + 1
+   else
+      pes_num_vars = num_per_pe_below
+   endif
+   
+   ! Fill out the pe's vars
+   do i = 1, pes_num_vars
+      var_list(i) = (pe + 1) + (i - 1) * num_pes
+   end do
+   
+elseif(distribution_type == 2) then
+   ! For this option, pairs of state have to stay together
+   ! Put in error check for num_pairs being even
+   num_pairs = num_vars / 2
+   ! First find how the pairs are distributed
+   num_per_pe_below = num_pairs / num_pes
+   num_left_over = num_pairs - num_per_pe_below * num_pes
+   if(num_left_over >= (pe + 1)) then
+      pes_num_pairs = num_per_pe_below + 1
+   else
+      pes_num_pairs = num_per_pe_below
+   endif
+
+   ! Number of vars is number of pairs times 2
+   pes_num_vars = pes_num_pairs * 2
+   
+   ! Fill out the pe's vars
+   do i = 1, pes_num_pairs
+      current_pair = (pe + 1) + (i - 1) * num_pes
+      var_list(2*i - 1) = 2*current_pair - 1
+      var_list(2*i) = 2*current_pair 
+   end do
+
 else
-   pes_num_vars = num_per_pe_below
+   ! Put in an error 
 endif
-
-! Fill out the pe's vars
-do i = 1, pes_num_vars
-   var_list(i) = (pe + 1) + (i - 1) * num_pes
-end do
 
 end subroutine get_var_list
 
@@ -1188,7 +1234,7 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(num_vars)
+max_num_vars = get_max_num_vars(num_vars, ens_handle%distribution_type)
 
 ! What is maximum number of copies stored on a var complete pe?
 max_num_copies = get_max_num_copies(num_copies)
@@ -1230,7 +1276,7 @@ if ( use_var2copy_rec_loop .eqv. .true. ) then ! use updated version
         end do RECEIVE_FROM_EACH
      else
         ! I'm the sending PE, figure out what vars of my copies I'll send.
-        call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+        call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send, ens_handle%distribution_type)
        
         do k = 1, my_num_copies
            do sv = 1, num_vars_to_send
@@ -1251,7 +1297,7 @@ else ! use older version
     if(my_pe == sending_pe) then
          ! Figure out what piece to send to each other PE and send it
          SEND_TO_EACH: do recv_pe = 0, num_pes - 1
-           call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+           call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send, ens_handle%distribution_type)
 
            if (num_vars_to_send > 0) then
              ! Loop to send these vars for each copy stored on my_pe
@@ -1361,7 +1407,7 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(num_vars)
+max_num_vars = get_max_num_vars(num_vars, ens_handle%distribution_type)
 
 ! What is maximum number of copies stored on a var complete pe?
 max_num_copies = get_max_num_copies(num_copies)
@@ -1383,7 +1429,7 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
    if (my_pe /= sending_pe ) then
 
       ! figure out what piece to recieve from each other PE and recieve it
-      call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+      call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle%distribution_type)
 
       if( num_vars_to_receive > 0 ) then
          ! Loop to receive these vars for each copy stored on my_pe
@@ -1415,7 +1461,7 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
             else
 
                ! figure out what piece to recieve from myself and recieve it
-               call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+               call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle%distribution_type)
                do k = 1,  my_num_copies
                   ! sending to yourself so just copy
                   global_ens_index = ens_handle%my_copies(k)
@@ -1440,7 +1486,7 @@ RECEIVING_PE_LOOP: do recv_pe = 0, num_pes - 1
 
       ! Figure out what piece to receive from each other PE and receive it
       RECEIVE_FROM_EACH: do sending_pe = 0, num_pes - 1
-         call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+         call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle%distribution_type)
 
          ! Loop to receive these vars for each copy stored on my_pe
          ALL_MY_COPIES: do k = 1, my_num_copies
