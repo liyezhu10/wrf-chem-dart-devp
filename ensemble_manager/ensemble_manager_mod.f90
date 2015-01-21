@@ -87,6 +87,9 @@ integer              :: global_counter = 1
 ! Logical flag for initialization of module
 logical              :: module_initialized = .false.
 
+! Module storage for quad_filter status: true means use quad_filter
+logical              :: quad_filter = .false.
+
 ! Module storage for writing error messages
 character(len = 255) :: msgstring
 
@@ -133,12 +136,13 @@ contains
 !-----------------------------------------------------------------
 
 subroutine init_ensemble_manager(ens_handle, num_copies, &
-   num_vars, distribution_type_in, layout_type)
+   num_vars, distribution_type_in, layout_type, quad_filter_in)
 
 type(ensemble_type), intent(out)            :: ens_handle
 integer,             intent(in)             :: num_copies, num_vars
 integer,             intent(in), optional   :: distribution_type_in
 integer,             intent(in), optional   :: layout_type
+logical,             intent(in), optional   :: quad_filter_in
 
 integer :: iunit, io
 
@@ -157,6 +161,18 @@ if ( .not. module_initialized ) then
    ! Initialize the module with utilities 
    call register_module(source, revision, revdate)
    module_initialized = .true.
+
+   ! Set the quad_filter logical in module storage
+   ! WARNING, THE QUAD_FILTER STATE IS ONLY SET BY FIRST CALL TO INIT_ENSEMBLE_MANAGER
+   if(present(quad_filter_in)) then
+      quad_filter = quad_filter_in
+   else
+      quad_filter = .false.
+   endif
+
+   ! QUAD FILTER IMPLICITLY SETS DISTRIBUTION TYPE TO 2: CHANGE THIS TO BE LESS UGLY
+   ! WOULD BE BETTER TO PASS DISTRIBUTION TYPE AS 2 FROM FILTER CALLS WHEN QUAD FILTER
+   if(quad_filter) ens_handle%distribution_type = 2
 
    ! Read the namelist entry
    call find_namelist_in_file("input.nml", "ensemble_manager_nml", iunit)
@@ -908,27 +924,46 @@ subroutine set_up_ens_distribution(ens_handle)
 
 type (ensemble_type),  intent(inout)  :: ens_handle
 
-integer :: num_per_pe_below, num_left_over, i
+integer :: num_per_pe_below, num_left_over, num_pairs, i
 
-! Option 1: Maximum separation for both vars and copies
-! Compute the total number of copies I'll get for var complete
-num_per_pe_below = ens_handle%num_copies / num_pes
-num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
-if(num_left_over >= (ens_handle%my_pe + 1)) then
-   ens_handle%my_num_copies = num_per_pe_below + 1
+   ! Option 1 and 2: Maximum separation for both vars and copies
+   ! Compute the total number of copies I'll get for var complete
+   num_per_pe_below = ens_handle%num_copies / num_pes
+   num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
+   if(num_left_over >= (ens_handle%my_pe + 1)) then
+      ens_handle%my_num_copies = num_per_pe_below + 1
+   else
+      ens_handle%my_num_copies = num_per_pe_below
+   endif
+
+if(ens_handle%distribution_type == 1) then
+   ! Do the same thing for copy complete: figure out which vars I get
+   num_per_pe_below = ens_handle%num_vars / num_pes
+   num_left_over = ens_handle%num_vars - num_per_pe_below * num_pes
+   if(num_left_over >= (ens_handle%my_pe + 1)) then
+      ens_handle%my_num_vars = num_per_pe_below + 1
+   else
+      ens_handle%my_num_vars = num_per_pe_below
+   endif
+
+elseif(ens_handle%distribution_type == 2) then
+   ! Option 2 for quad filter; Vars are in pairs
+   ! Figure out how many pairs each pe gets first following logic above for half the size
+   ! Might want an error check to confirm that num_vars is in fact even
+   num_pairs = ens_handle%num_vars / 2
+   num_per_pe_below = ens_handle%num_vars / num_pes
+   num_left_over = num_pairs - num_per_pe_below * num_pes
+   if(num_left_over >= (ens_handle%my_pe + 1)) then
+      ens_handle%my_num_vars = num_per_pe_below + 1
+   else
+      ens_handle%my_num_vars = num_per_pe_below
+   endif
+   
 else
-   ens_handle%my_num_copies = num_per_pe_below
+   ! Only 1 and 2 defined; PUT AN ERROR HERE
 endif
 
-! Do the same thing for copy complete: figure out which vars I get
-num_per_pe_below = ens_handle%num_vars / num_pes
-num_left_over = ens_handle%num_vars - num_per_pe_below * num_pes
-if(num_left_over >= (ens_handle%my_pe + 1)) then
-   ens_handle%my_num_vars = num_per_pe_below + 1
-else
-   ens_handle%my_num_vars = num_per_pe_below
-endif
-
+! CHECK TO MAKE SURE THAT BELOW IS DISTRIBUTION TYPE INDEPENDENT
 !Allocate the storage for copies and vars all at once
 allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
          ens_handle%time     (ens_handle%my_num_copies),              &
