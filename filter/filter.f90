@@ -1514,11 +1514,17 @@ call all_vars_to_all_copies(forward_op_ens_handle)
 call compute_copy_mean_var(obs_ens_handle, &
       1, ens_size, OBS_MEAN_START, OBS_VAR_START)
 
+! If using the quad filter, fill in the forward operator values
+! for the pseudo obs.
+if (quad_filter) then
+   call update_squared_obs_entries(obs_ens_handle, ens_size, OBS_MEAN_START, OBS_VAR_START)
+   call update_squared_qc_entries(obs_ens_handle, ens_size)
+endif
 
 ! Give the observation code a chance to alter the actual observation
 ! values if there are ambiguous values that need to be changed.
 ! e.g. quad filter pseudo obs computations
-if (observations_updateable) then
+if (quad_filter) then
   call update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, prior_post, &
     obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
     OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
@@ -2173,8 +2179,7 @@ logical :: verbose
 
 ! update every other state entry based on the previous entry
 ! the ensemble member values are (the original ensemble value - the mean) ^ 2
-! also call the mean/sd routine to populate the mean/sd values for the
-! new entries
+! also call the mean/sd routine to populate the mean/sd values for the new entries
 
 ! if you want to see the updated values, make this true. 
 ! for quiet execution, set it to false.
@@ -2207,6 +2212,102 @@ enddo
 call compute_copy_mean_sd(ens_handle, 1, ens_size, mean_index, sd_index)
 
 end subroutine update_squared_state_entries
+
+!-------------------------------------------------------------------------
+
+subroutine update_squared_obs_entries(obs_ens_handle, ens_size, mean_index, var_index)
+
+type(ensemble_type), intent(inout) :: obs_ens_handle
+integer,             intent(in)    :: ens_size
+integer,             intent(in)    :: mean_index
+integer,             intent(in)    :: var_index
+
+integer :: i, j
+integer :: npairs, original, squared
+real(r8) :: forward_operator_mean
+logical :: verbose
+
+! update every other obs forwared operator entry based on the previous entry
+! the ensemble member values are (the original ensemble FO value - the mean) ^ 2
+! also call the mean/var routine to populate the mean/var values for the new entries
+
+! if you want to see the updated values, make this true. 
+! for quiet execution, set it to false.
+verbose = .true.
+
+call prepare_to_update_copies(obs_ens_handle)
+
+npairs = obs_ens_handle%my_num_vars / 2
+! FIXME: test to be sure it is even
+
+do i = 1, npairs
+
+   original = (j*2)-1
+   squared = (j*2)
+
+   forward_operator_mean = obs_ens_handle%copies(mean_index, original)
+
+   do j=1, ens_size
+      ! here is the magic
+      obs_ens_handle%copies(j, squared) = (obs_ens_handle%copies(j, original) - forward_operator_mean)**2
+
+      if (verbose) then
+         write(*,*) 'F.O. mean, original, squared = ', forward_operator_mean, &
+                     obs_ens_handle%copies(j, original), obs_ens_handle%copies(j, squared)
+      endif
+
+   enddo
+enddo
+
+call compute_copy_mean_var(obs_ens_handle, 1, ens_size, mean_index, var_index)
+
+end subroutine update_squared_obs_entries
+
+!-------------------------------------------------------------------------
+
+subroutine update_squared_qc_entries(forward_op_ens_handle, ens_size)  !, mean_index, var_index)
+
+type(ensemble_type), intent(inout) :: forward_op_ens_handle
+integer,             intent(in)    :: ens_size
+!integer,             intent(in)    :: mean_index
+!integer,             intent(in)    :: var_index
+
+integer :: i, j
+integer :: npairs, original, squared
+!real(r8) :: forward_operator_mean
+logical :: verbose
+
+! copy over the original data QC values to the corresponding pseudo obs entry.
+
+! if you want to see the updated values, make this true. 
+! for quiet execution, set it to false.
+verbose = .true.
+
+call prepare_to_update_copies(forward_op_ens_handle)
+
+npairs = forward_op_ens_handle%my_num_vars / 2
+! FIXME: test to be sure it is even
+
+do i = 1, npairs
+
+   original = (j*2)-1
+   squared = (j*2)
+
+   do j=1, ens_size
+
+      if (verbose) then
+         write(*,*) 'QC original, squared = ', forward_op_ens_handle%copies(j, original), &
+                                               forward_op_ens_handle%copies(j, squared)
+      endif
+
+      forward_op_ens_handle%copies(j, squared) = forward_op_ens_handle%copies(j, original)
+   enddo
+enddo
+
+! FIXME: we don't need stats on the QC vals, right?
+!call compute_copy_mean_var(forward_op_ens_handle, 1, ens_size, mean_index, var_index)
+
+end subroutine update_squared_qc_entries
 
 !-------------------------------------------------------------------------
 
