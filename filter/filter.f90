@@ -529,6 +529,13 @@ AdvanceTime : do
       call trace_message('After  prior inflation damping and prep')
    endif
 
+   
+   ! FIXME: i think new code for quad filter goes here.  after inflation,
+   ! while we are still copy complete, and after ens mean and sd were computed.
+   if (quad_filter) then
+      call update_squared_state_entries(ens_handle, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
+   endif
+
    ! Back to state space for forward operator computations
    call all_copies_to_all_vars(ens_handle) 
 
@@ -2149,6 +2156,57 @@ call all_vars_to_all_copies(obs_ens_handle)
 
 
 end subroutine update_observations_quad_filter
+
+!-------------------------------------------------------------------------
+
+subroutine update_squared_state_entries(ens_handle, ens_size, mean_index, sd_index)
+
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+integer,             intent(in)    :: mean_index
+integer,             intent(in)    :: sd_index
+
+integer :: i, j
+integer :: npairs, original, squared
+real(r8) :: state_mean
+logical :: verbose
+
+! update every other state entry based on the previous entry
+! the ensemble member values are (the original ensemble value - the mean) ^ 2
+! also call the mean/sd routine to populate the mean/sd values for the
+! new entries
+
+! if you want to see the updated values, make this true. 
+! for quiet execution, set it to false.
+verbose = .true.
+
+call prepare_to_update_copies(ens_handle)
+
+npairs = ens_handle%my_num_vars / 2
+! FIXME: test to be sure it is even
+
+do i = 1, npairs
+
+   original = (j*2)-1
+   squared = (j*2)
+
+   ! here is the magic
+   state_mean = ens_handle%copies(mean_index, original)
+
+   do j=1, ens_size
+      ens_handle%copies(j, squared) = (ens_handle%copies(j, original) - state_mean)**2
+
+      if (verbose) then
+         write(*,*) 'state mean, original, squared = ', state_mean, ens_handle%copies(j, original), &
+                                                                    ens_handle%copies(j, squared)
+      endif
+
+   enddo
+enddo
+
+call compute_copy_mean_sd(ens_handle, 1, ens_size, mean_index, sd_index)
+
+end subroutine update_squared_state_entries
 
 !-------------------------------------------------------------------------
 
