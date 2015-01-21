@@ -25,11 +25,11 @@
    async                    = 0,
    adv_ens_command          = "./advance_model.csh",
    ens_size                 = 20,
-   start_from_restart       = .true.,
+   start_from_restart       = .false.,
    output_restart           = .true.,
-   obs_sequence_in_name     = "obs_seq.out",
+   obs_sequence_in_name     = "obs_pseudo.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "filter_ics",
+   restart_in_file_name     = "perfect_restart",
    restart_out_file_name    = "filter_restart",
    init_time_days           = 0,
    init_time_seconds        = 0,
@@ -37,7 +37,7 @@
    first_obs_seconds        = -1,
    last_obs_days            = -1,
    last_obs_seconds         = -1,
-   quad_filter              = .false.
+   quad_filter              = .true.
    num_output_state_members = 20,
    num_output_obs_members   = 20,
    output_interval          = 1,
@@ -108,7 +108,8 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'RAW_STATE_VARIABLE'
+   assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
+                                'QUAD_FILTER_SQUARED_ERROR'
    /
 
 &assim_model_nml
@@ -210,5 +211,12 @@
    outliers_in_histogram = .true.,
    use_zero_error_obs    = .false.,
    verbose               = .false.
+   /
+
+&obs_add_pseudo_obs_nml
+   filename_in = 'obs_seq.out', 
+   filename_out = 'obs_pseudo.out', 
+   print_only = .false., 
+   calendar = 'NO_CALENDAR'
    /
 
