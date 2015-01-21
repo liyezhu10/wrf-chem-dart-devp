@@ -147,6 +147,9 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
    silence
 
+! Are any of the observation types subject to being updated
+! during the computation?  e.g. quad filter
+logical :: observations_updateable = .false.
 
 !----------------------------------------------------------------
 
@@ -239,6 +242,12 @@ endif
 ! Observation space inflation for posterior not currently supported
 if(inf_flavor(2) == 1) call error_handler(E_ERR, 'filter_main', &
    'Posterior observation space inflation (type 1) not supported', source, revision, revdate)
+
+if (quad_filter) then
+   observations_updateable = .true.
+   call error_handler(E_MSG,'filter:', 'quad filter is enabled', &
+      source, revision, revdate)
+endif
 
 ! Setup the indices into the ensemble storage
 ENS_MEAN_COPY        = ens_size + 1
@@ -1498,6 +1507,17 @@ call all_vars_to_all_copies(forward_op_ens_handle)
 call compute_copy_mean_var(obs_ens_handle, &
       1, ens_size, OBS_MEAN_START, OBS_VAR_START)
 
+
+! Give the observation code a chance to alter the actual observation
+! values if there are ambiguous values that need to be changed.
+! e.g. quad filter pseudo obs computations
+if (observations_updateable) then
+  call update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, prior_post, &
+    obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
+    OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
+    OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
+endif
+
 call prepare_to_read_from_copies(forward_op_ens_handle)
 call prepare_to_update_copies(obs_ens_handle)
 
@@ -1946,6 +1966,189 @@ select case (this_obs_type)
 end select
 
 end function failed_outlier
+
+!-------------------------------------------------------------------------
+!-------------------------------------------------------------------------
+! special for quad filter, computing obs values and error variances for the
+! pseudo obs (QUAD_FILTER_SQUARED_ERROR obs types)
+
+
+subroutine update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, prior_post, &
+      obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
+      OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
+      OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
+
+
+use obs_def_mod, only          : get_obs_def_key, get_obs_kind, set_obs_def_error_variance
+use obs_kind_mod, only         : QUAD_FILTER_SQUARED_ERROR
+use location_mod, only         : location_type
+use ensemble_manager_mod, only : ensemble_type, get_my_num_copies, &
+                                 all_copies_to_all_vars, all_vars_to_all_copies, &
+                                 get_copy_owner_index, broadcast_copy
+use mpi_utilities_mod, only    : my_task_id
+use obs_sequence_mod, only     : set_obs, get_obs_def, set_obs_def, set_obs_values
+
+
+! Do prior observation space diagnostics on the set of obs corresponding to keys
+
+type(ensemble_type),     intent(inout) :: obs_ens_handle
+integer,                 intent(in)    :: ens_size
+integer,                 intent(in)    :: num_obs_in_set
+integer,                 intent(in)    :: keys(num_obs_in_set), prior_post
+integer,                 intent(in)    :: ens_mean_index, ens_spread_index
+type(obs_sequence_type), intent(inout) :: seq
+integer,                 intent(in)    :: OBS_MEAN_START, OBS_VAR_START
+integer,                 intent(in)    :: OBS_GLOBAL_QC_COPY, OBS_VAL_COPY
+integer,                 intent(in)    :: OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG
+
+integer               :: j, k, ens_offset, forward_min, forward_max, forward_unit, ivalue
+real(r8)              :: error, diff_sd, ratio, obs_temp(1)
+real(r8)              :: obs_prior_mean, obs_prior_var, obs_val, obs_err_var
+real(r8)              :: forward_temp(num_obs_in_set), rvalue(1)
+
+
+
+integer, intent(in) :: obs_val_index
+integer, intent(in) :: OBS_KEY_COPY
+type(obs_def_type)  :: obs_def
+integer             :: obs_kind_ind, original, pseudo
+real(r8)            :: i_real, original_err_var
+real(r8)            :: updated_obs(num_obs_in_set) !nsc
+real(r8)            :: pseudo_obs_val, pseudo_obs_err_var
+integer             :: i_int, npairs
+integer             :: this_obs_key
+integer             :: owner, owners_index
+type(obs_type)      :: observation1, observation2
+logical             :: verbose
+
+
+! only do this for the prior observations
+if (prior_post /= PRIOR_DIAG) return
+
+print *, 'in quad filter update routine for prior'
+
+! if you want to see the updated values, make this true. 
+! for quiet execution, set it to false.
+verbose = .true.
+
+call prepare_to_update_copies(obs_ens_handle)
+
+npairs = obs_ens_handle%my_num_vars / 2
+! FIXME: test to be sure it is even
+
+do j = 1, npairs
+
+   original = (j*2)-1
+   pseudo = (j*2)
+
+   ! we only need to do this for error checking - no other reason.
+   ! get the key number associated with each of my subset of obs
+   ! then get the obs and extract info from it.  this is where we
+   ! are going to overwrite the original (missing) values.
+   this_obs_key = obs_ens_handle%copies(OBS_KEY_COPY, pseudo) 
+   call get_obs_from_key(seq, this_obs_key, observation2)
+   call get_obs_def(observation2, obs_def)
+   obs_kind_ind = get_obs_kind(obs_def)
+   if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
+      ! FIXME: call the error handler here
+   endif
+
+   obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, original)
+   obs_prior_var  = obs_ens_handle%copies(OBS_VAR_START, original)
+
+   obs_val     = obs_ens_handle%copies(OBS_VAL_COPY, original)
+   obs_err_var = obs_ens_handle%copies(OBS_ERR_VAR_COPY, original)
+
+   ! here is the magic
+   pseudo_obs_val = ((obs_val - obs_prior_mean)**2) - obs_err_var
+   pseudo_obs_err_var = (2 * (obs_err_var**2)) + 4*obs_err_var*obs_prior_var
+
+   ! at this point we have the updated value.  only replace
+   ! the local copy in the ens handle.  we are out of sync
+   ! with other PEs and the observation sequence data right now.
+
+   obs_ens_handle%copies(OBS_VAL_COPY, pseudo) = pseudo_obs_val
+   obs_ens_handle%copies(OBS_ERR_VAR_COPY, pseudo) = pseudo_obs_err_var
+   if (verbose) then
+      write(*,*) 'ob, errvar after = ', pseudo_obs_val, pseudo_obs_err_var
+   endif
+
+enddo
+
+
+! get all the updated obs values onto one PE
+call all_copies_to_all_vars(obs_ens_handle)
+
+! FIXME: make this work and then make it better
+
+! Figure out which PE has all the obs values and broadcast
+! them into a temporary array on the other PEs.
+call broadcast_copy(obs_ens_handle, OBS_VAL_COPY, updated_obs)
+
+! Each PE has an independent copy of the observation
+! sequence.  These values must be updated.  Rather than
+! trying to track which ones are changed, just loop
+! through all of them and update any with different values.
+do j = 1, num_obs_in_set
+   call get_obs_from_key(seq, keys(j), observation) 
+   call get_obs_def(observation, obs_def)
+   obs_kind_ind = get_obs_kind(obs_def)
+
+   if (obs_kind_ind == QUAD_FILTER_SQUARED_ERROR) then
+      call get_obs_values(observation, obs_temp(1:1), obs_val_index)
+      obs_val = updated_obs(j)
+      if (obs_temp(1) /= obs_val) then
+         ! FIXME - does it have to be missing r8 originally?
+         if (verbose) then
+            write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
+            write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
+            write(*,*) 'updating obs in seq, index = ', j, obs_val_index
+         endif
+         obs_temp(1) = obs_val
+         call set_obs_values(observation, obs_temp(1:1), obs_val_index)
+         call set_obs(seq, observation, keys(j))
+      endif
+   endif
+enddo
+
+! Figure out which PE has all the obs values and broadcast
+! them into a temporary array on the other PEs.
+call broadcast_copy(obs_ens_handle, OBS_ERR_VAR_COPY, updated_obs)
+
+! Each PE has an independent copy of the observation
+! sequence.  These values must be updated.  Rather than
+! trying to track which ones are changed, just loop
+! through all of them and update any with different values.
+do j = 1, num_obs_in_set
+   call get_obs_from_key(seq, keys(j), observation) 
+   call get_obs_def(observation, obs_def)
+   obs_kind_ind = get_obs_kind(obs_def)
+
+! FIXME: also update error variance
+
+   if (obs_kind_ind == QUAD_FILTER_SQUARED_ERROR) then
+      original_err_var = get_obs_def_error_variance(obs_def)
+      obs_err_var = updated_obs(j)
+      if (original_err_var /= obs_err_var) then  ! FIXME: again, is orig always missing?
+         if (verbose) then
+            write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
+            write(*,*) 'old observation errvar, new errvar = ', original_err_var, obs_err_var
+            write(*,*) 'updating obs in seq, index = ', j, obs_val_index
+         endif
+         call set_obs_def_error_variance(obs_def, obs_err_var)
+         call set_obs_def(observation, obs_def)
+         call set_obs(seq, observation, keys(j))
+      endif
+   endif
+enddo
+
+! END HORRIBLE FIXME
+
+! Now redistribute back to all copies as this was originally.
+call all_vars_to_all_copies(obs_ens_handle)
+
+
+end subroutine update_observations_quad_filter
 
 !-------------------------------------------------------------------------
 
