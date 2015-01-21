@@ -926,7 +926,7 @@ integer,         intent(in)             :: funit
 type(time_type), optional, intent(out) :: target_time
 
 character(len = 16) :: open_format
-integer :: ios, int1, int2, i, indx, state_size
+integer :: ios, int1, int2, i, indx, state_size, nitems
 
 if ( .not. module_initialized ) call static_init_assim_model()
 
@@ -935,14 +935,17 @@ ios = 0
 ! Figure out whether the file is opened FORMATTED or UNFORMATTED
 inquire(funit, FORM=open_format)
 
+nitems = size(model_state)
+if (quad_filter) nitems = nitems / 2
+
 if (ascii_file_format(open_format)) then
    if(present(target_time)) target_time = read_time(funit)
    model_time = read_time(funit)
-   read(funit,*,iostat=ios) model_state
+   read(funit,*,iostat=ios) model_state(1:nitems)
 else
    if(present(target_time)) target_time = read_time(funit, form = "unformatted")
    model_time = read_time(funit, form = "unformatted")
-   read(funit,iostat=ios) model_state
+   read(funit,iostat=ios) model_state(1:nitems)
 endif
 
 ! If the model_state read fails ... dump diagnostics.

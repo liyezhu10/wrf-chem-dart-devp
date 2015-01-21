@@ -93,7 +93,7 @@ integer  :: last_obs_seconds    = -1
 integer  :: obs_window_days     = -1
 integer  :: obs_window_seconds  = -1
 ! Turn on quad filter 
-logical  :: quad_filter         = .true.
+logical  :: quad_filter         = .false.
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -192,7 +192,9 @@ real(r8), allocatable   :: ens_mean(:)
 logical                 :: ds, all_gone, allow_missing
 
 
-call filter_initialize_modules_used()
+! Initialize modules used that require it
+call initialize_mpi_utilities('Filter')
+
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "filter_nml", iunit)
@@ -202,6 +204,8 @@ call check_namelist_read(iunit, io, "filter_nml")
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
 if (do_nml_term()) write(     *     , nml=filter_nml)
+
+call filter_initialize_modules_used()
 
 call set_trace(trace_execution, output_timestamps, silence)
 
@@ -533,6 +537,7 @@ AdvanceTime : do
    ! FIXME: i think new code for quad filter goes here.  after inflation,
    ! while we are still copy complete, and after ens mean and sd were computed.
    if (quad_filter) then
+print *, 'args to update state: ', ens_size, ENS_MEAN_COPY, ENS_SD_COPY
       call update_squared_state_entries(ens_handle, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
    endif
 
@@ -955,9 +960,6 @@ end subroutine filter_generate_copy_meta_data
 !-------------------------------------------------------------------------
 
 subroutine filter_initialize_modules_used()
-
-! Initialize modules used that require it
-call initialize_mpi_utilities('Filter')
 
 call register_module(source,revision,revdate)
 
@@ -1518,7 +1520,7 @@ call compute_copy_mean_var(obs_ens_handle, &
 ! for the pseudo obs.
 if (quad_filter) then
    call update_squared_obs_entries(obs_ens_handle, ens_size, OBS_MEAN_START, OBS_VAR_START)
-   call update_squared_qc_entries(obs_ens_handle, ens_size)
+   call update_squared_qc_entries(forward_op_ens_handle, ens_size)
 endif
 
 ! Give the observation code a chance to alter the actual observation
