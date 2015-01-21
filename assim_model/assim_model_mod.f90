@@ -84,6 +84,9 @@ integer :: model_size
 ! Ensure init code is called exactly once
 logical :: module_initialized = .false.
 
+! Is quad filter in use?
+logical :: quad_filter = .false.
+
 ! Global storage for default restart formats
 character(len = 16) :: read_format = "unformatted", write_format = "unformatted"
 
@@ -131,7 +134,7 @@ end subroutine init_assim_model
 
 
 
-  subroutine static_init_assim_model()
+  subroutine static_init_assim_model(quad_filter_in)
 !----------------------------------------------------------------------
 ! subroutine static_init_assim_model()
 !
@@ -141,6 +144,8 @@ end subroutine init_assim_model
 
 implicit none
 
+logical, intent(in), optional :: quad_filter_in
+
 integer :: iunit, io
 
 ! only execute this code once, even if called multiple times.
@@ -149,6 +154,13 @@ if (module_initialized) return
 ! First thing to do is echo info to logfile ... 
 call register_module(source, revision, revdate)
 module_initialized = .true.
+
+! Set quad_filter status
+if(present(quad_filter_in)) then
+   quad_filter = quad_filter_in
+else 
+   quad_filter = .false.
+endif
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "assim_model_nml", iunit)
