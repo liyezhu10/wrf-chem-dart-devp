@@ -362,7 +362,11 @@ if(.not. start_from_restart) then
       ! If this is one of the actual ensemble copies, then perturb
       if(global_copy_index >= start_copy .and. global_copy_index <= end_copy) then
          ! See if model has an interface to perturb
-         call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
+         if (quad_filter) then
+            call pert_model_state(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%vars(1:ens_handle%num_vars:2, i), interf_provided)
+         else
+            call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
+         endif
          ! If model does not provide a perturbing interface, do it here
          if(.not. interf_provided) then
             ! To reproduce for varying pe count, need  fixed sequence for each copy

@@ -90,6 +90,8 @@ logical :: module_initialized = .false.
 ! Is quad filter in use?
 logical :: quad_filter = .false.
 
+logical :: write_it_all = .false.   ! FIXME
+
 ! Global storage for default restart formats
 character(len = 16) :: read_format = "unformatted", write_format = "unformatted"
 
@@ -840,12 +842,14 @@ real(r8),        intent(in)           :: model_state(:)
 integer,         intent(in)           :: funit
 type(time_type), optional, intent(in) :: target_time
 
-integer :: i, io, rc
+integer :: i, io, rc, nitems
 character(len = 16) :: open_format
 character(len=128) :: filename
 logical :: is_named
 
 if ( .not. module_initialized ) call static_init_assim_model()
+
+nitems = size(model_state)
 
 ! Figure out whether the file is opened FORMATTED or UNFORMATTED
 inquire(funit, FORM=open_format)
@@ -859,16 +863,27 @@ if (ascii_file_format(open_format)) then
    if (io /= 0) goto 10
    call write_time(funit, model_time, ios_out=io)
    if (io /= 0) goto 10
-   do i = 1, size(model_state)
-      write(funit, *, iostat = io) model_state(i)
-      if (io /= 0) goto 10
-   end do
+   if (write_it_all .or. .not. quad_filter) then
+      do i = 1, size(model_state)
+         write(funit, *, iostat = io) model_state(i)
+         if (io /= 0) goto 10
+      end do
+   else
+      do i = 1, size(model_state), 2
+         write(funit, *, iostat = io) model_state(i)
+         if (io /= 0) goto 10
+      end do
+   endif
 else
    if(present(target_time)) call write_time(funit, target_time, form="unformatted", ios_out=io)
    if (io /= 0) goto 10
    call write_time(funit, model_time, form="unformatted", ios_out=io)
    if (io /= 0) goto 10
-   write(funit, iostat = io) model_state
+   if (write_it_all .or. .not. quad_filter) then
+      write(funit, iostat = io) model_state
+   else
+      write(funit, iostat = io) model_state(1:nitems:2)
+   endif
    if (io /= 0) goto 10
 endif
 
@@ -1232,7 +1247,11 @@ endif
 ! model_mod:nc_write_model_vars knows nothing about assim_model_types,
 ! so we must pass the components.
 
-i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex) 
+if (quad_filter) then
+   i = nc_write_model_vars(ncFileID%ncid, model_state(1:model_size:2), copyindex, timeindex) 
+else
+   i = nc_write_model_vars(ncFileID%ncid, model_state(:), copyindex, timeindex) 
+endif
 
 end subroutine aoutput_diagnostics
 

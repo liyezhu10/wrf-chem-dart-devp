@@ -474,7 +474,7 @@ AdvanceTime : do
       call timestamp_message('Before running model', sync=.true.)
    
       call advance_state(ens_handle, ens_size, next_ens_time, async, &
-                         adv_ens_command, tasks_per_model_advance)
+                         adv_ens_command, tasks_per_model_advance, quad_filter_in=quad_filter)
    
       ! update so curr time is accurate.
       curr_ens_time = next_ens_time
@@ -1326,12 +1326,15 @@ real(r8)           :: input_qc(1), obs_value(1), obs_err_var, thisvar(1)
 integer            :: j, k, my_num_copies, istatus , global_ens_index, thiskey(1)
 logical            :: evaluate_this_ob, assimilate_this_ob
 type(obs_def_type) :: obs_def
+integer            :: model_size
 
 ! Assumed that both ensembles are var complete
 ! Each PE must loop to compute its copies of the forward operators
 ! IMPORTANT, IT IS ASSUMED THAT ACTUAL ENSEMBLES COME FIRST
 ! HK: I think it is also assumed that the ensemble members are in the same order in
 ! each of the handles
+
+model_size = get_model_size()
 
 ! Loop through my copies and compute expected value
 my_num_copies = get_my_num_copies(obs_ens_handle)
@@ -1378,9 +1381,15 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
       if(global_ens_index <= ens_size) then
          ! temporaries to avoid passing array sections which was slow on PGI compiler
          thiskey(1) = keys(j)
-         call get_expected_obs(seq, thiskey, &
-            global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
-            thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
+         if (quad_filter) then
+            call get_expected_obs(seq, thiskey, &
+               global_ens_index, ens_handle%vars(1:model_size:2, k), ens_handle%time(1), isprior, &
+               thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
+         else
+            call get_expected_obs(seq, thiskey, &
+               global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
+               thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
+         endif
          obs_ens_handle%vars(j, k) = thisvar(1)
 
          ! If istatus is 0 (successful) then put 0 for assimilate, -1 for evaluate only
