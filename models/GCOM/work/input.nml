@@ -163,7 +163,7 @@
    assimilation_period_seconds  = 0
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
-   debug                        = 0
+   debug                        = 9
    gcom_variables = 'temperature', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
                     'salinity',    'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
                     'u',           'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
@@ -333,9 +333,9 @@
 &model_mod_check_nml
    input_file           = "dart_ics"
    output_file          = "check_me_out"
-   advance_time_present = .FALSE.
+   advance_time_present = .TRUE.
    verbose              = .TRUE.
-   test1thru            = 1
+   test1thru            = 4
    x_ind                = 720
    kind_of_interest     = 'KIND_SALINITY'
    loc_of_interest      = 287.5, 82.48, 0.35

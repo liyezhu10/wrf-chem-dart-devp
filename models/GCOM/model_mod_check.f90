@@ -98,7 +98,7 @@ if (test1thru > 0) then
    write(*,*)
    write(*,*)'Testing static_init_model ...'
    call static_init_model()
-   write(*,*)'testing complete ...'
+   write(*,*)'static_init_model test complete ...'
 
 endif
 
@@ -108,7 +108,7 @@ if (test1thru > 1) then
    write(*,*)'Testing get_model_size ...'
    x_size = get_model_size()
    write(*,'(''state vector has length'',i10)') x_size
-   write(*,*)'testing complete ...'
+   write(*,*)'get_model_size test complete ...'
 
 endif
 
@@ -132,6 +132,8 @@ if (test1thru > 2) then
    call awrite_state_restart(model_time, statevector, iunit)
    call close_restart(iunit)
 
+   write(*,*)'trivial restart file "allones.ics" written.'
+
 endif
 
 !----------------------------------------------------------------------
@@ -142,7 +144,8 @@ endif
 if (test1thru > 3) then
 
    write(*,*)
-   write(*,*)'Reading '//trim(input_file)
+   write(*,*)'Reading ['//trim(input_file)//'] advance_time_present is ', &
+              advance_time_present
 
    iunit = open_restart_read(input_file)
    if ( advance_time_present ) then
@@ -152,8 +155,16 @@ if (test1thru > 3) then
    endif
 
    call close_restart(iunit)
-   call print_date( model_time,'model_mod_check:model date')
-   call print_time( model_time,'model_mod_check:model time')
+   call print_date( model_time,'model_mod_check:model   date')
+   call print_time( model_time,'model_mod_check:model   time')
+
+   if ( advance_time_present ) then
+      call print_date( adv_to_time,'model_mod_check:advance date')
+      call print_time( adv_to_time,'model_mod_check:advance time')
+   endif
+
+   write(*,*)'Read '//trim(input_file)//' complete.'
+   write(*,*)'test #4 complete'
 
 endif
 
@@ -168,7 +179,7 @@ endif
 if (test1thru > 4) then
 
    write(*,*)
-   write(*,*)'Exercising the netCDF routines.'
+   write(*,*)'Exercising the netCDF routines. test #5'
    write(*,*)'Creating '//trim(output_file)//'.nc'
 
    state_meta(1) = 'restart test'
@@ -178,6 +189,7 @@ if (test1thru > 4) then
 
    call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
+   write(*,*)'test #5 complete - netCDF file creation'
 endif
 
 !----------------------------------------------------------------------

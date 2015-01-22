@@ -24,15 +24,16 @@ use netcdf
 implicit none
 private
 
-public :: get_gcom_calendar,   &
-          set_model_time_step, &
-          get_horiz_grid_dims, &
-          get_vert_grid_dim,   &
-          read_horiz_grid,     &
-          read_topography,     &
-          read_vert_grid,      &
-          write_gcom_namelist, &
-          get_gcom_restart_filename
+public :: get_gcom_calendar,         &
+          set_model_time_step,       &
+          get_horiz_grid_dims,       &
+          get_vert_grid_dim,         &
+          read_horiz_grid,           &
+          read_topography,           &
+          read_vert_grid,            &
+          write_gcom_namelist,       &
+          get_gcom_restart_filename, &
+          get_gcom_grid_filename
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -43,8 +44,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=512) :: msgstring
 logical, save :: module_initialized = .false.
 
-character(len=256) :: ic_filename      = 'gcom_geometry.nc'
-!character(len=256) :: restart_filename = 'dart_gcom_mod_restart_filename_not_set'
+character(len=256) ::   ic_filename = 'no_gcom_restart_file'
+character(len=256) :: grid_filename = 'no_gcom_grid_file'
 
 ! set this to true if you want to print out the current time
 ! after each N observations are processed, for benchmarking.
@@ -187,6 +188,9 @@ integer :: iunit, io
 ! call check_namelist_read(iunit, io, 'time_manager_nml')
 
 call set_calendar_type('gregorian')
+
+call get_gcom_restart_filename(ic_filename)
+call get_gcom_grid_filename(grid_filename)
 
 ! Read GCOM I/O information (for restart file ... grid dimensions)
 ! Read GCOM initial information (for input/restart filename)

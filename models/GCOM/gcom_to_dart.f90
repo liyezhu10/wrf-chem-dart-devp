@@ -27,7 +27,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              error_handler, E_MSG
 
-use        model_mod, only : restart_file_to_dart_vector, static_init_model, &
+use        model_mod, only : gcom_file_to_dart_vector, static_init_model, &
                              get_model_size, get_gcom_restart_filename
 
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
@@ -91,14 +91,14 @@ call error_handler(E_MSG,'gcom_to_dart',string1,text1=string2)
 
 x_size = get_model_size()
 allocate(statevector(x_size))
-call restart_file_to_dart_vector(gcom_restart_filename, statevector, model_time) 
+call gcom_file_to_dart_vector(gcom_restart_filename, statevector, model_time) 
 
 iunit = open_restart_write(gcom_to_dart_output_file)
 
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
-call print_date(model_time, str='gcom_to_dart:GCOM  model date')
+call print_date(model_time, str='gcom_to_dart:GCOM model date')
 call print_time(model_time, str='gcom_to_dart:DART model time')
 call finalize_utilities('gcom_to_dart')
 

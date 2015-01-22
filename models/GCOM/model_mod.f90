@@ -10,7 +10,7 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 
-use        types_mod, only : r4, r8, SECPERDAY, MISSING_R8, MISSING_I, &
+use        types_mod, only : r4, r8, SECPERDAY, MISSING_R4, MISSING_R8, MISSING_I, &
                              rad2deg, PI, obstypelength, metadatalength
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
@@ -32,22 +32,23 @@ use    utilities_mod, only : register_module, logfileunit, get_unit,     &
                              open_file, file_exist, find_textfile_dims,  &
                              file_to_text, do_output
 
-use     obs_kind_mod, only : KIND_TEMPERATURE,          &
-                             KIND_SALINITY,             &
-                             KIND_DRY_LAND,             &
-                             KIND_U_CURRENT_COMPONENT,  &
-                             KIND_V_CURRENT_COMPONENT,  &
-                             KIND_SEA_SURFACE_HEIGHT,   &
-                             KIND_SEA_SURFACE_PRESSURE, &
-                             KIND_POTENTIAL_TEMPERATURE
+use     obs_kind_mod, only : KIND_TEMPERATURE,           &
+                             KIND_SALINITY,              &
+                             KIND_DRY_LAND,              &
+                             KIND_U_CURRENT_COMPONENT,   &
+                             KIND_V_CURRENT_COMPONENT,   &
+                             KIND_SEA_SURFACE_HEIGHT,    &
+                             KIND_SEA_SURFACE_PRESSURE,  &
+                             KIND_POTENTIAL_TEMPERATURE, &
+                             get_raw_obs_kind_index
 
 use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-use     dart_gcom_mod, only: set_model_time_step,                              &
-                             get_horiz_grid_dims, get_vert_grid_dim,           &
-                             read_horiz_grid, read_vert_grid, read_topography 
+! use     dart_gcom_mod, only: set_model_time_step,                              &
+!                              get_horiz_grid_dims, &
+!                              read_grid, read_vert_grid, read_topography 
 
 use typesizes
 use netcdf
@@ -55,19 +56,20 @@ use netcdf
 implicit none
 private
 
-! these routines must be public and you cannot change
-! the arguments - they will be called *from* the DART code.
-public :: get_model_size,         &
-          static_init_model,      &
+! These routines are required by DART.
+! Interfaces to these routines are fixed and cannot be changed in any way.
+
+public :: static_init_model,      &
+          get_model_size,         &
           get_model_time_step,    &
-          init_time,              &
-          init_conditions,        &
-          pert_model_state,       &
           get_state_meta_data,    &
-          adv_1step,              &
           model_interpolate,      &
           nc_write_model_atts,    &
           nc_write_model_vars,    &
+          init_conditions,        &
+          init_time,              &
+          pert_model_state,       &
+          adv_1step,              &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
@@ -76,10 +78,11 @@ public :: get_model_size,         &
 
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
-public :: get_gridsize,                &
-          restart_file_to_dart_vector, &
-          dart_vector_to_restart_file, &
-          DART_get_var,                &
+public :: get_gridsize,              &
+          get_gcom_restart_filename, &
+          gcom_file_to_dart_vector,  &
+          dart_vector_to_gcom_file,  &
+          DART_get_var,              &
           test_interpolation
 
 ! version controlled file description for error handling, do not edit
@@ -184,6 +187,8 @@ real(r8), allocatable :: ZC(:), ZG(:)
 ! each of the dipole u quadrilaterals and t quadrilaterals.
 real(r8), allocatable :: ULAT(:,:), ULON(:,:), TLAT(:,:), TLON(:,:)
 
+real(r8), allocatable :: ULEV(:,:,:)
+
 ! integer, lowest valid cell number in the vertical
 integer, allocatable  :: KMT(:, :), KMU(:, :)
 ! real, depth of lowest valid cell (0 = land).  use only if KMT/KMU not avail.
@@ -206,7 +211,7 @@ type progvartype
    character(len=NF90_MAX_NAME) :: varname
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
-   character(len=obstypelength), dimension(NF90_MAX_VAR_DIMS) :: dimnames
+   character(len=NF90_MAX_NAME), dimension(NF90_MAX_VAR_DIMS) :: dimnames
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
    integer  :: numdims
    integer  :: maxlevels
@@ -291,27 +296,6 @@ contains
 
 !-----------------------------------------------------------------------
 !>
-!> Returns the size of the model as an integer, i.e.
-!> the length of everything you need to pack into a DART vector:
-!> the 'state', any parameters you are estimating, etc.
-!>
-!> Required for all applications.
-!>
-
-function get_model_size()
-integer :: get_model_size
-
-if ( .not. module_initialized ) call static_init_model
-
-get_model_size = model_size
-
-call error_handler(E_MSG,'get_model_size','FIXME TJH UNTESTED')
-
-end function get_model_size
-
-
-!-----------------------------------------------------------------------
-!>
 !> Called to do one time initialization of the model.
 !> In this case, it reads in the grid information.
 
@@ -347,83 +331,109 @@ call error_handler(E_MSG,'static_init_model','FIXME TJH UNTESTED')
 
 ! Read the DART namelist for this model
 call find_namelist_in_file('input.nml', 'model_nml', iunit)
-read(iunit, nml = model_nml, iostat = io)
+read(iunit, nml = model_nml, iostat=io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
+call error_handler(E_MSG,'static_init_model','model_nml values are')
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
+!-----------------------------------------------------------------------
+! Set the time step ... 
+! FIXME ensure model_timestep is multiple of 'ocean_dynamics_timestep'
+! FIXME dart_gcom_mod:set_model_time_step() could do this
 
-! Set the time step ... causes GCOM namelists to be read.
-! Ensures model_timestep is multiple of 'ocean_dynamics_timestep'
-
-model_timestep = set_model_time_step()
-
+model_timestep = set_time(assimilation_period_seconds,assimilation_period_days)
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
-
 write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
+call error_handler(E_MSG,'static_init_model',string1)
 
-
+!-----------------------------------------------------------------------
 ! get data dimensions, then allocate space, then open the files
 ! and actually fill in the arrays.
 
-call get_horiz_grid_dims(Nx, Ny)
-call get_vert_grid_dim(Nz)
+call get_grid_dims(Nx, Ny, Nz)
 
 ! Allocate space for grid variables.
+allocate(ULEV(Nx,Ny,Nz))
 allocate(ULAT(Nx,Ny), ULON(Nx,Ny), TLAT(Nx,Ny), TLON(Nx,Ny))
 allocate( KMT(Nx,Ny),  KMU(Nx,Ny))
 allocate(  HT(Nx,Ny),   HU(Nx,Ny))
 allocate(     ZC(Nz),      ZG(Nz))
 
-
 ! Fill them in.
 ! horiz grid initializes ULAT/LON, TLAT/LON as well.
 ! kmt initializes HT/HU if present in input file.
-call read_horiz_grid(Nx, Ny, ULAT, ULON, TLAT, TLON)
-call read_topography(Nx, Ny,  KMT,  KMU)
-call read_vert_grid( Nz, ZC, ZG)
 
-if (debug > 2) call write_grid_netcdf() ! DEBUG only
-if (debug > 2) call write_grid_interptest() ! DEBUG only
+call read_grid(Nx, Ny, Nz, ULAT, ULON, ULEV)
+! FIXME call read_topography(Nx, Ny,  KMT,  KMU)
 
+if (debug > 20) call write_grid_netcdf()
+if (debug > 20) call write_grid_interptest()
 
+!---------------------------------------------------------------
+! Compile the list of variables to use in the creation
+! of the DART state vector.
+
+call parse_variable_table( gcom_variables, nfields, variable_table )
+
+call fill_progvar()
+
+!-----------------------------------------------------------------------
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
 
 ! record where in the state vector the data type changes
 ! from one type to another, by computing the starting
 ! index for each block of data.
-start_index(S_index)     = 1
-start_index(T_index)     = start_index(S_index) + (Nx * Ny * Nz)
-start_index(U_index)     = start_index(T_index) + (Nx * Ny * Nz)
-start_index(V_index)     = start_index(U_index) + (Nx * Ny * Nz)
-start_index(PSURF_index) = start_index(V_index) + (Nx * Ny * Nz)
+! start_index(S_index)     = 1
+! start_index(T_index)     = start_index(S_index) + (Nx * Ny * Nz)
+! start_index(U_index)     = start_index(T_index) + (Nx * Ny * Nz)
+! start_index(V_index)     = start_index(U_index) + (Nx * Ny * Nz)
+! start_index(PSURF_index) = start_index(V_index) + (Nx * Ny * Nz)
 
 ! in spite of the staggering, all grids are the same size
 ! and offset by half a grid cell.  4 are 3D and 1 is 2D.
 !  e.g. S,T,U,V = 256 x 225 x 70
 !  e.g. PSURF = 256 x 225
 
-if (do_output()) write(logfileunit, *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
-if (do_output()) write(     *     , *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
-
-model_size = (n3dfields * (Nx * Ny * Nz)) + (n2dfields * (Nx * Ny))
-if (do_output()) write(*,*) 'model_size = ', model_size
+if (do_output()) then
+   write(string1,*) 'grid shape : Nx, Ny, Nz = ', Nx, Ny, Nz
+   write(string2,*) 'number of variables = ', nfields
+   write(string3,*) 'model_size = ', model_size
+   call error_handler(E_MSG,'static_init_model',string1,text2=string2,text3=string3)
+endif
 
 ! initialize the pressure array - pressure in bars
-allocate(pressure(Nz))
-call depth2pressure(Nz, ZC, pressure)
+! allocate(pressure(Nz))
+! call depth2pressure(Nz, ZC, pressure)
 
 ! Initialize the interpolation routines
-call init_interp()
+! call init_interp()
+
+! call error_handler(E_ERR,'static_init_model','stopping early',source,revision,revdate)
 
 end subroutine static_init_model
+
+
+!-----------------------------------------------------------------------
+!>
+!> Returns the size of the model as an integer, i.e.
+!> the length of everything you need to pack into a DART vector:
+!> the 'state', any parameters you are estimating, etc.
+!>
+!> Required for all applications.
+!>
+
+function get_model_size()
+integer :: get_model_size
+
+if ( .not. module_initialized ) call static_init_model
+
+get_model_size = model_size
+
+end function get_model_size
 
 
 !-----------------------------------------------------------------------
@@ -443,119 +453,6 @@ get_model_time_step = model_timestep
 call error_handler(E_MSG,'get_model_time_step','FIXME TJH UNTESTED')
 
 end function get_model_time_step
-
-
-!-----------------------------------------------------------------------
-!>
-!> Companion interface to init_conditions. Returns a time that is
-!> appropriate for starting up a long integration of the model.
-!> At present, this is only used if the namelist parameter
-!> start_from_restart is set to .false. in the program perfect_model_obs.
-!>
-!> This interface is required for all applications.
-
-subroutine init_time(time)
-
-type(time_type), intent(out) :: time
-
-if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'init_time','FIXME TJH UNTESTED')
-
-string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
-string3 = 'use gcom_to_dart to generate an initial state which contains a timestamp'
-call error_handler(E_ERR,'init_time', &
-                  'WARNING!!  GCOM model has no built-in default time', &
-                  source, revision, revdate, &
-                  text2=string2, text3=string3)
-
-! this code never reached - just here to avoid compiler warnings
-! about an intent(out) variable not being set to a value.
-time = set_time(0,0)
-
-end subroutine init_time
-
-
-!-----------------------------------------------------------------------
-!>
-!> Returns a model state vector, x, that is some sort of appropriate
-!> initial condition for starting up a long integration of the model.
-!> At present, this is only used if the namelist parameter
-!> start_from_restart is set to .false. in the program perfect_model_obs.
-!>
-!> This interface is required for all applications.
-
-subroutine init_conditions(x)
-
-real(r8), intent(out) :: x(:)
-
-if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'init_conditions','FIXME TJH UNTESTED')
-
-string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
-string3 = 'use gcom_to_dart to generate an initial state'
-call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  gcom model has no built-in default state', &
-                  source, revision, revdate, &
-                  text2=string2, text3=string3)
-
-! this code never reached - just here to avoid compiler warnings
-! about an intent(out) variable not being set to a value.
-x = 0.0_r8
-
-end subroutine init_conditions
-
-
-!-----------------------------------------------------------------------
-!>
-!> Perturbs a model state for generating initial ensembles.
-!> The perturbed state is returned in pert_state.
-!> A model may choose to provide a NULL INTERFACE by returning
-!> .false. for the interf_provided argument. This indicates to
-!> the filter that if it needs to generate perturbed states, it
-!> may do so by adding a perturbation to each model state
-!> variable independently. The interf_provided argument
-!> should be returned as .true. if the model wants to do its own
-!> perturbing of states.
-!>
-!> This interface is required for all applications.
-
-subroutine pert_model_state(state, pert_state, interf_provided)
-
-real(r8), intent(in)  :: state(:)
-real(r8), intent(out) :: pert_state(:)
-logical,  intent(out) :: interf_provided
-
-integer :: i, var_type
-logical, save :: random_seq_init = .false.
-
-if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'pert_model_state','FIXME TJH UNTESTED')
-
-interf_provided = .true.
-
-! Initialize my random number sequence
-if(.not. random_seq_init) then
-   call init_random_seq(random_seq, my_task_id())
-   random_seq_init = .true.
-endif
-
-! only perturb the actual ocean cells; leave the land and
-! ocean floor values alone.
-do i=1,size(state)
-   call get_state_kind_inc_dry(i, var_type)
-   if (var_type /= KIND_DRY_LAND) then
-      pert_state(i) = random_gaussian(random_seq, state(i), &
-                                      model_perturbation_amplitude)
-   else
-      pert_state(i) = state(i)
-   endif
-enddo
-
-
-end subroutine pert_model_state
 
 
 !-----------------------------------------------------------------------
@@ -610,33 +507,6 @@ if (present(var_type)) then
 endif
 
 end subroutine get_state_meta_data
-
-
-!-----------------------------------------------------------------------
-!>
-!> If the model could be called as a subroutine, does a single
-!> timestep advance.  GCOM cannot be called this way, so fatal error
-!> if this routine is called.
-!>
-!> This interface is required for all applications.
-
-subroutine adv_1step(x, time)
-
-real(r8),        intent(inout) :: x(:)
-type(time_type), intent(in)    :: time
-
-if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'adv_1step','FIXME TJH UNTESTED')
-
-call error_handler(E_ERR,'adv_1step', &
-                  'GCOM model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-
-x = MISSING_R8 ! unreachable, just silences compiler about unused variable.
-! should do something to silence about time ...
-
-end subroutine adv_1step
 
 
 !-----------------------------------------------------------------------
@@ -1366,6 +1236,146 @@ end function nc_write_model_vars
 
 !-----------------------------------------------------------------------
 !>
+!> Companion interface to init_conditions. Returns a time that is
+!> appropriate for starting up a long integration of the model.
+!> At present, this is only used if the namelist parameter
+!> start_from_restart is set to .false. in the program perfect_model_obs.
+!>
+!> This interface is required for all applications.
+
+subroutine init_time(time)
+
+type(time_type), intent(out) :: time
+
+if ( .not. module_initialized ) call static_init_model
+
+call error_handler(E_MSG,'init_time','FIXME TJH UNTESTED')
+
+string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
+string3 = 'use gcom_to_dart to generate an initial state which contains a timestamp'
+call error_handler(E_ERR,'init_time', &
+                  'WARNING!!  GCOM model has no built-in default time', &
+                  source, revision, revdate, &
+                  text2=string2, text3=string3)
+
+! this code never reached - just here to avoid compiler warnings
+! about an intent(out) variable not being set to a value.
+time = set_time(0,0)
+
+end subroutine init_time
+
+
+!-----------------------------------------------------------------------
+!>
+!> Returns a model state vector, x, that is some sort of appropriate
+!> initial condition for starting up a long integration of the model.
+!> At present, this is only used if the namelist parameter
+!> start_from_restart is set to .false. in the program perfect_model_obs.
+!>
+!> This interface is required for all applications.
+
+subroutine init_conditions(x)
+
+real(r8), intent(out) :: x(:)
+
+if ( .not. module_initialized ) call static_init_model
+
+call error_handler(E_MSG,'init_conditions','FIXME TJH UNTESTED')
+
+string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
+string3 = 'use gcom_to_dart to generate an initial state'
+call error_handler(E_ERR,'init_conditions', &
+                  'WARNING!!  gcom model has no built-in default state', &
+                  source, revision, revdate, &
+                  text2=string2, text3=string3)
+
+! this code never reached - just here to avoid compiler warnings
+! about an intent(out) variable not being set to a value.
+x = 0.0_r8
+
+end subroutine init_conditions
+
+
+!-----------------------------------------------------------------------
+!>
+!> If the model could be called as a subroutine, does a single
+!> timestep advance.  GCOM cannot be called this way, so fatal error
+!> if this routine is called.
+!>
+!> This interface is required for all applications.
+
+subroutine adv_1step(x, time)
+
+real(r8),        intent(inout) :: x(:)
+type(time_type), intent(in)    :: time
+
+if ( .not. module_initialized ) call static_init_model
+
+call error_handler(E_MSG,'adv_1step','FIXME TJH UNTESTED')
+
+call error_handler(E_ERR,'adv_1step', &
+                  'GCOM model cannot be called as a subroutine; async cannot = 0', &
+                  source, revision, revdate)
+
+x = MISSING_R8 ! unreachable, just silences compiler about unused variable.
+! should do something to silence about time ...
+
+end subroutine adv_1step
+
+
+!-----------------------------------------------------------------------
+!>
+!> Perturbs a model state for generating initial ensembles.
+!> The perturbed state is returned in pert_state.
+!> A model may choose to provide a NULL INTERFACE by returning
+!> .false. for the interf_provided argument. This indicates to
+!> the filter that if it needs to generate perturbed states, it
+!> may do so by adding a perturbation to each model state
+!> variable independently. The interf_provided argument
+!> should be returned as .true. if the model wants to do its own
+!> perturbing of states.
+!>
+!> This interface is required for all applications.
+
+subroutine pert_model_state(state, pert_state, interf_provided)
+
+real(r8), intent(in)  :: state(:)
+real(r8), intent(out) :: pert_state(:)
+logical,  intent(out) :: interf_provided
+
+integer :: i, var_type
+logical, save :: random_seq_init = .false.
+
+if ( .not. module_initialized ) call static_init_model
+
+call error_handler(E_MSG,'pert_model_state','FIXME TJH UNTESTED')
+
+interf_provided = .true.
+
+! Initialize my random number sequence
+if(.not. random_seq_init) then
+   call init_random_seq(random_seq, my_task_id())
+   random_seq_init = .true.
+endif
+
+! only perturb the actual ocean cells; leave the land and
+! ocean floor values alone.
+do i=1,size(state)
+   call get_state_kind_inc_dry(i, var_type)
+   if (var_type /= KIND_DRY_LAND) then
+      pert_state(i) = random_gaussian(random_seq, state(i), &
+                                      model_perturbation_amplitude)
+   else
+      pert_state(i) = state(i)
+   endif
+enddo
+
+
+end subroutine pert_model_state
+
+
+!-----------------------------------------------------------------------
+!>
 !> Given a DART location (referred to as "base") and a set of candidate
 !> locations & kinds (obs, obs_kind), returns the subset close to the
 !> "base", their indices, and their distances to the "base" ...
@@ -1471,12 +1481,610 @@ call error_handler(E_MSG,'end_model','FIXME TJH UNTESTED')
 
 end subroutine end_model
 
+
 !=======================================================================
 ! End of the REQUIRED public interfaces.
 !=======================================================================
 ! The remaining (optional) PUBLIC interfaces come next.
 !=======================================================================
 
+
+!-----------------------------------------------------------------------
+!>
+!> Read the grid size from the grid netcdf file.
+!>
+!> The file name comes from module storage ... namelist.
+
+subroutine get_grid_dims(Nx, Ny, Nz)
+
+integer, intent(out) :: Nx   ! Number of Longitudes
+integer, intent(out) :: Ny   ! Number of Latitudes
+integer, intent(out) :: Nz   ! Number of Depths
+
+integer :: ncid, dimid, nc_rc
+
+! get the ball rolling ...
+
+call nc_check(nf90_open(trim(gcom_geometry_file), nf90_nowrite, ncid), &
+         'get_grid_dims','open ['//trim(gcom_geometry_file)//']')
+
+! Longitudes : get dimid for 'x' or 'Max_I', and then get value
+nc_rc = nf90_inq_dimid(ncid, 'x', dimid)
+if (nc_rc /= nf90_noerr) then
+   nc_rc = nf90_inq_dimid(ncid, 'Max_I', dimid)
+   if (nc_rc /= nf90_noerr) then
+      string1 = "no 'x' or 'Max_I' in file ["//trim(gcom_geometry_file)//"]"
+      call error_handler(E_ERR, 'get_grid_dims', string1, &
+                         source,revision,revdate) 
+   endif
+endif
+
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nx), &
+         'get_grid_dims','inquire_dimension x '//trim(gcom_geometry_file))
+
+! Latitudes : get dimid for 'y' or 'Max_J' ... and then get value
+nc_rc = nf90_inq_dimid(ncid, 'y', dimid)
+if (nc_rc /= nf90_noerr) then
+   nc_rc = nf90_inq_dimid(ncid, 'Max_J', dimid)
+   if (nc_rc /= nf90_noerr) then
+      string1 = "no 'y' or 'Max_J' in ["//trim(gcom_geometry_file)//"]"
+      call error_handler(E_ERR, 'get_grid_dims', string1, &
+                         source,revision,revdate)
+   endif
+endif
+
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ny), &
+         'get_grid_dims','inquire_dimension y '//trim(gcom_geometry_file))
+
+
+! Depth : get dimid for 'z' or 'Max_K' ... and then get value
+nc_rc = nf90_inq_dimid(ncid, 'z', dimid)
+if (nc_rc /= nf90_noerr) then
+   nc_rc = nf90_inq_dimid(ncid, 'Max_K', dimid)
+   if (nc_rc /= nf90_noerr) then
+      string1 = "no 'z' or 'Max_K' in ["//trim(gcom_geometry_file)//"]"
+      call error_handler(E_ERR, 'get_grid_dims', string1, &
+                         source,revision,revdate)
+   endif
+endif
+
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nz), &
+         'get_grid_dims','inquire_dimension z '//trim(gcom_geometry_file))
+
+! tidy up
+
+call nc_check(nf90_close(ncid), &
+         'get_grid_dims','close '//trim(gcom_geometry_file) )
+
+if (do_output() .and. debug > 8) then
+   write(*,*)'get_grid_dims: filename  ['//trim(gcom_geometry_file)//']'
+   write(*,*)'get_grid_dims: Max_I aka num_longitudes aka Nx',Nx
+   write(*,*)'get_grid_dims: Max_J aka num_latitides  aka Ny',Ny
+   write(*,*)'get_grid_dims: Max_K aka num_levels     aka Nz',Nz
+endif
+
+end subroutine get_grid_dims
+
+
+!-----------------------------------------------------------------------
+!>
+!> Open and read the grid from a netCDF file.
+!> The longitudes are read from variable 'x' (nx,ny)
+!> The latitudes  are read from variable 'y' (nx,ny)
+!> The levels     are read from variable 'z' (nx,ny,nz)
+!>
+!> dart_gcom_mod.f90 has a text read routine for read_horiz_grid()
+!>
+!> The x,y,z in the gcamIC02.nc files are really confusing
+!> looks like there are only Nx x's and Ny y's but there are Nx*Ny z's
+!> however ... the variables are all x(Nx,Ny,Nz) ... redundant
+
+subroutine read_grid(nlon, nlat, nlev, ULAT, ULON, ULEV)
+
+integer,  intent(in)  :: nlon
+integer,  intent(in)  :: nlat
+integer,  intent(in)  :: nlev
+real(r8), intent(out) :: ULAT(nlon,nlat)
+real(r8), intent(out) :: ULON(nlon,nlat)
+real(r8), intent(out) :: ULEV(nlon,nlat,nlev)
+
+integer  ::  dimIDs(NF90_MAX_VAR_DIMS)
+integer  :: dimlens(NF90_MAX_VAR_DIMS)
+integer  :: ncstart(NF90_MAX_VAR_DIMS)
+integer  :: nccount(NF90_MAX_VAR_DIMS)
+integer  :: ncid, VarID, numdims
+integer  :: longitude_DimID,latitude_DimID,level_DimID
+
+character(len=NF90_MAX_NAME) :: varname
+
+call nc_check(nf90_open(trim(gcom_geometry_file), nf90_nowrite, ncid), &
+      'read_grid','open ['//trim(gcom_geometry_file)//']')
+
+call nc_check(nf90_inq_dimid(ncid, 'Max_I', longitude_DimID), &
+      'read_grid', 'inq_dimid Max_I')
+call nc_check(nf90_inq_dimid(ncid, 'Max_J', latitude_DimID), &
+      'read_grid', 'inq_dimid Max_J')
+call nc_check(nf90_inq_dimid(ncid, 'Max_K', level_DimID), &
+      'read_grid', 'inq_dimid Max_K')
+
+!-----------------------------------------------------------------------
+! The latitudes are stored in a 3D variable, but only 1D is useful, as far as I can tell.
+! Using netCDF 'start' and 'count' to read just the z=1 hyperslab.
+
+varname = 'y'
+
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'read_grid', 'inq_varid')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims), &
+                   'read_grid', 'inquire_variable '//trim(varname))
+
+if ( (numdims /= 3)  ) then
+   write(string1,*) trim(varname)//' is not a 3D variable as expected.'
+   call error_handler(E_ERR,'read_grid',string1,source,revision,revdate)
+endif
+
+! FIXME ... check variable shape against Nx,Ny,Nz
+
+ncstart(:) = 1
+nccount(:) = 1
+
+where (dimIDs(1:numdims) == longitude_DimID) nccount(1:numdims) = nlon
+where (dimIDs(1:numdims) ==  latitude_DimID) nccount(1:numdims) = nlat
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)'read_grid: variable ['//trim(varname)//']'
+   write(*,*)'read_grid: dimids ', dimids(1:numdims)
+   write(*,*)'read_grid: start  ',ncstart(1:numdims)
+   write(*,*)'read_grid: count  ',nccount(1:numdims)
+endif
+
+call nc_check(nf90_get_var(ncid, VarID, values=ULAT, &
+        start=ncstart(1:numdims), count=nccount(1:numdims)), &
+             'read_grid', 'get_var '//trim(varname))
+
+!-----------------------------------------------------------------------
+! The longitudes are stored in a 3D variable, but only 1D is useful, as far as I can tell.
+! Using netCDF 'start' and 'count' to read just the z=1 hyperslab.
+
+varname = 'x'
+
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'read_grid', 'inq_varid')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims), &
+                   'read_grid', 'inquire_variable '//trim(varname))
+
+if ( (numdims /= 3)  ) then
+   write(string1,*) trim(varname)//' is not a 3D variable as expected.'
+   call error_handler(E_ERR,'read_grid',string1,source,revision,revdate)
+endif
+
+! FIXME ... check variable shape against Nx,Ny,Nz
+
+ncstart(:) = 1
+nccount(:) = 1
+
+where (dimIDs(1:numdims) == longitude_DimID) nccount(1:numdims) = nlon
+where (dimIDs(1:numdims) ==  latitude_DimID) nccount(1:numdims) = nlat
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)'read_grid: variable ['//trim(varname)//']'
+   write(*,*)'read_grid: dimids ', dimids(1:numdims)
+   write(*,*)'read_grid: start  ',ncstart(1:numdims)
+   write(*,*)'read_grid: count  ',nccount(1:numdims)
+endif
+
+call nc_check(nf90_get_var(ncid, VarID, values=ULON, &
+        start=ncstart(1:numdims), count=nccount(1:numdims)), &
+             'read_grid', 'get_var '//trim(varname))
+
+!-----------------------------------------------------------------------
+! The levels are a full 3D variable.
+
+varname = 'z'
+
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'read_grid', 'inq_varid')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims), &
+                   'read_grid', 'inquire_variable '//trim(varname))
+
+if ( (numdims /= 3)  ) then
+   write(string1,*) trim(varname)//' is not a 3D variable as expected.'
+   call error_handler(E_ERR,'read_grid',string1,source,revision,revdate)
+endif
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)'read_grid: variable ['//trim(varname)//']'
+   write(*,*)'read_grid: dimids ', dimids(1:numdims)
+endif
+
+call nc_check(nf90_get_var(ncid, VarID, values=ULEV), &
+             'read_grid', 'get_var '//trim(varname))
+
+!-----------------------------------------------------------------------
+
+string1 = 'FIXME calculate staggered grid etc.'
+call error_handler(E_MSG,'read_grid','... '//string1,text2=string1,text3=string1)
+
+! call calc_tpoints(nlon, ny, ULAT, ULON, TLAT, TLON)
+
+! convert from radians to degrees
+
+ULAT = ULAT * rad2deg
+ULON = ULON * rad2deg
+TLAT = TLAT * rad2deg
+TLON = TLON * rad2deg
+
+! ensure [0,360) [-90,90]
+
+where (ULON <   0.0_r8) ULON = ULON + 360.0_r8
+where (ULON > 360.0_r8) ULON = ULON - 360.0_r8
+where (TLON <   0.0_r8) TLON = TLON + 360.0_r8
+where (TLON > 360.0_r8) TLON = TLON - 360.0_r8
+
+where (ULAT < -90.0_r8) ULAT = -90.0_r8
+where (ULAT >  90.0_r8) ULAT =  90.0_r8
+where (TLAT < -90.0_r8) TLAT = -90.0_r8
+where (TLAT >  90.0_r8) TLAT =  90.0_r8
+
+end subroutine read_grid
+
+
+!------------------------------------------------------------------
+!>  This routine checks the user input against the variables available in the
+!>  input netcdf file to see if it is possible to construct the DART state vector
+!>  specified by the input.nml:model_nml:gcom_variables  variable.
+!>  Each variable must have 5 entries.
+!>  1: variable name
+!>  2: DART KIND
+!>  3: minimum value - as a character string - if none, use 'NA'
+!>  4: maximum value - as a character string - if none, use 'NA'
+!>  5: does the variable get updated in the restart file or not ...
+!>     only variables from restart files may be updated.
+!>     'UPDATE'       => update the variable in the restart file
+!>     'NO_COPY_BACK' => do not copy the variable back to the restart file
+!>     all these variables will be updated INTERNALLY IN DART
+!>
+!>  The calling code should check to see if the variable exists.
+
+subroutine parse_variable_table( variable_list, ngood, table )
+
+character(len=*), dimension(:),   intent(in)  :: variable_list
+integer,                          intent(out) :: ngood
+character(len=*), dimension(:,:), intent(out) :: table
+
+integer :: nrows, ncols, i
+character(len=NF90_MAX_NAME) :: varname       ! column 1
+character(len=NF90_MAX_NAME) :: dartstr       ! column 2
+character(len=NF90_MAX_NAME) :: minvalstring  ! column 3
+character(len=NF90_MAX_NAME) :: maxvalstring  ! column 4
+character(len=NF90_MAX_NAME) :: state_or_aux  ! column 6
+
+nrows = size(table,1)
+ncols = size(table,2)
+
+! This loop just repackages the 1D array of values into a 2D array.
+! We can do some miniminal checking along the way.
+! Determining which file to check is going to be more complicated.
+
+ngood = 0
+MyLoop : do i = 1, nrows
+
+   varname      = trim(variable_list(ncols*i - 4))
+   dartstr      = trim(variable_list(ncols*i - 3))
+   minvalstring = trim(variable_list(ncols*i - 2))
+   maxvalstring = trim(variable_list(ncols*i - 1))
+   state_or_aux = trim(variable_list(ncols*i    ))
+
+   call to_upper(state_or_aux)
+
+   table(i,VT_VARNAMEINDX) = trim(varname)
+   table(i,VT_KINDINDX)    = trim(dartstr)
+   table(i,VT_MINVALINDX)  = trim(minvalstring)
+   table(i,VT_MAXVALINDX)  = trim(maxvalstring)
+   table(i,VT_STATEINDX)   = trim(state_or_aux)
+
+   ! If the first element is empty, we have found the end of the list.
+   if ( table(i,1) == ' ' ) exit MyLoop
+
+   ! Any other condition is an error.
+   if ( any(table(i,:) == ' ') ) then
+      string1 = 'input.nml &model_nml:clm_variables not fully specified'
+      string2 = 'must be 6 entries per variable. Last known variable name is'
+      string3 = '['//trim(table(i,1))//'] ... (without the [], naturally)'
+      call error_handler(E_ERR, 'parse_variable_table', string1, &
+         source, revision, revdate, text2=string2, text3=string3)
+   endif
+
+   ! Make sure DART kind is valid
+
+   if( get_raw_obs_kind_index(dartstr) < 0 ) then
+      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
+      call error_handler(E_ERR,'parse_variable_table',string1,source,revision,revdate)
+   endif
+
+   ! Record the contents of the DART state vector
+
+   if ((debug > 3) .and. do_output()) then
+      write(logfileunit,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2)),' ', &
+                                               trim(table(i,3)), ' ', trim(table(i,4)),' ', &
+                                               trim(table(i,5))
+      write(     *     ,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2)),' ', &
+                                               trim(table(i,3)), ' ', trim(table(i,4)),' ', &
+                                               trim(table(i,5))
+   endif
+
+   ngood = ngood + 1
+enddo MyLoop
+
+if (ngood == nrows) then
+   string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
+   write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
+   call error_handler(E_MSG,'parse_variable_table',string1,text2=string2)
+endif
+
+end subroutine parse_variable_table
+
+
+!------------------------------------------------------------------
+!> Compute the offsets into the state vector for the start of each
+!> variable type. Requires reading variable shapes from the restart file.
+!> Record the extent of the data type in the state vector.
+
+subroutine fill_progvar()
+
+integer  :: ncid, io
+integer  :: i, ivar, index1, indexN
+integer  :: TimeDimID, VarID
+integer  :: dimIDs(NF90_MAX_VAR_DIMS)
+integer  :: varsize, dimlen
+integer  :: spvalINT
+real(r4) :: spvalR4
+real(r8) :: spvalR8, minvalue, maxvalue
+character(len=NF90_MAX_NAME) :: dimname
+
+! Open the file to get dimensions, metadata.
+
+call nc_check(nf90_open(trim(gcom_restart_file), NF90_NOWRITE, ncid), &
+              'fill_progvar','open ['//trim(gcom_restart_file)//']')
+
+! File is not required to have a time dimension
+io = nf90_inq_dimid(ncid, 'time', TimeDimID)
+if (io /= NF90_NOERR) TimeDimID = MISSING_I
+
+! Loop over all the variables used to create the DART vector
+
+index1  = 1;
+indexN  = 0;
+do ivar = 1, nfields
+
+   write(*,*)'filling progvar ',i
+
+   ! Copying the information in the variable_table to each progvar. 
+   ! Setting the default values.
+
+   progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
+   progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
+   progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
+   progvar(ivar)%maxlevels   = 0
+   progvar(ivar)%dimlens     = 0
+   progvar(ivar)%dimnames    = ' '
+   progvar(ivar)%spvalINT    = -9999        ! should come from gcom
+   progvar(ivar)%spvalR4     = 1.e36_r4     ! should come from gcom
+   progvar(ivar)%spvalR8     = 1.e36_r8     ! should come from gcom
+   progvar(ivar)%missingINT  = MISSING_I
+   progvar(ivar)%missingR4   = MISSING_R4
+   progvar(ivar)%missingR8   = MISSING_R8
+   progvar(ivar)%rangeRestricted   = BOUNDED_NONE
+   progvar(ivar)%minvalue          = MISSING_R8
+   progvar(ivar)%maxvalue          = MISSING_R8
+   progvar(ivar)%has_fill_value    = .false.
+   progvar(ivar)%has_missing_value = .false.
+   progvar(ivar)%update            = .false.
+
+   if (variable_table(ivar,VT_STATEINDX) == 'UPDATE') progvar(ivar)%update = .true.
+
+   ! If the character string can be interpreted as an r8, great.
+   ! If not, there is no value to be used.
+
+   read(variable_table(ivar,VT_MINVALINDX),*,iostat=io) minvalue
+   if (io == 0) progvar(ivar)%minvalue = minvalue
+   
+   read(variable_table(ivar,VT_MAXVALINDX),*,iostat=io) maxvalue
+   if (io == 0) progvar(ivar)%maxvalue = maxvalue
+   
+   ! rangeRestricted == BOUNDED_NONE  == 0 ... unlimited range
+   ! rangeRestricted == BOUNDED_BELOW == 1 ... minimum, but no maximum
+   ! rangeRestricted == BOUNDED_ABOVE == 2 ... maximum, but no minimum
+   ! rangeRestricted == BOUNDED_BOTH  == 3 ... minimum and maximum
+   
+   if (   (progvar(ivar)%minvalue       /= MISSING_R8) .and. &
+          (progvar(ivar)%maxvalue       /= MISSING_R8) ) then
+           progvar(ivar)%rangeRestricted = BOUNDED_BOTH
+   elseif (progvar(ivar)%maxvalue       /= MISSING_R8) then
+           progvar(ivar)%rangeRestricted = BOUNDED_ABOVE
+   elseif (progvar(ivar)%minvalue       /= MISSING_R8) then
+           progvar(ivar)%rangeRestricted = BOUNDED_BELOW
+   else
+           progvar(ivar)%rangeRestricted = BOUNDED_NONE
+   endif
+
+   ! Check to make sure min is less than max if both are specified.
+
+   if ( progvar(ivar)%rangeRestricted == BOUNDED_BOTH ) then
+      if (maxvalue < minvalue) then
+         write(string1,*)'&model_nml state_variable input error for ', &
+                          trim(progvar(ivar)%varname)
+         write(string2,*)'minimum value (',minvalue,') must be less than '
+         write(string3,*)'maximum value (',maxvalue,')'
+         call error_handler(E_ERR,'fill_progvar',string1, &
+            source,revision,revdate,text2=string2,text3=string3)
+      endif
+   endif
+
+   string2 = trim(gcom_restart_file)//' '//trim(progvar(ivar)%varname)
+
+   call nc_check(nf90_inq_varid(ncid, trim(progvar(ivar)%varname), VarID), &
+            'fill_progvar', 'inq_varid '//trim(string2))
+
+   call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, &
+                 ndims=progvar(ivar)%numdims, xtype=progvar(ivar)%xtype), &
+            'fill_progvar', 'inquire '//trim(string2))
+
+   ! If the long_name and/or units attributes are set, get them.
+   ! They are not REQUIRED to exist but are nice to use if they are present.
+
+   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
+      call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
+                  'fill_progvar', 'get_att long_name '//trim(string2))
+   else
+      progvar(ivar)%long_name = progvar(ivar)%varname
+   endif
+
+   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
+      call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
+                  'fill_progvar', 'get_att units '//trim(string2))
+   else
+      progvar(ivar)%units = 'unknown'
+   endif
+
+   ! Saving any FillValue, missing_value attributes to be used later.
+
+   if (progvar(ivar)%xtype == NF90_INT) then
+       if (nf90_get_att(ncid, VarID, '_FillValue'    , spvalINT) == NF90_NOERR) then
+          progvar(ivar)%spvalINT       = spvalINT
+          progvar(ivar)%has_fill_value = .true.
+       endif
+       if (nf90_get_att(ncid, VarID, 'missing_value' , spvalINT) == NF90_NOERR) then
+          progvar(ivar)%missingINT        = spvalINT
+          progvar(ivar)%has_missing_value = .true.
+       endif
+
+   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+       if (nf90_get_att(ncid, VarID, '_FillValue'    , spvalR4) == NF90_NOERR) then
+          progvar(ivar)%spvalR4        = spvalR4
+          progvar(ivar)%has_fill_value = .true.
+       endif
+       if (nf90_get_att(ncid, VarID, 'missing_value' , spvalR4) == NF90_NOERR) then
+          progvar(ivar)%missingR4         = spvalR4
+          progvar(ivar)%has_missing_value = .true.
+       endif
+
+   elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+       if (nf90_get_att(ncid, VarID, '_FillValue'    , spvalR8) == NF90_NOERR) then
+          progvar(ivar)%spvalR8        = spvalR8
+          progvar(ivar)%has_fill_value = .true.
+       endif
+       if (nf90_get_att(ncid, VarID, 'missing_value' , spvalR8) == NF90_NOERR) then
+          progvar(ivar)%missingR8         = spvalR8
+          progvar(ivar)%has_missing_value = .true.
+       endif
+   endif
+
+   ! This block captures the natural shape of the variable
+
+   varsize = 1
+   dimlen  = 1
+   DimensionLoop : do i = 1,progvar(ivar)%numdims
+
+      write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
+      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), name=dimname, len=dimlen), &
+                                          'fill_progvar', string1)
+
+      ! Only reserve space for a single time slice 
+      if (dimIDs(i) == TimeDimID) dimlen = 1
+
+      progvar(ivar)%dimlens( i) = dimlen
+      progvar(ivar)%dimnames(i) = dimname
+      varsize = varsize * dimlen
+
+   enddo DimensionLoop
+
+   ! Record the portion of the DART vector reserved for this variable.
+
+   progvar(ivar)%varsize     = varsize
+   progvar(ivar)%index1      = index1
+   progvar(ivar)%indexN      = index1 + varsize - 1
+   index1                    = index1 + varsize      ! sets up for next variable
+
+enddo
+
+call nc_check(nf90_close(ncid),'fill_progvar','close '//trim(string2))
+ncid = 0
+
+model_size = progvar(nfields)%indexN
+
+if ((debug > 0) .and. do_output()) call progvar_summary()
+
+end subroutine fill_progvar
+
+
+!-----------------------------------------------------------------------
+!>
+!> public utility routine to return the grid sizes.
+
+subroutine progvar_summary()
+
+integer :: i, ivar
+
+do ivar = 1,nfields
+
+   write(logfileunit,*)
+   write(logfileunit,*) 'variable number',ivar, 'is ['//trim(progvar(ivar)%varname)//']'
+   write(logfileunit,*) '  filename    ',trim(progvar(ivar)%origin)
+   write(logfileunit,*) '  update      ',progvar(ivar)%update
+   write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
+   write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
+   write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
+   write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+   write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+   write(logfileunit,*) '  dimnames    ',( trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims )
+   write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
+   write(logfileunit,*) '  index1      ',progvar(ivar)%index1
+   write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
+   write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
+   write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
+   write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
+   write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
+   write(logfileunit,*) '  spvalR8     ',progvar(ivar)%spvalR8
+   write(logfileunit,*) '  missingINT  ',progvar(ivar)%missingINT
+   write(logfileunit,*) '  missingR4   ',progvar(ivar)%missingR4
+   write(logfileunit,*) '  missingR8   ',progvar(ivar)%missingR8
+   write(logfileunit,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
+   write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
+   write(logfileunit,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
+   write(logfileunit,*) '  minvalue          ',progvar(ivar)%minvalue
+   write(logfileunit,*) '  maxvalue          ',progvar(ivar)%maxvalue
+
+   write(     *     ,*)
+   write(     *     ,*) 'variable number',ivar, 'is ['//trim(progvar(ivar)%varname)//']'
+   write(     *     ,*) '  filename    ',trim(progvar(ivar)%origin)
+   write(     *     ,*) '  update      ',progvar(ivar)%update
+   write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
+   write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
+   write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
+   write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+   write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+   write(     *     ,*) '  dimnames    ',( trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims )
+   write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
+   write(     *     ,*) '  index1      ',progvar(ivar)%index1
+   write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
+   write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
+   write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
+   write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
+   write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4
+   write(     *     ,*) '  spvalR8     ',progvar(ivar)%spvalR8
+   write(     *     ,*) '  missingINT  ',progvar(ivar)%missingINT
+   write(     *     ,*) '  missingR4   ',progvar(ivar)%missingR4
+   write(     *     ,*) '  missingR8   ',progvar(ivar)%missingR8
+   write(     *     ,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
+   write(     *     ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
+   write(     *     ,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
+   write(     *     ,*) '  minvalue          ',progvar(ivar)%minvalue
+   write(     *     ,*) '  maxvalue          ',progvar(ivar)%maxvalue
+
+enddo
+
+write(string1,*) 'total model size is ',model_size
+call error_handler(E_MSG,'progvar_summary',string1)
+
+end subroutine progvar_summary
 
 !-----------------------------------------------------------------------
 !>
@@ -1497,10 +2105,22 @@ end subroutine get_gridsize
 
 !-----------------------------------------------------------------------
 !>
+!> public utility routine to make the model_nml:gcom_restart_file accessible
+
+subroutine get_gcom_restart_filename(filename)
+
+character(len=*), intent(out) :: filename
+
+filename = gcom_restart_file
+
+end subroutine get_gcom_restart_filename
+
+!-----------------------------------------------------------------------
+!>
 !> Reads the current time and state variables from a GCOM restart
 !> file and packs them into a dart state vector.
 
-subroutine restart_file_to_dart_vector(filename, state_vector, model_time)
+subroutine gcom_file_to_dart_vector(filename, state_vector, model_time)
 
 character(len=*), intent(in)    :: filename
 real(r8),         intent(inout) :: state_vector(:)
@@ -1515,7 +2135,9 @@ character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, numdims, dimlen
 integer :: ncid, iyear, imonth, iday, ihour, iminute, isecond
 
-call error_handler(E_MSG,'restart_file_to_dart_vector','FIXME TJH UNTESTED')
+call error_handler(E_ERR,'write_grid_interptest','routine not written yet', &
+                      source, revision, revdate)
+call error_handler(E_MSG,'gcom_file_to_dart_vector','FIXME TJH UNTESTED')
 
 state_vector = MISSING_R8
 
@@ -1539,28 +2161,28 @@ state_vector = MISSING_R8
 
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
-   call error_handler(E_ERR,'restart_file_to_dart_vector',string1,source,revision,revdate)
+   call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
 endif
 
 call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-                  'restart_file_to_dart_vector', 'open '//trim(filename))
+                  'gcom_file_to_dart_vector', 'open '//trim(filename))
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iyear'  , iyear), &
-                  'restart_file_to_dart_vector', 'get_att iyear')
+                  'gcom_file_to_dart_vector', 'get_att iyear')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'imonth' , imonth), &
-                  'restart_file_to_dart_vector', 'get_att imonth')
+                  'gcom_file_to_dart_vector', 'get_att imonth')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iday'   , iday), &
-                  'restart_file_to_dart_vector', 'get_att iday')
+                  'gcom_file_to_dart_vector', 'get_att iday')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'ihour'  , ihour), &
-                  'restart_file_to_dart_vector', 'get_att ihour')
+                  'gcom_file_to_dart_vector', 'get_att ihour')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iminute', iminute), &
-                  'restart_file_to_dart_vector', 'get_att iminute')
+                  'gcom_file_to_dart_vector', 'get_att iminute')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'isecond', isecond), &
-                  'restart_file_to_dart_vector', 'get_att isecond')
+                  'gcom_file_to_dart_vector', 'get_att isecond')
 
 ! FIXME: we don't allow a real year of 0 - add one for now, but
 ! THIS MUST BE FIXED IN ANOTHER WAY!
 if (iyear == 0) then
-  call error_handler(E_MSG, 'restart_file_to_dart_vector', &
+  call error_handler(E_MSG, 'gcom_file_to_dart_vector', &
                      'WARNING!!!   year 0 not supported; setting to year 1')
   iyear = 1
 endif
@@ -1591,30 +2213,30 @@ do ivar=1, n3dfields
    ! Is the netCDF variable the right shape?
 
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'restart_file_to_dart_vector', 'inq_varid '//trim(string1))
+            'gcom_file_to_dart_vector', 'inq_varid '//trim(string1))
 
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'restart_file_to_dart_vector', 'inquire '//trim(string1))
+            'gcom_file_to_dart_vector', 'inquire '//trim(string1))
 
    if (numdims /= 3) then
       write(string1,*) trim(string1),' does not have exactly 3 dimensions'
-      call error_handler(E_ERR,'restart_file_to_dart_vector',string1,source,revision,revdate)
+      call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
    endif
 
    do i = 1,numdims
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'restart_file_to_dart_vector', string1)
+            'gcom_file_to_dart_vector', string1)
 
       if (dimlen /= size(data_3d_array,i)) then
          write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_3d_array,i)
-         call error_handler(E_ERR,'restart_file_to_dart_vector',string1,source,revision,revdate)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
       endif
    enddo
 
    ! Actually get the variable and stuff it into the array
 
-   call nc_check(nf90_get_var(ncid, VarID, data_3d_array), 'restart_file_to_dart_vector', &
+   call nc_check(nf90_get_var(ncid, VarID, data_3d_array), 'gcom_file_to_dart_vector', &
                 'get_var '//trim(varname))
 
    do k = 1, Nz   ! size(data_3d_array,3)
@@ -1637,30 +2259,30 @@ do ivar=(n3dfields+1), (n3dfields+n2dfields)
    ! Is the netCDF variable the right shape?
 
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'restart_file_to_dart_vector', 'inq_varid '//trim(string1))
+            'gcom_file_to_dart_vector', 'inq_varid '//trim(string1))
 
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'restart_file_to_dart_vector', 'inquire '//trim(string1))
+            'gcom_file_to_dart_vector', 'inquire '//trim(string1))
 
    if (numdims /= 2) then
       write(string1,*) trim(string1),' does not have exactly 2 dimensions'
-      call error_handler(E_ERR,'restart_file_to_dart_vector',string1,source,revision,revdate)
+      call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
    endif
 
    do i = 1,numdims
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'restart_file_to_dart_vector', string1)
+            'gcom_file_to_dart_vector', string1)
 
       if (dimlen /= size(data_2d_array,i)) then
          write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_2d_array,i)
-         call error_handler(E_ERR,'restart_file_to_dart_vector',string1,source,revision,revdate)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
       endif
    enddo
 
    ! Actually get the variable and stuff it into the array
 
-   call nc_check(nf90_get_var(ncid, VarID, data_2d_array), 'restart_file_to_dart_vector', &
+   call nc_check(nf90_get_var(ncid, VarID, data_2d_array), 'gcom_file_to_dart_vector', &
                 'get_var '//trim(varname))
 
    do j = 1, Ny   ! size(data_3d_array,2)
@@ -1672,7 +2294,7 @@ do ivar=(n3dfields+1), (n3dfields+n2dfields)
 
 enddo
 
-end subroutine restart_file_to_dart_vector
+end subroutine gcom_file_to_dart_vector
 
 
 !-----------------------------------------------------------------------
@@ -1680,7 +2302,7 @@ end subroutine restart_file_to_dart_vector
 !> Writes the current time and state variables from a dart state
 !> vector (1d fortran array) into a GCOM netcdf restart file.
 
-subroutine dart_vector_to_restart_file(state_vector, filename, statedate)
+subroutine dart_vector_to_gcom_file(state_vector, filename, statedate)
 
 real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: filename
@@ -1702,7 +2324,7 @@ integer :: i, ivar, ncid, VarID, numdims, dimlen
 ! Get the show underway
 !----------------------------------------------------------------------
 
-call error_handler(E_MSG,'dart_vector_to_restart_file','FIXME TJH UNTESTED')
+call error_handler(E_ERR,'dart_vector_to_gcom_file','FIXME TJH UNTESTED')
 
 ! Check that the input file exists.
 ! make sure the time tag in the restart file matches
@@ -1710,23 +2332,23 @@ call error_handler(E_MSG,'dart_vector_to_restart_file','FIXME TJH UNTESTED')
 
 if ( .not. file_exist(filename)) then
    write(string1,*)trim(filename),' does not exist. FATAL error.'
-   call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
 endif
 
 call nc_check( nf90_open(trim(filename), NF90_WRITE, ncid), &
-                  'dart_vector_to_restart_file', 'open '//trim(filename))
+                  'dart_vector_to_gcom_file', 'open '//trim(filename))
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iyear'  , iyear), &
-                  'dart_vector_to_restart_file', 'get_att iyear')
+                  'dart_vector_to_gcom_file', 'get_att iyear')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'imonth' , imonth), &
-                  'dart_vector_to_restart_file', 'get_att imonth')
+                  'dart_vector_to_gcom_file', 'get_att imonth')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iday'   , iday), &
-                  'dart_vector_to_restart_file', 'get_att iday')
+                  'dart_vector_to_gcom_file', 'get_att iday')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'ihour'  , ihour), &
-                  'dart_vector_to_restart_file', 'get_att ihour')
+                  'dart_vector_to_gcom_file', 'get_att ihour')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iminute', iminute), &
-                  'dart_vector_to_restart_file', 'get_att iminute')
+                  'dart_vector_to_gcom_file', 'get_att iminute')
 call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'isecond', isecond), &
-                  'dart_vector_to_restart_file', 'get_att isecond')
+                  'dart_vector_to_gcom_file', 'get_att isecond')
 
 gcom_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
 
@@ -1736,7 +2358,7 @@ if ( gcom_time /= statedate ) then
    call print_time(statedate,'DART current time')
    call print_time( gcom_time,'GCOM  current time')
    write(string1,*)trim(filename),' current time /= model time. FATAL error.'
-   call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
 endif
 
 if (do_output()) &
@@ -1752,24 +2374,24 @@ do ivar=1, n3dfields
 
    ! Is the netCDF variable the right shape?
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'dart_vector_to_restart_file', 'inq_varid '//trim(string1))
+            'dart_vector_to_gcom_file', 'inq_varid '//trim(string1))
 
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'dart_vector_to_restart_file', 'inquire '//trim(string1))
+            'dart_vector_to_gcom_file', 'inquire '//trim(string1))
 
    if (numdims /= 3) then
       write(string1,*) trim(string1),' does not have exactly 3 dimensions'
-      call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+      call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
    endif
 
    do i = 1,numdims
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'dart_vector_to_restart_file', string1)
+            'dart_vector_to_gcom_file', string1)
 
       if (dimlen /= size(data_3d_array,i)) then
          write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_3d_array,i)
-         call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+         call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
       endif
    enddo
 
@@ -1777,7 +2399,7 @@ do ivar=1, n3dfields
 
    ! Actually stuff it into the netcdf file
    call nc_check(nf90_put_var(ncid, VarID, data_3d_array), &
-            'dart_vector_to_restart_file', 'put_var '//trim(string1))
+            'dart_vector_to_gcom_file', 'put_var '//trim(string1))
 
 enddo
 
@@ -1790,37 +2412,37 @@ do ivar=(n3dfields+1), (n3dfields+n2dfields)
    ! Is the netCDF variable the right shape?
 
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'dart_vector_to_restart_file', 'inq_varid '//trim(string1))
+            'dart_vector_to_gcom_file', 'inq_varid '//trim(string1))
 
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'dart_vector_to_restart_file', 'inquire '//trim(string1))
+            'dart_vector_to_gcom_file', 'inquire '//trim(string1))
 
    if (numdims /= 2) then
       write(string1,*) trim(string1),' does not have exactly 2 dimensions'
-      call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+      call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
    endif
 
    do i = 1,numdims
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'dart_vector_to_restart_file', string1)
+            'dart_vector_to_gcom_file', string1)
 
       if (dimlen /= size(data_2d_array,i)) then
          write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_2d_array,i)
-         call error_handler(E_ERR,'dart_vector_to_restart_file',string1,source,revision,revdate)
+         call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
       endif
    enddo
 
    call vector_to_prog_var(state_vector, ivar, data_2d_array)
 
    call nc_check(nf90_put_var(ncid, VarID, data_2d_array), &
-            'dart_vector_to_restart_file', 'put_var '//trim(string1))
+            'dart_vector_to_gcom_file', 'put_var '//trim(string1))
 
 enddo
 
-call nc_check(nf90_close(ncid), 'dart_vector_to_restart_file', 'close '//trim(filename))
+call nc_check(nf90_close(ncid), 'dart_vector_to_gcom_file', 'close '//trim(filename))
 
-end subroutine dart_vector_to_restart_file
+end subroutine dart_vector_to_gcom_file
 
 
 !-----------------------------------------------------------------------
@@ -2450,7 +3072,6 @@ endif
 end subroutine get_var_3d
 
 
-
 subroutine test_interpolation(test_casenum)
  integer, intent(in) :: test_casenum
 
@@ -2607,7 +3228,7 @@ do imain = 1, dnx
       if ( istatus /= 0 ) then
          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' U interp failed - code '',i4)') &
               imain, jmain, dulon(imain, jmain), dulat(imain, jmain), istatus
-         call error_handler(E_MSG,'test_interpolation',string1,source,revision,revdate)
+         call error_handler(E_MSG,'test_interpolation',string1)
       endif
 
       write(24, *) dulon(imain, jmain), dulat(imain, jmain), dipole_u(imain, jmain)
@@ -2620,7 +3241,7 @@ do imain = 1, dnx
       if ( istatus /= 0 ) then
          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' T interp failed - code '',i4)') &
               imain,jmain, dtlon(imain, jmain), dtlat(imain, jmain), istatus
-         call error_handler(E_MSG,'test_interpolation',string1,source,revision,revdate)
+         call error_handler(E_MSG,'test_interpolation',string1)
       endif
 
       write(25, *) dtlon(imain, jmain), dtlat(imain, jmain), dipole_t(imain, jmain)
@@ -2650,6 +3271,9 @@ real(r8), intent(out) :: data_2d_array(:,:)
 integer :: i,j,ii
 integer :: dim1,dim2
 character(len=128) :: varname
+
+call error_handler(E_ERR,'vector_to_2d_prog_var','routine not written yet', &
+                      source, revision, revdate)
 
 dim1 = size(data_2d_array,1)
 dim2 = size(data_2d_array,2)
@@ -2691,6 +3315,9 @@ real(r8), intent(out) :: data_3d_array(:,:,:)
 integer :: i,j,k,ii
 integer :: dim1,dim2,dim3
 character(len=128) :: varname
+
+call error_handler(E_ERR,'vector_to_3d_prog_var','routine not written yet', &
+                      source, revision, revdate)
 
 dim1 = size(data_3d_array,1)
 dim2 = size(data_3d_array,2)
@@ -2736,6 +3363,9 @@ subroutine init_interp()
 
 integer :: i
 
+call error_handler(E_ERR,'init_interp','routine not written yet', &
+                      source, revision, revdate)
+
 ! Determine whether this is a irregular lon-lat grid or a dipole.
 ! Do this by seeing if the lons have the same values at both
 ! the first and last latitude row; this is not the case for dipole.
@@ -2772,6 +3402,9 @@ real(r8) :: u_c_lons(4), u_c_lats(4), t_c_lons(4), t_c_lats(4), pole_row_lon
 integer  :: i, j, k, pindex
 integer  :: reg_lon_ind(2), reg_lat_ind(2), u_total, t_total, u_index, t_index
 logical  :: is_pole
+
+call error_handler(E_ERR,'init_dipole_interp','routine not written yet', &
+                      source, revision, revdate)
 
 ! Begin by finding the quad that contains the pole for the dipole t_grid.
 ! To do this locate the u quad with the pole on its right boundary. This is on
@@ -2892,6 +3525,9 @@ subroutine get_reg_box_indices(lon, lat, x_ind, y_ind)
 real(r8), intent(in)  :: lon, lat
 integer,  intent(out) :: x_ind, y_ind
 
+call error_handler(E_ERR,'get_reg_box_indices','routine not written yet', &
+                      source, revision, revdate)
+
 call get_reg_lon_box(lon, x_ind)
 call get_reg_lat_box(lat, y_ind)
 
@@ -2906,6 +3542,9 @@ subroutine get_reg_lon_box(lon, x_ind)
 
 real(r8), intent(in)  :: lon
 integer,  intent(out) :: x_ind
+
+call error_handler(E_ERR,'get_reg_lon_box','routine not written yet', &
+                      source, revision, revdate)
 
 x_ind = int(num_reg_x * lon / 360.0_r8) + 1
 
@@ -2923,6 +3562,9 @@ subroutine get_reg_lat_box(lat, y_ind)
 
 real(r8), intent(in)  :: lat
 integer,  intent(out) :: y_ind
+
+call error_handler(E_ERR,'get_reg_lat_box','routine not written yet', &
+                      source, revision, revdate)
 
 y_ind = int(num_reg_y * (lat + 90.0_r8) / 180.0_r8) + 1
 
@@ -2954,6 +3596,9 @@ integer,  intent(out) :: reg_lon_ind(2), reg_lat_ind(2)
 
 real(r8) :: lat_min, lat_max, lon_min, lon_max
 integer  :: i
+
+call error_handler(E_ERR,'reg_box_overlap','routine not written yet', &
+                      source, revision, revdate)
 
 !  A quad containing the pole is fundamentally different
 if(is_pole) then
@@ -3019,6 +3664,9 @@ real(r8), intent(out) :: corners(4)
 
 integer :: ip1
 
+call error_handler(E_ERR,'get_quad_corners','routine not written yet', &
+                      source, revision, revdate)
+
 ! Have to worry about wrapping in longitude but not in latitude
 ip1 = i + 1
 if(ip1 > nx) ip1 = 1
@@ -3047,6 +3695,9 @@ integer, intent(in)    :: dipole_lon_index
 integer, intent(in)    :: dipole_lat_index
 
 integer :: ind_x, index_x, ind_y
+
+call error_handler(E_ERR,'update_reg_list','routine not written yet', &
+                      source, revision, revdate)
 
 ! Loop through indices for each possible regular cell
 ! Have to watch for wraparound in longitude
@@ -3124,6 +3775,9 @@ integer  :: x_ind, y_ind
 real(r8) :: p(4), x_corners(4), y_corners(4), xbot, xtop
 real(r8) :: lon_fract, lat_fract
 logical  :: masked
+
+call error_handler(E_ERR,'lon_lat_interpolate','routine not written yet', &
+                      source, revision, revdate)
 
 ! Succesful return has istatus of 0
 istatus = 0
@@ -3270,6 +3924,9 @@ real(r8),intent(in)  :: x(:)
 logical, intent(out) :: masked
 real(r8)             :: get_val
 
+call error_handler(E_ERR,'get_val','routine not written yet', &
+                      source, revision, revdate)
+
 ! check the land/ocean bottom map and return if not valid water cell.
 if(is_dry_land(var_type, lon_index, lat_index, height)) then
    masked = .true.
@@ -3308,6 +3965,9 @@ integer,  intent(out) :: istatus
 
 ! Local storage
 integer  :: lat_status, lon_top, lat_top
+
+call error_handler(E_ERR,'get_irreg_box','routine not written yet', &
+                      source, revision, revdate)
 
 ! Succesful return has istatus of 0
 istatus = 0
@@ -3349,6 +4009,9 @@ real(r8), intent(out) :: fract
 ! Local storage
 integer  :: i
 real(r8) :: dist_bot, dist_top
+
+call error_handler(E_ERR,'lon_bounds','routine not written yet', &
+                      source, revision, revdate)
 
 ! This is inefficient, someone could clean it up since longitudes are regularly spaced
 ! But note that they don't have to start at 0
@@ -3396,6 +4059,9 @@ integer,  intent(out) :: istatus
 ! Local storage
 integer :: i
 
+call error_handler(E_ERR,'lat_bounds','routine not written yet', &
+                      source, revision, revdate)
+
 ! Success should return 0, failure a positive number.
 istatus = 0
 
@@ -3436,6 +4102,9 @@ real(r8), intent(in) :: lon1
 real(r8), intent(in) :: lon2
 real(r8)             :: lon_dist
 
+call error_handler(E_ERR,'lon_dist','routine not written yet', &
+                      source, revision, revdate)
+
 lon_dist = lon2 - lon1
 if(lon_dist >= -180.0_r8 .and. lon_dist <= 180.0_r8) then
    return
@@ -3472,6 +4141,9 @@ integer,  intent(out) :: istatus
 
 integer  :: i, my_index
 real(r8) :: x_corners(4), y_corners(4)
+
+call error_handler(E_ERR,'get_dipole_quad','routine not written yet', &
+                      source, revision, revdate)
 
 istatus = 0
 
@@ -3516,6 +4188,9 @@ real(r8) :: x(2), y(2)
 logical  :: cant_be_in_box, in_box
 integer  :: intercepts_above(4), intercepts_below(4), i
 integer  :: num_above, num_below
+
+call error_handler(E_ERR,'in_quad','routine not written yet', &
+                      source, revision, revdate)
 
 ! Default answer is point is not in quad
 in_quad = .false.
@@ -3596,6 +4271,9 @@ integer,  intent(out) :: intercept_above
 integer,  intent(out) :: intercept_below
 
 real(r8) :: slope, y_intercept, side_x(2), x_point
+
+call error_handler(E_ERR,'line_intercept','routine not written yet', &
+                      source, revision, revdate)
 
 ! May have to adjust the longitude intent in values, so copy
 side_x = side_x_in
@@ -3685,6 +4363,9 @@ real(r8), intent(out) :: interp_val
 integer :: i
 real(r8) :: m(3, 3), v(3), r(3), a, x_corners(4), lon
 ! real(r8) :: lon_mean
+
+call error_handler(E_ERR,'quad_bilinear_interp','routine not written yet', &
+                      source, revision, revdate)
 
 ! Watch out for wraparound on x_corners.
 lon = lon_in
@@ -3825,6 +4506,9 @@ integer,  intent(out) :: istatus
 ! Local variables
 integer   :: i
 
+call error_handler(E_ERR,'height_bounds','routine not written yet', &
+                      source, revision, revdate)
+
 ! Succesful istatus is 0
 ! Make any failure here return istatus in the 20s
 istatus = 0
@@ -3881,6 +4565,9 @@ integer, intent(out) :: var_type
 
 integer :: startind, offset
 
+call error_handler(E_ERR,'get_state_indices','routine not written yet', &
+                      source, revision, revdate)
+
 if (debug > 5) print *, 'asking for meta data about index ', index_in
 
 call get_state_kind(index_in, var_type, startind, offset)
@@ -3911,6 +4598,9 @@ integer, intent(in)  :: index_in
 integer, intent(out) :: var_type
 integer, intent(out) :: startind
 integer, intent(out) :: offset
+
+call error_handler(E_ERR,'get_state_kind','routine not written yet', &
+                      source, revision, revdate)
 
 if (debug > 5) print *, 'asking for meta data about index ', index_in
 
@@ -3953,6 +4643,9 @@ integer, intent(out) :: var_type
 
 integer :: lon_index, lat_index, depth_index, startind, offset
 
+call error_handler(E_ERR,'get_state_kind_inc_dry','routine not written yet', &
+                      source, revision, revdate)
+
 call get_state_kind(index_in, var_type, startind, offset)
 
 if (startind == start_index(PSURF_index)) then
@@ -3989,6 +4682,9 @@ integer :: s, e
 !  U_index     = 3
 !  V_index     = 4
 !  PSURF_index = 5
+
+call error_handler(E_ERR,'print_ranges','routine not written yet', &
+                      source, revision, revdate)
 
 s = 1
 e = start_index(T_index)-1
@@ -4032,6 +4728,9 @@ logical             :: is_dry_land
 
 logical :: is_ugrid
 
+call error_handler(E_ERR,'is_dry_land','routine not written yet', &
+                      source, revision, revdate)
+
 is_dry_land = .FALSE.    ! start out thinking everything is wet.
 
 is_ugrid = is_on_ugrid(obs_type)
@@ -4053,6 +4752,9 @@ function is_on_ugrid(obs_type)
 integer, intent(in) :: obs_type
 logical             :: is_on_ugrid
 
+call error_handler(E_ERR,'is_on_ugrid','routine not written yet', &
+                      source, revision, revdate)
+
 is_on_ugrid = .FALSE.
 
 if ((obs_type == KIND_U_CURRENT_COMPONENT)  .or.  &
@@ -4072,7 +4774,10 @@ integer :: nlon, nlat, nz
 integer :: ulatVarID, ulonVarID, TLATvarid, TLONvarid
 integer :: ZGvarid, ZCvarid, KMTvarid, KMUvarid
 
-integer :: dimids(2);
+integer :: dimids(2)
+
+call error_handler(E_ERR,'write_grid_netcdf','routine not written yet', &
+                      source, revision, revdate)
 
 nlon = size(ULAT,1)
 nlat = size(ULAT,2)
@@ -4152,6 +4857,9 @@ real(r8) :: rtlon, rulon, rtlat, rulat, u_val, t_val
 !----------------------------------------------------------------------
 ! Generate a 'Regular' grid with the same rough 'shape' as the dipole grid
 !----------------------------------------------------------------------
+
+call error_handler(E_ERR,'write_grid_interptest','routine not written yet', &
+                      source, revision, revdate)
 
 open(unit=12, position='rewind', action='write', file='regular_grid_u')
 open(unit=13, position='rewind', action='write', file='regular_grid_t')
@@ -4235,6 +4943,9 @@ integer,  intent(out) :: istatus
 integer  :: hstatus, hgt_bot, hgt_top
 real(r8) :: hgt_fract, salinity_val, potential_temp, pres_val
 
+call error_handler(E_ERR,'compute_temperature','routine not written yet', &
+                      source, revision, revdate)
+
 interp_val = MISSING_R8
 istatus = 99
 
@@ -4297,6 +5008,9 @@ integer,  intent(out) :: istatus
 
 integer  :: offset
 real(r8) :: bot_val, top_val
+
+call error_handler(E_ERR,'do_interp','routine not written yet', &
+                      source, revision, revdate)
 
 ! Find the base location for the bottom height and interpolate horizontally
 !  on this level.  Do bottom first in case it is below the ocean floor; can
@@ -4485,6 +5199,9 @@ real(r8), intent(out) :: pressure(nd)
 integer :: n
 real(r8), parameter :: c1 = 1.0_r8
 
+call error_handler(E_ERR,'depth2pressure','routine not written yet', &
+                      source, revision, revdate)
+
 ! -----------------------------------------------------------------------
 !  convert depth in meters to pressure in bars
 ! -------POP
@@ -4520,8 +5237,11 @@ real(r8) :: mytimes(ntimes)
 character(len=NF90_MAX_NAME) :: attvalue
 
 type(time_type) :: thistime
-integer :: ios, itime, basedays, baseseconds
+integer :: io, itime, basedays, baseseconds
 integer :: iyear, imonth, iday, ihour, imin, isec
+
+call error_handler(E_ERR,'find_desired_time_index','routine not written yet', &
+                      source, revision, revdate)
 
 find_desired_time_index = MISSING_I   ! initialize to failure setting
 
@@ -4542,9 +5262,9 @@ if (attvalue(1:10) /= 'days since') then
           source, revision, revdate, text2=string2)
 endif
 
-read(attvalue,'(11x,i4,5(1x,i2))',iostat=ios)iyear,imonth,iday,ihour,imin,isec
-if (ios /= 0) then
-   write(string1,*)'Unable to read time units. Error status was ',ios
+read(attvalue,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,imin,isec
+if (io /= 0) then
+   write(string1,*)'Unable to read time units. Error status was ',io
    write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
    write(string3,*)'was      "'//trim(attvalue)//'"'
    call error_handler(E_ERR, 'find_desired_time_index:', string1, &

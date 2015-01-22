@@ -32,10 +32,10 @@ use  assim_model_mod, only : open_restart_read, aread_state_restart, close_resta
 
 use time_manager_mod, only : time_type, print_time, print_date, operator(-)
 
-use        model_mod, only : static_init_model, dart_vector_to_restart_file, &
+use        model_mod, only : static_init_model, dart_vector_to_gcom_file, &
                              get_model_size, get_gcom_restart_filename
 
-use     dart_gcom_mod, only : write_gcom_namelist
+! use     dart_gcom_mod, only : write_gcom_namelist
 
 implicit none
 
@@ -60,7 +60,7 @@ namelist /dart_to_gcom_nml/ dart_to_gcom_input_file, &
 integer               :: iunit, io, x_size
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
-character(len=128)    :: gcom_restart_filename = 'no_gcom_restart_file'
+character(len=256)    :: gcom_restart_filename = 'no_gcom_restart_file'
 
 character(len=512) :: string1, string2
 
@@ -84,11 +84,13 @@ call find_namelist_in_file("input.nml", "dart_to_gcom_nml", iunit)
 read(iunit, nml = dart_to_gcom_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_gcom_nml")
 
+! modify the gcom restart file specified in model_nml:gcom_restart_file
+
 call get_gcom_restart_filename( gcom_restart_filename )
 
-write(string1,*)'converting DART file ', trim(dart_to_gcom_input_file)
-write(string2,*)'to GCOM restart file ', trim(gcom_restart_filename)
-call error_handler(E_MSG,'dart_to_gcom',string1,text1=string2)
+write(string1,'(A)')'... converting DART file '//trim(dart_to_gcom_input_file)
+write(string2,'(A)')'to GCOM restart file '//trim(gcom_restart_filename)
+call error_handler(E_MSG,'dart_to_gcom',string1,text2=string2)
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
@@ -104,24 +106,24 @@ endif
 call close_restart(iunit)
 
 !----------------------------------------------------------------------
-! update the current GCOM state vector
+! Update the current GCOM state.
 ! Convey the amount of time to integrate the model ...
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
-call dart_vector_to_restart_file(statevector, gcom_restart_filename, model_time)
+call dart_vector_to_gcom_file(statevector, gcom_restart_filename, model_time)
 
 if ( advance_time_present ) then
-   call write_gcom_namelist(model_time, adv_to_time)
+!  call write_gcom_namelist(model_time, adv_to_time)
 endif
 
 !----------------------------------------------------------------------
 ! Log what we think we're doing, and exit.
 !----------------------------------------------------------------------
 
-call print_date( model_time,'dart_to_gcom:GCOM  model date')
+call print_date( model_time,'dart_to_gcom:GCOM model date')
 call print_time( model_time,'dart_to_gcom:DART model time')
-call print_date( model_time,'dart_to_gcom:GCOM  model date',logfileunit)
+call print_date( model_time,'dart_to_gcom:GCOM model date',logfileunit)
 call print_time( model_time,'dart_to_gcom:DART model time',logfileunit)
 
 if ( advance_time_present ) then
