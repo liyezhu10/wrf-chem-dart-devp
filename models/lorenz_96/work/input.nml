@@ -27,7 +27,7 @@
    ens_size                 = 20,
    start_from_restart       = .true.,
    output_restart           = .true.,
-   obs_sequence_in_name     = "obs_seq.out",
+   obs_sequence_in_name     = "obs_pseudo.out",
    obs_sequence_out_name    = "obs_seq.final",
    restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
@@ -37,6 +37,7 @@
    first_obs_seconds        = -1,
    last_obs_days            = -1,
    last_obs_seconds         = -1,
+   quad_filter              = .true.
    num_output_state_members = 20,
    num_output_obs_members   = 20,
    output_interval          = 1,
@@ -82,7 +83,7 @@
 
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 0.02,
+   cutoff                          = 0.2,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
@@ -111,6 +112,7 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
+                                'QUAD_FILTER_SQUARED_ERROR',
    /
 
 &assim_model_nml
@@ -145,6 +147,7 @@
    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
                input_files = '../../../obs_def/obs_def_1d_state_mod.f90',
+                             '../../../obs_def/obs_def_quad_filter_mod.f90'
    /
 
 &restart_file_tool_nml
@@ -236,4 +239,12 @@
    lonlim2    =    1.0,
    verbose    = .true.
    /
+
+&obs_add_pseudo_obs_nml
+   filename_in = 'obs_seq.out', 
+   filename_out = 'obs_pseudo.out', 
+   print_only = .false., 
+   calendar = 'NO_CALENDAR'
+   /
+
 
