@@ -43,7 +43,8 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
-                                 output_inflate_diagnostics
+                                 output_inflate_diagnostics, log_inflation_info,             &
+                                 get_minmax_task_zero
 use mpi_utilities_mod,    only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                  my_task_id, task_sync, broadcast_send, broadcast_recv,      &
                                  task_count
@@ -392,7 +393,12 @@ call trace_message('After  initializing inflation')
 call turn_read_copy_on(1, ens_size) ! need to read all restart copies
 
 if (direct_netcdf_read) then
+   call prepare_to_write_to_vars(ens_handle)
    call filter_read_restart_direct(ens_handle, time1)
+   call get_minmax_task_zero(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+   call log_inflation_info(prior_inflate, 'Prior')
+   call get_minmax_task_zero(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY)
+   call log_inflation_info(post_inflate, 'Posterior')
 endif
 
 !call all_vars_to_all_copies(ens_handle)
