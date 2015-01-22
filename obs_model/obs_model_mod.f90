@@ -377,6 +377,10 @@ ENSEMBLE_MEMBERS: do i = 1, ens_handle%my_num_copies
 
       do while(ens_handle%time(i) < target_time)
          if (quad_filter) then
+!print *, 'full state vector, ensemble member: ', i
+!print *, ens_handle%vars(:, i)
+print *, 'calling adv_1step with: '
+print *, ens_handle%vars(1:ens_handle%num_vars:2, i)
             call adv_1step(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%time(i))
          else
             call adv_1step(ens_handle%vars(:, i), ens_handle%time(i))

@@ -151,7 +151,7 @@ if(.not. present(distribution_type_in)) then
    ens_handle%distribution_type = 1
 else
    ! Check for error: only type 1 implemented for now
-   if(distribution_type_in /= 1) call error_handler(E_ERR, 'init_ensemble_manager', &
+   if(distribution_type_in /= 1 .and. distribution_type_in /= 2) call error_handler(E_ERR, 'init_ensemble_manager', &
       'only distribution_type 1 is implemented', source, revision, revdate)
    ens_handle%distribution_type = distribution_type_in
 endif
@@ -1038,10 +1038,16 @@ elseif(distribution_type == 2) then
    pair_number = (var_number + 1) / 2
    div = (pair_number - 1) / num_pes
    owner = pair_number - div * num_pes - 1
-   owners_index = div + 1
+   if (((var_number/2)*2) == var_number) then  ! even
+      owners_index = (div * 2) + 2
+   else  ! var number is odd
+      owners_index = (div * 2) + 1
+   endif
 else
    ! Put in an error statement
 endif
+
+write(21, *) 'get_var_owner_index: var_num, own, own_ind: ', var_number, owner, owners_index
 
 end subroutine get_var_owner_index
 
@@ -1698,11 +1704,13 @@ subroutine print_ens_handle(ens_handle, force, label)
  character(len=*), optional, intent(in) :: label
 
 logical :: print_anyway
-logical :: has_label
+logical :: has_label, old_output
 
 print_anyway = .false.
+old_output = do_output()
 if (present(force)) then
    print_anyway = force
+   call set_output(.true.)
 endif
 
 has_label = .false.
@@ -1726,6 +1734,8 @@ write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+write(msgstring, *) 'my_vars: ', ens_handle%my_vars
+call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'valid              : ', ens_handle%valid
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
@@ -1739,6 +1749,7 @@ if (allocated(ens_handle%pe_to_task_list)) then
    call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 endif
 
+call set_output(old_output)
 
 end subroutine print_ens_handle
 

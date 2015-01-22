@@ -131,6 +131,8 @@ type(assim_model_type), intent(inout) :: state
 ! Get the model_size from the model
 model_size = get_model_size()
 
+!print *, 'i am in init_assim_model, and model_size now is ', model_size
+
 allocate(state%state_vector(model_size))
 state%model_size = model_size
 
@@ -1222,7 +1224,8 @@ real(r8),          intent(in) :: model_state(:)
 integer, optional, intent(in) :: copy_index
 
 integer :: i, timeindex, copyindex
-integer :: is1,id1
+integer :: is1,id1, nitems
+
 
 if (.not. present(copy_index) ) then     ! we are dependent on the fact
    copyindex = 1                         ! there is a copyindex == 1
@@ -1248,7 +1251,13 @@ endif
 ! so we must pass the components.
 
 if (quad_filter) then
-   i = nc_write_model_vars(ncFileID%ncid, model_state(1:model_size:2), copyindex, timeindex) 
+   nitems = get_model_size()
+!print *, 'in aoutput_diagnostics, ready to stride state vector, model_size: ', nitems
+!print *, 'full model_state: '
+!print *, model_state(:)
+!print *, 'stepped state: '
+!print *, model_state(1:nitems:2)
+   i = nc_write_model_vars(ncFileID%ncid, model_state(1:nitems:2), copyindex, timeindex) 
 else
    i = nc_write_model_vars(ncFileID%ncid, model_state(:), copyindex, timeindex) 
 endif

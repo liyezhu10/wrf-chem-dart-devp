@@ -37,14 +37,14 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
                                  prepare_to_read_from_vars, prepare_to_write_to_vars,        &
                                  prepare_to_read_from_copies, get_ensemble_time, set_ensemble_time,&
-                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies
+                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies, print_ens_handle
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
                                  output_inflate_diagnostics
 use mpi_utilities_mod,    only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                  my_task_id, task_sync, broadcast_send, broadcast_recv,      &
-                                 task_count
+                                 task_count, sleep_seconds
 use smoother_mod,         only : smoother_read_restart, advance_smoother,                    &
                                  smoother_gen_copy_meta_data, smoother_write_restart,        &
                                  init_smoother, do_smoothing, smoother_mean_spread,          &
@@ -499,9 +499,18 @@ AdvanceTime : do
    ! obs_error_variance, observed value, key from sequence, global qc, 
    ! then mean for each group, then variance for each group
    TOTAL_OBS_COPIES = ens_size + 4 + 2*num_groups
-   call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 1, quad_filter_in = quad_filter)
-   ! Also need a qc field for copy of each observation
-   call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 1, quad_filter_in = quad_filter)
+   if (quad_filter) then
+      call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 2, quad_filter_in = quad_filter)
+      ! Also need a qc field for copy of each observation
+      call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 2, quad_filter_in = quad_filter)
+   else
+      call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 1, quad_filter_in = quad_filter)
+      ! Also need a qc field for copy of each observation
+      call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 1, quad_filter_in = quad_filter)
+   endif
+
+if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
+if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
 
    ! Allocate storage for the keys for this number of observations
    allocate(keys(num_obs_in_set))
@@ -537,7 +546,7 @@ AdvanceTime : do
    ! FIXME: i think new code for quad filter goes here.  after inflation,
    ! while we are still copy complete, and after ens mean and sd were computed.
    if (quad_filter) then
-print *, 'args to update state: ', ens_size, ENS_MEAN_COPY, ENS_SD_COPY
+!print *, 'args to update state: ', ens_size, ENS_MEAN_COPY, ENS_SD_COPY
       call update_squared_state_entries(ens_handle, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
    endif
 
@@ -1233,7 +1242,11 @@ integer :: days, secs
 ! Copies are ensemble, ensemble mean, variance inflation and inflation s.d.
 ! AVOID COPIES FOR INFLATION IF STATE SPACE IS NOT IN USE; NEEDS WORK
 !!!if(prior_inflate%flavor >= 2) then
+if (quad_filter) then
+   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 2, quad_filter_in = quad_filter)
+else
    call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 1, quad_filter_in = quad_filter)
+endif
 !!!else
 !!!   call init_ensemble_manager(ens_handle, ens_size + 2, model_size, 1, quad_filter_in = quad_filter)
 !!!endif
@@ -2194,7 +2207,7 @@ logical :: verbose
 
 ! if you want to see the updated values, make this true. 
 ! for quiet execution, set it to false.
-verbose = .true.
+verbose = .false.
 
 call prepare_to_update_copies(ens_handle)
 
@@ -2244,17 +2257,21 @@ logical :: verbose
 
 ! if you want to see the updated values, make this true. 
 ! for quiet execution, set it to false.
-verbose = .true.
+verbose = .false.
 
 call prepare_to_update_copies(obs_ens_handle)
 
 npairs = obs_ens_handle%my_num_vars / 2
 ! FIXME: test to be sure it is even
 
+write(*,*) 'upobs: total, mypairs, my task: ', obs_ens_handle%my_num_vars, npairs, my_task_id()
+
 do i = 1, npairs
 
    original = (i*2)-1
    squared = (i*2)
+
+   write(*,*) 'upobs: pair, original, squared indices: ', i, original, squared
 
    forward_operator_mean = obs_ens_handle%copies(mean_index, original)
 
@@ -2263,7 +2280,7 @@ do i = 1, npairs
       obs_ens_handle%copies(j, squared) = (obs_ens_handle%copies(j, original) - forward_operator_mean)**2
 
       if (verbose) then
-         write(*,*) 'F.O. mean, original, squared = ', forward_operator_mean, &
+         write(*,*) 'upobs: F.O. mean, original, squared = ', forward_operator_mean, &
                      obs_ens_handle%copies(j, original), obs_ens_handle%copies(j, squared)
       endif
 
@@ -2288,11 +2305,12 @@ integer :: npairs, original, squared
 !real(r8) :: forward_operator_mean
 logical :: verbose
 
+
 ! copy over the original data QC values to the corresponding pseudo obs entry.
 
 ! if you want to see the updated values, make this true. 
 ! for quiet execution, set it to false.
-verbose = .true.
+verbose = .false.
 
 call prepare_to_update_copies(forward_op_ens_handle)
 
@@ -2311,7 +2329,10 @@ do i = 1, npairs
                                                forward_op_ens_handle%copies(j, squared)
       endif
 
+      ! FIXME: this is going to fail if you are assimilating the paired obs
+      ! and trying to do anything else with the quad ob.  this is a feature for now.
       forward_op_ens_handle%copies(j, squared) = forward_op_ens_handle%copies(j, original)
+
    enddo
 enddo
 
