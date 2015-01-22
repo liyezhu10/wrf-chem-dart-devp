@@ -1064,9 +1064,17 @@ integer             :: get_max_num_vars
 integer, intent(in) :: num_vars
 integer, intent(in) :: distribution_type
 
-if(distribution_type == 1 .or. distribution_type == 2) then
-   ! The maximum number of vars per pe is the same for both distribution type 1 and 2
+integer :: num_pairs, max_num_pairs
+
+if(distribution_type == 1) then
    get_max_num_vars = num_vars / num_pes + 1
+
+else if(distribution_type == 2) then
+   num_pairs = num_vars / 2
+   max_num_pairs = num_pairs / num_pes + 1
+   
+   get_max_num_vars = 2 * max_num_pairs
+
 else
    ! Put in error check someday, maybe?
 endif
@@ -1734,8 +1742,8 @@ write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'my_vars: ', ens_handle%my_vars
-call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+!write(msgstring, *) 'my_vars: ', ens_handle%my_vars
+!call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'valid              : ', ens_handle%valid
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
