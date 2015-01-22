@@ -27,10 +27,10 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              error_handler, E_MSG
 
-use        model_mod, only : gcom_file_to_dart_vector, static_init_model, &
+use        model_mod, only : static_init_model, gcom_file_to_dart_vector, &
                              get_model_size, get_gcom_restart_filename
 
-use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
+use  assim_model_mod, only : open_restart_write, awrite_state_restart, close_restart
 
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -60,6 +60,8 @@ type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
 character(len=256)    :: gcom_restart_filename = 'no_gcom_restart_filename' 
 
+character(len=512) :: string1, string2
+
 !----------------------------------------------------------------------
 
 call initialize_utilities(progname='gcom_to_dart')
@@ -83,7 +85,7 @@ call get_gcom_restart_filename( gcom_restart_filename )
 
 write(string1,*)'converting GCOM restart file ', trim(gcom_restart_filename)
 write(string2,*)'                to DART file ', trim(gcom_to_dart_output_file)
-call error_handler(E_MSG,'gcom_to_dart',string1,text1=string2)
+call error_handler(E_MSG,'gcom_to_dart',string1,text2=string2)
 
 !----------------------------------------------------------------------
 ! Now that we know the names, get to work.

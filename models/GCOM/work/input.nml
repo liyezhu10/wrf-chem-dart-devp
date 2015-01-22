@@ -166,6 +166,7 @@
    debug                        = 9
    gcom_variables = 'temperature', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
                     'salinity',    'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
+                    'sst',         'KIND_SEA_SURFACE_HEIGHT',  '0.0', 'NA', 'UPDATE',
                     'u',           'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'v',           'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE'
   /
@@ -335,8 +336,8 @@
    output_file          = "check_me_out"
    advance_time_present = .TRUE.
    verbose              = .TRUE.
-   test1thru            = 4
-   x_ind                = 720
+   test1thru            = 6
+   x_ind                = 3202
    kind_of_interest     = 'KIND_SALINITY'
    loc_of_interest      = 287.5, 82.48, 0.35
    /
