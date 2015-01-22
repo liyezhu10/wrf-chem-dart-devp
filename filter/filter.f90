@@ -2194,8 +2194,8 @@ npairs = ens_handle%my_num_vars / 2
 
 do i = 1, npairs
 
-   original = (j*2)-1
-   squared = (j*2)
+   original = (i*2)-1
+   squared = (i*2)
 
    ! here is the magic
    state_mean = ens_handle%copies(mean_index, original)
@@ -2244,8 +2244,8 @@ npairs = obs_ens_handle%my_num_vars / 2
 
 do i = 1, npairs
 
-   original = (j*2)-1
-   squared = (j*2)
+   original = (i*2)-1
+   squared = (i*2)
 
    forward_operator_mean = obs_ens_handle%copies(mean_index, original)
 
@@ -2292,8 +2292,8 @@ npairs = forward_op_ens_handle%my_num_vars / 2
 
 do i = 1, npairs
 
-   original = (j*2)-1
-   squared = (j*2)
+   original = (i*2)-1
+   squared = (i*2)
 
    do j=1, ens_size
 
