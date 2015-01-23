@@ -34,7 +34,6 @@ use  assim_model_mod, only : open_restart_write, awrite_state_restart, close_res
 
 use time_manager_mod, only : time_type, print_time, print_date
 
-use netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit

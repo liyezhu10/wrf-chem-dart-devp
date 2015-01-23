@@ -24,6 +24,7 @@ program test_dipole_interp
 use model_mod, only : test_interpolation
 
 implicit none
+
 integer :: test_casenum
 
 write(*, *) 'There are 3 pairs of tests'

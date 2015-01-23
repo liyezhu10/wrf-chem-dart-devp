@@ -46,10 +46,6 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-! use     dart_gcom_mod, only: set_model_time_step,                              &
-!                              get_horiz_grid_dims, &
-!                              read_grid, read_vert_grid, read_topography 
-
 use typesizes
 use netcdf
 

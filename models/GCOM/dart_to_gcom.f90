@@ -35,8 +35,6 @@ use  assim_model_mod, only : open_restart_read, aread_state_restart, close_resta
 
 use time_manager_mod, only : time_type, print_time, print_date, operator(-)
 
-! use     dart_gcom_mod, only : write_gcom_namelist
-
 implicit none
 
 ! version controlled file description for error handling, do not edit
