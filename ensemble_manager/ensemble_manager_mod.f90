@@ -146,13 +146,15 @@ logical,             intent(in), optional   :: quad_filter_in
 
 integer :: iunit, io
 
-! Distribution type controls pe layout of storage; Default is 1. 1 is only one implemented.
+! Distribution type controls pe layout of storage; Default is 1. 
+! At present, distribution types 2 and 3 are only recommended for use of quad filter option.
 if(.not. present(distribution_type_in)) then
    ens_handle%distribution_type = 1
 else
    ! Check for error: only type 1 implemented for now
-   if(distribution_type_in /= 1 .and. distribution_type_in /= 2) call error_handler(E_ERR, 'init_ensemble_manager', &
-      'only distribution_type 1 is implemented', source, revision, revdate)
+   if(distribution_type_in /= 1 .and. distribution_type_in /= 2 .and. distribution_type_in /= 3) &
+      call error_handler(E_ERR, 'init_ensemble_manager', &
+      'only distribution_type 1, 2 and 3 are implemented', source, revision, revdate)
    ens_handle%distribution_type = distribution_type_in
 endif
 
@@ -170,10 +172,6 @@ if ( .not. module_initialized ) then
       quad_filter = .false.
    endif
 
-   ! QUAD FILTER IMPLICITLY SETS DISTRIBUTION TYPE TO 2: CHANGE THIS TO BE LESS UGLY
-   ! WOULD BE BETTER TO PASS DISTRIBUTION TYPE AS 2 FROM FILTER CALLS WHEN QUAD FILTER
-   if(quad_filter) ens_handle%distribution_type = 2
-
    ! Read the namelist entry
    call find_namelist_in_file("input.nml", "ensemble_manager_nml", iunit)
    read(iunit, nml = ensemble_manager_nml, iostat = io)
@@ -184,6 +182,14 @@ if ( .not. module_initialized ) then
 
    ! Get mpi information for this process; it's stored in module storage
    num_pes = task_count()
+endif
+
+! Distribution type MUST be 2 or 3 if quad filter has been specified
+if(quad_filter) then
+   if(distribution_type_in /= 2 .and. distribution_type_in /= 3) then
+      call error_handler(E_ERR, 'init_ensemble_manager', 'distribution_type must be 2 or 3 for quad_filter ', &
+                      source, revision, revdate)
+   endif
 endif
 
 ! Optional layout_type argument to assign how my_pe is related to my_task_id
@@ -362,10 +368,12 @@ if(.not. start_from_restart) then
       ! If this is one of the actual ensemble copies, then perturb
       if(global_copy_index >= start_copy .and. global_copy_index <= end_copy) then
          ! See if model has an interface to perturb
-         if (quad_filter) then
+         if (ens_handle%distribution_type == 2) then
             call pert_model_state(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%vars(1:ens_handle%num_vars:2, i), interf_provided)
+         elseif(ens_handle%distribution_type == 3) then
+            call pert_model_state(ens_handle%vars(1:ens_handle%num_vars/2, i), ens_handle%vars(1:ens_handle%num_vars/2, i), interf_provided)
          else
-            call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
+         call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
          endif
          ! If model does not provide a perturbing interface, do it here
          if(.not. interf_provided) then
@@ -1017,7 +1025,7 @@ end subroutine get_copy_owner_index
 
 !-----------------------------------------------------------------
 
-subroutine get_var_owner_index(var_number, owner, owners_index, distribution_type)
+subroutine get_var_owner_index(var_number, owner, owners_index, distribution_type, num_vars)
 
 ! Given the var number, returns which PE stores it when var complete
 ! and its index in that pes local storage. Depends on distribution_type
@@ -1026,8 +1034,9 @@ subroutine get_var_owner_index(var_number, owner, owners_index, distribution_typ
 integer, intent(in)  :: var_number
 integer, intent(out) :: owner, owners_index
 integer, intent(in)  :: distribution_type
+integer, intent(in)  :: num_vars
 
-integer :: div, pair_number
+integer :: div, pair_number, num_pairs, offset
 
 if(distribution_type == 1) then
    div = (var_number - 1) / num_pes
@@ -1043,8 +1052,21 @@ elseif(distribution_type == 2) then
    else  ! var number is odd
       owners_index = (div * 2) + 1
    endif
-else
-   ! Put in an error statement
+elseif(distribution_type == 3) then
+   ! Distribution type 3 has original state at the start followed by pseudo_state
+   num_pairs = num_vars / 2
+   if(var_number > num_pairs) then
+      ! Var is in pseudo_state extension
+      pair_number = var_number - num_pairs
+      offset = 2
+   else
+      ! Var is in original state
+      pair_number = var_number
+      offset = 1
+   endif
+   div = (pair_number - 1) / num_pes
+   owner = pair_number - div * num_pes - 1
+   owners_index = div*2 + offset
 endif
 
 write(21, *) 'get_var_owner_index: var_num, own, own_ind: ', var_number, owner, owners_index
@@ -1053,11 +1075,10 @@ end subroutine get_var_owner_index
 
 !-----------------------------------------------------------------
 
-!!!function get_max_num_vars(num_vars)
 function get_max_num_vars(num_vars, distribution_type)
 
 ! Returns the largest number of vars that are on any pe when copy complete.
-! Depends on distribution_type with only option 1 and 2 currently implemented.
+! Depends on distribution_type with only options 1, 2 and 3 currently implemented.
 ! Used to get size for creating storage to receive a list of the vars on a pe.
 
 integer             :: get_max_num_vars
@@ -1069,7 +1090,8 @@ integer :: num_pairs, max_num_pairs
 if(distribution_type == 1) then
    get_max_num_vars = num_vars / num_pes + 1
 
-else if(distribution_type == 2) then
+else if(distribution_type == 2 .or. distribution_type == 3) then
+   ! Both of these store pairs, have same max number of vars 
    num_pairs = num_vars / 2
    max_num_pairs = num_pairs / num_pes + 1
    
@@ -1130,9 +1152,10 @@ if(distribution_type == 1) then
       var_list(i) = (pe + 1) + (i - 1) * num_pes
    end do
    
-elseif(distribution_type == 2) then
+elseif(distribution_type == 2 .or. distribution_type == 3) then
    ! For this option, pairs of state have to stay together
    ! Put in error check for num_pairs being even
+   ! Distribution types 2 and 3 distribution of pairs in same way
    num_pairs = num_vars / 2
    ! First find how the pairs are distributed
    num_per_pe_below = num_pairs / num_pes
@@ -1145,12 +1168,18 @@ elseif(distribution_type == 2) then
 
    ! Number of vars is number of pairs times 2
    pes_num_vars = pes_num_pairs * 2
-   
+
    ! Fill out the pe's vars
    do i = 1, pes_num_pairs
       current_pair = (pe + 1) + (i - 1) * num_pes
-      var_list(2*i - 1) = 2*current_pair - 1
-      var_list(2*i) = 2*current_pair 
+   ! Membership of pairs differs between distribution type 2 and 3
+      if(distribution_type == 2) then 
+         var_list(2*i - 1) = 2*current_pair - 1
+         var_list(2*i) = 2*current_pair 
+      elseif(distribution_type == 3) then
+         var_list(2*i - 1) = current_pair
+         var_list(2*i) = current_pair + num_pairs
+      endif
    end do
 
 else
