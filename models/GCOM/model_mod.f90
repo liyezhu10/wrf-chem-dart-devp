@@ -14,7 +14,7 @@ use        types_mod, only : r4, r8, SECPERDAY, MISSING_R4, MISSING_R8, MISSING_
                              rad2deg, PI, obstypelength, metadatalength
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
-                             print_time, print_date,                           &
+                             print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+),  operator(-),          &
                              operator(>),  operator(<),  operator(/),          &
                              operator(/=), operator(<=), operator(==)
@@ -337,6 +337,8 @@ call error_handler(E_MSG,'static_init_model','model_nml values are')
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
+call set_calendar_type('Gregorian')
+
 !-----------------------------------------------------------------------
 ! Set the time step ... 
 ! FIXME ensure model_timestep is multiple of 'ocean_dynamics_timestep'
@@ -468,13 +470,12 @@ subroutine get_state_meta_data(index_in, location, var_type)
 
 integer,             intent(in)  :: index_in
 type(location_type), intent(out) :: location
-integer,             intent(out), optional :: var_type
+integer,  OPTIONAL,  intent(out) :: var_type
 
 real(r8) :: lat, lon, depth
-integer  :: n, varindex, offset, abs_index
+integer  :: n, varindex, offset
 integer  :: index1, index2, index3
-integer  ::  ndim1,  ndim2,  ndim3
-logical  :: has_singleton_dimension
+integer  ::  ndim1,  ndim2
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1558,7 +1559,7 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
  integer,              intent(in) :: obs_kind(:)
  integer,              intent(out):: num_close
  integer,              intent(out):: close_ind(:)
- real(r8),  optional,  intent(out):: dist(:)
+ real(r8),  OPTIONAL,  intent(out):: dist(:)
 
 
 integer :: t_ind, k
@@ -1785,6 +1786,7 @@ if ( (numdims /= 3)  ) then
 endif
 
 ! FIXME ... check variable shape against Nx,Ny,Nz
+! this will use the dimlens variable
 
 ncstart(:) = 1
 nccount(:) = 1
@@ -1947,7 +1949,7 @@ MyLoop : do i = 1, nrows
 
    ! Any other condition is an error.
    if ( any(table(i,:) == ' ') ) then
-      string1 = 'input.nml &model_nml:clm_variables not fully specified'
+      string1 = 'input.nml &model_nml:gcom not fully specified'
       string2 = 'must be 6 entries per variable. Last known variable name is'
       string3 = '['//trim(table(i,1))//'] ... (without the [], naturally)'
       call error_handler(E_ERR, 'parse_variable_table', string1, &
@@ -2271,6 +2273,8 @@ subroutine get_gridsize(num_x, num_y, num_z)
 
 integer, intent(out) :: num_x, num_y, num_z
 
+if ( .not. module_initialized ) call static_init_model
+
 call error_handler(E_MSG,'get_gridsize','FIXME TJH UNTESTED')
 
 num_x = Nx
@@ -2287,6 +2291,8 @@ end subroutine get_gridsize
 subroutine get_gcom_restart_filename(filename)
 
 character(len=*), intent(out) :: filename
+
+if ( .not. module_initialized ) call static_init_model
 
 filename = gcom_restart_file
 
@@ -2365,11 +2371,11 @@ end subroutine define_var_dims
 !> Reads the current time and state variables from a GCOM restart
 !> file and packs them into a dart state vector.
 
-subroutine gcom_file_to_dart_vector(filename, state_vector, model_time)
+subroutine gcom_file_to_dart_vector(filename, state_vector, state_time)
 
 character(len=*), intent(in)    :: filename
 real(r8),         intent(inout) :: state_vector(:)
-type(time_type),  intent(out)   :: model_time
+type(time_type),  intent(out)   :: state_time
 
 integer :: i, j, k, ivar, indx, io
 
@@ -2383,10 +2389,12 @@ integer :: dimIDs(NF90_MAX_VAR_DIMS)
 character(len=NF90_MAX_NAME) :: varname
 character(len=NF90_MAX_NAME) :: attvalue
 
-integer :: ncid, DimID, VarID, numdims, dimlen, ntimes
+integer :: ncid, TimeDimID, VarID, numdims, dimlen, ntimes
 integer :: iyear, imonth, iday, ihour, iminute, isecond
 integer :: origin_days, origin_seconds
-type(time_type) :: origin_time, this_time
+type(time_type) :: origin_time
+
+if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_MSG,'gcom_file_to_dart_vector','FIXME TJH UNTESTED')
 
@@ -2397,18 +2405,18 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
 endif
 
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+        'gcom_file_to_dart_vector', 'open '//trim(filename))
+
 ! Read the time data.
 ! DART only knows about integer number of seconds, so using the rounded one
 ! is what we would have to do anyway ... and we already have a set_date routine
 ! that takes ihour, iminute, isecond information.
 
-call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-        'gcom_file_to_dart_vector', 'open '//trim(filename))
-
-call nc_check(nf90_inq_dimid(ncid, 'time', DimID), &
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
         'gcom_file_to_dart_vector', 'inq_dimid time')
 
-call nc_check(nf90_inquire_dimension(ncid, DimID, len=ntimes), &
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=ntimes), &
         'gcom_file_to_dart_vector', 'inquire_dimension time')
 
 allocate(mytimes(ntimes))
@@ -2445,50 +2453,40 @@ origin_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
 call get_time(origin_time, origin_seconds, origin_days)
 
 ! FIXME ... assuming we are using the last time ...
+! The module 'model_time' is set and then the output argument
+! is set to the same value.  
 
-iday      = int(mytimes(ntimes))
-isecond   = (mytimes(ntimes) - iday)*86400
-this_time = set_time(origin_seconds+isecond, origin_days+iday)
+iday       = int(mytimes(ntimes))
+isecond    = (mytimes(ntimes) - iday)*86400
+model_time = set_time(origin_seconds+isecond, origin_days+iday)
+state_time = model_time
 
-
-call error_handler(E_ERR,'gcom_file_to_dart_vector','left off here', &
-                      source, revision, revdate)
-
-
-model_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
-
-if (do_output()) &
+if (do_output()) then
     call print_time(model_time,'time for restart file '//trim(filename))
-if (do_output()) &
     call print_date(model_time,'date for restart file '//trim(filename))
+endif
 
 ! Start counting and filling the state vector one item at a time,
-! repacking the 3d arrays into a single 1d list of numbers.
-! These must be a fixed number and in a fixed order.
+! repacking the Nd arrays into a single 1d list of numbers.
 
-indx = 1
+do ivar=1, nfields
 
-! fill SALT, TEMP, UVEL, VVEL in that order
-! The GCOM restart files have two time steps for each variable,
-! the variables are named SALT_CUR and SALT_OLD ... for example.
-! We are only interested in the CURrent time step.
-
-do ivar=1, n3dfields
-
-   varname = trim(progvarnames(ivar))//'_CUR'
+   varname = progvar(ivar)%varname
    string1 = trim(filename)//' '//trim(varname)
 
    ! Is the netCDF variable the right shape?
 
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
+   call nc_check(nf90_inq_varid(ncid, varname, VarID), &
             'gcom_file_to_dart_vector', 'inq_varid '//trim(string1))
 
    call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
             'gcom_file_to_dart_vector', 'inquire '//trim(string1))
 
-   if (numdims /= 3) then
-      write(string1,*) trim(string1),' does not have exactly 3 dimensions'
-      call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
+   if (numdims /= progvar(ivar)%numdims) then
+      write(string2,*) trim(string1),' has rank ', numdims
+      write(string3,*) 'expected rank ', progvar(ivar)%numdims, ' ... stopping.'
+      call error_handler(E_ERR,'gcom_file_to_dart_vector',string1, &
+                 source,revision,revdate,text2=string2,text3=string3)
    endif
 
    do i = 1,numdims
@@ -2496,69 +2494,74 @@ do ivar=1, n3dfields
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'gcom_file_to_dart_vector', string1)
 
-      if (dimlen /= size(data_3d_array,i)) then
-         write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_3d_array,i)
-         call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
+      ! DART only keeps 1 timestep around
+      if (dimIDs(i) == TimeDimID) dimlen = 1
+
+      if (dimlen /= progvar(ivar)%dimlens(i)) then
+         write(string2,*) 'dim/dimlen',i,dimlen, &
+                          'not expected value of ',progvar(ivar)%dimlens(i)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector',string1, &
+                    source,revision,revdate,text2=string2)
       endif
    enddo
 
-   ! Actually get the variable and stuff it into the array
+   indx = progvar(ivar)%index1
 
-   call nc_check(nf90_get_var(ncid, VarID, data_3d_array), 'gcom_file_to_dart_vector', &
-                'get_var '//trim(varname))
+   ! The singleton dimension (time) is always the last dimension,
+   ! so we check the rank of the variable not the netcdf number of dimensions.
+   ! Some of the variables may or may not have a 'time' dimension,
+   ! I haven't seen them yet, so I don't know.
 
-   do k = 1, Nz   ! size(data_3d_array,3)
-   do j = 1, Ny   ! size(data_3d_array,2)
-   do i = 1, Nx   ! size(data_3d_array,1)
-      state_vector(indx) = data_3d_array(i, j, k)
-      indx = indx + 1
-   enddo
-   enddo
-   enddo
+   if (progvar(ivar)%rank == 1) then
 
-enddo
+      allocate(data_1d_array(progvar(ivar)%dimlens(1)))
+      call DART_get_var(ncid, varname, data_1d_array)
 
-! and finally, PSURF (and any other 2d fields)
-do ivar=(n3dfields+1), (n3dfields+n2dfields)
+      do i = 1, progvar(ivar)%dimlens(1)
+         state_vector(indx) = data_1d_array(i)
+         indx = indx + 1
+      enddo
+      deallocate(data_1d_array)
 
-   varname = trim(progvarnames(ivar))//'_CUR'
-   string1 = trim(varname)//' '//trim(filename)
+   elseif (progvar(ivar)%rank == 2) then
 
-   ! Is the netCDF variable the right shape?
+      allocate(data_2d_array(progvar(ivar)%dimlens(1), &
+                             progvar(ivar)%dimlens(2)))
+      call DART_get_var(ncid, varname, data_2d_array)
 
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'gcom_file_to_dart_vector', 'inq_varid '//trim(string1))
+      do j = 1, progvar(ivar)%dimlens(2)
+      do i = 1, progvar(ivar)%dimlens(1)
+         state_vector(indx) = data_2d_array(i, j)
+         indx = indx + 1
+      enddo
+      enddo
+      deallocate(data_2d_array)
 
-   call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'gcom_file_to_dart_vector', 'inquire '//trim(string1))
+   elseif (progvar(ivar)%rank == 3) then
 
-   if (numdims /= 2) then
-      write(string1,*) trim(string1),' does not have exactly 2 dimensions'
-      call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
+      allocate(data_3d_array(progvar(ivar)%dimlens(1), &
+                             progvar(ivar)%dimlens(2), &
+                             progvar(ivar)%dimlens(3)))
+      call DART_get_var(ncid, varname, data_3d_array)
+
+      do k = 1, progvar(ivar)%dimlens(3)
+      do j = 1, progvar(ivar)%dimlens(2)
+      do i = 1, progvar(ivar)%dimlens(1)
+         state_vector(indx) = data_3d_array(i, j, k)
+         indx = indx + 1
+      enddo
+      enddo
+      enddo
+      deallocate(data_3d_array)
+
+   else
+
+      write(string1,*) 'no support for data array of dimension ', numdims
+      write(string2,*) 'variable [',trim(progvar(ivar)%varname),']'
+      write(string3,*) 'file [',trim(progvar(ivar)%origin),']'
+      call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
+                        source, revision, revdate, text2=string2, text3=string3)
    endif
-
-   do i = 1,numdims
-      write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
-      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'gcom_file_to_dart_vector', string1)
-
-      if (dimlen /= size(data_2d_array,i)) then
-         write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_2d_array,i)
-         call error_handler(E_ERR,'gcom_file_to_dart_vector',string1,source,revision,revdate)
-      endif
-   enddo
-
-   ! Actually get the variable and stuff it into the array
-
-   call nc_check(nf90_get_var(ncid, VarID, data_2d_array), 'gcom_file_to_dart_vector', &
-                'get_var '//trim(varname))
-
-   do j = 1, Ny   ! size(data_3d_array,2)
-   do i = 1, Nx   ! size(data_3d_array,1)
-      state_vector(indx) = data_2d_array(i, j)
-      indx = indx + 1
-   enddo
-   enddo
 
 enddo
 
@@ -2569,6 +2572,10 @@ end subroutine gcom_file_to_dart_vector
 !>
 !> Writes the current time and state variables from a dart state
 !> vector (1d fortran array) into a GCOM netcdf restart file.
+!> FIXME The more I think about it, the more that 'statedate'
+!> is always the same as 'model_time' ... must check
+!> Since the progvar(ivar)%dims is based on the GCOM file, all
+!> the shape error checking may be superfluous.
 
 subroutine dart_vector_to_gcom_file(state_vector, filename, statedate)
 
@@ -2576,139 +2583,168 @@ real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: statedate
 
-integer :: iyear, imonth, iday, ihour, iminute, isecond
-type(time_type) :: gcom_time
-
 ! temp space to hold data while we are writing it
-real(r8) :: data_2d_array(Nx,Ny)
-real(r8) :: data_3d_array(Nx,Ny,Nz)
+real(r8), allocatable :: data_1d_array(:)
+real(r8), allocatable :: data_2d_array(:,:)
+real(r8), allocatable :: data_3d_array(:,:,:)
 
-integer                      :: dimIDs(NF90_MAX_VAR_DIMS)
+integer  ::  dimIDs(NF90_MAX_VAR_DIMS)
+integer  :: ncstart(NF90_MAX_VAR_DIMS)
+integer  :: nccount(NF90_MAX_VAR_DIMS)
 character(len=NF90_MAX_NAME) :: varname
 
-integer :: i, ivar, ncid, VarID, numdims, dimlen
+integer :: i, ivar, ncid, TimeDimID, VarID, dimlen, numdims
+integer :: timeindex
 
 !----------------------------------------------------------------------
 ! Get the show underway
 !----------------------------------------------------------------------
 
-call error_handler(E_ERR,'dart_vector_to_gcom_file','FIXME TJH UNTESTED')
+if ( .not. module_initialized ) call static_init_model
 
 ! Check that the input file exists.
-! make sure the time tag in the restart file matches
-! the current time of the DART state ...
 
 if ( .not. file_exist(filename)) then
    write(string1,*)trim(filename),' does not exist. FATAL error.'
    call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
 endif
 
-call nc_check( nf90_open(trim(filename), NF90_WRITE, ncid), &
-                  'dart_vector_to_gcom_file', 'open '//trim(filename))
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iyear'  , iyear), &
-                  'dart_vector_to_gcom_file', 'get_att iyear')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'imonth' , imonth), &
-                  'dart_vector_to_gcom_file', 'get_att imonth')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iday'   , iday), &
-                  'dart_vector_to_gcom_file', 'get_att iday')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'ihour'  , ihour), &
-                  'dart_vector_to_gcom_file', 'get_att ihour')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iminute', iminute), &
-                  'dart_vector_to_gcom_file', 'get_att iminute')
-call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'isecond', isecond), &
-                  'dart_vector_to_gcom_file', 'get_att isecond')
+call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
+        'dart_vector_to_gcom_file', 'open '//trim(filename))
 
-gcom_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
+! make sure the time tag in the restart file matches
+! the current time of the DART state ...
+! find_desired_time_index will abort if it cannot find a match.
 
-if ( gcom_time /= statedate ) then
-   call print_time(statedate,'DART current time',logfileunit)
-   call print_time( gcom_time,'GCOM  current time',logfileunit)
-   call print_time(statedate,'DART current time')
-   call print_time( gcom_time,'GCOM  current time')
-   write(string1,*)trim(filename),' current time /= model time. FATAL error.'
-   call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
+        'dart_vector_to_gcom_file', 'inq_dimid time')
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=dimlen ), &
+        'dart_vector_to_gcom_file', 'inquire_dimension time '//trim(varname))
+
+timeindex = find_desired_time_index(ncid, dimlen, statedate)
+
+if (do_output()) then
+    call print_time(statedate,'time of restart file '//trim(filename))
+    call print_date(statedate,'date of restart file '//trim(filename))
 endif
 
-if (do_output()) &
-    call print_time(gcom_time,'time of restart file '//trim(filename))
-if (do_output()) &
-    call print_date(gcom_time,'date of restart file '//trim(filename))
+UPDATE : do ivar=1,nfields
 
-! fill S, T, U, V in that order
-do ivar=1, n3dfields
+   varname = trim(progvar(ivar)%varname)
+   string2 = trim(filename)//' '//trim(varname)
 
-   varname = trim(progvarnames(ivar))//'_CUR'
-   string1 = trim(filename)//' '//trim(varname)
-
-   ! Is the netCDF variable the right shape?
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'dart_vector_to_gcom_file', 'inq_varid '//trim(string1))
-
-   call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'dart_vector_to_gcom_file', 'inquire '//trim(string1))
-
-   if (numdims /= 3) then
-      write(string1,*) trim(string1),' does not have exactly 3 dimensions'
-      call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
+   if ( .not. progvar(ivar)%update ) then
+      write(string1,*)'intentionally not updating '//trim(string2)
+      write(string3,*)'as per namelist control in model_nml:gcom_variables'
+      call error_handler(E_MSG, 'dart_vector_to_gcom_file', string1, text2=string3)
+      cycle UPDATE
    endif
 
-   do i = 1,numdims
-      write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
-      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
-            'dart_vector_to_gcom_file', string1)
+   ! Ensure netCDF variable is conformable with progvar quantity.
 
-      if (dimlen /= size(data_3d_array,i)) then
-         write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_3d_array,i)
-         call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
-      endif
-   enddo
+   call nc_check(nf90_inq_varid(ncid, varname, VarID), &
+           'dart_vector_to_gcom_file','inq_varid '//trim(string2))
+   call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=numdims), &
+           'dart_vector_to_gcom_file','inquire_variable '//trim(string2))
 
-   call vector_to_prog_var(state_vector, ivar, data_3d_array)
-
-   ! Actually stuff it into the netcdf file
-   call nc_check(nf90_put_var(ncid, VarID, data_3d_array), &
-            'dart_vector_to_gcom_file', 'put_var '//trim(string1))
-
-enddo
-
-! and finally, PSURF (and any other 2d fields)
-do ivar=(n3dfields+1), (n3dfields+n2dfields)
-
-   varname = trim(progvarnames(ivar))//'_CUR'
-   string1 = trim(varname)//' '//trim(filename)
-
-   ! Is the netCDF variable the right shape?
-
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'dart_vector_to_gcom_file', 'inq_varid '//trim(string1))
-
-   call nc_check(nf90_inquire_variable(ncid,VarId,dimids=dimIDs,ndims=numdims), &
-            'dart_vector_to_gcom_file', 'inquire '//trim(string1))
-
-   if (numdims /= 2) then
-      write(string1,*) trim(string1),' does not have exactly 2 dimensions'
-      call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
+   if (numdims /= progvar(ivar)%numdims) then
+      write(string1,*) trim(filename)//' '//trim(varname)
+      write(string2,*) 'has rank ',numdims, ' /= expected value of ', &
+                       progvar(ivar)%numdims 
+      call error_handler(E_ERR,'dart_vector_to_gcom_file',string1, &
+                 source,revision,revdate,text2=string2)
    endif
 
-   do i = 1,numdims
-      write(string1,'(''inquire dimension'',i2,A)') i,trim(string1)
+   ncstart = 1
+   nccount = 1
+
+   DimCheck : do i = 1,numdims
+
+      write(string1,'(''inquire dimension'',1x,i2,1x,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'dart_vector_to_gcom_file', string1)
-
-      if (dimlen /= size(data_2d_array,i)) then
-         write(string1,*) trim(string1),'dim/dimlen',i,dimlen,'not',size(data_2d_array,i)
-         call error_handler(E_ERR,'dart_vector_to_gcom_file',string1,source,revision,revdate)
+     
+      if (dimIDs(i) == TimeDimID) then
+         ncstart(i) = timeindex
+         nccount(i) = 1
+         dimlen     = 1
+      else
+         ncstart(i) = 1
+         nccount(i) = dimlen
       endif
-   enddo
 
-   call vector_to_prog_var(state_vector, ivar, data_2d_array)
+      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen
+         write(string2,*) ' not ',progvar(ivar)%dimlens(i),' as it should be.'
+         call error_handler(E_ERR, 'dart_vector_to_gcom_file', string1, &
+                         source, revision, revdate, text2=string2)
+      endif
 
-   call nc_check(nf90_put_var(ncid, VarID, data_2d_array), &
-            'dart_vector_to_gcom_file', 'put_var '//trim(string1))
+   enddo DimCheck
 
-enddo
+   if (do_output() .and. (debug > 1)) then
+      write(*,*)'dart_vector_to_gcom_file: variable ['//trim(varname)//']'
+      write(*,*)'dart_vector_to_gcom_file: start ',ncstart(1:numdims)
+      write(*,*)'dart_vector_to_gcom_file: count ',nccount(1:numdims)
+   endif
 
-call nc_check(nf90_close(ncid), 'dart_vector_to_gcom_file', 'close '//trim(filename))
+   ! When called with a 4th argument, vector_to_prog_var() replaces the DART
+   ! missing code with the value in the corresponding variable in the netCDF file.
+   ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
+
+   if (progvar(ivar)%rank == 1) then
+
+      allocate(data_1d_array(progvar(ivar)%dimlens(1)))
+      call vector_to_prog_var(state_vector, ivar, data_1d_array, ncid)
+
+      call nc_check(nf90_put_var(ncid, VarID, data_1d_array, &
+              start=ncstart(1:numdims), &
+              count=nccount(1:numdims)), &
+              'dart_vector_to_gcom_file', 'put_var '//trim(varname))
+      deallocate(data_1d_array)
+
+   elseif (progvar(ivar)%rank == 2) then
+
+      allocate(data_2d_array(progvar(ivar)%dimlens(1), &
+                             progvar(ivar)%dimlens(2)))
+      call vector_to_prog_var(state_vector, ivar, data_2d_array, ncid)
+
+      call nc_check(nf90_put_var(ncid, VarID, data_2d_array, &
+              start=ncstart(1:numdims), &
+              count=nccount(1:numdims)), &
+              'dart_vector_to_gcom_file', 'put_var '//trim(varname))
+      deallocate(data_2d_array)
+
+   elseif (progvar(ivar)%rank == 3) then
+
+      allocate(data_3d_array(progvar(ivar)%dimlens(1), &
+                             progvar(ivar)%dimlens(2), &
+                             progvar(ivar)%dimlens(3)))
+      call vector_to_prog_var(state_vector, ivar, data_3d_array, ncid)
+
+      call nc_check(nf90_put_var(ncid, VarID, data_3d_array, &
+              start=ncstart(1:numdims), &
+              count=nccount(1:numdims)), &
+              'dart_vector_to_gcom_file', 'put_var '//trim(varname))
+      deallocate(data_3d_array)
+
+   else
+      write(string1, *) 'no support for data array of rank ', dimlen
+      call error_handler(E_ERR,'dart_vector_to_gcom_file', string1, &
+                        source,revision,revdate)
+   endif
+
+   ! TJH FIXME ... this works perfectly if it were not for a bug in netCDF.
+   ! When they fix the bug, this will be a useful thing to restore.
+   ! Make note that the variable has been updated by DART
+!  call nc_check(nf90_Redef(ncid),'dart_vector_to_gcom_file', 'redef '//trim(filename))
+!  call nc_check(nf90_put_att(ncid, VarID,'DART','variable modified by DART'),&
+!                'dart_vector_to_gcom_file', 'modified '//trim(varname))
+!  call nc_check(nf90_enddef(ncid),'dart_vector_to_gcom_file','state enddef '//trim(filename))
+
+enddo UPDATE
+
+call nc_check(nf90_close(ncid),'dart_vector_to_gcom_file','close '//trim(filename))
 
 end subroutine dart_vector_to_gcom_file
 
@@ -2769,20 +2805,27 @@ real(r8) :: spvalR8
 integer,  allocatable :: intarray(:)
 real(r4), allocatable ::  r4array(:)
 
+if ( .not. module_initialized ) call static_init_model
+
 ! a little whitespace makes this a lot more readable
 if (do_output() .and. (debug > 1)) then
    write(*,*)
    write(logfileunit,*)
 endif
 
-io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
-if (io1 /= NF90_NOERR) TimeDimID = MISSING_I
+! Need to know the Time Dimension ID and length
 
-call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//varname)
-call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_1d', 'inquire_variable '//varname)
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
+        'get_var_1d', 'inq_dimid time '//trim(varname))
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
+        'get_var_1d', 'inquire_dimension time '//trim(varname))
+
+call nc_check(nf90_inq_varid(ncid, varname, VarID), &
+                            'get_var_1d', 'inq_varid '//trim(varname))
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims, &
+              xtype=xtype), 'get_var_1d', 'inquire_variable '//trim(varname))
 call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
-              'get_var_1d', 'inquire_dimension '//varname)
+                            'get_var_1d', 'inquire_dimension '//trim(varname))
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
@@ -2793,9 +2836,7 @@ ncstart = 1
 nccount = dimlens(1)
 
 if (dimIDs(1) == TimeDimID) then
-   call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_1d', 'inquire_dimension time '//trim(varname))
-   timeindex  = find_desired_time_index(ncid, time_dimlen, varname)
+   timeindex  = find_desired_time_index(ncid, time_dimlen)
    ncstart(1) = timeindex
    nccount(1) = 1
 endif
@@ -2811,7 +2852,7 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
    var1d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -2846,7 +2887,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
    var1d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -2880,7 +2921,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var1d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
@@ -2964,23 +3005,24 @@ real(r8) :: spvalR8
 integer,  allocatable :: intarray(:,:)
 real(r4), allocatable ::  r4array(:,:)
 
+if ( .not. module_initialized ) call static_init_model
+
 ! a little whitespace makes this a lot more readable
 if (do_output() .and. (debug > 1)) then
    write(*,*)
    write(logfileunit,*)
 endif
 
-io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
-if (io1 /= NF90_NOERR) TimeDimID = MISSING_I
+! Need to know the Time Dimension ID and length
 
-call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_2d', 'inq_varid')
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
+        'get_var_2d', 'inq_dimid time '//trim(varname))
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen), &
+        'get_var_2d', 'inquire_dimension time '//trim(varname))
+
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'get_var_2d', 'inq_varid')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_2d', 'inquire_variable')
-
-if ( (numdims /= 2)  ) then
-   write(string1,*) trim(varname)//' is not a 2D variable as expected.'
-   call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
-endif
+              xtype=xtype), 'get_var_2d', 'inquire_variable '//trim(varname))
 
 ncstart(:) = 1
 nccount(:) = 1
@@ -2990,14 +3032,11 @@ DimCheck : do i = 1,numdims
    write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(varname)
 
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
-              'get_var_2d', string1)
+           'get_var_2d', string1)
 
    if ( dimIDs(i) == TimeDimID ) then
 
-      call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen), &
-            'get_var_2d', 'inquire_dimension time '//trim(varname))
-
-      timeindex  = find_desired_time_index(ncid, time_dimlen, varname)
+      timeindex  = find_desired_time_index(ncid, time_dimlen)
       ncstart(i) = timeindex
       dimlens(i) = 1
 
@@ -3017,12 +3056,17 @@ if (do_output() .and. (debug > 1)) then
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
 endif
 
+! if ( (numdims /= 2)  ) then
+!    write(string1,*) trim(varname)//' is not a 2D variable as expected.'
+!    call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
+! endif
+
 if (xtype == NF90_INT) then
 
    allocate(intarray(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
    var2d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -3057,7 +3101,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
    var2d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -3091,7 +3135,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var2d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
@@ -3175,45 +3219,40 @@ real(r8) :: spvalR8
 integer,  allocatable :: intarray(:,:,:)
 real(r4), allocatable ::  r4array(:,:,:)
 
+if ( .not. module_initialized ) call static_init_model
+
 ! a little whitespace makes this a lot more readable
 if (do_output() .and. (debug > 1)) then
    write(*,*)
    write(logfileunit,*)
 endif
 
-! 3D fields must have a time dimension.
 ! Need to know the Time Dimension ID and length
 
 call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
-         'get_var_3d', 'inq_dimid time '//varname)
-call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_3d', 'inquire_dimension time '//varname)
+        'get_var_3d', 'inq_dimid time '//trim(varname))
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen), &
+        'get_var_3d', 'inquire_dimension time '//trim(varname))
 
-call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_3d', 'inq_varid')
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'get_var_3d', 'inq_varid')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_3d', 'inquire_variable '//varname)
-
-if ( (numdims /= 3)  ) then
-   write(string1,*) trim(varname)//' is not a 3D variable as expected.'
-   call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
-endif
-
-! only expecting [nlon,nlat,time]
+              xtype=xtype), 'get_var_3d', 'inquire_variable '//trim(varname))
 
 ncstart(:) = 1
 nccount(:) = 1
+
 DimCheck : do i = 1,numdims
 
    write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(varname)
 
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
-                 'get_var_3d', trim(string1))
+           'get_var_3d', string1)
 
    if ( dimIDs(i) == TimeDimID ) then
 
-       timeindex  = find_desired_time_index(ncid, time_dimlen, varname)
-       ncstart(i) = timeindex
-       dimlens(i) = 1
+      timeindex  = find_desired_time_index(ncid, time_dimlen)
+      ncstart(i) = timeindex
+      dimlens(i) = 1
 
    elseif ( size(var3d,i) /= dimlens(i) ) then
       write(string1,*) trim(varname)//' has shape ', dimlens(1:numdims)
@@ -3231,12 +3270,18 @@ if (do_output() .and. (debug > 1)) then
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
 endif
 
+! TJH FIXME ... I think the following check is not necessary.
+! if ( (numdims /= 3)  ) then
+!    write(string1,*) trim(varname)//' is not a 3D variable as expected.'
+!    call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
+! endif
+
 if (xtype == NF90_INT) then
 
    allocate(intarray(dimlens(1),dimlens(2),dimlens(3)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(varname))
    var3d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -3271,7 +3316,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2),dimlens(3)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(varname))
    var3d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -3305,7 +3350,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var3d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
@@ -3340,10 +3385,13 @@ endif
 end subroutine get_var_3d
 
 
-subroutine test_interpolation(test_casenum)
- integer, intent(in) :: test_casenum
+!-----------------------------------------------------------------------
+!>
+!> rigorous test of the interpolation routine.
 
-! rigorous test of the interpolation routine.
+subroutine test_interpolation(test_casenum)
+
+integer, intent(in) :: test_casenum
 
 ! This is storage just used for temporary test driver
 integer :: imain, jmain, index, istatus, nx_temp, ny_temp
@@ -3369,6 +3417,8 @@ real(r8), allocatable :: reg_u_x(:), reg_t_x(:), dipole_u(:, :), dipole_t(:, :)
 ! Case 4: regular grid with same grid as dipole in SH to regular grid
 ! Case 5: regular grid with same grid as dipole in SH to dipole
 ! Case 6: dipole to regular grid with same grid as dipole in SH
+
+if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_MSG,'test_interpolate','FIXME TJH UNTESTED')
 
@@ -3537,11 +3587,12 @@ end subroutine test_interpolation
 !> Stuff the values from a 1d array, starting at an offset,
 !> into a 1d array.  not particularly challenging
 
-subroutine vector_to_1d_prog_var(x, varindex, data_1d_array)
+subroutine vector_to_1d_prog_var(x, varindex, data_1d_array, ncid)
 
-real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: varindex
-real(r8), intent(out) :: data_1d_array(:)
+real(r8),          intent(in)  :: x(:)
+integer,           intent(in)  :: varindex
+real(r8),          intent(out) :: data_1d_array(:)
+integer, OPTIONAL, intent(in)  :: ncid
 
 integer :: array_length
 
@@ -3555,6 +3606,11 @@ endif
 
 data_1d_array = x(progvar(varindex)%index1:progvar(varindex)%indexN)
 
+if (present(ncid)) then
+   string1 = 'FIXME clamping not supported yet.'
+   call error_handler(E_MSG,'vector_to_1d_prog_var',string1)
+endif
+
 end subroutine vector_to_1d_prog_var
 
 
@@ -3563,11 +3619,12 @@ end subroutine vector_to_1d_prog_var
 !> Stuff the values from a 1d fortran array, starting at an offset,
 !> into a 2d fortran array.  the 2 dims are taken from the array size.
 
-subroutine vector_to_2d_prog_var(x, varindex, data_2d_array)
+subroutine vector_to_2d_prog_var(x, varindex, data_2d_array, ncid)
 
-real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: varindex
-real(r8), intent(out) :: data_2d_array(:,:)
+real(r8),          intent(in)  :: x(:)
+integer,           intent(in)  :: varindex
+real(r8),          intent(out) :: data_2d_array(:,:)
+integer, OPTIONAL, intent(in)  :: ncid
 
 integer :: i,j,ii
 integer :: dim1,dim2
@@ -3598,6 +3655,11 @@ do i = 1,dim1
 enddo
 enddo
 
+if (present(ncid)) then
+   string1 = 'FIXME clamping not supported yet.'
+   call error_handler(E_MSG,'vector_to_2d_prog_var',string1)
+endif
+
 end subroutine vector_to_2d_prog_var
 
 
@@ -3606,11 +3668,12 @@ end subroutine vector_to_2d_prog_var
 !> Stuff the values from a 1d fortran array, starting at an offset,
 !> into a 3d fortran array.  the 3 dims are taken from the array size.
 
-subroutine vector_to_3d_prog_var(x, varindex, data_3d_array)
+subroutine vector_to_3d_prog_var(x, varindex, data_3d_array, ncid)
 
-real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: varindex
-real(r8), intent(out) :: data_3d_array(:,:,:)
+real(r8),          intent(in)  :: x(:)
+integer,           intent(in)  :: varindex
+real(r8),          intent(out) :: data_3d_array(:,:,:)
+integer, OPTIONAL, intent(in)  :: ncid
 
 integer :: i,j,k,ii
 integer :: dim1,dim2,dim3
@@ -3648,6 +3711,11 @@ do i = 1,dim1
 enddo
 enddo
 enddo
+
+if (present(ncid)) then
+   string1 = 'FIXME clamping not supported yet.'
+   call error_handler(E_MSG,'vector_to_3d_prog_var',string1)
+endif
 
 end subroutine vector_to_3d_prog_var
 
@@ -5523,37 +5591,41 @@ end subroutine depth2pressure
 
 !-----------------------------------------------------------------------
 !>
-!> find_desired_time_index() returns the index into the time array that matches
-!> the model_time from the CLM restart file.
+!> find_desired_time_index() returns the index into the time array that 
+!> matches the model_time from the GCOM restart file.
+!> If the optional argument 'time_wanted' is supplied, 
 
-function find_desired_time_index(ncid, ntimes, varname)
-integer,          intent(in) :: ncid
-integer,          intent(in) :: ntimes
-character(len=*), intent(in) :: varname
-integer                      :: find_desired_time_index
+function find_desired_time_index(ncid, ntimes, time_wanted)
+integer,                   intent(in) :: ncid
+integer,                   intent(in) :: ntimes
+type(time_type), OPTIONAL, intent(in) :: time_wanted
+integer                               :: find_desired_time_index
 
 integer  :: VarID
 real(r8) :: mytimes(ntimes)
 character(len=NF90_MAX_NAME) :: attvalue
 
-type(time_type) :: this_time
+type(time_type) :: this_time, target_time
 integer :: io, itime, origin_days, origin_seconds
-integer :: iyear, imonth, iday, ihour, imin, isec
-
-call error_handler(E_ERR,'find_desired_time_index','routine not written yet', &
-                      source, revision, revdate)
+integer :: iyear, imonth, iday, ihour, iminute, isecond
 
 find_desired_time_index = MISSING_I   ! initialize to failure setting
 
-call nc_check(nf90_inq_varid(ncid, 'time', VarID), &
-        'find_desired_time_index:', 'inq_varid time '//varname)
-call nc_check(nf90_get_var(  ncid, VarID, mytimes), &
-        'find_desired_time_index:', 'get_var   time '//varname)
-call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
-        'find_desired_time_index:', 'time get_att units '//varname)
+if (present(time_wanted)) then
+   target_time = time_wanted
+else
+   target_time = model_time
+endif
 
-! time:units = "days since 2004-01-01 00:00:00" ;
+call nc_check(nf90_inq_varid(ncid, 'time', VarID), &
+        'find_desired_time_index:', 'inq_varid time')
+call nc_check(nf90_get_var(  ncid, VarID, mytimes), &
+        'find_desired_time_index:', 'get_var   time')
+call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
+        'find_desired_time_index:', 'time get_att units')
+
 !               1234567890
+! time:units = "days since 2004-01-01 00:00:00" ;
 
 if (attvalue(1:10) /= 'days since') then
    write(string1,*)'expecting time units of [days since ... ]'
@@ -5562,7 +5634,7 @@ if (attvalue(1:10) /= 'days since') then
           source, revision, revdate, text2=string2)
 endif
 
-read(attvalue,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,imin,isec
+read(attvalue,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
 if (io /= 0) then
    write(string1,*)'Unable to read time units. Error status was ',io
    write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
@@ -5571,7 +5643,7 @@ if (io /= 0) then
           source, revision, revdate, text2=string2, text3=string3)
 endif
 
-this_time = set_date(iyear, imonth, iday, ihour, imin, isec)
+this_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
 call get_time(this_time, origin_seconds, origin_days)
 
 ! convert each time to a DART time and compare to desired
@@ -5579,30 +5651,30 @@ call get_time(this_time, origin_seconds, origin_days)
 TIMELOOP : do itime = 1,ntimes
 
    iday      = int(mytimes(itime))
-   isec      = (mytimes(itime) - iday)*86400
-   this_time = set_time(origin_seconds+isec, origin_days+iday)
+   isecond   = (mytimes(itime) - iday)*86400
+   this_time = set_time(origin_seconds+isecond, origin_days+iday)
 
-   if (this_time == model_time) then
+   if (this_time == target_time) then
       find_desired_time_index = itime
       exit TIMELOOP
    endif
 
 enddo TIMELOOP
 
-! FIXME ... do we actually need a perfect match ... or do we just use the last
-! one. History files may not have a perfect match to the restart file.
+! FIXME ... do we actually need a perfect match ... 
+! or do we just use the last one.
 if ( find_desired_time_index == MISSING_I ) then
-   call print_time(model_time,str='model time is ',iunit=logfileunit)
-   call print_time(model_time,str='model time is ')
-   call print_date(model_time,str='model date is ',iunit=logfileunit)
-   call print_date(model_time,str='model date is ')
-   write(string1,*)'No time matching model_time found for '//trim(varname)
+   call print_time(target_time,str='target time is ',iunit=logfileunit)
+   call print_time(target_time,str='target time is ')
+   call print_date(target_time,str='target date is ',iunit=logfileunit)
+   call print_date(target_time,str='target date is ')
+   write(string1,*)'No matching time found'
    call error_handler(E_ERR, 'find_desired_time_index:', string1, &
           source, revision, revdate )
 endif
 
 if ((debug > 0) .and. do_output()) then
-   write(string1,*)trim(varname)//' matching time index is ',find_desired_time_index
+   write(string1,*)'matching time index is ',find_desired_time_index
    call error_handler(E_MSG, 'find_desired_time_index:', string1)
 endif
 
