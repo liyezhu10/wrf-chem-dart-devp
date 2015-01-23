@@ -63,10 +63,11 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
-character(len=129)      :: msgstring
-type(obs_type)          :: observation
+character(len=256) :: msgstring
+type(obs_type)     :: observation
 
-integer                 :: trace_level, timestamp_level
+integer :: trace_level, timestamp_level
+logical :: quad_debug = .false.     ! set to .true. to get more output
 
 ! Defining whether diagnostics are for prior or posterior
 integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
@@ -183,7 +184,7 @@ integer                 :: OBS_VAL_COPY, OBS_ERR_VAR_COPY, OBS_KEY_COPY, OBS_GLO
 integer                 :: OBS_MEAN_START, OBS_MEAN_END
 integer                 :: OBS_VAR_START, OBS_VAR_END, TOTAL_OBS_COPIES
 integer                 :: input_qc_index, DART_qc_index
-integer                 :: mean_owner, mean_owners_index
+integer                 :: mean_owner, mean_owners_index, distribution_type
 
 ! For now, have model_size real storage for the ensemble mean, don't really want this
 ! in the long run
@@ -500,17 +501,21 @@ AdvanceTime : do
    ! then mean for each group, then variance for each group
    TOTAL_OBS_COPIES = ens_size + 4 + 2*num_groups
    if (quad_filter) then
-      call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 2, quad_filter_in = quad_filter)
-      ! Also need a qc field for copy of each observation
-      call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 2, quad_filter_in = quad_filter)
+      distribution_type = 2
    else
-      call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, 1, quad_filter_in = quad_filter)
-      ! Also need a qc field for copy of each observation
-      call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, 1, quad_filter_in = quad_filter)
+      distribution_type = 1
    endif
 
-if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
-if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
+   call init_ensemble_manager(obs_ens_handle, TOTAL_OBS_COPIES, num_obs_in_set, &
+                              distribution_type, quad_filter_in = quad_filter)
+   ! Also need a qc field for copy of each observation
+   call init_ensemble_manager(forward_op_ens_handle, ens_size, num_obs_in_set, &
+                              distribution_type, quad_filter_in = quad_filter)
+
+   if (quad_debug) then
+      if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
+      if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
+   endif
 
    ! Allocate storage for the keys for this number of observations
    allocate(keys(num_obs_in_set))
@@ -543,10 +548,13 @@ if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
    endif
 
    
-   ! FIXME: i think new code for quad filter goes here.  after inflation,
-   ! while we are still copy complete, and after ens mean and sd were computed.
+   ! Quad filter state values need to be updated while we are copy-complete
+   ! and after the ensemble mean and standard deviation have been computed.
    if (quad_filter) then
-!print *, 'args to update state: ', ens_size, ENS_MEAN_COPY, ENS_SD_COPY
+      if (quad_debug) then
+         write(msgstring, *) 'calling update_state with args: ', ens_size, ENS_MEAN_COPY, ENS_SD_COPY
+         call error_handler(E_MSG, 'quad_filter', msgstring)
+      endif
       call update_squared_state_entries(ens_handle, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
    endif
 
@@ -1235,21 +1243,25 @@ type(ensemble_type), intent(inout) :: ens_handle
 type(time_type),     intent(inout) :: time
 integer,             intent(in)    :: model_size
 
-integer :: days, secs
+integer :: days, secs, dist_type, extras
 
 ! First initialize the ensemble manager storage
 ! Need enough copies for ensemble plus mean, spread, and any inflates
 ! Copies are ensemble, ensemble mean, variance inflation and inflation s.d.
 ! AVOID COPIES FOR INFLATION IF STATE SPACE IS NOT IN USE; NEEDS WORK
 !!!if(prior_inflate%flavor >= 2) then
-if (quad_filter) then
-   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 2, quad_filter_in = quad_filter)
-else
-   call init_ensemble_manager(ens_handle, ens_size + 6, model_size, 1, quad_filter_in = quad_filter)
-endif
+   extras = 6
 !!!else
-!!!   call init_ensemble_manager(ens_handle, ens_size + 2, model_size, 1, quad_filter_in = quad_filter)
+!!!   extras = 2
 !!!endif
+
+if (quad_filter) then
+   dist_type = 2
+else
+   dist_type = 1
+endif
+   
+call init_ensemble_manager(ens_handle, ens_size + extras, model_size, dist_type, quad_filter_in = quad_filter)
 
 if (do_output()) then
    if (start_from_restart) then
@@ -1538,8 +1550,7 @@ call all_vars_to_all_copies(forward_op_ens_handle)
 call compute_copy_mean_var(obs_ens_handle, &
       1, ens_size, OBS_MEAN_START, OBS_VAR_START)
 
-! If using the quad filter, fill in the forward operator values
-! for the pseudo obs.
+! If using the quad filter, fill in the forward operator values for the pseudo obs.
 if (quad_filter) then
    call update_squared_obs_entries(obs_ens_handle, ens_size, OBS_MEAN_START, OBS_VAR_START)
    call update_squared_qc_entries(forward_op_ens_handle, ens_size)
@@ -2017,7 +2028,7 @@ subroutine update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, 
 
 
 use obs_def_mod, only          : get_obs_def_key, get_obs_kind, set_obs_def_error_variance
-use obs_kind_mod, only         : QUAD_FILTER_SQUARED_ERROR
+use obs_kind_mod, only         : QUAD_FILTER_SQUARED_ERROR, get_raw_obs_kind_name
 use location_mod, only         : location_type
 use ensemble_manager_mod, only : ensemble_type, get_my_num_copies, &
                                  all_copies_to_all_vars, all_vars_to_all_copies, &
@@ -2062,16 +2073,23 @@ logical             :: verbose
 ! only do this for the prior observations
 if (prior_post /= PRIOR_DIAG) return
 
-print *, 'in quad filter update routine for prior'
+if (quad_debug) call error_handler(E_MSG, 'filter: ', 'in quad filter update routine for prior') 
 
 ! if you want to see the updated values, make this true. 
 ! for quiet execution, set it to false.
-verbose = .true.
+verbose = .false.
 
 call prepare_to_update_copies(obs_ens_handle)
 
+! this count must be even, which is controlled by which
+! ensemble manager distribution is selected
 npairs = obs_ens_handle%my_num_vars / 2
-! FIXME: test to be sure it is even
+if ((npairs * 2) /= obs_ens_handle%my_num_vars) then 
+   write(msgstring, *) 'on task ', my_task_id(), ' the obs count must be even; it is ', &
+                        obs_ens_handle%my_num_vars
+   call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring, &
+                      source, revision, revdate)
+endif
 
 do j = 1, npairs
 
@@ -2087,7 +2105,10 @@ do j = 1, npairs
    call get_obs_def(observation2, obs_def)
    obs_kind_ind = get_obs_kind(obs_def)
    if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
-      ! FIXME: call the error handler here
+      write(msgstring, *) 'Wrong obs kind; expected Pseudo Observation but have kind ', &
+                           trim(get_raw_obs_kind_name(obs_kind_ind))
+      call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring, &
+                         source, revision, revdate)
    endif
 
    obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, original)
@@ -2107,7 +2128,8 @@ do j = 1, npairs
    obs_ens_handle%copies(OBS_VAL_COPY, pseudo) = pseudo_obs_val
    obs_ens_handle%copies(OBS_ERR_VAR_COPY, pseudo) = pseudo_obs_err_var
    if (verbose) then
-      write(*,*) 'ob, errvar after = ', pseudo_obs_val, pseudo_obs_err_var
+      write(msgstring,*) 'ob, errvar after = ', pseudo_obs_val, pseudo_obs_err_var
+      call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring)
    endif
 
 enddo
@@ -2117,6 +2139,7 @@ enddo
 call all_copies_to_all_vars(obs_ens_handle)
 
 ! FIXME: make this work and then make it better
+! i have temporarily just replicated a whole block of code.
 
 ! Figure out which PE has all the obs values and broadcast
 ! them into a temporary array on the other PEs.
@@ -2137,7 +2160,7 @@ do j = 1, num_obs_in_set
       if (obs_temp(1) /= obs_val) then
          ! FIXME - does it have to be missing r8 originally?
          if (verbose) then
-            write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
+            write(*,*) '1. iam, j, key = ', my_task_id(), j, keys(j)
             write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
             write(*,*) 'updating obs in seq, index = ', j, obs_val_index
          endif
@@ -2161,8 +2184,6 @@ do j = 1, num_obs_in_set
    call get_obs_def(observation, obs_def)
    obs_kind_ind = get_obs_kind(obs_def)
 
-! FIXME: also update error variance
-
    if (obs_kind_ind == QUAD_FILTER_SQUARED_ERROR) then
       original_err_var = get_obs_def_error_variance(obs_def)
       obs_err_var = updated_obs(j)
@@ -2179,7 +2200,6 @@ do j = 1, num_obs_in_set
    endif
 enddo
 
-! END HORRIBLE FIXME
 
 ! Now redistribute back to all copies as this was originally.
 call all_vars_to_all_copies(obs_ens_handle)
@@ -2211,8 +2231,15 @@ verbose = .false.
 
 call prepare_to_update_copies(ens_handle)
 
+! this count must be even, which is controlled by which
+! ensemble manager distribution is selected
 npairs = ens_handle%my_num_vars / 2
-! FIXME: test to be sure it is even
+if ((npairs * 2) /= ens_handle%my_num_vars) then 
+   write(msgstring, *) 'on task ', my_task_id(), ' the state count must be even; it is ', &
+                        ens_handle%my_num_vars
+   call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
+                      source, revision, revdate)
+endif
 
 do i = 1, npairs
 
@@ -2226,8 +2253,9 @@ do i = 1, npairs
       ens_handle%copies(j, squared) = (ens_handle%copies(j, original) - state_mean)**2
 
       if (verbose) then
-         write(*,*) 'state mean, original, squared = ', state_mean, ens_handle%copies(j, original), &
-                                                                    ens_handle%copies(j, squared)
+         write(msgstring,*) 'state mean, original, squared = ', state_mean, &
+               ens_handle%copies(j, original), ens_handle%copies(j, squared)
+         call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring)
       endif
 
    enddo
@@ -2261,17 +2289,30 @@ verbose = .false.
 
 call prepare_to_update_copies(obs_ens_handle)
 
+! this count must be even, which is controlled by which
+! ensemble manager distribution is selected
 npairs = obs_ens_handle%my_num_vars / 2
-! FIXME: test to be sure it is even
+if ((npairs * 2) /= obs_ens_handle%my_num_vars) then 
+   write(msgstring, *) 'on task ', my_task_id(), ' the obs count must be even; it is ', &
+                        obs_ens_handle%my_num_vars
+   call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring, &
+                      source, revision, revdate)
+endif
 
-write(*,*) 'upobs: total, mypairs, my task: ', obs_ens_handle%my_num_vars, npairs, my_task_id()
+if (verbose) then
+   write(msgstring,*) 'upobs: total, mypairs, my task: ', obs_ens_handle%my_num_vars, npairs, my_task_id()
+   call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
+endif
 
 do i = 1, npairs
 
    original = (i*2)-1
    squared = (i*2)
 
-   write(*,*) 'upobs: pair, original, squared indices: ', i, original, squared
+   if (verbose) then
+      write(*,*) 'upobs: pair, original, squared indices: ', i, original, squared
+      call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
+   endif
 
    forward_operator_mean = obs_ens_handle%copies(mean_index, original)
 
@@ -2280,8 +2321,9 @@ do i = 1, npairs
       obs_ens_handle%copies(j, squared) = (obs_ens_handle%copies(j, original) - forward_operator_mean)**2
 
       if (verbose) then
-         write(*,*) 'upobs: F.O. mean, original, squared = ', forward_operator_mean, &
+         write(msgstring,*) 'upobs: F.O. mean, original, squared = ', forward_operator_mean, &
                      obs_ens_handle%copies(j, original), obs_ens_handle%copies(j, squared)
+         call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
       endif
 
    enddo
@@ -2314,8 +2356,15 @@ verbose = .false.
 
 call prepare_to_update_copies(forward_op_ens_handle)
 
+! this count must be even, which is controlled by which
+! ensemble manager distribution is selected
 npairs = forward_op_ens_handle%my_num_vars / 2
-! FIXME: test to be sure it is even
+if ((npairs * 2) /= forward_op_ens_handle%my_num_vars) then 
+   write(msgstring, *) 'on task ', my_task_id(), ' the QC count must be even; it is ', &
+                        forward_op_ens_handle%my_num_vars
+   call error_handler(E_ERR, 'update_squared_qc_entries: ', msgstring, &
+                      source, revision, revdate)
+endif
 
 do i = 1, npairs
 
@@ -2325,19 +2374,22 @@ do i = 1, npairs
    do j=1, ens_size
 
       if (verbose) then
-         write(*,*) 'QC original, squared = ', forward_op_ens_handle%copies(j, original), &
-                                               forward_op_ens_handle%copies(j, squared)
+         write(msgstring,*) 'QC original, squared = ', forward_op_ens_handle%copies(j, original), &
+                                                       forward_op_ens_handle%copies(j, squared)
+         call error_handler(E_ERR, 'update_squared_qc_entries: ', msgstring)
       endif
 
-      ! FIXME: this is going to fail if you are assimilating the paired obs
-      ! and trying to do anything else with the quad ob.  this is a feature for now.
+      ! FIXME: you cannot do something different with the pseudo ob than the original
+      ! ob, e.g. assimilate one and evaluate or ignore the other.  this is a feature for now.
+
+      ! Note that these forward operator QC values are the 'raw' internal QC values, including
+      ! using -1 and -2 for eval only, neither eval or assim, and -99 for failing the incoming
+      ! qc value test.  these are NOT the outgoing DART QC values from 0 to 7.
+
       forward_op_ens_handle%copies(j, squared) = forward_op_ens_handle%copies(j, original)
 
    enddo
 enddo
-
-! FIXME: we don't need stats on the QC vals, right?
-!call compute_copy_mean_var(forward_op_ens_handle, 1, ens_size, mean_index, var_index)
 
 end subroutine update_squared_qc_entries
 
