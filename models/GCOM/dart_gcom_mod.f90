@@ -32,8 +32,8 @@ public :: get_gcom_calendar,         &
           read_topography,           &
           read_vert_grid,            &
           write_gcom_namelist,       &
-          get_gcom_restart_filename, &
-          get_gcom_grid_filename
+!         get_gcom_restart_filename, &
+!         get_gcom_grid_filename
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -189,8 +189,8 @@ integer :: iunit, io
 
 call set_calendar_type('gregorian')
 
-call get_gcom_restart_filename(ic_filename)
-call get_gcom_grid_filename(grid_filename)
+! call get_gcom_restart_filename(ic_filename)
+! call get_gcom_grid_filename(grid_filename)
 
 ! Read GCOM I/O information (for restart file ... grid dimensions)
 ! Read GCOM initial information (for input/restart filename)

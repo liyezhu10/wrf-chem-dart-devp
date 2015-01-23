@@ -47,8 +47,8 @@
 
 MPIFC = mpif90
 MPILD = mpif90
-FC = pgf90
-LD = pgf90
+FC = /opt/pgi/linux86-64/12.4/bin/pgf90
+LD = /opt/pgi/linux86-64/12.4/bin/pgf90
 
 # DISCUSSION ABOUT NETCDF. DART works with both V3 and V4 flavors of netCDF.
 # Some V4 installations also require the HDF5 libraries. Some don't.

@@ -67,7 +67,7 @@ type ensemble_type
    integer                  :: distribution_type
    integer                  :: valid     ! copies modified last, vars modified last, both same
    integer                  :: id_num
-   integer, allocatable     :: task_to_pe_list(:), pe_to_task_list(:) ! List of tasks
+   integer,         pointer :: task_to_pe_list(:), pe_to_task_list(:) ! List of tasks
    ! Flexible my_pe, layout_type which allows different task layouts for different ensemble handles
    integer                  :: my_pe    
    integer                  :: layout_type           
@@ -1647,7 +1647,8 @@ write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'my_pe number       : ', ens_handle%my_pe
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-if (allocated(ens_handle%pe_to_task_list)) then
+
+if (associated(ens_handle%pe_to_task_list)) then
    write(msgstring, *) 'task_to_pe_list    : ', ens_handle%task_to_pe_list
    call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
    write(msgstring, *) 'pe_to_task_list    : ', ens_handle%pe_to_task_list

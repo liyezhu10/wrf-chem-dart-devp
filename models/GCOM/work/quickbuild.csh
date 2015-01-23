@@ -44,6 +44,8 @@ foreach TARGET ( mkmf_* )
    switch ( $TARGET )
    case mkmf_preprocess:
       breaksw
+   case mkmf_obs_diag:
+      breaksw
    default:
       @ n = $n + 1
       echo
