@@ -996,7 +996,7 @@ call static_init_obs_sequence()
 
 ! Initialize the model class data now that obs_sequence is all set up
 call trace_message('Before init_model call')
-call static_init_assim_model(quad_filter)
+call static_init_assim_model(quad_filter, quad_filter_dist_type)
 call trace_message('After  init_model call')
 
 end subroutine filter_initialize_modules_used
