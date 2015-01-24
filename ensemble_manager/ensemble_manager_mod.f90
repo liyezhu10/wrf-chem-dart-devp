@@ -958,7 +958,8 @@ if(ens_handle%distribution_type == 1) then
       ens_handle%my_num_vars = num_per_pe_below
    endif
 
-elseif(ens_handle%distribution_type == 2) then
+elseif((ens_handle%distribution_type == 2) .or. &
+       (ens_handle%distribution_type == 3)) then
    ! Option 2 for quad filter; Vars are in pairs
    ! Figure out how many pairs each pe gets first following logic above for half the size
    ! Might want an error check to confirm that num_vars is in fact even
@@ -973,7 +974,8 @@ elseif(ens_handle%distribution_type == 2) then
    ens_handle%my_num_vars = 2 * my_num_pairs
    
 else
-   ! Only 1 and 2 defined; PUT AN ERROR HERE
+   call error_handler(E_ERR, 'set_up_ens_distribution: ', 'unknown distribution type', &
+                      source, revision, revdate)
 endif
 
 ! CHECK TO MAKE SURE THAT BELOW IS DISTRIBUTION TYPE INDEPENDENT
@@ -1000,6 +1002,8 @@ end do
 ! Fill out the number of my vars
 call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, not_used_here, &
    ens_handle%distribution_type)
+
+call print_ens_handle(ens_handle)
 
 end subroutine set_up_ens_distribution
 
@@ -1183,7 +1187,7 @@ elseif(distribution_type == 2 .or. distribution_type == 3) then
    end do
 
 else
-   ! Put in an error 
+   call error_handler(E_ERR, 'get_var_list: ', 'no case for this distribution_type', source,revision,revdate)
 endif
 
 end subroutine get_var_list
@@ -1735,19 +1739,26 @@ end subroutine timestamp_message
 
 !--------------------------------------------------------------------------------
 
-subroutine print_ens_handle(ens_handle, force, label)
+subroutine print_ens_handle(ens_handle, force, label, alldata)
  type(ensemble_type),        intent(in) :: ens_handle
  logical,          optional, intent(in) :: force
  character(len=*), optional, intent(in) :: label
+ logical,          optional, intent(in) :: alldata
 
-logical :: print_anyway
+logical :: print_anyway, print_all_data
 logical :: has_label, old_output
+integer :: i, j
 
-print_anyway = .false.
+print_anyway = .true.
 old_output = do_output()
 if (present(force)) then
    print_anyway = force
    call set_output(.true.)
+endif
+
+print_all_data = .false.
+if (present(alldata)) then
+   print_all_data = alldata
 endif
 
 has_label = .false.
@@ -1771,8 +1782,26 @@ write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-!write(msgstring, *) 'my_vars: ', ens_handle%my_vars
-!call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+if (print_all_data) then
+write(msgstring, *) 'my copies data: '
+call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+do j=1, ens_handle%my_num_vars
+   do i=1, ens_handle%num_copies
+      write(msgstring, *) 'ij, index, value: ', i, j,  ens_handle%my_vars(j), &
+                           ens_handle%copies(i, ens_handle%my_vars(j))
+      call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+  enddo
+enddo
+write(msgstring, *) 'my vars data: '
+call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+do j=1, ens_handle%my_num_copies
+   do i=1, ens_handle%num_vars
+      write(msgstring, *) 'ij, index, value: ', i, j,  ens_handle%my_copies(j), &
+                           ens_handle%vars(i, ens_handle%my_copies(j))
+      call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+  enddo
+enddo
+endif
 write(msgstring, *) 'valid              : ', ens_handle%valid
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
