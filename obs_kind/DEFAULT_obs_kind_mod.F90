@@ -342,7 +342,13 @@ integer, parameter, public :: &
     KIND_TAUAER4                     = 199, &
     KIND_PM10                        = 200, &
     KIND_PM25                        = 201, &
-    KIND_MODIS_AOD_RETRIEVAL         = 202
+    KIND_MODIS_AOD_RETRIEVAL         = 202, &
+!
+! Xueling's changes
+    KIND_OMI_NO2_RETRIEVAL           = 203, &
+    KIND_OMI_NO2_COLUMN              = 204, &
+    KIND_E_NO                        = 205
+
 ! APM --
 
 ! kinds for GITM (Alexey Morozov)
@@ -699,6 +705,11 @@ obs_kind_names(199) = obs_kind_type(KIND_TAUAER4, 'KIND_TAUAER4')
 obs_kind_names(200) = obs_kind_type(KIND_PM10, 'KIND_PM10')
 obs_kind_names(201) = obs_kind_type(KIND_PM25, 'KIND_PM25')
 obs_kind_names(202) = obs_kind_type(KIND_MODIS_AOD_RETRIEVAL, 'KIND_MODIS_AOD_RETRIEVAL')
+!
+! Xueling's changes
+obs_kind_names(203) = obs_kind_type(KIND_OMI_NO2_RETRIEVAL, 'KIND_OMI_NO2_RETRIEVAL')
+obs_kind_names(204) = obs_kind_type(KIND_OMI_NO2_COLUMN,'KIND_OMI_NO2_COLUMN') 
+obs_kind_names(205) = obs_kind_type(KIND_E_NO,'KIND_E_NO')
 !
 ! APM --
 obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')

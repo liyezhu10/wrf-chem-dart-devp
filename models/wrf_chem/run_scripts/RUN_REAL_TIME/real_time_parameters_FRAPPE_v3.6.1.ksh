@@ -7,15 +7,15 @@
 #
 # CYCLE DATE-TIME:
 #export DATE=2008072000
-#export DATE=2008072006
-export DATE=2008072012
+export DATE=2008072006
+#export DATE=2008072012
 #export DATE=2008072018
 export INITIAL_DATE=2008072000
 export FIRST_FILTER_DATE=2008072006
 export CYCLE_PERIOD=6
 #
 export BUILD_DIR=/glade/p/work/mizzi/TRUNK/WRFDAv3.4_dmpar/var/da
-export DART_DIR=/glade/p/work/mizzi/TRUNK/DART_CHEM
+export DART_DIR=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH
 cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
 cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
 export YYYY=$(echo $DATE | cut -c1-4)
@@ -55,7 +55,7 @@ if [[ ${HH} -eq 0 ]]; then
    export TMP_MM=$(echo $TMP_DATE | cut -c5-6)
    export TMP_DD=$(echo $TMP_DATE | cut -c7-8)
    export TMP_HH=$(echo $TMP_DATE | cut -c9-10)
-   export D_YYYY=${PAST_YYYY}
+   export D_YYYY=${TMP_YYYY}
    export D_YY=${TMP_YY}
    export D_MM=${TMP_MM}
    export D_DD=${TMP_DD}
@@ -94,24 +94,24 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 #
 # SELECT COMPOENT RUN OPTIONS:
 export RUN_GEOGRID=false
-export RUN_UNGRIB=false
-export RUN_METGRID=false
-export RUN_REAL=false
-export RUN_PERT_WRFCHEM_MET_IC=false
-export RUN_PERT_WRFCHEM_MET_BC=false
-export RUN_EXO_COLDENS=false
-export RUN_SEASON_WES=false
-export RUN_WRFCHEM_BIO=false
-export RUN_WRFCHEM_FIRE=false
-export RUN_WRFCHEM_CHEMI=false
-export RUN_PERT_WRFCHEM_CHEM_ICBC=false
-export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-export RUN_MOPITT_CO_OBS=false
+export RUN_UNGRIB=true
+export RUN_METGRID=true
+export RUN_REAL=true
+export RUN_PERT_WRFCHEM_MET_IC=true
+export RUN_PERT_WRFCHEM_MET_BC=true
+export RUN_EXO_COLDENS=true
+export RUN_SEASON_WES=true
+export RUN_WRFCHEM_BIO=true
+export RUN_WRFCHEM_FIRE=true
+export RUN_WRFCHEM_CHEMI=true
+export RUN_PERT_WRFCHEM_CHEM_ICBC=true
+export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+export RUN_MOPITT_CO_OBS=true
 export RUN_IASI_CO_OBS=false
 export RUN_IASI_O3_OBS=false
-export RUN_MET_OBS=false
-export RUN_COMBINE_OBS=false
-export RUN_PREPROCESS_OBS=false
+export RUN_MET_OBS=true
+export RUN_COMBINE_OBS=true
+export RUN_PREPROCESS_OBS=true
 #
 if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
    export RUN_WRFCHEM_INITIAL=true
@@ -121,9 +121,9 @@ if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
    export RUN_WRFCHEM_CYCLE_FR=false
 else
    export RUN_WRFCHEM_INITIAL=false
-   export RUN_DART_FILTER=false
-   export RUN_UPDATE_BC=false
-   export RUN_WRFCHEM_CYCLE_CR=false
+   export RUN_DART_FILTER=true
+   export RUN_UPDATE_BC=true
+   export RUN_WRFCHEM_CYCLE_CR=true
    export RUN_WRFCHEM_CYCLE_FR=true
 fi
 #
@@ -196,11 +196,11 @@ export FILTER_JOB_CLASS=regular
 # CODE VERSIONS:
 export WPS_VER=WPSv3.6.1_dmpar
 export WPS_GEOG_VER=WPSv3.6.1_GEOG_DATA
-export WRFDA_VER=WRFDAv3.6.1_dmpar
+export WRFDA_VER=WRFDAv3.4_dmpar
 export WRFDA_TOOLS_VER=WRFDA_TOOLSv3.4
 export WRF_VER=WRFv3.6.1_dmpar
 export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 #
 # ROOT DIRECTORIES:
 export SCRATCH_DIR=/glade/scratch/mizzi
@@ -208,7 +208,7 @@ export WORK_DIR=/glade/p/work/mizzi
 export ACD_DIR=/glade/p/acd/mizzi
 #
 # DEPENDENT DIRECTORIES:
-export RUN_DIR=${SCRATCH_DIR}/real_time_wrf_chem_FRAPPE_v3.6.1
+export RUN_DIR=${SCRATCH_DIR}/real_my_branch_FRAPPE_v3.6.1
 export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
@@ -372,7 +372,7 @@ export NL_INPUT_OUTNAME="'"wrfapm_d\<domain\>_\<date\>"'"
 export NL_DEBUG_LEVEL=0
 #
 # DOMAINS NAMELIST:
-export NL_TIME_STEP=60
+export NL_TIME_STEP=90
 export NL_TIME_STEP_FRACT_NUM=0
 export NL_TIME_STEP_FRACT_DEN=1
 export NL_MAX_DOM=${MAX_DOMAINS}
@@ -1439,7 +1439,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
          cp ${DA_BDY_FILE} wrfbdy_this
       fi
       rm -rf pert_wrf_bc
-      cp ${TRUNK_DIR}/${DART_VER}/models/wrf/work/pert_wrf_bc ./.
+      cp ${TRUNK_DIR}/${DART_VER}/models/wrf_chem/work/pert_wrf_bc ./.
       rm -rf input.nml
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 #
@@ -1679,7 +1679,7 @@ EOF
 #BSUB -J ${JOBRND}
 #BSUB -o ${JOBRND}.out
 #BSUB -e ${JOBRND}.err
-#BSUB -W 00:10        
+#BSUB -W 00:15        
 #BSUB -q premium
 #
 # RUN megan_bio_emis
@@ -2069,8 +2069,10 @@ if ${RUN_PERT_WRFCHEM_CHEM_EMISS}; then
    fi
 #
 # COPY PERTURBATION CODE
-   if [[ -e perturb_chem_emiss.exe ]]; then rm -rf perturb_chem_emiss.exe; fi
-   cp ${PERT_CHEM_EMISS_DIR}/perturb_chem_emiss.exe ./.
+   if [[ -e perturb_chem_emiss_RT_CR.exe ]]; then rm -rf perturb_chem_emiss_RT_CR.exe; fi
+   if [[ -e perturb_chem_emiss_RT_FR.exe ]]; then rm -rf perturb_chem_emiss_RT_FR.exe; fi
+   cp ${PERT_CHEM_EMISS_DIR}/perturb_chem_emiss_RT_CR.exe ./.
+   cp ${PERT_CHEM_EMISS_DIR}/perturb_chem_emiss_RT_FR.exe ./.
 #
    export L_DATE=${DATE}
    export LE_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
@@ -2127,7 +2129,7 @@ pert_bio=${NL_PERT_BIO}
 EOF
 #
 # RUN PERTURBATION CODE    
-         ./perturb_chem_emiss.exe
+         ./perturb_chem_emiss_RT_CR.exe
 #
 # GET FR EMISSON FILES FOR THIS MEMBER
          export WRFCHEMI=wrfchemi_d${FR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00
@@ -2162,7 +2164,7 @@ pert_bio=${NL_PERT_BIO}
 EOF
 #
 # RUN PERTURBATION CODE    
-         ./perturb_chem_emiss.exe
+         ./perturb_chem_emiss_RT_FR.exe
 #
 # GO TO NEXT MEMBER
          let MEM=${MEM}+1
@@ -2353,8 +2355,19 @@ if ${RUN_MET_OBS}; then
    fi
 #
 # GET PREPBUFR FILES
-   export L_DATE=${D_YYYY}${D_MM}${D_DD}06
-   export E_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} +24 2>/dev/null)
+# (THIS ASSUMES +/- 3HR OBS WINDOW) 
+   if [[ ${D_HH} -eq 24 ]]; then
+      export LL_HH=18
+   elif [[ ${D_HH} -eq 6 ]]; then
+      export LL_HH=00
+   elif [[ ${D_HH} -eq 12 ]]; then
+      export LL_HH=06
+   elif [[ ${D_HH} -eq 18 ]]; then
+      export LL_HH=12
+   fi
+#           
+   export L_DATE=${D_YYYY}${D_MM}${D_DD}${LL_HH}
+   export E_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} +6 2>/dev/null)
    while [[ ${L_DATE} -le ${E_DATE} ]]; do
       export L_YYYY=$(echo $L_DATE | cut -c1-4)
       export L_YY=$(echo $L_DATE | cut -c3-4)

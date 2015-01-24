@@ -8,9 +8,9 @@
 # CODE VERSIONS
 export WRFDA_VER=WRFDAv3.4_dmpar
 export WRFDA_TOOLS_VER=WRFDA_TOOLSv3.4
-export WRF_VER=WRFv3.4_dmpar
-export WRFCHEM_VER=WRFCHEMv3.5.1_dmpar
-export DART_VER=DART_CHEM
+export WRF_VER=WRFv3.6.1_dmpar
+export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
+export DART_VER=DART_CHEM_MY_BRANCH
 #
 # EXPERIMENT DETAILS:
 export NUM_MEMBERS=20
@@ -18,8 +18,10 @@ export MEM_START=1
 export USE_HSI=false
 #
 # TIME DATA:
-export START_DATE=2008070200
-export END_DATE=2008070223
+export START_DATE=2008060100
+export START_DATE=2008062406
+export END_DATE=2008062400
+export END_DATE=2008063018
 export DATE=${START_DATE}
 export YYYY=$(echo $DATE | cut -c1-4)
 export MM=$(echo $DATE | cut -c5-6)
@@ -28,11 +30,12 @@ export HH=$(echo $DATE | cut -c9-10)
 #
 # CYCLING AND BOUNDARY CONDITION TIME DATA
 export EMISS_FREQ=1
+export EMISS_FREQ=6
 export NL_MEAN=1.0
-export NL_SPREAD=0.05
-export NL_SPREAD=0.20
-export NL_SPREAD=0.35
-export NL_SPREAD=0.40
+#export NL_SPREAD=0.05
+#export NL_SPREAD=0.20
+#export NL_SPREAD=0.35
+#export NL_SPREAD=0.40
 #
 export NL_SPREAD=0.00
 #export NL_SPREAD=0.30
@@ -84,9 +87,9 @@ while [[ ${DATE} -le ${END_DATE} ]] ; do
    let MEM=${MEM_START}
       while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
          export NL_ENS_MEMBER=${MEM}
-         export NL_PERT_CHEM=true
-         export NL_PERT_FIRE=true
-         export NL_PERT_BIO=false
+         export NL_PERT_CHEM=false
+         export NL_PERT_FIRE=false
+         export NL_PERT_BIO=true
          if [[ ${HH} -eq 00 || ${HH} -eq 06 || ${HH} -eq 12 || ${HH} -eq 18 ]]; then
             export NL_PERT_BIO=true
          fi

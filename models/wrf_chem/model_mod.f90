@@ -82,7 +82,10 @@ use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN, 
                               KIND_SSLT04, &
                               KIND_DST05, &
                               KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM10, KIND_PM25, KIND_MODIS_AOD_RETRIEVAL 
+                              KIND_PM10, KIND_PM25, KIND_MODIS_AOD_RETRIEVAL, & 
+!
+! Xueling's changes
+                              KIND_OMI_NO2_RETRIEVAL, KIND_OMI_NO2_COLUMN, KIND_E_NO
 ! APM/AFAJ --
 
 ! FIXME:
@@ -717,10 +720,14 @@ WRFDomains : do id=1,num_domains
 ! APM/AFAJ ++
    wrf%dom(id)%type_o3  = get_type_ind_from_type_string(id,'o3')
    wrf%dom(id)%type_co  = get_type_ind_from_type_string(id,'co')
-   wrf%dom(id)%type_tauaer1= get_type_ind_from_type_string(id,'TAUAER1')
-   wrf%dom(id)%type_tauaer2= get_type_ind_from_type_string(id,'TAUAER2')
-   wrf%dom(id)%type_tauaer3= get_type_ind_from_type_string(id,'TAUAER3')
-   wrf%dom(id)%type_tauaer4= get_type_ind_from_type_string(id,'TAUAER4')
+   wrf%dom(id)%type_tauaer1 = get_type_ind_from_type_string(id,'TAUAER1')
+   wrf%dom(id)%type_tauaer2 = get_type_ind_from_type_string(id,'TAUAER2')
+   wrf%dom(id)%type_tauaer3 = get_type_ind_from_type_string(id,'TAUAER3')
+   wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
+!
+! Xueling's changes
+   wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
+!
 ! APM/AFAJ --
 
 enddo WRFDomains 
@@ -3141,9 +3148,7 @@ else
             fld = max(0.0_r8, fld)
          endif
       endif
-! APM/AFAJ --
 !
-! APM/AFAJ ++
    !-----------------------------------------------------
    ! 1.zb MOPITT and IASI CO Retrieval (CO)
 
@@ -3186,9 +3191,7 @@ else
 !            print *, 'APM: k+1 fld2',k+1,fld(2)
          endif
       endif
-! APM/AFAJ --
 !
-! APM/AFAJ ++
    !-----------------------------------------------------
    ! 1.zc Aerosol Optical Depth (TAUAER1, TAUAER2, TAUAER3, TAUAER4)
    !      added by AFAJ Ave Arellano for AOD assimilation
@@ -3259,6 +3262,52 @@ else
             fld(1) = aod5
             endif
          endif
+!
+! Xueling's changes
+   !-----------------------------------------------------
+   ! 1.zd OMI NO2 Retrieval (NO2)
+
+   else if( obs_kind == KIND_NO2_COLUMN ) then  
+
+      if ( wrf%dom(id)%type_no2 >= 0 ) then
+! APM: OMI CHECK
+!         print *, 'APM i,j,k : ',i,j,k
+!         print *, "APM:i ",boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_no2)
+!         print *, "APM:j ",boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_no2)
+!         print *, "APM:k ",boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_no2)
+
+   ! Check to make sure retrieved integer gridpoints are in valid range
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_no2 ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_no2 ) .and. &
+              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_no2 ) ) then
+
+            call getCorners(i, j, id, wrf%dom(id)%type_no2, ll, ul, lr, ur, rc )
+
+            if ( rc .ne. 0 ) then
+               print*, 'model_mod.f90 :: model_interpolate :: getCorners NO2 rc = ', rc
+               call abort
+            endif
+
+   ! Interpolation for the NO2 field at level k
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_no2)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_no2)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_no2)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_no2)
+
+            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!            print *, 'APM: is_lev0 ', is_lev0
+!            print *, 'APM: k, fld1',k,fld(1)
+
+   ! Interpolation for the NO2 field at level k+1
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_no2)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_no2)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_no2)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_no2)
+            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!            print *, 'APM: k+1 fld2',k+1,fld(2)
+         endif
+      endif
+!
 ! APM/AFAJ --
 
    !-----------------------------------------------------

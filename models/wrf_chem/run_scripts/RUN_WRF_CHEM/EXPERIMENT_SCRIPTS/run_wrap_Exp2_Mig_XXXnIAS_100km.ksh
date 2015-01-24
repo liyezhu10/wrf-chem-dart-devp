@@ -27,7 +27,7 @@ export W_SCRATCH_DIR=/glade/scratch/mizzi
 export W_ACD_DIR=/glade/p/acd/mizzi
 export W_HSI_DIR=/MIZZI
 export W_TRUNK_DIR=${W_PROJECT_DIR}/TRUNK
-export W_DART_DIR=${W_TRUNK_DIR}/DART_CHEM
+export W_DART_DIR=${W_TRUNK_DIR}/DART_CHEM_MY_BRANCH
 export W_RUN_SCRIPT_DIR=${W_DART_DIR}/models/wrf_chem/run_scripts/RUN_WRF_CHEM/EXPERIMENT_SCRIPTS
 export W_RUN_DIR=${W_SCRATCH_DIR}/RUN_${W_EXPERIMENT}
 #

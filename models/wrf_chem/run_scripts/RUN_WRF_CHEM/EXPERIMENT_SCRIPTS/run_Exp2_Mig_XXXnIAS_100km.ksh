@@ -73,7 +73,7 @@ export USE_WRFDA=false
 export USE_DART_INFL=true
 #
 # Define code versions
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
