@@ -67,7 +67,8 @@ character(len=256) :: msgstring
 type(obs_type)     :: observation
 
 integer :: trace_level, timestamp_level
-logical :: quad_debug = .false.     ! set to .true. to get more output
+logical :: quad_debug   = .true.     ! set to .true. to get more output
+logical :: quad_verbose = .false.     ! set to .true. to get a *lot* more output
 
 ! Defining whether diagnostics are for prior or posterior
 integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
@@ -2082,7 +2083,6 @@ integer             :: i_int, npairs
 integer             :: this_obs_key
 integer             :: owner, owners_index
 type(obs_type)      :: observation1, observation2
-logical             :: verbose
 
 
 ! only do this for the prior observations
@@ -2090,9 +2090,7 @@ if (prior_post /= PRIOR_DIAG) return
 
 if (quad_debug) call error_handler(E_MSG, 'filter: ', 'in quad filter update routine for prior') 
 
-! if you want to see the updated values, make this true. 
-! for quiet execution, set it to false.
-verbose = .false.
+if (quad_verbose) call print_ens_handle(obs_ens_handle, .true., 'obs_seq', .true.)
 
 call prepare_to_update_copies(obs_ens_handle)
 
@@ -2108,8 +2106,22 @@ endif
 
 do j = 1, npairs
 
-   original = (j*2)-1
-   pseudo = (j*2)
+   ! missing level of redirection - or not here?
+   !original = (j*2)-1
+   !pseudo = (j*2)
+
+   original = obs_ens_handle%my_vars((j*2)-1)
+   pseudo  = obs_ens_handle%my_vars((j*2))
+  
+   if (quad_verbose) then
+   if (.true.) then
+      write(msgstring,*) 'j/o/s, indir obsseq keys, original, pseudo = ', j, original, pseudo, &
+            obs_ens_handle%copies(OBS_KEY_COPY, original), obs_ens_handle%copies(OBS_KEY_COPY, pseudo)
+      call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
+      write(msgstring,*) 'j/o/s, orig  obsseq keys, original, pseudo = ', j, (j*2)-1, (j*2), &
+            obs_ens_handle%copies(OBS_KEY_COPY, (j*2)-1), obs_ens_handle%copies(OBS_KEY_COPY, j*2)
+      call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
+   endif
 
    ! we only need to do this for error checking - no other reason.
    ! get the key number associated with each of my subset of obs
@@ -2119,11 +2131,16 @@ do j = 1, npairs
    call get_obs_from_key(seq, this_obs_key, observation2)
    call get_obs_def(observation2, obs_def)
    obs_kind_ind = get_obs_kind(obs_def)
+   if (quad_verbose) then
+      write(msgstring,*) ' kind = ', obs_kind_ind, trim(get_raw_obs_kind_name(obs_kind_ind))
+      call error_handler(E_MSG, 'update_squared_state_entries: ', msgstring)
+   endif
+
    if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
       write(msgstring, *) 'Wrong obs kind; expected Pseudo Observation but have kind ', &
                            trim(get_raw_obs_kind_name(obs_kind_ind))
-      call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring, &
-                         source, revision, revdate)
+      call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
+                          source, revision, revdate)
    endif
 
    obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, original)
@@ -2131,6 +2148,11 @@ do j = 1, npairs
 
    obs_val     = obs_ens_handle%copies(OBS_VAL_COPY, original)
    obs_err_var = obs_ens_handle%copies(OBS_ERR_VAR_COPY, original)
+
+   if (quad_verbose) then
+      write(msgstring,*) 'pmean,pvar,omean,ovar = ', obs_prior_mean, obs_prior_var, obs_val, obs_err_var
+      call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
+   endif
 
    ! here is the magic
    pseudo_obs_val = ((obs_val - obs_prior_mean)**2) - obs_err_var
@@ -2142,9 +2164,9 @@ do j = 1, npairs
 
    obs_ens_handle%copies(OBS_VAL_COPY, pseudo) = pseudo_obs_val
    obs_ens_handle%copies(OBS_ERR_VAR_COPY, pseudo) = pseudo_obs_err_var
-   if (verbose) then
+   if (quad_verbose) then
       write(msgstring,*) 'ob, errvar after = ', pseudo_obs_val, pseudo_obs_err_var
-      call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring)
+      call error_handler(E_MSG, 'update_observations_quad_filter: ', msgstring)
    endif
 
 enddo
@@ -2174,7 +2196,7 @@ do j = 1, num_obs_in_set
       obs_val = updated_obs(j)
       if (obs_temp(1) /= obs_val) then
          ! FIXME - does it have to be missing r8 originally?
-         if (verbose) then
+         if (quad_verbose) then
             write(*,*) '1. iam, j, key = ', my_task_id(), j, keys(j)
             write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
             write(*,*) 'updating obs in seq, index = ', j, obs_val_index
@@ -2203,7 +2225,7 @@ do j = 1, num_obs_in_set
       original_err_var = get_obs_def_error_variance(obs_def)
       obs_err_var = updated_obs(j)
       if (original_err_var /= obs_err_var) then  ! FIXME: again, is orig always missing?
-         if (verbose) then
+         if (quad_verbose) then
             write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
             write(*,*) 'old observation errvar, new errvar = ', original_err_var, obs_err_var
             write(*,*) 'updating obs in seq, index = ', j, obs_val_index
@@ -2234,17 +2256,15 @@ integer,             intent(in)    :: sd_index
 integer :: i, j
 integer :: npairs, original, squared
 real(r8) :: state_mean
-logical :: verbose
 
 ! update every other state entry based on the previous entry
 ! the ensemble member values are (the original ensemble value - the mean) ^ 2
 ! also call the mean/sd routine to populate the mean/sd values for the new entries
 
-! if you want to see the updated values, make this true. 
-! for quiet execution, set it to false.
-verbose = .false.
 
 call prepare_to_update_copies(ens_handle)
+
+if (quad_verbose) call print_ens_handle(ens_handle, .true., 'state', .true.)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
@@ -2258,19 +2278,35 @@ endif
 
 do i = 1, npairs
 
-   original = (i*2)-1
-   squared = (i*2)
+   ! missing level of indirection?
+   !original = (i*2)-1
+   !squared = (i*2)
 
-   ! here is the magic
+   original = ens_handle%my_vars((i*2)-1)
+   squared  = ens_handle%my_vars((i*2))
+
+   if (ens_handle%copies(mean_index, original) == MISSING_R8) then
+      write(msgstring, *) 'Wrong entry: expected mean not to be missing, but is'
+      call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
+                         source, revision, revdate)
+   endif
+   !if (ens_handle%copies(mean_index, squared) /= MISSING_R8) then
+   !   write(msgstring, *) 'Wrong entry: expected mean to be missing, but have ', &
+   !                        ens_handle%copies(mean_index, squared)
+   !   call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
+   !                      source, revision, revdate)
+   !endif
+
    state_mean = ens_handle%copies(mean_index, original)
 
    do j=1, ens_size
+      ! here is the magic
       ens_handle%copies(j, squared) = (ens_handle%copies(j, original) - state_mean)**2
 
-      if (verbose) then
-         write(msgstring,*) 'state mean, original, squared = ', state_mean, &
-               ens_handle%copies(j, original), ens_handle%copies(j, squared)
-         call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring)
+      if (quad_verbose) then
+         write(msgstring,*) 'j/o/s, state mean, original, squared = ', j, original, squared, &
+               state_mean, ens_handle%copies(j, original), ens_handle%copies(j, squared)
+         call error_handler(E_MSG, 'update_squared_state_entries: ', msgstring)
       endif
 
    enddo
@@ -2292,17 +2328,14 @@ integer,             intent(in)    :: var_index
 integer :: i, j
 integer :: npairs, original, squared
 real(r8) :: forward_operator_mean
-logical :: verbose
 
 ! update every other obs forwared operator entry based on the previous entry
 ! the ensemble member values are (the original ensemble FO value - the mean) ^ 2
 ! also call the mean/var routine to populate the mean/var values for the new entries
 
-! if you want to see the updated values, make this true. 
-! for quiet execution, set it to false.
-verbose = .false.
-
 call prepare_to_update_copies(obs_ens_handle)
+
+if (quad_verbose) call print_ens_handle(obs_ens_handle, .true., 'obs', .true.)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
@@ -2314,19 +2347,23 @@ if ((npairs * 2) /= obs_ens_handle%my_num_vars) then
                       source, revision, revdate)
 endif
 
-if (verbose) then
+if (quad_verbose) then
    write(msgstring,*) 'upobs: total, mypairs, my task: ', obs_ens_handle%my_num_vars, npairs, my_task_id()
-   call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
+   call error_handler(E_MSG, 'update_squared_obs_entries: ', msgstring)
 endif
 
 do i = 1, npairs
 
-   original = (i*2)-1
-   squared = (i*2)
+   ! missing level of indirection?
+   !original = (i*2)-1
+   !squared = (i*2)
 
-   if (verbose) then
+   original = obs_ens_handle%my_vars((i*2)-1)
+   squared  = obs_ens_handle%my_vars((i*2))
+
+   if (quad_verbose) then
       write(msgstring,*) 'upobs: pair, original, squared indices: ', i, original, squared
-      call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
+      call error_handler(E_MSG, 'update_squared_obs_entries: ', msgstring)
    endif
 
    forward_operator_mean = obs_ens_handle%copies(mean_index, original)
@@ -2335,10 +2372,10 @@ do i = 1, npairs
       ! here is the magic
       obs_ens_handle%copies(j, squared) = (obs_ens_handle%copies(j, original) - forward_operator_mean)**2
 
-      if (verbose) then
-         write(msgstring,*) 'upobs: F.O. mean, original, squared = ', forward_operator_mean, &
+      if (quad_verbose) then
+         write(msgstring,*) 'j/o/s, F.O. original, squared = ', j, original, squared, &
                      obs_ens_handle%copies(j, original), obs_ens_handle%copies(j, squared)
-         call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring)
+         call error_handler(E_MSG, 'update_squared_obs_entries: ', msgstring)
       endif
 
    enddo
@@ -2360,14 +2397,10 @@ integer,             intent(in)    :: ens_size
 integer :: i, j
 integer :: npairs, original, squared
 !real(r8) :: forward_operator_mean
-logical :: verbose
 
+if (quad_verbose) call print_ens_handle(forward_op_ens_handle, .true., 'qcs', .true.)
 
 ! copy over the original data QC values to the corresponding pseudo obs entry.
-
-! if you want to see the updated values, make this true. 
-! for quiet execution, set it to false.
-verbose = .false.
 
 call prepare_to_update_copies(forward_op_ens_handle)
 
@@ -2383,15 +2416,19 @@ endif
 
 do i = 1, npairs
 
-   original = (i*2)-1
-   squared = (i*2)
+   ! missing level of indirection?
+   !original = (i*2)-1
+   !squared = (i*2)
+
+   original = forward_op_ens_handle%my_vars((i*2)-1)
+   squared  = forward_op_ens_handle%my_vars((i*2))
 
    do j=1, ens_size
 
-      if (verbose) then
-         write(msgstring,*) 'QC original, squared = ', forward_op_ens_handle%copies(j, original), &
-                                                       forward_op_ens_handle%copies(j, squared)
-         call error_handler(E_ERR, 'update_squared_qc_entries: ', msgstring)
+      if (quad_verbose) then
+         write(msgstring,*) 'j/o/s, Q.C. original, squared = ', j, original, squared, &
+                forward_op_ens_handle%copies(j, original), forward_op_ens_handle%copies(j, squared)
+         call error_handler(E_MSG, 'update_squared_qc_entries: ', msgstring)
       endif
 
       ! FIXME: you cannot do something different with the pseudo ob than the original
