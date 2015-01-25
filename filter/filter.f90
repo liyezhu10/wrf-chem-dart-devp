@@ -2114,7 +2114,6 @@ do j = 1, npairs
    pseudo  = obs_ens_handle%my_vars((j*2))
   
    if (quad_verbose) then
-   if (.true.) then
       write(msgstring,*) 'j/o/s, indir obsseq keys, original, pseudo = ', j, original, pseudo, &
             obs_ens_handle%copies(OBS_KEY_COPY, original), obs_ens_handle%copies(OBS_KEY_COPY, pseudo)
       call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
