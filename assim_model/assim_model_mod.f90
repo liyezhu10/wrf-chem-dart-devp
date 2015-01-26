@@ -89,8 +89,6 @@ logical :: module_initialized = .false.
 
 ! Is quad filter in use?
 logical :: quad_filter = .false.
-! If it is, what is the distribution_type for the state vector layout
-integer :: quad_filter_dist_type = -1
 
 logical :: write_it_all = .false.   ! FIXME
 
@@ -143,7 +141,7 @@ end subroutine init_assim_model
 
 
 
-  subroutine static_init_assim_model(quad_filter_in, quad_filter_dist_type_in)
+  subroutine static_init_assim_model(quad_filter_in)
 !----------------------------------------------------------------------
 ! subroutine static_init_assim_model()
 !
@@ -154,7 +152,6 @@ end subroutine init_assim_model
 implicit none
 
 logical, intent(in), optional :: quad_filter_in
-integer, intent(in), optional :: quad_filter_dist_type_in
 
 integer :: iunit, io
 
@@ -168,8 +165,6 @@ module_initialized = .true.
 ! Set quad_filter status
 if(present(quad_filter_in)) then
    quad_filter = quad_filter_in
-   ! Could error check for quad_filter_dist_type_in being present. Need both or neither.
-   quad_filter_dist_type = quad_filter_dist_type_in
 else 
    quad_filter = .false.
 endif
@@ -225,7 +220,7 @@ integer,             intent(out), optional :: var_type
 integer :: pair_index
 
 ! For a quad filter, need to account for fact that pairs of state are together
-if(quad_filter .and. quad_filter_dist_type == 2) then
+if(quad_filter) then
    ! Find out location of the pair with default
    pair_index = (index_in + 1) / 2
    if(present(var_type)) then
@@ -235,22 +230,6 @@ if(quad_filter .and. quad_filter_dist_type == 2) then
    else
       call models_get_state_meta_data(pair_index, location)
    endif
-elseif(quad_filter .and. quad_filter_dist_type == 3) then
-   ! Regular state comes first, then pseudo-state
-   model_size = get_model_size()
-   if(index_in > model_size/2) then
-      pair_index = index_in - model_size/2
-   else
-      pair_index = index_in
-   endif
-   if(present(var_type)) then
-      call models_get_state_meta_data(pair_index, location, var_type)
-      ! If it is in the pseudo-state then return that kind
-      if(index_in > model_size/2) var_type = KIND_QUAD_FILTER_SQUARED_ERROR
-   else
-      call models_get_state_meta_data(pair_index, location)
-   endif 
-      
 else
    if(present(var_type)) then
       call models_get_state_meta_data(index_in, location, var_type)
@@ -891,13 +870,8 @@ if (ascii_file_format(open_format)) then
          write(funit, *, iostat = io) model_state(i)
          if (io /= 0) goto 10
       end do
-   else if(quad_filter .and. quad_filter_dist_type == 2) then
+   else
       do i = 1, nitems, 2
-         write(funit, *, iostat = io) model_state(i)
-         if (io /= 0) goto 10
-      end do
-   else if(quad_filter .and. quad_filter_dist_type == 3) then
-      do i = 1, nitems/2
          write(funit, *, iostat = io) model_state(i)
          if (io /= 0) goto 10
       end do
@@ -909,10 +883,8 @@ else
    if (io /= 0) goto 10
    if (write_it_all .or. .not. quad_filter) then
       write(funit, iostat = io) model_state
-   else if(quad_filter .and. quad_filter_dist_type == 2) then
+   else
       write(funit, iostat = io) model_state(1:nitems:2)
-   else if(quad_filter .and. quad_filter_dist_type == 3) then
-      write(funit, iostat = io) model_state(1:nitems/2)
    endif
    if (io /= 0) goto 10
 endif
@@ -1033,16 +1005,12 @@ if(quad_filter) then
       write(msgstring,*) 'size of model_state ', size(model_state), &
          '  not equal to get_model_size ', state_size
       call error_handler(E_ERR,'aread_state_restart',msgstring,source,revision,revdate)
-   else if(quad_filter_dist_type == 2) then
+   else
       do i = state_size, 2, -2
          indx = i / 2
          model_state(i - 1) = model_state(indx)
          model_state(i) = missing_r8
       enddo
-   else if(quad_filter_dist_type == 3) then
-      ! The original state vector is already in place in the first half of the array
-      ! Just need to set the second half to missing_r8
-      model_state(state_size/2 + 1: state_size) = missing_r8
    endif
 
 endif
@@ -1289,11 +1257,7 @@ if (quad_filter) then
 !print *, model_state(:)
 !print *, 'stepped state: '
 !print *, model_state(1:nitems:2)
-   if(quad_filter_dist_type == 2) then
-      i = nc_write_model_vars(ncFileID%ncid, model_state(1:nitems:2), copyindex, timeindex) 
-   else if(quad_filter_dist_type == 3) then
-      i = nc_write_model_vars(ncFileID%ncid, model_state(1:nitems/2), copyindex, timeindex) 
-   endif
+   i = nc_write_model_vars(ncFileID%ncid, model_state(1:nitems:2), copyindex, timeindex) 
 else
    i = nc_write_model_vars(ncFileID%ncid, model_state(:), copyindex, timeindex) 
 endif
