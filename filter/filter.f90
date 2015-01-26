@@ -64,10 +64,11 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
 character(len=256) :: msgstring
-type(obs_type)          :: observation
+type(obs_type)     :: observation
+integer            :: trace_level, timestamp_level
 
-integer                 :: trace_level, timestamp_level
-logical :: quad_debug   = .true.     ! set to .true. to get more output
+! support for debugging the quad filter code
+logical :: quad_debug   = .false.     ! set to .true. to get more output
 logical :: quad_verbose = .false.     ! set to .true. to get a *lot* more output
 
 ! Defining whether diagnostics are for prior or posterior
@@ -514,8 +515,8 @@ AdvanceTime : do
                               distribution_type, quad_filter_in = quad_filter)
 
    if (quad_debug) then
-if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
-if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
+      if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
+      if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
    endif
 
    ! Allocate storage for the keys for this number of observations
@@ -2134,7 +2135,7 @@ do j = 1, npairs
       call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
    endif
 
-   ! here is the magic
+   ! here is the computation for the pseudo observation value and error variance for the quad filter
    pseudo_obs_val = ((obs_val - obs_prior_mean)**2) - obs_err_var
    pseudo_obs_err_var = (2 * (obs_err_var**2)) + 4*obs_err_var*obs_prior_var
 
@@ -2276,7 +2277,8 @@ do i = 1, npairs
    state_mean = ens_handle%copies(mean_index, original)
 
    do j=1, ens_size
-      ! here is the magic
+
+      ! here is the computation for the pseudo observation state value for the quad filter
       ens_handle%copies(j, squared) = (ens_handle%copies(j, original) - state_mean)**2
 
       if (quad_verbose) then
@@ -2341,7 +2343,8 @@ do i = 1, npairs
    forward_operator_mean = obs_ens_handle%copies(mean_index, original)
 
    do j=1, ens_size
-      ! here is the magic
+
+      ! here is the computation for the pseudo observation forward operator value for the quad filter
       obs_ens_handle%copies(j, squared) = (obs_ens_handle%copies(j, original) - forward_operator_mean)**2
 
       if (quad_verbose) then
