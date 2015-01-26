@@ -381,6 +381,7 @@ ENSEMBLE_MEMBERS: do i = 1, ens_handle%my_num_copies
 !print *, ens_handle%vars(:, i)
 !print *, 'calling adv_1step with: '
 !print *, ens_handle%vars(1:ens_handle%num_vars:2, i)
+            ! dist type 2 array section
             call adv_1step(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%time(i))
          else
             call adv_1step(ens_handle%vars(:, i), ens_handle%time(i))

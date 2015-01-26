@@ -368,6 +368,7 @@ if(.not. start_from_restart) then
       if(global_copy_index >= start_copy .and. global_copy_index <= end_copy) then
          ! See if model has an interface to perturb
          if (ens_handle%distribution_type == 2) then
+            ! dist type 2 array section
             call pert_model_state(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%vars(1:ens_handle%num_vars:2, i), interf_provided)
          else
             call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)

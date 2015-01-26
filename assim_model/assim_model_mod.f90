@@ -90,7 +90,12 @@ logical :: module_initialized = .false.
 ! Is quad filter in use?
 logical :: quad_filter = .false.
 
-logical :: write_it_all = .false.   ! FIXME
+! This is a private module variable.  If you set it .true. and recompile,
+! the code will write all the state vector values into the restart file.
+! This file cannot be used to restart the model - it will be twice the
+! size that any of the read routines expect.  But it can be used to
+! diagnose problems if needed.
+logical :: write_all_values = .false. 
 
 ! Global storage for default restart formats
 character(len = 16) :: read_format = "unformatted", write_format = "unformatted"
@@ -865,13 +870,13 @@ if (ascii_file_format(open_format)) then
    if (io /= 0) goto 10
    call write_time(funit, model_time, ios_out=io)
    if (io /= 0) goto 10
-   if (write_it_all .or. .not. quad_filter) then
+   if (.not. quad_filter .or. write_all_values) then
       do i = 1, nitems
          write(funit, *, iostat = io) model_state(i)
          if (io /= 0) goto 10
       end do
    else
-      do i = 1, nitems, 2
+      do i = 1, nitems, 2    ! stride by 2
          write(funit, *, iostat = io) model_state(i)
          if (io /= 0) goto 10
       end do
@@ -881,9 +886,10 @@ else
    if (io /= 0) goto 10
    call write_time(funit, model_time, form="unformatted", ios_out=io)
    if (io /= 0) goto 10
-   if (write_it_all .or. .not. quad_filter) then
+   if (.not. quad_filter .or. write_all_values) then
       write(funit, iostat = io) model_state
    else
+      ! dist type 2 array section
       write(funit, iostat = io) model_state(1:nitems:2)
    endif
    if (io /= 0) goto 10
@@ -1257,6 +1263,7 @@ if (quad_filter) then
 !print *, model_state(:)
 !print *, 'stepped state: '
 !print *, model_state(1:nitems:2)
+   ! dist type 2 array section
    i = nc_write_model_vars(ncFileID%ncid, model_state(1:nitems:2), copyindex, timeindex) 
 else
    i = nc_write_model_vars(ncFileID%ncid, model_state(:), copyindex, timeindex) 

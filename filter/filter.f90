@@ -1409,6 +1409,7 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
          ! temporaries to avoid passing array sections which was slow on PGI compiler
          thiskey(1) = keys(j)
          if (quad_filter) then
+            ! dist type 2 array section
             call get_expected_obs(seq, thiskey, &
                global_ens_index, ens_handle%vars(1:model_size:2, k), ens_handle%time(1), isprior, &
                thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
