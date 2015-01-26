@@ -295,7 +295,7 @@ end subroutine move_ahead
 !------------------------------------------------------------------------------
 
 subroutine advance_state(ens_handle, ens_size, target_time, async, adv_ens_command, &
-                         tasks_per_model_advance, quad_filter_dist_type_in)
+                         tasks_per_model_advance, quad_filter_in)
 
 ! Advances all ensemble copies of the state to the target_time.  Note that 
 ! there may be more than ens_size copies in the ens_handle storage. Copies other
@@ -309,7 +309,7 @@ type(time_type),     intent(in)    :: target_time
 integer,             intent(in)    :: ens_size, async
 character(len=*),    intent(in)    :: adv_ens_command
 integer,             intent(in)    :: tasks_per_model_advance
-integer, optional,   intent(in)    :: quad_filter_dist_type_in
+logical, optional,   intent(in)    :: quad_filter_in
 
 character(len = 129), dimension(ens_handle%num_copies) :: ic_file_name, ud_file_name 
 character(len = 129)                                   :: control_file_name
@@ -320,7 +320,7 @@ type(time_type) :: time_step, ens_time
 integer         :: is1, is2, id1, id2, my_num_state_copies, global_ens_index
 integer         :: i, control_unit, ic_file_unit, ud_file_unit, rc
 integer         :: need_advance, any_need_advance
-integer         :: quad_filter_dist_type
+logical         :: quad_filter 
 
 
 ! Initialize if needed
@@ -334,12 +334,10 @@ endif
 ! the advance is needed (which it should be).
 need_advance = 0
 
-if (present(quad_filter_dist_type_in)) then
-   ! Distribution type is 2 or 3 for a quad filter
-   quad_filter_dist_type = quad_filter_dist_type_in
+if (present(quad_filter_in)) then
+   quad_filter = quad_filter_in
 else
-   ! Distribution type is undefined if not present
-   quad_filter_dist_type = -1
+   quad_filter = .false.
 endif
 
 ! Determine model time_step
@@ -378,18 +376,13 @@ ENSEMBLE_MEMBERS: do i = 1, ens_handle%my_num_copies
    if(async == 0) then
 
       do while(ens_handle%time(i) < target_time)
-         if (quad_filter_dist_type == 2) then
+         if (quad_filter) then
 !print *, 'full state vector, ensemble member: ', i
 !print *, ens_handle%vars(:, i)
-print *, 'calling adv_1step with: '
-print *, ens_handle%vars(1:ens_handle%num_vars:2, i)
+!print *, 'calling adv_1step with: '
+!print *, ens_handle%vars(1:ens_handle%num_vars:2, i)
             call adv_1step(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%time(i))
-         else if(quad_filter_dist_type == 3) then
-print *, 'calling adv_1step with: '
-print *, ens_handle%vars(1:ens_handle%num_vars/2, i)
-            call adv_1step(ens_handle%vars(1:ens_handle%num_vars/2, i), ens_handle%time(i))
-
-         else if(quad_filter_dist_type == -1) then
+         else
             call adv_1step(ens_handle%vars(:, i), ens_handle%time(i))
          endif
          ens_handle%time(i) = ens_handle%time(i) + time_step
