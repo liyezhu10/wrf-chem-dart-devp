@@ -118,22 +118,12 @@ logical  :: silence                  = .false.
 logical  :: direct_netcdf_read = .false.
 ! - this is going to read/write inflation from a netcdf file too
 ! - smoother not allowed with direct netcdf read ( for the initial
-! - implementation.  Extra copies are for holding the prior diagnostic information
-! - so you can write it at the end
-
-! Namelist options for diagnostic files and inflation files
-! If num_ouput_state_members > 0:
-!    write Prior diagnostic files in the correct place
-! else
-!    save mean, sd, inf_mean, inf_sd to the end
-!
+! - implementation).
 ! Inflation file options:
-!     * write out regular diagnostic files
-!     Iff direct_netcdf_read = .true. :
-!         * write out skeleton diagnostic files
-!         * do not write out diagnostic files (Glen mode)
 ! If no diagnostic files (Glen mode):
 !     follow inflation options for fileoutput
+! skeleton_diagnostic_files creates empty diagnostic files containing time and
+! empty variables.
 logical  :: skeleton_diagnostic_files = .false. ! safest to default to false
 logical  :: diagnostic_files = .true. ! .false. = Glen mode
 
