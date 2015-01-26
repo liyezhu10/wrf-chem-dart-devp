@@ -64,9 +64,9 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
 character(len=256) :: msgstring
-type(obs_type)     :: observation
+type(obs_type)          :: observation
 
-integer :: trace_level, timestamp_level
+integer                 :: trace_level, timestamp_level
 logical :: quad_debug   = .true.     ! set to .true. to get more output
 logical :: quad_verbose = .false.     ! set to .true. to get a *lot* more output
 
@@ -94,8 +94,8 @@ integer  :: last_obs_seconds    = -1
 ! Assimilation window; defaults to model timestep size.
 integer  :: obs_window_days     = -1
 integer  :: obs_window_seconds  = -1
-! Turn on quad filter: Value of 2 or 3 turns quad filter on with given distribution type, all others turn off 
-integer  :: quad_filter_dist_type = -1
+! Turn on quad filter 
+logical  :: quad_filter         = .false.
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -139,8 +139,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
    first_obs_days, first_obs_seconds, last_obs_days, last_obs_seconds,              &
-   obs_window_days, obs_window_seconds, quad_filter_dist_type,                      &
-   enable_special_outlier_code,                                                     &
+   obs_window_days, obs_window_seconds, quad_filter, enable_special_outlier_code,   &
    num_output_state_members, num_output_obs_members, output_restart_mean,           &
    output_interval, num_groups, outlier_threshold, trace_execution,                 &
    input_qc_threshold, output_forward_op_errors, output_timestamps,                 &
@@ -153,9 +152,6 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
 ! Are any of the observation types subject to being updated
 ! during the computation?  e.g. quad filter
 logical :: observations_updateable = .false.
-
-! Is the quad filter turned on (quad_filter_dist_type in namelist is 2 or 3)
-logical :: quad_filter
 
 !----------------------------------------------------------------
 
@@ -210,13 +206,6 @@ call check_namelist_read(iunit, io, "filter_nml")
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
 if (do_nml_term()) write(     *     , nml=filter_nml)
-
-! If the quad_filter is turned on, set the global logical
-if(quad_filter_dist_type == 2 .or. quad_filter_dist_type == 3) then
-   quad_filter = .true.
-else
-   quad_filter = .false.
-endif
 
 call filter_initialize_modules_used()
 
@@ -487,7 +476,7 @@ AdvanceTime : do
       call timestamp_message('Before running model', sync=.true.)
    
       call advance_state(ens_handle, ens_size, next_ens_time, async, &
-                         adv_ens_command, tasks_per_model_advance, quad_filter_dist_type)
+                         adv_ens_command, tasks_per_model_advance, quad_filter_in=quad_filter)
    
       ! update so curr time is accurate.
       curr_ens_time = next_ens_time
@@ -525,8 +514,8 @@ AdvanceTime : do
                               distribution_type, quad_filter_in = quad_filter)
 
    if (quad_debug) then
-      if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
-      if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
+if (my_task_id() == 0) call print_ens_handle(obs_ens_handle, .true., 'iam0')
+if (my_task_id() == 1) call print_ens_handle(obs_ens_handle, .true., 'iam1')
    endif
 
    ! Allocate storage for the keys for this number of observations
@@ -997,7 +986,7 @@ call static_init_obs_sequence()
 
 ! Initialize the model class data now that obs_sequence is all set up
 call trace_message('Before init_model call')
-call static_init_assim_model(quad_filter, quad_filter_dist_type)
+call static_init_assim_model(quad_filter)
 call trace_message('After  init_model call')
 
 end subroutine filter_initialize_modules_used
@@ -1418,15 +1407,11 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
       if(global_ens_index <= ens_size) then
          ! temporaries to avoid passing array sections which was slow on PGI compiler
          thiskey(1) = keys(j)
-         if (quad_filter .and. quad_filter_dist_type == 2) then
+         if (quad_filter) then
             call get_expected_obs(seq, thiskey, &
                global_ens_index, ens_handle%vars(1:model_size:2, k), ens_handle%time(1), isprior, &
                thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
-         else if (quad_filter .and. quad_filter_dist_type == 3) then
-            call get_expected_obs(seq, thiskey, &
-               global_ens_index, ens_handle%vars(1:model_size/2, k), ens_handle%time(1), isprior, &
-               thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
-         else 
+         else
             call get_expected_obs(seq, thiskey, &
                global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
                thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
