@@ -513,7 +513,7 @@ AdvanceTime : do
    ! then mean for each group, then variance for each group
    TOTAL_OBS_COPIES = ens_size + 4 + 2*num_groups
    if (quad_filter) then
-      distribution_type = quad_filter_dist_type
+      distribution_type = 2
    else
       distribution_type = 1
    endif
@@ -1268,7 +1268,7 @@ integer :: days, secs, distribution_type, extras
 !!!endif
 
 if (quad_filter) then
-   distribution_type = quad_filter_dist_type
+   distribution_type = 2
 else
    distribution_type = 1
 endif
@@ -2044,7 +2044,7 @@ subroutine update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, 
 
 
 use obs_def_mod, only          : get_obs_def_key, get_obs_kind, set_obs_def_error_variance
-use obs_kind_mod, only         : QUAD_FILTER_SQUARED_ERROR, get_raw_obs_kind_name
+use obs_kind_mod, only         : QUAD_FILTER_SQUARED_ERROR, get_obs_kind_name
 use location_mod, only         : location_type
 use ensemble_manager_mod, only : ensemble_type, get_my_num_copies, &
                                  all_copies_to_all_vars, all_vars_to_all_copies, &
@@ -2106,13 +2106,9 @@ endif
 
 do j = 1, npairs
 
-   ! missing level of redirection - or not here?
-   !original = (j*2)-1
-   !pseudo = (j*2)
+   original = (j*2)-1
+   pseudo = (j*2)
 
-   original = obs_ens_handle%my_vars((j*2)-1)
-   pseudo  = obs_ens_handle%my_vars((j*2))
-  
    if (quad_verbose) then
       write(msgstring,*) 'j/o/s, indir obsseq keys, original, pseudo = ', j, original, pseudo, &
             obs_ens_handle%copies(OBS_KEY_COPY, original), obs_ens_handle%copies(OBS_KEY_COPY, pseudo)
@@ -2131,13 +2127,13 @@ do j = 1, npairs
    call get_obs_def(observation2, obs_def)
    obs_kind_ind = get_obs_kind(obs_def)
    if (quad_verbose) then
-      write(msgstring,*) ' kind = ', obs_kind_ind, trim(get_raw_obs_kind_name(obs_kind_ind))
+      write(msgstring,*) ' kind = ', obs_kind_ind, trim(get_obs_kind_name(obs_kind_ind))
       call error_handler(E_MSG, 'update_squared_state_entries: ', msgstring)
    endif
 
    if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
       write(msgstring, *) 'Wrong obs kind; expected Pseudo Observation but have kind ', &
-                           trim(get_raw_obs_kind_name(obs_kind_ind))
+                           trim(get_obs_kind_name(obs_kind_ind))
       call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
                           source, revision, revdate)
    endif
@@ -2277,12 +2273,8 @@ endif
 
 do i = 1, npairs
 
-   ! missing level of indirection?
-   !original = (i*2)-1
-   !squared = (i*2)
-
-   original = ens_handle%my_vars((i*2)-1)
-   squared  = ens_handle%my_vars((i*2))
+   original = (i*2)-1
+   squared = (i*2)
 
    if (ens_handle%copies(mean_index, original) == MISSING_R8) then
       write(msgstring, *) 'Wrong entry: expected mean not to be missing, but is'
@@ -2353,12 +2345,8 @@ endif
 
 do i = 1, npairs
 
-   ! missing level of indirection?
-   !original = (i*2)-1
-   !squared = (i*2)
-
-   original = obs_ens_handle%my_vars((i*2)-1)
-   squared  = obs_ens_handle%my_vars((i*2))
+   original = (i*2)-1
+   squared = (i*2)
 
    if (quad_verbose) then
       write(msgstring,*) 'upobs: pair, original, squared indices: ', i, original, squared
@@ -2415,12 +2403,8 @@ endif
 
 do i = 1, npairs
 
-   ! missing level of indirection?
-   !original = (i*2)-1
-   !squared = (i*2)
-
-   original = forward_op_ens_handle%my_vars((i*2)-1)
-   squared  = forward_op_ens_handle%my_vars((i*2))
+   original = (i*2)-1
+   squared = (i*2)
 
    do j=1, ens_size
 
