@@ -1030,6 +1030,10 @@ integer,                     intent(in)    :: ss_inflate_sd_index
 
 integer :: owner, owners_index
 
+! Types 2 and 3 are state space inflation types
+
+if(inflation_handle%inflation_flavor >= 2) then
+
 if (inflation_handle%mean_from_restart) then
 
    call get_copy_owner_index(ss_inflate_index, owner, owners_index)
@@ -1079,6 +1083,7 @@ if (inflation_handle%sd_from_restart) then
       endif
    endif
 
+endif
 endif
 
 end subroutine get_minmax_task_zero
