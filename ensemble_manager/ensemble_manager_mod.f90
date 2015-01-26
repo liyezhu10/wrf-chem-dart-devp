@@ -185,7 +185,7 @@ endif
 
 ! Distribution type MUST be 2 if quad filter has been specified
 if(quad_filter) then
-   if(distribution_type_in /= 2) then
+   if(ens_handle%distribution_type /= 2) then
       call error_handler(E_ERR, 'init_ensemble_manager', 'distribution_type must be 2 for quad_filter ', &
                       source, revision, revdate)
    endif
