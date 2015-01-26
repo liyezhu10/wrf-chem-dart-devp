@@ -333,10 +333,9 @@ end subroutine adaptive_inflate_init
 !------------------------------------------------------------------
 !> should you be turning on copies here?
 !> They are redone in filter anyway.
-subroutine adaptive_inflate_end(state_ens_handle, inflate_handle, ens_handle, ss_inflate_index, &
+subroutine adaptive_inflate_end(inflate_handle, ens_handle, ss_inflate_index, &
    ss_inflate_sd_index, direct_netcdf_read)
 
-type(ensemble_type),         intent(inout) :: state_ens_handle
 type(adaptive_inflate_type), intent(in)    :: inflate_handle
 type(ensemble_type),         intent(inout) :: ens_handle
 integer,                     intent(in)    :: ss_inflate_index, ss_inflate_sd_index

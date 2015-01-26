@@ -878,8 +878,8 @@ call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
 
 call trace_message('Before writing inflation restart files if required')
 ! Output the restart for the adaptive inflation parameters
-call adaptive_inflate_end(ens_handle, prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, direct_netcdf_read)
-call adaptive_inflate_end(ens_handle, post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY, direct_netcdf_read)
+call adaptive_inflate_end(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, direct_netcdf_read)
+call adaptive_inflate_end(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY, direct_netcdf_read)
 call trace_message('After  writing inflation restart files if required')
 
 ! Output a restart file if requested
