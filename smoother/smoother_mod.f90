@@ -487,15 +487,16 @@ integer         :: ens_offset, j
 
 ! Assumes that mean and spread have already been computed
 
+! must have called init_smoother() before using this routine
+if ( .not. module_initialized ) then
+   write(errstring, *)'cannot be called before init_smoother() called'
+   call error_handler(E_ERR,'smoother_state_space_diagnostics',errstring,source,revision,revdate)
+endif
+
+
 if (skeleton_diagnostic_file) then ! just write the time?
    if(my_task_id() == 0) call aoutput_diagnostics(out_unit, skeleton_diagnostic_file, curr_ens_time, temp_ens, output_state_mean_index)
 else
-
-   ! must have called init_smoother() before using this routine
-   if ( .not. module_initialized ) then
-      write(errstring, *)'cannot be called before init_smoother() called'
-      call error_handler(E_ERR,'smoother_state_space_diagnostics',errstring,source,revision,revdate)
-   endif
 
    ! Output ensemble mean
    call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_MEAN_COPY, temp_ens)
