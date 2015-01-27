@@ -97,6 +97,7 @@ integer  :: obs_window_days     = -1
 integer  :: obs_window_seconds  = -1
 ! Turn on quad filter 
 logical  :: quad_filter         = .false.
+logical  :: quad_filter_degenerate = .false.  ! if true, eval only all pseudo obs
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -148,7 +149,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence
+   silence, quad_filter_degenerate
 
 ! Are any of the observation types subject to being updated
 ! during the computation?  e.g. quad filter
@@ -2372,7 +2373,7 @@ integer,             intent(in)    :: ens_size
 
 integer :: i, j
 integer :: npairs, original, squared
-!real(r8) :: forward_operator_mean
+real(r8) :: pseudo_qc
 
 if (quad_verbose) call print_ens_handle(forward_op_ens_handle, .true., 'qcs', .true.)
 
@@ -2397,20 +2398,27 @@ do i = 1, npairs
 
    do j=1, ens_size
 
-      if (quad_verbose) then
-         write(msgstring,*) 'j/o/s, Q.C. original, squared = ', j, original, squared, &
-                forward_op_ens_handle%copies(j, original), forward_op_ens_handle%copies(j, squared)
-         call error_handler(E_MSG, 'update_squared_qc_entries: ', msgstring)
-      endif
-
-      ! FIXME: you cannot do something different with the pseudo ob than the original
-      ! ob, e.g. assimilate one and evaluate or ignore the other.  this is a feature for now.
+      ! previous versions of this code copied the original obs QC to the pseudo obs, 
+      ! guarenteeing you could not ignore or eval only the pseudo obs in a pair.  this update
+      ! should allow the pseudo obs to be eval only even if the original is assimilated.
 
       ! Note that these forward operator QC values are the 'raw' internal QC values, including
       ! using -1 and -2 for eval only, neither eval or assim, and -99 for failing the incoming
       ! qc value test.  these are NOT the outgoing DART QC values from 0 to 7.
 
-      forward_op_ens_handle%copies(j, squared) = forward_op_ens_handle%copies(j, original)
+      ! start out assuming you will copy straight through.  only if the original obs
+      ! has a qc of 0, set the pseudo obs qc to -1, which is interpreted as eval only.
+
+      pseudo_qc = forward_op_ens_handle%copies(j, original)
+      if (quad_filter_degenerate .and. pseudo_qc == 0) pseudo_qc = -1   
+
+      if (quad_verbose) then
+         write(msgstring,*) 'j/o/s, Q.C. original, squared = ', j, original, squared, &
+                forward_op_ens_handle%copies(j, original), pseudo_qc
+         call error_handler(E_MSG, 'update_squared_qc_entries: ', msgstring)
+      endif
+
+      forward_op_ens_handle%copies(j, squared) = pseudo_qc
 
    enddo
 enddo
