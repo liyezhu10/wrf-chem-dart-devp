@@ -129,10 +129,11 @@ character(len=metadatalength) :: state_meta(1)
 
 logical                 :: assimilate_this_ob, evaluate_this_ob, pre_I_format
 logical                 :: all_gone
+logical                 :: skeleton ! for diagnostic files .false. writes regular diag files
 
 ! Initialize all modules used that require it
 call perfect_initialize_modules_used()
-
+skeleton = .false.
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "perfect_model_obs_nml", iunit)
 read(iunit, nml = perfect_model_obs_nml, iostat = io)
@@ -317,7 +318,7 @@ AdvanceTime: do
       (time_step_number / output_interval * output_interval == time_step_number)) then
 
       call trace_message('Before updating truth diagnostics file')
-      call aoutput_diagnostics(StateUnit, ens_handle%time(1), ens_handle%vars(:, 1), 1)
+      call aoutput_diagnostics(StateUnit, skeleton, ens_handle%time(1), ens_handle%vars(:, 1), 1)
       call trace_message('After  updating truth diagnostics file')
    endif
 
