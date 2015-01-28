@@ -974,7 +974,7 @@ if (print_trace_details >= 0) call error_handler(E_MSG,'filter_assim:',msgstring
 
 ! diagnostics for stats on saving calls by remembering obs at the same location.
 ! change .true. to .false. in the line below to remove the output completely.
-if (close_obs_caching .and. .true.) then
+if (close_obs_caching .and. .true. .and. print_trace_details >= 0) then
    if (num_close_obs_cached > 0 .and. do_output()) then
       print *, "Total number of calls made    to get_close_obs for obs/states:    ", &
                 num_close_obs_calls_made + num_close_states_calls_made
