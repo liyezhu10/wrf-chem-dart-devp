@@ -84,8 +84,8 @@ real(r8) :: value(1)
 ! Namelist input with default values
 
 
-character(len=256)   :: filename_in = ''
-character(len=256)   :: filename_out = ''
+character(len=256)   :: filename_in  = 'obs_seq.out'
+character(len=256)   :: filename_out = 'obs_pseudo_seq.out'
 
 logical              :: print_only    = .false.
 character(len=32)    :: calendar      = 'Gregorian'
