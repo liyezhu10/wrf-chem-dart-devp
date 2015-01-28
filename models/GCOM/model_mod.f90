@@ -181,9 +181,12 @@ real(r8), allocatable :: ZC(:), ZG(:)
 
 ! These arrays store the longitude and latitude of the lower left corner of
 ! each of the dipole u quadrilaterals and t quadrilaterals.
-real(r8), allocatable :: ULAT(:,:), ULON(:,:), TLAT(:,:), TLON(:,:)
-
-real(r8), allocatable :: ULEV(:,:,:)
+real(r8), allocatable :: ULAT(:,:,:), ULON(:,:,:),ULEV(:,:,:)
+real(r8), allocatable :: VLAT(:,:,:), VLON(:,:,:),VLEV(:,:,:)
+real(r8), allocatable :: WLAT(:,:,:), WLON(:,:,:),WLEV(:,:,:)
+real(r8), allocatable :: PLAT(:,:,:), PLON(:,:,:),PLEV(:,:,:)
+real(r8), allocatable :: TLAT(:,:,:), TLON(:,:,:),TLEV(:,:,:)
+real(r8), allocatable :: SLAT(:,:,:), SLON(:,:,:),SLEV(:,:,:)
 
 ! integer, lowest valid cell number in the vertical
 integer, allocatable  :: KMT(:, :), KMU(:, :)
@@ -357,7 +360,7 @@ call get_grid_dims(Nx, Ny, Nz)
 
 ! Allocate space for grid variables.
 allocate(ULEV(Nx,Ny,Nz))
-allocate(ULAT(Nx,Ny), ULON(Nx,Ny), TLAT(Nx,Ny), TLON(Nx,Ny))
+allocate(ULAT(Nx,Ny,Nz), ULON(Nx,Ny,Nz), TLAT(Nx,Ny,Nz), TLON(Nx,Ny,Nz))
 allocate( KMT(Nx,Ny),  KMU(Nx,Ny))
 allocate(  HT(Nx,Ny),   HU(Nx,Ny))
 allocate(     ZC(Nz),      ZG(Nz))
@@ -1672,44 +1675,39 @@ call nc_check(nf90_open(trim(gcom_geometry_file), nf90_nowrite, ncid), &
          'get_grid_dims','open ['//trim(gcom_geometry_file)//']')
 
 ! Longitudes : get dimid for 'x' or 'Max_I', and then get value
-nc_rc = nf90_inq_dimid(ncid, 'x', dimid)
-if (nc_rc /= nf90_noerr) then
-   nc_rc = nf90_inq_dimid(ncid, 'Max_I', dimid)
+   nc_rc = nf90_inq_dimid(ncid, 'nx', dimid)
    if (nc_rc /= nf90_noerr) then
-      string1 = "no 'x' or 'Max_I' in file ["//trim(gcom_geometry_file)//"]"
+      string1 = "no 'nx' in file ["//trim(gcom_geometry_file)//"]"
       call error_handler(E_ERR, 'get_grid_dims', string1, &
                          source,revision,revdate) 
    endif
-endif
 
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nx), &
          'get_grid_dims','inquire_dimension x '//trim(gcom_geometry_file))
 
 ! Latitudes : get dimid for 'y' or 'Max_J' ... and then get value
-nc_rc = nf90_inq_dimid(ncid, 'y', dimid)
-if (nc_rc /= nf90_noerr) then
-   nc_rc = nf90_inq_dimid(ncid, 'Max_J', dimid)
+
+   nc_rc = nf90_inq_dimid(ncid, 'ny', dimid)
    if (nc_rc /= nf90_noerr) then
-      string1 = "no 'y' or 'Max_J' in ["//trim(gcom_geometry_file)//"]"
+      string1 = "no 'ny' in ["//trim(gcom_geometry_file)//"]"
       call error_handler(E_ERR, 'get_grid_dims', string1, &
                          source,revision,revdate)
    endif
-endif
+
 
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ny), &
          'get_grid_dims','inquire_dimension y '//trim(gcom_geometry_file))
 
 
 ! Depth : get dimid for 'z' or 'Max_K' ... and then get value
-nc_rc = nf90_inq_dimid(ncid, 'z', dimid)
-if (nc_rc /= nf90_noerr) then
-   nc_rc = nf90_inq_dimid(ncid, 'Max_K', dimid)
+
+   nc_rc = nf90_inq_dimid(ncid, 'nz', dimid)
    if (nc_rc /= nf90_noerr) then
-      string1 = "no 'z' or 'Max_K' in ["//trim(gcom_geometry_file)//"]"
+      string1 = "no 'nz'  in ["//trim(gcom_geometry_file)//"]"
       call error_handler(E_ERR, 'get_grid_dims', string1, &
                          source,revision,revdate)
    endif
-endif
+
 
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nz), &
          'get_grid_dims','inquire_dimension z '//trim(gcom_geometry_file))
@@ -1721,9 +1719,9 @@ call nc_check(nf90_close(ncid), &
 
 if (do_output() .and. debug > 8) then
    write(*,*)'get_grid_dims: filename  ['//trim(gcom_geometry_file)//']'
-   write(*,*)'get_grid_dims: Max_I aka num_longitudes aka Nx',Nx
-   write(*,*)'get_grid_dims: Max_J aka num_latitides  aka Ny',Ny
-   write(*,*)'get_grid_dims: Max_K aka num_levels     aka Nz',Nz
+   write(*,*)'get_grid_dims: Max_I aka num_longitudes aka nx',Nx
+   write(*,*)'get_grid_dims: Max_J aka num_latitides  aka ny',Ny
+   write(*,*)'get_grid_dims: Max_K aka num_levels     aka nz',Nz
 endif
 
 end subroutine get_grid_dims
@@ -1747,8 +1745,8 @@ subroutine read_grid(nlon, nlat, nlev, ULAT, ULON, ULEV)
 integer,  intent(in)  :: nlon
 integer,  intent(in)  :: nlat
 integer,  intent(in)  :: nlev
-real(r8), intent(out) :: ULAT(nlon,nlat)
-real(r8), intent(out) :: ULON(nlon,nlat)
+real(r8), intent(out) :: ULAT(nlon,nlat,nlev)
+real(r8), intent(out) :: ULON(nlon,nlat,nlev)
 real(r8), intent(out) :: ULEV(nlon,nlat,nlev)
 
 integer  ::  dimIDs(NF90_MAX_VAR_DIMS)
@@ -1763,12 +1761,12 @@ character(len=NF90_MAX_NAME) :: varname
 call nc_check(nf90_open(trim(gcom_geometry_file), nf90_nowrite, ncid), &
       'read_grid','open ['//trim(gcom_geometry_file)//']')
 
-call nc_check(nf90_inq_dimid(ncid, 'Max_I', longitude_DimID), &
-      'read_grid', 'inq_dimid Max_I')
-call nc_check(nf90_inq_dimid(ncid, 'Max_J', latitude_DimID), &
-      'read_grid', 'inq_dimid Max_J')
-call nc_check(nf90_inq_dimid(ncid, 'Max_K', level_DimID), &
-      'read_grid', 'inq_dimid Max_K')
+call nc_check(nf90_inq_dimid(ncid, 'nx', longitude_DimID), &
+      'read_grid', 'inq_dimid nx')
+call nc_check(nf90_inq_dimid(ncid, 'ny', latitude_DimID), &
+      'read_grid', 'inq_dimid ny')
+call nc_check(nf90_inq_dimid(ncid, 'nz', level_DimID), &
+      'read_grid', 'inq_dimid nz')
 
 !-----------------------------------------------------------------------
 ! The latitudes are stored in a 3D variable, but only 1D is useful, as far as I can tell.
@@ -1793,6 +1791,8 @@ nccount(:) = 1
 
 where (dimIDs(1:numdims) == longitude_DimID) nccount(1:numdims) = nlon
 where (dimIDs(1:numdims) ==  latitude_DimID) nccount(1:numdims) = nlat
+where (dimIDs(1:numdims) ==     level_DimID) nccount(1:numdims) = nlev
+
 
 if (do_output() .and. (debug > 1)) then
    write(*,*)'read_grid: variable ['//trim(varname)//']'
@@ -1827,6 +1827,8 @@ nccount(:) = 1
 
 where (dimIDs(1:numdims) == longitude_DimID) nccount(1:numdims) = nlon
 where (dimIDs(1:numdims) ==  latitude_DimID) nccount(1:numdims) = nlat
+where (dimIDs(1:numdims) ==     level_DimID) nccount(1:numdims) = nlev
+
 
 if (do_output() .and. (debug > 1)) then
    write(*,*)'read_grid: variable ['//trim(varname)//']'
@@ -3727,161 +3729,12 @@ end subroutine vector_to_3d_prog_var
 !> This should be called at static_init_model time to avoid
 !> having all this temporary storage in the middle of a run.
 
-subroutine init_interp()
 
-integer :: i
-
-call error_handler(E_ERR,'init_interp','routine not written yet', &
-                      source, revision, revdate)
-
-! Determine whether this is a irregular lon-lat grid or a dipole.
-! Do this by seeing if the lons have the same values at both
-! the first and last latitude row; this is not the case for dipole.
-
-dipole_grid = .false.
-do i = 1, nx
-   if(ulon(i, 1) /= ulon(i, ny)) then
-      dipole_grid = .true.
-      call init_dipole_interp()
-      return
-   endif
-enddo
-
-end subroutine init_interp
 
 
 !-----------------------------------------------------------------------
 !>
 !>  Build the data structure for interpolation for a dipole grid.
-
-subroutine init_dipole_interp()
-
-! Need a temporary data structure to build this.
-! These arrays keep a list of the x and y indices of dipole quads
-! that potentially overlap the regular boxes. Need one for the u
-! and one for the t grid.
-integer :: ureg_list_lon(num_reg_x, num_reg_y, max_reg_list_num)
-integer :: ureg_list_lat(num_reg_x, num_reg_y, max_reg_list_num)
-integer :: treg_list_lon(num_reg_x, num_reg_y, max_reg_list_num)
-integer :: treg_list_lat(num_reg_x, num_reg_y, max_reg_list_num)
-
-
-real(r8) :: u_c_lons(4), u_c_lats(4), t_c_lons(4), t_c_lats(4), pole_row_lon
-integer  :: i, j, k, pindex
-integer  :: reg_lon_ind(2), reg_lat_ind(2), u_total, t_total, u_index, t_index
-logical  :: is_pole
-
-call error_handler(E_ERR,'init_dipole_interp','routine not written yet', &
-                      source, revision, revdate)
-
-! Begin by finding the quad that contains the pole for the dipole t_grid.
-! To do this locate the u quad with the pole on its right boundary. This is on
-! the row that is opposite the shifted pole and exactly follows a lon circle.
-pole_x = nx / 2;
-! Search for the row at which the longitude flips over the pole
-pole_row_lon = ulon(pole_x, 1);
-do i = 1, ny
-   pindex = i
-   if(ulon(pole_x, i) /= pole_row_lon) exit
-enddo
-
-! Pole boxes for u have indices pole_x or pole_x-1 and index - 1;
-! (it's right before the flip).
-u_pole_y = pindex - 1;
-
-! Locate the T dipole quad that contains the pole.
-! We know it is in either the same lat quad as the u pole edge or one higher.
-! Figure out if the pole is more or less than halfway along
-! the u quad edge to find the right one.
-if(ulat(pole_x, u_pole_y) > ulat(pole_x, u_pole_y + 1)) then
-   t_pole_y = u_pole_y;
-else
-   t_pole_y = u_pole_y + 1;
-endif
-
-! Loop through each of the dipole grid quads
-do i = 1, nx
-   ! There's no wraparound in y, one box less than grid boundaries
-   do j = 1, ny - 1
-      ! Is this the pole quad for the T grid?
-      is_pole = (i == pole_x .and. j == t_pole_y)
-
-      ! Set up array of lons and lats for the corners of these u and t quads
-      call get_quad_corners(ulon, i, j, u_c_lons)
-      call get_quad_corners(ulat, i, j, u_c_lats)
-      call get_quad_corners(tlon, i, j, t_c_lons)
-      call get_quad_corners(tlat, i, j, t_c_lats)
-
-      ! Get list of regular boxes that cover this u dipole quad
-      ! false indicates that for the u grid there's nothing special about pole
-      call reg_box_overlap(u_c_lons, u_c_lats, .false., reg_lon_ind, reg_lat_ind)
-
-      ! Update the temporary data structures for the u quad
-      call update_reg_list(u_dipole_num, ureg_list_lon, &
-         ureg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
-
-      ! Repeat for t dipole quads
-      call reg_box_overlap(t_c_lons, t_c_lats, is_pole, reg_lon_ind, reg_lat_ind)
-      call update_reg_list(t_dipole_num, treg_list_lon, &
-         treg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
-   enddo
-enddo
-
-if (do_output()) write(*,*)'to determine (minimum) max_reg_list_num values for new grids ...'
-if (do_output()) write(*,*)'u_dipole_num is ',maxval(u_dipole_num)
-if (do_output()) write(*,*)'t_dipole_num is ',maxval(t_dipole_num)
-
-! Invert the temporary data structure. The total number of entries will be
-! the sum of the number of dipole cells for each regular cell.
-u_total = sum(u_dipole_num)
-t_total = sum(t_dipole_num)
-
-! Allocate storage for the final structures in module storage
-allocate(u_dipole_lon_list(u_total), u_dipole_lat_list(u_total))
-allocate(t_dipole_lon_list(t_total), t_dipole_lat_list(t_total))
-
-! Fill up the long list by traversing the temporary structure. Need indices
-! to keep track of where to put the next entry.
-u_index = 1
-t_index = 1
-
-! Loop through each regular grid box
-do i = 1, num_reg_x
-   do j = 1, num_reg_y
-
-      ! The list for this regular box starts at the current indices.
-      u_dipole_start(i, j) = u_index
-      t_dipole_start(i, j) = t_index
-
-      ! Copy all the close dipole quads for regular u box(i, j)
-      do k = 1, u_dipole_num(i, j)
-         u_dipole_lon_list(u_index) = ureg_list_lon(i, j, k)
-         u_dipole_lat_list(u_index) = ureg_list_lat(i, j, k)
-         u_index = u_index + 1
-      enddo
-
-      ! Copy all the close dipoles for regular t box (i, j)
-      do k = 1, t_dipole_num(i, j)
-         t_dipole_lon_list(t_index) = treg_list_lon(i, j, k)
-         t_dipole_lat_list(t_index) = treg_list_lat(i, j, k)
-         t_index = t_index + 1
-      enddo
-
-   enddo
-enddo
-
-! Confirm that the indices come out okay as debug
-if(u_index /= u_total + 1) then
-   string1 = 'Storage indices did not balance for U grid: : contact DART developers'
-   call error_handler(E_ERR, 'init_dipole_interp', string1, source, revision, revdate)
-endif
-if(t_index /= t_total + 1) then
-   string1 = 'Storage indices did not balance for T grid: : contact DART developers'
-   call error_handler(E_ERR, 'init_dipole_interp', string1, source, revision, revdate)
-endif
-
-end subroutine init_dipole_interp
-
 
 !-----------------------------------------------------------------------
 !>
@@ -4024,27 +3877,6 @@ end subroutine reg_box_overlap
 !> Grabs the corners for a given quadrilateral from the global array of lower
 !> right corners. Note that corners go counterclockwise around the quad.
 
-subroutine get_quad_corners(x, i, j, corners)
-real(r8), intent(in)  :: x(:, :)
-integer,  intent(in)  :: i
-integer,  intent(in)  :: j
-real(r8), intent(out) :: corners(4)
-
-integer :: ip1
-
-call error_handler(E_ERR,'get_quad_corners','routine not written yet', &
-                      source, revision, revdate)
-
-! Have to worry about wrapping in longitude but not in latitude
-ip1 = i + 1
-if(ip1 > nx) ip1 = 1
-
-corners(1) = x(i,   j  )
-corners(2) = x(ip1, j  )
-corners(3) = x(ip1, j+1)
-corners(4) = x(i,   j+1)
-
-end subroutine get_quad_corners
 
 
 !-----------------------------------------------------------------------
@@ -4168,8 +4000,8 @@ if(dipole_grid) then
       endif
 
       ! Search the list of quads to see if (lon, lat) is in one
-      call get_dipole_quad(lon, lat, ulon, ulat, num_inds, start_ind, &
-         u_dipole_lon_list, u_dipole_lat_list, lon_bot, lat_bot, istatus)
+      !call get_dipole_quad(lon, lat, ulon, ulat, num_inds, start_ind, &
+        ! u_dipole_lon_list, u_dipole_lat_list, lon_bot, lat_bot, istatus)
       ! Fail on bad istatus return
       if(istatus /= 0) return
 
@@ -4189,8 +4021,8 @@ if(dipole_grid) then
       ! On T grid
       num_inds =  t_dipole_num  (x_ind, y_ind)
       start_ind = t_dipole_start(x_ind, y_ind)
-      call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
-         t_dipole_lon_list, t_dipole_lat_list, lon_bot, lat_bot, istatus)
+      !call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
+       !  t_dipole_lon_list, t_dipole_lat_list, lon_bot, lat_bot, istatus)
       ! Fail on bad istatus return
       if(istatus /= 0) return
 
@@ -4201,8 +4033,8 @@ if(dipole_grid) then
       endif
 
       ! Getting corners for accurate interpolation
-      call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
-      call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
+      !call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
+      !call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
    endif
 
 else
@@ -4492,47 +4324,7 @@ end function lon_dist
 !> which quad contains the point.  istatus is returned as 0 if all went
 !> well and 1 if the point was not found to be in any of the quads.
 
-subroutine get_dipole_quad(lon, lat, qlons, qlats, num_inds, start_ind, &
-                           x_inds, y_inds, found_x, found_y, istatus)
 
-real(r8), intent(in)  :: lon
-real(r8), intent(in)  :: lat
-real(r8), intent(in)  :: qlons(:, :)
-real(r8), intent(in)  :: qlats(:, :)
-integer,  intent(in)  :: num_inds
-integer,  intent(in)  :: start_ind
-integer,  intent(in)  :: x_inds(:)
-integer,  intent(in)  :: y_inds(:)
-integer,  intent(out) :: found_x
-integer,  intent(out) :: found_y
-integer,  intent(out) :: istatus
-
-integer  :: i, my_index
-real(r8) :: x_corners(4), y_corners(4)
-
-call error_handler(E_ERR,'get_dipole_quad','routine not written yet', &
-                      source, revision, revdate)
-
-istatus = 0
-
-! Loop through all the quads and see if the point is inside
-do i = 1, num_inds
-   my_index = start_ind + i - 1
-   call get_quad_corners(qlons, x_inds(my_index), y_inds(my_index), x_corners)
-   call get_quad_corners(qlats, x_inds(my_index), y_inds(my_index), y_corners)
-
-   ! Ssearch in this individual quad
-   if(in_quad(lon, lat, x_corners, y_corners)) then
-      found_x = x_inds(my_index)
-      found_y = y_inds(my_index)
-      return
-   endif
-enddo
-
-! Falling off the end means search failed, return istatus 1
-istatus = 1
-
-end subroutine get_dipole_quad
 
 
 !-----------------------------------------------------------------------
@@ -5277,14 +5069,14 @@ rowmat(:,1) = cos(PI * real((/ (i,i=0,Nx-1) /),r8) / Nx);
 colmat(1,:) = sin(PI * real((/ (i,i=0,Ny-1) /),r8) / Ny);
 dmat        = matmul(rowmat,colmat)
 
-do i = 1, Nx
-   do j = 1, Ny
-      write(12, *) i, j, ULON(i,j), ULAT(i,j)
-      write(13, *) i, j, TLON(i,j), TLAT(i,j)
-      write(14, *)       ULON(i,j), ULAT(i,j), dmat(i, j)
-      write(15, *)       TLON(i,j), TLAT(i,j), dmat(i, j)
-   enddo
-enddo
+!do i = 1, Nx
+!   do j = 1, Ny
+!      write(12, *) i, j, ULON(i,j), ULAT(i,j)
+!      write(13, *) i, j, TLON(i,j), TLAT(i,j)
+!      write(14, *)       ULON(i,j), ULAT(i,j), dmat(i, j)
+!      write(15, *)       TLON(i,j), TLAT(i,j), dmat(i, j)
+!   enddo
+!enddo
 
 close(unit=12)
 close(unit=13)

@@ -336,7 +336,7 @@
    output_file          = "check_me_out"
    advance_time_present = .TRUE.
    verbose              = .TRUE.
-   test1thru            = 6
+   test1thru            = 1
    x_ind                = 3202
    kind_of_interest     = 'KIND_SALINITY'
    loc_of_interest      = 287.5, 82.48, 0.35
