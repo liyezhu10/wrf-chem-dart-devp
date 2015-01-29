@@ -167,7 +167,8 @@
    gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
                     'S', 'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
                     'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
-                    'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE' 
+                    'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+                    'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE' 
   /
 
 &gcom_to_dart_nml
