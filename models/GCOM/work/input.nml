@@ -175,7 +175,7 @@
   /
 
 &dart_to_gcom_nml
-   dart_to_gcom_input_file   = 'dart_restart'
+   dart_to_gcom_input_file   = 'perturbed_ics.txt'
    advance_time_present      = .false.
   /
 
@@ -333,8 +333,8 @@
 &model_mod_check_nml
    input_file           = "dart_ics"
    output_file          = "check_me_out"
-   advance_time_present = .TRUE.
-   verbose              = .TRUE.
+   advance_time_present = .false.
+   verbose              = .true.
    test1thru            = 5
    x_ind                = 3202
    kind_of_interest     = 'KIND_SALINITY'

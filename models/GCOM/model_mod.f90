@@ -461,7 +461,7 @@ integer,             intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer,  OPTIONAL,  intent(out) :: var_type
 
-real(r8) :: lat, lon, depth
+!real(r8) :: lat, lon, depth
 integer  :: n, varindex, offset
 integer  :: index1, index2, index3
 integer  ::  ndim1,  ndim2
@@ -1497,7 +1497,7 @@ real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
 logical,  intent(out) :: interf_provided
 
-integer :: i, ivar, var_type
+integer :: i, ivar
 logical, save :: random_seq_init = .false.
 
 if ( .not. module_initialized ) call static_init_model
@@ -1697,14 +1697,14 @@ Nxm1 = Nx - 1
 Nym1 = Ny - 1
 Nzm1 = Nz - 1
 
-if (do_output() .and. debug > 8) then
+if (do_output() .and. debug > 99) then
    write(*,*)'get_grid_dims: filename  ['//trim(gcom_geometry_file)//']'
-   write(*,*)'get_grid_dims: nx aka num_longitudes aka nx',Nx
-   write(*,*)'get_grid_dims: ny aka num_latitides  aka ny',Ny
-   write(*,*)'get_grid_dims: nz aka num_levels     aka nz',Nz
-   write(*,*)'get_grid_dims:                            Nx-1',Nxm1
-   write(*,*)'get_grid_dims:                            Ny-1',Nym1
-   write(*,*)'get_grid_dims:                            Nz-1',Nzm1
+   write(*,*)'get_grid_dims: num_longitudes aka nx',Nx
+   write(*,*)'get_grid_dims: num_latitides  aka ny',Ny
+   write(*,*)'get_grid_dims: num_levels     aka nz',Nz
+   write(*,*)'get_grid_dims:                  Nx-1',Nxm1
+   write(*,*)'get_grid_dims:                  Ny-1',Nym1
+   write(*,*)'get_grid_dims:                  Nz-1',Nzm1
 endif
 
 end subroutine get_grid_dims
@@ -4860,7 +4860,7 @@ integer :: nlon, nlat, nlev
 integer :: ulatVarID, ulonVarID, ulevVarID
 !integer :: ZGvarid, ZCvarid, KMTvarid, KMUvarid
 
-integer :: dimids(2)
+integer :: dimids(3)
 
 call error_handler(E_ERR,'write_grid_netcdf','routine not written yet', &
                       source, revision, revdate)
@@ -4873,12 +4873,13 @@ call nc_check(nf90_create('dart_grid.nc', NF90_CLOBBER, ncid),'write_grid_netcdf
 
 ! define dimensions
 
-call nc_check(nf90_def_dim(ncid, 'i', nlon, NlonDimID),'write_grid_netcdf')
-call nc_check(nf90_def_dim(ncid, 'j', nlat, NlatDimID),'write_grid_netcdf')
-call nc_check(nf90_def_dim(ncid, 'k', nlev, NlevDimID),'write_grid_netcdf')
+call nc_check(nf90_def_dim(ncid, 'nx', nlon, NlonDimID),'write_grid_netcdf')
+call nc_check(nf90_def_dim(ncid, 'ny', nlat, NlatDimID),'write_grid_netcdf')
+call nc_check(nf90_def_dim(ncid, 'nz', nlev, NlevDimID),'write_grid_netcdf')
 
 dimids(1) = NlonDimID
 dimids(2) = NlatDimID
+dimids(3) = NlevDimID
 
 ! define variables
 
@@ -5313,8 +5314,8 @@ end subroutine depth2pressure
 !-----------------------------------------------------------------------
 !>
 !> find_desired_time_index() returns the index into the time array that 
-!> matches the model_time from the GCOM restart file.
-!> If the optional argument 'time_wanted' is supplied, 
+!> matches the target_time. 
+!> If no target_time is supplied, the model_time is the target.
 
 function find_desired_time_index(ncid, ntimes, time_wanted)
 integer,                   intent(in) :: ncid
@@ -5383,18 +5384,36 @@ TIMELOOP : do itime = 1,ntimes
 enddo TIMELOOP
 
 ! FIXME ... do we actually need a perfect match ... 
-! or do we just use the last one.
+! or do we just use the last one if close enough.
+
+! If we did not find one, list all the ones we did find.
 if ( find_desired_time_index == MISSING_I ) then
-   call print_time(target_time,str='target time is ',iunit=logfileunit)
-   call print_time(target_time,str='target time is ')
-   call print_date(target_time,str='target date is ',iunit=logfileunit)
-   call print_date(target_time,str='target date is ')
+   call print_time(target_time,str='find_desired_time_index:target time is ',iunit=logfileunit)
+   call print_time(target_time,str='find_desired_time_index:target time is ')
+   call print_date(target_time,str='find_desired_time_index:target date is ',iunit=logfileunit)
+   call print_date(target_time,str='find_desired_time_index:target date is ')
+
+   do itime = 1,ntimes
+      iday      = int(mytimes(itime))
+      isecond   = (mytimes(itime) - iday)*86400
+      this_time = set_time(origin_seconds+isecond, origin_days+iday)
+      write(string1,'(A,i4,A,i4,A)') 'find_desired_time_index:GCOM time index ',itime,' of ',ntimes,' is'
+      call print_time(this_time,str=string1)
+      call print_time(this_time,str=string1,iunit=logfileunit)
+      call print_date(this_time,str=string1)
+      call print_date(this_time,str=string1,iunit=logfileunit)
+   enddo 
+
    write(string1,*)'No matching time found'
    call error_handler(E_ERR, 'find_desired_time_index:', string1, &
           source, revision, revdate )
 endif
 
 if ((debug > 0) .and. do_output()) then
+   call print_time(target_time,str='target time is ',iunit=logfileunit)
+   call print_time(target_time,str='target time is ')
+   call print_date(target_time,str='target date is ',iunit=logfileunit)
+   call print_date(target_time,str='target date is ')
    write(string1,*)'matching time index is ',find_desired_time_index
    call error_handler(E_MSG, 'find_desired_time_index:', string1)
 endif
@@ -5487,7 +5506,7 @@ elseif ( varname == 'lev' ) then
                'get_grid_variable', 'get_var '//trim(varname))
 endif
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 9)) then
    write(*,*)'get_grid_variable: variable ['//trim(varname)//']'
    write(*,*)'get_grid_variable: dimids ', dimids(1:numdims)
    write(*,*)'get_grid_variable: length ', dimlens(1:numdims)

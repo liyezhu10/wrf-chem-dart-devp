@@ -127,7 +127,8 @@ if (test1thru > 2) then
    allocate(statevector(x_size))
 
    statevector = 1.0_r8;
-   model_time  = set_time(21600, 149446)   ! 06Z 4 March 2010
+!  model_time  = set_time(21600, 149446)   ! 06Z 4 Mar 2010
+   model_time  = set_time(43200, 140618)   ! 12Z 1 Jan 1986
 
    iunit = open_restart_write('allones.ics')
    call awrite_state_restart(model_time, statevector, iunit)
