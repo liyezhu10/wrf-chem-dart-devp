@@ -163,7 +163,7 @@
    assimilation_period_seconds  = 10
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
-   debug                        = 9
+   debug                        = 2
    gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
                     'S', 'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
                     'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',

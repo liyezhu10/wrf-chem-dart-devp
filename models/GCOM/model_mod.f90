@@ -234,10 +234,10 @@ end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
 
-INTERFACE vector_to_prog_var
-      MODULE PROCEDURE vector_to_1d_prog_var
-      MODULE PROCEDURE vector_to_2d_prog_var
-      MODULE PROCEDURE vector_to_3d_prog_var
+INTERFACE vector_to_variable
+      MODULE PROCEDURE vector_to_1d_variable
+      MODULE PROCEDURE vector_to_2d_variable
+      MODULE PROCEDURE vector_to_3d_variable
 END INTERFACE
 
 INTERFACE DART_get_var
@@ -304,20 +304,6 @@ subroutine static_init_model()
 integer :: iunit, io
 integer :: ss, dd
 
-! The Plan:
-!
-!   read in the grid sizes from the horiz grid file and the vert grid file
-!   horiz is netcdf, vert is ascii
-!
-!   allocate space, and read in actual grid values
-!
-!   figure out model timestep.  FIXME: from where?
-!
-!   Compute the model size.
-!
-!   set the index numbers where the field types change
-!
-
 if ( module_initialized ) return ! only need to do this once.
 
 ! Print module information to log file and stdout.
@@ -326,8 +312,6 @@ call register_module(source, revision, revdate)
 ! Since this routine calls other routines that could call this routine
 ! we'll say we've been initialized pretty dang early.
 module_initialized = .true.
-
-call error_handler(E_MSG,'static_init_model','FIXME TJH UNTESTED')
 
 ! Read the DART namelist for this model
 call find_namelist_in_file('input.nml', 'model_nml', iunit)
@@ -373,21 +357,7 @@ call fill_progvar()
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
 
-! record where in the state vector the data type changes
-! from one type to another, by computing the starting
-! index for each block of data.
-! start_index(S_index)     = 1
-! start_index(T_index)     = start_index(S_index) + (Nx * Ny * Nz)
-! start_index(U_index)     = start_index(T_index) + (Nx * Ny * Nz)
-! start_index(V_index)     = start_index(U_index) + (Nx * Ny * Nz)
-! start_index(PSURF_index) = start_index(V_index) + (Nx * Ny * Nz)
-
-! in spite of the staggering, all grids are the same size
-! and offset by half a grid cell.  4 are 3D and 1 is 2D.
-!  e.g. S,T,U,V = 256 x 225 x 70
-!  e.g. PSURF = 256 x 225
-
-if (do_output()) then
+if (do_output() .and. (debug > 99)) then
    write(string1,*) 'grid shape : Nx, Ny, Nz = ', Nx, Ny, Nz
    write(string2,*) 'number of variables = ', nfields
    write(string3,*) 'model_size = ', model_size
@@ -400,8 +370,6 @@ endif
 
 ! Initialize the interpolation routines
 ! call init_interp()
-
-! call error_handler(E_ERR,'static_init_model','stopping early',source,revision,revdate)
 
 end subroutine static_init_model
 
@@ -1298,11 +1266,11 @@ if ( output_state_vector ) then
 else
 
    !----------------------------------------------------------------------------
-   ! We need to process the DART variables.
+   ! Reshape the DART vector into the 'natural' shape of the variables.
    ! Replace DART missing values with netcdf missing value.
    !----------------------------------------------------------------------------
 
-   do ivar = 1,nfields  ! Very similar to loop in sv_to_restart_file
+   do ivar = 1,nfields
 
       varname = trim(progvar(ivar)%varname)
       string2 = trim(filename)//' '//trim(varname)
@@ -1362,7 +1330,7 @@ else
          endif
 
          allocate(data_1d( progvar(ivar)%dimlens(1) ))
-         call vector_to_prog_var(state_vector, ivar, data_1d)
+         call vector_to_variable(state_vector, ivar, data_1d)
          call nc_check(nf90_put_var(ncFileID, VarID, data_1d, &
              start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1379,7 +1347,7 @@ else
 
          allocate(data_2d( progvar(ivar)%dimlens(1),  &
                            progvar(ivar)%dimlens(2) ))
-         call vector_to_prog_var(state_vector, ivar, data_2d)
+         call vector_to_variable(state_vector, ivar, data_2d)
          call nc_check(nf90_put_var(ncFileID, VarID, data_2d, &
              start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1397,7 +1365,7 @@ else
          allocate(data_3d( progvar(ivar)%dimlens(1),  &
                            progvar(ivar)%dimlens(2),  &
                            progvar(ivar)%dimlens(3) ))
-         call vector_to_prog_var(state_vector, ivar, data_3d)
+         call vector_to_variable(state_vector, ivar, data_3d)
          call nc_check(nf90_put_var(ncFileID, VarID, data_3d, &
              start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1541,7 +1509,7 @@ logical, save :: random_seq_init = .false.
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_MSG,'pert_model_state','FIXME TJH UNTESTED')
+call error_handler(E_MSG,'pert_model_state','FIXME Angie UNTESTED')
 
 interf_provided = .true.
 
@@ -1554,7 +1522,7 @@ endif
 ! only perturb the actual ocean cells; leave the land and
 ! ocean floor values alone.
 VARLOOP : do ivar=1,nfields
-! My comment is better than your comment.
+
    if (do_output() .and. debug > 1) then
       write(string1,*)'Perturbing ',ivar,trim(progvar(ivar)%varname)
       call error_handler(E_MSG,'pert_model_state',string1)
@@ -1562,12 +1530,11 @@ VARLOOP : do ivar=1,nfields
 
    STATELOOP : do i = progvar(ivar)%index1, progvar(ivar)%indexN
 
-      pert_state(i) = state(i) + random_gaussian(random_seq, state(i), &
+      pert_state(i) = state(i) + random_gaussian(random_seq, 0.0_r8, &
                                       model_perturbation_amplitude)
 
    enddo STATELOOP 
 enddo VARLOOP
-
 
 end subroutine pert_model_state
 
@@ -1967,8 +1934,6 @@ index1  = 1;
 indexN  = 0;
 do ivar = 1, nfields
 
-   write(*,*)'filling progvar ',ivar
-
    ! Copying the information in the variable_table to each progvar. 
    ! Setting the default values.
 
@@ -2135,7 +2100,7 @@ ncid = 0
 
 model_size = progvar(nfields)%indexN
 
-if ((debug > 0) .and. do_output()) call progvar_summary()
+if ((debug > 3) .and. do_output()) call progvar_summary()
 
 end subroutine fill_progvar
 
@@ -2344,8 +2309,6 @@ integer :: origin_days, origin_seconds
 type(time_type) :: origin_time
 
 if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'gcom_file_to_dart_vector','FIXME TJH UNTESTED')
 
 state_vector = MISSING_R8
 
@@ -2631,20 +2594,20 @@ UPDATE : do ivar=1,nfields
 
    enddo DimCheck
 
-   if (do_output() .and. (debug > 1)) then
+   if (do_output() .and. (debug > 3)) then
       write(*,*)'dart_vector_to_gcom_file: variable ['//trim(varname)//']'
       write(*,*)'dart_vector_to_gcom_file: start ',ncstart(1:numdims)
       write(*,*)'dart_vector_to_gcom_file: count ',nccount(1:numdims)
    endif
 
-   ! When called with a 4th argument, vector_to_prog_var() replaces the DART
+   ! When called with a 4th argument, vector_to_variable() replaces the DART
    ! missing code with the value in the corresponding variable in the netCDF file.
-   ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
+   ! Any clamping to physically meaningful values occurrs in vector_to_variable.
 
    if (progvar(ivar)%rank == 1) then
 
       allocate(data_1d_array(progvar(ivar)%dimlens(1)))
-      call vector_to_prog_var(state_vector, ivar, data_1d_array, ncid)
+      call vector_to_variable(state_vector, ivar, data_1d_array, ncid)
 
       call nc_check(nf90_put_var(ncid, VarID, data_1d_array, &
               start=ncstart(1:numdims), &
@@ -2656,7 +2619,7 @@ UPDATE : do ivar=1,nfields
 
       allocate(data_2d_array(progvar(ivar)%dimlens(1), &
                              progvar(ivar)%dimlens(2)))
-      call vector_to_prog_var(state_vector, ivar, data_2d_array, ncid)
+      call vector_to_variable(state_vector, ivar, data_2d_array, ncid)
 
       call nc_check(nf90_put_var(ncid, VarID, data_2d_array, &
               start=ncstart(1:numdims), &
@@ -2669,7 +2632,7 @@ UPDATE : do ivar=1,nfields
       allocate(data_3d_array(progvar(ivar)%dimlens(1), &
                              progvar(ivar)%dimlens(2), &
                              progvar(ivar)%dimlens(3)))
-      call vector_to_prog_var(state_vector, ivar, data_3d_array, ncid)
+      call vector_to_variable(state_vector, ivar, data_3d_array, ncid)
 
       call nc_check(nf90_put_var(ncid, VarID, data_3d_array, &
               start=ncstart(1:numdims), &
@@ -3528,10 +3491,10 @@ end subroutine test_interpolation
 
 
 !-----------------------------------------------------------------------
-! overloaded routines defining vector_to_prog_var
-!          MODULE PROCEDURE vector_to_1d_prog_var
-!          MODULE PROCEDURE vector_to_2d_prog_var
-!          MODULE PROCEDURE vector_to_3d_prog_var
+! overloaded routines defining vector_to_variable
+!          MODULE PROCEDURE vector_to_1d_variable
+!          MODULE PROCEDURE vector_to_2d_variable
+!          MODULE PROCEDURE vector_to_3d_variable
 !-----------------------------------------------------------------------
 
 !-----------------------------------------------------------------------
@@ -3539,7 +3502,7 @@ end subroutine test_interpolation
 !> Stuff the values from a 1d array, starting at an offset,
 !> into a 1d array.  not particularly challenging
 
-subroutine vector_to_1d_prog_var(x, varindex, data_1d_array, ncid)
+subroutine vector_to_1d_variable(x, varindex, data_1d_array, ncid)
 
 real(r8),          intent(in)  :: x(:)
 integer,           intent(in)  :: varindex
@@ -3553,17 +3516,34 @@ array_length = size(data_1d_array,1)
 if ( array_length /= progvar(varindex)%varsize ) then
    write(string1,*)trim(progvar(varindex)%varname),' length /= array_length ', &
                         progvar(varindex)%varsize,' /= ',array_length
-   call error_handler(E_ERR,'vector_to_1d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_1d_variable',string1,source,revision,revdate)
 endif
 
 data_1d_array = x(progvar(varindex)%index1:progvar(varindex)%indexN)
 
 if (present(ncid)) then
-   string1 = 'FIXME clamping not supported yet.'
-   call error_handler(E_MSG,'vector_to_1d_prog_var',string1)
+
+   write(string1,'(A)') '... FIXME clamping '//trim(progvar(varindex)%varname)//' to a static value.'
+   string2 = 'FIXME should be / could be adding some variability to it.'
+   call error_handler(E_MSG,'vector_to_1d_variable',string1,text2=string2)
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_1d_array /= MISSING_R8) .and. &
+             (data_1d_array > progvar(varindex)%maxvalue)) &
+              data_1d_array = progvar(varindex)%maxvalue ! FIXME ... add variability
+   endif
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_BELOW ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_1d_array /= MISSING_R8) .and. &
+             (data_1d_array < progvar(varindex)%minvalue)) &
+              data_1d_array = progvar(varindex)%minvalue ! FIXME ... add variability
+   endif
+
 endif
 
-end subroutine vector_to_1d_prog_var
+end subroutine vector_to_1d_variable
 
 
 !-----------------------------------------------------------------------
@@ -3571,7 +3551,7 @@ end subroutine vector_to_1d_prog_var
 !> Stuff the values from a 1d fortran array, starting at an offset,
 !> into a 2d fortran array.  the 2 dims are taken from the array size.
 
-subroutine vector_to_2d_prog_var(x, varindex, data_2d_array, ncid)
+subroutine vector_to_2d_variable(x, varindex, data_2d_array, ncid)
 
 real(r8),          intent(in)  :: x(:)
 integer,           intent(in)  :: varindex
@@ -3581,7 +3561,7 @@ integer, OPTIONAL, intent(in)  :: ncid
 integer :: i,j,ii
 integer :: dim1,dim2
 
-call error_handler(E_MSG,'vector_to_2d_prog_var','routine not tested', &
+call error_handler(E_MSG,'vector_to_2d_variable','routine not tested', &
                       source, revision, revdate)
 
 dim1 = size(data_2d_array,1)
@@ -3590,12 +3570,12 @@ dim2 = size(data_2d_array,2)
 if (dim1 /= progvar(varindex)%dimlens(1)) then
    write(string1,*)trim(progvar(varindex)%varname),' 2d array dim 1 ',dim1, &
                 ' /= ', progvar(varindex)%dimlens(1)
-   call error_handler(E_ERR,'vector_to_2d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_2d_variable',string1,source,revision,revdate)
 endif
 if (dim2 /= progvar(varindex)%dimlens(2)) then
    write(string1,*)trim(progvar(varindex)%varname),' 2d array dim 2 ',dim2, &
                 ' /= ', progvar(varindex)%dimlens(2)
-   call error_handler(E_ERR,'vector_to_2d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_2d_variable',string1,source,revision,revdate)
 endif
 
 ii = progvar(varindex)%index1
@@ -3608,11 +3588,28 @@ enddo
 enddo
 
 if (present(ncid)) then
-   string1 = 'FIXME clamping not supported yet.'
-   call error_handler(E_MSG,'vector_to_2d_prog_var',string1)
+
+   write(string1,'(A)') '... FIXME clamping '//trim(progvar(varindex)%varname)//' to a static value.'
+   string2 = 'FIXME should be / could be adding some variability to it.'
+   call error_handler(E_MSG,'vector_to_2d_variable',string1,text2=string2)
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_2d_array /= MISSING_R8) .and. &
+             (data_2d_array > progvar(varindex)%maxvalue)) &
+              data_2d_array = progvar(varindex)%maxvalue ! FIXME ... add variability
+   endif
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_BELOW ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_2d_array /= MISSING_R8) .and. &
+             (data_2d_array < progvar(varindex)%minvalue)) &
+              data_2d_array = progvar(varindex)%minvalue ! FIXME ... add variability
+   endif
+
 endif
 
-end subroutine vector_to_2d_prog_var
+end subroutine vector_to_2d_variable
 
 
 !-----------------------------------------------------------------------
@@ -3620,7 +3617,7 @@ end subroutine vector_to_2d_prog_var
 !> Stuff the values from a 1d fortran array, starting at an offset,
 !> into a 3d fortran array.  the 3 dims are taken from the array size.
 
-subroutine vector_to_3d_prog_var(x, varindex, data_3d_array, ncid)
+subroutine vector_to_3d_variable(x, varindex, data_3d_array, ncid)
 
 real(r8),          intent(in)  :: x(:)
 integer,           intent(in)  :: varindex
@@ -3630,9 +3627,6 @@ integer, OPTIONAL, intent(in)  :: ncid
 integer :: i,j,k,ii
 integer :: dim1,dim2,dim3
 
-call error_handler(E_MSG,'vector_to_3d_prog_var','routine not tested', &
-                      source, revision, revdate)
-
 dim1 = size(data_3d_array,1)
 dim2 = size(data_3d_array,2)
 dim3 = size(data_3d_array,3)
@@ -3640,17 +3634,17 @@ dim3 = size(data_3d_array,3)
 if (dim1 /= progvar(varindex)%dimlens(1)) then
    write(string1,*)trim(progvar(varindex)%varname),' 3d array dim 1 ',dim1, &
                 ' /= ', progvar(varindex)%dimlens(1)
-   call error_handler(E_ERR,'vector_to_3d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_3d_variable',string1,source,revision,revdate)
 endif
 if (dim2 /= progvar(varindex)%dimlens(2)) then
    write(string1,*)trim(progvar(varindex)%varname),' 3d array dim 2 ',dim2, &
                 ' /= ', progvar(varindex)%dimlens(2)
-   call error_handler(E_ERR,'vector_to_3d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_3d_variable',string1,source,revision,revdate)
 endif
 if (dim3 /= progvar(varindex)%dimlens(3)) then
    write(string1,*)trim(progvar(varindex)%varname),' 3d array dim 3 ',dim3, &
                 ' /= ', progvar(varindex)%dimlens(3)
-   call error_handler(E_ERR,'vector_to_3d_prog_var',string1,source,revision,revdate)
+   call error_handler(E_ERR,'vector_to_3d_variable',string1,source,revision,revdate)
 endif
 
 ii = progvar(varindex)%index1
@@ -3665,11 +3659,28 @@ enddo
 enddo
 
 if (present(ncid)) then
-   string1 = 'FIXME clamping not supported yet.'
-   call error_handler(E_MSG,'vector_to_3d_prog_var',string1)
+
+   write(string1,'(A)') '... FIXME clamping '//trim(progvar(varindex)%varname)//' to a static value.'
+   string2 = 'FIXME should be / could be adding some variability to it.'
+   call error_handler(E_MSG,'vector_to_3d_variable',string1,text2=string2)
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_3d_array /= MISSING_R8) .and. &
+             (data_3d_array > progvar(varindex)%maxvalue)) &
+              data_3d_array = progvar(varindex)%maxvalue ! FIXME ... add variability
+   endif
+
+   if ((progvar(varindex)%rangeRestricted == BOUNDED_BELOW ) .or. &
+       (progvar(varindex)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_3d_array /= MISSING_R8) .and. &
+             (data_3d_array < progvar(varindex)%minvalue)) &
+              data_3d_array = progvar(varindex)%minvalue ! FIXME ... add variability
+   endif
+
 endif
 
-end subroutine vector_to_3d_prog_var
+end subroutine vector_to_3d_variable
 
 
 !-----------------------------------------------------------------------
