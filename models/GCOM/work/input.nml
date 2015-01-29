@@ -159,16 +159,15 @@
 &model_nml
    gcom_restart_file            = 'gcom_restart.nc'
    gcom_geometry_file           = 'gcom_geometry.nc'
-   assimilation_period_days     = 1
-   assimilation_period_seconds  = 0
+   assimilation_period_days     = 0
+   assimilation_period_seconds  = 10
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
    debug                        = 9
-   gcom_variables = 'temperature', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
-                    'salinity',    'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
-                    'sst',         'KIND_SEA_SURFACE_HEIGHT',  '0.0', 'NA', 'UPDATE',
-                    'u',           'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
-                    'v',           'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE'
+   gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'UPDATE',
+                    'S', 'KIND_SALINITY',            '0.0', 'NA', 'UPDATE',
+                    'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+                    'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE' 
   /
 
 &gcom_to_dart_nml
@@ -336,7 +335,7 @@
    output_file          = "check_me_out"
    advance_time_present = .TRUE.
    verbose              = .TRUE.
-   test1thru            = 1
+   test1thru            = 5
    x_ind                = 3202
    kind_of_interest     = 'KIND_SALINITY'
    loc_of_interest      = 287.5, 82.48, 0.35

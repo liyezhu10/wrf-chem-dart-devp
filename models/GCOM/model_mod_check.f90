@@ -35,7 +35,7 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              operator(-)
 
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             model_interpolate
+                             model_interpolate, pert_model_state
 
 implicit none
 
@@ -67,9 +67,10 @@ namelist /model_mod_check_nml/ input_file, output_file, &
 
 integer :: ios_out, iunit, io
 integer :: x_size
+logical :: provided
 
 type(time_type)       :: model_time, adv_to_time
-real(r8), allocatable :: statevector(:)
+real(r8), allocatable :: statevector(:), pert_state(:)
 
 character(len=metadatalength) :: state_meta(1)
 type(netcdf_file_type) :: ncFileID
@@ -169,6 +170,29 @@ if (test1thru > 3) then
 endif
 
 !----------------------------------------------------------------------
+! Write a supremely simple restart file. Most of the time, I just use
+! this as a starting point for a Matlab function that replaces the
+! values with something more complicated.
+!----------------------------------------------------------------------
+
+if (test1thru > 2) then
+
+   write(*,*)
+   write(*,*)' Testing pert_model_state - creating restart file "perturbed_ics.txt".'
+
+   allocate(pert_state(x_size))
+
+   call pert_model_state(statevector, pert_state, provided)
+
+   iunit = open_restart_write('perturbed_ics.txt')
+   call awrite_state_restart(model_time, pert_state, iunit)
+   call close_restart(iunit)
+
+   write(*,*)'Perturbed restart file "perturbed_ics.txt" written.'
+
+endif
+
+!----------------------------------------------------------------------
 ! Output the state vector to a netCDF file ...
 ! This is the same procedure used by 'perfect_model_obs' & 'filter'
 ! init_diag_output()
@@ -246,6 +270,9 @@ if (test1thru > 9) then
 endif
 
 call finalize_utilities('model_mod_check')
+
+deallocate(statevector)
+deallocate(pert_state)
 
 contains
 
