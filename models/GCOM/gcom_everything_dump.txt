@@ -12,7 +12,7 @@ variables:
 		time:units = "days since 1601-01-01 00:00:00" ;
 		time:long_name = "reference time" ;
 		time:calendar = "gregorian" ;
-	double u(sz, sy, nx) ;
+	double u(time, sz, sy, nx) ;
 		u:units = "km/s" ;
 		u:long_name = "u component of the velocity" ;
 	double ulon(sz, sy, nx) ;
@@ -25,7 +25,7 @@ variables:
 		ulev:long_name = "depths of the u component of the velocity" ;
 		ulev:units = "meters" ;
 
-	double v(sz, ny, sx) ;
+	double v(time, sz, ny, sx) ;
 		v:units = "km/s" ;
 		v:long_name = "v component of the velocity" ;
 	double vlon(sz, ny, sx) ;
@@ -38,7 +38,7 @@ variables:
 		vlev:long_name = "depths of the v component of the velocity" ;
 		vlev:units = "meters" ;
 
-	double w(nz, sy, sx) ;
+	double w(time, nz, sy, sx) ;
 		w:units = "km/s" ;
 		w:long_name = "w component of the velocity" ;
 	double wlon(nz, sy, sx) ;
@@ -51,13 +51,13 @@ variables:
 		wlev:long_name = "depths of the w component of the velocity" ;
 		wlev:units = "meters" ;
 
-	double p(sz, sy, sx) ;
+	double p(time, sz, sy, sx) ;
 		p:units = "bar" ;
 		p:long_name = "non-hydrostatic pressure" ;
-	double T(sz, sy, sx) ;
+	double T(time, sz, sy, sx) ;
 		t:units = "degrees celsius" ;
 		t:long_name = "temperature" ;
-	double S(sz, sy, sx) ;
+	double S(time, sz, sy, sx) ;
 		s:units = "psu" ;
 		s:long_name = "initial salinity" ;
 	double lon(sz, sy, sx) ;
