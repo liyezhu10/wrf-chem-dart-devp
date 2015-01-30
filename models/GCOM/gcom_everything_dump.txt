@@ -1,0 +1,77 @@
+netcdf gcom_everything {
+dimensions:
+	time = UNLIMITED ; // (10 currently)
+	nx = 97 ;
+	ny = 33 ;
+	nz = 33 ;
+	sx = 96 ;
+	sy = 32 ;
+	sz = 32 ;
+variables:
+	double time(time) ;
+		time:units = "days since 1601-01-01 00:00:00" ;
+		time:long_name = "reference time" ;
+		time:calendar = "gregorian" ;
+	double u(sz, sy, nx) ;
+		u:units = "km/s" ;
+		u:long_name = "u component of the velocity" ;
+	double ulon(sz, sy, nx) ;
+		ulon:long_name = "longitudes of the u component of the velocity" ;
+		ulon:units = "degrees East" ;
+	double ulat(sz, sy, nx) ;
+		ulat:long_name = "latitudes of the u component of the velocity" ;
+		ulat:units = "degrees North" ;
+	double ulev(sz, sy, nx) ;
+		ulev:long_name = "depths of the u component of the velocity" ;
+		ulev:units = "meters" ;
+
+	double v(sz, ny, sx) ;
+		v:units = "km/s" ;
+		v:long_name = "v component of the velocity" ;
+	double vlon(sz, ny, sx) ;
+		ulon:long_name = "longitudes of the v component of the velocity" ;
+		ulon:units = "degrees East" ;
+	double vlat(sz, ny, sx) ;
+		vlat:long_name = "latitudes of the v component of the velocity" ;
+		vlat:units = "degrees North" ;
+	double vlev(sz, ny, sx) ;
+		vlev:long_name = "depths of the v component of the velocity" ;
+		vlev:units = "meters" ;
+
+	double w(nz, sy, sx) ;
+		w:units = "km/s" ;
+		w:long_name = "w component of the velocity" ;
+	double wlon(nz, sy, sx) ;
+		wlon:long_name = "longitudes of the w component of the velocity" ;
+		wlon:units = "degrees East" ;
+	double wlat(nz, sy, sx) ;
+		wlat:long_name = "latitudes of the w component of the velocity" ;
+		wlat:units = "degrees North" ;
+	double wlev(nz, sy, sx) ;
+		wlev:long_name = "depths of the w component of the velocity" ;
+		wlev:units = "meters" ;
+
+	double p(sz, sy, sx) ;
+		p:units = "bar" ;
+		p:long_name = "non-hydrostatic pressure" ;
+	double T(sz, sy, sx) ;
+		t:units = "degrees celsius" ;
+		t:long_name = "temperature" ;
+	double S(sz, sy, sx) ;
+		s:units = "psu" ;
+		s:long_name = "initial salinity" ;
+	double lon(sz, sy, sx) ;
+		lon:long_name = "longitudes of [p,S,T]" ;
+		lon:units = "degrees East" ;
+	double lat(sz, sy, sx) ;
+		lat:long_name = "latitudes of [p,S,T]" ;
+		lat:units = "degrees North" ;
+	double lev(sz, sy, sx) ;
+		lev:long_name = "depths of [p,S,T]" ;
+		lev:units = "meters" ;
+
+// global attributes:
+		:title = "Seamount Bathymetry for General Curvilinear Ocean Model GCOM" ;
+		:institution = "Computational Science Research Center (CSRC), San Diego State University" ;
+		:source_file = "./Grid.dat.geo" ;
+}
