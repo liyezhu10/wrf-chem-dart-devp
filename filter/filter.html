@@ -26,6 +26,7 @@
 </table>
 
 <A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#QuadFilter">QUADRATIC SQUARED ERROR FILTER</A> /
 <A HREF="#Modules">MODULES</A> /
 <A HREF="#FilesUsed">FILES</A> /
 <A HREF="#References">REFERENCES</A> /
@@ -101,12 +102,27 @@ controls the length of execution of filter.
 <A NAME="FilterTypes"></A>
 <H4>Types of Filters available</H4>
 <P>
-   The different types of assimilation algorithms 
-   (EAKF, ENKF, Kernel filter, Particle filter, etc.) are determined
-   by the <em class=code>&amp;assim_tools_nml:filter_kind</em> entry,
+   DART includes several different types of assimilation algorithms,
+   including an Ensemble Adjustment Kalman Filter (EAKF)
+   <a href="#References">(Anderson 2001, 2003)</a>, an Ensemble
+   Kalman Filter (ENKF), a Kernel filter, a Particle filter, and
+   a Rank Histogram filter.
+   Note that although it is expressed in a slightly different form,
+   the algorithm for the EAKF is identical to the Ensemble Square
+   Root Filter (EnSRF) as described in Whitaker and Hamill, 2002.
+</P>
+<P>
+   The selection of assimilation algorithm is made by changing
+   namelist items in the <em class=code>&amp;assim_tools_nml:filter_kind</em> entry,
    described in <a href="../assim_tools/assim_tools_mod.html">assim_tools_mod.html</a>.
    Despite having 'filter' in the name, they are assimilation algorithms
    and so are implemented in <em class=file>assim_tools_mod.f90</em>.
+</P>
+<P>
+   The one exception is the new Quadratic Squared Error Filter which
+   is controlled by a new filter namelist item, <em class=code>quad_filter</em>.
+   See the additional documentation <a href="#QuadFilter">here</a> for
+   more details on its use.
 </P>
 
 <A NAME="GettingStarted"></A>
@@ -647,6 +663,8 @@ prematurely terminating the namelist.
    first_obs_seconds        = -1,
    last_obs_days            = -1,
    last_obs_seconds         = -1,
+   quad_filter              = .false.
+   quad_filter_eval_only    = .false.
    num_output_state_members = 0,
    num_output_obs_members   = 0,
    output_interval          = 1,
@@ -792,6 +810,25 @@ being for the posterior inflation.
     <TD>integer</TD>
     <TD>If negative, don't use. If non-negative, ignore all observations
         after this time.
+ </TD></TR>
+
+<TR><TD>quad_filter</TD>
+    <TD>logical</TD>
+    <TD>If true, use the Quadratic Squared Error filter.  This requires
+adding additional observations to the input obs_seq file with a
+specialized observation sequence tool.  See the section on 
+<a href="#QuadFilter">Quadratic Squared Error Filter</a>
+for more details on its use.
+ </TD></TR>
+
+<TR><TD>quad_filter_eval_only</TD>
+    <TD>logical</TD>
+    <TD>If <em class=code>quad_filter</em> is true and this flag is also true, 
+disable the impact of the quad filter squared error observations. 
+They will be evaulated, but will not impact the model state.
+This effectively disables the quad_filter function but allows the
+values of the additional pseudo observations to be examined
+for diagnostic purposes.
  </TD></TR>
 
 <TR><TD>num_output_state_members</TD>
@@ -1047,6 +1084,144 @@ unchanged.
 </TABLE>
 
 </div>
+
+<br />
+<br />
+
+<!--==================================================================-->
+<!-- Documentation on the new Quad Filter use and functionality       -->
+<!--==================================================================-->
+
+<A NAME="QuadFilter"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>Quadratic Squared Error Filter</H2>
+<P>
+This version of filter includes an optional Quadratic Squared Error 
+Filter which can be combined with any of the other available filter kinds.
+There are a few additional steps required to use this filter. 
+These include building filter with the Quad Filter observation types
+included, setting the <em class=code>quad_filter</em>
+namelist item to <em class=code>.TRUE.</em>, 
+augmenting the input <em class=file>obs_seq</em> file to include
+"pseudo observations", and then removing the pseudo obs before
+using the standard DART MATLAB observation space diagnostics.
+See below for more details on each of these steps.
+</P>
+<P>FIXME: Is there a reference/paper/something that I can add to the
+references section and put a link to that here?
+</P>
+
+<H4>Adding Quad Filter observation types support</H4>
+<P>
+In the <em class=file>DART/models/xxx/work</em> directory,
+in the <em class=file>input.nml</em> namelist file, in the
+<em class=code>&preprocess_nml :: input_files</em> list, add
+<em class=file>"../../../obs_def/obs_def_quad_filter_mod.f90"</em>
+to the list of forward operator/observation type definition files
+that already exist for this model.
+</P>
+
+<H4>Adding the files to build the Pseudo Observations tool</H4>
+<P>
+The input observation sequence file must be augmented
+with additional "pseudo observations".  A new tool is provided to add these
+observations, <em class=file>obs_add_pseudo_obs</em>.
+</P>
+<P>
+This tool works with any model, but the <em class=file>mkmf_obs_add_pseudo_obs</em> and
+<em class=file>path_names_obs_add_pseudo_obs</em> files may not be in all model
+<em class=file>work</em> directories. Copy these files from the
+<em class=file>DART/obs_sequence</em> directory and update them for
+the model being used.  Consult other <em class=file>path_names_xxx</em>
+files in the <em class=file>work</em> directory
+to determine the correct locations module to include, and add any additional
+model-specific modules that might be needed beyond the standard model_mod.f90.
+</P>
+
+<H4>Building all executables with Quad Filter support</H4>
+<P>
+Compile all the executables for this model with the
+<em class=file>quickbuild.csh</em> script.  Add the <em class=code>-mpi</em>
+flag to compile a parallel version of filter; <em class=code>-nompi</em>
+to build a serial version.  The <em class=file>obs_add_pseudo_obs</em>
+executable should be built along with the other tools if the 
+<em class=file>mkmf_obs_add_pseudo_obs</em> file is in 
+the <em class=file>work</em> directory.
+</P>
+
+<H4>Altering the observation sequence file to add Pseudo Observations</H4>
+<P>
+As the last step before running filter, run the new
+<a href="../obs_sequence/obs_add_pseudo_obs.html">obs_add_pseudo_obs</a>
+tool to augment the obs_sequence file.  Each observation will have a
+corresponding "pseudo observation" added, so the obs_seq file will double 
+in size.  This new obs_seq file should be used as the input to filter.
+</P>
+<P>
+The tool requires a namelist.  See the example <em class=file>obs_add_pseudo_obs.nml</em>
+namelist file in the <em class=file>obs_sequence</em> directory.  It must be
+added to the <em class=file>input.nml</em> file where all DART namelists are located.
+</P>
+<P>
+Here is an example of that namelist:
+<div class=indent><pre>
+&amp;obs_add_pseudo_obs_nml
+   filename_in  = 'obs_seq.out', 
+   filename_out = 'obs_seq_with_pseudo_obs.out', 
+/
+</pre></div>
+
+<H4>Running filter with the Quad Filter enabled</H4>
+<P>
+Run filter as before, setting the <em class=code>quad_filter</em>
+namelist item to <em class=code>.TRUE.</em>, and leaving the
+<em class=code>quad_filter_eval_only</em> item as <em class=code>.FALSE.</em>&nbsp;.
+</P>
+<P>
+To quickly compare a quad filter run with a standard filter run, leave all
+the settings the same but set
+<em class=code>quad_filter_eval_only</em> to <em class=code>.TRUE.</em>&nbsp;.
+This will evaluate the Pseudo observations in the input obs_seq file but
+they will not impact the state.  The output will be identical to running
+without the Quad filter.
+</P>
+<P>
+Be sure the <em class=code>&amp;filter_nml</em> is using the observation sequence file
+which includes the Pseudo observations, e.g.
+<div class=indent><pre>
+&amp;filter_nml
+   ...
+   obs_sequence_in_name     = "obs_seq_with_pseudo_obs.out",
+   obs_sequence_out_name    = "obs_seq_with_pseudo_obs.final",
+   ...
+   quad_filter              = .true.,
+   quad_filter_eval_only    = .false.,
+   ...
+/
+</pre></div>
+</P>
+
+<H4>Removing the Pseudo Observations before running Diagnostics</H4>
+<P>
+The output state
+space diagnostics files are identical to the non-quad-filter files
+so any diagnostic plots or programs will work as before.
+However the output observation sequence file has additional observations
+that will generally need to be removed before running the standard DART
+observation diagnostic routines.
+</P>
+<P>
+To remove the pseudo observations, run the standard DART
+<em class=file>obs_sequence_tool</em> with a namelist similar to this:
+<div class=indent><pre>
+&amp;obs_sequence_tool_nml
+   filename_seq      = 'obs_seq_with_pseudo_obs.final'
+   filename_out      = 'obs_seq.final',
+   keep_types        = .false.,
+   obs_types         = 'QUAD_FILTER_SQUARED_ERROR',
+/
+</pre></div>
+</P>
 
 <br />
 <br />

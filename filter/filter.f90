@@ -96,8 +96,8 @@ integer  :: last_obs_seconds    = -1
 integer  :: obs_window_days     = -1
 integer  :: obs_window_seconds  = -1
 ! Turn on quad filter 
-logical  :: quad_filter         = .false.
-logical  :: quad_filter_degenerate = .false.  ! if true, eval only all pseudo obs
+logical  :: quad_filter            = .false.
+logical  :: quad_filter_eval_only  = .false.  ! if true, eval only all pseudo obs
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -149,7 +149,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence, quad_filter_degenerate
+   silence, quad_filter_eval_only
 
 ! Are any of the observation types subject to being updated
 ! during the computation?  e.g. quad filter
@@ -2410,7 +2410,7 @@ do i = 1, npairs
       ! has a qc of 0, set the pseudo obs qc to -1, which is interpreted as eval only.
 
       pseudo_qc = forward_op_ens_handle%copies(j, original)
-      if (quad_filter_degenerate .and. pseudo_qc == 0) pseudo_qc = -1   
+      if (quad_filter_eval_only .and. pseudo_qc == 0) pseudo_qc = -1   
 
       if (quad_verbose) then
          write(msgstring,*) 'j/o/s, Q.C. original, squared = ', j, original, squared, &

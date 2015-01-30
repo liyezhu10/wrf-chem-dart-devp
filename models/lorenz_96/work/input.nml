@@ -28,7 +28,7 @@
    start_from_restart       = .true.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_pseudo.out",
-   obs_sequence_out_name    = "obs_seq.final",
+   obs_sequence_out_name    = "obs_pseudo.final",
    restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
    init_time_days           = 0,
@@ -38,6 +38,7 @@
    last_obs_days            = -1,
    last_obs_seconds         = -1,
    quad_filter              = .true.,
+   quad_filter_eval_only    = .false.,
    num_output_state_members = 20,
    num_output_obs_members   = 20,
    output_interval          = 1,
@@ -112,7 +113,6 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
-                                'QUAD_FILTER_SQUARED_ERROR',
    /
 
 &assim_model_nml
@@ -169,15 +169,12 @@
    /
 
 &obs_sequence_tool_nml
-   filename_seq      = 'obs1.out', 'obs2.out',
-   filename_seq_list = '',
-   filename_out      = 'obs_seq.combined',
-   first_obs_days    = -1,
-   first_obs_seconds = -1,
-   last_obs_days     = -1,
-   last_obs_seconds  = -1,
+   filename_seq      = 'obs_pseudo.final'
+   filename_out      = 'obs_seq.final',
    print_only        = .false.,
    gregorian_cal     = .false.,
+   keep_types        = .false.,
+   obs_types         = 'QUAD_FILTER_SQUARED_ERROR',
    /
 
 # other possible obs tool namelist items:
