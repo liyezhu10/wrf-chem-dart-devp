@@ -24,6 +24,10 @@ set process = $1
 set num_states = $2
 set control_file = $3
 
+echo "My process ID is $process"
+echo "I am responsible for advancing $num_states states."
+echo "I am going to read my filenames from $control_file"
+
 #-------------------------------------------------------------------------
 # Block 1: populate a run-time directory with the bits needed to 
 # run the ocean model.
@@ -41,17 +45,15 @@ cd       $temp_dir
 # Get the 'changing' namelist files from CENTRALDIR
 # Only the namelists in CENTRALDIR have the updated information about
 # the state of the model partway through an assimilation experiment.
-foreach FILE ( ../ucoam_in.part1 \
-               ../ucoam_in.part2 \
-               ../input.nml )
+foreach FILE ( ../input.nml )
    cp -pv $FILE . || exit 1
 end
 
 # Try to ensure that the input.nml has the required value for
-# dart_to_ucoam_nml:advance_time_present for this context.
+# dart_to_gcom_nml:advance_time_present for this context.
 
 echo '1'                      >! ex_commands
-echo '/dart_to_ucoam_nml'     >> ex_commands
+echo '/dart_to_gcom_nml'      >> ex_commands
 echo '/advance_time_present'  >> ex_commands
 echo ':s/\.false\./\.true\./' >> ex_commands
 echo ':wq'                    >> ex_commands
@@ -59,11 +61,8 @@ echo ':wq'                    >> ex_commands
 ( ex input.nml < ex_commands ) >& /dev/null
 \rm -f ex_commands
 
-# copy the files used by 
-foreach FILE ( ../horiz_grid.gx3v5.* \
-               ../topography.gx3v5.* \
-               ../vert_grid.gx3v5    \
-               ../*_contents )
+# copy the files used by GCOM & DART
+foreach FILE ( ../gcom_geometry.nc )
    ln -sfv $FILE . || exit 1
 end
 
@@ -77,68 +76,56 @@ set input_file_line = 2
 set output_file_line = 3
 while($state_copy <= $num_states)
    
-   set ensemble_member = `head -$ensemble_member_line ../$control_file | tail -1`
-   set input_file      = `head -$input_file_line      ../$control_file | tail -1`
-   set output_file     = `head -$output_file_line     ../$control_file | tail -1`
+   set ensemble_member = `head -n $ensemble_member_line ../$control_file | tail -n 1`
+   set input_file      = `head -n $input_file_line      ../$control_file | tail -n 1`
+   set output_file     = `head -n $output_file_line     ../$control_file | tail -n 1`
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model.
-   # We are going to take a ucoam netCDF restart file and simply overwrite the
+   # We are going to take a gcom netCDF restart file and simply overwrite the
    # appropriate variables. The DART output file also has the 'advance_to'
    # time - which must be communicated to the model ...
    #----------------------------------------------------------------------
 
-   # The EXPECTED DART filter restart_out_file_name is 'dart_restart'
-   # The dart_to_ucoam_nml:advance_time_present = .TRUE. must be set
+   # The EXPECTED DART dart_to_gcom_input_file is 'dart_restart'
+   # The dart_to_gcom_nml:advance_time_present = .TRUE. must be set
 
    ln -sfv ../$input_file dart_restart || exit 2
 
-   # CENTRALDIR will always contain a pointer file containing the name
-   # of the most recent ucoam restart file for this ensemble member.
-   # Locally, the ucoam restart file name is always ucoam.r.nc
+   # CENTRALDIR will always contain the gcom_restart.nc file.
+   # The most recent gcom timestep is inserted into this file.
 
-   if ( -e ../rpointer.ocn.${ensemble_member}.restart ) then
-      # dereference the pointer file
-      set RESTARTFILE = `head -1 ../rpointer.ocn.${ensemble_member}.restart`
-      cp -pv ../${RESTARTFILE} ucoam.r.nc || exit 2
-   
-   else
-      echo "ERROR: Pointer file for ensemble member $ensemble_member is missing."
-      echo "Looking for "`pwd`" ../rpointer.ocn.${ensemble_member}.restart"
-      echo "Exiting ... (pointer file not found in CENTRALDIR)"
-      exit 2
-   endif
+   set RESTARTFILE = `printf %04d gcom_restart_${ensemble_member}.nc'`
 
-   # create a ucoam_in to satisfy dart_ucoam_mod:initialize_module()
+   cp -pv ../${RESTARTFILE} gcom.r.nc || exit 2
 
-   cat ucoam_in.part1 ucoam_in.part2 >! ucoam_in
+   ../dart_to_gcom || exit 2
 
-   ../dart_to_ucoam || exit 2
 
-   # Convey the new ucoam 'advance_to' time to ucoam via the namelist
-   cat ucoam_in.DART ucoam_in.part2 >! ucoam_in
+   # Convey the new gcom 'advance_to' time to gcom via the namelist
+   cat gcom_in.DART gcom_in.part2 >! gcom_in
 
-   # ucoam needs a pointer file containing the restart filename
-   echo "ucoam.r.nc"       >! rpointer.ocn.restart
+   # gcom needs a pointer file containing the restart filename
+   echo "gcom.r.nc"       >! rpointer.ocn.restart
    echo "RESTART_FMT=nc" >> rpointer.ocn.restart
 
    #----------------------------------------------------------------------
    # Block 3: Run the ocean model
    # The CCSM version has a pointer file that contains the name of the
    # last restart. The LANL version has no such mechanism, but the 
-   # filename can be predicted from the ucoam_in namelist information.
+   # filename can be predicted from the gcom_in namelist information.
    #----------------------------------------------------------------------
    # the value of MPI is inherited
 
    rm -f ocn.log.*
 
-   ${MPI} ../ucoam || exit 3
+   ${MPI} ../gcom || exit 3
 
-   grep "Successful completion of ucoam run" ocn.log.*
-   set ucoamstatus = $status
-   if ( $ucoamstatus != 0 ) then
-      echo "ERROR - ucoam ensemble member $ensemble_member did not complete successfully" 
-      echo "ERROR - ucoam ensemble member $ensemble_member did not complete successfully" 
+   grep "Successful completion of gcom run" ocn.log.*
+   set gcomstatus = $status
+   if ( $gcomstatus != 0 ) then
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
       exit 3 
    endif
    
@@ -148,26 +135,26 @@ while($state_copy <= $num_states)
 
    ls -lrt
 
-   # ucoam makes a new restart file and updates the pointer file
-   # Rename the ucoam pointer file contents to contain the ensemble member info
+   # gcom makes a new restart file and updates the pointer file
+   # Rename the gcom pointer file contents to contain the ensemble member info
 
    set RESTARTFILE = `head -1 rpointer.ocn.restart`
-   set NEWFILE = `echo $RESTARTFILE | sed -e "s/ucoam/ucoam.$ensemble_member/"`
-   echo "ucoam member $ensemble_member made restart file $NEWFILE"
+   set NEWFILE = `echo $RESTARTFILE | sed -e "s/gcom/gcom.$ensemble_member/"`
+   echo "gcom member $ensemble_member made restart file $NEWFILE"
 
    mv -v $RESTARTFILE $NEWFILE
   
    echo $NEWFILE         >! rpointer.ocn.restart 
    echo "RESTART_FMT=nc" >> rpointer.ocn.restart
 
-   ln -svf ${NEWFILE} ucoam.r.nc || exit 4
+   ln -svf ${NEWFILE} gcom.r.nc || exit 4
    
-   # ucoam_to_dart reads the restart file after the model advance and writes
+   # gcom_to_dart reads the restart file after the model advance and writes
    # out an updated DART 'initial conditions' file. This initial conditions
    # file contains a header with the valid time of the ensuing model state.
-   # The ucoam restart files contain the valid time of the model state.
+   # The gcom restart files contain the valid time of the model state.
 
-   ../ucoam_to_dart || exit 4
+   ../gcom_to_dart || exit 4
 
    # The (new,updated) DART restart file name is called 'dart_ics'
    # Move the updated files back to 'centraldir'
@@ -184,7 +171,7 @@ while($state_copy <= $num_states)
 end
 
 # must communicate the time_manager_nml:stop_count 
-# cp -pv ucoam_in.DART ../ucoam_in
+# cp -pv gcom_in.DART ../gcom_in
 
 # Change back to original directory and get rid of temporary directory
 cd ..

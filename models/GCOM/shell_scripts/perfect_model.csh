@@ -10,7 +10,7 @@
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
 
-echo "`date` -- BEGIN GENERATE ucoam TRUE STATE"
+echo "`date` -- BEGIN GENERATE GCOM TRUE STATE"
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
@@ -45,7 +45,10 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
+      set BASEOBSDIR = /home/thoar/svn/DART/UCOAM/models/GCOM/work
+      set    DARTDIR = /home/thoar/svn/DART/UCOAM/models/GCOM
+      set   SERUCOAM = /home/mgarcia/UCOAM-Moh/serucoam
+
    breaksw
 endsw
 
@@ -56,26 +59,26 @@ endsw
 # Piping stuff through 'bc' strips off any preceeding zeros.
 #-------------------------------------------------------------------------
 
-set FILE = `head -n 1 rpointer.ocn.restart`
-set FILE = $FILE:t
-set FILE = $FILE:r
-set MYCASE = `echo $FILE | sed -e "s#\..*##"`
-set OCN_DATE_EXT = `echo $FILE:e`
-set OCN_DATE     = `echo $FILE:e | sed -e "s#-# #g"`
-set OCN_YEAR     = `echo $OCN_DATE[1] | bc`
-set OCN_MONTH    = `echo $OCN_DATE[2] | bc`
-set OCN_DAY      = `echo $OCN_DATE[3] | bc`
-set OCN_SECONDS  = `echo $OCN_DATE[4] | bc`
-set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
-
-echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
-echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
+#set FILE = `head -n 1 rpointer.ocn.restart`
+#set FILE = $FILE:t
+#set FILE = $FILE:r
+#set MYCASE = `echo $FILE | sed -e "s#\..*##"`
+#set OCN_DATE_EXT = `echo $FILE:e`
+#set OCN_DATE     = `echo $FILE:e | sed -e "s#-# #g"`
+#set OCN_YEAR     = `echo $OCN_DATE[1] | bc`
+#set OCN_MONTH    = `echo $OCN_DATE[2] | bc`
+#set OCN_DAY      = `echo $OCN_DATE[3] | bc`
+#set OCN_SECONDS  = `echo $OCN_DATE[4] | bc`
+#set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
+#
+#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
+#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
 
 #-------------------------------------------------------------------------
 # Create temporary working directory for the perfect model and go there
 #-------------------------------------------------------------------------
 
-set temp_dir = pmo_ucoam
+set temp_dir = pmo_gcom
 echo "temp_dir is $temp_dir"
 
 if ( -d $temp_dir ) then
@@ -90,9 +93,11 @@ cd $temp_dir
 # The observation file names have a time that matches the stopping time of ucoam.
 #-----------------------------------------------------------------------------
 
-set YYYYMM   = `printf %04d%02d                ${OCN_YEAR} ${OCN_MONTH}`
-set OBSFNAME = `printf obs_seq.0Z.%04d%02d%02d ${OCN_YEAR} ${OCN_MONTH} ${OCN_DAY}`
-set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}/${OBSFNAME}
+# set YYYYMM   = `printf %04d%02d                ${OCN_YEAR} ${OCN_MONTH}`
+# set OBSFNAME = `printf obs_seq.0Z.%04d%02d%02d ${OCN_YEAR} ${OCN_MONTH} ${OCN_DAY}`
+# set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}/${OBSFNAME}
+
+set OBS_FILE = ${BASEOBSDIR}/obs_seq.in
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.in
@@ -118,19 +123,27 @@ endif
 # &ucoam_to_dart_nml:        ucoam_to_dart_output_file = 'dart_ics'
 #=========================================================================
 
-if ( ! -e ${CASEROOT}/input.nml ) then
-   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
+if ( ! -e ${DARTDIR}/work/input.nml ) then
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
    exit -2
 endif
 
-sed -e "s#dart_ics#perfect_ics#" < ${CASEROOT}/input.nml >! input.nml
+sed -e "s#dart_ics#perfect_ics#" < ${DARTDIR}/work/input.nml >! input.nml
 
-set OCN_RESTART_FILENAME = ${MYCASE}.ucoam.r.${OCN_DATE_EXT}.nc
-set     OCN_NML_FILENAME = ucoam2_in
+${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit -1
+${COPY} ${DARTDIR}/work/dart_to_gcom               . || exit -1
+${COPY} ${DARTDIR}/work/gcom_to_dart               . || exit -1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit -1
 
-${LINK} ../$OCN_RESTART_FILENAME ucoam.r.nc
-${LINK} ../$OCN_NML_FILENAME     ucoam_in
+set OCN_RESTART_FILENAME = gcom_restart.nc
+set OCN_GEOMETRY_FILENAME = gcom_geometry.nc
+
+# This would be better in the long run, but for now ...
+# ${COPY} ${SERUCOAM}/OUTPUT/$OCN_RESTART_FILENAME   . || exit -1
+${COPY} ${SERUCOAM}/OUTPUT/$OCN_GEOMETRY_FILENAME  . || exit -1
+
+${COPY} ${DARTDIR}/data/gcom_restart_1986-01-01.43200.nc $OCN_RESTART_FILENAME || exit -1
 
 #=========================================================================
 # Block 2: Convert 1 ucoam restart file to a DART initial conditions file.
@@ -138,9 +151,9 @@ ${LINK} ../$OCN_NML_FILENAME     ucoam_in
 # that came from the contents of the pointer file ../rpointer.ocn.restart
 #=========================================================================
 
-echo "`date` -- BEGIN ucoam-TO-DART"
+echo "`date` -- BEGIN GCOM-TO-DART"
 
-${EXEROOT}/ucoam_to_dart
+./gcom_to_dart
 
 if ($status != 0) then
    echo "ERROR ... DART died in 'ucoam_to_dart' ... ERROR"
@@ -148,7 +161,7 @@ if ($status != 0) then
    exit -3
 endif
 
-echo "`date` -- END ucoam-TO-DART"
+echo "`date` -- END GCOM-TO-DART"
 
 #=========================================================================
 # Block 3: Advance the model and harvest the synthetic observations.
@@ -161,7 +174,7 @@ echo "`date` -- END ucoam-TO-DART"
 
 echo "`date` -- BEGIN ucoam PERFECT_MODEL_OBS"
 
-${EXEROOT}/perfect_model_obs
+./perfect_model_obs
 
 if ($status != 0) then
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"

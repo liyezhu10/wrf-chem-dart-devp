@@ -24,12 +24,13 @@ program dart_to_gcom
 
 use        types_mod, only : r8
 
-use    utilities_mod, only : initialize_utilities, finalize_utilities, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities,   &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, error_handler, E_MSG
 
 use        model_mod, only : static_init_model, dart_vector_to_gcom_file, &
-                             get_model_size, get_gcom_restart_filename
+                             get_model_size, get_gcom_restart_filename,   &
+                             write_gcom_timeinfo
 
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 
@@ -112,7 +113,7 @@ call close_restart(iunit)
 call dart_vector_to_gcom_file(statevector, gcom_restart_filename, model_time)
 
 if ( advance_time_present ) then
-!  call write_gcom_namelist(model_time, adv_to_time)
+   call write_gcom_timeinfo(model_time, adv_to_time)
 endif
 
 !----------------------------------------------------------------------

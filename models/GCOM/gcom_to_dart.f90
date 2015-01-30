@@ -103,6 +103,13 @@ call print_date(model_time, str='gcom_to_dart:GCOM model date')
 call print_time(model_time, str='gcom_to_dart:DART model time')
 call finalize_utilities('gcom_to_dart')
 
+
+!----------------------------------------------------------------------
+! Write the model time to some cookie file ...
+!----------------------------------------------------------------------
+
+
+
 end program gcom_to_dart
 
 ! <next few lines under version control, do not edit>

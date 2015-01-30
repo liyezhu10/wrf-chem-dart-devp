@@ -30,7 +30,7 @@ use    utilities_mod, only : register_module, logfileunit, get_unit,     &
                              nc_check, do_output, to_upper,              &
                              find_namelist_in_file, check_namelist_read, &
                              open_file, file_exist, find_textfile_dims,  &
-                             file_to_text, do_output
+                             file_to_text, do_output, close_file
 
 use     obs_kind_mod, only : KIND_TEMPERATURE,           &
                              KIND_SALINITY,              &
@@ -79,7 +79,9 @@ public :: get_gridsize,              &
           gcom_file_to_dart_vector,  &
           dart_vector_to_gcom_file,  &
           DART_get_var,              &
-          test_interpolation
+          test_interpolation,        &
+          write_gcom_timeinfo
+
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -161,6 +163,7 @@ integer, parameter :: n2dfields = 1
 ! (the absoft compiler likes them to all be the same length during declaration)
 ! we trim the blanks off before use anyway, so ...
 character(len=128) :: progvarnames(5) = (/'SALT ','TEMP ','UVEL ','VVEL ','PSURF'/)
+! TJH FIXME ... remove this baggage.
 
 integer, parameter :: S_index     = 1
 integer, parameter :: T_index     = 2
@@ -552,7 +555,19 @@ logical        :: convert_to_ssh
 
 if ( .not. module_initialized ) call static_init_model
 
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
 call error_handler(E_MSG,'model_interpolate','FIXME TJH UNTESTED')
+call error_handler(E_MSG,'model_interpolate','FIXME TJH UNTESTED')
+interp_val = 10.0_r8
+istatus = 0
+return
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
+! TJH DEBUG FIXME 
 
 ! print data min/max values
 if (debug > 2) call print_ranges(x)
@@ -1471,8 +1486,6 @@ real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
 if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'adv_1step','FIXME TJH UNTESTED')
 
 call error_handler(E_ERR,'adv_1step', &
                   'GCOM model cannot be called as a subroutine; async cannot = 0', &
@@ -2429,6 +2442,27 @@ do ivar=1, nfields
       allocate(data_1d_array(progvar(ivar)%dimlens(1)))
       call DART_get_var(ncid, varname, data_1d_array)
 
+      if (    progvar(ivar)%units == 'm/s') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'psu') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees celsius') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'bar') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'km/s') then
+         write(string1,*) 'converting variable ', trim(progvar(ivar)%varname)
+         write(string2,*) 'from ', trim(progvar(ivar)%units),' to m/s'
+         call error_handler(E_MSG,'gcom_file_to_dart_vector', string1, text2=string2)
+
+         data_1d_array = data_1d_array/1000.0_r8 ! convert km/s to meters/s
+      else
+         write(string1,*) 'no support for units of ', trim(progvar(ivar)%units)
+         write(string2,*) 'on variable ', trim(progvar(ivar)%varname)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
+                        source, revision, revdate, text2=string2)
+      endif
+
       do i = 1, progvar(ivar)%dimlens(1)
          state_vector(indx) = data_1d_array(i)
          indx = indx + 1
@@ -2440,6 +2474,27 @@ do ivar=1, nfields
       allocate(data_2d_array(progvar(ivar)%dimlens(1), &
                              progvar(ivar)%dimlens(2)))
       call DART_get_var(ncid, varname, data_2d_array)
+
+      if (    progvar(ivar)%units == 'm/s') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'psu') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees celsius') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'bar') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'km/s') then
+         write(string1,*) 'converting variable ', trim(progvar(ivar)%varname)
+         write(string2,*) 'from ', trim(progvar(ivar)%units),' to m/s'
+         call error_handler(E_MSG,'gcom_file_to_dart_vector', string1, text2=string2)
+
+         data_2d_array = data_2d_array/1000.0_r8 ! convert km/s to meters/s
+      else
+         write(string1,*) 'no support for units of ', trim(progvar(ivar)%units)
+         write(string2,*) 'on variable ', trim(progvar(ivar)%varname)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
+                        source, revision, revdate, text2=string2)
+      endif
 
       do j = 1, progvar(ivar)%dimlens(2)
       do i = 1, progvar(ivar)%dimlens(1)
@@ -2455,6 +2510,27 @@ do ivar=1, nfields
                              progvar(ivar)%dimlens(2), &
                              progvar(ivar)%dimlens(3)))
       call DART_get_var(ncid, varname, data_3d_array)
+
+      if (    progvar(ivar)%units == 'm/s') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'psu') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees celsius') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'bar') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'km/s') then
+         write(string1,*) 'converting variable ', trim(progvar(ivar)%varname)
+         write(string2,*) 'from ', trim(progvar(ivar)%units),' to m/s'
+         call error_handler(E_MSG,'gcom_file_to_dart_vector', string1, text2=string2)
+
+         data_3d_array = data_3d_array/1000.0_r8 ! convert km/s to meters/s
+      else
+         write(string1,*) 'no support for units of ', trim(progvar(ivar)%units)
+         write(string2,*) 'on variable ', trim(progvar(ivar)%varname)
+         call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
+                        source, revision, revdate, text2=string2)
+      endif
 
       do k = 1, progvar(ivar)%dimlens(3)
       do j = 1, progvar(ivar)%dimlens(2)
@@ -2753,7 +2829,7 @@ if (dimIDs(1) == TimeDimID) then
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 99)) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -2962,7 +3038,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 99)) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -3176,7 +3252,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 99)) then
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -3483,6 +3559,44 @@ call error_handler(E_ERR,'test_interpolation','not written yet', source, revisio
 ! TJH FIXME just to silence compiler
 write(*,*)'string1 ',test_casenum
 end subroutine test_interpolation
+
+
+!-----------------------------------------------------------------------
+!>
+!> write the time information to a cookie file so we can use it to
+!> control the length of the forecast from GCOM
+
+subroutine write_gcom_timeinfo(current_time, forecast_stop_time)
+type(time_type), intent(in) :: current_time
+type(time_type), intent(in) :: forecast_stop_time
+
+integer :: iunit
+integer :: current_days, current_seconds
+integer :: stop_days, stop_seconds
+integer :: forecast_days, forecast_seconds
+type(time_type) :: forecast_duration
+
+if ( .not. module_initialized ) call static_init_model
+
+forecast_duration = forecast_stop_time - current_time
+
+call get_time(forecast_duration,  forecast_seconds, forecast_days)
+call get_time(current_time,        current_seconds,  current_days)
+call get_time(forecast_stop_time,     stop_seconds,     stop_days)
+
+iunit = open_file('dart_gcom_timeinfo.txt',form='formatted',action='write')
+
+write(iunit,*)'current  time (days,seconds) is ',current_days, current_seconds
+write(iunit,*)'stop     time (days,seconds) is ',stop_days, stop_seconds
+write(iunit,*)'forecast duration (days,seconds) is ',forecast_days, forecast_seconds
+
+call close_file(iunit)
+
+call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
+call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
+call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
+
+end subroutine write_gcom_timeinfo
 
 
 !=======================================================================
@@ -4813,12 +4927,6 @@ real(r8), intent(in) :: x(:)
 
 integer :: s, e
 
-!  S_index     = 1
-!  T_index     = 2
-!  U_index     = 3
-!  V_index     = 4
-!  PSURF_index = 5
-
 call error_handler(E_ERR,'print_ranges','routine not written yet', &
                       source, revision, revdate)
 
@@ -5480,7 +5588,8 @@ integer  ::  dimIDs(NF90_MAX_VAR_DIMS)
 integer  :: dimlens(NF90_MAX_VAR_DIMS)
 integer  :: VarID, numdims, i
 
-call nc_check(nf90_inq_varid(ncid, varname, VarID), 'get_grid_variable', 'inq_varid')
+call nc_check(nf90_inq_varid(ncid, varname, VarID), 'get_grid_variable', &
+                   'inq_varid ['//trim(varname)//']')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims), &
                    'get_grid_variable', 'inquire_variable '//trim(varname))
 
