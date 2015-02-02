@@ -111,6 +111,7 @@
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
                                 'QUAD_FILTER_SQUARED_ERROR'
+   /
 
 &assim_model_nml
    write_binary_restart_files = .false.,
