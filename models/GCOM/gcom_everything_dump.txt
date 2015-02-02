@@ -1,115 +1,121 @@
 netcdf gcom_everything {
 dimensions:
 	time = UNLIMITED ; // (10 currently)
-	lon = 97 ;
-	lat = 33 ;
-	lev = 33 ;
-	slon = 96 ;
-	slat = 32 ;
-	slev = 32 ;
+	nxp1 = 97 ;
+	nyp1 = 33 ;
+	nzp1 = 33 ;
+	nx = 96 ;
+	ny = 32 ;
+	nz = 32 ;
 variables:
 	double	time(time) ;
 		time:units = "days since 1601-01-01 00:00:00" ;
 		time:long_name = "time" ;
 		time:calendar = "gregorian" ;
 
-	double	u(time, slev, slat, lon) ;
+	double	u(time, nz, ny, nxp1) ;
 		u:units = "km/s" ;
 		u:long_name = "u component of the velocity" ;
+		u:coordinates = "ulon ulat ulev time" ;
 
-	double	ulon(slev, slat, lon) ;
+	double	ulon(nz, ny, nxp1) ;
 		ulon:axis = "X" ;
 		ulon:long_name = "longitude" ;
 		ulon:units = "degrees_east" ;
-		ulon:description = "longitudes of the u component of velocity" ;
+		ulon:comment = "longitudes of the u component of velocity" ;
 
-	double	ulat(slev, slat, lon) ;
+	double	ulat(nz, ny, nxp1) ;
 		ulat:axis = "Y" ;
 		ulat:long_name = "latitude" ;
 		ulat:units = "degrees_north" ;
-		ulat:description = "latitudes of the u component of velocity" ;
+		ulat:comment = "latitudes of the u component of velocity" ;
 
-	double	ulev(slev, slat, lon) ;
+	double	ulev(nz, ny, nxp1) ;
 		ulev:axis = "Z" ;
                 ulev:positive = "up" ;
 		ulev:long_name = "depth" ;
 		ulev:units = "meters" ;
-		ulev:description = "depths of the u component of velocity" ;
+		ulev:comment = "depths of the u component of velocity" ;
 
-	double	v(time, slev, lat, slon) ;
+	double	v(time, nz, nyp1, nx) ;
 		v:units = "km/s" ;
 		v:long_name = "v component of the velocity" ;
+		v:coordinates = "vlon vlat vlev time" ;
 
-	double	vlon(slev, lat, slon) ;
+	double	vlon(nz, nyp1, nx) ;
 		vlon:axis = "X" ;
 		vlon:long_name = "longitude" ;
 		vlon:units = "degrees_east" ;
-		vlon:description = "longitudes of the v component of the velocity" ;
+		vlon:comment = "longitudes of the v component of the velocity" ;
 
-	double	vlat(slev, lat, slon) ;
+	double	vlat(nz, nyp1, nx) ;
 		vlat:axis = "Y" ;
 		vlat:long_name = "latitude" ;
 		vlat:units = "degrees_north" ;
-		vlat:description = "latitudes of the v component of the velocity" ;
+		vlat:comment = "latitudes of the v component of the velocity" ;
 
-	double	vlev(slev, lat, slon) ;
+	double	vlev(nz, nyp1, nx) ;
 		vlev:axis = "Z" ;
 		vlev:positive = "up" ;
 		vlev:long_name = "depth" ;
 		vlev:units = "meters" ;
-		vlev:description = "depths of the v component of the velocity" ;
+		vlev:comment = "depths of the v component of the velocity" ;
 
-	double	w(time, lev, slat, slon) ;
+	double	w(time, nzp1, ny, nx) ;
 		w:units = "km/s" ;
 		w:long_name = "w component of the velocity" ;
+		w:coordinates = "wlon wlat wlev time" ;
 
-	double	wlon(lev, slat, slon) ;
+	double	wlon(nzp1, ny, nx) ;
 		wlon:axis = "X" ;
 		wlon:long_name = "longitude" ;
 		wlon:units = "degrees_east" ;
-		wlon:description = "longitudes of the w component of the velocity" ;
+		wlon:comment = "longitudes of the w component of the velocity" ;
 
-	double	wlat(lev, slat, slon) ;
+	double	wlat(nzp1, ny, nx) ;
 		wlat:axis = "Y" ;
 		wlat:long_name = "latitude" ;
 		wlat:units = "degrees_north" ;
-		wlat:description = "latitudes of the w component of the velocity" ;
+		wlat:comment = "latitudes of the w component of the velocity" ;
 
-	double	wlev(lev, slat, slon) ;
+	double	wlev(nzp1, ny, nx) ;
 		wlev:axis = "Z" ;
 		wlev:positive = "up" ;
 		wlev:long_name = "depth" ;
 		wlev:units = "meters" ;
-		wlev:description = "depths of the w component of the velocity" ;
+		wlev:comment = "depths of the w component of the velocity" ;
 
-	double	p(time, slev, slat, slon) ;
+	double	p(time, nz, ny, nx) ;
 		p:units = "bar" ;
 		p:long_name = "non-hydrostatic pressure" ;
-	double	T(time, slev, slat, slon) ;
+		p:coordinates = "lon lat lev time" ;
+	double	T(time, nz, ny, nx) ;
 		T:units = "degrees celsius" ;
 		T:long_name = "temperature" ;
-	double	S(time, slev, slat, slon) ;
+		T:coordinates = "lon lat lev time" ;
+	double	S(time, nz, ny, nx) ;
 		S:units = "psu" ;
 		S:long_name = "initial salinity" ;
+		S:coordinates = "lon lat lev time" ;
 
-	double	lon(slev, slat, slon) ;
+	double	lon(nz, ny, nx) ;
 		lon:axis = "X" ;
 		lon:long_name = "longitude" ;
 		lon:units = "degrees_east" ;
-		lon:description = "longitudes of [p,S,T]" ;
+		lon:comment = "longitude of grid center [p,S,T]" ;
 
-	double	lat(slev, slat, slon) ;
+	double	lat(nz, ny, nx) ;
 		lat:axis = "Y" ;
 		lat:long_name = "latitude" ;
 		lat:units = "degrees_north" ;
-		lat:description = "latitudes of [p,S,T]" ;
+		lat:comment = "latitude of grid center [p,S,T]" ;
 
-	double	lev(slev, slat, slon) ;
+	double	lev(nz, ny, nx) ;
 		lev:axis = "Z" ;
 		lev:positive = "up" ;
 		lev:units = "meters" ;
 		lev:long_name = "depth" ;
-		lev:description = "depths of [p,S,T]" ;
+		lev:comment = "depth of grid center [p,S,T]" ;
 
 // global attributes:
 		:title = "Seamount Bathymetry for General Curvilinear Ocean Model GCOM" ;
