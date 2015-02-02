@@ -1,110 +1,110 @@
 netcdf gcom_everything {
 dimensions:
 	time = UNLIMITED ; // (10 currently)
-	nx = 97 ;
-	ny = 33 ;
-	nz = 33 ;
-	sx = 96 ;
-	sy = 32 ;
-	sz = 32 ;
+	lon = 97 ;
+	lat = 33 ;
+	lev = 33 ;
+	slon = 96 ;
+	slat = 32 ;
+	slev = 32 ;
 variables:
 	double	time(time) ;
 		time:units = "days since 1601-01-01 00:00:00" ;
 		time:long_name = "time" ;
 		time:calendar = "gregorian" ;
 
-	double	u(time, sz, sy, nx) ;
+	double	u(time, slev, slat, lon) ;
 		u:units = "km/s" ;
 		u:long_name = "u component of the velocity" ;
 
-	double	ulon(sz, sy, nx) ;
+	double	ulon(slev, slat, lon) ;
 		ulon:axis = "X" ;
 		ulon:long_name = "longitude" ;
 		ulon:units = "degrees_east" ;
 		ulon:description = "longitudes of the u component of velocity" ;
 
-	double	ulat(sz, sy, nx) ;
+	double	ulat(slev, slat, lon) ;
 		ulat:axis = "Y" ;
 		ulat:long_name = "latitude" ;
 		ulat:units = "degrees_north" ;
 		ulat:description = "latitudes of the u component of velocity" ;
 
-	double	ulev(sz, sy, nx) ;
+	double	ulev(slev, slat, lon) ;
 		ulev:axis = "Z" ;
                 ulev:positive = "up" ;
 		ulev:long_name = "depth" ;
 		ulev:units = "meters" ;
 		ulev:description = "depths of the u component of velocity" ;
 
-	double	v(time, sz, ny, sx) ;
+	double	v(time, slev, lat, slon) ;
 		v:units = "km/s" ;
 		v:long_name = "v component of the velocity" ;
 
-	double	vlon(sz, ny, sx) ;
+	double	vlon(slev, lat, slon) ;
 		vlon:axis = "X" ;
 		vlon:long_name = "longitude" ;
 		vlon:units = "degrees_east" ;
 		vlon:description = "longitudes of the v component of the velocity" ;
 
-	double	vlat(sz, ny, sx) ;
+	double	vlat(slev, lat, slon) ;
 		vlat:axis = "Y" ;
 		vlat:long_name = "latitude" ;
 		vlat:units = "degrees_north" ;
 		vlat:description = "latitudes of the v component of the velocity" ;
 
-	double	vlev(sz, ny, sx) ;
+	double	vlev(slev, lat, slon) ;
 		vlev:axis = "Z" ;
 		vlev:positive = "up" ;
 		vlev:long_name = "depth" ;
 		vlev:units = "meters" ;
 		vlev:description = "depths of the v component of the velocity" ;
 
-	double	w(time, nz, sy, sx) ;
+	double	w(time, lev, slat, slon) ;
 		w:units = "km/s" ;
 		w:long_name = "w component of the velocity" ;
 
-	double	wlon(nz, sy, sx) ;
+	double	wlon(lev, slat, slon) ;
 		wlon:axis = "X" ;
 		wlon:long_name = "longitude" ;
 		wlon:units = "degrees_east" ;
 		wlon:description = "longitudes of the w component of the velocity" ;
 
-	double	wlat(nz, sy, sx) ;
+	double	wlat(lev, slat, slon) ;
 		wlat:axis = "Y" ;
 		wlat:long_name = "latitude" ;
 		wlat:units = "degrees_north" ;
 		wlat:description = "latitudes of the w component of the velocity" ;
 
-	double	wlev(nz, sy, sx) ;
+	double	wlev(lev, slat, slon) ;
 		wlev:axis = "Z" ;
 		wlev:positive = "up" ;
 		wlev:long_name = "depth" ;
 		wlev:units = "meters" ;
 		wlev:description = "depths of the w component of the velocity" ;
 
-	double	p(time, sz, sy, sx) ;
+	double	p(time, slev, slat, slon) ;
 		p:units = "bar" ;
 		p:long_name = "non-hydrostatic pressure" ;
-	double	T(time, sz, sy, sx) ;
+	double	T(time, slev, slat, slon) ;
 		T:units = "degrees celsius" ;
 		T:long_name = "temperature" ;
-	double	S(time, sz, sy, sx) ;
+	double	S(time, slev, slat, slon) ;
 		S:units = "psu" ;
 		S:long_name = "initial salinity" ;
 
-	double	lon(sz, sy, sx) ;
+	double	lon(slev, slat, slon) ;
 		lon:axis = "X" ;
 		lon:long_name = "longitude" ;
 		lon:units = "degrees_east" ;
 		lon:description = "longitudes of [p,S,T]" ;
 
-	double	lat(sz, sy, sx) ;
+	double	lat(slev, slat, slon) ;
 		lat:axis = "Y" ;
 		lat:long_name = "latitude" ;
 		lat:units = "degrees_north" ;
 		lat:description = "latitudes of [p,S,T]" ;
 
-	double	lev(sz, sy, sx) ;
+	double	lev(slev, slat, slon) ;
 		lev:axis = "Z" ;
 		lev:positive = "up" ;
 		lev:units = "meters" ;
