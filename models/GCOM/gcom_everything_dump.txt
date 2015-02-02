@@ -8,67 +8,108 @@ dimensions:
 	sy = 32 ;
 	sz = 32 ;
 variables:
-	double time(time) ;
+	double	time(time) ;
 		time:units = "days since 1601-01-01 00:00:00" ;
-		time:long_name = "reference time" ;
+		time:long_name = "time" ;
 		time:calendar = "gregorian" ;
-	double u(time, sz, sy, nx) ;
+
+	double	u(time, sz, sy, nx) ;
 		u:units = "km/s" ;
 		u:long_name = "u component of the velocity" ;
-	double ulon(sz, sy, nx) ;
-		ulon:long_name = "longitudes of the u component of the velocity" ;
-		ulon:units = "degrees East" ;
-	double ulat(sz, sy, nx) ;
-		ulat:long_name = "latitudes of the u component of the velocity" ;
-		ulat:units = "degrees North" ;
-	double ulev(sz, sy, nx) ;
-		ulev:long_name = "depths of the u component of the velocity" ;
-		ulev:units = "meters" ;
 
-	double v(time, sz, ny, sx) ;
+	double	ulon(sz, sy, nx) ;
+		ulon:axis = "X" ;
+		ulon:long_name = "longitude" ;
+		ulon:units = "degrees_east" ;
+		ulon:description = "longitudes of the u component of velocity" ;
+
+	double	ulat(sz, sy, nx) ;
+		ulat:axis = "Y" ;
+		ulat:long_name = "latitude" ;
+		ulat:units = "degrees_north" ;
+		ulat:description = "latitudes of the u component of velocity" ;
+
+	double	ulev(sz, sy, nx) ;
+		ulev:axis = "Z" ;
+                ulev:positive = "up" ;
+		ulev:long_name = "depth" ;
+		ulev:units = "meters" ;
+		ulev:description = "depths of the u component of velocity" ;
+
+	double	v(time, sz, ny, sx) ;
 		v:units = "km/s" ;
 		v:long_name = "v component of the velocity" ;
-	double vlon(sz, ny, sx) ;
-		ulon:long_name = "longitudes of the v component of the velocity" ;
-		ulon:units = "degrees East" ;
-	double vlat(sz, ny, sx) ;
-		vlat:long_name = "latitudes of the v component of the velocity" ;
-		vlat:units = "degrees North" ;
-	double vlev(sz, ny, sx) ;
-		vlev:long_name = "depths of the v component of the velocity" ;
-		vlev:units = "meters" ;
 
-	double w(time, nz, sy, sx) ;
+	double	vlon(sz, ny, sx) ;
+		vlon:axis = "X" ;
+		vlon:long_name = "longitude" ;
+		vlon:units = "degrees_east" ;
+		vlon:description = "longitudes of the v component of the velocity" ;
+
+	double	vlat(sz, ny, sx) ;
+		vlat:axis = "Y" ;
+		vlat:long_name = "latitude" ;
+		vlat:units = "degrees_north" ;
+		vlat:description = "latitudes of the v component of the velocity" ;
+
+	double	vlev(sz, ny, sx) ;
+		vlev:axis = "Z" ;
+		vlev:positive = "up" ;
+		vlev:long_name = "depth" ;
+		vlev:units = "meters" ;
+		vlev:description = "depths of the v component of the velocity" ;
+
+	double	w(time, nz, sy, sx) ;
 		w:units = "km/s" ;
 		w:long_name = "w component of the velocity" ;
-	double wlon(nz, sy, sx) ;
-		wlon:long_name = "longitudes of the w component of the velocity" ;
-		wlon:units = "degrees East" ;
-	double wlat(nz, sy, sx) ;
-		wlat:long_name = "latitudes of the w component of the velocity" ;
-		wlat:units = "degrees North" ;
-	double wlev(nz, sy, sx) ;
-		wlev:long_name = "depths of the w component of the velocity" ;
-		wlev:units = "meters" ;
 
-	double p(time, sz, sy, sx) ;
+	double	wlon(nz, sy, sx) ;
+		wlon:axis = "X" ;
+		wlon:long_name = "longitude" ;
+		wlon:units = "degrees_east" ;
+		wlon:description = "longitudes of the w component of the velocity" ;
+
+	double	wlat(nz, sy, sx) ;
+		wlat:axis = "Y" ;
+		wlat:long_name = "latitude" ;
+		wlat:units = "degrees_north" ;
+		wlat:description = "latitudes of the w component of the velocity" ;
+
+	double	wlev(nz, sy, sx) ;
+		wlev:axis = "Z" ;
+		wlev:positive = "up" ;
+		wlev:long_name = "depth" ;
+		wlev:units = "meters" ;
+		wlev:description = "depths of the w component of the velocity" ;
+
+	double	p(time, sz, sy, sx) ;
 		p:units = "bar" ;
 		p:long_name = "non-hydrostatic pressure" ;
-	double T(time, sz, sy, sx) ;
-		t:units = "degrees celsius" ;
-		t:long_name = "temperature" ;
-	double S(time, sz, sy, sx) ;
-		s:units = "psu" ;
-		s:long_name = "initial salinity" ;
-	double lon(sz, sy, sx) ;
-		lon:long_name = "longitudes of [p,S,T]" ;
-		lon:units = "degrees East" ;
-	double lat(sz, sy, sx) ;
-		lat:long_name = "latitudes of [p,S,T]" ;
-		lat:units = "degrees North" ;
-	double lev(sz, sy, sx) ;
-		lev:long_name = "depths of [p,S,T]" ;
+	double	T(time, sz, sy, sx) ;
+		T:units = "degrees celsius" ;
+		T:long_name = "temperature" ;
+	double	S(time, sz, sy, sx) ;
+		S:units = "psu" ;
+		S:long_name = "initial salinity" ;
+
+	double	lon(sz, sy, sx) ;
+		lon:axis = "X" ;
+		lon:long_name = "longitude" ;
+		lon:units = "degrees_east" ;
+		lon:description = "longitudes of [p,S,T]" ;
+
+	double	lat(sz, sy, sx) ;
+		lat:axis = "Y" ;
+		lat:long_name = "latitude" ;
+		lat:units = "degrees_north" ;
+		lat:description = "latitudes of [p,S,T]" ;
+
+	double	lev(sz, sy, sx) ;
+		lev:axis = "Z" ;
+		lev:positive = "up" ;
 		lev:units = "meters" ;
+		lev:long_name = "depth" ;
+		lev:description = "depths of [p,S,T]" ;
 
 // global attributes:
 		:title = "Seamount Bathymetry for General Curvilinear Ocean Model GCOM" ;
