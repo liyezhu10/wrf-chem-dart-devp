@@ -27,7 +27,8 @@ use     model_mod, only : models_get_model_size => get_model_size,              
                           models_get_state_meta_data => get_state_meta_data,       &
                           get_model_time_step, model_interpolate, init_conditions, &
                           init_time, adv_1step, end_model, nc_write_model_atts,    &
-                          nc_write_model_vars, pert_model_state,                   &
+                          nc_write_model_vars,                                     &
+                          models_pert_model_state => pert_model_state,             &
                           get_close_maxdist_init, get_close_obs_init,              &
                           get_close_obs, ens_mean_for_model
 use  obs_kind_mod, only : KIND_QUAD_FILTER_SQUARED_ERROR
@@ -136,8 +137,6 @@ type(assim_model_type), intent(inout) :: state
 ! Get the model_size from the model
 model_size = get_model_size()
 
-!print *, 'i am in init_assim_model, and model_size now is ', model_size
-
 allocate(state%state_vector(model_size))
 state%model_size = model_size
 
@@ -224,26 +223,43 @@ integer,             intent(out), optional :: var_type
 
 integer :: pair_index
 
+
 ! For a quad filter, need to account for fact that pairs of state are together
 if(quad_filter) then
    ! Find out location of the pair with default
    pair_index = (index_in + 1) / 2
+   call models_get_state_meta_data(pair_index, location, var_type)
    if(present(var_type)) then
-      call models_get_state_meta_data(pair_index, location, var_type)
       ! If it is the pseudo-state (even index) then return kind
       if((index_in / 2) * 2 == index_in) var_type = KIND_QUAD_FILTER_SQUARED_ERROR
-   else
-      call models_get_state_meta_data(pair_index, location)
    endif
 else
-   if(present(var_type)) then
-      call models_get_state_meta_data(index_in, location, var_type)
-   else
-      call models_get_state_meta_data(index_in, location)
-   endif
+   call models_get_state_meta_data(index_in, location, var_type)
 endif
 
 end subroutine get_state_meta_data
+
+!---------------
+
+subroutine pert_model_state(state, pert_state, interf_provided)
+
+real(r8), intent(in)  :: state(:)
+real(r8), intent(out) :: pert_state(:)
+logical,  intent(out) :: interf_provided
+
+integer :: nitems
+
+nitems = size(state)
+
+if (quad_filter) then
+   ! dist type 2 array section
+   call models_pert_model_state(state(1:nitems:2), pert_state(1:nitems:2), interf_provided)
+else
+   call models_pert_model_state(state, pert_state, interf_provided)
+endif
+
+end subroutine pert_model_state
+
 
 !---------------
 
