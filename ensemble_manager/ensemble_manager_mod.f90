@@ -216,6 +216,14 @@ ens_handle%my_pe = map_task_to_pe(ens_handle, my_task_id())
 ens_handle%num_copies = num_copies
 ens_handle%num_vars = num_vars
 
+! dist type 2 requires num_vars to be even.  if we check now, we don't
+! have to check later.
+if((ens_handle%distribution_type == 2) .and. ((num_vars/2)*2 /= num_vars)) then
+   call error_handler(E_ERR, 'init_ensemble_manager', &
+                      'distribution type 2 requires number of vars to be even', &
+                      source, revision, revdate)
+endif
+
 ! For debugging, error checking
 ens_handle%id_num = global_counter
 global_counter = global_counter + 1
@@ -367,12 +375,7 @@ if(.not. start_from_restart) then
       ! If this is one of the actual ensemble copies, then perturb
       if(global_copy_index >= start_copy .and. global_copy_index <= end_copy) then
          ! See if model has an interface to perturb
-         if (ens_handle%distribution_type == 2) then
-            ! dist type 2 array section
-            call pert_model_state(ens_handle%vars(1:ens_handle%num_vars:2, i), ens_handle%vars(1:ens_handle%num_vars:2, i), interf_provided)
-         else
-            call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
-         endif
+         call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
          ! If model does not provide a perturbing interface, do it here
          if(.not. interf_provided) then
             ! To reproduce for varying pe count, need  fixed sequence for each copy
@@ -928,23 +931,24 @@ subroutine set_up_ens_distribution(ens_handle)
 
 ! Figures out how to lay-out the copy complete and vars complete
 ! distributions. The distribution_type identifies 
-! different options. Only distribution_type 1 is implemented.
-! This puts every nth var or copy on a given processor where n is the
-! total number of processes.
+! different options; distribution_types 1 and 2 are implemented.
+! Type 1 puts every nth var or copy on a given processor where n is the
+! total number of processes. Type 2 supports the quad filter by
+! distributing vars in pairs.
 
 type (ensemble_type),  intent(inout)  :: ens_handle
 
 integer :: num_per_pe_below, num_left_over, num_pairs, my_num_pairs, i, not_used_here
 
-   ! Option 1 and 2: Maximum separation for both vars and copies
-   ! Compute the total number of copies I'll get for var complete
-   num_per_pe_below = ens_handle%num_copies / num_pes
-   num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
-   if(num_left_over >= (ens_handle%my_pe + 1)) then
-      ens_handle%my_num_copies = num_per_pe_below + 1
-   else
-      ens_handle%my_num_copies = num_per_pe_below
-   endif
+! Option 1 and 2: Maximum separation for both vars and copies
+! Compute the total number of copies I'll get for var complete
+num_per_pe_below = ens_handle%num_copies / num_pes
+num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
+if(num_left_over >= (ens_handle%my_pe + 1)) then
+   ens_handle%my_num_copies = num_per_pe_below + 1
+else
+   ens_handle%my_num_copies = num_per_pe_below
+endif
 
 if(ens_handle%distribution_type == 1) then
    ! Do the same thing for copy complete: figure out which vars I get
@@ -970,9 +974,6 @@ elseif(ens_handle%distribution_type == 2) then
    endif
    ens_handle%my_num_vars = 2 * my_num_pairs
    
-else
-   call error_handler(E_ERR, 'set_up_ens_distribution: ', 'unknown distribution type', &
-                      source, revision, revdate)
 endif
 
 ! CHECK TO MAKE SURE THAT BELOW IS DISTRIBUTION TYPE INDEPENDENT
@@ -1004,18 +1005,18 @@ end subroutine set_up_ens_distribution
 
 !-----------------------------------------------------------------
 
-subroutine get_copy_owner_index(copy_number, owner, owners_index)
+subroutine get_copy_owner_index(copy_number, owner, owners_index, distribution_type)
 
 ! Given the copy number, returns which PE stores it when copy complete
-! and its index in that pes local storage. Depends on distribution_type
-! with only option 1 currently implemented.
+! and its index in that pes local storage. Depends on distribution_type.
 
-integer, intent(in)  :: copy_number
-integer, intent(out) :: owner, owners_index
+integer, intent(in)           :: copy_number
+integer, intent(out)          :: owner, owners_index
+integer, intent(in), optional :: distribution_type
 
 integer :: div
 
-! Asummes distribution type 1
+! Assumes distribution type 1
 div = (copy_number - 1) / num_pes
 owner = copy_number - div * num_pes - 1
 owners_index = div + 1
@@ -1027,8 +1028,7 @@ end subroutine get_copy_owner_index
 subroutine get_var_owner_index(var_number, owner, owners_index, distribution_type)
 
 ! Given the var number, returns which PE stores it when var complete
-! and its index in that pes local storage. Depends on distribution_type
-! with only option 1 currently implemented.
+! and its index in that pes local storage. Depends on distribution_type.
 
 integer, intent(in)  :: var_number
 integer, intent(out) :: owner, owners_index
@@ -1051,7 +1051,7 @@ elseif(distribution_type == 2) then
       owners_index = (div * 2) + 1
    endif
 else
-   ! Put in an error statement
+   call error_handler(E_ERR, 'get_var_owner_index: ', 'no case for this distribution_type', source,revision,revdate)
 endif
 
 end subroutine get_var_owner_index
@@ -1061,7 +1061,7 @@ end subroutine get_var_owner_index
 function get_max_num_vars(num_vars, distribution_type)
 
 ! Returns the largest number of vars that are on any pe when copy complete.
-! Depends on distribution_type with only option 1 and 2 currently implemented.
+! Depends on distribution_type.
 ! Used to get size for creating storage to receive a list of the vars on a pe.
 
 integer             :: get_max_num_vars
@@ -1080,7 +1080,7 @@ else if(distribution_type == 2) then
    get_max_num_vars = 2 * max_num_pairs
 
 else
-   ! Put in error check someday, maybe?
+   call error_handler(E_ERR, 'get_max_num_vars: ', 'no case for this distribution_type', source,revision,revdate)
 endif
    
 
@@ -1088,34 +1088,33 @@ end function get_max_num_vars
 
 !-----------------------------------------------------------------
 
-function get_max_num_copies(num_copies)
-!!!function get_max_num_copies(num_copies, distribution_type)
+function get_max_num_copies(num_copies, distribution_type)
 
 ! Returns the largest number of copies that are on any pe when var complete.
-! Depends on distribution_type with only option 1 currently implemented.
+! Depends on distribution_type.
 ! Used to get size for creating storage to receive a list of the copies on a pe.
 
-integer             :: get_max_num_copies
-integer, intent(in) :: num_copies
-!!!integer, intent(in) :: distribution_type
+integer                       :: get_max_num_copies
+integer, intent(in)           :: num_copies
+integer, intent(in), optional :: distribution_type
 
+! Assumes distribution type 1
 get_max_num_copies = num_copies / num_pes + 1
 
 end function get_max_num_copies
 
 !-----------------------------------------------------------------
 
-!!!subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
 subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, distribution_type)
 
 ! Returns a list of the vars stored by process pe when copy complete
 ! and the number of these vars.
 ! var_list must be dimensioned large enough to hold all vars.
-! Depends on distribution_type with only option 1 currently implemented.
+! Depends on distribution_type.
 
 integer,   intent(in)     :: num_vars, pe
 integer,   intent(out)    :: var_list(:), pes_num_vars
-integer, intent(in) :: distribution_type
+integer,   intent(in)     :: distribution_type
 
 integer :: num_per_pe_below, num_left_over, pes_num_pairs, num_pairs, current_pair, i
 
@@ -1165,18 +1164,19 @@ end subroutine get_var_list
 
 !-----------------------------------------------------------------
 
-subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies)
-!!!subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies, distribution_type)
+subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies, distribution_type)
 
 ! Returns a list of the copies stored by process pe when var complete.
 ! copy_list must be dimensioned large enough to hold all copies.
-! Depends on distribution_type with only option 1 currently implemented.
+! Depends on distribution_type.
 
-integer,   intent(in)    :: num_copies, pe
-integer,   intent(out)   :: copy_list(:), pes_num_copies
-!!!integer, intent(in) :: distribution_type
+integer,   intent(in)           :: num_copies, pe
+integer,   intent(out)          :: copy_list(:), pes_num_copies
+integer,   intent(in), optional :: distribution_type
 
 integer :: num_per_pe_below, num_left_over, i
+
+! Assumes distribution type 1
 
 ! Figure out which copies stored by pe
 num_per_pe_below = num_copies / num_pes
