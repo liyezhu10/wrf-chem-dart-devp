@@ -37,14 +37,15 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
                                  prepare_to_read_from_vars, prepare_to_write_to_vars,        &
                                  prepare_to_read_from_copies, get_ensemble_time, set_ensemble_time,&
-                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies, print_ens_handle
+                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
+                                 print_ens_handle
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
                                  output_inflate_diagnostics
 use mpi_utilities_mod,    only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                  my_task_id, task_sync, broadcast_send, broadcast_recv,      &
-                                 task_count, sleep_seconds
+                                 task_count
 use smoother_mod,         only : smoother_read_restart, advance_smoother,                    &
                                  smoother_gen_copy_meta_data, smoother_write_restart,        &
                                  init_smoother, do_smoothing, smoother_mean_spread,          &
@@ -141,19 +142,15 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
    first_obs_days, first_obs_seconds, last_obs_days, last_obs_seconds,              &
-   obs_window_days, obs_window_seconds, quad_filter, enable_special_outlier_code,   &
+   obs_window_days, obs_window_seconds, quad_filter, quad_filter_eval_only,         &
    num_output_state_members, num_output_obs_members, output_restart_mean,           &
-   output_interval, num_groups, outlier_threshold, trace_execution,                 &
-   input_qc_threshold, output_forward_op_errors, output_timestamps,                 &
+   output_interval, num_groups, outlier_threshold, enable_special_outlier_code,     &
+   input_qc_threshold, output_forward_op_errors, output_timestamps, trace_execution, &
+   silence,                                                                         &
    inf_flavor, inf_initial_from_restart, inf_sd_initial_from_restart,               &
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
-   inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence, quad_filter_eval_only
-
-! Are any of the observation types subject to being updated
-! during the computation?  e.g. quad filter
-logical :: observations_updateable = .false.
+   inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation
 
 !----------------------------------------------------------------
 
@@ -251,11 +248,8 @@ endif
 if(inf_flavor(2) == 1) call error_handler(E_ERR, 'filter_main', &
    'Posterior observation space inflation (type 1) not supported', source, revision, revdate)
 
-if (quad_filter) then
-   observations_updateable = .true.
-   call error_handler(E_MSG,'filter:', 'quad filter is enabled', &
+if (quad_filter) call error_handler(E_MSG,'filter:', 'quad filter is enabled', &
       source, revision, revdate)
-endif
 
 ! Setup the indices into the ensemble storage
 ENS_MEAN_COPY        = ens_size + 1
@@ -2084,13 +2078,8 @@ call prepare_to_update_copies(obs_ens_handle)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
+call must_be_even(obs_ens_handle%my_num_vars, 'obs')
 npairs = obs_ens_handle%my_num_vars / 2
-if ((npairs * 2) /= obs_ens_handle%my_num_vars) then 
-   write(msgstring, *) 'on task ', my_task_id(), ' the obs count must be even; it is ', &
-                        obs_ens_handle%my_num_vars
-   call error_handler(E_ERR, 'update_observations_quad_filter: ', msgstring, &
-                      source, revision, revdate)
-endif
 
 do j = 1, npairs
 
@@ -2110,21 +2099,23 @@ do j = 1, npairs
    ! get the key number associated with each of my subset of obs
    ! then get the obs and extract info from it.  this is where we
    ! are going to overwrite the original (missing) values.
-   this_obs_key = obs_ens_handle%copies(OBS_KEY_COPY, pseudo) 
-   call get_obs_from_key(seq, this_obs_key, observation2)
-   call get_obs_def(observation2, obs_def)
-   obs_kind_ind = get_obs_kind(obs_def)
-   if (quad_verbose) then
-      write(msgstring,*) ' kind = ', obs_kind_ind, trim(get_obs_kind_name(obs_kind_ind))
-      call error_handler(E_MSG, 'update_squared_state_entries: ', msgstring)
-   endif
-
-   if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
-      write(msgstring, *) 'Wrong obs kind; expected Pseudo Observation but have kind ', &
-                           trim(get_obs_kind_name(obs_kind_ind))
-      call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
-                          source, revision, revdate)
-   endif
+   if (quad_debug) then
+      this_obs_key = obs_ens_handle%copies(OBS_KEY_COPY, pseudo) 
+      call get_obs_from_key(seq, this_obs_key, observation2)
+      call get_obs_def(observation2, obs_def)
+      obs_kind_ind = get_obs_kind(obs_def)
+      if (quad_verbose) then
+         write(msgstring,*) ' kind = ', obs_kind_ind, trim(get_obs_kind_name(obs_kind_ind))
+         call error_handler(E_MSG, 'update_squared_state_entries: ', msgstring)
+      endif
+   
+      if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
+         write(msgstring, *) 'Wrong obs kind; expected Pseudo Observation but have kind ', &
+                              trim(get_obs_kind_name(obs_kind_ind))
+         call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
+                             source, revision, revdate)
+      endif
+   endif ! end of error checking block
 
    obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, original)
    obs_prior_var  = obs_ens_handle%copies(OBS_VAR_START, original)
@@ -2158,66 +2149,66 @@ enddo
 ! get all the updated obs values onto one PE
 call all_copies_to_all_vars(obs_ens_handle)
 
-! FIXME: make this work and then make it better
-! i have temporarily just replicated a whole block of code.
+! this algorithm requires broadcast of 2 arrays.  right now it does the
+! work in two replicated blocks of code; it might be better for long term
+! code maintenance if they could be combined somehow.
 
 ! Figure out which PE has all the obs values and broadcast
 ! them into a temporary array on the other PEs.
 call broadcast_copy(obs_ens_handle, OBS_VAL_COPY, updated_obs)
 
-! Each PE has an independent copy of the observation
-! sequence.  These values must be updated.  Rather than
-! trying to track which ones are changed, just loop
-! through all of them and update any with different values.
-do j = 1, num_obs_in_set
+! Update the original observation values in the observation sequence
+! that is stored on each task.
+do j = 2, num_obs_in_set, 2
    call get_obs_from_key(seq, keys(j), observation) 
    call get_obs_def(observation, obs_def)
    obs_kind_ind = get_obs_kind(obs_def)
 
-   if (obs_kind_ind == QUAD_FILTER_SQUARED_ERROR) then
+   if (obs_kind_ind /= QUAD_FILTER_SQUARED_ERROR) then
+      write(msgstring, *) 'After broadcast, wrong obs kind; expected Pseudo Observation but have kind ', &
+                           trim(get_obs_kind_name(obs_kind_ind))
+      call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
+                         source, revision, revdate)
+   endif
+
+   if (quad_debug) then
       call get_obs_values(observation, obs_temp(1:1), obs_val_index)
-      obs_val = updated_obs(j)
-      if (obs_temp(1) /= obs_val) then
-         ! FIXME - does it have to be missing r8 originally?
-         if (quad_verbose) then
-            write(*,*) '1. iam, j, key = ', my_task_id(), j, keys(j)
-            write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
-            write(*,*) 'updating obs in seq, index = ', j, obs_val_index
-         endif
-         obs_temp(1) = obs_val
-         call set_obs_values(observation, obs_temp(1:1), obs_val_index)
-         call set_obs(seq, observation, keys(j))
+      if (obs_temp(1) /= missing_r8) then
+         write(msgstring, *) 'After broadcast, original obs value not missing_r8, was', obs_temp(1)
+         call error_handler(E_ERR, 'update_observation_quad_filter: ', msgstring, &
+                            source, revision, revdate)
+      endif
+      if (quad_verbose) then
+         write(*,*) 'obs key, old obs value, new obs value = ', keys(j), obs_temp(1), updated_obs(j)
       endif
    endif
+
+   obs_temp(1) = updated_obs(j)
+   call set_obs_values(observation, obs_temp(1:1), obs_val_index)
+   call set_obs(seq, observation, keys(j))
 enddo
 
-! Figure out which PE has all the obs values and broadcast
+
+! Figure out which PE has all the obs error variance values and broadcast
 ! them into a temporary array on the other PEs.
 call broadcast_copy(obs_ens_handle, OBS_ERR_VAR_COPY, updated_obs)
 
-! Each PE has an independent copy of the observation
-! sequence.  These values must be updated.  Rather than
-! trying to track which ones are changed, just loop
-! through all of them and update any with different values.
-do j = 1, num_obs_in_set
+! Update the original observation error variances values in the observation sequence
+! that is stored on each task.
+
+do j = 2, num_obs_in_set, 2
    call get_obs_from_key(seq, keys(j), observation) 
    call get_obs_def(observation, obs_def)
-   obs_kind_ind = get_obs_kind(obs_def)
-
-   if (obs_kind_ind == QUAD_FILTER_SQUARED_ERROR) then
+   
+   if (quad_verbose) then
       original_err_var = get_obs_def_error_variance(obs_def)
-      obs_err_var = updated_obs(j)
-      if (original_err_var /= obs_err_var) then  ! FIXME: again, is orig always missing?
-         if (quad_verbose) then
-            write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
-            write(*,*) 'old observation errvar, new errvar = ', original_err_var, obs_err_var
-            write(*,*) 'updating obs in seq, index = ', j, obs_val_index
-         endif
-         call set_obs_def_error_variance(obs_def, obs_err_var)
-         call set_obs_def(observation, obs_def)
-         call set_obs(seq, observation, keys(j))
-      endif
+      write(*,*) 'obs key, old observation errvar, new errvar = ', keys(j), original_err_var, updated_obs(j)
    endif
+
+   obs_err_var = updated_obs(j)
+   call set_obs_def_error_variance(obs_def, obs_err_var)
+   call set_obs_def(observation, obs_def)
+   call set_obs(seq, observation, keys(j))
 enddo
 
 
@@ -2251,13 +2242,8 @@ if (quad_verbose) call print_ens_handle(ens_handle, .true., 'state', .true.)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
+call must_be_even(ens_handle%my_num_vars, 'state')
 npairs = ens_handle%my_num_vars / 2
-if ((npairs * 2) /= ens_handle%my_num_vars) then 
-   write(msgstring, *) 'on task ', my_task_id(), ' the state count must be even; it is ', &
-                        ens_handle%my_num_vars
-   call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
-                      source, revision, revdate)
-endif
 
 do i = 1, npairs
 
@@ -2269,12 +2255,6 @@ do i = 1, npairs
       call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
                          source, revision, revdate)
    endif
-   !if (ens_handle%copies(mean_index, squared) /= MISSING_R8) then
-   !   write(msgstring, *) 'Wrong entry: expected mean to be missing, but have ', &
-   !                        ens_handle%copies(mean_index, squared)
-   !   call error_handler(E_ERR, 'update_squared_state_entries: ', msgstring, &
-   !                      source, revision, revdate)
-   !endif
 
    state_mean = ens_handle%copies(mean_index, original)
 
@@ -2319,13 +2299,8 @@ if (quad_verbose) call print_ens_handle(obs_ens_handle, .true., 'obs', .true.)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
+call must_be_even(obs_ens_handle%my_num_vars, 'obs')
 npairs = obs_ens_handle%my_num_vars / 2
-if ((npairs * 2) /= obs_ens_handle%my_num_vars) then 
-   write(msgstring, *) 'on task ', my_task_id(), ' the obs count must be even; it is ', &
-                        obs_ens_handle%my_num_vars
-   call error_handler(E_ERR, 'update_squared_obs_entries: ', msgstring, &
-                      source, revision, revdate)
-endif
 
 if (quad_verbose) then
    write(msgstring,*) 'upobs: total, mypairs, my task: ', obs_ens_handle%my_num_vars, npairs, my_task_id()
@@ -2383,13 +2358,8 @@ call prepare_to_update_copies(forward_op_ens_handle)
 
 ! this count must be even, which is controlled by which
 ! ensemble manager distribution is selected
+call must_be_even(forward_op_ens_handle%my_num_vars, 'QC')
 npairs = forward_op_ens_handle%my_num_vars / 2
-if ((npairs * 2) /= forward_op_ens_handle%my_num_vars) then 
-   write(msgstring, *) 'on task ', my_task_id(), ' the QC count must be even; it is ', &
-                        forward_op_ens_handle%my_num_vars
-   call error_handler(E_ERR, 'update_squared_qc_entries: ', msgstring, &
-                      source, revision, revdate)
-endif
 
 do i = 1, npairs
 
@@ -2403,7 +2373,7 @@ do i = 1, npairs
       ! should allow the pseudo obs to be eval only even if the original is assimilated.
 
       ! Note that these forward operator QC values are the 'raw' internal QC values, including
-      ! using -1 and -2 for eval only, neither eval or assim, and -99 for failing the incoming
+      ! using -1 for eval only, -2 for neither eval or assim, and -99 for failing the incoming
       ! qc value test.  these are NOT the outgoing DART QC values from 0 to 7.
 
       ! start out assuming you will copy straight through.  only if the original obs
@@ -2426,6 +2396,21 @@ enddo
 end subroutine update_squared_qc_entries
 
 !-------------------------------------------------------------------------
+
+subroutine must_be_even(ivalue, estring)
+
+integer,          intent(in) :: ivalue
+character(len=*), intent(in) :: estring
+
+if (((ivalue/2) * 2) /= ivalue) then
+   write(msgstring, *) 'on task ', my_task_id(), ' the '//trim(estring)//' count must be even; it is ', ivalue
+   call error_handler(E_ERR, 'must_be_even: ', msgstring, source, revision, revdate)
+endif
+
+end subroutine must_be_even
+
+!-------------------------------------------------------------------------
+
 
 end program filter
 
