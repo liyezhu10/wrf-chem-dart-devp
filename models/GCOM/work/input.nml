@@ -163,22 +163,22 @@
    assimilation_period_seconds  = 10
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
-   debug                        = 2
+   debug                        = 9
    gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'NO_COPY_BACK',
                     'S', 'KIND_SALINITY',            '0.0', 'NA', 'NO_COPY_BACK',
                     'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
-                    'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE' 
-                    'p', 'KIND_HYDROSTATIC_PRESSURE','NA',  'NA', 'UPDATE' 
+                    'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+                    'p', 'KIND_PRESSURE',            '0.0', 'NA', 'UPDATE' 
   /
 
 &gcom_to_dart_nml
-   gcom_to_dart_output_file  = 'dart_ics'
+   gcom_to_dart_output_file  = 'dart_ics.txt'
   /
 
 &dart_to_gcom_nml
    dart_to_gcom_input_file   = 'dart_ics.txt'
-   advance_time_present      = .true.
+   advance_time_present      = .false.
   /
 
 &location_nml
@@ -333,7 +333,7 @@
 
 
 &model_mod_check_nml
-   input_file           = "dart_ics"
+   input_file           = "dart_ics.txt"
    output_file          = "check_me_out"
    advance_time_present = .false.
    verbose              = .true.

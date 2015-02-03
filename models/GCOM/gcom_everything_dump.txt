@@ -95,7 +95,7 @@ variables:
 		T:coordinates = "lon lat lev time" ;
 	double	S(time, nz, ny, nx) ;
 		S:units = "psu" ;
-		S:long_name = "initial salinity" ;
+		S:long_name = "salinity" ;
 		S:coordinates = "lon lat lev time" ;
 
 	double	lon(nz, ny, nx) ;

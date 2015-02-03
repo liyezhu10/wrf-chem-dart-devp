@@ -178,8 +178,10 @@ endif
 
 if (test1thru > 2) then
 
+   input_file = 'perturbed_ics.txt'
+
    write(*,*)
-   write(*,*)' Testing pert_model_state - creating restart file "perturbed_ics.txt".'
+   write(*,*)'Testing pert_model_state - creating restart file ['//trim(input_file)//']'
 
    allocate(pert_state(x_size))
 
@@ -189,7 +191,7 @@ if (test1thru > 2) then
    call awrite_state_restart(model_time, pert_state, iunit)
    call close_restart(iunit)
 
-   write(*,*)'Perturbed restart file "perturbed_ics.txt" written.'
+   write(*,*)'Perturbed restart file ['//trim(input_file)//'] written.'
 
 endif
 
@@ -206,11 +208,12 @@ if (test1thru > 4) then
    write(*,*)
    write(*,*)'Exercising the netCDF routines. test #5'
    write(*,*)'Creating '//trim(output_file)//'.nc'
+   write(*,*)'from  '//trim(input_file)
 
    state_meta(1) = 'restart test'
    ncFileID = init_diag_output(trim(output_file),'just testing a restart', 1, state_meta)
 
-   call aoutput_diagnostics(ncFileID, model_time, statevector, 1)
+   call aoutput_diagnostics(ncFileID, model_time, pert_state, 1)
 
    call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
