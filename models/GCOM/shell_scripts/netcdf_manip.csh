@@ -85,6 +85,36 @@ ncrename -h -d nzp1,nz -d  nyp1,ny -d nxp1,nx lonlatlev.nc
 
 ncks -a -h -A lonlatlev.nc allgood.nc 
 
+#=======================================================================
+
+# This part removes the geometry variables from the restart file
+
+set fname = gcom_restart_original.nc
+
+rm temp.nc
+
+ncks -h -v time,u,v,w,p,T,S $fname temp.nc
+ncatted -h -a coordinates,u,o,c,'ulon ulat ulev time' temp.nc
+ncatted -h -a coordinates,v,o,c,'vlon vlat vlev time' temp.nc
+ncatted -h -a coordinates,w,o,c,'wlon wlat wlev time' temp.nc
+ncatted -h -a coordinates,p,o,c,'lon lat lev time' temp.nc
+ncatted -h -a coordinates,S,o,c,'lon lat lev time' temp.nc
+ncatted -h -a coordinates,T,o,c,'lon lat lev time' temp.nc
+
+ncatted -h -a long_name,time,o,c,time temp.nc
+ncatted -h -a calendar,time,o,c,gregorian temp.nc
+ncatted -h -a units,time,o,c,'days since 1986-01-01 00:00:00' temp.nc
+
+ncatted -h -a units,p,o,c,bar temp.nc
+ncatted -h -a units,S,o,c,psu temp.nc
+ncatted -h -a units,T,o,c,'degrees C' temp.nc
+ncatted -h -a units,u,o,c,'m/s' temp.nc
+ncatted -h -a units,v,o,c,'m/s' temp.nc
+ncatted -h -a units,w,o,c,'m/s' temp.nc
+
+ncrename -h -d nx,nxp1 -d ny,nyp1 -d nz,nzp1 temp.nc
+ncrename -h -d sx,nx   -d sy,ny   -d sz,nz   temp.nc
+
 exit 0
 
 # <next few lines under version control, do not edit>
