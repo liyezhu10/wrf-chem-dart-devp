@@ -212,9 +212,7 @@
    /
 
 &obs_add_pseudo_obs_nml
-   filename_in = 'obs_seq.three.out', 
+   filename_in  = 'obs_seq.three.out', 
    filename_out = 'obs_pseudo.three.out', 
-   print_only = .false., 
-   calendar = 'NO_CALENDAR'
-   /
+/
 
