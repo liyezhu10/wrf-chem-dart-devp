@@ -7,103 +7,157 @@
 % DART $Id$
 
 %dimensions:
-         nx = 97 ;
-         ny = 33 ;
-         nz = 33 ;
+         nxp1 = 97 ;
+         nyp1 = 33 ;
+         nzp1 = 33 ;
 %        time = UNLIMITED ; // (1 currently)
-         sx = 96 ;
-         sy = 32 ;
-         sz = 32 ;
+         nx = 96 ;
+         ny = 32 ;
+         nz = 32 ;
 %variables:
-%        double ulon(sz, sy, nx) ;
+%        double ulon(nz, ny, nxp1) ;
 %                ulon:units = "kilometers_east" ;
 %                ulon:long_name = "x-coordinate of the grid nodes" ;
-%        double ulat(sz, sy, nx) ;
+%        double ulat(nz, ny, nxp1) ;
 %                ulat:units = "kilometers_east" ;
 %                ulat:long_name = "x-coordinate of the grid nodes" ;
-%        double ulev(sz, sy, nx) ;
+%        double ulev(nz, ny, nxp1) ;
 %                ulev:units = "kilometers_east" ;
 %                ulev:long_name = "x-coordinate of the grid nodes" ;
 
-ulon = zeros(nx,sy,sz);
-ulat = zeros(nx,sy,sz);
-ulev = zeros(nx,sy,sz);
+ulon = zeros(nxp1,ny,nz);
+ulat = zeros(nxp1,ny,nz);
+ulev = zeros(nxp1,ny,nz);
 
  nccreate('grid.nc','ulon',...
-          'Dimensions',{'nx' nx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nxp1' nxp1 'ny' ny 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','ulat',...
-          'Dimensions',{'nx' nx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nxp1' nxp1 'ny' ny 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','ulev',...
-          'Dimensions',{'nx' nx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nxp1' nxp1 'ny' ny 'nz' nz},...
           'Format','classic');
 
 ncwrite('grid.nc','ulon', ulon);
 ncwrite('grid.nc','ulat', ulat);
 ncwrite('grid.nc','ulev', ulev);
+ncwriteatt('grid.nc','ulon','long_name','longitude');
+ncwriteatt('grid.nc','ulon','units','degrees_east');
+ncwriteatt('grid.nc','ulon','axis','X');
+ncwriteatt('grid.nc','ulat','long_name','latitude');
+ncwriteatt('grid.nc','ulat','units','degrees_north');
+ncwriteatt('grid.nc','ulat','axis','Y');
+ncwriteatt('grid.nc','ulev','long_name','depth');
+ncwriteatt('grid.nc','ulev','units','meters');
+ncwriteatt('grid.nc','ulev','axis','Z');
+ncwriteatt('grid.nc','ulev','positive','up');
 
-vlon = zeros(sx,ny,sz);
-vlat = zeros(sx,ny,sz);
-vlev = zeros(sx,ny,sz);
+ncwriteatt('grid.nc','ulon','comment','longitude of the u component of velocity');
+ncwriteatt('grid.nc','ulat','comment','latitude of the u component of velocity');
+ncwriteatt('grid.nc','ulev','comment','depth of the u component of velocity');
+
+vlon = zeros(nx,nyp1,nz);
+vlat = zeros(nx,nyp1,nz);
+vlev = zeros(nx,nyp1,nz);
 
  nccreate('grid.nc','vlon',...
-          'Dimensions',{'sx' sx 'ny' ny 'sz' sz},...
+          'Dimensions',{'nx' nx 'nyp1' nyp1 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','vlat',...
-          'Dimensions',{'sx' sx 'ny' ny 'sz' sz},...
+          'Dimensions',{'nx' nx 'nyp1' nyp1 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','vlev',...
-          'Dimensions',{'sx' sx 'ny' ny 'sz' sz},...
+          'Dimensions',{'nx' nx 'nyp1' nyp1 'nz' nz},...
           'Format','classic');
 
 ncwrite('grid.nc','vlon', vlon);
 ncwrite('grid.nc','vlat', vlat);
 ncwrite('grid.nc','vlev', vlev);
+ncwriteatt('grid.nc','vlon','long_name','longitude');
+ncwriteatt('grid.nc','vlon','units','degrees_east');
+ncwriteatt('grid.nc','vlat','long_name','latitude');
+ncwriteatt('grid.nc','vlat','units','degrees_north');
+ncwriteatt('grid.nc','vlev','long_name','depth');
+ncwriteatt('grid.nc','vlev','units','meters');
+ncwriteatt('grid.nc','vlon','axis','X');
+ncwriteatt('grid.nc','vlat','axis','Y');
+ncwriteatt('grid.nc','vlev','axis','Z');
+ncwriteatt('grid.nc','vlev','positive','up');
 
-wlon = zeros(sx,sy,nz);
-wlat = zeros(sx,sy,nz);
-wlev = zeros(sx,sy,nz);
+ncwriteatt('grid.nc','vlon','comment','longitude of the v component of velocity');
+ncwriteatt('grid.nc','vlat','comment','latitude of the v component of velocity');
+ncwriteatt('grid.nc','vlev','comment','depth of the v component of velocity');
+
+wlon = zeros(nx,ny,nzp1);
+wlat = zeros(nx,ny,nzp1);
+wlev = zeros(nx,ny,nzp1);
 
  nccreate('grid.nc','wlon',...
-          'Dimensions',{'sx' sx 'sy' sy 'nz' nz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nzp1' nzp1},...
           'Format','classic');
 
  nccreate('grid.nc','wlat',...
-          'Dimensions',{'sx' sx 'sy' sy 'nz' nz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nzp1' nzp1},...
           'Format','classic');
 
  nccreate('grid.nc','wlev',...
-          'Dimensions',{'sx' sx 'sy' sy 'nz' nz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nzp1' nzp1},...
           'Format','classic');
 
 ncwrite('grid.nc','wlon', wlon);
 ncwrite('grid.nc','wlat', wlat);
 ncwrite('grid.nc','wlev', wlev);
+ncwriteatt('grid.nc','wlon','long_name','longitude');
+ncwriteatt('grid.nc','wlon','units','degrees_east');
+ncwriteatt('grid.nc','wlat','long_name','latitude');
+ncwriteatt('grid.nc','wlat','units','degrees_north');
+ncwriteatt('grid.nc','wlev','long_name','depth');
+ncwriteatt('grid.nc','wlev','units','meters');
+ncwriteatt('grid.nc','wlon','axis','X');
+ncwriteatt('grid.nc','wlat','axis','Y');
+ncwriteatt('grid.nc','wlev','axis','Z');
+ncwriteatt('grid.nc','wlev','positive','up');
+ncwriteatt('grid.nc','wlon','comment','longitude of the w component of velocity');
+ncwriteatt('grid.nc','wlat','comment','latitude of the w component of velocity');
+ncwriteatt('grid.nc','wlev','comment','depth of the w component of velocity');
 
-lon = zeros(sx,sy,sz);
-lat = zeros(sx,sy,sz);
-lev = zeros(sx,sy,sz);
+lon = zeros(nx,ny,nz);
+lat = zeros(nx,ny,nz);
+lev = zeros(nx,ny,nz);
 
  nccreate('grid.nc','lon',...
-          'Dimensions',{'sx' sx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','lat',...
-          'Dimensions',{'sx' sx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nz' nz},...
           'Format','classic');
 
  nccreate('grid.nc','lev',...
-          'Dimensions',{'sx' sx 'sy' sy 'sz' sz},...
+          'Dimensions',{'nx' nx 'ny' ny 'nz' nz},...
           'Format','classic');
 
  ncwrite('grid.nc','lon', lon);
  ncwrite('grid.nc','lat', lat);
  ncwrite('grid.nc','lev', lev);
+ncwriteatt('grid.nc','lon','long_name','longitude');
+ncwriteatt('grid.nc','lon','units','degrees_east');
+ncwriteatt('grid.nc','lat','long_name','latitude');
+ncwriteatt('grid.nc','lat','units','degrees_north');
+ncwriteatt('grid.nc','lev','long_name','depth');
+ncwriteatt('grid.nc','lev','units','meters');
+ncwriteatt('grid.nc','lon','axis','X');
+ncwriteatt('grid.nc','lat','axis','Y');
+ncwriteatt('grid.nc','lev','axis','Z');
+ncwriteatt('grid.nc','lev','positive','up');
+ncwriteatt('grid.nc','lon','comment','longitude of the grid cell center');
+ncwriteatt('grid.nc','lat','comment','latitude of the grid cell center');
+ncwriteatt('grid.nc','lev','comment','depth of the grid cell center');
 
 % <next few lines under version control, do not edit>
 % $URL$
