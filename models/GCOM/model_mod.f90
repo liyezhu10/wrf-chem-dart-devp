@@ -428,6 +428,7 @@ integer,  OPTIONAL,  intent(out) :: var_type
 integer  :: n, varindex, offset
 integer  :: index1, index2, index3
 integer  ::  ndim1,  ndim2
+real(r8) :: mylon, mylat, mylev
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -487,34 +488,42 @@ else
          source,revision,revdate,text2=string2)
 endif
 
-! FIXME Now we need to know which metadata arrays to index
+! FIXME -maybe- do we really only support 3d variables?
+! The code is sprinkled with 1D and 2D support  - if it ever gets to the point
+! where we are estimating parameters, 1D support will be needed.
 
-!if (is_on_ugrid(local_var)) then
-!   lon = ULON(index1, index2)
-!   lat = ULAT(index1, index2)
-!else
-!   lon = TLON(index1, index2)
-!   lat = TLAT(index1, index2)
-!endif
-!
-!if (local_var == KIND_SEA_SURFACE_HEIGHT) then
-!   depth = 0.0_r8
-!else
-!   depth = ZC(index3)
-!endif
-!
-!if (debug > 5) print *, 'lon, lat, depth = ', lon, lat, depth
-!
-!location = set_location(lon, lat, depth, VERTISHEIGHT)
-!
-!if (present(var_type)) then
-!   var_type = progvar(varindex)%dart_kind
-!
-!   if(is_dry_land(var_type, index1, index2, index3)) then
-!      var_type = KIND_DRY_LAND
-!   endif
-!
-!endif
+if     (trim(progvar(varindex)%coordinates) == 'lon lat lev time') then
+   mylon =  LON(index1,index2,index3)
+   mylat =  LAT(index1,index2,index3)
+   mylev =  LEV(index1,index2,index3)
+elseif (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev time') then
+   mylon = ULON(index1,index2,index3)
+   mylat = ULAT(index1,index2,index3)
+   mylev = ULEV(index1,index2,index3)
+elseif (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev time') then
+   mylon = VLON(index1,index2,index3)
+   mylat = VLAT(index1,index2,index3)
+   mylev = VLEV(index1,index2,index3)
+elseif (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev time') then
+   mylon = WLON(index1,index2,index3)
+   mylat = WLAT(index1,index2,index3)
+   mylev = WLEV(index1,index2,index3)
+else
+   write(string1,*) 'unknown coordinate variables of ['//trim(progvar(varindex)%coordinates)//']'
+   write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
+   call error_handler(E_ERR,'get_state_meta_data',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+! FIXME - vertical coordinates ... meters, kilometers ... not sure what we are
+! supposed to have. Will be important for comparison with observations and 
+! vertical localization.
+
+location = set_location(mylon, mylat, mylev, VERTISHEIGHT)
+
+if (present(var_type)) then
+   var_type = progvar(varindex)%dart_kind
+endif
 
 end subroutine get_state_meta_data
 
@@ -2310,7 +2319,7 @@ character(len=*), intent(in)    :: filename
 real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: state_time
 
-integer :: i, j, k, ivar, indx, io
+integer :: i, j, k, ivar, indx, io, iunit
 
 ! temp space to hold data while we are reading it
 real(r8), allocatable :: mytimes(:)
@@ -2326,6 +2335,8 @@ integer :: ncid, TimeDimID, VarID, numdims, dimlen, ntimes
 integer :: iyear, imonth, iday, ihour, iminute, isecond
 integer :: origin_days, origin_seconds
 type(time_type) :: origin_time
+
+logical :: write_metadata
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2397,6 +2408,19 @@ if (do_output()) then
     call print_date(model_time,'date for restart file '//trim(filename))
 endif
 
+! If desired, output a file that has the full i,j,k,lat,lon,lev for every element of the DART vector
+if (do_output() .and. (debug > 8)) then 
+   iunit = open_file('metadata_table.txt',form='formatted',action='write')
+   write(*,*)'varname   indx          i          j          k'
+   write_metadata = .true.
+else
+   write_metadata = .false.
+endif
+
+ 100 format(A,2(1x,i10))  ! DART index, i
+ 200 format(A,3(1x,i10))  ! DART index, i, j
+ 300 format(A,4(1x,i10))  ! DART index, i, j, k
+
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
 
@@ -2454,6 +2478,8 @@ do ivar=1, nfields
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'degrees celsius') then
          ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees C') then
+         ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'bar') then
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'km/s') then
@@ -2471,6 +2497,7 @@ do ivar=1, nfields
 
       do i = 1, progvar(ivar)%dimlens(1)
          state_vector(indx) = data_1d_array(i)
+         if (write_metadata) write(iunit,100) trim(progvar(ivar)%varname), indx, i
          indx = indx + 1
       enddo
       deallocate(data_1d_array)
@@ -2486,6 +2513,8 @@ do ivar=1, nfields
       elseif (progvar(ivar)%units == 'psu') then
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'degrees celsius') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees C') then
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'bar') then
          ! Units are correct, nothing to do.
@@ -2505,6 +2534,7 @@ do ivar=1, nfields
       do j = 1, progvar(ivar)%dimlens(2)
       do i = 1, progvar(ivar)%dimlens(1)
          state_vector(indx) = data_2d_array(i, j)
+         if (write_metadata) write(iunit,200) trim(progvar(ivar)%varname), indx, i, j
          indx = indx + 1
       enddo
       enddo
@@ -2522,6 +2552,8 @@ do ivar=1, nfields
       elseif (progvar(ivar)%units == 'psu') then
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'degrees celsius') then
+         ! Units are correct, nothing to do.
+      elseif (progvar(ivar)%units == 'degrees C') then
          ! Units are correct, nothing to do.
       elseif (progvar(ivar)%units == 'bar') then
          ! Units are correct, nothing to do.
@@ -2542,6 +2574,7 @@ do ivar=1, nfields
       do j = 1, progvar(ivar)%dimlens(2)
       do i = 1, progvar(ivar)%dimlens(1)
          state_vector(indx) = data_3d_array(i, j, k)
+         if (write_metadata) write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k
          indx = indx + 1
       enddo
       enddo
@@ -2558,6 +2591,8 @@ do ivar=1, nfields
    endif
 
 enddo
+
+if (write_metadata) call close_file(iunit)
 
 end subroutine gcom_file_to_dart_vector
 

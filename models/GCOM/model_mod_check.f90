@@ -13,7 +13,7 @@ program model_mod_check
 use        types_mod, only : r8, digits12, metadatalength, obstypelength
 
 use    utilities_mod, only : initialize_utilities, nc_check, &
-                             open_file, close_file, find_namelist_in_file, &
+                             find_namelist_in_file, &
                              check_namelist_read, finalize_utilities, &
                              error_handler, E_MSG
 
