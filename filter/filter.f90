@@ -53,7 +53,7 @@ use smoother_mod,         only : smoother_read_restart, advance_smoother,       
                                  init_smoother, do_smoothing, smoother_mean_spread,          &
                                  smoother_assim, filter_state_space_diagnostics,             &
                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
-use state_vector_io_mod,  only : state_vector_io_init, netcdf_filename, setup_read_write,    &
+use state_vector_io_mod,  only : state_vector_io_init, setup_read_write,    &
                                  turn_read_copy_on, get_state_variable_info,                 &
                                  initialize_arrays_for_read, read_restart_netcdf,            &
                                  write_restart_netcdf, turn_write_copy_on,                   &
@@ -2047,7 +2047,6 @@ call initialize_arrays_for_read(num_variables_in_state, num_domains)
 model_size = 0
 do domain = 1, num_domains
    !netcdf_filename = info_file_name(domain) !first restart
-   netcdf_filename = restart_files_in(1,1)
    !write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
    call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
    model_size = model_size + domain_size

@@ -40,7 +40,7 @@ private
 
 public :: state_vector_io_init, &
           initialize_arrays_for_read, &
-          netcdf_filename, get_state_variable_info, &
+          get_state_variable_info, &
           read_restart_netcdf, &
           write_restart_netcdf, &
           netcdf_filename_out, &
@@ -140,6 +140,7 @@ integer :: i
 global_variable_names = variable_names
 
 ! open netcdf file - all restart files have the same info?
+netcdf_filename = restart_files_in(1,domain)
 ret = nf90_open(netcdf_filename, NF90_NOWRITE, ncfile)
 call nc_check(ret, 'get_state_variable_info', 'opening')
 
