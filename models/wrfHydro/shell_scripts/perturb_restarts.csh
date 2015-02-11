@@ -96,9 +96,11 @@ endif
 # clear any ensemble files (assuming ensemble sizes are < 1000)
 \rm -f ${pertPath}/restart*0*.nc
 
+echo $pertPath
 # make fresh copes of the base restart files. 
 foreach i (`seq 1 $nEns`)
     set ii=`printf "%04d" $i`
+    \ls ${pertPath}/RESTART.* 
     \cp -v ${pertPath}/RESTART.* ${pertPath}/restart.${ii}.nc || exit 4
     \cp -v ${pertPath}/HYDRO_RST.* ${pertPath}/restart.hydro.${ii}.nc || exit 3
     if ( $nAssimOnlyRestarts > 0 ) then 

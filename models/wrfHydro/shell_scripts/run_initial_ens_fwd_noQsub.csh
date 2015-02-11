@@ -12,8 +12,8 @@
 ## note, configure for both qsub and without (see run_filter.csh)
 
 #-----------------------------------------------------------
-if ($#argv != 5 & $#argv != 6) then
-    echo "Usage: endYyyy endMm endDD endHH inDir(relative to calling dir) ppn"
+if ($#argv != 6 & $#argv != 7) then
+    echo "Usage: endYyyy endMm endDD endHH inDir(relative to calling dir) ppn inputNml"
     exit 1
 endif
 set endYyyy = $1
@@ -21,13 +21,13 @@ set endMm   = $2
 set endDd   = $3
 set endHh   = $4
 set inDir   = $5
-
-if ($#argv == 6) set ppn = $6
-if(! $?ppn) set ppn = 1
-if($ppn > 16) then 
+set ppn     = $6
+if ($ppn > 16) then 
     echo "Right now only configured to use a single node, setting ppn=8."
     set ppn = 8
 endif 
+if ($#argv == 7) set inputNml = `readlink -f $7`
+
 
 #-----------------------------------------------------------
 ## Examine the contents of the inDir and its internal consistency
@@ -49,6 +49,10 @@ if ( $assimOnlyActive ) then
 	echo "The number of LSM restart files does not match the number of assimOnly restart files."
 	exit 1
     endif
+    if ( ! $?inputNml ) then
+        echo "restart.assimOnly.nc files detected, but no input.nml file has been specified."
+        exit 1
+    endif
 endif
 
 set nEns = $nLsmRestarts
@@ -63,13 +67,15 @@ foreach iEns ( `seq 1 $nEns` )
 	`ncdump -h $inDir/restart.hydro.${iEnsFmt}.nc | grep Restart_ | cut -d'=' -f2 | tr -d ' ";'`
     if ( $assimOnlyActive ) then 
     set rstTimeAssimOnly = \
-	`ncdump -h $inDir/restart.assimOnly.${iEnsFmt}.nc | grep Restart_ | cut -d'=' -f2 | tr -d ' ";'`
+	`ncdump -h $inDir/restart.assimOnly.${iEnsFmt}.nc | grep ':Restart_' | cut -d'=' -f2 | tr -d ' ";'`
     endif 
     if ( $restartTime != $rstTimeLsm       |  \
          $restartTime != $rstTimeHydro     ) then 
 	 echo "There are non-matching restart times between the lsm or hydro restart files."
 	 exit 2
     endif
+
+
     if ( $assimOnlyActive ) then 
 	if ( $restartTime != $rstTimeAssimOnly ) then 
 	    echo "There are non-matching restart times between the lsm and assimOnly restart files."
@@ -103,6 +109,10 @@ echo "Output/Run dir: $outPath"
 echo "ppn : $ppn"
 
 # Run ensembles within this dir
+if ( -e $outPath ) then 
+    echo 'Output/Run directory already exists, exiting'
+    exit 1
+endif
 \mkdir -p $outPath || exit 1
 cd $outPath
 ln -sf ../$inDir .  ## make this symlink so it's clear what these runs started from. 
@@ -125,6 +135,11 @@ ex_end
 # Note that the namelists used for dat assume the restart files are
 # named restart.nc and restart.hydro.nc, so that specification in the
 # namelist dosent need need edited to reflect the restart time.
+
+## get the forcing files before changing dirs
+set forcDir = `grep INDIR namelist.hrldas | tr -d ' "' | tr -d "'" | grep -v '^[\!\]' | cut -d'=' -f2`
+if ( `echo $forcDir | egrep '^[.]' | wc -l` ) set forcDir = `echo ../${forcDir}`
+ln -s $forcDir .
 
 \cp ../setup_ensemble_run.csh .
 
@@ -152,10 +167,9 @@ while($iEns <= $nEns)
     ## this control file gets cleaned up in run_wrfHydro.csh
     touch $ensDir/wrfHydroStillWorking.dum
 
-    ./setup_ensemble_run.csh $inDir $iEnsFmt $assimOnlyActive &
+    ./setup_ensemble_run.csh $inDir $iEnsFmt $assimOnlyActive $inputNml &
 
     @ iEns++
-
 end
 
 ## we dont want this script to finish until all the runs are complete. 

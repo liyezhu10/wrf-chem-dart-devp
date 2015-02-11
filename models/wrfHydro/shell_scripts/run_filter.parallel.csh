@@ -38,7 +38,7 @@
 #PBS -r n
 #PBS -e filter.err
 #PBS -o filter.log
-#PBS -l nodes=1:ppn=16,walltime=168:00:00
+#PBS -l nodes=3:ppn=11,walltime=168:00:00
 
 ####################################################################
 ####################################################################
@@ -93,8 +93,17 @@ set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
 set ADVANCESTRING = `grep -A 42 filter_nml input.nml | grep adv_ens_command | grep -v '!'`
 set ADV_CMD  = `echo $ADVANCESTRING | cut -d= -f2 | tr -d '"'`
-
 echo $ADV_CMD
+
+# this variable is optional. helps manage writing files to node disks rather than 
+# across the network. 
+# nodeDisk should be a location available on all nodes for writing. 
+set nodeDisk = '/c1'
+if ($?nodeDisk) then 
+    set nodeDir  = ${nodeDisk}/DART.RUN.`date | tr ' ' '-'`
+    echo $nodeDir > nodeDir.control
+    if ( ! -e nodeDir.control ) exit 1
+endif
 
 echo parallel_model: $parallel_model
 
@@ -110,11 +119,13 @@ if ($?PBS_O_WORKDIR) then
     # PBS has a list of processors in a file whose name is (PBS_NODEFILE)
     echo "PBS - using mpirun for execution"
     # each filter task advances the ensembles, each running on 1 proc.
-    if ( "$parallel_model" == "false" ) then  ## async==2
+    if ( "$parallel_model" == "false" ) then  
+    ## async==2 ##
 
       mpirun ./filter
 
-    else  ## async==4
+    else  
+    ## async==4 ##
    
     # filter runs in parallel until time to do a model advance,
     # and then this script starts up the modelxxx jobs, each one
@@ -190,67 +201,86 @@ else
     #echo "node5:2" >> $MYNODEFILE
     #echo "node3:2" >> $MYNODEFILE
     #echo "node1:2" >> $MYNODEFILE
-    setenv NUM_PROCS 8
+    setenv NUM_PROCS 1
     set MPIRUN = '/opt/openmpi/bin/mpirun'
     set MPICMD = "$MPIRUN -np $NUM_PROCS"
     # -machinefile $MYNODEFILE"
     
     echo "MPICMD = ${MPICMD}"
 
-    # filter runs in parallel until time to do a model advance,
-    # and then this script starts up the modelxxx jobs, each one
-    # running in parallel. then it runs wakeup_filter to wake
-    # up filter so it can continue.
+    if ( "$parallel_model" == "false" ) then  
+    ## async==2 ##
 
-    \rm -f model_to_filter.lock filter_to_model.lock
-    mkfifo model_to_filter.lock filter_to_model.lock
+      $MPICMD ./filter
 
-    set filterhome = $HOME/.filter$$
-    if ( ! -e $filterhome) mkdir $filterhome
+      if (! $?) exit 8
 
-    # this starts filter but also returns control back to
-    # this script immediately.
-    (setenv HOME $filterhome; ${MPICMD} ./filter) &
+    else  
+    ## async==4 ##
 
-    while ( -e filter_to_model.lock )
+        # filter runs in parallel until time to do a model advance,
+        # and then this script starts up the modelxxx jobs, each one
+        # running in parallel. then it runs wakeup_filter to wake
+        # up filter so it can continue.
 
-        set todo=`cat < filter_to_model.lock`
-        echo "todo received, value = ${todo}"
+        \rm -f model_to_filter.lock filter_to_model.lock
+        mkfifo model_to_filter.lock filter_to_model.lock
 
-        if ( "${todo}" == "finished" ) then
-          echo "main script: filter done."
-          wait
-          break
+        set filterhome = $HOME/.filter$$
+        if ( ! -e $filterhome) mkdir $filterhome
 
-        else if ( "${todo}" == "advance" ) then
+        # this starts filter but also returns control back to
+        # this script immediately.
+        (setenv HOME $filterhome; ${MPICMD} ./filter) &
+            
+        while ( -e filter_to_model.lock )
+            
+            set todo=`cat < filter_to_model.lock`
+            echo "todo received, value = ${todo}"
+                
+            if ( "${todo}" == "finished" ) then
+            echo "main script: filter done."
+            wait
+            break
+                
+            else if ( "${todo}" == "advance" ) then
+                
+            # the second number below must match the number
+            # of ensembles. Also, in input.nml, the advance model
+            # command must have -np N with N equal to the number
+            # of processors this job is using.
+            # jlm somewhat unclear. 
+            # and also giving an example calling seq in input.nml
+            # e.g.: mpirun -np $NUM_PROCS ?
+            echo "calling model advance now:"
+            ${ADV_CMD} 0 ${NUM_ENS} filter_control00000 || exit 9
+                
+            echo "restarting filter."
+            ${MPICMD} ./wakeup_filter
+                
+            else
+                
+            echo "main script: unexpected value received."
+            break
+                
+            endif
+                
+        end
+            
+        echo "filter finished, removing pipes."
+        \rm -f model_to_filter.lock filter_to_model.lock
+        if ( -d $filterhome) rmdir $filterhome
 
-          # the second number below must match the number
-          # of ensembles. Also, in input.nml, the advance model
-          # command must have -np N with N equal to the number
-          # of processors this job is using.
-	  # jlm somewhat unclear. 
-	  # and also giving an example calling seq in input.nml
-	  # e.g.: mpirun -np $NUM_PROCS ?
-          echo "calling model advance now:"
-          ${ADV_CMD} 0 ${NUM_ENS} filter_control00000 || exit 9
+    endif  ## async if 2 else 4
 
-          echo "restarting filter."
-          ${MPICMD} ./wakeup_filter
+endif  ## ($?PBS_O_WORKDIR) 
 
-        else
-
-          echo "main script: unexpected value received."
-          break
-
-        endif
-
-    end
-
-    echo "filter finished, removing pipes."
-    \rm -f model_to_filter.lock filter_to_model.lock
-    if ( -d $filterhome) rmdir $filterhome
-
+## bring back desired output on the nodes.  
+if ($?nodeDisk) then 
+    ./getNodeFiles.sh `pwd`
+    rm nodeDir.control
 endif
+
 
 exit 0
 

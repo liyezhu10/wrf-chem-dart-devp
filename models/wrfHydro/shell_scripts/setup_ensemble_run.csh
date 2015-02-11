@@ -3,11 +3,10 @@
 set inDir           = $1
 set iEnsFmt         = $2
 set assimOnlyActive = $3
-
+set inputNml        = $4
 
 set ensDir = ensemble.${iEnsFmt}
 cd $ensDir
-
 ## get the name lists
 \cp ../namelist.hrldas .
 \cp ../hydro.namelist .
@@ -18,6 +17,7 @@ foreach FILE ( ../../PARAMS.gathered/* )
 	\ln -sf $FILE . || exit 2  
 end
 
+
 # the wrfHydro restart files for the individual ensemble members
 \ln -sv ../$inDir/restart.$iEnsFmt.nc  restart.nc   || exit 2
 \ln -sv ../$inDir/restart.hydro.$iEnsFmt.nc  restart.hydro.nc   || exit 2
@@ -27,6 +27,7 @@ endif
 
 ## If assimOnly variables need applied, this script does it.
 if ( $assimOnlyActive ) then 
+        ln -sf $inputNml input.nml
 	cp ../../apply_assimOnly.csh .
 	./apply_assimOnly.csh
 	set assimOnlySuccess = $?

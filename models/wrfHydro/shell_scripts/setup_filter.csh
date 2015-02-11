@@ -242,7 +242,7 @@ mkdir OUTPUT
 \rm -f  model_to_filter.lock
 \rm -f  Posterior_Diag.nc
 \rm -f  Prior_Diag.nc
-
+\rm -f  nodeDir.control
 
 #==============================================================================
 # Check for required  files and dirs (excluding parameters)
@@ -439,7 +439,8 @@ end
 echo
 echo "DART Executable Builds"
 foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter wakeup_filter \
-		restart_file_tool obs_sequence_tool create_obs_sequence )
+		restart_file_tool obs_sequence_tool create_obs_sequence \
+                perfect_model_obs )
     if ( -e ${FILE} && ! $forceCopyDartBuilds )  then
 	echo "Using existing $FILE"
     else
@@ -454,7 +455,7 @@ end
 #==============================================================================
 echo
 echo "DART Scripts"
-foreach FILE ( run_filter.csh advance_model.csh  gregorian_time )
+foreach FILE ( run_filter.csh advance_model.csh run_pmo.csh getNodeFiles.sh gregorian_time )
    if ( -e ${FILE} && ! $forceCopyDartScripts )  then
       echo "Using existing $FILE"
    else

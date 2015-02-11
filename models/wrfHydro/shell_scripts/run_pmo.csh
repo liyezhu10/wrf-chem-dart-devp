@@ -30,26 +30,8 @@ set REMOVE = '/bin/rm -fr'
 # Check to make sure all the required files have been staged in CENTRALDIR
 #==============================================================================
 
-set CENTRALDIR = `pwd`
-
-@ BAIL = 0
-foreach FILE ( wrfinput namelist.hrldas Noah_hrldas_beta SOILPARM.TBL \
-               VEGPARM.TBL GENPARM.TBL URBPARM.TBL obs_seq.in input.nml \
-               perfect_model_obs dart_to_noah noah_to_dart run_pmo.csh \
-               advance_model.csh restart.nc perfect_ics)
-
-   if ( ! -e $FILE ) then
-      echo "$FILE is needed but not present in CENTRALDIR"
-      @ BAIL = 1
-   endif
-
-end
-
-if ( $BAIL > 0 ) then
-   echo "FATAL ERROR ... stage the missing file(s) and try again."
-   echo "FATAL ERROR ... stage the missing file(s) and try again."
-   exit 1
-endif
+##./setup_filter.csh forceCopyAll##
+@ BAIL = $?
 
 ./perfect_model_obs
 

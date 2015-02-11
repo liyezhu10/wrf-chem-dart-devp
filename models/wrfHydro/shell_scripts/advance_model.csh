@@ -57,30 +57,59 @@ set control_file = $3
 # we need to provide a safe haven for each TASK ... in 'temp_dir'.
 set temp_dir = 'advance_temp'$process
 
+set nodeDir  = `pwd`
+if ( -e nodeDir.control ) then
+    set nodeDir  = `head -1 nodeDir.control`
+    if ( ! -e ${nodeDir}/OUTPUT ) mkdir -p ${nodeDir}/OUTPUT
+    set temp_dir = ${nodeDir}/${temp_dir}
+    set thisHost = `hostname`
+    echo $thisHost >> nodeDir.control
+endif
+
+## this is used to remove relative paths 1 dir up.
+## what happens if larger relative paths are used?
+cd ..
+set loginUp1Dir = `pwd`
+cd -    
+set loginDir = `pwd`
+
 # Create a clean temporary directory and go there
-\rm -rf  $temp_dir  || exit 1
+\rm -rf   $temp_dir  || exit 1
 \mkdir -p $temp_dir  || exit 1
-cd       $temp_dir  || exit 1
+cd        $temp_dir  || exit 1
 
 # Get the DART input.nml and the NOAH namelist
-\cp ../namelist.hrldas .
-\cp ../hydro.namelist .
-\cp ../input.nml .   ## i'm not seeing this used here but it might be used by filter.
+\cp ${loginDir}/namelist.hrldas .
+\cp ${loginDir}/hydro.namelist .
+\cp ${loginDir}/input.nml .   ## i'm not seeing this used here but it might be used by filter.
+
+# if running on node disks then have to modify the paths in the namelist files. 
+##
+#if ($?loginUp1Dir) then
+    foreach ff ( namelist.hrldas hydro.namelist )
+        echo $ff
+        foreach i ( `egrep '[.][.][/]' $ff | tr -d ' ' | egrep -v '^(!)' | cut -d'=' -f2` )
+            echo $i
+            set whLine = `grep -n $i $ff | cut -d':' -f1`
+            sed -i "${whLine}s&../&${loginUp1Dir}/&" $ff
+        end
+    end
+#endif 
 
 # Get parameters.
-foreach FILE ( ../PARAMS.gathered/* ) 
+foreach FILE ( ${loginDir}/PARAMS.gathered/* ) 
     echo $FILE
-#   \cp -v ../$FILE . || exit 2 ## these dont change so link them instead.
+#   \cp -v ${loginDir}/$FILE . || exit 2 ## if these are to be changed, that's handled below.
     \ln -sf $FILE . || exit 2  
 end
 
 # From the namelist determine if the noAssim restarts are needed. 
 # The line could be commented out (default is blank in model_mod.f90) or set to ''.
 set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | wc -l`
-set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | \
+set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_state_variables | \
                          cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
 set assimOnly_active = 0
-if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
+if ($assimOnly_active1 > 0 & $assimOnly_active2 > 0) set assimOnly_active = 1
 # assimOnly variables dont necessarily mean perturbed forcing?
 # for now the do mean perturbed forcing...
 # eventually may want to list the variables in the file and set flags based on these. 
@@ -95,9 +124,9 @@ set     output_file_line = 3
 
 while($state_copy <= $num_states)
    
-    set ensemble_member = `\head -$ensemble_member_line ../$control_file | \tail -1`
-    set input_file      = `\head -$input_file_line      ../$control_file | \tail -1`
-    set output_file     = `\head -$output_file_line     ../$control_file | \tail -1`
+    set ensemble_member = `\head -$ensemble_member_line ${loginDir}/$control_file | \tail -1`
+    set input_file      = `\head -$input_file_line      ${loginDir}/$control_file | \tail -1`
+    set output_file     = `\head -$output_file_line     ${loginDir}/$control_file | \tail -1`
     set instance        = `printf "%04d" $ensemble_member`
 
     #-------------------------------------------------------------------
@@ -109,7 +138,7 @@ while($state_copy <= $num_states)
     #-------------------------------------------------------------------
 
     echo "advance_model.csh block 2 converting ensemble member $instance"
-
+echo `pwd`
     # clean up from last advance
     # some of these must be copied at some point?? for diagnostics?
     \rm -f  restart.nc  restart.hydro.nc  dart_restart  restart.assimOnly.nc
@@ -121,19 +150,20 @@ while($state_copy <= $num_states)
     \rm -f  qstrmvol*  diag_hydro.*  stderr.txt stdout.txt  GW_*.txt  *.GW_DOMAIN*
  
     # need the wrfHydro restart files for the output of dart_to_wrfHydro
-    \ln -sv ../restart.$instance.nc  restart.nc   || exit 2
-    \ln -sv ../restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
+    \ln -sv ${loginDir}/restart.$instance.nc  restart.nc   || exit 2
+    \ln -sv ${loginDir}/restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
+
     if ( $assimOnly_active ) \
-	\ln -sv ../restart.assimOnly.$instance.nc  restart.assimOnly.nc   || exit 2
+	\ln -sv ${loginDir}/restart.assimOnly.$instance.nc  restart.assimOnly.nc   || exit 2
 
     if ( $assimOnly_active ) then 
 	## these guys depend on their initial values in call to apply_assimOnly
 	## e.g. need to know the original geo_finegrid file to copy and modify it.
-	\cp ../namelist.hrldas .
-	\cp ../hydro.namelist .
+#	\cp ${temp_dir}/namelist.hrldas .
+#	\cp ${temp_dir}/hydro.namelist .
         # Since parameter files are potentially altered in assimOnly,
 	# refresh and dont use symlinks.
-	foreach FILE ( ../PARAMS.gathered/* ) 
+	foreach FILE ( ${loginDir}/PARAMS.gathered/* ) 
 	    echo $FILE
 	    \cp -v --remove-destination $FILE . || exit 2 ## these might change so dont link
 	end
@@ -141,14 +171,14 @@ while($state_copy <= $num_states)
 
     # the input file is the name of the dart_restart.instance? 
     # There must be reasons for being cryptic.
-    \ln -sv ../$input_file           dart_restart || exit 2
-    
+    \ln -sv ${loginDir}/$input_file           dart_restart || exit 2
+
     # push the assimilation back to the model
     # This modifies
-    # restart.nc -> ../restart.$instance.nc
-    # restart.hydro.nc -> ../restart.hydro.$instance.nc
-    # restart.assimOnly.nc -> ../restart.assimOnly.$instance.nc
-    ../dart_to_wrfHydro                          || exit 2
+    # restart.nc -> ${loginDir}/restart.$instance.nc
+    # restart.hydro.nc -> ${loginDir}/restart.hydro.$instance.nc
+    # restart.assimOnly.nc -> ${loginDir}/restart.assimOnly.$instance.nc
+    ${loginDir}/dart_to_wrfHydro                          || exit 2
 
     if ( ! -e wrfHydro_advance_information.txt ) then
 	echo "ERROR: dart_to_noah failed for member $ensemble_member"
@@ -180,13 +210,14 @@ while($state_copy <= $num_states)
     set restartFileHh = `echo $restartFileTime | cut -d_ -f2 | cut -d: -f1`
 
 ex namelist.hrldas <<ex_end
-g;KHOUR ;s;= .*;= $numadvances;
-g;START_YEAR;s;= .*;= $restartFileYyyy;
-g;START_MONTH;s;= .*;= $restartFileMm;
-g;START_DAY;s;= .*;= $restartFileDd;
-g;START_HOUR;s;= .*;= $restartFileHh;
+g;KHOUR;s;=.*;= $numadvances;
+g;START_YEAR;s;=.*;= $restartFileYyyy;
+g;START_MONTH;s;=.*;= $restartFileMm;
+g;START_DAY;s;=.*;= $restartFileDd;
+g;START_HOUR;s;=.*;= $restartFileHh;
 wq
 ex_end
+echo "The above error is apparently harmless. Might move to sed."
 
     echo '******************************************************************************'
     echo ' Ensemble member:' $instance
@@ -207,8 +238,8 @@ ex_end
     #-------------------------------------------------------------------
     # Block 2.5: AssimOnly Assimilation State Variables.
     if ( $assimOnly_active ) then 
-      cp ../apply_assimOnly.csh .
-      ./apply_assimOnly.csh
+      cp ${loginDir}/apply_assimOnly.csh .
+      ./apply_assimOnly.csh ${loginDir}
       set failure = $?
       if ( $failure ) exit 22
     endif    
@@ -223,10 +254,10 @@ ex_end
     #-------------------------------------------------------------------
     echo "advance the model"
     ## i just want the model to be quiet so I can focus on the DART output
-    if ( `readlink ../wrf_hydro.exe | grep serial | wc -l` ) then 
-        ../wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+    if ( `readlink ${loginDir}/wrf_hydro.exe | grep serial | wc -l` ) then 
+        ${loginDir}/wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
     else
-	mpirun -np 4 ../wrf_hydro.exe &> /tmp/jamesmccWfrHydroEnsOutputJunk.$process
+	mpirun -np 6 ${loginDir}/wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
     endif 
 
     \rm -f /tmp/jamesmccWfrHydroEnsOutputJunk.$process
@@ -269,7 +300,7 @@ ex_end
     set integStart = `\ls -1 *LDASOUT_DOMAIN* | \head -1 | \cut -d. -f1`
     set integEnd   = `\ls -1 RESTART*_DOMAIN* | \tail -1 | \cut -d. -f2 | cut -d_ -f1`
     set integDir =  OUTPUT/model_integration.${integStart}-${integEnd}.$instance
-    set integDirCurrent =  ../${integDir}
+    set integDirCurrent = ${nodeDir}/${integDir}
     \mkdir $integDirCurrent
 
     # Fixed HRLDAS to do restarts at the end of the loop, after time advance,  
@@ -284,8 +315,8 @@ ex_end
 	\mv $outFile ${integDirCurrent}/${outFile}.${instance}.nc
     end 
 
-    ## These are the parameters which were used in the model advance. 
-    if ( $assimOnly_active ) cp restart.assimOnly.nc $integDirCurrent/.
+   ## These are the parameters which were used in the model advance. 
+   if ( $assimOnly_active ) cp restart.assimOnly.nc $integDirCurrent/.
 
     # Set the new/latest restart for ingest to dart
     set RESTARTlsm = `\ls -1  RESTART* | \tail -1`
@@ -294,15 +325,15 @@ ex_end
     \ln -sf $RESTARTlsm    restart.nc        || exit 4
     \ln -sf $RESTARThydro  restart.hydro.nc  || exit 4
 
-    ../wrfHydro_to_dart              || exit 4
+    ${loginDir}/wrfHydro_to_dart              || exit 4
 
-    \mv -v  dart_ics  ../$output_file          || exit 5
+    \mv -v  dart_ics  ${loginDir}/$output_file          || exit 5
     # this breaks the restart.nc and restart.hydro.nc symlinks
     # but they are reset in the next loop
     \mv -v  ${RESTARTlsm}    ${integDirCurrent}/${RESTARTlsm}.$instance.nc   || exit 5
     \mv -v  ${RESTARThydro}  ${integDirCurrent}/${RESTARThydro}.$instance.nc || exit 5
-    \ln -sfv ${integDir}/${RESTARTlsm}.$instance.nc   ../restart.$instance.nc
-    \ln -sfv ${integDir}/${RESTARThydro}.$instance.nc ../restart.hydro.$instance.nc
+    \ln -sfv ${integDirCurrent}/${RESTARTlsm}.$instance.nc   ${loginDir}/restart.$instance.nc
+    \ln -sfv ${integDirCurrent}/${RESTARThydro}.$instance.nc ${loginDir}/restart.hydro.$instance.nc
     # the linking (vs. cp ing) in these last two lines implies that the model-created 
     # restart files are not sacred, they will be overwritten by dart_to_wrfHydro
 
@@ -312,12 +343,14 @@ ex_end
     @ input_file_line = $input_file_line + 3
     @ output_file_line = $output_file_line + 3
 
+echo "advance_model.csh end loop over member for this process"
+
 end  ## loop over ensemble members for this process.
 
 # Change back to original directory and get rid of temporary directory.
 # If all goes well, there should be no need to keep this directory.
 # If you are debugging, you may want to keep this directory. 
-cd ..
+cd $loginDir
 \rm -rf $temp_dir
 
 # MANDATORY - Remove the control_file to signal completion. If it still
@@ -326,8 +359,10 @@ cd ..
 
 \rm -rf $control_file
 
+## i think this code chunk is obselete.....
 ## if parameters in the geoFineFile were edited clean up that file. 
 if ($?geoFineFileSrc) then
+    echo 'fofofofofofofofofofofofofofofofofofofofofofofofofofofofof'
     \cp $geoFineFileOrig $geoFineFile
     \rm -f $geoFineFileOrig
 endif 
