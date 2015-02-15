@@ -7,7 +7,7 @@
 ! interface for wrfHydro
 ! This is modeled on an earlier noah interface, so the term noah maybe used when wrfHydro is more appropriate.
 ! We are attempting to accomodate use of either Noah or NoahMP as LSMs.
-! We are also attempting to accomodate runing with/without the hydro component, so assim would
+! We are also attempting to accomodate runing with/without the hydro sstate_component, so assim would
 ! just be for the LSM without the hydro component.
 ! See input.nml and it's model_nml to specfiy LSM and if hydro compnent is active.
 ! The state variables of interest can also be specified here. (Debatable if desired to show
@@ -44,21 +44,23 @@ use    utilities_mod, only : register_module, error_handler, nc_check,         &
      find_namelist_in_file, check_namelist_read,       &
      file_exist, find_textfile_dims, file_to_text
 
-use    obs_kind_mod, only : &
-     KIND_SOIL_MOISTURE,    &
-     KIND_SOIL_LIQUID_WATER,    &
-     KIND_SURFACE_HEAD,     &
-     KIND_STREAM_FLOW,      &
-     KIND_STREAM_HEIGHT,    &
-     KIND_STREAM_CHAN_VOLUME,  &
-     KIND_DEEP_GROUNDWATER_LEVEL, &
-     KIND_LEAF_AREA_INDEX,  &
-     KIND_SNOW_THICKNESS,   &
-     KIND_SNOW_WATER,       &
-     KIND_SNOWCOVER_FRAC,   &
-     KIND_2D_PARAMETER,     &        !! eg precip multiplier, soil texture parameter
+use    obs_kind_mod, only :                   &
+     KIND_SOIL_MOISTURE,                      &
+     KIND_SOIL_LIQUID_WATER,                  &
+     KIND_SURFACE_HEAD,                       &
+     KIND_STREAM_FLOW,                        &
+     KIND_STREAM_HEIGHT,                      &
+     KIND_DEEP_GROUNDWATER_LEVEL,             &
+     KIND_SOIL_TEMPERATURE,                   &
+     KIND_GROUND_SURF_TEMPERATURE,            &
+     KIND_CANOPY_TEMPERATURE,                 &
+     KIND_LEAF_AREA_INDEX,                    &
+     KIND_SNOW_THICKNESS,                     &
+     KIND_SNOW_WATER,                         &
+     KIND_SNOWCOVER_FRAC,                     &
+     KIND_2D_PARAMETER,        &     !! eg precip multiplier, soil texture parameter
      KIND_GEOPOTENTIAL_HEIGHT, &     !! maybe be used for model_interpolate
-     paramname_length,      &
+     paramname_length,         &
      get_raw_obs_kind_index
 
 use mpi_utilities_mod, only: my_task_id
@@ -268,8 +270,8 @@ integer            :: order_to_write = 1
 integer            :: TERADJ_SOLAR = 0
 !! integer            :: NSOIL=4  !! repeated but equal
 real(r8), dimension(NSOLDX) :: zsoil8  !! this is for the hydro component (bad name)
-integer            :: DXRT = 100
-integer            :: AGGFACTRT = 10
+real(r8)           :: DXRT = -999.0_r8
+integer            :: AGGFACTRT = -999
 integer            :: DTRT = 2
 integer            :: SUBRTSWCRT = 1
 integer            :: OVRTSWCRT = 1
@@ -346,11 +348,16 @@ real(r8), allocatable, dimension(:,:) :: xlong, xlat, hlong, hlat
 real(r8), allocatable, dimension(:) :: linkLat, linkLong, channelIndsX, channelIndsY
 real(r8), allocatable, dimension(:) :: basnMask, basnLon, basnLat
 integer :: south_north, west_east, n_hlong, n_hlat, n_link, n_basn
+integer, dimension(2)               :: fine2dShape, coarse2dShape
 integer, dimension(3)               :: fine3dShape, coarse3dShape
-!! set by calling disagSh2ox, these dont really need to be allocatable...
+!! Following are global because they are used in multiple subroutines.
 real(R8), dimension(:,:,:), allocatable :: smc, sice, sh2oMaxRt, sh2oWltRt
-real(R8), dimension(:,:),   allocatable ::  smcWlt1, smcMax1
-
+real(R8), dimension(:,:),   allocatable ::              smcMax1, smcWlt1
+!! Used to hold the fine res variables to be adjusted. Not allocated if not used.
+real(R8), dimension(:,:,:), allocatable :: sh2oDisag
+real(R8), dimension(:,:),   allocatable :: sfcHeadDisag
+real(r8) :: fineGridArea, coarseGridArea
+integer  :: hydroSmcPresent, hydroSfcHeadPresent
 
 interface vector_to_prog_var
    module procedure vector_to_1d_prog_var
@@ -383,7 +390,7 @@ integer  :: VarID, dimlen, varsize
 integer  :: iunit, io, ivar, iunit_lsm, iunit_hydro, iunit_assimOnly, igrid, iState
 integer  :: ilat, ilon, ilev, myindex,  i, index1
 integer  :: nLayers, n_lsm_fields, n_hydro_layers, n_hydro_fields, n_assimOnly_fields
-integer  :: dumNLon, dumNLat, dumSize, wp, dumNumDims, lsmSmcPresent, hydroSmcPresent
+integer  :: dumNLon, dumNLat, dumSize, wp, dumNumDims, lsmSmcPresent
 integer, allocatable, dimension(:)  :: whichVars, keepLsmVars0, keepLsmVars
 integer  :: whVar1
 
@@ -456,6 +463,16 @@ if (hydro_model_active) then
    call check_namelist_read(iunit, io, 'HYDRO_nlist')
 endif
 
+! Dxrt is necessary for aggregation. it may not be needed but... if it dosent need to 
+! exist there are other potential problems to ponder. 
+if (dxrt .lt. 0.) then
+   write(string1,*) 'dxrt was not specified in the hydro.namelist. If you are not running an equal area projected grid, please proceede with extreme caution.'
+   call error_handler(E_ERR, 'static_init_model', string1, source, revision, revdate)
+endif
+!! this is in square meters, dxrt in meters
+fineGridArea = dxrt**2.
+coarseGridArea = (dxrt*AGGFACTRT)**2.
+
 ! If the zsoils dont match between the models, throw an error
 if (trim(lsm_model_choice) .eq. 'noah') then
    if( .not.  all( zsoil(1:nsoil) == zsoil8(1:nsoil) )) then
@@ -465,6 +482,10 @@ if (trim(lsm_model_choice) .eq. 'noah') then
       call error_handler(E_ERR, 'static_init_model', string1, &
                  source, revision, revdate, text2=string2, text3=string3)
    endif
+soil_thick_input = zsoil
+do i=nsoil,2,-1 
+   soil_thick_input(i)=zsoil(i)-zsoil(i-1)
+enddo
 endif
 
 if (trim(lsm_model_choice) .eq. 'noahMP') then
@@ -482,6 +503,8 @@ if (trim(lsm_model_choice) .eq. 'noahMP') then
    endif
    deallocate(zsoilComp)
 endif 
+
+
 
 ! Record the NOAH namelist
 if (do_nml_file()) write(nmlfileunit, nml=NOAHLSM_OFFLINE)
@@ -528,11 +551,13 @@ if (hydro_model_active) then
    call get_hydro_constants(GEO_FINEGRID_FLNM) !!
    !! global variables defining the aggregation/disaggregation dimension
    !! these are always xyz since they are for dis/agg wrfHydro variables 
-   fine3dShape = (/ n_hlong, n_hlat, nsoil /)  !! for disaggregating
+   fine2dShape   = (/ n_hlong, n_hlat /)  !! for disaggregating
+   fine3dShape   = (/ n_hlong, n_hlat, nsoil /)  !! for disaggregating
+   coarse2dShape = (/ west_east, south_north /) !! for reaggregating
    coarse3dShape = (/ west_east, south_north, nsoil /) !! for reaggregating
 else
    ! TJH FIXME fine3dShape coarse3dShape are used later ... even when (logically) hydro_model_active may be false.
-   ! JLM fixme - that shouldnt happen since there's no "fine" grid for disag.
+   ! JLM fixme - that shouldnt happen since there's no "fine" grid for disag, will try to fix... 
    fine3dShape   = (/ n_hlong, n_hlat, nsoil /)  !! for disaggregating
    coarse3dShape = (/ west_east, south_north, nsoil /) !! for reaggregating
 endif
@@ -624,11 +649,15 @@ lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL
      (lsm_state_variables(1,:) .eq. 'SH2O') )
 
 hydroSmcPresent = 0
+hydroSfcHeadPresent = 0
 if (hydro_model_active) then
-! use any( ) jlm fixme
-   hydroSmcPresent =  sum( (/ (i, i=1,n_hydro_fields) /), &
-        mask = (hydro_state_variables(1,:) .eq. 'sh2ox') )
+   hydroSmcPresent     = any( hydro_state_variables(1,:) .eq. 'sh2ox' )
+   hydroSfcHeadPresent = any( hydro_state_variables(1,:) .eq. 'sfcheadrt' )
+   if (hydroSmcPresent)     allocate(sh2oDisag(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
+   if (hydroSfcHeadPresent) allocate(sfcHeadDisag(fine2dShape(1),fine2dShape(2)))
+   if (hydroSmcPresent .OR. hydroSfcHeadPresent) call disagHydro()
 endif
+
 
 if (lsmSmcPresent > 0 .and. hydroSmcPresent > 0) then
    if (rst_typ /= 1) then
@@ -660,12 +689,8 @@ if (hydro_model_active) then
       write(string1,*) 'cannot adjust total soil moisture (smc) in the hydro model'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    end if
-   if (any(hydro_state_variables .eq. 'sfcheadrt')) then
-      write(string1,*) 'cannot yet adjust surface head (sfcheadrt) in the hydro model - &
-                       &need to implement (dis)aggreation'
-      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
-   endif
 endif
+
 
 !! make a combined list of: state variables, types, component
 nfields = n_lsm_fields + n_hydro_fields + n_assimOnly_fields
@@ -773,42 +798,91 @@ FILL_PROGVAR : do ivar = 1, nfields
    progvar(ivar)%maxvalue        = huge(0.0_r8)
 
    ! set minvalue for certain variables which deserve it.
-   if ( varname == 'SNODEP'  .or. &    ! noah
-        varname == 'WEASD'   .or. &
-        varname == 'SNOWH'   .or. &    ! noahMP
-        varname == 'SNEQV'   .or. &
-        varname == 'SNOWC'   .or. &
-        varname == 'LAI'     .or. &
-        varname == 'WA'      .or. &
-        varname == 'qlink1'  .or. &    ! hydro
-        varname == 'hlink'   .or. &
-        varname == 'cvol'    .or. &
-        varname == 'z_gwsubbas'   .or. &
-        varname == 'precipMult'   .or. &    ! assimOnly
-        varname == 'OVROUGHRTFAC' .or. &
-        varname == 'RETDEPRTFAC'  .or. &
-        varname == 'gwCoeff'     .or. &
-        varname == 'gwExpon'          &
+   if ( varname == 'SNODEP'        .or. &    ! noah
+        varname == 'WEASD'         .or. &
+        varname == 'SNOWH'         .or. &    ! noahMP
+        varname == 'SNEQV'         .or. &
+        varname == 'SNOWC'         .or. &
+        varname == 'SOIL_T'        .or. &
+        varname == 'CANLIQ'        .or. &
+        varname == 'LAI'           .or. &
+        varname == 'WA'            .or. &
+        varname == 'qlink1'        .or. &    ! hydro
+        varname == 'hlink'         .or. &
+        varname == 'cvol'          .or. &
+        varname == 'z_gwsubbas'    .or. &
+        varname == 'sfcheadrt'     .or. &
+        varname == 'infxswgt'      .or. &
+        varname == 'precipMult'    .or. &    ! assimOnly
+        varname == 'OVROUGHRTFAC'  .or. &
+        varname == 'RETDEPRTFAC'   .or. &
+        varname == 'gwCoeff'       .or. &
+        varname == 'gwExpon'       .or. &
+        varname == 'ksatMult'      .or. &
+        varname == 'maxSmcMult'    .or. &
+        varname == 'bbMult'        .or. &
+        varname == 'satPsiMult'    .or. &
+        varname == 'slope'         .or. &
+        varname == 'refkdt'         .or. &
+        varname == 'rsMult'        .or. &
+        varname == 'ch2opMult'     .or. &
+        varname == 'czil'               &
         ) then
       progvar(ivar)%rangeRestricted = 1
       ! Most vars have minvalue of 0.
       progvar(ivar)%minvalue     = 0
       ! Write exceptions here, this is a dummy example.
-      if ( varname == 'degKelvin' ) progvar(ivar)%minvalue     = -273.15
+      if ( varname == 'SOIL_T' )        progvar(ivar)%minvalue     = 100  !! Kelvin. 
+      if ( varname == 'precipMult' )    progvar(ivar)%minvalue     = .01
+      if ( varname == 'OVROUGHRTFAC' )  progvar(ivar)%minvalue     = .01
+      if ( varname == 'RETDEPRTFAC' )   progvar(ivar)%minvalue     = .01
+      if ( varname == 'gwCoeff' )       progvar(ivar)%minvalue     = .01
+      if ( varname == 'gwExpon' )       progvar(ivar)%minvalue     = .01
+      if ( varname == 'ksatMult' )      progvar(ivar)%minvalue     = .01
+      if ( varname == 'maxSmcMult' )    progvar(ivar)%minvalue     = .01
+      if ( varname == 'bbMult' )        progvar(ivar)%minvalue     = .1
+      if ( varname == 'satPsiMult' )    progvar(ivar)%minvalue     = .001
+      if ( varname == 'slope' )         progvar(ivar)%minvalue     = .01
+      if ( varname == 'refkdt' )         progvar(ivar)%minvalue    = .5
+      if ( varname == 'rsMult' )        progvar(ivar)%minvalue     = .3  
+      if ( varname == 'ch2opMult' )     progvar(ivar)%minvalue     = 0.001  
+      if ( varname == 'czil' )          progvar(ivar)%minvalue     = .01 
    end if
 
    ! set maxvalue for those deserving variables. 
-   if ( varname == 'OVROUGHRTFAC' .or. &   ! assimOnly
+   if ( varname == 'SOIL_T'       .or. &  ! assimOnly
+        varname == 'precipMult'   .or. &  ! assimOnly
+        varname == 'OVROUGHRTFAC' .or. &   
         varname == 'RETDEPRTFAC'  .or. &
-        varname == 'gwCoeff'     .or. &
-        varname == 'gwExpon'          &
+        varname == 'gwCoeff'      .or. &
+        varname == 'gwExpon'      .or. &
+        varname == 'ksatMult'     .or. &
+        varname == 'maxSmcMult'   .or. &
+        varname == 'bbMult'       .or. &
+        varname == 'satPsiMult'   .or. &
+        varname == 'slope'        .or. &
+        varname == 'refkdt'        .or. &
+        varname == 'rsMult'       .or. &
+        varname == 'ch2opMult'    .or. &
+        varname == 'czil'              &
         ) then
       progvar(ivar)%rangeRestricted = progvar(ivar)%rangeRestricted + 2
       progvar(ivar)%maxvalue        = 14.2  !! total dummy. 
-      if ( varname == 'OVROUGHRTFAC' ) progvar(ivar)%maxvalue = 20. ! fairly arbitrary
-      if ( varname == 'RETDEPRTFAC' )  progvar(ivar)%maxvalue = 20.
-      if ( varname == 'gwCoeff' ) progvar(ivar)%maxvalue = 1000 ! fairly arbitrary
-      if ( varname == 'gwExpon' )  progvar(ivar)%maxvalue = 1000
+      if ( varname == 'SOIL_T' )        progvar(ivar)%maxvalue = 273.15+75.  ! Kelvin. 
+      if ( varname == 'precipMult' )    progvar(ivar)%maxvalue = 10.
+      if ( varname == 'OVROUGHRTFAC' )  progvar(ivar)%maxvalue = 20.  ! fairly arbitrary
+      if ( varname == 'RETDEPRTFAC' )   progvar(ivar)%maxvalue = 20.
+      if ( varname == 'gwCoeff' )       progvar(ivar)%maxvalue = 100. ! fairly arbitrary
+      if ( varname == 'gwExpon' )       progvar(ivar)%maxvalue = 100.
+      if ( varname == 'ksatMult' )      progvar(ivar)%maxvalue = 10.
+      if ( varname == 'maxSmcMult' )    progvar(ivar)%maxvalue = 1.25
+      if ( varname == 'bbMult' )        progvar(ivar)%maxvalue = 3.
+      if ( varname == 'satPsiMult' )    progvar(ivar)%maxvalue = 7.
+      if ( varname == 'slope' )         progvar(ivar)%maxvalue = 1.
+      if ( varname == 'refkdt' )        progvar(ivar)%maxvalue = 5.
+      if ( varname == 'rsMult' )        progvar(ivar)%maxvalue = 1.2
+      if ( varname == 'ch2opMult' )     progvar(ivar)%maxvalue = 5.
+      if ( varname == 'czil' )          progvar(ivar)%maxvalue = 1
    end if
 
    ! specify if array bounds are to be used. 
@@ -835,8 +909,12 @@ FILL_PROGVAR : do ivar = 1, nfields
       ! the hack on the following line allows us to change dimensions from file storage to 
       ! disaggregated dimensions for hydro sh2ox and use the disaggregated in the assim.
       ! use dimnames to identify changing the size instead... jlm fixme
-      if (trim(component) .eq. 'HYDRO' .and. &  
-           trim(varname) .eq. 'sh2ox') dimlen = fine3dShape(i)
+
+      if (trim(component) .eq. 'HYDRO') then 
+         if (trim(varname) .eq. 'sh2ox')       dimlen = fine3dShape(i)
+         if (trim(varname) .eq. 'sfcheadrt')   dimlen = fine2dShape(i)
+      endif
+
       progvar(ivar)%dimlens(i) = dimlen
       progvar(ivar)%dimnames(i) = trim(dimname)
       varsize = varsize * dimlen
@@ -1316,9 +1394,8 @@ do iPt=1,nPts
 enddo
 
 dists = sqrt( (stateVarLat  -loc_lat  )**(2.) + &
-     (stateVarLon  -loc_lon  )**(2.) )
-! + &
-!     (stateVarDepth-loc_depth)**(2.) )
+              (stateVarLon  -loc_lon  )**(2.) )
+!             (stateVarDepth-loc_depth)**(2.) )  !! 3d
 closestIndArr = minloc( dists )
 closestInd = closestIndArr(1) + index1 - 1
 
@@ -2424,7 +2501,8 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
       endif
 
       ncstart(i) = 1
-      if (trim(varname) .eq. 'sh2ox') dimlen = fine3dShape(i)
+      if (trim(varname) .eq. 'sh2ox')     dimlen = fine3dShape(i)
+      if (trim(varname) .eq. 'sfcheadrt') dimlen = fine2dShape(i)
       nccount(i) = dimlen
 
       if ( trim(dimname) == 'Time' ) then
@@ -2473,9 +2551,16 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
 
       allocate(data_2d_array(nccount(1), nccount(2)))
 
-      call nc_check(nf90_get_var(ncid, VarID, data_2d_array,  &
-           start=ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
-           'model_to_dart_vector', 'get_var '//trim(string3))
+      if (trim(varname) .eq. 'sfcheadrt') then 
+         !! disags sfcheadrt  this is in the wrong dimension
+         write(logfileunit,*)"Disaggregating HYDRO surface head (sfcheadrt)."
+         write(     *     ,*)"Disaggregating HYDRO surface head (sfcheadrt)."
+         data_2d_array = sfcHeadDisag
+      else
+         call nc_check(nf90_get_var(ncid, VarID, data_2d_array,  &
+              start=ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
+              'model_to_dart_vector', 'get_var '//trim(string3))
+      end if
 
       do indx2 = 1, nccount(2)
       do indx1 = 1, nccount(1)
@@ -2493,7 +2578,7 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
          !! disags liquid water content (sh2oRt) into module memory for use elsewhere.
          write(logfileunit,*)"Disaggregating HYDRO liquid soil moisture."
          write(     *     ,*)"Disaggregating HYDRO liquid soil moisture."
-         call disagSh2ox(data_3d_array) 
+         data_3d_array = sh2oDisag
       else 
          call nc_check(nf90_get_var(ncid, VarID, data_3d_array,  &
               start=ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
@@ -2573,44 +2658,68 @@ endif
 end subroutine model_to_dart_vector
 
 
-
 !===============================================================================-------------
-subroutine disagSh2ox(sh2oRt)
+subroutine disagHydro()
+! There are two hydro quantities which are disaggregated. Soil moisture content (SMC) and 
+! surface head (sfchead). sfchead depends on smc in the disaggregation, so they are 
+! done together if sfchead is present. If sfchead is not present, then only sh2ort is disaggregated. 
+! This is possible since their re-aggregation does not have dependence. 
+!
+! The hydro code used here starts at (roughly) line 2327 in Routing/Noah_distr_routing.F
+! Taken from HYDRO_drv/module_HYDRO_drv.F near line 536
+! Several changes in naming conventions are mentioned below. 
+!
+! --- SMC ---
 ! Disaggregating of sh2ox can be done simply using weights.
 ! HOWEVER, we would like to physically constrain perturbations to sh2ox using
-! the wilt and max water holding of the soil and the amount of ice in a given
-! layer (sice=smc-sh2ox).
-! total soil moisture: smc, smcrt
-! liquid soil moisture: sh2ox, sh2oxrt
-! ice soil moisture: sice
+! the wilt and max water holding of the soil and the amount of ice in a given layer (sice=smc-sh2ox). 
+! total soil moisture coarse and fine res:    smc, smcrt
+! liquid soil moisture coarse and fine res: sh2ox, sh2ort
+! low res ice: sice=smc-sh2ox
 ! coarse res, 2D, total soil moisture wilt and max soil water: smcWlt1, smcMax1
-! fine res, 3D, *liquid* soil moisture wilt and max soil water: sh2oWltRt, sh2oxMaxRt (adjusted for ice)
-! sh2owgts: weigts to disagg to routing domain.
+! fine res, 3D, *liquid* soil moisture wilt & max soil water: sh2oWltRt, sh2oxMaxRt (adj for ice)
+! fine res weights for disag: sh2owgts
+! NOTE I renamed: smcrt->sh2oRt, smcWltRt->sh2oWltRt, and smcMaxRt->sh2oMaxRt compared to hydro code.
 
-! this code starts at (roughly) line 2327 in Routing/Noah_distr_routing.F
-! Taken from HYDRO_drv/module_HYDRO_drv.F near line 536
-! NOTE I renamed: smcrt->sh2oRt, smcWltRt->sh2oWltRt, and smcMaxRt->sh2oMaxRt compared to that code.
+! --- SFCHEAD ---
+! In this routine 
+! sfcHeadSubRt - fine resolution surface head
+! sfcHeadRt    - coarse resolution surface head
+! infxswgts    - fine resolution weights to go between the above surface head. 
+! In the hydro code infxsrt is disaggregated to infxsubrt. 
+! This is because 
+! sfcheadrt -> LSM -> infxsrt -> HYDRO -> infxsubrt -> sfcheadsubrt -> infxswgt -> sfcheadrt
+! So that infiltration excess is surface head after it's been allowed to infiltrate.
+! sfcheadrt and infxswgt are the prognostic variables saved to restart file at the end of 
+! the advance. We do the following disaggregation here, outside the model advance:
+! sfcheadrt, infxwgt -> sfcheadsubrt
+! Then sfcheadsubrt is adjusted in the assimilation. 
+! (The aggregation routine reverses this: sfcheadsubrt -> sfcheadrt, infxwgt)
 
+! IN/OUT
+! Done by setting global variables.
+! These are set by the disag
+!real(R8), dimension(:,:,:), allocatable :: sh2oDisag
+!real(R8), dimension(:,:),   allocatable :: sfcHeadDisag
 
-!! IN/OUT
-real(R8), dimension(n_hlong,n_hlat,nsoil), intent(out) :: sh2oRt
+! global 
+! real(R8), dimension(:,:,:), allocatable :: sice  !! global
+! real(R8), dimension(:,:,:), ALLOCATABLE :: sh2oMaxRt, sh2oWltRt !! global
+! real(R8), dimension(west_east,south_north)   :: smcWlt1, smcMax1
 
-!! global to share with aggSh2ox
-!! real(R8), dimension(:,:,:), allocatable :: sice  !! global
-!! real(R8), dimension(:,:,:), ALLOCATABLE :: sh2oMaxRt, sh2oWltRt !! global
-!! real(R8), dimension(west_east,south_north)   :: smcWlt1, smcMax1
-
-!! read from hydro restart file.
+! read from hydro restart file.
 real(R8), dimension(west_east,south_north,nsoil) :: sh2ox
-real(R8), dimension(n_hlong,n_hlat,nsoil) :: sh2oWgt
+real(R8), dimension(n_hlong,n_hlat,nsoil)        :: sh2oWgt,   sh2ort
+real(R8), dimension(:,:), allocatable            :: sfcHeadRt, infxsWgt, sfcHeadSubRt
 
-!local
-real(R8)           :: WATHOLDCAP
+! local
+real(R8)           :: LSMVOL, SMCEXCS, WATHOLDCAP, area_lsm
 character(len=250) :: errString
 integer            :: ncid, varId, i, j, ix, iy, jx, ixrt, iyrt
-integer            :: krt, ixxrt, jyyrt, ncNdims
+integer            :: krt, ixxrt, jyyrt, ncNdims, kf
 integer            :: AGGFACXRT, AGGFACYRT, AGGFACTRT
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+real(r8), dimension(nsoldx) :: SLDPTH
 
 !! this code starts at (roughly) line 2327 in Routing/Noah_distr_routing.F
 iy = south_north
@@ -2620,59 +2729,86 @@ ixrt = n_hlong
 iyrt = n_hlat
 !nsoil=nsoil
 aggfactrt = n_hlong/west_east
+sldpth = soil_thick_input
+area_lsm = coarseGridArea
 
 !! global scope variables, so be more careful
 !! allocated here but deallocated in aggSh2ox. These should not be allocated when arriving here...
-if (.not. allocated(smcWlt1))  allocate(smcWlt1(west_east,south_north))
-if (.not. allocated(smcMax1))  allocate(smcMax1(west_east,south_north))
-if (.not. allocated(sh2oWltRt)) allocate(sh2oWltRt(ixrt,iyrt,nsoil))
-if (.not. allocated(sh2oMaxRt)) allocate(sh2oMaxRt(ixrt,iyrt,nsoil))
-if (.not. allocated(smc)    )   allocate(      smc(ix,  iy,  nsoil))
-if (.not. allocated(sice)    )  allocate(     sice(ix,  iy,  nsoil))
+if (.not. allocated(smcWlt1))    allocate(  smcWlt1(west_east,south_north))
+if (.not. allocated(smcMax1))    allocate(  smcMax1(west_east,south_north))
+if (.not. allocated(sh2oWltRt))  allocate(sh2oWltRt(ixrt,iyrt,      nsoil))
+if (.not. allocated(sh2oMaxRt))  allocate(sh2oMaxRt(ixrt,iyrt,      nsoil))
+if (.not. allocated(smc)    )    allocate(      smc(ix,   iy,       nsoil))
+if (.not. allocated(sice)    )   allocate(     sice(ix,   iy,       nsoil))
 
 !! open the hydro restart file
 call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, ncid), &
-     'disagSh2ox', 'open '//trim(hydro_netcdf_filename))
+     'disagHydro', 'open '//trim(hydro_netcdf_filename))
 
 !! SMC
-errString    = 'disagSh2ox: smc'
+errString    = 'disagHydro: smc'
 call nc_check(nf90_inq_varid(ncid, 'smc', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smc), 'disagSh2ox', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smc), 'disagHydro', 'get_var: '//trim(errString))
 
 !! sh2ox
-errString    = 'disagSh2ox: sh2ox'
+errString    = 'disagHydro: sh2ox'
 call nc_check(nf90_inq_varid(ncid, 'sh2ox', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, sh2ox),'disagSh2ox', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, sh2ox),'disagHydro', 'get_var: '//trim(errString))
 
 !! smcWlt1
-errString    = 'disagSh2ox: smcWlt1'
+errString    = 'disagHydro: smcWlt1'
 call nc_check(nf90_inq_varid(ncid, 'smcwlt1', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smcWlt1),'disagSh2ox', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smcWlt1),'disagHydro', 'get_var: '//trim(errString))
 
 !! smcMax1
-errString    = 'disagSh2ox: smcmax1'
+errString    = 'disagHydro: smcmax1'
 call nc_check(nf90_inq_varid(ncid, 'smcmax1', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, smcMax1),'disagSh2ox', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, smcMax1),'disagHydro', 'get_var: '//trim(errString))
 
 !! sh2owgt
-errString    = 'disagSh2ox: sh2owgt'
+errString    = 'disagHydro: sh2owgt'
 call nc_check(nf90_inq_varid(ncid, 'sh2owgt', varId), 'varId: '//trim(errString))
-call nc_check(nf90_get_var(ncid, VarID, sh2owgt),'disagSh2ox', 'get_var: '//trim(errString))
+call nc_check(nf90_get_var(ncid, VarID, sh2owgt),'disagHydro', 'get_var: '//trim(errString))
+
+if (hydroSfcHeadPresent) then 
+   allocate(sfcHeadRt(west_east,south_north), &
+            infxsWgt(n_hlong,n_hlat), sfcHeadSubRt(n_hlong,n_hlat) )
+
+   !! sfcHeadRt
+   errString    = 'disagHydro: sfcHeadRt'
+   call nc_check(nf90_inq_varid(ncid, 'sfcheadrt', varId), 'varId: '//trim(errString))
+   call nc_check(nf90_get_var(ncid, VarID, sfcHeadRt), 'disagHydro', 'get_var: '//trim(errString))
+
+   !! infxswgt
+   errString    = 'disagHydro: infxsWgt'
+   call nc_check(nf90_inq_varid(ncid, 'infxswgt', varId), 'varId: '//trim(errString))
+   call nc_check(nf90_get_var(ncid, VarID, infxsWgt),'disagHydro', 'get_var: '//trim(errString))
+end if
 
 !! close the hydro restart file
-call nc_check(nf90_close(ncid), 'static_init_model', 'close '//trim(hydro_netcdf_filename))
+call nc_check(nf90_close(ncid), 'disagHydro', 'close '//trim(hydro_netcdf_filename))
 
 !! calculate sice
 sice=smc-sh2ox
+!! scmrefrt not needed unless we want to adjust the disaggregated lksat.
 
 !! disag
 do J=1,JX  !! also know as y
    do I=1,IX
+
+      if (hydroSfcHeadPresent) &
+           !LSMVOL=INFXSRT(I,J)*area_lsm(I,J)
+           LSMVOL=sfcHeadRt(I,J)*area_lsm
+
       do AGGFACYRT=AGGFACTRT-1,0,-1
          do AGGFACXRT=AGGFACTRT-1,0,-1
 
             IXXRT=I*AGGFACTRT-AGGFACXRT
             JYYRT=J*AGGFACTRT-AGGFACYRT
+
+            if (hydroSfcHeadPresent) &
+                 !INFXSUBRT(IXXRT,JYYRT)=LSMVOL*INFXSWGT(IXXRT,JYYRT)/fineGridArea
+                 sfcHeadSubRt(IXXRT,JYYRT)=LSMVOL*INFXSWGT(IXXRT,JYYRT)/fineGridArea
 
             !! note that this block could be moved out of the agg do loop as nothing
             !! depends on high-res indices and the assingments to high-res can be vectorized.
@@ -2693,6 +2829,7 @@ do J=1,JX  !! also know as y
                else
                   sh2oMaxRt(IXXRT,JYYRT,KRT)= SMCMAX1(I,J)
                   sh2oWltRt(IXXRT,JYYRT,KRT) = SMCWLT1(I,J)
+                  ! watholdcap not used after here... 
                end if   !endif adjust for soil ice...
 
                !Now Adjust soil moisture
@@ -2703,16 +2840,61 @@ do J=1,JX  !! also know as y
                   SH2ORT(IXXRT,JYYRT,KRT) = 0.001  !will be skipped w/ landmask
                   sh2oMaxRt(IXXRT,JYYRT,KRT) = 0.001
                end if
+
+               if (hydroSfcHeadPresent) then
+                  !DJG Check/Adjust so that subgrid cells do not exceed saturation...
+                  if (sh2oRt(IXXRT,JYYRT,KRT).gt.sh2oMaxRt(IXXRT,JYYRT,KRT)) then
+                     SMCEXCS = (sh2oRt(IXXRT,JYYRT,KRT) - sh2oMaxRt(IXXRT,JYYRT,KRT)) &
+                          * SLDPTH(KRT)*1000.  !Excess soil water in units of (mm)
+                     sh2oRt(IXXRT,JYYRT,KRT) = sh2oMaxRt(IXXRT,JYYRT,KRT)
+                     do KF = KRT-1,1, -1  !loop back upward to redistribute excess water from disagg.
+                        sh2oRt(IXXRT,JYYRT,KF) = sh2oRt(IXXRT,JYYRT,KF) + SMCEXCS/(SLDPTH(KF)*1000.) 
+                        if (sh2oRt(IXXRT,JYYRT,KF).gt.sh2oMaxRt(IXXRT,JYYRT,KF)) then  !Recheck new lyr sat.
+                           SMCEXCS = (sh2oRt(IXXRT,JYYRT,KF) - sh2oMaxRt(IXXRT,JYYRT,KF)) &
+                                * SLDPTH(KF)*1000.  !Excess soil water in units of (mm)
+                           sh2oRt(IXXRT,JYYRT,KF) = sh2oMaxRt(IXXRT,JYYRT,KF)
+                        else  ! Excess soil water expired
+                           SMCEXCS = 0.
+                           exit
+                        end if
+                     end do
+                     if (SMCEXCS.gt.0) then  !If not expired by sfc then add to Infil. Excess
+                        !INFXSUBRT(IXXRT,JYYRT) = INFXSUBRT(IXXRT,JYYRT) + SMCEXCS
+                        sfcHeadSubRt(IXXRT,JYYRT) = sfcHeadSubRt(IXXRT,JYYRT) + SMCEXCS
+                        SMCEXCS = 0.
+                     end if
+                  end if  !End if for soil moisture saturation excess
+               end if
             end do !KRT
+
+            do KRT=1,NSOIL  !debug loop
+               if (sh2oRt(IXXRT,JYYRT,KRT).gt.sh2oMaxRt(IXXRT,JYYRT,KRT)) then
+                  string1 = &
+                       "SMCMAX exceeded upon disagg. Inds & values: ixxrt,jyyrt,krt,sh2oRt,sh2oMaxRt"
+                  write(string2,*) ixxrt,jyyrt,krt, sh2oRt(IXXRT,JYYRT,KRT),sh2oMaxRt(IXXRT,JYYRT,KRT)
+                  call error_handler(E_ERR, 'disaggregateHydro', string1, &
+                                     source, revision, revdate, text2=string2)
+               else if (sh2oRt(IXXRT,JYYRT,KRT).le.0.) then
+                  string1 = &
+                       "SMCRT depleted on disag. Inds &values:ixxrt,jyyrt,krt,sh2oRt,sh2oMaxRt,sh2ox"
+                  write(string2,*) ixxrt,jyyrt,krt, &
+                       sh2oRt(IXXRT,JYYRT,KRT),sh2oMaxRt(IXXRT,JYYRT,KRT),sh2ox(I,J,KRT)
+                  write(string3,*) "i,j,krt, nsoil",i,j,krt,nsoil
+                  call error_handler(E_ERR, 'disaggregateHydro', string1, &
+                                     source, revision, revdate, text2=string2, text3=string3)
+               end if
+            end do !debug loop
+
          end do !AGGFACXRT
       end do !AGGFACYRT
    end do !IX
 end do !JX
 
+!! this is not vegas? (what happens here stays here or not).
+if (hydroSmcPresent)     sh2oDisag    = sh2oRt
+if (hydroSfcHeadPresent) sfcHeadDisag = sfcHeadSubRt
 
-
-end subroutine disagSh2ox
-!===============================================================================-------------
+end subroutine disagHydro
 
 
 !===============================================================================
@@ -2749,10 +2931,11 @@ real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 real(r8), allocatable, dimension(:,:,:)     :: smcAgg, smcAggWeights
+real(r8), allocatable, dimension(:,:)       :: sfcHeadAgg, InfxsWeights
 
 ! variables related to screwing around with soil moisture states
-integer :: varidSh2ox, ncNdimsSh2ox
-integer, dimension(NF90_MAX_VAR_DIMS) :: mycountSh2ox, mystartSh2ox
+integer :: varidOrig, ncNdimsOrig
+integer, dimension(NF90_MAX_VAR_DIMS) :: mycountSh2ox, mystartSh2ox, mycountSfcHead, mystartSfcHead
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2863,7 +3046,11 @@ UPDATE : do ivar=1, nfields
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), name=dimnames(i), len=dimlen), &
            'dart_vector_to_model_files', string1)
+
+      !! These vars wont check because they are different in file than used in DART.
       if (trim(varname) .eq. 'sh2ox') dimlen = fine3dShape(i) !! completely cheating
+      if (trim(varname) .eq. 'sfcheadrt') dimlen = fine2dShape(i) !! completely cheating
+
       if (component == 'LSM' .and. dimIDs(i) == TimeDimID) timedimcounter = 1
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
@@ -2878,11 +3065,10 @@ UPDATE : do ivar=1, nfields
       write(string1,*) trim(string2),' required to have "Time" as the last/unlimited dimension'
       write(string2,*)' last dimension is ',trim(dimnames(ncNdims))
       call error_handler(E_ERR, 'dart_vector_to_model_files', string1, &
-           source, revision, revdate, text2=string2)
+                         source, revision, revdate, text2=string2)
+      where(dimIDs == TimeDimID) mystart = timeindex
+      where(dimIDs == TimeDimID) mycount = 1
    endif
-
-   where(dimIDs == TimeDimID) mystart = timeindex
-   where(dimIDs == TimeDimID) mycount = 1
 
    if ( (do_output()) .and. debug > 99 ) then
       write(*,*)
@@ -2910,6 +3096,48 @@ UPDATE : do ivar=1, nfields
       allocate(data_2d_array(progvar(ivar)%dimlens(1), &
                              progvar(ivar)%dimlens(2)) )
       call vector_to_prog_var(state_vector, ivar, data_2d_array,limit=.true.)
+
+      !! I really need to do these in a better way, just dont have time right now.
+      if (trim(varname) .eq. 'sfcheadrt') then
+         allocate(sfcHeadAgg(coarse2dShape(1),coarse2dShape(2)), &
+                  infxsWeights(fine2dShape(1),fine2dShape(2))     )
+         sfcHeadDisag = data_2d_array ! global, but declared yet??
+         deallocate(data_2d_array)
+         call aggSfcHead(sfcHeadAgg, infxsWeights)
+         allocate(data_2d_array(coarse2dShape(1),coarse2dShape(2)))
+         !! sfcHeadRt onfile = sfcHeadAgg
+         data_2d_array = sfcHeadAgg
+         deallocate(sfcHeadAgg)
+         varidOrig = varid !! this will be written to file after this if statment
+         ncNdimsOrig = ncNdims
+         
+         !! output sh2owgts to the ncid file
+         !! i'm kinda cheating by not doing all the dimension checks...
+         varname = 'infxswgt'
+         mycount(1:2)=fine2dShape(1:2)
+         string2 = trim(filename)//' '//trim(varname)  ! for diagnostics
+         call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+              'dart_vector_to_model_files', 'inq_varid '//trim(string2))
+         call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
+              'dart_vector_to_model_files', 'inquire '//trim(string2))
+         call nc_check(nf90_put_var(ncFileID, VarID, infxsWeights, &
+              start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
+              'dart_vector_to_model_files', 'put_var '//trim(string2))
+         ! Make note that the variable has been updated by DART
+         call nc_check(nf90_Redef(ncFileID),'dart_vector_to_model_files', 'redef '//trim(filename))
+         call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
+              'dart_vector_to_model_files', 'modified '//trim(varname))
+         call nc_check(nf90_enddef(ncfileID),'dart_vector_to_model_files','state enddef '//trim(filename))
+
+         !! reset the current variable to sfcheadrt
+         varname = 'sfcheadrt'
+         string2 = trim(filename)//' '//trim(varname)  ! for diagnostics
+         varid = varidOrig
+         ncNdims = ncNdimsOrig
+         mycount(1:2) = coarse2dShape(1:2)
+         print*,shape(data_2d_array)
+      endif  !! if sfcHeadRt
+
       call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
            start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
            'dart_vector_to_model_files', 'put_var '//trim(string2))
@@ -2942,16 +3170,17 @@ UPDATE : do ivar=1, nfields
          ! However it lives as coarse res soil moisture and weights in the restart files. 
          ! Spatially aggregate and solve the weights and the total soil moisture. 
          allocate(smcAgg(coarse3dShape(1),coarse3dShape(2),coarse3dShape(3)), &
-              smcAggWeights(fine3dShape(1),fine3dShape(2),fine3dShape(3)) )
-         call aggSh2ox(data_3d_array, smcAgg, smcAggWeights)
+                  smcAggWeights(fine3dShape(1),fine3dShape(2),fine3dShape(3)) )
+         sh2oDisag = data_3d_array
          deallocate(data_3d_array)
+         call aggSh2ox(smcAgg, smcAggWeights)  !! also sets the global smc variable
          allocate(data_3d_array(coarse3dShape(1),coarse3dShape(2),coarse3dShape(3)))
-         !! sh2ox = smcAgg
-         data_3d_array = smcAgg
+         !! sh2ox onfile = smcAgg
+         data_3d_array = smcAgg  !! this gets set just outside this if block
          deallocate(smcAgg)
 
-         varidSh2ox = varid !! this will be written to file after this if statment
-         ncNdimsSh2ox = ncNdims
+         varidOrig = varid !! this will be written to file after this if statment
+         ncNdimsOrig = ncNdims
          
          !! output sh2owgts to the ncid file
          !! i'm kinda cheating by not doing all the dimension checks...
@@ -2988,12 +3217,11 @@ UPDATE : do ivar=1, nfields
               'dart_vector_to_model_files', 'modified '//trim(varname))
          call nc_check(nf90_enddef(ncfileID),'dart_vector_to_model_files','state enddef '//trim(filename))
 
-
          !! reset the current variable to sh2ox
          varname = 'sh2ox'
          string2 = trim(filename)//' '//trim(varname)  ! for diagnostics
-         varid = varidSh2ox
-         ncNdims = ncNdimsSh2ox
+         varid = varidOrig
+         ncNdims = ncNdimsOrig
          mycount(1:3) = coarse3dShape(1:3)
 
       endif
@@ -3025,7 +3253,7 @@ ncFileID = 0
 end subroutine dart_vector_to_model_files
 
 !===============================================================================
-subroutine aggSh2ox(sh2oRtIn, sh2ox, sh2owgt)
+subroutine aggSh2ox(sh2ox, sh2owgt)
 ! Taken from HYDRO_drv/module_HYDRO_drv.F near line 536
 ! NOTE I renamed: smcrt->sh2oRt, smcWltRt->sh2oWltRt, and 
 !                 smcMaxRt->sh2oMaxRt compared to that code
@@ -3034,8 +3262,10 @@ subroutine aggSh2ox(sh2oRtIn, sh2ox, sh2owgt)
 ! requires (rt grid:) smcrt, sh2oRt, sh2oWltRt, sh2oMaxRt and (lsm grid:) sice
 ! Global/module variables: sh2oWltRt, sh2oMaxRt, sice
 
-! liquid water content on the rt grid
-real(R8), dimension(:,:,:), intent(in)  :: sh2oRtIn
+! Because this is independent of sfchead, I use separate subroutines for aggregation.
+
+! Global
+! real(R8), dimension(:,:,:)  :: sh2oDisag, smc
 
 ! liquid water content on the low res grid
 real(R8), dimension(west_east,south_north,nsoil), intent(out) :: sh2ox
@@ -3048,12 +3278,11 @@ real(r8), dimension(n_hlong,n_hlat,nsoil)      :: sh2oRt
 integer            :: i, j, ix, jx, krt, ixxrt, jyyrt, ss
 integer            :: AGGFACXRT, AGGFACYRT, AGGFACTRT
 
-
 jx = south_north
 ix = west_east
 aggfactrt = n_hlong/west_east
 
-sh2oRt = sh2oRtIn
+sh2oRt = sh2oDisag  ! global
 
 !---------------------------------------------------------------------
 ! The following block could be done here, but it is done in 
@@ -3068,8 +3297,8 @@ sh2oRt = sh2oRtIn
 ! from file. The soil moisture is different but not used, while all the other
 ! fields are the same (sice, sh2oWltRt, and sh2oMaxRt).
 !if ((.not. allocated(sh2oWltRt)) .or. (.not. allocated(sh2oMaxRt))) then
-!   call disagSh2ox(sh2oRt)  !! This allocates and calculates both of these
-!   sh2oRt = sh2oRtIn
+!   call disagHydro(sh2oRt)  !! This allocates and calculates both of these
+!   sh2oRt = sh2oDisag
 !end if
 ! These constraints use the sice to constrain the liquid fraction.
 !sh2oRt = max( min( sh2oRt,  sh2oMaxRt ), sh2oWltRt )
@@ -3093,8 +3322,9 @@ do J=1,JX
          end do !aggfacxrt
       end do !aggfacyrt
 
-      !! because sice is uniform & the liquid water (sh2oRt) was conatrained above by a constant amt of ice
-      !! aggregation will not violate smcWilt or smcMax at the coarse scale. 
+      ! because sice is uniform & the liquid water (sh2oRt) was 
+      ! conatrained above by a constant amt of ice
+      ! aggregation will not violate smcWilt or smcMax at the coarse scale. 
 
       !! sh2ox - lsm grid layer is layer average of rt grid
       do KRT=1,NSOIL
@@ -3120,13 +3350,82 @@ end do
 
 !! update smc = sice + sh2ox at the lsm/coarse grid resolution.
 !! calculate sice
+!! smc is global
 smc=sh2ox+sice
 do ss=1,nsoil
    smc(:,:,ss) = max( min(smc(:,:,ss), smcMax1), smcWlt1)
 end do
 
 end subroutine aggSh2ox
-!===============================================================================-------------
+
+
+!===============================================================================
+subroutine aggSfcHead(sfcHeadRt, infxsWgt)
+
+! (The aggregation: sfcheadsubrt -> sfcheadrt, infxwgt)
+! sfcHeadSubRt == global sfcHeadDisag - fine resolution surface head
+! sfcHeadRt    - coarse resolution surface head
+! infxswgts    - fine resolution weights to go between the above surface head. 
+
+! Taken from HYDRO_drv/module_HYDRO_drv.F near line 536
+
+! Because this is independent of soil moisture, I use separate subroutines for aggregation.
+
+! surface head (aka infiltration excess after infiltration) on the rt grid
+! real(R8), dimension(:,:)  :: sfcHeadDisag
+
+! sfc head on the low res grid
+real(R8), dimension(west_east,south_north), intent(out) :: sfcHeadRt
+! weights to disaggregate 
+real(R8), dimension(n_hlong,n_hlat),        intent(out) :: infxsWgt
+
+! local
+real(r8)                     :: sfcHeadAggRt, lsmVol
+integer                      :: i, j, ix, jx, krt, ixxrt, jyyrt, ss
+integer                      :: aggFacXRt, aggFacYRt, aggFactRt
+
+jx = south_north
+ix = west_east
+aggfactrt = n_hlong/west_east
+
+do J = 1,JX
+   do I = 1,IX
+
+      sfcHeadAggRt = 0.
+      lsmVol=0.
+
+      do aggFacYRt = aggFactRt-1,0,-1
+         do aggFacXRt = aggFactRt-1,0,-1
+            IXXRT=I*aggFactRt-aggFacXRt
+            JYYRT=J*aggFactRt-aggFacYRt
+
+            sfcHeadAggRt = sfcHeadAggRt + sfcHeadDisag(IXXRT,JYYRT)
+            lsmVol = lsmVol + sfcHeadDisag(IXXRT,JYYRT)*fineGridArea
+
+         end do  !! aggFacYRt
+      end do  !! aggFacXRt
+
+      sfcHeadRt(I,J) = sfcHeadAggRt / (aggFactRt**2)
+
+      do aggFacYRt = aggFactRt-1,0,-1
+         do aggFacXRt = aggFactRt-1,0,-1
+            IXXRT=I*aggFactRt-aggFacXRt
+            JYYRT=J*aggFactRt-aggFacYRt
+
+            if (lsmVol .gt. 0.) then
+               infxsWgt(IXXRT,JYYRT) = sfcHeadDisag(IXXRT,JYYRT) * fineGridArea/lsmVol
+            else
+               infxsWgt(IXXRT,JYYRT) = 1./FLOAT(aggFactRt**2)
+            end if
+      
+         end do  !! aggFacYRt
+      end do  !! aggFacXRt
+      
+   end do
+end do
+
+
+end subroutine aggSfcHead
 
 
 !===============================================================================
@@ -3364,7 +3663,7 @@ where (hlat >  90.0_r8) hlat =  90.0_r8
 do ii=1,n_hlong
    do jj=1,n_hlat
       hlongFlip(ii,jj) = hlong(ii,n_hlat-jj+1)
-      hlatFlip(ii,jj) =  hlat(ii,n_hlat-jj+1)
+       hlatFlip(ii,jj) =  hlat(ii,n_hlat-jj+1)
    end do
 end do
 hlong = hlongFlip
@@ -3465,7 +3764,8 @@ DEFDIM : do i = 1,progvar(ivar)%numdims
    !! though hydro sh2ox is output on the coarse grid with the weights sh2owgts
    !! i'd rather have the fine grid sh2ox in the diagnostic files. 
    if (progvar(ivar)%component == 'HYDRO' ) then 
-      if (progvar(ivar)%varname == 'sh2ox' ) then 
+      if (progvar(ivar)%varname == 'sh2ox' .OR. &
+          progvar(ivar)%varname == 'sfcheadrt' ) then 
          if (trim(theDimname) == 'ix')      theDimname = 'ixrt'
          if (trim(theDimname) == 'iy')      theDimname = 'iyrt'
       endif
@@ -3545,7 +3845,7 @@ if (present(limit)) then
       elseif (progvar(ivar)%rangeRestricted == 3) then
          where(data_1d_array < progvar(ivar)%minvalue) data_1d_array = progvar(ivar)%minvalue
          where(data_1d_array > progvar(ivar)%maxvalue) data_1d_array = progvar(ivar)%maxvalue
-      elseif (progvar(ivar)%rangeRestricted == 3) then
+      elseif (progvar(ivar)%rangeRestricted == 4) then
          write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
          write(string2, *)'No code written to restrict its range, however.'
          call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
@@ -3597,7 +3897,7 @@ if (present(limit)) then
       elseif (progvar(ivar)%rangeRestricted == 3) then
          where(data_2d_array < progvar(ivar)%minvalue) data_2d_array = progvar(ivar)%minvalue
          where(data_2d_array > progvar(ivar)%maxvalue) data_2d_array = progvar(ivar)%maxvalue
-      elseif (progvar(ivar)%rangeRestricted == 3) then
+      elseif (progvar(ivar)%rangeRestricted == 4) then
          write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
          write(string2, *)'No code written to restrict its range, however.'
          call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
@@ -3627,7 +3927,7 @@ integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
 logical,  optional,         intent(in)  :: limit
 
-real(R8),dimension(:,:,:),allocatable :: dum !! dum to disagSh2ox to init global sh2oWltRt and sh2oMaxRt
+real(R8),dimension(:,:,:),allocatable :: dum !! dum to disagHydro to init global sh2oWltRt and sh2oMaxRt
 integer :: i,j,k,ii
 
 ! unpack the right part of the DART state vector into a 3D array.
@@ -3665,9 +3965,7 @@ if (present(limit)) then
             ! from file. The soil moisture is different but not used, while all the other
             ! fields are the same (sice, sh2oWltRt, and sh2oMaxRt).
             if ( (.not. allocated(sh2oWltRt)) .or. (.not. allocated(sh2oMaxRt)) ) then
-               allocate(dum(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
-               call disagSh2ox(dum)  
-               deallocate(dum)
+               call disagHydro()  
             endif
             data_3d_array = max( min( data_3d_array, sh2oMaxRt ), sh2oWltRt )
          else 

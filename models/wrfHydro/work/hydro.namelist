@@ -7,10 +7,10 @@
 
 !!!! MODEL INPUT DATA FILES !!!
 !Specify land surface model gridded input data file...(e.g.: "geo_em.d03.nc")
- GEO_STATIC_FLNM = "DOMAIN/geo_em.d01.nc.4mile_1km.nc"
+ GEO_STATIC_FLNM = "../DOMAIN/geo_em.d01.nc.4mile_1km.nc"
 
 !Specify the high-resolution routing terrain input data file...(e.g.: "Fulldom_hires_hydrofile.nc"
- GEO_FINEGRID_FLNM = "DOMAIN/Fulldom_hires_hydrofile_4mile_benchmark.nc"
+ GEO_FINEGRID_FLNM = "../DOMAIN/Fulldom_hires_hydrofile_4mile_benchmark.nc"
 
 !Specify the name of the restart file if starting from restart...comment out with '!' if not...
  RESTART_FILE  = 'restart.hydro.nc'
@@ -98,6 +98,6 @@
 
 !Groundwater/baseflow mask specified on land surface model grid...
 !Note: Only required if baseflow bucket model is active
- gwbasmskfil = "DOMAIN/gw_basn1k.txt"
+ gwbasmskfil = "../DOMAIN/gw_basn1k.txt"
 
 /

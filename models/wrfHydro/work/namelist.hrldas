@@ -1,6 +1,6 @@
 &NOAHLSM_OFFLINE
 
- HRLDAS_CONSTANTS_FILE = "DOMAIN/wrfinput_d01_1km"
+ HRLDAS_CONSTANTS_FILE = "../DOMAIN/wrfinput_d01_1km"
  INDIR = "../FORCING/"
  ! OUTDIR = 
 
@@ -9,7 +9,7 @@
  START_YEAR  = 2012
 ! START_YEAR  = 2012
  START_MONTH = 07
- START_DAY   = 05
+ START_DAY   = 03
  START_HOUR  = 00
  START_MIN   = 00
 
@@ -58,7 +58,7 @@
  FORC_TYP = 1
 
 ! for extract greenfrac
- GEO_STATIC_FLNM = "DOMAIN/geo_em.d01.nc.4mile_1km.nc"
+ GEO_STATIC_FLNM = "../DOMAIN/geo_em.d01.nc.4mile_1km.nc"
 
 !HRLDAS_ini_typ 1: initial and parameters from frocing; 0: from wrfinput.
  HRLDAS_ini_typ = 1
