@@ -352,7 +352,7 @@ call fill_progvar()
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. (debug > 0)) then
    write(string1,*) '    grid center shape : nx, ny, nz = ', nx, ny, nz
    write(string2,*) 'grid edges  shape : nxp1, nyp1, nzp1 = ', nxp1, nyp1, nzp1
    write(string3,*) 'number of variables = ', nfields, ' model_size = ', model_size
@@ -426,88 +426,49 @@ integer,  OPTIONAL,  intent(out) :: var_type
 
 !real(r8) :: lat, lon, depth
 integer  :: n, varindex, offset
-integer  :: index1, index2, index3
-integer  ::  ndim1,  ndim2
+integer  :: lon_index, lat_index, lev_index
 real(r8) :: mylon, mylat, mylev
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_MSG,'get_state_meta_data','FIXME TJH UNTESTED')
+if ((index_in < progvar(1)%index1) .or. &
+    (index_in > progvar(nfields)%indexN) ) then
+   write(string1,*) 'desired index ',index_in
+   write(string2,*) 'is not within the bounds of the DART address space.'
+   call error_handler(E_ERR,'get_state_meta_data',string1, &
+         source,revision,revdate,text2=string2)
+endif
 
 ! Find the DART variable that spans the index of interest.
 FindIndex : do n = 1,nfields
    if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
-      varindex     = n
+      varindex = n
       exit FindIndex
    endif
 enddo FindIndex
 
-offset = index_in - progvar(varindex)%index1 + 1
-
-write(*,*) 'DART index ',index_in,' is in ',trim(progvar(varindex)%varname)
-
-! So now we know the variable and its shape. Remember that DART only
-! stores a single timestep, so any time dimension is a singleton.
-! Furthermore, netCDF requires the time/unlimited dimension be the LAST
-! (in Fortran) dimension, so we can just focus on the first N dimensions.
-! Relying on integer arithmetic.
-
-if     ( progvar(varindex)%rank == 1) then
-
-   index1 = offset
-
-   write(*,*) '     offset is ',offset,' index is ',index1
-
-elseif ( progvar(varindex)%rank == 2) then
-
-   ndim1 = progvar(varindex)%dimlens(1)
-
-   index2 = 1 + (offset - 1)/ndim1
-   index1 = offset - (index2 - 1)*ndim1
-
-   write(*,*) '     offset is ',offset,' index1 is ',index1
-   write(*,*) '     offset is ',offset,' index2 is ',index2
-
-elseif ( progvar(varindex)%rank == 3) then
-
-   ndim1 = progvar(varindex)%dimlens(1)  ! nxp1
-   ndim2 = progvar(varindex)%dimlens(2)  ! nyp1
-
-   index3 = 1 + (offset - 1)/(ndim1*ndim2)
-   index2 = 1 + (offset - (index3-1)*ndim1*ndim2 -1)/ndim1
-   index1 = offset - (index3-1)*ndim1*ndim2 - (index2-1)*ndim1
-
-   write(*,*) '     offset is ',offset,' index1 is ',index1
-   write(*,*) '     offset is ',offset,' index2 is ',index2
-   write(*,*) '     offset is ',offset,' index3 is ',index3
-
-else
-   write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
-   write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
-   call error_handler(E_ERR,'get_state_meta_data',string1, &
-         source,revision,revdate,text2=string2)
-endif
+call get_state_indices(varindex, index_in, lon_index, lat_index, lev_index)
 
 ! FIXME -maybe- do we really only support 3d variables?
 ! The code is sprinkled with 1D and 2D support  - if it ever gets to the point
 ! where we are estimating parameters, 1D support will be needed.
 
 if     (trim(progvar(varindex)%coordinates) == 'lon lat lev time') then
-   mylon =  LON(index1,index2,index3)
-   mylat =  LAT(index1,index2,index3)
-   mylev =  LEV(index1,index2,index3)
+   mylon =  LON(lon_index, lat_index, lev_index)
+   mylat =  LAT(lon_index, lat_index, lev_index)
+   mylev =  LEV(lon_index, lat_index, lev_index)
 elseif (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev time') then
-   mylon = ULON(index1,index2,index3)
-   mylat = ULAT(index1,index2,index3)
-   mylev = ULEV(index1,index2,index3)
+   mylon = ULON(lon_index, lat_index, lev_index)
+   mylat = ULAT(lon_index, lat_index, lev_index)
+   mylev = ULEV(lon_index, lat_index, lev_index)
 elseif (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev time') then
-   mylon = VLON(index1,index2,index3)
-   mylat = VLAT(index1,index2,index3)
-   mylev = VLEV(index1,index2,index3)
+   mylon = VLON(lon_index, lat_index, lev_index)
+   mylat = VLAT(lon_index, lat_index, lev_index)
+   mylev = VLEV(lon_index, lat_index, lev_index)
 elseif (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev time') then
-   mylon = WLON(index1,index2,index3)
-   mylat = WLAT(index1,index2,index3)
-   mylev = WLEV(index1,index2,index3)
+   mylon = WLON(lon_index, lat_index, lev_index)
+   mylat = WLAT(lon_index, lat_index, lev_index)
+   mylev = WLEV(lon_index, lat_index, lev_index)
 else
    write(string1,*) 'unknown coordinate variables of ['//trim(progvar(varindex)%coordinates)//']'
    write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
@@ -523,6 +484,20 @@ location = set_location(mylon, mylat, mylev, VERTISHEIGHT)
 
 if (present(var_type)) then
    var_type = progvar(varindex)%dart_kind
+endif
+
+if (do_output() .and. (debug > 5)) then
+   write(*,*) 'DART index ',index_in,' is in ',trim(progvar(varindex)%varname)
+   if     ( progvar(varindex)%rank == 1) then
+      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
+   elseif ( progvar(varindex)%rank == 2) then
+      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
+      write(*,*) '     offset is ',offset,' lat_index is ',lat_index, 'lat is ',mylat
+   elseif ( progvar(varindex)%rank == 3) then
+      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
+      write(*,*) '     offset is ',offset,' lat_index is ',lat_index, 'lat is ',mylat
+      write(*,*) '     offset is ',offset,' lev_index is ',lev_index, 'lev is ',mylev
+   endif
 endif
 
 end subroutine get_state_meta_data
@@ -588,7 +563,7 @@ llon    = loc_array(1)
 llat    = loc_array(2)
 lheight = loc_array(3)
 
-if (do_output() .and. (debug > 1))  &
+if (do_output() .and. (debug > 2))  &
    print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
 
 if( vert_is_height(location) ) then
@@ -617,7 +592,7 @@ if(obs_type == KIND_TEMPERATURE) then
    ! we know how to interpolate this from potential temp,
    ! salinity, and pressure based on depth.
    call compute_temperature(x, llon, llat, lheight, interp_val, istatus)
-   if (do_output() .and. (debug > 1)) print *, 'interp val, istatus = ', interp_val, istatus
+   if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
    return
 endif
 
@@ -629,7 +604,7 @@ if( vert_is_surface(location) ) then
    if (convert_to_ssh .and. (istatus == 0)) then
       interp_val = interp_val / 980.6_r8   ! GCOM uses CGS units
    endif
-   if (do_output() .and. (debug > 1)) print *, 'interp val, istatus = ', interp_val, istatus
+   if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
    return
 endif
 
@@ -645,7 +620,7 @@ endif
 ! final value.  this sets both interp_val and istatus.
 call do_interp(x, base_offset, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_type, interp_val, istatus)
-if (do_output() .and. (debug > 1)) print *, 'interp val, istatus = ', interp_val, istatus
+if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
 
 end subroutine model_interpolate
 
@@ -1335,7 +1310,7 @@ else
       where(dimIDs == TimeDimID) ncstart = timeindex
       where(dimIDs == TimeDimID) nccount = 1
 
-      if (do_output() .and. (debug > 9)) then
+      if (do_output() .and. (debug > 99)) then
          write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',ncstart(1:ncNdims)
          write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',nccount(1:ncNdims)
       endif
@@ -1544,7 +1519,7 @@ endif
 ! ocean floor values alone.
 VARLOOP : do ivar=1,nfields
 
-   if (do_output() .and. debug > 1) then
+   if (do_output() .and. (debug > 3)) then
       write(string1,*)'Perturbing ',ivar,trim(progvar(ivar)%varname)
       call error_handler(E_MSG,'pert_model_state',string1)
    endif
@@ -1737,7 +1712,7 @@ call nc_check(nf90_inquire_dimension(ncid, dimid, len=nzp1), &
 call nc_check(nf90_close(ncid), &
          'get_grid_dims','close '//trim(gcom_geometry_file) )
 
-if (do_output() .and. debug > 99) then
+if (do_output() .and. (debug > 99)) then
    write(*,*)'get_grid_dims: filename  ['//trim(gcom_geometry_file)//']'
    write(*,*)'get_grid_dims: num longitude gridcell centers ',nx
    write(*,*)'get_grid_dims: num latitide  gridcell centers ',ny
@@ -1819,6 +1794,29 @@ where ( LON > 360.0_r8)  LON =  LON - 360.0_r8
 where ( LAT < -90.0_r8)  LAT = -90.0_r8
 where ( LAT >  90.0_r8)  LAT =  90.0_r8
 
+if (do_output() .and. (debug > 3)) then
+
+   write(*,*)'Summary of the grid variables.'
+
+   write(*,*)'range of all T,S,p longitudes ',minval(LON), maxval(LON)
+   write(*,*)'range of all T,S,p latitude   ',minval(LAT), maxval(LAT)
+   write(*,*)'range of all T,S,p levels     ',minval(LEV), maxval(LEV)
+
+   write(*,*)'range of all U     longitudes ',minval(ULON), maxval(ULON)
+   write(*,*)'range of all U     latitude   ',minval(ULAT), maxval(ULAT)
+   write(*,*)'range of all U     levels     ',minval(ULEV), maxval(ULEV)
+
+   write(*,*)'range of all V     longitudes ',minval(VLON), maxval(VLON)
+   write(*,*)'range of all V     latitude   ',minval(VLAT), maxval(VLAT)
+   write(*,*)'range of all V     levels     ',minval(VLEV), maxval(VLEV)
+
+   write(*,*)'range of all W     longitudes ',minval(WLON), maxval(WLON)
+   write(*,*)'range of all W     latitude   ',minval(WLAT), maxval(WLAT)
+   write(*,*)'range of all W     levels     ',minval(WLEV), maxval(WLEV)
+
+   write(*,*)
+
+endif
 
 end subroutine read_grid
 
@@ -2283,7 +2281,7 @@ ndims           = ndims + 1
 dimids(ndims)   = unlimitedDimid
 dimnames(ndims) = 'time'
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. (debug > 99)) then
 
    write(logfileunit,*)
    write(logfileunit,*)'define_var_dims knowledge'
@@ -2337,6 +2335,7 @@ integer :: origin_days, origin_seconds
 type(time_type) :: origin_time
 
 logical :: write_metadata
+real(r8) :: mylon, mylat, mylev
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2409,7 +2408,7 @@ if (do_output()) then
 endif
 
 ! If desired, output a file that has the full i,j,k,lat,lon,lev for every element of the DART vector
-if (do_output() .and. (debug > 8)) then 
+if (do_output() .and. (debug > 7)) then 
    iunit = open_file('metadata_table.txt',form='formatted',action='write')
    write(*,*)'varname   indx          i          j          k'
    write_metadata = .true.
@@ -2419,7 +2418,7 @@ endif
 
  100 format(A,2(1x,i10))  ! DART index, i
  200 format(A,3(1x,i10))  ! DART index, i, j
- 300 format(A,4(1x,i10))  ! DART index, i, j, k
+ 300 format(A,4(1x,i10),3(1x,f16.8))  ! DART index, i, j, k
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -2574,12 +2573,50 @@ do ivar=1, nfields
       do j = 1, progvar(ivar)%dimlens(2)
       do i = 1, progvar(ivar)%dimlens(1)
          state_vector(indx) = data_3d_array(i, j, k)
-         if (write_metadata) write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k
          indx = indx + 1
       enddo
       enddo
       enddo
+
       deallocate(data_3d_array)
+
+      ! This is a debug block. The ugly part is to figure out which set of
+      ! lats/lons go with each variable.
+      if (write_metadata) then
+
+         indx = progvar(ivar)%index1
+         do k = 1, progvar(ivar)%dimlens(3)
+         do j = 1, progvar(ivar)%dimlens(2)
+         do i = 1, progvar(ivar)%dimlens(1)
+
+            if     (trim(progvar(ivar)%coordinates) == 'lon lat lev time') then
+               mylon =  LON(i,j,k)
+               mylat =  LAT(i,j,k)
+               mylev =  LEV(i,j,k)
+            elseif (trim(progvar(ivar)%coordinates) == 'ulon ulat ulev time') then
+               mylon = ULON(i,j,k)
+               mylat = ULAT(i,j,k)
+               mylev = ULEV(i,j,k)
+            elseif (trim(progvar(ivar)%coordinates) == 'vlon vlat vlev time') then
+               mylon = VLON(i,j,k)
+               mylat = VLAT(i,j,k)
+               mylev = VLEV(i,j,k)
+            elseif (trim(progvar(ivar)%coordinates) == 'wlon wlat wlev time') then
+               mylon = WLON(i,j,k)
+               mylat = WLAT(i,j,k)
+               mylev = WLEV(i,j,k)
+            else
+               write(string1,*)'unsupported coordinates ',trim(progvar(ivar)%coordinates)
+               call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
+                          source, revision, revdate)
+            endif
+
+            write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k, mylon, mylat, mylev
+            indx = indx + 1
+         enddo
+         enddo
+         enddo
+      endif
 
    else
 
@@ -2593,6 +2630,8 @@ do ivar=1, nfields
 enddo
 
 if (write_metadata) call close_file(iunit)
+
+! FIXME ... do we want to print a summary of min/max values for each variable.
 
 end subroutine gcom_file_to_dart_vector
 
@@ -2711,7 +2750,7 @@ UPDATE : do ivar=1,nfields
 
    enddo DimCheck
 
-   if (do_output() .and. (debug > 3)) then
+   if (do_output() .and. (debug > 99)) then
       write(*,*)'dart_vector_to_gcom_file: variable ['//trim(varname)//']'
       write(*,*)'dart_vector_to_gcom_file: start ',ncstart(1:numdims)
       write(*,*)'dart_vector_to_gcom_file: count ',nccount(1:numdims)
@@ -2837,7 +2876,7 @@ real(r4), allocatable ::  r4array(:)
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -2870,7 +2909,7 @@ if (dimIDs(1) == TimeDimID) then
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -3037,7 +3076,7 @@ real(r4), allocatable ::  r4array(:,:)
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -3079,7 +3118,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -3251,7 +3290,7 @@ real(r4), allocatable ::  r4array(:,:,:)
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -3293,7 +3332,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. (debug > 3)) then
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -4818,8 +4857,8 @@ if(lheight <= hgt_array(1)) then
    bot = 2
    ! NOTE: the fract definition is the relative distance from bottom to top
    fract = 1.0_r8
-if (do_output() .and. (debug > 7)) print *, 'above first level in height'
-if (do_output() .and. (debug > 7)) print *, 'hgt_array, top, bot, fract=', hgt_array(1), top, bot, fract
+if (do_output() .and. (debug > 5)) print *, 'above first level in height'
+if (do_output() .and. (debug > 5)) print *, 'hgt_array, top, bot, fract=', hgt_array(1), top, bot, fract
    return
 endif
 
@@ -4830,7 +4869,7 @@ do i = 2, nheights
       top = i -1
       bot = i
       fract = (hgt_array(bot) - lheight) / (hgt_array(bot) - hgt_array(top))
-if (do_output() .and. (debug > 7)) print *, 'i, hgt_array, top, bot, fract=', i, hgt_array(i), top, bot, fract
+if (do_output() .and. (debug > 5)) print *, 'i, hgt_array, top, bot, fract=', i, hgt_array(i), top, bot, fract
       return
    endif
 enddo
@@ -4846,33 +4885,58 @@ end subroutine height_bounds
 !> Given an integer index into the state vector structure, returns the
 !> associated array indices for lat, lon, and depth, as well as the type.
 
-subroutine get_state_indices(index_in, lat_index, lon_index, depth_index, var_type)
+subroutine get_state_indices(ivar, index_in, lon_index, lat_index, lev_index)
 
+integer, intent(in)  :: ivar
 integer, intent(in)  :: index_in
-integer, intent(out) :: lat_index
 integer, intent(out) :: lon_index
-integer, intent(out) :: depth_index
-integer, intent(out) :: var_type
+integer, intent(out) :: lat_index
+integer, intent(out) :: lev_index
 
-integer :: startind, offset
+integer :: offset, ndim1, ndim2
 
-call error_handler(E_ERR,'get_state_indices','routine not written yet', &
-                      source, revision, revdate)
+offset = index_in - progvar(ivar)%index1 + 1
 
-if (do_output() .and. (debug > 5)) print *, 'asking for meta data about index ', index_in
+! So now we know the variable and its shape. Remember that DART only
+! stores a single timestep, so any time dimension is a singleton.
+! Furthermore, netCDF requires the time/unlimited dimension be the LAST
+! (in Fortran) dimension, so we can just focus on the first N dimensions.
+! Relying on integer arithmetic.
+!
+! We know the storage order is lon,lat,lev ...
+! FIXME ... may want to ensure at some point.
 
-call get_state_kind(index_in, var_type, startind, offset)
+if     ( progvar(ivar)%rank == 1) then
 
-if (startind == start_index(PSURF_index)) then
-  depth_index = 1
+   lon_index = offset
+
+elseif ( progvar(ivar)%rank == 2) then
+
+   ndim1 = progvar(ivar)%dimlens(1)
+
+   lat_index = 1 + (offset - 1)/ndim1
+   lon_index = offset - (lat_index - 1)*ndim1
+
+elseif ( progvar(ivar)%rank == 3) then
+
+   ndim1 = progvar(ivar)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
+   ndim2 = progvar(ivar)%dimlens(2)  ! num_next_fastest 
+
+   lev_index = 1 + (offset - 1)/(ndim1*ndim2)
+   lat_index = 1 + (offset - (lev_index-1)*ndim1*ndim2 -1)/ndim1
+   lon_index = offset - (lev_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
+
 else
-  depth_index = (offset / (nxp1 * nyp1)) + 1
+   write(string1,*) 'Does not support variables with rank ',progvar(ivar)%rank
+   write(string2,*) 'variable is ',trim(progvar(ivar)%varname)
+   call error_handler(E_ERR,'get_state_meta_data',string1, &
+         source,revision,revdate,text2=string2)
 endif
 
-lat_index = (offset - ((depth_index-1)*nxp1*nyp1)) / nxp1 + 1
-lon_index =  offset - ((depth_index-1)*nxp1*nyp1) - ((lat_index-1)*nxp1) + 1
-
-if (do_output() .and. (debug > 5)) print *, 'lon, lat, depth index = ', lon_index, lat_index, depth_index
+if (do_output() .and. (debug > 99)) then
+   print *, 'get_state_indices: asking for meta data about index ', index_in
+   print *, 'get_state_indices: lon, lat, lev index = ', lon_index, lat_index, lev_index
+endif
 
 end subroutine get_state_indices
 
@@ -5252,18 +5316,18 @@ endif
 call do_interp(x, start_index(S_index), hgt_bot, hgt_top, hgt_fract, llon, llat, &
                KIND_SALINITY, salinity_val, istatus)
 if(istatus /= 0) return
-if (debug > 8) print *, 'salinity: ', salinity_val
+if (do_output() .and. (debug > 8)) print *, 'salinity: ', salinity_val
 
 ! potential temperature - degrees C.
 call do_interp(x, start_index(T_index), hgt_bot, hgt_top, hgt_fract, llon, llat, &
                KIND_POTENTIAL_TEMPERATURE, potential_temp, istatus)
 if(istatus /= 0) return
-if (debug > 8) print *, 'potential temp: ', potential_temp
+if (do_output() .and. (debug > 8)) print *, 'potential temp: ', potential_temp
 
 ! compute pressure at location between given levels.  these values are in bars;
 ! the convert routine wants decibars as pressure input.  hgt_fract is 0 at bottom, 1 at top
 pres_val = pressure(hgt_bot) + hgt_fract * (pressure(hgt_top) - pressure(hgt_bot))
-if (debug > 8) then
+if (do_output() .and. (debug > 8)) then
    print *, 'local pressure: ', pres_val
    print *, 'bot, top, press: ', hgt_bot, pressure(hgt_bot), &
                                  hgt_top, pressure(hgt_top), pres_val
@@ -5272,7 +5336,7 @@ endif
 ! and finally, convert to sensible (in-situ) temperature.
 ! potential temp in degrees C, pressure in decibars, salinity in psu or pss (g/kg).
 call insitu_temp(potential_temp, salinity_val*1000.0_r8, pres_val*10.0_r8, interp_val)
-if (debug > 2) print *, 's,pt,pres,t: ', salinity_val, potential_temp, pres_val, interp_val
+if (do_output() .and. (debug > 2)) print *, 's,pt,pres,t: ', salinity_val, potential_temp, pres_val, interp_val
 
 end subroutine compute_temperature
 
@@ -5307,30 +5371,30 @@ call error_handler(E_ERR,'do_interp','routine not written yet', &
 !  on this level.  Do bottom first in case it is below the ocean floor; can
 !  avoid the second horizontal interpolation.
 offset = base_offset + (hgt_bot - 1) * nxp1 * nyp1
-if (debug > 6) &
+if (do_output() .and. (debug > 6)) &
    print *, 'bot, field, abs offset: ', hgt_bot, base_offset, offset
 
 call lon_lat_interpolate(x(offset:), llon, llat, obs_type, hgt_bot, bot_val, istatus)
 ! Failed istatus from interpolate means give up
 if(istatus /= 0) return
-if (debug > 6) &
+if (do_output() .and. (debug > 6)) &
    print *, 'bot_val = ', bot_val
 
 ! Find the base location for the top height and interpolate horizontally
 !  on this level.
 offset = base_offset + (hgt_top - 1) * nxp1 * nyp1
-if (debug > 6) &
+if (do_output() .and. (debug > 6)) &
    print *, 'top, field, abs offset: ', hgt_top, base_offset, offset
 
 call lon_lat_interpolate(x(offset:), llon, llat, obs_type, hgt_top, top_val, istatus)
 ! Failed istatus from interpolate means give up
 if(istatus /= 0) return
-if (debug > 6) &
+if (do_output() .and. (debug > 6)) &
    print *, 'top_val = ', top_val
 
 ! Then weight them by the vertical fraction and return
 interp_val = bot_val + hgt_fract * (top_val - bot_val)
-if (debug > 2) print *, 'do_interp: interp val = ',interp_val
+if (do_output() .and. (debug > 2)) print *, 'do_interp: interp val = ',interp_val
 
 end subroutine do_interp
 
@@ -5444,8 +5508,8 @@ real(r8) :: dp,p,q,r1,r2,r3,r4,r5,s1,t,x
 
       insitu_t = t
 
-if (debug > 2) print *, 'potential temp, salinity, local pressure -> sensible temp'
-if (debug > 2) print *, potemp, s, lpres, insitu_t
+if (do_output() .and. (debug > 2)) print *, 'potential temp, salinity, local pressure -> sensible temp'
+if (do_output() .and. (debug > 2)) print *, potemp, s, lpres, insitu_t
 
 !       potemp     -> potential temperature in celsius degrees
 !       s          -> salinity pss 78

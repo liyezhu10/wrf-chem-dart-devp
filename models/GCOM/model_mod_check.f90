@@ -10,7 +10,7 @@ program model_mod_check
 ! purpose: test routines
 !----------------------------------------------------------------------
 
-use        types_mod, only : r8, digits12, metadatalength, obstypelength
+use        types_mod, only : r8, digits12, metadatalength, obstypelength, MISSING_R8
 
 use    utilities_mod, only : initialize_utilities, nc_check, &
                              find_namelist_in_file, &
@@ -55,7 +55,7 @@ logical               :: advance_time_present = .FALSE.
 logical               :: verbose              = .FALSE.
 integer               :: test1thru = -1
 integer               :: x_ind = -1
-real(r8), dimension(3) :: loc_of_interest = -1.0_r8
+real(r8), dimension(3) :: loc_of_interest = MISSING_R8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
 namelist /model_mod_check_nml/ input_file, output_file, &
@@ -231,7 +231,13 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 5) then
-   if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+   write(*,*)
+   write(*,*)'Testing #6 get_state_meta_data() at index ',x_ind
+
+   call check_meta_data( x_ind )
+
+   write(*,*)'Testing #6 complete - get_state_meta_data().'
+   write(*,*)
 endif
 
 !----------------------------------------------------------------------
@@ -240,7 +246,11 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 6) then
+   write(*,*)
+   write(*,*)'Testing #7 find_closest_gridpoint()'
    if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+   write(*,*)'Testing #7 complete - find_closest_gridpoint()'
+   write(*,*)
 endif
 
 !----------------------------------------------------------------------
@@ -284,17 +294,18 @@ contains
 subroutine check_meta_data( iloc )
 
 integer, intent(in) :: iloc
-type(location_type) :: loc
-integer             :: var_type
-character(len=512)  :: string1
 
-write(*,*)
-write(*,*)'Checking metadata routines.'
+type(location_type)          :: loc
+integer                      :: var_type
+character(len=512)           :: string1
+character(len=obstypelength) :: kind_name
 
-call get_state_meta_data( iloc, loc, var_type)
-
-call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
+if ( x_ind > 0 .and. x_ind <= x_size ) then
+   call get_state_meta_data( x_ind, loc, var_type)
+   kind_name = get_raw_obs_kind_name(var_type)
+   call write_location(42, loc, fform='formatted', charstring=string1)
+   write(*,*)' indx ',iloc,' is type #',var_type,trim(kind_name),trim(string1)
+endif
 
 end subroutine check_meta_data
 
@@ -316,16 +327,14 @@ character(len=obstypelength) :: kind_name
 logical :: matched
 
 ! Check user input ... if there is no 'vertical' ...
-if ( (count(loc_of_interest >= 0.0_r8) < 3) .or. &
-     (LocationDims < 3 ) ) then
+if ( any( (loc_of_interest - MISSING_R8) < 1.0_r8) ) then
    write(*,*)
-   write(*,*)'Interface not fully implemented.'
+   write(*,*)'loc_of_interest not fully specified. Unable to perform test.'
    return
 endif
 
-write(*,*)
 write(*,'(''Checking for the indices into the state vector that are at'')')
-write(*,'(''lon/lat/lev'',3(1x,f10.5))')loc_of_interest(1:LocationDims)
+write(*,'(''lon/lat/lev'',3(1x,f15.9))')loc_of_interest(1:LocationDims)
 
 allocate( thisdist(get_model_size()) )
 thisdist  = 9999999999.9_r8         ! really far away
@@ -341,9 +350,8 @@ rlon = loc_of_interest(1)
 rlat = loc_of_interest(2)
 rlev = loc_of_interest(3)
 
-! Since there can be/will be multiple variables with
-! identical distances, we will just cruise once through
-! the array and come back to find all the 'identical' values.
+! Just cruise once through the array to find the closest and
+! comee back to find all the 'identical' values.
 do i = 1,get_model_size()
 
    ! Really inefficient, but grab the 'which_vert' from the
@@ -378,7 +386,7 @@ do i = 1,get_model_size()
       rloc      = get_location(loc1)
       if (nint(rloc(3)) == nint(rlev)) then
          kind_name = get_raw_obs_kind_name(var_type)
-         write(*,'(''lon/lat/lev'',3(1x,f10.5),'' is index '',i10,'' for '',a)') &
+         write(*,'(''lon/lat/lev'',3(1x,f15.9),'' index '',i10,1x,a)') &
              rloc, i, trim(kind_name)
          matched = .true.
       endif
