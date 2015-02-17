@@ -43,10 +43,11 @@ character(len=2048), allocatable :: restart_files_in(:,:), restart_files_out(:,:
 ! Namelist options
 character(len=512) :: restart_in_stub  = 'input'
 character(len=512) :: restart_out_stub = 'output'
+logical            :: overwrite_input = .false.  ! sets the output file = input file
 
 
 ! Should probably get num_domains, num_restarts from elsewhere. In here for now
-namelist / io_filenames_nml / restart_in_stub, restart_out_stub
+namelist / io_filenames_nml / restart_in_stub, restart_out_stub, overwrite_input
 
 contains
 
@@ -82,7 +83,11 @@ do dom = 1, num_domains
       restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
       write(extension, '(i4.4)') i
       restart_files_out(i, dom, 1) = 'prior_member.' // extension
-      restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+      if (overwrite_input) then
+         restart_files_out(i, dom, 2) = restart_files_in(i, dom)
+      else
+         restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+      endif
    enddo
 enddo
 
