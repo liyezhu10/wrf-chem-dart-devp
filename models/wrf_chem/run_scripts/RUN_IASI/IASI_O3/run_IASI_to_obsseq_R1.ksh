@@ -14,6 +14,7 @@
 # SET TIME INFORMATION
   export START_DATE=2008060106
   export END_DATE=2008063018
+  export END_DATE=2008060106
   export TIME_INC=6
   export ASIM_WINDOW=3
   export START_DATE_DATA=20080601
@@ -23,7 +24,9 @@
   export PROCS=8
 #  export OB_TYPE=ob_reanal
   export OB_TYPE=obs
-  export NL_APM_SCALE=1.
+  export NL_APM_SCALE_MOP_CO=1.
+  export NL_APM_SCALE_IAS_CO=1.
+  export NL_APM_SCALE_IAS_O3=1.
   export NL_APM_SCALE_SW=.FALSE.
 #
 # INITIAL CONDITION FILES
@@ -34,7 +37,7 @@
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
   export WRF_VER=WRFv3.4_dmpar
-  export DART_VER=DART_CHEM
+  export DART_VER=DART_CHEM_MY_BRANCH
 #
 # INDEPENDENT DIRECTORIES
   export CODE_DIR=/glade/p/work/mizzi
@@ -238,12 +241,17 @@
         rm -rf obs_def_apm.nml
         cat <<EOF > obs_def_apm.nml
 &obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
+apm_scale_mop_co=${NL_APM_SCALE_MOP_CO}
+apm_scale_ias_co=${NL_APM_SCALE_IAS_CO}
+apm_scale_ias_o3=${NL_APM_SCALE_IAS_O3}
 apm_scale_sw=${NL_APM_SCALE_SW}
 /
 EOF
 #
         ./obs_sequence_tool
+        if [[ ! -e ${DATA_OUT_DIR}/obs_IASI_O3_DnN_Mig_DA ]]; then
+           mkdir -p ${DATA_OUT_DIR}/obs_IASI_O3_DnN_Mig_DA
+        fi
         if [[ -e obs_seq_${L_DATE}.out ]]; then
            cp obs_seq_${L_DATE}.out ${DATA_OUT_DIR}/obs_IASI_O3_DnN_Mig_DA/.
         else
