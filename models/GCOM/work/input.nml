@@ -182,7 +182,7 @@
 &location_nml
    horiz_dist_only             = .false.
    vert_normalization_pressure = 100000.0
-   vert_normalization_height   = 6370000.0
+   vert_normalization_height   = 6370.0
    approximate_distance        = .false.
    nlon                        = 71
    nlat                        = 36
@@ -328,8 +328,9 @@
    verbose    = .false.
   /
 
-# u  1685      36,18,1     239.45833300      32.09375000    -993.28925000
-# u  48245     36,18,16    239.45833300      32.09375000    -796.38450000
+# u  1685      36,18,1   239.45833300  32.09375000  -993.28925000
+# u  48245     36,18,16  239.45833300  32.09375000  -796.38450000
+# u  48246     37,18,16  239.50000000  32.09375000  -795.56225000
 
 &model_mod_check_nml
    input_file           = "dart_ics.txt"
@@ -339,6 +340,6 @@
    test1thru            = 8
    x_ind                = 48245
    kind_of_interest     = 'KIND_U_CURRENT_COMPONENT'
-   loc_of_interest      = 239.45833300, 32.09375000, -796.3845000
+   loc_of_interest      = 239.4990, 32.09375000, -796.5
    /
 

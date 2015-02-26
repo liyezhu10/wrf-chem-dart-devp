@@ -500,7 +500,8 @@ real(r8) :: loc_array(3), longitude, latitude, level
 integer  :: base_kind
 integer  :: i, ivar, varindex, iclose, num_close, indx, num_wanted
 integer  :: closest_index, lon_index, lat_index, lev_index
-real(r8) :: closest
+real(r8) :: closest, above, below, dist_above, dist_below
+integer  :: istatus1, istatus2
 
 real(r8), allocatable :: distances(:), sorted_distances(:), data_values(:)
 integer,  allocatable :: indices(:), sorted_indices(:), close_indices(:)
@@ -576,21 +577,43 @@ CLOSE : do iclose = 1, num_close
 
 enddo CLOSE
 
-! Given the index of the closest, we can calculate the indices of the neighbors.
-! Might be faster than sorting several hundred items ...
-! Might be able to just search the N nearest neighbors.
-
-call get_state_indices(closest_index, lon_index, lat_index, lev_index, varindex)
-
-if (do_output() .and. debug > 0) then
-   write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
-   write(*,*)'model_interpolate: [i,j,k] of closest is',lon_index,lat_index,lev_index
-endif
+!FIX ! FIXME ... can use the simple inverse_distance below or do this. no need to do both
+!FIX ! 
+!FIX ! Given the index of the closest, we can calculate the indices of the neighbors.
+!FIX ! Might be faster than sorting several hundred items ...
+!FIX ! Might be able to just search the N nearest neighbors.
+!FIX 
+!FIX call get_state_indices(closest_index, lon_index, lat_index, lev_index, varindex)
+!FIX 
+!FIX if (do_output() .and. debug > 0) then
+!FIX    write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
+!FIX    write(*,*)'model_interpolate: [i,j,k] of closest is',lon_index,lat_index,lev_index
+!FIX endif
+!FIX 
+!FIX call horizontal_interpolation(location, closest_index, num_wanted, &
+!FIX        indices(1:num_wanted), distances(1:num_wanted), varindex, x, 'above', &
+!FIX        above, dist_above, istatus1)
+!FIX call horizontal_interpolation(location, closest_index, num_wanted, &
+!FIX        indices(1:num_wanted), distances(1:num_wanted), varindex, x, 'above', &
+!FIX        below, dist_below, istatus2)
 
 ! The inverse distance weighted scheme should only use a small number of neighbors.
 ! Now we can sort based on distance.
 ! Must also keep track of the location into the DART state vector so we can use
 ! them to get the state values at those locations (that are close enough).
+
+! FIXME ... what is happening is that the vertical levels are closely spaced relative 
+! to the horizontal separation. Since we have found the closest level, we
+! should horizontally interpolate on the levels above and below and then do
+! a vertical interpolation. 
+
+! TJH I played around with the order of magnitude of vert_normalization_height
+! TJH from 6370000 to 6370 and looked at the effect on which were the closest gridcells.
+! TJH with 6370000 ... the closest were all the same horizontal i,j and only k changed
+! TJH with 637000  ... ditto
+! TJH with 63700   ... ditto
+! TJH with 6370    ... FINALLY the vertical stayed the same and the nearest neighbors 
+! TJH were the horizontal neighbors.
 
 allocate(sorted_distances(num_wanted), &
            sorted_indices(num_wanted), &
@@ -605,15 +628,23 @@ do i=1,min(num_wanted,num_neighbors)
    sorted_distances(i) = distances(sorted_indices(i))
       close_indices(i) =   indices(sorted_indices(i))
         data_values(i) = x(indices(sorted_indices(i)))
-   write(*,*)i,close_indices(i),sorted_distances(i),data_values(i)
 enddo
+
+if (do_output() .and. (debug > 2)) then
+   write(*,*)'       rank   dartindex         distance                 state' &
+             //'_value                  i           j           k'
+   do i=1,min(num_wanted,num_neighbors)
+      call get_state_indices(close_indices(i), lon_index, lat_index, lev_index, varindex)
+      write(*,*)i,close_indices(i),sorted_distances(i),data_values(i),&
+                lon_index, lat_index, lev_index
+   enddo
+endif
 
 call inverse_distance_interpolation(data_values, sorted_distances, num_neighbors, &
          obs_val, istatus)
 
-write(*,*)
-
-if (do_output() .and. (debug > 0)) then
+if (do_output() .and. (debug > 1)) then
+    write(*,*) 
     print *, 'model_interpolate: summary'
     print *, 'itype     ', itype, ' is ',trim(kind_name)
     print *, 'num_close ', num_close
@@ -638,7 +669,7 @@ end subroutine model_interpolate
 !>     to define the location dimension and variable ID. All we need to do
 !>     is query, verify, and fill ...
 !>
-!> This interface is required for all applications.
+!> This interface is required for all applications. no need to do both
 
 function nc_write_model_atts( ncFileID ) result (ierr)
 
@@ -1644,6 +1675,8 @@ if (allocated( LAT)) deallocate( LAT,  LON,  LEV)
 
 if (allocated(state_locations)) deallocate(state_locations)
 if (allocated(state_kinds))     deallocate(state_kinds)
+
+call get_close_obs_destroy(gc_state)
 
 end subroutine end_model
 
@@ -4867,6 +4900,7 @@ istatus = 20
 end subroutine height_bounds
 
 
+
 !-----------------------------------------------------------------------
 !>
 !> Given an integer index into the state vector structure, returns the
@@ -4944,6 +4978,55 @@ if (do_output() .and. (debug > 99)) then
 endif
 
 end subroutine get_state_indices
+
+
+!-----------------------------------------------------------------------
+!>
+!> Given the indices for the lat, lon, level (i,j,k)s
+!> 
+
+function ijk_to_state_index(varindex, i_index, j_index, k_index)
+
+integer, intent(in) :: varindex
+integer, intent(in) :: i_index
+integer, intent(in) :: j_index
+integer, intent(in) :: k_index
+integer             :: ijk_to_state_index
+
+integer :: n, offset, ndim1, ndim2
+
+offset = progvar(varindex)%index1 - 1
+
+if     ( progvar(varindex)%rank == 1) then
+
+   ijk_to_state_index = offset + i_index
+
+elseif ( progvar(varindex)%rank == 2) then
+
+   ndim1 = progvar(varindex)%dimlens(1)
+
+   ijk_to_state_index = offset + j_index*ndim1 + i_index
+
+elseif ( progvar(varindex)%rank == 3) then
+
+   ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
+   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest 
+
+   ijk_to_state_index = offset + (j_index-1)*ndim1 + (k_index-1)*ndim1*ndim2 + i_index
+
+else
+   write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
+   write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
+   call error_handler(E_ERR,'get_state_meta_data',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+if (do_output() .and. (debug > 0)) then
+   print *, 'ijk_to_state_index: lon, lat, lev index = ', i_index, j_index, k_index
+   print *, 'ijk_to_state_index: returns       index = ', ijk_to_state_index
+endif
+
+end function ijk_to_state_index
 
 
 !-----------------------------------------------------------------------
@@ -6019,6 +6102,54 @@ istatus = 0
 
 end subroutine inverse_distance_interpolation
 
+
+!-----------------------------------------------------------------------
+!>
+!> horizontal_interpolation 
+!>
+
+subroutine horizontal_interpolation(location, closest_index, num_wanted, indices, &
+   distances, varindex, state, which_layer, interp_value, interp_dist, istatus)
+
+type(location_type), intent(in)    :: location
+integer,             intent(in)    :: closest_index
+integer,             intent(in)    :: num_wanted
+integer,             intent(in)    :: indices(:)
+real(r8),            intent(in)    :: distances(:)
+integer,             intent(inout) :: varindex
+real(r8),            intent(in)    :: state(:)
+character(len=*),    intent(in)    :: which_layer
+real(r8),            intent(out)   :: interp_value
+real(r8),            intent(out)   :: interp_dist
+integer,             intent(out)   :: istatus
+
+real(r8) :: lon_lat_lev(3)
+real(r8) :: level_of_interest
+integer  :: lon_index, lat_index, lev_index, dart_state_index
+
+! Find the layer of interest.
+! Find the horizontally adjacent gridpoints.
+
+interp_value = MISSING_R8
+istatus = 1
+
+! If the distances are calculated using horizontal information only, we still need
+! to find the layer of interest. For our purpose, if the observation falls exactly
+! on a layer, it is considered to be on the layer 'below'.
+
+lon_lat_lev = get_location(location)
+level_of_interest = lon_lat_lev(3)
+
+call get_state_indices(closest_index, lon_index, lat_index, lev_index, varindex)
+
+dart_state_index = ijk_to_state_index(varindex, lon_index, lat_index, lev_index)
+
+call error_handler(E_MSG,'horizontal_interpolation','FIXME. Not finished.')
+
+if (do_output() .and. (debug > 99)) &
+   write(*,*)'DEBUG ',closest_index, lon_index, lat_index, lev_index, dart_state_index
+
+end subroutine horizontal_interpolation
 
 !------------------------------------------------------------------
 ! End of model_mod
