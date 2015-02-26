@@ -497,14 +497,15 @@ integer  :: close_ind(model_size) ! CRAZY TJH FIXME CRAZY
 
 ! Local storage
 real(r8) :: loc_array(3), longitude, latitude, level
-logical  :: we_dont_have_that
 integer  :: base_kind
-integer  :: i, ivar, iclose, num_close, indx, num_wanted
-integer  :: closest_index
+integer  :: i, ivar, varindex, iclose, num_close, indx, num_wanted
+integer  :: closest_index, lon_index, lat_index, lev_index
 real(r8) :: closest
 
-real(r8), allocatable :: distances(:), sorted_distances(:)
+real(r8), allocatable :: distances(:), sorted_distances(:), data_values(:)
 integer,  allocatable :: indices(:), sorted_indices(:), close_indices(:)
+
+integer, parameter :: num_neighbors = 12
 
 character(len=obstypelength) :: kind_name
 
@@ -519,6 +520,7 @@ if ( .not. module_initialized ) call static_init_model
 obs_val   = MISSING_R8   ! the DART bad value flag
 istatus   = 99           ! unknown error
 base_kind = itype        ! it really is a DART KIND, so call it a kind
+varindex  = -1
 
 ! Get the individual location values
 loc_array = get_location(location)
@@ -532,11 +534,13 @@ if (do_output() .and. (debug > 2))  &
 kind_name = get_raw_obs_kind_name(base_kind)
 
 ! If the requested kind does not exist in our state - just return as a failure
-we_dont_have_that = .true.
-do ivar = 1,nfields
-   if (progvar(ivar)%dart_kind == base_kind) we_dont_have_that = .false.
-enddo
-if (we_dont_have_that) return
+VARLOOP : do ivar = 1,nfields
+   if (progvar(ivar)%dart_kind == base_kind) then
+      varindex = ivar
+      exit VARLOOP
+   endif
+enddo VARLOOP
+if (varindex < 0) return
 
 ! Generate the list of indices into the DART vector of the close candidates.
 
@@ -568,7 +572,7 @@ CLOSE : do iclose = 1, num_close
       closest_index = indx
    endif
 
-   write(*,*)'model_interpolate:', iclose, num_wanted, indx, kind_name, distances(num_wanted)
+   ! write(*,*)'model_interpolate DEBUG:', iclose, num_wanted, indx, kind_name, distances(num_wanted)
 
 enddo CLOSE
 
@@ -576,9 +580,12 @@ enddo CLOSE
 ! Might be faster than sorting several hundred items ...
 ! Might be able to just search the N nearest neighbors.
 
-write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
+call get_state_indices(closest_index, lon_index, lat_index, lev_index, varindex)
 
-stop ! FIXME left off here
+if (do_output() .and. debug > 0) then
+   write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
+   write(*,*)'model_interpolate: [i,j,k] of closest is',lon_index,lat_index,lev_index
+endif
 
 ! The inverse distance weighted scheme should only use a small number of neighbors.
 ! Now we can sort based on distance.
@@ -587,16 +594,22 @@ stop ! FIXME left off here
 
 allocate(sorted_distances(num_wanted), &
            sorted_indices(num_wanted), &
-            close_indices(num_wanted))
+            close_indices(num_wanted), &
+              data_values(num_wanted))
 
-sorted_indices = (/ (i,i=1,num_close) /)
+sorted_indices = (/ (i,i=1,num_wanted) /)
 
 call index_sort(distances(1:num_wanted), sorted_indices, num_wanted)
 
-do i=1,num_wanted
+do i=1,min(num_wanted,num_neighbors)
    sorted_distances(i) = distances(sorted_indices(i))
       close_indices(i) =   indices(sorted_indices(i))
+        data_values(i) = x(indices(sorted_indices(i)))
+   write(*,*)i,close_indices(i),sorted_distances(i),data_values(i)
 enddo
+
+call inverse_distance_interpolation(data_values, sorted_distances, num_neighbors, &
+         obs_val, istatus)
 
 write(*,*)
 
@@ -609,7 +622,8 @@ if (do_output() .and. (debug > 0)) then
     print *, 'istatus   ', istatus
 endif
 
-deallocate(distances, indices, sorted_distances, sorted_indices, close_indices)
+deallocate(distances, sorted_distances, data_values)
+deallocate(indices, sorted_indices, close_indices)
 
 end subroutine model_interpolate
 
@@ -5835,7 +5849,6 @@ integer :: i, j, k, num_neighbors
 
 real(r8) :: max_lon, max_lat, max_lev, maxdist
 real(r8) :: lon_dist, lat_dist, lev_dist
-
 real(r8) :: meters_to_radians
 
 ! Need to determine the likely maximum size of any of the gridcells.
@@ -5912,8 +5925,9 @@ if (do_output() .and. (debug > 1)) then
    write(*,*)
 endif
 
+! maxdist unscaled resulted in 928 candidates for a location in the middle of the domain
 num_neighbors = 8   ! as opposed to model_size ! NANCY
-call get_close_maxdist_init(gc_state, maxdist)
+call get_close_maxdist_init(gc_state, maxdist*0.8_r8 )
 call get_close_obs_init(gc_state, model_size, state_locations)
 
 interpolation_initialized = .true.
@@ -5955,6 +5969,55 @@ do ivar = 1,nfields
 enddo
 
 end subroutine set_state_locations_kinds
+
+
+!-----------------------------------------------------------------------
+!>
+!> inverse_distance_interpolation() 
+!>
+!> This does an (inverse distance)^2 weighting over the N nearest neighbors.
+
+subroutine inverse_distance_interpolation(x, distances, num_neighbors, obs_val, istatus)
+
+real(r8), intent(in)  :: x(:)
+real(r8), intent(in)  :: distances(:)
+integer,  intent(in)  :: num_neighbors
+real(r8), intent(out) :: obs_val
+integer,  intent(out) :: istatus
+
+integer  :: i, indx
+integer  :: lon_index, lat_index, lev_index
+
+real(r8) :: inverse_distances(num_neighbors)
+real(r8) :: weights(num_neighbors)
+
+obs_val = MISSING_R8
+
+! Check if more than one distance is 'zero'
+! write(*,*)'id debug: count of small distances',count(distances(1:num_neighbors) <= tiny(0.0_r8))
+! write(*,*)'id debug: count of small distances',count(distances(2:num_neighbors) <= tiny(0.0_r8))
+
+if ( count(distances(2:num_neighbors) <= tiny(0.0_r8)) > 0 ) then
+   string1 = 'More than 1 distance is zero. Should not happen'
+   call error_handler(E_MSG,'inverse_distance_interpolation', string1)
+   istatus = 9
+   return
+endif
+
+! Check if one and only one has a zero distance, just use it.
+! If it had exactly a zero distance it would have infinite weight.
+! Since the distances are sorted, zero distance would have to be the first one.
+if (distances(1) <= tiny(0.0_r8)) then
+   obs_val = x(1)
+else
+   inverse_distances = (1.0_r8 / distances(1:num_neighbors))**2
+   weights = inverse_distances / sum(inverse_distances)
+   obs_val = sum(x(1:num_neighbors) * weights)
+endif
+
+istatus = 0
+
+end subroutine inverse_distance_interpolation
 
 
 !------------------------------------------------------------------
