@@ -11,7 +11,7 @@ module model_mod
 ! Modules that are absolutely required for use are listed
 
 use        types_mod, only : r4, r8, SECPERDAY, MISSING_R4, MISSING_R8, MISSING_I, &
-                             rad2deg, PI, obstypelength, metadatalength
+                             rad2deg, PI, obstypelength, metadatalength, earth_radius
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
@@ -40,11 +40,15 @@ use     obs_kind_mod, only : KIND_TEMPERATURE,           &
                              KIND_SEA_SURFACE_HEIGHT,    &
                              KIND_SEA_SURFACE_PRESSURE,  &
                              KIND_POTENTIAL_TEMPERATURE, &
-                             get_raw_obs_kind_index
+                             get_raw_obs_kind_index,     &
+                             get_raw_obs_kind_name,      &
+                             get_obs_kind_var_type
 
 use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
+
+use         sort_mod, only: index_sort
 
 use typesizes
 use netcdf
@@ -92,6 +96,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=512) :: string1, string2, string3
 
 logical, save :: module_initialized = .false.
+logical, save :: interpolation_initialized = .false.
 
 ! Storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
@@ -180,6 +185,10 @@ real(r8), allocatable :: ULAT(:,:,:), ULON(:,:,:), ULEV(:,:,:)
 real(r8), allocatable :: VLAT(:,:,:), VLON(:,:,:), VLEV(:,:,:)
 real(r8), allocatable :: WLAT(:,:,:), WLON(:,:,:), WLEV(:,:,:)
 real(r8), allocatable ::  LAT(:,:,:),  LON(:,:,:),  LEV(:,:,:)
+
+type(location_type), allocatable :: state_locations(:)
+integer,             allocatable :: state_kinds(:)
+type(get_close_type) :: gc_state
 
 ! integer, lowest valid cell number in the vertical
 integer, allocatable  :: KMT(:, :), KMU(:, :)
@@ -348,6 +357,8 @@ call parse_variable_table( gcom_variables, nfields, variable_table )
 
 call fill_progvar()
 
+call set_state_locations_kinds()
+
 !-----------------------------------------------------------------------
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
@@ -364,7 +375,7 @@ endif
 ! call depth2pressure(nzp1, ZC, pressure)
 
 ! Initialize the interpolation routines
-! call init_interp()
+call init_interp()
 
 end subroutine static_init_model
 
@@ -431,50 +442,11 @@ real(r8) :: mylon, mylat, mylev
 
 if ( .not. module_initialized ) call static_init_model
 
-if ((index_in < progvar(1)%index1) .or. &
-    (index_in > progvar(nfields)%indexN) ) then
-   write(string1,*) 'desired index ',index_in
-   write(string2,*) 'is not within the bounds of the DART address space.'
-   call error_handler(E_ERR,'get_state_meta_data',string1, &
-         source,revision,revdate,text2=string2)
-endif
+varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
+call get_state_indices(index_in, lon_index, lat_index, lev_index, varindex)
 
-! Find the DART variable that spans the index of interest.
-FindIndex : do n = 1,nfields
-   if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
-      varindex = n
-      exit FindIndex
-   endif
-enddo FindIndex
-
-call get_state_indices(varindex, index_in, lon_index, lat_index, lev_index)
-
-! FIXME -maybe- do we really only support 3d variables?
-! The code is sprinkled with 1D and 2D support  - if it ever gets to the point
-! where we are estimating parameters, 1D support will be needed.
-
-if     (trim(progvar(varindex)%coordinates) == 'lon lat lev time') then
-   mylon =  LON(lon_index, lat_index, lev_index)
-   mylat =  LAT(lon_index, lat_index, lev_index)
-   mylev =  LEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev time') then
-   mylon = ULON(lon_index, lat_index, lev_index)
-   mylat = ULAT(lon_index, lat_index, lev_index)
-   mylev = ULEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev time') then
-   mylon = VLON(lon_index, lat_index, lev_index)
-   mylat = VLAT(lon_index, lat_index, lev_index)
-   mylev = VLEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev time') then
-   mylon = WLON(lon_index, lat_index, lev_index)
-   mylat = WLAT(lon_index, lat_index, lev_index)
-   mylev = WLEV(lon_index, lat_index, lev_index)
-else
-   write(string1,*) 'unknown coordinate variables of ['//trim(progvar(varindex)%coordinates)//']'
-   write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
-   call error_handler(E_ERR,'get_state_meta_data',string1, &
-         source,revision,revdate,text2=string2)
-endif
+call get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
+                               mylon, mylat, mylev)
 
 ! FIXME - vertical coordinates ... meters, kilometers ... not sure what we are
 ! supposed to have. Will be important for comparison with observations and 
@@ -505,7 +477,7 @@ end subroutine get_state_meta_data
 
 !-----------------------------------------------------------------------
 !>
-!> Model interpolate will interpolate any state variable (S, T, U, V, PSURF) to
+!> model_interpolate is the basis for almost all forward observation operators.
 !> the given location given a state vector. The type of the variable being
 !> interpolated is obs_type since normally this is used to find the expected
 !> value of an observation at some location. The interpolated value is
@@ -513,114 +485,131 @@ end subroutine get_state_meta_data
 !>
 !> This interface is required for all applications.
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, itype, obs_val, istatus)
 
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in)  :: location
-integer,             intent(in)  :: obs_type
-real(r8),            intent(out) :: interp_val
+integer,             intent(in)  :: itype  ! really a KIND
+real(r8),            intent(out) :: obs_val
 integer,             intent(out) :: istatus
 
+integer  :: close_ind(model_size) ! CRAZY TJH FIXME CRAZY
+
 ! Local storage
-real(r8)       :: loc_array(3), llon, llat, lheight
-integer        :: base_offset, ind
-integer        :: hgt_bot, hgt_top
-real(r8)       :: hgt_fract
-integer        :: hstatus
-logical        :: convert_to_ssh
+real(r8) :: loc_array(3), longitude, latitude, level
+logical  :: we_dont_have_that
+integer  :: base_kind
+integer  :: i, ivar, iclose, num_close, indx, num_wanted
+integer  :: closest_index
+real(r8) :: closest
+
+real(r8), allocatable :: distances(:), sorted_distances(:)
+integer,  allocatable :: indices(:), sorted_indices(:), close_indices(:)
+
+character(len=obstypelength) :: kind_name
 
 if ( .not. module_initialized ) call static_init_model
 
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-call error_handler(E_MSG,'model_interpolate','FIXME TJH UNTESTED')
-call error_handler(E_MSG,'model_interpolate','FIXME TJH UNTESTED')
-interp_val = 10.0_r8
-istatus = 0
-return
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-! TJH DEBUG FIXME 
-
-! print data min/max values
-if (do_output() .and. (debug > 2)) call print_ranges(x)
-
 ! Let's assume failure.  Set return val to missing, then the code can
 ! just set istatus to something indicating why it failed, and return.
-! If the interpolation is good, the interp_val will be set to the
+! If the interpolation is good, the obs_val will be set to the
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-interp_val = MISSING_R8     ! the DART bad value flag
-istatus = 99                ! unknown error
+obs_val   = MISSING_R8   ! the DART bad value flag
+istatus   = 99           ! unknown error
+base_kind = itype        ! it really is a DART KIND, so call it a kind
 
-! Get the individual locations values
+! Get the individual location values
 loc_array = get_location(location)
-llon    = loc_array(1)
-llat    = loc_array(2)
-lheight = loc_array(3)
+longitude = loc_array(1)
+latitude  = loc_array(2)
+level     = loc_array(3)
 
 if (do_output() .and. (debug > 2))  &
-   print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
+   print *,'want interpolation of DART KIND',base_kind,'at',longitude,latitude,level
 
-if( vert_is_height(location) ) then
-   ! Nothing to do
-elseif ( vert_is_surface(location) ) then
-   ! Nothing to do
-elseif (vert_is_level(location)) then
-   ! convert the level index to an actual depth
-   ind = nint(loc_array(3))
-   if ( (ind < 1) .or. (ind > size(zc)) ) then
-      istatus = 11
-      return
-   else
-      lheight = zc(ind)
+kind_name = get_raw_obs_kind_name(base_kind)
+
+! If the requested kind does not exist in our state - just return as a failure
+we_dont_have_that = .true.
+do ivar = 1,nfields
+   if (progvar(ivar)%dart_kind == base_kind) we_dont_have_that = .false.
+enddo
+if (we_dont_have_that) return
+
+! Generate the list of indices into the DART vector of the close candidates.
+
+call loc_get_close_obs(gc_state, location, base_kind, state_locations, state_kinds, &
+                       num_close, close_ind)
+
+! Loop over close candidates. They come in without regard to what DART KIND they are,
+! nor are they sorted by distance. We are only interested in the close locations
+! of the right DART KIND.
+
+closest = 1000000.0_r8 ! not very close
+closest_index = 0
+
+allocate(distances(num_close),indices(num_close))
+num_wanted = 0
+CLOSE : do iclose = 1, num_close
+
+   indx = close_ind(iclose)
+
+   if (state_kinds(indx) /= base_kind) cycle CLOSE
+
+   num_wanted = num_wanted + 1
+   kind_name  = get_raw_obs_kind_name(state_kinds(indx))
+   distances(num_wanted) = get_dist(location, state_locations(indx))
+   indices(num_wanted)   = indx
+
+   if (distances(num_wanted) < closest) then
+      closest = distances(num_wanted)
+      closest_index = indx
    endif
-else   ! if pressure or undefined, we don't know what to do
-   istatus = 17
-   return
+
+   write(*,*)'model_interpolate:', iclose, num_wanted, indx, kind_name, distances(num_wanted)
+
+enddo CLOSE
+
+! Given the index of the closest, we can calculate the indices of the neighbors.
+! Might be faster than sorting several hundred items ...
+! Might be able to just search the N nearest neighbors.
+
+write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
+
+stop ! FIXME left off here
+
+! The inverse distance weighted scheme should only use a small number of neighbors.
+! Now we can sort based on distance.
+! Must also keep track of the location into the DART state vector so we can use
+! them to get the state values at those locations (that are close enough).
+
+allocate(sorted_distances(num_wanted), &
+           sorted_indices(num_wanted), &
+            close_indices(num_wanted))
+
+sorted_indices = (/ (i,i=1,num_close) /)
+
+call index_sort(distances(1:num_wanted), sorted_indices, num_wanted)
+
+do i=1,num_wanted
+   sorted_distances(i) = distances(sorted_indices(i))
+      close_indices(i) =   indices(sorted_indices(i))
+enddo
+
+write(*,*)
+
+if (do_output() .and. (debug > 0)) then
+    print *, 'model_interpolate: summary'
+    print *, 'itype     ', itype, ' is ',trim(kind_name)
+    print *, 'num_close ', num_close
+    print *, 'closest   ', close_ind(1)
+    print *, 'obs_val   ', obs_val
+    print *, 'istatus   ', istatus
 endif
 
-! kind (in-situ) temperature is a combination of potential temp,
-! salinity, and pressure based on depth.  call a routine that
-! interpolates all three, does the conversion, and returns the
-! sensible/in-situ temperature.
-if(obs_type == KIND_TEMPERATURE) then
-   ! we know how to interpolate this from potential temp,
-   ! salinity, and pressure based on depth.
-   call compute_temperature(x, llon, llat, lheight, interp_val, istatus)
-   if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
-   return
-endif
-
-
-! For Sea Surface Height or Pressure don't need the vertical coordinate
-! SSP needs to be converted to a SSH if height is required.
-if( vert_is_surface(location) ) then
-   call lon_lat_interpolate(x(base_offset:), llon, llat, obs_type, 1, interp_val, istatus)
-   if (convert_to_ssh .and. (istatus == 0)) then
-      interp_val = interp_val / 980.6_r8   ! GCOM uses CGS units
-   endif
-   if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
-   return
-endif
-
-! Get the bounding vertical levels and the fraction between bottom and top
-call height_bounds(lheight, nzp1, ZC, hgt_bot, hgt_top, hgt_fract, hstatus)
-if(hstatus /= 0) then
-   istatus = 12
-   return
-endif
-
-! do a 2d interpolation for the value at the bottom level, then again for
-! the top level, then do a linear interpolation in the vertical to get the
-! final value.  this sets both interp_val and istatus.
-call do_interp(x, base_offset, hgt_bot, hgt_top, hgt_fract, &
-               llon, llat, obs_type, interp_val, istatus)
-if (do_output() .and. (debug > 2)) print *, 'interp val, istatus = ', interp_val, istatus
+deallocate(distances, indices, sorted_distances, sorted_indices, close_indices)
 
 end subroutine model_interpolate
 
@@ -1550,15 +1539,14 @@ end subroutine pert_model_state
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs, obs_kind, num_close, close_ind, dist)
 
- type(get_close_type), intent(in) :: gc
- type(location_type),  intent(in) :: base_obs_loc
- integer,              intent(in) :: base_obs_kind
- type(location_type),  intent(in) :: obs(:)
- integer,              intent(in) :: obs_kind(:)
- integer,              intent(out):: num_close
- integer,              intent(out):: close_ind(:)
- real(r8),  OPTIONAL,  intent(out):: dist(:)
-
+type(get_close_type), intent(in) :: gc
+type(location_type),  intent(in) :: base_obs_loc
+integer,              intent(in) :: base_obs_kind
+type(location_type),  intent(in) :: obs(:)
+integer,              intent(in) :: obs_kind(:)
+integer,              intent(out):: num_close
+integer,              intent(out):: close_ind(:)
+real(r8),  OPTIONAL,  intent(out):: dist(:)
 
 integer :: t_ind, k
 
@@ -1639,6 +1627,9 @@ if (allocated(ULAT)) deallocate(ULAT, ULON, ULEV)
 if (allocated(VLAT)) deallocate(VLAT, VLON, VLEV)
 if (allocated(WLAT)) deallocate(WLAT, WLON, WLEV)
 if (allocated( LAT)) deallocate( LAT,  LON,  LEV)
+
+if (allocated(state_locations)) deallocate(state_locations)
+if (allocated(state_kinds))     deallocate(state_kinds)
 
 end subroutine end_model
 
@@ -2167,6 +2158,7 @@ do ivar = 1,nfields
    write(logfileunit,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
    write(logfileunit,*) '  minvalue          ',progvar(ivar)%minvalue
    write(logfileunit,*) '  maxvalue          ',progvar(ivar)%maxvalue
+   write(logfileunit,*)
 
    write(     *     ,*)
    write(     *     ,*) 'variable number',ivar, 'is ['//trim(progvar(ivar)%varname)//']'
@@ -2196,6 +2188,7 @@ do ivar = 1,nfields
    write(     *     ,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
    write(     *     ,*) '  minvalue          ',progvar(ivar)%minvalue
    write(     *     ,*) '  maxvalue          ',progvar(ivar)%maxvalue
+   write(     *     ,*)
 
 enddo
 
@@ -2588,28 +2581,8 @@ do ivar=1, nfields
          do k = 1, progvar(ivar)%dimlens(3)
          do j = 1, progvar(ivar)%dimlens(2)
          do i = 1, progvar(ivar)%dimlens(1)
-
-            if     (trim(progvar(ivar)%coordinates) == 'lon lat lev time') then
-               mylon =  LON(i,j,k)
-               mylat =  LAT(i,j,k)
-               mylev =  LEV(i,j,k)
-            elseif (trim(progvar(ivar)%coordinates) == 'ulon ulat ulev time') then
-               mylon = ULON(i,j,k)
-               mylat = ULAT(i,j,k)
-               mylev = ULEV(i,j,k)
-            elseif (trim(progvar(ivar)%coordinates) == 'vlon vlat vlev time') then
-               mylon = VLON(i,j,k)
-               mylat = VLAT(i,j,k)
-               mylev = VLEV(i,j,k)
-            elseif (trim(progvar(ivar)%coordinates) == 'wlon wlat wlev time') then
-               mylon = WLON(i,j,k)
-               mylat = WLAT(i,j,k)
-               mylev = WLEV(i,j,k)
-            else
-               write(string1,*)'unsupported coordinates ',trim(progvar(ivar)%coordinates)
-               call error_handler(E_ERR,'gcom_file_to_dart_vector', string1, &
-                          source, revision, revdate)
-            endif
+        
+            call get_state_lonlatlev(ivar,i,j,k,mylon,mylat,mylev) 
 
             write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k, mylon, mylat, mylev
             indx = indx + 1
@@ -2631,7 +2604,7 @@ enddo
 
 if (write_metadata) call close_file(iunit)
 
-! FIXME ... do we want to print a summary of min/max values for each variable.
+if (do_output() .and. (debug > 0)) call print_ranges(state_vector)
 
 end subroutine gcom_file_to_dart_vector
 
@@ -4885,17 +4858,35 @@ end subroutine height_bounds
 !> Given an integer index into the state vector structure, returns the
 !> associated array indices for lat, lon, and depth, as well as the type.
 
-subroutine get_state_indices(ivar, index_in, lon_index, lat_index, lev_index)
+subroutine get_state_indices(index_in, lon_index, lat_index, lev_index, varindex)
 
-integer, intent(in)  :: ivar
-integer, intent(in)  :: index_in
-integer, intent(out) :: lon_index
-integer, intent(out) :: lat_index
-integer, intent(out) :: lev_index
+integer, intent(in)    :: index_in
+integer, intent(out)   :: lon_index
+integer, intent(out)   :: lat_index
+integer, intent(out)   :: lev_index
+integer, intent(inout) :: varindex
 
-integer :: offset, ndim1, ndim2
+integer :: n, offset, ndim1, ndim2
 
-offset = index_in - progvar(ivar)%index1 + 1
+if ((index_in < progvar(1)%index1) .or. &
+    (index_in > progvar(nfields)%indexN) ) then
+   write(string1,*) 'desired index ',index_in
+   write(string2,*) 'is not within the bounds of the DART address space.'
+   call error_handler(E_ERR,'get_state_indices',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+if (varindex < 0) then
+   ! Find the DART variable that spans the index of interest.
+   FindIndex : do n = 1,nfields
+      if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
+         varindex = n
+         exit FindIndex
+      endif
+   enddo FindIndex
+endif
+
+offset = index_in - progvar(varindex)%index1 + 1
 
 ! So now we know the variable and its shape. Remember that DART only
 ! stores a single timestep, so any time dimension is a singleton.
@@ -4906,29 +4897,29 @@ offset = index_in - progvar(ivar)%index1 + 1
 ! We know the storage order is lon,lat,lev ...
 ! FIXME ... may want to ensure at some point.
 
-if     ( progvar(ivar)%rank == 1) then
+if     ( progvar(varindex)%rank == 1) then
 
    lon_index = offset
 
-elseif ( progvar(ivar)%rank == 2) then
+elseif ( progvar(varindex)%rank == 2) then
 
-   ndim1 = progvar(ivar)%dimlens(1)
+   ndim1 = progvar(varindex)%dimlens(1)
 
    lat_index = 1 + (offset - 1)/ndim1
    lon_index = offset - (lat_index - 1)*ndim1
 
-elseif ( progvar(ivar)%rank == 3) then
+elseif ( progvar(varindex)%rank == 3) then
 
-   ndim1 = progvar(ivar)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
-   ndim2 = progvar(ivar)%dimlens(2)  ! num_next_fastest 
+   ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
+   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest 
 
    lev_index = 1 + (offset - 1)/(ndim1*ndim2)
    lat_index = 1 + (offset - (lev_index-1)*ndim1*ndim2 -1)/ndim1
    lon_index = offset - (lev_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
 
 else
-   write(string1,*) 'Does not support variables with rank ',progvar(ivar)%rank
-   write(string2,*) 'variable is ',trim(progvar(ivar)%varname)
+   write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
+   write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
    call error_handler(E_ERR,'get_state_meta_data',string1, &
          source,revision,revdate,text2=string2)
 endif
@@ -4939,6 +4930,48 @@ if (do_output() .and. (debug > 99)) then
 endif
 
 end subroutine get_state_indices
+
+
+!-----------------------------------------------------------------------
+!>
+!> Given an integer index into the state vector structure, 
+!> return the longitude, latitude and level
+
+subroutine get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
+                               mylon, mylat, mylev)
+
+integer,  intent(in)  :: varindex
+integer,  intent(in)  :: lon_index
+integer,  intent(in)  :: lat_index
+integer,  intent(in)  :: lev_index
+real(r8), intent(out) :: mylon
+real(r8), intent(out) :: mylat
+real(r8), intent(out) :: mylev
+
+if     (trim(progvar(varindex)%coordinates) == 'lon lat lev') then
+   mylon =  LON(lon_index, lat_index, lev_index)
+   mylat =  LAT(lon_index, lat_index, lev_index)
+   mylev =  LEV(lon_index, lat_index, lev_index)
+elseif (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev') then
+   mylon = ULON(lon_index, lat_index, lev_index)
+   mylat = ULAT(lon_index, lat_index, lev_index)
+   mylev = ULEV(lon_index, lat_index, lev_index)
+elseif (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev') then
+   mylon = VLON(lon_index, lat_index, lev_index)
+   mylat = VLAT(lon_index, lat_index, lev_index)
+   mylev = VLEV(lon_index, lat_index, lev_index)
+elseif (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev') then
+   mylon = WLON(lon_index, lat_index, lev_index)
+   mylat = WLAT(lon_index, lat_index, lev_index)
+   mylev = WLEV(lon_index, lat_index, lev_index)
+else
+   write(string1,*) 'unknown coordinate variables of ['//trim(progvar(varindex)%coordinates)//']'
+   write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
+   call error_handler(E_ERR,'get_state_lonlatlev',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+end subroutine get_state_lonlatlev
 
 
 !-----------------------------------------------------------------------
@@ -5025,42 +5058,38 @@ end subroutine get_state_kind_inc_dry
 !-----------------------------------------------------------------------
 !>
 !> intended for debugging use = print out the data min/max for each
-!> field in the state vector, along with the starting and ending
-!> indices for each field.
+!> field in the state vector
 
-subroutine print_ranges(x)
+subroutine print_ranges(x,varindex)
 
-real(r8), intent(in) :: x(:)
+real(r8),           intent(in) :: x(:)
+integer,  optional, intent(in) :: varindex
 
-integer :: s, e
+real(r8) :: minimum, maximum
+integer  :: ivar
 
-call error_handler(E_ERR,'print_ranges','routine not written yet', &
-                      source, revision, revdate)
+if (present(varindex)) then
 
-s = 1
-e = start_index(T_index)-1
-print *, 'min/max  salinity: ', minval(x(s:e)), maxval(x(s:e))
-print *, 's/e      salinity: ', s, e
+   ivar = varindex
 
-s = start_index(T_index)
-e = start_index(U_index)-1
-print *, 'min/max  pot temp: ', minval(x(s:e)), maxval(x(s:e))
-print *, 's/e      pot temp: ', s, e
+   minimum = minval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+   maximum = maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+   
+   write(*,*)trim(progvar(ivar)%varname),' range: ', &
+             minimum, maximum, trim(progvar(ivar)%units)
 
-s = start_index(U_index)
-e = start_index(V_index)-1
-print *, 'min/max U current: ', minval(x(s:e)), maxval(x(s:e))
-print *, 's/e     U current: ', s, e
+else
 
-s = start_index(V_index)
-e = start_index(PSURF_index)-1
-print *, 'min/max V current: ', minval(x(s:e)), maxval(x(s:e))
-print *, 's/e     V current: ', s, e
+   do ivar = 1,nfields
 
-s = start_index(PSURF_index)
-e = size(x)
-print *, 'min/max Surf Pres: ', minval(x(s:e)), maxval(x(s:e))
-print *, 's/e     Surf Pres: ', s, e
+      minimum = minval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+      maximum = maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+   
+      write(*,*)trim(progvar(ivar)%varname),' range: ', &
+                minimum, maximum, trim(progvar(ivar)%units)
+   enddo
+
+endif
 
 end subroutine print_ranges
 
@@ -5686,6 +5715,9 @@ endif
 end function find_desired_time_index
 
 
+!-----------------------------------------------------------------------
+!>
+!> get_grid_variable(ncid, varname)
 
 subroutine get_grid_variable(ncid, varname)
 integer,          intent(in) :: ncid
@@ -5779,6 +5811,151 @@ if (do_output() .and. (debug > 99)) then
 endif
 
 end subroutine get_grid_variable
+
+
+!-----------------------------------------------------------------------
+!>
+!> init_interp() Initializes data structures needed for interpolation.
+!>
+!> General philosophy is to precompute a 'get_close' structure with
+!> a list of what state vector elements are within a certain distance
+!> of each other.
+
+subroutine init_interp()
+
+! This should be called at static_init_model time to avoid 
+! having all this temporary storage in the middle of a run.
+!
+! DART has a 'get_close' type that divides the domain into a set of boxes
+! and tracks which locations are in which box. The get_close_obs() routine
+! then finds the box and the subsequent distances. The trick is to set up
+! the set of boxes parsimoniously.
+
+integer :: i, j, k, num_neighbors
+
+real(r8) :: max_lon, max_lat, max_lev, maxdist
+real(r8) :: lon_dist, lat_dist, lev_dist
+
+real(r8) :: meters_to_radians
+
+! Need to determine the likely maximum size of any of the gridcells.
+! the idea is to find a distance that allows us to find the surrounding
+! gridcell locations without finding 'too many' neighboring gridcells.
+!
+! Since this is a regional model, I am going to use the 
+! lat & lon values as proxies for the physical distance.
+! The maximum grid cell size from one grid should suffice.
+
+max_lon = 0.0_r8
+max_lat = 0.0_r8
+max_lev = 0.0_r8
+
+do k = 1, nz
+do j = 1, ny
+do i = 2, nx
+   lon_dist = abs(LON(i-1,j,k) - LON(i,j,k))   ! degrees
+   lat_dist = abs(LAT(i-1,j,k) - LAT(i,j,k))   ! degrees
+   lev_dist = abs(LEV(i-1,j,k) - LEV(i,j,k))   ! meters
+   if(lon_dist > max_lon) max_lon = lon_dist
+   if(lat_dist > max_lat) max_lat = lat_dist
+   if(lev_dist > max_lev) max_lev = lev_dist
+enddo
+enddo
+enddo
+
+do k = 1, nz
+do j = 2, ny
+do i = 1, nx
+   lon_dist = abs(LON(i,j-1,k) - LON(i,j,k))
+   lat_dist = abs(LAT(i,j-1,k) - LAT(i,j,k))
+   lev_dist = abs(LEV(i,j-1,k) - LEV(i,j,k))
+   if(lon_dist > max_lon) max_lon = lon_dist
+   if(lat_dist > max_lat) max_lat = lat_dist
+   if(lev_dist > max_lev) max_lev = lev_dist
+enddo
+enddo
+enddo
+
+do k = 2, nz
+do j = 1, ny
+do i = 1, nx
+   lon_dist = abs(LON(i,j,k-1) - LON(i,j,k))
+   lat_dist = abs(LAT(i,j,k-1) - LAT(i,j,k))
+   lev_dist = abs(LEV(i,j,k-1) - LEV(i,j,k))
+   if(lon_dist > max_lon) max_lon = lon_dist
+   if(lat_dist > max_lat) max_lat = lat_dist
+   if(lev_dist > max_lev) max_lev = lev_dist
+enddo
+enddo
+enddo
+
+! 2PI radians for the circumference of the earth (PI*earth_diameter_in_m).
+! meters_to_radians = 2.0_r8 * PI / (PI * 2.0_r8 * earth_radius * 1000.0_r8)
+
+meters_to_radians = 1.0_r8 / (earth_radius * 1000.0_r8)
+
+max_lon = max_lon / rad2deg
+max_lat = max_lat / rad2deg
+max_lev = max_lev * meters_to_radians
+maxdist = sqrt(max_lon*max_lon + max_lat*max_lat + max_lev*max_lev)
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)
+   write(*,*)'init_interp: summary'
+   write(*,*)'init_interp: Maximum distance ',maxdist, ' (radians) based on '
+   write(*,*)'init_interp: max_lon = ', max_lon, 'radians',max_lon*rad2deg,'degrees'
+   write(*,*)'init_interp: max_lat = ', max_lat, 'radians',max_lat*rad2deg,'degrees'
+   write(*,*)'init_interp: max_lev = ', max_lev, 'radians',max_lev/meters_to_radians,'meters'
+   write(*,*)
+   write(*,*)'There are ',1.0_r8/meters_to_radians,' meters in 1 radian (on earth).'
+   write(*,*)'This could be the suggested &location_nml:vert_normalization_height.'
+   write(*,*)
+endif
+
+num_neighbors = 8   ! as opposed to model_size ! NANCY
+call get_close_maxdist_init(gc_state, maxdist)
+call get_close_obs_init(gc_state, model_size, state_locations)
+
+interpolation_initialized = .true.
+
+end subroutine init_interp
+
+
+!-----------------------------------------------------------------------
+!>
+!> set_state_locations_kinds() creates an array the size of the state with
+!>                       the location of each of the corresponding elements.
+
+subroutine set_state_locations_kinds()
+
+integer  :: ivar, indx
+integer  :: lon_index, lat_index, lev_index
+real(r8) :: mylon, mylat, mylev
+
+! FIXME at some point, having the state_locations() array should obviate
+! the need to keep the ULON,ULAT,ULEV ...etc. objects around. At present,
+! they are needed by nc_write_model_atts() - but that could be about it.
+
+allocate(state_locations(model_size)) ! module data that persists because it
+                                      ! is used by model_interpolate
+allocate(state_kinds(model_size))     ! module data that persists because it
+                                      ! is used by model_interpolate
+
+do ivar = 1,nfields
+   do indx = progvar(ivar)%index1,progvar(ivar)%indexN
+
+      call get_state_indices(indx, lon_index, lat_index, lev_index, ivar)
+
+      call get_state_lonlatlev(ivar, lon_index, lat_index, lev_index, &
+                               mylon, mylat, mylev)
+
+      state_locations(indx) = set_location(mylon, mylat, mylev, VERTISHEIGHT)
+      state_kinds(indx)     = progvar(ivar)%dart_kind
+   enddo
+enddo
+
+end subroutine set_state_locations_kinds
+
 
 !------------------------------------------------------------------
 ! End of model_mod

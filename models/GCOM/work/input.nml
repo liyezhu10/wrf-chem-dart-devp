@@ -163,12 +163,10 @@
    assimilation_period_seconds  = 10
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
-   debug                        = 9
-   gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'NO_COPY_BACK',
-                    'S', 'KIND_SALINITY',            '0.0', 'NA', 'NO_COPY_BACK',
-                    'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+   debug                        = 4
+   gcom_variables = 'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
-                    'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+                    'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'NO_COPY_BACK',
                     'p', 'KIND_PRESSURE',            '0.0', 'NA', 'UPDATE' 
   /
 
@@ -177,15 +175,14 @@
   /
 
 &dart_to_gcom_nml
-   dart_to_gcom_input_file   = 'dart_ics.txt'
-   advance_time_present      = .false.
+   dart_to_gcom_input_file   = 'dart_restart.txt'
+   advance_time_present      = .true.
   /
 
 &location_nml
-   horiz_dist_only             = .true.
+   horiz_dist_only             = .false.
    vert_normalization_pressure = 100000.0
-   vert_normalization_height   = 10000.0
-   vert_normalization_level    = 20.0
+   vert_normalization_height   = 6370000.0
    approximate_distance        = .false.
    nlon                        = 71
    nlat                        = 36
@@ -331,15 +328,17 @@
    verbose    = .false.
   /
 
+# u  1685      36,18,1     239.45833300      32.09375000    -993.28925000
+# u  48245     36,18,16    239.45833300      32.09375000    -796.38450000
 
 &model_mod_check_nml
    input_file           = "dart_ics.txt"
    output_file          = "check_me_out"
    advance_time_present = .false.
    verbose              = .true.
-   test1thru            = 5
-   x_ind                = 3202
-   kind_of_interest     = 'KIND_SALINITY'
-   loc_of_interest      = 287.5, 82.48, 0.35
+   test1thru            = 8
+   x_ind                = 48245
+   kind_of_interest     = 'KIND_U_CURRENT_COMPONENT'
+   loc_of_interest      = 239.45833300, 32.09375000, -796.3845000
    /
 

@@ -20,8 +20,7 @@ use    utilities_mod, only : initialize_utilities, nc_check, &
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 
-use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_SALINITY, KIND_TEMPERATURE
+use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
 
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
@@ -67,6 +66,7 @@ namelist /model_mod_check_nml/ input_file, output_file, &
 
 integer :: ios_out, iunit, io
 integer :: x_size
+integer :: mykindindex
 logical :: provided
 
 type(time_type)       :: model_time, adv_to_time
@@ -243,12 +243,15 @@ endif
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
 ! Checking for valid input is tricky ... we don't know much.
+! As long as the longitude is nowhere near missing, thats all we can do
 !----------------------------------------------------------------------
 
 if (test1thru > 6) then
    write(*,*)
    write(*,*)'Testing #7 find_closest_gridpoint()'
-   if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+
+   if ( abs(loc_of_interest(1)-MISSING_R8) > 1.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+
    write(*,*)'Testing #7 complete - find_closest_gridpoint()'
    write(*,*)
 endif
@@ -257,11 +260,15 @@ endif
 ! Check the interpolation - print initially to STDOUT
 !----------------------------------------------------------------------
 
-if (test1thru > 9) then
-   write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_SALINITY'
+if (test1thru > 7) then
 
-   call model_interpolate(statevector, loc, KIND_SALINITY, interp_val, ios_out)
+   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+
+   mykindindex = get_raw_obs_kind_index(kind_of_interest)
+   write(*,*)
+   write(*,*)'Testing model_interpolate() with ',trim(kind_of_interest),mykindindex
+
+   call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'model_interpolate : value is ',interp_val
@@ -270,16 +277,32 @@ if (test1thru > 9) then
    endif
 
 
+   mykindindex = get_raw_obs_kind_index('KIND_PRESSURE')
    write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_TEMPERATURE'
+   write(*,*)'Testing model_interpolate() with KIND_PRESSURE',mykindindex
 
-   call model_interpolate(statevector, loc, KIND_TEMPERATURE, interp_val, ios_out)
+   call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'model_interpolate : value is ',interp_val
    else
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
+
+
+   mykindindex = get_raw_obs_kind_index('KIND_TEMPERATURE')
+   write(*,*)
+   write(*,*)'Testing model_interpolate() with KIND_TEMPERATURE',mykindindex
+
+   call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
+
+   if ( ios_out == 0 ) then
+      write(*,*)'model_interpolate : value is ',interp_val
+   else
+      write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
+   endif
+
+
 
 endif
 
@@ -318,7 +341,6 @@ subroutine find_closest_gridpoint( loc_of_interest )
 real(r8), dimension(:), intent(in) :: loc_of_interest
 
 type(location_type) :: loc0, loc1
-integer  :: mykindindex
 integer  :: i, var_type, which_vert
 real(r8) :: closest, rlon, rlat, rlev
 real(r8), allocatable, dimension(:) :: thisdist
