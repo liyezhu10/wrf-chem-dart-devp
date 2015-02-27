@@ -10,48 +10,22 @@
 # This presumes two directories exists that contain all the required bits
 # for ucoam and for DART.
 #
-#=============================================================================
-# This block of directives constitutes the preamble for the LSF queuing system
-# LSF is used on the IMAGe Linux cluster 'coral'
-# LSF is used on the IBM   'bluefire'
-#
-# the normal way to submit to the queue is:    bsub < run_filter
-#
-# an explanation of the most common directives follows:
-# -J Job name (master script job.csh presumes filter_server.xxxx.log)
-# -o STDOUT filename
-# -e STDERR filename
-# -P      account
-# -q queue    cheapest == [standby, economy, (regular,debug), premium] == $$$$
-# -n number of processors  (really)
-##=============================================================================
-#
-#BSUB -J filter
-#BSUB -o filter.%J.log
-#BSUB -q regular
-#BSUB -n 16
-#BSUB -R "span[ptile=2]"
-#BSUB -P 86850054
-#BSUB -W 2:00
-#BSUB -N -u ${USER}@ucar.edu
+# It is entirely fine to have BOTH directives in the same file.
+# I guarantee that as soon as you delete one set, you will change machines
+# and wish you had not deleted the directives. 
 #
 ##=============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
-## PBS is used on the CGD Linux cluster 'bangkok'
-## PBS is used on the CGD Linux cluster 'calgary'
 ##
 ## the normal way to submit to the queue is:    qsub run_filter
 ##
 ## an explanation of the most common directives follows:
-## -N     Job name
-## -r n   Declare job non-rerunable
-## -e <arg>  filename for standard error
-## -o <arg>  filename for standard out
+## -N <arg>   Job name
+## -r n       Declare job non-rerunable
+## -e <arg>   filename for standard error
+## -o <arg>   filename for standard out
 ## -q <arg>   Queue name (small, medium, long, verylong)
-## -l nodes=xx:ppn=2   requests BOTH processors on the node. On both bangkok
-##                     and calgary, there is no way to 'share' the processors
-##                     on the node with another job, so you might as well use
-##                     them both. (ppn == Processors Per Node)
+## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node. 
 ##=============================================================================
 #
 #PBS -N filter
@@ -59,7 +33,30 @@
 #PBS -e filter.err
 #PBS -o filter.log
 #PBS -q medium
-#PBS -l nodes=8:ppn=2
+#PBS -l nodes=2:ppn=16
+#
+#=============================================================================
+## This block of directives constitutes the preamble for the LSF queuing system
+##
+## the normal way to submit to the queue is:    bsub < run_filter
+##
+## an explanation of the most common directives follows:
+## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
+## -o <arg>      output listing filename
+## -q <arg>      queue
+## -n <arg>      number of processors  (really)
+## -P <arg>      account
+## -W <arg>      wall-clock hours:minutes required
+## -N -u <arg>   mail this user when job finishes
+##=============================================================================
+#
+#BSUB -J filter
+#BSUB -o filter.%J.log
+#BSUB -q regular
+#BSUB -n 1
+#BSUB -P 8685xxxx
+#BSUB -W 2:00
+#BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
 # Turns out the scripts are a lot more flexible if you don't rely on 
@@ -67,20 +64,7 @@
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
 
-if ($?LSB_QUEUE) then
-
-   #-------------------------------------------------------------------
-   # This is used by LSF
-   #-------------------------------------------------------------------
-
-   setenv ORIGINALDIR $LS_SUBCWD
-   setenv JOBNAME     $LSB_JOBNAME
-   setenv JOBID       $LSB_JOBID
-   setenv MYQUEUE     $LSB_QUEUE
-   setenv MYHOST      $LSB_SUB_HOST
-   setenv MPI         mpirun.lsf
-
-else if ($?PBS_QUEUE) then
+if ($?PBS_QUEUE) then
 
    #-------------------------------------------------------------------
    # This is used by PBS
@@ -92,6 +76,19 @@ else if ($?PBS_QUEUE) then
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
    setenv MPI         mpirun
+
+else if ($?LSB_QUEUE) then
+
+   #-------------------------------------------------------------------
+   # This is used by LSF
+   #-------------------------------------------------------------------
+
+   setenv ORIGINALDIR $LS_SUBCWD
+   setenv JOBNAME     $LSB_JOBNAME
+   setenv JOBID       $LSB_JOBID
+   setenv MYQUEUE     $LSB_QUEUE
+   setenv MYHOST      $LSB_SUB_HOST
+   setenv MPI         mpirun.lsf
 
 else
 
@@ -121,8 +118,60 @@ echo "${JOBNAME} ($JOBID) started      at "`date`
 echo
 
 #----------------------------------------------------------------------
-# Make a unique, (empty, clean) temporary directory.
+# This block is an attempt to localize all the machine-specific
+# changes to this script such that the same script can be used
+# on multiple platforms. This will help us maintain the script.
 #----------------------------------------------------------------------
+
+set nonomatch  # suppress "rm" warnings if wildcard does not match anything
+
+# The FORCE options are not optional.
+# The VERBOSE options are useful for debugging though
+# some systems don't like the -v option to any of the following
+
+switch ("`hostname`")
+   case be*:
+      # NCAR "bluefire"
+      setenv   MOVE '/usr/local/bin/mv -fv'
+      setenv   COPY '/usr/local/bin/cp -fv --preserve=timestamps'
+      setenv   LINK '/usr/local/bin/ln -fvs'
+      setenv REMOVE '/usr/local/bin/rm -fr'
+
+      setenv    TEMPDIR /glade/proj3/image/thoar/
+      setenv BASEOBSDIR /glade/proj3/image/Observations/WOD09
+   breaksw
+
+   case ys*:
+      # NCAR "yellowstone"
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+
+      setenv    TEMPDIR /glade/scratch/thoar/
+      setenv BASEOBSDIR /glade/p/image/Observations/WOD09
+   breaksw
+
+   default:
+      # SDSU "dulcinea"
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+
+      setenv    TEMPDIR /gcemproject/thoar/
+      setenv BASEOBSDIR /home/thoar/svn/DART/UCOAM/models/GCOM/work
+      setenv    DARTDIR /home/thoar/svn/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM /home/mgarcia/UCOAM-Moh/serucoam
+
+   breaksw
+endsw
+
+#-------------------------------------------------------------------------
+# Create temporary working directory for the assimilation and go there
+#-------------------------------------------------------------------------
+
+echo "`date` -- BEGIN FILTER"
 
 setenv TMPDIR /ptmp/${user}/${JOBNAME}/job_${JOBID}
 
@@ -131,27 +180,6 @@ cd ${TMPDIR}
 
 set CENTRALDIR = `pwd`
 set myname = $0          # this is the name of this script
-
-# some systems don't like the -v option to any of the following 
-
-set OSTYPE = `uname -s`
-switch ( ${OSTYPE} )
-   case IRIX64:
-      setenv REMOVE 'rm -rf'
-      setenv   COPY 'cp -p'
-      setenv   MOVE 'mv -f'
-      breaksw
-   case AIX:
-      setenv REMOVE 'rm -rf'
-      setenv   COPY 'cp -p'
-      setenv   MOVE 'mv -f'
-      breaksw
-   default:
-      setenv REMOVE 'rm -rvf'
-      setenv   COPY 'cp -vp'
-      setenv   MOVE 'mv -fv'
-      breaksw
-endsw
 
 echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
 
@@ -183,21 +211,18 @@ set  OBSERVATIONDIR = /ptmp/${user}/ucoam_OSSE/1_7_Jan2000
 
 #-----------------------------------------------------------------------------
 # Get the ucoam executable, control files, and data files.
-# trying to use the CCSM naming conventions
 #-----------------------------------------------------------------------------
 
  ${COPY} ${ucoamDIR}/ucoam                       .
  ${COPY} ${ucoamDIR}/ucoam_in.part1              .
  ${COPY} ${ucoamDIR}/ucoam_in.part2              .
-
- ${COPY} ${ucoamDIR}/gx3v5_tavg_contents       .
- ${COPY} ${ucoamDIR}/gx3v5_movie_contents      .
- ${COPY} ${ucoamDIR}/gx3v5_history_contents    .
- ${COPY} ${ucoamDIR}/gx3v5_transport_contents  .
-
- ${COPY} ${ucoamDIR}/vert_grid.gx3v5              .
- ${COPY} ${ucoamDIR}/horiz_grid.gx3v5.r8ieee.le   .
- ${COPY} ${ucoamDIR}/topography.gx3v5.i4ieee.le   .
+ ${COPY} ${ucoamDIR}/gx3v5_tavg_contents         .
+ ${COPY} ${ucoamDIR}/gx3v5_movie_contents        .
+ ${COPY} ${ucoamDIR}/gx3v5_history_contents      .
+ ${COPY} ${ucoamDIR}/gx3v5_transport_contents    .
+ ${COPY} ${ucoamDIR}/vert_grid.gx3v5             .
+ ${COPY} ${ucoamDIR}/horiz_grid.gx3v5.r8ieee.le  .
+ ${COPY} ${ucoamDIR}/topography.gx3v5.i4ieee.le  .
 
 #-----------------------------------------------------------------------------
 # Determine the number of ensemble members from input.nml,
@@ -330,17 +355,14 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
     # Must be using LSF or PBS as the queueing system.
     echo "Using ${MPI} for execution"
 
-    # each filter task advances the ensembles, each running on 1 proc.
     if ( "$parallel_model" == "false" ) then
-
+       # each filter task advances the ensembles, each running on 1 proc.
        ${MPI} ./filter
 
-    else
-
-    # 1) filter runs in parallel until time to do a model advance.
-    # 2) advance_model.csh successively runs N ucoam instances,
-    #    each using the entire processor set.
-    # 3) wakeup_filter wakes up filter so it can continue.
+    else # 1) filter runs in parallel until time to do a (parallel) model advance.
+         # 2) advance_model.csh successively runs N ucoam instances,
+         #    each using the entire processor set - one after another.
+         # 3) wakeup_filter wakes up filter so it can continue.
 
       \rm -f model_to_filter.lock filter_to_model.lock
       mkfifo model_to_filter.lock filter_to_model.lock
@@ -493,9 +515,11 @@ ls -l
 
 exit 0
 
-${MOVE} *.data *.meta         ${experiment}/ucoam
-${MOVE} data data.cal         ${experiment}/ucoam
-${MOVE} STD*                  ${experiment}/ucoam
+# everything after here is just bits and pieces that may be useful.
+# the preceeding exit means that we never get here.
+${MOVE} *.data *.meta              ${experiment}/ucoam
+${MOVE} data data.cal              ${experiment}/ucoam
+${MOVE} STD*                       ${experiment}/ucoam
 
 ${MOVE} filter_restart*            ${experiment}/DART
 ${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART

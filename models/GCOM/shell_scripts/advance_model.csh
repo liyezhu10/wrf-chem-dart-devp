@@ -33,11 +33,11 @@ echo "I am going to read my filenames from $control_file"
 # run the ocean model.
 #-------------------------------------------------------------------------
 
-# Get unique name for temporary working directory for this process's stuff
-set temp_dir = 'advance_temp'${process}
-echo "temp_dir is $temp_dir"
+# Create a unique name for temporary working directory for this process.
+# Create a clean temporary directory and go there.
 
-# Create a clean temporary directory and go there
+set temp_dir = `printf "advance_temp%04d" $process`
+
 \rm -rf  $temp_dir
 mkdir -p $temp_dir
 cd       $temp_dir
@@ -80,6 +80,14 @@ while($state_copy <= $num_states)
    set input_file      = `head -n $input_file_line      ../$control_file | tail -n 1`
    set output_file     = `head -n $output_file_line     ../$control_file | tail -n 1`
 
+   # make sure we have a clean logfile for this entire advance
+   set logfile = `printf "log_advance.%04d.txt"     $ensemble_member`
+
+   echo "control_file is ../$control_file"             >! $logfile
+   echo "working on ensemble_member $ensemble_member"  >> $logfile
+   echo "input_file  is $input_file"                   >> $logfile
+   echo "output_file is $output_file"                  >> $logfile
+
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model.
    # We are going to take a gcom netCDF restart file and simply overwrite the
@@ -89,25 +97,65 @@ while($state_copy <= $num_states)
 
    # The EXPECTED DART dart_to_gcom_input_file is 'dart_restart'
    # The dart_to_gcom_nml:advance_time_present = .TRUE. must be set
-
-   ln -sfv ../$input_file dart_restart || exit 2
-
    # CENTRALDIR will always contain the gcom_restart.nc file.
    # The most recent gcom timestep is inserted into this file.
 
    set RESTARTFILE = `printf %04d gcom_restart_${ensemble_member}.nc'`
 
-   cp -pv ../${RESTARTFILE} gcom.r.nc || exit 2
-
-   ../dart_to_gcom || exit 2
-
+   ln -sfv ../$input_file    dart_restart >>& $logfile || exit 2
+   cp -pv  ../${RESTARTFILE} gcom.r.nc    >>& $logfile || exit 2
+   ../dart_to_gcom                        >>& $logfile || exit 2
 
    # Convey the new gcom 'advance_to' time to gcom via the namelist
    cat gcom_in.DART gcom_in.part2 >! gcom_in
 
-   # gcom needs a pointer file containing the restart filename
-   echo "gcom.r.nc"       >! rpointer.ocn.restart
-   echo "RESTART_FMT=nc" >> rpointer.ocn.restart
+   # update tiegcm param.dat values by grabbing the values from namelist_update  
+   # and then overwriting whatever is in the param.dat
+   # There is a danger that you match multiple things ... F107 and F107A,
+   # SOURCE_START and START, for example ... so try to grep whitespace too ...
+
+   set start_year   = `grep " START_YEAR "   namelist_update`
+   set start_day    = `grep " START_DAY "    namelist_update`
+   set source_start = `grep " SOURCE_START " namelist_update`
+   set start        = `grep " START "        namelist_update`
+   set secstart     = `grep " SECSTART "     namelist_update`
+   set stop         = `grep " STOP "         namelist_update`
+   set secstop      = `grep " SECSTOP "      namelist_update`
+   set hist         = `grep " HIST "         namelist_update`
+   set sechist      = `grep " SECHIST "      namelist_update`
+   set save         = `grep " SAVE "         namelist_update`
+   set secsave      = `grep " SECSAVE "      namelist_update`
+   set f107         = `grep " F107 "         namelist_update`
+
+   # FIXME SAVE and SECSAVE may not be needed ... they do not exist in 
+   # the tiegcm.nml anymore. Is this true for all versions in use ...
+   #
+   # the way to think about the following sed syntax is this:
+   # / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
+
+   sed -e "/ START_YEAR /c\ ${start_year}" \
+       -e "/ START_DAY /c\ ${start_day}" \
+       -e "/ SOURCE_START /c\ ${source_start}" \
+       -e "/ START /c\ ${start}" \
+       -e "/ STOP /c\ ${stop}" \
+       -e "/ HIST /c\ ${hist}" \
+       -e "/ SECSTART /c\ ${secstart}" \
+       -e "/ SECSTOP /c\ ${secstop}" \
+       -e "/ SECHIST /c\ ${sechist}" \
+       -e "/ F107 /c\ ${f107}" \
+       -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
+       -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
+       -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
+       tiegcm.nml >! tiegcm.nml.updated
+
+   if ( -e tiegcm.nml.updated ) then
+      echo "tiegcm.nml updated with new start/stop time for ensemble member $ensemble_member"
+      mv tiegcm.nml tiegcm.nml.original
+      mv tiegcm.nml.updated tiegcm.nml
+   else
+      echo "ERROR tiegcm.nml did not update correctly for ensemble member $ensemble_member."
+      exit 1
+   endif
 
    #----------------------------------------------------------------------
    # Block 3: Run the ocean model

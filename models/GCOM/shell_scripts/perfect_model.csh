@@ -5,78 +5,173 @@
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
+#
+# Script to assimilate observations using DART and the ucoam ocean model.
+# This presumes two directories exists that contain all the required bits
+# for ucoam and for DART.
+#
+# It is entirely fine to have BOTH directives in the same file.
+# I guarantee that as soon as you delete one set, you will change machines
+# and wish you had not deleted the directives. 
+#
+##=============================================================================
+## This block of directives constitutes the preamble for the PBS queuing system
+##
+## the normal way to submit to the queue is:    qsub run_filter
+##
+## an explanation of the most common directives follows:
+## -N <arg>   Job name
+## -r n       Declare job non-rerunable
+## -e <arg>   filename for standard error
+## -o <arg>   filename for standard out
+## -q <arg>   Queue name (small, medium, long, verylong)
+## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node. 
+##=============================================================================
+#
+#PBS -N pmo
+#PBS -r n
+#PBS -e pmo.err
+#PBS -o pmo.log
+#PBS -q medium
+#PBS -l nodes=2:ppn=16
+#
+#=============================================================================
+## This block of directives constitutes the preamble for the LSF queuing system
+##
+## the normal way to submit to the queue is:    bsub < run_filter
+##
+## an explanation of the most common directives follows:
+## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
+## -o <arg>      output listing filename
+## -q <arg>      queue
+## -n <arg>      number of processors  (really)
+## -P <arg>      account
+## -W <arg>      wall-clock hours:minutes required
+## -N -u <arg>   mail this user when job finishes
+##=============================================================================
+#
+#BSUB -J pmo
+#BSUB -o pmo.%J.log
+#BSUB -q regular
+#BSUB -n 1
+#BSUB -P 8685xxxx
+#BSUB -W 2:00
+#BSUB -N -u ${USER}@ucar.edu
 
+#----------------------------------------------------------------------
+# Turns out the scripts are a lot more flexible if you don't rely on 
+# the queuing-system-specific variables -- so I am converting them to
+# 'generic' names and using the generics throughout the remainder.
+#----------------------------------------------------------------------
+
+if ($?PBS_QUEUE) then
+
+   #-------------------------------------------------------------------
+   # This is used by PBS
+   #-------------------------------------------------------------------
+
+   setenv ORIGINALDIR $PBS_O_WORKDIR
+   setenv JOBNAME     $PBS_JOBNAME
+   setenv JOBID       $PBS_JOBID
+   setenv MYQUEUE     $PBS_QUEUE
+   setenv MYHOST      $PBS_O_HOST
+   setenv MPI         mpirun
+
+else if ($?LSB_QUEUE) then
+
+   #-------------------------------------------------------------------
+   # This is used by LSF
+   #-------------------------------------------------------------------
+
+   setenv ORIGINALDIR $LS_SUBCWD
+   setenv JOBNAME     $LSB_JOBNAME
+   setenv JOBID       $LSB_JOBID
+   setenv MYQUEUE     $LSB_QUEUE
+   setenv MYHOST      $LSB_SUB_HOST
+   setenv MPI         mpirun.lsf
+
+else
+
+   #-------------------------------------------------------------------
+   # You can run this interactively to check syntax, file motion, etc.
+   #-------------------------------------------------------------------
+
+   setenv ORIGINALDIR `pwd`
+   setenv JOBNAME     pmo
+   setenv JOBID       $$
+   setenv MYQUEUE     Interactive
+   setenv MYHOST      $HOST
+   setenv MPI         csh
+
+endif
+
+#----------------------------------------------------------------------
+# Just an echo of the job attributes
+#----------------------------------------------------------------------
+
+echo
+echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
+echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
+echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
+echo "${JOBNAME} ($JOBID) running       on $HOST"
+echo "${JOBNAME} ($JOBID) started      at "`date`
+echo
+
+#----------------------------------------------------------------------
 # This block is an attempt to localize all the machine-specific
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
+#----------------------------------------------------------------------
 
-echo "`date` -- BEGIN GENERATE GCOM TRUE STATE"
-
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
+set nonomatch  # suppress "rm" warnings if wildcard does not match anything
 
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
+
 switch ("`hostname`")
    case be*:
       # NCAR "bluefire"
-      set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
+      setenv   MOVE '/usr/local/bin/mv -fv'
+      setenv   COPY '/usr/local/bin/cp -fv --preserve=timestamps'
+      setenv   LINK '/usr/local/bin/ln -fvs'
+      setenv REMOVE '/usr/local/bin/rm -fr'
 
-      set BASEOBSDIR = /glade/proj3/image/Observations/WOD09
+      setenv    TEMPDIR /glade/proj3/image/thoar/
+      setenv BASEOBSDIR /glade/proj3/image/Observations/WOD09
    breaksw
 
    case ys*:
       # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
 
-      set BASEOBSDIR = /glade/p/image/Observations/WOD09
+      setenv    TEMPDIR /glade/scratch/thoar/
+      setenv BASEOBSDIR /glade/p/image/Observations/WOD09
    breaksw
 
    default:
-      # NERSC "hopper"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
+      # SDSU "dulcinea"
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
 
-      set BASEOBSDIR = /home/thoar/svn/DART/UCOAM/models/GCOM/work
-      set    DARTDIR = /home/thoar/svn/DART/UCOAM/models/GCOM
-      set   SERUCOAM = /home/mgarcia/UCOAM-Moh/serucoam
+      setenv    TEMPDIR /gcemproject/thoar/
+      setenv BASEOBSDIR /home/thoar/svn/DART/UCOAM/models/GCOM/work
+      setenv    DARTDIR /home/thoar/svn/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM /home/mgarcia/UCOAM-Moh/angie/serucoam
 
    breaksw
 endsw
 
 #-------------------------------------------------------------------------
-# Determine time of model state ... from file name
-# of the form "./${MYCASE}.ucoam.r.2000-01-06-00000.nc"
-#
-# Piping stuff through 'bc' strips off any preceeding zeros.
-#-------------------------------------------------------------------------
-
-#set FILE = `head -n 1 rpointer.ocn.restart`
-#set FILE = $FILE:t
-#set FILE = $FILE:r
-#set MYCASE = `echo $FILE | sed -e "s#\..*##"`
-#set OCN_DATE_EXT = `echo $FILE:e`
-#set OCN_DATE     = `echo $FILE:e | sed -e "s#-# #g"`
-#set OCN_YEAR     = `echo $OCN_DATE[1] | bc`
-#set OCN_MONTH    = `echo $OCN_DATE[2] | bc`
-#set OCN_DAY      = `echo $OCN_DATE[3] | bc`
-#set OCN_SECONDS  = `echo $OCN_DATE[4] | bc`
-#set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
-#
-#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
-#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
-
-#-------------------------------------------------------------------------
 # Create temporary working directory for the perfect model and go there
 #-------------------------------------------------------------------------
+
+echo "`date` -- BEGIN GENERATE GCOM TRUE STATE"
 
 set temp_dir = pmo_gcom
 echo "temp_dir is $temp_dir"
@@ -87,6 +182,22 @@ else
    mkdir -p $temp_dir
 endif
 cd $temp_dir
+
+#-------------------------------------------------------------------------
+# Determine time of model state ... from file name
+# of the form "./${MYCASE}.ucoam.r.2000-01-06-00000.nc"
+#
+# Piping stuff through 'bc' strips off any preceeding zeros.
+#-------------------------------------------------------------------------
+
+#set OCN_YEAR     = `echo $OCN_DATE[1] | bc`
+#set OCN_MONTH    = `echo $OCN_DATE[2] | bc`
+#set OCN_DAY      = `echo $OCN_DATE[3] | bc`
+#set OCN_SECONDS  = `echo $OCN_DATE[4] | bc`
+#set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
+#
+#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
+#echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
 
 #-----------------------------------------------------------------------------
 # Get observation sequence file ... or die right away.
