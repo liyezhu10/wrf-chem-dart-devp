@@ -8,64 +8,63 @@
 #
 # Top level script to generate observations and a TRUE state.
 #
-# Unlike the more complex job.csh, this script only processes a single 
-# observation file.  Still fairly complex; requires a raft of
+# This script only processes a single observation file.
+# Still fairly complex; requires a raft of
 # data files and most of them are in hardcoded locations.
 #
-# This script is designed to be run from the command line (as a single thread)
-# and should only take a few seconds to a minute to complete, depending on
-# the filesystem performance and data file size.
+# This script is designed to be executed as a batch job. 
+# However, if you comment out the model advance part - you can run this
+# interactively to check for logic, file motion, syntax errors and the like.
+# It is entirely fine to have directives for both PBS and LSF in the same file.
+# I guarantee that as soon as you delete one set, you will change machines
+# and wish you had not deleted the directives. 
 #
-# The script moves the necessary files to the current directory - in DART
-# nomenclature, this will be called CENTRALDIR. 
-# After everything is confirmed to have been assembled, it is possible
-# to edit the data, data.cal, and input.nml files for the specifics of 
-# the experiment; as well as allow final configuration of a 'nodelist' file.
-#
-# Once the 'table is set', all that remains is to start/submit the 
-# 'runme_filter' script. That script will spawn 'filter' as a 
-# parallel job on the appropriate nodes; each of these tasks will 
-# call a separate model_advance.csh when necessary.
-#
-# The central directory is where the scripts reside and where script and 
-# program I/O are expected to happen.
-#-----------------------------------------------------------------------------
-#
-#BXXX -b 18:00
-#BSUB -J ucoam_OSSE
-#BSUB -o ucoam_OSSE.%J.log
-#BSUB -q economy
-#BSUB -n 16
-#BSUB -R "span[ptile=2]"
-#BSUB -P 86850054
-#BSUB -W 2:00
-#BSUB -N -u ${USER}@ucar.edu
+# The script moves the necessary files to a temporary directory that is the
+# basis for the DART experiment; this will be called CENTRALDIR. 
 #
 ##=============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
-## PBS is used on the CGD Linux cluster 'bangkok'
-## PBS is used on the CGD Linux cluster 'calgary'
 ##
 ## the normal way to submit to the queue is:    qsub run_filter
 ##
 ## an explanation of the most common directives follows:
-## -N     Job name
-## -r n   Declare job non-rerunable
-## -e <arg>  filename for standard error
-## -o <arg>  filename for standard out
+## -N <arg>   Job name
+## -r n       Declare job non-rerunable
+## -e <arg>   filename for standard error
+## -o <arg>   filename for standard out
 ## -q <arg>   Queue name (small, medium, long, verylong)
-## -l nodes=xx:ppn=2   requests BOTH processors on the node. On both bangkok
-##                     and calgary, there is no way to 'share' the processors
-##                     on the node with another job, so you might as well use
-##                     them both. (ppn == Processors Per Node)
+## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node. 
 ##=============================================================================
 #
-#PBS -N ucoam_OSSE
+#PBS -N gcom_pmo
 #PBS -r n
-#PBS -e ucoam_OSSE.err
-#PBS -o ucoam_OSSE.log
+#PBS -e gcom_pmo.err
+#PBS -o gcom_pmo.log
 #PBS -q medium
-#PBS -l nodes=8:ppn=2
+#PBS -l nodes=2:ppn=16
+#
+#=============================================================================
+## This block of directives constitutes the preamble for the LSF queuing system
+##
+## the normal way to submit to the queue is:    bsub < run_filter
+##
+## an explanation of the most common directives follows:
+## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
+## -o <arg>      output listing filename
+## -q <arg>      queue
+## -n <arg>      number of processors  (really)
+## -P <arg>      account
+## -W <arg>      wall-clock hours:minutes required
+## -N -u <arg>   mail this user when job finishes
+##=============================================================================
+#
+#BSUB -J gcom_pmo
+#BSUB -o gcom_pmo.%J.log
+#BSUB -q regular
+#BSUB -n 1
+#BSUB -P 8685xxxx
+#BSUB -W 2:00
+#BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
 # Turns out the scripts are a lot more flexible if you don't rely on 
@@ -73,20 +72,7 @@
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
 
-if ($?LSB_QUEUE) then
-
-   #-------------------------------------------------------------------
-   # This is used by LSF
-   #-------------------------------------------------------------------
-
-   setenv ORIGINALDIR $LS_SUBCWD
-   setenv JOBNAME     $LSB_JOBNAME
-   setenv JOBID       $LSB_JOBID
-   setenv MYQUEUE     $LSB_QUEUE
-   setenv MYHOST      $LSB_SUB_HOST
-   setenv MPI         mpirun.lsf
-
-else if ($?PBS_QUEUE) then
+if ($?PBS_QUEUE) then
 
    #-------------------------------------------------------------------
    # This is used by PBS
@@ -97,7 +83,20 @@ else if ($?PBS_QUEUE) then
    setenv JOBID       $PBS_JOBID
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
-   setenv MPI         mpirun
+   setenv RUN_CMD     "mpirun -np 1 -machinefile $PBS_NODEFILE"
+
+else if ($?LSB_QUEUE) then
+
+   #-------------------------------------------------------------------
+   # This is used by LSF
+   #-------------------------------------------------------------------
+
+   setenv ORIGINALDIR $LS_SUBCWD
+   setenv JOBNAME     $LSB_JOBNAME
+   setenv JOBID       $LSB_JOBID
+   setenv MYQUEUE     $LSB_QUEUE
+   setenv MYHOST      $LSB_SUB_HOST
+   setenv RUN_CMD     mpirun.lsf
 
 else
 
@@ -106,13 +105,66 @@ else
    #-------------------------------------------------------------------
 
    setenv ORIGINALDIR `pwd`
-   setenv JOBNAME     ucoam
+   setenv JOBNAME     pmo
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
    setenv MYHOST      $HOST
-   setenv MPI         csh
+   setenv RUN_CMD     csh
 
 endif
+
+#----------------------------------------------------------------------
+# This block is an attempt to localize all the machine-specific
+# changes to this script such that the same script can be used
+# on multiple platforms. This will help us maintain the script.
+#----------------------------------------------------------------------
+
+set nonomatch  # suppress "rm" warnings if wildcard does not match anything
+
+# The FORCE options are not optional.
+# The VERBOSE options are useful for debugging though
+# some systems don't like the -v option to any of the following
+
+switch ("`hostname`")
+
+   case ys*:
+      # NCAR "yellowstone"
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+
+      setenv EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
+      setenv CENTRALDIR /glade/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
+      setenv    DARTDIR ${HOME}/work/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM ${HOME}/UCOAM-Moh/angie/serucoam
+   breaksw
+
+   default:
+      # SDSU "dulcinea"
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+
+      setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
+      setenv CENTRALDIR /raid/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
+      setenv    DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM /home/mgarcia/UCOAM-Moh/angie/serucoam
+
+   breaksw
+endsw
+
+#----------------------------------------------------------------------
+# Make a unique, (empty, clean) temporary directory.
+#----------------------------------------------------------------------
+
+mkdir -p ${CENTRALDIR}
+cd ${CENTRALDIR}
+
+set myname = $0          # this is the name of this script
 
 #----------------------------------------------------------------------
 # Just an echo of the job attributes
@@ -123,150 +175,127 @@ echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
 echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
 echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
 echo "${JOBNAME} ($JOBID) running       on $HOST"
-echo "${JOBNAME} ($JOBID) started      at "`date`
+echo "${JOBNAME} ($JOBID) started       at "`date`
+echo "${JOBNAME} ($JOBID) CENTRALDIR    is $CENTRALDIR"
 echo
 
-#----------------------------------------------------------------------
-# Make a unique, (empty, clean) temporary directory.
-#----------------------------------------------------------------------
-
-setenv TMPDIR /ptmp/${user}/${JOBNAME}/job_${JOBID}
-
-mkdir -p ${TMPDIR}
-cd ${TMPDIR}
-
-set CENTRALDIR = `pwd`
-set myname = $0          # this is the name of this script
-
-# some systems don't like the -v option to any of the following 
-
-set OSTYPE = `uname -s`
-switch ( ${OSTYPE} )
-   case IRIX64:
-      setenv REMOVE 'rm -rf'
-      setenv   COPY 'cp -p'
-      setenv   MOVE 'mv -f'
-      breaksw
-   case AIX:
-      setenv REMOVE 'rm -rf'
-      setenv   COPY 'cp -p'
-      setenv   MOVE 'mv -f'
-      breaksw
-   default:
-      setenv REMOVE 'rm -rvf'
-      setenv   COPY 'cp -vp'
-      setenv   MOVE 'mv -fv'
-      breaksw
-endsw
-
-echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
-
-#-----------------------------------------------------------------------------
-# Set variables containing various directory names where we will GET things
-#-----------------------------------------------------------------------------
-
-set DARTDIR = /fs/image/home/${user}/SVN/DART/models/ucoam
-set  ucoamDIR = /ptmp/${user}/ucoam/osse
-set ucoamFILE = `head -1 ${ucoamDIR}/rpointer.ocn.20.restart`
-
-#-----------------------------------------------------------------------------
+#=========================================================================
+# Block 1: Populate CENTRALDIR with everything needed to run DART and GCOM.
+#
 # Get the DART executables, scripts, and input files
+# The input.nml will be copied from the DART directory and modified appropriately.
 #-----------------------------------------------------------------------------
 
-# executables
- ${COPY} ${DARTDIR}/work/perfect_model_obs          .
- ${COPY} ${DARTDIR}/work/dart_to_ucoam                .
- ${COPY} ${DARTDIR}/work/ucoam_to_dart                .
-
-# shell scripts
- ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .
-
-# data files
- ${COPY} ${DARTDIR}/work/input.nml                  .
- ${COPY} ${DARTDIR}/work/obs_seq.in                 .
+${COPY} ${DARTDIR}/work/perfect_model_obs          .  || exit 1
+${COPY} ${DARTDIR}/work/dart_to_gcom               .  || exit 1
+${COPY} ${DARTDIR}/work/gcom_to_dart               .  || exit 1
+${COPY} ${BASEOBSDIR}/obs_seq.in                   .  || exit 1
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .  || exit 1
 
 #-----------------------------------------------------------------------------
 # Get the ucoam executable, control files, and data files.
-# trying to use the CCSM naming conventions
 #-----------------------------------------------------------------------------
 
- ${COPY} ${ucoamDIR}/ucoam                       .
- ${COPY} ${ucoamDIR}/ucoam_in.part1              .
- ${COPY} ${ucoamDIR}/ucoam_in.part2              .
- ${COPY} ${ucoamDIR}/${ucoamFILE}                ucoam.r.nc
+mkdir -p   GRID || exit 1
+mkdir -p  PARAM || exit 1
+mkdir -p OUTPUT || exit 1
 
- ${COPY} ${ucoamDIR}/gx3v5_tavg_contents       .
- ${COPY} ${ucoamDIR}/gx3v5_movie_contents      .
- ${COPY} ${ucoamDIR}/gx3v5_history_contents    .
- ${COPY} ${ucoamDIR}/gx3v5_transport_contents  .
+${COPY} ${SERUCOAM}/Main                     gcom.serial.exe || exit 1
+${COPY} ${SERUCOAM}/GRID/Grid.dat            GRID            || exit 1
+${COPY} ${SERUCOAM}/GRID/ProbSize.dat        GRID            || exit 1
+${COPY} ${SERUCOAM}/PARAM/param.dat          PARAM           || exit 1
+${COPY} ${SERUCOAM}/OUTPUT/gcamIC20secII.nc  OUTPUT/gcom_restart.nc || exit 1
 
- ${COPY} ${ucoamDIR}/vert_grid.gx3v5              .
- ${COPY} ${ucoamDIR}/horiz_grid.gx3v5.r8ieee.le   .
- ${COPY} ${ucoamDIR}/topography.gx3v5.i4ieee.le   .
+#=========================================================================
+# Block 2: Convert 1 ucoam restart file to a DART initial conditions file.
+# At the end of the block, we have a DART initial condition file  perfect_ics
+#=========================================================================
+#
+# DART namelist settings required:
+#
+# &perfect_model_obs_nml:  start_from_restart       = .true.
+# &perfect_model_obs_nml:  async                    = 2
+# &perfect_model_obs_nml:  restart_in_file_name     = 'perfect_ics'
+# &perfect_model_obs_nml:  obs_sequence_in_name     = 'obs_seq.in'
+# &perfect_model_obs_nml:  obs_sequence_out_name    = 'obs_seq.perfect'
+# &perfect_model_obs_nml:  init_time_days           = -1,
+# &perfect_model_obs_nml:  init_time_seconds        = -1,
+# &perfect_model_obs_nml:  first_obs_days           = -1,
+# &perfect_model_obs_nml:  first_obs_seconds        = -1,
+# &perfect_model_obs_nml:  last_obs_days            = -1,
+# &perfect_model_obs_nml:  last_obs_seconds         = -1,
+# &model_nml:              gcom_restart_file        = 'gcom_restart.nc'
+# &model_nml:              gcom_geometry_file       = 'gcom_geometry.nc'
+# &gcom_to_dart_nml:       gcom_to_dart_output_file = 'perfect_ics'
+#=========================================================================
 
-#${COPY} ${ucoamDIR}/chl_mm_SeaWiFs97-01_20031205.ieeer8   .
-#${COPY} ${ucoamDIR}/sfwf_20040517.ieeer8                  .
-#${COPY} ${ucoamDIR}/shf_20031208.ieeer8                   .
-#${COPY} ${ucoamDIR}/tidal_energy_gx3v5_20081021.ieeer8    .
-#${COPY} ${ucoamDIR}/ts_PHC2_jan_20030806.ieeer8           .
+if ( ! -e ${DARTDIR}/work/input.nml ) then
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
+   exit -2
+endif
 
-#-----------------------------------------------------------------------------
-# Check that everything moved OK, and the table is set.
-# Convert the ucoam restart file to a DART ics file.
-#-----------------------------------------------------------------------------
+# Ensure the namelist has the values required by this script.
 
-cat ucoam_in.part1 ucoam_in.part2 >! ucoam_in
+sed -e "s/ start_from_restart /c\ start_from_restart = .true." \
+       "s/ async /c\ async = 2" \
+       "s/ restart_in_file_name /c\ restart_in_file_name = 'perfect_ics'" \
+       "s/ obs_sequence_in_name /c\ obs_sequence_in_name = 'obs_seq.in'" \
+       "s/ obs_sequence_out_name /c\ obs_sequence_out_name = 'obs_seq.perfect'" \
+       "s/ gcom_restart_file /c\ gcom_restart_file = 'gcom_restart.nc'" \
+       "s/ gcom_geometry_file /c\ gcom_geometry_file = 'gcom_geometry.nc'" \
+       "s/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'perfect_ics'" \
+       ${DARTDIR}/work/input.nml >! input.nml
 
-./ucoam_to_dart || exit 1
+echo "`date` -- BEGIN GCOM-TO-DART"
 
-${MOVE} dart_ics perfect_ics
+${LINK} gcom_restart.nc gcom_geometry.nc
 
-#-----------------------------------------------------------------------------
-# Run perfect_model_obs ... harvest the observations to populate obs_seq.out
-# This is the 'CENTRALDIR' ... advance_model.csh will expect some things.
-#-----------------------------------------------------------------------------
+${RUN_CMD} ./gcom_to_dart
 
-echo "ucoam.r.nc"       >! rpointer.ocn.1.restart
-echo "RESTART_FMT=nc" >> rpointer.ocn.1.restart
+if ($status != 0) then
+   echo "ERROR ... DART died in 'gcom_to_dart' ... ERROR"
+   echo "ERROR ... DART died in 'gcom_to_dart' ... ERROR"
+   exit -2
+endif
 
-./perfect_model_obs || exit 2
+echo "`date` -- END GCOM-TO-DART"
 
-echo "${JOBNAME} ($JOBID) finished at "`date`
+#=========================================================================
+# Block 3: Advance the model and harvest the synthetic observations.
+# output files are:
+# True_state.nc   ...... the DART state
+# obs_seq.perfect ...... the synthetic observations
+# dart_log.out    ...... run-time output of all DART routines
+# perfect_restart ...... which we don't need
+#=========================================================================
 
-#-----------------------------------------------------------------------------
-# Move the output to storage after filter completes.
-# At this point, all the restart,diagnostic files are in the CENTRALDIR
-# and need to be moved to the 'experiment permanent' directory.
-# We have had problems with some, but not all, files being moved
-# correctly, so we are adding bulletproofing to check to ensure the filesystem
-# has completed writing the files, etc. Sometimes we get here before
-# all the files have finished being written.
-#-----------------------------------------------------------------------------
+echo "`date` -- BEGIN ucoam PERFECT_MODEL_OBS"
 
-echo "Listing contents of CENTRALDIR before archiving"
+${RUN_CMD} ./perfect_model_obs
+
+if ($status != 0) then
+   echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
+   echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
+   exit -4
+endif
+
+echo "`date` -- END   ucoam PERFECT_MODEL_OBS"
+
+#=========================================================================
+# Block 4: Copy/Move the good stuff back to someplace safe.
+# CENTRALDIR is usually on a volatile or temporary filesystem.
+# EXPERIMENT is usually someplace long-term.
+
+${MOVE} True_State.nc    ${EXPERIMENT}
+${MOVE} obs_seq.perfect  ${EXPERIMENT}
+${MOVE} dart_log.out     ${EXPERIMENT}
+${MOVE} input.nml        ${EXPERIMENT}
+${MOVE} *.csh            ${EXPERIMENT}
+${MOVE} $myname          ${EXPERIMENT}
+
+echo "Listing contents of CENTRALDIR after archiving (miss anything?)"
 ls -l
-
-exit
-
-${MOVE} *.data *.meta         ${experiment}/ucoam
-${MOVE} data data.cal         ${experiment}/ucoam
-${MOVE} STD*                  ${experiment}/ucoam
-
-${MOVE} filter_restart*            ${experiment}/DART
-${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART
-${MOVE} assim_model_state_ic[1-9]* ${experiment}/DART
-${MOVE} Posterior_Diag.nc          ${experiment}/DART
-${MOVE} Prior_Diag.nc              ${experiment}/DART
-${MOVE} obs_seq.final              ${experiment}/DART
-${MOVE} dart_log.out               ${experiment}/DART
-
-# Good style dictates that you save the scripts so you can see what worked.
-
-${COPY} input.nml                  ${experiment}/DART
-${COPY} *.csh                      ${experiment}/DART
-${COPY} $myname                    ${experiment}/DART
-
-ls -lrt
 
 exit 0
 
