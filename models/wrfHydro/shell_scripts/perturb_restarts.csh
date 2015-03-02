@@ -109,7 +109,7 @@ foreach i (`seq 1 $nEns`)
 end
 
 # perturb the restarts!
-/home/jamesmcc/fortranTools/SCRF/smcIcs/smcPerturb.exe
+/home/jamesmcc/fortranTools/wrfHydroInitEns/smcIcs/smcPerturb.exe
 
 echo '========================================================================================='
 ls $pertPath

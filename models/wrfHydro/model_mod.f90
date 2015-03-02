@@ -1233,7 +1233,8 @@ do iState=1,model_size
 enddo
 
 
-deallocate(state_lon, state_lat, state_level)
+deallocate(state_lon, state_lat, state_level, &
+           keepLsmVars0, keepLsmVars, uniqueGridMemOrd, whichVars)
 
 end subroutine static_init_model
 
@@ -1482,7 +1483,14 @@ subroutine end_model()
 ! INTERFACE if the model has no need to clean up storage, etc.
 ! good style ... perhaps you could deallocate stuff (from static_init_model?).
 if ( .not. module_initialized ) call static_init_model
-!deallocate(state_loc)
+
+deallocate(sh2oDisag, sfcHeadDisag,   &
+           all_state_variables,       &
+           channelIndsX, channelIndsY, linkLong, linkLat, &
+           state_loc, &
+           smcWlt1, smcMax1, sh2oWltRt, sh2oMaxRt, smc, sice, &
+           hlong, hlat, basnMask, basnLon, basnLat)
+
 end subroutine end_model
 
 
@@ -2894,6 +2902,10 @@ end do !JX
 if (hydroSmcPresent)     sh2oDisag    = sh2oRt
 if (hydroSfcHeadPresent) sfcHeadDisag = sfcHeadSubRt
 
+if (hydroSfcHeadPresent) then 
+   deallocate(sfcHeadRt, infxsWgt, sfcHeadSubRt)
+endif
+
 end subroutine disagHydro
 
 
@@ -2931,7 +2943,7 @@ real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 real(r8), allocatable, dimension(:,:,:)     :: smcAgg, smcAggWeights
-real(r8), allocatable, dimension(:,:)       :: sfcHeadAgg, InfxsWeights
+real(r8), allocatable, dimension(:,:)       :: sfcHeadAgg, infxsWeights
 
 ! variables related to screwing around with soil moisture states
 integer :: varidOrig, ncNdimsOrig
@@ -3123,6 +3135,7 @@ UPDATE : do ivar=1, nfields
          call nc_check(nf90_put_var(ncFileID, VarID, infxsWeights, &
               start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
               'dart_vector_to_model_files', 'put_var '//trim(string2))
+         deallocate(infxsWeights)
          ! Make note that the variable has been updated by DART
          call nc_check(nf90_Redef(ncFileID),'dart_vector_to_model_files', 'redef '//trim(filename))
          call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
@@ -3194,6 +3207,7 @@ UPDATE : do ivar=1, nfields
          call nc_check(nf90_put_var(ncFileID, VarID, smcAggWeights, &
               start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
               'dart_vector_to_model_files', 'put_var '//trim(string2))
+         deallocate(smcAggWeights)
          ! Make note that the variable has been updated by DART
          call nc_check(nf90_Redef(ncFileID),'dart_vector_to_model_files', 'redef '//trim(filename))
          call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
@@ -3363,7 +3377,7 @@ end subroutine aggSh2ox
 subroutine aggSfcHead(sfcHeadRt, infxsWgt)
 
 ! (The aggregation: sfcheadsubrt -> sfcheadrt, infxwgt)
-! sfcHeadSubRt == global sfcHeadDisag - fine resolution surface head
+! sfcHeadDisag == global sfcHeadDisag - fine resolution surface head
 ! sfcHeadRt    - coarse resolution surface head
 ! infxswgts    - fine resolution weights to go between the above surface head. 
 
@@ -3703,7 +3717,6 @@ do indx = 1, n_basn
       basnLat = sum( hlat, basnGrid .eq. indx) / count(basnGrid .eq. indx)
 enddo 
 
-deallocate(basnMaskTmp)
 
 
 !get the channelgrid
@@ -3718,7 +3731,7 @@ call getChannelCoords(filename, iunit, numdims, ncstart, nccount)
 
 call nc_check(nf90_close(iunit), 'get_hydro_constants '//trim(filename))
 
-!! FIX - check if there are a bunch of local deallocations I should be doing?
+deallocate(basnMaskTmp, basnGrid)
 
 end subroutine get_hydro_constants
 

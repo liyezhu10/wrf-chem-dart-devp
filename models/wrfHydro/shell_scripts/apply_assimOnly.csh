@@ -7,8 +7,9 @@
 # Assumptions: 
 #  You are in a directory with 
 #  1) one restart.assimOnly.nc
-#  2) all the other information necessary to advance the model are properly specified in 
-#     the namelist.hrldas and hydro.namelist which also reside in this dir. A summary of 
+#  2) all the other information necessary to advance the model (incl. parameter and 
+#     geolocation files) are properly specified in the namelist.hrldas and 
+#     hydro.namelist which also reside in this dir. A summary of 
 #     file information used:
 #     namelist.hrldas
 #         KHOUR: the number of forcing timesteps to which forcing adjustments are applied. 
@@ -19,7 +20,7 @@
 # Notes: 
 #  1) Previously, when the model was to be advanced for long periods, I would 
 #     consider the specified precipMult as a mean and I would generate a timeseries
-#     about this mean with some variance. It's not clear that's appropriate. So it
+#     about this mean with some variance. It's not clear that's appropriate. So it has
 #     been abandoned. It seems like it could simply be added in at a given timestep
 #     by introducing zero biased noise (rather than generating a full timeseries 
 #     upfront).
@@ -166,18 +167,24 @@ endif
 # Parameters
 set paramVars = ( OVROUGHRTFAC \
                   RETDEPRTFAC  \
-                  gwCoeff      \ 
+                  gwCoeff      \
                   gwExpon      \
                   ksatMult     \
                   slope        \
-                  refdk        \
-                  refkdt       \
+                  refDk        \
+                  refKdt       \
                   maxSmcMult   \
+                  wltSmc       \
+                  refSmc       \
+                  satDw        \
                   rsMult       \
                   ch2opMult    \
                   czil         \
                   bbMult       \
-                  satPsiMult )
+                  satPsiMult   \
+                  mann         \
+)
+
 set paramGrep = `echo $paramVars | tr ' ' '|'`
 set paramGrep = `echo "($paramGrep)"`
 set paramActive =  `echo $assimOnlyVars | egrep $paramGrep | wc -l`
@@ -261,6 +268,42 @@ ex_end
 
     #--------------------------------------------    
     #--------------------------------------------    
+    # CHANPARM.TBL 
+    
+    # mann
+    if ( `echo $assimOnlyVars | grep mann | wc -l` ) then 
+        set mannDims = `ncks -m restart.assimOnly.nc | grep 'mann dimension' | wc -l`
+        if ( $mannDims == 1 ) then
+            set theMann = `ncdump -v mann restart.assimOnly.nc | tail -n2 | head -1 | \
+                              cut -d'=' -f2 | tr -d ' ;'`
+            set theMann = `echo $theMann | cut -c1-6`
+            \rm -rf CHANPARM.TBL.NEW
+            touch   CHANPARM.TBL.NEW
+            set nlines = `cat CHANPARM.TBL | wc -l`
+            foreach ll (`seq 1 $nlines`)
+                if ( `echo $ll | egrep '^(1|2|3)$' | wc -l` ) then
+                    sed -n ${ll}p CHANPARM.TBL >> CHANPARM.TBL.NEW || exit 7
+                    continue
+                endif
+                set origValue = `sed -n ${ll}p CHANPARM.TBL | cut -d',' -f5`
+                set origValue = `printf '%.16f' $origValue`
+                set newValue  = 0`echo "$origValue * $theMann" | bc | cut -c1-3`
+                sed -n ${ll}p CHANPARM.TBL | \
+                    awk -v newValue=$newValue 'BEGIN{FS=",";OFS=","};{$5="  "newValue;print}' \
+                    >> CHANPARM.TBL.NEW 
+            end
+
+            mv CHANPARM.TBL.NEW   CHANPARM.TBL
+        endif 
+        if ( $mannDims > 1 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+    endif  
+
+
+    #--------------------------------------------    
+    #--------------------------------------------    
     ## GWBUCKPARM.TBL
 
     ## gwCoeff ---------------
@@ -305,7 +348,8 @@ ex_end
     #--------------------------------------------    
     #--------------------------------------------    
     ## SOILPARM.TBL and HYDRO.TBL
-    ## Oh joy, these are in two places!
+    ## SOILPARM code must be above GENPARM
+    ## Oh joy, some of these parameters these are in two places (SOILPARM and HYDRO!
 
     ## ksatMult --------------
     ## an example of multiplying a column
@@ -460,7 +504,6 @@ echo foo12 >&2
 
     endif  # bbMult
 
-echo foo13 >&2
     ## satPsiMult ------------
     if ( `echo $assimOnlyVars | grep satPsiMult | wc -l` ) then 
 
@@ -497,6 +540,186 @@ echo foo13 >&2
         endif 
 
     endif  # satPsiMult
+
+
+    
+    ## refSmc ------------
+    ## This must be below maxsmc, satdk and bb
+    ## if set to -1, set using the Campbell '74 equations suggested in the NoahMP code
+    if ( `echo $assimOnlyVars | grep refSmc | wc -l` ) then 
+
+        set refSmcDims = `ncks -m restart.assimOnly.nc | grep 'refSmc dimension' | wc -l`
+        if ( $refSmcDims == 1 ) then
+            set theRefSmc = `ncdump -v refSmc restart.assimOnly.nc | tail -n2 | head -1 | \
+                              cut -d'=' -f2 | tr -d ' ;'`
+            ## SOILPARM.TBL
+            set nlines = `cat SOILPARM.TBL | wc -l`
+            \rm -rf SOILPARM.TBL.NEW
+            touch SOILPARM.TBL.NEW
+            foreach ll (`seq 1 $nlines`)
+                if ( `echo $ll | egrep '^(1|2|3|23|24|25|45)$' | wc -l` ) then
+                    sed -n ${ll}p SOILPARM.TBL >> SOILPARM.TBL.NEW || exit 7
+                    continue
+                endif
+
+                ## if calculating from other table values, need maxsmc, satdk, and bb from table
+                if ( `echo "$theRefSmc == -1" | bc` ) then                
+                    if ( `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f12 | tr -d "'"` == "WATER" ) then
+                        set newValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f6`
+                    else
+                        set tblMaxSmc = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f5 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblSatDk  = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f8 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblBb     = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f2 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        ## REFSMC1=MAXSMC*(5.79E-9/SATDK)**(1/(2*BB+3)) 5.79E-9 m/s= 0.5 mm
+                        set theBase = `echo "scale=16; ((5.79*10^-9)/($tblSatDk))"  | bc`
+                        set theExp  = `echo "scale=16; 1./(2.*$tblBb+3.)" | bc`
+                        set thePow  = `echo "scale=16; e($theExp*l($theBase))" | bc -l`
+                        set newValue  = `echo "scale=16; $tblMaxSmc*$thePow" | bc`
+                    endif 
+                else 
+                    set origValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f6`
+                    set origValue = `printf '%.16f' $origValue`
+                    set newValue = `echo "$origValue * $theRefSmc" | bc`
+                endif
+                set newValue = `printf '%.2e' $newValue`
+                set newValue = `echo $newValue | sed 's/-0/-/' | sed 's/+0/+/'`
+                sed -n ${ll}p SOILPARM.TBL | \
+                    awk -v newValue=$newValue 'BEGIN{FS=",";OFS=","};{$6="  "newValue;print}' \
+                    >> SOILPARM.TBL.NEW 
+            end
+
+            mv SOILPARM.TBL.NEW   SOILPARM.TBL
+        endif ## 1D
+
+        if ( $refSmcDims > 1 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+
+    endif  # refSmc
+
+
+    ## wltSmc ------------
+    ## This must be below maxsmc, satdk and bb
+    ## if set to -1, set using the Campbell '74 equations suggested in the NoahMP code
+    if ( `echo $assimOnlyVars | grep wltSmc | wc -l` ) then 
+
+        set wltSmcDims = `ncks -m restart.assimOnly.nc | grep 'wltSmc dimension' | wc -l`
+        if ( $wltSmcDims == 1 ) then
+            set theWltSmc = `ncdump -v wltSmc restart.assimOnly.nc | tail -n2 | head -1 | \
+                              cut -d'=' -f2 | tr -d ' ;'`
+            ## SOILPARM.TBL
+            set nlines = `cat SOILPARM.TBL | wc -l`
+            \rm -rf SOILPARM.TBL.NEW
+            touch SOILPARM.TBL.NEW
+            foreach ll (`seq 1 $nlines`)
+                if ( `echo $ll | egrep '^(1|2|3|23|24|25|45)$' | wc -l` ) then
+                    sed -n ${ll}p SOILPARM.TBL >> SOILPARM.TBL.NEW || exit 7
+                    continue
+                endif
+
+                ## if calculating from other table values, need maxsmc, satdk, and bb from table
+                if ( `echo "$theWltSmc == -1" | bc` ) then                
+                    if ( `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f12 | tr -d "'"` == "WATER" ) then
+                        set newValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f10`
+                    else
+                        set tblMaxSmc = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f5 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblSatPsi  = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f7 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblBb     = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f2 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        ## WLTSMC1=MAXSMC*(200./SATPSI)**(-1./BB) 
+                        set theBase = `echo "scale=16; 200./$tblSatPsi"  | bc`
+                        set theExp  = `echo "scale=16; -1/$tblBb" | bc`
+                        set thePow  = `echo "scale=16; e($theExp*l($theBase))" | bc -l`
+                        set newValue = `echo "scale=16; $tblMaxSmc*$thePow" | bc`
+                    endif 
+                else 
+                    set origValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f10`
+                    set origValue = `printf '%.16f' $origValue`
+                    set newValue = `echo "$origValue * $theWltSmc" | bc`
+                endif
+                set newValue = `printf '%.2e' $newValue`
+                set newValue = `echo $newValue | sed 's/-0/-/' | sed 's/+0/+/'`
+                sed -n ${ll}p SOILPARM.TBL | \
+                    awk -v newValue=$newValue 'BEGIN{FS=",";OFS=","};{$10="  "newValue;print}' \
+                    >> SOILPARM.TBL.NEW 
+            end
+
+            mv SOILPARM.TBL.NEW   SOILPARM.TBL
+        endif ## 1D
+
+        if ( $wltSmcDims > 1 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+
+    endif  # wltSmc
+
+
+    ## satDw ------------
+    ## This must be below maxsmc, satdk and bb
+    ## if set to -1, set using the Campbell '74 equations suggested in the NoahMP code
+    if ( `echo $assimOnlyVars | grep satDw | wc -l` ) then 
+
+        set satDwDims = `ncks -m restart.assimOnly.nc | grep 'satDw dimension' | wc -l`
+        if ( $satDwDims == 1 ) then
+            set theSatDw = `ncdump -v satDw restart.assimOnly.nc | tail -n2 | head -1 | \
+                              cut -d'=' -f2 | tr -d ' ;'`
+            ## SOILPARM.TBL
+            set nlines = `cat SOILPARM.TBL | wc -l`
+            \rm -rf SOILPARM.TBL.NEW
+            touch SOILPARM.TBL.NEW
+            foreach ll (`seq 1 $nlines`)
+                if ( `echo $ll | egrep '^(1|2|3|23|24|25|45)$' | wc -l` ) then
+                    sed -n ${ll}p SOILPARM.TBL >> SOILPARM.TBL.NEW || exit 7
+                    continue
+                endif
+
+                ## if calculating from other table values, need maxsmc, satdk, and bb from table
+                if ( `echo "$theSatDw == -1" | bc` ) then                
+                    if ( `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f12 | tr -d "'"` == "WATER" ) then
+                        set newValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f9`
+                    else
+                        set tblMaxSmc = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f5 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblSatDk  = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f8 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblSatPsi  = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f7 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        set tblBb     = \
+                         `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f2 | sed -e 's/[eE]+*/\\*10\\^/'`
+                        ## SATDW = BB*SATDK*(SATPSI/MAXSMC)
+                        set newValue = \
+                            `echo "scale=16; $tblBb*$tblSatDk*($tblSatPsi/$tblMaxSmc)" | bc`
+                    endif 
+                else 
+                    set origValue = `sed -n ${ll}p SOILPARM.TBL | cut -d',' -f9`
+                    set origValue = `printf '%.16f' $origValue`
+                    set newValue = `echo "$origValue * $theSatDw" | bc`
+                endif
+                set newValue = `printf '%.2e' $newValue`
+                set newValue = `echo $newValue | sed 's/-0/-/' | sed 's/+0/+/'`
+                sed -n ${ll}p SOILPARM.TBL | \
+                    awk -v newValue=$newValue 'BEGIN{FS=",";OFS=","};{$9="  "newValue;print}' \
+                    >> SOILPARM.TBL.NEW 
+            end
+
+            mv SOILPARM.TBL.NEW   SOILPARM.TBL
+        endif ## 1D
+
+        if ( $satDwDims > 1 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+
+    endif  # satDw
+
+
 
 
     #--------------------------------------------    
@@ -621,7 +844,8 @@ echo foo13 >&2
     #--------------------------------------------    
     #--------------------------------------------    
     ## GENPARM.TBL
-    
+    ## GENPARM must be below SOILPARM
+
     ## SLOPE -----------------
     if ( `echo $assimOnlyVars | grep slope | wc -l` ) then 
         set slopeDims = `ncks -m restart.assimOnly.nc | grep 'slope dimension' | wc -l`
@@ -639,35 +863,41 @@ echo foo13 >&2
         endif 
     endif
 
-    ## REFDK ----------------- This has to be written AFTER SATDK
-    if ( `echo $assimOnlyVars | grep refdk | wc -l` ) then 
-        set refdkDims = `ncks -m restart.assimOnly.nc | grep 'refdk dimension' | wc -l`
-        if ( $refdkDims == 1 ) then
-            set theRefdk = `ncdump -v refdk restart.assimOnly.nc | tail -n2 | head -1 | \
+    ## refDk ----------------- This has to be written AFTER SATDK
+    ## if set to -1 in restart.assimOnly.nc, then use the satDk value in the SOILPARM.TBL
+    if ( `echo $assimOnlyVars | grep refDk | wc -l` ) then 
+        set refDkDims = `ncks -m restart.assimOnly.nc | grep 'refDk dimension' | wc -l`
+        if ( $refDkDims == 1 ) then
+            set theRefDk = `ncdump -v refDk restart.assimOnly.nc | tail -n2 | head -1 | \
                               cut -d'=' -f2 | tr -d ' ;'`
-            set theRefdk = `echo $theRefdk | cut -c1-5`
-            set lineNumRefdk = `grep -n REFDK_DATA GENPARM.TBL | cut -d: -f1`
-            @ setLineNum = $lineNumRefdk + 2
-            sed -i "${setLineNum}s/.*/$theRefdk/" GENPARM.TBL
+            ## if refDk is -1 then we set refDk using the current SOILPARM.TBL value
+            ## of satdk for silty clay loam
+            if ( `echo "$theRefDk == -1" | bc` ) then
+                set whSltClyLom=`grep -n 'SILTY CLAY LOAM' SOILPARM.TBL | cut -d: -f1`
+                set whSltClyLom=$whSltClyLom[1]
+                set theRefDk = `sed -n ${whSltClyLom}p SOILPARM.TBL | cut -d',' -f8`
+            endif
+            set lineNumRefDk = `grep -n REFDK_DATA GENPARM.TBL | cut -d: -f1`
+            @ setLineNum = $lineNumRefDk + 1
+            sed -i "${setLineNum}s/.*/$theRefDk/" GENPARM.TBL
         endif 
-        if ( $refdkDims > 1 ) then
+        if ( $refDkDims > 1 ) then
             echo 'Not yet configured'
             exit 3
         endif 
     endif
 
-    ## REFKDT -----------------
-    if ( `echo $assimOnlyVars | grep refkdt | wc -l` ) then 
-        set refkdtDims = `ncks -m restart.assimOnly.nc | grep 'refkdt dimension' | wc -l`
-        if ( $refkdtDims == 1 ) then
-            set theRefkdt = `ncdump -v refkdt restart.assimOnly.nc | tail -n2 | head -1 | \
+    ## refKdt ----------------- 
+    if ( `echo $assimOnlyVars | grep refKdt | wc -l` ) then 
+        set refKdtDims = `ncks -m restart.assimOnly.nc | grep 'refKdt dimension' | wc -l`
+        if ( $refKdtDims == 1 ) then
+            set theRefKdt = `ncdump -v refKdt restart.assimOnly.nc | tail -n2 | head -1 | \
                               cut -d'=' -f2 | tr -d ' ;'`
-            set theRefkdt = `echo $theRefkdt | cut -c1-5`
-            set lineNumRefkdt = `grep -n REFKDT_DATA GENPARM.TBL | cut -d: -f1`
-            @ setLineNum = $lineNumRefkdt + 2
-            sed -i "${setLineNum}s/.*/$theRefkdt/" GENPARM.TBL
+            set lineNumRefKdt = `grep -n REFKDT_DATA GENPARM.TBL | cut -d: -f1`
+            @ setLineNum = $lineNumRefKdt + 1
+            sed -i "${setLineNum}s/.*/$theRefKdt/" GENPARM.TBL
         endif 
-        if ( $refkdtDims > 1 ) then
+        if ( $refKdtDims > 1 ) then
             echo 'Not yet configured'
             exit 3
         endif 
@@ -697,6 +927,5 @@ echo foo13 >&2
     endif  # czil
 
 endif  # paramActive
-
 
 exit 0
