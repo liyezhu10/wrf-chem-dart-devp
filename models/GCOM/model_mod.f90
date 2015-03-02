@@ -168,7 +168,7 @@ integer, parameter :: U_index     = 3
 integer, parameter :: V_index     = 4
 integer, parameter :: PSURF_index = 5
 
-integer :: start_index(5) ! TJH FIXME this gets replaced 
+integer :: start_index(5) ! TJH FIXME this gets replaced
 
 ! Grid parameters - the values will be read from a
 ! standard GCOM namelist and filled in here.
@@ -331,7 +331,7 @@ if (do_output()) write(     *     , nml=model_nml)
 call set_calendar_type('Gregorian')
 
 !-----------------------------------------------------------------------
-! Set the time step ... 
+! Set the time step ...
 ! FIXME ensure model_timestep is multiple of 'ocean_dynamics_timestep'
 ! FIXME dart_gcom_mod:set_model_time_step() could do this
 
@@ -402,8 +402,8 @@ end function get_model_size
 
 !-----------------------------------------------------------------------
 !>
-!> Returns the minimum amount of time that the model should be 
-!> advanced in a given implementation. 
+!> Returns the minimum amount of time that the model should be
+!> advanced in a given implementation.
 !>
 !> This interface is required for all applications.
 
@@ -574,22 +574,22 @@ CLOSE : do iclose = 1, num_close
 enddo CLOSE
 
 !FIX ! FIXME ... can use the simple inverse_distance below or do this. no need to do both
-!FIX ! 
+!FIX !
 !FIX ! Given the index of the closest, we can calculate the indices of the neighbors.
 !FIX ! Might be faster than sorting several hundred items ...
 !FIX ! Might be able to just search the N nearest neighbors.
-!FIX 
+!FIX
 !FIX call get_state_indices(closest_index, lon_index, lat_index, lev_index, varindex)
-!FIX 
+!FIX
 !FIX if (do_output() .and. debug > 0) then
 !FIX    write(*,*)'model_interpolate: closest_index, distance',closest_index,closest
 !FIX    write(*,*)'model_interpolate: [i,j,k] of closest is',lon_index,lat_index,lev_index
 !FIX endif
-!FIX 
+!FIX
 !FIX There are remnants of the POP interpolation that may be useful here.
 !FIX lon_lat_interpolate()
 !FIX do_interp()
-!FIX 
+!FIX
 !FIX horizontal_interpolation() is simply a stub ...
 !FIX call horizontal_interpolation(location, closest_index, num_wanted, &
 !FIX        indices(1:num_wanted), distances(1:num_wanted), varindex, x, 'above', &
@@ -603,17 +603,17 @@ enddo CLOSE
 ! Must also keep track of the location into the DART state vector so we can use
 ! them to get the state values at those locations (that are close enough).
 
-! FIXME ... what is happening is that the vertical levels are closely spaced relative 
+! FIXME ... what is happening is that the vertical levels are closely spaced relative
 ! to the horizontal separation. Since we have found the closest level, we
 ! should horizontally interpolate on the levels above and below and then do
-! a vertical interpolation. 
+! a vertical interpolation.
 
 ! TJH I played around with the order of magnitude of vert_normalization_height
 ! TJH from 6370000 to 6370 and looked at the effect on which were the closest gridcells.
 ! TJH with 6370000 ... the closest were all the same horizontal i,j and only k changed
 ! TJH with 637000  ... ditto
 ! TJH with 63700   ... ditto
-! TJH with 6370    ... FINALLY the vertical stayed the same and the nearest neighbors 
+! TJH with 6370    ... FINALLY the vertical stayed the same and the nearest neighbors
 ! TJH were the horizontal neighbors.
 
 allocate(sorted_distances(num_wanted), &
@@ -645,7 +645,7 @@ call inverse_distance_interpolation(data_values, sorted_distances, num_neighbors
          obs_val, istatus)
 
 if (do_output() .and. (debug > 1)) then
-    write(*,*) 
+    write(*,*)
     print *, 'model_interpolate: summary'
     print *, 'itype     ', itype, ' is ',trim(kind_name)
     print *, 'num_close ', num_close
@@ -886,7 +886,7 @@ else
    !----------------------------------------------------------------------------
    ! We need to output the prognostic variables.
    !----------------------------------------------------------------------------
-   ! Define the new dimensions IDs 
+   ! Define the new dimensions IDs
    ! FIXME ... do we grab dimension names from all possible vars
    !----------------------------------------------------------------------------
 
@@ -1216,7 +1216,7 @@ end function nc_write_model_atts
 !>
 !> Writes the model variables to a netCDF file.
 !>
-!> All errors are fatal, so the return code is always '0 == normal', 
+!> All errors are fatal, so the return code is always '0 == normal',
 !> since the fatal errors stop execution.
 !>
 !> assim_model_mod:init_diag_output uses information from the location_mod
@@ -1556,7 +1556,7 @@ VARLOOP : do ivar=1,nfields
       pert_state(i) = state(i) + random_gaussian(random_seq, 0.0_r8, &
                                       model_perturbation_amplitude)
 
-   enddo STATELOOP 
+   enddo STATELOOP
 enddo VARLOOP
 
 end subroutine pert_model_state
@@ -1761,9 +1761,9 @@ end subroutine get_grid_dims
 !>
 !> FIXME ... should add a fatal exit if domain encompasses the pole.
 !>
-!> FIXME Angie ... fill in the description of the module variables that get modified. 
-!> FIXME Angie ... fill in the description of the module variables that get modified. 
-!> FIXME Angie ... fill in the description of the module variables that get modified. 
+!> FIXME Angie ... fill in the description of the module variables that get modified.
+!> FIXME Angie ... fill in the description of the module variables that get modified.
+!> FIXME Angie ... fill in the description of the module variables that get modified.
 
 subroutine read_grid()
 
@@ -1977,7 +1977,7 @@ index1  = 1;
 indexN  = 0;
 do ivar = 1, nfields
 
-   ! Copying the information in the variable_table to each progvar. 
+   ! Copying the information in the variable_table to each progvar.
    ! Setting the default values.
 
    progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
@@ -2010,15 +2010,15 @@ do ivar = 1, nfields
 
    read(variable_table(ivar,VT_MINVALINDX),*,iostat=io) minvalue
    if (io == 0) progvar(ivar)%minvalue = minvalue
-   
+
    read(variable_table(ivar,VT_MAXVALINDX),*,iostat=io) maxvalue
    if (io == 0) progvar(ivar)%maxvalue = maxvalue
-   
+
    ! rangeRestricted == BOUNDED_NONE  == 0 ... unlimited range
    ! rangeRestricted == BOUNDED_BELOW == 1 ... minimum, but no maximum
    ! rangeRestricted == BOUNDED_ABOVE == 2 ... maximum, but no minimum
    ! rangeRestricted == BOUNDED_BOTH  == 3 ... minimum and maximum
-   
+
    if (   (progvar(ivar)%minvalue       /= MISSING_R8) .and. &
           (progvar(ivar)%maxvalue       /= MISSING_R8) ) then
            progvar(ivar)%rangeRestricted = BOUNDED_BOTH
@@ -2121,7 +2121,7 @@ do ivar = 1, nfields
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), name=dimname, len=dimlen), &
                                           'fill_progvar', string1)
 
-      ! Only reserve space for a single time slice 
+      ! Only reserve space for a single time slice
       if (dimIDs(i) == TimeDimID) then
          has_singleton_dimension = .TRUE.
          dimlen = 1
@@ -2359,8 +2359,7 @@ character(len=NF90_MAX_NAME) :: varname
 character(len=NF90_MAX_NAME) :: attvalue
 
 integer :: ncid, TimeDimID, VarID, numdims, dimlen, ntimes
-integer :: iyear, imonth, iday, ihour, iminute, isecond
-integer :: origin_days, origin_seconds
+integer :: iday, isecond, origin_days, origin_seconds
 type(time_type) :: origin_time
 
 logical :: write_metadata
@@ -2379,9 +2378,6 @@ call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
         'gcom_file_to_dart_vector', 'open '//trim(filename))
 
 ! Read the time data.
-! DART only knows about integer number of seconds, so using the rounded one
-! is what we would have to do anyway ... and we already have a set_date routine
-! that takes ihour, iminute, isecond information.
 
 call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
         'gcom_file_to_dart_vector', 'inq_dimid time')
@@ -2400,41 +2396,13 @@ call nc_check(nf90_get_var(  ncid, VarID, mytimes), &
 call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
         'gcom_file_to_dart_vector', 'time get_att units')
 
-! Expecting units of days, but sometimes they are in seconds since
-! time:units = "seconds since 2004-01-01 00:00:00" ;
-! time:units = "days since 2004-01-01 00:00:00" ;
-!               12345678901234
+origin_time = convert_times(attvalue, mytimes)
 
-if      (attvalue(1:10) == 'days since') then
-
-   read(attvalue,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
-
-else if (attvalue(1:10) == 'seconds si') then ! convert to days
-
-   read(attvalue,'(14x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
-   mytimes = mytimes / 86400.0_r8
-else
-   write(string1,*)'expecting time units of [days since ... ]'
-   write(string2,*)'                or   [seconds since ... ]'
-   write(string3,*)'read time units of ['//trim(attvalue)//']'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
-          source, revision, revdate, text2=string2, text3=string3)
-endif
-
-if (io /= 0) then
-   write(string1,*)'Unable to read time units. Error status was ',io
-   write(string2,*)'expected "... since YYYY-MM-DD HH:MM:SS"'
-   write(string3,*)'was      "'//trim(attvalue)//'"'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
-          source, revision, revdate, text2=string2, text3=string3)
-endif
-
-origin_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
 call get_time(origin_time, origin_seconds, origin_days)
 
 ! FIXME ... assuming we are using the last time ...
 ! The module 'model_time' is set and then the output argument
-! is set to the same value.  
+! is set to the same value.
 
 iday       = int(mytimes(ntimes))
 isecond    = (mytimes(ntimes) - iday)*86400
@@ -2447,7 +2415,7 @@ if (do_output()) then
 endif
 
 ! If desired, output a file that has the full i,j,k,lat,lon,lev for every element of the DART vector
-if (do_output() .and. (debug > 7)) then 
+if (do_output() .and. (debug > 7)) then
    iunit = open_file('metadata_table.txt',form='formatted',action='write')
    write(*,*)'varname   indx          i          j          k'
    write_metadata = .true.
@@ -2627,8 +2595,8 @@ do ivar=1, nfields
          do k = 1, progvar(ivar)%dimlens(3)
          do j = 1, progvar(ivar)%dimlens(2)
          do i = 1, progvar(ivar)%dimlens(1)
-        
-            call get_state_lonlatlev(ivar,i,j,k,mylon,mylat,mylev) 
+
+            call get_state_lonlatlev(ivar,i,j,k,mylon,mylat,mylev)
 
             write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k, mylon, mylat, mylev
             indx = indx + 1
@@ -2737,7 +2705,7 @@ UPDATE : do ivar=1,nfields
    if (numdims /= progvar(ivar)%numdims) then
       write(string1,*) trim(filename)//' '//trim(varname)
       write(string2,*) 'has rank ',numdims, ' /= expected value of ', &
-                       progvar(ivar)%numdims 
+                       progvar(ivar)%numdims
       call error_handler(E_ERR,'dart_vector_to_gcom_file',string1, &
                  source,revision,revdate,text2=string2)
    endif
@@ -2750,7 +2718,7 @@ UPDATE : do ivar=1,nfields
       write(string1,'(''inquire dimension'',1x,i2,1x,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'dart_vector_to_gcom_file', string1)
-     
+
       if (dimIDs(i) == TimeDimID) then
          ncstart(i) = timeindex
          nccount(i) = 1
@@ -3477,52 +3445,52 @@ end subroutine get_var_3d
 !> rigorous test of the interpolation routine.
 
 subroutine test_interpolation(test_casenum)
-  
+
 integer, intent(in) :: test_casenum
-  
+
 ! ! This is storage just used for temporary test driver
 ! integer :: imain, jmain, index, istatus, nxp1_temp, nyp1_temp
 ! integer :: dnxp1_temp, dnyp1_temp, height
 ! real(r8) :: ti, tj
-! 
+!
 ! ! Storage for testing interpolation to a different grid
 ! integer :: dnxp1, dnyp1
 ! real(r8), allocatable :: dulon(:, :), dulat(:, :), dtlon(:, :), dtlat(:, :)
 ! real(r8), allocatable :: reg_u_data(:, :), reg_t_data(:, :)
 ! real(r8), allocatable :: reg_u_x(:), reg_t_x(:), dipole_u(:, :), dipole_t(:, :)
-! 
+!
 ! ! Test program reads in two grids; one is the interpolation grid
 ! ! The second is a grid to which to interpolate.
-! 
+!
 ! ! Read of first grid
 ! ! Set of block options for now
 ! ! Lon lat for u on channel 12, v on 13, u data on 14, t data on 15
-! 
+!
 ! ! Case 1: regular grid to dipole
 ! ! Case 2: dipole to regular grid
 ! ! Case 3: regular grid to regular grid with same grid as dipole in SH
 ! ! Case 4: regular grid with same grid as dipole in SH to regular grid
 ! ! Case 5: regular grid with same grid as dipole in SH to dipole
 ! ! Case 6: dipole to regular grid with same grid as dipole in SH
-! 
+!
 ! if ( .not. module_initialized ) call static_init_model
-! 
+!
 ! call error_handler(E_MSG,'test_interpolate','FIXME TJH UNTESTED')
-! 
+!
 ! if(test_casenum == 1 .or. test_casenum == 3) then
 !    ! Case 1 or 3: read in from regular grid
 !    open(unit=12, position='rewind', action='read', file='regular_grid_u')
 !    open(unit=13, position='rewind', action='read', file='regular_grid_t')
 !    open(unit=14, position='rewind', action='read', file='regular_grid_u_data')
 !    open(unit=15, position='rewind', action='read', file='regular_grid_t_data')
-! 
+!
 ! else if(test_casenum == 4 .or. test_casenum == 5) then
 !    ! Case 3 or 4: read regular with same grid as dipole in SH
 !    open(unit=12, position='rewind', action='read', file='regular_griddi_u')
 !    open(unit=13, position='rewind', action='read', file='regular_griddi_t')
 !    open(unit=14, position='rewind', action='read', file='regular_griddi_u_data')
 !    open(unit=15, position='rewind', action='read', file='regular_griddi_t_data')
-! 
+!
 ! else if(test_casenum == 2 .or. test_casenum == 6) then
 !    ! Case 5: read in from dipole grid
 !    open(unit=12, position='rewind', action='read', file='dipole_grid_u')
@@ -3530,7 +3498,7 @@ integer, intent(in) :: test_casenum
 !    open(unit=14, position='rewind', action='read', file='dipole_grid_u_data')
 !    open(unit=15, position='rewind', action='read', file='dipole_grid_t_data')
 ! endif
-! 
+!
 ! ! Get the size of the grid from the input u and t files
 ! read(12, *) nxp1, nyp1
 ! read(13, *) nxp1_temp, nyp1_temp
@@ -3538,13 +3506,13 @@ integer, intent(in) :: test_casenum
 !    write(string1,*)'mismatch nxp1,nxp1_temp ',nxp1,nxp1_temp,' or nyp1,nyp1_temp',nyp1,nyp1_temp
 !    call error_handler(E_ERR,'test_interpolation',string1,source,revision,revdate)
 ! endif
-! 
+!
 ! ! Allocate stuff for the first grid (the one being interpolated from)
 ! allocate(ulon(nxp1, nyp1), ulat(nxp1, nyp1), tlon(nxp1, nyp1), tlat(nxp1, nyp1))
 ! allocate(reg_u_data(nxp1, nyp1), reg_t_data(nxp1, nyp1))
 ! ! The Dart format 1d data arrays
 ! allocate(reg_u_x(nxp1*nyp1), reg_t_x(nxp1*nyp1))
-! 
+!
 ! do imain = 1, nxp1
 !    do jmain = 1, nyp1
 !       read(12, *) ti, tj, ulon(imain, jmain), ulat(imain, jmain)
@@ -3553,7 +3521,7 @@ integer, intent(in) :: test_casenum
 !       read(15, *) ti, tj, reg_t_data(imain, jmain)
 !    enddo
 ! enddo
-! 
+!
 ! ! Load into 1D dart data array
 ! index = 0
 ! do jmain = 1, nyp1
@@ -3563,16 +3531,16 @@ integer, intent(in) :: test_casenum
 !       reg_t_x(index) = reg_t_data(imain, jmain)
 !    enddo
 ! enddo
-! 
+!
 ! ! dummy out vertical; let height always = 1 and allow
 ! ! all grid points to be processed.
 ! kmt = 2
 ! kmu = 2
 ! height = 1
-! 
+!
 ! ! Initialize the interpolation data structure for this grid.
 ! call init_interp()
-! 
+!
 ! ! Now read in the points for the output grid
 ! ! Case 1: regular grid to dipole
 ! ! Case 2: dipole to regular grid
@@ -3586,14 +3554,14 @@ integer, intent(in) :: test_casenum
 !    open(unit=23, position='rewind', action='read',  file='dipole_grid_t')
 !    open(unit=24, position='rewind', action='write', file='dipole_grid_u_data.out')
 !    open(unit=25, position='rewind', action='write', file='dipole_grid_t_data.out')
-! 
+!
 ! else if(test_casenum == 2 .or. test_casenum == 4) then
 !    ! Output to regular grid
 !    open(unit=22, position='rewind', action='read',  file='regular_grid_u')
 !    open(unit=23, position='rewind', action='read',  file='regular_grid_t')
 !    open(unit=24, position='rewind', action='write', file='regular_grid_u_data.out')
 !    open(unit=25, position='rewind', action='write', file='regular_grid_t_data.out')
-! 
+!
 ! else if(test_casenum == 3 .or. test_casenum == 6) then
 !    ! Output to regular grid with same grid as dipole in SH
 !    open(unit=22, position='rewind', action='read',  file='regular_griddi_u')
@@ -3601,55 +3569,55 @@ integer, intent(in) :: test_casenum
 !    open(unit=24, position='rewind', action='write', file='regular_griddi_u_data.out')
 !    open(unit=25, position='rewind', action='write', file='regular_griddi_t_data.out')
 ! endif
-! 
+!
 ! read(22, *) dnxp1, dnyp1
 ! read(23, *) dnxp1_temp, dnyp1_temp
 ! if(dnxp1 /= dnxp1_temp .or. dnyp1 /= dnyp1_temp) then
 !    write(string1,*)'mismatch dnxp1,dnxp1_temp ',dnxp1,dnxp1_temp,' or dnyp1,dnyp1_temp',dnyp1,dnyp1_temp
 !    call error_handler(E_ERR,'test_interpolation',string1,source,revision,revdate)
 ! endif
-! 
+!
 ! allocate(dulon(dnxp1, dnyp1), dulat(dnxp1, dnyp1), dtlon(dnxp1, dnyp1), dtlat(dnxp1, dnyp1))
 ! allocate(dipole_u(dnxp1, dnyp1), dipole_t(dnxp1, dnyp1))
-! 
+!
 ! dipole_u = 0.0_r8   ! just put some dummy values in to make sure they get changed.
 ! dipole_t = 0.0_r8   ! just put some dummy values in to make sure they get changed.
-! 
+!
 ! do imain = 1, dnxp1
 ! do jmain = 1, dnyp1
 !    read(22, *) ti, tj, dulon(imain, jmain), dulat(imain, jmain)
 !    read(23, *) ti, tj, dtlon(imain, jmain), dtlat(imain, jmain)
 ! enddo
 ! enddo
-! 
+!
 ! do imain = 1, dnxp1
 !    do jmain = 1, dnyp1
 !       ! Interpolate U from the first grid to the second grid
-! 
+!
 !       call lon_lat_interpolate(reg_u_x, dulon(imain, jmain), dulat(imain, jmain), &
 !          KIND_U_CURRENT_COMPONENT, height, dipole_u(imain, jmain), istatus)
-! 
+!
 !       if ( istatus /= 0 ) then
 !          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' U interp failed - code '',i4)') &
 !               imain, jmain, dulon(imain, jmain), dulat(imain, jmain), istatus
 !          call error_handler(E_MSG,'test_interpolation',string1)
 !       endif
-! 
+!
 !       write(24, *) dulon(imain, jmain), dulat(imain, jmain), dipole_u(imain, jmain)
-! 
+!
 !       ! Interpolate U from the first grid to the second grid
-! 
+!
 !       call lon_lat_interpolate(reg_t_x, dtlon(imain, jmain), dtlat(imain, jmain), &
 !          KIND_POTENTIAL_TEMPERATURE, height, dipole_t(imain, jmain), istatus)
-! 
+!
 !       if ( istatus /= 0 ) then
 !          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' T interp failed - code '',i4)') &
 !               imain,jmain, dtlon(imain, jmain), dtlat(imain, jmain), istatus
 !          call error_handler(E_MSG,'test_interpolation',string1)
 !       endif
-! 
+!
 !       write(25, *) dtlon(imain, jmain), dtlat(imain, jmain), dipole_t(imain, jmain)
-! 
+!
 !    enddo
 ! enddo
 
@@ -4378,11 +4346,11 @@ end function get_val
 
 !-----------------------------------------------------------------------
 !>
-!> Given a longitude lon, the array of longitudes for grid boundaries, 
+!> Given a longitude lon, the array of longitudes for grid boundaries,
 !> and the number of longitudes in the grid, returns the indices of the longitude
 !> below and above the location longitude and the fraction of the distance
 !> between. It is assumed that the longitude wraps around for a global grid.
-!> Since longitude grids are going to be regularly spaced, this could be made 
+!> Since longitude grids are going to be regularly spaced, this could be made
 !> more efficient.
 !> Algorithm fails for a silly grid that has only 2 longitudes separated by 180 degrees.
 
@@ -4958,7 +4926,7 @@ elseif ( progvar(varindex)%rank == 2) then
 elseif ( progvar(varindex)%rank == 3) then
 
    ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
-   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest 
+   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest
 
    lev_index = 1 + (offset - 1)/(ndim1*ndim2)
    lat_index = 1 + (offset - (lev_index-1)*ndim1*ndim2 -1)/ndim1
@@ -4982,7 +4950,7 @@ end subroutine get_state_indices
 !-----------------------------------------------------------------------
 !>
 !> Given the indices for the lat, lon, level (i,j,k)s
-!> 
+!>
 
 function ijk_to_state_index(varindex, i_index, j_index, k_index)
 
@@ -5009,7 +4977,7 @@ elseif ( progvar(varindex)%rank == 2) then
 elseif ( progvar(varindex)%rank == 3) then
 
    ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
-   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest 
+   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest
 
    ijk_to_state_index = offset + (j_index-1)*ndim1 + (k_index-1)*ndim1*ndim2 + i_index
 
@@ -5030,7 +4998,7 @@ end function ijk_to_state_index
 
 !-----------------------------------------------------------------------
 !>
-!> Given an integer index into the state vector structure, 
+!> Given an integer index into the state vector structure,
 !> return the longitude, latitude and level
 
 subroutine get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
@@ -5044,19 +5012,23 @@ real(r8), intent(out) :: mylon
 real(r8), intent(out) :: mylat
 real(r8), intent(out) :: mylev
 
-if     (trim(progvar(varindex)%coordinates) == 'lon lat lev') then
+if     ((trim(progvar(varindex)%coordinates) == 'lon lat lev') .or. &
+        (trim(progvar(varindex)%coordinates) == 'lon lat lev time')) then
    mylon =  LON(lon_index, lat_index, lev_index)
    mylat =  LAT(lon_index, lat_index, lev_index)
    mylev =  LEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev') then
+elseif ((trim(progvar(varindex)%coordinates) == 'ulon ulat ulev') .or. &
+        (trim(progvar(varindex)%coordinates) == 'ulon ulat ulev time')) then
    mylon = ULON(lon_index, lat_index, lev_index)
    mylat = ULAT(lon_index, lat_index, lev_index)
    mylev = ULEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev') then
+elseif ((trim(progvar(varindex)%coordinates) == 'vlon vlat vlev') .or. &
+        (trim(progvar(varindex)%coordinates) == 'vlon vlat vlev time')) then
    mylon = VLON(lon_index, lat_index, lev_index)
    mylat = VLAT(lon_index, lat_index, lev_index)
    mylev = VLEV(lon_index, lat_index, lev_index)
-elseif (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev') then
+elseif ((trim(progvar(varindex)%coordinates) == 'wlon wlat wlev') .or. &
+        (trim(progvar(varindex)%coordinates) == 'wlon wlat wlev time')) then
    mylon = WLON(lon_index, lat_index, lev_index)
    mylat = WLAT(lon_index, lat_index, lev_index)
    mylev = WLEV(lon_index, lat_index, lev_index)
@@ -5160,7 +5132,7 @@ if (present(varindex)) then
 
    minimum = minval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
    maximum = maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
-   
+
    write(*,*)trim(progvar(ivar)%varname),' range: ', &
              minimum, maximum, trim(progvar(ivar)%units)
 
@@ -5170,7 +5142,7 @@ else
 
       minimum = minval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
       maximum = maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
-   
+
       write(*,*)trim(progvar(ivar)%varname),' range: ', &
                 minimum, maximum, trim(progvar(ivar)%units)
    enddo
@@ -5242,7 +5214,7 @@ integer :: ulatVarID, ulonVarID, ulevVarID
 
 integer :: dimids(3)
 
-! FIXME: add all the coordinate variables 
+! FIXME: add all the coordinate variables
 call error_handler(E_ERR,'write_grid_netcdf','routine not written yet', &
                       source, revision, revdate)
 
@@ -5513,30 +5485,30 @@ end subroutine do_interp
 !>  the trick here that if you make rp = local pressure and press = 0.0,
 !>  and put potemp in the "temp" variable , it will return insitu temp in the
 !>  potemp variable.
-!> 
+!>
 !> an example figure of the relationship of potential temp and in-situ temp at
 !> depth: http://oceanworld.tamu.edu/resources/ocng_textbook/chapter06/chapter06_05.htm
 !> see the 'potential temperature' section (note graph starts at -1000m)
-!> 
+!>
 !>     title:
 !>     *****
-!> 
+!>
 !>       insitu_temp  -- calculate sensible (in-situ) temperature from
 !>                       local pressure, salinity, and potential temperature
-!> 
+!>
 !>     purpose:
 !>     *******
-!> 
+!>
 !>       to calculate sensible temperature, taken from a converter that
 !>       went from sensible/insitu temperature to potential temperature
 !>
 !>       ref: N.P. Fofonoff
 !>            Deep Sea Research
 !>            in press Nov 1976
-!> 
+!>
 !>     arguments:
 !>     **********
-!> 
+!>
 !>       potemp     -> potential temperature in celsius degrees
 !>       s          -> salinity pss 78
 !>       lpres      -> local pressure in decibars
@@ -5620,22 +5592,22 @@ end subroutine insitu_temp
 !>  using a mean density derived from depth-dependent global
 !>  average temperatures and salinities from levitus 1994, and
 !>  integrating using hydrostatic balance.
-!> 
+!>
 !>  references:
-!> 
+!>
 !>  levitus, s., r. burgett, and t.p. boyer, world ocean atlas
 !>  volume 3: salinity, noaa atlas nesdis 3, us dept. of commerce, 1994.
-!> 
+!>
 !>  levitus, s. and t.p. boyer, world ocean atlas 1994, volume 4:
 !>  temperature, noaa atlas nesdis 4, us dept. of commerce, 1994.
-!> 
+!>
 !>  dukowicz, j. k., 2000: reduction of pressure and pressure
 !>  gradient errors in ocean simulations, j. phys. oceanogr., submitted.
-!> 
+!>
 !>  input parameters:
 !>  nd     - size of arrays
 !>  depth  - depth in meters. no units check is made
-!> 
+!>
 !>  output parameters:
 !>  pressure - pressure in bars
 
@@ -5672,8 +5644,8 @@ end subroutine depth2pressure
 
 !-----------------------------------------------------------------------
 !>
-!> find_desired_time_index() returns the index into the time array that 
-!> matches the target_time. 
+!> find_desired_time_index() returns the index into the time array that
+!> matches the target_time.
 !> If no target_time is supplied, the model_time is the target.
 
 function find_desired_time_index(ncid, ntimes, time_wanted)
@@ -5705,26 +5677,8 @@ call nc_check(nf90_get_var(  ncid, VarID, mytimes), &
 call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
         'find_desired_time_index:', 'time get_att units')
 
-!               1234567890
-! time:units = "days since 2004-01-01 00:00:00" ;
+this_time = convert_times(attvalue, mytimes)
 
-if (attvalue(1:10) /= 'days since') then
-   write(string1,*)'expecting time units of [days since ... ]'
-   write(string2,*)'read time units of ['//trim(attvalue)//']'
-   call error_handler(E_ERR, 'find_desired_time_index:', string1, &
-          source, revision, revdate, text2=string2)
-endif
-
-read(attvalue,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
-if (io /= 0) then
-   write(string1,*)'Unable to read time units. Error status was ',io
-   write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
-   write(string3,*)'was      "'//trim(attvalue)//'"'
-   call error_handler(E_ERR, 'find_desired_time_index:', string1, &
-          source, revision, revdate, text2=string2, text3=string3)
-endif
-
-this_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
 call get_time(this_time, origin_seconds, origin_days)
 
 ! convert each time to a DART time and compare to desired
@@ -5742,7 +5696,7 @@ TIMELOOP : do itime = 1,ntimes
 
 enddo TIMELOOP
 
-! FIXME ... do we actually need a perfect match ... 
+! FIXME ... do we actually need a perfect match ...
 ! or do we just use the last one if close enough.
 
 ! If we did not find one, list all the ones we did find.
@@ -5761,7 +5715,7 @@ if ( find_desired_time_index == MISSING_I ) then
       call print_time(this_time,str=string1,iunit=logfileunit)
       call print_date(this_time,str=string1)
       call print_date(this_time,str=string1,iunit=logfileunit)
-   enddo 
+   enddo
 
    write(string1,*)'No matching time found'
    call error_handler(E_ERR, 'find_desired_time_index:', string1, &
@@ -5890,7 +5844,7 @@ end subroutine get_grid_variable
 
 subroutine init_interp()
 
-! This should be called at static_init_model time to avoid 
+! This should be called at static_init_model time to avoid
 ! having all this temporary storage in the middle of a run.
 !
 ! DART has a 'get_close' type that divides the domain into a set of boxes
@@ -5908,7 +5862,7 @@ real(r8) :: meters_to_radians
 ! the idea is to find a distance that allows us to find the surrounding
 ! gridcell locations without finding 'too many' neighboring gridcells.
 !
-! Since this is a regional model, I am going to use the 
+! Since this is a regional model, I am going to use the
 ! lat & lon values as proxies for the physical distance.
 ! The maximum grid cell size from one grid should suffice.
 
@@ -6026,7 +5980,7 @@ end subroutine set_state_locations_kinds
 
 !-----------------------------------------------------------------------
 !>
-!> inverse_distance_interpolation() 
+!> inverse_distance_interpolation()
 !>
 !> This does an (inverse distance)^2 weighting over the N nearest neighbors.
 
@@ -6075,7 +6029,7 @@ end subroutine inverse_distance_interpolation
 
 !-----------------------------------------------------------------------
 !>
-!> horizontal_interpolation 
+!> horizontal_interpolation
 !>
 
 subroutine horizontal_interpolation(location, closest_index, num_wanted, indices, &
@@ -6120,6 +6074,56 @@ if (do_output() .and. (debug > 99)) &
    write(*,*)'DEBUG ',closest_index, lon_index, lat_index, lev_index, dart_state_index
 
 end subroutine horizontal_interpolation
+
+
+
+!-----------------------------------------------------------------------
+!>
+!> convert_times
+!>
+
+function convert_times(timeunits, times)
+
+character(len=*), intent(in)    :: timeunits
+real(r8),         intent(inout) :: times(:)
+type(time_type)                 :: convert_times
+
+integer :: io, iyear, imonth, iday, ihour, iminute, isecond
+
+! Expecting units of days, but sometimes they are in seconds since
+! time:units = "seconds since 2004-01-01 00:00:00" ;
+! time:units = "days since 2004-01-01 00:00:00" ;
+!               12345678901234
+
+if      (timeunits(1:10) == 'days since') then
+
+   read(timeunits,'(11x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
+
+else if (timeunits(1:10) == 'seconds si') then ! convert to days
+
+   read(timeunits,'(14x,i4,5(1x,i2))',iostat=io)iyear,imonth,iday,ihour,iminute,isecond
+   times = times / 86400.0_r8
+
+else
+   write(string1,*)'expecting time units of [days since ... ]'
+   write(string2,*)'                or   [seconds since ... ]'
+   write(string3,*)'read time units of ['//trim(timeunits)//']'
+   call error_handler(E_ERR, 'convert_times:', string1, &
+          source, revision, revdate, text2=string2, text3=string3)
+endif
+
+if (io /= 0) then
+   write(string1,*)'Unable to read time units. Error status was ',io
+   write(string2,*)'expected "... since YYYY-MM-DD HH:MM:SS"'
+   write(string3,*)'was      "'//trim(timeunits)//'"'
+   call error_handler(E_ERR, 'convert_times:', string1, &
+          source, revision, revdate, text2=string2, text3=string3)
+endif
+
+convert_times = set_date(iyear, imonth, iday, ihour, iminute, isecond)
+
+end function convert_times
+
 
 !------------------------------------------------------------------
 ! End of model_mod
