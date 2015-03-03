@@ -76,8 +76,11 @@ LD = gfortran
 # remove it from the LIBS line. The same is true for any library. If 'ld'
 # does not complain - it worked.
 
-INCS = -I/usr/include/netcdf-3
-LIBS = -L/usr/lib64 -lnetcdff -lnetcdf
+# See ~thoar/.bash_profile for an example how to automatically set NETCDFLIBDIR
+# and NETCDFMODDIR for dulcinea's login and compute nodes.
+
+INCS = -I${NETCDFMODDIR}
+LIBS = -L${NETCDFLIBDIR} -lnetcdff -lnetcdf
 # FFLAGS  = -O2 -ffree-line-length-none $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 

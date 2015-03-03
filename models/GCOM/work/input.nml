@@ -154,6 +154,13 @@
 #    'UPDATE'       =>        update the variable in the restart file
 #    'NO_COPY_BACK' => do not update the variable in the restart file
 #    all these variables WILL be updated INTERNALLY IN DART
+#
+#  gcom_variables = 'T', 'KIND_TEMPERATURE',         '0.0', 'NA', 'NO_COPY_BACK',
+#                   'S', 'KIND_SALINITY',            '0.0', 'NA', 'NO_COPY_BACK',
+#                   'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+#                   'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
+#                   'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'NO_COPY_BACK',
+#                   'p', 'KIND_PRESSURE',            '0.0', 'NA', 'UPDATE' 
 
 &model_nml
    gcom_restart_file            = 'gcom_restart.nc'
@@ -162,7 +169,7 @@
    assimilation_period_seconds  = 10
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
-   debug                        = 4
+   debug                        = 5
    gcom_variables = 'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'NO_COPY_BACK',
@@ -327,10 +334,6 @@
    verbose    = .false.
   /
 
-# u  1685      36,18,1   239.45833300  32.09375000  -993.28925000
-# u  48245     36,18,16  239.45833300  32.09375000  -796.38450000
-# u  48246     37,18,16  239.50000000  32.09375000  -795.56225000
-
 &model_mod_check_nml
    input_file           = "dart_ics.txt"
    output_file          = "check_me_out"
@@ -340,5 +343,5 @@
    x_ind                = 48245
    kind_of_interest     = 'KIND_U_CURRENT_COMPONENT'
    loc_of_interest      = 239.4990, 32.09375000, -796.5
-   /
+  /
 

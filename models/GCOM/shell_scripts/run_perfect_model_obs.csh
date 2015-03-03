@@ -12,20 +12,20 @@
 # Still fairly complex; requires a raft of
 # data files and most of them are in hardcoded locations.
 #
-# This script is designed to be executed as a batch job. 
+# This script is designed to be executed as a batch job.
 # However, if you comment out the model advance part - you can run this
 # interactively to check for logic, file motion, syntax errors and the like.
 # It is entirely fine to have directives for both PBS and LSF in the same file.
 # I guarantee that as soon as you delete one set, you will change machines
-# and wish you had not deleted the directives. 
+# and wish you had not deleted the directives.
 #
 # The script moves the necessary files to a temporary directory that is the
-# basis for the DART experiment; this will be called CENTRALDIR. 
+# basis for the DART experiment; this will be called CENTRALDIR.
 #
 ##=============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
 ##
-## the normal way to submit to the queue is:    qsub run_filter
+## the normal way to submit to the queue is:    qsub run_perfect_model_obs.csh
 ##
 ## an explanation of the most common directives follows:
 ## -N <arg>   Job name
@@ -33,20 +33,20 @@
 ## -e <arg>   filename for standard error
 ## -o <arg>   filename for standard out
 ## -q <arg>   Queue name (small, medium, long, verylong)
-## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node. 
+## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
 ##=============================================================================
 #
 #PBS -N gcom_pmo
 #PBS -r n
 #PBS -e gcom_pmo.err
 #PBS -o gcom_pmo.log
-#PBS -q medium
-#PBS -l nodes=2:ppn=16
+#PBS -q batch
+#PBS -l nodes=1:ppn=1:mpi
 #
 #=============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
 ##
-## the normal way to submit to the queue is:    bsub < run_filter
+## the normal way to submit to the queue is:    bsub < run_perfect_model_obs.csh
 ##
 ## an explanation of the most common directives follows:
 ## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
@@ -67,7 +67,7 @@
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
-# Turns out the scripts are a lot more flexible if you don't rely on 
+# Turns out the scripts are a lot more flexible if you don't rely on
 # the queuing-system-specific variables -- so I am converting them to
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
@@ -138,7 +138,7 @@ switch ("`hostname`")
       setenv CENTRALDIR /glade/scratch/${USER}/${JOBNAME}/job_${JOBID}
       setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
       setenv    DARTDIR ${HOME}/work/DART/UCOAM/models/GCOM
-      setenv   SERUCOAM ${HOME}/UCOAM-Moh/angie/serucoam
+      setenv   SERUCOAM ${HOME}/work/DART/UCOAM/models/GCOM/serucoam
    breaksw
 
    default:
@@ -150,12 +150,14 @@ switch ("`hostname`")
 
       setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
       setenv CENTRALDIR /raid/scratch/${USER}/${JOBNAME}/job_${JOBID}
-      setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
       setenv    DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
-      setenv   SERUCOAM /home/mgarcia/UCOAM-Moh/angie/serucoam
+      setenv   SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
 
    breaksw
 endsw
+
+env | sort > batch_environment
 
 #----------------------------------------------------------------------
 # Make a unique, (empty, clean) temporary directory.
@@ -180,34 +182,50 @@ echo "${JOBNAME} ($JOBID) CENTRALDIR    is $CENTRALDIR"
 echo
 
 #=========================================================================
-# Block 1: Populate CENTRALDIR with everything needed to run DART and GCOM.
-#
-# Get the DART executables, scripts, and input files
-# The input.nml will be copied from the DART directory and modified appropriately.
-#-----------------------------------------------------------------------------
+# Block 1: Build all the GCOM executables we will need for this run.
+# Since the compute nodes cannot execute things compiled on the head node,
+# you have to compile what you need on the compute node. Really annoying.
 
-${COPY} ${DARTDIR}/work/perfect_model_obs          .  || exit 1
-${COPY} ${DARTDIR}/work/dart_to_gcom               .  || exit 1
-${COPY} ${DARTDIR}/work/gcom_to_dart               .  || exit 1
-${COPY} ${BASEOBSDIR}/obs_seq.in                   .  || exit 1
-${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .  || exit 1
+echo "`date` -- Assembling the GCOM pieces."
 
-#-----------------------------------------------------------------------------
-# Get the ucoam executable, control files, and data files.
-#-----------------------------------------------------------------------------
-
-mkdir -p   GRID || exit 1
-mkdir -p  PARAM || exit 1
+mkdir -p GRID   || exit 1
+mkdir -p PARAM  || exit 1
 mkdir -p OUTPUT || exit 1
 
-${COPY} ${SERUCOAM}/Main                     gcom.serial.exe || exit 1
-${COPY} ${SERUCOAM}/GRID/Grid.dat            GRID            || exit 1
-${COPY} ${SERUCOAM}/GRID/ProbSize.dat        GRID            || exit 1
-${COPY} ${SERUCOAM}/PARAM/param.dat          PARAM           || exit 1
-${COPY} ${SERUCOAM}/OUTPUT/gcamIC20secII.nc  OUTPUT/gcom_restart.nc || exit 1
+cd ${SERUCOAM}/src
+make clean || exit -1
+make       || exit -1
+${REMOVE} *.o *.mod
+cd ${CENTRALDIR}
+
+${MOVE} ${SERUCOAM}/Main.exe                gcom.serial.exe || exit 1
+${LINK} ${SERUCOAM}/GRID/Grid.dat           GRID            || exit 1
+${COPY} ${SERUCOAM}/GRID/ProbSize.dat       GRID            || exit 1
+${COPY} ${SERUCOAM}/PARAM/param.dat         PARAM           || exit 1
+${COPY} ${SERUCOAM}/OUTPUT/gcamIC20secII.nc OUTPUT/gcom_restart.nc || exit 1
 
 #=========================================================================
-# Block 2: Convert 1 ucoam restart file to a DART initial conditions file.
+# Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
+#=========================================================================
+
+# Get the DART executables, scripts, and input files
+# The input.nml will be copied from the DART directory and modified appropriately.
+
+echo "`date` -- Assembling the DART pieces"
+
+cd ${DARTDIR}/work
+csh quickbuild.csh -nompi || exit 2
+
+cd ${CENTRALDIR}
+
+${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 2
+${COPY} ${DARTDIR}/work/dart_to_gcom               . || exit 2
+${COPY} ${DARTDIR}/work/gcom_to_dart               . || exit 2
+${COPY} ${BASEOBSDIR}/obs_seq.in                   . || exit 2
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
+
+#=========================================================================
+# Block 3: Convert 1 ucoam restart file to a DART initial conditions file.
 # At the end of the block, we have a DART initial condition file  perfect_ics
 #=========================================================================
 #
@@ -232,37 +250,38 @@ ${COPY} ${SERUCOAM}/OUTPUT/gcamIC20secII.nc  OUTPUT/gcom_restart.nc || exit 1
 if ( ! -e ${DARTDIR}/work/input.nml ) then
    echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
-   exit -2
+   exit 3
 endif
 
 # Ensure the namelist has the values required by this script.
 
-sed -e "s/ start_from_restart /c\ start_from_restart = .true." \
-       "s/ async /c\ async = 2" \
-       "s/ restart_in_file_name /c\ restart_in_file_name = 'perfect_ics'" \
-       "s/ obs_sequence_in_name /c\ obs_sequence_in_name = 'obs_seq.in'" \
-       "s/ obs_sequence_out_name /c\ obs_sequence_out_name = 'obs_seq.perfect'" \
-       "s/ gcom_restart_file /c\ gcom_restart_file = 'gcom_restart.nc'" \
-       "s/ gcom_geometry_file /c\ gcom_geometry_file = 'gcom_geometry.nc'" \
-       "s/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'perfect_ics'" \
-       ${DARTDIR}/work/input.nml >! input.nml
+sed -e "/ start_from_restart /c\ start_from_restart = .true." \
+    -e "/ async /c\ async = 2" \
+    -e "/ restart_in_file_name /c\ restart_in_file_name = 'perfect_ics'" \
+    -e "/ obs_sequence_in_name /c\ obs_sequence_in_name = 'obs_seq.in'" \
+    -e "/ obs_sequence_out_name /c\ obs_sequence_out_name = 'obs_seq.perfect'" \
+    -e "/ gcom_restart_file /c\ gcom_restart_file = 'gcom_restart.nc'" \
+    -e "/ gcom_geometry_file /c\ gcom_geometry_file = 'gcom_geometry.nc'" \
+    -e "/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'perfect_ics'" \
+       ${DARTDIR}/work/input.nml >! input.nml || exit 3
 
 echo "`date` -- BEGIN GCOM-TO-DART"
 
-${LINK} gcom_restart.nc gcom_geometry.nc
+${LINK} OUTPUT/gcom_restart.nc .                  || exit 3
+${LINK} gcom_restart.nc        gcom_geometry.nc   || exit 3
 
 ${RUN_CMD} ./gcom_to_dart
 
 if ($status != 0) then
    echo "ERROR ... DART died in 'gcom_to_dart' ... ERROR"
    echo "ERROR ... DART died in 'gcom_to_dart' ... ERROR"
-   exit -2
+   exit 3
 endif
 
 echo "`date` -- END GCOM-TO-DART"
 
 #=========================================================================
-# Block 3: Advance the model and harvest the synthetic observations.
+# Block 4: Advance the model and harvest the synthetic observations.
 # output files are:
 # True_state.nc   ...... the DART state
 # obs_seq.perfect ...... the synthetic observations
@@ -277,7 +296,7 @@ ${RUN_CMD} ./perfect_model_obs
 if ($status != 0) then
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
-   exit -4
+   exit 4
 endif
 
 echo "`date` -- END   ucoam PERFECT_MODEL_OBS"
