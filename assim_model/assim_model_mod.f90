@@ -29,7 +29,8 @@ use     model_mod, only : get_model_size, static_init_model, get_state_meta_data
                           get_close_maxdist_init, get_close_obs_init,              &
                           get_close_obs, ens_mean_for_model, fill_variable_list,   &
                           info_file_name, get_model_time_from_file,                &
-                          variables_domains, construct_file_name_in
+                          variables_domains, construct_file_name_in,               &
+                          clamp_or_fail_it, do_clamp_or_fail
 
 implicit none
 private
@@ -47,7 +48,7 @@ public :: static_init_assim_model, init_diag_output, get_model_size,            
           close_restart, adv_1step, aget_initial_condition, get_close_maxdist_init,        &
           get_close_obs_init, get_close_obs, ens_mean_for_model,                           &
           fill_variable_list, info_file_name, get_model_time_from_file,                    &
-          variables_domains, construct_file_name_in
+          variables_domains, construct_file_name_in, clamp_or_fail_it, do_clamp_or_fail
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &

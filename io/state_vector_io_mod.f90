@@ -23,7 +23,8 @@ use utilities_mod,        only : error_handler, E_ERR, nc_check, check_namelist_
                                  E_MSG
 
 use assim_model_mod,      only : get_model_size, aread_state_restart, awrite_state_restart, &
-                                 open_restart_read, open_restart_write, close_restart
+                                 open_restart_read, open_restart_write, close_restart, &
+                                 clamp_or_fail_it, do_clamp_or_fail
 
 use time_manager_mod,     only : time_type
 
@@ -495,7 +496,7 @@ end subroutine create_state_output
 !> Write variables from start_var to end_var
 subroutine write_variables(var_block, start_var, end_var, domain)
 
-real(r8), intent(in) :: var_block(:)
+real(r8), intent(inout) :: var_block(:)
 integer,  intent(in) :: start_var
 integer,  intent(in) :: end_var
 integer,  intent(in) :: domain 
@@ -511,7 +512,12 @@ start_in_var_block = 1
 do i = start_var, end_var
 
    var_size = variable_sizes(i, domain)
-   
+
+   ! check whether you have to do anything to the variable, clamp or fail
+   if (do_clamp_or_fail(i, domain)) then
+      call clamp_or_fail_it(i, domain, var_block(start_in_var_block:start_in_var_block+var_size-1))
+   endif
+
    ! number of dimensions and length of each
    allocate(dims(dimensions_and_lengths(i, 1, domain)))
    dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
