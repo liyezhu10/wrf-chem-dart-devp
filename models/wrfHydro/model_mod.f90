@@ -4,8 +4,9 @@
 !
 ! $Id$
 
-! interface for wrfHydro
-! This is modeled on an earlier noah interface, so the term noah maybe used when wrfHydro is more appropriate.
+! Interface for wrfHydro
+! This is modeled on an earlier noah interface, so the term noah maybe used when 
+! wrfHydro is more appropriate.
 ! We are attempting to accomodate use of either Noah or NoahMP as LSMs.
 ! We are also attempting to accomodate runing with/without the hydro sstate_component, so assim would
 ! just be for the LSM without the hydro component.
