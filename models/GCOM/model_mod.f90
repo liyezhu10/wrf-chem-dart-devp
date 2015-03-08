@@ -3638,30 +3638,35 @@ type(time_type), intent(in) :: current_time
 type(time_type), intent(in) :: forecast_stop_time
 
 integer :: iunit
-integer :: current_days, current_seconds
-integer :: stop_days, stop_seconds
 integer :: forecast_days, forecast_seconds
 type(time_type) :: forecast_duration
+integer :: iyear, imonth, iday, ihour, imin, iseconds, seconds
 
 if ( .not. module_initialized ) call static_init_model
 
-forecast_duration = forecast_stop_time - current_time
-
-call get_time(forecast_duration,  forecast_seconds, forecast_days)
-call get_time(current_time,        current_seconds,  current_days)
-call get_time(forecast_stop_time,     stop_seconds,     stop_days)
-
 iunit = open_file('dart_gcom_timeinfo.txt',form='formatted',action='write')
 
-write(iunit,*)'current  time (days,seconds) is ',current_days, current_seconds
-write(iunit,*)'stop     time (days,seconds) is ',stop_days, stop_seconds
-write(iunit,*)'forecast duration (days,seconds) is ',forecast_days, forecast_seconds
+forecast_duration = forecast_stop_time - current_time
+call get_time(forecast_duration,  forecast_seconds, forecast_days)
+write(iunit,'(''Stop_Time_sec = '',f16.1)') forecast_seconds+forecast_days*86400.0_r8
 
+call get_date(current_time, iyear, imonth, iday, ihour, imin, iseconds)
+seconds = ihour*3600 + imin*60 + iseconds
+write(iunit,'(''currenttimetag = '',i4.4,''-''i2.2,''-''i2.2,''-''i5.5)') &
+            iyear,imonth,iday,seconds
+
+call get_date(forecast_stop_time, iyear, imonth, iday, ihour, imin, iseconds)
+seconds = ihour*3600 + imin*60 + iseconds
+write(iunit,'(''forecasttimetag = '',i4.4,''-''i2.2,''-''i2.2,''-''i5.5)') &
+            iyear,imonth,iday,seconds
+
+write(iunit,*)
+call print_date(      current_time,'current date',iunit=iunit)
+call print_date(forecast_stop_time,'desired date',iunit=iunit)
+call print_time(      current_time,'current time',iunit=iunit)
+call print_time(forecast_stop_time,'desired time',iunit=iunit)
+call print_time( forecast_duration,'forecast duration (days,seconds)',iunit=iunit)
 call close_file(iunit)
-
-call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
-call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
-call error_handler(E_MSG,'write_gcom_timeinfo:','ANGIE FIXME routine not written')
 
 end subroutine write_gcom_timeinfo
 

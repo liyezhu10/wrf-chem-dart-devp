@@ -38,33 +38,25 @@ echo "I am going to read my filenames from $control_file"
 
 set temp_dir = `printf "advance_temp%04d" $process`
 
-\rm -rf  $temp_dir
-mkdir -p $temp_dir
-cd       $temp_dir
+${REMOVE}  $temp_dir
+mkdir -p   $temp_dir
+cd         $temp_dir
 
-# Get the 'changing' namelist files from CENTRALDIR
-# Only the namelists in CENTRALDIR have the updated information about
-# the state of the model partway through an assimilation experiment.
-foreach FILE ( ../input.nml )
-   cp -pv $FILE . || exit 1
-end
+mkdir -p GRID   || exit 1
+mkdir -p PARAM  || exit 1
+mkdir -p OUTPUT || exit 1
 
-# Try to ensure that the input.nml has the required value for
+${LINK} ../GRID/Grid.dat      GRID  || exit 1
+${LINK} ../GRID/ProbSize.dat  GRID  || exit 1
+${LINK} ../gcom_geometry.nc   .     || exit 1
+
+# Ensure that the input.nml has the required value for
 # dart_to_gcom_nml:advance_time_present for this context.
+# the way to think about the following sed syntax is this:
+# / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
 
-echo '1'                      >! ex_commands
-echo '/dart_to_gcom_nml'      >> ex_commands
-echo '/advance_time_present'  >> ex_commands
-echo ':s/\.false\./\.true\./' >> ex_commands
-echo ':wq'                    >> ex_commands
-
-( ex input.nml < ex_commands ) >& /dev/null
-\rm -f ex_commands
-
-# copy the files used by GCOM & DART
-foreach FILE ( ../gcom_geometry.nc )
-   ln -sfv $FILE . || exit 1
-end
+sed -e "/ advance_time_present /c\ advance_time_present = .true." \
+       ../input.nml >! input.nml
 
 echo 'listing now that the table has been set ...'
 ls -l
@@ -102,113 +94,65 @@ while($state_copy <= $num_states)
 
    set RESTARTFILE = `printf %04d gcom_restart_${ensemble_member}.nc'`
 
-   ln -sfv ../$input_file    dart_restart >>& $logfile || exit 2
-   cp -pv  ../${RESTARTFILE} gcom.r.nc    >>& $logfile || exit 2
-   ../dart_to_gcom                        >>& $logfile || exit 2
+   ${LINK} ../$input_file       dart_restart      >>& $logfile || exit 2
+   ${LINK} ../${RESTARTFILE}    gcom_restart.nc   >>& $logfile || exit 2
+   ${LINK} ../gcom_geometry.nc  gcom_geometry.nc  >>& $logfile || exit 2
+   
+   ${RUN_CMD} ../dart_to_gcom                     >>& $logfile || exit 2
 
-   # Convey the new gcom 'advance_to' time to gcom via the namelist
-   cat gcom_in.DART gcom_in.part2 >! gcom_in
+   # Convey the new gcom 'advance_to' time to gcom via param.dat
 
-   # update tiegcm param.dat values by grabbing the values from namelist_update  
-   # and then overwriting whatever is in the param.dat
-   # There is a danger that you match multiple things ... F107 and F107A,
-   # SOURCE_START and START, for example ... so try to grep whitespace too ...
+   \rm -f PARAM/param.dat
 
-   set start_year   = `grep " START_YEAR "   namelist_update`
-   set start_day    = `grep " START_DAY "    namelist_update`
-   set source_start = `grep " SOURCE_START " namelist_update`
-   set start        = `grep " START "        namelist_update`
-   set secstart     = `grep " SECSTART "     namelist_update`
-   set stop         = `grep " STOP "         namelist_update`
-   set secstop      = `grep " SECSTOP "      namelist_update`
-   set hist         = `grep " HIST "         namelist_update`
-   set sechist      = `grep " SECHIST "      namelist_update`
-   set save         = `grep " SAVE "         namelist_update`
-   set secsave      = `grep " SECSAVE "      namelist_update`
-   set f107         = `grep " F107 "         namelist_update`
+   set sec2advance  = `grep " Stop_Time_sec " dart_gcom_timeinfo.txt`
 
-   # FIXME SAVE and SECSAVE may not be needed ... they do not exist in 
-   # the tiegcm.nml anymore. Is this true for all versions in use ...
-   #
-   # the way to think about the following sed syntax is this:
-   # / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
+   sed -e "/ Stop Time  sec /c\ ${sec2advance}" \
+          "/ Stop_Time_sec /c\ ${sec2advance}" \
+          ../PARAM/param.dat PARAM/param.dat || exit 2
 
-   sed -e "/ START_YEAR /c\ ${start_year}" \
-       -e "/ START_DAY /c\ ${start_day}" \
-       -e "/ SOURCE_START /c\ ${source_start}" \
-       -e "/ START /c\ ${start}" \
-       -e "/ STOP /c\ ${stop}" \
-       -e "/ HIST /c\ ${hist}" \
-       -e "/ SECSTART /c\ ${secstart}" \
-       -e "/ SECSTOP /c\ ${secstop}" \
-       -e "/ SECHIST /c\ ${sechist}" \
-       -e "/ F107 /c\ ${f107}" \
-       -e "/ SOURCE /c\ SOURCE = 'tiegcm_restart_p.nc'" \
-       -e "/ OUTPUT /c\ OUTPUT = 'tiegcm_restart_p.nc'" \
-       -e "/ SECOUT /c\ SECOUT = 'tiegcm_s.nc'"         \
-       tiegcm.nml >! tiegcm.nml.updated
-
-   if ( -e tiegcm.nml.updated ) then
-      echo "tiegcm.nml updated with new start/stop time for ensemble member $ensemble_member"
-      mv tiegcm.nml tiegcm.nml.original
-      mv tiegcm.nml.updated tiegcm.nml
+   if ( -e PARAM/param.dat ) then
+      echo "param.dat updated with of ${sec2advance} for member $ensemble_member" >>& $logfile
    else
-      echo "ERROR tiegcm.nml did not update correctly for ensemble member $ensemble_member."
+      echo "ERROR param.dat did not update for ensemble member $ensemble_member" >>& $logfile
+      echo "ERROR Stop Time in sec is ${sec2advance}" >>& $logfile
       exit 1
    endif
 
    #----------------------------------------------------------------------
    # Block 3: Run the ocean model
-   # The CCSM version has a pointer file that contains the name of the
-   # last restart. The LANL version has no such mechanism, but the 
-   # filename can be predicted from the gcom_in namelist information.
    #----------------------------------------------------------------------
-   # the value of MPI is inherited
 
-   rm -f ocn.log.*
+   ${RUN_CMD} ../gcom >>& $logfile || exit 3
 
-   ${MPI} ../gcom || exit 3
-
-   grep "Successful completion of gcom run" ocn.log.*
-   set gcomstatus = $status
-   if ( $gcomstatus != 0 ) then
-      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-      exit 3 
-   endif
+#  grep "Successful completion of gcom run" ocn.log.*
+#  set gcomstatus = $status
+#  if ( $gcomstatus != 0 ) then
+#     echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
+#     echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
+#     exit 3 
+#  endif
    
    #----------------------------------------------------------------------
    # Block 4: Convert the ocean model output to form needed by DART
    #----------------------------------------------------------------------
 
-   ls -lrt
-
-   # gcom makes a new restart file and updates the pointer file
-   # Rename the gcom pointer file contents to contain the ensemble member info
-
-   set RESTARTFILE = `head -1 rpointer.ocn.restart`
-   set NEWFILE = `echo $RESTARTFILE | sed -e "s/gcom/gcom.$ensemble_member/"`
-   echo "gcom member $ensemble_member made restart file $NEWFILE"
-
-   mv -v $RESTARTFILE $NEWFILE
-  
-   echo $NEWFILE         >! rpointer.ocn.restart 
-   echo "RESTART_FMT=nc" >> rpointer.ocn.restart
-
-   ln -svf ${NEWFILE} gcom.r.nc || exit 4
-   
    # gcom_to_dart reads the restart file after the model advance and writes
    # out an updated DART 'initial conditions' file. This initial conditions
    # file contains a header with the valid time of the ensuing model state.
    # The gcom restart files contain the valid time of the model state.
 
-   ../gcom_to_dart || exit 4
+   ${RUN_CMD} ../gcom_to_dart >>& $logfile || exit 4
+
+   set forecasttimetag = `grep "forecasttimetag" dart_gcom_timeinfo.txt | sed 's/ =//g`
+   set FORECASTTIME = `echo $forecasttimetag | sed -e "s/forecasttimetag//"`
+
+   echo "Should now be at ",${FORECASTTIME}
+   
+   ls -lrt
 
    # The (new,updated) DART restart file name is called 'dart_ics'
    # Move the updated files back to 'centraldir'
-   mv -v dart_ics ../$output_file || exit 4
-   mv -v rpointer.ocn.restart ../rpointer.ocn.${ensemble_member}.restart || exit 4
-   mv -v ${NEWFILE} ../${NEWFILE} || exit 4
+   ${MOVE} dart_ics ../$output_file || exit 4
 
    # bookkeeping
 
