@@ -58,9 +58,17 @@ use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,   &
                              KIND_SNOWCOVER_FRAC,     &
                              KIND_SNOW_THICKNESS,     &
                              KIND_LEAF_CARBON,        &
+                             KIND_LEAF_NITROGEN,      &
+                             KIND_LEAF_AREA_INDEX,    &
+                             KIND_NET_PRIMARY_PROD_FLUX, &
+                             KIND_BIOMASS,            &
                              KIND_WATER_TABLE_DEPTH,  &
                              KIND_GEOPOTENTIAL_HEIGHT,&
                              KIND_BRIGHTNESS_TEMPERATURE, &
+                             KIND_RADIATION_VISIBLE_DOWN, &
+                             KIND_RADIATION_VISIBLE_UP, &
+                             KIND_RADIATION_NEAR_IR_DOWN, &
+                             KIND_RADIATION_NEAR_IR_UP, &
                              paramname_length,        &
                              get_raw_obs_kind_index
 
@@ -2434,8 +2442,8 @@ real(r8), dimension(:), optional, intent(in) :: optionals
 
 real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
-real(r8) :: interp_val_2
-integer  :: istatus_2
+real(r8) :: interp_val_2, interp_val_3
+integer  :: istatus_2, istatus_3
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2447,7 +2455,7 @@ if ( .not. module_initialized ) call static_init_model
 
 interp_val   = MISSING_R8     ! the DART bad value flag
 interp_val_2 = MISSING_R8     ! the DART bad value flag
-istatus = 99                ! unknown error
+istatus      = 99             ! unknown error
 
 ! Get the individual locations values
 
@@ -2493,8 +2501,32 @@ elseif (obs_kind == KIND_SNOWCOVER_FRAC ) then
    call compute_gridcell_value(x, location, 'frac_sno', interp_val, istatus)
 elseif (obs_kind == KIND_LEAF_CARBON ) then
    call compute_gridcell_value(x, location, 'leafc',    interp_val, istatus)
+elseif (obs_kind == KIND_LEAF_AREA_INDEX ) then
+   call compute_gridcell_value(x, location, 'LAIP_VALUE',    interp_val,istatus)
+elseif (obs_kind == KIND_LEAF_NITROGEN ) then
+   call compute_gridcell_value(x, location, 'leafn',    interp_val, istatus)
+elseif (obs_kind == KIND_NET_PRIMARY_PROD_FLUX ) then
+   call compute_gridcell_value(x, location, 'annsum_npp',    interp_val, istatus)
 elseif (obs_kind == KIND_WATER_TABLE_DEPTH ) then
    call compute_gridcell_value(x, location, 'ZWT',    interp_val, istatus)
+elseif (obs_kind == KIND_RADIATION_VISIBLE_UP ) then
+   call compute_gridcell_value(x, location, 'FSRVDLN',  interp_val, istatus)
+elseif (obs_kind == KIND_RADIATION_VISIBLE_DOWN ) then
+   call compute_gridcell_value(x, location, 'FSDSVDLN', interp_val, istatus)
+elseif (obs_kind == KIND_RADIATION_NEAR_IR_UP ) then
+   call compute_gridcell_value(x, location, 'FSRNDLN',  interp_val, istatus)
+elseif (obs_kind == KIND_RADIATION_NEAR_IR_DOWN ) then
+   call compute_gridcell_value(x, location, 'FSDSNDLN', interp_val, istatus)
+elseif (obs_kind == KIND_BIOMASS ) then
+   call compute_gridcell_value(x, location, 'leafc'    ,interp_val,   istatus)
+   call compute_gridcell_value(x, location, 'livestemc',interp_val_2, istatus_2)
+   call compute_gridcell_value(x, location, 'deadstemc',interp_val_3, istatus_3)
+   if ((istatus == 0) .and. (istatus_2 == 0) .and. (istatus_3 == 0 )) then
+      interp_val = interp_val + interp_val_2 + interp_val_3
+   else
+      interp_val = MISSING_R8
+      istatus = 6
+   endif
 elseif (obs_kind == KIND_SNOW_THICKNESS ) then
    write(string1,*)'model_interpolate for DZSNO not written yet.'
    call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
@@ -2554,7 +2586,7 @@ if ( .not. module_initialized ) call static_init_model
 ! make any error codes set here be in the 10s
 
 interp_val = MISSING_R8  ! the DART bad value flag
-istatus    = 99          ! unknown error
+istatus    = 9           ! unknown error
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
@@ -2586,7 +2618,7 @@ if ((debug > 5) .and. do_output()) then
                   loc_lat,LAT(gridlatj),gridlatj
 endif
 
-! If there is no vertical component, the problem is greatly simplified.
+! Since there is no vertical component, the problem is greatly simplified.
 ! Simply area-weight an average of all pieces in the grid cell.
 ! FIXME ... this is the loop that can exploit the knowledge of what 
 ! columnids or pftids are needed for any particular gridcell.
@@ -3042,7 +3074,7 @@ if (present(ncid)) then
               data_2d_array = progvar(ivar)%minvalue
    endif
 
-   ! Replace the DART fill value with the original value and apply any clamping.
+   ! Replace the DART fill value with the original value 
    ! Get the 'original' variable from the netcdf file if need be.
 
    allocate(org_array(size(data_2d_array,1),size(data_2d_array,2)))
@@ -3056,26 +3088,6 @@ if (present(ncid)) then
    ! restoring the indeterminate original values
 
    where(data_2d_array == MISSING_R8 ) data_2d_array = org_array
-
-   ! clamping the assimilated values to physically meaningful ranges.
-
-   if     (trim(progvar(ivar)%varname) == 'DZSNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'ZSNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'ZISNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'H2OSOI_LIQ') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'T_SOISNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'T_LAKE') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'leafc') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = 0.0_r8
-   endif
 
    deallocate(org_array)
 

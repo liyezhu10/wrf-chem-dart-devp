@@ -109,13 +109,6 @@ make || exit $n
 
 \rm -f *.o *.mod
 
-echo
-echo 'time to run filter here:'
-echo ' for lsf run "bsub < runme_filter"'
-echo ' for pbs run "qsub runme_filter"'
-echo ' for lam-mpi run "lamboot" once, then "runme_filter"'
-echo ' for mpich run "mpd" once, then "runme_filter"'
-
 exit 0
 
 # <next few lines under version control, do not edit>
