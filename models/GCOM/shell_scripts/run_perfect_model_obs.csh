@@ -267,8 +267,8 @@ sed -e "/ start_from_restart /c\ start_from_restart = .true." \
 
 echo "`date` -- BEGIN GCOM-TO-DART"
 
-${LINK} OUTPUT/gcom_restart.nc .                  || exit 3
-${LINK} gcom_restart.nc        gcom_geometry.nc   || exit 3
+${LINK} OUTPUT/gcom_restart.nc gcom_restart.nc      || exit 3
+${LINK} gcom_restart.nc        gcom_geometry.nc     || exit 3
 
 ${RUN_CMD} ./gcom_to_dart
 
@@ -288,6 +288,10 @@ echo "`date` -- END GCOM-TO-DART"
 # dart_log.out    ...... run-time output of all DART routines
 # perfect_restart ...... which we don't need
 #=========================================================================
+
+# advance_model.csh needs a 'gcom_restart_nnnn.nc' in this directory
+
+${LINK} OUTPUT/gcom_restart.nc gcom_restart_0001.nc || exit 4
 
 echo "`date` -- BEGIN ucoam PERFECT_MODEL_OBS"
 

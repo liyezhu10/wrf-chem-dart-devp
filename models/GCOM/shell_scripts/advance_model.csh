@@ -46,9 +46,12 @@ mkdir -p GRID   || exit 1
 mkdir -p PARAM  || exit 1
 mkdir -p OUTPUT || exit 1
 
-${LINK} ../GRID/Grid.dat      GRID  || exit 1
-${LINK} ../GRID/ProbSize.dat  GRID  || exit 1
-${LINK} ../gcom_geometry.nc   .     || exit 1
+${LINK} ../gcom_geometry.nc      .  || exit 1
+
+cd GRID
+${LINK} ../../GRID/Grid.dat      .  || exit 1
+${LINK} ../../GRID/ProbSize.dat  .  || exit 1
+cd ..
 
 # Ensure that the input.nml has the required value for
 # dart_to_gcom_nml:advance_time_present for this context.
@@ -58,8 +61,16 @@ ${LINK} ../gcom_geometry.nc   .     || exit 1
 sed -e "/ advance_time_present /c\ advance_time_present = .true." \
        ../input.nml >! input.nml
 
+if (-z input.nml) then
+   echo "the advance_time_present sed failed ..."
+   exit 1
+else
+   echo "The new DART input.nml looks like:"
+   cat input.nml
+endif
+
 echo 'listing now that the table has been set ...'
-ls -l
+ls -lR
 
 # Loop through each state
 set state_copy = 1
@@ -92,7 +103,9 @@ while($state_copy <= $num_states)
    # CENTRALDIR will always contain the gcom_restart.nc file.
    # The most recent gcom timestep is inserted into this file.
 
-   set RESTARTFILE = `printf %04d gcom_restart_${ensemble_member}.nc'`
+   set RESTARTFILE = `printf gcom_restart_%04d.nc ${ensemble_member}`
+
+   echo "RESTARTFILE is [${RESTARTFILE}]"
 
    ${LINK} ../$input_file       dart_restart      >>& $logfile || exit 2
    ${LINK} ../${RESTARTFILE}    gcom_restart.nc   >>& $logfile || exit 2
