@@ -60,7 +60,7 @@ integer, intent(in) :: num_domains
 integer :: iunit, io
 integer :: dom, num_files, i
 character(len = 129) :: inflation_in(2), inflation_out(2)
-character(len = 4)   :: extension
+character(len = 4)   :: extension, dom_str
 
 !call register_module(source, revision, revdate)
 
@@ -82,7 +82,8 @@ do dom = 1, num_domains
    do i = 1, ens_size  ! restarts
       restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
       write(extension, '(i4.4)') i
-      restart_files_out(i, dom, 1) = 'prior_member.' // extension
+      write(dom_str, '(i1.1)') dom
+      restart_files_out(i, dom, 1) = 'prior_member_d0' // trim(dom_str) // '.' // extension
       if (overwrite_input) then
          restart_files_out(i, dom, 2) = restart_files_in(i, dom)
       else
