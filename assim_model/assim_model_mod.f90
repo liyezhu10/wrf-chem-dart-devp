@@ -1091,7 +1091,7 @@ end subroutine output_diagnostics
 
 
 
-
+! No longer writing skeleton (just time) files
 subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index)
 !-------------------------------------------------------------------
 ! Outputs the "state" to the supplied netCDF file. 
@@ -1147,8 +1147,7 @@ endif
 
 ! model_mod:nc_write_model_vars knows nothing about assim_model_types,
 ! so we must pass the components.
-! No need to do this anymore
-!i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex)
+i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex)
 
 end subroutine aoutput_diagnostics
 

@@ -163,7 +163,7 @@ real(r8)             :: inf_damping(2)            = 1.0_r8
 real(r8)             :: inf_lower_bound(2)        = 1.0_r8
 real(r8)             :: inf_upper_bound(2)        = 1000000.0_r8
 real(r8)             :: inf_sd_lower_bound(2)     = 0.0_r8
-!logical              :: output_inflation          = .true. ! This was for the diagnostic files, no separate option for prior and posterior
+logical              :: output_inflation          = .true. ! This is for the diagnostic files, no separate option for prior and posterior
 
 namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,    &
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
@@ -177,7 +177,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound,           &
-   silence, direct_netcdf_read, direct_netcdf_write, diagnostic_files
+   silence, direct_netcdf_read, direct_netcdf_write, diagnostic_files, output_inflation
 
 
 !----------------------------------------------------------------
@@ -678,12 +678,15 @@ AdvanceTime : do
        (time_step_number / output_interval * output_interval == time_step_number)) then
 
       if(diagnostic_files) then
-         ! skeleton just to write the time to diagnostic files.
+         ! Need to transpose and write diagnostic files
+         allocate(state_ens_handle%vars(state_ens_handle%num_vars, state_ens_handle%my_num_copies))
+         call all_copies_to_all_vars(state_ens_handle)
          call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit, state_ens_handle, &
             model_size, num_output_state_members, &
-            output_state_mean_index, output_state_spread_index, &
+            output_state_mean_index, output_state_spread_index, output_inflation, &
             ENS_MEAN_COPY, ENS_SD_COPY, &
             prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+         deallocate(state_ens_handle%vars)
 
       endif
 
@@ -828,12 +831,14 @@ AdvanceTime : do
          (time_step_number / output_interval * output_interval == time_step_number)) then
 
       if (diagnostic_files) then
-         ! skeleton just to put time in the diagnostic file
+         allocate(state_ens_handle%vars(state_ens_handle%num_vars, state_ens_handle%my_num_copies))
+         call all_copies_to_all_vars(state_ens_handle)
          call filter_state_space_diagnostics(curr_ens_time, PosteriorStateUnit, state_ens_handle, &
             model_size, num_output_state_members, output_state_mean_index, &
-            output_state_spread_index, &
+            output_state_spread_index, output_inflation, &
             ENS_MEAN_COPY, ENS_SD_COPY, &
             post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
+         deallocate(state_ens_handle%vars)
          ! Cyclic storage for lags with most recent pointed to by smoother_head
          ! ens_mean is passed to avoid extra temp storage in diagnostics
 
