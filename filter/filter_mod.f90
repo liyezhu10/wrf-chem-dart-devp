@@ -949,13 +949,17 @@ call trace_message('After  writing inflation restart files if required')
 call trace_message('Before writing state restart files if requested')
 call timestamp_message('Before writing state restart files if requested')
 
-call turn_write_copy_on(1,ens_size) ! restarts
+if (output_restart)      call turn_write_copy_on(1,ens_size) ! restarts
+if (output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
+
 ! Prior_Diag copies - write spare copies
 if (spare_copies) then
    call turn_write_copy_on(SPARE_COPY_MEAN)
    call turn_write_copy_on(SPARE_COPY_SPREAD)
-   call turn_write_copy_on(SPARE_COPY_INF_MEAN)
-   call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+   if (output_inflation) then
+      call turn_write_copy_on(SPARE_COPY_INF_MEAN)
+      call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+   endif
 endif
 
 if(direct_netcdf_write) then
