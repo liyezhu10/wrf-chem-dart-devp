@@ -951,16 +951,12 @@ call timestamp_message('Before writing state restart files if requested')
 
 call turn_write_copy_on(1,ens_size) ! restarts
 ! Prior_Diag copies - write spare copies
-call turn_write_copy_on(SPARE_COPY_MEAN)
-call turn_write_copy_on(SPARE_COPY_SPREAD)
-call turn_write_copy_on(SPARE_COPY_INF_MEAN)
-call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
-
-! Posterior Diag 
-call turn_write_copy_on(ENS_MEAN_COPY) ! mean
-call turn_write_copy_on(ENS_SD_COPY) ! sd
-call turn_write_copy_on(POST_INF_COPY) ! posterior inf mean
-call turn_write_copy_on(POST_INF_SD_COPY) ! posterior inf sd
+if (spare_copies) then
+   call turn_write_copy_on(SPARE_COPY_MEAN)
+   call turn_write_copy_on(SPARE_COPY_SPREAD)
+   call turn_write_copy_on(SPARE_COPY_INF_MEAN)
+   call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+endif
 
 if(direct_netcdf_write) then
    call filter_write_restart_direct(state_ens_handle, isprior=.false.)
