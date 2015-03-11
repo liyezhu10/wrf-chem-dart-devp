@@ -42,7 +42,7 @@ The important nameslist are io_filenames_nml and filter_nml.  state_vector_io_nm
 </div>
 <P>
 <ul>
-<il>Here is an example of how the restart_in_stub is used to construct the input filenames.
+<li>Here is an example of how the restart_in_stub is used to construct the input filenames.
 <P>
 restart_in_stub = 'advance_temp' for a 2 domain case:
 <P>
@@ -117,6 +117,15 @@ netcdf files:<P>
 </ul>
 
 <P>
+direct_netcdf_read = .true. reads the state variables from the filenames constructed
+from restart_in_stub<P>
+direct_netcdf_read = .false. reads from dart restart files (same behaviour as Lanai)<P>
+direct_netcdf_write = .true. writes the state variables to the filenames constructed
+from restart_out_stub or the input files if desired. <P>
+direct_netcdf_write = .false. writes to dart restart files (same behaviour as Lanai)<P>
+
+
+
 
 <div class=namelist>
 <pre>
