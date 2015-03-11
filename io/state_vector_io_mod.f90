@@ -193,11 +193,11 @@ call get_variable_ids(variable_names, domain, variable_ids(:, domain))
 ! get all variable sizes, only readers store dimensions?
 variable_sizes(:, domain) = total_size(n, variable_ids(:, domain), domain)
 domain_size = sum(variable_sizes(:, domain))
-if(my_task_id() == 0) then
-   do i = 1, n
-      print*, i, 'variable_sizes', variable_sizes(i, domain), trim(variable_names(i))
-   enddo
-endif
+!if(my_task_id() == 0) then
+!   do i = 1, n
+!      print*, i, 'variable_sizes', variable_sizes(i, domain), trim(variable_names(i))
+!   enddo
+!endif
 
 if ( any(variable_sizes(:, domain)>limit_mem) ) then
    print*, 'memory limit = ', limit_mem

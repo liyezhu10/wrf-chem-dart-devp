@@ -629,16 +629,16 @@ AdvanceTime : do
    ! Compute the ensemble of prior observations, load up the obs_err_var
    ! and obs_values. ens_size is the number of regular ensemble members,
    ! not the number of copies
-   start = MPI_WTIME()
+   !start = MPI_WTIME()
 
    call get_obs_ens_distrib_state(state_ens_handle, obs_fwd_op_ens_handle, qc_ens_handle, &
      seq, keys, obs_val_index, input_qc_index, &
      OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
      OBS_MEAN_START, OBS_VAR_START, isprior=.true.)
 
-   finish = MPI_WTIME()
+   !finish = MPI_WTIME()
 
-   if (my_task_id() == 0) print*, 'distributed average ', (finish-start)
+   !if (my_task_id() == 0) print*, 'distributed average ', (finish-start)
    !call test_obs_copies(obs_fwd_op_ens_handle, 'prior')
 
 !   goto 10011 !HK bail out after forward operators
@@ -646,7 +646,6 @@ AdvanceTime : do
    ! While we're here, make sure the timestamp on the actual ensemble copy
    ! for the mean has the current time.  If the user requests it be written
    ! out, it needs a valid timestamp.
-   if (my_task_id() == 0 ) print*, '************ MEAN TIME *****************'
    call get_copy_owner_index(ENS_MEAN_COPY, mean_owner, mean_owners_index)
    if(state_ens_handle%my_pe == mean_owner) then
       ! Make sure the timestamp for the mean is the current time.
