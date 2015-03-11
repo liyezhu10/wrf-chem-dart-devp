@@ -22,7 +22,7 @@ module io_filenames_mod
 
 use utilities_mod, only : do_nml_file, nmlfileunit, do_nml_term, check_namelist_read, &
                           find_namelist_in_file
-use model_mod,     only : construct_file_name_in
+use model_mod,     only : construct_file_name_in, construct_file_name_out
 
 implicit none
 
@@ -42,10 +42,11 @@ character(len=2048), allocatable :: restart_files_in(:,:), restart_files_out(:,:
 ! Namelist options
 character(len=512) :: restart_in_stub  = 'input'
 character(len=512) :: restart_out_stub = 'output'
+logical            :: overwrite_input = .false.  ! sets the output file = input file
 
 
 ! Should probably get num_domains, num_restarts from elsewhere. In here for now
-namelist / io_filenames_nml / restart_in_stub, restart_out_stub
+namelist / io_filenames_nml / restart_in_stub, restart_out_stub, overwrite_input
 
 contains
 
@@ -53,12 +54,12 @@ contains
 !> read namelist and set up filename arrays
 subroutine io_filenames_init(ens_size, num_domains, inflation_in, inflation_out)
 
-integer, intent(in) :: ens_size 
+integer, intent(in) :: ens_size ! ensemble size + extras
 integer, intent(in) :: num_domains
 integer :: iunit, io
 integer :: dom, num_files, i
 character(len = 129) :: inflation_in(2), inflation_out(2)
-character(len = 4)   :: extension
+character(len = 4)   :: extension, dom_str
 
 !call register_module(source, revision, revdate)
 
@@ -80,8 +81,13 @@ do dom = 1, num_domains
    do i = 1, ens_size  ! restarts
       restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
       write(extension, '(i4.4)') i
-      restart_files_out(i, dom, 1) = 'prior_member.' // extension
-      restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+      write(dom_str, '(i1.1)') dom
+      restart_files_out(i, dom, 1) = 'prior_member_d0' // trim(dom_str) // '.' // extension
+      if (overwrite_input) then
+         restart_files_out(i, dom, 2) = restart_files_in(i, dom)
+      else
+         restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+      endif
    enddo
 enddo
 
@@ -149,20 +155,6 @@ subroutine end_io_filenames()
 deallocate(restart_files_in, restart_files_out)
 
 end subroutine end_io_filenames
-
-
-!--------------------------------------------------------------------
-!> construct restart file name for writing
-function construct_file_name_out(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_out
-
-write(construct_file_name_out, '(A,  A, i2.2, A, i2.2)') TRIM(stub), '_d', domain, '.', copy
-
-end function construct_file_name_out
 
 !----------------------------------
 !> @}

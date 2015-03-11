@@ -35,6 +35,24 @@
 
 <H2>Overview</H2>
 
+<P> This is the remote memory access (RMA) initial release of DART.
+This branch was created from the Lanai release of DART. There are
+two major differences between the RMA release and Lanai:
+
+<ul>
+<li>The whole state vector does not have to be stored on any process.
+<li>The state vector can be read/written directly from model files without
+using moodel_to_dart/dart_to_model
+</ul>
+<P>
+The new namelist options for the RMA release are detailed
+<a href="rma_differences.html">here.</a>
+
+<P>
+RMA refers to the one-sided communication protocol used to allow
+one process to read from another processors memory (Remote Memory
+Access).
+
 <P>
 The Data Assimilation Research Testbed (DART) is a public-domain,
 community facility for doing research on and applying ensemble

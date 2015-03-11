@@ -687,20 +687,23 @@ AdvanceTime : do
             prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
          deallocate(state_ens_handle%vars)
 
-      endif
+      else ! only write output members as netcdf if you are not writing diagnostic files
 
-      ! write prior files if you have ensemble members to output
-      if (.not. spare_copies) then
-         call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
-         call turn_write_copy_on(1, num_output_state_members)
-         ! need to ouput the diagnostic info in restart files
+         ! write prior files if you have ensemble members to output
+         if (.not. spare_copies) then
+            call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
+            call turn_write_copy_on(1, num_output_state_members)
+            ! need to ouput the diagnostic info in restart files
             call turn_write_copy_on(ENS_MEAN_COPY)
             call turn_write_copy_on(ENS_SD_COPY)
-               ! Output inflation sucks
+            if (output_inflation) then
                call turn_write_copy_on(PRIOR_INF_COPY)
                call turn_write_copy_on(PRIOR_INF_SD_COPY)
-         ! FIXME - what to do with lorenz_96 (or similar) here?
-         call filter_write_restart_direct(state_ens_handle, isprior = .true.)
+            endif
+            ! FIXME - what to do with lorenz_96 (or similar) here?
+            call filter_write_restart_direct(state_ens_handle, isprior = .true.)
+         endif
+         
       endif
 
    endif

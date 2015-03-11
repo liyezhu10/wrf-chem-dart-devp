@@ -145,7 +145,8 @@ public ::  get_model_size,                    &
            info_file_name, construct_file_name_in, &
            get_model_time,                    &
            do_clamp_or_fail,                  &
-           clamp_or_fail_it
+           clamp_or_fail_it, &
+           construct_file_name_out
 
 
 !  public stubs 
@@ -9261,6 +9262,20 @@ elseif (wrf%dom(dom)%clamp_or_fail(var_index) == 'CLAMP') then
 endif
 
 end subroutine clamp_or_fail_it
+
+!--------------------------------------------------------------------
+!> construct restart file name for writing
+function construct_file_name_out(stub, domain, copy)
+
+character(len=512), intent(in) :: stub
+integer,            intent(in) :: domain
+integer,            intent(in) :: copy
+character(len=1024)            :: construct_file_name_out
+
+write(construct_file_name_out, '(A,  A, i2.2, A, i2.2)') TRIM(stub), '_d', domain, '.', copy
+
+end function construct_file_name_out
+
 
 !--------------------------------------------------------------------
 

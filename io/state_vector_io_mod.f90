@@ -117,7 +117,7 @@ logical :: arrays_initialized = .false.
 ! Aim: to have the regular transpose as the default
 integer :: limit_mem = 2147483640!< This is the number of elements (not bytes) so you don't have times the number by 4 or 8
 integer :: limit_procs = 100000!< how many processors you want involved in each transpose.
-logical :: create_restarts = .true. ! what if the restart files exist?
+logical :: create_restarts = .false. ! what if the restart files exist?
 logical :: time_unlimited = .true. ! You need to keep track of the time.
 
 namelist /  state_vector_io_nml / limit_mem, limit_procs, create_restarts, time_unlimited
