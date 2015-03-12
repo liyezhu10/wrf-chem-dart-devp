@@ -953,21 +953,30 @@ call timestamp_message('Before writing state restart files if requested')
 
 if (output_restart)      call turn_write_copy_on(1,ens_size) ! restarts
 if (output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
+if( .not. diagnostic_files) then
 
-! Prior_Diag copies - write spare copies
-if (spare_copies) then
-   call turn_write_copy_on(SPARE_COPY_MEAN)
-   call turn_write_copy_on(SPARE_COPY_SPREAD)
-   if (output_inflation) then
-      call turn_write_copy_on(SPARE_COPY_INF_MEAN)
-      call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+   ! Prior_Diag copies - write spare copies
+   if (spare_copies) then
+      call turn_write_copy_on(SPARE_COPY_MEAN)
+      call turn_write_copy_on(SPARE_COPY_SPREAD)
+      if (output_inflation) then
+         call turn_write_copy_on(SPARE_COPY_INF_MEAN)
+         call turn_write_copy_on(SPARE_COPY_INF_SPREAD)
+      endif
    endif
+
+   ! Posterior Diag
+   call turn_write_copy_on(ENS_MEAN_COPY) ! mean
+   call turn_write_copy_on(ENS_SD_COPY) ! sd
+
 endif
 
 if(direct_netcdf_write) then
    call filter_write_restart_direct(state_ens_handle, isprior=.false.)
-else ! write
-   call filter_write_restart(state_ens_handle)
+else ! write binary files
+   if(output_restart) call write_ensemble_restart(state_ens_handle, restart_out_file_name, 1, ens_size)
+   if(output_restart_mean) call write_ensemble_restart(state_ens_handle, trim(restart_out_file_name)//'.mean', &
+                                  ENS_MEAN_COPY, ENS_MEAN_COPY, .true.)
 endif
 
 ! deallocate whole state storage - should this be in ensemble_manager
@@ -1514,17 +1523,6 @@ if(state_ens_handle%my_pe == 0) then
 endif
 
 end subroutine filter_read_restart
-
-!-------------------------------------------------------------------------
-!> write the restart information into a DART restart file.
-subroutine filter_write_restart(state_ens_handle)
-
-type(ensemble_type) :: state_ens_handle
-
-! assumes you have %vars
-call write_ensemble_restart(state_ens_handle, restart_out_file_name, 1, ens_size)
-
-end subroutine filter_write_restart
 
 !-------------------------------------------------------------------------
 !> write the restart information directly into the model netcdf file.
