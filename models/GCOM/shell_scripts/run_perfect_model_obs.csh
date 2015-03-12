@@ -30,18 +30,20 @@
 ## an explanation of the most common directives follows:
 ## -N <arg>   Job name
 ## -r n       Declare job non-rerunable
-## -e <arg>   filename for standard error
-## -o <arg>   filename for standard out
+## -e <arg>   filename for standard error AFTER job completes
+## -o <arg>   filename for standard out AFTER job completes
 ## -q <arg>   Queue name (small, medium, long, verylong)
 ## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
+## -l walltime=hh:mm:ss request hh wallclock hours of runtime ..
 ##=============================================================================
 #
 #PBS -N gcom_pmo
 #PBS -r n
 #PBS -e gcom_pmo.err
-#PBS -o gcom_pmo.log
+#PBS -o gcom_pmo.out
 #PBS -q batch
 #PBS -l nodes=1:ppn=1:mpi
+#PBS -l walltime=2:00:00
 #
 #=============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
@@ -188,21 +190,17 @@ echo
 
 echo "`date` -- Assembling the GCOM pieces."
 
-mkdir -p GRID   || exit 1
-mkdir -p PARAM  || exit 1
-mkdir -p OUTPUT || exit 1
-
 cd ${SERUCOAM}/src
 make clean || exit -1
 make       || exit -1
 ${REMOVE} *.o *.mod
 cd ${CENTRALDIR}
 
-${MOVE} ${SERUCOAM}/Main.exe                gcom.serial.exe || exit 1
-${LINK} ${SERUCOAM}/GRID/Grid.dat           GRID            || exit 1
-${COPY} ${SERUCOAM}/GRID/ProbSize.dat       GRID            || exit 1
-${COPY} ${SERUCOAM}/PARAM/param.dat         PARAM           || exit 1
-${COPY} ${SERUCOAM}/OUTPUT/gcamIC20secII.nc OUTPUT/gcom_restart.nc || exit 1
+${MOVE} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
+${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
+${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
+${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
+${COPY} ${SERUCOAM}/gcamIC20secII.nc  gcom_restart.nc || exit 1
 
 #=========================================================================
 # Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
@@ -226,14 +224,14 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
 #=========================================================================
 # Block 3: Convert 1 ucoam restart file to a DART initial conditions file.
-# At the end of the block, we have a DART initial condition file  perfect_ics
+# At the end of the block, we have a DART initial condition file  dart_ics
 #=========================================================================
 #
-# DART namelist settings required:
+# DART namelist settings required (to make advance_model.csh easy):
 #
 # &perfect_model_obs_nml:  start_from_restart       = .true.
 # &perfect_model_obs_nml:  async                    = 2
-# &perfect_model_obs_nml:  restart_in_file_name     = 'perfect_ics'
+# &perfect_model_obs_nml:  restart_in_file_name     = 'dart_ics'
 # &perfect_model_obs_nml:  obs_sequence_in_name     = 'obs_seq.in'
 # &perfect_model_obs_nml:  obs_sequence_out_name    = 'obs_seq.perfect'
 # &perfect_model_obs_nml:  init_time_days           = -1,
@@ -244,7 +242,8 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 # &perfect_model_obs_nml:  last_obs_seconds         = -1,
 # &model_nml:              gcom_restart_file        = 'gcom_restart.nc'
 # &model_nml:              gcom_geometry_file       = 'gcom_geometry.nc'
-# &gcom_to_dart_nml:       gcom_to_dart_output_file = 'perfect_ics'
+# &gcom_to_dart_nml:       gcom_to_dart_output_file = 'dart_ics'
+# &dart_to_gcom_nml:       dart_to_gcom_input_file  = 'dart_restart'
 #=========================================================================
 
 if ( ! -e ${DARTDIR}/work/input.nml ) then
@@ -257,17 +256,17 @@ endif
 
 sed -e "/ start_from_restart /c\ start_from_restart = .true." \
     -e "/ async /c\ async = 2" \
-    -e "/ restart_in_file_name /c\ restart_in_file_name = 'perfect_ics'" \
+    -e "/ restart_in_file_name /c\ restart_in_file_name = 'dart_ics'" \
     -e "/ obs_sequence_in_name /c\ obs_sequence_in_name = 'obs_seq.in'" \
     -e "/ obs_sequence_out_name /c\ obs_sequence_out_name = 'obs_seq.perfect'" \
     -e "/ gcom_restart_file /c\ gcom_restart_file = 'gcom_restart.nc'" \
     -e "/ gcom_geometry_file /c\ gcom_geometry_file = 'gcom_geometry.nc'" \
-    -e "/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'perfect_ics'" \
+    -e "/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'dart_ics'" \
+    -e "/ dart_to_gcom_input_file /c\ dart_to_gcom_input_file = 'dart_restart'" \
        ${DARTDIR}/work/input.nml >! input.nml || exit 3
 
 echo "`date` -- BEGIN GCOM-TO-DART"
 
-${LINK} OUTPUT/gcom_restart.nc gcom_restart.nc      || exit 3
 ${LINK} gcom_restart.nc        gcom_geometry.nc     || exit 3
 
 ${RUN_CMD} ./gcom_to_dart
@@ -291,7 +290,7 @@ echo "`date` -- END GCOM-TO-DART"
 
 # advance_model.csh needs a 'gcom_restart_nnnn.nc' in this directory
 
-${LINK} OUTPUT/gcom_restart.nc gcom_restart_0001.nc || exit 4
+${LINK} gcom_restart.nc gcom_restart_0001.nc || exit 4
 
 echo "`date` -- BEGIN ucoam PERFECT_MODEL_OBS"
 

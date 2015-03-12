@@ -28,6 +28,13 @@ echo "My process ID is $process"
 echo "I am responsible for advancing $num_states states."
 echo "I am going to read my filenames from $control_file"
 
+echo "Inheriting the following definitions:"
+echo "MOVE    is ${MOVE}"
+echo "COPY    is ${COPY}"
+echo "LINK    is ${LINK}"
+echo "REMOVE  is ${REMOVE}"
+echo "RUN_CMD is ${RUN_CMD}"
+
 #-------------------------------------------------------------------------
 # Block 1: populate a run-time directory with the bits needed to 
 # run the ocean model.
@@ -42,16 +49,12 @@ ${REMOVE}  $temp_dir
 mkdir -p   $temp_dir
 cd         $temp_dir
 
-mkdir -p GRID   || exit 1
-mkdir -p PARAM  || exit 1
-mkdir -p OUTPUT || exit 1
+# Copy all the static data from the previous directory "CENTRALDIR"
+# into this directory where the model advance takes place.
 
 ${LINK} ../gcom_geometry.nc      .  || exit 1
-
-cd GRID
-${LINK} ../../GRID/Grid.dat      .  || exit 1
-${LINK} ../../GRID/ProbSize.dat  .  || exit 1
-cd ..
+${LINK} ../Grid.dat              .  || exit 1
+${LINK} ../ProbSize.dat          .  || exit 1
 
 # Ensure that the input.nml has the required value for
 # dart_to_gcom_nml:advance_time_present for this context.
@@ -64,9 +67,6 @@ sed -e "/ advance_time_present /c\ advance_time_present = .true." \
 if (-z input.nml) then
    echo "the advance_time_present sed failed ..."
    exit 1
-else
-   echo "The new DART input.nml looks like:"
-   cat input.nml
 endif
 
 echo 'listing now that the table has been set ...'
@@ -90,6 +90,7 @@ while($state_copy <= $num_states)
    echo "working on ensemble_member $ensemble_member"  >> $logfile
    echo "input_file  is $input_file"                   >> $logfile
    echo "output_file is $output_file"                  >> $logfile
+   echo "starting advance_model.csh at "`date`         >> $logfile
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model.
@@ -105,37 +106,43 @@ while($state_copy <= $num_states)
 
    set RESTARTFILE = `printf gcom_restart_%04d.nc ${ensemble_member}`
 
-   echo "RESTARTFILE is [${RESTARTFILE}]"
+   echo "RESTARTFILE is [${RESTARTFILE}]"         >> $logfile || exit 2
 
-   ${LINK} ../$input_file       dart_restart      >>& $logfile || exit 2
-   ${LINK} ../${RESTARTFILE}    gcom_restart.nc   >>& $logfile || exit 2
-   ${LINK} ../gcom_geometry.nc  gcom_geometry.nc  >>& $logfile || exit 2
+   ${LINK} ../$input_file       dart_restart      >> $logfile || exit 2
+   ${LINK} ../${RESTARTFILE}    gcom_restart.nc   >> $logfile || exit 2
    
-   ${RUN_CMD} ../dart_to_gcom                     >>& $logfile || exit 2
+   ../dart_to_gcom                     >> $logfile || exit 2
+
+   ls -lR                              >> $logfile
+   echo "finished dart_to_gcom "`date` >> $logfile
 
    # Convey the new gcom 'advance_to' time to gcom via param.dat
 
-   \rm -f PARAM/param.dat
+   set sec2advance = `grep Stop_Time_sec dart_gcom_timeinfo.txt`
 
-   set sec2advance  = `grep " Stop_Time_sec " dart_gcom_timeinfo.txt`
+   echo "sec2advance is $sec2advance" >> $logfile
 
-   sed -e "/ Stop Time  sec /c\ ${sec2advance}" \
-          "/ Stop_Time_sec /c\ ${sec2advance}" \
-          ../PARAM/param.dat PARAM/param.dat || exit 2
+   sed -e "/Stop Time  sec /c\ ${sec2advance}" \
+       -e "/ Stop_Time_sec /c\ ${sec2advance}" \
+          ../param.dat >! param.dat || exit 2
 
-   if ( -e PARAM/param.dat ) then
-      echo "param.dat updated with of ${sec2advance} for member $ensemble_member" >>& $logfile
+   if ( -e param.dat ) then
+      echo "param.dat updated with of ${sec2advance} for member $ensemble_member" >> $logfile
    else
-      echo "ERROR param.dat did not update for ensemble member $ensemble_member" >>& $logfile
-      echo "ERROR Stop Time in sec is ${sec2advance}" >>& $logfile
+      echo "ERROR param.dat did not update for ensemble member $ensemble_member" >> $logfile
+      echo "ERROR Stop Time in sec is ${sec2advance}" >> $logfile
       exit 1
    endif
+
+   echo "before running gcom "`date` >> $logfile
 
    #----------------------------------------------------------------------
    # Block 3: Run the ocean model
    #----------------------------------------------------------------------
 
-   ${RUN_CMD} ../gcom >>& $logfile || exit 3
+   ../gcom.serial.exe >> $logfile || exit 3
+
+   echo "after running gcom "`date` >> $logfile
 
 #  grep "Successful completion of gcom run" ocn.log.*
 #  set gcomstatus = $status
@@ -154,12 +161,12 @@ while($state_copy <= $num_states)
    # file contains a header with the valid time of the ensuing model state.
    # The gcom restart files contain the valid time of the model state.
 
-   ${RUN_CMD} ../gcom_to_dart >>& $logfile || exit 4
+   ../gcom_to_dart >> $logfile || exit 4
 
-   set forecasttimetag = `grep "forecasttimetag" dart_gcom_timeinfo.txt | sed 's/ =//g`
+   set forecasttimetag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed 's/ =//g`
    set FORECASTTIME = `echo $forecasttimetag | sed -e "s/forecasttimetag//"`
 
-   echo "Should now be at ",${FORECASTTIME}
+   echo "Should now be at ${FORECASTTIME}"
    
    ls -lrt
 

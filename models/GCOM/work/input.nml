@@ -166,7 +166,7 @@
    gcom_restart_file            = 'gcom_restart.nc'
    gcom_geometry_file           = 'gcom_geometry.nc'
    assimilation_period_days     = 0
-   assimilation_period_seconds  = 10
+   assimilation_period_seconds  = 2
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
    debug                        = 5
@@ -177,11 +177,11 @@
   /
 
 &gcom_to_dart_nml
-   gcom_to_dart_output_file  = 'dart_ics.txt'
+   gcom_to_dart_output_file  = 'dart_ics'
   /
 
 &dart_to_gcom_nml
-   dart_to_gcom_input_file   = 'dart_restart.txt'
+   dart_to_gcom_input_file   = 'dart_restart'
    advance_time_present      = .true.
   /
 
