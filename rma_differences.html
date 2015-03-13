@@ -84,13 +84,14 @@ the same as the input file.  This will <em>overwrite</em> your input files.
    diagnostic_files            = .false.
    output_inflation            = .true.
    num_output_state_members    = 0,
-   inf_initial_from_restart    = .false., .false.,
-   inf_sd_initial_from_restart = .false., .true.,
+   inf_output_restart          = .false., .false.,
    direct_netcdf_read          = .true.
    direct_netcdf_write         = .true.
 /
 </pre>
 </div>
+<ul>
+<li>
 <P>
 diagnostic_files = .true. will write disgnoistc files (Prior_Diag.nc and Post_Diag.nc).
 The default is not to write these because all the ouptut is netcdf. <P>
@@ -106,8 +107,8 @@ Prior_Diag.nc will be written out as separate
 netcdf files:<P>
 &nbsp;&nbsp;PriorDiag_sd_d01.nc<br>
 &nbsp;&nbsp;PriorDiag_mean_d01.nc<br>
-&nbsp;&nbsp;PriorDiag_inf_sd_d01.nc <em> (optional) </em> <br>
-&nbsp;&nbsp;PriorDiag_inf_mean_d01.nc<em> (optional) </em> <P>
+&nbsp;&nbsp;PriorDiag_inf_sd_d01.nc <em> (optional output_inflation = .true.) </em> <br>
+&nbsp;&nbsp;PriorDiag_inf_mean_d01.nc<em> (optional output_inflation = .true.) </em> <P>
 
 &nbsp;&nbsp;The posterior inflation files are only written out if the <em>posterior</em> inf_output_restart is set to true: <P>
 &nbsp;&nbsp;inf_output_restart          = .true.,  &nbsp; <em>.true.</em><P>
@@ -117,13 +118,22 @@ netcdf files:<P>
 </ul>
 
 <P>
+<li>Inflation files are split into <em> n </em> files for <em> n </em> domains. The filenames
+are<P>
+inf_in_file_name<em>_d01</em>, inf_in_file_name<em>_d02</em>, etc.<br>
+inf_out_file_name<em>_d01</em>, inf_out_file_name<em>_d02</em>, etc.
+<P>
+
+
+<P>
+<li>For restart files:<P>
 direct_netcdf_read = .true. reads the state variables from the filenames constructed
 from restart_in_stub<P>
 direct_netcdf_read = .false. reads from dart restart files (same behaviour as Lanai)<P>
 direct_netcdf_write = .true. writes the state variables to the filenames constructed
 from restart_out_stub or the input files if desired. <P>
 direct_netcdf_write = .false. writes to dart restart files (same behaviour as Lanai)<P>
-
+</ul>
 
 
 
