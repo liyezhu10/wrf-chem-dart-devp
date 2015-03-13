@@ -28,7 +28,7 @@
 
 <H2>Namelist Options</H2>
 
-There is a new nameslist io_filenames_nml and some changes to filter_nml.
+There is a new nameslist, io_filenames_nml, and some changes to filter_nml.
 
 <P>
 <div class=namelist>
@@ -71,11 +71,13 @@ filter_restart_d01.03 <br>
 filter_restart_d02.03 <br>
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &#8942; <br>
 filter_restart_d01.50 <br>
-filter_restart_d02.50 <br>
+filter_restart_d02.50 <P>
+
+Filter will overwrite the state variables in existing files, or create new netcdf files.
 
 <P>
 <li>overwrite_input = .true. overrides the restart_out_stub and sets the output file to be
-the same as the input file.  This will <em>overwrite</em> your input files.
+the same as the input file.  This will <em>overwrite</em>  the state variables in your <em>input</em> files.
 </ul>
 
 <div class=namelist>
@@ -86,10 +88,8 @@ the same as the input file.  This will <em>overwrite</em> your input files.
    num_output_state_members    = 0,
    inf_output_restart          = .false., .false.,
    direct_netcdf_read          = .true.
-   direct_netcdf_write         = .true.
    inf_in_file_name            = 'prior_inf', 'post_inf',
    inf_out_file_name           = 'prior_inf_ic_new', 'post_inf_ic_new',
-
 /
 </pre>
 </div>
@@ -128,12 +128,14 @@ inf_out_file_name<em>_d01</em>, inf_out_file_name<em>_d02</em>, etc.
 
 <P>
 <li>For restart files:<P>
-direct_netcdf_read = .true. reads the state variables from the filenames constructed
+direct_netcdf_read = .true. <br>
+<ul>
+<li>reads the state variables from the filenames constructed
 from restart_in_stub<P>
-direct_netcdf_read = .false. reads from dart restart files (same behaviour as trunk)<P>
-direct_netcdf_write = .true. writes the state variables to the filenames constructed
+<li>writes the state variables to the filenames constructed
 from restart_out_stub or the input files if desired. <P>
-direct_netcdf_write = .false. writes to dart restart files (same behaviour as trunk)<P>
+</ul>
+direct_netcdf_read = .false. reads from dart restart files (same behaviour as trunk)<P>
 </ul>
 
 <!--==================================================================-->
