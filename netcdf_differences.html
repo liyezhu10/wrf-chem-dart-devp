@@ -7,7 +7,7 @@
 <BODY>
 <A NAME="TOP"></A>
 
-<H1>Netcdf-io release changes from Lanai</H1>
+<H1>Netcdf-io changes from Trunk</H1>
 
 <table border=0 summary="" cellpadding=5>
 <tr>
@@ -62,7 +62,7 @@ advance_temp50/wrfinput_d02 <br>
 <P>
 restart_out_stub = 'filter_restart' for a 2 domain case:
 <P>
-filenames:
+filenames:<br>
 filter_restart_d01.01 <br>
 filter_restart_d02.01 <br>
 filter_restart_d01.02 <br>
@@ -87,17 +87,22 @@ the same as the input file.  This will <em>overwrite</em> your input files.
    inf_output_restart          = .false., .false.,
    direct_netcdf_read          = .true.
    direct_netcdf_write         = .true.
+   inf_in_file_name            = 'prior_inf', 'post_inf',
+   inf_out_file_name           = 'prior_inf_ic_new', 'post_inf_ic_new',
+
 /
 </pre>
 </div>
 <P>
+<ul>
+<li>
 diagnostic_files = .true. will write disgnoistc files (Prior_Diag.nc and Post_Diag.nc).
 The default is not to write these because all the ouptut is netcdf. <P>
 
 <ul>
 <li>If diagnostic_files = <em>.true. </em>:<P>
 &nbsp;&nbsp;output_inflation = .true. will write both the inflation mean and sd in both the
-Prior and Posterior Diag files (same as Lanai behaviour)<P>
+Prior and Posterior Diag files (same as trunk behaviour)<P>
 &nbsp;&nbsp;num_output_state_members = * will be written in to the diagnostic files.
 <li>If diagnostic_files = <em> .false. </em>:<P>
 &nbsp;&nbsp;The information that would have gone in
@@ -112,17 +117,24 @@ netcdf files:<P>
 &nbsp;&nbsp;inf_output_restart          = .true.,  &nbsp; <em>.true.</em><P>
 &nbsp;&nbsp;num_output_state_members = * will be written to netcdf files<p>
 &nbsp;&nbsp;prior_member_d01.0001, prior_member_d01.0002, etc.
-
 </ul>
 
 <P>
+<li>Inflation files are split into <em> n </em> files for <em> n </em> domains. The filenames
+are<P>
+inf_in_file_name<em>_d01</em>, inf_in_file_name<em>_d02</em>, etc.<br>
+inf_out_file_name<em>_d01</em>, inf_out_file_name<em>_d02</em>, etc.
+<P>
+
+<P>
+<li>For restart files:<P>
 direct_netcdf_read = .true. reads the state variables from the filenames constructed
 from restart_in_stub<P>
-direct_netcdf_read = .false. reads from dart restart files (same behaviour as Lanai)<P>
+direct_netcdf_read = .false. reads from dart restart files (same behaviour as trunk)<P>
 direct_netcdf_write = .true. writes the state variables to the filenames constructed
 from restart_out_stub or the input files if desired. <P>
-direct_netcdf_write = .false. writes to dart restart files (same behaviour as Lanai)<P>
-
+direct_netcdf_write = .false. writes to dart restart files (same behaviour as trunk)<P>
+<ul>
 
 <!--==================================================================-->
 <!-- Legalese & Metadata                                              -->
