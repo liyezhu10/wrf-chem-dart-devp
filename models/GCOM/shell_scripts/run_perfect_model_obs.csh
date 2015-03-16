@@ -138,9 +138,9 @@ switch ("`hostname`")
 
       setenv EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
       setenv CENTRALDIR /glade/scratch/${USER}/${JOBNAME}/job_${JOBID}
-      setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
       setenv    DARTDIR ${HOME}/work/DART/UCOAM/models/GCOM
       setenv   SERUCOAM ${HOME}/work/DART/UCOAM/models/GCOM/serucoam
+      setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
    breaksw
 
    default:

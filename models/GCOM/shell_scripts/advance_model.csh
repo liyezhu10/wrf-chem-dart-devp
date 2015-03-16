@@ -137,20 +137,28 @@ while($state_copy <= $num_states)
    echo "before running gcom "`date` >> $logfile
 
    #----------------------------------------------------------------------
-   # Block 3: Run the ocean model
+   # Block 3: Run the ocean model ... produces gcom_output.nc
    #----------------------------------------------------------------------
 
    ../gcom.serial.exe >> $logfile || exit 3
 
    echo "after running gcom "`date` >> $logfile
 
-#  grep "Successful completion of gcom run" ocn.log.*
-#  set gcomstatus = $status
-#  if ( $gcomstatus != 0 ) then
-#     echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-#     echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-#     exit 3 
-#  endif
+   grep "UCOAM Finished successfully." $logfile
+   set gcomstatus = $status
+   if ( $gcomstatus != 0 ) then
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
+      exit 3 
+   endif
+
+   if ( -e gcom_output.nc ) then
+      ${MOVE} gcom_output.nc ../${RESTARTFILE} >> $logfile || exit 3
+   else
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
+      exit 3 
+   endif
    
    #----------------------------------------------------------------------
    # Block 4: Convert the ocean model output to form needed by DART
@@ -163,8 +171,8 @@ while($state_copy <= $num_states)
 
    ../gcom_to_dart >> $logfile || exit 4
 
-   set forecasttimetag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed 's/ =//g`
-   set FORECASTTIME = `echo $forecasttimetag | sed -e "s/forecasttimetag//"`
+   set forecasttimetag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed -e 's/ = //g'`
+   set FORECASTTIME = `echo $forecasttimetag | sed -e 's/forecasttimetag//'`
 
    echo "Should now be at ${FORECASTTIME}"
    
