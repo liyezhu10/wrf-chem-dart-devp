@@ -138,6 +138,29 @@ from restart_out_stub or the input files if desired. <P>
 direct_netcdf_read = .false. reads from dart restart files (same behaviour as trunk)<P>
 </ul>
 
+<div class=namelist>
+<pre>
+&amp;state_vector_io_nml
+   single_precision_output = .false.
+   create_restarts         = .false.
+   time_unlimited          = .true.
+/
+</pre>
+</div>
+<P>
+single_precision_output = <em>.true.</em> makes dart create netcdf restart files with floats
+not doubles regardless of the precision set in filter (r4 or r8). Note if the netcdf files already
+exist, filter will not change the precision of the variables.
+<P>
+create_restarts = <em>.true.</em>  clobbers exitsing netcdf files (creates a new file instead of
+overwriting variables).  The default is to overwrite variables in an existing file. If no file
+exists one will be created.
+<P>
+time_unlimited = .true. makes time the unlimited dimension in any output netcdf files
+created by DART.
+<P>
+
+
 <!--==================================================================-->
 <!-- Legalese & Metadata                                              -->
 <!--==================================================================-->

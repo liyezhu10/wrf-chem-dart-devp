@@ -74,10 +74,11 @@ character(len=256), allocatable :: dim_names(:, :, :)
 character(len=256), allocatable :: global_variable_names(:)
 
 ! namelist variables with default values
+logical :: single_precision_output = .false. ! Allows you to write r4 netcdf files even if filter is double precision
 logical :: create_restarts = .false. ! what if the restart files exist?
 logical :: time_unlimited = .true. ! You need to keep track of the time.
 
-namelist /  state_vector_io_nml / create_restarts, time_unlimited
+namelist /  state_vector_io_nml / single_precision_output, create_restarts, time_unlimited
 
 contains
 
@@ -475,10 +476,14 @@ do i = 1, num_state_variables ! loop around state variables
    ! double or single precision?
    ndims = dimensions_and_lengths(i, 1, dom)
 
-   if (r8 == digits12) then ! datasize = MPI_REAL8  ! What should we be writing?
-      xtype = nf90_double
-   else
+   if (single_precision_output) then
       xtype = nf90_real
+   else ! write output that is the precision of filter
+      if (r8 == digits12) then ! datasize = MPI_REAL8  ! What should we be writing?
+         xtype = nf90_double
+      else
+         xtype = nf90_real
+      endif
    endif
 
    ret = nf90_def_var(ncfile_out, trim(global_variable_names(i)), xtype=xtype, dimids=dimIds(i, 1:ndims, dom), varid=new_varid)
