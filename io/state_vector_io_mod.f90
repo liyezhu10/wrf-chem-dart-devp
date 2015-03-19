@@ -30,7 +30,7 @@ use time_manager_mod,     only : time_type
 
 use netcdf
 
-use io_filenames_mod,     only : restart_files_in, restart_files_out, io_filenames_init
+use io_filenames_mod,     only : restart_files_in, restart_files_out
 
 use copies_on_off_mod
 
@@ -242,7 +242,7 @@ integer :: ending_point
 integer :: ens_size !< ensemble size
 integer :: remainder
 integer :: start_rank
-integer :: my_copy !< which copy a pe is reading, starting from 0 to match pe
+integer :: my_copy !< which copy a pe is reading
 integer :: c !< copies_read loop index
 integer :: copies_read
 
