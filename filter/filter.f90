@@ -200,8 +200,6 @@ integer                 :: POST_INF_COPY, POST_INF_SD_COPY
 integer                 :: OBS_VAL_COPY, OBS_ERR_VAR_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
 integer                 :: OBS_MEAN_START, OBS_MEAN_END
 integer                 :: OBS_VAR_START, OBS_VAR_END, TOTAL_OBS_COPIES
-integer                 :: SPARE_COPY_MEAN, SPARE_COPY_SPREAD 
-integer                 :: SPARE_COPY_INF_MEAN, SPARE_COPY_INF_SPREAD
 integer                 :: input_qc_index, DART_qc_index
 integer                 :: mean_owner, mean_owners_index
 integer                 :: num_extras
@@ -1373,7 +1371,7 @@ if (do_output()) then
          'Reading in initial condition/restart data for all ensemble members from file(s)')
    else
       call error_handler(E_MSG,'filter_read_restart:', &
-         'Reading in a single ensemble and perturbing data for the other ensemble members')
+         'Reading in a single member and perturbing data for the other ensemble members')
    endif
 endif
 
@@ -2018,13 +2016,11 @@ end subroutine print_obs_time
 !> netcdf file
 !> Which routine should find model size?
 !> 
-subroutine filter_read_restart_direct(state_ens_handle, time)!, model_size)
+subroutine filter_read_restart_direct(state_ens_handle, time)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
 type(time_type),     intent(inout) :: time
-!integer,             intent(out)   :: model_size
 
-integer                         :: model_size
 character(len=256), allocatable :: variable_list(:) !< does this need to be module storage
 integer                         :: dart_index !< where to start in state_ens_handle%copies
 integer                         :: num_domains !< number of input files to read
@@ -2044,12 +2040,8 @@ variable_list = fill_variable_list(num_variables_in_state)
 ! need to know number of domains
 call initialize_arrays_for_read(num_variables_in_state, num_domains) 
 
-model_size = 0
 do domain = 1, num_domains
-   !netcdf_filename = info_file_name(domain) !first restart
-   !write(*,*) 'netcdf_filename :: ', trim(netcdf_filename)
    call get_state_variable_info(num_variables_in_state, variable_list, domain, domain_size)
-   model_size = model_size + domain_size
 enddo
 
 ! read time from input file if time not set in namelist
