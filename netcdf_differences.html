@@ -28,7 +28,7 @@
 
 <H2>Namelist Options</H2>
 
-There is a new nameslist, io_filenames_nml, and some changes to filter_nml.
+There are two new nameslists, io_filenames_nml and state_vector_io_nml, and some changes to filter_nml. 
 
 <P>
 <div class=namelist>
@@ -79,6 +79,31 @@ Filter will overwrite the state variables in existing files, or create new netcd
 <li>overwrite_input = .true. overrides the restart_out_stub and sets the output file to be
 the same as the input file.  This will <em>overwrite</em>  the state variables in your <em>input</em> files.
 </ul>
+
+
+<div class=namelist>
+<pre>
+&amp;state_vector_io_nml
+   single_precision_output = .false.
+   create_restarts         = .false.
+   time_unlimited          = .true.
+/
+</pre>
+</div>
+
+<P>
+single_precision_output = <em>.true.</em> forces filter to create single precisiion netcdf restart files
+regardless of the precision set in filter (r4 or r8). Note if the netcdf files already
+exist, filter will not change the precision of the variables.
+<P>
+create_restarts = <em>.true.</em>  clobbers exitsing netcdf files (creates a new file instead of
+overwriting variables).  The default is to overwrite variables in an existing file. If no file
+exists one will be created.
+<P>
+time_unlimited = .true. makes time the unlimited dimension in any output netcdf files
+created by DART.
+<P>
+
 
 <div class=namelist>
 <pre>
@@ -138,27 +163,6 @@ from restart_out_stub or the input files if desired. <P>
 direct_netcdf_read = .false. reads from dart restart files (same behaviour as trunk)<P>
 </ul>
 
-<div class=namelist>
-<pre>
-&amp;state_vector_io_nml
-   single_precision_output = .false.
-   create_restarts         = .false.
-   time_unlimited          = .true.
-/
-</pre>
-</div>
-<P>
-single_precision_output = <em>.true.</em> makes dart create netcdf restart files with floats
-not doubles regardless of the precision set in filter (r4 or r8). Note if the netcdf files already
-exist, filter will not change the precision of the variables.
-<P>
-create_restarts = <em>.true.</em>  clobbers exitsing netcdf files (creates a new file instead of
-overwriting variables).  The default is to overwrite variables in an existing file. If no file
-exists one will be created.
-<P>
-time_unlimited = .true. makes time the unlimited dimension in any output netcdf files
-created by DART.
-<P>
 
 
 <!--==================================================================-->
