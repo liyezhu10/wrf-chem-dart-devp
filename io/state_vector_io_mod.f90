@@ -152,11 +152,6 @@ call get_variable_ids(variable_names, domain, variable_ids(:, domain))
 ! get all variable sizes, only readers store dimensions?
 variable_sizes(:, domain) = total_size(n, variable_ids(:, domain), domain)
 domain_size = sum(variable_sizes(:, domain))
-!if(my_task_id() == 0) then
-!   do i = 1, n
-!      print*, i, 'variable_sizes', variable_sizes(i, domain), trim(variable_names(i))
-!   enddo
-!endif
 
 ! close netcdf file
 ret = nf90_close(ncfile)
@@ -190,6 +185,7 @@ end subroutine get_variable_ids
 !> Get state variable size, i.e. how many elements are in the variable
 !> readers need to store the dimension information
 !> Every task is storing the dimension information at the moment.
+!> FIXME: this should be a subroutine since it has side effects.
 function total_size(n, varId, domain)
 
 integer, intent(in)  :: n !< number of variables in the state vector
@@ -358,7 +354,11 @@ COPIES : do c = 1, state_ens_handle%my_num_copies
    ending_point = starting_point + num_vars -1
 
    if (query_write_copy(my_copy)) then
-      call write_variables(state_ens_handle%vars(starting_point:ending_point, c), 1, num_state_variables, domain)
+      if (my_copy <= state_ens_handle%num_copies -6) then ! actual copy, may need clamping
+         call write_variables_clamp(state_ens_handle%vars(starting_point:ending_point, c), 1, num_state_variables, domain)
+      else ! extra copy, don't clamp
+         call write_variables(state_ens_handle%vars(starting_point:ending_point, c), 1, num_state_variables, domain)
+      endif
       ret = nf90_close(ncfile_out)
       call nc_check(ret, 'write_restart_netcdf', 'closing')
    endif
@@ -374,6 +374,9 @@ end subroutine write_restart_netcdf
 
 !-------------------------------------------------
 !> Read in variables from start_var to end_var
+!> FIXME: At the moment, this code is assuming that the variables in the state start
+!> at (1,1,1) and that the whole variable is read. This is not the case for 
+!> Tiegcm and CLM.  
 subroutine read_variables(var_block, start_var, end_var, domain)
 
 real(r8), intent(inout) :: var_block(:)
@@ -518,11 +521,6 @@ do i = start_var, end_var
 
    var_size = variable_sizes(i, domain)
 
-   ! check whether you have to do anything to the variable, clamp or fail
-   if (do_clamp_or_fail(i, domain)) then
-      call clamp_or_fail_it(i, domain, var_block(start_in_var_block:start_in_var_block+var_size-1))
-   endif
-
    ! number of dimensions and length of each
    allocate(dims(dimensions_and_lengths(i, 1, domain)))
    dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
@@ -539,6 +537,52 @@ do i = start_var, end_var
 enddo
 
 end subroutine write_variables
+
+
+!-------------------------------------------------
+!> Write variables from start_var to end_var
+!> For actual ensemble members
+subroutine write_variables_clamp(var_block, start_var, end_var, domain)
+
+real(r8), intent(inout) :: var_block(:)
+integer,  intent(in) :: start_var
+integer,  intent(in) :: end_var
+integer,  intent(in) :: domain 
+
+integer :: i
+integer :: count_displacement
+integer :: start_in_var_block
+integer :: var_size
+integer, allocatable :: dims(:)
+integer :: var_id 
+
+start_in_var_block = 1
+do i = start_var, end_var
+
+   var_size = variable_sizes(i, domain)
+
+   ! check whether you have to do anything to the variable, clamp or fail
+   if (do_clamp_or_fail(i, domain)) then
+      call clamp_or_fail_it(i, domain, var_block(start_in_var_block:start_in_var_block+var_size-1))
+   endif
+
+   ! number of dimensions and length of each
+   allocate(dims(dimensions_and_lengths(i, 1, domain)))
+   dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
+
+   ret = nf90_inq_varid(ncfile_out, global_variable_names(i), var_id)
+   call nc_check(ret, 'write_variables_clamp', 'getting variable id')
+
+   ret = nf90_put_var(ncfile_out, var_id, var_block(start_in_var_block:start_in_var_block+var_size-1), count=dims)
+   call nc_check(ret, 'write_variables_clamp', 'writing')
+   start_in_var_block = start_in_var_block + var_size
+
+   deallocate(dims)
+
+enddo
+
+end subroutine write_variables_clamp
+
 
 !-------------------------------------------------------
 !> Adding space for an unlimited dimension in the dimesion arrays
