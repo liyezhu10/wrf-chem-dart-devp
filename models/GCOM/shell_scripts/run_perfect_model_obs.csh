@@ -133,7 +133,7 @@ switch ("`hostname`")
       # NCAR "yellowstone"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
       setenv EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
@@ -147,7 +147,7 @@ switch ("`hostname`")
       # SDSU "dulcinea"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
       setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
@@ -158,8 +158,6 @@ switch ("`hostname`")
 
    breaksw
 endsw
-
-env | sort > batch_environment
 
 #----------------------------------------------------------------------
 # Make a unique, (empty, clean) temporary directory.
@@ -200,7 +198,7 @@ ${MOVE} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
 ${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
 ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
-${COPY} ${SERUCOAM}/gcamIC20secII.nc  gcom_restart.nc || exit 1
+${COPY} ${SERUCOAM}/gcom_restart.nc   gcom_restart.nc || exit 1
 
 #=========================================================================
 # Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
@@ -267,7 +265,7 @@ sed -e "/ start_from_restart /c\ start_from_restart = .true." \
 
 echo "`date` -- BEGIN GCOM-TO-DART"
 
-${LINK} gcom_restart.nc        gcom_geometry.nc     || exit 3
+${LINK} gcom_restart.nc gcom_geometry.nc || exit 3
 
 ${RUN_CMD} ./gcom_to_dart
 

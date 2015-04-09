@@ -116,13 +116,15 @@ while($state_copy <= $num_states)
    ls -lR                              >> $logfile
    echo "finished dart_to_gcom "`date` >> $logfile
 
-   # Convey the new gcom 'advance_to' time to gcom via param.dat
+   # Convey the new start/stop times to gcom via param.dat
 
+   set newstartdate = `grep Start_Time   dart_gcom_timeinfo.txt`
    set sec2advance = `grep Stop_Time_sec dart_gcom_timeinfo.txt`
 
+   echo "gcomstartdate is $newstartdate" >> $logfile
    echo "sec2advance is $sec2advance" >> $logfile
 
-   sed -e "/Stop Time  sec /c\ ${sec2advance}" \
+   sed -e "/ Start_Time /c\ ${newstartdate}" \
        -e "/ Stop_Time_sec /c\ ${sec2advance}" \
           ../param.dat >! param.dat || exit 2
 

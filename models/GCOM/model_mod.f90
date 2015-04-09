@@ -347,8 +347,8 @@ call error_handler(E_MSG,'static_init_model',string1)
 call get_grid_dims()
 call read_grid()
 
-if (debug > 20) call write_grid_netcdf()
-if (debug > 20) call write_grid_interptest()
+if (do_output() .and. (debug > 20)) call write_grid_netcdf()
+if (do_output() .and. (debug > 20)) call write_grid_interptest()
 
 !---------------------------------------------------------------
 ! Compile the list of variables to use in the creation
@@ -525,7 +525,7 @@ longitude = loc_array(1)
 latitude  = loc_array(2)
 level     = loc_array(3)
 
-if (do_output() .and. (debug > 2))  &
+if (do_output() .and. (debug > 4))  &
    print *,'want interpolation of DART KIND',base_kind,'at',longitude,latitude,level
 
 kind_name = get_raw_obs_kind_name(base_kind)
@@ -568,8 +568,6 @@ CLOSE : do iclose = 1, num_close
       closest = distances(num_wanted)
       closest_index = indx
    endif
-
-   ! write(*,*)'model_interpolate DEBUG:', iclose, num_wanted, indx, kind_name, distances(num_wanted)
 
 enddo CLOSE
 
@@ -631,7 +629,7 @@ do i=1,min(num_wanted,num_neighbors)
         data_values(i) = x(indices(sorted_indices(i)))
 enddo
 
-if (do_output() .and. (debug > 2)) then
+if (do_output() .and. (debug > 4)) then
    write(*,*)'       rank   dartindex         distance                 state' &
              //'_value                  i           j           k'
    do i=1,min(num_wanted,num_neighbors)
@@ -644,7 +642,7 @@ endif
 call inverse_distance_interpolation(data_values, sorted_distances, num_neighbors, &
          obs_val, istatus)
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 4)) then
     write(*,*)
     print *, 'model_interpolate: summary'
     print *, 'itype     ', itype, ' is ',trim(kind_name)
@@ -1545,7 +1543,6 @@ endif
 ! only perturb the actual ocean cells; leave the land and
 ! ocean floor values alone.
 VARLOOP : do ivar=1,nfields
-
    if (do_output() .and. (debug > 3)) then
       write(string1,*)'Perturbing ',ivar,trim(progvar(ivar)%varname)
       call error_handler(E_MSG,'pert_model_state',string1)
@@ -3646,11 +3643,14 @@ if ( .not. module_initialized ) call static_init_model
 
 iunit = open_file('dart_gcom_timeinfo.txt',form='formatted',action='write')
 
+call get_date(current_time, iyear, imonth, iday, ihour, imin, iseconds)
+write(iunit,100)"Start_Time = 'seconds since ",iyear,imonth,iday,ihour,imin,iseconds
+100 format (A,i4.4,"-",i2.2,"-",i2.2,1x,i2.2,":",i2.2,":",i2.2,"'")
+
 forecast_duration = forecast_stop_time - current_time
 call get_time(forecast_duration,  forecast_seconds, forecast_days)
 write(iunit,'(''Stop_Time_sec = '',f16.1)') forecast_seconds+forecast_days*86400.0_r8
 
-call get_date(current_time, iyear, imonth, iday, ihour, imin, iseconds)
 seconds = ihour*3600 + imin*60 + iseconds
 write(iunit,'(''currenttimetag = '',i4.4,''-''i2.2,''-''i2.2,''-''i5.5)') &
             iyear,imonth,iday,seconds
@@ -4993,7 +4993,7 @@ else
          source,revision,revdate,text2=string2)
 endif
 
-if (do_output() .and. (debug > 0)) then
+if (do_output() .and. (debug > 4)) then
    print *, 'ijk_to_state_index: lon, lat, lev index = ', i_index, j_index, k_index
    print *, 'ijk_to_state_index: returns       index = ', ijk_to_state_index
 endif
@@ -5379,9 +5379,6 @@ if(hstatus /= 0) then
    istatus = 12
    return
 endif
-
-
-
 
 ! salinity - in msu (kg/kg).  converter will want psu (g/kg).
 call do_interp(x, start_index(S_index), hgt_bot, hgt_top, hgt_fract, llon, llat, &
@@ -6004,10 +6001,6 @@ real(r8) :: inverse_distances(num_neighbors)
 real(r8) :: weights(num_neighbors)
 
 obs_val = MISSING_R8
-
-! Check if more than one distance is 'zero'
-! write(*,*)'id debug: count of small distances',count(distances(1:num_neighbors) <= tiny(0.0_r8))
-! write(*,*)'id debug: count of small distances',count(distances(2:num_neighbors) <= tiny(0.0_r8))
 
 if ( count(distances(2:num_neighbors) <= tiny(0.0_r8)) > 0 ) then
    string1 = 'More than 1 distance is zero. Should not happen'
