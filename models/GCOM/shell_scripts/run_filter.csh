@@ -10,9 +10,19 @@
 # This presumes two directories exists that contain all the required bits
 # for ucoam and for DART.
 #
-# It is entirely fine to have BOTH directives in the same file.
+# This script only processes a single observation file.
+# Still fairly complex; requires a raft of
+# data files and most of them are in hardcoded locations.
+#
+# This script is designed to be executed as a batch job.
+# However, if you comment out the model advance part - you can run this
+# interactively to check for logic, file motion, syntax errors and the like.
+# It is entirely fine to have directives for both PBS and LSF in the same file.
 # I guarantee that as soon as you delete one set, you will change machines
-# and wish you had not deleted the directives. 
+# and wish you had not deleted the directives.
+#
+# The script moves the necessary files to a temporary directory that is the
+# basis for the DART experiment; this will be called CENTRALDIR.
 #
 ##=============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
@@ -22,10 +32,11 @@
 ## an explanation of the most common directives follows:
 ## -N <arg>   Job name
 ## -r n       Declare job non-rerunable
-## -e <arg>   filename for standard error
-## -o <arg>   filename for standard out
+## -e <arg>   filename for standard error AFTER job completes
+## -o <arg>   filename for standard out AFTER job completes
 ## -q <arg>   Queue name (small, medium, long, verylong)
-## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node. 
+## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
+## -l walltime=hh:mm:ss request hh wallclock hours of runtime ..
 ##=============================================================================
 #
 #PBS -N filter
@@ -34,6 +45,7 @@
 #PBS -o filter.log
 #PBS -q medium
 #PBS -l nodes=2:ppn=16
+#PBS -l walltime=2:00:00
 #
 #=============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
@@ -59,7 +71,7 @@
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
-# Turns out the scripts are a lot more flexible if you don't rely on 
+# Turns out the scripts are a lot more flexible if you don't rely on
 # the queuing-system-specific variables -- so I am converting them to
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
@@ -75,7 +87,7 @@ if ($?PBS_QUEUE) then
    setenv JOBID       $PBS_JOBID
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
-   setenv MPI         mpirun
+   setenv RUN_CMD     "mpirun -np 1 -machinefile $PBS_NODEFILE"
 
 else if ($?LSB_QUEUE) then
 
@@ -88,7 +100,7 @@ else if ($?LSB_QUEUE) then
    setenv JOBID       $LSB_JOBID
    setenv MYQUEUE     $LSB_QUEUE
    setenv MYHOST      $LSB_SUB_HOST
-   setenv MPI         mpirun.lsf
+   setenv RUN_CMD     mpirun.lsf
 
 else
 
@@ -101,21 +113,9 @@ else
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
    setenv MYHOST      $HOST
-   setenv MPI         csh
+   setenv RUN_CMD     csh
 
 endif
-
-#----------------------------------------------------------------------
-# Just an echo of the job attributes
-#----------------------------------------------------------------------
-
-echo
-echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
-echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
-echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
-echo "${JOBNAME} ($JOBID) running       on $HOST"
-echo "${JOBNAME} ($JOBID) started      at "`date`
-echo
 
 #----------------------------------------------------------------------
 # This block is an attempt to localize all the machine-specific
@@ -130,99 +130,100 @@ set nonomatch  # suppress "rm" warnings if wildcard does not match anything
 # some systems don't like the -v option to any of the following
 
 switch ("`hostname`")
-   case be*:
-      # NCAR "bluefire"
-      setenv   MOVE '/usr/local/bin/mv -fv'
-      setenv   COPY '/usr/local/bin/cp -fv --preserve=timestamps'
-      setenv   LINK '/usr/local/bin/ln -fvs'
-      setenv REMOVE '/usr/local/bin/rm -fr'
-
-      setenv    TEMPDIR /glade/proj3/image/thoar/
-      setenv BASEOBSDIR /glade/proj3/image/Observations/WOD09
-   breaksw
 
    case ys*:
       # NCAR "yellowstone"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
-      setenv    TEMPDIR /glade/scratch/thoar/
-      setenv BASEOBSDIR /glade/p/image/Observations/WOD09
+      setenv EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
+      setenv CENTRALDIR /glade/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv    DARTDIR ${HOME}/work/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM ${HOME}/work/DART/UCOAM/models/GCOM/serucoam
+      setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
    breaksw
 
    default:
       # SDSU "dulcinea"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
-      setenv    TEMPDIR /gcemproject/thoar/
-      setenv BASEOBSDIR /home/thoar/svn/DART/UCOAM/models/GCOM/work
-      setenv    DARTDIR /home/thoar/svn/DART/UCOAM/models/GCOM
-      setenv   SERUCOAM /home/mgarcia/UCOAM-Moh/serucoam
+      setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
+      setenv CENTRALDIR /raid/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv    DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
+      setenv   SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
 
    breaksw
 endsw
 
-#-------------------------------------------------------------------------
-# Create temporary working directory for the assimilation and go there
-#-------------------------------------------------------------------------
+#----------------------------------------------------------------------
+# Make a unique, (empty, clean) temporary directory.
+#----------------------------------------------------------------------
 
 echo "`date` -- BEGIN FILTER"
 
-setenv TMPDIR /ptmp/${user}/${JOBNAME}/job_${JOBID}
+mkdir -p ${CENTRALDIR}
+cd ${CENTRALDIR}
 
-mkdir -p ${TMPDIR}
-cd ${TMPDIR}
-
-set CENTRALDIR = `pwd`
 set myname = $0          # this is the name of this script
 
-echo "${JOBNAME} ($JOBID) CENTRALDIR == $CENTRALDIR"
+#----------------------------------------------------------------------
+# Just an echo of the job attributes
+#----------------------------------------------------------------------
 
-#-----------------------------------------------------------------------------
-# Set variables containing various directory names where we will GET things
-#-----------------------------------------------------------------------------
+echo
+echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
+echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
+echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
+echo "${JOBNAME} ($JOBID) running       on $HOST"
+echo "${JOBNAME} ($JOBID) started       at "`date`
+echo "${JOBNAME} ($JOBID) CENTRALDIR    is $CENTRALDIR"
+echo
 
-set DARTDIR = /fs/image/home/${user}/SVN/DART/models/ucoam
-set  ucoamDIR = /ptmp/${user}/ucoam/osse
-set  OBSERVATIONDIR = /ptmp/${user}/ucoam_OSSE/1_7_Jan2000
+#=========================================================================
+# Block 1: Build all the GCOM executables we will need for this run.
+# Since the compute nodes cannot execute things compiled on the head node,
+# you have to compile what you need on the compute node. Really annoying.
 
-#-----------------------------------------------------------------------------
+echo "`date` -- Assembling the GCOM pieces."
+
+cd ${SERUCOAM}/src
+make clean || exit -1
+make       || exit -1
+${REMOVE} *.o *.mod
+cd ${CENTRALDIR}
+
+${MOVE} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
+${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
+${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
+${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
+${COPY} ${SERUCOAM}/gcom_restart.nc   gcom_restart.nc || exit 1
+
+#=========================================================================
+# Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
+#=========================================================================
+
 # Get the DART executables, scripts, and input files
-#-----------------------------------------------------------------------------
+# The input.nml will be copied from the DART directory and modified appropriately.
 
-# executables
- ${COPY} ${DARTDIR}/work/filter                     .
- ${COPY} ${DARTDIR}/work/wakeup_filter              .
- ${COPY} ${DARTDIR}/work/dart_to_ucoam                .
- ${COPY} ${DARTDIR}/work/ucoam_to_dart                .
- ${COPY} ${DARTDIR}/work/restart_file_tool          .
+echo "`date` -- Assembling the DART pieces"
 
-# shell scripts
- ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh .
+cd ${DARTDIR}/work
+csh quickbuild.csh -mpi || exit 2
 
-# data files
- ${COPY} ${DARTDIR}/work/input.nml                  .
- ${COPY} ${OBSERVATIONDIR}/obs_seq.out              .
+cd ${CENTRALDIR}
 
-#-----------------------------------------------------------------------------
-# Get the ucoam executable, control files, and data files.
-#-----------------------------------------------------------------------------
-
- ${COPY} ${ucoamDIR}/ucoam                       .
- ${COPY} ${ucoamDIR}/ucoam_in.part1              .
- ${COPY} ${ucoamDIR}/ucoam_in.part2              .
- ${COPY} ${ucoamDIR}/gx3v5_tavg_contents         .
- ${COPY} ${ucoamDIR}/gx3v5_movie_contents        .
- ${COPY} ${ucoamDIR}/gx3v5_history_contents      .
- ${COPY} ${ucoamDIR}/gx3v5_transport_contents    .
- ${COPY} ${ucoamDIR}/vert_grid.gx3v5             .
- ${COPY} ${ucoamDIR}/horiz_grid.gx3v5.r8ieee.le  .
- ${COPY} ${ucoamDIR}/topography.gx3v5.i4ieee.le  .
+${COPY} ${DARTDIR}/work/restart_file_tool          . || exit 2
+${COPY} ${DARTDIR}/work/filter                     . || exit 2
+${COPY} ${DARTDIR}/work/dart_to_gcom               . || exit 2
+${COPY} ${DARTDIR}/work/gcom_to_dart               . || exit 2
+${COPY} ${BASEOBSDIR}/obs_seq.out                  . || exit 2
+${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
 #-----------------------------------------------------------------------------
 # Determine the number of ensemble members from input.nml,
@@ -259,22 +260,16 @@ else
   set parallel_model = "false"
 endif
 
-#-----------------------------------------------------------------------------
-# Block 1: convert N ucoam restart files to DART initial conditions file(s).
+#=========================================================================
+# Block 3: convert N ucoam restart files to DART initial conditions file(s).
 # Since the initial ensemble may not all have the desired timestamp, we
 # will use restart_file_tool to use a consistent date in the header of
 # all the DART initial conditions files. At the end of this block, 
-# we have DART restart files   filter_ics.[1-N]    that
-# came from pointer files    rpointer.ocn.[1-N].restart
-#
-# DART requires that ucoam uses pointer files and that the ucoam restart files
-# are netCDF format. The experiment should be initialized such that there
-# are "ensemble_size" number of ucoam restart files and matching pointer files.
-# The pointer files should have the absolute path to the restart file.
+# we have DART restart files   filter_ics.[1-N]
+#=========================================================================
 #
 # DART namelist settings appropriate/required:
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-# &ensemble_manager_nml: single_restart_file_in  = '.false.'
+
 # &ucoam_to_dart_nml:      ucoam_to_dart_output_file = 'dart_ics',
 #
 # &restart_file_tool_nml: <see list that follows>
@@ -296,44 +291,95 @@ endif
 # ensure namelists have desired values ...
 #-----------------------------------------------------------------------------
 
-# Gregorian 1 Jan 2000 <==> DART 145731
+#
+# DART namelist settings required (to make advance_model.csh easy):
+#
+# &filter_nml:           start_from_restart       = .true.
+# &filter_nml:           async                    = 2
+# &filter_nml:           restart_in_file_name     = 'dart_ics'
+# &filter_nml:           obs_sequence_in_name     = 'obs_seq.in'
+# &filter_nml:           obs_sequence_out_name    = 'obs_seq.perfect'
+# &filter_nml:           init_time_days           = -1,
+# &filter_nml:           init_time_seconds        = -1,
+# &filter_nml:           first_obs_days           = -1,
+# &filter_nml:           first_obs_seconds        = -1,
+# &filter_nml:           last_obs_days            = -1,
+# &filter_nml:           last_obs_seconds         = -1,
+# &ensemble_manager_nml: single_restart_file_in   = .false.
+# &model_nml:            gcom_restart_file        = 'gcom_restart.nc'
+# &model_nml:            gcom_geometry_file       = 'gcom_geometry.nc'
+# &gcom_to_dart_nml:     gcom_to_dart_output_file = 'dart_ics'
+# &dart_to_gcom_nml:     dart_to_gcom_input_file  = 'dart_restart'
+#=========================================================================
 
-echo ':0'                               >! ex_commands
-echo '/restart_file_tool_nml'           >> ex_commands
-echo '/write_binary_restart_files'      >> ex_commands
-echo ':s/.false./.true./'               >> ex_commands
-echo '/overwrite_data_time'             >> ex_commands
-echo ':s/.false./.true./'               >> ex_commands
-echo '/new_data_days'                   >> ex_commands
-echo ':s/-1/145731/'                    >> ex_commands
-echo '/new_data_secs'                   >> ex_commands
-echo ':s/-1/0/'                         >> ex_commands
-echo ':wq'                              >> ex_commands
+if ( ! -e ${DARTDIR}/work/input.nml ) then
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
+   echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
+   exit 3
+endif
 
-( ex input.nml < ex_commands ) >& /dev/null
-\rm -f ex_commands
+# Ensure the namelist has the values required by this script.
 
-cat ucoam_in.part1 ucoam_in.part2 >! ucoam_in
+sed -e "/ start_from_restart /c\ start_from_restart = .true." \
+    -e "/ async /c\ async = 2" \
+    -e "/ restart_in_file_name /c\ restart_in_file_name = 'dart_ics'" \
+    -e "/ obs_sequence_in_name /c\ obs_sequence_in_name = 'obs_seq.out'" \
+    -e "/ obs_sequence_out_name /c\ obs_sequence_out_name = 'obs_seq.final'" \
+    -e "/ single_restart_file_in /c\ single_restart_file_in = .false." \
+    -e "/ gcom_restart_file /c\ gcom_restart_file = 'gcom_restart.nc'" \
+    -e "/ gcom_geometry_file /c\ gcom_geometry_file = 'gcom_geometry.nc'" \
+    -e "/ gcom_to_dart_output_file /c\ gcom_to_dart_output_file = 'dart_ics'" \
+    -e "/ dart_to_gcom_input_file /c\ dart_to_gcom_input_file = 'dart_restart'" \
+       ${DARTDIR}/work/input.nml >! input.nml || exit 3
+
+#-----------------------------------------------------------------------------
+# Grab the start time from the param.dat file and convert it to a DART time.
+# Use that as the start time for all the initial conditions files.
+#-----------------------------------------------------------------------------
+
+set starttime = `grep Start_Time param.dat | sed -e "s/[:=,a-zA-Z_'\-]/ /g"`
+set   startyear = $starttime[1]
+set  startmonth = $starttime[2]
+set    startday = $starttime[3]
+set   starthour = $starttime[4]
+@ startminute = `echo $starttime[5] | bc`
+@ startsecond = `echo $starttime[6] | bc`
+@ seconds = ${startminute} * 60 + ${startsecond}
+
+set modeltime = `echo "${startyear}${startmonth}${startday}${starthour} + ${seconds}s -g" | ./advance_time`
+set modeldays = $modeltime[1]
+set modelseconds = $modeltime[2]
+
+# Ensure the namelist has the values required by this script.
+
+sed -e "/ write_binary_restart_files /c\ write_binary_restart_files = .true." \
+    -e "/ overwrite_data_time /c\ overwrite_data_time = .true." \
+    -e "/ new_data_days /c\ new_data_days = $modeldays" \
+    -e "/ new_data_secs /c\ new_data_secs = modelseconds" \
+       input.nml >! new_input.nml || exit 3
+
+mv new_input.nml input.nml
+
+#-----------------------------------------------------------------------------
+# Loop over all the ensemble members and create a DART ics file for each. 
+# This requires an ensemble of gcom restart files "gcom_restart_nnnn.nc"
+#-----------------------------------------------------------------------------
+
+echo "`date` -- BEGIN GCOM-TO-DART"
 
 set member = 1
 while ($member <= $ensemble_size)
 
-   # grab the ucoam pointer file and dereference it 
-   # Copy the ucoam restart file ... we will be updating it.
-   # then link the ucoam restart file to the name for 'ucoam_to_dart'
-   ${COPY} ${ucoamDIR}/rpointer.ocn.$member.restart .
-   set OCN_RESTART_FILENAME = `head -1 rpointer.ocn.$member.restart`
-   ${COPY} ${ucoamDIR}/${OCN_RESTART_FILENAME} .
-   ln -sf ${OCN_RESTART_FILENAME} ucoam.r.nc
+   set gcomfile = `printf gcom_restart_%04d.nc $member`
 
-#  echo "Changing iyear of ${OCN_RESTART_FILENAME} to 2000"
-#  ncatted -O -h -a iyear,global,o,l,2000 ${OCN_RESTART_FILENAME}
+   ${LINK} ${ENSEMBLEDIR}/$gcomfile gcom_restart.nc   || exit 3
+   ${LINK} ${ENSEMBLEDIR}/$gcomfile gcom_geometry.nc  || exit 3
 
-   ./ucoam_to_dart || exit 1
+   ${RUN_CMD} ./gcom_to_dart || exit 3
 
-   ${MOVE} dart_ics dart_input
+   ${MOVE} dart_ics dart_input || exit 3
 
-   ./restart_file_tool || exit 1
+   ${RUN_CMD} ./restart_file_tool || exit 3
 
    # set the filename expected by DART for the initial conditions 
    set DART_IC_FILE = `printf filter_ics.%04d $member`
