@@ -964,7 +964,7 @@ else
    time_dimension_exists = .false.
 
    ! What file options do you want
-   create_mode = NF90_CLOBBER
+   create_mode = NF90_64BIT_OFFSET
    ret = nf90_create(filename, create_mode, ncfile_out)
    call nc_check(ret, 'create_state_output', 'creating')
 
