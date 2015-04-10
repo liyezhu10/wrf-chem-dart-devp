@@ -29,8 +29,9 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              print_time, write_time, &
                              operator(-)
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             compute_gridcell_value, gridcell_components, &
-                             model_interpolate, DART_get_var, get_grid_vertval
+                             model_interpolate
+use    clm_model_mod, only : compute_gridcell_value, gridcell_components, &
+                             DART_get_var, get_grid_vertval
 
 implicit none
 

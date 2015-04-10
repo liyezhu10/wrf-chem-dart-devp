@@ -1,6 +1,7 @@
 assim_model/assim_model_mod.f90
 common/types_mod.f90
 location/threed_sphere/location_mod.f90
+models/clm/clm_model_mod.f90
 models/clm/dart_to_clm.f90
 models/clm/model_mod.f90
 mpi_utilities/null_mpi_utilities_mod.f90

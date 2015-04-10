@@ -575,17 +575,18 @@ end subroutine sv_to_restart_file
 !------------------------------------------------------------------
 !------------------------------------------------------------------
 
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                         obs, obs_kind, num_close, close_ind, dist)
 
- type(get_close_type),              intent(in) :: gc
- type(location_type),               intent(in) :: base_obs_loc
- integer,                           intent(in) :: base_obs_kind
- type(location_type), dimension(:), intent(in) :: obs
- integer,             dimension(:), intent(in) :: obs_kind
- integer,                           intent(out):: num_close
- integer,             dimension(:), intent(out):: close_ind
- real(r8),  optional, dimension(:), intent(out):: dist
+subroutine get_close_obs(gc, base_obs_loc, base_obs_type, &
+                         locs, loc_kind, num_close, close_ind, dist)
+
+ type(get_close_type), intent(in)    :: gc
+ type(location_type),  intent(in)    :: base_obs_loc
+ integer,              intent(in)    :: base_obs_type
+ type(location_type),  intent(inout) :: locs(:)
+ integer,              intent(in)    :: loc_kind(:)
+ integer,              intent(out)   :: num_close
+ integer,              intent(out)   :: close_ind(:)
+ real(r8),  optional,  intent(out)   :: dist(:)
 
 ! Given a DART location (referred to as "base") and a set of candidate
 ! locations & kinds (obs, obs_kind), returns the subset close to the
@@ -603,18 +604,18 @@ num_close = 0
 close_ind(:) = -1
 if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 
-call which_model_obs(base_obs_kind, modelname)
+call which_model_obs(base_obs_type, modelname)
 if (modelname == 'CAM') then
-   call cam_get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                          obs, obs_kind, num_close, close_ind, dist)
+   call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                          locs, loc_kind, num_close, close_ind, dist)
 
 else if (modelname == 'POP') then
-   call pop_get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                          obs, obs_kind, num_close, close_ind, dist)
+   call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                          locs, loc_kind, num_close, close_ind, dist)
 
 else if (modelname == 'CLM') then
-   call clm_get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                          obs, obs_kind, num_close, close_ind, dist)
+   call clm_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                          locs, loc_kind, num_close, close_ind, dist)
 
 endif
 

@@ -4,150 +4,42 @@
 !
 ! $Id$
 
+!> Substitute this code for mpi_utilities_mod.f90 if you do not want to
+!> have to link in an MPI library, and you only want to run single task.
+!> Many of the single task DART utility programs use this file instead of
+!> the parallel version.  Note that this file has the same module name
+!> and the same external entry points as the real mpi_utilities_mod.f90
+!> file, so it will link correctly as a replacement file.
+!>
+!> Programs using this module instead of the actual MPI routines do not
+!> need to be compiled with the MPI wrapper commands (e.g. mpif90).
+!> In most cases it will be better to compile with the fortran compiler
+!> directly.  (On some platforms this is required.)
+
 module mpi_utilities_mod
 
-!-----------------------------------------------------------------------------
-!
-!   USED FOR IMPLEMENTATIONS THAT DO NOT WANT TO USE MPI.
-!   ALSO REQUIRED FOR INTEGRATE_MODEL PROGRAM TO WORK WITH SHELL
-!   DRIVEN MODEL ADVANCES. ACTS AS IF THERE IS ONLY A SINGLE TASK.
-!
-!   Programs using this module instead of the actual MPI routines do not
-!   need to be compiled with the MPI wrapper commands (e.g. mpif90).
-!   In most cases it will be better to compile with the fortran compiler
-!   directly.  (On some platforms this is required.)
-!
-!   These routines mimic the actual interfaces to the MPI (Message Passing
-!   Interface) library but do not use MPI.
-!
-!    # initialize_mpi_utilities()  Subroutine that initializes MPI and sets
-!                                  local values needed later.  Must be called
-!                                  before any other routine here.
-!
-!    # finalize_mpi_utilities()  Subroutine that shuts down MPI cleanly.
-!                                Must be called before program exits, and no
-!                                other routines here can be used afterwards.
-!
-!    # task_count()       Function that returns the total number of MPI tasks.
-!
-!    # my_task_id()       Function that returns my task number.  Note that
-!                         in the MPI world task numbers run from 0 to N-1.
-!
-!    # send_to()          Subroutine which sends a 1D data array
-!                         synchronously to another task (point-to-point).
-!
-!    # receive_from()     Subroutine which receives a 1D data array
-!                         synchronously from another task (point-to-point).
-!
-!    # task_sync()        Subroutine that only returns after every task has
-!                         reached this same location in the code.
-!        
-!    # array_broadcast()  Subroutine that sends a copy of the entire data 
-!                         array to all other tasks. 
-!                
-!  *** exit_all()         Subroutine that substitutes for the intrinsic exit.
-!                         It calls MPI_Abort() to force other MPI tasks to
-!                         exit as well in case of error.
-!
-!    * transpose_array()  Subroutine that transposes a 2D array
-!                         from column-major to row-major or back.
-!
-!   ** array_distribute() Subroutine that distributes a data array across the
-!                         other tasks, so each task gets a non-overlapping 
-!                         subset of the data.
-!                
-!   MPI cover routines more specific for DART and hopefully more useful.
-!
-!    # iam_task0()        Function which returns .TRUE. if task id is 0,
-!                         .FALSE. for anything else.
-!
-!    # broadcast_send()   Subroutine which takes two r8 arrays and broadcasts
-!                         them to all other tasks.  If sending ID is not the
-!                         same as the local task ID, an error is returned.
-!                         Does not return until all other tasks have called
-!                         recv to pick up the data.
-!
-!    # broadcast_recv()   Subroutine which receives two r8 arrays from the 
-!                         sending task ID.  If the sending ID is the same as
-!                         the local task ID, an error is returned.  All other
-!                         tasks must call recv before this routine returns.
-!
-!    * sum_across_tasks() Subroutine which takes a single integer argument
-!                         from each task, and returns the sum of all integers
-!                         across all tasks back to all tasks.  All tasks must
-!                         call this routine before it can compute and return
-!                         the value.
-!
-!   Lower level utility routines which interact with the utilities_mod.f90 
-!   code to open a named pipe per MPI task, read and write from them, and
-!   close and/or remove them.
-!
-!  *** make_pipe()        Function that creates a named pipe (fifo), opens it,
-!                         and returns the unit number.  Ok to call if the pipe
-!                         already exists or is already open; it will skip
-!                         those steps and just return the unit number.  The 
-!                         name argument is used as a base and a filename
-!                         in the form 'base.NNNN' is generated, where the N's
-!                         are the MPI rank number, 0 padded.
-!
-!  *** destroy_pipe()     The unit number is closed and the pipe file is 
-!                         removed.
-!
-!    * read_pipe()        The character string is read from the pipe.
-!                         (Can be overloaded to read ints if time or status
-!                         info is useful to exchange between processes.) 
-!                         This routine blocks until data is available.
-!
-!    * write_pipe()       The character string is written to the pipe.
-!                         (Can be overloaded to write ints if time or status
-!                         info is useful to exchange between processes.) 
-!                         This routine writes and returns immediately.
-!
-!   Wrappers for system functions.  Covers differences if you run with
-!   or without MPI.
-!
-!  *** shell_execute()    Use the system() command to execute a command string.
-!                         Will wait for the command to complete and returns an
-!                         error code unless you end the command with & to put
-!                         it into background.   Function which returns the rc
-!                         of the command, 0 being all is ok.
-!
-!  *** sleep_seconds()    Wrapper for the sleep command.  Argument is a real
-!                         in seconds.  Different systems have different lower
-!                         resolutions for the minimum time it will sleep.
-!                         Subroutine, no return value.
-!
-!
-!   # code done and tested
-! *** both code and interface are done (but untested so far)
-!  ** interface with proposed arguments exists but code not complete
-!   * interface name only; no arg list devised yet 
-!
-!-----------------------------------------------------------------------------
-! 
-! these do not exist - i believe a single transpose will work.  but if not,
-! they can be separated into these two, which can either work on a real
-! 2D array or a single linearized array which is logically 2D but in reality
-! stored in a 1D fortran array:
-!
-!      transpose_row_major()  Subroutine which transposes a logical 2D array
-!                             from column-major to row-major.  The source and
-!                             destination arrays must be stored in 1D arrays 
-!                             of length (nrows * ncols).
-!
-!      transpose_col_major()  Subroutine which transposes a logical 2D array
-!                             from row-major to column-major.  The source and
-!                             destination arrays must be stored in 1D arrays 
-!                             of length (nrows * ncols).
-!
-!-----------------------------------------------------------------------------
+use        types_mod, only : r8, digits12
+use    utilities_mod, only : register_module, error_handler,          & 
+                             E_ERR, E_WARN, E_MSG,                    &
+                             initialize_utilities, finalize_utilities
+use time_manager_mod, only : time_type
 
-use types_mod, only        : r8, digits12
-use utilities_mod, only    : register_module, error_handler,             &
-                             initialize_utilities, get_unit, close_file, & 
-                             E_ERR, E_WARN, E_MSG, E_DBG, finalize_utilities
-use time_manager_mod, only : time_type, set_time
-
+!#ifdef __NAG__
+ !use F90_unix_proc, only : sleep, system, exit
+ !! block for NAG compiler
+ !  PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
+ !    INTEGER,INTENT(IN) :: SECONDS
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
+ !
+ !  SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
+ !    CHARACTER*(*),INTENT(IN) :: STRING
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
+ !
+ !!also used in exit_all outside this module
+ !  SUBROUTINE EXIT(STATUS)
+ !    INTEGER,OPTIONAL :: STATUS
+ !! end block
+!#endif
 
 implicit none
 private
@@ -161,28 +53,30 @@ private
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
  !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
+!#if .not. defined (__GFORTRAN__) .and. .not. defined(__NAG__)
  ! interface block for getting return code back from system() routine
  interface
-  function system(string)    
+  function system(string)
    character(len=*) :: string
-   integer :: system         
+   integer :: system
   end function system
  end interface
- ! end block                 
+ ! end block
+!#endif
  !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
+
 
 !   ---- private data for mpi_utilities ----
 
-integer :: myrank          ! my mpi number
-integer :: total_tasks     ! total mpi tasks/procs
-integer :: my_local_comm   ! duplicate communicator private to this file
-integer :: comm_size       ! if ens count < tasks, only the first N participate
+integer :: myrank        = -1  ! my mpi number
+integer :: total_tasks   = -1  ! total mpi tasks/procs
+integer :: my_local_comm =  0  ! duplicate communicator private to this file
 
 public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           task_count, my_task_id, block_task, restart_task,                  &
           task_sync, array_broadcast, send_to, receive_from, iam_task0,      &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
-          sum_across_tasks
+          sum_across_tasks, get_dart_mpi_comm
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -190,11 +84,12 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-logical, save :: module_initialized = .false.
+logical :: module_initialized = .false.
 
-character(len = 129) :: saved_progname = ''
+character(len = 256) :: saved_progname = ''
+character(len = 256) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 
-character(len = 129) :: errstring
+character(len = 256) :: errstring
 
 ! Namelist input - placeholder for now; no options yet in this module.
 !namelist /mpi_utilities_nml/ x
@@ -206,19 +101,18 @@ contains
 ! mpi cover routines
 !-----------------------------------------------------------------------------
 
-subroutine initialize_mpi_utilities(progname, alternatename)
- character(len=*), intent(in), optional :: progname
- character(len=*), intent(in), optional :: alternatename
+!> Initialize the utilities module, and print out a message including the 
+!> program name.
 
-! Initialize MPI and query it for global information.  Make a duplicate
-! communicator so that any user code which wants to call MPI will not 
-! interfere with any outstanding asynchronous requests, accidental tag
-! matches, etc.  This routine must be called before any other routine in
-! this file, and it should not be called more than once (but it does have
-! defensive code in case that happens.)
+subroutine initialize_mpi_utilities(progname, alternatename)
+
+character(len=*), intent(in), optional :: progname
+character(len=*), intent(in), optional :: alternatename
 
 if ( module_initialized ) then
-   ! return without calling the code below multiple times
+   ! return without calling the code below multiple times.  Print out a warning each
+   ! time this is called again because it may indicate an error in logic.  In a well-
+   ! constructed program the initialize routine will only be called once.
    write(errstring, *) 'initialize_mpi_utilities has already been called'
    call error_handler(E_WARN,'initialize_mpi_utilities', errstring, source, revision, revdate)
    return
@@ -227,7 +121,7 @@ endif
 call initialize_utilities(progname, alternatename)
 
 if (present(progname)) then
-   if (len_trim(progname) < len(saved_progname)) then
+   if (len_trim(progname) <= len(saved_progname)) then
       saved_progname = trim(progname)
    else
       saved_progname = progname(1:len(saved_progname))
@@ -242,15 +136,12 @@ endif
 
 myrank = 0
 total_tasks = 1
-
-! TODO: if there are fewer ensembles than tasks, all the collective routines
-! need to take that into account and not participate if they are > comm_size.
-comm_size = total_tasks
+my_local_comm = 0
 
 if (r8 /= digits12) then
-   write(errstring, *) "Using real * 4 for datasize of r8"
-   call error_handler(E_MSG,'initialize_mpi_utilities: ',errstring,source,revision,revdate)
-endif
+      write(errstring, *) "Using real * 4 for datasize of r8"
+      call error_handler(E_MSG,'initialize_mpi_utilities: ',errstring,source,revision,revdate)
+   endif
 
 ! non-MPI successfully initialized.
 call error_handler(E_MSG,'initialize_mpi_utilities: ','Running single process', &
@@ -260,13 +151,13 @@ end subroutine initialize_mpi_utilities
 
 !-----------------------------------------------------------------------------
 
+!> Shut down cleanly.  Call normal utilities finalize if we have actually
+!> ever called initialize.  Otherwise there is nothing to do in the null case.
+
 subroutine finalize_mpi_utilities(callfinalize, async)
- logical, intent(in), optional :: callfinalize
- integer, intent(in), optional :: async
 
-! Shut down cleanly.  Call normal utilities finalize if we have actually
-! ever called initialize.  Otherwise there is nothing to do in the null case.
-
+logical, intent(in), optional :: callfinalize
+integer, intent(in), optional :: async
 
 if ( .not. module_initialized ) return
 
@@ -281,11 +172,9 @@ end subroutine finalize_mpi_utilities
 
 !-----------------------------------------------------------------------------
 
-function task_count()
+!> Return the number of MPI tasks.  For this code this is always 1.
 
-! Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
-! it returns 4.  (The actual task numbers are 0-3.)  For the null mpi utils,
-! this always returns 1.
+function task_count()
 
 integer :: task_count
 
@@ -298,10 +187,9 @@ end function task_count
 
 !-----------------------------------------------------------------------------
 
-function my_task_id()
+!> Return my unique task id.  For this code this is always 0.
 
-! Return my unique task id.  Values run from 0 to N-1 (where N is the
-! total number of MPI tasks.  For the null mpi utils, this is always 0.
+function my_task_id()
 
 integer :: my_task_id
 
@@ -314,112 +202,60 @@ end function my_task_id
 
 !-----------------------------------------------------------------------------
 
+!> A no-op for this code.
+
 subroutine task_sync()
-
-! Synchronize all tasks.  This subroutine does not return until all tasks
-! execute this line of code.
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
 
 end subroutine task_sync
 
 
 !-----------------------------------------------------------------------------
 
+!> Send the srcarray to the destination task id.
+!> This communication style cannot be easily simulated correctly with one task.
+!> If called, always throw an error.
+
 subroutine send_to(dest_id, srcarray, time, label)
- integer, intent(in) :: dest_id
- real(r8), intent(in) :: srcarray(:)
- type(time_type), intent(in), optional :: time
- character(len=*), intent(in), optional :: label
 
-! Send the srcarray to the destination id.
-! If time is specified, it is also sent in a separate communications call.  
-! This is a synchronous call; it will not return until the destination has 
-! called receive to accept the data.  If the send_to/receive_from calls are 
-! not paired correctly the code will hang.
+integer,          intent(in)           :: dest_id
+real(r8),         intent(in)           :: srcarray(:)
+type(time_type),  intent(in), optional :: time
+character(len=*), intent(in), optional :: label
 
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-! simple idiotproofing
-if ((dest_id < 0) .or. (dest_id >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "destination task id ", dest_id, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
-endif
-
-! this style cannot be easily simulated correctly with one task.
-! always throw an error.
 write(errstring, '(a)') "cannot call send_to() in the single process case"
-call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
+      call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
 
 end subroutine send_to
 
 
 !-----------------------------------------------------------------------------
 
+!> Receive the dstarray from the source task id.
+!> This communication style cannot be easily simulated correctly with one task.
+!> If called, always throw an error.
+
 subroutine receive_from(src_id, destarray, time, label)
- integer, intent(in) :: src_id
- real(r8), intent(out) :: destarray(:)
- type(time_type), intent(out), optional :: time
- character(len=*), intent(in), optional :: label
 
-! Receive data into the destination array from the src task.
-! If time is specified, it is received in a separate communications call.  
-! This is a synchronous call; it will not return until the source has 
-! sent the data.  If the send_to/receive_from calls are not paired correctly 
-! the code will hang.
+integer,          intent(in)            :: src_id
+real(r8),         intent(out)           :: destarray(:)
+type(time_type),  intent(out), optional :: time
+character(len=*), intent(in),  optional :: label
 
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-! simple idiotproofing
-if ((src_id < 0) .or. (src_id >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "source task id ", src_id, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
-endif
-
-! this style cannot be easily simulated correctly with one task.
-! always throw an error.
 write(errstring, '(a)') "cannot call receive_from() in the single process case"
-call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
-
-destarray = 0
-if (present(time)) time = set_time(0, 0)
+      call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
 
 end subroutine receive_from
 
 
 
 !-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 1D, 2D, 3D inputs?
 
-
-subroutine transpose_array
-
-! not implemented here yet.  will have arguments -- several of them.
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-
-end subroutine transpose_array
-
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
+!> The array already has the values, nothing to do.  Not an error to call.
 
 subroutine array_broadcast(array, root)
- real(r8), intent(inout) :: array(:)
- integer, intent(in) :: root
 
-! The data array values on the root task will be broadcast to every other
-! task.  When this routine returns, all tasks will have the contents of the
-! root array in their own arrays.  Thus 'array' is intent(in) on root, and
-! intent(out) on all other tasks.
+real(r8), intent(inout) :: array(:)
+integer,  intent(in)    :: root
 
 if ( .not. module_initialized ) call initialize_mpi_utilities()
 
@@ -430,56 +266,19 @@ if ((root < 0) .or. (root >= total_tasks)) then
    call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
 endif
 
-! array already has the values, nothing to do.
-
+! Data is already in array, so you can return here.
+   
 end subroutine array_broadcast
-
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
- real(r8), intent(in) :: srcarray(:)
- integer, intent(in) :: root
- real(r8), intent(out) :: dstarray(:)
- integer, intent(out) :: dstcount
- integer, intent(in) :: how
- integer, intent(out) :: which(:)
-
-! 'srcarray' on the root task will be distributed across all the tasks
-! into 'dstarray'.  dstarray must be large enough to hold each task's share
-! of the data.  The actual number of values returned on each task will be
-! passed back in the 'count' argument.  'how' is a flag to select how to
-! distribute the data (round-robin, contiguous chunks, etc).  'which' is an
-! integer index array which lists which of the original values were selected
-! and put into 'dstarray'.
-
-integer :: i
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-dstarray = srcarray
-dstcount = size(srcarray)
-which = (/ ((i), i=1,size(srcarray))  /)
-
-end subroutine array_distribute
 
 !-----------------------------------------------------------------------------
 ! DART-specific cover utilities
 !-----------------------------------------------------------------------------
 
-function iam_task0()
+!> Return .TRUE. if my local task id is 0, .FALSE. otherwise.
+!> (Task numbers in MPI start at 0, contrary to the rules of polite fortran.)
+!> This version always returns .TRUE. since there is only a single task ever.
 
-! Return .TRUE. if my local task id is 0, .FALSE. otherwise.
-! (Task numbers in MPI start at 0, contrary to the rules of polite fortran.)
+function iam_task0()
 
 logical :: iam_task0
 
@@ -490,18 +289,18 @@ iam_task0 = (myrank == 0)
 end function iam_task0
 
 !-----------------------------------------------------------------------------
+
+!> Returns with nothing to do.  Does validate the 'from' task id.
+!> Not an error to call.
+
 subroutine broadcast_send(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
- integer, intent(in) :: from
- ! really only intent(in) here, but must match array_broadcast() call.
- real(r8), intent(inout) :: array1(:)
- real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
- real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
-! cover routine for array broadcast.  one additional sanity check -- make 
-! sure the 'from' matches my local task id.  also, these arrays are
-! intent(in) here, but they call a routine which is intent(inout) so they
-! must be the same here.
+integer,  intent(in)              :: from
+! arrays are really only intent(in) here, but must match array_broadcast() call.
+real(r8), intent(inout)           :: array1(:)
+real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
+real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 if ( .not. module_initialized ) call initialize_mpi_utilities()
 
@@ -512,25 +311,23 @@ if (from /= myrank) then
    call error_handler(E_ERR,'broadcast_send', errstring, source, revision, revdate)
 endif
 
-! this does nothing, because the array already has the data.
-! the subroutine does validate 'from' to be sure it's a valid task id.
-call array_broadcast(array1, from)
+! Data is already in arrays, so you can return here.
 
 end subroutine broadcast_send
 
 !-----------------------------------------------------------------------------
+
+!> Returns with nothing to do.  Does validate the 'from' task id.
+!> Not an error to call.
+
 subroutine broadcast_recv(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
- integer, intent(in) :: from
- ! really only intent(out) here, but must match array_broadcast() call.
- real(r8), intent(inout) :: array1(:)
- real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
- real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
-! cover routine for array broadcast.  one additional sanity check -- make 
-! sure the 'from' is not the same as my local task id.  these arrays are
-! intent(out) here, but they call a routine which is intent(inout) so they
-! must be the same here.
+integer,  intent(in)              :: from
+! arrays are really only intent(out) here, but must match array_broadcast() call.
+real(r8), intent(inout)           :: array1(:)
+real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
+real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 if ( .not. module_initialized ) call initialize_mpi_utilities()
 
@@ -541,18 +338,18 @@ if (from == myrank) then
    call error_handler(E_ERR,'broadcast_recv', errstring, source, revision, revdate)
 endif
 
-! this does nothing, because the array already has the data.
-! the subroutine does validate 'from' to be sure it's a valid task id.
-call array_broadcast(array1, from)
+! Data is already in arrays, so you can return here.
 
 end subroutine broadcast_recv
 
 !-----------------------------------------------------------------------------
-subroutine sum_across_tasks(addend, sum)
- integer, intent(in) :: addend
- integer, intent(out) :: sum
+   
+!> Returns addend in sum for a single task.
 
-! cover routine for MPI all-reduce
+subroutine sum_across_tasks(addend, sum)
+
+integer, intent(in) :: addend
+integer, intent(out) :: sum
 
 if ( .not. module_initialized ) call initialize_mpi_utilities()
 
@@ -562,214 +359,97 @@ end subroutine sum_across_tasks
 
 
 !-----------------------------------------------------------------------------
-! pipe-related utilities
+! pipe-related utilities - satisfy the subroutine names, but nothing to do.
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
+
 subroutine block_task()
 
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
- 
- 
 end subroutine block_task
 
 !-----------------------------------------------------------------------------
-subroutine restart_task()
-   
-   
-if ( .not. module_initialized ) call initialize_mpi_utilities()
 
+subroutine restart_task()
 
 end subroutine restart_task
 
 
 !-----------------------------------------------------------------------------
-!    * make_pipe()        Function that creates a named pipe (fifo), opens it,
-!                         and returns the unit number.  Ok to call if the pipe
-!                         already exists or is already open; it will skip
-!                         those steps and just return the unit number.  The 
-!                         name argument is used as a base and a filename
-!                         in the form 'base.NNNN' is generated, where the N's
-!                         are the MPI rank number, 0 padded.
-!
-!-----------------------------------------------------------------------------
-
-function make_pipe(pipename, exists) result (iunit)
- character(len=*), intent(in) :: pipename
- logical, intent(in), optional :: exists
- integer :: iunit
-
-! Create, open, and return a fortran unit number for a named pipe.
-! The local MPI rank number will be appended to the given name to create
-! a file of the form 'base.NNNN', where N's are the MPI rank number, 0 padded.
-! TODO: based on the total number of tasks get extra style points for
-! creating the shortest name necessary; e.g. base.N, base.NN, base.NNN, etc.
-!
-! If the optional 'exists' flag is not present, then it is not an error
-! whether the pipe already exists or not.  It is made if it does not exist, 
-! it is opened if not already opened, and the fortran unit number is returned.
-! If 'exists' is present then it forces the issue of whether the pipe file
-! must exist already or not.  The error handler is called if things aren't 
-! as expected.  apologies to tim hoar for the intentional imitation of
-! the generic file utilities_mod.f90 code.
-
-logical :: open, there
-character(len=128) :: fname
-character(len=11) :: format
-integer :: rc
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-write(fname, "(a,i4.4)") trim(pipename)//".", myrank
-print *, "fname now = ", trim(fname)
-
-! check to see if the pipe already exists; if so, we've got the unit number
-! (directly into the output value) and we're done.  otherwise, make it and
-! open it.
-inquire (file=fname, exist=there, opened=open, number=iunit, form=format)
-
-if (.not. open) then
-
-   if (.not. there) then
-      ! make pipe file; mkfifo should be standard on any unix/linux system.
-      rc = system('mkfifo '//trim(fname)//' '//char(0))
-
-      ! and check to be sure it was made
-      inquire (file=fname, exist=there)
-
-      if (.not. there) then
-        write(errstring, *) 'mkfifo command failed to create '//trim(fname)
-        call error_handler(E_ERR,'make_pipe', errstring, source, revision, revdate)
-      endif
-   endif
-
-   ! open pipe using an available unit number
-   iunit = get_unit()
-   open(unit=iunit, file=fname)
-
-endif
-
-! iunit contains the function return value.
-
-end function make_pipe
-
-
-!-----------------------------------------------------------------------------
-!    * destroy_pipe()     The unit number is closed and the pipe file is 
-!                         removed.
-!
-subroutine destroy_pipe(iunit)
- integer, intent(in) :: iunit
-
-character(len=128) :: pipename
-integer :: ios, rc
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'destroy_pipe', errstring, source, revision, revdate)
-
-
-! general idea is:
-
-! call inquire to get name
-inquire(unit=iunit, name=pipename, iostat=ios)
-if (ios /= 0) then
-   write(errstring, '(a,i4)') 'failure trying to inquire about unit ', iunit
-   call error_handler(E_ERR,'destroy_pipe', errstring, source, revision, revdate)
-endif
-
-call close_file(iunit)
-
-! remove echo when we trust this command.
-rc = system('echo rm -f '//trim(pipename)//' '//char(0))
-
-
-end subroutine destroy_pipe
-
-!-----------------------------------------------------------------------------
-!    * read_pipe()        The character string is read from the pipe.
-!                         (Can be overloaded to read ints if time or status
-!                         info is useful to exchange between processes.) 
-!                         This routine blocks until data is available.
-!
-subroutine read_pipe(iunit, chardata)
- integer, intent(in) :: iunit
- character(len=*), intent(out) :: chardata
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'read_pipe', errstring, source, revision, revdate)
-
-chardata = " "
- 
-end subroutine
-
-!-----------------------------------------------------------------------------
-!    * write_pipe()       The character string is written to the pipe.
-!                         (Can be overloaded to write ints if time or status
-!                         info is useful to exchange between processes.) 
-!                         This routine writes and returns immediately.
-!
-subroutine write_pipe(iunit, chardata)
- integer, intent(in) :: iunit
- character(len=*), intent(in) :: chardata
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'write_pipe', errstring, source, revision, revdate)
- 
-end subroutine
-
-
-!-----------------------------------------------------------------------------
 ! general system util wrappers.
 !-----------------------------------------------------------------------------
+
+!> Use the system() command to execute a command string.
+!> Will wait for the command to complete and returns an
+!> error code unless you end the command with & to put
+!> it into background.   Function which returns the rc
+!> of the command, 0 being all is ok.
+
 function shell_execute(execute_string, serialize)
- character(len=*), intent(in) :: execute_string
- logical, intent(in), optional :: serialize
- integer :: shell_execute
 
-! Use the system() command to execute a command string.
-! Will wait for the command to complete and returns an
-! error code unless you end the command with & to put
-! it into background.   Function which returns the rc
-! of the command, 0 being all is ok.
-
-! on some platforms/mpi implementations, the system() call
-! does not seem to be reentrant.  if serialize is set and
-! is true, do each call serially.
+character(len=*), intent(in)           :: execute_string
+logical,          intent(in), optional :: serialize
+integer                                :: shell_execute
 
 character(len=255) :: doit
 
-   !print *, "in-string is: ", trim(execute_string)
+!DEBUG: print *, "in-string is: ", trim(execute_string)
 
-   write(doit, "(a, 1x, a1)") trim(execute_string), char(0)
-
-   !print *, "about to run: ", trim(doit)
-   !print *, "input string length = ", len(trim(doit))
-
-   shell_execute = system(doit)
-   print *, "execution returns, rc = ", shell_execute
+   call do_system(shell_name, execute_string, shell_execute)
+       
+!DEBUG: print *, "execution returns, rc = ", shell_execute
 
 end function shell_execute
 
 !-----------------------------------------------------------------------------
+
+!> wrapper so you only have to make this work in a single place
+
+subroutine do_system(shell, execute, rc)
+
+character(len=*), intent(in)  :: shell
+character(len=*), intent(in)  :: execute
+integer,          intent(out) :: rc
+
+!#ifdef __NAG__
+!  call system(trim(shell)//' '//trim(execute)//' '//char(0), errno=rc)
+!#else
+   rc = system(trim(shell)//' '//trim(execute)//' '//char(0))
+!#endif
+
+end subroutine do_system
+
+!-----------------------------------------------------------------------------
+
+!> Wrapper for the sleep command.  Argument is a real
+!> in seconds.  Different systems have different lower
+!> resolutions for the minimum time it will sleep.
+!> Subroutine, no return value.
+
 subroutine sleep_seconds(naplength)
- real(r8), intent(in) :: naplength
 
-! Wrapper for the sleep command.  Argument is a real
-! in seconds.  Different systems have different lower
-! resolutions for the minimum time it will sleep.
-! Subroutine, no return value.
+real(r8), intent(in) :: naplength
 
- integer :: sleeptime
+integer :: sleeptime
 
- sleeptime = floor(naplength)
- if (sleeptime <= 0) sleeptime = 1
+sleeptime = floor(naplength)
+if (sleeptime <= 0) sleeptime = 1
 
- call sleep(sleeptime)
+call sleep(sleeptime)
 
 end subroutine sleep_seconds
+
+!-----------------------------------------------------------------------------
+
+!> Return 0 for the communicator number.
+
+function get_dart_mpi_comm()
+
+integer :: get_dart_mpi_comm
+
+get_dart_mpi_comm = my_local_comm
+
+end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
@@ -778,21 +458,23 @@ end module mpi_utilities_mod
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
-! NOTE -- non-module code, so this subroutine can be called from the
-!  utilities module, which this module uses (and cannot have circular refs)
+!> NOTE: non-module code, so this subroutine can be called from the
+!>  utilities module, which this module uses (and cannot have circular refs)
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
 
-!-----------------------------------------------------------------------------
+!> Call exit with the specified code.  NOT PART of the mpi_utilities_mod, so
+!> this can be called from any code in the system.
 
 subroutine exit_all(exit_code)
- integer, intent(in) :: exit_code
 
-! Call exit with the specified code.
+integer, intent(in) :: exit_code
 
-   call exit(exit_code)
+call exit(exit_code)
 
 end subroutine exit_all
+
+!-----------------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
 ! $URL$

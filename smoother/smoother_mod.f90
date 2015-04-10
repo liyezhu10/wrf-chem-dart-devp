@@ -57,9 +57,10 @@ type(adaptive_inflate_type)         :: lag_inflate
 
 !---- namelist with default values
 
-integer  :: num_lags           = 0
-logical  :: start_from_restart = .false.
-logical  :: output_restart     = .false.
+integer :: num_lags           = 0
+logical :: start_from_restart = .false.
+logical :: output_restart     = .false.
+logical :: advancing_model_outside_program = .false.
 
 ! These will be prepended with Lag_NNNNN_ (and optionally appended with
 ! ens number depending on namelist settings).
@@ -68,7 +69,7 @@ character(len = 129) :: restart_in_file_name  = 'ics', &
 
 namelist /smoother_nml/ num_lags, start_from_restart, &
                         output_restart, restart_in_file_name, &
-                        restart_out_file_name
+                        restart_out_file_name, advancing_model_outside_program
 
 !-------------------------------------------------------------------------
 contains
@@ -203,11 +204,12 @@ end subroutine smoother_read_restart
 
 !-------------------------------------------------------------------------
 
-subroutine advance_smoother(ens_handle)
+subroutine advance_smoother(ens_handle, program_end)
 
 type(ensemble_type), intent(in) :: ens_handle
+logical, optional,   intent(in) :: program_end
 
-integer         :: smoother_tail
+integer :: smoother_tail
 
 ! must have called init_smoother() before using this routine
 if ( .not. module_initialized ) then
@@ -215,22 +217,31 @@ if ( .not. module_initialized ) then
    call error_handler(E_ERR,'advance_smoother',errstring,source,revision,revdate)
 endif
 
-!call error_handler(E_MSG, 'advance_smoother', 'start of routine')
-!if (num_lags /= num_current_lags) then
-!   write(errstring, '(A,I4)') 'num_current_lags starts =', num_current_lags
-!   call error_handler(E_MSG, 'advance_smoother', errstring)
-!endif
+! if this advance is being called at the end of filter,
+! we only really want to advance the smoother if we are
+! planning to advance the model before calling filter again.
+! unless that's true (indicated by the namelist item), return
+! without doing anything.
+if (present(program_end)) then
+   if (program_end .and. .not. advancing_model_outside_program) return
+endif
 
-!write(errstring, '(A,I4)') 'apparently time has advanced, head starts =', smoother_head
-!call error_handler(E_MSG, 'advance_smoother', errstring)
+call error_handler(E_MSG, 'advance_smoother', 'start of routine')
+if (num_lags /= num_current_lags) then
+   write(errstring, '(A,I4)') 'num_current_lags starts =', num_current_lags
+   call error_handler(E_MSG, 'advance_smoother', errstring)
+endif
+
+write(errstring, '(A,I4)') 'apparently time has advanced, head starts =', smoother_head
+call error_handler(E_MSG, 'advance_smoother', errstring)
 
 ! Copy the newest state from the ensemble over the oldest state
 ! Storage is cyclic
 smoother_tail = smoother_head - 1
 if(smoother_tail == 0) smoother_tail = num_lags
 call duplicate_ens(ens_handle, lag_handle(smoother_tail), .true.)
-!write(errstring, '(A,I4)') 'copied current ens data into tail =', smoother_tail
-!call error_handler(E_MSG, 'advance_smoother', errstring)
+write(errstring, '(A,I4)') 'copied current ens data into tail =', smoother_tail
+call error_handler(E_MSG, 'advance_smoother', errstring)
 
 
 ! Make the head point to the most recent data copy
@@ -239,16 +250,16 @@ smoother_head = smoother_tail
 ! Add one to smoother ens if necessary
 call smoother_inc_lags()
 
-!write(errstring, '(A,I4,A,I4)') 'head now =', smoother_head, ' num_current_lags =', num_current_lags
-!call error_handler(E_MSG, 'advance_smoother', errstring)
+write(errstring, '(A,I4,A,I4)') 'head now =', smoother_head, ' num_current_lags =', num_current_lags
+call error_handler(E_MSG, 'advance_smoother', errstring)
 
 ! debug only
-!call print_time(lag_handle(smoother_head)%time(1), ' advance_smoother: head time now', logfileunit)
-!call print_time(lag_handle(smoother_head)%time(1), ' advance_smoother: head time now')
-!smoother_tail = smoother_head - 1
-!if(smoother_tail == 0) smoother_tail = num_lags
-!call print_time(lag_handle(smoother_tail)%time(1), ' advance_smoother: tail time now', logfileunit)
-!call print_time(lag_handle(smoother_tail)%time(1), ' advance_smoother: tail time now')
+call print_time(lag_handle(smoother_head)%time(1), ' advance_smoother: head time now', logfileunit)
+call print_time(lag_handle(smoother_head)%time(1), ' advance_smoother: head time now')
+smoother_tail = smoother_head - 1
+if(smoother_tail == 0) smoother_tail = num_lags
+call print_time(lag_handle(smoother_tail)%time(1), ' advance_smoother: tail time now', logfileunit)
+call print_time(lag_handle(smoother_tail)%time(1), ' advance_smoother: tail time now')
 
 end subroutine advance_smoother
 

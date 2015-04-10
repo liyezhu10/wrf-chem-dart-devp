@@ -23,9 +23,9 @@ use   utilities_mod, only : open_file, close_file, &
                             initialize_utilities, finalize_utilities, &
                             logfileunit, nmlfileunit, do_nml_file, do_nml_term, &
                             check_namelist_read, find_namelist_in_file
-use       model_mod, only : model_type, init_model_instance, write_cam_init, &
-                            vector_to_prog_var, static_init_model, get_model_size, &
-                            write_cam_times, end_model_instance
+use   cam_model_mod, only : cam_model_type, cam_init_model_instance, cam_write_cam_init, &
+                            cam_vector_to_prog_var, cam_static_init_model, cam_get_model_size, &
+                            cam_write_cam_times, cam_end_model_instance
 use assim_model_mod, only : aread_state_restart, open_restart_read, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -51,7 +51,7 @@ namelist /dart_to_cam_nml/ dart_to_cam_input_file,  &
 
 !----------------------------------------------------------------------
 
-type(model_type)       :: var
+type(cam_model_type)       :: var
 type(time_type)        :: model_time, adv_to_time
 real(r8), allocatable  :: statevector(:)
 integer                :: file_unit, vecsize, iunit, io
@@ -73,13 +73,13 @@ if (do_nml_file()) write(nmlfileunit, nml=dart_to_cam_nml)
 if (do_nml_term()) write(     *     , nml=dart_to_cam_nml)
 
 ! initialize model
-call static_init_model()
+call cam_static_init_model()
 
-vecsize = get_model_size()
+vecsize = cam_get_model_size()
 allocate(statevector(vecsize))
 
 ! Allocate the instance of the cam model type for storage
-call init_model_instance(var)
+call cam_init_model_instance(var)
 
 ! Get file for DART vector input
 file_unit = open_restart_read(dart_to_cam_input_file)
@@ -92,16 +92,16 @@ endif
 call close_restart(file_unit)
 
 ! decompose vector back into CAM fields
-call vector_to_prog_var (statevector, var)
+call cam_vector_to_prog_var (statevector, var)
 deallocate (statevector)
 
 ! write fields to the netCDF initial file.
-call write_cam_init(dart_to_cam_output_file, model_time, var)
-call end_model_instance(var)
+call cam_write_cam_init(dart_to_cam_output_file, model_time, var)
+call cam_end_model_instance(var)
 
 ! write cam times to a separate 'times' support file.  used to
 ! update cam namelist start/stop times.
-if (advance_time_present) call write_cam_times(model_time, adv_to_time)
+if (advance_time_present) call cam_write_cam_times(model_time, adv_to_time)
 
 call print_date( model_time,'dart_to_cam:CAM  model date')
 call print_time( model_time,'dart_to_cam:DART model time')

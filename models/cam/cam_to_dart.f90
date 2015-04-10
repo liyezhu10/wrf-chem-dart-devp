@@ -21,9 +21,9 @@ use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities,   &
                              check_namelist_read, find_namelist_in_file, &
                              nmlfileunit, do_nml_file, do_nml_term
-use        model_mod, only : model_type, init_model_instance, &
-                             end_model_instance, &
-                             prog_var_to_vector, read_cam_init
+use    cam_model_mod, only : cam_model_type, cam_init_model_instance, &
+                             cam_end_model_instance, &
+                             cam_prog_var_to_vector, cam_read_cam_init
 use  assim_model_mod, only : static_init_assim_model, get_model_size,  &
                              open_restart_write, awrite_state_restart, &
                              close_restart
@@ -49,7 +49,7 @@ namelist /cam_to_dart_nml/ cam_to_dart_input_file, cam_to_dart_output_file
 
 ! allocatable storage to read in a native format for cam state
 real(r8), allocatable  :: statevector(:)
-type(model_type)       :: var
+type(cam_model_type)       :: var
 type(time_type)        :: model_time
 integer                :: iunit, x_size, io
 
@@ -74,15 +74,15 @@ allocate(statevector(x_size))
 
 ! Allocate the instance of the cam model type for storage
 ! I'll just point to the space I need, not;    
-call init_model_instance(var)
+call cam_init_model_instance(var)
 
 ! Read the file cam state fragments into var;
 ! transform fields into state vector for DART
 
-call read_cam_init(cam_to_dart_input_file, var, model_time)
+call cam_read_cam_init(cam_to_dart_input_file, var, model_time)
 
-call prog_var_to_vector(var, statevector)
-call end_model_instance(var)
+call cam_prog_var_to_vector(var, statevector)
+call cam_end_model_instance(var)
 
 ! write out state vector in "proprietary" format
 iunit = open_restart_write(cam_to_dart_output_file)

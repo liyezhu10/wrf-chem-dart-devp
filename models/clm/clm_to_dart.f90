@@ -24,7 +24,7 @@ program clm_to_dart
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
-use        model_mod, only : get_model_size, clm_to_dart_state_vector
+use    clm_model_mod, only : clm_get_model_size, clm_to_dart_state_vector
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
@@ -68,7 +68,7 @@ call check_namelist_read(iunit, io, "clm_to_dart_nml") ! closes, too.
 ! get to work
 !----------------------------------------------------------------------
 
-x_size = get_model_size()
+x_size = clm_get_model_size()
 allocate(statevector(x_size))
 
 ! Each variable specifies its own file of origin.
