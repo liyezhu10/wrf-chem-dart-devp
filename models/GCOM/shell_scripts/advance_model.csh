@@ -94,22 +94,25 @@ while($state_copy <= $num_states)
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model.
-   # We are going to take a gcom netCDF restart file and simply overwrite the
-   # appropriate variables. The DART output file also has the 'advance_to'
-   # time - which must be communicated to the model ...
+   # Copy the 'most current' gcom_restart file for this ensemble member 
+   # from CENTRALDIR to the local directory and simply overwrite the
+   # appropriate variables with the state from the DART assimilation.
+   # dart_to_gcom also creates dart_gcom_timeinfo.txt, which contains
+   # the current time of the model as well as the desired stopping time.
+   # It has this information as several character strings that are then
+   # extracted and used to modify namelists or construct filenames. 
    #----------------------------------------------------------------------
 
    # The EXPECTED DART dart_to_gcom_input_file is 'dart_restart'
    # The dart_to_gcom_nml:advance_time_present = .TRUE. must be set
-   # CENTRALDIR will always contain the gcom_restart.nc file.
-   # The most recent gcom timestep is inserted into this file.
+   # CENTRALDIR will always contain the gcom_restart_nnnn.nc file.
 
    set RESTARTFILE = `printf gcom_restart_%04d.nc ${ensemble_member}`
 
    echo "RESTARTFILE is [${RESTARTFILE}]"         >> $logfile || exit 2
 
    ${LINK} ../$input_file       dart_restart      >> $logfile || exit 2
-   ${LINK} ../${RESTARTFILE}    gcom_restart.nc   >> $logfile || exit 2
+   ${COPY} ../${RESTARTFILE}    gcom_restart.nc   >> $logfile || exit 2
    
    ../dart_to_gcom                     >> $logfile || exit 2
 
@@ -120,6 +123,8 @@ while($state_copy <= $num_states)
 
    set newstartdate = `grep Start_Time   dart_gcom_timeinfo.txt`
    set sec2advance = `grep Stop_Time_sec dart_gcom_timeinfo.txt`
+   set  currenttag = `grep currenttimetag  dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
+   set forecasttag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
 
    echo "gcomstartdate is $newstartdate" >> $logfile
    echo "sec2advance is $sec2advance" >> $logfile
@@ -140,6 +145,11 @@ while($state_copy <= $num_states)
 
    #----------------------------------------------------------------------
    # Block 3: Run the ocean model ... produces gcom_output.nc
+   #          If the model advanced successfully, rename the output file
+   #          so it contains the ensemble member and current model time.
+   #          Must push this output back to CENTRALDIR and update the link
+   #          to gcom_restart_nnnn.nc so that the next time gcom_restart.nc
+   #          is copied to TEMPDIR, we get the most current state.
    #----------------------------------------------------------------------
 
    ../gcom.serial.exe >> $logfile || exit 3
@@ -154,8 +164,11 @@ while($state_copy <= $num_states)
       exit 3 
    endif
 
+
    if ( -e gcom_output.nc ) then
-      ${MOVE} gcom_output.nc ../${RESTARTFILE} >> $logfile || exit 3
+      set NEWNAME = `printf gcom_restart_%04d.${forecasttag}.nc ${ensemble_member}`
+      ${MOVE} gcom_output.nc ../${NEWNAME}
+      (cd ..; ${LINK} ${NEWNAME} ${RESTARTFILE}; cd -) >> $logfile || exit 3
    else
       echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
       echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
@@ -173,10 +186,7 @@ while($state_copy <= $num_states)
 
    ../gcom_to_dart >> $logfile || exit 4
 
-   set forecasttimetag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed -e 's/ = //g'`
-   set FORECASTTIME = `echo $forecasttimetag | sed -e 's/forecasttimetag//'`
-
-   echo "Should now be at ${FORECASTTIME}"
+   echo "Should now be at ${forecasttag}"
    
    ls -lrt
 
@@ -192,15 +202,11 @@ while($state_copy <= $num_states)
    @ output_file_line = $output_file_line + 3
 end
 
-# must communicate the time_manager_nml:stop_count 
-# cp -pv gcom_in.DART ../gcom_in
-
 # Change back to original directory and get rid of temporary directory
 cd ..
 # \rm -rf $temp_dir
 
 # Remove the filter_control file to signal completion
-# Is there a need for any sleeps to avoid trouble on completing moves here?
 \rm -rf $control_file
 
 exit 0

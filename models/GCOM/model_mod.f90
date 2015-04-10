@@ -332,8 +332,7 @@ call set_calendar_type('Gregorian')
 
 !-----------------------------------------------------------------------
 ! Set the time step ...
-! FIXME ensure model_timestep is multiple of 'ocean_dynamics_timestep'
-! FIXME dart_gcom_mod:set_model_time_step() could do this
+! FIXME ensure model_timestep is multiple of 'param.nml:Writeout_freq'
 
 model_timestep = set_time(assimilation_period_seconds,assimilation_period_days)
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
@@ -414,7 +413,8 @@ if ( .not. module_initialized ) call static_init_model
 
 get_model_time_step = model_timestep
 
-call error_handler(E_MSG,'get_model_time_step','FIXME TJH UNTESTED')
+call error_handler(E_MSG,'get_model_time_step','FIXME TJH UNTESTED', &
+    text2='should be a multiple of param.dat:&param_nml:Writeout_freq')
 
 end function get_model_time_step
 

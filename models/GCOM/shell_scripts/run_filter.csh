@@ -34,7 +34,7 @@
 ## -r n       Declare job non-rerunable
 ## -e <arg>   filename for standard error AFTER job completes
 ## -o <arg>   filename for standard out AFTER job completes
-## -q <arg>   Queue name (small, medium, long, verylong)
+## -q <arg>   Queue name
 ## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
 ## -l walltime=hh:mm:ss request hh wallclock hours of runtime ..
 ##=============================================================================
@@ -43,8 +43,8 @@
 #PBS -r n
 #PBS -e filter.err
 #PBS -o filter.log
-#PBS -q medium
-#PBS -l nodes=2:ppn=16
+#PBS -q batch
+#PBS -l nodes=2:ppn=8
 #PBS -l walltime=2:00:00
 #
 #=============================================================================

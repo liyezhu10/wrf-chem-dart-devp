@@ -43,7 +43,7 @@
 #PBS -o gcom_pmo.out
 #PBS -q batch
 #PBS -l nodes=1:ppn=1:mpi
-#PBS -l walltime=2:00:00
+#PBS -l walltime=12:00:00
 #
 #=============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
@@ -133,7 +133,7 @@ switch ("`hostname`")
       # NCAR "yellowstone"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -vs'
+      setenv   LINK 'ln -fvs'
       setenv REMOVE 'rm -fr'
 
       setenv EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
@@ -147,7 +147,7 @@ switch ("`hostname`")
       # SDSU "dulcinea"
       setenv   MOVE 'mv -fv'
       setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -vs'
+      setenv   LINK 'ln -fvs'
       setenv REMOVE 'rm -fr'
 
       setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
