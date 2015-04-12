@@ -525,7 +525,9 @@ state_vector = MISSING_R8
 
 if (include_CAM) then
    call set_start_end('CAM', x_start, x_end)
-   call cam_restart_file_to_sv(filename, state_vector(x_start:x_end), model_time)
+   ! FIXME: make a routine of this form:
+   print *, 'should be reading cam state vector here - FIXME!!'
+   !call cam_prog_var_to_vector(filename, state_vector(x_start:x_end), model_time)
 endif
 
 if (include_POP) then
@@ -535,7 +537,9 @@ endif
 
 if (include_CLM) then
    call set_start_end('CLM', x_start, x_end)
-   call clm_restart_file_to_sv(filename, state_vector(x_start:x_end), model_time)
+   ! FIXME: make a routine of this form:
+   print *, 'should be reading clm state vector here - FIXME!!'
+   !call clm_to_dart_state_vector(filename, state_vector(x_start:x_end), model_time)
 endif
 
 end subroutine restart_file_to_sv
@@ -562,7 +566,7 @@ integer :: x_start, x_end
 if ( .not. module_initialized ) call static_init_model
 
 call set_start_end('CAM', x_start, x_end)
-call cam_sv_to_restart_file(state_vector(x_start:x_end), filename, statedate)
+!call cam_vector_to_prog_var(state_vector(x_start:x_end), filename, statedate)
 
 call set_start_end('POP', x_start, x_end)
 call pop_sv_to_restart_file(state_vector(x_start:x_end), filename, statedate)
@@ -614,7 +618,7 @@ else if (modelname == 'POP') then
                           locs, loc_kind, num_close, close_ind, dist)
 
 else if (modelname == 'CLM') then
-   call clm_get_close_obs(gc, base_obs_loc, base_obs_type, &
+   call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
                           locs, loc_kind, num_close, close_ind, dist)
 
 endif
