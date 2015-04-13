@@ -36,13 +36,13 @@ type ensemble_type
    !DIRECT ACCESS INTO STORAGE IS USED TO REDUCE COPYING: BE CAREFUL
    !!!private
    integer                  :: num_copies, num_vars, my_num_copies, my_num_vars
-   integer,         pointer :: my_copies(:), my_vars(:)
+   integer,        allocatable  :: my_copies(:), my_vars(:)
    ! Storage in next line is to be used when each pe has all copies of subset of vars
-   real(r8),        pointer :: copies(:, :)         ! Dimensioned (num_copies, my_num_vars)
+   real(r8),       allocatable  :: copies(:, :)         ! Dimensioned (num_copies, my_num_vars)
    ! Storage on next line is used when each pe has subset of copies of all vars
-   real(r8),        pointer :: vars(:, :)           ! Dimensioned (num_vars, my_num_copies)
+   real(r8),       allocatable  :: vars(:, :)           ! Dimensioned (num_vars, my_num_copies)
    ! Time is only related to var complete
-   type(time_type), pointer :: time(:)
+   type(time_type), allocatable :: time(:)
    integer                  :: distribution_type
    integer                  :: valid     ! copies modified last, vars modified last, both same
    integer                  :: id_num
@@ -96,7 +96,7 @@ map_pe_to_task = ens_handle%pe_to_task_list(p + 1)
 end function map_pe_to_task
 
 !--------------------------------------------------------------------------------
-!> return the numbers of copies in the window
+!> return the number of actual ensemble members (not extra copies)
 function copies_in_window(state_ens_handle)
 
 type(ensemble_type), intent(in) :: state_ens_handle
