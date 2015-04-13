@@ -21,10 +21,10 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_type
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, do_output, to_upper,                    &
+                             nc_check, to_upper, file_to_text,                 &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
-                             file_to_text, do_output
+                             do_nml_file, do_nml_term, nmlfileunit
 use     obs_kind_mod     ! for now, include all
 
 
@@ -72,9 +72,13 @@ integer :: cam_model_size, clm_model_size, pop_model_size
 character(len=256) :: msgstring
 logical, save :: module_initialized = .false.
 
-! FIXME: for now make cam the only default
+! FIXME: make the number and names extensible, eventually.
+! for the first implementation we only support CAM, POP, and CLM
+! explicitly.
+
+! Default to cam and pop
 logical :: include_CAM = .true.
-logical :: include_POP = .false.
+logical :: include_POP = .true.
 logical :: include_CLM = .false.
 
 integer  :: debug = 0   ! turn up for more and more debug messages
@@ -85,6 +89,9 @@ namelist /model_nml/  &
    include_POP, &
    include_CLM, &
    debug
+
+! FIXME: add the input and output filenames here for the
+! restart files?
 
 type(time_type) :: model_time, model_timestep
 integer :: model_size    ! the state vector length
@@ -105,18 +112,17 @@ if ( module_initialized ) return ! only need to do this once.
 call register_module(source, revision, revdate)
 
 ! Since this routine calls other routines that could call this routine
-! we'll say we've been initialized pretty dang early.
+! we'll say we've been initialized right away.
 module_initialized = .true.
 
-! Read the DART namelist for this model
+! Read the DART namelist for the CESM pseudo-model
 call find_namelist_in_file('input.nml', 'model_nml', iunit)
 read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
-if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
+if (do_nml_term()) write(     *     , nml=model_nml)
 
 
 if (include_CAM) call cam_static_init_model()
@@ -186,6 +192,8 @@ function get_model_size()
 
 if ( .not. module_initialized ) call static_init_model
 
+! These sizes are module globals - set them so later we can
+! get the right offsets for different sections of the state vector.
 cam_model_size = 0
 pop_model_size = 0
 clm_model_size = 0
@@ -288,18 +296,49 @@ function get_model_time_step()
 ! in time that the model is capable of advancing the state in a given
 ! implementation. This interface is required for all applications.
 
-type(time_type) :: cam_time, clm_time, pop_time
+type(time_type) :: cam_time, pop_time, clm_time, base_time, zero_time
 
 if ( .not. module_initialized ) call static_init_model
+
+zero_time = set_time(0,0)
+
+cam_time = zero_time
+clm_time = zero_time
+pop_time = zero_time
+
 
 if (include_CAM) cam_time = cam_get_model_time_step()
 if (include_POP) pop_time = pop_get_model_time_step()
 if (include_CLM) clm_time = clm_get_model_time_step()
 
-! FIXME:
-! make sure they are compatible here
+! make sure they are compatible here and error out if they are not.
+if (cam_time > zero_time) then
+   base_time = cam_time
+else if (pop_time > zero_time) then
+   base_time = pop_time
+else if (clm_time > zero_time) then
+   base_time = clm_time
+else
+   call error_handler(E_ERR, 'get_model_time_step', 'no models returned a good time step')
+endif
 
-get_model_time_step = cam_time
+if ((cam_time > zero_time .and. cam_time /= base_time) .or. &
+    (pop_time > zero_time .and. pop_time /= base_time) .or. &
+    (clm_time > zero_time .and. clm_time /= base_time)) then
+   call print_time(cam_time, 'CAM time step')
+   call print_time(cam_time, 'CAM time step', logfileunit)
+   call print_time(cam_time, 'POP time step')
+   call print_time(cam_time, 'POP time step', logfileunit)
+   call print_time(cam_time, 'CLM time step')
+   call print_time(cam_time, 'CLM time step', logfileunit)
+   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps must be the same')
+endif
+
+if (base_time == zero_time) then
+   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps were zero')
+endif
+
+get_model_time_step = base_time
 
 end function get_model_time_step
 
@@ -327,19 +366,20 @@ character(len=32) :: modelname
 call which_model_state(index_in, modelname)
 call set_start_end(modelname, x_start, x_end)
 
-if (modelname == 'CAM') then
-   call cam_get_state_meta_data(index_in - x_start, location, var_type)
+select case (modelname)
+   case ('CAM')
+      call cam_get_state_meta_data(index_in - x_start, location, var_type)
 
-else if (modelname == 'POP') then
-   call pop_get_state_meta_data(index_in - x_start, location, var_type)
+   case ('POP')
+      call pop_get_state_meta_data(index_in - x_start, location, var_type)
 
-else if (modelname == 'CLM') then
-   call clm_get_state_meta_data(index_in - x_start, location, var_type)
+   case ('CLM')
+      call clm_get_state_meta_data(index_in - x_start, location, var_type)
 
-else
-   call error_handler(E_ERR, 'get_state_meta_data', 'offset beyond state vector length', &
+   case default
+      call error_handler(E_ERR, 'get_state_meta_data', 'error determining right model to use', &
                       source, revision, revdate)
-endif
+end select
 
 
 end subroutine get_state_meta_data
@@ -456,23 +496,61 @@ subroutine pert_model_state(state, pert_state, interf_provided)
 ! perturbing of states.
 
 integer :: x_start, x_end
+logical :: had_interface
+integer :: tristate(3) 
+
 
 if ( .not. module_initialized ) call static_init_model
 
+! key to 'tristate' values:
+!   0 = this model isn't being used
+!   1 = this model has a perturb interface
+!   2 = this model doesn't have a perturb interface
+tristate(:) = 0
+
 if (include_CAM) then
    call set_start_end('CAM', x_start, x_end)
-   call cam_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), interf_provided)
+   call cam_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), had_interface)
+   if (had_interface) then
+      tristate = 1
+   else
+      tristate = 2
+   endif
 endif
 
 if (include_POP) then
    call set_start_end('POP', x_start, x_end)
-   call pop_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), interf_provided)
+   call pop_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), had_interface)
+   if (had_interface) then
+      tristate = 1
+   else
+      tristate = 2
+   endif
 endif
 
 if (include_CLM) then
    call set_start_end('CLM', x_start, x_end)
-   call clm_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), interf_provided)
+   call clm_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), had_interface)
+   if (had_interface) then
+      tristate = 1
+   else
+      tristate = 2
+   endif
 endif
+
+! FIXME: we cannot handle the case where some models want to
+! perturb on their own and some want filter to do it.  it has to
+! be every model or no models at this point.
+if (all(tristate > 0) == 1) then
+   interf_provided = .true.
+else if (all(tristate > 0) == 2) then
+   interf_provided = .false.
+else
+   call error_handler(E_ERR, 'pert_model_state', &
+      'if any models use a perturb routine, all models must use a perturb routine', &
+      source, revision, revdate)
+endif
+
 
 end subroutine pert_model_state
 
@@ -566,6 +644,7 @@ integer :: x_start, x_end
 if ( .not. module_initialized ) call static_init_model
 
 call set_start_end('CAM', x_start, x_end)
+! FIXME:
 !call cam_vector_to_prog_var(state_vector(x_start:x_end), filename, statedate)
 
 call set_start_end('POP', x_start, x_end)
@@ -608,20 +687,30 @@ num_close = 0
 close_ind(:) = -1
 if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 
+! FIXME: in a real unified model_mod, these would all be called
+! and any state vector items from any model are potentially close.
+! the vertical conversions are one issue; the other is whether the
+! distances should be the same or different in different mediums
+! (e.g air vs water vs soil/snow)
+
 call which_model_obs(base_obs_type, modelname)
-if (modelname == 'CAM') then
-   call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                          locs, loc_kind, num_close, close_ind, dist)
+select case (modelname)
+   case ('CAM')
+      call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                             locs, loc_kind, num_close, close_ind, dist)
 
-else if (modelname == 'POP') then
-   call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                          locs, loc_kind, num_close, close_ind, dist)
+   case ('POP')
+      call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                             locs, loc_kind, num_close, close_ind, dist)
 
-else if (modelname == 'CLM') then
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                          locs, loc_kind, num_close, close_ind, dist)
+   case ('CLM')
+      call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                             locs, loc_kind, num_close, close_ind, dist)
 
-endif
+   case default
+      call error_handler(E_ERR, 'get_close_obs', 'error determining right model to use', &
+                      source, revision, revdate)
+end select
 
 
 end subroutine get_close_obs
@@ -694,6 +783,8 @@ subroutine which_model_obs(obs_type, modelname)
  integer,          intent(in)  :: obs_type
  character(len=*), intent(out) :: modelname
 
+! FIXME: this needs to be beefed up with all possible obs types
+! and which model would have the best forward operator for it.
 
 select case (obs_type)
    case (RADIOSONDE_TEMPERATURE)

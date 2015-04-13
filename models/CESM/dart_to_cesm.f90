@@ -68,9 +68,6 @@ call initialize_utilities(progname='dart_to_cesm')
 
 call static_init_model()
 
-x_size = get_model_size()
-allocate(statevector(x_size))
-
 ! Read the namelist to get the input filename.
 
 call find_namelist_in_file("input.nml", "dart_to_cesm_nml", iunit)
@@ -79,10 +76,12 @@ call check_namelist_read(iunit, io, "dart_to_cesm_nml")
 
 call get_cesm_restart_filename( cesm_restart_filename )
 
-write(*,*)
-write(*,'(''dart_to_cesm:converting DART file '',A, &
-      &'' to CESM restart file '',A)') &
-     trim(dart_to_cesm_input_file), trim(cesm_restart_filename)
+x_size = get_model_size()
+allocate(statevector(x_size))
+
+call error_handler(E_MSG, 'dart_to_cesm: ', &
+     'converting DART file '//trim(dart_to_cesm_input_file)//&
+     ' to CESM restart file '//trim(cesm_restart_filename))
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
@@ -103,6 +102,7 @@ call close_restart(iunit)
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
+! FIXME: does this need to be a list of filenames from the namelist?
 call sv_to_restart_file(statevector, cesm_restart_filename, model_time)
 
 if ( advance_time_present ) then
@@ -113,16 +113,16 @@ endif
 ! Log what we think we're doing, and exit.
 !----------------------------------------------------------------------
 
-call print_date( model_time,'dart_to_cesm:CESM model date')
-call print_time( model_time,'dart_to_cesm:DART model time')
-call print_date( model_time,'dart_to_cesm:CESM model date',logfileunit)
-call print_time( model_time,'dart_to_cesm:DART model time',logfileunit)
+call print_date( model_time,'dart_to_cesm: CESM model date')
+call print_time( model_time,'dart_to_cesm: DART model time')
+call print_date( model_time,'dart_to_cesm: CESM model date', logfileunit)
+call print_time( model_time,'dart_to_cesm: DART model time', logfileunit)
 
 if ( advance_time_present ) then
-call print_time(adv_to_time,'dart_to_cesm:advance_to time')
-call print_date(adv_to_time,'dart_to_cesm:advance_to date')
-call print_time(adv_to_time,'dart_to_cesm:advance_to time',logfileunit)
-call print_date(adv_to_time,'dart_to_cesm:advance_to date',logfileunit)
+   call print_time(adv_to_time,'dart_to_cesm: advance_to time')
+   call print_date(adv_to_time,'dart_to_cesm: advance_to date')
+   call print_time(adv_to_time,'dart_to_cesm: advance_to time', logfileunit)
+   call print_date(adv_to_time,'dart_to_cesm: advance_to date', logfileunit)
 endif
 
 call finalize_utilities('dart_to_cesm')

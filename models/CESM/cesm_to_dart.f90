@@ -77,6 +77,10 @@ call check_namelist_read(iunit, io, "cesm_to_dart_nml") ! closes, too.
 
 call get_cesm_restart_filename( cesm_restart_filename )
 
+call error_handler(E_MSG, 'cesm_to_dart: ', &
+     'converting CESM restart file '//trim(cesm_restart_filename))//&
+     ' to DART file '//trim(dart_to_cesm_input_file)
+
 write(*,*)
 write(*,'(''cesm_to_dart:converting CESM restart file '',A, &
       &'' to DART file '',A)') &
@@ -88,6 +92,8 @@ write(*,'(''cesm_to_dart:converting CESM restart file '',A, &
 
 x_size = get_model_size()
 allocate(statevector(x_size))
+
+! FIXME: does this need to take an array of filenames?
 call restart_file_to_sv(cesm_restart_filename, statevector, model_time)
 
 iunit = open_restart_write(cesm_to_dart_output_file)
@@ -99,8 +105,11 @@ call close_restart(iunit)
 ! Call finalize_utilities()
 !----------------------------------------------------------------------
 
-call print_date(model_time, str='cesm_to_dart:CESM model date')
-call print_time(model_time, str='cesm_to_dart:DART model time')
+call print_date(model_time, str='cesm_to_dart: CESM model date')
+call print_date(model_time, str='cesm_to_dart: CESM model date', logfileunit)
+call print_time(model_time, str='cesm_to_dart: DART model time')
+call print_time(model_time, str='cesm_to_dart: DART model time', logfileunit)
+
 call finalize_utilities('cesm_to_dart')
 
 end program cesm_to_dart
