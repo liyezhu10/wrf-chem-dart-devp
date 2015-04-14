@@ -603,9 +603,7 @@ state_vector = MISSING_R8
 
 if (include_CAM) then
    call set_start_end('CAM', x_start, x_end)
-   ! FIXME: make a routine of this form:
-   print *, 'should be reading cam state vector here - FIXME!!'
-   !call cam_prog_var_to_vector(filename, state_vector(x_start:x_end), model_time)
+   call cam_model_to_state_vector(filename, state_vector(x_start:x_end), model_time)
 endif
 
 if (include_POP) then
@@ -615,9 +613,7 @@ endif
 
 if (include_CLM) then
    call set_start_end('CLM', x_start, x_end)
-   ! FIXME: make a routine of this form:
-   print *, 'should be reading clm state vector here - FIXME!!'
-   !call clm_to_dart_state_vector(filename, state_vector(x_start:x_end), model_time)
+   call clm_to_dart_state_vector(state_vector(x_start:x_end), model_time)
 endif
 
 end subroutine restart_file_to_sv
@@ -634,24 +630,23 @@ end subroutine get_cesm_restart_filename
 
 !------------------------------------------------------------------
 
-subroutine sv_to_restart_file(state_vector, filename, statedate)
+subroutine sv_to_restart_file(state_vector, filename, state_time)
  real(r8),         intent(in) :: state_vector(:)
  character(len=*), intent(in) :: filename 
- type(time_type),  intent(in) :: statedate
+ type(time_type),  intent(in) :: state_time
 
 integer :: x_start, x_end
 
 if ( .not. module_initialized ) call static_init_model
 
 call set_start_end('CAM', x_start, x_end)
-! FIXME:
-!call cam_vector_to_prog_var(state_vector(x_start:x_end), filename, statedate)
+call cam_state_vector_to_model(state_vector(x_start:x_end), filename, state_time)
 
 call set_start_end('POP', x_start, x_end)
-call pop_sv_to_restart_file(state_vector(x_start:x_end), filename, statedate)
+call pop_sv_to_restart_file(state_vector(x_start:x_end), filename, state_time)
 
 call set_start_end('CLM', x_start, x_end)
-call clm_sv_to_restart_file(state_vector(x_start:x_end), filename, statedate)
+call clm_sv_to_restart_file(state_vector(x_start:x_end), filename, state_time)
 
 end subroutine sv_to_restart_file
 

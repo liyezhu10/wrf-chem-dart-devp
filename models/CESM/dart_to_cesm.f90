@@ -48,14 +48,15 @@ character (len = 128) :: dart_to_cesm_input_file  = 'dart_restart'
 logical               :: advance_time_present     = .false.
 
 namelist /dart_to_cesm_nml/ dart_to_cesm_input_file, &
-                           advance_time_present
+                            advance_time_present
 
 !----------------------------------------------------------------------
 
 integer               :: iunit, io, x_size
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
-character (len = 128) :: cesm_restart_filename = 'no_cesm_restart_file'
+character(len=512)    :: msgstring
+character(len=256)    :: cesm_restart_filename = 'no_cesm_restart_file'
 
 !----------------------------------------------------------------------
 
@@ -79,9 +80,9 @@ call get_cesm_restart_filename( cesm_restart_filename )
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-call error_handler(E_MSG, 'dart_to_cesm: ', &
-     'converting DART file '//trim(dart_to_cesm_input_file)//&
-     ' to CESM restart file '//trim(cesm_restart_filename))
+write(msgstring, '(A)') 'converting DART file ', trim(dart_to_cesm_input_file), &
+                        ' to CESM restart file ', trim(cesm_restart_filename)
+call error_handler(E_MSG, 'dart_to_cesm: ', msgstring)
 
 !----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.

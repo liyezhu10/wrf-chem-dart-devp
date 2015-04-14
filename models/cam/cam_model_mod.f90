@@ -194,7 +194,7 @@ public ::                                                                 &
 
 public ::                                                               &
    cam_model_type, cam_prog_var_to_vector, cam_vector_to_prog_var,      &
-   cam_read_cam_init,                                                   &
+   cam_read_cam_init, cam_model_to_state_vector, cam_state_vector_to_model, &
    cam_init_model_instance, cam_end_model_instance, cam_write_cam_init, &
    cam_write_cam_times
 
@@ -2914,6 +2914,54 @@ call nc_check(nf90_close(ncfileid), 'write_cam_init', 'close cam initial file')
 deallocate(temp_3d, temp_2d)
 
 end subroutine cam_write_cam_init
+
+
+!=======================================================================
+subroutine cam_model_to_state_vector(filename, state_vector, model_time)
+
+character(len=*), intent(in)    :: filename
+real(r8),         intent(inout) :: state_vector(:)
+type(time_type),  intent(out)   :: model_time
+
+type(cam_model_type) :: Var
+
+! Allocate the instance of the cam model type for storage
+call cam_init_model_instance(var)
+
+! Read cam files and put into var struct
+call cam_read_cam_init(filename, var, model_time)
+
+! now convert from var to state vector
+call cam_prog_var_to_vector(var, state_vector)
+
+! and release var struct memory
+call cam_end_model_instance(var)
+
+end subroutine cam_model_to_state_vector
+
+
+!=======================================================================
+subroutine cam_state_vector_to_model(state_vector, filename, state_time)
+
+character(len=*), intent(in) :: filename
+real(r8),         intent(in) :: state_vector(:)
+type(time_type),  intent(in) :: state_time
+
+type(cam_model_type) :: Var
+
+! Allocate the instance of the cam model type for storage
+call cam_init_model_instance(var)
+
+! decompose vector back into CAM fields
+call cam_vector_to_prog_var (state_vector, var)
+
+! write fields to the netCDF initial file.
+call cam_write_cam_init(filename, state_time, var)
+
+! and release var struct memory
+call cam_end_model_instance(var)
+
+end subroutine cam_state_vector_to_model
 
 
 !=======================================================================

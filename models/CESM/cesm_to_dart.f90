@@ -24,7 +24,7 @@ program cesm_to_dart
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             error_handler, E_MSG
+                             error_handler, E_MSG, logfileunit
 use        model_mod, only : restart_file_to_sv, static_init_model, &
                              get_model_size, get_cesm_restart_filename
 use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
@@ -54,7 +54,8 @@ namelist /cesm_to_dart_nml/ cesm_to_dart_output_file
 integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
-character (len = 128) :: cesm_restart_filename = 'no_cesm_restart_filename'
+character(len=512)    :: msgstring
+character(len=256)    :: cesm_restart_filename = 'no_cesm_restart_filename'
 
 !----------------------------------------------------------------------
 
@@ -77,14 +78,9 @@ call check_namelist_read(iunit, io, "cesm_to_dart_nml") ! closes, too.
 
 call get_cesm_restart_filename( cesm_restart_filename )
 
-call error_handler(E_MSG, 'cesm_to_dart: ', &
-     'converting CESM restart file '//trim(cesm_restart_filename))//&
-     ' to DART file '//trim(dart_to_cesm_input_file)
-
-write(*,*)
-write(*,'(''cesm_to_dart:converting CESM restart file '',A, &
-      &'' to DART file '',A)') &
-       trim(cesm_restart_filename), trim(cesm_to_dart_output_file)
+write(msgstring, '(A)') 'converting CESM restart file ', trim(cesm_restart_filename), &
+                        ' to DART file ', trim(cesm_to_dart_output_file)
+call error_handler(E_MSG, 'cesm_to_dart: ', msgstring)
 
 !----------------------------------------------------------------------
 ! Now that we know the names, get to work.
@@ -105,10 +101,10 @@ call close_restart(iunit)
 ! Call finalize_utilities()
 !----------------------------------------------------------------------
 
-call print_date(model_time, str='cesm_to_dart: CESM model date')
-call print_date(model_time, str='cesm_to_dart: CESM model date', logfileunit)
-call print_time(model_time, str='cesm_to_dart: DART model time')
-call print_time(model_time, str='cesm_to_dart: DART model time', logfileunit)
+call print_date(model_time, 'cesm_to_dart: CESM model date')
+call print_date(model_time, 'cesm_to_dart: CESM model date', logfileunit)
+call print_time(model_time, 'cesm_to_dart: DART model time')
+call print_time(model_time, 'cesm_to_dart: DART model time', logfileunit)
 
 call finalize_utilities('cesm_to_dart')
 
