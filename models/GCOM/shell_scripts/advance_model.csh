@@ -7,7 +7,7 @@
 # DART $Id$
 #
 # This script has 4 logical 'blocks':
-# 1) creates a clean, temporary directory in which to run a model instance 
+# 1) creates a clean, temporary directory in which to run a model instance
 #    and copies the necessary files into the temporary directory
 # 2) converts the DART output to input expected by the ocean model
 # 3) runs the ocean model
@@ -15,9 +15,9 @@
 #
 # The error code from the script reflects which block it failed.
 #
-# Arguments are the 
-# 1) process number of caller, 
-# 2) the number of state copies belonging to that process, and 
+# Arguments are the
+# 1) process number of caller,
+# 2) the number of state copies belonging to that process, and
 # 3) the name of the filter_control_file for that process
 
 set process = $1
@@ -36,7 +36,7 @@ echo "REMOVE  is ${REMOVE}"
 echo "RUN_CMD is ${RUN_CMD}"
 
 #-------------------------------------------------------------------------
-# Block 1: populate a run-time directory with the bits needed to 
+# Block 1: populate a run-time directory with the bits needed to
 # run the ocean model.
 #-------------------------------------------------------------------------
 
@@ -59,7 +59,7 @@ ${LINK} ../ProbSize.dat          .  || exit 1
 # Ensure that the input.nml has the required value for
 # dart_to_gcom_nml:advance_time_present for this context.
 # the way to think about the following sed syntax is this:
-# / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line 
+# / SearchStringWithWhiteSpaceToMakeUnique  /c\ the_new_contents_of_the_line
 
 sed -e "/ advance_time_present /c\ advance_time_present = .true." \
        ../input.nml >! input.nml
@@ -78,7 +78,7 @@ set ensemble_member_line = 1
 set input_file_line = 2
 set output_file_line = 3
 while($state_copy <= $num_states)
-   
+
    set ensemble_member = `head -n $ensemble_member_line ../$control_file | tail -n 1`
    set input_file      = `head -n $input_file_line      ../$control_file | tail -n 1`
    set output_file     = `head -n $output_file_line     ../$control_file | tail -n 1`
@@ -94,13 +94,13 @@ while($state_copy <= $num_states)
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model.
-   # Copy the 'most current' gcom_restart file for this ensemble member 
+   # Copy the 'most current' gcom_restart file for this ensemble member
    # from CENTRALDIR to the local directory and simply overwrite the
    # appropriate variables with the state from the DART assimilation.
    # dart_to_gcom also creates dart_gcom_timeinfo.txt, which contains
    # the current time of the model as well as the desired stopping time.
    # It has this information as several character strings that are then
-   # extracted and used to modify namelists or construct filenames. 
+   # extracted and used to modify namelists or construct filenames.
    #----------------------------------------------------------------------
 
    # The EXPECTED DART dart_to_gcom_input_file is 'dart_restart'
@@ -113,7 +113,7 @@ while($state_copy <= $num_states)
 
    ${LINK} ../$input_file       dart_restart      >> $logfile || exit 2
    ${COPY} ../${RESTARTFILE}    gcom_restart.nc   >> $logfile || exit 2
-   
+
    ../dart_to_gcom                     >> $logfile || exit 2
 
    ls -lR                              >> $logfile
@@ -159,9 +159,9 @@ while($state_copy <= $num_states)
    grep "UCOAM Finished successfully." $logfile
    set gcomstatus = $status
    if ( $gcomstatus != 0 ) then
-      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" 
-      exit 3 
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully"
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully"
+      exit 3
    endif
 
 
@@ -170,11 +170,11 @@ while($state_copy <= $num_states)
       ${MOVE} gcom_output.nc ../${NEWNAME}
       (cd ..; ${LINK} ${NEWNAME} ${RESTARTFILE}; cd -) >> $logfile || exit 3
    else
-      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
-      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" 
-      exit 3 
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc"
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc"
+      exit 3
    endif
-   
+
    #----------------------------------------------------------------------
    # Block 4: Convert the ocean model output to form needed by DART
    #----------------------------------------------------------------------
@@ -184,14 +184,16 @@ while($state_copy <= $num_states)
    # file contains a header with the valid time of the ensuing model state.
    # The gcom restart files contain the valid time of the model state.
 
+   ${LINK} ../${RESTARTFILE} gcom_restart.nc >> $logfile || exit 4
    ../gcom_to_dart >> $logfile || exit 4
 
    echo "Should now be at ${forecasttag}"
-   
+
    ls -lrt
 
    # The (new,updated) DART restart file name is called 'dart_ics'
    # Move the updated files back to 'centraldir'
+
    ${MOVE} dart_ics ../$output_file || exit 4
 
    # bookkeeping
