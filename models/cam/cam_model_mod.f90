@@ -393,7 +393,7 @@ integer :: Time_step_seconds = 21600, Time_step_days = 0
 logical :: print_details = .false.
 
 
-namelist /model_nml/ vert_coord, output_state_vector, model_version, cam_phis,        &
+namelist /cam_model_nml/ vert_coord, output_state_vector, model_version, cam_phis,    &
                        state_num_0d,   state_num_1d,   state_num_2d,   state_num_3d,  &
                      state_names_0d, state_names_1d, state_names_2d, state_names_3d,  &
                                       which_vert_1d,  which_vert_2d,  which_vert_3d,  &
@@ -608,9 +608,9 @@ call register_module(source, revision, revdate)
 call set_calendar_type('GREGORIAN')
 
 ! Read the namelist entry
-call find_namelist_in_file("input.nml", "model_nml", iunit)
-read(iunit, nml = model_nml, iostat = io)
-call check_namelist_read(iunit, io, "model_nml")
+call find_namelist_in_file("input.nml", "cam_model_nml", iunit)
+read(iunit, nml = cam_model_nml, iostat = io)
+call check_namelist_read(iunit, io, "cam_model_nml")
 call verify_namelist()
 
 ! Stand-alone CAM (not CESM) uses the first block of the if statement.
@@ -628,8 +628,8 @@ else
 end if
 
 ! Record the namelist values
-if (do_nml_file()) write(nmlfileunit, nml=model_nml)
-if (do_nml_term()) write(    *      , nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=cam_model_nml)
+if (do_nml_term()) write(    *      , nml=cam_model_nml)
 
 ! Set the model minimum time step from the namelist seconds and days input
 Time_step_atmos = set_time(Time_step_seconds, Time_step_days)
