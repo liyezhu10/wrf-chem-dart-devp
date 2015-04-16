@@ -22,7 +22,7 @@
 # The script moves the necessary files to a temporary directory that is the
 # basis for the DART experiment; this will be called CENTRALDIR.
 #
-##=============================================================================
+##==============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
 ##
 ## the normal way to submit to the queue is:    qsub run_perfect_model_obs.csh
@@ -32,10 +32,10 @@
 ## -r n       Declare job non-rerunable
 ## -e <arg>   filename for standard error AFTER job completes
 ## -o <arg>   filename for standard out AFTER job completes
-## -q <arg>   Queue name (small, medium, long, verylong)
+## -q <arg>   Queue name
 ## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
 ## -l walltime=hh:mm:ss request hh wallclock hours of runtime ..
-##=============================================================================
+##==============================================================================
 #
 #PBS -N gcom_pmo
 #PBS -r n
@@ -45,7 +45,7 @@
 #PBS -l nodes=1:ppn=1:mpi
 #PBS -l walltime=12:00:00
 #
-#=============================================================================
+##==============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
 ##
 ## the normal way to submit to the queue is:    bsub < run_perfect_model_obs.csh
@@ -53,32 +53,34 @@
 ## an explanation of the most common directives follows:
 ## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
 ## -o <arg>      output listing filename
-## -q <arg>      queue
-## -n <arg>      number of processors  (really)
 ## -P <arg>      account
+## -q <arg>      queue
 ## -W <arg>      wall-clock hours:minutes required
+## -n <arg>      number of MPI tasks (or processors, usually)
+## -R <arg>      number of MPI tasks per node
 ## -N -u <arg>   mail this user when job finishes
-##=============================================================================
+##==============================================================================
 #
 #BSUB -J gcom_pmo
 #BSUB -o gcom_pmo.%J.log
-#BSUB -q regular
-#BSUB -n 1
 #BSUB -P 8685xxxx
+#BSUB -q regular
 #BSUB -W 2:00
+#BSUB -n 1
+#BSUB -R "span[ptile=1]"
 #BSUB -N -u ${USER}@ucar.edu
 
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Turns out the scripts are a lot more flexible if you don't rely on
 # the queuing-system-specific variables -- so I am converting them to
 # 'generic' names and using the generics throughout the remainder.
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 if ($?PBS_QUEUE) then
 
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
    # This is used by PBS
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
 
    setenv ORIGINALDIR $PBS_O_WORKDIR
    setenv JOBNAME     $PBS_JOBNAME
@@ -89,9 +91,9 @@ if ($?PBS_QUEUE) then
 
 else if ($?LSB_QUEUE) then
 
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
    # This is used by LSF
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
 
    setenv ORIGINALDIR $LS_SUBCWD
    setenv JOBNAME     $LSB_JOBNAME
@@ -102,9 +104,9 @@ else if ($?LSB_QUEUE) then
 
 else
 
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
    # You can run this interactively to check syntax, file motion, etc.
-   #-------------------------------------------------------------------
+   #----------------------------------------------------------------------------
 
    setenv ORIGINALDIR `pwd`
    setenv JOBNAME     pmo
@@ -115,11 +117,11 @@ else
 
 endif
 
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # This block is an attempt to localize all the machine-specific
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 set nonomatch  # suppress "rm" warnings if wildcard does not match anything
 
@@ -159,18 +161,18 @@ switch ("`hostname`")
    breaksw
 endsw
 
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Make a unique, (empty, clean) temporary directory.
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 mkdir -p ${CENTRALDIR}
 cd ${CENTRALDIR}
 
 set myname = $0          # this is the name of this script
 
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Just an echo of the job attributes
-#----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 echo
 echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
@@ -181,7 +183,7 @@ echo "${JOBNAME} ($JOBID) started       at "`date`
 echo "${JOBNAME} ($JOBID) CENTRALDIR    is $CENTRALDIR"
 echo
 
-#=========================================================================
+#===============================================================================
 # Block 1: Build all the GCOM executables we will need for this run.
 # Since the compute nodes cannot execute things compiled on the head node,
 # you have to compile what you need on the compute node. Really annoying.
@@ -194,15 +196,15 @@ make       || exit -1
 ${REMOVE} *.o *.mod
 cd ${CENTRALDIR}
 
-${MOVE} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
+${COPY} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
 ${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
 ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
 ${COPY} ${SERUCOAM}/gcom_restart.nc   gcom_restart.nc || exit 1
 
-#=========================================================================
+#===============================================================================
 # Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
-#=========================================================================
+#===============================================================================
 
 # Get the DART executables, scripts, and input files
 # The input.nml will be copied from the DART directory and modified appropriately.
@@ -211,7 +213,6 @@ echo "`date` -- Assembling the DART pieces"
 
 cd ${DARTDIR}/work
 csh quickbuild.csh -nompi || exit 2
-
 cd ${CENTRALDIR}
 
 ${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 2
@@ -220,7 +221,7 @@ ${COPY} ${DARTDIR}/work/gcom_to_dart               . || exit 2
 ${COPY} ${BASEOBSDIR}/obs_seq.in                   . || exit 2
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
-#=========================================================================
+#===============================================================================
 # Block 3: Convert 1 ucoam restart file to a DART initial conditions file.
 # At the end of the block, we have a DART initial condition file  dart_ics
 #=========================================================================
@@ -307,6 +308,7 @@ echo "`date` -- END   ucoam PERFECT_MODEL_OBS"
 # CENTRALDIR is usually on a volatile or temporary filesystem.
 # EXPERIMENT is usually someplace long-term.
 
+mkdir -p ${EXPERIMENT}
 ${MOVE} True_State.nc    ${EXPERIMENT}
 ${MOVE} obs_seq.perfect  ${EXPERIMENT}
 ${MOVE} dart_log.out     ${EXPERIMENT}
