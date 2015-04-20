@@ -56,7 +56,7 @@ integer               :: iunit, io, x_size
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
 character(len=512)    :: msgstring
-character(len=256)    :: cesm_restart_filename = 'no_cesm_restart_file'
+character(len=256)    :: cesm_restart_filenames(20) = 'no_cesm_restart_file'
 
 !----------------------------------------------------------------------
 
@@ -75,13 +75,13 @@ call find_namelist_in_file("input.nml", "dart_to_cesm_nml", iunit)
 read(iunit, nml = dart_to_cesm_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_cesm_nml")
 
-call get_cesm_restart_filename( cesm_restart_filename )
+call get_cesm_restart_filename( cesm_restart_filenames )
 
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-write(msgstring, '(A)') 'converting DART file ', trim(dart_to_cesm_input_file), &
-                        ' to CESM restart file ', trim(cesm_restart_filename)
+write(msgstring, '(3A)') 'converting DART file ', trim(dart_to_cesm_input_file), &
+                        ' to CESM restart files '
 call error_handler(E_MSG, 'dart_to_cesm: ', msgstring)
 
 !----------------------------------------------------------------------
@@ -104,7 +104,7 @@ call close_restart(iunit)
 !----------------------------------------------------------------------
 
 ! FIXME: does this need to be a list of filenames from the namelist?
-call sv_to_restart_file(statevector, cesm_restart_filename, model_time)
+call sv_to_restart_file(statevector, cesm_restart_filenames, model_time)
 
 if ( advance_time_present ) then
    ! call write_cesm_namelist(model_time, adv_to_time)

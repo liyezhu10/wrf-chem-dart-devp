@@ -650,23 +650,33 @@ end subroutine get_cesm_restart_filename
 
 !------------------------------------------------------------------
 
-subroutine sv_to_restart_file(state_vector, filename, state_time)
+subroutine sv_to_restart_file(state_vector, filenames, state_time)
  real(r8),         intent(in) :: state_vector(:)
- character(len=*), intent(in) :: filename 
+ character(len=*), intent(in) :: filenames(:)
  type(time_type),  intent(in) :: state_time
 
-integer :: x_start, x_end
+integer :: x_start, x_end, used
 
 if ( .not. module_initialized ) call static_init_model
 
-call set_start_end('CAM', x_start, x_end)
-call cam_state_vector_to_model(state_vector(x_start:x_end), filename, state_time)
+used = 1
+if (include_CAM) then
+   call set_start_end('CAM', x_start, x_end)
+   call cam_state_vector_to_model(state_vector(x_start:x_end), filenames(used), state_time)
+   used = used + 1
+endif
 
-call set_start_end('POP', x_start, x_end)
-call pop_sv_to_restart_file(state_vector(x_start:x_end), filename, state_time)
+if (include_POP) then
+   call set_start_end('POP', x_start, x_end)
+   call pop_sv_to_restart_file(state_vector(x_start:x_end), filenames(used), state_time)
+   used = used + 1
+endif
 
-call set_start_end('CLM', x_start, x_end)
-call clm_sv_to_restart_file(state_vector(x_start:x_end), filename, state_time)
+if (include_CLM) then
+   call set_start_end('CLM', x_start, x_end)
+   call clm_sv_to_restart_file(state_vector(x_start:x_end), filenames(used), state_time)
+   used = used + 1
+endif
 
 end subroutine sv_to_restart_file
 
