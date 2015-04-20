@@ -55,7 +55,7 @@ integer               :: io, iunit, x_size
 type(time_type)       :: model_time
 real(r8), allocatable :: statevector(:)
 character(len=512)    :: msgstring
-character(len=256)    :: cesm_restart_filename = 'no_cesm_restart_filename'
+character(len=256)    :: cesm_restart_filenames(20) = 'no_cesm_restart_filename'
 
 !----------------------------------------------------------------------
 
@@ -76,10 +76,10 @@ call find_namelist_in_file("input.nml", "cesm_to_dart_nml", iunit)
 read(iunit, nml = cesm_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "cesm_to_dart_nml") ! closes, too.
 
-call get_cesm_restart_filename( cesm_restart_filename )
+call get_cesm_restart_filename( cesm_restart_filenames )
 
-write(msgstring, '(4A)') 'converting CESM restart file ', trim(cesm_restart_filename), &
-                        ' to DART file ', trim(cesm_to_dart_output_file)
+write(msgstring, '(2A)') 'converting CESM restart files to DART file', &
+                          trim(cesm_to_dart_output_file)
 call error_handler(E_MSG, 'cesm_to_dart: ', msgstring)
 
 !----------------------------------------------------------------------
@@ -89,8 +89,7 @@ call error_handler(E_MSG, 'cesm_to_dart: ', msgstring)
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-! FIXME: does this need to take an array of filenames?
-call restart_file_to_sv(cesm_restart_filename, statevector, model_time)
+call restart_file_to_sv(cesm_restart_filenames, statevector, model_time)
 
 iunit = open_restart_write(cesm_to_dart_output_file)
 

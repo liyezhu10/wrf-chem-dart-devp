@@ -587,44 +587,64 @@ end subroutine ens_mean_for_model
 
 !------------------------------------------------------------------
 
-subroutine restart_file_to_sv(filename, state_vector, model_time)
- character(len=*), intent(in)    :: filename 
+subroutine restart_file_to_sv(filenames, state_vector, model_time)
+ character(len=*), intent(in)    :: filenames(:)
  real(r8),         intent(inout) :: state_vector(:)
  type(time_type),  intent(out)   :: model_time
 
 ! FIXME: we can figure out the parts of the state vector, but
 ! the filenames are going to be separate so what do we do?
 
-integer :: x_start, x_end
+integer :: x_start, x_end, used
 
 if ( .not. module_initialized ) call static_init_model
 
 state_vector = MISSING_R8
+used = 1
 
 if (include_CAM) then
    call set_start_end('CAM', x_start, x_end)
-   call cam_model_to_state_vector(filename, state_vector(x_start:x_end), model_time)
+   call cam_model_to_state_vector(filenames(used), state_vector(x_start:x_end), model_time)
+   used = used + 1
 endif
 
 if (include_POP) then
    call set_start_end('POP', x_start, x_end)
-   call pop_restart_file_to_sv(filename, state_vector(x_start:x_end), model_time)
+   call pop_restart_file_to_sv(filenames(used), state_vector(x_start:x_end), model_time)
+   used = used + 1
 endif
 
 if (include_CLM) then
    call set_start_end('CLM', x_start, x_end)
    call clm_to_dart_state_vector(state_vector(x_start:x_end), model_time)
+   used = used + 1
 endif
 
 end subroutine restart_file_to_sv
 
 !------------------------------------------------------------------
 
-subroutine get_cesm_restart_filename(filename)
- character(len=*), intent(out) :: filename
+subroutine get_cesm_restart_filename(filenames)
+ character(len=*), intent(out) :: filenames(:)
 
-! FIXME:
-filename = 'caminput.nc'
+! FIXME: this is a hack and should be in the namelist somewhere!
+integer :: used
+
+used = 1
+if (include_CAM) then
+   filenames(used) = 'caminput.nc'
+   used = used + 1
+endif
+
+if (include_POP) then
+   filenames(used) = 'pop.r.nc'
+   used = used + 1
+endif
+
+if (include_CLM) then
+   filenames(used) = 'clminput.nc'
+   used = used + 1
+endif
 
 end subroutine get_cesm_restart_filename
 
