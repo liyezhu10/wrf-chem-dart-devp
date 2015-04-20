@@ -78,7 +78,7 @@ call check_namelist_read(iunit, io, "cesm_to_dart_nml") ! closes, too.
 
 call get_cesm_restart_filename( cesm_restart_filenames )
 
-write(msgstring, '(2A)') 'converting CESM restart files to DART file', &
+write(msgstring, '(2A)') 'converting CESM restart files to DART file ', &
                           trim(cesm_to_dart_output_file)
 call error_handler(E_MSG, 'cesm_to_dart: ', msgstring)
 

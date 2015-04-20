@@ -81,7 +81,7 @@ x_size = get_model_size()
 allocate(statevector(x_size))
 
 write(msgstring, '(3A)') 'converting DART file ', trim(dart_to_cesm_input_file), &
-                        ' to CESM restart files '
+                        ' to CESM restart files'
 call error_handler(E_MSG, 'dart_to_cesm: ', msgstring)
 
 !----------------------------------------------------------------------

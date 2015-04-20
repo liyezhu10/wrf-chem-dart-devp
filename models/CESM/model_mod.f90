@@ -546,9 +546,10 @@ if (all(tristate > 0) == 1) then
 else if (all(tristate > 0) == 2) then
    interf_provided = .false.
 else
-   call error_handler(E_ERR, 'pert_model_state', &
+   call error_handler(E_MSG, 'pert_model_state', &
       'if any models use a perturb routine, all models must use a perturb routine', &
-      source, revision, revdate)
+      source, revision, revdate, text2='overriding local pert routines and using filters')
+   interf_provided = .false.
 endif
 
 
@@ -817,7 +818,7 @@ select case (obs_type)
    case (RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COMPONENT)
       modelname = 'CAM'
  
-   case (XBT_TEMPERATURE)
+   case (XBT_TEMPERATURE, ARGO_TEMPERATURE, FLOAT_TEMPERATURE)
       modelname = 'POP'
 
    case (LEAF_CARBON)
