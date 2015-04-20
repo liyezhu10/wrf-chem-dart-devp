@@ -145,12 +145,12 @@
    netCDF_large_file_support  = .true.
   /
 
-&model_nml
+&pop_model_nml
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
    output_state_vector          = .false.,
-   debug                        = 0,
+   debug                        = 1,
   /
 
 &pop_to_dart_nml

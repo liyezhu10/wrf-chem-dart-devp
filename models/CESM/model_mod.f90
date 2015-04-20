@@ -624,7 +624,7 @@ subroutine get_cesm_restart_filename(filename)
  character(len=*), intent(out) :: filename
 
 ! FIXME:
-filename = 'dummy'
+filename = 'caminput.nc'
 
 end subroutine get_cesm_restart_filename
 

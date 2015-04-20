@@ -145,8 +145,8 @@
 
 ! CESM model namelist
 &model_nml
-   include_CAM = .true.
-   include_POP = .false.
+   include_CAM = .false.
+   include_POP = .true.
    include_CLM = .false.
    debug       = 9
   /
@@ -178,8 +178,8 @@
    pert_names          = 'T', 'US', 'VS',
    pert_sd             = 0.20,
    pert_base_vals      = -888888.0d0,
-   highest_obs_pressure_mb   = 100.0,
-   highest_state_pressure_mb = 150.0,
+   highest_obs_pressure_Pa   = 1000.0,
+   highest_state_pressure_Pa = 1500.0,
    max_obs_lat_degree        = 89.0,
    Time_step_seconds   = 21600,
    Time_step_days      = 0,

@@ -30,28 +30,28 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              file_to_text, do_output
 
 use cam_model_mod, only :   &
-   cam_get_model_size,      &
-   cam_adv_1step,           &
-   cam_get_state_meta_data, &
-   cam_model_interpolate,   &
-   cam_get_model_time_step, &
-   cam_static_init_model,   &
-   cam_end_model,           &
-   cam_init_time,           &
-   cam_init_conditions,     &
-   cam_nc_write_model_atts, &
-   cam_nc_write_model_vars, &
-   cam_pert_model_state,    &
-   cam_ens_mean_for_model,  &
-   cam_get_close_obs,       &
-   cam_model_type,          &
-   cam_prog_var_to_vector,  &
-   cam_vector_to_prog_var,  &
-   cam_read_cam_init,       &
-   cam_init_model_instance, &
-   cam_end_model_instance,  &
-   cam_write_cam_init,      &
-   cam_write_cam_times
+   get_model_size => cam_get_model_size,      &
+   adv_1step => cam_adv_1step,           &
+   get_state_meta_data => cam_get_state_meta_data, &
+   model_interpolate => cam_model_interpolate,   &
+   get_model_time_step => cam_get_model_time_step, &
+   static_init_model => cam_static_init_model,   &
+   end_model => cam_end_model,           &
+   init_time => cam_init_time,           &
+   init_conditions => cam_init_conditions,     &
+   nc_write_model_atts => cam_nc_write_model_atts, &
+   nc_write_model_vars => cam_nc_write_model_vars, &
+   pert_model_state => cam_pert_model_state,    &
+   ens_mean_for_model => cam_ens_mean_for_model,  &
+   get_close_obs => cam_get_close_obs,       &
+   model_type => cam_model_type,          &
+   prog_var_to_vector => cam_prog_var_to_vector,  &
+   vector_to_prog_var => cam_vector_to_prog_var,  &
+   read_cam_init => cam_read_cam_init,       &
+   init_model_instance => cam_init_model_instance, &
+   end_model_instance => cam_end_model_instance,  &
+   write_cam_init => cam_write_cam_init,      &
+   write_cam_times => cam_write_cam_times
 
 use typesizes
 use netcdf 
@@ -88,175 +88,176 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 contains
 
-
-!------------------------------------------------------------------
-!------------------------------------------------------------------
-
-subroutine static_init_model()
-
-call cam_static_init_model()
-
-end subroutine static_init_model
-
-!------------------------------------------------------------
-
-subroutine init_conditions(x)
- real(r8), intent(out) :: x(:)
-
-call cam_init_conditions(x)
-
-end subroutine init_conditions
-
-!------------------------------------------------------------------
-
-subroutine adv_1step(x, time)
- real(r8),        intent(inout) :: x(:)
- type(time_type), intent(in)    :: time
-
-call cam_adv_1step(x, time)
-
-end subroutine adv_1step
-
-!------------------------------------------------------------------
-
-function get_model_size()
- integer :: get_model_size
-
-get_model_size = cam_get_model_size()
-
-end function get_model_size
-
-!------------------------------------------------------------------
-
-subroutine init_time(time)
- type(time_type), intent(out) :: time
-
-call cam_init_time(time)
-
-end subroutine init_time
-
-!------------------------------------------------------------------
-
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
- real(r8),            intent(in) :: x(:)
- type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_type
- real(r8),           intent(out) :: interp_val
- integer,            intent(out) :: istatus
-
-call cam_model_interpolate(x, location, obs_type, interp_val, istatus)
-
-end subroutine model_interpolate
-
-!------------------------------------------------------------------
-
-function get_model_time_step()
- type(time_type) :: get_model_time_step
-
-get_model_time_step = cam_get_model_time_step()
-
-end function get_model_time_step
-
-!------------------------------------------------------------------
-
-subroutine get_state_meta_data(index_in, location, var_type)
- integer,             intent(in)  :: index_in
- type(location_type), intent(out) :: location
- integer,             intent(out), optional :: var_type
-
-call cam_get_state_meta_data(index_in, location, var_type)
-
-end subroutine get_state_meta_data
-
-!------------------------------------------------------------------
-
-subroutine end_model()
-
-call cam_end_model()
-
-end subroutine end_model
-
-!------------------------------------------------------------------
-
-function nc_write_model_atts(ncFileID)
- integer, intent(in)  :: ncFileID            ! netCDF file identifier
- integer              :: nc_write_model_atts ! function return value
-
-nc_write_model_atts = cam_nc_write_model_atts(ncFileID)
-
-end function nc_write_model_atts
-
-!------------------------------------------------------------------
-
-function nc_write_model_vars(ncFileID, statevec, copyindex, timeindex) 
- integer,                intent(in) :: ncFileID            ! netCDF file identifier
- real(r8), dimension(:), intent(in) :: statevec
- integer,                intent(in) :: copyindex
- integer,                intent(in) :: timeindex
- integer                            :: nc_write_model_vars ! function return value
-
-nc_write_model_vars = cam_nc_write_model_vars(ncFileID, statevec, copyindex, timeindex) 
-
-end function nc_write_model_vars
-
-!------------------------------------------------------------------
-
-subroutine pert_model_state(state, pert_state, interf_provided)
- real(r8), intent(in)  :: state(:)
- real(r8), intent(out) :: pert_state(:)
- logical,  intent(out) :: interf_provided
-
-call cam_pert_model_state(state, pert_state, interf_provided)
-
-end subroutine pert_model_state
-
-!------------------------------------------------------------------
-
-subroutine ens_mean_for_model(ens_mean)
- real(r8), intent(in) :: ens_mean(:)
-
-call cam_ens_mean_for_model(ens_mean)
-
-end subroutine ens_mean_for_model
-
-!------------------------------------------------------------------
-
-subroutine prog_var_to_vector(var, st_vec)
- type(cam_model_type), intent(in)  :: var
- real(r8),             intent(out) :: st_vec(:)
-
-call cam_prog_var_to_vector(var, st_vec)
-
-end subroutine prog_var_to_vector
-
-!------------------------------------------------------------------
-
-subroutine vector_to_prog_var(st_vec, var)
- real(r8),             intent(in)    :: st_vec(:)
- type(cam_model_type), intent(inout) :: var
-
-call cam_vector_to_prog_var(st_vec, var)
-
-end subroutine vector_to_prog_var
-
-!------------------------------------------------------------------
-
-subroutine get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
-                            num_close, close_indices, distances)
-
- type(get_close_type), intent(in)    :: filt_gc
- type(location_type),  intent(in)    :: base_obs_loc
- integer,              intent(in)    :: base_obs_type
- type(location_type),  intent(inout) :: locs(:)
- integer,              intent(in)    :: kinds(:)
- integer,              intent(out)   :: num_close
- integer,              intent(out)   :: close_indices(:)
- real(r8),             intent(out)   :: distances(:)
-
-call cam_get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
-                            num_close, close_indices, distances)
-
-end subroutine get_close_obs
+!%! 
+!%! !------------------------------------------------------------------
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine static_init_model()
+!%! 
+!%! call cam_static_init_model()
+!%! 
+!%! end subroutine static_init_model
+!%! 
+!%! !------------------------------------------------------------
+!%! 
+!%! subroutine init_conditions(x)
+!%!  real(r8), intent(out) :: x(:)
+!%! 
+!%! call cam_init_conditions(x)
+!%! 
+!%! end subroutine init_conditions
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine adv_1step(x, time)
+!%!  real(r8),        intent(inout) :: x(:)
+!%!  type(time_type), intent(in)    :: time
+!%! 
+!%! call cam_adv_1step(x, time)
+!%! 
+!%! end subroutine adv_1step
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! function get_model_size()
+!%!  integer :: get_model_size
+!%! 
+!%! get_model_size = cam_get_model_size()
+!%! 
+!%! end function get_model_size
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine init_time(time)
+!%!  type(time_type), intent(out) :: time
+!%! 
+!%! call cam_init_time(time)
+!%! 
+!%! end subroutine init_time
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+!%!  real(r8),            intent(in) :: x(:)
+!%!  type(location_type), intent(in) :: location
+!%!  integer,             intent(in) :: obs_type
+!%!  real(r8),           intent(out) :: interp_val
+!%!  integer,            intent(out) :: istatus
+!%! 
+!%! call cam_model_interpolate(x, location, obs_type, interp_val, istatus)
+!%! 
+!%! end subroutine model_interpolate
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! function get_model_time_step()
+!%!  type(time_type) :: get_model_time_step
+!%! 
+!%! get_model_time_step = cam_get_model_time_step()
+!%! 
+!%! end function get_model_time_step
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine get_state_meta_data(index_in, location, var_type)
+!%!  integer,             intent(in)  :: index_in
+!%!  type(location_type), intent(out) :: location
+!%!  integer,             intent(out), optional :: var_type
+!%! 
+!%! call cam_get_state_meta_data(index_in, location, var_type)
+!%! 
+!%! end subroutine get_state_meta_data
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine end_model()
+!%! 
+!%! call cam_end_model()
+!%! 
+!%! end subroutine end_model
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! function nc_write_model_atts(ncFileID)
+!%!  integer, intent(in)  :: ncFileID            ! netCDF file identifier
+!%!  integer              :: nc_write_model_atts ! function return value
+!%! 
+!%! nc_write_model_atts = cam_nc_write_model_atts(ncFileID)
+!%! 
+!%! end function nc_write_model_atts
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! function nc_write_model_vars(ncFileID, statevec, copyindex, timeindex) 
+!%!  integer,                intent(in) :: ncFileID            ! netCDF file identifier
+!%!  real(r8), dimension(:), intent(in) :: statevec
+!%!  integer,                intent(in) :: copyindex
+!%!  integer,                intent(in) :: timeindex
+!%!  integer                            :: nc_write_model_vars ! function return value
+!%! 
+!%! nc_write_model_vars = cam_nc_write_model_vars(ncFileID, statevec, copyindex, timeindex) 
+!%! 
+!%! end function nc_write_model_vars
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine pert_model_state(state, pert_state, interf_provided)
+!%!  real(r8), intent(in)  :: state(:)
+!%!  real(r8), intent(out) :: pert_state(:)
+!%!  logical,  intent(out) :: interf_provided
+!%! 
+!%! call cam_pert_model_state(state, pert_state, interf_provided)
+!%! 
+!%! end subroutine pert_model_state
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine ens_mean_for_model(ens_mean)
+!%!  real(r8), intent(in) :: ens_mean(:)
+!%! 
+!%! call cam_ens_mean_for_model(ens_mean)
+!%! 
+!%! end subroutine ens_mean_for_model
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine prog_var_to_vector(var, st_vec)
+!%!  type(cam_model_type), intent(in)  :: var
+!%!  real(r8),             intent(out) :: st_vec(:)
+!%! 
+!%! call cam_prog_var_to_vector(var, st_vec)
+!%! 
+!%! end subroutine prog_var_to_vector
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine vector_to_prog_var(st_vec, var)
+!%!  real(r8),             intent(in)    :: st_vec(:)
+!%!  type(cam_model_type), intent(inout) :: var
+!%! 
+!%! call cam_vector_to_prog_var(st_vec, var)
+!%! 
+!%! end subroutine vector_to_prog_var
+!%! 
+!%! !------------------------------------------------------------------
+!%! 
+!%! subroutine get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
+!%!                             num_close, close_indices, distances)
+!%! 
+!%!  type(get_close_type), intent(in)    :: filt_gc
+!%!  type(location_type),  intent(in)    :: base_obs_loc
+!%!  integer,              intent(in)    :: base_obs_type
+!%!  type(location_type),  intent(inout) :: locs(:)
+!%!  integer,              intent(in)    :: kinds(:)
+!%!  integer,              intent(out)   :: num_close
+!%!  integer,              intent(out)   :: close_indices(:)
+!%!  real(r8),             intent(out)   :: distances(:)
+!%! 
+!%! call cam_get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
+!%!                             num_close, close_indices, distances)
+!%! 
+!%! end subroutine get_close_obs
+!%! 
 
 !------------------------------------------------------------------
 ! End of model_mod

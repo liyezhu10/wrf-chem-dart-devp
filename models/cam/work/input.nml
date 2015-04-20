@@ -208,7 +208,7 @@
 #         100000. for allowing upper levels to be pulled towards the obs.
 #========================================================================
 
-&model_nml
+&cam_model_nml
    output_state_vector = .false.,
    model_version       = '5.1.1',
    model_config_file   = 'caminput.nc' 
