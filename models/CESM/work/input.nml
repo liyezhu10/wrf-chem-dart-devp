@@ -25,12 +25,12 @@
 &filter_nml
    async                    = 0,
    adv_ens_command          = "no_advance_script",
-   ens_size                 =  23,
-   start_from_restart       = .true.,
+   ens_size                 =  3,
+   start_from_restart       = .false.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "filter_ics",
+   restart_in_file_name     = "dart_ics.20080601",
    restart_out_file_name    = "filter_restart",
    init_time_days           = -1,
    init_time_seconds        = -1,
@@ -43,7 +43,7 @@
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       =  1.0,
-   outlier_threshold        =  3.0,
+   outlier_threshold        =  -1.0,
    output_forward_op_errors = .false.,
    output_timestamps        = .false.,
    output_inflation         = .true.,
@@ -89,7 +89,7 @@
   /
 
 &ensemble_manager_nml
-   single_restart_file_in  = .false.
+   single_restart_file_in  = .true.
    single_restart_file_out = .false.
    perturbation_amplitude  = 0.2
    layout                  = 1
@@ -115,6 +115,7 @@
 
 &obs_kind_nml
      evaluate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
+                                'XBT_TEMPERATURE'
   /
 
 &preprocess_nml
@@ -250,15 +251,15 @@
 # Gregorian: 12 Z 1 January 2000 <==> DART: 145731 days 43200 seconds
 
 &restart_file_tool_nml
-   input_file_name              = "filter_restart",
-   output_file_name             = "filter_updated_restart",
+   input_file_name              = "dart_ics",
+   output_file_name             = "dart_ics.20080601"
    ens_size                     = 1,
    single_restart_file_in       = .true.,
    single_restart_file_out      = .true.,
    write_binary_restart_files   = .true.,
-   overwrite_data_time          = .false.,
-   new_data_days                = -1,
-   new_data_secs                = -1,
+   overwrite_data_time          = .true.,
+   new_data_days                = 148805,
+   new_data_secs                = 0,
    input_is_model_advance_file  = .false.,
    output_is_model_advance_file = .false.,
    overwrite_advance_time       = .false.,
@@ -267,17 +268,28 @@
    gregorian_cal                = .true.
   /
 
+! !creating a combined atm/ocn obs_seq file:
+!obs_sequence_tool_nml
+!   filename_seq    = '/glade/p/image/Observations/GPS/local/200805/obs_seq20080531',
+!                     '/glade/p/image/Observations/WOD09/200806/obs_seq.0Z.20080601',
+!   filename_out    = 'obs_seq.out',
+!   synonymous_copy_list = 'observation', 'WOD observation',
+!   synonymous_qc_list = 'NCEP QC', 'Data QC', 'WOD QC',
+!   first_obs_days = 148804,
+!   first_obs_seconds = 75601,
+!   last_obs_days = 148805,
+!   last_obs_seconds = 10800,
+!   gregorian_cal   = .true.
+
 &obs_sequence_tool_nml
-   num_input_files = 7,
-   filename_seq    = '../observations/ssh_pseudo.obs_seq.out',
-                     '../observations/gliders_t_pseudo.obs_seq.out',
-                     '../observations/drifters_u_pseudo.obs_seq.out',
-                     '../observations/drifters_v_pseudo.obs_seq.out',
-                     '../observations/adcp_u_pseudo.obs_seq.out',
-                     '../observations/adcp_v_pseudo.obs_seq.out',
-                     '../observations/tmi_pseudo.obs_seq.out',
-   filename_out    = 'obs_seq.out',
+   filename_seq    = 'obs_seq.final'
+   filename_out    = 'obs_seq.final.culled',
+   keep_types = .true.,
+   obs_types = 'RADIOSONDE_TEMPERATURE', 'XBT_TEMPERATURE',
    gregorian_cal   = .true.
+  /
+
+&obs_def_gps_nml
   /
 
 # other possible obs tool namelist items:
@@ -379,4 +391,9 @@
    latlim2    =   90.0,
    verbose    = .false.
   /
+
+&obs_assim_count_nml
+   filename_in = 'obs_seq.final.culled'
+   calendar = 'GREGORIAN'
+/
 
