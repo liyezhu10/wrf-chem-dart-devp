@@ -233,7 +233,7 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 # Block 3: convert N ucoam restart files to DART initial conditions file(s).
 # Since the initial ensemble may not all have the desired timestamp, we
 # will use restart_file_tool to use a consistent date in the header of
-# all the DART initial conditions files. At the end of this block, 
+# all the DART initial conditions files. At the end of this block,
 # we have DART restart files   filter_ics.[1-N]
 #===============================================================================
 #
@@ -350,7 +350,7 @@ set     ASYNC_TYPE = `echo    $ASYNCSTRING[3] | sed -e 's#,##'`
 echo "The model advance command is ${ADV_CMD}"
 
 #-------------------------------------------------------------------------------
-# Loop over all the ensemble members and create a DART ics file for each. 
+# Loop over all the ensemble members and create a DART ics file for each.
 # This requires an ensemble of gcom restart files "gcom_restart_nnnn.nc"
 #-------------------------------------------------------------------------------
 
@@ -371,7 +371,7 @@ while ($member <= $ensemble_size)
    ./restart_file_tool                  || exit 3
    ${MOVE} dart_output ${DART_IC_FILE}  || exit 3
 
-   @ member++ 
+   @ member++
 end
 
 #===============================================================================
@@ -410,7 +410,7 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
        # each filter task advances the ensembles, each running on 1 proc.
        ${MPI_CMD} ./filter
 
-    else 
+    else
        # 1) filter runs in parallel until time to do a (parallel) model advance.
        # 2) advance_model.csh successively runs N ucoam instances,
        #    each using the entire processor set - one after another.

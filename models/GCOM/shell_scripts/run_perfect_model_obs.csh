@@ -224,7 +224,7 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 #===============================================================================
 # Block 3: Convert 1 ucoam restart file to a DART initial conditions file.
 # At the end of the block, we have a DART initial condition file  dart_ics
-#=========================================================================
+#===============================================================================
 #
 # DART namelist settings required (to make advance_model.csh easy):
 #
@@ -243,7 +243,7 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 # &model_nml:              gcom_geometry_file       = 'gcom_geometry.nc'
 # &gcom_to_dart_nml:       gcom_to_dart_output_file = 'dart_ics'
 # &dart_to_gcom_nml:       dart_to_gcom_input_file  = 'dart_restart'
-#=========================================================================
+#===============================================================================
 
 if ( ! -e ${DARTDIR}/work/input.nml ) then
    echo "ERROR ... DART required file ${DARTDIR}/work/input.nml not found ... ERROR"
@@ -278,14 +278,14 @@ endif
 
 echo "`date` -- END GCOM-TO-DART"
 
-#=========================================================================
+#===============================================================================
 # Block 4: Advance the model and harvest the synthetic observations.
 # output files are:
 # True_state.nc   ...... the DART state
 # obs_seq.perfect ...... the synthetic observations
 # dart_log.out    ...... run-time output of all DART routines
 # perfect_restart ...... which we don't need
-#=========================================================================
+#===============================================================================
 
 # advance_model.csh needs a 'gcom_restart_nnnn.nc' in this directory
 
@@ -303,8 +303,8 @@ endif
 
 echo "`date` -- END   ucoam PERFECT_MODEL_OBS"
 
-#=========================================================================
-# Block 4: Copy/Move the good stuff back to someplace safe.
+#===============================================================================
+# Block 5: Copy/Move the good stuff back to someplace safe.
 # CENTRALDIR is usually on a volatile or temporary filesystem.
 # EXPERIMENT is usually someplace long-term.
 
