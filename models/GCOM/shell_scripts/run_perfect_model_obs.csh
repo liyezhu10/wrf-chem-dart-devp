@@ -145,6 +145,20 @@ switch ("`hostname`")
       setenv BASEOBSDIR ${HOME}/work/DART/UCOAM/models/GCOM/work
    breaksw
 
+   case node*:
+      # SDSU cluster "Cincinatti" has hosts 'node??'
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+      
+      setenv  EXPERIMENT /cinci/${USER}/deep_storage
+      setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
+      setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
+      setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
+   breaksw
+
    default:
       # SDSU "dulcinea"
       setenv   MOVE 'mv -fv'

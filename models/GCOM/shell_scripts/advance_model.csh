@@ -43,7 +43,7 @@ echo "RUN_CMD is ${RUN_CMD}"
 # Create a unique name for temporary working directory for this process.
 # Create a clean temporary directory and go there.
 
-set temp_dir = `printf "advance_temp%04d" $process`
+set temp_dir = `printf "temp_advance_%04d" $process`
 
 ${REMOVE}  $temp_dir
 mkdir -p   $temp_dir
@@ -164,7 +164,6 @@ while($state_copy <= $num_states)
       exit 3
    endif
 
-
    if ( -e gcom_output.nc ) then
       set NEWNAME = `printf gcom_restart_%04d.${forecasttag}.nc ${ensemble_member}`
       ${MOVE} gcom_output.nc ../${NEWNAME}
@@ -209,7 +208,7 @@ cd ..
 # \rm -rf $temp_dir
 
 # Remove the filter_control file to signal completion
-\rm -rf $control_file
+\rm -rfv $control_file
 
 exit 0
 

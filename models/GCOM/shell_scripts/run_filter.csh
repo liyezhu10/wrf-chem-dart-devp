@@ -84,12 +84,13 @@ if ($?PBS_QUEUE) then
    # This is used by PBS
    #----------------------------------------------------------------------------
 
-   setenv ORIGINALDIR $PBS_O_WORKDIR
-   setenv JOBNAME     $PBS_JOBNAME
-   setenv JOBID       $PBS_JOBID
-   setenv MYQUEUE     $PBS_QUEUE
-   setenv MYHOST      $PBS_O_HOST
-   setenv MPI_CMD     "mpirun -np 1 -machinefile $PBS_NODEFILE"
+   setenv ORIGINALDIR   $PBS_O_WORKDIR
+   setenv JOBNAME       $PBS_JOBNAME
+   setenv JOBID         $PBS_JOBID
+   setenv MYQUEUE       $PBS_QUEUE
+   setenv MYHOST        $PBS_O_HOST
+   setenv NCORES        `cat $PBS_NODEFILE | wc -l`
+   setenv RUN_CMD       "mpirun -np $NCORES -machinefile $PBS_NODEFILE"
 
 else if ($?LSB_QUEUE) then
 
@@ -102,7 +103,7 @@ else if ($?LSB_QUEUE) then
    setenv JOBID       $LSB_JOBID
    setenv MYQUEUE     $LSB_QUEUE
    setenv MYHOST      $LSB_SUB_HOST
-   setenv MPI_CMD     mpirun.lsf
+   setenv RUN_CMD     mpirun.lsf
 
 else
 
@@ -115,7 +116,7 @@ else
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
    setenv MYHOST      $HOST
-   setenv MPI_CMD     'no_interactive_mpi'
+   setenv RUN_CMD     'no_interactive_mpi'
 
 endif
 
@@ -130,6 +131,8 @@ set nonomatch  # suppress "rm" warnings if wildcard does not match anything
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
+
+echo "hostname is `hostname`"
 
 switch ("`hostname`")
 
@@ -148,6 +151,21 @@ switch ("`hostname`")
       setenv ENSEMBLEDIR ${HOME}/work/DART/UCOAM/models/GCOM/serucoam
    breaksw
 
+   case node*:
+      # SDSU cluster "Cincinatti" has hosts 'node??'
+      setenv   MOVE 'mv -fv'
+      setenv   COPY 'cp -fv --preserve=timestamps'
+      setenv   LINK 'ln -fvs'
+      setenv REMOVE 'rm -fr'
+
+      setenv  EXPERIMENT /cinci/${USER}/deep_storage
+      setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
+      setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
+      setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
+      setenv ENSEMBLEDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+   breaksw
+
    default:
       # SDSU "dulcinea"
       setenv   MOVE 'mv -fv'
@@ -161,8 +179,8 @@ switch ("`hostname`")
       setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
       setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
       setenv ENSEMBLEDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
-
    breaksw
+
 endsw
 
 #-------------------------------------------------------------------------------
@@ -196,17 +214,16 @@ echo
 
 echo "`date` -- Assembling the GCOM pieces."
 
-cd ${SERUCOAM}/src
-make clean || exit -1
-make       || exit -1
-${REMOVE} *.o *.mod
-cd ${CENTRALDIR}
+# cd ${SERUCOAM}/src
+# make clean || exit -1
+# make       || exit -1
+# ${REMOVE} *.o *.mod
+# cd ${CENTRALDIR}
 
 ${COPY} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
 ${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
 ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
-${COPY} ${SERUCOAM}/gcom_restart_????.nc     .        || exit 1
 
 #===============================================================================
 # Block 2: Populate CENTRALDIR with everything needed to run DART and GCOM.
@@ -217,12 +234,11 @@ ${COPY} ${SERUCOAM}/gcom_restart_????.nc     .        || exit 1
 
 echo "`date` -- Assembling the DART pieces"
 
-cd ${DARTDIR}/work
-csh quickbuild.csh -mpi || exit 2
-cd ${CENTRALDIR}
+# cd ${DARTDIR}/work
+# csh quickbuild.csh -mpi || exit 2
+# cd ${CENTRALDIR}
 
 ${COPY} ${DARTDIR}/work/advance_time               . || exit 2
-${COPY} ${DARTDIR}/work/restart_file_tool          . || exit 2
 ${COPY} ${DARTDIR}/work/filter                     . || exit 2
 ${COPY} ${DARTDIR}/work/dart_to_gcom               . || exit 2
 ${COPY} ${DARTDIR}/work/gcom_to_dart               . || exit 2
@@ -231,35 +247,16 @@ ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
 #===============================================================================
 # Block 3: convert N ucoam restart files to DART initial conditions file(s).
-# Since the initial ensemble may not all have the desired timestamp, we
-# will use restart_file_tool to use a consistent date in the header of
-# all the DART initial conditions files. At the end of this block,
-# we have DART restart files   filter_ics.[1-N]
+# At the end of this block, we have DART restart files   filter_ics.[1-N]
 #===============================================================================
 #
 # DART namelist settings appropriate/required:
 
 # &ucoam_to_dart_nml:      ucoam_to_dart_output_file = 'dart_ics',
 #
-# &restart_file_tool_nml: <see list that follows>
-#  input_file_name              = "dart_input",
-#  output_file_name             = "dart_output",
-#  ens_size                     = 1,
-#  single_restart_file_in       = .true.,
-#  single_restart_file_out      = .true.,
-#  overwrite_data_time          = .true.,
-#  overwrite_advance_time       = .true.,
-#  new_data_days                = 144731,       [1 january 2000]
-#  new_data_secs                =      0,       [midnight]
-#  input_is_model_advance_file  = .false.,
-#  output_is_model_advance_file = .false.,
-#  gregorian_cal                = .true.
-#  new_advance_days             =  -1,
-#  new_advance_secs             =  -1
 #-------------------------------------------------------------------------------
 # ensure namelists have desired values ...
 #-------------------------------------------------------------------------------
-
 #
 # DART namelist settings required (to make advance_model.csh easy):
 #
@@ -320,18 +317,7 @@ set modeltime = `echo "${startyear}${startmonth}${startday}${starthour} +${secon
 set modeldays = $modeltime[1]
 set modelseconds = $modeltime[2]
 
-# Populate the namelist for the restart_file_tool such that
-# all the restart files will have the same model time.
-# The initial ensemble is a collection of model states from
-# different times. Not quite 'climatological', but near enough.
-
-sed -e "/ write_binary_restart_files /c\ write_binary_restart_files = .true." \
-    -e "/ overwrite_data_time /c\ overwrite_data_time = .true." \
-    -e "/ new_data_days /c\ new_data_days = $modeldays" \
-    -e "/ new_data_secs /c\ new_data_secs = $modelseconds" \
-       input.nml >! new_input.nml || exit 3
-
-mv new_input.nml input.nml
+echo "$starttime is DART time $modeldays $modelseconds"
 
 #-------------------------------------------------------------------------------
 # Determine the number of ensemble members from input.nml,
@@ -363,13 +349,12 @@ while ($member <= $ensemble_size)
    set  rest_file_in = `printf   dart_input.%04d    $member`
    set  DART_IC_FILE = `printf     dart_ics.%04d    $member`
 
-   ${LINK} ${ENSEMBLEDIR}/$gcomfile gcom_restart.nc   || exit 3
-   ${LINK} ${ENSEMBLEDIR}/$gcomfile gcom_geometry.nc  || exit 3
+   ${COPY} ${ENSEMBLEDIR}/$gcomfile  . || exit 3
+   ${LINK} $gcomfile gcom_restart.nc   || exit 3
+   ${LINK} $gcomfile gcom_geometry.nc  || exit 3
 
    ./gcom_to_dart                       || exit 3
-   ${MOVE} dart_ics ${rest_file_in}     || exit 3
-   ./restart_file_tool                  || exit 3
-   ${MOVE} dart_output ${DART_IC_FILE}  || exit 3
+   ${MOVE} dart_ics ${DART_IC_FILE}     || exit 3
 
    @ member++
 end
@@ -404,11 +389,11 @@ endif
 if ($?LSB_QUEUE || $?PBS_QUEUE) then
 
     # Must be using LSF or PBS as the queueing system.
-    echo "Using ${MPI_CMD} for execution"
+    echo "Using ${RUN_CMD} for execution"
 
     if ( "$parallel_model" == "false" ) then
        # each filter task advances the ensembles, each running on 1 proc.
-       ${MPI_CMD} ./filter
+       ${RUN_CMD} ./filter
 
     else
        # 1) filter runs in parallel until time to do a (parallel) model advance.
@@ -425,7 +410,7 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
       # this starts filter but also returns control back to
       # this script immediately.
 
-      ( setenv HOME $filterhome; ${MPI_CMD} ./filter ) &
+      ( setenv HOME $filterhome; ${RUN_CMD} ./filter ) &
 
       while ( -e filter_to_model.lock )
 
@@ -443,7 +428,7 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
           ./advance_model.csh 0 ${ensemble_size} filter_control00000 || exit 9
 
           echo "restarting filter."
-          ${MPI_CMD} ./wakeup_filter
+          ${RUN_CMD} ./wakeup_filter
 
         else
 
@@ -483,18 +468,18 @@ else
 #   for compas
     setenv NUM_PROCS `cat nodelist-pgi | wc -l`
     set MPIRUN = /opt/mpich/myrinet/pgi/bin/mpirun
-    setenv MPI_CMD "$MPIRUN -np $NUM_PROCS -nolocal -machinefile nodelist-pgi"
+    setenv RUN_CMD "$MPIRUN -np $NUM_PROCS -nolocal -machinefile nodelist-pgi"
 
 #   for atlas-pgi
     setenv NUM_PROCS `cat nodelist-pgi | wc -l`
     set MPIRUN = /share/apps/mpich1/pgi/bin/mpirun
-    setenv MPI_CMD "$MPIRUN -np $NUM_PROCS -nolocal -machinefile nodelist-pgi"
+    setenv RUN_CMD "$MPIRUN -np $NUM_PROCS -nolocal -machinefile nodelist-pgi"
 
 #   for atlas-gfortran
     set MPIRUN = /share/apps/openmpi/gfortran/bin/mpirun
-    setenv MPI_CMD "$MPIRUN --hostfile nodelist-gfortran --mca mtl mx --mca pml cm -np 72"
+    setenv RUN_CMD "$MPIRUN --hostfile nodelist-gfortran --mca mtl mx --mca pml cm -np 72"
 
-    echo "MPI_CMD = ${MPI_CMD}"
+    echo "RUN_CMD = ${RUN_CMD}"
 
     # filter runs in parallel until time to do a model advance,
     # and then this script starts up the mitgcmuv jobs, each one
@@ -510,7 +495,7 @@ else
     # this starts filter but also returns control back to
     # this script immediately.
 
-    (setenv HOME $filterhome; ${MPI_CMD} ./filter) &
+    (setenv HOME $filterhome; ${RUN_CMD} ./filter) &
 
     while ( -e filter_to_model.lock )
 
@@ -533,7 +518,7 @@ else
           ./advance_model.csh 0 ${ensemble_size} filter_control00000 || exit 9
 
           echo "restarting filter."
-          ${MPI_CMD} ./wakeup_filter
+          ${RUN_CMD} ./wakeup_filter
 
         else
 
