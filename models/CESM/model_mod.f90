@@ -303,9 +303,8 @@ if ( .not. module_initialized ) call static_init_model
 zero_time = set_time(0,0)
 
 cam_time = zero_time
-clm_time = zero_time
 pop_time = zero_time
-
+clm_time = zero_time
 
 if (include_CAM) cam_time = cam_get_model_time_step()
 if (include_POP) pop_time = pop_get_model_time_step()
@@ -325,17 +324,20 @@ endif
 if ((cam_time > zero_time .and. cam_time /= base_time) .or. &
     (pop_time > zero_time .and. pop_time /= base_time) .or. &
     (clm_time > zero_time .and. clm_time /= base_time)) then
+
    call print_time(cam_time, 'CAM time step')
    call print_time(cam_time, 'CAM time step', logfileunit)
-   call print_time(cam_time, 'POP time step')
-   call print_time(cam_time, 'POP time step', logfileunit)
-   call print_time(cam_time, 'CLM time step')
-   call print_time(cam_time, 'CLM time step', logfileunit)
-   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps must be the same')
+   call print_time(pop_time, 'POP time step')
+   call print_time(pop_time, 'POP time step', logfileunit)
+   call print_time(clm_time, 'CLM time step')
+   call print_time(clm_time, 'CLM time step', logfileunit)
+   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps must be the same', &
+                      source, revision, revdate)
 endif
 
 if (base_time == zero_time) then
-   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps were zero')
+   call error_handler(E_ERR, 'get_model_time_step', 'all model time steps were zero', &
+                      source, revision, revdate)
 endif
 
 get_model_time_step = base_time
