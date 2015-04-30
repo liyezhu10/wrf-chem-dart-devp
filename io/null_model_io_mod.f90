@@ -12,23 +12,6 @@ implicit none
 
 contains
 
-!--------------------------------------------------------------------
-!> read namelist and set up filename arrays
-function fill_variable_list(num_variables_in_state)
-
-integer             :: num_variables_in_state
-character(len=256)  :: fill_variable_list(num_variables_in_state)
-
-
-end function fill_variable_list
-
-!--------------------------------------------------------------------
-!> get the input file name
-function get_info_file_name(domain)
-
-integer, intent(in) :: domain
-character(len=265)  :: get_info_file_name
-
 end function get_info_file_name
 
 !--------------------------------------------------------------------
@@ -40,24 +23,6 @@ character(len=1024), intent(in) :: filename
 type(time_type) :: get_model_time_from_file
 
 end function get_model_time_from_file
-
-!--------------------------------------------------------------------
-!> pass number of variables in the state out to filter 
-subroutine variables_domains(num_variables_in_state, num_doms)
-
-integer, intent(out) :: num_variables_in_state
-integer, intent(out) :: num_doms !< number of domains
-
-end subroutine variables_domains
-
-!--------------------------------------------------------------------
-!> construct info filename for get_state_variable_info
-function info_file_name(domain)
-
-integer, intent(in) :: domain
-character(len=256)  :: info_file_name
-
-end function info_file_name
 
 !--------------------------------------------------------------------
 !> construct restart file name for reading

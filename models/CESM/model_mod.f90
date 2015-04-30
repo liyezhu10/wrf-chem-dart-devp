@@ -841,16 +841,6 @@ end subroutine which_model_obs
 
 
 !--------------------------------------------------------------------
-!> construct info filename for get_state_variable_info
-function info_file_name(domain)
-
-integer, intent(in) :: domain
-character(len=256)  :: info_file_name
-
-
-end function info_file_name
-
-!--------------------------------------------------------------------
 !> construct restart file name for reading
 function construct_file_name_in(stub, domain, copy)
 

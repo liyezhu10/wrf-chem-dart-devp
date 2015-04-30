@@ -62,7 +62,6 @@ public :: pop_get_model_size,         &
           pop_pert_model_state,       &
           pop_get_close_obs,          &
           pop_ens_mean_for_model,     &
-          pop_info_file_name, &
           pop_construct_file_name_in, &
           pop_get_model_time_from_file, &
           pop_do_clamp_or_fail, &
@@ -3688,17 +3687,6 @@ if (debug > 2 .and. do_output()) then
 endif
 
 end subroutine dpth2pres
-
-!--------------------------------------------------------------------
-!> construct info filename for get_state_variable_info
-function pop_info_file_name(domain)
-
-integer, intent(in) :: domain
-character(len=256)  :: pop_info_file_name
-
-write(pop_info_file_name, '(A)') 'pop.r.nc'
-
-end function pop_info_file_name
 
 !--------------------------------------------------------------------
 !> construct restart file name for reading
