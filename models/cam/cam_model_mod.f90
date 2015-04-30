@@ -175,6 +175,8 @@ use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, KIND_
 
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
+use state_vector_mod, only : add_domain
+
 ! end of use statements
 !=========================================================================================
 !
@@ -205,6 +207,9 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 !-----------------------------------------------------------------------
+
+
+integer :: component_id
 
 ! DART form of ensemble mean, global storage for use by get_close_obs:convert_vert
 ! Ensemble mean is used so that the same "state" will be used for the height calculations
@@ -585,10 +590,12 @@ contains
 ! static_init_model section
 
 !=======================================================================
-subroutine cam_static_init_model()
+subroutine cam_static_init_model(cam_id)
 !
 ! Initializes class data for CAM model (all the stuff that needs to be done once).
 ! For now, does this by reading info from a fixed name netcdf file.
+
+integer, optional, intent(out) :: cam_id
 
 integer  :: iunit, io, i, ncfileid
 integer  :: max_levs, ierr
@@ -630,6 +637,10 @@ end if
 ! Record the namelist values
 if (do_nml_file()) write(nmlfileunit, nml=cam_model_nml)
 if (do_nml_term()) write(    *      , nml=cam_model_nml)
+
+! Add a component to the state vector
+component_id = add_domain('caminput.nc', nflds, cflds)
+if (present(cam_id)) cam_id = component_id ! to pass out to CESM model_mod
 
 ! Set the model minimum time step from the namelist seconds and days input
 Time_step_atmos = set_time(Time_step_seconds, Time_step_days)

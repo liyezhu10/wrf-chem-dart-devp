@@ -67,6 +67,8 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
+use state_vector_mod, only : add_domain
+
 use typesizes
 use netcdf
 
@@ -111,6 +113,10 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=256) :: string1, string2, string3
 logical, save :: module_initialized = .false.
+
+integer :: component_id
+character(len=NF90_MAX_NAME) :: netcdfvarnames(1) ! single vector
+integer :: netcdf_nfields
 
 ! Storage for a random sequence for perturbing a single initial state
 
@@ -447,7 +453,7 @@ end function clm_get_model_time_step
 
 
 
-subroutine clm_static_init_model()
+subroutine clm_static_init_model(clm_id)
 !------------------------------------------------------------------
 !
 ! Called to do one time initialization of the model.
@@ -456,6 +462,8 @@ subroutine clm_static_init_model()
 ! the dart_clm_mod module.
 
 ! Local variables - all the important ones have module scope
+
+integer, optional, intent(out) :: clm_id
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=obstypelength)          :: dimname
@@ -486,6 +494,12 @@ call check_namelist_read(iunit, io, 'clm_model_nml')
 if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
 if (do_output()) write(logfileunit, nml=clm_model_nml)
 if (do_output()) write(     *     , nml=clm_model_nml)
+
+! Add a component to the state vector
+netcdf_nfields = 1
+netcdfvarnames = 'state'
+component_id = add_domain('clm.nc', netcdf_nfields, netcdfvarnames)
+if (present(clm_id)) clm_id = component_id ! to pass out to CESM model_mod
 
 !---------------------------------------------------------------
 ! Set the time step ... causes clm namelists to be read.

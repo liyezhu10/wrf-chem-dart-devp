@@ -38,6 +38,8 @@ use      dart_pop_mod, only: set_model_time_step,                              &
                              read_horiz_grid, read_topography, read_vert_grid, &
                              get_pop_restart_filename
 
+use state_vector_mod, only : add_domain
+
 use typesizes
 use netcdf 
 
@@ -59,7 +61,13 @@ public :: pop_get_model_size,         &
           pop_nc_write_model_vars,    &
           pop_pert_model_state,       &
           pop_get_close_obs,          &
-          pop_ens_mean_for_model
+          pop_ens_mean_for_model,     &
+          pop_info_file_name, &
+          pop_construct_file_name_in, &
+          pop_get_model_time_from_file, &
+          pop_do_clamp_or_fail, &
+          pop_clamp_or_fail_it
+
 
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
@@ -124,7 +132,9 @@ integer, parameter :: nfields   = n3dfields + n2dfields
 
 ! (the absoft compiler likes them to all be the same length during declaration)
 ! we trim the blanks off before use anyway, so ...
+integer :: component_id
 character(len=128) :: progvarnames(nfields) = (/'SALT ','TEMP ','UVEL ','VVEL ','PSURF'/)
+character(len=128) :: netcdfvarnames(nfields) = (/'SALT_CUR ','TEMP_CUR ','UVEL_CUR ','VVEL_CUR ','PSURF_CUR'/)
 
 integer, parameter :: S_index     = 1
 integer, parameter :: T_index     = 2
@@ -232,10 +242,12 @@ contains
 !------------------------------------------------------------------
 !------------------------------------------------------------------
 
-subroutine pop_static_init_model()
+subroutine pop_static_init_model(pop_id)
 
 ! Called to do one time initialization of the model. In this case,
 ! it reads in the grid information.
+
+integer, optional, intent(out) :: pop_id
 
 integer :: iunit, io
 integer :: ss, dd
@@ -272,6 +284,9 @@ call check_namelist_read(iunit, io, 'pop_model_nml')
 if (do_nml_file()) write(nmlfileunit, nml=pop_model_nml)
 if (do_nml_term()) write(     *     , nml=pop_model_nml)
 
+! Add a component to the state vector
+component_id = add_domain('pop.r.nc', nfields, netcdfvarnames)
+if (present(pop_id)) pop_id = component_id ! to pass out to CESM model_mod
 
 ! Set the time step ... causes POP namelists to be read.
 ! Ensures model_timestep is multiple of 'ocean_dynamics_timestep'
@@ -306,7 +321,6 @@ call read_vert_grid( Nz, ZC, ZG)
 
 if (debug > 2) call write_grid_netcdf() ! DEBUG only
 if (debug > 2) call write_grid_interptest() ! DEBUG only
-
 
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
@@ -3674,6 +3688,106 @@ if (debug > 2 .and. do_output()) then
 endif
 
 end subroutine dpth2pres
+
+!--------------------------------------------------------------------
+!> construct info filename for get_state_variable_info
+function pop_info_file_name(domain)
+
+integer, intent(in) :: domain
+character(len=256)  :: pop_info_file_name
+
+write(pop_info_file_name, '(A)') 'pop.r.nc'
+
+end function pop_info_file_name
+
+!--------------------------------------------------------------------
+!> construct restart file name for reading
+function pop_construct_file_name_in(stub, domain, copy)
+
+character(len=512), intent(in) :: stub
+integer,            intent(in) :: domain
+integer,            intent(in) :: copy
+character(len=1024)            :: pop_construct_file_name_in
+
+write(pop_construct_file_name_in, '(A, i4.4)') TRIM(stub), copy
+
+
+end function pop_construct_file_name_in
+
+!--------------------------------------------------------------------
+!> read the time from the input file
+!> Stolen from pop model_mod.f90 restart_to_sv
+function pop_get_model_time_from_file(filename)
+
+character(len=1024) :: filename
+type(time_type) :: pop_get_model_time_from_file
+
+
+integer :: ret !< netcdf return code
+integer :: ncid !< netcdf file id
+integer :: iyear, imonth, iday, ihour, iminute, isecond
+
+if ( .not. module_initialized ) call pop_static_init_model
+
+if ( .not. file_exist(filename) ) then
+   write(msgstring,*) 'cannot open file ', trim(filename),' for reading.'
+   call error_handler(E_ERR,'get_model_time',msgstring,source,revision,revdate)
+endif
+
+call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+                  'get_model_time', 'open '//trim(filename))
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iyear'  , iyear), &
+                  'get_model_time', 'get_att iyear')
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'imonth' , imonth), &
+                  'get_model_time', 'get_att imonth')
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iday'   , iday), &
+                  'get_model_time', 'get_att iday')
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'ihour'  , ihour), &
+                  'get_model_time', 'get_att ihour')
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iminute', iminute), &
+                  'get_model_time', 'get_att iminute')
+call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'isecond', isecond), &
+                  'get_model_time', 'get_att isecond')
+
+! FIXME: we don't allow a real year of 0 - add one for now, but
+! THIS MUST BE FIXED IN ANOTHER WAY!
+if (iyear == 0) then
+  call error_handler(E_MSG, 'get_model_time', &
+                     'WARNING!!!   year 0 not supported; setting to year 1')
+  iyear = 1
+endif
+
+pop_get_model_time_from_file = set_date(iyear, imonth, iday, ihour, iminute, isecond)
+
+
+end function pop_get_model_time_from_file
+
+!-------------------------------------------------------
+!> Check whether you need to error out, clamp, or
+!> do nothing depending on the variable bounds
+function pop_do_clamp_or_fail(var, dom)
+
+integer, intent(in) :: var ! variable index
+integer, intent(in) :: dom ! domain index
+logical             :: pop_do_clamp_or_fail
+
+pop_do_clamp_or_fail = .false.
+!if (var == 'FAIL') do_clamp_or_fail = .true.
+!if (var == 'CLAMP') do_clamp_or_fail = .true.
+
+end function pop_do_clamp_or_fail
+
+!-------------------------------------------------------
+!> Check a variable for out of bounds and clamp or fail if
+!> needed
+subroutine pop_clamp_or_fail_it(var_index, dom, variable)
+
+integer,     intent(in) :: var_index ! variable index
+integer,     intent(in) :: dom ! domain index
+real(r8), intent(inout) :: variable(:) ! variable
+
+
+end subroutine pop_clamp_or_fail_it
 
 !------------------------------------------------------------------
 !------------------------------------------------------------------

@@ -14,7 +14,7 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date,                           &
                              operator(*),  operator(+), operator(-),           &
                              operator(>),  operator(<), operator(/),           &
-                             operator(/=), operator(<=)
+                             operator(/=), operator(<=), operator(==)
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              get_location, loc_get_close_obs => get_close_obs, &
@@ -59,7 +59,10 @@ public :: get_model_size,         &
           ens_mean_for_model, &
   restart_file_to_sv, &
   sv_to_restart_file, &
-  get_cesm_restart_filename
+  get_cesm_restart_filename, &
+  construct_file_name_in, &
+  do_clamp_or_fail, &
+  clamp_or_fail_it
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -68,6 +71,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 integer :: cam_model_size, clm_model_size, pop_model_size
+integer :: cam_id, clm_id, pop_id
 
 character(len=256) :: msgstring
 logical, save :: module_initialized = .false.
@@ -125,9 +129,9 @@ if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
 
-if (include_CAM) call cam_static_init_model()
-if (include_POP) call pop_static_init_model()
-if (include_CLM) call clm_static_init_model()
+if (include_CAM) call cam_static_init_model(cam_id)
+if (include_POP) call pop_static_init_model(pop_id)
+if (include_CLM) call clm_static_init_model(clm_id)
 
 
 model_timestep = get_model_time_step()
@@ -543,9 +547,10 @@ endif
 ! FIXME: we cannot handle the case where some models want to
 ! perturb on their own and some want filter to do it.  it has to
 ! be every model or no models at this point.
-if (all(tristate > 0) == 1) then
+! FIXME: broken these tests to I can compile
+if (all(tristate == 1)) then
    interf_provided = .true.
-else if (all(tristate > 0) == 2) then
+else if (all(tristate == 2)) then
    interf_provided = .false.
 else
    call error_handler(E_MSG, 'pert_model_state', &
@@ -833,6 +838,65 @@ select case (obs_type)
 end select
 
 end subroutine which_model_obs
+
+
+!--------------------------------------------------------------------
+!> construct info filename for get_state_variable_info
+function info_file_name(domain)
+
+integer, intent(in) :: domain
+character(len=256)  :: info_file_name
+
+
+end function info_file_name
+
+!--------------------------------------------------------------------
+!> construct restart file name for reading
+function construct_file_name_in(stub, domain, copy)
+
+character(len=512), intent(in) :: stub
+integer,            intent(in) :: domain
+integer,            intent(in) :: copy
+character(len=1024)            :: construct_file_name_in
+
+
+end function construct_file_name_in
+
+!--------------------------------------------------------------------
+!> read the time from the input file
+!> Stolen from pop model_mod.f90 restart_to_sv
+function get_model_time_from_file(filename)
+
+character(len=1024) :: filename
+type(time_type) :: get_model_time_from_file
+
+
+
+
+end function get_model_time_from_file
+
+!------------------------------------------------------------------
+! FIXME the clamp or fail routines need to know which model is which.
+function do_clamp_or_fail(var, dom)
+
+integer, intent(in) :: var ! variable index
+integer, intent(in) :: dom ! domain indentifier
+logical             :: do_clamp_or_fail
+
+
+end function do_clamp_or_fail
+
+!-------------------------------------------------------
+!> Check a variable for out of bounds and clamp or fail if
+!> needed
+subroutine clamp_or_fail_it(var_index, dom, variable)
+
+integer,     intent(in) :: var_index ! variable index
+integer,     intent(in) :: dom ! domain index
+real(r8), intent(inout) :: variable(:) ! variable
+
+
+end subroutine clamp_or_fail_it
 
 !------------------------------------------------------------------
 ! End of model_mod
