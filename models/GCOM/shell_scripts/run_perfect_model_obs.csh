@@ -7,6 +7,8 @@
 # DART $Id$
 #
 # Top level script to generate observations and a TRUE state.
+# This presumes two directories exists that contain all the required bits
+# for GCOM and for DART.
 #
 # This script only processes a single observation file.
 # Still fairly complex; requires a raft of
@@ -51,7 +53,7 @@
 ## the normal way to submit to the queue is:    bsub < run_perfect_model_obs.csh
 ##
 ## an explanation of the most common directives follows:
-## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
+## -J <arg>      Job name
 ## -o <arg>      output listing filename
 ## -P <arg>      account
 ## -q <arg>      queue
@@ -151,7 +153,7 @@ switch ("`hostname`")
       setenv   COPY 'cp -fv --preserve=timestamps'
       setenv   LINK 'ln -fvs'
       setenv REMOVE 'rm -fr'
-      
+
       setenv  EXPERIMENT /cinci/${USER}/deep_storage
       setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
       setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
@@ -171,13 +173,15 @@ switch ("`hostname`")
       setenv    DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
       setenv   SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
       setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
-
    breaksw
+
 endsw
 
 #-------------------------------------------------------------------------------
 # Make a unique, (empty, clean) temporary directory.
 #-------------------------------------------------------------------------------
+
+echo "`date` -- BEGIN PERFECT_OBS_GENERATION"
 
 mkdir -p ${CENTRALDIR}
 cd ${CENTRALDIR}
@@ -201,14 +205,15 @@ echo
 # Block 1: Build all the GCOM executables we will need for this run.
 # Since the compute nodes cannot execute things compiled on the head node,
 # you have to compile what you need on the compute node. Really annoying.
+# This script requires that gcom is serial code - no MPI at this point.
 
 echo "`date` -- Assembling the GCOM pieces."
 
-cd ${SERUCOAM}/src
-make clean || exit -1
-make       || exit -1
-${REMOVE} *.o *.mod
-cd ${CENTRALDIR}
+# cd ${SERUCOAM}/src
+# make clean || exit -1
+# make       || exit -1
+# ${REMOVE} *.o *.mod
+# cd ${CENTRALDIR}
 
 ${COPY} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
@@ -222,12 +227,14 @@ ${COPY} ${SERUCOAM}/gcom_restart.nc   gcom_restart.nc || exit 1
 
 # Get the DART executables, scripts, and input files
 # The input.nml will be copied from the DART directory and modified appropriately.
+# Again, if the compute nodes can execute code compiled on the head node,
+# it should not be necessary to compile the code here.
 
 echo "`date` -- Assembling the DART pieces"
 
-cd ${DARTDIR}/work
-csh quickbuild.csh -nompi || exit 2
-cd ${CENTRALDIR}
+# cd ${DARTDIR}/work
+# csh quickbuild.csh -nompi || exit 2
+# cd ${CENTRALDIR}
 
 ${COPY} ${DARTDIR}/work/perfect_model_obs          . || exit 2
 ${COPY} ${DARTDIR}/work/dart_to_gcom               . || exit 2
@@ -236,7 +243,7 @@ ${COPY} ${BASEOBSDIR}/obs_seq.in                   . || exit 2
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
 #===============================================================================
-# Block 3: Convert 1 ucoam restart file to a DART initial conditions file.
+# Block 3: Convert 1 GCOM restart file to a DART initial conditions file.
 # At the end of the block, we have a DART initial condition file  dart_ics
 #===============================================================================
 #
@@ -305,7 +312,7 @@ echo "`date` -- END GCOM-TO-DART"
 
 ${LINK} gcom_restart.nc gcom_restart_0001.nc || exit 4
 
-echo "`date` -- BEGIN ucoam PERFECT_MODEL_OBS"
+echo "`date` -- BEGIN GCOM PERFECT_MODEL_OBS"
 
 ${RUN_CMD} ./perfect_model_obs
 
@@ -315,7 +322,7 @@ if ($status != 0) then
    exit 4
 endif
 
-echo "`date` -- END   ucoam PERFECT_MODEL_OBS"
+echo "`date` -- END   GCOM PERFECT_MODEL_OBS"
 
 #===============================================================================
 # Block 5: Copy/Move the good stuff back to someplace safe.
@@ -330,6 +337,7 @@ ${MOVE} input.nml        ${EXPERIMENT}
 ${MOVE} *.csh            ${EXPERIMENT}
 ${MOVE} $myname          ${EXPERIMENT}
 
+echo "${JOBNAME} ($JOBID) finished at "`date`
 echo "Listing contents of CENTRALDIR after archiving (miss anything?)"
 ls -l
 

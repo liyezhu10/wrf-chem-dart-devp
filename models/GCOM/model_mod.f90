@@ -79,8 +79,7 @@ public :: static_init_model,      &
 
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
-public :: get_gridsize,              &
-          get_gcom_restart_filename, &
+public :: get_gcom_restart_filename, &
           gcom_file_to_dart_vector,  &
           dart_vector_to_gcom_file,  &
           DART_get_var,              &
@@ -162,11 +161,11 @@ namelist /model_nml/             &
 !                          to and from the vars to state vector.
 !------------------------------------------------------------------
 
-integer, parameter :: S_index     = 1
-integer, parameter :: T_index     = 2
-integer, parameter :: U_index     = 3
-integer, parameter :: V_index     = 4
-integer, parameter :: PSURF_index = 5
+integer, parameter :: S_index     = 1  ! TJH FIXME remove at some point
+integer, parameter :: T_index     = 2  ! TJH FIXME remove at some point
+integer, parameter :: U_index     = 3  ! TJH FIXME remove at some point
+integer, parameter :: V_index     = 4  ! TJH FIXME remove at some point
+integer, parameter :: PSURF_index = 5  ! TJH FIXME remove at some point
 
 integer :: start_index(5) ! TJH FIXME this gets replaced
 
@@ -193,15 +192,10 @@ type(get_close_type) :: gc_state
 
 ! integer, lowest valid cell number in the vertical
 integer, allocatable  :: KMT(:, :), KMU(:, :)
-! real, depth of lowest valid cell (0 = land).  use only if KMT/KMU not avail.
-real(r8), allocatable :: HT(:,:), HU(:,:)
 
 ! compute pressure based on depth - can do once upfront.
 real(r8), allocatable :: pressure(:)
 
-real(r8)        :: endTime
-real(r8)        :: ocean_dynamics_timestep = 900.0_r4
-integer         :: timestepcount = 0
 type(time_type) :: model_time, model_timestep
 
 integer :: model_size    ! the state vector length
@@ -489,15 +483,16 @@ integer,             intent(in)  :: itype  ! really a KIND
 real(r8),            intent(out) :: obs_val
 integer,             intent(out) :: istatus
 
-integer  :: close_ind(model_size) ! CRAZY TJH FIXME CRAZY
+integer  :: close_ind(model_size) ! undesirable to have something this big ... but ...
 
 ! Local storage
 real(r8) :: loc_array(3), longitude, latitude, level
 integer  :: base_kind
 integer  :: i, ivar, varindex, iclose, num_close, indx, num_wanted
 integer  :: closest_index, lon_index, lat_index, lev_index
-real(r8) :: closest, above, below, dist_above, dist_below
-integer  :: istatus1, istatus2
+real(r8) :: closest
+! real(r8) :: above, below, dist_above, dist_below
+! integer  :: istatus1, istatus2
 
 real(r8), allocatable :: distances(:), sorted_distances(:), data_values(:)
 integer,  allocatable :: indices(:), sorted_indices(:), close_indices(:)
@@ -1598,6 +1593,8 @@ if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 ! computations that will follow.  This is a horizontal-distance operation and
 ! we don't need to have the relevant vertical coordinate information yet
 ! (for obs).
+! FIXME - confirm that the close_ind() array does not benefit from having 
+! all the dry_land locations pruned out.
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind)
@@ -1764,7 +1761,7 @@ end subroutine get_grid_dims
 
 subroutine read_grid()
 
-integer :: ncid, varid
+integer :: ncid
 
 call nc_check(nf90_open(trim(gcom_geometry_file), nf90_nowrite, ncid), &
       'read_grid','open ['//trim(gcom_geometry_file)//']')
@@ -1904,8 +1901,8 @@ MyLoop : do i = 1, nrows
 
    ! Any other condition is an error.
    if ( any(table(i,:) == ' ') ) then
-      string1 = 'input.nml &model_nml:gcom not fully specified'
-      string2 = 'must be 6 entries per variable. Last known variable name is'
+      string1 = 'input.nml &model_nml:gcom_variables not fully specified'
+      string2 = 'must be 5 entries per variable. Last known variable name is'
       string3 = '['//trim(table(i,1))//'] ... (without the [], naturally)'
       call error_handler(E_ERR, 'parse_variable_table', string1, &
          source, revision, revdate, text2=string2, text3=string3)
@@ -2233,25 +2230,6 @@ end subroutine progvar_summary
 
 !-----------------------------------------------------------------------
 !>
-!> public utility routine to return the grid sizes.
-
-subroutine get_gridsize(num_x, num_y, num_z)
-
-integer, intent(out) :: num_x, num_y, num_z
-
-if ( .not. module_initialized ) call static_init_model
-
-call error_handler(E_MSG,'get_gridsize','FIXME TJH UNTESTED')
-
-num_x = nxp1
-num_y = nyp1
-num_z = nzp1
-
-end subroutine get_gridsize
-
-
-!-----------------------------------------------------------------------
-!>
 !> public utility routine to make the model_nml:gcom_restart_file accessible
 
 subroutine get_gcom_restart_filename(filename)
@@ -2343,7 +2321,7 @@ character(len=*), intent(in)    :: filename
 real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: state_time
 
-integer :: i, j, k, ivar, indx, io, iunit
+integer :: i, j, k, ivar, indx, iunit
 
 ! temp space to hold data while we are reading it
 real(r8), allocatable :: mytimes(:)
@@ -5086,40 +5064,6 @@ end subroutine get_state_kind
 
 !-----------------------------------------------------------------------
 !>
-!> Given an integer index into the state vector structure, returns the
-!> type, taking into account the ocean bottom and dry land.
-
-subroutine get_state_kind_inc_dry(index_in, var_type)
-
-integer, intent(in)  :: index_in
-integer, intent(out) :: var_type
-
-integer :: lon_index, lat_index, depth_index, startind, offset
-
-call error_handler(E_ERR,'get_state_kind_inc_dry','routine not written yet', &
-                      source, revision, revdate)
-
-call get_state_kind(index_in, var_type, startind, offset)
-
-if (startind == start_index(PSURF_index)) then
-  depth_index = 1
-else
-  depth_index = (offset / (nxp1 * nyp1)) + 1
-endif
-
-lat_index = (offset - ((depth_index-1)*nxp1*nyp1)) / nxp1 + 1
-lon_index =  offset - ((depth_index-1)*nxp1*nyp1) - ((lat_index-1)*nxp1) + 1
-
-! if on land or below ocean floor, replace type with dry land.
-if(is_dry_land(var_type, lon_index, lat_index, depth_index)) then
-   var_type = KIND_DRY_LAND
-endif
-
-end subroutine get_state_kind_inc_dry
-
-
-!-----------------------------------------------------------------------
-!>
 !> intended for debugging use = print out the data min/max for each
 !> field in the state vector
 
@@ -5662,7 +5606,7 @@ character(len=NF90_MAX_NAME) :: attvalue
 
 type(time_type) :: this_time, target_time
 integer :: io, itime, origin_days, origin_seconds
-integer :: iyear, imonth, iday, ihour, iminute, isecond
+integer :: iday, isecond
 
 find_desired_time_index = MISSING_I   ! initialize to failure setting
 
@@ -5993,9 +5937,6 @@ real(r8), intent(in)  :: distances(:)
 integer,  intent(in)  :: num_neighbors
 real(r8), intent(out) :: obs_val
 integer,  intent(out) :: istatus
-
-integer  :: i, indx
-integer  :: lon_index, lat_index, lev_index
 
 real(r8) :: inverse_distances(num_neighbors)
 real(r8) :: weights(num_neighbors)

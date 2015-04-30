@@ -6,9 +6,9 @@
 #
 # DART $Id$
 #
-# Script to assimilate observations using DART and the ucoam ocean model.
+# Script to assimilate observations using DART and the GCOM ocean model.
 # This presumes two directories exists that contain all the required bits
-# for ucoam and for DART.
+# for GCOM and for DART.
 #
 # This script only processes a single observation file.
 # Still fairly complex; requires a raft of
@@ -53,7 +53,7 @@
 ## the normal way to submit to the queue is:    bsub < run_filter
 ##
 ## an explanation of the most common directives follows:
-## -J <arg>      Job name (master script job.csh presumes filter_server.xxxx.log)
+## -J <arg>      Job name
 ## -o <arg>      output listing filename
 ## -P <arg>      account
 ## -q <arg>      queue
@@ -112,7 +112,7 @@ else
    #----------------------------------------------------------------------------
 
    setenv ORIGINALDIR `pwd`
-   setenv JOBNAME     ucoam
+   setenv JOBNAME     gcom
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
    setenv MYHOST      $HOST
@@ -131,8 +131,6 @@ set nonomatch  # suppress "rm" warnings if wildcard does not match anything
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
-
-echo "hostname is `hostname`"
 
 switch ("`hostname`")
 
@@ -211,6 +209,8 @@ echo
 # Block 1: Build all the GCOM executables we will need for this run.
 # Since the compute nodes cannot execute things compiled on the head node,
 # you have to compile what you need on the compute node. Really annoying.
+# This script requires that gcom is serial code - but DART's filter
+# and wakeup_filter must be compiled WITH mpi.
 
 echo "`date` -- Assembling the GCOM pieces."
 
@@ -231,6 +231,8 @@ ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
 
 # Get the DART executables, scripts, and input files
 # The input.nml will be copied from the DART directory and modified appropriately.
+# Again, if the compute nodes can execute code compiled on the head node,
+# it should not be necessary to compile the code here.
 
 echo "`date` -- Assembling the DART pieces"
 
@@ -246,17 +248,9 @@ ${COPY} ${BASEOBSDIR}/obs_seq.out                  . || exit 2
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh . || exit 2
 
 #===============================================================================
-# Block 3: convert N ucoam restart files to DART initial conditions file(s).
+# Block 3: convert N GCOM restart files to DART initial conditions file(s).
 # At the end of this block, we have DART restart files   filter_ics.[1-N]
 #===============================================================================
-#
-# DART namelist settings appropriate/required:
-
-# &ucoam_to_dart_nml:      ucoam_to_dart_output_file = 'dart_ics',
-#
-#-------------------------------------------------------------------------------
-# ensure namelists have desired values ...
-#-------------------------------------------------------------------------------
 #
 # DART namelist settings required (to make advance_model.csh easy):
 #
@@ -397,7 +391,7 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
 
     else
        # 1) filter runs in parallel until time to do a (parallel) model advance.
-       # 2) advance_model.csh successively runs N ucoam instances,
+       # 2) advance_model.csh successively runs N GCOM instances,
        #    each using the entire processor set - one after another.
        # 3) wakeup_filter wakes up filter so it can continue.
 
@@ -454,8 +448,8 @@ else
     # script that changes to the current directory before running.
 
     echo "running with no queueing system"
-    echo "This is untested for ucoam -- ending now."
-    exit
+    echo "This is untested for GCOM -- ending now."
+    exit 9
 
     # before running this script, do this once. the syntax is
     # node name : how many tasks you can run on it
@@ -556,9 +550,9 @@ exit 0
 # everything after here is just bits and pieces that may be useful.
 # the preceeding exit means that we never get here.
 #
-# ${MOVE} *.data *.meta              ${experiment}/ucoam
-# ${MOVE} data data.cal              ${experiment}/ucoam
-# ${MOVE} STD*                       ${experiment}/ucoam
+# ${MOVE} *.data *.meta              ${experiment}/GCOM
+# ${MOVE} data data.cal              ${experiment}/GCOM
+# ${MOVE} STD*                       ${experiment}/GCOM
 
 # ${MOVE} filter_restart*            ${experiment}/DART
 # ${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART

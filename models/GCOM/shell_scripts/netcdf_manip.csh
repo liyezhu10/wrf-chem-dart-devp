@@ -83,7 +83,7 @@ ncrename -h -d nzp1,nz -d  nyp1,ny -d nxp1,nx lonlatlev.nc
 
 # paste the two files into one. Finis.
 
-ncks -a -h -A lonlatlev.nc allgood.nc 
+ncks -a -h -A lonlatlev.nc allgood.nc
 
 #=======================================================================
 
