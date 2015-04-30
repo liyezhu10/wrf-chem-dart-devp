@@ -424,23 +424,25 @@ do i = 1, nx
    do j = 1, ny - 1
       
       ! Only update regular boxes that contain all wet corners (kmu>0)
-      if(kmu(i,j)>0 .and. kmu(i,j+1)>0 .and. kmu(i+1,j+1)>0 .and. kmu(i+1,j)>0) then
+      if(all_wet_corners(kmu, i, j)) then
+
          ! Set up array of lons and lats for the corners of these u quads
-      call get_quad_corners(ulon, i, j, u_c_lons)
-      call get_quad_corners(ulat, i, j, u_c_lats)
+         call get_quad_corners(ulon, i, j, u_c_lons)
+         call get_quad_corners(ulat, i, j, u_c_lats)
 
-      ! Get list of regular boxes that cover this u dipole quad
-      ! false indicates that for the u grid there's nothing special about pole
-      call reg_box_overlap(u_c_lons, u_c_lats, .false., reg_lon_ind, reg_lat_ind)         
+         ! Get list of regular boxes that cover this u dipole quad
+         ! false indicates that for the u grid there's nothing special about pole
+         call reg_box_overlap(u_c_lons, u_c_lats, .false., reg_lon_ind, reg_lat_ind)         
 
-      ! Update the temporary data structures for the u quad 
-      call update_reg_list(u_dipole_num, ureg_list_lon, &
-         ureg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
+         ! Update the temporary data structures for the u quad 
+         call update_reg_list(u_dipole_num, ureg_list_lon, &
+                              ureg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
       endif 
 
       ! Repeat for t dipole quads.
       ! Only update regular boxes that contain all wet corners (kmt>0)
-      if(kmt(i,j)>0 .and. kmt(i,j+1)>0 .and. kmt(i+1,j+1)>0 .and. kmt(i+1,j)>0) then
+      if(all_wet_corners(kmt, i, j)) then
+
          ! Set up array of lons and lats for the corners of these t quads
          call get_quad_corners(tlon, i, j, t_c_lons)
          call get_quad_corners(tlat, i, j, t_c_lats)
@@ -448,9 +450,9 @@ do i = 1, nx
          ! Is this the pole quad for the T grid?
          is_pole = (i == pole_x .and. j == t_pole_y)
 
-      call reg_box_overlap(t_c_lons, t_c_lats, is_pole, reg_lon_ind, reg_lat_ind)         
-      call update_reg_list(t_dipole_num, treg_list_lon, &
-         treg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
+         call reg_box_overlap(t_c_lons, t_c_lats, is_pole, reg_lon_ind, reg_lat_ind)         
+         call update_reg_list(t_dipole_num, treg_list_lon, &
+                              treg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
       endif
    enddo
 enddo
@@ -625,6 +627,34 @@ else
 endif
 
 end subroutine reg_box_overlap
+
+!------------------------------------------------------------
+
+function all_wet_corners(d, i, j)
+ integer, intent(in)  :: d(:, :)
+ integer, intent(in)  :: i, j
+ logical              :: all_wet_corners
+
+! pass in the proper depth array.  this routine returns true only
+! if all the corners have a non-zero depth.
+
+integer :: ip1
+
+! set to fail so we can return early.
+all_wet_corners = .false.
+
+! Have to worry about wrapping in longitude but not in latitude
+ip1 = i + 1
+if(ip1 > nx) ip1 = 1
+
+if (d(i,   j  ) <= 0) return
+if (d(ip1, j  ) <= 0) return
+if (d(ip1, j+1) <= 0) return
+if (d(i,   j+1) <= 0) return
+
+all_wet_corners = .true.
+
+end function all_wet_corners
 
 !------------------------------------------------------------
 

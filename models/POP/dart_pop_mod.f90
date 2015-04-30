@@ -360,11 +360,15 @@ if ( .not. module_initialized ) call initialize_module
 ! Check the 'restart_freq_opt' and 'restart_freq' to determine
 ! when we can stop the model
 
-if ( trim(restart_freq_opt) == 'nday' ) then
+if ( trim(restart_freq_opt) == 'nhours' ) then
+   set_model_time_step = set_time(restart_freq * 60, 0) ! (seconds, days)
+else if ( trim(restart_freq_opt) == 'nday' ) then
    set_model_time_step = set_time(0, restart_freq) ! (seconds, days)
 else if ( trim(restart_freq_opt) == 'nyear' ) then
    ! FIXME ... CCSM_POP uses a bogus value for this
-   set_model_time_step = set_time(0, 1) ! (seconds, days)
+   call error_handler(E_MSG, 'POP:set_model_time_step(): ', 'overriding the model timestep with 6 hours')
+   set_model_time_step = set_time(21600, 0) ! (seconds, days)
+   !set_model_time_step = set_time(0, 1) ! (seconds, days)
 else
    call error_handler(E_ERR,'set_model_time_step', &
               'restart_freq_opt must be nday', source, revision, revdate)
