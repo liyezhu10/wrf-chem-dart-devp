@@ -22,9 +22,7 @@ use utilities_mod,        only : error_handler, E_ERR, nc_check, check_namelist_
                                  find_namelist_in_file, nmlfileunit, do_nml_file, do_nml_term, file_exist, &
                                  E_MSG
 
-use assim_model_mod,      only : get_model_size, aread_state_restart, awrite_state_restart, &
-                                 open_restart_read, open_restart_write, close_restart, &
-                                 clamp_or_fail_it, do_clamp_or_fail
+use assim_model_mod,      only : clamp_or_fail_it, do_clamp_or_fail
 
 use time_manager_mod,     only : time_type
 
