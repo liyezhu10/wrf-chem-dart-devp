@@ -25,7 +25,7 @@ use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, 
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 ens_mean_for_model, end_assim_model
+                                 ens_mean_for_model, end_assim_model, get_model_time_from_file
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
@@ -41,7 +41,8 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
-                                 output_inflate_diagnostics
+                                 output_inflate_diagnostics, get_minmax_task_zero,           &
+                                 log_inflation_info
 use mpi_utilities_mod,    only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                  my_task_id, task_sync, broadcast_send, broadcast_recv,      &
                                  task_count
@@ -51,6 +52,14 @@ use smoother_mod,         only : smoother_read_restart, advance_smoother,       
                                  smoother_assim, filter_state_space_diagnostics,             &
                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
 
+use state_vector_io_mod,  only : state_vector_io_init, setup_read_write, turn_read_copy_on,  &
+                                 read_restart_netcdf, turn_write_copy_on,                    &
+                                 turn_write_copy_off, state_vector_io_init,                  &
+                                 write_restart_netcdf
+
+use state_vector_mod,  only : get_num_domains
+
+use io_filenames_mod,     only : restart_files_in
 
 !------------------------------------------------------------------------------
 
@@ -108,6 +117,11 @@ logical  :: output_timestamps        = .false.
 logical  :: trace_execution          = .false.
 logical  :: silence                  = .false.
 
+! read/write state to netcdf file
+logical  :: direct_netcdf_read = .false.
+
+logical  :: direct_netcdf_write = .false.
+
 character(len = 129) :: obs_sequence_in_name  = "obs_seq.out",    &
                         obs_sequence_out_name = "obs_seq.final",  &
                         restart_in_file_name  = 'filter_ics',     &
@@ -146,7 +160,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence
+   silence, direct_netcdf_read, direct_netcdf_write
 
 ! Are any of the observation types subject to being updated
 ! during the computation?  e.g. Folded doppler intensities.
@@ -181,6 +195,7 @@ integer                 :: OBS_MEAN_START, OBS_MEAN_END
 integer                 :: OBS_VAR_START, OBS_VAR_END, TOTAL_OBS_COPIES
 integer                 :: input_qc_index, DART_qc_index
 integer                 :: mean_owner, mean_owners_index
+integer                 :: num_extras
 
 ! For now, have model_size real storage for the ensemble mean, don't really want this
 ! in the long run
@@ -245,6 +260,7 @@ if(inf_flavor(2) == 1) call error_handler(E_ERR, 'filter_main', &
    'Posterior observation space inflation (type 1) not supported', source, revision, revdate)
 
 ! Setup the indices into the ensemble storage
+num_extras = 6
 ENS_MEAN_COPY        = ens_size + 1
 ENS_SD_COPY          = ens_size + 2
 PRIOR_INF_COPY       = ens_size + 3
@@ -299,8 +315,15 @@ call timestamp_message('Before reading in ensemble restart files')
 ! Set a time type for initial time if namelist inputs are not negative
 call filter_set_initial_time(time1)
 
-! Read in restart files and initialize the ensemble storage
-call filter_read_restart(ens_handle, time1, model_size)
+! set up arrays for which copies to read/write
+call setup_read_write(ens_size + num_extras)
+
+if (direct_netcdf_read) then
+   call init_ensemble_manager(ens_handle, ens_size + num_extras, model_size)
+else
+   ! Read in restart files and initialize the ensemble storage
+   call filter_read_restart(ens_handle, time1, model_size)
+endif
 
 ! Read in or initialize smoother restarts as needed
 if(ds) then
@@ -317,16 +340,19 @@ allow_missing = get_missing_ok_status()
 call trace_message('Before initializing inflation')
 
 ! Initialize the adaptive inflation module
+! This activates turn_read_copy_on
 call adaptive_inflate_init(prior_inflate, inf_flavor(1), inf_initial_from_restart(1), &
    inf_sd_initial_from_restart(1), inf_output_restart(1), inf_deterministic(1),       &
    inf_in_file_name(1), inf_out_file_name(1), inf_diag_file_name(1), inf_initial(1),  &
    inf_sd_initial(1), inf_lower_bound(1), inf_upper_bound(1), inf_sd_lower_bound(1),  &
-   ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, allow_missing, 'Prior')
+   ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, allow_missing, 'Prior',             &
+   direct_netcdf_read)
 call adaptive_inflate_init(post_inflate, inf_flavor(2), inf_initial_from_restart(2),  &
    inf_sd_initial_from_restart(2), inf_output_restart(2), inf_deterministic(2),       &
    inf_in_file_name(2), inf_out_file_name(2), inf_diag_file_name(2), inf_initial(2),  &
    inf_sd_initial(2), inf_lower_bound(2), inf_upper_bound(2), inf_sd_lower_bound(2),  &
-   ens_handle, POST_INF_COPY, POST_INF_SD_COPY, allow_missing, 'Posterior')
+   ens_handle, POST_INF_COPY, POST_INF_SD_COPY, allow_missing, 'Posterior',           &
+   direct_netcdf_read)
 
 if (do_output()) then
    if (inf_flavor(1) > 0 .and. inf_damping(1) < 1.0_r8) then
@@ -340,6 +366,19 @@ if (do_output()) then
 endif
 
 call trace_message('After  initializing inflation')
+
+! Read in restart files and initialize the ensemble_storage
+call turn_read_copy_on(1, ens_size) ! need to read all restart copies - do you?
+
+if (direct_netcdf_read) then
+   call prepare_to_write_to_vars(ens_handle)
+   call filter_read_restart_direct(ens_handle, time1)
+   call get_minmax_task_zero(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+   call log_inflation_info(prior_inflate, 'Prior')
+   call get_minmax_task_zero(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY)
+   call log_inflation_info(post_inflate, 'Posterior')
+endif
+
 
 call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
@@ -778,19 +817,30 @@ call trace_message('Before writing output sequence file')
 if(my_task_id() == 0) call write_obs_seq(seq, obs_sequence_out_name)
 call trace_message('After  writing output sequence file')
 
+! Direct netcdf options
+call turn_write_copy_off(1, ens_size + num_extras) ! clean slate
+
 call trace_message('Before writing inflation restart files if required')
 ! Output the restart for the adaptive inflation parameters
-call adaptive_inflate_end(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
-call adaptive_inflate_end(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY)
+call adaptive_inflate_end(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, direct_netcdf_write)
+call adaptive_inflate_end(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY, direct_netcdf_write)
 call trace_message('After  writing inflation restart files if required')
 
 ! Output a restart file if requested
 call trace_message('Before writing state restart files if requested')
-if(output_restart) &
-   call write_ensemble_restart(ens_handle, restart_out_file_name, 1, ens_size)
-if(output_restart_mean) &
-   call write_ensemble_restart(ens_handle, trim(restart_out_file_name)//'.mean', &
-                               ENS_MEAN_COPY, ENS_MEAN_COPY, .true.)
+if (output_restart)      call turn_write_copy_on(1, ens_size) ! restart
+if (output_restart_mean) call turn_write_copy_on(ENS_MEAN_COPY)
+
+! The restart files are written here
+if (direct_netcdf_write) then
+   call filter_write_restart_direct(ens_handle, isprior=.false.)
+else
+   if(output_restart) &
+      call write_ensemble_restart(ens_handle, restart_out_file_name, 1, ens_size)
+   if(output_restart_mean) &
+      call write_ensemble_restart(ens_handle, trim(restart_out_file_name)//'.mean', &
+                                 ENS_MEAN_COPY, ENS_MEAN_COPY, .true.)
+endif
 
 if(ds) then
    call advance_smoother(ens_handle, program_end=.true.)
@@ -965,6 +1015,12 @@ call static_init_obs_sequence()
 call trace_message('Before init_model call')
 call static_init_assim_model()
 call trace_message('After  init_model call')
+
+if (direct_netcdf_read .or. direct_netcdf_write) then
+   call trace_message('Before  state_vector_io_init')
+   call state_vector_io_init()
+   call trace_message('After  state_vector_io_init')
+endif
 
 end subroutine filter_initialize_modules_used
 
@@ -1239,7 +1295,7 @@ if (do_output()) then
          'Reading in initial condition/restart data for all ensemble members from file(s)')
    else
       call error_handler(E_MSG,'filter_read_restart:', &
-         'Reading in a single ensemble and perturbing data for the other ensemble members')
+         'Reading in a single member and perturbing data for the other ensemble members')
    endif
 endif
 
@@ -1271,7 +1327,7 @@ endif
 end subroutine filter_read_restart
 
 !-------------------------------------------------------------------------
-
+! HK why is this in filter_mod not in adaptive_inflate_mod?
 subroutine filter_ensemble_inflate(ens_handle, inflate_copy, inflate, ENS_MEAN_COPY)
 
 type(ensemble_type),         intent(inout) :: ens_handle
@@ -1974,6 +2030,87 @@ select case (this_obs_type)
 end select
 
 end function failed_outlier
+
+!------------------------------------------------------------------
+!> Read the restart information directly from the model output
+!> netcdf file
+!> Which routine should find model size?
+!> 
+subroutine filter_read_restart_direct(state_ens_handle,time)
+
+type(ensemble_type), intent(inout) :: state_ens_handle
+type(time_type),     intent(inout) :: time
+
+integer                         :: dart_index !< where to start in state_ens_handle%copies
+integer                         :: domain_size !< number of state elements in a domain
+integer                         :: num_variables_in_state
+integer                         :: domain !< loop variable
+
+! to start with, assume same variables in each domain - this will not always be the case
+! If they are not in a domain, just set lengths to zero?
+! need to know number of domains
+! read time from input file if time not set in namelist
+if(init_time_days < 0) then
+   !write(*,*) 'restart_files_in :: ', trim(restart_files_in(1,1))
+   time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
+endif
+
+state_ens_handle%time = time
+
+! read in the data and transpose
+dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_restart_netcdf
+do domain = 1, get_num_domains()
+   call read_restart_netcdf(state_ens_handle, restart_in_file_name, domain, dart_index)
+enddo
+
+! Need Temporary print of initial model time?
+
+end subroutine filter_read_restart_direct
+
+!-------------------------------------------------------------------------
+!> write the restart information directly into the model netcdf file.
+subroutine filter_write_restart_direct(state_ens_handle, isprior)
+
+type(ensemble_type),      intent(inout) :: state_ens_handle
+logical,                  intent(in)    :: isprior
+
+integer           :: dart_index !< where to start in state_ens_handle%copies
+integer           :: num_variables_in_state
+integer           :: num_domains
+integer           :: domain !< loop index
+
+! transpose and write out the data
+dart_index = 1
+do domain = 1, get_num_domains()
+   call write_restart_netcdf(state_ens_handle, restart_out_file_name, domain, dart_index, isprior)
+enddo
+
+end subroutine filter_write_restart_direct
+
+!==================================================================
+! TEST FUNCTIONS BELOW THIS POINT
+!------------------------------------------------------------------
+!> dump out obs_copies to file
+subroutine test_obs_copies(obs_ens_handle, information)
+
+type(ensemble_type), intent(in) :: obs_ens_handle
+character(len=*),    intent(in) :: information
+
+character*20  :: task_str !< string to hold the task number
+character*129 :: file_obscopies !< output file name
+integer :: i
+
+write(task_str, '(i10)') obs_ens_handle%my_pe
+file_obscopies = TRIM('obscopies_' // TRIM(ADJUSTL(information)) // TRIM(ADJUSTL(task_str)))
+open(15, file=file_obscopies, status ='unknown')
+
+do i = 1, obs_ens_handle%num_copies - 4
+   write(15, *) obs_ens_handle%copies(i,:)
+enddo
+
+close(15)
+
+end subroutine test_obs_copies
 
 !-------------------------------------------------------------------------
 

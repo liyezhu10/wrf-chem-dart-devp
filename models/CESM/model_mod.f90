@@ -62,7 +62,8 @@ public :: get_model_size,         &
   get_cesm_restart_filename, &
   construct_file_name_in, &
   do_clamp_or_fail, &
-  clamp_or_fail_it
+  clamp_or_fail_it, &
+  get_model_time_from_file
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -854,7 +855,6 @@ end function construct_file_name_in
 
 !--------------------------------------------------------------------
 !> read the time from the input file
-!> Stolen from pop model_mod.f90 restart_to_sv
 function get_model_time_from_file(filename)
 
 character(len=1024) :: filename

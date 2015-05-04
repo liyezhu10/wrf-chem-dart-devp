@@ -28,7 +28,7 @@ use     model_mod, only : get_model_size, static_init_model, get_state_meta_data
                           nc_write_model_vars, pert_model_state,                   &
                           get_close_maxdist_init, get_close_obs_init,              &
                           get_close_obs, ens_mean_for_model, clamp_or_fail_it,     &
-                          do_clamp_or_fail
+                          do_clamp_or_fail, get_model_time_from_file
 
 implicit none
 private
@@ -45,7 +45,7 @@ public :: static_init_assim_model, init_diag_output, get_model_size,            
           nc_get_tindex, get_model_time_step, open_restart_read, open_restart_write,       &
           close_restart, adv_1step, aget_initial_condition, get_close_maxdist_init,        &
           get_close_obs_init, get_close_obs, ens_mean_for_model, clamp_or_fail_it,         &
-          do_clamp_or_fail
+          do_clamp_or_fail, get_model_time_from_file
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &

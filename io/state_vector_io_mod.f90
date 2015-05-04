@@ -38,7 +38,6 @@ use state_vector_mod, only : state_type, domain_type, get_domain_size, num_varia
 
 use copies_on_off_mod
 
-!use state_vector_mod, only : state_type
 
 implicit none
 
@@ -186,10 +185,8 @@ do i = start_var, end_var
    var_size = variable_size(domain, i)
 
    ! number of dimensions and length of each
-   !allocate(dims(dimensions_and_lengths(i,1, domain)))
    allocate(dims(num_dims(domain, i)))
 
-   !dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
    dims = get_dim_lengths(domain, i)
 
    ret = nf90_inq_varid(ncfile, variable_name(domain, i), var_id)
@@ -311,10 +308,8 @@ do i = start_var, end_var
    var_size = variable_size(domain, i)
 
    ! number of dimensions and length of each
-   !allocate(dims(dimensions_and_lengths(i, 1, domain)))
    allocate(dims(num_dims(domain, i)))
 
-   !dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
    dims = get_dim_lengths(domain, i)
 
    ret = nf90_inq_varid(ncfile_out, variable_name(domain, i), var_id)
@@ -358,10 +353,8 @@ do i = start_var, end_var
    endif
 
    ! number of dimensions and length of each
-   !allocate(dims(dimensions_and_lengths(i, 1, domain)))
    allocate(dims(num_dims(domain, i)))
 
-   !dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
    dims = get_dim_lengths(domain, i)
 
    ret = nf90_inq_varid(ncfile_out, variable_name(domain, i), var_id)
