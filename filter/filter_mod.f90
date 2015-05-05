@@ -59,7 +59,7 @@ use state_vector_io_mod,  only : state_vector_io_init, setup_read_write, turn_re
 
 use state_vector_mod,  only : get_num_domains
 
-use io_filenames_mod,     only : restart_files_in
+use io_filenames_mod,     only : restart_files_in, set_filenames, io_filenames_init
 
 !------------------------------------------------------------------------------
 
@@ -119,7 +119,6 @@ logical  :: silence                  = .false.
 
 ! read/write state to netcdf file
 logical  :: direct_netcdf_read = .false.
-
 logical  :: direct_netcdf_write = .false.
 
 character(len = 129) :: obs_sequence_in_name  = "obs_seq.out",    &
@@ -372,7 +371,7 @@ call turn_read_copy_on(1, ens_size) ! need to read all restart copies - do you?
 
 if (direct_netcdf_read) then
    call prepare_to_write_to_vars(ens_handle)
-   call filter_read_restart_direct(ens_handle, time1)
+   call filter_read_restart_direct(ens_handle, num_extras, time1)
    call get_minmax_task_zero(prior_inflate, ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
    call log_inflation_info(prior_inflate, 'Prior')
    call get_minmax_task_zero(post_inflate, ens_handle, POST_INF_COPY, POST_INF_SD_COPY)
@@ -1019,6 +1018,9 @@ call trace_message('After  init_model call')
 if (direct_netcdf_read .or. direct_netcdf_write) then
    call trace_message('Before  state_vector_io_init')
    call state_vector_io_init()
+   call trace_message('After  state_vector_io_init')
+   call trace_message('Before  state_vector_io_init')
+   call io_filenames_init()
    call trace_message('After  state_vector_io_init')
 endif
 
@@ -2036,15 +2038,19 @@ end function failed_outlier
 !> netcdf file
 !> Which routine should find model size?
 !> 
-subroutine filter_read_restart_direct(state_ens_handle,time)
+subroutine filter_read_restart_direct(state_ens_handle, num_extras, time)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
+integer,             intent(in)    :: num_extras
 type(time_type),     intent(inout) :: time
 
 integer                         :: dart_index !< where to start in state_ens_handle%copies
 integer                         :: domain_size !< number of state elements in a domain
 integer                         :: num_variables_in_state
 integer                         :: domain !< loop variable
+
+
+call set_filenames(state_ens_handle%num_copies - num_extras, inf_in_file_name, inf_out_file_name)
 
 ! to start with, assume same variables in each domain - this will not always be the case
 ! If they are not in a domain, just set lengths to zero?

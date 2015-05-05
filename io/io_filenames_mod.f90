@@ -31,7 +31,7 @@ private
 ! These should probably be set and get functions rather than 
 ! direct access
 
-public :: io_filenames_init, restart_files_in, restart_files_out
+public :: io_filenames_init, restart_files_in, restart_files_out, set_filenames
 
 ! How do people name there restart files?
 ! What about domains?
@@ -53,15 +53,10 @@ contains
 
 !----------------------------------
 !> read namelist and set up filename arrays
-subroutine io_filenames_init(ens_size, num_domains, inflation_in, inflation_out)
+!> io filename arrrays should be set at when you read?
+subroutine io_filenames_init()
 
-integer, intent(in) :: ens_size ! ensemble size + extras
-integer, intent(in) :: num_domains
 integer :: iunit, io
-integer :: dom, num_files, i
-character(len = 129) :: inflation_in(2), inflation_out(2)
-character(len = 4)   :: extension, dom_str
-
 !call register_module(source, revision, revdate)
 
 ! Read the namelist entry
@@ -73,7 +68,21 @@ call check_namelist_read(iunit, io, "io_filenames_nml")
 if (do_nml_file()) write(nmlfileunit, nml=io_filenames_nml)
 if (do_nml_term()) write(     *     , nml=io_filenames_nml)
 
-num_files = ens_size + 6 !> @todo
+end subroutine io_filenames_init
+
+!----------------------------------
+
+subroutine set_filenames(ens_size, inflation_in, inflation_out)
+
+integer,              intent(in) :: ens_size
+character(len = 129), intent(in) :: inflation_in(2), inflation_out(2)
+character(len = 4)   :: extension, dom_str
+
+integer :: num_domains
+integer :: dom, i ! loop variables
+integer :: num_files
+
+num_files = ens_size + 6 !> @todo ensemble size + number of extras
 
 allocate(restart_files_in(num_files, num_domains))
 allocate(restart_files_out(num_files, num_domains, 2)) ! for prior and posterior filenames
@@ -141,7 +150,8 @@ do dom = 1, num_domains
 
 enddo
 
-end subroutine io_filenames_init
+end subroutine set_filenames
+
 
 !--------------------------------------------------------------------
 !> construct restart file name for writing

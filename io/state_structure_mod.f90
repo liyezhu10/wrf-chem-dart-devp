@@ -156,6 +156,7 @@ character(len=512) :: netcdf_filename
 integer :: ncfile ! netdcf file id - should this be part of the domain handle?
 
 ! open netcdf file - all restart files in a domain have the same info?
+print*, 'domain%info_file', domain%info_file
 ret = nf90_open(domain%info_file, NF90_NOWRITE, ncfile)
 call nc_check(ret, 'get_state_variable_info', 'opening')
 
