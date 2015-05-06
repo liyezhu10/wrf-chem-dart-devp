@@ -20,9 +20,10 @@ module io_filenames_mod
 !> Diagnostic files could have different netcdf variable ids
 !> @{
 
-use utilities_mod, only : do_nml_file, nmlfileunit, do_nml_term, check_namelist_read, &
-                          find_namelist_in_file
-use model_mod,     only : construct_file_name_in
+use utilities_mod,    only : do_nml_file, nmlfileunit, do_nml_term, check_namelist_read, &
+                             find_namelist_in_file
+use model_mod,        only : construct_file_name_in
+use state_vector_mod, only : get_num_domains
 
 implicit none
 
@@ -83,6 +84,8 @@ integer :: dom, i ! loop variables
 integer :: num_files
 
 num_files = ens_size + 6 !> @todo ensemble size + number of extras
+
+num_domains = get_num_domains()
 
 allocate(restart_files_in(num_files, num_domains))
 allocate(restart_files_out(num_files, num_domains, 2)) ! for prior and posterior filenames

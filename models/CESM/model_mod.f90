@@ -851,6 +851,9 @@ integer,            intent(in) :: copy
 character(len=1024)            :: construct_file_name_in
 
 
+construct_file_name_in = 'pop.r.nc'
+
+
 end function construct_file_name_in
 
 !--------------------------------------------------------------------
@@ -859,7 +862,6 @@ function get_model_time_from_file(filename)
 
 character(len=1024) :: filename
 type(time_type) :: get_model_time_from_file
-
 
 
 
