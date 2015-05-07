@@ -27,6 +27,8 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              do_nml_file, do_nml_term, nmlfileunit
 use     obs_kind_mod     ! for now, include all
 
+use state_vector_mod,  only : get_num_domains
+
 
 use pop_model_mod
 use clm_model_mod
@@ -281,6 +283,7 @@ call set_start_end(modelname, x_start, x_end)
 if (modelname == 'CAM') then
    call cam_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
 else if (modelname == 'POP') then
+   print*, 'pink'
    call pop_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
 else if (modelname == 'CLM') then
    call clm_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
@@ -375,13 +378,13 @@ call set_start_end(modelname, x_start, x_end)
 
 select case (modelname)
    case ('CAM')
-      call cam_get_state_meta_data(index_in - x_start, location, var_type)
+      call cam_get_state_meta_data(index_in - x_start +1, location, var_type)
 
    case ('POP')
-      call pop_get_state_meta_data(index_in - x_start, location, var_type)
+      call pop_get_state_meta_data(index_in - x_start +1, location, var_type)
 
    case ('CLM')
-      call clm_get_state_meta_data(index_in - x_start, location, var_type)
+      call clm_get_state_meta_data(index_in - x_start +1, location, var_type)
 
    case default
       call error_handler(E_ERR, 'get_state_meta_data', 'error determining right model to use', &
@@ -766,11 +769,11 @@ select case (modelname)
 
    case ('POP') 
       x_start = cam_model_size + 1
-      x_end = x_start + pop_model_size
+      x_end = x_start + pop_model_size -1
 
    case ('CLM')
       x_start = cam_model_size + pop_model_size + 1
-      x_end = x_start + clm_model_size 
+      x_end = x_start + clm_model_size -1
 
    case default
       x_start = -1
@@ -820,6 +823,11 @@ subroutine which_model_obs(obs_type, modelname)
 ! FIXME: this needs to be beefed up with all possible obs types
 ! and which model would have the best forward operator for it.
 
+!FIXME  for model_intertpolate kind is used.  You can't tell the 
+! model from KIND_TEMPERATURE
+modelname = 'POP'
+return
+
 select case (obs_type)
    case (RADIOSONDE_TEMPERATURE)
       modelname = 'CAM'
@@ -857,13 +865,29 @@ construct_file_name_in = 'pop.r.nc'
 end function construct_file_name_in
 
 !--------------------------------------------------------------------
-!> read the time from the input file
-function get_model_time_from_file(filename)
+!> read the time from the input files
+!> Only one time is passed to filter.  Check each model time is the
+!> same (should you be able to take the time from one model only?)
+function get_model_time_from_file()
 
-character(len=1024) :: filename
 type(time_type) :: get_model_time_from_file
 
+integer :: dom_id
 
+do dom_id = 1, get_num_domains()
+
+   if (dom_id == pop_id) then
+      get_model_time_from_file = pop_get_model_time_from_file()
+   elseif (dom_id == cam_id) then
+      get_model_time_from_file = cam_get_model_time_from_file()
+   elseif (dom_id == clm_id) then
+      call error_handler(E_ERR, 'no clm', 'yet')
+   ! good luck
+   endif
+
+enddo
+
+call print_time(get_model_time_from_file)
 
 end function get_model_time_from_file
 
@@ -875,6 +899,8 @@ integer, intent(in) :: var ! variable index
 integer, intent(in) :: dom ! domain indentifier
 logical             :: do_clamp_or_fail
 
+do_clamp_or_fail = .false.
+call error_handler(E_MSG, 'do_clamp_or_fail', 'not available')
 
 end function do_clamp_or_fail
 

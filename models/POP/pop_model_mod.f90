@@ -3705,15 +3705,17 @@ end function pop_construct_file_name_in
 !--------------------------------------------------------------------
 !> read the time from the input file
 !> Stolen from pop model_mod.f90 restart_to_sv
-function pop_get_model_time_from_file(filename)
+function pop_get_model_time_from_file()
 
 character(len=1024) :: filename
 type(time_type) :: pop_get_model_time_from_file
 
-
 integer :: ret !< netcdf return code
 integer :: ncid !< netcdf file id
 integer :: iyear, imonth, iday, ihour, iminute, isecond
+
+filename = 'pop.r.nc'
+call error_handler(E_MSG, 'filename hard coded', 'pop_get_model_time_from_file')
 
 if ( .not. module_initialized ) call pop_static_init_model
 

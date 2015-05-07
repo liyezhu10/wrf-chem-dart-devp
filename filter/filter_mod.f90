@@ -2057,8 +2057,9 @@ call set_filenames(state_ens_handle%num_copies - num_extras, inf_in_file_name, i
 ! need to know number of domains
 ! read time from input file if time not set in namelist
 if(init_time_days < 0) then
-   !write(*,*) 'restart_files_in :: ', trim(restart_files_in(1,1))
-   time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
+   ! HK you should not pass the filename in, it does not make sense
+   !time = get_model_time_from_file(restart_files_in(1,1)) ! Any of the restarts?
+   time = get_model_time_from_file() ! Any of the restarts?
 endif
 
 state_ens_handle%time = time
