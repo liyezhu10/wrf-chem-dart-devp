@@ -858,9 +858,15 @@ integer,            intent(in) :: domain
 integer,            intent(in) :: copy
 character(len=1024)            :: construct_file_name_in
 
-
-construct_file_name_in = 'pop.r.nc'
-
+if(domain == cam_id) then
+   construct_file_name_in = 'caminput.nc'
+elseif(domain == pop_id) then
+   construct_file_name_in = 'pop.r.nc'
+elseif(domain == clm_id) then
+   call error_handler(E_ERR, 'no clm', 'yet')
+else
+  construct_file_name_in = 'NULL'
+endif
 
 end function construct_file_name_in
 

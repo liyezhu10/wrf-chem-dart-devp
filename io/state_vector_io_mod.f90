@@ -133,7 +133,7 @@ COPIES: do c = 1, state_ens_handle%my_num_copies
    ! You have already opened this once to read the variable info. Should you just leave it open
    ! on the readers?
    if (query_read_copy(my_copy)) then
-      netcdf_filename = restart_files_in(my_copy, 1)
+      netcdf_filename = restart_files_in(my_copy, domain)
       print*, 'opening netcdf_filename ', trim(netcdf_filename)
       ret = nf90_open(netcdf_filename, NF90_NOWRITE, ncfile)
       call nc_check(ret, 'read_restart_netcdf opening', netcdf_filename)

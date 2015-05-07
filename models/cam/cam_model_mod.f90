@@ -638,10 +638,6 @@ end if
 if (do_nml_file()) write(nmlfileunit, nml=cam_model_nml)
 if (do_nml_term()) write(    *      , nml=cam_model_nml)
 
-! Add a component to the state vector
-component_id = add_domain('caminput.nc', nflds, cflds)
-if (present(cam_id)) cam_id = component_id ! to pass out to CESM model_mod
-
 ! Set the model minimum time step from the namelist seconds and days input
 Time_step_atmos = set_time(Time_step_seconds, Time_step_days)
 if (print_details .and. do_out) call print_time(Time_step_atmos)
@@ -739,6 +735,10 @@ end if
 ! Order the state vector parts into cflds.
 allocate(cflds(nflds))
 call order_state_fields()
+
+! Add a component to the state vector
+component_id = add_domain('caminput.nc', nflds, cflds)
+if (present(cam_id)) cam_id = component_id ! to pass out to CESM model_mod
 
 !------------------------------------------------------------------------
 ! Get field attributes needed by nc_write_model_atts from caminput.nc.
@@ -7097,6 +7097,7 @@ end if
 if (allocated(phis_stagr_lon)) deallocate(phis_stagr_lon)
 if (allocated(phis_stagr_lat)) deallocate(phis_stagr_lat)
 
+
 deallocate (ps, p, p_col, model_h)
 if (allocated(ps_stagr_lon)) deallocate(ps_stagr_lon)
 if (allocated(ps_stagr_lat)) deallocate(ps_stagr_lat)
@@ -7109,6 +7110,7 @@ if (.not. l_rectang) then
    deallocate(corners)
    deallocate(num_nghbrs, centers, a, b, x_ax_bearings)
 end if
+
 
 call end_grid_1d_instance(lon)
 call end_grid_1d_instance(lat)
@@ -7124,8 +7126,9 @@ call end_grid_1d_instance(ilev)
 call end_grid_1d_instance(P0)
 
 ! Deallocate _gc variables; cs_gc_xyz and cs_gc
-call finalize_closest_node()
+!call finalize_closest_node()
 if (.not. l_rectang) call get_close_obs_destroy(cs_gc)
+
 
 end subroutine cam_end_model
 

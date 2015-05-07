@@ -101,6 +101,7 @@ subroutine static_init_state_type()
 if(state_initialized) return !?
 
 state%num_domains = 0
+state_initialized = .true.
 
 end subroutine static_init_state_type
 
@@ -128,6 +129,7 @@ state%num_domains = state%num_domains + 1
 dom_identifier = state%num_domains
 
 state%domain(dom_identifier)%info_file = info_file
+
 ! set number of variables in this domain
 state%domain(dom_identifier)%num_variables = num_variables
 
@@ -136,6 +138,7 @@ allocate(state%domain(dom_identifier)%variable(num_variables))
 
 do i = 1, num_variables
    state%domain(dom_identifier)%variable(i)%varname = var_names(i)
+   print*, trim(state%domain(dom_identifier)%variable(i)%varname)
 enddo
 
 call get_state_variable_info(state%domain(dom_identifier))
@@ -156,7 +159,6 @@ character(len=512) :: netcdf_filename
 integer :: ncfile ! netdcf file id - should this be part of the domain handle?
 
 ! open netcdf file - all restart files in a domain have the same info?
-print*, 'domain%info_file', domain%info_file
 ret = nf90_open(domain%info_file, NF90_NOWRITE, ncfile)
 call nc_check(ret, 'get_state_variable_info', 'opening')
 
@@ -380,6 +382,7 @@ end function domain_num_dims
 !------------------------------------
 !> Identify the unique dimensions within a domain
 !> I think you can sort dimension ids and remove duplicates
+!> What if there are 0 dimensions?
 subroutine get_unique_dimensions(dom)
 
 integer :: dom ! domain index

@@ -121,6 +121,9 @@ logical  :: silence                  = .false.
 logical  :: direct_netcdf_read = .false.
 logical  :: direct_netcdf_write = .false.
 
+! switch off diagnostic files - I don't think diagnoistic files work yet
+logical :: state_diagnostic_files = .false.
+
 character(len = 129) :: obs_sequence_in_name  = "obs_seq.out",    &
                         obs_sequence_out_name = "obs_seq.final",  &
                         restart_in_file_name  = 'filter_ics',     &
@@ -604,21 +607,25 @@ AdvanceTime : do
    call timestamp_message('After  computing prior observation values')
    call     trace_message('After  computing prior observation values')
 
-   ! Do prior state space diagnostic output as required
-   ! Use ens_mean which is declared model_size for temp storage in diagnostics
-   if ((output_interval > 0) .and. &
-       (time_step_number / output_interval * output_interval == time_step_number)) then
-      call trace_message('Before prior state space diagnostics')
-      call timestamp_message('Before prior state space diagnostics')
-      call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit, ens_handle, &
-         model_size, num_output_state_members, &
-         output_state_mean_index, output_state_spread_index, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
-      call timestamp_message('After  prior state space diagnostics')
-      call trace_message('After  prior state space diagnostics')
+   if (state_diagnostic_files) then
+
+      ! Do prior state space diagnostic output as required
+      ! Use ens_mean which is declared model_size for temp storage in diagnostics
+      if ((output_interval > 0) .and. &
+         (time_step_number / output_interval * output_interval == time_step_number)) then
+         call trace_message('Before prior state space diagnostics')
+         call timestamp_message('Before prior state space diagnostics')
+         call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit, ens_handle, &
+            model_size, num_output_state_members, &
+            output_state_mean_index, output_state_spread_index, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+         call timestamp_message('After  prior state space diagnostics')
+         call trace_message('After  prior state space diagnostics')
+      endif
+
    endif
-  
+
    call trace_message('Before observation space diagnostics')
    ! Do prior observation space diagnostics and associated quality control
    call obs_space_diagnostics(obs_ens_handle, forward_op_ens_handle, ens_size, &
@@ -713,26 +720,29 @@ AdvanceTime : do
       call trace_message('After  computing smoother means/spread')
    endif
 
-   ! Do posterior state space diagnostic output as required
-   if ((output_interval > 0) .and. &
-       (time_step_number / output_interval * output_interval == time_step_number)) then
-      call trace_message('Before posterior state space diagnostics')
-      call timestamp_message('Before posterior state space diagnostics')
-      call filter_state_space_diagnostics(curr_ens_time, PosteriorStateUnit, ens_handle, &
-         model_size, num_output_state_members, output_state_mean_index, &
-         output_state_spread_index, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
-      ! Cyclic storage for lags with most recent pointed to by smoother_head
-      ! ens_mean is passed to avoid extra temp storage in diagnostics
+   if (state_diagnostic_files) then
 
-      call smoother_ss_diagnostics(model_size, num_output_state_members, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         POST_INF_COPY, POST_INF_SD_COPY)
-      call timestamp_message('After  posterior state space diagnostics')
-      call trace_message('After  posterior state space diagnostics')
+      ! Do posterior state space diagnostic output as required
+      if ((output_interval > 0) .and. &
+         (time_step_number / output_interval * output_interval == time_step_number)) then
+         call trace_message('Before posterior state space diagnostics')
+         call timestamp_message('Before posterior state space diagnostics')
+         call filter_state_space_diagnostics(curr_ens_time, PosteriorStateUnit, ens_handle, &
+            model_size, num_output_state_members, output_state_mean_index, &
+            output_state_spread_index, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
+         ! Cyclic storage for lags with most recent pointed to by smoother_head
+         ! ens_mean is passed to avoid extra temp storage in diagnostics
+
+         call smoother_ss_diagnostics(model_size, num_output_state_members, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            POST_INF_COPY, POST_INF_SD_COPY)
+         call timestamp_message('After  posterior state space diagnostics')
+         call trace_message('After  posterior state space diagnostics')
    endif
 
+   endif
 
    call trace_message('Before posterior obs space diagnostics')
 
@@ -949,11 +959,12 @@ endif
 
 
 ! Set up diagnostic output for model state, if output is desired
-PriorStateUnit     = init_diag_output('Prior_Diag', &
-                        'prior ensemble state', num_state_copies, state_meta)
-PosteriorStateUnit = init_diag_output('Posterior_Diag', &
-                        'posterior ensemble state', num_state_copies, state_meta)
-
+if(state_diagnostic_files) then
+   PriorStateUnit     = init_diag_output('Prior_Diag', &
+                           'prior ensemble state', num_state_copies, state_meta)
+   PosteriorStateUnit = init_diag_output('Posterior_Diag', &
+                           'posterior ensemble state', num_state_copies, state_meta)
+endif
 
 ! Set the metadata for the observations.
 
