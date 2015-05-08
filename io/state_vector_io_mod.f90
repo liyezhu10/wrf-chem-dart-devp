@@ -34,7 +34,8 @@ use state_vector_mod, only : state_type, domain_type, get_domain_size, num_varia
                              variable_size, num_dims, get_dim_ids, variable_name, &
                              get_dim_lengths, &
                              dim_name, dim_length, add_time_unlimited, set_var_id, &
-                             unique_dim_name, num_unique_dims, unique_dim_length
+                             unique_dim_name, num_unique_dims, unique_dim_length, &
+                             check_correct_variables
 
 use copies_on_off_mod
 
@@ -253,6 +254,12 @@ COPIES : do c = 1, state_ens_handle%my_num_copies
          if(file_exist(netcdf_filename_out)) then
             ret = nf90_open(netcdf_filename_out, NF90_WRITE, ncfile_out)
             call nc_check(ret, 'write_restart_netcdf opening', trim(netcdf_filename_out))
+            ! check variables present and are the correct size
+            if (.not. check_correct_variables(netcdf_filename_out, domain)) then
+               write(msgstring, *) 'Exsting netcdf file does not match model: Recreating output file ', trim(netcdf_filename_out)
+               call error_handler(E_MSG,'state_vector_io_mod:', msgstring)
+               call create_state_output(netcdf_filename_out, domain)
+            endif
          else ! create output file if it does not exist
             write(msgstring, *) 'Creating output file ', trim(netcdf_filename_out)
             call error_handler(E_MSG,'state_vector_io_mod:', msgstring)
@@ -371,8 +378,6 @@ end subroutine write_variables_clamp
 
 !-------------------------------------------------
 !> Create the output files
-!> Assume same variables in each domain
-!> Overwriting reading arrays with writing info.  Is this what you want to do?
 !> ncfile_out is global - is this ok?
 subroutine create_state_output(filename, dom)
 
