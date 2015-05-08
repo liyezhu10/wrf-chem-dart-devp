@@ -446,7 +446,7 @@ do i = 1, ndims
    endif
 enddo
 
-deallocate(array_of_dimids, u)
+deallocate(array_of_dimids, array_of_names, array_of_lengths, index, u)
 
 end subroutine get_unique_dimensions
 
@@ -528,6 +528,13 @@ ret = nf90_open(netcdf_filename, NF90_NOWRITE, ncfile)
 call nc_check(ret, 'check_correct_variables output', netcdf_filename)
 
 do i = 1, state%domain(dom)%num_variables
+
+   ret = nf90_inq_varid(ncfile, state%domain(dom)%variable(i)%varname, var_id)
+   ! Any kind of error is a fail.
+   if (ret /= NF90_NOERR) then
+      check_correct_variables = .false.
+      return
+   endif
 
    ret = nf90_inquire_variable(ncfile, var_id, ndims=ndims, dimids=dimids, xtype=xtype)
    ! Any kind of error is a fail.
