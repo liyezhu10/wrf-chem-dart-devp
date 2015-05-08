@@ -7126,7 +7126,7 @@ call end_grid_1d_instance(ilev)
 call end_grid_1d_instance(P0)
 
 ! Deallocate _gc variables; cs_gc_xyz and cs_gc
-!call finalize_closest_node()
+call finalize_closest_node()
 if (.not. l_rectang) call get_close_obs_destroy(cs_gc)
 
 

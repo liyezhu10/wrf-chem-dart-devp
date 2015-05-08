@@ -283,7 +283,6 @@ call set_start_end(modelname, x_start, x_end)
 if (modelname == 'CAM') then
    call cam_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
 else if (modelname == 'POP') then
-   print*, 'pink'
    call pop_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
 else if (modelname == 'CLM') then
    call clm_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)

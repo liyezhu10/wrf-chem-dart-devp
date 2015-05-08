@@ -138,7 +138,6 @@ allocate(state%domain(dom_identifier)%variable(num_variables))
 
 do i = 1, num_variables
    state%domain(dom_identifier)%variable(i)%varname = var_names(i)
-   print*, trim(state%domain(dom_identifier)%variable(i)%varname)
 enddo
 
 call get_state_variable_info(state%domain(dom_identifier))

@@ -815,10 +815,13 @@ call trace_message('End of main filter assimilation loop, starting cleanup', 'fi
 
 call trace_message('Before finalizing diagnostics files')
 ! properly dispose of the diagnostics files
-if(my_task_id() == 0) then
-   ierr = finalize_diag_output(PriorStateUnit)
-   ierr = finalize_diag_output(PosteriorStateUnit)
+if (state_diagnostic_files) then
+   if(my_task_id() == 0) then
+      ierr = finalize_diag_output(PriorStateUnit)
+      ierr = finalize_diag_output(PosteriorStateUnit)
+   endif
 endif
+
 call trace_message('After  finalizing diagnostics files')
 
 call trace_message('Before writing output sequence file')
