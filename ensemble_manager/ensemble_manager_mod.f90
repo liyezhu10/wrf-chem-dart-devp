@@ -51,7 +51,8 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           broadcast_copy,             prepare_to_write_to_vars, prepare_to_write_to_copies, &
           prepare_to_read_from_vars,  prepare_to_read_from_copies, prepare_to_update_vars,  &
           prepare_to_update_copies,   print_ens_handle,                                 &
-          map_task_to_pe,             map_pe_to_task
+          map_task_to_pe,             map_pe_to_task,           is_single_restart_file_in, &
+          perturb_my_copies
 
 type ensemble_type
    !DIRECT ACCESS INTO STORAGE IS USED TO REDUCE COPYING: BE CAREFUL
@@ -1853,6 +1854,50 @@ integer                         :: map_task_to_pe
 map_task_to_pe = ens_handle%task_to_pe_list(t + 1)
 
 end function map_task_to_pe
+
+!---------------------------------------------------------------------------------
+! HK this is so filter can see if it is a single file in for netcdf read. 
+! I don't think this IO stuff should be in the ensemble manager.
+function is_single_restart_file_in()
+
+logical :: is_single_restart_file_in
+
+is_single_restart_file_in = single_restart_file_in
+
+end function is_single_restart_file_in
+
+!---------------------------------------------------------------------------------
+!> perturb my copies
+subroutine perturb_my_copies(ens_handle, start_copy, end_copy)
+
+type(ensemble_type),  intent(inout)           :: ens_handle
+integer,              intent(in)              :: start_copy, end_copy
+
+integer                :: global_copy_index
+logical                :: interf_provided
+type(random_seq_type)  :: random_seq
+integer                :: i, j ! loop variables
+
+PERTURB_MY_RESTARTS: do i = 1, ens_handle%my_num_copies
+   global_copy_index = ens_handle%my_copies(i)
+   ! If this is one of the actual ensemble copies, then perturb
+   if(global_copy_index >= start_copy .and. global_copy_index <= end_copy) then
+     ! See if model has an interface to perturb
+      call pert_model_state(ens_handle%vars(:, i), ens_handle%vars(:, i), interf_provided)
+      ! If model does not provide a perturbing interface, do it here
+      if(.not. interf_provided) then
+         ! To reproduce for varying pe count, need  fixed sequence for each copy
+         call init_random_seq(random_seq, global_copy_index)
+         do j = 1, ens_handle%num_vars
+            if (ens_handle%vars(j,i) /= MISSING_R8) &
+               ens_handle%vars(j, i) = random_gaussian(random_seq, ens_handle%vars(j, i), &
+               perturbation_amplitude)
+         end do
+      endif
+   endif
+end do PERTURB_MY_RESTARTS
+
+end subroutine perturb_my_copies
 
 !---------------------------------------------------------------------------------
 

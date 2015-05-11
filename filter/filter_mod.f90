@@ -37,7 +37,8 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
                                  prepare_to_read_from_vars, prepare_to_write_to_vars,        &
                                  prepare_to_read_from_copies, get_ensemble_time,             &
-                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies
+                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
+                                 is_single_restart_file_in, perturb_my_copies
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
@@ -370,7 +371,11 @@ endif
 call trace_message('After  initializing inflation')
 
 ! Read in restart files and initialize the ensemble_storage
-call turn_read_copy_on(1, ens_size) ! need to read all restart copies - do you?
+if (start_from_restart) then
+   call turn_read_copy_on(1, ens_size) ! need to read all restart copies - do you?
+else
+   call error_handler(E_ERR, 'filter_mod', 'need to start from restart')
+endif
 
 if (direct_netcdf_read) then
    call prepare_to_write_to_vars(ens_handle)
@@ -2063,6 +2068,15 @@ integer                         :: domain_size !< number of state elements in a 
 integer                         :: num_variables_in_state
 integer                         :: domain !< loop variable
 
+if (do_output()) then
+   if (start_from_restart) then
+      call error_handler(E_MSG,'filter_read_restart:', &
+         'Reading in initial condition/restart data for all ensemble members from file(s)')
+   else
+      call error_handler(E_MSG,'filter_read_restart:', &
+         'Reading in a single member and perturbing data for the other ensemble members')
+   endif
+endif
 
 call set_filenames(state_ens_handle%num_copies - num_extras, inf_in_file_name, inf_out_file_name)
 
@@ -2078,11 +2092,16 @@ endif
 
 state_ens_handle%time = time
 
-! read in the data and transpose
+! Read in the data
 dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_restart_netcdf
 do domain = 1, get_num_domains()
    call read_restart_netcdf(state_ens_handle, restart_in_file_name, domain, dart_index)
 enddo
+
+! Perturb if only a single restart file is read.
+if (is_single_restart_file_in()) then
+   call perturb_my_copies(state_ens_handle, 1, ens_size)
+endif
 
 ! Need Temporary print of initial model time?
 

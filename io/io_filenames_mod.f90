@@ -24,6 +24,7 @@ use utilities_mod,    only : do_nml_file, nmlfileunit, do_nml_term, check_nameli
                              find_namelist_in_file
 use model_mod,        only : construct_file_name_in
 use state_vector_mod, only : get_num_domains
+use ensemble_manager_mod, only : is_single_restart_file_in
 
 implicit none
 
@@ -91,17 +92,38 @@ allocate(restart_files_in(num_files, num_domains))
 allocate(restart_files_out(num_files, num_domains, 2)) ! for prior and posterior filenames
 
 do dom = 1, num_domains
-   do i = 1, ens_size  ! restarts
-      restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
-      write(extension, '(i4.4)') i
-      write(dom_str, '(i1.1)') dom
-      restart_files_out(i, dom, 1) = 'prior_member_d0' // trim(dom_str) // '.' // extension
-      if (overwrite_input) then
-         restart_files_out(i, dom, 2) = restart_files_in(i, dom)
-      else
-         restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
-      endif
-   enddo
+
+   if (is_single_restart_file_in()) then ! reading first restart for now
+
+      restart_files_in(:, dom) = construct_file_name_in(restart_in_stub, dom, 1)
+
+      do i = 1, ens_size  ! restarts
+         write(extension, '(i4.4)') i
+         write(dom_str, '(i1.1)') dom
+         restart_files_out(i, dom, 1) = 'prior_member_d0' // trim(dom_str) // '.' // extension
+         if (overwrite_input) then
+            restart_files_out(i, dom, 2) = restart_files_in(i, dom)
+         else
+            restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+         endif
+      enddo
+
+   else
+
+      do i = 1, ens_size  ! restarts
+         restart_files_in(i, dom)  = construct_file_name_in(restart_in_stub, dom, i)
+         write(extension, '(i4.4)') i
+         write(dom_str, '(i1.1)') dom
+         restart_files_out(i, dom, 1) = 'prior_member_d0' // trim(dom_str) // '.' // extension
+         if (overwrite_input) then
+            restart_files_out(i, dom, 2) = restart_files_in(i, dom)
+         else
+            restart_files_out(i, dom, 2) = construct_file_name_out(restart_out_stub, dom, i)
+         endif
+      enddo
+
+   endif
+
 enddo
 
 ! input extras

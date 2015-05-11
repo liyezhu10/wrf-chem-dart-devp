@@ -519,7 +519,8 @@ tristate(:) = 0
 
 if (include_CAM) then
    call set_start_end('CAM', x_start, x_end)
-   call cam_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), had_interface)
+   !call cam_pert_model_state(state(x_start:x_end), pert_state(x_start:x_end), had_interface)
+   call error_handler(E_MSG, 'pert_model_state', 'no cam perturb for now')
    if (had_interface) then
       tristate = 1
    else
