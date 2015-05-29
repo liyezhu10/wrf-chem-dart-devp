@@ -29,6 +29,12 @@
  * lines outside the &name, / delimiters are ignored and often
  * used as comments.
  *
+ * it's possible that a later fortran standard allows ! to be
+ * used inside a namelist as a comment char, but that isn't
+ * universal with older compilers.  todo: make an option that
+ * maintains lines starting with ! inside & and / , but where
+ * to output them?  sort on first non-blank char after the ! ?
+ *
  * separators seem to be commas, in which case multiple values
  * can occur on the same line.  arrays of values can seem to
  * occur on multiple lines.   bother.
@@ -106,6 +112,7 @@ char *haschar(char *line, int linelen, char target);
 int longestname(struct nml *nl);
 int nextname(char *line, int linelen, int offset, int *start, int *end);
 int nextvalue(char *line, int linelen, int offset, int *start, int *end);
+int justvalue(char *line, int linelen, char **value);
 
 int main(int argc, char **argv)
 {

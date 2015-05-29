@@ -23,7 +23,8 @@ private
 
 public :: get_obs_kind_name, assimilate_this_obs_kind, &
           evaluate_this_obs_kind, get_obs_kind_var_type, get_obs_kind_index, &
-          write_obs_kind, read_obs_kind, get_kind_from_menu, map_def_index
+          write_obs_kind, read_obs_kind, get_kind_from_menu, map_def_index, &
+          has_ext_prior_this_obs_kind, use_ext_prior_this_obs_kind
 ! Added by TRW for restart file functionality
 public :: get_raw_obs_kind_name, get_raw_obs_kind_index
 ! Added by nsc to try to limit the number of global vars exported from
@@ -172,7 +173,7 @@ integer, parameter, public :: &
     KIND_INFRARED_BRIGHT_TEMP        = 61, &
     KIND_LANDMASK                    = 62
 
-! kind for unstructured grids
+! kind for unstructured grids 
 integer, parameter, public :: &
     KIND_EDGE_NORMAL_SPEED           = 63
 
@@ -272,11 +273,22 @@ integer, parameter, public :: &
     KIND_FPAR                        = 129, &
     KIND_TOTAL_WATER_STORAGE         = 130
 
+! kinds for phenological variables
+integer, parameter, public :: &
+    KIND_GREEN_LEAF_FACTOR	     = 130, &
+    KIND_PRESCRIBED_EXPONENT	     = 131, &
+    KIND_FILLER			     = 132  
+
+! kinds for FIA assimilation variables
+integer, parameter, public :: &
+    KIND_DBH			     = 133, &
+    KIND_STEM_DENSITY		     = 134
+
 ! more kinds for land snow cover (Ally Toure)
 integer, parameter, public :: &
-    KIND_BRIGHTNESS_TEMPERATURE      = 131, &
-    KIND_VEGETATION_TEMPERATURE      = 132, &
-    KIND_CANOPY_HEIGHT               = 133
+    KIND_BRIGHTNESS_TEMPERATURE      = 135, &
+    KIND_VEGETATION_TEMPERATURE      = 136, &
+    KIND_CANOPY_HEIGHT               = 137
 
 ! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
@@ -286,26 +298,147 @@ integer, parameter, public :: &
 
 ! more kinds for TIEGCM Alex Chartier 
 integer, parameter, public :: &
-    KIND_VERTICAL_TEC                = 143, &
-    KIND_O_N2_COLUMN_DENSITY_RATIO   = 144
+    KIND_VERTICAL_TEC                = 143  ! total electron content
 
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
 !! possibly of interest to other models with Chemistry species.
 !! DO NOT USE numbers between 151-250 without talking to me, please?  (nancy)
 
-! these chemistry kinds match the numbers Arthur Mizzi is using
+! BG Kinds for chemistry with CAM-Chem
 integer, parameter, public :: &
-    KIND_O3                          = 151, &
-    KIND_CO                          = 153, &
-    KIND_NO                          = 155, &
-    KIND_NO2                         = 156
+    KIND_O3                       = 151
 
-! more chemistry kinds (Jerome Barre)  (last three slots)
+    ! BG Nitrogen species
 integer, parameter, public :: &
-    KIND_CO2                         = 247, &
-    KIND_NH3                         = 248, &
-    KIND_CH4                         = 249
+    KIND_NO                       = 152, &
+    KIND_NO2                      = 153, &
+    KIND_NO3                      = 154, &
+    KIND_HNO3                     = 155, &
+    KIND_HNO4                     = 156, & ! doesnot exist in fact
+    KIND_N2O5                     = 157, &
+    KIND_PAN                      = 158, &
+    KIND_NH3                      = 159, &
+    KIND_HCN                      = 160, &
+    KIND_CH3CN                    = 161
+
+    ! BG CO and VOCs concentrations
+integer, parameter, public :: &
+    KIND_CO                       = 162, &
+    KIND_BIGALD                   = 163, &
+    KIND_BIGALK                   = 164, &
+    KIND_BIGENE                   = 165, & 
+    KIND_C10H16                   = 166, &
+    KIND_C2H2                     = 167, &
+    KIND_C2H4                     = 168, &
+    KIND_C2H5OH                   = 169, & 
+    KIND_C2H6                     = 170, &
+    KIND_C3H6                     = 171, &
+    KIND_C3H8                     = 172, &
+    KIND_CH2O                     = 173, &
+    KIND_CH3CHO                   = 174, &
+    KIND_CH3COCH3                 = 175, &
+    KIND_CH3COOH                  = 176, & 
+    KIND_CH3OH                    = 177, &
+    KIND_HCOOH                    = 178, &
+    KIND_ISOP                     = 179, &
+    KIND_MEK                      = 180, &
+    KIND_TOLUENE                  = 181
+
+    ! BG CO and VOCs emissions
+integer, parameter, public :: &
+    KIND_SFCO                     = 182, &
+    KIND_SFHCN                    = 183, &
+    KIND_SFBIGALD                 = 184, &
+    KIND_SFBIGALK                 = 185, &
+    KIND_SFBIGENE                 = 186, & 
+    KIND_SFC10H16                 = 187, &
+    KIND_SFC2H2                   = 188, &
+    KIND_SFC2H4                   = 189, &
+    KIND_SFC2H5OH                 = 190, & 
+    KIND_SFC2H6                   = 191, &
+    KIND_SFC3H6                   = 192, &
+    KIND_SFC3H8                   = 193, &
+    KIND_SFCH2O                   = 194, &
+    KIND_SFCH3CHO                 = 195, &
+    KIND_SFCH3CN                  = 196, &
+    KIND_SFCH3COCH3               = 197, &
+    KIND_SFCH3COOH                = 198, & 
+    KIND_SFCH3OH                  = 199, &
+    KIND_SFHCOOH                  = 200, &
+    KIND_SFISOP                   = 201, &
+    KIND_SFMEK                    = 202, &
+    KIND_SFTOLUENE                = 203
+
+    ! BG Radicals
+integer, parameter, public :: &
+    KIND_H2O2                     = 204, &
+    KIND_OH                       = 205, &
+    KIND_HO2                      = 206, &
+    KIND_RO2                      = 207, &
+    KIND_ROOH                     = 208
+
+    ! BG GHG
+integer, parameter, public :: &
+    KIND_CH4                      = 209, &
+    KIND_N2O                      = 210
+
+    ! BG Some inorganic
+integer, parameter, public :: &
+    KIND_DMS                      = 211, &
+    KIND_MPAN                     = 212, &
+    KIND_NH4                      = 213
+
+    ! BG Aerosols MAM3
+integer, parameter, public :: &
+    KIND_AEROD_v                  = 214, &
+    KIND_bc_a1                    = 215, &
+    KIND_bc_c1                    = 216, & ! Not in .i., only .h1. 
+    KIND_soa_a1                   = 217, &
+    KIND_soa_a2                   = 218, &
+    KIND_soa_c1                   = 219, & ! Not in .i., only .h1. 
+    KIND_soa_c2                   = 220, & ! Not in .i., only .h1. 
+    KIND_so4_a1                   = 221, &
+    KIND_so4_a2                   = 222, &
+    KIND_so4_a3                   = 223, &
+    KIND_so4_c1                   = 224, & ! Not in .i., only .h1. 	
+    KIND_so4_c2                   = 225, & ! Not in .i., only .h1. 	
+    KIND_so4_c3                   = 226, & ! Not in .i., only .h1. 	
+    KIND_num_a1                   = 227, &
+    KIND_num_a2                   = 228, &
+    KIND_pom_a1                   = 229, &
+    KIND_pom_c1                   = 230, & ! Not in .i., only .h1. 	
+    KIND_dst_a1                   = 231, &
+    KIND_dst_a3                   = 232, & 
+    KIND_dst_c1                   = 233, & ! Not in .i., only .h1. 	
+    KIND_dst_c3                   = 234, &
+    KIND_ncl_a1                   = 235, &
+    KIND_ncl_a2                   = 236, &
+    KIND_ncl_a3                   = 237, &
+    KIND_ncl_c1                   = 238, & ! Not in .i., only .h1. 
+    KIND_ncl_c2                   = 239, & ! Not in .i., only .h1. 
+    KIND_ncl_c3                   = 240    ! Not in .i., only .h1. 
+
+    ! BG DIAG CO
+integer, parameter, public :: &
+    KIND_DF_CO                    = 241, &
+    KIND_CO_CHML                  = 242, &
+    KIND_CO_CHMP                  = 243, &
+    KIND_CT_CO                    = 244, &
+    KIND_DCOCHM                   = 245, &
+    KIND_CO_SRF                   = 246, &
+    KIND_O3_SRF                   = 247, &
+    KIND_CH4_SRF                  = 248, &
+    KIND_OH_SRF                   = 249, &
+    KIND_CH2O_SRF                 = 250
+ 
+    ! BG Nb: Those following species are also in CAM-Chem, if needed
+    ! ALKO2 ALKOOH C2H5O2 C2H5OOH C3H7O2 C3H7OOH CH3CO3 CH3COCHO CH3COOOH CH3O2 CH3OOH CRESOL ENEO2 EO 
+    ! EO2 GLYALD GLYOXAL HOCH2OO HYAC HYDRALD ISOPNO3 ISOPO2 ISOPOOH MACR MACRO2  MACROOH MCO3 
+    ! MEKO2 MEKOOH MPAN MVK ONIT ONITR PO2 POOH Rn TERPO2 TERPOOH TOLO2 TOLOOH XO2 XOH XOOH 
+    ! Pb 
+    ! HO2NO2 O O1D
+
 
 ! kinds for GITM (Alexey Morozov)
 integer, parameter, public :: &
@@ -346,10 +479,56 @@ integer, parameter, public :: &
   KIND_GND_GPS_VTEC                  = 285, &
   KIND_DENSITY_ION_OP                = 286
  
+    ! BG DIAG CH4/O3/CH2O/OH/PBLH
+integer, parameter, public :: &
+    KIND_DF_CH4                   = 300, &
+    KIND_CH4_CHML                 = 301, &
+    KIND_CH4_CHMP                 = 302, &
+    KIND_CT_CH4                   = 303, &
+    KIND_DCH4CHM                  = 304, &
+    KIND_DF_O3                    = 305, &
+    KIND_O3_CHML                  = 306, &
+    KIND_O3_CHMP                  = 307, &
+    KIND_CT_O3                    = 308, &
+    KIND_DO3CHM                   = 309, &
+    KIND_DF_CH2O                  = 310, &
+    KIND_CH2O_CHML                = 311, &
+    KIND_CH2O_CHMP                = 312, &
+    KIND_CT_CH2O                  = 313, &
+    KIND_DCH2OCHM                 = 314, &
+    KIND_DF_OH                    = 315, &
+    KIND_OH_CHML                  = 316, &
+    KIND_OH_CHMP                  = 317, &
+    KIND_CT_OH                    = 318, &
+    KIND_DOHCHM                   = 319, &
+    KIND_PBLH                     = 320
+    ! BG BIOGENIC EMISSIONS
+integer, parameter, public :: &
+    KIND_MEG_CO                   = 321, &
+    KIND_MEG_ISOP                 = 322, &  
+    KIND_MEG_BIGALK               = 323, &
+    KIND_MEG_BIGENE               = 324, &
+    KIND_MEG_MEK                  = 325, &
+    KIND_MEG_C10H16               = 326, &
+    KIND_MEG_CH3COOH              = 327, &
+    KIND_MEG_CH3COCH3             = 338, &
+    KIND_MEG_HCOOH                = 339, &
+    KIND_MEG_HCN                  = 330, &
+    KIND_MEG_CH3OH                = 331, &
+    KIND_MEG_C2H5OH               = 332, &
+    KIND_MEG_CH2O                 = 333, &
+    KIND_MEG_CH3CHO               = 334, &
+    KIND_MEG_C2H6                 = 335, &
+    KIND_MEG_C2H4                 = 336, &
+    KIND_MEG_C3H6                 = 337, &
+    KIND_MEG_C3H8                 = 338, &
+    KIND_MEG_TOLUENE              = 339
+
+
 !! PRIVATE ONLY TO THIS MODULE. see comment below near the max_obs_specific
 !! declaration.
 
-integer, parameter :: max_obs_generic = 286
+integer, parameter :: max_obs_generic = 339
 
 !----------------------------------------------------------------------------
 ! This list is autogenerated by the 'preprocess' program.  To add new
@@ -383,7 +562,7 @@ logical, save :: module_initialized = .false.
 !! and kind, respectively).  using intermediate names might make the transition
 !! less painful.  right now, many(most) of the subroutine names or args
 !! which are public are using 'kind' where it needs to be 'type'.
-integer, parameter :: max_obs_specific = max_obs_kinds
+!integer, parameter :: max_obs_specific = max_obs_kinds
 
 character(len=129) :: msg_string
 
@@ -602,24 +781,135 @@ obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITRO
 obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
 obs_kind_names(129) = obs_kind_type(KIND_FPAR                  ,'KIND_FPAR')
 obs_kind_names(130) = obs_kind_type(KIND_TOTAL_WATER_STORAGE   ,'KIND_TOTAL_WATER_STORAGE')
-obs_kind_names(131) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
-obs_kind_names(132) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')
-obs_kind_names(133) = obs_kind_type(KIND_CANOPY_HEIGHT,        'KIND_CANOPY_HEIGHT')
+
+obs_kind_names(130) = obs_kind_type(KIND_GREEN_LEAF_FACTOR     ,'KIND_GREEN_LEAF_FACTOR')
+obs_kind_names(131) = obs_kind_type(KIND_PRESCRIBED_EXPONENT   ,'KIND_PRESCRIBED_EXPONENT')
+obs_kind_names(132) = obs_kind_type(KIND_FILLER                ,'KIND_FILLER')
+obs_kind_names(133) = obs_kind_type(KIND_DBH                   ,'KIND_DBH')
+obs_kind_names(134) = obs_kind_type(KIND_STEM_DENSITY          ,'KIND_STEM_DENSITY')
+obs_kind_names(135) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE,'KIND_BRIGHTNESS_TEMPERATURE')
+obs_kind_names(136) = obs_kind_type(KIND_VEGETATION_TEMPERATURE,'KIND_VEGETATION_TEMPERATURE')
+obs_kind_names(137) = obs_kind_type(KIND_CANOPY_HEIGHT,        'KIND_CANOPY_HEIGHT')
 
 obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
 obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
 obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
 obs_kind_names(143) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
-obs_kind_names(144) = obs_kind_type(KIND_O_N2_COLUMN_DENSITY_RATIO, 'KIND_O_N2_COLUMN_DENSITY_RATIO')
 
-obs_kind_names(151) = obs_kind_type(KIND_O3,              'KIND_O3')
-obs_kind_names(153) = obs_kind_type(KIND_CO,              'KIND_CO')
-obs_kind_names(155) = obs_kind_type(KIND_NO,              'KIND_NO')
-obs_kind_names(156) = obs_kind_type(KIND_NO2,             'KIND_NO2')
+! BG :: Kinds for CAM-Chem chemistry
+obs_kind_names(151) = obs_kind_type(KIND_O3, 'KIND_O3')
+obs_kind_names(152) = obs_kind_type(KIND_NO, 'KIND_NO')
+obs_kind_names(153) = obs_kind_type(KIND_NO2, 'KIND_NO2')
+obs_kind_names(154) = obs_kind_type(KIND_NO3, 'KIND_NO3')
+obs_kind_names(155) = obs_kind_type(KIND_HNO3, 'KIND_HNO3')
+obs_kind_names(156) = obs_kind_type(KIND_HNO4, 'KIND_HNO4')
+obs_kind_names(157) = obs_kind_type(KIND_N2O5, 'KIND_N2O5')
+obs_kind_names(158) = obs_kind_type(KIND_PAN, 'KIND_PAN')
+obs_kind_names(159) = obs_kind_type(KIND_NH3, 'KIND_NH3')
+obs_kind_names(160) = obs_kind_type(KIND_HCN, 'KIND_HCN')
+obs_kind_names(161) = obs_kind_type(KIND_CH3CN, 'KIND_CH3CN')
+! CO and VOCs
+obs_kind_names(162) = obs_kind_type(KIND_CO, 'KIND_CO')
+obs_kind_names(163) = obs_kind_type(KIND_BIGALD, 'KIND_BIGALD')
+obs_kind_names(164) = obs_kind_type(KIND_BIGALK, 'KIND_BIGALK')
+obs_kind_names(165) = obs_kind_type(KIND_BIGENE, 'KIND_BIGENE')
+obs_kind_names(166) = obs_kind_type(KIND_C10H16, 'KIND_C10H16')
+obs_kind_names(167) = obs_kind_type(KIND_C2H2, 'KIND_C2H2')
+obs_kind_names(168) = obs_kind_type(KIND_C2H4, 'KIND_C2H4')
+obs_kind_names(169) = obs_kind_type(KIND_C2H5OH, 'KIND_C2H5OH')
+obs_kind_names(170) = obs_kind_type(KIND_C2H6, 'KIND_C2H6')
+obs_kind_names(171) = obs_kind_type(KIND_C3H6, 'KIND_C3H6')
+obs_kind_names(172) = obs_kind_type(KIND_C3H8, 'KIND_C3H8')
+obs_kind_names(173) = obs_kind_type(KIND_CH2O, 'KIND_CH2O')
+obs_kind_names(174) = obs_kind_type(KIND_CH3CHO, 'KIND_CH3CHO')
+obs_kind_names(175) = obs_kind_type(KIND_CH3COCH3, 'KIND_CH3COCH3')
+obs_kind_names(176) = obs_kind_type(KIND_CH3COOH, 'KIND_CH3COOH')
+obs_kind_names(177) = obs_kind_type(KIND_CH3OH, 'KIND_CH3OH')
+obs_kind_names(178) = obs_kind_type(KIND_HCOOH, 'KIND_HCOOH')
+obs_kind_names(179) = obs_kind_type(KIND_ISOP, 'KIND_ISOP')
+obs_kind_names(180) = obs_kind_type(KIND_MEK, 'KIND_MEK')
+obs_kind_names(181) = obs_kind_type(KIND_TOLUENE, 'KIND_TOLUENE')
+! CO and VOCs Emissions.
+obs_kind_names(182) = obs_kind_type(KIND_SFCO,     'KIND_SFCO')
+obs_kind_names(183) = obs_kind_type(KIND_SFHCN,    'KIND_SFHCN')
+obs_kind_names(184) = obs_kind_type(KIND_SFBIGALD, 'KIND_SFBIGALD')
+obs_kind_names(185) = obs_kind_type(KIND_SFBIGALK, 'KIND_SFBIGALK')
+obs_kind_names(186) = obs_kind_type(KIND_SFBIGENE, 'KIND_SFBIGENE')
+obs_kind_names(187) = obs_kind_type(KIND_SFC10H16, 'KIND_SFC10H16')
+obs_kind_names(188) = obs_kind_type(KIND_SFC2H2,   'KIND_SFC2H2')
+obs_kind_names(189) = obs_kind_type(KIND_SFC2H4,   'KIND_SFC2H4')
+obs_kind_names(190) = obs_kind_type(KIND_SFC2H5OH, 'KIND_SFC2H5OH')
+obs_kind_names(191) = obs_kind_type(KIND_SFC2H6,   'KIND_SFC2H6')
+obs_kind_names(192) = obs_kind_type(KIND_SFC3H6,   'KIND_SFC3H6')
+obs_kind_names(193) = obs_kind_type(KIND_SFC3H8,   'KIND_SFC3H8')
+obs_kind_names(194) = obs_kind_type(KIND_SFCH2O,   'KIND_SFCH2O')
+obs_kind_names(195) = obs_kind_type(KIND_SFCH3CHO, 'KIND_SFCH3CHO')
+obs_kind_names(196) = obs_kind_type(KIND_SFCH3CN,  'KIND_SFCH3CN')
+obs_kind_names(197) = obs_kind_type(KIND_SFCH3COCH3, 'KIND_SFCH3COCH3')
+obs_kind_names(198) = obs_kind_type(KIND_SFCH3COOH, 'KIND_SFCH3COOH')
+obs_kind_names(199) = obs_kind_type(KIND_SFCH3OH,  'KIND_SFCH3OH')
+obs_kind_names(200) = obs_kind_type(KIND_SFHCOOH,  'KIND_SFHCOOH')
+obs_kind_names(201) = obs_kind_type(KIND_SFISOP,   'KIND_SFISOP')
+obs_kind_names(202) = obs_kind_type(KIND_SFMEK,    'KIND_SFMEK')
+obs_kind_names(203) = obs_kind_type(KIND_SFTOLUENE,'KIND_SFTOLUENE')
 
-obs_kind_names(247) = obs_kind_type(KIND_CO2,             'KIND_CO2')
-obs_kind_names(248) = obs_kind_type(KIND_NH3,             'KIND_NH3')
-obs_kind_names(249) = obs_kind_type(KIND_CH4,             'KIND_CH4')
+! Radicals
+obs_kind_names(204) = obs_kind_type(KIND_H2O2, 'KIND_H2O2')
+obs_kind_names(205) = obs_kind_type(KIND_OH, 'KIND_OH')
+obs_kind_names(206) = obs_kind_type(KIND_HO2, 'KIND_HO2')
+obs_kind_names(207) = obs_kind_type(KIND_RO2, 'KIND_RO2')
+obs_kind_names(208) = obs_kind_type(KIND_ROOH, 'KIND_ROOH')
+
+! GHG
+!obs_kind_names(209) = obs_kind_type(KIND_CO2, 'KIND_CO2')
+obs_kind_names(209) = obs_kind_type(KIND_CH4, 'KIND_CH4')
+obs_kind_names(210) = obs_kind_type(KIND_N2O, 'KIND_N2O')
+
+! inorganic left
+obs_kind_names(211) = obs_kind_type(KIND_DMS, 'KIND_DMS')
+obs_kind_names(212) = obs_kind_type(KIND_MPAN, 'KIND_MPAN')
+obs_kind_names(213) = obs_kind_type(KIND_NH4, 'KIND_NH4')
+
+! AEROSOLS
+obs_kind_names(214) = obs_kind_type(KIND_AEROD_v,'KIND_AEROD_v')
+obs_kind_names(215) = obs_kind_type(KIND_bc_a1,  'KIND_bc_a1')
+obs_kind_names(216) = obs_kind_type(KIND_bc_c1,  'KIND_bc_c1')
+obs_kind_names(217) = obs_kind_type(KIND_soa_a1, 'KIND_soa_a1')
+obs_kind_names(218) = obs_kind_type(KIND_soa_a2, 'KIND_soa_a2')
+obs_kind_names(219) = obs_kind_type(KIND_soa_c1, 'KIND_soa_c1')
+obs_kind_names(220) = obs_kind_type(KIND_soa_c2, 'KIND_soa_c2')
+obs_kind_names(221) = obs_kind_type(KIND_so4_a1, 'KIND_so4_a1')
+obs_kind_names(222) = obs_kind_type(KIND_so4_a2, 'KIND_so4_a2')
+obs_kind_names(223) = obs_kind_type(KIND_so4_a3, 'KIND_so4_a3')
+obs_kind_names(224) = obs_kind_type(KIND_so4_c1, 'KIND_so4_c1')
+obs_kind_names(225) = obs_kind_type(KIND_so4_c2, 'KIND_so4_c2')
+obs_kind_names(226) = obs_kind_type(KIND_so4_c3, 'KIND_so4_c3')
+obs_kind_names(227) = obs_kind_type(KIND_num_a1, 'KIND_num_a1')
+obs_kind_names(228) = obs_kind_type(KIND_num_a2, 'KIND_num_a2')
+obs_kind_names(229) = obs_kind_type(KIND_pom_a1, 'KIND_pom_a1')
+obs_kind_names(230) = obs_kind_type(KIND_pom_c1, 'KIND_pom_c1')
+obs_kind_names(231) = obs_kind_type(KIND_dst_a1, 'KIND_dst_a1')
+obs_kind_names(232) = obs_kind_type(KIND_dst_a3, 'KIND_dst_a3')
+obs_kind_names(233) = obs_kind_type(KIND_dst_c1, 'KIND_dst_c1')
+obs_kind_names(234) = obs_kind_type(KIND_dst_c3, 'KIND_dst_c3')
+obs_kind_names(235) = obs_kind_type(KIND_ncl_a1, 'KIND_ncl_a1')
+obs_kind_names(236) = obs_kind_type(KIND_ncl_a2, 'KIND_ncl_a2')
+obs_kind_names(237) = obs_kind_type(KIND_ncl_a3, 'KIND_ncl_a3')
+obs_kind_names(238) = obs_kind_type(KIND_ncl_c1, 'KIND_ncl_c1')
+obs_kind_names(239) = obs_kind_type(KIND_ncl_c2, 'KIND_ncl_c2')
+obs_kind_names(240) = obs_kind_type(KIND_ncl_c3, 'KIND_ncl_c3')
+obs_kind_names(241) = obs_kind_type(KIND_DF_CO, 'KIND_DF_CO')
+obs_kind_names(242) = obs_kind_type(KIND_CO_CHML, 'KIND_CO_CHML')
+obs_kind_names(243) = obs_kind_type(KIND_CO_CHMP, 'KIND_CO_CHMP')
+obs_kind_names(244) = obs_kind_type(KIND_CT_CO, 'KIND_CT_CO')
+obs_kind_names(245) = obs_kind_type(KIND_DCOCHM, 'KIND_DCOCHM')
+obs_kind_names(246) = obs_kind_type(KIND_CO_SRF, 'KIND_CO_SRF')
+obs_kind_names(247) = obs_kind_type(KIND_O3_SRF, 'KIND_O3_SRF')
+obs_kind_names(248) = obs_kind_type(KIND_CH4_SRF, 'KIND_CH4_SRF')
+obs_kind_names(249) = obs_kind_type(KIND_OH_SRF, 'KIND_OH_SRF')
+obs_kind_names(250) = obs_kind_type(KIND_CH2O_SRF, 'KIND_CH2O_SRF')
+
+! BG :: End of Kinds for CAM-Chem chemistry, restart after 300s..
 
 obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
 obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')
@@ -659,6 +949,50 @@ obs_kind_names(285) = obs_kind_type(KIND_GND_GPS_VTEC          ,'KIND_GND_GPS_VT
 obs_kind_names(286) = obs_kind_type(KIND_DENSITY_ION_OP        ,'KIND_DENSITY_ION_OP')
 
 ! count here, then output below
+obs_kind_names(300) = obs_kind_type(KIND_DF_CH4      ,'KIND_DF_CH4')
+obs_kind_names(301) = obs_kind_type(KIND_CH4_CHML    ,'KIND_CH4_CHML')
+obs_kind_names(302) = obs_kind_type(KIND_CH4_CHMP    ,'KIND_CH4_CHMP')
+obs_kind_names(303) = obs_kind_type(KIND_CT_CH4      ,'KIND_CT_CH4') 
+obs_kind_names(304) = obs_kind_type(KIND_DCH4CHM     ,'KIND_DCH4CHM')
+obs_kind_names(305) = obs_kind_type(KIND_DF_O3       ,'KIND_DF_O3')  
+obs_kind_names(306) = obs_kind_type(KIND_O3_CHML     ,'KIND_O3_CHML')
+obs_kind_names(307) = obs_kind_type(KIND_O3_CHMP     ,'KIND_O3_CHMP')
+obs_kind_names(308) = obs_kind_type(KIND_CT_O3       ,'KIND_CT_O3')
+obs_kind_names(309) = obs_kind_type(KIND_DO3CHM      ,'KIND_DO3CHM ')
+obs_kind_names(310) = obs_kind_type(KIND_DF_CH2O     ,'KIND_DF_CH2O')
+obs_kind_names(311) = obs_kind_type(KIND_CH2O_CHML   ,'KIND_CH2O_CHML')
+obs_kind_names(312) = obs_kind_type(KIND_CH2O_CHMP   ,'KIND_CH2O_CHMP')
+obs_kind_names(313) = obs_kind_type(KIND_CT_CH2O     ,'KIND_CT_CH2O')
+obs_kind_names(314) = obs_kind_type(KIND_DCH2OCHM    ,'KIND_DCH2OCHM')
+obs_kind_names(315) = obs_kind_type(KIND_DF_OH       ,'KIND_DF_OH')
+obs_kind_names(316) = obs_kind_type(KIND_OH_CHML     ,'KIND_OH_CHML')
+obs_kind_names(317) = obs_kind_type(KIND_OH_CHMP     ,'KIND_OH_CHMP')
+obs_kind_names(318) = obs_kind_type(KIND_CT_OH       ,'KIND_CT_OH')
+obs_kind_names(319) = obs_kind_type(KIND_DOHCHM      ,'KIND_DOHCHM')
+obs_kind_names(320) = obs_kind_type(KIND_PBLH        ,'KIND_PBLH')
+
+    ! BG BIOGENIC EMISSIONS
+obs_kind_names(321) = obs_kind_type(KIND_MEG_CO        ,'KIND_MEG_CO')                       
+obs_kind_names(322) = obs_kind_type(KIND_MEG_ISOP      ,'KIND_MEG_ISOP') 
+obs_kind_names(323) = obs_kind_type(KIND_MEG_BIGALK    ,'KIND_MEG_BIGALK')  
+obs_kind_names(324) = obs_kind_type(KIND_MEG_BIGENE    ,'KIND_MEG_BIGENE')  
+obs_kind_names(325) = obs_kind_type(KIND_MEG_MEK       ,'KIND_MEG_MEK')  
+obs_kind_names(326) = obs_kind_type(KIND_MEG_C10H16    ,'KIND_MEG_C10H16') 
+obs_kind_names(327) = obs_kind_type(KIND_MEG_CH3COOH   ,'KIND_MEG_CH3COOH') 
+obs_kind_names(328) = obs_kind_type(KIND_MEG_CH3COCH3  ,'KIND_MEG_CH3COCH3') 
+obs_kind_names(329) = obs_kind_type(KIND_MEG_HCOOH     ,'KIND_MEG_HCOOH')  
+obs_kind_names(330) = obs_kind_type(KIND_MEG_HCN       ,'KIND_MEG_HCN')   
+obs_kind_names(331) = obs_kind_type(KIND_MEG_CH3OH     ,'KIND_MEG_CH3OH')   
+obs_kind_names(332) = obs_kind_type(KIND_MEG_C2H5OH    ,'KIND_MEG_C2H5OH')
+obs_kind_names(333) = obs_kind_type(KIND_MEG_CH2O      ,'KIND_MEG_CH2O')
+obs_kind_names(334) = obs_kind_type(KIND_MEG_CH3CHO    ,'KIND_MEG_CH3CHO')
+obs_kind_names(335) = obs_kind_type(KIND_MEG_C2H6      ,'KIND_MEG_C2H6')
+obs_kind_names(336) = obs_kind_type(KIND_MEG_C2H4      ,'KIND_MEG_C2H4')
+obs_kind_names(337) = obs_kind_type(KIND_MEG_C3H6      ,'KIND_MEG_C3H6')
+obs_kind_names(338) = obs_kind_type(KIND_MEG_C3H8      ,'KIND_MEG_C3H8')
+obs_kind_names(339) = obs_kind_type(KIND_MEG_TOLUENE   ,'KIND_MEG_TOLUENE')
+
+
 
 num_kind_assimilate = 0
 do i = 1, max_obs_specific
@@ -813,9 +1147,9 @@ character(len=paramname_length) :: get_raw_obs_kind_name
 
 if (.not. module_initialized) call initialize_module
 
-if (obs_kind_ind < 1 .or. obs_kind_ind > max_obs_generic) then
+if (obs_kind_ind < 0 .or. obs_kind_ind > max_obs_generic) then
    write(msg_string,'(A,I6,A,I6)') 'generic kind number ', obs_kind_ind, &
-                                   ' must be between 1 and ', max_obs_generic
+                                   ' must be between 0 and ', max_obs_generic
    call error_handler(E_ERR, 'get_raw_obs_kind_name', msg_string, &
                       source, revision, revdate)
 endif
@@ -871,7 +1205,7 @@ if (.not. module_initialized) call initialize_module
 
 string1 = adjustl(obs_kind_name)
 
-do i = 1, max_obs_generic
+do i = 0, max_obs_generic
    if(trim(string1) == trim(obs_kind_names(i)%name)) then
       get_raw_obs_kind_index = i
       return
@@ -939,6 +1273,38 @@ if ( .not. module_initialized ) call initialize_module
 evaluate_this_obs_kind = obs_type_info(obs_type_ind)%evaluate
 
 end function evaluate_this_obs_kind
+
+!----------------------------------------------------------------------------
+
+function has_ext_prior_this_obs_kind(obs_type_ind)
+
+! Returns true if this obs_type has externally computed priors
+
+logical             :: has_ext_prior_this_obs_kind
+integer, intent(in) :: obs_type_ind
+
+if ( .not. module_initialized ) call initialize_module
+
+! FIXME: add this to some namelist
+has_ext_prior_this_obs_kind = .false.
+
+end function has_ext_prior_this_obs_kind
+
+!----------------------------------------------------------------------------
+
+function use_ext_prior_this_obs_kind(obs_type_ind)
+
+! Returns true if this obs_type should use externally computed priors
+
+logical             :: use_ext_prior_this_obs_kind
+integer, intent(in) :: obs_type_ind
+
+if ( .not. module_initialized ) call initialize_module
+
+! FIXME: add this to some namelist
+use_ext_prior_this_obs_kind = .false.
+
+end function use_ext_prior_this_obs_kind
 
 !----------------------------------------------------------------------------
 

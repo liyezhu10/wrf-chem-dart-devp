@@ -31,11 +31,14 @@
 #
 # -- Ensure DARTROOT references a valid DART directory.
 # -- Examine the whole script to identify things to change for your experiments.
+# -- If you configure a DARTROOT/models/cam/work/${CASE}_input.nml with the
+#    details of the experiment, it will be copied into ${CASEROOT}/input.nml
+#    If ${CASE}_input.nml does not exist, the simple input.nml will be used.
 # -- Provide any initial files needed by your run:
-#       inflation
-#       sampling error correction
+#       inflation files should be staged in the ${RUNDIR} directory
+#       CAM-SE; HommeMapping_cs_grid.nc file, if available.
+#               Otherwise, one will be created and propagated.
 # -- Run this script.
-# -- Edit the DART input.nml that appears in the ${CASEROOT} directory.
 # -- Submit the job using ${CASEROOT}/${CASE}.submit
 #
 # ==============================================================================
@@ -57,6 +60,10 @@ set num_instances = $NINST_ATM
 # base portion of the DART code tree.
 
 setenv DARTROOT  BOGUS_DART_ROOT_STRING
+setenv SetupDir  BOGUS_SETUP_DIRECTORY
+
+echo "CESM_DART_config: SetupDir = $SetupDir"
+
 
 # ==============================================================================
 # Some
@@ -241,7 +248,7 @@ exit 0
 EndOfText
 chmod 0755 update_dart_namelists
 
-./update_dart_namelists || exit -9
+./update_dart_namelists
 
 #=========================================================================
 # Stage the files needed for SAMPLING ERROR CORRECTION - even if not
@@ -310,7 +317,7 @@ endif
 # overwrite whatever _should_ be there.
 #
 # IMPORTANT: If you stage your own inflation file, you must REMOVE the cookie
-# file from the RUNDIR directory.
+# file from the ${RUNDIR} directory.
 
 if ( $num_instances > 1 ) then
    date >! ${RUNDIR}/cam_inflation_cookie
@@ -419,6 +426,28 @@ else
 endif
 
 chmod 0744 ${CASE}.run
+
+#TJH # SE-CAM; try to use an existing HommeMapping_cs_grid.nc file,
+#TJH # whose name may come from input.nml:model_nml
+#TJH set core = `echo $CASE | cut -b 1`
+#TJH if ($core == 'S') then
+#TJH    set MYSTRING = `grep cs_grid_file input.nml`
+#TJH    if ($#MYSTRING == 3) then
+#TJH       set MYSTRING = `echo $MYSTRING[3] | sed -e "s#'# #g"`
+#TJH       set cs_grid = $MYSTRING:t
+#TJH    else
+#TJH       set cs_grid = 'HommeMapping_cs_grid.nc'
+#TJH    endif
+#TJH
+#TJH    if (-f $SetupDir/$cs_grid && ! -f ${RUNDIR}/$cs_grid) then
+#TJH       cp $SetupDir/$cs_grid ${RUNDIR}
+#TJH       echo "Using $SetupDir/$cs_grid for this SE-CAM assimilation"
+#TJH    else
+#TJH       echo "\n No $cs_grid available.  "
+#TJH       echo "   DART:static_init_model will create one and store it here. \n "
+#TJH    endif
+#TJH # ? ? Should there be a flag/change to assimilate.csh to say it's an SE-CAM?
+#TJH endif
 
 # ==============================================================================
 # What to do next

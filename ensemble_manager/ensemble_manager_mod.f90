@@ -22,7 +22,7 @@ use utilities_mod,     only : register_module, do_nml_file, do_nml_term, &
 use assim_model_mod,   only : aread_state_restart, awrite_state_restart, &
                               open_restart_read, open_restart_write,     &
                               close_restart, pert_model_state
-use time_manager_mod,  only : time_type, set_time
+use time_manager_mod,  only : time_type, set_time, set_time_missing
 use random_seq_mod,    only : random_seq_type, init_random_seq, random_gaussian
 use mpi_utilities_mod, only : task_count, my_task_id, send_to, receive_from, &
                               task_sync, broadcast_send, broadcast_recv
@@ -50,8 +50,8 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           compute_copy_mean_var,      get_copy_owner_index,     set_ensemble_time,      &
           broadcast_copy,             prepare_to_write_to_vars, prepare_to_write_to_copies, &
           prepare_to_read_from_vars,  prepare_to_read_from_copies, prepare_to_update_vars,  &
-          prepare_to_update_copies,   print_ens_handle,                                 &
-          map_task_to_pe,             map_pe_to_task
+          prepare_to_update_copies,   print_ens_handle,         set_copy_time,          &
+          map_task_to_pe,             map_pe_to_task,           get_copy_time
 
 type ensemble_type
    !DIRECT ACCESS INTO STORAGE IS USED TO REDUCE COPYING: BE CAREFUL
@@ -266,6 +266,8 @@ logical                             :: interf_provided
 logical                             :: single_file_override
 type(random_seq_type)               :: random_seq
 
+integer				 :: offset
+
 ! Does not make sense to have start_from_restart and single_restart_file_in BOTH false
 if(.not. start_from_restart .and. .not. single_restart_file_in) then
    write(msgstring, *) 'start_from_restart in filter_nml and single_restart_file_in in &
@@ -301,7 +303,7 @@ if(single_restart_file_in .or. .not. start_from_restart .or. &
        if(my_task_id() == 0) then
        ! Read restarts in sequence; only read once for not start_from_restart
          if(start_from_restart .or. i == start_copy) &
-            call aread_state_restart(ens_time, ens, iunit)
+            call aread_state_restart(ens_time, ens, iunit,offset=i-start_copy+1)
          ! Override this time if requested by namelist
          if(present(init_time)) ens_time = init_time
       endif
@@ -327,7 +329,9 @@ else
          ! File name extension is the global index number for the copy
          write(extension, '(i4.4)') global_copy_index - start_copy + 1
          this_file_name = trim(file_name) // '.' // extension
+print *, 'getting ready to open ', trim(this_file_name)
          iunit = open_restart_read(this_file_name)
+print *, 'open_restart_read returned unit number ', iunit
 
          ! Read the file directly into storage
          call aread_state_restart(ens_handle%time(i), ens_handle%vars(:, i), iunit)
@@ -729,6 +733,63 @@ end subroutine prepare_to_update_copies
 
 !-----------------------------------------------------------------
 
+subroutine set_copy_time(ens_handle, copy, mtime)
+
+! Sets the time of an ensemble member using global copy number.
+
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: copy
+type(time_type),     intent(in)    :: mtime
+
+integer :: i, global_copy_index
+
+! Loop to see if any of my copies are the requested one
+do i = 1, ens_handle%my_num_copies
+   ! Get global index for my ith ensemble
+   global_copy_index = ens_handle%my_copies(i)
+   ! If this global copy is the one being set, do it
+   if(global_copy_index == copy) then
+      ens_handle%time(i) = mtime
+   endif
+enddo
+
+end subroutine set_copy_time
+
+!-----------------------------------------------------------------
+
+subroutine get_copy_time(ens_handle, copy, mtime)
+
+! Gets the time of an ensemble member using global copy number.
+
+type(ensemble_type), intent(in)  :: ens_handle
+integer,             intent(in)  :: copy
+type(time_type),     intent(out) :: mtime
+
+integer :: i, global_copy_index
+
+! this is a collective call but only the owner of the requested
+! copy will get a value.  the caller will still need to see
+! if their task is the owner of this copy before using the time
+! value.  that makes this version of the call very much less useful.
+! unless it broadcasts it internally and returns mtime on all tasks.
+
+! make sure all calls get an output value set.
+mtime = set_time_missing()
+
+! Loop to see if any of my copies are involved
+do i = 1, ens_handle%my_num_copies
+   ! Get global index for my ith ensemble
+   global_copy_index = ens_handle%my_copies(i)
+   ! If this global copy is the one being requested, return it
+   if(global_copy_index == copy) then
+      mtime = ens_handle%time(i)
+   endif
+enddo
+
+end subroutine get_copy_time
+
+!-----------------------------------------------------------------
+
 subroutine set_ensemble_time(ens_handle, indx, mtime)
 
 ! Sets the time of an ensemble member indexed by local storage on this pe.
@@ -738,8 +799,8 @@ integer,             intent(in)    :: indx
 type(time_type),     intent(in)    :: mtime
 
 if(indx < 1 .or. indx > ens_handle%my_num_copies) then
-   write(msgstring, *) 'indx: ', indx, ' cannot exceed ', ens_handle%my_num_copies
-   call error_handler(E_ERR,'get_ensemble_time', msgstring, source, revision, revdate)
+   write(msgstring, *) 'indx: ', indx, ' must be between 1 and ', ens_handle%my_num_copies
+   call error_handler(E_ERR,'set_ensemble_time', msgstring, source, revision, revdate)
 endif
 
 ens_handle%time(indx) = mtime
@@ -757,7 +818,7 @@ integer,             intent(in)  :: indx
 type(time_type),     intent(out) :: mtime
 
 if(indx < 1 .or. indx > ens_handle%my_num_copies) then
-   write(msgstring, *) 'indx: ', indx, ' cannot exceed ', ens_handle%my_num_copies
+   write(msgstring, *) 'indx: ', indx, ' must be between 1 and ', ens_handle%my_num_copies
    call error_handler(E_ERR,'get_ensemble_time', msgstring, source, revision, revdate)
 endif
 

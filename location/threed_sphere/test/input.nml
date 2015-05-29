@@ -5,3 +5,5 @@
  module_details = .false.,
  /
 
+&obs_kind_nml
+ /

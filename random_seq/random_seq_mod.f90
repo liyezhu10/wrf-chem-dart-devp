@@ -307,7 +307,7 @@ function ran_gauss(s)
 
 ! Polar (Box-Mueller) method; See Knuth v2, 3rd ed, p122 
 
-! Returns a N(-1, 1) random number draw from a gaussian distribution
+! Returns a (-1, 1) random number draw from a gaussian distribution
 
 type(random_seq_type), intent(inout) :: s
 real(r8) :: ran_gauss

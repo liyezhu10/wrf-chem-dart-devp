@@ -17,6 +17,12 @@ set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
+#
+#
+set OBS_CASE = Synthetic/T_U_V_Q_iso_skel
+# set OBS_CASE = Synthetic/T_isolated
+# set OBS_CASE = ACARS
+
 switch ("`hostname`")
    case ys*:
       # NCAR "yellowstone"
@@ -106,7 +112,9 @@ if (! -d ${BASEOBSDIR}/${YYYYMM}_6H) then
    exit -10
 endif
 
-set OBSFNAME = `printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_SECONDS}`
+set OBSFNAME = `printf obs_seq%04d%02d%02d%02d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_HOUR}`
+# these only exist for a few files.  the line above works for all dirs.
+#set OBSFNAME = `printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_SECONDS}`
 
 set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}_6H/${OBSFNAME}
 

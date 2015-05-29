@@ -80,8 +80,7 @@ use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
 use         map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
                               ij_to_latlon, gridwind_to_truewind
 
-use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, PROJ_CASSINI, &
-                                    PROJ_CYL
+use misc_definitions_module, only : PROJ_LATLON, PROJ_MERC
 
 use netcdf
 use typesizes
@@ -193,29 +192,18 @@ logical :: periodic_x = .false.    ! wrap in longitude or x
 logical :: periodic_y = .false.    ! used for single column model, wrap in y
 !JPH -- single column model flag 
 logical :: scm        = .false.    ! using the single column model
+logical :: allow_perturbed_ics = .false.  ! should spin the model up for a while after
 
-! obsolete items; ignored by this code. 
-! non-backwards-compatible change. should be removed, 
-! but see note below about namelist.
-integer :: num_moist_vars
-logical :: surf_obs, soil_data, h_diab
 
-! adv_mod_command moved to dart_to_wrf namelist; ignored here.
-character(len = 72) :: adv_mod_command = ''
-
-! num_moist_vars, surf_obs, soil_data, h_diab, and adv_mod_command
-! are IGNORED no matter what their settings in the namelist are.
-! they are obsolete, but removing them here will cause a fatal error
-! until users remove them from their input.nml files as well.
-namelist /model_nml/ output_state_vector, num_moist_vars, &
-                     num_domains, calendar_type, surf_obs, soil_data, h_diab, &
+namelist /model_nml/ output_state_vector, &
+                     num_domains, calendar_type, &
                      default_state_variables, wrf_state_variables, &
                      wrf_state_bounds, sfc_elev_max_diff, &
-                     adv_mod_command, assimilation_period_seconds, &
+                     assimilation_period_seconds, &
                      allow_obs_below_vol, vert_localization_coord, &
                      center_search_half_length, center_spline_grid_scale, &
                      circulation_pres_level, circulation_radius, polar, &
-                     periodic_x, periodic_y, scm
+                     periodic_x, periodic_y, scm, allow_perturbed_ics
 
 real(r8), allocatable :: ens_mean(:)
 
@@ -350,14 +338,6 @@ call check_namelist_read(iunit, io, "model_nml")
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
-
-! Temporary warning until this namelist item is removed.
-if (adv_mod_command /= '') then
-   msgstring2 = "Set the model advance command in the &dart_to_wrf_nml namelist"
-   call error_handler(E_MSG, 'static_init_model:', &
-         "WARNING: adv_mod_command ignored in &model_mod namelist", &
-          text2=msgstring2)
-endif
 
 allocate(wrf%dom(num_domains))
 
@@ -6132,11 +6112,16 @@ end function model_height_w
 subroutine pert_model_state(state, pert_state, interf_provided)
 
 ! Perturbs a single model state for generating initial ensembles.
-! WARNING - this routine is not a substitute for a good set
-! of real initial condition files.  Intended as a last resort,
-! this routine should be used to start a long free-run model 
-! advance to spin-up a set of internally consistent states with 
-! their own structure before assimilating a set of obserations.
+! Because this requires some care when using - see the comments in the
+! code below - you must set a namelist variable to enable this functionality.
+
+! Using this routine is not a substitute for a good set of real initial 
+! condition files.  Intended as a last resort, this routine should be used 
+! to start a period of free-running to allow the model to spin-up a set of 
+! internally consistent states with their own structure before assimilating 
+! a set of observations.  A good ensemble of boundary conditions is important
+! to evolve the ensemble members differently, which is the goal.
+!
 
 real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
@@ -6150,28 +6135,44 @@ type(random_seq_type) :: random_seq
 integer               :: id, i, j, s, e
 integer, save         :: counter = 0
 
-! generally you do not want to perturb a single state
-! to begin an experiment - unless you make minor perturbations
-! and then run the model free for long enough that differences
-! develop which contain actual structure. if you comment
-! out the next 4 lines, the subsequent code is a pert routine which 
-! can be used to add minor perturbations which can be spun up.
-! note that as written, if all values in a field are identical
-! (i.e. 0.0) this routine will not change those values, since
-! it won't make a new value outside the original min/max of that
-! variable in the state vector.
+! generally you do not want to just perturb a single state to begin an 
+! experiment, especially for a regional weather model, because the 
+! resulting fields will have spread but they won't have organized features.
+! we have had good luck with some global atmosphere models where there is
+! a lot of model divergence; after a few days of running they evolve into
+! plausible conditions that allow assimilation of real obs.
+!
+! if you really need to start with a single state and proceed, the suggestion
+! is to start with small magnitude perturbations and then get a good ensemble
+! of boundary conditions and run the model for a while (many days) to let it
+! evolve into plausible weather patterns.  then start assimilating real obs.
+!
+! using this routine requires you to set the new namelist item 
+! 'allow_perturbed_ics' to true so you have to read the warnings here or
+! in the html docs.
+!
+! this code will add random noise field by field (T, U, V, etc), and new values
+! will not exceed the original max or min values for each field.  this means
+! it will not generate illegal values (e.g. negatives for percentages or
+! number concentrations) but it also means that if all values in a field are
+! identical (e.g. all 0.0) this routine will not change those values.  the code
+! can easily be modified to set allowed min and max values here instead of
+! using the incoming field min and max values; but you will have to modify
+! the code below to enable that functionality.
 
-call error_handler(E_ERR,'pert_model_state', &
-                  'WRF model cannot be started from a single vector', &
-                  source, revision, revdate, &
-                  text2='see comments in wrf/model_mod.f90::pert_model_state()')
+if (.not. allow_perturbed_ics) then
+   call error_handler(E_ERR,'pert_model_state', &
+                     'starting WRF model from a single vector requires additional steps', &
+                     source, revision, revdate, &
+                     text2='see comments in wrf/model_mod.f90::pert_model_state()')
+endif
 
-! NOT REACHED unless preceeding 4 lines commented out
+! NOT REACHED unless allow_perturbed_ics is true in the namelist
 
 ! start of pert code
 interf_provided = .true.
 
-! the first time through get the task id (0:N-1) and set a unique seed 
+! the first time through get the task id (0:N-1) and set a unique starting seed 
 ! per task.  this should reproduce from run to run if you keep the number
 ! of MPI tasks the same.  it WILL NOT reproduce if the number of tasks changes.
 ! if this routine could at some point get the global ensemble member number
@@ -6195,7 +6196,9 @@ do id=1, num_domains
       ! starting and ending indices in the linear state vect
       s = wrf%dom(id)%var_index(1, i)
       e = wrf%dom(id)%var_index(2, i)
-      ! original min/max data values of each type
+      ! original min/max data values of each type.
+      ! if all field values are identical they will remain unchanged.
+      ! set different min/max limits per field, if you need to, here.
       minv = minval(state(s:e))
       maxv = maxval(state(s:e))
       !! Option 1:
@@ -7612,7 +7615,6 @@ subroutine setup_map_projection(id)
 integer, intent(in)   :: id
 logical, parameter    :: debug = .false.
 
-integer  :: proj_code
 real(r8) :: latinc,loninc
 
 ! Initializes the map projection structure to missing values
@@ -7636,23 +7638,9 @@ real(r8) :: latinc,loninc
       loninc = 360.0_r8/wrf%dom(id)%we
    endif
 
-   if(wrf%dom(id)%map_proj == map_latlon) then
+   if(wrf%dom(id)%map_proj == PROJ_LATLON) then
       truelat1 = latinc
       stdlon = loninc
-      proj_code = PROJ_LATLON
-   elseif(wrf%dom(id)%map_proj == map_lambert) then
-      proj_code = PROJ_LC
-   elseif(wrf%dom(id)%map_proj == map_polar_stereo) then
-      proj_code = PROJ_PS
-   elseif(wrf%dom(id)%map_proj == map_mercator) then
-      proj_code = PROJ_MERC
-   elseif(wrf%dom(id)%map_proj == map_cyl) then
-      proj_code = PROJ_CYL
-   elseif(wrf%dom(id)%map_proj == map_cassini) then
-      proj_code = PROJ_CASSINI
-   else
-      call error_handler(E_ERR,'static_init_model', &
-        'Map projection no supported.', source, revision, revdate)
    endif
 
 !nc -- specified inputs to hopefully handle ALL map projections -- hopefully map_set will
@@ -7664,7 +7652,7 @@ real(r8) :: latinc,loninc
 !      + Gaussian grid uses nlat & nlon
 !      + Rotated Lat/Lon uses ixdim, jydim, stagger, phi, & lambda
 !
-   call map_set( proj_code=proj_code, &
+   call map_set( proj_code=wrf%dom(id)%map_proj, &
                  proj=wrf%dom(id)%proj, &
                  lat1=wrf%dom(id)%latitude(1,1), &
                  lon1=wrf%dom(id)%longitude(1,1), &

@@ -24,7 +24,7 @@
 &filter_nml
    async                    = 0,
    adv_ens_command          = "./advance_model.csh",
-   ens_size                 = 20,
+   ens_size                 = 50,
    start_from_restart       = .true.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
@@ -129,7 +129,7 @@
    module_details = .false.,
    logfilename = 'dart_log.out',
    nmlfilename = 'dart_log.nml',
-   write_nml   = 'terminal'
+   write_nml   = 'file'
    /
 
 &preprocess_nml

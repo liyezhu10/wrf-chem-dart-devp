@@ -6,7 +6,7 @@
 
 program location_test3
 
-! Simple test program to exercise oned location module.
+! Simple test program to exercise threed_cartesian location module.
 
 use location_mod
 use types_mod,      only : r8
@@ -25,14 +25,20 @@ character(len=128), parameter :: revdate  = "$Date$"
 integer, parameter :: nl = 20
 type(location_type) :: loc1(nl), loc2, near1
 integer  :: iunit, i, j, dummy(nl), num_close, close_ind(nl), rc, near1index
-real(r8) :: loc2_val(3), dist(nl)
-real(r8) :: minv(3), maxv(3), v(3), minr(3), maxr(3), maxdist
+real(r8) :: loc2_val(4), dist(nl)
+real(r8) :: minv(4), maxv(4), v(4), minr(4), maxr(4), maxdist
 type(random_seq_type) :: ran_seq
 logical :: ran_seq_init = .false.
 type(get_close_type) :: cc_gc
 character(len=100) :: buf
 
 
+! make this work as well for 3D sphere
+minv(4) =  1.0_r8
+maxv(4) =  2.0_r8
+   v(4) =  1.0_r8
+minr(4) =  3.0_r8
+maxr(4) = -1.0_r8
 
 ! Open an output file
 iunit = get_unit()
@@ -43,13 +49,23 @@ if(.not. ran_seq_init) then
    ran_seq_init = .TRUE.
 endif
 
-minv(1) = -100.0_r8
-minv(2) = -200.0_r8
+! for box
+!minv(1) = -100.0_r8
+!minv(2) = -200.0_r8
+! for sphere
+minv(1) = 100.0_r8
+minv(2) = 20.0_r8
+
 minv(3) = -500.0_r8
 
-maxv(1) = 10000.0_r8
-maxv(2) = 20000.0_r8
-maxv(3) = 50000.0_r8
+! for box
+!maxv(1) = 10000.0_r8
+!maxv(2) = 20000.0_r8
+! for sphere
+!maxv(1) = 150.0_r8
+!maxv(2) = 25.0_r8
+
+maxv(3) = 5000.0_r8
 
 minr(:) = 1e38_r8
 maxr(:) = -1e38_r8
@@ -58,11 +74,11 @@ maxdist = 10000.0_r8
 
 ! set a known min/max at the box edges so we know any
 ! random points generated will be inside for now.
-loc1(1)  = set_location(minv(1), minv(2), minv(3))
+loc1(1)  = set_location(minv)
 call write_location(0, loc1(1), charstring=buf)
 write(*,*) 'location ', 1, trim(buf)
 
-loc1(2)  = set_location(maxv(1), maxv(2), maxv(3))
+loc1(2)  = set_location(maxv)
 call write_location(0, loc1(2), charstring=buf)
 write(*,*) 'location ', 2, trim(buf)
 
@@ -74,7 +90,7 @@ do i = 3, nl
       if (v(j) > maxr(j)) maxr(j) = v(j)
    enddo
 
-   loc1(i)  = set_location(v(1), v(2), v(3))
+   loc1(i)  = set_location(v)
 
    call write_location(0, loc1(i), charstring=buf)
    write(*,*) 'location ', i, trim(buf)
@@ -98,7 +114,7 @@ do i = 1, nl
       v(j) = random_uniform(ran_seq) * (maxr(j)-minr(j)) + minr(j)
    enddo
 
-   loc2  = set_location(v(1), v(2), v(3))
+   loc2  = set_location(v)
    call write_location(iunit, loc2)
    call write_location(0, loc2, charstring=buf)
    print *, 'generated a random point at ', trim(buf)
@@ -123,18 +139,18 @@ do i = 1, nl
       enddo
    endif
 
-   call find_nearest(cc_gc, loc2, loc1, near1index, rc)
-   if (rc /= 0) then
-      print *, 'bad return from find nearest, ', rc
-      cycle
-   endif
-   if (near1index < 1) then
-      print *, 'near1index < 1, ', near1index
-      cycle
-   endif
-   print *, 'nearest location index = ', near1index
-   call write_location(0, loc1(near1index), charstring=buf)
-   write(*,*) 'near loc ', trim(buf)
+   !call find_nearest(cc_gc, loc2, loc1, near1index, rc)
+   !if (rc /= 0) then
+   !   print *, 'bad return from find nearest, ', rc
+   !   cycle
+   !endif
+   !if (near1index < 1) then
+   !   print *, 'near1index < 1, ', near1index
+   !   cycle
+   !endif
+   !print *, 'nearest location index = ', near1index
+   !call write_location(0, loc1(near1index), charstring=buf)
+   !write(*,*) 'near loc ', trim(buf)
 
 enddo
 

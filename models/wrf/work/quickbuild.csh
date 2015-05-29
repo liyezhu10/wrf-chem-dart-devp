@@ -57,7 +57,7 @@ foreach TARGET ( mkmf_* )
 end
 
 #\rm -f *.o *.mod 
-\rm -f input.nml*_default
+#\rm -f input.nml*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
   echo "Success: All single task DART programs compiled."  

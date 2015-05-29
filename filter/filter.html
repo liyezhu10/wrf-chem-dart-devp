@@ -439,12 +439,6 @@ and then when first trying out inflation start with type 2
 prior inflation and no inflation (0) for posterior.
 <br /> <br />
 <dt>
-<em>&amp;filter_nml :: inf_deterministic</em><br />
-valid values: .true. or .false.
-<dd>
-Recommend always using .true..
-<br /> <br />
-<dt>
 <em>&amp;filter_nml :: inf_initial</em><br />
 valid values: real numbers, usually 1.0 or slightly larger
 <dd>
@@ -452,6 +446,26 @@ If not reading in inflation values from a restart file,
 the initial value to set for the inflation.  Generally
 we recommend starting with just slightly above 1.0, 
 maybe 1.02, for a slight amount of initial inflation.
+<br /> <br />
+<dt>
+<em>&amp;filter_nml :: inf_lower_bound</em><br />
+valid values: real numbers, usually 1.0 or slightly larger
+<dd>
+If inflation is time-evolving (see <em>inf_sd_initial</em> namelist item below),
+then this sets the lowest value the inflation can evolve to.
+Setting a number less than one allows for deflation but generally
+in a well-observed system the ensemble needs more spread and not less.
+We recommend a setting of 1.0.
+<br /> <br />
+<dt>
+<em>&amp;filter_nml :: inf_upper_bound</em><br />
+valid values: real numbers, usually 1.0 or slightly larger
+<dd>
+If inflation is time-evolving (see <em>inf_sd_initial</em> namelist item below),
+then this sets the largest value the inflation can evolve to.
+We recommend a setting of 100.0, although if the inflation
+values reach those levels there is probably a problem
+with the assimilation.
 <br /> <br />
 <dt>
 <em>&amp;filter_nml :: inf_sd_initial</em><br />
@@ -476,26 +490,6 @@ Smaller values are more sure and the time evolution will
 be slower since we are more confident that the mean is correct.
 We have had good results setting this and <em>inf_sd_lower_bound</em>
 to 0.6 for large geophysical models.
-<br /> <br />
-<dt>
-<em>&amp;filter_nml :: inf_lower_bound</em><br />
-valid values: real numbers, usually 1.0 or slightly larger
-<dd>
-If inflation is time-evolving (see <em>inf_sd_initial</em> namelist item above),
-then this sets the lowest value the inflation can evolve to.
-Setting a number less than one allows for deflation but generally
-in a well-observed system the ensemble needs more spread and not less.
-We recommend a setting of 1.0.
-<br /> <br />
-<dt>
-<em>&amp;filter_nml :: inf_upper_bound</em><br />
-valid values: real numbers, usually 1.0 or slightly larger
-<dd>
-If inflation is time-evolving (see <em>inf_sd_initial</em> namelist item above),
-then this sets the largest value the inflation can evolve to.
-We recommend a setting of 100.0, although if the inflation
-values reach those levels there is probably a problem
-with the assimilation.
 <br /> <br />
 <dt>
 <em>&amp;filter_nml :: inf_sd_lower_bound</em><br />
@@ -550,6 +544,12 @@ for the next step (from <em>inf_in_file_name</em>).
 There is an inflation value
 and inflation standard deviation per state vector item,
 so the total file size will be two times the state vector length.
+<br /> <br />
+<dt>
+<em>&amp;filter_nml :: inf_deterministic</em><br />
+valid values: .true. or .false.
+<dd>
+Recommend always using .true..
 <br /> <br />
 </dl>
 

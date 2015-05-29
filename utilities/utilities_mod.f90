@@ -167,7 +167,7 @@ public :: file_exist, get_unit, open_file, close_file, timestamp,           &
           set_tasknum, set_output, do_output, set_nml_output, do_nml_file,  &
           E_DBG, E_MSG, E_WARN, E_ERR, DEBUG, MESSAGE, WARNING, FATAL,      &
           is_longitude_between, get_next_filename, ascii_file_format,       &
-          set_filename_list
+          set_filename_list, start_timer, read_timer
 
 ! this routine is either in the null_mpi_utilities_mod.f90, or in
 ! the mpi_utilities_mod.f90 file, but it is not a module subroutine.
@@ -245,7 +245,7 @@ contains
          ! always abort execution at this step.
 
          if ( present(progname) ) then
-            if (do_output_flag) write(*,*)'Starting program ',trim(adjustl(progname))
+            if (do_output_flag) write(*,*)'Starting program ',trim(progname)
          endif
 
          if (do_output_flag) write(*,*)'Initializing the utilities module.'
@@ -270,9 +270,9 @@ contains
          endif
 
          if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
-         if (do_output_flag) write(*,*)'Trying to open file ', trim(adjustl(lname))
+         if (do_output_flag) write(*,*)'Trying to open file ', trim(lname)
 
-         open(logfileunit, file=trim(adjustl(lname)), form='formatted', &
+         open(logfileunit, file=lname, form='formatted', &
                            action='write', position='append', iostat = io )
          if ( io /= 0 ) then
             write(*,*)'FATAL ERROR in initialize_utilities'
@@ -311,16 +311,16 @@ contains
          ! If nmlfilename != logfilename, open it.  otherwise set nmlfileunit
          ! to be same as logunit.
          if (do_nml_file()) then
-            if (trim(adjustl(nmlfilename)) /= trim(adjustl(lname))) then
+            if (nmlfilename /= lname) then
                if (do_output_flag) &
-                write(*,*)'Trying to open namelist log ', trim(adjustl(nmlfilename))
+                write(*,*)'Trying to open namelist log ', trim(nmlfilename)
        
                nmlfileunit = nextunit()
                if (nmlfileunit < 0) &
                   call error_handler(E_ERR,'initialize_utilities', &
                     'Cannot get unit for nm log file', source, revision, revdate)
    
-               open(nmlfileunit, file=trim(adjustl(nmlfilename)), form='formatted', &
+               open(nmlfileunit, file=nmlfilename, form='formatted', &
                     position='append', iostat = io )
                if ( io /= 0 ) then
                   call error_handler(E_ERR,'initialize_utilities', &
@@ -463,21 +463,13 @@ contains
       if ( .not. module_details) return
 
 
-      write(logfileunit,*)
       write(logfileunit,*)'Registering module :'
       write(logfileunit,*)trim(src)
-      write(logfileunit,*)trim(rev)
-      write(logfileunit,*)trim(rdate)
-      write(logfileunit,*)'Registration complete.'
-      write(logfileunit,*)
+      write(logfileunit,*)trim(rev), ' , ', trim(rdate)
 
-      write(     *     ,*)
       write(     *     ,*)'Registering module :'
       write(     *     ,*)trim(src)
-      write(     *     ,*)trim(rev)
-      write(     *     ,*)trim(rdate)
-      write(     *     ,*)'Registration complete.'
-      write(     *     ,*)
+      write(     *     ,*)trim(rev), ' , ', trim(rdate)
 
    end subroutine register_module
 
@@ -495,9 +487,9 @@ contains
       if ( .not. module_initialized ) call initialize_utilities
       if ( .not. do_output_flag) return
 
-      if (trim(adjustl(pos)) == 'end') then
+      if (pos == 'end') then
          call finalize_utilities()
-      else if (trim(adjustl(pos)) == 'brief') then
+      else if (pos == 'brief') then
          call write_time (logfileunit, brief=.true., & 
                           string1=string1, string2=string2, string3=string3)
          call write_time (             brief=.true., &
@@ -520,13 +512,10 @@ contains
 
       character(len=*), intent(in) :: file_name
       logical :: file_exist
-      integer :: trimlen
 
       if ( .not. module_initialized ) call initialize_utilities
 
-      trimlen = len_trim(file_name)
-
-      inquire (file=file_name(1:trimlen), exist=file_exist)
+      inquire (file=file_name, exist=file_exist)
 
    end function file_exist
 
@@ -596,7 +585,7 @@ contains
 
       inquire(iunit, name = file_name, iostat=ios)
       if ( ios == 0 ) then
-         write(str1,*)'file name is ' // trim(adjustl(file_name))
+         write(str1,*)'file name is ' // trim(file_name)
          call error_handler(E_MSG, srname, str1, source, revision, revdate)
       endif
 
@@ -713,14 +702,14 @@ contains
           select case (iabs(level))
              case (0)
                 if ( .not. do_output_flag) return
-                print *, ' MESSAGE from ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
+                print *, ' MESSAGE from ',trim(routine)
+                print *, ' ',trim(message)
              case (1)
-                print *, ' WARNING in ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
+                print *, ' WARNING in ',trim(routine)
+                print *, ' ',trim(message)
              case default
-                print *, ' ERROR in ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
+                print *, ' ERROR in ',trim(routine)
+                print *, ' ',trim(message)
                 call exit_all(99)
           end select
 
@@ -915,7 +904,7 @@ end subroutine error_handler
 
    if ( .not. module_initialized ) call initialize_utilities
 
-   inquire (file=trim(fname), opened=open, number=iunit,  &
+   inquire (file=fname, opened=open, number=iunit,  &
             form=format, iostat=rc)
 
    if (open) then
@@ -990,11 +979,11 @@ end subroutine error_handler
       iunit = get_unit()
 
       if (format == 'formatted' .or. format == 'FORMATTED') then
-          open (iunit, file=trim(fname), form=format,     &
+          open (iunit, file=fname, form=format,     &
                 position=pos, delim='apostrophe',    &
                 action=act, status=stat, iostat=rc)
       else
-          open (iunit, file=trim(fname), form=format,     &
+          open (iunit, file=fname, form=format,     &
                 position=pos, action=act, status=stat, iostat=rc)
       endif
 
@@ -1021,21 +1010,21 @@ end subroutine error_handler
    integer,          intent(in) :: iunit
    character(len=*), intent(in) :: routine, version
 
-   integer           :: n
+   integer           :: m, n
    character(len=20) :: myname
    character(len=8)  :: vers
 
    if ( .not. module_initialized ) call initialize_utilities
    if ( .not. do_output_flag) return
 
-     n = min(len(routine),20); myname = adjustl(routine(1:n))
-     n = min(len(version), 8); vers   = adjustl(version(1:n))
+   m = min(len(routine),20)
+   n = min(len(version), 8)
 
-     if (iunit > 0) then
-         write (iunit,10) myname, vers
-     else
-         write (*,10) myname, vers
-     endif
+   if (iunit > 0) then
+      write (iunit,10) routine(1:m), version(1:m)
+   else
+      write (*,10) routine(1:n), version(1:n)
+   endif
 
   10 format (/,60('-'),  &
              /,10x, 'ROUTINE = ',a20, '  VERSION = ', a8, &
@@ -1064,13 +1053,13 @@ end subroutine error_handler
 !  and time printed on same line in YYYY/MM/DD HH:MM:SS format
 !  with the tag 'TIME:' before it.  should be easier to postprocess.
 
-   integer,          optional, intent(in) :: unit
-   character(len=*), optional, intent(in) :: label
-   character(len=*), optional, intent(in) :: string1
-   character(len=*), optional, intent(in) :: string2
-   character(len=*), optional, intent(in) :: string3
-   logical,          optional, intent(in) :: tz
-   logical,          optional, intent(in) :: brief
+   integer,          optional, intent(in)  :: unit
+   character(len=*), optional, intent(in)  :: label
+   character(len=*), optional, intent(in)  :: string1
+   character(len=*), optional, intent(in)  :: string2
+   character(len=*), optional, intent(in)  :: string3
+   logical,          optional, intent(in)  :: tz
+   logical,          optional, intent(in)  :: brief
 
 
    integer :: lunit
@@ -1130,6 +1119,30 @@ end subroutine error_handler
 
    end subroutine write_time
 
+
+!#######################################################################
+
+! start a time block
+subroutine start_timer(base)
+integer, intent(out) :: base
+
+call system_clock(base)
+
+end subroutine start_timer
+
+!#######################################################################
+
+function read_timer(base)
+integer, intent(in) :: base
+real(r8) :: read_timer
+
+integer :: now, counts_per_sec
+
+call system_clock(now, counts_per_sec)
+
+read_timer = real((now - base), r8) / counts_per_sec 
+
+end function read_timer
 
 !#######################################################################
 
@@ -1333,17 +1346,17 @@ write_to_logfile = .true.
 if(present(write_to_logfile_in)) write_to_logfile = write_to_logfile_in
 
 ! Check for file existence; no file is an error
-if(file_exist(trim(namelist_file_name))) then
+if(file_exist(namelist_file_name)) then
 
-   iunit = open_file(trim(namelist_file_name), action = 'read')
+   iunit = open_file(namelist_file_name, action = 'read')
 
    ! Read each line until end of file is found
    ! Look for the start of a namelist with &nml_name
    ! Convert test string to all uppercase ... since that is
    ! what happens if Fortran writes a namelist.
 
-   string1 = adjustl(nml_name)
-   call to_upper(string1)             ! works in-place
+   string1 = nml_name     ! to_upper() works in-place so make copy first
+   call to_upper(string1)
    test_string = '&' // trim(string1)
 
    do
@@ -1366,10 +1379,10 @@ if(file_exist(trim(namelist_file_name))) then
          endif
       else
 
-         string1 = adjustl(nml_string)
-         call to_upper(string1)
+         string1 = adjustl(nml_string)     ! remove possible leading blanks
+         call to_upper(string1)            ! to_upper() works in-place so work on the copy
 
-         if(trim(string1) == trim(test_string)) then
+         if(string1 == test_string) then
             backspace(iunit)
             return
          endif
@@ -1394,6 +1407,38 @@ else
 endif
 
 end subroutine find_namelist_in_file
+
+!#######################################################################
+
+
+! FIXME: how to make this work?  target of namelist could be any type
+!  and fortran is so strongly typed.  disaster.   read everything after
+!  = into a string and force the caller to scan from a string into the 
+!  right var type?  and what about arrays or lists types?  arrrggghhh.
+! fortran namelists suck.
+ 
+subroutine find_item_in_namelist(namelist_item, nml_name, iunit, &
+   value_found)
+!-----------------------------------------------------------------------
+! 
+! Opens namelist_file_name if it exists on unit iunit, error if it
+! doesn't exist.
+! Searches file for a line containing ONLY the string
+! &nml_name, for instance &filter_nml. If found, backs up one record and
+! returns true. Otherwise, error message and terminates
+!
+
+character(len=*),  intent(in)  :: namelist_item
+character(len=*),  intent(in)  :: nml_name
+integer,           intent(in)  :: iunit
+character(len=*),  intent(out) :: value_found
+
+value_found = 'not found'
+
+write(*,*) 'FIXME: this routine is not written yet'
+stop
+
+end subroutine find_item_in_namelist
 
 
 !#######################################################################
@@ -1636,7 +1681,7 @@ integer :: i, ios, funit
 
 character(len=512)  :: string
 
-funit   = open_file(listname, form="FORMATTED", action="READ")
+funit = open_file(listname, form="FORMATTED", action="READ")
 
 PARSELOOP : do i=1, lineindex
 
@@ -1658,7 +1703,7 @@ if (len_trim(string) > len(get_next_filename)) then
                       source, revision, revdate)   
 endif
 
-get_next_filename = adjustl(string(1:len(get_next_filename)))
+get_next_filename = string
 call close_file(funit)
 
 end function get_next_filename

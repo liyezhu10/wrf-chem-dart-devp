@@ -39,7 +39,7 @@
 
 &utilities_nml
    TERMLEVEL = 1,
-   module_details = .true.,
+   module_details = .false.,
    logfilename = 'dart_log.out',
    nmlfilename = 'dart_log.nml'
    /
@@ -56,8 +56,8 @@
    /
 
 &obs_seq_to_netcdf_nml
-   obs_sequence_name = 'obs_seq.final',
-   obs_sequence_list = '',
+   obs_sequence_name = '',
+   obs_sequence_list = 'olist',
    append_to_netcdf  = .false.,
    lonlim1    =    0.0,
    lonlim2    =  360.0,
@@ -167,4 +167,18 @@
    min_lon =   0.0, 
    max_lon = 360.0
    /
+
+
+&obs_common_subset_nml
+   num_to_compare_at_once   = 2,
+   filename_seq             = 'afile1', 
+                              'afile2',
+   filename_seq_list        = '',
+   filename_out_suffix      = '.common' ,
+   calendar                 = 'Gregorian',
+   print_every              = 10000,
+   dart_qc_threshold        = 3,
+   print_only               = .false.,
+   eval_and_assim_can_match = .false.
+/
 

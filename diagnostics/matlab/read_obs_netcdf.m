@@ -149,6 +149,7 @@ end
 myobs  =      obs(inds,mytypeind);
 mylocs =      loc(inds,:);
 mykeys = obs_keys(inds);
+mytype = obs_type(inds);
 myztyp =   z_type(inds);
 mytime =        t(inds);
 
@@ -171,6 +172,7 @@ obsstruct.z    = mylocs(inds,3);
 obsstruct.obs  =  myobs(inds,:);
 obsstruct.Ztyp = myztyp(inds);
 obsstruct.keys = mykeys(inds);
+obsstruct.type = mytype(inds);
 obsstruct.time = mytime(inds);
 obsstruct.qc   = [];
 

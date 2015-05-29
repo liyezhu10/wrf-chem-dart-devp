@@ -11,17 +11,17 @@ module assim_model_mod
 
 use    types_mod, only : r8, digits12
 use location_mod, only : location_type, read_location, LocationDims
-use time_manager_mod, only : time_type, get_time, read_time, write_time,           &
+use time_manager_mod, only : time_type, get_time, read_time, write_time, set_time, &
                              THIRTY_DAY_MONTHS, JULIAN, GREGORIAN, NOLEAP,         &
                              operator(<), operator(>), operator(+), operator(-),   &
                              operator(/), operator(*), operator(==), operator(/=), &
-                             get_calendar_type
+                             get_calendar_type, print_time
 use utilities_mod, only : get_unit, close_file, register_module, error_handler,    &
                           E_ERR, E_WARN, E_MSG, E_DBG, nmlfileunit,                &
                           dump_unit_attributes, find_namelist_in_file,             &
                           check_namelist_read, nc_check, do_nml_file, do_nml_term, &
                           find_textfile_dims, file_to_text, set_output,            &
-                          ascii_file_format, set_output
+                          ascii_file_format, set_output, open_file
 use     model_mod, only : get_model_size, static_init_model, get_state_meta_data,  &
                           get_model_time_step, model_interpolate, init_conditions, &
                           init_time, adv_1step, end_model, nc_write_model_atts,    &
@@ -98,9 +98,11 @@ character(len = 129)  :: msgstring
 
 logical  :: write_binary_restart_files = .true.
 logical  :: netCDF_large_file_support  = .false.
+logical  :: binary_is_netcdf           = .false.
 
 namelist /assim_model_nml/ write_binary_restart_files, &
-                           netCDF_large_file_support
+                           netCDF_large_file_support,  &
+                           binary_is_netcdf
 !-------------------------------------------------------------
 
 contains
@@ -159,12 +161,19 @@ call check_namelist_read(iunit, io, "assim_model_nml")
 if (do_nml_file()) write(nmlfileunit, nml=assim_model_nml)
 if (do_nml_term()) write(     *     , nml=assim_model_nml)
 
-! Set the write format for restart files
-if(write_binary_restart_files) then
-   write_format = "unformatted"
+! Set the write format for restart files.  Read format will be 
+! determined by testing the open file handle.
+if (write_binary_restart_files) then
+   if (binary_is_netcdf) then
+      write_format = "netcdf"
+   else
+      write_format = "unformatted"
+   endif
 else
    write_format = "formatted"
 endif
+
+read_format = "unknown"
 
 ! Call the underlying model's static initialization
 call static_init_model()
@@ -754,18 +763,22 @@ if(present(target_time)) then
 else
    call awrite_state_restart(assim_model%time, assim_model%state_vector, funit)
 endif
-
+       
 end subroutine write_state_restart
 
 
 
-
+!! ABP - 01/14/2014
+!! Modified to only work with netCDF files
+!! Modified to include unlimited dimension for netCDF state_vector write
 subroutine awrite_state_restart(model_time, model_state, funit, target_time)
 !----------------------------------------------------------------------
 !
 ! Write a restart file given a model extended state and a unit number 
 ! opened to the restart file. (Need to reconsider what is passed to 
 ! identify file or if file can even be opened within this routine).
+
+use netcdf
 
 implicit none
 
@@ -774,50 +787,139 @@ real(r8),        intent(in)           :: model_state(:)
 integer,         intent(in)           :: funit
 type(time_type), optional, intent(in) :: target_time
 
+integer :: EnsembleCount_ID
+integer :: model_state_size_ID, model_state_ID, time_scalar_ID
+integer :: model_time_secs_ID, model_time_days_ID, target_time_secs_ID, target_time_days_ID
+integer :: target_time_secs, target_time_days, model_time_secs, model_time_days
+integer :: ndims, nvars, ngatts, unlimdimid
+
+character(len=NF90_MAX_NAME) :: varname
+integer :: lngth
+
 integer :: i, io, rc
 character(len = 16) :: open_format
 character(len=128) :: filename
 logical :: is_named
 
-if ( .not. module_initialized ) call static_init_assim_model()
 
-! Figure out whether the file is opened FORMATTED or UNFORMATTED
-inquire(funit, FORM=open_format)
+if (write_format == 'netcdf') then
+   
+   lngth = -1
+   
+   if ( .not. module_initialized ) call static_init_assim_model()
+   
+   ! inquire netCDF file
+   call nc_check(nf90_inquire(funit, ndims, nvars, ngatts, unlimdimid),	&
+   	'awrite_state_restart', 'nc_inq')  
+   
+   ! check if variables already exist in file, if not, initialize variables here
+   if(nvars.lt.1)then
+   call nc_check(nf90_def_dim(funit, "time_scalar", 1, time_scalar_ID),	&
+   	'awrite_state_restart', 'define dim time_scalar')  
+   
+   if(present(target_time))then
+    call get_time(target_time, target_time_secs, target_time_days)
+    
+    call nc_check(nf90_def_var(funit, "target_time_secs", nf90_int, time_scalar_ID, target_time_secs_ID),	&
+   	'awrite_state_restart', 'define target_time_secs')  
+    call nc_check(nf90_def_var(funit, "target_time_days", nf90_int, time_scalar_ID, target_time_days_ID),	&
+   	'awrite_state_restart', 'define target_time_days')  
+   endif
+   
+    call nc_check(nf90_def_var(funit, "model_time_secs", nf90_int, time_scalar_ID, model_time_secs_ID),	&
+   	'awrite_state_restart', 'define model_time_secs')  
+    call nc_check(nf90_def_var(funit, "model_time_days", nf90_int, time_scalar_ID, model_time_days_ID),	&
+   	'awrite_state_restart', 'define model_time_days')  
+    call nc_check(nf90_def_dim(funit, "model_state_size", size(model_state), model_state_size_ID),	&
+   	'awrite_state_restart', 'define dim model_state_size')  
+    call nc_check(nf90_def_dim(funit, "EnsembleCount", nf90_unlimited, EnsembleCount_ID),	&
+   	'awrite_state_restart', 'define dim EnsembleCount')  	
+    call nc_check(nf90_def_var(funit, "model_state", nf90_double, (/model_state_size_ID,EnsembleCount_ID/), model_state_ID),	&
+   	'awrite_state_restart', 'define var model_state')  
+   
+   ! END DEFINE MODE
+   call nc_check(nf90_enddef(funit),'awrite_state_restart', 'end define mode') 
+   endif
+   
+   ! INQUIRE
+   if(present(target_time))then
+    call nc_check(nf90_inq_varid(funit, "target_time_secs", target_time_secs_ID),	&
+   	'awrite_state_restart', 'inquire target_time_secs_ID')   
+    call nc_check(nf90_inq_varid(funit, "target_time_days", target_time_days_ID),	&
+   	'awrite_state_restart', 'inquire target_time_days_ID')   
+   endif
+   
+    call nc_check(nf90_inq_varid(funit, "model_time_secs", model_time_secs_ID),		&
+   	'awrite_state_restart', 'inquire model_time_secs_ID')   	
+    call nc_check(nf90_inq_varid(funit, "model_time_days", model_time_days_ID),		&
+   	'awrite_state_restart', 'inquire model_time_days_ID')   
+    call nc_check(nf90_inq_varid(funit, "model_state", model_state_ID),			&
+   	'awrite_state_restart', 'inquire model_state_ID')   
+   	
+   call nc_check(NF90_Inquire_Dimension(funit, EnsembleCount_ID, varname, lngth), 	&
+          'awrite_state_restart', 'inquire_model_state_dimension unlimited')	
+          
+   lngth  = lngth + 1
+   
+   ! GET TIME
+   call get_time(model_time, model_time_secs, model_time_days)
+   
+   ! WRITE OUT DATA
+   if(present(target_time))then
+   call nc_check(nf90_put_var(funit, target_time_secs_ID, target_time_secs),	&
+   	'awrite_state_restart', 'put target_time_secs')  
+   call nc_check(nf90_put_var(funit, target_time_days_ID, target_time_days),	&
+   	'awrite_state_restart', 'put target_time_days')  
+   endif
+   
+   call nc_check(nf90_put_var(funit, model_time_secs_ID, model_time_secs),	&
+   	'awrite_state_restart', 'put model_time_secs')  
+   call nc_check(nf90_put_var(funit, model_time_days_ID, model_time_days),	&
+   	'awrite_state_restart', 'put model_time_days') 
+   	
+   call nc_check(nf90_put_var(funit, model_state_ID, model_state, start=(/1,lngth/)),	&
+   	'awrite_state_restart', 'put model_state') 	
 
-! assume success
-io = 0
-
-! Write the state vector
-if (ascii_file_format(open_format)) then
-   if(present(target_time)) call write_time(funit, target_time, ios_out=io)
-   if (io /= 0) goto 10
-   call write_time(funit, model_time, ios_out=io)
-   if (io /= 0) goto 10
-   do i = 1, size(model_state)
-      write(funit, *, iostat = io) model_state(i)
-      if (io /= 0) goto 10
-   end do
 else
-   if(present(target_time)) call write_time(funit, target_time, form="unformatted", ios_out=io)
-   if (io /= 0) goto 10
-   call write_time(funit, model_time, form="unformatted", ios_out=io)
-   if (io /= 0) goto 10
-   write(funit, iostat = io) model_state
-   if (io /= 0) goto 10
+
+   ! Figure out whether the file is opened FORMATTED or UNFORMATTED
+   inquire(funit, FORM=open_format)
+   
+   ! assume success
+   io = 0
+   
+   ! Write the state vector
+   if (ascii_file_format(open_format)) then
+      if(present(target_time)) call write_time(funit, target_time, ios_out=io)
+      if (io /= 0) goto 10
+      call write_time(funit, model_time, ios_out=io)
+      if (io /= 0) goto 10
+      do i = 1, size(model_state)
+         write(funit, *, iostat = io) model_state(i)
+         if (io /= 0) goto 10
+      end do
+   else
+      if(present(target_time)) call write_time(funit, target_time, form="unformatted", ios_out=io)
+      if (io /= 0) goto 10
+      call write_time(funit, model_time, form="unformatted", ios_out=io)
+      if (io /= 0) goto 10
+      write(funit, iostat = io) model_state
+      if (io /= 0) goto 10
+   endif
+   
+   ! come directly here on error.
+   10 continue
+   
+   ! if error, use inquire function to extract filename associated with
+   ! this fortran unit number and use it to give the error message context.
+   if (io /= 0) then
+      inquire(funit, named=is_named, name=filename, iostat=rc)
+      if ((rc /= 0) .or. (.not. is_named)) filename = 'unknown file'
+      write(msgstring,*) 'error writing to restart file ', trim(filename)
+      call error_handler(E_ERR,'awrite_state_restart',msgstring,source,revision,revdate)
+   endif
+
 endif
-
-! come directly here on error. 
-10 continue
-
-! if error, use inquire function to extract filename associated with
-! this fortran unit number and use it to give the error message context.
-if (io /= 0) then
-   inquire(funit, named=is_named, name=filename, iostat=rc)
-   if ((rc /= 0) .or. (.not. is_named)) filename = 'unknown file'
-   write(msgstring,*) 'error writing to restart file ', trim(filename)
-   call error_handler(E_ERR,'awrite_state_restart',msgstring,source,revision,revdate)
-endif
-
 
 end subroutine awrite_state_restart
 
@@ -845,210 +947,303 @@ endif
 end subroutine read_state_restart
 
 
-
-
-subroutine aread_state_restart(model_time, model_state, funit, target_time)
+!! ABP - 01/14/2014
+!! Modified to only work with netCDF files
+subroutine aread_state_restart(model_time, model_state, funit, target_time, offset)
 !----------------------------------------------------------------------
 !
 ! Read a restart file given a unit number (see write_state_restart)
+use netcdf
 
 implicit none
 
 type(time_type), intent(out)            :: model_time
 real(r8),        intent(out)            :: model_state(:)
 integer,         intent(in)             :: funit
-type(time_type), optional, intent(out) :: target_time
+type(time_type), optional, intent(out)  :: target_time
+
+integer,         optional, intent(in)   :: offset
+
+integer :: model_time_secs_ID, model_time_days_ID, target_time_secs_ID, target_time_days_ID, model_state_ID
+integer :: model_time_secs, model_time_days, target_time_secs, target_time_days
 
 character(len = 16) :: open_format
 integer :: ios, int1, int2
 
+
 if ( .not. module_initialized ) call static_init_assim_model()
 
-ios = 0
-
-! Figure out whether the file is opened FORMATTED or UNFORMATTED
-inquire(funit, FORM=open_format)
-
-if (ascii_file_format(open_format)) then
-   if(present(target_time)) target_time = read_time(funit)
-   model_time = read_time(funit)
-   read(funit,*,iostat=ios) model_state
-else
-   if(present(target_time)) target_time = read_time(funit, form = "unformatted")
-   model_time = read_time(funit, form = "unformatted")
-   read(funit,iostat=ios) model_state
+! try netcdf and see if you get an error or not
+if (read_format == 'unknown') then
+print *, 'testing for netcdf file format'
+   ios = nf90_inquire(funit)
+print *, 'ios = ', ios
+   if (ios == nf90_noerr) then
+      read_format = 'netcdf'
+print *, 'thinks reading format is netcdf'
+   endif
 endif
 
-! If the model_state read fails ... dump diagnostics.
-if ( ios /= 0 ) then
-   ! messages are being used as error lines below.  in an MPI filter,
-   ! all messages are suppressed that aren't from PE0.  if an error
-   ! happens in another task, these lines won't be printed unless we
-   ! turn on output.
-   call set_output(.true.)
+if (read_format == 'netcdf') then
 
-   write(msgstring,*)'dimension of model state is ',size(model_state)
-   call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
+   if(present(target_time))then
+    call nc_check(nf90_inq_varID(funit, 'target_time_secs', target_time_secs_ID),	&
+   	'aread_state_restart', 'inquire target_time_secs')  
+    call nc_check(nf90_inq_varID(funit, 'target_time_days', target_time_days_ID),	&
+   	'aread_state_restart', 'inquire target_time_days')  
+    call nc_check(nf90_get_var(funit, target_time_secs_ID, target_time_secs),	&
+   	'aread_state_restart', 'get target_time_secs')  
+    call nc_check(nf90_get_var(funit, target_time_days_ID, target_time_days),	&
+   	'aread_state_restart', 'get target_time_days')  
+    target_time = set_time(target_time_secs, target_time_days)  
+   endif
+   
+    call nc_check(nf90_inq_varID(funit, 'model_time_secs', model_time_secs_ID),	&
+   	'aread_state_restart', 'inquire model_time_secs')  
+    call nc_check(nf90_inq_varID(funit, 'model_time_days', model_time_days_ID),	&
+   	'aread_state_restart', 'inquire model_time_days')  
+    call nc_check(nf90_get_var(funit, model_time_secs_ID, model_time_secs),	&
+   	'aread_state_restart', 'get model_time_secs')  
+    call nc_check(nf90_get_var(funit, model_time_days_ID, model_time_days),	&
+   	'aread_state_restart', 'get model_time_days')  
+   model_time = set_time(model_time_secs, model_time_days)   
+       
+   ! READ IN MODEL STATE
+    call nc_check(nf90_inq_varID(funit, 'model_state', model_state_ID),	&
+   	'aread_state_restart', 'inquire model_state')  
+   	
+   if(present(offset)) then	
+     call nc_check(nf90_get_var(funit, model_state_ID, model_state, start=(/1,offset/)),	&
+   	'aread_state_restart', 'get model_state')  
+   else
+     call nc_check(nf90_get_var(funit, model_state_ID, model_state, start=(/1,1/)),		&
+   	'aread_state_restart', 'get model_state')  
+   endif	
 
-   if(present(target_time)) then
-      call get_time(target_time, int1, int2)       ! time -> secs/days
-      write(msgstring,*)'target_time (secs/days) : ',int1,int2
+else
+
+   ios = 0
+   
+   ! Figure out whether the file is opened FORMATTED or UNFORMATTED
+   inquire(funit, FORM=open_format)
+   
+   if (ascii_file_format(open_format)) then
+print *, 'thinks reading format is ascii'
+print *, 'target_time is present? ', present(target_time)
+print *, 'funit = ', funit
+      if(present(target_time)) target_time = read_time(funit)
+      model_time = read_time(funit)
+call print_time(model_time)
+      read(funit,*,iostat=ios) model_state
+print *, 'ios = ', ios
+   else
+print *, 'thinks reading format is binary'
+print *, 'target_time is present? ', present(target_time)
+      if(present(target_time)) target_time = read_time(funit, form = "unformatted")
+      model_time = read_time(funit, form = "unformatted")
+      read(funit,iostat=ios) model_state
+print *, 'ios = ', ios
+   endif
+   
+   ! If the model_state read fails ... dump diagnostics.
+   if ( ios /= 0 ) then
+      ! messages are being used as error lines below.  in an MPI filter,
+      ! all messages are suppressed that aren't from PE0.  if an error
+      ! happens in another task, these lines won't be printed unless we
+      ! turn on output.
+      call set_output(.true.)
+   
+      write(msgstring,*)'dimension of model state is ',size(model_state)
       call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
+   
+      if(present(target_time)) then
+         call get_time(target_time, int1, int2)       ! time -> secs/days
+         write(msgstring,*)'target_time (secs/days) : ',int1,int2
+         call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
+      endif
+   
+      call get_time(model_time, int1, int2)       ! time -> secs/days
+      write(msgstring,*)'model_time (secs/days) : ',int1,int2
+      call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
+   
+      write(msgstring,'(''model max/min/first is'',3(1x,E12.6) )') &
+               maxval(model_state), minval(model_state), model_state(1)
+      call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
+   
+      call dump_unit_attributes(funit)
+   
+      write(msgstring,*)'read error is : ',ios
+      call error_handler(E_ERR,'aread_state_restart',msgstring,source,revision,revdate)
    endif
 
-   call get_time(model_time, int1, int2)       ! time -> secs/days
-   write(msgstring,*)'model_time (secs/days) : ',int1,int2
-   call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
-
-   write(msgstring,'(''model max/min/first is'',3(1x,E12.6) )') &
-            maxval(model_state), minval(model_state), model_state(1)
-   call error_handler(E_MSG,'aread_state_restart',msgstring,source,revision,revdate)
-
-   call dump_unit_attributes(funit)
-
-   write(msgstring,*)'read error is : ',ios
-   call error_handler(E_ERR,'aread_state_restart',msgstring,source,revision,revdate)
 endif
 
 end subroutine aread_state_restart
 
 
-
+!! ABP - 01/14/2014
+!! Modified to only work with netCDF files
 function open_restart_write(file_name, override_write_format)
 !----------------------------------------------------------------------
 !
 ! Opens a restart file for writing
 
+use netcdf
+
 character(len = *), intent(in) :: file_name
 character(len = *), optional, intent(in) :: override_write_format
 
-integer :: open_restart_write, io
+integer :: open_restart_write
+
+character(len=129) :: ncfile_name
+
+integer :: io
 
 if ( .not. module_initialized ) call static_init_assim_model()
 
-open_restart_write = get_unit()
-if(present(override_write_format)) then
-   open(unit = open_restart_write, file = file_name, form = override_write_format, &
-        iostat = io)
+if (write_format == 'netcdf') then
+   !! CREATE FILE
+   ncfile_name = trim(adjustl(file_name))//'.nc'
+   call nc_check(nf90_create(path = ncfile_name, cmode = NF90_64BIT_OFFSET, ncid = open_restart_write), &
+                 'open_restart_write', 'create '//ncfile_name)
+                   
 else
-   open(unit = open_restart_write, file = file_name, form = write_format, iostat = io)
-endif
-if (io /= 0) then
-   write(msgstring,*) 'unable to open restart file ', trim(file_name), ' for writing'
-   call error_handler(E_ERR,'open_restart_write',msgstring,source,revision,revdate)
+
+   open_restart_write = get_unit()
+   if(present(override_write_format)) then
+      open(unit = open_restart_write, file = file_name, form = override_write_format, &
+           iostat = io)
+   else
+      open(unit = open_restart_write, file = file_name, form = write_format, iostat = io)
+   endif
+   if (io /= 0) then
+      write(msgstring,*) 'unable to open restart file ', trim(file_name), ' for writing'
+      call error_handler(E_ERR,'open_restart_write',msgstring,source,revision,revdate)
+   endif
+
 endif
 
 end function open_restart_write
 
 
+!! ABP - 01/14/2014
+!! Modified to only work with netCDF files
 function open_restart_read(file_name)
 !----------------------------------------------------------------------
 !
 ! Opens a restart file for reading
 
+use netcdf
+
 integer :: open_restart_read
 character(len = *), intent(in) :: file_name
 
+character(len = 256) :: ncfile_name
 integer :: ios, ios_out
 !!logical :: old_output_state
 type(time_type) :: temp_time
 character(len=64) :: string2
 
-if ( .not. module_initialized ) call static_init_assim_model()
 
-! DEBUG -- if enabled, every task will print out as it opens the
-! restart files.  If questions about missing restart files, first start
-! by commenting in only the timestamp line.  If still concerns, then
-! go ahead and comment in all the lines.
-!!old_output_state = do_output()
-!!call set_output(.true.)
-!call timestamp("open_restart", "opening restart file "//trim(file_name), pos='')
-!!call set_output(old_output_state)
-!END DEBUG
+if ( .not. module_initialized ) call static_init_assim_model()    
 
-! if you want to document which file(s) are being opened before
-! trying the open (e.g. in case the fortran runtime library intercepts
-! the error and does not return to let us print out the name) then
-! comment this in and you can see what files are being opened.
-!write(msgstring, *) 'Opening restart file ',trim(adjustl(file_name))
-!call error_handler(E_MSG,'open_restart_read',msgstring,source,revision,revdate)
 
-! WARNING: Absoft Pro Fortran 9.0, on a power-pc mac, is convinced
-! that certain binary files are, in fact, ascii, because the read_time 
-! call is returning what seems like a good time even though it should
-! be garbage.  This code works fine on all other platforms/compilers
-! we've tried, so we're leaving it as-is.  Best solution if you're
-! using absoft on a mac is to set all files to be non-binary in the
-! namelist.  You may also have to set the format in both obs_model_mod.f90 
-! and interpolate_model.f90 to 'formatted' instead of the hardcoded 
-! 'unformatted' for async 2/4 model advance temp_ic and temp_ud files.
+print *, 'at start of open_restart_read, read_format is ', trim(read_format)
+! try netcdf and see if you get an error or not
+if (read_format == 'unknown' .or. read_format == 'netcdf') then
 
-! Autodetect format of restart file when opening
-! Know that the first thing in here has to be a time, so try to read it.
-! If it fails with one format, try the other. If it fails with both, punt.
-open_restart_read = get_unit()
-read_format = 'formatted'
-open(unit   = open_restart_read, &
-     file   = trim(file_name),   &
-     form   = read_format,       &
-     action = 'read',            &
-     status = 'old',             &
-     iostat = ios)
-! An opening error means something is wrong with the file, error and stop
-if(ios /= 0) goto 11
-temp_time = read_time(open_restart_read, read_format, ios_out)
-if(ios_out == 0) then 
-   ! It appears to be formatted, proceed
-   rewind open_restart_read
-   return
+   ncfile_name = trim(adjustl(file_name))//'.nc'
+   ios = nf90_open(ncfile_name, NF90_NOWRITE, open_restart_read)
+  
+   if (ios == nf90_noerr .and. read_format == 'unknown') read_format = 'netcdf'
+
+print *, 'after test for netcdf, read_format is now ', trim(read_format)
+
 endif
 
-! Next, try to see if an unformatted read works instead
-close(open_restart_read)
+if (read_format /= 'netcdf') then
 
-open_restart_read = get_unit()
-read_format = 'unformatted'
-open(unit   = open_restart_read, &
-     file   = trim(file_name),   &
-     form   = read_format,       &
-     action = 'read',            &
-     status = 'old',             &
-     iostat = ios)
-! An opening error means something is wrong with the file, error and stop
-if(ios /= 0) goto 11
-rewind open_restart_read
-temp_time = read_time(open_restart_read, read_format, ios_out)
-if(ios_out == 0) then 
-   ! It appears to be unformatted, proceed
-   rewind open_restart_read
-   return
+   ! DEBUG -- if enabled, every task will print out as it opens the
+   ! restart files.  If questions about missing restart files, first start
+   ! by commenting in only the timestamp line.  If still concerns, then
+   ! go ahead and comment in all the lines.
+   !!old_output_state = do_output()
+   !!call set_output(.true.)
+   !call timestamp("open_restart", "opening restart file "//trim(file_name), pos='')
+   !!call set_output(old_output_state)
+   !END DEBUG
+   
+   ! if you want to document which file(s) are being opened before
+   ! trying the open (e.g. in case the fortran runtime library intercepts
+   ! the error and does not return to let us print out the name) then
+   ! comment this in and you can see what files are being opened.
+   !write(msgstring, *) 'Opening restart file ',trim(adjustl(file_name))
+   !call error_handler(E_MSG,'open_restart_read',msgstring,source,revision,revdate)
+   
+   ! WARNING: Absoft Pro Fortran 9.0, on a power-pc mac, is convinced
+   ! that certain binary files are, in fact, ascii, because the read_time
+   ! call is returning what seems like a good time even though it should
+   ! be garbage.  This code works fine on all other platforms/compilers
+   ! we've tried, so we're leaving it as-is.  Best solution if you're
+   ! using absoft on a mac is to set all files to be non-binary in the
+   ! namelist.  You may also have to set the format in both obs_model_mod.f90
+   ! and interpolate_model.f90 to 'formatted' instead of the hardcoded
+   ! 'unformatted' for async 2/4 model advance temp_ic and temp_ud files.
+   
+   ! Autodetect format of restart file when opening
+   ! Know that the first thing in here has to be a time, so try to read it.
+   ! If it fails with one format, try the other. If it fails with both, punt.
+   open_restart_read = open_file(file_name, 'formatted', 'read')
+   temp_time = read_time(open_restart_read, read_format, ios_out)
+   if(ios_out == 0) then
+      ! It appears to be formatted, proceed
+      read_format = 'ascii'
+      rewind open_restart_read
+      return
+   endif
+   
+   ! Next, try to see if an unformatted read works instead
+   call close_file(open_restart_read)
+   
+   open_restart_read = open_file(file_name, 'unformatted', 'read')
+   temp_time = read_time(open_restart_read, read_format, ios_out)
+   if(ios_out == 0) then
+      ! It appears to be unformatted, proceed
+      read_format = 'binary'
+      rewind open_restart_read
+      return
+   endif
+   
+   ! if you get here, you could open the file but it didn't seem to
+   ! start with a timestamp.
+   write(msgstring, *) 'File '//trim(file_name)//' does not seem to be a DART IC/restart file'
+   write( string2 , *) 'It does not start with a readable timestamp.'
+   call error_handler(E_ERR, 'open_restart_read', msgstring, &
+        source, revision, revdate, text2=string2)
+
 endif
-
-! Otherwise, neither format works. Have a fatal error.
-11 continue
-
-write(msgstring, *) 'Problem opening file ',trim(file_name)
-write( string2 , *) 'OPEN status was ',ios
-call error_handler(E_ERR, 'open_restart_read', msgstring, &
-     source, revision, revdate, text2=string2)
 
 end function open_restart_read
 
-
-
+!! ABP - 01/14/2014
+!! Modified to only work with netCDF files
 subroutine close_restart(file_unit)
 !----------------------------------------------------------------------
-!
+use netcdf
+
 ! Closes a restart file
 integer, intent(in) :: file_unit
 
-call close_file(file_unit)
+integer :: ios
+
+! try netcdf and see if you get an error or not
+ios = nf90_close(file_unit)
+
+if (ios /= nf90_noerr) then
+   call close_file(file_unit)
+endif
 
 end subroutine close_restart
-
-
-
-
 
 
 subroutine output_diagnostics(ncFileID, state, copy_index)

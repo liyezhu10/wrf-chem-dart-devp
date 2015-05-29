@@ -21,7 +21,8 @@ use     location_mod, only : location_type, is_location_in_region
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, read_obs_def, &
                              write_obs_def, destroy_obs_def, copy_obs_def, &
                              interactive_obs_def, get_obs_def_location, &
-                             get_expected_obs_from_def, get_obs_kind
+                             get_expected_obs_from_def, get_obs_kind, &
+                             operator(/=), print_obs_def
 use     obs_kind_mod, only : write_obs_kind, read_obs_kind, max_obs_kinds, &
                              get_obs_kind_index
 use time_manager_mod, only : time_type, operator(>), operator(<), &
@@ -38,6 +39,15 @@ interface assignment(=)
    module procedure copy_obs
 end interface
 
+interface operator(==)
+   module procedure eq_obs
+end interface
+
+interface operator(/=)
+   module procedure ne_obs
+end interface
+
+
 ! Public interfaces for obs sequences
 public :: obs_sequence_type, init_obs_sequence, interactive_obs_sequence, &
    get_num_copies, get_num_qc, get_num_obs, get_max_num_obs, &
@@ -46,7 +56,7 @@ public :: obs_sequence_type, init_obs_sequence, interactive_obs_sequence, &
    set_qc_meta_data, get_first_obs, get_last_obs, add_copies, add_qc, &
    write_obs_seq, read_obs_seq, set_obs, append_obs_to_seq, &
    get_obs_from_key, get_obs_time_range, get_time_range_keys, &
-   get_num_times, get_num_key_range, &
+   get_num_times, get_num_key_range, operator(==), operator(/=), &
    static_init_obs_sequence, destroy_obs_sequence, read_obs_seq_header, &
    get_expected_obs, delete_seq_head, delete_seq_tail, &
    get_next_obs_from_key, get_prev_obs_from_key, delete_obs_by_typelist, &
@@ -56,7 +66,7 @@ public :: obs_sequence_type, init_obs_sequence, interactive_obs_sequence, &
 public :: obs_type, init_obs, destroy_obs, get_obs_def, set_obs_def, &
    get_obs_values, set_obs_values, replace_obs_values, get_qc, set_qc, &  
    read_obs, write_obs, replace_qc, interactive_obs, copy_obs, assignment(=), &
-   get_obs_key, copy_partial_obs
+   get_obs_key, copy_partial_obs, print_obs, eq_obs, ne_obs
 
 ! Public interfaces for obs covariance modeling
 public :: obs_cov_type
@@ -2182,6 +2192,90 @@ obs1%next_time = obs2%next_time
 obs1%cov_group = obs2%cov_group
 
 end subroutine copy_obs
+
+!-----------------------------------------------------
+
+subroutine print_obs(obs1)
+
+type(obs_type), intent(in) :: obs1
+
+integer :: i
+
+print *, 'obs key: ', obs1%key
+call print_obs_def(obs1%def)
+
+if (associated(obs1%values)) then
+   print *, 'obs copies: '
+   do i = 1, size(obs1%values)
+      print *, i, obs1%values(i)
+   enddo
+else
+   print *, 'no copies'
+endif
+
+if (associated(obs1%qc)) then
+   print *, 'obs qcs: '
+   do i = 1, size(obs1%qc)
+      print *, i, obs1%qc(i)
+   enddo
+else
+   print *, 'no qcs'
+endif
+
+print *, 'obs linked list info:'
+print *, 'prev obs: ', obs1%prev_time
+print *, 'next obs: ', obs1%next_time
+print *, 'cov group: ', obs1%cov_group
+
+end subroutine print_obs
+
+!-----------------------------------------------------
+
+function eq_obs(obs1, obs2)
+
+! This routine could be overloaded with the == operator
+
+type(obs_type), intent(in) :: obs1
+type(obs_type), intent(in) :: obs2
+logical :: eq_obs
+
+integer :: i
+
+eq_obs = .false.
+
+if (obs1%def /= obs2%def) return
+
+if (associated(obs1%values) .and. .not. associated(obs2%values)) return
+if (associated(obs2%values) .and. .not. associated(obs1%values)) return
+if (size(obs1%values) /= size(obs2%values)) return
+   
+do i = 1, size(obs1%values)
+   if (obs1%values(i) /= obs2%values(i)) return
+enddo
+
+if (associated(obs1%qc) .and. .not. associated(obs2%qc)) return
+if (associated(obs2%qc) .and. .not. associated(obs1%qc)) return
+if (size(obs1%qc) /= size(obs2%qc)) return
+   
+do i = 1, size(obs1%qc)
+   if (obs1%qc(i) /= obs2%qc(i)) return
+enddo
+
+end function eq_obs
+
+!-------------------------------------------------
+
+function ne_obs(obs1, obs2)
+
+! This routine could be overloaded with the /= operator
+
+type(obs_type), intent(in) :: obs1
+type(obs_type), intent(in) :: obs2
+logical :: ne_obs
+
+ne_obs = .not. eq_obs(obs1, obs2)
+
+end function ne_obs
 
 !-------------------------------------------------
 

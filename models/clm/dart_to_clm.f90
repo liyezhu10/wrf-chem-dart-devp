@@ -27,10 +27,11 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, open_file, close_file, &
                              error_handler, E_MSG
-use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
+use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart, &
+                             get_model_size
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time
 use        model_mod, only : static_init_model, sv_to_restart_file, &
-                             get_model_size, get_clm_restart_filename
+                             get_clm_restart_filename
 
 implicit none
 

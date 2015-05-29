@@ -21,7 +21,7 @@ use     location_mod, only : location_type, get_location, set_location,        &
                              write_location
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind,     &
                              get_obs_def_location, read_obs_def,               &
-                             set_obs_def_time
+                             set_obs_def_time, get_obs_kind
 use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name,                 &
                              get_obs_kind_index, read_obs_kind
 use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
@@ -72,6 +72,10 @@ integer, parameter      :: print_every = 5000
 
 ! lazy, pick big number.  make it bigger if too small.
 integer, parameter :: max_obs_input_types = 500
+
+type(location_type) :: location
+integer :: obs_type_ind
+character(len=256) :: string
 
 !----------------------------------------------------------------
 ! Namelist input with default values
@@ -196,7 +200,13 @@ if ( get_first_obs(seq_in, obs_in) )  then
       !   modify obs_out to match what you need
 
       ! if you need something in the obs_def type, here's how you do that
-      !call get_obs_def(obs_out, this_obs_def)
+      call get_obs_def(obs_out, this_obs_def)
+      location = get_obs_def_location(this_obs_def)
+      obs_type_ind = get_obs_kind(this_obs_def)
+
+
+      call write_location(0, location, charstring = string)
+      write(*, *) trim(string) // '  ' // trim(get_obs_kind_name(obs_type_ind))
 
       ! change something
  

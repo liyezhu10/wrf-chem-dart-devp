@@ -36,27 +36,15 @@ type xyz_location_type
    real(r8) :: x, y, z
 end type xyz_location_type
 
-! This version supports both regularly spaced boxes, and octree division
-! of the space.  for octrees, divide each dim in half until N numbers of filled 
-! boxes, or octree reaches some depth?  give some threshold where you don't
-! divide a box with less than N points in it?
-
-! contrast with kD-trees (divide along dimensions, not points), and there are
-! two types of octrees - PR (point region) where the regions split at an
-! explicit point, vs MX tree where the split is defined to be at the center
-! of the region.
-
-! if the underlying geometry is spherical, there will be many many empty boxes 
-! if we uniformly divide up space, and worse, existing locations will be 
-! clustered in a few boxes.
-
+! this version does not support the experimental octree code, only
+! the space-filling boxes.
 
 type box_type
    private
-   integer, pointer  :: obs_box(:)           ! (nobs); List of obs indices in boxes
-   integer, pointer  :: count(:, :, :)       ! (nx, ny, nz); # of obs in each box
-   integer, pointer  :: start(:, :, :)       ! (nx, ny, nz); Start of list of obs in this box
-   real(r8)          :: bot_x, top_x         ! extents in x, y, z
+   integer, allocatable :: obs_box(:)     ! (nobs); List of obs indices in boxes
+   integer, allocatable :: count(:, :, :) ! (nx,ny,nz); # of obs in each box
+   integer, allocatable :: start(:, :, :) ! (nx,ny,nz); List start for obs in this box
+   real(r8)          :: bot_x, top_x      ! extents in x, y, z
    real(r8)          :: bot_y, top_y 
    real(r8)          :: bot_z, top_z 
    real(r8)          :: x_width, y_width, z_width    ! widths of boxes in x,y,z
@@ -107,7 +95,7 @@ namelist /xyz_location_nml/ &
 
 interface xyz_set_location
    module procedure set_location_single
-!   module procedure set_location_array
+   module procedure set_location_array
    module procedure set_location_lonlat
 end interface xyz_set_location
 
@@ -119,8 +107,7 @@ subroutine initialize_module
  
 ! things which need doing exactly once.
 
-integer :: iunit, io, i
-character(len=129) :: str1
+integer :: iunit, io
 
 if (module_initialized) return
 
@@ -142,8 +129,10 @@ if (filled < 1) then
    call error_handler(E_ERR, 'set_location', errstring, source, revision, revdate)
 endif
 
-! FIXME:
-use_octree   = .false.  ! if false, use regular boxes
+if (use_octree) then
+   call error_handler(E_MSG, 'xyz locations: ', 'octree unsupported; namelist item ignored')
+   use_octree   = .false.  ! if false, use regular boxes
+endif
 
 end subroutine initialize_module
 
@@ -169,8 +158,6 @@ real(r8)                            :: xyz_get_dist
 
 real(r8) :: x_dif, y_dif, z_dif
 
-if ( .not. module_initialized ) call initialize_module
-
 x_dif = loc1%x - loc2%x
 y_dif = loc1%y - loc2%y
 z_dif = loc1%z - loc2%z
@@ -188,8 +175,6 @@ function xyz_get_location(loc)
 type(xyz_location_type), intent(in) :: loc
 real(r8), dimension(3) :: xyz_get_location
 
-if ( .not. module_initialized ) call initialize_module
-
 xyz_get_location(1) = loc%x
 xyz_get_location(2) = loc%y
 xyz_get_location(3) = loc%z
@@ -205,18 +190,18 @@ subroutine xyz_get_ll_location(loc, radius, lon, lat)
 ! by MPAS (in the grid generation step), return the corresponding
 ! lon, lat location in degrees.
 
-type(xyz_location_type) :: loc
-real(r8), intent(in)  :: radius
-real(r8), intent(out) :: lon, lat
+type(xyz_location_type), intent(in) :: loc
+real(r8),                intent(in)  :: radius
+real(r8),                intent(out) :: lon, lat
 
 real(r8) :: rlat, rlon
 
-! right now this is only needed for debugging messages.
-! the arc versions of routines are expensive.
+! beware if calling a lot.
+! the arc versions of routines are computationally expensive.
 
 rlat = PI/2.0_r8 - acos(loc%z/radius)
 rlon = atan2(loc%y,loc%x)
-if (rlon < 0) rlon = rlon + PI*2
+if (rlon < 0) rlon = rlon + PI*2.0_r8
 
 lat = rlat * rad2deg
 lon = rlon * rad2deg
@@ -231,8 +216,6 @@ function set_location_single(x, y, z)
 
 real(r8), intent(in) :: x, y, z
 type (xyz_location_type) :: set_location_single
-
-if ( .not. module_initialized ) call initialize_module
 
 set_location_single%x = x
 set_location_single%y = y
@@ -249,8 +232,6 @@ function set_location_array(list)
 
 real(r8), intent(in) :: list(:)
 type (xyz_location_type) :: set_location_array
-
-if ( .not. module_initialized ) call initialize_module
 
 if (size(list) < 3) then
    write(errstring,*)'requires 3 input values'
@@ -274,9 +255,6 @@ type (xyz_location_type) :: set_location_lonlat
 real(r8) :: x, y, z
 real(r8) :: rlat, rlon, rr
 
-if ( .not. module_initialized ) call initialize_module
-
-
 rlat = lat * deg2rad
 rlon = lon * deg2rad
 
@@ -299,28 +277,24 @@ subroutine xyz_get_close_obs_init(gc, num, obs)
 ! Initializes part of get_close accelerator that depends on the particular obs
 
 type(xyz_get_close_type), intent(inout) :: gc
-integer,              intent(in)    :: num
-type(xyz_location_type),  intent(in)    :: obs(num)
-
-   call get_close_init_boxes(gc, num, obs)
-
-end subroutine xyz_get_close_obs_init
-
-!----------------------------------------------------------------------------
-
-subroutine get_close_init_boxes(gc, num, obs)
- 
-! Initializes part of get_close accelerator that depends on the particular obs
-
-type(xyz_get_close_type), intent(inout) :: gc
-integer,              intent(in)    :: num
+integer,                  intent(in)    :: num
 type(xyz_location_type),  intent(in)    :: obs(num)
 
 integer :: i, j, k, cum_start, l
 integer :: x_box(num), y_box(num), z_box(num)
 integer :: tstart(nx, ny, nz)
 
-if ( .not. module_initialized ) call initialize_module
+if ( .not. module_initialized ) then
+   call error_handler(E_ERR, 'xyz_get_close_obs_init:', &
+                      'xyz_get_close_maxdist_init() must be called first', &
+                      source, revision, revdate)
+endif
+
+if (.not. allocated(gc%box%count)) then
+   call error_handler(E_ERR, 'xyz_get_close_obs_init:', &
+                      'bad arg "gc" since xyz_get_close_maxdist_init() not called', &
+                      source, revision, revdate)
+endif
 
 ! Allocate storage for obs number dependent part
 allocate(gc%box%obs_box(num))
@@ -387,7 +361,7 @@ do i = 1, nx
 end do
 
 
-end subroutine get_close_init_boxes
+end subroutine xyz_get_close_obs_init
 
 !----------------------------------------------------------------------------
 
@@ -395,40 +369,44 @@ subroutine xyz_get_close_obs_destroy(gc)
 
 type(xyz_get_close_type), intent(inout) :: gc
 
-   call get_close_destroy_boxes(gc)
+if ( .not. module_initialized ) then
+   call error_handler(E_ERR, 'xyz_get_close_obs_destroy:', &
+                      'xyz_get_close_maxdist_init() was never called.', &
+                      source, revision, revdate, &
+                      text2='xyz_get_close_obs_destroy() does not need to be called')
+endif
+
+if (.not. allocated(gc%box%count)) then
+   call error_handler(E_ERR, 'xyz_get_close_obs_destroy:', &
+                      'input argument "gc" is uninitialized', &
+                      source, revision, revdate, &
+                      text2='xyz_get_close_maxdist_init() was never called on this gc.')
+endif
+
+
+if (allocated(gc%box%obs_box)) deallocate(gc%box%obs_box)
+if (allocated(gc%box%count))   deallocate(gc%box%count)
+if (allocated(gc%box%start))   deallocate(gc%box%start)
 
 end subroutine xyz_get_close_obs_destroy
-
-!----------------------------------------------------------------------------
-
-subroutine get_close_destroy_boxes(gc)
-
-type(xyz_get_close_type), intent(inout) :: gc
-
-deallocate(gc%box%obs_box, gc%box%count, gc%box%start)
-
-end subroutine get_close_destroy_boxes
 
 !----------------------------------------------------------------------------
 
 subroutine xyz_get_close_maxdist_init(gc, maxdist)
 
 type(xyz_get_close_type), intent(inout) :: gc
-real(r8),             intent(in)    :: maxdist
+real(r8),                 intent(in)    :: maxdist
 
-character(len=129) :: str1
-integer :: i
+if ( .not. module_initialized ) call initialize_module()
 
 ! set the default value.
 gc%maxdist = maxdist
 !print *, 'setting maxdist to ', maxdist
 
-if (.not. use_octree) then
-   ! Allocate the storage for the grid dependent boxes
-   allocate(gc%box%count(nx,ny,nz), gc%box%start(nx,ny,nz))
-   gc%box%count  = -1
-   gc%box%start  = -1
-endif
+! Allocate the storage for the grid dependent boxes
+allocate(gc%box%count(nx,ny,nz), gc%box%start(nx,ny,nz))
+gc%box%count  = -1
+gc%box%start  = -1
 
 end subroutine xyz_get_close_maxdist_init
 
@@ -444,14 +422,11 @@ subroutine find_box_ranges(gc, locs, num)
 !  - about 100 other schemes
   
 type(xyz_get_close_type), intent(inout) :: gc
-integer,              intent(in)    :: num
+integer,                  intent(in)    :: num
 type(xyz_location_type),  intent(in)    :: locs(num)
 
-logical :: old_out
-integer :: i
 
-
-! FIXME: this space could be very sparse
+! this space could be very sparse
 
 gc%box%bot_x = minval(locs(:)%x)
 gc%box%bot_y = minval(locs(:)%y)
@@ -460,24 +435,6 @@ gc%box%bot_z = minval(locs(:)%z)
 gc%box%top_x = maxval(locs(:)%x)
 gc%box%top_y = maxval(locs(:)%y)
 gc%box%top_z = maxval(locs(:)%z)
-
-!gc%box%bot_x = locs(1)%x
-!gc%box%bot_y = locs(1)%y
-!gc%box%bot_z = locs(1)%z
-!  
-!gc%box%top_x = locs(1)%x
-!gc%box%top_y = locs(1)%y
-!gc%box%top_z = locs(1)%z
-!
-!do i=2, num
-!   gc%box%bot_x = min(gc%box%bot_x, locs(i)%x)
-!   gc%box%bot_y = min(gc%box%bot_y, locs(i)%y)
-!   gc%box%bot_z = min(gc%box%bot_z, locs(i)%z)
-!   
-!   gc%box%top_x = max(gc%box%top_x, locs(i)%x)
-!   gc%box%top_y = max(gc%box%top_y, locs(i)%y)
-!   gc%box%top_z = max(gc%box%top_z, locs(i)%z)
-!enddo
 
 gc%box%x_width = (gc%box%top_x - gc%box%bot_x) / nx
 gc%box%y_width = (gc%box%top_y - gc%box%bot_y) / ny 
@@ -489,37 +446,17 @@ gc%box%nboxes_x = aint((gc%maxdist + (gc%box%x_width-1)) / gc%box%x_width)
 gc%box%nboxes_y = aint((gc%maxdist + (gc%box%y_width-1)) / gc%box%y_width) 
 gc%box%nboxes_z = aint((gc%maxdist + (gc%box%z_width-1)) / gc%box%z_width) 
 
-!print *, 'min xyz = ', gc%box%bot_x, gc%box%bot_y, gc%box%bot_z
-!print *, 'max xyz = ', gc%box%top_x, gc%box%top_y, gc%box%top_z
-!print *, 'wid xyz = ', gc%box%x_width, gc%box%y_width, gc%box%z_width
-!print *, 'nbx xyz = ', nx, ny, nz
-!print *, 'nbx xyz = ', gc%box%nboxes_x, gc%box%nboxes_y, gc%box%nboxes_z
-
 end subroutine find_box_ranges
 
 !----------------------------------------------------------------------------
 
 subroutine xyz_find_nearest(gc, base_loc, loc_list, nearest, rc)
- type(xyz_get_close_type), intent(in), target  :: gc
- type(xyz_location_type),  intent(in)  :: base_loc
- type(xyz_location_type),  intent(in)  :: loc_list(:)
- integer,              intent(out) :: nearest
- integer,              intent(out) :: rc
 
-! find the nearest point in the get close list to the specified point
-
-   call find_nearest_boxes(gc, base_loc, loc_list, nearest, rc)
-
-end subroutine xyz_find_nearest
-
-!----------------------------------------------------------------------------
-
-subroutine find_nearest_boxes(gc, base_loc, loc_list, nearest, rc)
- type(xyz_get_close_type), intent(in), target  :: gc
- type(xyz_location_type),  intent(in)  :: base_loc
- type(xyz_location_type),  intent(in)  :: loc_list(:)
- integer,              intent(out) :: nearest
- integer,              intent(out) :: rc
+type(xyz_get_close_type), intent(in), target  :: gc
+type(xyz_location_type),  intent(in)  :: base_loc
+type(xyz_location_type),  intent(in)  :: loc_list(:)
+integer,                  intent(out) :: nearest
+integer,                  intent(out) :: rc
 
 ! find the nearest point in the get close list to the specified point
 
@@ -533,13 +470,27 @@ nearest = -99
 rc = -1
 dist = 1e38_r8                ! something big and positive.
 
+if ( .not. module_initialized ) then
+   call error_handler(E_ERR, 'xyz_find_nearest:', &
+                      'xyz_get_close_maxdist_init() must be called first', &
+                      source, revision, revdate)
+endif
+
+if (.not. allocated(gc%box%count)) then
+   call error_handler(E_ERR, 'xyz_find_nearest:', &
+                      'input argument "gc" is uninitialized', &
+                      source, revision, revdate, &
+                      text2='xyz_get_close_maxdist_init() was never called on this gc.')
+endif
+
 ! the list of locations in the obs() argument must be the same
 ! as the list of locations passed into get_close_obs_init(), so
 ! gc%num and size(obs) better be the same.   if the list changes,
 ! you have to destroy the old gc and init a new one.
+
 if (size(loc_list) /= gc%num) then
-   write(errstring,*)'obs() array must match one passed to get_close_obs_init()'
-   call error_handler(E_ERR, 'get_close_obs', errstring, source, revision, revdate)
+   write(errstring,*)'loc_list() array must match one passed to xyz_get_close_obs_init()'
+   call error_handler(E_ERR, 'xyz_find_nearest', errstring, source, revision, revdate)
 endif
 
 ! If num == 0, no point in going any further. 
@@ -613,11 +564,6 @@ if (nearest < 0 .or. ghost == 0)  then
    end_z = z_box + ghost
    if (end_z > nz) end_z = nz
 
-   !print *, 'looping from '
-   !print *, 'x: ', start_x, end_x
-   !print *, 'y: ', start_y, end_y
-   !print *, 'z: ', start_z, end_z
-   
    ! Next, loop through each box that is close to this box
    do i = start_x, end_x
       do j = start_y, end_y
@@ -658,7 +604,7 @@ if (nearest < 0 .or. ghost == 0)  then
    endif
 endif
 
-end subroutine find_nearest_boxes
+end subroutine xyz_find_nearest
 
 !----------------------------------------------------------------------------
 

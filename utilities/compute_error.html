@@ -37,7 +37,8 @@
 
 <P>
 Utility program to compute the time-mean ensemble error and spread
-in the same manner that the DART MATLAB diagnostic routine 'plot_total_err' does.
+in the same manner that the DART MATLAB diagnostic routine 
+<em class=code>plot_total_err</em> does.
 It runs from the command line, opens no windows, and outputs several
 types of numerical results on standard output.  Grep for 'Total' to get the 2 lines
 with total error and total spread. Intended for scripts where only the
@@ -59,6 +60,12 @@ option to recompute the time mean ensemble error and spread
 after skipping the first N times.  This can be useful to skip an
 initial error spike while the model is spinning up which can result
 in a larger than expected total error.
+</P>
+<P>
+Use error method 2 to get values consistent with the DART Matlab scripts.
+Use error method 1 to get values consistent with most of the
+DA literature.  Method 1 divides the error and spread values by 
+the square root of the model size, whereas method 2 does not.
 </P>
 <P>
 Namelist interface
@@ -88,6 +95,7 @@ prematurely terminating the namelist.
    truth_file_name = 'True_State.nc'
    diag_file_name  = 'Prior_Diag.nc'
    skip_first_ntimes = 0
+   error_method = 1
  /
 </pre>
 </div>
@@ -121,6 +129,15 @@ prematurely terminating the namelist.
 a second time, skipping the first N times.  This can be useful when running
 an experiment that has an initial error spike as the model spins up and then
 decays down to a more steady state.
+</TD></TR>
+
+<TR><TD>error_method</TD>
+    <TD>integer</TD>
+    <TD>Method 1 is more consistent with most Data Assimilation 
+literature.  It divides the error and spread by the square root of the model 
+size.  Method 2 is consistent with the DART Matlab scripts which do not do 
+the divide and should return the same values as scripts like 
+<em class=code>plot_total_err</em>.
 </TD></TR>
 
 
@@ -176,7 +193,8 @@ utilities_mod
 
 <TR><!-- routine --><TD VALIGN=top>time dimension error</TD>
     <!-- message --><TD VALIGN=top>files must have overlapping time series</TD>
-    <!-- comment --><TD VALIGN=top>The unlimited 'time' dimension must values in common between both files.</TD></TR>
+    <!-- comment --><TD VALIGN=top>The unlimited 'time' dimension must have
+values in common between both files.</TD></TR>
 
 </TABLE>
 </div>

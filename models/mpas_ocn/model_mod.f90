@@ -6,7 +6,7 @@
 
 module model_mod
 
-! MPAS ocean model interface to the DART data assimilation system.
+! MPAS Ocean model interface to the DART data assimilation system.
 ! Code in this module is compiled with the DART executables.  It isolates
 ! all information about the MPAS grids, model variables, and other details.
 ! There are a set of 16 subroutine interfaces that are required by DART;
@@ -16,11 +16,13 @@ module model_mod
 
 ! Units on everything are MKS:
 !
-! u   (velocity):  meter / second
+! normalVelocity (velocity):  meter / second
 ! h   (depth)   :  meter
 ! rho (density) :  kilograms / meter^3
 ! temperature   :  *potential temperature* degrees C
 ! salinity      :  PSU
+!
+! pressure, where used, is in bars
 !
 ! Note:  the 'temperature' variable is *potential* temperature.
 
@@ -65,14 +67,16 @@ use     obs_kind_mod, only : paramname_length,        &
                              get_raw_obs_kind_name,   &
                              KIND_VERTICAL_VELOCITY,  &
                              KIND_POTENTIAL_TEMPERATURE, &
+                             KIND_EDGE_NORMAL_SPEED,  &
                              KIND_TEMPERATURE,        &
-                             KIND_SALINITY,              &
-                             KIND_DRY_LAND,              &
-                             KIND_EDGE_NORMAL_SPEED,     &
+                             KIND_PRESSURE,           &
+                             KIND_DENSITY,            &
                              KIND_U_CURRENT_COMPONENT,   &
                              KIND_V_CURRENT_COMPONENT,   &
                              KIND_SEA_SURFACE_HEIGHT,    &
                              KIND_SEA_SURFACE_PRESSURE,  &
+                             KIND_SALINITY,              &
+                             KIND_DRY_LAND,              &
                              KIND_TRACER_CONCENTRATION
 
 use mpi_utilities_mod, only: my_task_id
@@ -83,14 +87,16 @@ use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 use typesizes
 use netcdf
 
-! RBF (radial basis function) modules, donated by LANL. currently deprecated
-! in this version.  they did the job but not as well as other techniques and
-! at a much greater execution-time code.  they were used to interpolate
-! values at arbitrary locations, not just at cell centers.  with too small
-! a set of basis points, the values were discontinuous at cell boundaries;
-! with too many the values were too smoothed out.  we went back to
-! barycentric interpolation in triangles formed by the three cell centers
-! that enclosed the given point.
+! RBF (radial basis function) modules, donated by LANL.
+! in this model only the edge normal velocities are available so they
+! need to be used.  they are expensive (in time).  if reconstructed
+! velocities (u,v) at the cell centers are available there is a much
+! cheaper barycentric (triangular) interpolation option available
+! (selectable by namelist).   the RBF code is used to interpolate
+! at arbitrary observation locations. there are namelist-selectable
+! options for the size of the basis set. watch the results; with too
+! small a basis the resulting values are discontinuous at cell
+! boundaries; with too large a basis the results are over-smoothed.
 use get_geometry_mod
 use get_reconstruct_mod
 
@@ -148,11 +154,16 @@ real(r8), parameter :: cv = 716.0_r8
 real(r8), parameter :: p0 = 100000.0_r8
 real(r8), parameter :: rcv = rgas/(cp-rgas)
 
+! FIXME: this should be part of the file metadata
+real(r8), parameter :: mpas_missing = -1e34_r8
+
 ! earth radius; needed to convert lat/lon to x,y,z cartesian coords.
-! FIXME: the example ocean files has a global attr with 6371220.0
-! the actual mpas code may have hardwired values (it did in the atmosphere)
-! need to check what is really going on.
-real(r8), parameter :: radius = 6371229.0 ! meters
+! FIXME: i believe 6371229.0 meters is hardwired into the mpas
+! atmosphere, but the ocean data files include a global attribute
+! with the value 6371220.0
+! for now, use 1229 in atm, 1220 in ocean, and ask questions
+! about this later.
+real(r8), parameter :: radius = 6371220.0 ! meters
 
 ! roundoff error
 real(r8), parameter :: roundoff = 1.0e-12_r8
@@ -182,23 +193,23 @@ character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
 character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
 
-! if .false. use U/V reconstructed winds tri interp at centers for wind forward ops
-! if .true.  use edge normal winds (u) with RBF functs for wind forward ops
-logical :: use_u_for_wind = .false.
+! if .false. use U/V reconstructed current tri interp at centers for current forward ops
+! if .true.  use edge normal current (normalVelocity) with RBF functs for current forward ops
+logical :: use_normalVelocity_for_current = .true.
 
 ! if using rbf, options 1,2,3 control how many points go into the rbf.
 ! larger numbers use more points from further away
 integer :: use_rbf_option = 2
 
-! if .false. edge normal winds (u) should be in state vector and are written out directly
-! if .true.  edge normal winds (u) are updated based on U/V reconstructed winds
-logical :: update_u_from_reconstruct = .true.
+! if .false. edge normal current (normalVelocity) should be in state vector and are written out directly
+! if .true.  edge normal current (normalVelocity) is updated based on U/V reconstructed currents
+logical :: update_normalVelocity_from_reconstruct = .false.
 
-! only if update_u_from_reconstruct is true,
-! if .false. use the cell center u,v reconstructed values to update edge winds
-! if .true., read in the original u,v winds, compute the increments after the
-! assimilation, and use only the increments to update the edge winds
-logical :: use_increments_for_u_update = .true.
+! only if update_normalVelocity_from_reconstruct is true,
+! if .false. use the cell center u,v reconstructed values to update edge current
+! if .true., read in the original u,v current, compute the increments after the
+! assimilation, and use only the increments to update the edge current
+logical :: use_increments_for_normalVelocity_update = .true.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -211,10 +222,10 @@ namelist /model_nml/             &
    calendar,                     &
    debug,                        &
    xyzdebug,                     &
-   use_u_for_wind,               &
+   use_normalVelocity_for_current, &
    use_rbf_option,               &
-   update_u_from_reconstruct,    &
-   use_increments_for_u_update
+   update_normalVelocity_from_reconstruct, &
+   use_increments_for_normalVelocity_update
 
 ! DART state vector contents are specified in the input.nml:&mpas_vars_nml namelist.
 integer, parameter :: max_state_variables = 80
@@ -293,10 +304,23 @@ real(r8), allocatable :: zGridFace(:,:)   ! geometric depth at cell faces   (nVe
 real(r8), allocatable :: zGridCenter(:,:) ! geometric depth at cell centers (nVertLevels,  nCells)
 real(r8), allocatable :: zGridEdge(:,:)   ! geometric depth at edge centers (nVertLevels,  nEdges)
 
-real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be computed instead
-                                      !  of requiring it in the input file (save file space). FIXME
-real(r8), allocatable :: hZLevel(:)   ! layer thicknesses - maybe - FIXME
-!real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
+! the distributed mpas_ocean files have:
+!    double layerThickness(Time, nCells, nVertLevels) ;
+!    double bottomDepth(nCells) ;
+!    int maxLevelCell(nCells) ;
+!    double refBottomDepth(nVertLevels) ;
+! but no zMid, no hZlevel and no zEdgeCenter (which exist in the docs
+! but apparently aren't output by default.)  from the PDF docs:  
+!    bottomDepth - depth in positive meters of the ocean floor per column
+!    maxLevelCell - index of the last active ocean cell in each column
+!    layerThickness - doc says 'layer thickness'.  from other possible
+!      variables in the docs, this must be at the cell centers.
+!    refBottomDepth - doc says 'Reference depth of ocean for each 
+!      vertical level.  Used in 'z-level' type runs.'  since there
+!      is only a single column of values this must apply to all
+!      cells in some kind of idealized run.  not good for our needs.
+
+real(r8), allocatable :: layerThickness(:,:)   ! (nVertLevels,nCells,Time)
 
 integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
@@ -307,13 +331,15 @@ integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
 real(r8), allocatable :: edgeNormalVectors(:,:)
 
 ! Boundary information might be needed ... regional configuration?
-! Read if available.
+! Read if available.  all the following fields are described in the
+! documentation, but only the maxLevelCell array is in the example
+! files currently being distributed. 
 
-integer,  allocatable :: boundaryCell(:,:) ! logical, cells that are on boundaries
-integer,  allocatable :: maxLevelEdgeTop(:) !
-integer,  allocatable :: boundaryEdge(:,:) ! logical, edges that are boundaries
+!integer,  allocatable :: maxLevelEdgeTop(:) ! doesn't exist in distributed ocn files?
+integer,  allocatable :: boundaryCell(:,:)   ! logical, cells that are on boundaries
+integer,  allocatable :: boundaryEdge(:,:)   ! logical, edges that are boundaries
 integer,  allocatable :: boundaryVertex(:,:) ! logical, vertices that are on boundaries
-integer,  allocatable :: maxLevelCell(:) ! list of maximum (deepest) level for each cell
+integer,  allocatable :: maxLevelCell(:)     ! list of maximum (deepest) level for each cell?
 
 real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
 
@@ -323,8 +349,8 @@ type(time_type) :: model_timestep      ! smallest time to adv model
 ! useful flags in making decisions when searching for points, etc
 logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
 logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
-logical :: has_edge_u = .false.        ! true = has original normal u on edges
-logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
+logical :: has_edge_normalVelocity = .false.        ! true = has original normal velocity on edges
+logical :: has_uvreconstruct = .false. ! true = has reconstructed velocities at centers
 
 ! Do we have any state vector items located on the cell edges?
 ! If not, avoid reading in or using the edge arrays to save space.
@@ -333,16 +359,11 @@ logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
 ! are located on the edges then this flag should be changed to .true.
 ! however, the way the code is structured these arrays are allocated
 ! before the details of field list is examined.  since right now the
-! only possible field array that is on the edges is the 'u' edge normal
-! winds, search specifically for that in the state field list and set
+! only possible field array that is on the edges is the 'normalVelocity' 
+! current, search specifically for that in the state field list and set
 ! this based on that.  if any other data might be on edges, this routine
 ! will need to be updated: is_edgedata_in_state_vector()
 logical :: data_on_edges = .false.
-
-! currently unused; for a regional model it is going to be necessary to know
-! if the grid is continuous around longitudes (wraps in east-west) or not,
-! and if it covers either of the poles.
-character(len= 64) :: ew_boundary_type, ns_boundary_type
 
 ! common names that call specific subroutines based on the arg types
 INTERFACE vector_to_prog_var
@@ -369,33 +390,6 @@ END INTERFACE
 
 !------------------------------------------------
 
-! The regular grid used for triangle interpolation divides the sphere into
-! a set of regularly spaced lon-lat boxes. The number of boxes in
-! longitude and latitude are set by num_reg_x and num_reg_y. Making the
-! number of regular boxes smaller decreases the computation required for
-! doing each interpolation but increases the static storage requirements
-! and the initialization computation (which seems to be pretty small).
-integer, parameter :: num_reg_x = 90, num_reg_y = 90
-
-! The max_reg_list_num controls the size of temporary storage used for
-! initializing the regular grid. Two arrays
-! of size num_reg_x*num_reg_y*max_reg_list_num are needed. The initialization
-! fails and returns an error if max_reg_list_num is too small. A value of
-! ??? is sufficient for ???
-integer, parameter :: max_reg_list_num = 100
-
-! The triangle interpolation keeps a list of how many and which triangles
-! overlap each regular lon-lat box. The number is stored in
-! array triangle_num. The allocatable array
-! triangle_list lists the uniquen index
-! of each overlapping triangle. The entry in
-! triangle_start for a given regular lon-lat box indicates
-! where the list of triangles begins in the triangle_list.
-
-integer :: triangle_start(num_reg_x, num_reg_y)
-integer :: triangle_num  (num_reg_x, num_reg_y) = 0
-integer, allocatable :: triangle_list(:)
-
 contains
 
 !==================================================================
@@ -419,10 +413,10 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname,dimname
 character(len=paramname_length)       :: kind_string
 integer :: ncid, VarID, numdims, varsize, dimlen
-integer :: iunit, io, ivar, i, index1, indexN, iloc, kloc
+integer :: iunit, io, ivar, i, index1, indexN, iloc, jloc
 integer :: ss, dd, z1, m1
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
-integer :: cel1, cel2
+integer :: cel1, cel2, edgeid
 logical :: both
 
 if ( module_initialized ) return ! only need to do this once.
@@ -477,6 +471,8 @@ call read_grid_dims()
 allocate(latCell(nCells), lonCell(nCells))
 allocate(zGridFace(nVertLevelsP1, nCells))
 allocate(zGridCenter(nVertLevels, nCells))
+allocate(layerThickness(nVertLevels, nCells))
+!allocate(zEdgeCenter(nVertLevels,   nEdges))
 
 allocate(cellsOnVertex(vertexDegree, nVertices))
 allocate(nEdgesOnCell(nCells))
@@ -486,7 +482,11 @@ allocate(verticesOnCell(maxEdges, nCells))
 allocate(edgeNormalVectors(3, nEdges))
 allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
 
-! see if U is in the state vector list.  if not, don't read in or
+!allocate(maxLevelEdgeTop(nEdges))
+allocate(maxLevelCell(nCells))
+allocate(boundaryCell(nVertLevels,nCells))
+
+! see if normalVelocity is in the state vector list.  if not, don't read in or
 ! use any of the Edge arrays to save space.
 data_on_edges = is_edgedata_in_state_vector(mpas_state_variables)
 
@@ -494,51 +494,73 @@ if(data_on_edges) then
    allocate(zGridEdge(nVertLevels, nEdges))
    allocate(xEdge(nEdges), yEdge(nEdges), zEdge(nEdges))
    allocate(latEdge(nEdges), lonEdge(nEdges))
+   allocate(boundaryEdge(nVertLevels, nEdges))
 endif
 
-! this reads in latCell, lonCell, hZLevel, zMid, cellsOnVertex
+! this reads in latCell, lonCell, cellsOnVertex, etc
 call get_grid()
 
 ! determine which edges are boundaries
 ! (this requires 'maxLevelEdgeTop' to exist in the restart file)
-boundaryEdge(:,1:nEdges) = 1
-do iloc=1, nEdges
-   if(maxLevelEdgeTop(iloc) > 0) then
-      boundaryEdge(1:maxLevelEdgeTop(iloc),iloc) = 0
-   endif
-end do
+! FIXME: 'maxLevelCell' seems to exist, not 'maxLevelEdgeTop'
+! can we extract the same info from it?
+!boundaryEdge(:,1:nEdges) = 1
+!do iloc=1, nEdges
+!   if(maxLevelEdgeTop(iloc) > 0) then
+!      boundaryEdge(1:maxLevelEdgeTop(iloc),iloc) = 0
+!   endif
+!end do
 
 ! determine which cells are on boundaries
 boundaryCell(:,1:nCells) = 0
-do kloc=1, nEdges
-   do iloc=1, nVertLevels
-      if(boundaryEdge(iloc,kloc) .eq. 1) then
-         if(cellsOnEdge(1,kloc) > 0) then
-            boundaryCell(iloc,cellsOnEdge(1,kloc)) = 1
-         endif
-         if(cellsOnEdge(2,kloc) > 0) then
-            boundaryCell(iloc,cellsOnEdge(2,kloc)) = 1
-         endif
-     endif
-   end do
-end do
+do jloc=1, nCells
+   if (maxLevelCell(jloc)+1 < nVertLevels) &
+      boundaryCell(maxLevelCell(jloc)+1:nVertLevels,jloc) = 1
+enddo
+
+! and now for edges (if needed?)
+if (data_on_edges) then
+   boundaryEdge(:,1:nEdges) = 0
+   do jloc=1, nCells
+      if (maxLevelCell(jloc)+1 < nVertLevels) then
+         nedges = nEdgesOnCell(jloc)
+         do iloc=1, nedges
+            edgeid = edgesOnCell(iloc, jloc)
+            boundaryEdge(maxLevelCell(jloc)+1:nVertLevels,edgeid) = 1
+         enddo
+      endif
+   enddo
+endif
+
+!do jloc=1, nEdges
+!   do iloc=1, nVertLevels
+!      if(boundaryEdge(iloc,jloc) .eq. 1) then
+!         if(cellsOnEdge(1,jloc) > 0) then
+!            boundaryCell(iloc,cellsOnEdge(1,jloc)) = 1
+!		endif
+!         if(cellsOnEdge(2,jloc) > 0) then
+!            boundaryCell(iloc,cellsOnEdge(2,jloc)) = 1
+!		endif
+!     endif
+!   end do
+!end do
 
 if(data_on_edges) then
    ! FIXME: This code is supposed to check whether an edge has 2 neighbours or 1 neighbour and then
    !        compute the depth accordingly.  HOWEVER, the array cellsOnEdge does not change with
    !        depth, but it should as an edge may have 2 neighbour cells at the top but not at depth.
-   do kloc=1, nEdges
+   do jloc=1, nEdges
       do iloc=1, nVertLevels
-         cel1 = cellsOnEdge(1,kloc)
-         cel2 = cellsOnEdge(2,kloc)
+         cel1 = cellsOnEdge(1,jloc)
+         cel2 = cellsOnEdge(2,jloc)
          if (cel1>0 .and. cel2>0) then
-            zGridEdge(iloc,kloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
+            zGridEdge(iloc,jloc) = (zGridCenter(iloc,cel1) + zGridCenter(iloc,cel2))*0.5_r8
          else if (cel1>0) then
-            zGridEdge(iloc,kloc) = zGridCenter(iloc,cel1)
+            zGridEdge(iloc,jloc) = zGridCenter(iloc,cel1)
          else if (cel2>0) then
-            zGridEdge(iloc,kloc) = zGridCenter(iloc,cel2)
+            zGridEdge(iloc,jloc) = zGridCenter(iloc,cel2)
          else  !this is bad...
-            write(string1,*)'Edge ',kloc,' at vertlevel ',iloc,' has no neighbouring cells!'
+            write(string1,*)'Edge ',jloc,' at vertlevel ',iloc,' has no neighbouring cells!'
             call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
          endif
       enddo
@@ -658,7 +680,7 @@ do ivar = 1, nfields
       progvar(ivar)%ZonHalf = .FALSE.
    endif
 
-   if (varname == 'u') has_edge_u = .true.
+   if (varname == 'normalVelocity') has_edge_normalVelocity = .true.
    if (varname == 'uReconstructZonal' .or. &
        varname == 'uReconstructMeridional') has_uvreconstruct = .true.
 
@@ -703,70 +725,53 @@ endif
 
 ! do some sanity checking here:
 
-! if you have at least one of these wind components in the state vector,
+! if you have at least one of these current components in the state vector,
 ! you have to have them both.  the subroutine will error out if only one
 ! is found and not both.
 if (has_uvreconstruct) then
-   call winds_present(z1,m1,both)
+   call current_present(z1,m1,both)
 endif
 
-! if you set the namelist to use the reconstructed cell center winds,
+! if you set the namelist to use the reconstructed cell center currents,
 ! they have to be in the state vector.
-if (update_u_from_reconstruct .and. .not. has_uvreconstruct) then
-   write(string1,*) 'update_u_from_reconstruct cannot be True'
-   write(string2,*) 'because state vector does not contain U/V reconstructed winds'
+if (update_normalVelocity_from_reconstruct .and. .not. has_uvreconstruct) then
+   write(string1,*) 'update_normalVelocity_from_reconstruct cannot be True'
+   write(string2,*) 'because state vector does not contain U/V reconstructed currents'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate, &
                       text2=string2)
 endif
 
-! if you set the namelist to update the edge normal winds based on the
-! updated cell center winds, and you also have the edge normal winds in
-! the state vector, warn that the edge normal winds will be ignored
+! if you set the namelist to update the edge normal current based on the
+! updated cell center currents, and you also have the edge normal current in
+! the state vector, warn that the edge normal current will be ignored
 ! when going back to the mpas_analysis.nc file.  not an error, but the
 ! updates to the edge normal vectors won't affect the results.
-if (update_u_from_reconstruct .and. has_edge_u) then
-   write(string1,*) 'edge normal winds (u) in MPAS file will be updated based on U/V reconstructed winds'
+if (update_normalVelocity_from_reconstruct .and. has_edge_normalVelocity) then
+   write(string1,*) 'edge normal current (normalVelocity) in MPAS file will be updated based on U/V reconstructed current'
    write(string2,*) 'and not from the updated edge normal values in the state vector'
-   write(string3,*) 'because update_u_from_reconstruct is True'
+   write(string3,*) 'because update_normalVelocity_from_reconstruct is True'
    call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate, &
                       text2=string2, text3=string3)
 endif
 
-! there are two choices when updating the edge normal winds based on the
-! winds at the cell centers.  one is a direct interpolation of the values;
+! there are two choices when updating the edge normal current based on the
+! current at the cell centers.  one is a direct interpolation of the values;
 ! the other is to read in the original cell centers, compute the increments
 ! changed by the interpolation, and then add or substract only the increments
-! from the original edge normal wind values.
-if (update_u_from_reconstruct) then
-   if (use_increments_for_u_update) then
-      write(string1,*) 'edge normal winds (u) in MPAS file will be updated based on the difference'
-      write(string2,*) 'between the original U/V reconstructed winds and the updated values'
-      write(string3,*) 'because use_increment_for_u_update is True'
+! from the original edge normal current values.
+if (update_normalVelocity_from_reconstruct) then
+   if (use_increments_for_normalVelocity_update) then
+      write(string1,*) 'edge normal current (normalVelocity) in MPAS file will be updated based on the difference'
+      write(string2,*) 'between the original U/V reconstructed currents and the updated values'
+      write(string3,*) 'because use_increment_for_normalVelocity_update is True'
    else
-      write(string1,*) 'edge normal winds (u) in MPAS file will be updated by averaging the'
-      write(string2,*) 'updated U/V reconstructed winds at the corresponding cell centers'
-      write(string3,*) 'because use_increment_for_u_update is False'
+      write(string1,*) 'edge normal currents (normalVelocity) in MPAS file will be updated by averaging the'
+      write(string2,*) 'updated U/V reconstructed currents at the corresponding cell centers'
+      write(string3,*) 'because use_increment_for_normalVelocity_update is False'
    endif
    call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate, &
                       text2=string2, text3=string3)
 endif
-
-! basically we cannot do much without having at least these
-! three fields in the state vector.  refuse to go further
-! if these are not present:
-!
-! TJH if ((get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE) < 0) .or. &
-! TJH     (get_progvar_index_from_kind(KIND_DENSITY) < 0) .or. &
-! TJH     (get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO) < 0)) then
-! TJH    write(string1, *) 'State vector is missing one or more of the following fields:'
-! TJH    write(string2, *) 'Potential Temperature (theta), Density (rho), Vapor Mixing Ratio (qv).'
-! TJH    write(string3, *) 'Cannot convert between height/pressure nor compute sensible temps.'
-! TJH    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate, &
-! TJH                       text2=string2, text3=string3)
-! TJH endif
-
-string1 = 'WARNING: fix block of required variables - detritus from atmosphere'
-call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 
 allocate( ens_mean(model_size) )
 
@@ -890,7 +895,7 @@ if (debug > 12) then
 
     write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
     write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, vloc
-    write(*,'("                      LON/LAT/HGT: ",3(f12.3,2x))') lonCell(iloc), latCell(iloc), depth
+    write(*,'("                      LON/LAT/DPH: ",3(f12.3,2x))') lonCell(iloc), latCell(iloc), depth
 
 endif
 
@@ -919,7 +924,7 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values
 !       ISTATUS = 18:  altitude illegal
-!       ISTATUS = 19:  could not compute u using RBF code
+!       ISTATUS = 19:  could not compute normalVelocity using RBF code
 !       ISTATUS = 101: Internal error; reached end of subroutine without
 !                      finding an applicable case.
 !
@@ -937,7 +942,7 @@ integer,             intent(out) :: istatus
 integer  :: ivar, obs_kind
 integer  :: tvars(3)
 logical  :: goodkind
-real(r8) :: values(3), lpres
+real(r8) :: values(3), pres_val
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -953,8 +958,16 @@ if (debug > 0) then
    print *, my_task_id(), 'stt x(1), kind, loc ', x(1), obs_kind, trim(string1)
 endif
 
-! if we can interpolate any other kinds that are not directly in the
-! state vector, then add those cases here.
+! see if observation kind is in the state vector.  this sets an
+! error code and returns without a fatal error if answer is no.
+! exceptions:  the state vector has potential temp, but we can
+! compute sensible temperature from pot_temp, salinity, and
+! pressure based on depth.  also there are options for the currents 
+! because mpas may have either currents on cell edges (normal only)
+! and/or reconstructed currents at the cell centers (U,V).  
+! there are namelist options to control which to use if both are 
+! in the state vector.
+
 ivar = get_progvar_index_from_kind(obs_kind)
 if (ivar > 0) then
    goodkind = .true.
@@ -963,10 +976,15 @@ else
    ! exceptions if the kind isn't directly
    ! a field in the state vector:
    select case (obs_kind)
-      !case (KIND_TEMPERATURE)  ! potential temperature is in state vector not in-situ temp
-      !   goodkind = .true.
-      !case (KIND_PRESSURE)
-      !   goodkind = .true.
+      case (KIND_TEMPERATURE)  ! potential temperature is in state vector not in-situ temp
+         goodkind = .true.
+      case (KIND_PRESSURE)
+         goodkind = .true.
+      case (KIND_U_CURRENT_COMPONENT,KIND_V_CURRENT_COMPONENT)
+         ! if the reconstructed currents at the cell centers aren't there,
+         ! we can use the edge normal currents, if the user allows it.
+         if (get_progvar_index_from_kind(KIND_EDGE_NORMAL_SPEED) > 0 &
+             .and. use_normalVelocity_for_current) goodkind = .true.
    end select
 endif
 
@@ -978,29 +996,64 @@ if (.not. goodkind) then
    goto 100
 endif
 
-! if you add exceptions above, then you need code like this:
-! if (obs_kind == KIND_xxx) then
-!   add code here for how to interpolate it.
-!
-!   compute_scalar_with_barycentric() can take up to 3 kinds at one location
-!   and return up to 3 values which can be combined or computed on here.
-!
-!   to use the RBF functions, here is an example call.  the third arg
-!   controls whether to return the meridional (.false.) or zonal (.true.) component.
-!   call compute_u_with_rbf(x, location, .TRUE., interp_val, istatus)
-!
-!   on error, goto 100 to get the final error checking code
-!
-! else
+! Not prepared to do w interpolation at this time
+if(obs_kind == KIND_VERTICAL_VELOCITY) then
+   if (debug > 4) print *, 'no vert vel yet'
+   istatus = 16
+   goto 100
+endif
 
-   ! direct interpolation, kind is in the state vector
+! currents
+if ((obs_kind == KIND_U_CURRENT_COMPONENT   .or. &
+     obs_kind == KIND_V_CURRENT_COMPONENT) .and. &
+     has_edge_normalVelocity .and. use_normalVelocity_for_current) then
+   if (obs_kind == KIND_U_CURRENT_COMPONENT) then
+      ! return U
+      call compute_uv_with_rbf(x, location, .TRUE., interp_val, istatus)
+   else
+      ! return V
+      call compute_uv_with_rbf(x, location, .FALSE., interp_val, istatus)
+   endif
+   if (debug > 4) print *, 'called u_with_rbf, kind, val, istatus: ', obs_kind, interp_val, istatus
+   if (istatus /= 0) goto 100
+
+else if (obs_kind == KIND_TEMPERATURE) then
+   ! we know how to interpolate this from potential temp,
+   ! salinity, and pressure based on depth.
+   tvars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+   tvars(2) = get_progvar_index_from_kind(KIND_SALINITY)
+
+   call compute_scalar_with_barycentric(x, location, 2, tvars, values, istatus)
+   if (debug > 4) print *, 'called compute temp, kind, val, istatus: ', obs_kind, interp_val, istatus
+   if (istatus /= 0) goto 100
+
+   pres_val = compute_pressure_at_loc(x, location)
+
+   ! convert to sensible (in-situ) temperature.
+   ! potential temp in degrees C, pressure in decibars, salinity in psu or pss (g/kg).
+   call insitu_temp(values(1), values(2)*1000.0_r8, pres_val*10.0_r8, interp_val)
+   if (debug > 2) print *, 's,pt,pres,t: ', values(2), values(1), pres_val, interp_val
+
+else if (obs_kind == KIND_PRESSURE) then
+
+   interp_val = compute_pressure_at_loc(x, location)
+   if (interp_val == MISSING_R8) then
+      if (debug > 4) print *, 'compute_pressure_at_loc failed'
+      istatus = 202
+      goto 100
+   endif
+   istatus = 0
+
+else
+
+   ! direct interpolation, kind is in the state vector at cell centers
    tvars(1) = ivar
    call compute_scalar_with_barycentric(x, location, 1, tvars, values, istatus)
    interp_val = values(1)
    if (debug > 4) print *, 'called generic compute_w_bary, kind, val, istatus: ', obs_kind, interp_val, istatus
    if (istatus /= 0) goto 100
 
-!endif
+endif
 
 100 continue
 
@@ -1265,17 +1318,17 @@ else
                  'nc_write_model_atts', 'zCell long_name '//trim(filename))
 
    ! Grid vertical information
-!  call nc_check(nf90_def_var(ncFileID,name='zgrid',xtype=nf90_double, &
-!                dimids=(/ nVertLevelsP1DimID, nCellsDimID /) ,varid=VarID), &
-!                'nc_write_model_atts', 'zgrid def_var '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'grid zgrid'), &
-!                'nc_write_model_atts', 'zgrid long_name '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'meters'),  &
-!                'nc_write_model_atts', 'zgrid units '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'positive', 'up'),  &
-!                'nc_write_model_atts', 'zgrid units '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
-!                'nc_write_model_atts', 'zgrid cartesian_axis '//trim(filename))
+   call nc_check(nf90_def_var(ncFileID,name='layerThickness',xtype=nf90_double, &
+                 dimids=(/ nVertLevelsP1DimID, nCellsDimID /) ,varid=VarID), &
+                 'nc_write_model_atts', 'layerThickness def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'cell center layerThickness'), &
+                 'nc_write_model_atts', 'layerThickness long_name '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'meters'),  &
+                 'nc_write_model_atts', 'layerThickness units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'positive', 'down'),  &
+                 'nc_write_model_atts', 'layerThickness units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
+                 'nc_write_model_atts', 'layerThickness cartesian_axis '//trim(filename))
 
    ! Vertex Longitudes
    call nc_check(nf90_def_var(ncFileID,name='lonVertex', xtype=nf90_double, &
@@ -1391,15 +1444,10 @@ else
                    'nc_write_model_atts', 'latEdge put_var '//trim(filename))
    endif
 
-   call nc_check(NF90_inq_varid(ncFileID, 'hZLevel', VarID), &
-                 'nc_write_model_atts', 'hZLevel inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, hZLevel ), &
-                'nc_write_model_atts', 'hZLevel put_var '//trim(filename))
-
-   call nc_check(NF90_inq_varid(ncFileID, 'zMid', VarID), &
-                 'nc_write_model_atts', 'zMid inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, zMid ), &
-                'nc_write_model_atts', 'zMid put_var '//trim(filename))
+   call nc_check(NF90_inq_varid(ncFileID, 'layerThickness', VarID), &
+                 'nc_write_model_atts', 'layerThickness inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, layerThickness ), &
+                'nc_write_model_atts', 'layerThickness put_var '//trim(filename))
 
    call nc_check(NF90_inq_varid(ncFileID, 'nEdgesOnCell', VarID), &
                  'nc_write_model_atts', 'nEdgesOnCell inq_varid '//trim(filename))
@@ -1757,6 +1805,8 @@ if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
 if (allocated(zGridFace))      deallocate(zGridFace)
 if (allocated(zGridCenter))    deallocate(zGridCenter)
+if (allocated(layerThickness)) deallocate(layerThickness)
+if (allocated(maxLevelCell))   deallocate(maxLevelCell)
 if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 if (allocated(nEdgesOnCell))   deallocate(nEdgesOnCell)
 if (allocated(edgesOnCell))    deallocate(edgesOnCell)
@@ -2282,7 +2332,7 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: ncFileID, TimeDimID, TimeDimLength
-logical :: done_winds
+logical :: done_currents
 type(time_type) :: model_time
 
 if ( .not. module_initialized ) call static_init_model
@@ -2334,25 +2384,25 @@ else
    TimeDimLength = 0
 endif
 
-done_winds = .false.
+done_currents = .false.
 PROGVARLOOP : do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
 
    if (( varname == 'uReconstructZonal' .or. &
-         varname == 'uReconstructMeridional' ) .and. update_u_from_reconstruct ) then
-      if (done_winds) cycle PROGVARLOOP
+         varname == 'uReconstructMeridional' ) .and. update_normalVelocity_from_reconstruct ) then
+      if (done_currents) cycle PROGVARLOOP
 
-      ! this routine updates the edge winds from both the zonal and meridional
+      ! this routine updates the edge currents from both the zonal and meridional
       ! fields, so only call it once.
-      call update_wind_components(ncFileID, state_vector, use_increments_for_u_update)
-      done_winds = .true.
+      call update_current_components(ncFileID, state_vector, use_increments_for_normalVelocity_update)
+      done_currents = .true.
       cycle PROGVARLOOP
    endif
-   if ( varname == 'u' .and. update_u_from_reconstruct ) then
-      write(string1, *) 'skipping update of edge normal winds (u) because'
-      write(string2, *) 'update_u_from_reconstruct is True'
+   if ( varname == 'normalVelocity' .and. update_normalVelocity_from_reconstruct ) then
+      write(string1, *) 'skipping update of edge normal currents (normalVelocity) because'
+      write(string2, *) 'update_normalVelocity_from_reconstruct is True'
       call error_handler(E_MSG,'statevector_to_analysis_file',string1,&
                          source,revision,revdate, text2=string2)
       cycle PROGVARLOOP
@@ -2473,6 +2523,8 @@ subroutine do_clamping(out_of_range_fail, range, dimsize, varname, array_1d, arr
  character(len=*), intent(in)    :: varname
  real(r8),optional,intent(inout) :: array_1d(:), array_2d(:,:), array_3d(:,:,:)
 
+real(r8) :: val
+
 ! for a given directive and range, do the data clamping for the given
 ! input array.  only one of the optional array args should be specified - the
 ! one which matches the given dimsize.  this still has replicated sections for
@@ -2497,15 +2549,16 @@ if (dimsize == 1) then
    if ( range(1) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( minval(array_1d) < range(1) ) then
-            write(string1, *) 'min data val = ', minval(array_1d), &
+         val = minval(array_1d, mask= array_1d /= mpas_missing)
+         if ( val < range(1) ) then
+            write(string1, *) 'min data val = ', val, &
                               'min data bounds = ', range(1)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
       else
-         where ( array_1d < range(1) ) array_1d = range(1)
+         where ( array_1d < range(1) .and. array_1d /= mpas_missing ) array_1d = range(1)
       endif
 
    endif ! min range set
@@ -2514,21 +2567,23 @@ if (dimsize == 1) then
    if ( range(2) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( maxval(array_1d) > range(2) ) then
-            write(string1, *) 'max data val = ', maxval(array_1d), &
+         val = maxval(array_1d, mask= array_1d /= mpas_missing)
+         if ( val > range(2) ) then
+            write(string1, *) 'max data val = ', val, &
                               'max data bounds = ', range(2)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
       else
-         where ( array_1d > range(2) ) array_1d = range(2)
+         where ( array_1d > range(2) .and. array_1d /= mpas_missing ) array_1d = range(2)
       endif
 
    endif ! max range set
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
-                      minval(array_1d), maxval(array_1d)
+                      minval(array_1d, mask = array_1d /= mpas_missing), &
+                      maxval(array_1d, mask = array_1d /= mpas_missing)
    call error_handler(E_MSG, '', string1, source,revision,revdate)
 
 else if (dimsize == 2) then
@@ -2541,15 +2596,16 @@ else if (dimsize == 2) then
    if ( range(1) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( minval(array_2d) < range(1) ) then
-            write(string1, *) 'min data val = ', minval(array_2d), &
+         val = minval(array_2d, mask= array_2d /= mpas_missing)
+         if ( val < range(1) ) then
+            write(string1, *) 'min data val = ', val, &
                               'min data bounds = ', range(1)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
       else
-         where ( array_2d < range(1) ) array_2d = range(1)
+         where ( array_2d < range(1) .and. array_2d /= mpas_missing ) array_2d = range(1)
       endif
 
    endif ! min range set
@@ -2558,21 +2614,23 @@ else if (dimsize == 2) then
    if ( range(2) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( maxval(array_2d) > range(2) ) then
-            write(string1, *) 'max data val = ', maxval(array_2d), &
+         val = maxval(array_2d, mask= array_2d /= mpas_missing)
+         if ( val > range(2) ) then
+            write(string1, *) 'max data val = ', val, &
                               'max data bounds = ', range(2)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
       else
-         where ( array_2d > range(2) ) array_2d = range(2)
+         where ( array_2d > range(2) .and. array_2d /= mpas_missing ) array_2d = range(2)
       endif
 
    endif ! max range set
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
-                      minval(array_2d), maxval(array_2d)
+                      minval(array_2d, mask = array_2d /= mpas_missing), &
+                      maxval(array_2d, mask = array_2d /= mpas_missing)
    call error_handler(E_MSG, '', string1, source,revision,revdate)
 
 else if (dimsize == 3) then
@@ -2585,15 +2643,16 @@ else if (dimsize == 3) then
    if ( range(1) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( minval(array_3d) < range(1) ) then
-            write(string1, *) 'min data val = ', minval(array_3d), &
+         val = minval(array_3d, mask= array_3d /= mpas_missing)
+         if ( val < range(1) ) then
+            write(string1, *) 'min data val = ', val, &
                               'min data bounds = ', range(1)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
       else
-         where ( array_3d < range(1) ) array_3d = range(1)
+         where ( array_3d < range(1) .and. array_3d /= mpas_missing ) array_3d = range(1)
       endif
 
    endif ! min range set
@@ -2602,21 +2661,23 @@ else if (dimsize == 3) then
    if ( range(2) /= missing_r8 ) then
 
       if ( out_of_range_fail ) then
-         if ( maxval(array_3d) > range(2) ) then
-            write(string1, *) 'max data val = ', maxval(array_3d), &
+         val = maxval(array_3d, mask= array_3d /= mpas_missing)
+         if ( val > range(2) ) then
+            write(string1, *) 'max data val = ', val, &
                               'max data bounds = ', range(2)
             call error_handler(E_ERR, 'statevector_to_analysis_file', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
       else
-         where ( array_3d > range(2) ) array_3d = range(2)
+         where ( array_3d > range(2) .and. array_3d /= mpas_missing ) array_3d = range(2)
       endif
 
    endif ! max range set
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
-                      minval(array_3d), maxval(array_3d)
+                      minval(array_3d, mask = array_3d /= mpas_missing), &
+                      maxval(array_3d, mask = array_3d /= mpas_missing)
    call error_handler(E_MSG, '', string1, source,revision,revdate)
 
 else
@@ -2971,14 +3032,9 @@ subroutine get_grid()
 ! Read the actual grid values in from the MPAS netcdf file.
 !
 ! The file name comes from module storage ... namelist.
-! This reads in the following arrays:
-!   latCell, lonCell, zGridFace, cellsOnVertex (all in module global storage)
 
 
-integer  :: ncid, VarID, numdims, dimlen, i
-
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME) :: dimname
+integer  :: ncid, VarID, i, j
 
 ! Read the netcdf file data
 
@@ -2996,15 +3052,10 @@ call nc_check(nf90_inq_varid(ncid, 'lonCell', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, lonCell), &
       'get_grid', 'get_var lonCell '//trim(grid_definition_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'hZLevel', VarID), &
-      'get_grid', 'inq_varid hZLevel '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, hZLevel), &
-      'get_grid', 'get_var hZLevel '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'zMid', VarID), &
-      'get_grid', 'inq_varid zMid '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zMid), &
-      'get_grid', 'get_var zMid '//trim(grid_definition_filename))
+call nc_check(nf90_inq_varid(ncid, 'layerThickness', VarID), &
+      'get_grid', 'inq_varid layerThickness '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, layerThickness), &
+      'get_grid', 'get_var layerThickness '//trim(grid_definition_filename))
 
 call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
       'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
@@ -3019,11 +3070,18 @@ lonCell = lonCell * rad2deg
 ! Read the variables
 
 ! FIXME ...   inq_varid edgeNormalVectors ../data/mpas_out.nc: NetCDF: Variable not found
-edgeNormalVectors(:,:) = MISSING_R8
-! call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
-!       'get_grid', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
-! call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
-!       'get_grid', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
+if ( nf90_inq_varid(ncid, 'edgeNormalVectors', VarID) == NF90_NOERR ) then
+   ! the RBF functions need this as one of their inputs.  if present, great.
+   ! if not, can the values be computed somehow?
+   call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
+         'get_grid', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
+   call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
+         'get_grid', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
+else
+   edgeNormalVectors(:,:) = MISSING_R8
+   call error_handler(E_MSG, 'get_grid', "'edgeNormalVectors' not found in input file", &
+      source, revision, revdate, text2="continuing, but RBF functions will not work")
+endif
 
 call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
       'get_grid', 'inq_varid nEdgesOnCell '//trim(grid_definition_filename))
@@ -3090,28 +3148,26 @@ call nc_check(nf90_inq_varid(ncid, 'verticesOnCell', VarID), &
 call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
       'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'maxLevelEdgeTop', VarID), &
-      'get_grid', 'inq_varid maxLevelEdgeTop '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, maxLevelEdgeTop), &
-      'get_grid', 'get_var maxLevelEdgeTop '//trim(grid_definition_filename))
+!call nc_check(nf90_inq_varid(ncid, 'maxLevelEdgeTop', VarID), &
+!      'get_grid', 'inq_varid maxLevelEdgeTop '//trim(grid_definition_filename))
+!call nc_check(nf90_get_var( ncid, VarID, maxLevelEdgeTop), &
+!      'get_grid', 'get_var maxLevelEdgeTop '//trim(grid_definition_filename))
+
+! right now we are counting on this, so make it required.
+call nc_check(nf90_inq_varid(ncid, 'maxLevelCell', VarID), &
+      'get_grid', 'inq_varid maxLevelCell '//trim(grid_definition_filename))
+call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
+      'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
+all_levels_exist_everywhere = .false.
 
 ! Get the boundary information if available.
 ! Assuming the existence of this variable is sufficient to determine if
 ! the grid is defined everywhere or not.
 
-call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'get_grid', 'inquire boundaryEdge'//trim(model_analysis_filename))
-
-!do i=1, numdims
-!   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname),'get_grid')
-!   write(*,*)'boundaryEdge inquire length for dimension (',i,') is ',dimlen,' '//trim(dimname)
-!enddo
-
 if ( nf90_inq_varid(ncid, 'boundaryEdge', VarID) == NF90_NOERR ) then
    allocate(boundaryEdge(nVertLevels,nEdges))
    call nc_check(nf90_get_var( ncid, VarID, boundaryEdge), &
       'get_grid', 'get_var boundaryEdge '//trim(grid_definition_filename))
-   boundaryEdge(:,:) = MISSING_R8
    global_grid = .false.
 endif
 
@@ -3119,24 +3175,32 @@ if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
    allocate(boundaryVertex(nVertLevels,nVertices))
    call nc_check(nf90_get_var( ncid, VarID, boundaryVertex), &
       'get_grid', 'get_var boundaryVertex '//trim(grid_definition_filename))
-   boundaryVertex(:,:) = MISSING_R8
    global_grid = .false.
-endif
-
-if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
-   allocate(maxLevelCell(nCells))
-   call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
-      'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
-   all_levels_exist_everywhere = .false.
 endif
 
 call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
 
-! FIXME : Use layer thicknesses (perhaps hZLevel) to determine all layer information
+! FIXME : Use layer thicknesses to determine all layer information
+! there is no hZlevel but now there is a layerThickness(nVertLevels,nCells,Time)
+! there is also no zMid(:,:) array.  can we iterate over nVertlevels to compute this?
 
-zGridFace(:,:)   = MISSING_R8
-zGridCenter(:,:) = -1.0_r8 * zMid(:,:)    ! all depths are negative in the input file; obs are +
-zGridEdge(:,:)   = MISSING_R8
+! if needed, will fill in later
+if (data_on_edges) zGridEdge(:,:)   = MISSING_R8
+
+! start with cell centers on vertical faces
+do j=1, nCells
+   zGridFace(1,j) = 0.0_r8
+   do i=2, nVertLevelsP1
+      zGridFace(i,j) = zGridFace(i-1,j) + layerThickness(i-1,j)
+   enddo
+enddo
+
+! now do cell centers at vertical midpoints
+do j=1, nCells
+   do i=1, nVertLevels
+      zGridCenter(i,j) = (zGridFace(i,j) + zGridFace(i+1,j)) / 2.0_r8
+   enddo
+enddo
 
 ! A little sanity check
 if ((debug > 9) .and. do_output()) then
@@ -3144,7 +3208,6 @@ if ((debug > 9) .and. do_output()) then
    write(*,*)
    write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
    write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
-   write(*,*)'hZLevel           range ',minval(hZLevel),           maxval(hZLevel)
    write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
    write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
    write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
@@ -3161,7 +3224,7 @@ if ((debug > 9) .and. do_output()) then
    write(*,*)'yVertex           range ',minval(yVertex),           maxval(yVertex)
    write(*,*)'zVertex           range ',minval(zVertex),           maxval(zVertex)
    write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
-   write(*,*)'maxLevelEdgeTop   range ',minval(maxLevelEdgeTop),   maxval(maxLevelEdgeTop)
+   !write(*,*)'maxLevelEdgeTop   range ',minval(maxLevelEdgeTop),   maxval(maxLevelEdgeTop)
    if (allocated(boundaryEdge)) &
    write(*,*)'boundaryEdge      range ',minval(boundaryEdge),      maxval(boundaryEdge)
    if (allocated(boundaryVertex)) &
@@ -3176,42 +3239,42 @@ end subroutine get_grid
 
 !------------------------------------------------------------------
 
-subroutine update_wind_components(ncid, state_vector, use_increments_for_u_update)
+subroutine update_current_components(ncid, state_vector, use_increments_for_normalVelocity_update)
 
  integer,  intent(in)  :: ncid                  ! netCDF handle for model_analysis_filename
  real(r8), intent(in)  :: state_vector(:)
- logical,  intent(in)  :: use_increments_for_u_update
+ logical,  intent(in)  :: use_increments_for_normalVelocity_update
 
-! the winds pose a special problem because the model uses the edge-normal component
-! of the winds at the center of the cell edges at half levels in the vertical ('u').
+! the currents pose a special problem because the model uses the edge-normal component
+! of the currents at the center of the cell edges at half levels in the vertical ('normalVelocity').
 ! the output files from the model can include interpolated Meridional and Zonal
-! winds as prognostic fields, which are easier for us to use when computing
-! forward operator values.  but in the end we need to update 'u' in the output
+! currents as prognostic fields, which are easier for us to use when computing
+! forward operator values.  but in the end we need to update 'normalVelocity' in the output
 ! model file.
 
-! this routine is only called when 'u' is not being directly updated by the
+! this routine is only called when 'normalVelocity' is not being directly updated by the
 ! assimilation, and the updated cell center values need to be converted back
-! to update 'u'.   there are several choices for how to do this and most are
+! to update 'normalVelocity'.   there are several choices for how to do this and most are
 ! controlled by namelist settings.
 
-! If 'use_increments_for_u_update' is .true.:
-!  Read in the previous reconstructed winds from the original mpas netcdf file
+! If 'use_increments_for_normalVelocity_update' is .true.:
+!  Read in the previous reconstructed currents from the original mpas netcdf file
 !  and compute what increments (changes in values) were added by the assimilation.
-!  Read in the original edge normal wind 'u' field from that same mpas netcdf
-!  file and add the interpolated increments to compute the updated 'u' values.
+!  Read in the original edge normal current 'normalVelocity' field from that same mpas netcdf
+!  file and add the interpolated increments to compute the updated 'normalVelocity' values.
 !  (note that we can't use the DART Prior_Diag.nc file to get the previous
 !  values if we're using Prior inflation, because the diagnostic values are
 !  written out after inflation is applied.)
 
-! If 'use_increments_for_u_update' is .false.:
-!  use the Zonal/Meridional cell center values directly. The edge normal winds
+! If 'use_increments_for_normalVelocity_update' is .false.:
+!  use the Zonal/Meridional cell center values directly. The edge normal currents
 !  are each directly between 2 cell centers, so average the components normal
 !  to the edge direction.  don't read in the previous values at the cell centers
-!  or the edge normal winds.
+!  or the edge normal currents.
 
 ! there are several changes here from previous versions:
 !  1. it requires both zonal and meridional fields to be there.  it doesn't
-!  make sense to assimilate with only one component of the winds.
+!  make sense to assimilate with only one component of the currents.
 !  2. i removed the 'return if this has been called already' flag.
 !  this is a generic utility routine.  if someone wrote a main program
 !  that wanted to cycle over multiple files in a loop, this would have
@@ -3221,7 +3284,7 @@ subroutine update_wind_components(ncid, state_vector, use_increments_for_u_updat
 !  the code needs to be changed (one place vs three).
 
 ! space to hold existing data from the analysis file
-real(r8), allocatable :: u(:,:)              ! u(nVertLevels, nEdges)
+real(r8), allocatable :: normalVelocity(:,:) ! normalVelocity(nVertLevels, nEdges)
 real(r8), allocatable :: ucell(:,:)          ! uReconstructZonal(nVertLevels, nCells)
 real(r8), allocatable :: vcell(:,:)          ! uReconstructMeridional(nVertLevels, nCells)
 real(r8), allocatable :: data_2d_array(:,:)  ! temporary
@@ -3230,28 +3293,28 @@ integer :: zonal, meridional
 
 if ( .not. module_initialized ) call static_init_model
 
-! get the ivar values for the zonal and meridional wind fields
-call winds_present(zonal,meridional,both)
-if (.not. both) call error_handler(E_ERR, 'update_wind_components', &
-   'internal error: wind fields not found', source, revision, revdate)
+! get the ivar values for the zonal and meridional current fields
+call current_present(zonal,meridional,both)
+if (.not. both) call error_handler(E_ERR, 'update_current_components', &
+   'internal error: current fields not found', source, revision, revdate)
 
-allocate(    u(nVertLevels, nEdges))
+allocate(normalVelocity(nVertLevels, nEdges))
 allocate(ucell(nVertLevels, nCells))
 allocate(vcell(nVertLevels, nCells))
 
-! if doing increments, read in 'u' (edge normal winds), plus the uReconstructZonal
+! if doing increments, read in 'normalVelocity' (edge normal current), plus the uReconstructZonal
 ! and uReconstructMeridional fields from the mpas analysis netcdf file.
 
-if (use_increments_for_u_update) then
-   call read_2d_from_nc_file(ncid, 'u', u)
+if (use_increments_for_normalVelocity_update) then
+   call read_2d_from_nc_file(ncid, 'normalVelocity', normalVelocity)
    call read_2d_from_nc_file(ncid, 'uReconstructZonal', ucell)
    call read_2d_from_nc_file(ncid, 'uReconstructMeridional', vcell)
 
    if ((debug > 8) .and. do_output()) then
       write(*,*)
-      write(*,*)'update_winds: org u          range ',minval(u),     maxval(u)
-      write(*,*)'update_winds: org zonal      range ',minval(ucell), maxval(ucell)
-      write(*,*)'update_winds: org meridional range ',minval(vcell), maxval(vcell)
+      write(*,*)'update_current: org normalVelocity range ',minval(normalVelocity), maxval(normalVelocity)
+      write(*,*)'update_current: org zonal          range ',minval(ucell), maxval(ucell)
+      write(*,*)'update_current: org meridional     range ',minval(vcell), maxval(vcell)
    endif
 
    ! compute the increments compared to the updated values in the state vector
@@ -3268,45 +3331,45 @@ if (use_increments_for_u_update) then
    ! this is by nedges, not ncells as above
    allocate(data_2d_array(nVertLevels, nEdges))
    call uv_cell_to_edges(ucell, vcell, data_2d_array)
-   u(:,:) = u(:,:) + data_2d_array(:,:)
+   normalVelocity(:,:) = normalVelocity(:,:) + data_2d_array(:,:)
    deallocate(data_2d_array)
 
    if ((debug > 8) .and. do_output()) then
       write(*,*)
-      write(*,*)'update_winds: u increment    range ',minval(ucell), maxval(ucell)
-      write(*,*)'update_winds: v increment    range ',minval(vcell), maxval(vcell)
+      write(*,*)'update_current: u increment    range ',minval(ucell), maxval(ucell)
+      write(*,*)'update_current: v increment    range ',minval(vcell), maxval(vcell)
    endif
 
 else
 
-   ! The state vector has updated zonal and meridional wind components.
+   ! The state vector has updated zonal and meridional current components.
    ! put them directly into the arrays.  these are the full values, not
    ! just increments.
    call vector_to_prog_var(state_vector, zonal, ucell)
    call vector_to_prog_var(state_vector, meridional, vcell)
 
-   call uv_cell_to_edges(ucell, vcell, u)
+   call uv_cell_to_edges(ucell, vcell, normalVelocity)
 
    if ((debug > 8) .and. do_output()) then
       write(*,*)
-      write(*,*)'update_winds: u values    range ',minval(ucell), maxval(ucell)
-      write(*,*)'update_winds: v values    range ',minval(vcell), maxval(vcell)
+      write(*,*)'update_current: u values    range ',minval(ucell), maxval(ucell)
+      write(*,*)'update_current: v values    range ',minval(vcell), maxval(vcell)
    endif
 
 endif
 
 if ((debug > 8) .and. do_output()) then
    write(*,*)
-   write(*,*)'update_winds: u after update:',minval(u), maxval(u)
+   write(*,*)'update_current: normalVelocity after update:',minval(normalVelocity), maxval(normalVelocity)
 endif
 
 ! Write back to the mpas analysis file.
 
-call put_u(ncid, u)
+call put_normalVelocity(ncid, normalVelocity)
 
-deallocate(ucell, vcell, u)
+deallocate(ucell, vcell, normalVelocity)
 
-end subroutine update_wind_components
+end subroutine update_current_components
 
 
 !------------------------------------------------------------------
@@ -3350,18 +3413,18 @@ enddo
 call nc_check( nf90_get_var(ncid, VarID, data, &
                start=mystart(1:numdims), count=mycount(1:numdims)), &
               'read_2d_from_nc_file', &
-              'get_var u '//trim(model_analysis_filename))
+              'get_var normalVelocity '//trim(model_analysis_filename))
 
 end subroutine read_2d_from_nc_file
 
 
 !------------------------------------------------------------------
 
-subroutine put_u(ncid, u)
+subroutine put_normalVelocity(ncid, normalVelocity)
  integer,  intent(in) :: ncid
- real(r8), intent(in) :: u(:,:)       ! u(nVertLevels, nEdges)
+ real(r8), intent(in) :: normalVelocity(:,:)       ! normalVelocity(nVertLevels, nEdges)
 
-! Put the newly updated 'u' field back into the netcdf file.
+! Put the newly updated 'normalVelocity' field back into the netcdf file.
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount, numu
 integer :: VarID, numdims, nDimensions, nVariables, nAttributes, unlimitedDimID
@@ -3371,20 +3434,20 @@ if ( .not. module_initialized ) call static_init_model
 
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-              'put_u', 'inquire '//trim(model_analysis_filename))
+              'put_normalVelocity', 'inquire '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-              'put_u', 'inquire time dimension length '//trim(model_analysis_filename))
+              'put_normalVelocity', 'inquire time dimension length '//trim(model_analysis_filename))
 
-call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-              'put_u', 'inq_varid u '//trim(model_analysis_filename))
+call nc_check(nf90_inq_varid(ncid, 'normalVelocity', VarID), &
+              'put_normalVelocity', 'inq_varid normalVelocity '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'put_u', 'inquire u '//trim(model_analysis_filename))
+              'put_normalVelocity', 'inquire normalVelocity '//trim(model_analysis_filename))
 
 do i=1, numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
-                 'put_u', 'inquire U dimension length '//trim(model_analysis_filename))
+                 'put_normalVelocity', 'inquire normalVelocity dimension length '//trim(model_analysis_filename))
 enddo
 
 ! for all but the time dimension, read all the values.
@@ -3394,8 +3457,8 @@ mystart(numdims) = ntimes
 mycount = numu
 mycount(numdims) = 1
 
-call nc_check(nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
-              'put_u', 'get_var u '//trim(model_analysis_filename))
+call nc_check(nf90_put_var(ncid, VarID, normalVelocity, start=mystart, count=mycount), &
+              'put_normalVelocity', 'put_var normalVelocity '//trim(model_analysis_filename))
 
 
 ! A little sanity check
@@ -3403,11 +3466,11 @@ call nc_check(nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
 if ((debug > 9) .and. do_output()) then
 
    write(*,*)
-   write(*,*)'u       range ',minval(u),     maxval(u)
+   write(*,*)'normalVelocity       range ',minval(normalVelocity),     maxval(normalVelocity)
 
 endif
 
-end subroutine put_u
+end subroutine put_normalVelocity
 
 
 !------------------------------------------------------------------
@@ -3428,7 +3491,11 @@ if ( .not. module_initialized ) call static_init_model
 ii = progvar(ivar)%index1
 
 do idim1 = 1, size(data_1d_array, 1)
-   data_1d_array(idim1) = x(ii)
+   if (x(ii) == missing_r8) then
+      data_1d_array(idim1) = mpas_missing
+   else
+      data_1d_array(idim1) = x(ii)
+   endif
    ii = ii + 1
 enddo
 
@@ -3462,7 +3529,11 @@ ii = progvar(ivar)%index1
 
 do idim2 = 1,size(data_2d_array, 2)
    do idim1 = 1,size(data_2d_array, 1)
-      data_2d_array(idim1,idim2) = x(ii)
+      if (x(ii) == missing_r8) then
+         data_2d_array(idim1,idim2) = mpas_missing
+      else
+         data_2d_array(idim1,idim2) = x(ii)
+      endif
       ii = ii + 1
    enddo
 enddo
@@ -3498,7 +3569,11 @@ ii = progvar(ivar)%index1
 do idim3 = 1,size(data_3d_array, 3)
    do idim2 = 1,size(data_3d_array, 2)
       do idim1 = 1,size(data_3d_array, 1)
-         data_3d_array(idim1,idim2,idim3) = x(ii)
+         if (x(ii) == missing_r8) then
+            data_3d_array(idim1,idim2,idim3) = mpas_missing
+         else
+            data_3d_array(idim1,idim2,idim3) = x(ii)
+         endif
          ii = ii + 1
       enddo
    enddo
@@ -3534,6 +3609,7 @@ ii = progvar(ivar)%index1
 
 do idim1 = 1, size(data_1d_array, 1)
    x(ii) = data_1d_array(idim1)
+   if (x(ii) == mpas_missing) x(ii) = missing_r8
    ii = ii + 1
 enddo
 
@@ -3568,6 +3644,7 @@ ii = progvar(ivar)%index1
 do idim2 = 1,size(data_2d_array, 2)
    do idim1 = 1,size(data_2d_array, 1)
       x(ii) = data_2d_array(idim1,idim2)
+      if (x(ii) == mpas_missing) x(ii) = missing_r8
       ii = ii + 1
    enddo
 enddo
@@ -3604,6 +3681,7 @@ do idim3 = 1,size(data_3d_array, 3)
    do idim2 = 1,size(data_3d_array, 2)
       do idim1 = 1,size(data_3d_array, 1)
          x(ii) = data_3d_array(idim1,idim2,idim3)
+         if (x(ii) == mpas_missing) x(ii) = missing_r8
          ii = ii + 1
       enddo
    enddo
@@ -3724,11 +3802,6 @@ if (ngood == nrows) then
    call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate,text2=string2)
 endif
 
-! TJH FIXME need to add check so they cannot have both normal winds and reconstructed winds in
-! DART state vector.   nsc - not sure that should be illegal.  which one is
-! updated in the restart file is controlled by namelist and both could be in
-! state vector for testing.
-
 end subroutine verify_state_variables
 
 
@@ -3739,7 +3812,7 @@ function is_edgedata_in_state_vector(state_variables)
   logical :: is_edgedata_in_state_vector
 
 ! before we actually read and parse the input table,
-! do a quick check to see if 'u' is one of the state variable names.
+! do a quick check to see if 'normalVelocity' is one of the state variable names.
 ! add any other fields here if their data values are based on edges
 ! and not cell centers.
 
@@ -3757,7 +3830,7 @@ MyLoop : do i = 1, nrows
 
    if (mpasname == ' ') exit MyLoop ! Found end of list.
 
-   if (mpasname == 'u') then
+   if (mpasname == 'normalVelocity') then
       is_edgedata_in_state_vector = .true.
       return
    endif
@@ -3877,11 +3950,27 @@ subroutine print_minmax(ivar, x)
 integer,  intent(in) :: ivar
 real(r8), intent(in) :: x(:)
 
+integer :: i1, iN, count
+real(r8) :: datamin, datamax
+real(r8), allocatable :: temp(:)
+
+! start and stop range for this variable in x(:)
+i1 = progvar(ivar)%index1
+iN = progvar(ivar)%indexN
+count = iN - i1 + 1
+
+allocate(temp(count))
+temp(1:count) = x(i1:iN)
+
+datamin = minval(temp, mask = temp /= missing_r8)
+datamax = maxval(temp, mask = temp /= missing_r8)
+
 write(string1, '(A,A32,2F16.7)') 'data  min/max ', trim(progvar(ivar)%varname), &
-           minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
-           maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
+              datamin, datamax
 
 call error_handler(E_MSG, '', string1, source,revision,revdate)
+
+deallocate(temp)
 
 end subroutine print_minmax
 
@@ -3907,7 +3996,7 @@ end function FindTimeDimension
 
 !------------------------------------------------------------------
 
-subroutine winds_present(zonal,meridional,both)
+subroutine current_present(zonal,meridional,both)
 
 integer, intent(out) :: zonal, meridional
 logical, intent(out) :: both
@@ -3929,11 +4018,11 @@ else if (zonal < 0 .and. meridional < 0) then
 endif
 
 ! only one present - error.
-write(string1,*) 'both components for U/V reconstructed winds must be in state vector'
+write(string1,*) 'both components for U/V reconstructed current must be in state vector'
 write(string2,*) 'cannot have only one of uReconstructMeridional and uReconstructZonal'
-call error_handler(E_ERR,'winds_present',string1,source,revision,revdate,text2=string2)
+call error_handler(E_ERR,'current_present',string1,source,revision,revdate,text2=string2)
 
-end subroutine winds_present
+end subroutine current_present
 
 
 !------------------------------------------------------------
@@ -4190,6 +4279,9 @@ real(r8) :: loc_array(3), tk, values(3)
 type(location_type) :: new_location
 integer :: istatus, ivars(3)
 
+! see routines at end of this code - for converting
+! depths into pressures.
+
 string1 = 'routine not written for ocean.'
 string2 = 'if needed, borrow from mpas_atm/model_mod.f90'
 call error_handler(E_ERR, 'compute_pressure', string1, &
@@ -4289,6 +4381,12 @@ if (zin == missing_r8) then
    return
 endif
 
+! Scale Height is defined in atmosphere as: -log(pressure / surface_pressure)
+if (ztypein == VERTISSCALEHEIGHT .or. ztypeout == VERTISSCALEHEIGHT) then
+   string1 = 'SCALE HEIGHT is unsupported in the ocean model'
+   call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
+endif
+
 ! Convert the incoming vertical type (ztypein) into the vertical
 ! localization coordinate given in the namelist (ztypeout).
 ! Various incoming vertical types (ztypein) are taken care of
@@ -4322,28 +4420,28 @@ select case (ztypeout)
    ! ------------------------------------------------------------
    case (VERTISPRESSURE)
 
-   ! Need to get base offsets for the potential temperature, density, and water
-   ! vapor mixing fields in the state vector
-! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
-! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
-! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+   ! Need to get base offsets for the potential temperature, density
+   ! fields in the state vector
+   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
 
-string1 = 'fix VERTISPRESSURE get base offsets - detritus from atmosphere'
-call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-
-   if (any(ivars(1:3) < 0)) then
-      write(string1,*) 'Internal error, cannot find one or more of: theta, rho, qv'
+   if (any(ivars(1:2) < 0)) then
+      write(string1,*) 'Internal error, cannot find one or more of: theta, density'
       call error_handler(E_ERR, 'vert_convert',string1,source, revision, revdate)
    endif
 
-   ! Get theta, rho, qv at the interpolated location
-   call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
+   ! Get theta, density the interpolated location
+   call compute_scalar_with_barycentric (x, location, 2, ivars, values, istatus)
    if (istatus /= 0) return
 
-   ! Convert theta, rho, qv into pressure
-   call compute_full_pressure(values(1), values(2), values(3), zout, tk)
+   ! Convert theta, rho, level into pressure
+   ! FIXME:
+string1 = 'fix VERTISPRESSURE get base offsets - make pressure routine work'
+call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
+
+   !call compute_full_pressure(values(1), values(2), level, zout, tk)
    if ((debug > 9) .and. do_output()) then
-      write(string2,'("zout_in_pressure, theta, rho, qv:",3F10.2,F15.10)') zout, values
+      write(string2,'("zout_in_pressure, theta, rho: ",3F10.2,F15.10)') zout, values(1:2)
       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
    endif
 
@@ -4364,57 +4462,6 @@ call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
    ! now have vertically interpolated values at cell centers.
    ! use horizontal weights to compute value at interp point.
    zout = sum(weights * fdata)
-
-   ! ------------------------------------------------------------
-   ! outgoing vertical coordinate should be 'scale height' (a ratio)
-   ! ------------------------------------------------------------
-   case (VERTISSCALEHEIGHT)
-
-   ! Scale Height is defined here as: -log(pressure / surface_pressure)
-
-   ! Need to get base offsets for the potential temperature, density, and water
-   ! vapor mixing fields in the state vector
-! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
-! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
-! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
-
-string1 = 'fix vertisscaleheight get base offsets - detritus from atmosphere'
-call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-
-   ! Get theta, rho, qv at the interpolated location
-   call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
-   if (istatus /= 0) return
-
-   ! Convert theta, rho, qv into pressure
-   call compute_full_pressure(values(1), values(2), values(3), fullp, tk)
-   if ((debug > 9) .and. do_output()) then
-      write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F15.10)') fullp, values
-      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-   endif
-
-   ! Get theta, rho, qv at the surface corresponding to the interpolated location
-   surfloc = set_location(llv_loc(1), llv_loc(2), 1.0_r8, VERTISLEVEL)
-   call compute_scalar_with_barycentric (x, surfloc, 3, ivars, values, istatus)
-   if (istatus /= 0) return
-
-   ! Convert surface theta, rho, qv into pressure
-   call compute_full_pressure(values(1), values(2), values(3), surfp, tk)
-   if ((debug > 9) .and. do_output()) then
-      write(string2,'("zout_surf_pressure, theta, rho, qv:",3F10.2,F15.10)') surfp, values
-      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-   endif
-
-   ! and finally, convert into scale height
-   if (surfp /= 0.0_r8) then
-      zout = -log(fullp / surfp)
-   else
-      zout = MISSING_R8
-   endif
-
-   if ((debug > 9) .and. do_output()) then
-      write(string2,'("zout_in_pressure:",F10.2)') zout
-      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-   endif
 
    ! -------------------------------------------------------
    ! outgoing vertical coordinate is unrecognized
@@ -4564,7 +4611,7 @@ integer,             intent(out) :: ier
 
 real(r8) :: lat, lon, vert, llv(3)
 integer  :: verttype, i
-integer  :: pt_base_offset, density_base_offset, qv_base_offset
+integer  :: pt_base_offset, density_base_offset
 
 ! the plan is to take in: whether this var is on cell centers or edges,
 ! and the location so we can extract the vert value and which vert flag.
@@ -4641,16 +4688,15 @@ endif
 if(vert_is_pressure(loc) ) then
    ! Need to get base offsets for the potential temperature, density, and water
    ! vapor mixing fields in the state vector
-! TJH   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
-! TJH   call get_index_range(KIND_DENSITY,          density_base_offset)
-! TJH   call get_index_range(KIND_VAPOR_MIXING_RATIO,    qv_base_offset)
+   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
+   call get_index_range(KIND_DENSITY,          density_base_offset)
 
 string1 = 'fix VERTISPRESSURE vertical interpolation for pressure - detritus from atmosphere'
 call error_handler(E_ERR,'find_vert_level',string1,source,revision,revdate)
 
    do i=1, nc
       call find_pressure_bounds(x, vert, ids(i), nVertLevels, &
-            pt_base_offset, density_base_offset, qv_base_offset,  &
+            pt_base_offset, density_base_offset,              &
             lower(i), upper(i), fract(i), ier)
       if ((debug > 9) .and. do_output()) &
          print '(A,5(1x,I5),1x,F10.4)', &
@@ -4701,7 +4747,7 @@ end subroutine find_vert_level
 !------------------------------------------------------------------
 
 subroutine find_pressure_bounds(x, p, cellid, nbounds, &
-   pt_base_offset, density_base_offset, qv_base_offset, &
+   pt_base_offset, density_base_offset,                &
    lower, upper, fract, ier)
 
 ! Finds vertical interpolation indices and fraction for a quantity with
@@ -4714,7 +4760,7 @@ real(r8),  intent(in)  :: x(:)
 real(r8),  intent(in)  :: p
 integer,   intent(in)  :: cellid
 integer,   intent(in)  :: nbounds
-integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
+integer,   intent(in)  :: pt_base_offset, density_base_offset
 integer,   intent(out) :: lower, upper
 real(r8),  intent(out) :: fract
 integer,   intent(out) :: ier
@@ -4729,13 +4775,13 @@ upper = -1
 
 ! Find the lowest pressure
 call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-   qv_base_offset, cellid, 1, nbounds, pressure(1), ier)
+   cellid, 1, nbounds, pressure(1), ier)
 !print *, 'find p bounds2, pr(1) = ', pressure(1), ier
 if(ier /= 0) return
 
 ! Get the highest pressure level
 call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-   qv_base_offset, cellid, nbounds, nbounds, pressure(nbounds), ier)
+   cellid, nbounds, nbounds, pressure(nbounds), ier)
 !print *, 'find p bounds2, pr(n) = ', pressure(nbounds), ier
 if(ier /= 0) return
 
@@ -4748,7 +4794,7 @@ if (ier /= 0) return
 ! Loop through the rest of the column from the bottom up
 do i = 2, nbounds
    call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-      qv_base_offset, cellid, i, nbounds, pressure(i), ier)
+      cellid, i, nbounds, pressure(i), ier)
 !print *, 'find p bounds i, pr(i) = ', i, pressure(i), ier
    if (ier /= 0) return
 
@@ -4762,7 +4808,7 @@ do i = 2, nbounds
       if ((debug > 5) .and. do_output())  then
       do j = 1, nbounds
          call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-            qv_base_offset, cellid, j, nbounds, pr, ier2, .true.)
+            cellid, j, nbounds, pr, ier2, .true.)
       enddo
       endif
 
@@ -4804,13 +4850,13 @@ end subroutine find_pressure_bounds
 
 !------------------------------------------------------------------
 
-subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
+subroutine get_interp_pressure(x, pt_offset, density_offset, &
    cellid, lev, nlevs, pressure, ier, debug)
 
 ! Finds the value of pressure at a given point at model level lev
 
 real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: pt_offset, density_offset, qv_offset
+integer,  intent(in)  :: pt_offset, density_offset
 integer,  intent(in)  :: cellid
 integer,  intent(in)  :: lev, nlevs
 real(r8), intent(out) :: pressure
@@ -4818,28 +4864,27 @@ integer,  intent(out) :: ier
 logical,  intent(in), optional :: debug
 
 integer  :: offset
-real(r8) :: pt, density, qv, tk
+real(r8) :: pt, density, tk
 
 
 ! Get the values of potential temperature, density, and vapor
 offset = (cellid - 1) * nlevs + lev - 1
 pt = x(pt_offset + offset)
 density = x(density_offset + offset)
-qv = x(qv_offset + offset)
 
 ! Error if any of the values are missing; probably will be all or nothing
-if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
+if(pt == MISSING_R8 .or. density == MISSING_R8) then
    ier = 2
    return
 endif
 
-! Convert theta, rho, qv into pressure
-call compute_full_pressure(pt, density, qv, pressure, tk)
+! Convert theta, density into pressure
+!call compute_full_pressure(pt, density, pressure, tk)
 
 if (present(debug)) then
    if (debug) then
       write(*,*) 'get_interp_pressure: cellid, lev', cellid, lev
-      write(*,*) 'get_interp_pressure: pt,rho,qv,p,tk', pt, density, qv, pressure, tk
+      write(*,*) 'get_interp_pressure: pt,rho,p,tk', pt, density, pressure, tk
    endif
 endif
 
@@ -5047,6 +5092,8 @@ endif
 
 c(1) = cellid
 
+! FIXME: we don't know the vertical at this point, and the
+! boundary info is per level...
 if (on_boundary(cellid)) then
    ier = 12
    return
@@ -5164,7 +5211,7 @@ end subroutine find_triangle_vert_indices
 
 !------------------------------------------------------------
 
-subroutine compute_u_with_rbf(x, loc, zonal, uval, ier)
+subroutine compute_uv_with_rbf(x, loc, zonal, uval, ier)
 real(r8),            intent(in)  :: x(:)
 type(location_type), intent(in) :: loc
 logical,             intent(in)  :: zonal
@@ -5192,11 +5239,11 @@ integer  :: verttype, lower(listsize), upper(listsize), ncells, celllist(listsiz
 ! the same as before and it's asking for V now instead of U,
 ! skip the expensive computation.
 
-progindex = get_index_from_varname('u')
+progindex = get_index_from_varname('normalVelocity')
 if (progindex < 0 .or. .not. data_on_edges) then
-   ! cannot compute u if it isn't in the state vector, or if we
+   ! cannot compute normalVelocity if it isn't in the state vector, or if we
    ! haven't read in the edge data (which shouldn't happen if
-   ! u is in the state vector.
+   ! normalVelocity is in the state vector.
    uval = MISSING_R8
    ier = 18
    return
@@ -5251,7 +5298,7 @@ do i = 1, nedges
    if (edgelist(i) > size(xEdge)) then
       write(string1, *) 'edgelist has index larger than edge count', &
                           i, edgelist(i), size(xEdge)
-      call error_handler(E_ERR, 'compute_u_with_rbf', 'internal error', &
+      call error_handler(E_ERR, 'compute_uv_with_rbf', 'internal error', &
                          source, revision, revdate, text2=string1)
    endif
    xdata(i) = xEdge(edgelist(i))
@@ -5301,7 +5348,7 @@ endif
 
 ier = 0
 
-end subroutine compute_u_with_rbf
+end subroutine compute_uv_with_rbf
 
 !------------------------------------------------------------
 
@@ -5718,7 +5765,7 @@ enddo
 ! starting to work.
 
 
-! FIXME: the ocean files have:
+! FIXME: if the ocean files had: (which they currently do not?)
 !  integer boundaryEdge(nVertLevels, nEdges)
 !  integer boundaryVertex(nVertLevels, nVertices)
 ! as a first pass, if ANY of the edges or vertices are on
@@ -5779,7 +5826,7 @@ logical :: found
 ! starting to work.
 
 
-! FIXME: the ocean files have:
+! FIXME: if the ocean files had: (which they currently do not?)
 !  integer boundaryEdge(nVertLevels, nEdges)
 !  integer boundaryVertex(nVertLevels, nVertices)
 ! as a first pass, if ANY of the edges or vertices are on
@@ -5892,7 +5939,7 @@ ncells = 3
 if (degree == 1) return
 
 
-! FIXME: the ocean files have:
+! FIXME: if the ocean files had: (which they currently do not?)
 !  integer boundaryEdge(nVertLevels, nEdges)
 !  integer boundaryVertex(nVertLevels, nVertices)
 ! as a first pass, if ANY of the edges or vertices are on
@@ -6291,19 +6338,19 @@ end subroutine invert3
 
 !------------------------------------------------------------------
 
-subroutine uv_cell_to_edges(zonal_wind, meridional_wind, du)
+subroutine uv_cell_to_edges(zonal_current, meridional_current, dV)
 
-! Project u, v wind increments at cell centers onto the edges.
+! Project u, v current increments at cell centers onto the edges.
 ! FIXME:
 !        we can hard-code R3 here since it comes from the (3d) x/y/z cartesian coordinate.
 !        We define nEdgesOnCell in get_grid_dims, and read edgesOnCell in get_grid.
 !        We read edgeNormalVectors in get_grid to use this subroutine.
-!        Here "U" is the prognostic variable in MPAS, and we update it with the wind
-!        increments at cell centers.
+!        Here "normalVelocity" is the prognostic variable in MPAS, and we update 
+!          it with the current increments at cell centers.
 
-real(r8), intent(in) :: zonal_wind(:,:)             ! u wind updated from filter
-real(r8), intent(in) :: meridional_wind(:,:)        ! v wind updated from filter
-real(r8), intent(out):: du(:,:)                     ! normal velocity increment on the edges
+real(r8), intent(in) :: zonal_current(:,:)             ! u current updated from filter
+real(r8), intent(in) :: meridional_current(:,:)        ! v current updated from filter
+real(r8), intent(out):: dV(:,:)                     ! normal velocity increment on the edges
 
 ! Local variables
 integer, parameter :: R3 = 3
@@ -6314,7 +6361,7 @@ integer  :: iCell, iEdge, jEdge, k
 if ( .not. module_initialized ) call static_init_model
 
 ! Initialization
-du(:,:) = 0.0_r8
+dV(:,:) = 0.0_r8
 
 ! Back to radians (locally)
 lonCell_rad = lonCell*deg2rad
@@ -6340,11 +6387,11 @@ do iCell = 1, nCells
    do jEdge = 1, nEdgesOnCell(iCell)
       iEdge = edgesOnCell(jEdge, iCell)
       do k = 1, nVertLevels
-         du(k,iEdge) = du(k,iEdge) + 0.5_r8 * zonal_wind(k,iCell)   &
+         dV(k,iEdge) = dV(k,iEdge) + 0.5_r8 * zonal_current(k,iCell)   &
                      * (edgeNormalVectors(1,iEdge) * east(1,iCell)  &
                      +  edgeNormalVectors(2,iEdge) * east(2,iCell)  &
                      +  edgeNormalVectors(3,iEdge) * east(3,iCell)) &
-                     + 0.5_r8 * meridional_wind(k,iCell)            &
+                     + 0.5_r8 * meridional_current(k,iCell)            &
                      * (edgeNormalVectors(1,iEdge) * north(1,iCell) &
                      +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
                      +  edgeNormalVectors(3,iEdge) * north(3,iCell))
@@ -6371,63 +6418,184 @@ real(r8) :: mi
 
 end subroutine r3_normalize
 
+!------------------------------------------------------------
+
+!==================================================================
+! The following (private) routines were borrowed from the POP code 
+!==================================================================
 
 !------------------------------------------------------------------
 
-function theta_to_tk (theta, rho, qv)
+subroutine insitu_temp(potemp, s, lpres, insitu_t)
+ real(r8), intent(in)  :: potemp, s, lpres
+ real(r8), intent(out) :: insitu_t
 
-! Compute sensible temperature [K] from potential temperature [K].
-! code matches computation done in MPAS model
+! CODE FROM POP MODEL -
+! nsc 1 nov 2012:  i have taken the original subroutine with call:
+!  subroutine dpotmp(press,temp,s,rp,potemp)
+! and removed the original 'press' argument (setting it to 0.0 below)
+! and renamed temp -> potemp, and potemp -> insitu_t
+! i also reordered the args to be a bit more logical.  now you specify:
+! potential temp, salinity, local pressure in decibars, and you get
+! back in-situ temperature (called sensible temperature in the atmosphere;
+! what a thermometer would measure).  the original (F77 fixed format) code
+! had a computed goto which is deprecated/obsolete.  i replaced it with 
+! a set of 'if() then else if()' lines.  i did try to not alter the original
+! code so much it wasn't recognizable anymore.
+!
+!  aliciak note: rp = 0 and press = local pressure as function of depth
+!  will return potemp given temp.
+!  the trick here that if you make rp = local pressure and press = 0.0, 
+!  and put potemp in the "temp" variable , it will return insitu temp in the 
+!  potemp variable.
 
-real(r8), intent(in)  :: theta    ! potential temperature [K]
-real(r8), intent(in)  :: rho      ! dry density
-real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
-real(r8)  :: theta_to_tk          ! sensible temperature [K]
+! an example figure of the relationship of potential temp and in-situ temp
+! at depth:  http://oceanworld.tamu.edu/resources/ocng_textbook/chapter06/chapter06_05.htm
+! see the 'potential temperature' section (note graph starts at -1000m)
 
-! Local variables
-real(r8) :: theta_m               ! potential temperature modified by qv
-real(r8) :: exner                 ! exner function
-real(r8) :: qv_nonzero            ! qv >= 0
+!     title:
+!     *****
 
-qv_nonzero = max(qv,0.0_r8)
-theta_m = (1.0_r8 + 1.61_r8 * qv_nonzero)*theta
+!       insitu_temp  -- calculate sensible (in-situ) temperature from 
+!                       local pressure, salinity, and potential temperature
 
-!theta_m = (1.0_r8 + 1.61_r8 * (max(qv, 0.0_r8)))*theta
-exner = ( (rgas/p0) * (rho*theta_m) )**rcv
+!     purpose:
+!     *******
 
-! Temperature [K]
-theta_to_tk = theta * exner
+!       to calculate sensible temperature, taken from a converter that
+!       went from sensible/insitu temperature to potential temperature
+!
+!       ref: N.P. Fofonoff
+!            Deep Sea Research
+!            in press Nov 1976
 
-end function theta_to_tk
+!     arguments:
+!     **********
 
+!       potemp     -> potential temperature in celsius degrees
+!       s          -> salinity pss 78
+!       lpres      -> local pressure in decibars
+!       insitu_t   <- in-situ (sensible) temperature (deg c)
+
+
+!     local variables:
+!     *********
+
+integer  :: i,j,n
+real(r8) :: dp,p,q,r1,r2,r3,r4,r5,s1,t,x
+
+!     code:
+!     ****
+
+      s1 = s - 35.0_r8
+      p  = 0.0_r8
+      t  = potemp
+
+      dp = lpres - p
+      n  = int (abs(dp)/1000.0_r8) + 1
+      dp = dp/n
+
+      do i=1,n
+         do j=1,4
+
+            r1 = ((-2.1687e-16_r8 * t + 1.8676e-14_r8) * t - 4.6206e-13_r8) * p
+            r2 = (2.7759e-12_r8*t - 1.1351e-10_r8) * s1
+            r3 = ((-5.4481e-14_r8 * t + 8.733e-12_r8) * t - 6.7795e-10_r8) * t
+            r4 = (r1 + (r2 + r3 + 1.8741e-8_r8)) * p + (-4.2393e-8_r8 * t+1.8932e-6_r8) * s1
+            r5 = r4 + ((6.6228e-10_r8 * t-6.836e-8_r8) * t + 8.5258e-6_r8) * t + 3.5803e-5_r8
+
+            x  = dp*r5
+
+            if (j == 1) then
+               t = t + 0.5_r8 * x
+               q = x
+               p = p + 0.5_r8 * dp
+          
+            else if (j == 2) then
+               t = t + 0.29298322_r8 * (x-q)
+               q = 0.58578644_r8 * x + 0.121320344_r8 * q
+   
+            else if (j == 3) then
+               t = t + 1.707106781_r8 * (x-q)
+               q = 3.414213562_r8*x - 4.121320344_r8*q
+               p = p + 0.5_r8*dp
+
+            else ! j must == 4
+               t = t + (x - 2.0_r8 * q) / 6.0_r8
+
+            endif
+   
+         enddo ! j loop
+      enddo ! i loop
+
+      insitu_t = t
+
+if (debug > 2) print *, 'potential temp, salinity, local pressure -> sensible temp'
+if (debug > 2) print *, potemp, s, lpres, insitu_t
+
+!       potemp     -> potential temperature in celsius degrees
+!       s          -> salinity pss 78
+!       lpres      -> local pressure in decibars
+!       insitu_t   <- in-situ (sensible) temperature (deg c)
+
+end subroutine insitu_temp
 
 !------------------------------------------------------------------
 
-subroutine compute_full_pressure(theta, rho, qv, pressure, tk)
+! FIXME: this needs to take a location or cellid as an argument, not
+! depth, so we can figure out the depth, which varies per cell.
+! we also can require the density be part of the state, and then
+! we can compute it instead of looking it up.
+subroutine dpth2pres(nd, depth, pressure)
+ integer,  intent(in)  :: nd
+ real(r8), intent(in)  :: depth(nd)
+ real(r8), intent(out) :: pressure(nd)
 
-! Compute full pressure from the equation of state.
-! since it has to compute sensible temp along the way,
-! make temp one of the return values rather than having
-! to call theta_to_tk() separately.
-! code matches computation done in MPAS model
+!  description:
+!  this function computes pressure in bars from depth in meters
+!  using a mean density derived from depth-dependent global 
+!  average temperatures and salinities from levitus 1994, and 
+!  integrating using hydrostatic balance.
+! 
+!  references:
+! 
+!  levitus, s., r. burgett, and t.p. boyer, world ocean atlas 
+!  volume 3: salinity, noaa atlas nesdis 3, us dept. of commerce, 1994.
+! 
+!  levitus, s. and t.p. boyer, world ocean atlas 1994, volume 4:
+!  temperature, noaa atlas nesdis 4, us dept. of commerce, 1994.
+! 
+!  dukowicz, j. k., 2000: reduction of pressure and pressure
+!  gradient errors in ocean simulations, j. phys. oceanogr., submitted.
 
-real(r8), intent(in)  :: theta    ! potential temperature [K]
-real(r8), intent(in)  :: rho      ! dry density
-real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
-real(r8), intent(out) :: pressure ! full pressure [Pa]
-real(r8), intent(out) :: tk       ! return sensible temperature to caller
+!  input parameters:
+!  nd     - size of arrays
+!  depth  - depth in meters. no units check is made
 
-! Local variables
-real(r8) :: qv_nonzero            ! qv >= 0
+!  output parameters:
+!  pressure - pressure in bars 
 
-qv_nonzero = max(qv,0.0_r8)
-tk = theta_to_tk(theta, rho, qv_nonzero)
+!  local variables & parameters:
+integer :: n
+real(r8), parameter :: c1 = 1.0_r8
 
-!tk = theta_to_tk(theta, rho, max(qv,0.0_r8))
-pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
-!if ((debug > 9) .and. do_output()) print *, 't,r,q,p,tk =', theta, rho, qv, pressure, tk
+! -----------------------------------------------------------------------
+!  convert depth in meters to pressure in bars
+! -----------------------------------------------------------------------
 
-end subroutine compute_full_pressure
+      do n=1,nd
+         pressure(n) = 0.059808_r8*(exp(-0.025_r8*depth(n)) - c1)  &
+                     + 0.100766_r8*depth(n) + 2.28405e-7_r8*depth(n)**2
+      end do
+
+if (debug > 2 .and. do_output()) then
+   print *, 'depth->pressure conversion table.  cols are: N, depth(m), pressure(bars)'
+   do n=1,nd
+      print *, n, depth(n), pressure(n)
+   enddo
+endif
+
+end subroutine dpth2pres
 
 
 !===================================================================

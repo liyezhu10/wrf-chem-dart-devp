@@ -4,6 +4,18 @@
 !
 ! $Id$
 
+program obs_selection
+
+!> Subset an observation sequence file.  Takes as input one or more
+!> observation sequence files, and a selection file.  The selection
+!> file can be another obs_sequence file, a mask file from the obs_xxx
+!> tool, or an ascii file with longitudes/latitudes only.
+!>
+!> Can specify tolerances on how exactly values must match.
+!> Can ignore time, types.  Can use selection list to include or
+!> exclude observations.
+!> 
+
 ! nsc 12apr2012 -
 ! was too slow for large lists and large obs_seq files.
 ! sorted the obs_def list by time and then started the search
@@ -17,9 +29,6 @@
 ! to making the performance acceptable.
 !
 
-program obs_selection
-
-! this latest addition has select by list of obs types.
 
 use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
 use    utilities_mod, only : timestamp, register_module, initialize_utilities, &
@@ -33,7 +42,7 @@ use     location_mod, only : location_type, get_location, set_location, &
                              VERTISLEVEL, VERTISPRESSURE, VERTISSCALEHEIGHT, &
                              VERTISUNDEF, query_location
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind, &
-                             get_obs_def_location, read_obs_def
+                             get_obs_def_location, read_obs_def, init_obs_def
 use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name, get_obs_kind_index, &
                              read_obs_kind
 use time_manager_mod, only : time_type, operator(>), print_time, set_time, &
@@ -100,6 +109,7 @@ logical            :: process_file(max_num_input_files)
 
 character(len=256) :: selections_file = 'obsdef_mask.txt'
 logical            :: selections_is_obs_seq = .false.
+logical            :: selections_is_text = .false.
 
 ! max differences allowed when deciding a location is the same
 real(r8) :: latlon_tolerance      = 0.000001 ! horizontal, degrees
@@ -110,6 +120,8 @@ real(r8) :: scaleheight_tolerance = 0.001    ! vertical, pressure ratio
 real(r8) :: level_tolerance       = 0.00001  ! vertical, fractional model levels
 
 logical  :: match_vertical        = .false.
+logical  :: exclude_selections    = .false.
+logical  :: ignore_time           = .false.
 logical  :: print_only            = .false.
 logical  :: partial_write         = .false.
 logical  :: print_timestamps      = .false.
@@ -121,7 +133,8 @@ namelist /obs_selection_nml/ &
          selections_file, selections_is_obs_seq, print_only, calendar,   &
          print_timestamps, partial_write, latlon_tolerance,              &
          surface_tolerance, pressure_tolerance, height_tolerance,        &
-         scaleheight_tolerance, level_tolerance, match_vertical
+         scaleheight_tolerance, level_tolerance, match_vertical,         &
+         exclude_selections, selections_is_text, ignore_time
 
 !----------------------------------------------------------------
 ! Start of the program:
@@ -160,7 +173,7 @@ call handle_filenames(filename_seq, filename_seq_list, num_input_files)
 call set_calendar_type(calendar)
 cal = (get_calendar_type() /= NO_CALENDAR)
 
-call read_selection_list(selections_file, selections_is_obs_seq, obs_def_list, obs_def_count, type_wanted)
+call read_selection_list(selections_file, selections_is_obs_seq, selections_is_text, obs_def_list, obs_def_count, type_wanted)
 
 ! end of namelist processing and setup
 
@@ -324,7 +337,11 @@ FILES: do i = 1, num_input_files
    ! figure out the time of the first obs in this file, and set the
    ! offset for the first item in the selection file that's at this time.
    t1 = get_time_from_obs(obs_in)
-   base_index = set_base(t1, obs_def_list, obs_def_count)
+   if (ignore_time) then
+      base_index = 1
+   else
+      base_index = set_base(t1, obs_def_list, obs_def_count)
+   endif
 
    if (base_index < 0) then
       write(msgstring2, *) 'skipping all obs in ', trim(filename_seq(i))
@@ -363,7 +380,7 @@ FILES: do i = 1, num_input_files
          ! if the time of the next obs is different from this one, bump
          ! up the start of the search index offset.
          t2 = get_time_from_obs(next_obs_in)
-         if (t1 /= t2) then
+         if (.not. ignore_time .and. t1 /= t2) then
             base_index = next_base_index
             next_base_index = set_base(t2, obs_def_list, obs_def_count, base_index)
             t1 = t2
@@ -914,10 +931,11 @@ enddo QCMetaData
 end subroutine print_metadata
 
 !---------------------------------------------------------------------
-subroutine read_selection_list(select_file, select_is_seq, &
+subroutine read_selection_list(select_file, select_is_seq, select_is_text, &
                                selection_list, selection_count, type_wanted)
  character(len=*),                intent(in)  :: select_file
  logical,                         intent(in)  :: select_is_seq
+ logical,                         intent(in)  :: select_is_text
  type(obs_def_type), allocatable, intent(out) :: selection_list(:)
  integer,                         intent(out) :: selection_count
  logical,            allocatable, intent(out) :: type_wanted(:)
@@ -933,7 +951,7 @@ subroutine read_selection_list(select_file, select_is_seq, &
  type(obs_type) :: obs, prev_obs
  type(obs_sequence_type) :: seq_in
  logical :: is_this_last
- real(r8) :: dummy
+ real(r8) :: dummy, lon, lat
  type(obs_def_type), allocatable :: temp_sel_list(:)
  type(time_type), allocatable :: temp_time(:)
  integer, allocatable :: sort_index(:)
@@ -941,7 +959,65 @@ subroutine read_selection_list(select_file, select_is_seq, &
  ! if the list of which obs to select comes from the coverage tool,
  ! it's a list of obs_defs.   if it's a full obs_seq file, then
  ! use the normal tools and just pull out the list of obs_defs.
- if (.not. select_is_seq) then
+ ! if it is text, this is a fairly specific case and the text is
+ ! just lat/lon points which match any type and any time.
+ if (select_is_seq) then
+     call read_obs_seq(select_file, 0, 0, 0, seq_in)
+
+     count  = get_num_obs(seq_in)
+     copies = get_num_copies(seq_in)
+     qcs    = get_num_qc(seq_in)
+
+     call init_obs(obs,      copies, qcs)
+     call init_obs(prev_obs, copies, qcs)
+
+     allocate(selection_list(count), type_wanted(max_obs_kinds))
+    
+     if (.not. get_first_obs(seq_in, obs)) then
+         call error_handler(E_ERR,'obs_selection', &
+           'empty obs_seq for selection file', &
+            source,revision,revdate)
+     endif
+
+     ! in an obs_seq file, using get_next_obs you will
+     ! be guarenteed to get these in increasing time order.
+
+     is_this_last = .false.
+     do i = 1, count
+         if (is_this_last) exit 
+
+         call get_obs_def(obs, selection_list(i))
+         this_type = get_obs_kind(selection_list(i))
+         if (this_type > 0) type_wanted(this_type) = .true.
+
+         prev_obs = obs
+         call get_next_obs(seq_in, prev_obs, obs, is_this_last)
+     enddo
+    
+    call destroy_obs(obs)
+    call destroy_obs_sequence(seq_in)
+
+ else if (select_is_text) then
+     iunit = open_file(select_file, form='formatted', action='read')
+    
+     read(iunit, *) count
+
+     ! these ones stay around and are returned from this subroutine
+     allocate(selection_list(count), type_wanted(max_obs_kinds))
+  
+     ! set all types wanted
+     type_wanted(:) = .true.
+
+     ! read into array in whatever order these are in the file
+     do i = 1, count
+        read(iunit, *) lon, lat
+        call init_obs_def(selection_list(i), set_location(lon, lat, 0.0_r8, VERTISSURFACE), &
+                          0, set_time(0,0), 0.0_r8)
+     enddo
+
+     call close_file(iunit)
+
+ else
      iunit = open_file(select_file, form='formatted', action='read')
     
      read(iunit, *) label, count
@@ -988,42 +1064,6 @@ subroutine read_selection_list(select_file, select_is_seq, &
      deallocate(temp_sel_list, temp_time, sort_index)
 
      call close_file(iunit)
- else
-    
-     call read_obs_seq(select_file, 0, 0, 0, seq_in)
-
-     count  = get_num_obs(seq_in)
-     copies = get_num_copies(seq_in)
-     qcs    = get_num_qc(seq_in)
-
-     call init_obs(obs,      copies, qcs)
-     call init_obs(prev_obs, copies, qcs)
-
-     allocate(selection_list(count), type_wanted(max_obs_kinds))
-    
-     if (.not. get_first_obs(seq_in, obs)) then
-         call error_handler(E_ERR,'obs_selection', &
-           'empty obs_seq for selection file', &
-            source,revision,revdate)
-     endif
-
-     ! in an obs_seq file, using get_next_obs you will
-     ! be guarenteed to get these in increasing time order.
-
-     is_this_last = .false.
-     do i = 1, count
-         if (is_this_last) exit 
-
-         call get_obs_def(obs, selection_list(i))
-         this_type = get_obs_kind(selection_list(i))
-         if (this_type > 0) type_wanted(this_type) = .true.
-
-         prev_obs = obs
-         call get_next_obs(seq_in, prev_obs, obs, is_this_last)
-     enddo
-    
-    call destroy_obs(obs)
-    call destroy_obs_sequence(seq_in)
  endif
 
  selection_count = count
@@ -1083,7 +1123,7 @@ end function set_base
 
 
 
-! compare horiz location, time, type - ignores vertical
+!> compare location, time, obs type - return positive if should be kept
 !---------------------------------------------------------------------
 function good_selection(obs_in, selection_list, selection_count, startindex)
  type(obs_type),     intent(in) :: obs_in
@@ -1092,68 +1132,98 @@ function good_selection(obs_in, selection_list, selection_count, startindex)
  integer,            intent(in) :: startindex
  logical :: good_selection
 
- ! first pass, iterate list.
- ! if too slow, pull in the get_close code
+! first pass, iterate list.
+! if too slow, pull in the get_close code
 
+integer :: i
+type(obs_def_type)  :: base_obs_def
+integer             :: base_obs_type, test_obs_type
+type(time_type)     :: base_obs_time, test_obs_time
+type(location_type) :: base_obs_loc,  test_obs_loc
 
- integer :: i
- type(obs_def_type)  :: base_obs_def
- integer             :: base_obs_type, test_obs_type
- type(time_type)     :: base_obs_time, test_obs_time
- type(location_type) :: base_obs_loc,  test_obs_loc
+call get_obs_def(obs_in, base_obs_def)
+base_obs_loc  = get_obs_def_location(base_obs_def)
+base_obs_time = get_obs_def_time(base_obs_def)
+base_obs_type = get_obs_kind(base_obs_def)
 
- call get_obs_def(obs_in, base_obs_def)
- base_obs_loc  = get_obs_def_location(base_obs_def)
- base_obs_time = get_obs_def_time(base_obs_def)
- base_obs_type = get_obs_kind(base_obs_def)
+! this program now time-sorts the selection list first, so we
+! are guarenteed the obs_defs will be encountered in time order.
+! now optimize in two ways:  first, the caller will pass in an
+! offset that is less than or equal to the first obs for this time,
+! and second this routine will return when the obs_def time is
+! larger than the time to match.  that should save a lot of looping.
 
- ! this program now time-sorts the selection list first, so we
- ! are guarenteed the obs_defs will be encountered in time order.
- ! now optimize in two ways:  first, the caller will pass in an
- ! offset that is less than or equal to the first obs for this time,
- ! and second this routine will return when the obs_def time is
- ! larger than the time to match.  that should save a lot of looping.
+if (startindex < 1 .or. startindex > selection_count) then
+   write(msgstring2, *) 'startindex ', startindex, ' is not between 1 and ', selection_count
+   call error_handler(E_ERR, 'good_selection', &
+      'invalid startindex, internal error should not happen', &
+      source, revision, revdate, text2=msgstring2) 
+endif
 
- if (startindex < 1 .or. startindex > selection_count) then
-    write(msgstring2, *) 'startindex ', startindex, ' is not between 1 and ', selection_count
-    call error_handler(E_ERR, 'good_selection', &
-       'invalid startindex, internal error should not happen', &
-       source, revision, revdate, text2=msgstring2) 
- endif
- 
- ! statistics for timing/debugging
- num_good_called = num_good_called + 1
+! statistics for timing/debugging
+num_good_called = num_good_called + 1
 
- ! the obs_def list is time-sorted now.  if you get to a larger
- ! time without a match you can bail early.
- good_selection = .false.
+if (exclude_selections) then
+   ! this option rejects obs that match ones in the selection list
 
- ! first select on time - it is an integer comparison
- ! and quicker than location test.  then type, and
- ! finally location.
- do i = startindex, selection_count
+   good_selection = .false.
+  
+   do i = startindex, selection_count
+  
+      ! this version ignores time right now.  it should test
+      ! the ignore_time namelist item and error out if it is
+      ! false and you're in the exclude code. FIXME. 
 
-    test_obs_time = get_obs_def_time(selection_list(i))
+      test_obs_loc = get_obs_def_location(selection_list(i))
+    
+      ! we are looking for location matches in the selection list and
+      ! rejecting them if found.
+      if (same_location(base_obs_loc, test_obs_loc, match_vertical)) return
+  
+   enddo
 
-    ! if past the possible times, return now.
-    if (base_obs_time > test_obs_time) then
-       num_good_searched = i - startindex + 1
-       return
-    endif
+   ! did not find this location on the reject list, so it is a keeper.
+   num_good_searched = i - startindex + 1
+   good_selection = .true.
+   return
 
-    if (base_obs_time /= test_obs_time) cycle
+else
+   ! this option keeps obs that match ones in the selection list
 
-    test_obs_type = get_obs_kind(selection_list(i))
-    if (base_obs_type /= test_obs_type) cycle
-
-    test_obs_loc = get_obs_def_location(selection_list(i))
-    if ( .not. same_location(base_obs_loc, test_obs_loc, match_vertical)) cycle
-
-    ! all match - good return.
-    num_good_searched = i - startindex + 1
-    good_selection = .true.
-    return
- enddo
+   ! the obs_def list is time-sorted now.  if you get to a larger
+   ! time without a match you can bail early.
+   good_selection = .false.
+  
+   ! first select on time - it is an integer comparison
+   ! and quicker than location test.  then type, and
+   ! finally location.
+   do i = startindex, selection_count
+  
+      test_obs_time = get_obs_def_time(selection_list(i))
+  
+      if (.not. ignore_time) then
+         ! if past the possible times, return now.
+         if (base_obs_time > test_obs_time) then
+            num_good_searched = i - startindex + 1
+            return
+         endif
+  
+         if (base_obs_time /= test_obs_time) cycle
+      endif
+  
+      test_obs_type = get_obs_kind(selection_list(i))
+      if (base_obs_type /= test_obs_type) cycle
+  
+      test_obs_loc = get_obs_def_location(selection_list(i))
+    
+      if ( .not. same_location(base_obs_loc, test_obs_loc, match_vertical)) cycle
+  
+      ! all match - good return.
+      num_good_searched = i - startindex + 1
+      good_selection = .true.
+      return
+   enddo
+endif
 
  ! if you get here, no match, and return value is already false.
 num_good_searched = selection_count - startindex + 1

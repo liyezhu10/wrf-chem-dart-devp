@@ -24,8 +24,9 @@ program clm_to_dart
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read
-use        model_mod, only : get_model_size, clm_to_dart_state_vector
-use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart
+use        model_mod, only : clm_to_dart_state_vector
+use  assim_model_mod, only : awrite_state_restart, open_restart_write, close_restart, &
+                             get_model_size
 use time_manager_mod, only : time_type, print_time, print_date
 
 implicit none

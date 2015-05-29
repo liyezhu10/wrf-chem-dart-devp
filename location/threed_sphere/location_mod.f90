@@ -135,10 +135,13 @@ integer, parameter    :: VERT_TYPE_COUNT = 4
 real(r8)              :: vert_normalization(VERT_TYPE_COUNT)
 real(r8), allocatable :: per_type_vert_norm(:,:)  ! if doing per-type
 
-! Global storage for fast approximate sin and cosine lookups
+! Global storage for fast approximate sin, cosine, and arc cosine lookups.
 ! PAR For efficiency for small cases might want to fill tables as needed
-! Also these could be larger for more accurate computations, if needed.
-! 630 is 2 * PI rounded up, times 100.
+! NOTE: These can be adjusted to use slightly more memory to be more
+! accurate and still be faster than computing the exact values on demand.
+! The sin/cos limit should be 6.3 (2 * PI rounded up) times DELTA,
+! the acos limit should be 1 * DELTA.  e.g. for sin/cos delta of 1000,
+! the sincos limit would be 6300; for acos delta 10000, acos limit 10000.
 real(r8), parameter :: SINCOS_DELTA = 100.0_r8
 integer,  parameter :: SINCOS_LIMIT = 630
 real(r8), parameter :: ACOS_DELTA = 1000.0_r8
@@ -245,7 +248,7 @@ contains
 
 subroutine initialize_module()
 
-integer :: iunit, io, i, v, k, typecount, type_index
+integer :: iunit, io, i, k, typecount, type_index
 
 
 if (module_initialized) return
@@ -1290,7 +1293,7 @@ type(get_close_type), intent(inout) :: gc
 real(r8),             intent(in)    :: maxdist
 real(r8), intent(in), optional      :: maxdist_list(:)
 
-integer :: i, typecount, distcount, mapnum
+integer :: i, typecount, distcount
 real(r8), allocatable :: distlist(:)
 
 ! Support per-loc-type localization more efficiently.

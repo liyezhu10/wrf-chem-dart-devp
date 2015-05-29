@@ -10,25 +10,22 @@ program filter
 use types_mod,            only : r8, missing_r8, metadatalength
 use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                  get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
-                                 get_obs_def, get_time_range_keys, set_obs_values, set_obs,  &
-                                 write_obs_seq, get_num_obs, get_obs_values, init_obs,       &
-                                 assignment(=), get_num_copies, get_qc, get_num_qc, set_qc,  &
+                                 get_obs_def, get_time_range_keys, write_obs_seq,            &
+                                 get_obs_values, init_obs, set_qc_meta_data, get_expected_obs,&
+                                 assignment(=), get_num_copies, get_qc, get_num_qc,          &
                                  static_init_obs_sequence, destroy_obs, read_obs_seq_header, &
-                                 set_qc_meta_data, get_expected_obs, get_first_obs,          &
-                                 get_obs_time_range, delete_obs_from_seq, delete_seq_head,   &
-                                 delete_seq_tail, replace_obs_values, replace_qc,            &
-                                 destroy_obs_sequence, get_qc_meta_data, add_qc
-use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
-                                 get_obs_kind
+                                 delete_seq_head, delete_seq_tail, replace_obs_values, add_qc,&
+                                 destroy_obs_sequence, get_qc_meta_data, replace_qc
+use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                  operator(-), print_time
 use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
-                                 initialize_utilities, logfileunit, nmlfileunit, timestamp,  &
+                                 logfileunit, nmlfileunit, timestamp,                        &
                                  do_output, find_namelist_in_file, check_namelist_read,      &
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 aoutput_diagnostics, ens_mean_for_model, end_assim_model
+                                 ens_mean_for_model, end_assim_model
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
@@ -36,11 +33,11 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  all_vars_to_all_copies, all_copies_to_all_vars,             &
                                  read_ensemble_restart, write_ensemble_restart,              &
                                  compute_copy_mean, compute_copy_mean_sd,                    &
-                                 compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
-                                 get_ensemble_time, set_ensemble_time, broadcast_copy,       &
-                                 prepare_to_read_from_vars, prepare_to_write_to_vars, prepare_to_read_from_copies,    &
-                                 prepare_to_write_to_copies, get_ensemble_time, set_ensemble_time,    &
-                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies
+                                 compute_copy_mean_var, get_copy_owner_index,                &
+                                 get_ensemble_time, set_copy_time, broadcast_copy,           &
+                                 prepare_to_read_from_vars, prepare_to_write_to_vars,        &
+                                 prepare_to_read_from_copies, prepare_to_write_to_copies,    &
+                                 map_task_to_pe, map_pe_to_task, prepare_to_update_copies
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &
@@ -134,6 +131,11 @@ real(r8)             :: inf_upper_bound(2)        = 1000000.0_r8
 real(r8)             :: inf_sd_lower_bound(2)     = 0.0_r8
 logical              :: output_inflation          = .true.
 
+! FIXME: the code that this calls belongs in another module.
+! Are any of the observation types subject to being updated
+! during the computation?  e.g. Folded doppler intensities.
+logical :: observations_updateable = .true.
+
 namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,    &
    start_from_restart, output_restart, obs_sequence_in_name, obs_sequence_out_name, &
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
@@ -146,12 +148,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_output_restart, inf_deterministic, inf_in_file_name, inf_damping,            &
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
-   silence
-
-! FIXME: this belongs someplace else.
-! Are any of the observation types subject to being updated
-! during the computation?  e.g. Folded doppler intensities.
-logical :: observations_updateable = .true.
+   silence, observations_updateable
 
 !----------------------------------------------------------------
 
@@ -222,6 +219,10 @@ call error_handler(E_MSG,'filter:', msgstring, source, revision, revdate)
 
 ! See if smoothing is turned on
 ds = do_smoothing()
+if (ds) then
+   write(msgstring, '(A)') 'smoother is enabled'
+   call error_handler(E_MSG,'filter:', msgstring, source, revision, revdate)
+endif
 
 ! Make sure inflation options are legal
 do i = 1, 2
@@ -278,6 +279,8 @@ call trace_message('Before setting up space for ensembles')
 
 ! Allocate model size storage and ens_size storage for metadata for outputting ensembles
 model_size = get_model_size()
+write(msgstring, '(A,I16)') 'state vector item count (per ensemble member) is ', model_size
+call error_handler(E_MSG,'filter:', msgstring, source, revision, revdate)
 
 ! Have ens_mean on all processors for distance computations, really don't want to do this
 allocate(ens_mean(model_size))
@@ -545,12 +548,8 @@ AdvanceTime : do
 
    ! While we're here, make sure the timestamp on the actual ensemble copy
    ! for the mean has the current time.  If the user requests it be written
-   ! out, it needs a valid timestamp.
-   call get_copy_owner_index(ENS_MEAN_COPY, mean_owner, mean_owners_index)
-   if(ens_handle%my_pe == mean_owner) then
-      ! Make sure the timestamp for the mean is the current time.
-      call set_ensemble_time(ens_handle, mean_owners_index, curr_ens_time)
-   endif
+   ! out later on, it needs a valid timestamp.
+   call set_copy_time(ens_handle, ENS_MEAN_COPY, curr_ens_time)
 
    ! Make sure all tasks have a copy of the ensemble mean.
    call broadcast_copy(ens_handle, ENS_MEAN_COPY, ens_mean)
@@ -787,7 +786,10 @@ if(output_restart_mean) &
    call write_ensemble_restart(ens_handle, trim(restart_out_file_name)//'.mean', &
                                ENS_MEAN_COPY, ENS_MEAN_COPY, .true.)
 
-if(ds) call smoother_write_restart(1, ens_size)
+if(ds) then
+   call advance_smoother(ens_handle, program_end=.true.)
+   call smoother_write_restart(1, ens_size)
+endif
 call trace_message('After  writing state restart files if requested')
 
 ! Give the model_mod code a chance to clean up. 
@@ -1508,7 +1510,7 @@ call compute_copy_mean_var(obs_ens_handle, &
 ! values if there are ambiguous values that need to be changed.
 ! e.g. Folded doppler readings.
 if (observations_updateable) then
-  call update_observations_radar(obs_ens_handle, ens_size, seq, keys, prior_post, &
+  call update_observations(obs_ens_handle, ens_size, seq, keys, prior_post, &
     obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
     OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
     OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
@@ -1858,7 +1860,6 @@ end subroutine print_ens_time
 !-------------------------------------------------------------------------
 
 subroutine print_obs_time(seq, key, msg)
-
 type(obs_sequence_type), intent(in) :: seq
 integer, intent(in) :: key
 character(len=*), intent(in), optional :: msg
@@ -1964,6 +1965,43 @@ end select
 end function failed_outlier
 
 !-------------------------------------------------------------------------
+! special if observation sequence needs updating.  right now it is assumed
+! to be read-only and exist on all tasks.  this code, if it needs to update
+! the observation values in any way, must do some communication to ensure
+! all tasks have a consistent obs sequence.
+!-------------------------------------------------------------------------
+
+subroutine update_observations(obs_ens_handle, ens_size, seq, keys, prior_post, &
+      obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
+      OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
+      OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
+
+type(ensemble_type),     intent(inout) :: obs_ens_handle
+integer,                 intent(in)    :: ens_size
+integer,                 intent(in)    :: num_obs_in_set
+integer,                 intent(in)    :: keys(num_obs_in_set), prior_post
+integer,                 intent(in)    :: ens_mean_index, ens_spread_index
+type(obs_sequence_type), intent(inout) :: seq
+integer,                 intent(in)    :: OBS_MEAN_START, OBS_VAR_START
+integer,                 intent(in)    :: OBS_GLOBAL_QC_COPY, OBS_VAL_COPY
+integer,                 intent(in)    :: OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG
+
+! when we put other things here, make a way to call another module
+! and have the path_names_xxx files select which update routine to use.
+! this allows us to have a single filter.f90 source file again.
+if (.true.) then
+   call update_observations_radar(obs_ens_handle, ens_size, seq, keys, prior_post, &
+       obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
+       OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
+       OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
+else
+   write(msgstring, *) 'no observation update routine exists for this case'
+   call error_handler(E_ERR,'update_observations', msgstring, source, revision, revdate)
+endif
+
+end subroutine update_observations
+
+!-------------------------------------------------------------------------
 !-------------------------------------------------------------------------
 ! special for doppler radar unfolding
 
@@ -1974,14 +2012,15 @@ subroutine update_observations_radar(obs_ens_handle, ens_size, seq, keys, prior_
       OBS_ERR_VAR_COPY, DART_qc_index, PRIOR_DIAG)
 
 
-use obs_def_mod, only          : get_obs_def_key, get_obs_kind
-use obs_kind_mod, only         : DOPPLER_RADIAL_VELOCITY
-use obs_def_radar_mod, only    : get_obs_def_radial_vel
-use location_mod, only         : location_type
-use ensemble_manager_mod, only : ensemble_type, get_my_num_copies, &
-                                 all_copies_to_all_vars, all_vars_to_all_copies, &
-                                 get_copy_owner_index, broadcast_copy
-use mpi_utilities_mod, only    : my_task_id !, broadcast_send, broadcast_recv
+!use obs_def_mod, only          : get_obs_def_key, get_obs_kind
+!use obs_kind_mod, only         : DOPPLER_RADIAL_VELOCITY
+!use obs_def_radar_mod, only    : get_obs_def_radial_vel
+!use obs_sequence_mod, only     : set_obs_values, set_obs
+!use location_mod, only         : location_type
+!use ensemble_manager_mod, only : ensemble_type, get_my_num_copies, &
+!                                 all_copies_to_all_vars, all_vars_to_all_copies, &
+!                                 get_copy_owner_index, broadcast_copy
+!use mpi_utilities_mod, only    : my_task_id !, broadcast_send, broadcast_recv
 
 
 ! Do prior observation space diagnostics on the set of obs corresponding to keys
@@ -2019,88 +2058,90 @@ integer             :: owner, owners_index
 type(obs_type)      :: observation
 logical             :: verbose
 
+ !%! FIXME:
+return
 
-! only do this for the prior observations
-if (prior_post /= PRIOR_DIAG) return
-
-! if you want to see the updated values, make this true. 
-! for quiet execution, set it to false.
-verbose = .true.
-
-call prepare_to_update_copies(obs_ens_handle)
-
-do j = 1, obs_ens_handle%my_num_vars
-   ! get the key number associated with each of my subset of obs
-   ! then get the obs and extract info from it.
-   this_obs_key = obs_ens_handle%copies(OBS_KEY_COPY, j) 
-   call get_obs_from_key(seq, this_obs_key, observation)
-   call get_obs_def(observation, obs_def)
-   obs_kind_ind = get_obs_kind(obs_def)
-   if (obs_kind_ind == DOPPLER_RADIAL_VELOCITY) then
-      obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, j)
-      obs_val = obs_ens_handle%copies(OBS_VAL_COPY, j)
-      velkey = get_obs_def_key(obs_def)
-      call get_obs_def_radial_vel(velkey, radarloc, beamdir, velnyquist)
-      if ( (velnyquist > 0.0_r8) .and. &
-           (obs_prior_mean /= missing_r8) .and. (obs_val /= missing_r8) ) then
-         i_real = (obs_prior_mean - obs_val) / (2.0_r8 * velnyquist)
-         i_int = nint(i_real)
-         if (i_int /= 0) then
-            if (verbose) then
-               write(*,*)
-               write(*,*) '*** UNFOLDING VELOCITY ***'
-               write(*,*) '1. iam, j, key = ', my_task_id(), j, this_obs_key
-               write(*,*) 'ob before unfolding = ', obs_val
-            endif
-            ! at this point we have the updated value.  only replace
-            ! the local copy in the ens handle.  we are out of sync
-            ! with other PEs and the observation sequence data right now.
-            obs_val = obs_val + 2.0_r8 * i_int * velnyquist
-            obs_ens_handle%copies(OBS_VAL_COPY, j) = obs_val
-            if (verbose) then
-               write(*,*) 'ob after unfolding = ', obs_val
-               write(*,*) 'mean, nyquist = ', obs_prior_mean, velnyquist
-            endif
-         endif
-      endif
-   endif
-enddo
-
-
-! get all the updated obs values onto one PE
-call all_copies_to_all_vars(obs_ens_handle)
-
-! Figure out which PE has all the obs values and broadcast
-! them into a temporary array on the other PEs.
-call broadcast_copy(obs_ens_handle, OBS_VAL_COPY, updated_obs)
-
-! Each PE has an independent copy of the observation
-! sequence.  These values must be updated.  Rather than
-! trying to track which ones are changed, just loop
-! through all of them and update any with different values.
-do j = 1, num_obs_in_set
-   call get_obs_from_key(seq, keys(j), observation) 
-   call get_obs_def(observation, obs_def)
-   obs_kind_ind = get_obs_kind(obs_def)
-   if (obs_kind_ind == DOPPLER_RADIAL_VELOCITY) then
-      call get_obs_values(observation, obs_temp(1:1), obs_val_index)
-      obs_val = updated_obs(j)
-      if (obs_temp(1) /= obs_val) then
-         if (verbose) then
-            write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
-            write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
-            write(*,*) 'updating obs in seq, index = ', j, obs_val_index
-         endif
-         obs_temp(1) = obs_val
-         call set_obs_values(observation, obs_temp(1:1), obs_val_index)
-         call set_obs(seq, observation, keys(j))
-      endif
-   endif
-enddo
-
-! Now redistribute back to all copies as this was originally.
-call all_vars_to_all_copies(obs_ens_handle)
-
+!%! ! only do this for the prior observations
+!%! if (prior_post /= PRIOR_DIAG) return
+!%! 
+!%! ! if you want to see the updated values, make this true. 
+!%! ! for quiet execution, set it to false.
+!%! verbose = .true.
+!%! 
+!%! call prepare_to_update_copies(obs_ens_handle)
+!%! 
+!%! do j = 1, obs_ens_handle%my_num_vars
+!%!    ! get the key number associated with each of my subset of obs
+!%!    ! then get the obs and extract info from it.
+!%!    this_obs_key = obs_ens_handle%copies(OBS_KEY_COPY, j) 
+!%!    call get_obs_from_key(seq, this_obs_key, observation)
+!%!    call get_obs_def(observation, obs_def)
+!%!    obs_kind_ind = get_obs_kind(obs_def)
+!%!    if (obs_kind_ind == DOPPLER_RADIAL_VELOCITY) then
+!%!       obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, j)
+!%!       obs_val = obs_ens_handle%copies(OBS_VAL_COPY, j)
+!%!       velkey = get_obs_def_key(obs_def)
+!%!       call get_obs_def_radial_vel(velkey, radarloc, beamdir, velnyquist)
+!%!       if ( (velnyquist > 0.0_r8) .and. &
+!%!            (obs_prior_mean /= missing_r8) .and. (obs_val /= missing_r8) ) then
+!%!          i_real = (obs_prior_mean - obs_val) / (2.0_r8 * velnyquist)
+!%!          i_int = nint(i_real)
+!%!          if (i_int /= 0) then
+!%!             if (verbose) then
+!%!                write(*,*)
+!%!                write(*,*) '*** UNFOLDING VELOCITY ***'
+!%!                write(*,*) '1. iam, j, key = ', my_task_id(), j, this_obs_key
+!%!                write(*,*) 'ob before unfolding = ', obs_val
+!%!             endif
+!%!             ! at this point we have the updated value.  only replace
+!%!             ! the local copy in the ens handle.  we are out of sync
+!%!             ! with other PEs and the observation sequence data right now.
+!%!             obs_val = obs_val + 2.0_r8 * i_int * velnyquist
+!%!             obs_ens_handle%copies(OBS_VAL_COPY, j) = obs_val
+!%!             if (verbose) then
+!%!                write(*,*) 'ob after unfolding = ', obs_val
+!%!                write(*,*) 'mean, nyquist = ', obs_prior_mean, velnyquist
+!%!             endif
+!%!          endif
+!%!       endif
+!%!    endif
+!%! enddo
+!%! 
+!%! 
+!%! ! get all the updated obs values onto one PE
+!%! call all_copies_to_all_vars(obs_ens_handle)
+!%! 
+!%! ! Figure out which PE has all the obs values and broadcast
+!%! ! them into a temporary array on the other PEs.
+!%! call broadcast_copy(obs_ens_handle, OBS_VAL_COPY, updated_obs)
+!%! 
+!%! ! Each PE has an independent copy of the observation
+!%! ! sequence.  These values must be updated.  Rather than
+!%! ! trying to track which ones are changed, just loop
+!%! ! through all of them and update any with different values.
+!%! do j = 1, num_obs_in_set
+!%!    call get_obs_from_key(seq, keys(j), observation) 
+!%!    call get_obs_def(observation, obs_def)
+!%!    obs_kind_ind = get_obs_kind(obs_def)
+!%!    if (obs_kind_ind == DOPPLER_RADIAL_VELOCITY) then
+!%!       call get_obs_values(observation, obs_temp(1:1), obs_val_index)
+!%!       obs_val = updated_obs(j)
+!%!       if (obs_temp(1) /= obs_val) then
+!%!          if (verbose) then
+!%!             write(*,*) '2. iam, j, key = ', my_task_id(), j, keys(j)
+!%!             write(*,*) 'old observation value, new value = ', obs_temp(1), obs_val
+!%!             write(*,*) 'updating obs in seq, index = ', j, obs_val_index
+!%!          endif
+!%!          obs_temp(1) = obs_val
+!%!          call set_obs_values(observation, obs_temp(1:1), obs_val_index)
+!%!          call set_obs(seq, observation, keys(j))
+!%!       endif
+!%!    endif
+!%! enddo
+!%! 
+!%! ! Now redistribute back to all copies as this was originally.
+!%! call all_vars_to_all_copies(obs_ens_handle)
+!%! 
 
 end subroutine update_observations_radar
 

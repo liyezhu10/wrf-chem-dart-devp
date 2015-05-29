@@ -48,13 +48,17 @@ character(len=8  ) :: obsdate
 integer :: iunit, io, ii, day1, kbeg, kend, obs_unit
 integer :: fyear, fmonth, fday, fhour, fmin, fsec
 integer :: hyear, hmonth, hday, hhour, hmin, hsec
-integer :: gdays, gsecs, sdays, edays, dummy
-logical :: daily, inc_midnight
+integer :: gdays, gsecs
+logical :: daily
 
 type(time_type) :: start_time, end_time, window_width, one_sec
 type(time_type) :: window_start, window_end, window_mid, window_half
 type(time_type) :: hack, next
 
+
+!real(r8) :: bin_beg(5), bin_end(5)
+!data bin_beg/ 3.001_r8,  9.001_r8, 15.001_r8, 21.001_r8,  3.001_r8/
+!data bin_end/ 9.000_r8, 15.000_r8, 21.000_r8, 27.000_r8, 27.000_r8/
 
 ! ----------------------------------------------------------------------
 ! Declare namelist parameters
@@ -63,7 +67,6 @@ type(time_type) :: hack, next
 integer :: startyear = 2003, startmonth = 1, startday = 1, starthour = 0, startseconds = 0
 integer ::   endyear = 2003,   endmonth = 1,   endday = 1,   endhour = 6,   endseconds = 0
 integer :: windowdays = 0, windowhours = 6, windowseconds = 0
-logical :: midnight_24 = .false.
 
 integer :: max_num_obs = 800000
 character(len = 128) ::  input_filename_base    = 'temp_obs.'
@@ -107,7 +110,7 @@ namelist /prepbufr_to_obs_nml/ &
         windowdays, windowhours, windowseconds, &
         input_filename_base, input_filename_pattern, &
         output_filename_base, output_filename_pattern, &
-        max_num_obs, select_obs, midnight_24, &
+        max_num_obs, select_obs, &
         ADPUPA, AIRCAR, AIRCFT, SATEMP, SFCSHP, ADPSFC, SATWND, &
         obs_U, obs_V, obs_T, obs_PS, obs_QV, &
         lon1, lon2, lat1, lat2, &
@@ -179,9 +182,7 @@ do while (window_start <= end_time)
   
    ! output current window info
    call print_date(window_start, 'Window start time: ')
-   call get_time(window_start, dummy, sdays)
    call print_date(window_end,   'Window   end time: ')
-   call get_time(window_end, dummy, edays)
    
    ! FIXME: we could let user specify how to name the files
    ! with a window offset - 0 for start time, 1/2 for mid, 
@@ -205,15 +206,9 @@ do while (window_start <= end_time)
    ! construct input and output filenames
    ! FIXME: make this consistent with prepbufr and the non-daily option:
    if (fhour == 0) then
-      if (midnight_24) then
-         hack = window_mid - set_time(0, 1)
-         call get_date(hack, hyear, hmonth, hday, hhour, hmin, hsec)
-         write( input_name,  input_filename_pattern) trim(input_filename_base), hyear, hmonth, hday, 24
-      else
-         hack = window_mid
-         call get_date(hack, hyear, hmonth, hday, hhour, hmin, hsec)
-         write( input_name,  input_filename_pattern) trim(input_filename_base), hyear, hmonth, hday, 0
-      endif
+      hack = window_mid - set_time(0, 1)
+      call get_date(hack, hyear, hmonth, hday, hhour, hmin, hsec)
+      write( input_name,  input_filename_pattern) trim(input_filename_base), hyear, hmonth, hday, 24
    else
       write( input_name,  input_filename_pattern) trim(input_filename_base), fyear, fmonth, fday, fhour
    endif
@@ -233,10 +228,11 @@ do while (window_start <= end_time)
 
    obs_unit  = get_unit()
    open(unit = obs_unit, file = input_name, form='formatted', status='old')
-   write(*,*) ' main input file: '//trim(input_name)
+   print*, 'input file opened= ', trim(input_name)
    rewind (obs_unit)
    
-   call construct_obs_sequence(seq, obs_unit, gdays, window_start, window_end, inc_midnight)
+   !call construct_obs_sequence(seq, obs_unit, gdays, bin_beg(kkk), bin_end(kkk))
+   call construct_obs_sequence(seq, obs_unit, gdays, window_start, window_end, .true.)
    close(obs_unit)
 
    ! construct input and output filenames
@@ -250,10 +246,11 @@ do while (window_start <= end_time)
    else
       write( input_name,  input_filename_pattern) trim(input_filename_base), fyear, fmonth, fday, fhour
    endif
-   write(*,*) ' aux  input file: '//trim(input_name)
+write(*,*) ' input name: '//trim( input_name)
 
    obs_unit  = get_unit()
    open(unit = obs_unit, file = input_name, form='formatted', status='old')
+   print*, 'input file opened= ', trim(input_name)
    rewind (obs_unit)
    
    ! read the next available ascii intermediate file to collect any obs which are
@@ -286,6 +283,7 @@ contains
 !-------------------------------------------------
 
 
+!subroutine construct_obs_sequence (seq, iunit, gday, bin_beg, bin_end)
 subroutine construct_obs_sequence (seq, iunit, gday, wstart, wend, wrap)
 !------------------------------------------------------------------------------
 !  this function is to convert NCEP decoded BUFR data to DART sequence format
@@ -299,8 +297,11 @@ subroutine construct_obs_sequence (seq, iunit, gday, wstart, wend, wrap)
 type(obs_sequence_type), intent(inout) :: seq
 integer,                 intent(in)    :: iunit
 integer,                 intent(in)    :: gday
+!real(r8),                intent(in)    :: bin_beg, bin_end
 type(time_type),         intent(in)    :: wstart, wend
 logical,                 intent(in)    :: wrap
+
+
 
 type(obs_type) :: obs, prev_obs
 integer :: i, num_copies, num_qc
@@ -346,18 +347,21 @@ character(len = 80) :: obsfile, label
 character(len = 6 ) :: subset
 logical :: pass, first_obs
 
+print *, 'construct_obs_seq: day = ', gday
 call get_date(wstart, syear, smonth, sday, shour, sminute, sseconds)
 call get_date(wend,   eyear, emonth, eday, ehour, eminute, eseconds)
-if (debug) call print_date(wstart, 'window start')
-if (debug) call print_date(wend,   'window   end')
 
 bin_beg = shour + sminute / 60.0_r8 + sseconds / 3600.0_r8
 bin_end = ehour + eminute / 60.0_r8 + eseconds / 3600.0_r8
+print *, 'bins orig = ', bin_beg, bin_end
 if (bin_end < bin_beg) then
-   bin_end = bin_end + 24.0_r8
+   !if (wrap) then
+      bin_end = bin_end + 24.0_r8
+   !else
+   !   bin_beg = bin_beg - 24.0_r8
+   !endif
 endif
-if (debug) print *, 'bin start, end: ', bin_beg, bin_end
-
+print *, 'wrap, bins now  = ', wrap, bin_beg, bin_end
 
 ! Initialize the obs variable
 
@@ -374,6 +378,7 @@ first_obs = .true.
 !  loop over all observations within the file
 !------------------------------------------------------------------------------
 
+print *, 'top of obs loop'
 obsloop:  do
 
    read(iunit,880,end=200) obs_err, lon, lat, lev, zob, zob2, rcount, time, &
@@ -633,14 +638,10 @@ obsloop:  do
    endif
 
    if (time < 24.0_r8) then
-      if (wrap) then
-        rday = gday - 1
-      else
-        rday = gday
-      endif
+      rday = gday - 1
       seconds = time * 3600
    else
-      rday = gday 
+      rday = gday
       seconds = (time - 24.0_r8) * 3600
    endif
 

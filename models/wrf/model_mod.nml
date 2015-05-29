@@ -60,7 +60,9 @@
    polar                       = .false.,
    periodic_x                  = .false.,
    periodic_y                  = .false.,
-   scm                         = .false.  /
+   scm                         = .false. 
+   allow_perturbed_ics         = .false.
+/
 
 # polar and periodic_x are used in global wrf.  if polar is true, the 
 # grid interpolation routines will wrap over the north & south poles.  

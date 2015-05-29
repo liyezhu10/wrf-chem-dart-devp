@@ -21,7 +21,7 @@ use ensemble_manager_mod, only : ensemble_type, write_ensemble_restart,       &
 
 use assim_model_mod,      only : static_init_assim_model
 
-use            model_mod, only : get_model_size
+use      assim_model_mod, only : get_model_size
 
 implicit none
 

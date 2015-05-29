@@ -689,7 +689,7 @@ subroutine update_inflation(inflate_handle, inflate, inflate_sd, prior_mean, pri
    obs, obs_var, gamma)
 
 ! Given information from an inflate type, scalar values for inflate and inflate_sd,
-! the ensemble prior_mean and prior_var for an observation, and the obsered value
+! the ensemble prior_mean and prior_var for an observation, and the observed value
 ! and observational error variance, computes updated values for the inflate and
 ! inflate_sd values using the algorithms documented on the DART website.
 ! The gamma paramter gives the localized prior correlation times the localization

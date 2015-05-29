@@ -22,15 +22,15 @@ use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
-                             init_diag_output, finalize_diag_output
+                             init_diag_output, finalize_diag_output, &
+                             get_model_size, get_state_meta_data, model_interpolate
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              read_time, get_time, set_time,  &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
-use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             compute_gridcell_value, gridcell_components, &
-                             model_interpolate, DART_get_var, get_grid_vertval
+use        model_mod, only : static_init_model, compute_gridcell_value, &
+                             gridcell_components, DART_get_var, get_grid_vertval
 
 implicit none
 

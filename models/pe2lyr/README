@@ -5,6 +5,7 @@
 # DART $Id$
 
 Wed, 28 Apr 2004
+updated 1 Dec 2014
 
 These are the instructions to run pe2lyr model.
 
@@ -12,13 +13,13 @@ I) To build the model and simply test that it runs:
 
 1) Modify "DART/mkmf/mkmf.template" to match your system and compiler
    (copy the closest template in that directory to this name and customize it).
-*  take -r8 out for the portland fortran compiler
 
-2) Go to DART/models/pe2lyr/work and run 'csh ./workshop_setup.csh'
+2) Go to DART/models/pe2lyr/work and run 'csh ./quickbuild.csh'
    This creates make files and runs make to create an assortment of
-   executables.  It also runs 'perfect_model_obs' and 'filter' before exiting.
-   These use an existing obs_seq.in file which contains 10 observations and
-   runs quickly for testing.
+   executables.  
+
+3) You can run 'perfect_model_obs' and 'filter' which use an existing obs_seq.in
+   file which contains 10 observations for quick testing.
 
 
 II) To run an experiment with the existing grid size and with a 100 day spinup:
@@ -31,7 +32,7 @@ III) To spin up a different grid size, or to spin up the state for other than
 
 0) To change grid size, edit DART/models/pe2lyr/model_mod.f90 and include one of
    the 3 existing 'resoltXX.h' files.  cd into 'work' and rebuild the 
-   executables by running 'csh ./workshop_setup.csh'
+   executables by running 'csh ./quickbuild.csh'
 
 1) Generate a single identity observation by running ./create_obs_sequence
    and use the following inputs when prompted:
@@ -40,7 +41,7 @@ III) To spin up a different grid size, or to spin up the state for other than
      # copies of data:  0
      # quality control:  0
      -1 to quit:  1
-     var type:   -30
+     obs type:  -30
      time:   0 0
      error var:   1000000
      input filename:  set_def.one_identity_obs
@@ -110,7 +111,7 @@ III) To spin up a different grid size, or to spin up the state for other than
       inf_flavor = 0, 0
 
 8) Run ./filter to generate 80 ensembles, perturbed from the single 
-   perfect_restart file.   This step also takes a while.
+   perfect_ics file.   This step also takes a while.
 
 9) Examine the ensemble spread by using 'ncview Prior_Diag.nc' and examining 
     copy 2 of the u, v, and z fields.
@@ -150,6 +151,6 @@ can be used as the basis of further experiments.
     change obs_sequence_file_name = "obs_seq.out_151" for &filter_nml
     in input.nml
 
-12) repeat step 7 and 8 with cutoff=0.25, inf_flavor=3, 0, inf_initial=1.01,
+12) repeat step 7 and 8 with cutoff=0.25, inf_flavor=2, 0, inf_initial=1.01,
     start_from_restart=true.
 

@@ -78,7 +78,7 @@ set block = no
 # then set commline to 'yes'.  otherwise, set the year, month, and days 
 # directly in the variables below.
 
-set commline = no
+set commline = yes
 
 if ($commline == 'yes') then
   set year     = $argv[1]

@@ -62,14 +62,15 @@ subroutine get_args_from_string(argline, argcount, argwords)
 ! inword is a logical which toggles when inside a word or not
 ! maxw are the max number of words, defined by what the caller passes in
 ! maxl is the max length of any one word, again defined by the size of the
-!  in coming array.
+!  incoming array.
+
 integer :: firstc, finalc, thisc
 logical :: inword
 integer :: maxw, maxl
 integer :: wordlen
 
 ! error handling
-character(len=128) :: msgstring
+character(len=256) :: msgstring, msgstring2
 
 
 ! maxw is max number of arg 'words' allowed
@@ -134,7 +135,8 @@ endif
 
 if (wordlen > maxl) then
    write(msgstring,*) 'one or more args longer than max length allowed by calling code, ', maxl
-   call error_handler(E_ERR,'get_args_from_string',msgstring, source,revision,revdate)
+   write(msgstring2,*) 'max string length is ', wordlen
+   call error_handler(E_ERR,'get_args_from_string',msgstring, source,revision,revdate,text2=msgstring2)
 endif
 
 end subroutine 

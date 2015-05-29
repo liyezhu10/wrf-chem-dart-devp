@@ -32,7 +32,7 @@ use spharmt_mod, only : sphere, getvrtdiv, spharm, spharmt_init, getuv
 implicit none
 private
 
-include "resolt31.h"
+include "resolt63.h"
 
 public :: get_model_size, &
           adv_1step, &
@@ -62,7 +62,7 @@ type(modelvars) :: model_dat
 type(sphere)    :: sphere_dat
 character(len=129) :: errstring
 
-integer  :: levs(2)
+integer  :: levs(nlevs)
 real :: lons(nlons), lats(nlats)
 
 contains

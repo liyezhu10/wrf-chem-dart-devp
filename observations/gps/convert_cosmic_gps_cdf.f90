@@ -4,6 +4,20 @@
 !
 ! $Id$
 
+! FIXME:  from the FAQ web page here:
+!  https://wiki.ucar.edu/display/cosmic/CDAAC+Data+Users+FAQ
+! apparently we need to add support for a global 'bad' attribute':
+!
+! Question: I am seeing negative refractivity or other bad values in some 
+!  atmPrf profiles with COSMIC2013 and new COSMIC profiles, what is going on?
+!
+! Answer:  Starting with the COSMIC2013 reprocessing we do not exclude profiles 
+!  that failed the QC from our archives.  You must check the netcdf global 
+!  attribute  :bad and exclude any atmPrf files where bad = 1 for general research.     
+!
+! it sounds like this applies to the entire profile.
+!
+
 program convert_cosmic_gps_cdf
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

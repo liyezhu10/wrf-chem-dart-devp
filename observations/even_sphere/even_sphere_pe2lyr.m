@@ -35,9 +35,12 @@ x(1:n) = 0;
 y(1:n) = 0;
 z(1:n) = 0;
 
-% Total number of observations at single time is levels*n*3
-num_obs = size(levels, 2) * n * 3;
+% Total number of observations at single time is nlevels
+% times ntypes times number of different locations.
+num_obs = size(levels, 2) * 3 * n;
  
+% the magic happens here - compute x,y,z evenly spaced
+% on the sphere.
 inc = pi * (3 - sqrt(5));
 off = 2 / n;
 for k = 1:n
@@ -109,7 +112,7 @@ for hloc = 1:n
          fprintf(fid, '%6.2f\n', dlat(hloc));
          % Now the date and time
          fprintf(fid, '%5i %3i %3i %3i %2i %2i \n', year, month, day, hour, 0, 0);
-         % Finally, the error variance, 1 for temperature, 4 for winds
+         % Finally, the error variance, 1 deg for temperature, 4 m/s for winds
          if(field == 1)
             fprintf(fid, '%2i\n', 1);
          else

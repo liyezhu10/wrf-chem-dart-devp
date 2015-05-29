@@ -34,13 +34,13 @@
 ! time step info
 ! istpday=72 works for t31
 
- integer, parameter :: istpday = 72*4
+ integer, parameter :: istpday = 4*72
  real, parameter :: dt = 86400./istpday
 
 ! resolution info
 
  integer, parameter :: ntrunc = 127
- integer, parameter :: nlons = 96*4
+ integer, parameter :: nlons = 4*96
  integer, parameter :: nlats = nlons/2
  integer, parameter :: nlevs = 2
  integer, parameter :: model_size = 2*3*nlats*nlons

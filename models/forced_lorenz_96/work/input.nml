@@ -117,7 +117,7 @@
 
 &model_nml
    num_state_vars    = 40,
-   forcing           = 8.00,
+   forcing           = 8.0,
    delta_t           = 0.05,
    time_step_days    = 0,
    time_step_seconds = 3600,

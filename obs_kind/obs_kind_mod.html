@@ -60,52 +60,52 @@ allows users to selectively assimilate, evaluate, or ignore them.
 <P>
 Generic kinds are associated with an observation type or with a model
 state variable. An example kind is 
-<em class="unix">KIND_U_WIND_COMPONENT</em>. 
+<em class=unix>KIND_U_WIND_COMPONENT</em>. 
 Multiple different specific observation
 types can be associated with this generic kind, for instance 
-<em class="unix">RADIOSONDE_U_WIND_COMPONENT</em>,
-<em class="unix">ACARS_U_WIND_COMPONENT</em>, and
-<em class="unix">SAT_U_WIND_COMPONENT</em>. 
+<em class=unix>RADIOSONDE_U_WIND_COMPONENT</em>,
+<em class=unix>ACARS_U_WIND_COMPONENT</em>, and
+<em class=unix>SAT_U_WIND_COMPONENT</em>. 
 Generic kinds are
 defined via an integer parameter statement at the start of this module. As
 new generic kinds are needed they are added to this list. Generic kind
 integer parameters are required to start with 
-<em class="unix">KIND_</em> and observation types
-are NOT allowed to start with <em class="unix">KIND_</em>.
+<em class=unix>KIND_</em> and observation types
+are NOT allowed to start with <em class=unix>KIND_</em>.
 </P> <P>
 Typically kinds are used by 
-model-interface files <em class="file">models/xx/model_mod.f90</em>,
-observation forward operator files <em class="file">obs_def/obs_def_xx_mod.f90</em>,
-and observation converter programs <em class="file">observations/xx/xx.f90</em>.
+model-interface files <em class=file>models/xx/model_mod.f90</em>,
+observation forward operator files <em class=file>obs_def/obs_def_xx_mod.f90</em>,
+and observation converter programs <em class=file>observations/xx/xx.f90</em>.
 </P> <P>
 The obs_kind module being described here is created by the program
-<em class="file">preprocess</em> from two kinds of input files. 
+<em class=file>preprocess</em> from two kinds of input files. 
 First, a DEFAULT obs_kind module (normally called 
-<em class="file">DEFAULT_obs_kind_mod.F90</em> and documented in this
+<em class=file>DEFAULT_obs_kind_mod.F90</em> and documented in this
 directory) is used as a template into which the preprocessor incorporates
 information from zero or more special obs_def modules (such as
-<em class="file">obs_def_1d_state_mod.f90</em> or 
-<em class="file">obs_def_reanalysis_bufr_mod.f90</em>) which are
+<em class=file>obs_def_1d_state_mod.f90</em> or 
+<em class=file>obs_def_reanalysis_bufr_mod.f90</em>) which are
 documented in the obs_def directory. 
 If no special obs_def files are included
 in the preprocessor namelist, a minimal 
-<em class="file">obs_kind_mod.f90</em> is created which can
+<em class=file>obs_kind_mod.f90</em> is created which can
 only support identity forward observation operators.
 </P> <P>
 When making code changes
 remember to edit only the template file (normally
-<em class="file">DEFAULT_obs_kind_mod.F90</em>) and not
-the <em class="file">obs_kind_mod.f90</em> file directly.
+<em class=file>DEFAULT_obs_kind_mod.F90</em>) and not
+the <em class=file>obs_kind_mod.f90</em> file directly.
 All of the build scripts in DART remove the existing
 obs_kind and obs_def modules and regenerate them using
-the <em class="file">preprocess</em> program and any
+the <em class=file>preprocess</em> program and any
 direct changes will be lost.
 </P>
 
 <H4>Adding Additional Kinds</H4>
 <P>
 To add an additional kind, edit the
-<em class="file">obs_kind/DEFAULT_obs_kind_mod.F90</em> file and
+<em class=file>obs_kind/DEFAULT_obs_kind_mod.F90</em> file and
 add a unique number to the list of generic kinds at the top of the file.
 Then find the 
 <em class=unix>obs_kind_names</em> initializer statements
@@ -114,8 +114,8 @@ and add an entry with the same index to define the string
 associated with the parameter.  The names must be identical.
 If the number is larger than the current maximum,
 increase the value of <em class=unix>max_obs_generic</em>.
-Run the <em class="file">preprocess</em> program to generate the
-<em class="file">obs_kind/obs_kind_mod.f90</em> file which will then be
+Run the <em class=file>preprocess</em> program to generate the
+<em class=file>obs_kind/obs_kind_mod.f90</em> file which will then be
 used by the rest of the DART system.
 </P> 
 <H4>Implementation Details</H4>
@@ -124,7 +124,7 @@ The obs_kind module contains an automatically-generated list
 of integer parameters, derived from the obs_def files, an
 integer parameter <em class=unix>max_obs_kinds</em>, and
 an automatically-generated list of initializers for the
-<em class="unix">obs_type_type</em> derived type that 
+<em class=unix>obs_type_type</em> derived type that 
 defines the details of each observation type that has been created by the 
 preprocess program. Each entry contains the integer index of the
 observation type, the string name of the observation type
@@ -133,9 +133,9 @@ associated generic kind, and two logicals indicating whether this
 observation type is to be assimilated, evaluated only (forward operator is
 computed but not assimilated), or ignored entirely. The logicals
 initially default to .false. and are set to .true. via the 
-<em class="unix">&amp;obs_kind_nml</em> namelist.
+<em class=unix>&amp;obs_kind_nml</em> namelist.
 A second derived type
-<em class="unix">obs_kind_type</em> maps generic kind
+<em class=unix>obs_kind_type</em> maps generic kind
 parameters to the equivalent string names.
 </P>
 <br>
@@ -145,7 +145,7 @@ parameters to the equivalent string names.
 <!--==================================================================-->
 
 <A NAME="Namelist"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>NAMELIST</H2>
 <P>
 This namelist is read from the file <em class=file>input.nml</em>.
@@ -224,7 +224,7 @@ compute the forward operators for surface pressure obs.
 <!--==================================================================-->
 
 <A NAME="Modules"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>MODULES USED</H2>
 <PRE>
 utilities_mod
@@ -238,7 +238,7 @@ utilities_mod
 <!--==================================================================-->
 
 <A NAME="Interface"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>PUBLIC INTERFACES</H2>
 
 <TABLE>
@@ -283,7 +283,7 @@ utilities_mod
 <P>
 The total number of available observation types in the obs_type_type table.
 This value is added by the preprocess program and depends on which
-<em class="file">obs_def_xxx_mod.f90</em> files are listed in the
+<em class=file>obs_def_xxx_mod.f90</em> files are listed in the
 <a href="../preprocess/preprocess.html#Namelist">&amp;preprocess_nml</a> namelist.
 (Note that in spite of the name, this is the number of specific types,
 e.g. RADIOSONDE_TEMPERATURE, AIRCRAFT_SPECIFIC_HUMIDITY) and not the number
@@ -369,8 +369,8 @@ the preprocess program.
 <div class=routine>
 <em class=call> var = get_obs_kind_name(obs_kind_ind) </em>
 <pre>
-character(len=32)              :: <em class=code>get_obs_kind_name</em>
-integer, intent(in)            :: <em class=code>obs_kind_ind</em>
+character(len=paramname_length) :: <em class=code>get_obs_kind_name</em>
+integer, intent(in)             :: <em class=code>obs_kind_ind</em>
 </pre>
 </div>
 
@@ -402,8 +402,8 @@ associated with the integer index.
 <div class=routine>
 <em class=call> var = get_raw_obs_kind_name(obs_kind_ind) </em>
 <pre>
-character(len=32)              :: <em class=code>get_raw_obs_kind_name</em>
-integer, intent(in)            :: <em class=code>obs_kind_ind</em>
+character(len=paramname_length) :: <em class=code>get_raw_obs_kind_name</em>
+integer, intent(in)             :: <em class=code>obs_kind_ind</em>
 </pre>
 </div>
 
@@ -435,8 +435,8 @@ associated with the integer index.
 <div class=routine>
 <em class=call> var = get_obs_kind_index(obs_kind_name) </em>
 <pre>
-integer                       :: <em class=code>get_obs_kind_index</em>
-character(len=32), intent(in) :: <em class=code>obs_kind_name</em>
+integer                                     :: <em class=code>get_obs_kind_index</em>
+character(len=paramname_length), intent(in) :: <em class=code>obs_kind_name</em>
 </pre>
 </div>
 
@@ -471,8 +471,8 @@ as the name string.
 <div class=routine>
 <em class=call> var = get_raw_obs_kind_index(obs_kind_name) </em>
 <pre>
-integer                       :: <em class=code>get_raw_obs_kind_index</em>
-character(len=32), intent(in) :: <em class=code>obs_kind_name</em>
+integer                                     :: <em class=code>get_raw_obs_kind_index</em>
+character(len=paramname_length), intent(in) :: <em class=code>obs_kind_name</em>
 </pre>
 </div>
 
@@ -824,7 +824,7 @@ in the obs_type_type table.
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
 <UL>
 <LI>&amp;obs_kind_nml in input.nml
@@ -837,7 +837,7 @@ in the obs_type_type table.
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
 <ul>
 <li> none </li>
@@ -849,7 +849,7 @@ in the obs_type_type table.
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>ERROR CODES and CONDITIONS</H2>
 <div class=errors>
 <TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
@@ -894,7 +894,7 @@ in the obs_type_type table.
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
 The terminology has evolved since the initial version of this
@@ -931,7 +931,7 @@ select to assimilate and evaluate these as they choose.
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<div class=top>[<a href="#">top</a>]</div><hr />
 <H2>Terms of Use</H2>
 
 <P>

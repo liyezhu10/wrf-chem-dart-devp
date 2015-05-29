@@ -19,3 +19,9 @@ defined which matched these fields.  See tc_to_obs.f90 and
 look for the 'select case' section where you can add new
 sections to read in the data of interest.
 
+Here is a link to a PDF document describing another
+variant of the formatting:
+
+http://www.nhc.noaa.gov/data/hurdat/hurdat2-format-atlantic.pdf
+
+

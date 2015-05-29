@@ -135,7 +135,8 @@ prematurely terminating the namelist.
    polar                       = .false.,
    periodic_x                  = .false.,
    periodic_y                  = .false.,
-   scm                         = .false.  
+   scm                         = .false.,
+   allow_perturbed_ics         = .false.
 /
 
 # Notes for model_nml:
@@ -370,6 +371,33 @@ circulation calculation is done when searching for the vortex center.
            <LI>3 = height (in meters)</LI>
            <LI>4 = scale height (unitless)</LI>
        </UL>
+</TD></TR>
+    
+<TR><TD> allow_perturbed_ics TD>
+    <TD> logical </TD>
+    <TD>Generally we recommend using parts of the WRF-Var system to
+generate an ensemble of initial conditions for an assimilation experiment.
+However, it is possible to start with a single model state, add small
+random perturbations to the fields, and then run the model in free-forecast
+mode (without assimilating observations) until coherent features have
+developed and the ensemble members have enough spread.  If this is the
+method you desire, set 'allow_perturbed_ics' to .true. to enable the
+coded in the WRF model_mod that perturbs an initial ensemble member.
+The perturbations are done field by field (e.g. temperature, u wind,
+v wind, humidity, etc).  The noise added to each item in that field
+is a draw from a random gaussian distribution with a mean of the original
+value and a spread of the &amp;ensemble_manager_nml :: perturbation_amplitude
+namelist item.  The resulting value is checked against the original data
+minimum and maximum of that field, and new values are not allowed to be
+set outside the original range.  This preserves fields which are restricted
+to a value between 0 and 1, for example, or fields whose values must
+be a positive number.  If this namelist item is left .false. you will
+get an error when trying to start from a single ensemble member.
+Note that to start 'filter' in this mode, you must set
+&amp;filter_nml :: start_from_restart = .false. , which isn't intuitive
+since you do have to have a single restart file.  This namelist item
+controls whether you must have N restart files, where N is your ensemble
+size, or just a single restart file.
 </TD></TR>
     
 </TBODY> 
@@ -843,7 +871,7 @@ real(r8),             intent(in)    :: <em class=code>maxdist</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_maxdist_init">
+<A HREF="../../location/threed_sphere/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -868,7 +896,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -901,7 +929,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 <P>
 Calls the 3-D sphere locations module to get a list of potentially
 close state vector points, and again for unassimilated observations.
-See <A HREF="../../location/threed-sphere/location_mod.html#get_close_obs">
+See <A HREF="../../location/threed_sphere/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of the locations module
 version of this code.  Then,
 if vertical localization is enabled, this code converts all vertical

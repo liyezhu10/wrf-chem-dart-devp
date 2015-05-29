@@ -332,7 +332,7 @@ else
 
 endif
 
-write(msgstring, '(A, i8)') 'Model size/restart data length =', model_size
+write(msgstring, '(A, I10)') 'Model size/restart data length =', model_size
 call error_handler(E_MSG,'',msgstring)
 
 if (old_advance_time .ne. set_time_missing()) then
@@ -367,7 +367,7 @@ subroutine print_info(model_size, has_cal, data_time, is_advance, advance_time)
 
 call error_handler(E_MSG,'','')
 
-write(msgstring, '(A, i8)') 'Model size/restart data length =', model_size
+write(msgstring, '(A, I10)') 'Model size/restart data length =', model_size
 call error_handler(E_MSG,'',msgstring)
 
 call error_handler(E_MSG,'','')

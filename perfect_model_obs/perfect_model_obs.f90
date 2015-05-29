@@ -8,7 +8,7 @@ program perfect_model_obs
 
 ! Program to build an obs_sequence file from simulated observations.
 
-use        types_mod,     only : r8, metadatalength
+use        types_mod,     only : r8, metadatalength, missing_r8
 use    utilities_mod,     only : initialize_utilities, register_module, error_handler, &
                                  find_namelist_in_file, check_namelist_read,           &
                                  E_ERR, E_MSG, E_DBG, nmlfileunit, timestamp,          &
@@ -16,12 +16,12 @@ use    utilities_mod,     only : initialize_utilities, register_module, error_ha
                                  open_file, close_file, finalize_utilities
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), print_time,   &
                                  generate_seed
-use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,                 &
-                                 get_obs_from_key, set_copy_meta_data, get_obs_def,         &
-                                 get_time_range_keys, set_obs_values, set_qc, set_obs,      &
-                                 write_obs_seq, get_num_obs, init_obs, assignment(=),       &
-                                 static_init_obs_sequence, get_num_qc, read_obs_seq_header, &
-                                 set_qc_meta_data, get_expected_obs, delete_seq_head,       &
+use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type, get_qc,          &
+                                 get_obs_from_key, set_copy_meta_data, get_obs_def,          &
+                                 get_time_range_keys, set_obs_values, set_qc, set_obs,       &
+                                 write_obs_seq, get_num_obs, init_obs, assignment(=),        &
+                                 static_init_obs_sequence, get_num_qc, read_obs_seq_header,  &
+                                 set_qc_meta_data, get_expected_obs, delete_seq_head,        &
                                  delete_seq_tail, destroy_obs, destroy_obs_sequence
 
 use      obs_def_mod,     only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
@@ -170,7 +170,9 @@ call read_obs_seq_header(obs_seq_in_file_name, cnum_copies, cnum_qc, cnum_obs, c
 additional_copies = 2 - cnum_copies
 if(additional_copies < 0) additional_copies = 0
 
-! Want to have a qc field available in case forward op wont work
+! Want to have a qc field available in case forward op does not succeed.
+! If one or more qc fields exist, the first one will be overwritten
+! in case of failure.
 if(cnum_qc == 0) then
    additional_qc = 1
 else
@@ -353,38 +355,39 @@ AdvanceTime: do
       call get_obs_from_key(seq, keys(j), obs)
       call get_obs_def(obs, obs_def)
 
-      ! If observation is not being evaluated or assimilated, skip it
-      ! Ends up setting a 1000 qc field so observation is not used again.
-      if(istatus == 0 .and. (assimilate_this_ob .or. evaluate_this_ob)) then
+      ! set different qc codes to indicate why a FO failed.
+      ! (the strategy is to use the dart QC codes + 1000)
+
+      ! are we ignoring this ob type intentionally?
+      if (.not. (assimilate_this_ob .or. evaluate_this_ob)) then
+         obs_value(1) = true_obs(1)
+         ! still add in noise, but mark with a special qc?
+         qc(1) = 1005.0_r8
+
+      else if ((istatus /= 0) .or. (true_obs(1) == missing_r8)) then
+         obs_value(1) = true_obs(1)
+         qc(1) = 1004.0_r8
+      
+         ! if failed forward op logging requested then write out value
+         if(output_forward_op_errors) write(forward_unit, *) keys(j), istatus
+
+      else 
          obs_value(1) = random_gaussian(random_seq, true_obs(1), &
             sqrt(get_obs_def_error_variance(obs_def)))
 
-         ! Set qc to 0 if none existed before
-         if(cnum_qc == 0) then
+         ! if this obs came in with an existing qc, leave it alone.
+         ! otherwise set it to 0
+         if (cnum_qc > 0) then
+            call get_qc(obs, qc, 1)
+         else
             qc(1) = 0.0_r8
-            call set_qc(obs, qc, 1)
          endif
-      else
-         obs_value(1) = true_obs(1)
-         qc(1) = 1000.0_r8
-         call set_qc(obs, qc, 1)
 
-         ! FIXME: we could set different qc codes, like 1004, 1005, to
-         ! indicate why this obs isn't being processed - separate failed 
-         ! forward operators from those types not on the assim or eval lists.
-         ! the values 4, 5, etc could match the dart QC values + 1000.
-
-         ! if failed forward op logging requested, make sure we're
-         ! only writing out obs with real errors and not those that
-         ! end up in this code section because their type isn't in the namelist.
-         if(output_forward_op_errors) then
-            if ((istatus /= 0) .and. (assimilate_this_ob .or. evaluate_this_ob)) &
-               write(forward_unit, *) keys(j), istatus
-         endif
       endif
 
       call set_obs_values(obs, obs_value, 1)
       call set_obs_values(obs, true_obs, 2)
+      call set_qc(obs, qc, 1)
 
       ! Insert the observations into the sequence first copy
       call set_obs(seq, obs, keys(j))

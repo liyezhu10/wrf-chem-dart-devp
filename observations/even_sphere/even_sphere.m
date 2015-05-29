@@ -65,6 +65,9 @@ for k = 1:n
    dlon(k) = rad2deg(lon(k));
    dlat(k) = rad2deg(lat(k));
 end
+bob = [dlon(:), dlat(:)];
+whos bob
+bob
 
 % Need to generate output for driving create_obs_sequence
 fid = fopen('even_create_input', 'w');

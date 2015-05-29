@@ -6,7 +6,7 @@
 
 module model_mod
 
-use        types_mod, only : r8
+use        types_mod, only : r8, missing_r8
 use time_manager_mod, only : time_type, set_time
 use     location_mod, only : location_type, set_location, get_location,  &
                              LocationDims, LocationName, LocationLName,  &
@@ -241,7 +241,7 @@ integer,            intent(out) :: istatus
 integer :: lower_index, upper_index, i
 real(r8) :: lctn, lctnfrac
 
-! All forward operators supported
+! the basic forward operator for this model can never fail.
 istatus = 0
 
 ! Convert location to real
@@ -257,36 +257,55 @@ if(upper_index > model_size) upper_index = upper_index - model_size
 lctnfrac = lctn - int(lctn)
 obs_val = (1.0_r8 - lctnfrac) * x(lower_index) + lctnfrac * x(upper_index)
 
-if(1 == 1) return
-
-!!!obs_val = obs_val ** 2
-!!!if(1 == 1) return
-
-! Temporarily add on an observation from the other side of the domain, too
-lower_index = lower_index + model_size / 2
-if(lower_index > model_size) lower_index = lower_index - model_size
-upper_index = upper_index + model_size / 2
-if(upper_index > model_size) upper_index = upper_index - model_size
-obs_val = obs_val + &
-   lctnfrac * x(lower_index) + (1.0_r8 - lctnfrac) * x(upper_index)
-if(1 == 1) return
+return 
 
 
-! Next one does an average over a range of points
-obs_val = 0.0_r8
-lower_index = lower_index - 7
-upper_index = upper_index - 7
-if(lower_index < 1) lower_index = lower_index + model_size
-if(upper_index < 1) upper_index = upper_index + model_size
-
-do i = 1, 15
-   if(lower_index > model_size) lower_index = lower_index - model_size
-   if(upper_index > model_size) upper_index = upper_index - model_size
-   obs_val = obs_val + &
-      (1.0_r8 - lctnfrac) * x(lower_index) + lctnfrac * x(upper_index)
-   lower_index = lower_index + 1
-   upper_index = upper_index + 1
-end do
+! Code below here was used for various experiments with returning
+! a modified forward operator value.
+!
+! ! Test allowing missing values in the model state.  In this case, the
+! ! forward operator can fail.
+! if (x(lower_index) == missing_r8 .or. x(upper_index) == missing_r8) then
+!    obs_val = missing_r8
+!    istatus = 1
+! else
+!    lctnfrac = lctn - int(lctn)
+!    obs_val = (1.0_r8 - lctnfrac) * x(lower_index) + lctnfrac * x(upper_index)
+! endif
+! return
+!
+!
+! ! squared observation value
+! obs_val = obs_val ** 2
+! return 
+! 
+! ! Temporarily add on an observation from the other side of the domain, too
+! ! This forward operator value is less accurate, more noisy.
+! lower_index = lower_index + model_size / 2
+! if(lower_index > model_size) lower_index = lower_index - model_size
+! upper_index = upper_index + model_size / 2
+! if(upper_index > model_size) upper_index = upper_index - model_size
+! obs_val = obs_val + &
+!    lctnfrac * x(lower_index) + (1.0_r8 - lctnfrac) * x(upper_index)
+! return 
+! 
+! 
+! ! Average over a range of nearby points
+! obs_val = 0.0_r8
+! lower_index = lower_index - 7
+! upper_index = upper_index - 7
+! if(lower_index < 1) lower_index = lower_index + model_size
+! if(upper_index < 1) upper_index = upper_index + model_size
+! 
+! do i = 1, 15
+!    if(lower_index > model_size) lower_index = lower_index - model_size
+!    if(upper_index > model_size) upper_index = upper_index - model_size
+!    obs_val = obs_val + &
+!       (1.0_r8 - lctnfrac) * x(lower_index) + lctnfrac * x(upper_index)
+!    lower_index = lower_index + 1
+!    upper_index = upper_index + 1
+! end do
+! return 
 
 end subroutine model_interpolate
 

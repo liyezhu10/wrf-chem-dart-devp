@@ -406,8 +406,13 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revision",revision), &
                           "nc_write_model_atts", "put_att model_revision")
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revdate" ,revdate), &
                           "nc_write_model_atts", "put_att model_revdate")
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","template"), &
+call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","FIXME HERE - MAKE THIS YOUR OWN NAME"), &
                           "nc_write_model_atts", "put_att model")
+
+! the matlab diagnostic routine CheckModel.m uses the model name to decide
+! which model created the diagnostic file. when you want to use the diagnostic
+! routines you will need to add a new section to DART/matlab/CheckModel.m for
+! this model.  it will key off the string in the global "model" attribute above.
 
 !-------------------------------------------------------------------------------
 ! Here is the extensible part. The simplest scenario is to output the state vector,

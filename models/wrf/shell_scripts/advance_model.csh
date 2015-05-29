@@ -254,9 +254,9 @@ while($state_copy <= $num_states)
    if ( $SPEC_BC > 0 ) then
 
       if ( $USE_WRFVAR ) then
-         set bdyfiles = `ls ${CENTRALDIR}/WRF/wrfbdy_d01_*_mean`
+         set bdyfiles = `ls -1 ${CENTRALDIR}/WRF/wrfbdy_d01_*_mean`
       else
-         set bdyfiles = `ls ${CENTRALDIR}/WRF/wrfbdy_d01_*_${ensemble_member} | grep -v mean`
+         set bdyfiles = `ls -1 ${CENTRALDIR}/WRF/wrfbdy_d01_*_${ensemble_member} | grep -v mean`
       endif
 
       set keylist = ()
@@ -267,7 +267,7 @@ while($state_copy <= $num_states)
          set keylist = ( $keylist $key )
       end
 
-      set keys = `echo $keylist | fmt -1 | sort -n`
+      set keys = `echo $keylist | sort -n`
 
    else  #  idealized WRF with non-specified BCs
 

@@ -88,6 +88,9 @@
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
    print_every_nth_obs             = 0,
+   adjust_obs_impact               = 'false',
+   obs_impact_filename             = 'bob.txt' 
+   allow_any_impact_value          = .false.
    /
 
    #output_localization_diagnostics = .false.,
@@ -116,6 +119,8 @@
                               '../../../obs_def/obs_def_gps_mod.f90',
                               '../../../obs_def/obs_def_vortex_mod.f90',
                               '../../../obs_def/obs_def_gts_mod.f90',
+                              '../../../obs_def/obs_def_eval_mod.f90',
+                              '../../../obs_def/obs_def_tpw_mod.f90',
    /
 
 &obs_kind_nml
@@ -125,6 +130,7 @@
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
    evaluate_these_obs_types   = 'RADIOSONDE_SPECIFIC_HUMIDITY',
+                                'EVAL_TEMPERATURE'
    /
 
 # Notes for obs_def_radar_mod_nml:
@@ -300,7 +306,7 @@
    /
    
 &obs_seq_to_netcdf_nml  
-   obs_sequence_name = 'obs_seq.final',
+   obs_sequence_name = 'obs_seq.upper_air_radiosonde', 
    obs_sequence_list = '',
    append_to_netcdf  = .false.,
    lonlim1    =    0.0,
@@ -337,13 +343,18 @@
 # from the obs_seq_coverage utility.
 
 &obs_selection_nml
-   filename_seq          = 'obs_seq.out', 
+   filename_seq          = 'obs_seq.out1', 
    filename_seq_list     = '', 
    filename_out          = 'obs_seq.processed', 
-   selections_file       = 'obsdef_mask.txt', 
+   selections_file       = 'lonlat_mask.txt', 
    selections_is_obs_seq = .false.,
+   selections_is_text    = .true.
+   latlon_tolerance      = 28.0 
    print_only            = .false., 
    calendar              = 'gregorian',
+   match_vertical        = .false.
+   exclude_selections    = .true.
+   ignore_time           = .true.
    /
 
 &obs_seq_verify_nml
@@ -374,22 +385,34 @@
    new_advance_secs             = -1,
    /
 
+   #filename_seq      = 'obs_seq20110601',
+   #filename_seq      = 'obs_seq20090601',
+   #filename_seq      = 'AIRS.20090601.out'
+
 &obs_sequence_tool_nml
-   num_input_files   = 1, 
-   filename_seq      = 'obs_seq.out',
-   filename_out      = 'obs_seq.processed', 
-   first_obs_days    = -1, 
-   first_obs_seconds = -1, 
-   last_obs_days     = -1, 
-   last_obs_seconds  = -1, 
-   obs_types         = '', 
-   keep_types        = .false., 
-   print_only        = .false., 
-   min_lat           = -90.0, 
-   max_lat           =  90.0, 
-   min_lon           =   0.0, 
-   max_lon           = 360.0,
-   /
+   filename_seq      = '/Users/nancy/Desktop/obs_seq.out',
+   print_only        = .true., 
+/
+  # filename_out      = 'obs_seq.out1', 
+  # obs_types         = 'LAND_SFC_ALTIMETER',
+  #                     'AIRCRAFT_U_WIND_COMPONENT',
+  #                     'AIRCRAFT_V_WIND_COMPONENT',
+  #                     'AIRCRAFT_TEMPERATURE',
+  #                     'MARINE_SFC_U_WIND_COMPONENT',
+  #                     'MARINE_SFC_V_WIND_COMPONENT',
+  #                     'MARINE_SFC_TEMPERATURE',
+  #                     'MARINE_SFC_SPECIFIC_HUMIDITY',
+  #                     'SAT_U_WIND_COMPONENT',
+  #                     'SAT_V_WIND_COMPONENT',
+  #                     'RADIOSONDE_SURFACE_ALTIMETER',
+  #                     'MARINE_SFC_ALTIMETER',
+  #                     'LAND_SFC_ALTIMETER',
+  # keep_types        = .false.
+  # min_lat           = -90.0, 
+  # max_lat           =  90.0, 
+  # min_lon           =   0.0, 
+  # max_lon           = 360.0,
+  # 
 
 &replace_wrf_fields_nml
    debug = .false.,
@@ -463,3 +486,9 @@
 !  trop_cyclone_extra       = 'obs_seq.tc'
 
 
+
+&obs_impact_tool_nml
+  input_filename         = 'crosstest'
+  output_filename        = 'bob.txt'
+  debug                  = .true.
+  /

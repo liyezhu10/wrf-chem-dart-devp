@@ -40,7 +40,7 @@
 ! resolution info
 
  integer, parameter :: ntrunc = 63  
- integer, parameter :: nlons = 192
+ integer, parameter :: nlons = 2*96
  integer, parameter :: nlats = nlons/2
  integer, parameter :: nlevs = 2
  integer, parameter :: model_size = 2*3*nlats*nlons

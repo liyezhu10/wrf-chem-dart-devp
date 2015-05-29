@@ -306,6 +306,9 @@ prematurely terminating the namelist.
    allow_missing_in_clm            = .false.
    special_localization_obs_types  = "",
    special_localization_cutoffs    = -1,
+   adjust_obs_impact               = .false.,
+   obs_impact_filename             = '',
+   allow_any_impact_values         = .false.
 /
 </pre>
 </div>
@@ -417,7 +420,7 @@ so the size of the file will depend on the number of changed cutoffs.
 
 <TR>
  <TD> localization_diagnostics_file </TD>
- <TD> character(len=129) </TD>
+ <TD> character(len=256) </TD>
  <TD> Filename for the localization diagnostics information.
 This file will be opened in append mode, so new information will be written
 at the end of any existing data.
@@ -461,11 +464,9 @@ or to verify progress is being made in cases with suspected problems.
 <TR>
  <TD> close_obs_caching </TD>
  <TD> logical </TD>
- <TD> Should remain .TRUE. unless you are using
-specialized_localization_cutoffs.  In that case to get accurate
-results, set it to .FALSE..  This also needs to be .FALSE. if
-you have a get_close_obs() routine in your model_mod file
-that uses the types/kinds of the obs to adjust the distances.
+ <TD> Should remain .TRUE. unless your model_mod has added a
+specialized get_close_obs() routine which uses the types/kinds
+of the obs and state vector to adjust the distances.
  </TD> </TR>
 
 
@@ -482,6 +483,43 @@ support for this option; the CLM model has been tested and is known
 to work.  Other users with models which would benefit from setting missing
 values in the state vector are encouraged to contact
 <a href="mailto:dart@ucar.edu">dart at ucar.edu</a>.
+ </TD> </TR>
+
+   adjust_obs_impact               = .false.,
+   obs_impact_filename             = '',
+   allow_any_impact_values         = .false.
+
+<TR>
+ <TD> adjust_obs_impact </TD>
+ <TD> logical </TD>
+ <TD> Should not be needed for normal assimilation cases.  The filter
+code computes the correlation between observations and state variables
+automatically and adjusts the impact of observations accordingly.
+However, if the model has a non-dynamic response for different parts
+of the state vector it may be necessary to augment the automatically
+computed correlations.  If this is set to TRUE, an additional table
+must be specified that explicitly sets an additional factor for
+the impact of specific types of observations on different parts
+of the state vector.  See the documentation for the
+<a href="../utilities/obs_impact_tool.html"> obs_impact_tool</a> for more
+information on how to construct the impact table.
+ </TD> </TR>
+
+<TR>
+ <TD> obs_impact_filename </TD>
+ <TD> character(len=256) </TD>
+ <TD> If <em class=code>adjust_obs_impact</em> is TRUE, the name of
+the text file that contains the impact table values.  The format of
+this table is described in the documentation for the
+<a href="../utilities/obs_impact_tool.html"> obs_impact_tool</a>.
+ </TD> </TR>
+
+<TR>
+ <TD> allow_any_impact_values </TD>
+ <TD> logical </TD>
+ <TD> By default, the impact values must be between 0.0 and 1.0, 
+inclusive.  If TRUE the values of the impacts can be any
+numeric value.  Use with care.
  </TD> </TR>
 
 </TBODY>

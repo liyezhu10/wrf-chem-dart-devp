@@ -1,5 +1,5 @@
 &perfect_model_obs_nml
-   start_from_restart       = .true.,
+   start_from_restart       = .false.,
    output_restart           = .true.,
    async                    = 0,
    init_time_days           = 0,
@@ -12,7 +12,7 @@
    restart_in_file_name     = "perfect_ics",
    restart_out_file_name    = "perfect_restart",
    obs_seq_in_file_name     = "obs_seq.in",
-   obs_seq_out_file_name    = "obs_seq.out",
+   obs_seq_out_file_name    = "obs_seq.outX",
    adv_ens_command          = "../shell_scripts/advance_model.csh",
    trace_execution          = .false.,
    output_timestamps        = .false.,
@@ -25,9 +25,9 @@
    async                    = 0,
    adv_ens_command          = "../shell_scripts/advance_model.csh",
    ens_size                 = 20,
-   start_from_restart       = .true.,
+   start_from_restart       = .false.,
    output_restart           = .true.,
-   obs_sequence_in_name     = "obs_seq.out",
+   obs_sequence_in_name     = "obs_seq.outX",
    obs_sequence_out_name    = "obs_seq.final",
    restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
@@ -42,11 +42,11 @@
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       =  3.0,
-   outlier_threshold        = -1.0,
+   outlier_threshold        =  3.0,
    enable_special_outlier_code = .false.,
    output_forward_op_errors = .false.,
    output_inflation         = .true.,
-   output_timestamps        = .false.,
+   output_timestamps        = .true.,
    trace_execution          = .false.,
    silence                  = .false.,
 
@@ -58,21 +58,35 @@
    inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-   inf_initial                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.6,                     0.0,
-   inf_damping                 = 0.9,                     1.0,
-   inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 1000000.0,               1000000.0,
-   inf_sd_lower_bound          = 0.6,                     0.0,
+   inf_initial                 = 0.1,                     1.0,
+   inf_sd_initial              = 0.01,                     0.6,
+   inf_damping                 = 0.9,                     0.9,
+   inf_lower_bound             = 0.0,                     1.0,
+   inf_upper_bound             = 10.0,                   100.0,
+   inf_sd_lower_bound          = 0.0,                     0.6,
    /
 
 &smoother_nml
    num_lags              = 0,
-   start_from_restart    = .false.,
+   start_from_restart    = .true.,
    output_restart        = .true.,
    restart_in_file_name  = 'ics',
    restart_out_file_name = 'restart',
+   advancing_model_outside_program = .true.,
    /
+
+&integrate_model_nml
+   ens_size                    = 20, 
+   input_file_name             = 'filter_restart', 
+   output_file_name            = 'filter_ics', 
+   write_binary_restart_files  = .false.,
+   trace_execution             = .true.,
+   input_is_model_advance_file = .false.,
+   target_days                 = 0,
+   target_seconds              = 28800,
+   single_restart_file_in      = .true.,
+   single_restart_file_out     = .false.,
+/
 
 &ensemble_manager_nml
    single_restart_file_in  = .true.,
@@ -89,9 +103,12 @@
    adaptive_localization_threshold = -1,
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 0,
+   print_every_nth_obs             = -1,
    rectangular_quadrature          = .true.,
    gaussian_likelihood_tails       = .false.,
+   adjust_obs_impact               = .true.,
+   obs_impact_filename             = 'bob.txt',
+   allow_any_impact_values         = .true.
    /
 
 &cov_cutoff_nml
@@ -114,7 +131,8 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .false.,
+   write_binary_restart_files = .true.,
+   binary_is_netcdf           = .false.
    netCDF_large_file_support  = .false.,
    /
 
@@ -165,10 +183,21 @@
    gregorian_cal                = .false.
    /
 
+&smoother_file_tool_nml
+   filter_restart_file_name     = "filter_restart",
+   smoother_restart_file_name   = "restart",
+   ens_size                     = 20,
+   num_lags                     = 3,
+   single_restart_file_in       = .false,
+   single_restart_file_out      = .false.,
+   write_binary_restart_files   = .false.,
+   gregorian_cal                = .false.
+   /
+
 &obs_sequence_tool_nml
-   filename_seq      = 'obs1.out', 'obs2.out',
-   filename_seq_list = '',
-   filename_out      = 'obs_seq.combined',
+   filename_seq      = '',
+   filename_seq_list = 'bob',
+   filename_out      = 'bob.out',
    first_obs_days    = -1,
    first_obs_seconds = -1,
    last_obs_days     = -1,
@@ -237,3 +266,12 @@
    verbose    = .true.
    /
 
+&compute_error_nml
+   skip_first_ntimes = 5
+   /
+
+&obs_impact_tool_nml
+  input_filename = 'crosstest',
+  output_filename = 'bob.txt',
+  debug = .true.
+  /

@@ -195,19 +195,23 @@ obsloop: do    ! no end limit - have the loop break when input ends
       if (debug) print *, 'added temperature obs to output seq'
    else
 
-      ! DART usually assimilates wind as 2 separate U and V components
+      ! DART assimilates wind as 2 separate U and V components
       ! instead of trying to assimilate a vector of speed and direction.
-      ! so convert a wind speed & direction into the U and V components
-      ! and create 2 obs for it.  assume vert is in mb or hectopascals,
-      ! convert to pascals.  DART does assume all pressures are in pascals.
-      uwnd = sin(wdir * DEG2RAD) * wspeed
-      vwnd = cos(wdir * DEG2RAD) * wspeed
-      uerr = sin(wdir * DEG2RAD) * werr
-      verr = cos(wdir * DEG2RAD) * werr
+      ! speed is possible to assimilate, but directions are a problem
+      ! when trying to do statistics on numbers that are cyclic (0->360->0)
+      ! so convert into U and V components and create 2 obs for it. 
+      ! direction of 0 means wind comes from north, 90 from east, etc.
+      uwnd = -sin(wdir * DEG2RAD) * wspeed
+      vwnd = -cos(wdir * DEG2RAD) * wspeed
 
-      ! convert hectopascals to pascals.
+      ! assume the wind errors are equally assigned to the U and V components
+      uerr = werr
+      verr = werr
+
+      ! assuming vert is in mb or hectopascals, convert to pascals.
       vert = vert * 100.0_r8
 
+      ! make an obs derived type, and then add it to the sequence
       call create_3d_obs(lat, lon, vert, VERTISPRESSURE, uwnd, &
                          EVAL_U_WIND_COMPONENT, uerr, oday, osec, qc, obs)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
