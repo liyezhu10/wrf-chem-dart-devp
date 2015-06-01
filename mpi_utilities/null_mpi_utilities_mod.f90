@@ -102,12 +102,14 @@ contains
 !-----------------------------------------------------------------------------
 
 !> Initialize the utilities module, and print out a message including the 
-!> program name.
+!> program name.  In this version the optional communicator argument is
+!> completely ignored.
 
-subroutine initialize_mpi_utilities(progname, alternatename)
+subroutine initialize_mpi_utilities(progname, alternatename, communicator)
 
 character(len=*), intent(in), optional :: progname
 character(len=*), intent(in), optional :: alternatename
+integer,          intent(in), optional :: communicator
 
 if ( module_initialized ) then
    ! return without calling the code below multiple times.  Print out a warning each
