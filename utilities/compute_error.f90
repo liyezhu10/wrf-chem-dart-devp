@@ -25,7 +25,10 @@
 !> 
 !> FIXME: the output of this program is human-reader-friendly, but not
 !> easy to parse by another program when run in a script.  make the
-!> output easier to handle in scripting languages.
+!> output easier to handle in scripting languages.  could be implemented
+!> by adding a 'brief' option to the namelist that just prints out the
+!> total error and spread including the 'skip start' value, with a simple 
+!> label and no other info.
 
 module support_routines_mod
 
