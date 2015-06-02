@@ -467,10 +467,10 @@ end subroutine read_transpose
 !> Two stages of collection.
 !> See transpose_write.pdf for explanation of a, k, y.
 !> 
-subroutine transpose_write(state_ens_handle, restart_out_file_name, domain, dart_index, isprior)
+subroutine transpose_write(state_ens_handle, num_extras, domain, dart_index, isprior)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
-character(len=129),  intent(in)    :: restart_out_file_name
+integer,             intent(in)    :: num_extras ! non restart copies
 integer,             intent(in)    :: domain
 integer,             intent(inout) :: dart_index
 logical,             intent(in)    :: isprior
@@ -519,8 +519,6 @@ type(time_type) :: ens_time
 
 ens_size = state_ens_handle%num_copies ! have the extras incase you want to read inflation restarts
 my_pe = state_ens_handle%my_pe
-
-netcdf_filename_out = restart_out_file_name ! lorenz_96
 
 copies_written = 0
 
@@ -638,7 +636,11 @@ COPIES : do c = 1, ens_size
          if (my_pe < ens_size) then ! I am a writer
             if ( query_write_copy(my_copy + 1)) then
                !var_block = MISSING_R8  ! if you want to create a file for bitwise testing
-               call write_variables(var_block, start_var, end_var, domain)
+               if (my_copy <= state_ens_handle%num_copies - num_extras) then ! actual copy, may need clamping
+                  call write_variables_clamp(var_block, start_var, end_var, domain)
+               else ! extra copy, don't clamp
+                  call write_variables(var_block, start_var, end_var, domain)
+               endif
                deallocate(var_block)
             endif
          endif
@@ -812,7 +814,11 @@ COPIES : do c = 1, ens_size
             if (my_pe < ens_size) then ! I am a writer
                if(query_write_copy(my_copy + 1)) then
                   !var_block = MISSING_R8  ! if you want to create a file for bitwise testing
-                  call write_variables(var_block, start_var, end_var, domain)
+                  if (my_copy <= state_ens_handle%num_copies - num_extras) then ! actual copy, may need clamping
+                     call write_variables_clamp(var_block, start_var, end_var, domain)
+                  else ! extra copy, don't clamp
+                     call write_variables(var_block, start_var, end_var, domain)
+                  endif
                endif
             endif
 
@@ -1045,11 +1051,6 @@ do i = start_var, end_var
 
    var_size = variable_sizes(i, domain)
 
-   ! check whether you have to do anything to the variable, clamp or fail
-   if (do_clamp_or_fail(i, domain)) then
-      call clamp_or_fail_it(i, domain, var_block(start_in_var_block:start_in_var_block+var_size-1))
-   endif
-
    ! number of dimensions and length of each
    allocate(dims(dimensions_and_lengths(i, 1, domain)))
    dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
@@ -1066,6 +1067,49 @@ do i = start_var, end_var
 enddo
 
 end subroutine write_variables
+
+!-------------------------------------------------
+!> Write variables from start_var to end_var
+!> For actual ensemble members
+subroutine write_variables_clamp(var_block, start_var, end_var, domain)
+
+real(r8), intent(inout) :: var_block(:)
+integer,  intent(in) :: start_var
+integer,  intent(in) :: end_var
+integer,  intent(in) :: domain 
+
+integer :: i
+integer :: start_in_var_block
+integer :: var_size
+integer, allocatable :: dims(:)
+integer :: var_id 
+
+start_in_var_block = 1
+do i = start_var, end_var
+
+   var_size = variable_sizes(i, domain)
+
+   ! check whether you have to do anything to the variable, clamp or fail
+   if (do_clamp_or_fail(i, domain)) then
+      call clamp_or_fail_it(i, domain, var_block(start_in_var_block:start_in_var_block+var_size-1))
+   endif
+
+   ! number of dimensions and length of each
+   allocate(dims(dimensions_and_lengths(i, 1, domain)))
+   dims = dimensions_and_lengths(i, 2:dimensions_and_lengths(i,1, domain) + 1, domain)
+
+   ret = nf90_inq_varid(ncfile_out, global_variable_names(i), var_id)
+   call nc_check(ret, 'write_variables_clamp', 'getting variable id')
+
+   ret = nf90_put_var(ncfile_out, var_id, var_block(start_in_var_block:start_in_var_block+var_size-1), count=dims)
+   call nc_check(ret, 'write_variables_clamp', 'writing')
+   start_in_var_block = start_in_var_block + var_size
+
+   deallocate(dims)
+
+enddo
+
+end subroutine write_variables_clamp
 
 !-------------------------------------------------
 !> Find pes for loop indices

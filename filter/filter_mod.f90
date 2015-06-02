@@ -701,7 +701,7 @@ AdvanceTime : do
                call turn_write_copy_on(PRIOR_INF_SD_COPY)
             endif
             ! FIXME - what to do with lorenz_96 (or similar) here?
-            call filter_write_restart_direct(state_ens_handle, isprior = .true.)
+            call filter_write_restart_direct(state_ens_handle, num_extras, isprior = .true.)
          endif
          
       endif
@@ -972,7 +972,7 @@ if( .not. diagnostic_files) then
 endif
 
 if(direct_netcdf_write) then
-   call filter_write_restart_direct(state_ens_handle, isprior=.false.)
+   call filter_write_restart_direct(state_ens_handle, num_extras, isprior=.false.)
 else ! write binary files
    if(output_restart) call write_ensemble_restart(state_ens_handle, restart_out_file_name, 1, ens_size)
    if(output_restart_mean) call write_ensemble_restart(state_ens_handle, trim(restart_out_file_name)//'.mean', &
@@ -1526,9 +1526,10 @@ end subroutine filter_read_restart
 
 !-------------------------------------------------------------------------
 !> write the restart information directly into the model netcdf file.
-subroutine filter_write_restart_direct(state_ens_handle, isprior)
+subroutine filter_write_restart_direct(state_ens_handle, num_extras, isprior)
 
 type(ensemble_type), intent(inout) :: state_ens_handle
+integer,             intent(in)    :: num_extras ! non restart copies
 logical,             intent(in)    :: isprior
 
 integer :: dart_index !< where to start in state_ens_handle%copies
@@ -1541,7 +1542,7 @@ call variables_domains(num_variables_in_state, num_domains)
 ! transpose and write out the data
 dart_index = 1
 do domain = 1, num_domains
-   call transpose_write(state_ens_handle, restart_out_file_name, domain, dart_index, isprior)
+   call transpose_write(state_ens_handle, num_extras, domain, dart_index, isprior)
 enddo
 
 end subroutine filter_write_restart_direct
