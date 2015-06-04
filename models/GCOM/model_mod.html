@@ -791,6 +791,14 @@ mean gaussian noise to the input state without respect to the dynamic range
 of the variable in question or whether or not GCOM can tolerate the 
 resulting state. The variance is set by
 <em class=file>input.nml</em><em class=code>&amp;model_nml:model_perturbation_amplitude</em>.
+<br />
+<br />
+<em class=code>pert_model_state()</em> is called when <em class=file>input.nml</em><em class=code>&filter_nml</em>
+<a href="../../filter/filter.html#Namelist">start_from_restart&nbsp;=&nbsp;.false.</a>&nbsp;.
+<br />
+In this case, a single restart file <strong>must exist</strong> and is specified in 
+<em class=file>input.nml</em><em class=code>&filter_nml</em>
+<a href="../../filter/filter.html#Namelist">restart_in_file_name</a>&nbsp;.
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
