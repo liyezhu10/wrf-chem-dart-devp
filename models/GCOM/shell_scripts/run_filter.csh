@@ -44,7 +44,7 @@
 #PBS -e gcom_filter.err
 #PBS -o gcom_filter.log
 #PBS -q batch
-#PBS -l nodes=2:ppn=8
+#PBS -l nodes=2:ppn=8:reserved
 #PBS -l walltime=2:00:00
 #
 ##==============================================================================
@@ -136,9 +136,9 @@ switch ("`hostname`")
 
    case ys*:
       # NCAR "yellowstone"
-      setenv   MOVE 'mv -fv'
-      setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   MOVE 'mv -v'
+      setenv   COPY 'cp -v --preserve=timestamps'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
       setenv  EXPERIMENT /glade/p/work/${USER}/${JOBNAME}
@@ -151,9 +151,9 @@ switch ("`hostname`")
 
    case node*:
       # SDSU cluster "Cincinatti" has hosts 'node??'
-      setenv   MOVE 'mv -fv'
-      setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   MOVE 'mv -v'
+      setenv   COPY 'cp -v --preserve=timestamps'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
       setenv  EXPERIMENT /cinci/${USER}/deep_storage
@@ -166,9 +166,9 @@ switch ("`hostname`")
 
    default:
       # SDSU "dulcinea"
-      setenv   MOVE 'mv -fv'
-      setenv   COPY 'cp -fv --preserve=timestamps'
-      setenv   LINK 'ln -fvs'
+      setenv   MOVE 'mv -v'
+      setenv   COPY 'cp -v --preserve=timestamps'
+      setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
 
       setenv  EXPERIMENT /gcemproject/${USER}/${JOBNAME}
@@ -332,6 +332,7 @@ echo "The model advance command is ${ADV_CMD}"
 #-------------------------------------------------------------------------------
 # Loop over all the ensemble members and create a DART ics file for each.
 # This requires an ensemble of gcom restart files "gcom_restart_nnnn.nc"
+# GCOM_POINTER will always point to the most current GCOM file for each member.
 #-------------------------------------------------------------------------------
 
 echo "`date` -- BEGIN GCOM-TO-DART"
@@ -339,18 +340,21 @@ echo "`date` -- BEGIN GCOM-TO-DART"
 set member = 1
 while ($member <= $ensemble_size)
 
-   set      gcomfile = `printf gcom_restart_%04d.nc $member`
+   set  GCOM_POINTER = `printf gcom_restart_%04d.nc $member`
    set  rest_file_in = `printf   dart_input.%04d    $member`
    set  DART_IC_FILE = `printf     dart_ics.%04d    $member`
 
-   ${COPY} ${ENSEMBLEDIR}/$gcomfile  . || exit 3
-   ${LINK} $gcomfile gcom_restart.nc   || exit 3
-   ${LINK} $gcomfile gcom_geometry.nc  || exit 3
+   ${REMOVE} gcom_restart.nc gcom_geometry.nc
+
+   ${COPY} ${ENSEMBLEDIR}/${GCOM_POINTER}  .  || exit 3
+   ${LINK} ${GCOM_POINTER} gcom_restart.nc    || exit 3
+   ${LINK} ${GCOM_POINTER} gcom_geometry.nc   || exit 3
 
    ./gcom_to_dart                       || exit 3
    ${MOVE} dart_ics ${DART_IC_FILE}     || exit 3
 
    @ member++
+
 end
 
 #===============================================================================
@@ -387,7 +391,7 @@ if ($?LSB_QUEUE || $?PBS_QUEUE) then
 
     if ( "$parallel_model" == "false" ) then
        # each filter task advances the ensembles, each running on 1 proc.
-       ${RUN_CMD} ./filter
+       ${RUN_CMD} ./filter || exit 4
 
     else
        # 1) filter runs in parallel until time to do a (parallel) model advance.
@@ -531,7 +535,16 @@ else
 endif
 
 #===============================================================================
-# Block 5: Move the output to storage after filter completes.
+# Block 5: Think about it. The last GCOM restart file is not modified at this point.
+# The assimilated state is in the DART filter_restart.nnnnn.
+# If you want to create a GCOM posterior state from this file, you will
+# have to manually run dart_to_gcom on this last set of DART and GCOM files.
+#===============================================================================
+
+# FIXME ... should update the last gcom_restart files with the assimilated state.
+
+#===============================================================================
+# Block 6: Move the output to storage after filter completes.
 # At this point, all the restart,diagnostic files are in the CENTRALDIR
 # and need to be moved to the 'experiment permanent' directory.
 # We have had problems with some, but not all, files being moved

@@ -24,16 +24,14 @@ set process = $1
 set num_states = $2
 set control_file = $3
 
-echo "My process ID is $process"
-echo "I am responsible for advancing $num_states states."
-echo "I am going to read my filenames from $control_file"
+# echo "My process ID is $process"
+# echo "I am responsible for advancing $num_states states."
+# echo "I am going to read my filenames from $control_file"
 
-echo "Inheriting the following definitions:"
-echo "MOVE    is ${MOVE}"
-echo "COPY    is ${COPY}"
-echo "LINK    is ${LINK}"
-echo "REMOVE  is ${REMOVE}"
-echo "RUN_CMD is ${RUN_CMD}"
+setenv   MOVE 'mv -v'
+setenv   COPY 'cp -v --preserve=timestamps'
+setenv   LINK 'ln -vs'
+setenv REMOVE 'rm -fr'
 
 #-------------------------------------------------------------------------
 # Block 1: populate a run-time directory with the bits needed to
@@ -69,9 +67,6 @@ if (-z input.nml) then
    exit 1
 endif
 
-echo 'listing now that the table has been set ...'
-ls -lR
-
 # Loop through each state
 set state_copy = 1
 set ensemble_member_line = 1
@@ -86,10 +81,10 @@ while($state_copy <= $num_states)
    # make sure we have a clean logfile for this entire advance
    set logfile = `printf "log_advance.%04d.txt"     $ensemble_member`
 
-   echo "control_file is ../$control_file"             >! $logfile
+   echo "control_file is ../${control_file}"           >! $logfile
    echo "working on ensemble_member $ensemble_member"  >> $logfile
-   echo "input_file  is $input_file"                   >> $logfile
-   echo "output_file is $output_file"                  >> $logfile
+   echo "input_file  is ${input_file}"                 >> $logfile
+   echo "output_file is ${output_file}"                >> $logfile
    echo "starting advance_model.csh at "`date`         >> $logfile
 
    #----------------------------------------------------------------------
@@ -106,13 +101,18 @@ while($state_copy <= $num_states)
    # The EXPECTED DART dart_to_gcom_input_file is 'dart_restart'
    # The dart_to_gcom_nml:advance_time_present = .TRUE. must be set
    # CENTRALDIR will always contain the gcom_restart_nnnn.nc file.
+   # gcom_restart_nnnn.nc can be considered a 'pointer' file.
+   # The latest,greatest GCOM state will always be gcom_restart_nnnn.nc
 
-   set RESTARTFILE = `printf gcom_restart_%04d.nc ${ensemble_member}`
+   set GCOM_POINTER = `printf gcom_restart_%04d.nc ${ensemble_member}`
 
-   echo "RESTARTFILE is [${RESTARTFILE}]"         >> $logfile || exit 2
+   echo "GCOM RESTARTFILE is [${GCOM_POINTER}]"    >> $logfile || exit 2
 
-   ${LINK} ../$input_file       dart_restart      >> $logfile || exit 2
-   ${COPY} ../${RESTARTFILE}    gcom_restart.nc   >> $logfile || exit 2
+   if ( -e dart_restart    ) ${REMOVE} dart_restart
+   if ( -e gcom_restart.nc ) ${REMOVE} gcom_restart.nc
+
+   ${LINK} ../${input_file}     dart_restart      >> $logfile || exit 2
+   ${COPY} ../${GCOM_POINTER}   gcom_restart.nc   >> $logfile || exit 2
 
    ../dart_to_gcom                     >> $logfile || exit 2
 
@@ -121,13 +121,13 @@ while($state_copy <= $num_states)
 
    # Convey the new start/stop times to gcom via param.dat
 
-   set newstartdate = `grep Start_Time   dart_gcom_timeinfo.txt`
-   set sec2advance = `grep Stop_Time_sec dart_gcom_timeinfo.txt`
-   set  currenttag = `grep currenttimetag  dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
-   set forecasttag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
+   set newstartdate = `grep Start_Time      dart_gcom_timeinfo.txt`
+   set  sec2advance = `grep Stop_Time_sec   dart_gcom_timeinfo.txt`
+   set   currenttag = `grep currenttimetag  dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
+   set  forecasttag = `grep forecasttimetag dart_gcom_timeinfo.txt | sed -e "s/[a-z,= ]//g"`
 
-   echo "gcomstartdate is $newstartdate" >> $logfile
-   echo "sec2advance is $sec2advance" >> $logfile
+   echo "gcomstartdate is ${newstartdate}" >> $logfile
+   echo "sec2advance   is ${sec2advance}"  >> $logfile
 
    sed -e "/ Start_Time /c\ ${newstartdate}" \
        -e "/ Stop_Time_sec /c\ ${sec2advance}" \
@@ -154,23 +154,27 @@ while($state_copy <= $num_states)
 
    ../gcom.serial.exe >> $logfile || exit 3
 
-   echo "after running gcom "`date` >> $logfile
+   echo "after running gcom "`date`       >> $logfile
+   echo "Should now be at ${forecasttag}" >> $logfile
 
    grep "UCOAM Finished successfully." $logfile
    set gcomstatus = $status
    if ( $gcomstatus != 0 ) then
       echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully"
       echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully"
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" >> $logfile
+      echo "ERROR - gcom ensemble member $ensemble_member did not complete successfully" >> $logfile
       exit 3
    endif
 
    if ( -e gcom_output.nc ) then
-      set NEWNAME = `printf gcom_restart_%04d.${forecasttag}.nc ${ensemble_member}`
-      ${MOVE} gcom_output.nc ../${NEWNAME}
-      (cd ..; ${LINK} ${NEWNAME} ${RESTARTFILE}; cd -) >> $logfile || exit 3
+      # gcom_to_dart expects a filename of gcom_restart.nc 
+      ${MOVE} gcom_output.nc gcom_restart.nc || exit 3
    else
       echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc"
       echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc"
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" >> $logfile
+      echo "ERROR - gcom ensemble member $ensemble_member did not create gcom_output.nc" >> $logfile
       exit 3
    endif
 
@@ -178,22 +182,21 @@ while($state_copy <= $num_states)
    # Block 4: Convert the ocean model output to form needed by DART
    #----------------------------------------------------------------------
 
-   # gcom_to_dart reads the restart file after the model advance and writes
-   # out an updated DART 'initial conditions' file. This initial conditions
-   # file contains a header with the valid time of the ensuing model state.
-   # The gcom restart files contain the valid time of the model state.
+   # gcom_to_dart reads the GCOM file after the model advance and writes
+   # out an updated DART 'initial conditions' file named 'dart_ics'.
+   # Move the updated files back to 'centraldir' and update the pointer file
+   # to point to the newest GCOM restart file for the next advance.
 
-   ${LINK} ../${RESTARTFILE} gcom_restart.nc >> $logfile || exit 4
-   ../gcom_to_dart >> $logfile || exit 4
+   ../gcom_to_dart                    >> $logfile || exit 4
+   ${MOVE} dart_ics ../${output_file} >> $logfile || exit 4
 
-   echo "Should now be at ${forecasttag}"
+   # This just renames the file to contain the instance number and valid time
+   set NEWNAME = `printf gcom_restart_%04d.${forecasttag}.nc ${ensemble_member}`
 
-   ls -lrt
+   ${MOVE} gcom_restart.nc ../${NEWNAME} >> $logfile || exit 4
 
-   # The (new,updated) DART restart file name is called 'dart_ics'
-   # Move the updated files back to 'centraldir'
-
-   ${MOVE} dart_ics ../$output_file || exit 4
+   ${REMOVE} ../${GCOM_POINTER}
+   (cd ..; ${LINK} ${NEWNAME} ${GCOM_POINTER}; cd -) >> $logfile || exit 4
 
    # bookkeeping
 
@@ -205,10 +208,10 @@ end
 
 # Change back to original directory and get rid of temporary directory
 cd ..
-# \rm -rf $temp_dir
+# \rm -rf ${temp_dir}
 
 # Remove the filter_control file to signal completion
-\rm -rfv $control_file
+\rm -rfv ${control_file}
 
 exit 0
 
