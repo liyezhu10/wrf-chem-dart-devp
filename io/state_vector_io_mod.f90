@@ -1216,7 +1216,7 @@ integer :: i
 sum_variables_below = 0
 
 do i = 1, domain -1
-   sum_variables_below = sum(variable_sizes(:, i)) ! whole domain below
+   sum_variables_below = sum_variables_below + sum(variable_sizes(:, i)) 
 enddo
 
 sum_variables_below = sum_variables_below + sum(variable_sizes(1:start_var-1, domain))
