@@ -276,6 +276,7 @@ if (test1thru > 7) then
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
 
+   ! Testing Pressure, because it might live just off-grid from the loc_of_interest
 
    mykindindex = get_raw_obs_kind_index('KIND_PRESSURE')
    write(*,*)
@@ -289,6 +290,8 @@ if (test1thru > 7) then
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
 
+   ! Testing Temperature, because it might live just off-grid from the loc_of_interest
+   ! in a different way.
 
    mykindindex = get_raw_obs_kind_index('KIND_TEMPERATURE')
    write(*,*)
@@ -301,8 +304,6 @@ if (test1thru > 7) then
    else
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
-
-
 
 endif
 

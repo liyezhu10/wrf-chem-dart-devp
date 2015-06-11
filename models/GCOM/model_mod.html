@@ -198,6 +198,124 @@ the big picture and then go back and re-read them to fully grasp what is going o
 talk about the relationship between param.dat, the time in the gcom_restart.nc
 file, the time in the dart_ics file and observations.</P>
 
+<A NAME="vert_normalization_height"></A>
+<H2>Discussion of <em class=code>vert_normalization_height</em> 
+with respect to grid spacing.</H2>
+
+<P>The relationship between 
+<em class=file>input.nml</em><em class=code>&amp;location_nm:vert_normalization_height</em>,
+<em class=code>&amp;assim_tools_nml:cutoff</em>, and the grid spacing is complicated.
+The <em class=code>vert_normalization_height</em> is crucial with respect to the 
+definition of what is within the localization radius or not.  It also has an 
+impact on what gridcells contribute to the application of the 
+forward observation operator.
+<em><strong>The bottom line</strong></em> is that the default 
+<em class=code>vert_normalization_height</em> 
+should never be taken for granted.<br />
+Test it and see if you like what gridcells are being used for the interpolation.<br />
+Test it and see if you like what is happening to the innovations.
+<br />
+<br />
+The <em class=code>model_interpolate()</em> code simply looks for the 
+<strong>N</strong> nearest neighbors. When the horizontal grid SPACING is 
+several kilometers and the vertical layers are on the order of tens of meters, 
+and the vertical scale is not exaggerated (1&nbsp;km in the horizontal =~ 1&nbsp;km 
+in the vertical) then ALL the nearest neighbors come from the same horizontal 
+location and the N closest vertical layers are used. This felt really wrong to me, 
+so I stretched the vertical exaggeration by choosing a 
+<em class=code>vert_normalization_height</em> so that I got the N nearest 
+neighbors from the 'same' vertical level.
+<br />
+<br />
+In a high-res seamount case, for example, the horizontal spacing is closer to 50m, 
+and the vertical layers are tens of meters apart. In this case, if there is 
+NO vertical exaggeration, the N nearest neighbors can come from locations 
+horizontally nearby as well as vertically - a much more natural representation.
+<br />
+<br />
+However, that same vertical exaggeration is used in the distance calculation 
+to determine what is in the localization radius.  Consequently, anyplace the 
+grid is 'warped' in lat/lon space (i.e. the physical space), what is 'close' 
+strongly depends on the vertical exaggeration as well as the degree of warping. 
+So - it is quite possible - and quite accurate - to have gridcells that are not 
+consecutively indexed to have distances that are not consecutive (hard to phrase, actually).
+</P>
+
+<TABLE border=0 cellpadding=5 width=100% summary='impact of vert_normalization_height and cutoff'>
+<tr><td><img src="../../doc/images/gcom_local_grid_seamount.png" alt="seamount grid" height=400 /></td>
+    <td>
+What I mean is that if I put an observation EXACTLY at lonindex = 64, 
+latindex = 16, levelindex = 10 (which is a bit on the side of the seamount case) 
+and have a large vertical exaggeration (<em class=code>vert_normalization_height = 500</em>) ... 
+it is entirely possible that 63,13,10 is closer than 64,15,10.  
+This also causes the increments (the innovations) to appear to be 'noncontiguous', 
+resulting in a peculiarly spotted field of innovations. 
+The image to the left is an example of the few gridcells in a region that is
+minimally warped.
+</td>
+</tr>
+</table>
+
+<P>
+The following are diagnostics from a seamount case that had horizontal grid spacing about 50m and vertical
+spacing in the 10's of meters range. I assimilated a single U_CURRENT_COMPONENT observation 
+<strong>exactly</strong> on gridcell (64,16,10). With a <em class=code>vert_normalization_height = 500</em>
+(a lot of vertical exaggeration), the 12 nearest neighbors all came from the same 'level'.
+<strong>BUT</strong> I had to go to a <em class=code>cutoff = 0.000160</em> 
+(a half-width of more than a kilometer!) to get any other gridcell to be within the cutoff 
+radius - take a look at the following table of the 12 closest gridcells and the image to the lower left.
+</P>
+<pre> want interpolation of DART KIND          51 at   242.644923789000        32.5995745035500       -897.902750000000
+rank dartindex         distance                 state_value     i  j  k    longitude (deg)   latitude (deg)    depth (meters)
+ 1   29455     2.120369787642344E-009 -5.352092637616289E-004   64 16 10   242.644923789000  32.5995745035500  -897.902750000000
+ 2   29552      62.6446256260277      -5.357401041928145E-004   64 17 10   242.644921565000  32.6001383024000  -897.902750000000
+ 3   29163      427.726339190069       0.436345399286287        63 13 10   242.644486434000  32.5978818510000  -897.872750000000
+ 4   29358      646.030429510927       9.731683813766100E-002   64 15 10   242.644926013000  32.5990107046500  -897.953250000000
+ 5   29649      655.078905333592       9.731683491462780E-002   64 18 10   242.644919341000  32.6007021012000  -897.953250000000
+ 6   29261      1809.16058305424       0.235254445079926        64 14 10   242.644928236500  32.5984469057000  -898.044500000000
+ 7   29746      1814.57536902641       0.235254439486291        64 19 10   242.644917117000  32.6012659000000  -898.044500000000
+ 8   29260      2708.85231830169       0.230943788947948        63 14 10   242.644484207500  32.5984456500000  -897.690250000000
+ 9   29745      2712.47153313136       0.230943783326527        63 19 10   242.644473074500  32.6012646441500  -897.690250000000
+10   29164      3277.61800100468       0.434373030719604        64 13 10   242.644930460000  32.5978831067000  -898.159750000000
+11   29456      3698.99441002118       1.246747080155530E-002   65 16 10   242.645367823500  32.5995757577500  -898.193250000000
+12   29553      3699.52485671758       1.246747443816500E-002   65 17 10   242.645365602500  32.6001395566500  -898.193250000000</pre>
+
+<P>
+When I use <em class=code>vert_normalization_height = 6370000.0</em> (no exaggeration) the following 
+are the N nearest neighbors and a <em class=code>cutoff = 0.000010</em> (a half-width of about 64 meters), 
+results in the localization impacting a few neighboring gridcells - see the image on the lower right.
+</P>
+
+<pre> want interpolation of DART KIND          51 at   242.644923789000        32.5995745035500       -897.902750000000
+rank dartindex         distance                 state_value     i  j  k    longitude (deg)   latitude (deg)    depth (meters)
+ 1   29455     2.120369787642344E-009 -5.352092637616289E-004   64 16 10   242.644923789000  32.5995745035500  -897.902750000000
+ 2   26351      12.8905509873473       3.258895970186345E-003   64 16  9   242.644923789000  32.5995745035500  -910.801000000000
+ 3   32559      13.7795200415402      -7.998252407111866E-003   64 16 11   242.644923789000  32.5995745035500  -884.115000000000
+ 4   23247      25.0055651719358       1.724938025585966E-003   64 16  8   242.644923789000  32.5995745035500  -922.923250000000
+ 5   35663      28.5696864642526      -1.753079675342877E-002   64 16 12   242.644923789000  32.5995745035500  -869.316000000000
+ 6   20143      36.4514789835257      -6.322428483856149E-003   64 16  7   242.644923789000  32.5995745035500  -934.376000000000
+ 7   29456      41.5656234744980       1.247075979010545E-002   65 16 10   242.645367823500  32.5995757577500  -898.193250000000
+ 8   29454      41.5669355887254      -1.132022111991248E-002   63 16 10   242.644479754500  32.5995732478000  -897.462750000000
+ 9   26350      43.3876021687945      -7.750119021557372E-003   63 16  9   242.644479754500  32.5995732478000  -910.354750000000
+10   26352      43.6058582826109       1.610037073839844E-002   65 16  9   242.645367823500  32.5995757577500  -911.096000000000
+11   32560      43.7001510110454       5.433125010459082E-003   65 16 11   242.645367823500  32.5995757577500  -884.400750000000
+12   32558      43.9274327567607      -1.881031848668287E-002   63 16 11   242.644479754500  32.5995732478000  -883.681500000000</pre>
+
+
+<TABLE border=0 cellpadding=5 width=100% summary='impact of vert_normalization_height and cutoff'>
+<TR><TH colspan=2>Innovations from a single observation.</TH></TR>
+<TR><TH><em class=code>vert_normalization_height = 500.0</em><br/>
+        <em class=code>cutoff = 0.000160</em></TH>
+    <TH><em class=code>vert_normalization_height = 6370000.0</em><br/>
+        <em class=code>cutoff = 0.000010</em></TH>
+</TR>
+<TR>
+<TD><img src="../../doc/images/gcom_cutoff_0.000160_height_500.u.pdf" alt="cutoff 0.000160 height 500" width=100% />
+<TD><img src="../../doc/images/gcom_cutoff_0.000010_height_6370000.u.pdf" alt="cutoff 0.000010 height 6370000" width=100% />
+</TR>
+
+</TABLE>
+
 
 <!--=====================================================================-->
 <!--===================== DESCRIPTION OF A NAMELIST =====================-->
@@ -793,11 +911,11 @@ resulting state. The variance is set by
 <em class=file>input.nml</em><em class=code>&amp;model_nml:model_perturbation_amplitude</em>.
 <br />
 <br />
-<em class=code>pert_model_state()</em> is called when <em class=file>input.nml</em><em class=code>&filter_nml</em>
+<em class=code>pert_model_state()</em> is called when <em class=file>input.nml</em><em class=code>&amp;filter_nml</em>
 <a href="../../filter/filter.html#Namelist">start_from_restart&nbsp;=&nbsp;.false.</a>&nbsp;.
 <br />
 In this case, a single restart file <strong>must exist</strong> and is specified in 
-<em class=file>input.nml</em><em class=code>&filter_nml</em>
+<em class=file>input.nml</em><em class=code>&amp;filter_nml</em>
 <a href="../../filter/filter.html#Namelist">restart_in_file_name</a>&nbsp;.
 </P>
 

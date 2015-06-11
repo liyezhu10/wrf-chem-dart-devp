@@ -1,9 +1,8 @@
 function plot_grid(fname)
-%% plot_grid ... plots the ULAT,ULON and TLAT,TLON variables from a netcdf file.
+%% plot_grid ... plots the ulat,ulon,ulev variables from a netcdf file.
 % 
-% fname = 'h.A1.10.nc';
+% fname = 'gcom_restart.nc';
 % plot_grid(fname)
-%
 
 %% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -11,99 +10,105 @@ function plot_grid(fname)
 %
 % DART $Id$
 
-ulat = nc_varget(fname,'ULAT') * 180/pi;;
-ulon = nc_varget(fname,'ULON') * 180/pi;;
-tlat = nc_varget(fname,'TLAT') * 180/pi;;
-tlon = nc_varget(fname,'TLON') * 180/pi;;
+ulon3D = nc_varget(fname,'ulon');
+ulat3D = nc_varget(fname,'ulat');
+ulev3D = nc_varget(fname,'ulev');
 
-Ulat = ulat(:);
-Ulon = ulon(:);
-Tlat = tlat(:);
-Tlon = tlon(:);
+deg2rad = pi/180.0;
 
-inds = find(tlon <= 0);
-tlon(inds) = tlon(inds) + 360.0;
-inds = find(ulon <= 0);
-ulon(inds) = ulon(inds) + 360.0;
+[nlev, nlat, nlon] = size(ulon3D);
 
-np = 5;
-nx = size(ulat,1);
-ny = size(ulat,2);
+inds = find(ulon3D <= 0);
+ulon3D(inds) = ulon3D(inds) + 360.0;
+
+% Just pick off the 10th level.
+Ulon = squeeze(ulon3D(10,:,:));
+Ulat = squeeze(ulat3D(10,:,:));
+Ulev = squeeze(ulev3D(10,:,:));
+
+lon = Ulon(:);
+lat = Ulat(:);
+lev = Ulev(:);
 
 figure(1); clf; orient landscape
-   plot(Ulon,Ulat,'ko',Tlon,Tlat,'rx')
-   legend('U,V Grid','S,T Grid')
-   legend boxoff
-
+   plot3(lon,lat,lev,'ko')
+   title('U gridpoints for level 10')
+   xlabel('longitude (degrees)')   % fixme ... read the attributes and plot
+   ylabel('latitude (degrees)')    % fixme ... read the attributes and plot
+   zlabel('depth (meters)')        % fixme ... read the attributes and plot
 
 figure(2); clf; orient landscape
 
-   i1 =  1;
-   iN = np;
-   j1 = 1;
-   jN = np;
+    iN = 64;
+    jN = 16;
+    kN = 10;
 
-   myplot(i1,iN,j1,jN,ulon,ulat,tlon,tlat)
+    fprintf('%20.15f %20.15f %20.15f\n', ulon3D(kN,jN,iN)        , ulat3D(kN,jN,iN)        , ulev3D(kN,jN,iN))
+    fprintf('%20.15f %20.15f %20.15f\n', ulon3D(kN,jN,iN)*deg2rad, ulat3D(kN,jN,iN)*deg2rad, ulev3D(kN,jN,iN))
+
+    my3Dplot(iN,jN,kN,ulon3D,ulat3D,ulev3D)
 
 figure(3); clf; orient landscape
 
-   i1 =  1;
-   iN = np;
-   j1 = ny-np+1;
-   jN = ny;
-
-   myplot(i1,iN,j1,jN,ulon,ulat,tlon,tlat)
-
-figure(4); clf; orient landscape
-
-   i1 = nx-np+1;
-   iN = nx;
-   j1 = ny-np+1;
-   jN = ny;
-
-   myplot(i1,iN,j1,jN,ulon,ulat,tlon,tlat)
-
-figure(5); clf; orient landscape
-
-   i1 = nx-np+1;
-   iN = nx;
-   j1 = 1;
-   jN = np;
-
-   myplot(i1,iN,j1,jN,ulon,ulat,tlon,tlat)
+    my2Dplot(iN,jN,kN,ulon3D,ulat3D)
 
 
-function myplot(i1,iN,j1,jN,ulon,ulat,tlon,tlat)
 
-   h = plot(ulon(i1:iN,j1:jN), ulat(i1:iN,j1:jN), 'ko', ...
-            tlon(i1:iN,j1:jN), tlat(i1:iN,j1:jN), 'rx');
-   set(h,'MarkerSize',1)
+function my2Dplot(ilon,ilat,ilev,ulon,ulat)
 
-   for i = i1:iN
-   for j = j1:jN
-   %  h = text(ulon(i,j),ulat(i,j), sprintf('%d,%d',i,j));
+   lon1 = ilon-3; lonN = ilon+3;
+   lat1 = ilat-3; latN = ilat+3;
+
+   lons = ulon(ilev, lat1:latN, lon1:lonN);
+   lats = ulat(ilev, lat1:latN, lon1:lonN);
+
+   h1 = plot(lons(:), lats(:), 'ko');
+   set(h1,'MarkerSize',1)
+   axis equal
+
+   for i = lon1:lonN
+   for j = lat1:latN
+   
       str   = sprintf('''%d,%d''',i,j);
-      mystr = sprintf('h1 = text(%f,%f,%s);',ulon(i,j),ulat(i,j),str);
+      mystr = sprintf('h1 = text(%f,%f,%s);',ulon(ilev,j,i),ulat(ilev,j,i),str);
       eval(mystr)
       set(h1,'HorizontalAlignment','center', ...
             'VerticalAlignment','middle', ...
             'FontSize',10,'Color','k')
+        
+   end
+   end
 
-      mystr = sprintf('h2 = text(%f,%f,%s);',tlon(i,j),tlat(i,j),str);
-      eval(mystr)
-      set(h2,'HorizontalAlignment','center', ...
-            'VerticalAlignment','middle', ...
-            'FontSize',10,'Color','r')
-   end
-   end
-   title('POP grid layout')
-   xlabel('U,V grid in black; T,S grid in red')
+ 
+function my3Dplot(ilon,ilat,ilev,ulon,ulat,ulev)
+
+   lon1 = ilon-3; lonN = ilon+3;
+   lat1 = ilat-3; latN = ilat+3;
+   lev1 = ilev-1; levN = ilev+1;
+
+   lons = ulon(lev1:levN, lat1:latN, lon1:lonN);
+   lats = ulat(lev1:levN, lat1:latN, lon1:lonN);
+   levs = ulev(lev1:levN, lat1:latN, lon1:lonN);
+
+   h1 = plot3(lons(:), lats(:), levs(:), 'ko');
+   set(h1,'MarkerSize',10)
+
+   hold on;
+
+   h2 = plot3(ulon(ilev,ilat,ilon), ulat(ilev,ilat,ilon), ulev(ilev,ilat,ilon), 'ro');
+   set(h2,'MarkerSize',10,'MarkerFaceColor','r')
+
+   title({'GCOM U grid layout','64,16,10 in red'})
+   xlabel('longitude (degrees)')
+   ylabel('latitude (degrees)')
+   zlabel('depth (m)')
    set(gca,'box','off')
 
-%  set(h,'Visible','off'); % Get the domain right.
-%   h = [h1 h2];
-%  legend('U,V Grid','S,T Grid')
-%  legend boxoff
+   hold off;
+
+% TJH FIXME ... it would be cool to have the same plot - in radians - with the 
+% vert_normalization_height applied - and another with the anything within the 
+% cutoff radius highlighted.
 
 % <next few lines under version control, do not edit>
 % $URL$

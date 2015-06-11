@@ -146,21 +146,6 @@ namelist /model_nml/             &
    debug,                        &
    gcom_variables
 
-!------------------------------------------------------------------
-!
-! The DART state vector (control vector) will consist of:  S, T, U, V, PSURF
-! (Salinity, Temperature, U velocity, V velocity, Sea Surface Height).
-! S, T are 3D arrays, located at cell centers.  U,V are at grid cell corners.
-! PSURF is a 2D field (X,Y only).  The Z direction is downward.
-!
-! FIXME: proposed change : we make this completely namelist driven,
-!                          both contents and order of vars.  this should
-!                          wait until restart files are in netcdf format,
-!                          to avoid problems with incompatible namelist
-!                          and IC files.  it also complicates the mapping
-!                          to and from the vars to state vector.
-!------------------------------------------------------------------
-
 integer, parameter :: S_index     = 1  ! TJH FIXME remove at some point
 integer, parameter :: T_index     = 2  ! TJH FIXME remove at some point
 integer, parameter :: U_index     = 3  ! TJH FIXME remove at some point
@@ -340,7 +325,6 @@ call error_handler(E_MSG,'static_init_model',string1)
 call get_grid_dims()
 call read_grid()
 
-if (do_output() .and. (debug > 20)) call write_grid_netcdf()
 if (do_output() .and. (debug > 20)) call write_grid_interptest()
 
 !---------------------------------------------------------------
@@ -430,7 +414,7 @@ integer,             intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer,  OPTIONAL,  intent(out) :: var_type
 
-integer  :: varindex, offset
+integer  :: varindex
 integer  :: lon_index, lat_index, lev_index
 real(r8) :: mylon, mylat, mylev
 
@@ -449,18 +433,19 @@ if (present(var_type)) then
 endif
 
 if (do_output() .and. (debug > 5)) then
-   write(*,*) 'DART index ',index_in,' is in ',trim(progvar(varindex)%varname)
    if     ( progvar(varindex)%rank == 1) then
-      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
+      write(*,100) trim(progvar(varindex)%varname), index_in, lon_index 
    elseif ( progvar(varindex)%rank == 2) then
-      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
-      write(*,*) '     offset is ',offset,' lat_index is ',lat_index, 'lat is ',mylat
+      write(*,200) trim(progvar(varindex)%varname), index_in, lon_index, lat_index 
    elseif ( progvar(varindex)%rank == 3) then
-      write(*,*) '     offset is ',offset,' lon_index is ',lon_index, 'lon is ',mylon
-      write(*,*) '     offset is ',offset,' lat_index is ',lat_index, 'lat is ',mylat
-      write(*,*) '     offset is ',offset,' lev_index is ',lev_index, 'lev is ',mylev
+      if (mylon > 180.0_r8) mylon =  mylon - 360.0_r8
+      write(*,300) trim(progvar(varindex)%varname), index_in, lon_index, lat_index , lev_index, mylon, mylat, mylev
    endif
 endif
+
+ 100 format(A,2(1x,i10))              ! varname, DART index, i
+ 200 format(A,3(1x,i10))              ! varname, DART index, i, j
+ 300 format(A,4(1x,i10),3(1x,f18.10)) ! varname, DART index, i, j, k, and the 3 locations
 
 end subroutine get_state_meta_data
 
@@ -501,6 +486,8 @@ integer, parameter :: num_neighbors = 12
 
 character(len=obstypelength) :: kind_name
 
+real(r8), parameter :: RAD2M = 40000000.0_r8/(2.0_r8*PI)
+
 if ( .not. module_initialized ) call static_init_model
 
 ! Let's assume failure.  Set return val to missing, then the code can
@@ -538,6 +525,14 @@ if (varindex < 0) return
 
 call loc_get_close_obs(gc_state, location, base_kind, state_locations, state_kinds, &
                        num_close, close_ind)
+
+! Sometimes the location is outside the model domain.
+! In this case, we cannot interpolate.
+
+if (num_close == 0) then
+   istatus = 23
+   return
+endif
 
 ! Loop over close candidates. They come in without regard to what DART KIND they are,
 ! nor are they sorted by distance. We are only interested in the close locations
@@ -625,12 +620,15 @@ do i=1,min(num_wanted,num_neighbors)
 enddo
 
 if (do_output() .and. (debug > 4)) then
-   write(*,*)'       rank   dartindex         distance                 state' &
+   write(*,*)'       rank   dartindex   distance(meters)           state' &
              //'_value                  i           j           k'
    do i=1,min(num_wanted,num_neighbors)
       call get_state_indices(close_indices(i), lon_index, lat_index, lev_index, varindex)
-      write(*,*)i,close_indices(i),sorted_distances(i),data_values(i),&
-                lon_index, lat_index, lev_index
+      write(*,*)i,close_indices(i),sorted_distances(i)*RAD2M,data_values(i),&
+                lon_index, lat_index, lev_index, &
+                ULON(lon_index, lat_index, lev_index), &
+                ULAT(lon_index, lat_index, lev_index), &
+                ULEV(lon_index, lat_index, lev_index)
    enddo
 endif
 
@@ -903,187 +901,187 @@ else
 
    !----------------------------------------------------------------------------
    ! U Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='ULON', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='ulon', xtype=nf90_real, &
                  dimids=(/ nxp1_dimid, ny_dimid, nz_dimid /), varid=ulonVarID),&
-                 'nc_write_model_atts', 'ULON def_var '//trim(filename))
+                 'nc_write_model_atts', 'ulon def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'long_name', 'longitude'), &
-                 'nc_write_model_atts', 'ULON long_name '//trim(filename))
+                 'nc_write_model_atts', 'ulon long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'comment', 'longitudes of U grid'), &
-                 'nc_write_model_atts', 'ULON comment '//trim(filename))
+                 'nc_write_model_atts', 'ulon comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'axis', 'X'),  &
-                 'nc_write_model_atts', 'ULON axis '//trim(filename))
+                 'nc_write_model_atts', 'ulon axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'ULON units '//trim(filename))
+                 'nc_write_model_atts', 'ulon units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'ULON valid_range '//trim(filename))
+                 'nc_write_model_atts', 'ulon valid_range '//trim(filename))
 
    ! U Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='ULAT', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='ulat', xtype=nf90_real, &
                  dimids=(/ nxp1_dimid, ny_dimid, nz_dimid /), varid=ulatVarID),&
-                 'nc_write_model_atts', 'ULAT def_var '//trim(filename))
+                 'nc_write_model_atts', 'ulat def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'long_name', 'latitude'), &
-                 'nc_write_model_atts', 'ULAT long_name '//trim(filename))
+                 'nc_write_model_atts', 'ulat long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'comment', 'latitudes of U grid'), &
-                 'nc_write_model_atts', 'ULAT comment '//trim(filename))
+                 'nc_write_model_atts', 'ulat comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'axis', 'Y'),   &
-                 'nc_write_model_atts', 'ULAT axis '//trim(filename))
+                 'nc_write_model_atts', 'ulat axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'ULAT units '//trim(filename))
+                 'nc_write_model_atts', 'ulat units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
+                 'nc_write_model_atts', 'ulat valid_range '//trim(filename))
 
    ! U Grid Levels
-   call nc_check(nf90_def_var(ncFileID,name='ULEV', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='ulev', xtype=nf90_real, &
                  dimids=(/ nxp1_dimid, ny_dimid, nz_dimid /), varid=ulevVarID),&
-                 'nc_write_model_atts', 'ULEV def_var '//trim(filename))
+                 'nc_write_model_atts', 'ulev def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulevVarID, 'long_name', 'depth'), &
-                 'nc_write_model_atts', 'ULEV long_name '//trim(filename))
+                 'nc_write_model_atts', 'ulev long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulevVarID, 'comment', 'depth of U grid'), &
-                 'nc_write_model_atts', 'ULEV comment '//trim(filename))
+                 'nc_write_model_atts', 'ulev comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulevVarID, 'axis', 'Z'),   &
-                 'nc_write_model_atts', 'ULEV axis '//trim(filename))
+                 'nc_write_model_atts', 'ulev axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulevVarID, 'units', 'meters'),  &
-                 'nc_write_model_atts', 'ULEV units '//trim(filename))
+                 'nc_write_model_atts', 'ulev units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  ulevVarID, 'positive', 'up'),  &
-                 'nc_write_model_atts', 'ULEV positive '//trim(filename))
+                 'nc_write_model_atts', 'ulev positive '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! V Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='VLON', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='vlon', xtype=nf90_real, &
                  dimids=(/ nx_dimid, nyp1_dimid, nz_dimid /), varid=vlonVarID),&
-                 'nc_write_model_atts', 'VLON def_var '//trim(filename))
+                 'nc_write_model_atts', 'vlon def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlonVarID, 'long_name', 'longitude'), &
-                 'nc_write_model_atts', 'VLON long_name '//trim(filename))
+                 'nc_write_model_atts', 'vlon long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlonVarID, 'comment', 'longitudes of V grid'), &
-                 'nc_write_model_atts', 'VLON comment '//trim(filename))
+                 'nc_write_model_atts', 'vlon comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlonVarID, 'axis', 'X'),  &
-                 'nc_write_model_atts', 'VLON axis '//trim(filename))
+                 'nc_write_model_atts', 'vlon axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlonVarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'VLON units '//trim(filename))
+                 'nc_write_model_atts', 'vlon units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'VLON valid_range '//trim(filename))
+                 'nc_write_model_atts', 'vlon valid_range '//trim(filename))
 
    ! V Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='VLAT', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='vlat', xtype=nf90_real, &
                  dimids=(/ nx_dimid, nyp1_dimid, nz_dimid /), varid=vlatVarID),&
-                 'nc_write_model_atts', 'VLAT def_var '//trim(filename))
+                 'nc_write_model_atts', 'vlat def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlatVarID, 'long_name', 'latitude'), &
-                 'nc_write_model_atts', 'VLAT long_name '//trim(filename))
+                 'nc_write_model_atts', 'vlat long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlatVarID, 'comment', 'latitudes of V grid'), &
-                 'nc_write_model_atts', 'VLAT comment '//trim(filename))
+                 'nc_write_model_atts', 'vlat comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlatVarID, 'axis', 'Y'),   &
-                 'nc_write_model_atts', 'VLAT axis '//trim(filename))
+                 'nc_write_model_atts', 'vlat axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlatVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'VLAT units '//trim(filename))
+                 'nc_write_model_atts', 'vlat units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'VLAT valid_range '//trim(filename))
+                 'nc_write_model_atts', 'vlat valid_range '//trim(filename))
 
    ! V Grid Levels
-   call nc_check(nf90_def_var(ncFileID,name='VLEV', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='vlev', xtype=nf90_real, &
                  dimids=(/ nx_dimid, nyp1_dimid, nz_dimid /), varid=vlevVarID),&
-                 'nc_write_model_atts', 'VLEV def_var '//trim(filename))
+                 'nc_write_model_atts', 'vlev def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlevVarID, 'long_name', 'depth'), &
-                 'nc_write_model_atts', 'VLEV long_name '//trim(filename))
+                 'nc_write_model_atts', 'vlev long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlevVarID, 'comment', 'depth of V grid'), &
-                 'nc_write_model_atts', 'VLEV comment '//trim(filename))
+                 'nc_write_model_atts', 'vlev comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlevVarID, 'axis', 'Z'),   &
-                 'nc_write_model_atts', 'VLEV axis '//trim(filename))
+                 'nc_write_model_atts', 'vlev axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlevVarID, 'units', 'meters'),  &
-                 'nc_write_model_atts', 'VLEV units '//trim(filename))
+                 'nc_write_model_atts', 'vlev units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  vlevVarID, 'positive', 'up'),  &
-                 'nc_write_model_atts', 'VLEV positive '//trim(filename))
+                 'nc_write_model_atts', 'vlev positive '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! W Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='WLON', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='wlon', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nzp1_dimid /), varid=wlonVarID),&
-                 'nc_write_model_atts', 'WLON def_var '//trim(filename))
+                 'nc_write_model_atts', 'wlon def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlonVarID, 'long_name', 'longitude'), &
-                 'nc_write_model_atts', 'WLON long_name '//trim(filename))
+                 'nc_write_model_atts', 'wlon long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlonVarID, 'comment', 'longitudes of W grid'), &
-                 'nc_write_model_atts', 'WLON comment '//trim(filename))
+                 'nc_write_model_atts', 'wlon comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlonVarID, 'axis', 'X'),  &
-                 'nc_write_model_atts', 'WLON axis '//trim(filename))
+                 'nc_write_model_atts', 'wlon axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlonVarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'WLON units '//trim(filename))
+                 'nc_write_model_atts', 'wlon units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'WLON valid_range '//trim(filename))
+                 'nc_write_model_atts', 'wlon valid_range '//trim(filename))
 
    ! W Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='WLAT', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='wlat', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nzp1_dimid /), varid=wlatVarID),&
-                 'nc_write_model_atts', 'WLAT def_var '//trim(filename))
+                 'nc_write_model_atts', 'wlat def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlatVarID, 'long_name', 'latitude'), &
-                 'nc_write_model_atts', 'WLAT long_name '//trim(filename))
+                 'nc_write_model_atts', 'wlat long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlatVarID, 'comment', 'latitudes of W grid'), &
-                 'nc_write_model_atts', 'WLAT comment '//trim(filename))
+                 'nc_write_model_atts', 'wlat comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlatVarID, 'axis', 'Y'),   &
-                 'nc_write_model_atts', 'WLAT axis '//trim(filename))
+                 'nc_write_model_atts', 'wlat axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlatVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'WLAT units '//trim(filename))
+                 'nc_write_model_atts', 'wlat units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'WLAT valid_range '//trim(filename))
+                 'nc_write_model_atts', 'wlat valid_range '//trim(filename))
 
    ! W Grid Levels
-   call nc_check(nf90_def_var(ncFileID,name='WLEV', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='wlev', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nzp1_dimid /), varid=wlevVarID),&
-                 'nc_write_model_atts', 'WLEV def_var '//trim(filename))
+                 'nc_write_model_atts', 'wlev def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'long_name', 'depth'), &
-                 'nc_write_model_atts', 'WLEV long_name '//trim(filename))
+                 'nc_write_model_atts', 'wlev long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'comment', 'levels of W grid'), &
-                 'nc_write_model_atts', 'WLEV comment '//trim(filename))
+                 'nc_write_model_atts', 'wlev comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'axis', 'Z'),   &
-                 'nc_write_model_atts', 'WLEV axis '//trim(filename))
+                 'nc_write_model_atts', 'wlev axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'units', 'meters'),  &
-                 'nc_write_model_atts', 'WLEV units '//trim(filename))
+                 'nc_write_model_atts', 'wlev units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  wlevVarID, 'positive', 'up'),  &
-                 'nc_write_model_atts', 'WLEV positive '//trim(filename))
+                 'nc_write_model_atts', 'wlev positive '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! [T,S,p] Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='LON', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='lon', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nz_dimid /), varid=lonVarID),&
-                 'nc_write_model_atts', 'LON def_var '//trim(filename))
+                 'nc_write_model_atts', 'lon def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  lonVarID, 'long_name', 'longitude'), &
-                 'nc_write_model_atts', 'LON long_name '//trim(filename))
+                 'nc_write_model_atts', 'lon long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  lonVarID, 'comment', 'longitudes of [T,S,p] grid'), &
-                 'nc_write_model_atts', 'LON comment '//trim(filename))
+                 'nc_write_model_atts', 'lon comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  lonVarID, 'axis', 'X'),  &
-                 'nc_write_model_atts', 'LON axis '//trim(filename))
+                 'nc_write_model_atts', 'lon axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  lonVarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'LON units '//trim(filename))
+                 'nc_write_model_atts', 'lon units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  lonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'LON valid_range '//trim(filename))
+                 'nc_write_model_atts', 'lon valid_range '//trim(filename))
 
    ! [T,S,p] Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='LAT', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='lat', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nz_dimid /), varid=latVarID),&
-                 'nc_write_model_atts', 'LAT def_var '//trim(filename))
+                 'nc_write_model_atts', 'lat def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  latVarID, 'long_name', 'latitude'), &
-                 'nc_write_model_atts', 'LAT long_name '//trim(filename))
+                 'nc_write_model_atts', 'lat long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  latVarID, 'comment', 'latitudes of [T,S,p] grid'), &
-                 'nc_write_model_atts', 'LAT comment '//trim(filename))
+                 'nc_write_model_atts', 'lat comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  latVarID, 'axis', 'Y'),   &
-                 'nc_write_model_atts', 'LAT axis '//trim(filename))
+                 'nc_write_model_atts', 'lat axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  latVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'LAT units '//trim(filename))
+                 'nc_write_model_atts', 'lat units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  latVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'LAT valid_range '//trim(filename))
+                 'nc_write_model_atts', 'lat valid_range '//trim(filename))
 
    ! [T,S,p] Grid Levels
-   call nc_check(nf90_def_var(ncFileID,name='LEV', xtype=nf90_real, &
+   call nc_check(nf90_def_var(ncFileID,name='lev', xtype=nf90_real, &
                  dimids=(/ nx_dimid, ny_dimid, nz_dimid /), varid=levVarID),&
-                 'nc_write_model_atts', 'LEV def_var '//trim(filename))
+                 'nc_write_model_atts', 'lev def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  levVarID, 'long_name', 'depth'), &
-                 'nc_write_model_atts', 'LEV long_name '//trim(filename))
+                 'nc_write_model_atts', 'lev long_name '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  levVarID, 'comment', 'levels of [T,S,p] grid'), &
-                 'nc_write_model_atts', 'LEV comment '//trim(filename))
+                 'nc_write_model_atts', 'lev comment '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  levVarID, 'axis', 'Z'),   &
-                 'nc_write_model_atts', 'LEV axis '//trim(filename))
+                 'nc_write_model_atts', 'lev axis '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  levVarID, 'units', 'meters'),  &
-                 'nc_write_model_atts', 'LEV units '//trim(filename))
+                 'nc_write_model_atts', 'lev units '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,  levVarID, 'positive', 'up'),  &
-                 'nc_write_model_atts', 'LEV positive '//trim(filename))
+                 'nc_write_model_atts', 'lev positive '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -1155,32 +1153,32 @@ else
    call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
    call nc_check(nf90_put_var(ncFileID, ulonVarID, ULON ), &
-                'nc_write_model_atts', 'ULON put_var '//trim(filename))
+                'nc_write_model_atts', 'ulon put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, ulatVarID, ULAT ), &
-                'nc_write_model_atts', 'ULAT put_var '//trim(filename))
+                'nc_write_model_atts', 'ulat put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, ulevVarID, ULEV ), &
-                'nc_write_model_atts', 'ULEV put_var '//trim(filename))
+                'nc_write_model_atts', 'ulev put_var '//trim(filename))
 
    call nc_check(nf90_put_var(ncFileID, vlonVarID, VLON ), &
-                'nc_write_model_atts', 'VLON put_var '//trim(filename))
+                'nc_write_model_atts', 'vlon put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, vlatVarID, VLAT ), &
-                'nc_write_model_atts', 'VLAT put_var '//trim(filename))
+                'nc_write_model_atts', 'vlat put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, vlevVarID, VLEV ), &
-                'nc_write_model_atts', 'VLEV put_var '//trim(filename))
+                'nc_write_model_atts', 'vlev put_var '//trim(filename))
 
    call nc_check(nf90_put_var(ncFileID, wlonVarID, WLON ), &
-                'nc_write_model_atts', 'WLON put_var '//trim(filename))
+                'nc_write_model_atts', 'wlon put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, wlatVarID, WLAT ), &
-                'nc_write_model_atts', 'WLAT put_var '//trim(filename))
+                'nc_write_model_atts', 'wlat put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, wlevVarID, WLEV ), &
-                'nc_write_model_atts', 'WLEV put_var '//trim(filename))
+                'nc_write_model_atts', 'wlev put_var '//trim(filename))
 
    call nc_check(nf90_put_var(ncFileID, lonVarID, LON ), &
-                'nc_write_model_atts', 'LON put_var '//trim(filename))
+                'nc_write_model_atts', 'lon put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, latVarID, LAT ), &
-                'nc_write_model_atts', 'LAT put_var '//trim(filename))
+                'nc_write_model_atts', 'lat put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, levVarID, LEV ), &
-                'nc_write_model_atts', 'LEV put_var '//trim(filename))
+                'nc_write_model_atts', 'lev put_var '//trim(filename))
 
 endif
 
@@ -1428,12 +1426,10 @@ type(time_type), intent(out) :: time
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_MSG,'init_time','FIXME TJH UNTESTED')
-
 string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 string3 = 'use gcom_to_dart to generate an initial state which contains a timestamp'
 call error_handler(E_ERR,'init_time', &
-                  'WARNING!!  GCOM model has no built-in default time', &
+                  'GCOM model_mod has no built-in default time', &
                   source, revision, revdate, &
                   text2=string2, text3=string3)
 
@@ -1459,12 +1455,10 @@ real(r8), intent(out) :: x(:)
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_MSG,'init_conditions','FIXME TJH UNTESTED')
-
 string2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 string3 = 'use gcom_to_dart to generate an initial state'
 call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  gcom model has no built-in default state', &
+                  'GCOM model_mod has no built-in default state', &
                   source, revision, revdate, &
                   text2=string2, text3=string3)
 
@@ -2398,9 +2392,9 @@ else
    write_metadata = .false.
 endif
 
- 100 format(A,2(1x,i10))  ! DART index, i
- 200 format(A,3(1x,i10))  ! DART index, i, j
- 300 format(A,4(1x,i10),3(1x,f16.8))  ! DART index, i, j, k
+ 100 format(A,2(1x,i10))              ! varname, DART index, i
+ 200 format(A,3(1x,i10))              ! varname, DART index, i, j
+ 300 format(A,4(1x,i10),3(1x,f18.10)) ! varname, DART index, i, j, k, and the 3 locations
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -2572,6 +2566,9 @@ do ivar=1, nfields
          do i = 1, progvar(ivar)%dimlens(1)
 
             call get_state_lonlatlev(ivar,i,j,k,mylon,mylat,mylev)
+
+            ! TJH DEBUG - if you want to write [-180,180]
+            ! if (mylon > 180.0_r8) mylon = mylon - 360.0_r8
 
             write(iunit,300) trim(progvar(ivar)%varname), indx, i, j, k, mylon, mylat, mylev
             indx = indx + 1
@@ -3300,12 +3297,6 @@ if (do_output() .and. (debug > 3)) then
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
 endif
 
-! TJH FIXME ... I think the following check is not necessary.
-! if ( (numdims /= 3)  ) then
-!    write(string1,*) trim(varname)//' is not a 3D variable as expected.'
-!    call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
-! endif
-
 if (xtype == NF90_INT) then
 
    allocate(intarray(dimlens(1),dimlens(2),dimlens(3)))
@@ -3598,8 +3589,9 @@ integer, intent(in) :: test_casenum
 
 call error_handler(E_ERR,'test_interpolation','not written yet', source, revision, revdate)
 
-! TJH FIXME just to silence compiler
+! just to silence compiler
 write(*,*)'string1 ',test_casenum
+
 end subroutine test_interpolation
 
 
@@ -4011,7 +4003,7 @@ real(r8), intent(out) :: corners(4)
 call error_handler(E_ERR,'get_quad_corners','routine not written yet', &
                       source, revision, revdate)
 
-! TJH FIXME ... just to silence compiler
+! just to silence compiler
 corners(1) = i
 corners(2) = j
 corners(3) = x(1,1,1)
@@ -5148,65 +5140,6 @@ if ((obs_type == KIND_U_CURRENT_COMPONENT)  .or.  &
     (obs_type == KIND_V_CURRENT_COMPONENT)) is_on_ugrid = .TRUE.
 
 end function is_on_ugrid
-
-
-!-----------------------------------------------------------------------
-!>
-!> Write the grid to a netcdf file for checking.
-
-subroutine write_grid_netcdf()
-
-integer :: ncid, NlonDimID, NlatDimID, NlevDimID
-integer :: nlon, nlat, nlev
-integer :: ulatVarID, ulonVarID, ulevVarID
-!integer :: ZGvarid, ZCvarid, KMTvarid, KMUvarid
-
-integer :: dimids(3)
-
-! FIXME: add all the coordinate variables
-call error_handler(E_ERR,'write_grid_netcdf','routine not written yet', &
-                      source, revision, revdate)
-
-nlon = size(ULAT,1)
-nlat = size(ULAT,2)
-nlev = size(ULAT,3)
-
-call nc_check(nf90_create('dart_grid.nc', NF90_CLOBBER, ncid),'write_grid_netcdf')
-
-! define dimensions
-
-call nc_check(nf90_def_dim(ncid, 'nxp1', nlon, NlonDimID),'write_grid_netcdf')
-call nc_check(nf90_def_dim(ncid, 'nyp1', nlat, NlatDimID),'write_grid_netcdf')
-call nc_check(nf90_def_dim(ncid, 'nzp1', nlev, NlevDimID),'write_grid_netcdf')
-
-dimids(1) = NlonDimID
-dimids(2) = NlatDimID
-dimids(3) = NlevDimID
-
-! define variables
-
-call nc_check(nf90_def_var(ncid, 'ULON', nf90_double,  dimids, ulonVarID),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'ULAT', nf90_double,  dimids, ulatVarID),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'ULEV', nf90_double,  dimids, ulevVarID),'write_grid_netcdf')
-
-call nc_check(nf90_put_att(ncid,ulonVarID,'long_name',  'U grid lons'), 'write_grid_netcdf')
-call nc_check(nf90_put_att(ncid,ulatVarID,'long_name',  'U grid lats'), 'write_grid_netcdf')
-call nc_check(nf90_put_att(ncid,ulevVarID,'long_name','U grid levels'), 'write_grid_netcdf')
-call nc_check(nf90_put_att(ncid,ulonVarID,'units',     'degrees East'), 'write_grid_netcdf')
-call nc_check(nf90_put_att(ncid,ulatVarID,'units',    'degrees North'), 'write_grid_netcdf')
-call nc_check(nf90_put_att(ncid,ulevVarID,'units',           'meters'), 'write_grid_netcdf')
-
-call nc_check(nf90_enddef(ncid),'write_grid_netcdf')
-
-! fill variables
-
-call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, ulevVarID, ULEV),'write_grid_netcdf')
-
-call nc_check(nf90_close(ncid),'write_grid_netcdf')
-
-end subroutine write_grid_netcdf
 
 
 !-----------------------------------------------------------------------

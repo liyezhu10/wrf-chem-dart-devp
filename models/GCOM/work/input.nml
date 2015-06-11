@@ -74,10 +74,17 @@
    restart_out_file_name = 'smoother_restart'
   /
 
-# cutoff of 0.03 (radians) is about 200km
+# cutoff = 0.03 (radians) is about 200 kilometers
+# cutoff = 0.000160 is ~ 1000 meters
+# cutoff = 0.000080 is ~ 500  meters
+# cutoff = 0.000040 is ~ 254  meters
+# cutoff = 0.000020 is ~ 127  meters
+# cutoff = 0.000010 is ~ 63.66 meters
+# cutoff = 0.000005 is ~ 31.84 meters
+
 &assim_tools_nml
    filter_kind                     = 1
-   cutoff                          = 0.005
+   cutoff                          = 0.000010
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
    sampling_error_correction       = .false.
@@ -173,7 +180,7 @@
    gcom_variables = 'u', 'KIND_U_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'v', 'KIND_V_CURRENT_COMPONENT', 'NA',  'NA', 'UPDATE',
                     'w', 'KIND_W_CURRENT_COMPONENT', 'NA',  'NA', 'NO_COPY_BACK',
-                    'p', 'KIND_PRESSURE',            '0.0', 'NA', 'UPDATE' 
+                    'p', 'KIND_PRESSURE',            '0.0', 'NA', 'UPDATE'
   /
 
 &gcom_to_dart_nml
@@ -185,10 +192,11 @@
    advance_time_present      = .true.
   /
 
+# There are 6370000.0 meters in one Earth radian.
 &location_nml
    horiz_dist_only             = .false.
    vert_normalization_pressure = 100000.0
-   vert_normalization_height   = 6370.0
+   vert_normalization_height   = 6370000.0
    approximate_distance        = .false.
    nlon                        = 71
    nlat                        = 36
@@ -334,14 +342,16 @@
    verbose    = .false.
   /
 
+# loc_of_interest = 239.4990, 32.09375000, -796.5
+# loc_of_interest = 242.64492378900, 32.5995745036, -897.9027500000    u(64,16,10) in high-res seamount
 &model_mod_check_nml
-   input_file           = "dart_ics.txt"
+   input_file           = "dart_ics"
    output_file          = "check_me_out"
    advance_time_present = .false.
    verbose              = .true.
    test1thru            = 8
    x_ind                = 48245
    kind_of_interest     = 'KIND_U_CURRENT_COMPONENT'
-   loc_of_interest      = 239.4990, 32.09375000, -796.5
+   loc_of_interest      = 242.64492378900, 32.5995745036, -897.9027500000
   /
 
