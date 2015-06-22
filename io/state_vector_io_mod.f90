@@ -934,6 +934,13 @@ do i = start_var, end_var
 
    ret = nf90_get_var(ncfile, var_id, var_block(start_in_var_block:start_in_var_block+var_size-1), count=dims)
    call nc_check(ret, 'read_variables','reading')
+!********* code notes for Ave ****************
+   if (global_variable_names(i) == the varible you want to transform)
+     ! tranform goes here, e.g.
+      var_block(start_in_var_block:start_in_var_block+var_size-1) = log(var_block(start_in_var_block:start_in_var_block+var_size-1))
+
+   endif
+!******** end of code notes for Ave ***********
 
    start_in_var_block = start_in_var_block + var_size
 
@@ -1057,6 +1064,13 @@ do i = start_var, end_var
 
    ret = nf90_inq_varid(ncfile_out, global_variable_names(i), var_id)
    call nc_check(ret, 'write_variables', 'getting variable id')
+!********* code notes for Ave ****************
+   if (global_variable_names(i) == the varible you want to transform back to original)
+     ! tranform back goes here, e.g.
+      var_block(start_in_var_block:start_in_var_block+var_size-1) = exp(var_block(start_in_var_block:start_in_var_block+var_size-1))
+
+   endif
+!******** end of code notes for Ave ***********
 
    ret = nf90_put_var(ncfile_out, var_id, var_block(start_in_var_block:start_in_var_block+var_size-1), count=dims)
    call nc_check(ret, 'write_variables', 'writing')
