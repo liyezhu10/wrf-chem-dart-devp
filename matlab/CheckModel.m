@@ -225,7 +225,8 @@ switch lower(model)
       vars.vars  = varnames;
       vars.fname = fname;
 
-   case {'cam','tiegcm','fms_bgrid','pe2lyr','mitgcm_ocean','pbl_1d','mpas_atm','sqg'}
+   case {'cam', 'tiegcm', 'fms_bgrid', 'pe2lyr', 'mitgcm_ocean', 'pbl_1d', ...
+         'mpas_atm', 'sqg', 'gcom'}
 
       varnames = get_DARTvars(fname);
       num_vars = length(varnames);

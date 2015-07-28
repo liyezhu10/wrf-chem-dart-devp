@@ -83,6 +83,10 @@ switch lower(pinfo.model)
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');
+   
    case {'mitgcm_ocean'}
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotEnsTimeSeries');

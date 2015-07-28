@@ -275,7 +275,14 @@ switch lower(modelname)
       dnum_lvls = dim_length(fname,'ZG');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
-
+  
+    case {'gcom'}
+      dnum_lons = dim_length(fname,'nx');
+      dnum_lats = dim_length(fname,'ny');
+      dnum_lvls = dim_length(fname,'nz');
+         x = 3;
+         y = [dnum_lons dnum_lats dnum_lvls];
+         
    case {'mpas_atm'}
 
       dnum_cells = dim_length(fname,'nCells');
@@ -290,11 +297,11 @@ switch lower(modelname)
          y = [dnum_X dnum_Y];
 
    case {'simple_advection'}
-      y = dim_length(fname,'loc1d');
+         y = dim_length(fname,'loc1d');
 	 x = 1;
 
    otherwise
-      y = dim_length(fname,'StateVariable');
+         y = dim_length(fname,'StateVariable');
 	 x = 1;
 
 end

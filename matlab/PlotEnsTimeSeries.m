@@ -205,7 +205,7 @@ switch lower(pinfo.model)
             hold off;
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam','sqg'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam','sqg','gcom'}
 
       clf;
 
@@ -245,7 +245,7 @@ switch lower(pinfo.model)
          end
          s1 = sprintf('%s model ''%s'' %s Ensemble Members ', ...
                     pinfo.model, pinfo.var, pinfo.diagn_file);
-         s2 = sprintf('level %d lat %.2f lon %.2f', ...
+         s2 = sprintf('level %d lat %.5f lon %.5f', ...
                     pinfo.level, pinfo.latitude, pinfo.longitude);
          title({s1,s2},'interpreter','none','fontweight','bold');
          xdates(pinfo.time)
