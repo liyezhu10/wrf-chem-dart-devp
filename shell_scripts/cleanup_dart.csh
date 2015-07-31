@@ -11,23 +11,14 @@ set clobber
 
 switch ( $#argv )
    case 0:
-      # supplying no arguments -- echo usage not
+      # this script takes no arguments, so this is good.
       breaksw
    default:
       echo " "
       echo "usage: $SNAME:t"
       echo " "
-      echo "This script compiles 'filter' for a wide range of models and then does"
-      echo "relatively extensive tests of the L96 programs with a variety of options."
-      echo " "
-      echo "This must be run from the top-level 'DART' directory."
-      echo " "
-      echo "This is a pretty verbose process, so if you are logging the output,"
-      echo "make sure you have plenty of space:"
-      echo " "
-      echo "./$SNAME:t |& tee DART_test.log"
-      echo " "
-      echo "can easily result in a 750 Kb log file"
+      echo "This script removes all non-essential files from the lorenz_96 directory."
+      echo " including files created by building the model, and by the test_dart.csh script."
       exit 1
       breaksw
 endsw
