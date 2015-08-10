@@ -1,0 +1,26 @@
+&jules_input_grid
+nx=40,
+ny=40,
+time_dim_name='time',
+/
+&jules_latlon
+file='/users/ar15645/work/regional_simulations/data/grid_lat_lon.nc',
+lat_name='latitude',
+lon_name='longitude',
+/
+&jules_land_frac
+file='/users/ar15645/coupling_simulations/mask_simulation/data/land_fraction_mask.nc',
+land_frac_name='land_fraction'
+/
+&jules_model_grid
+force_1d_grid=.false.,
+land_only=.false.,
+use_subgrid=.true.,
+latlon_region=.true.,
+lat_bounds=51.3458 51.5042,
+lon_bounds=-1.7125 -1.3875,
+land_only=.true.,
+/
+&jules_surf_hgt
+zero_height=.true.,
+/
