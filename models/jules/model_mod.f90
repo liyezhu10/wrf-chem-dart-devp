@@ -141,6 +141,7 @@ integer, parameter :: BOUNDED_BOTH  = 3 ! ... minimum and maximum
 integer :: nfields
 integer, parameter :: max_state_variables = 10
 integer, parameter :: num_state_table_columns = 6
+character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
 ! Codes for interpreting the columns of the variables
 integer, parameter :: VT_VARNAMEINDX  = 1 ! ... variable name
@@ -162,7 +163,7 @@ character(len=256) :: jules_restart_filename = 'jules_restart.nc'
 character(len=256) :: jules_output_filename = 'jules_history.nc'
 character(len=256) :: jules_vector_history_filename = 'jules_vector_history.nc'
 
-character(len=obstypelength) :: variables(max_state_variables, num_state_table_columns) = ' '
+character(len=obstypelength) :: variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
    jules_restart_filename,      &
@@ -3634,7 +3635,8 @@ end subroutine get_jules_output_filename
 function parse_variable_table() result(ngood)
 
 integer :: ngood
-! character variables(:,:) is module scope
+! character variables(:)        is module scope
+! character variable_table(:,:) is module scope
 
 integer :: i
 character(len=NF90_MAX_NAME) :: varname       ! column 1
@@ -3651,26 +3653,31 @@ character(len=NF90_MAX_NAME) :: state_or_aux  ! column 6
 ngood = 0
 MyLoop : do i = 1, max_state_variables
 
-   varname      = trim(variables(i, VT_VARNAMEINDX))
-   dartstr      = trim(variables(i, VT_KINDINDX   ))
-   minvalstring = trim(variables(i, VT_MINVALINDX ))
-   maxvalstring = trim(variables(i, VT_MAXVALINDX ))
-   origin_file  = trim(variables(i, VT_ORIGININDX ))
-   state_or_aux = trim(variables(i, VT_STATEINDX  ))
+   varname      = trim(variables(num_state_table_columns*i - 5))
+   dartstr      = trim(variables(num_state_table_columns*i - 4))
+   minvalstring = trim(variables(num_state_table_columns*i - 3))
+   maxvalstring = trim(variables(num_state_table_columns*i - 2))
+   origin_file  = trim(variables(num_state_table_columns*i - 1))
+   state_or_aux = trim(variables(num_state_table_columns*i    ))
 
    call to_upper(origin_file)
    call to_upper(state_or_aux)
 
-   ! If the first element is empty, we have found the end of the list.
-   if ( variables(i,1) == ' ' ) exit MyLoop
+   variable_table(i,VT_VARNAMEINDX) = trim(varname)
+   variable_table(i,VT_KINDINDX)    = trim(dartstr)
+   variable_table(i,VT_MINVALINDX)  = trim(minvalstring)
+   variable_table(i,VT_MAXVALINDX)  = trim(maxvalstring)
+   variable_table(i,VT_ORIGININDX)  = trim(origin_file)
+   variable_table(i,VT_STATEINDX)   = trim(state_or_aux)
 
-   write(*,*)variables(i,:)
+   ! If the first element is empty, we have found the end of the list.
+   if ( variable_table(i,1) == ' ' ) exit MyLoop
 
    ! Any other condition is an error.
-   if ( any(variables(i,:) == ' ') ) then
-      string1 = 'input.nml &model_nml:variables not fully specified'
+   if ( any(variable_table(i,:) == ' ') ) then
+      string1 = 'input.nml &model_nml:clm_variables not fully specified'
       string2 = 'must be 6 entries per variable. Last known variable name is'
-      string3 = '['//trim(variables(i,1))//'] ... (without the [], naturally)'
+      string3 = '['//trim(variable_table(i,1))//'] ... (without the [], naturally)'
       call error_handler(E_ERR, 'parse_variable_table', string1, &
          source, revision, revdate, text2=string2, text3=string3)
    endif
@@ -3685,12 +3692,18 @@ MyLoop : do i = 1, max_state_variables
    ! Record the contents of the DART state vector
 
    if ((debug > 8) .and. do_output()) then
-      write(logfileunit,*)'variable ',i,' is ',trim(variables(i,1)), ' ', trim(variables(i,2)),' ', &
-                                               trim(variables(i,3)), ' ', trim(variables(i,4)),' ', &
-                                               trim(variables(i,5)), ' ', trim(variables(i,6))
-      write(     *     ,*)'variable ',i,' is ',trim(variables(i,1)), ' ', trim(variables(i,2)),' ', &
-                                               trim(variables(i,3)), ' ', trim(variables(i,4)),' ', &
-                                               trim(variables(i,5)), ' ', trim(variables(i,6))
+      write(logfileunit,*)'variable ',i,' is ',trim(variable_table(i,1)), ' ', &
+                                               trim(variable_table(i,2)), ' ', &
+                                               trim(variable_table(i,3)), ' ', &
+                                               trim(variable_table(i,4)), ' ', &
+                                               trim(variable_table(i,5)), ' ', &
+                                               trim(variable_table(i,6))
+      write(     *     ,*)'variable ',i,' is ',trim(variable_table(i,1)), ' ', &
+                                               trim(variable_table(i,2)), ' ', &
+                                               trim(variable_table(i,3)), ' ', &
+                                               trim(variable_table(i,4)), ' ', &
+                                               trim(variable_table(i,5)), ' ', &
+                                               trim(variable_table(i,6))
    endif
 
    ngood = ngood + 1
@@ -4711,8 +4724,8 @@ integer, intent(in) :: ivar
 integer  :: ios
 real(r8) :: minvalue, maxvalue
 
-progvar(ivar)%varname     = trim(variables(ivar,VT_VARNAMEINDX))
-progvar(ivar)%kind_string = trim(variables(ivar,VT_KINDINDX))
+progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
+progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
 progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
 progvar(ivar)%maxlevels   = 0
 progvar(ivar)%dimlens     = 0
@@ -4730,17 +4743,17 @@ progvar(ivar)%has_fill_value    = .true.
 progvar(ivar)%has_missing_value = .true.
 progvar(ivar)%update            = .false.
 
-if (variables(ivar,VT_ORIGININDX) == 'VECTOR') then
+if (variable_table(ivar,VT_ORIGININDX) == 'VECTOR') then
    progvar(ivar)%origin = trim(jules_vector_history_filename)
-elseif (variables(ivar,VT_ORIGININDX) == 'HISTORY') then
+elseif (variable_table(ivar,VT_ORIGININDX) == 'HISTORY') then
    progvar(ivar)%origin = trim(jules_output_filename)
 else
-   variables(ivar,VT_ORIGININDX) = 'RESTART'
+   variable_table(ivar,VT_ORIGININDX) = 'RESTART'
    progvar(ivar)%origin = trim(jules_restart_filename)
 endif
 
-if ((variables(ivar,VT_STATEINDX)  == 'UPDATE') .and. &
-    (variables(ivar,VT_ORIGININDX) == 'RESTART')) progvar(ivar)%update = .true.
+if ((variable_table(ivar,VT_STATEINDX)  == 'UPDATE') .and. &
+    (variable_table(ivar,VT_ORIGININDX) == 'RESTART')) progvar(ivar)%update = .true.
 
 ! set the default values
 
@@ -4752,10 +4765,10 @@ progvar(ivar)%maxvalue = MISSING_R8
 ! If the character string can be interpreted as an r8, great.
 ! If not, there is no value to be used.
 
-read(variables(ivar,VT_MINVALINDX),*,iostat=ios) minvalue
+read(variable_table(ivar,VT_MINVALINDX),*,iostat=ios) minvalue
 if (ios == 0) progvar(ivar)%minvalue = minvalue
 
-read(variables(ivar,VT_MAXVALINDX),*,iostat=ios) maxvalue
+read(variable_table(ivar,VT_MAXVALINDX),*,iostat=ios) maxvalue
 if (ios == 0) progvar(ivar)%maxvalue = maxvalue
 
 ! rangeRestricted == BOUNDED_NONE  == 0 ... unlimited range
