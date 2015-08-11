@@ -148,7 +148,7 @@
 
 
 &assim_model_nml
-   write_binary_restart_files = .true.
+   write_binary_restart_files = .false.
    netCDF_large_file_support  = .true.
    /
 
@@ -186,6 +186,7 @@
                 'snow_tile',  'KIND_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      '0.0', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         '0.0', 'NA', 'restart' , 'UPDATE',
+                'soil_wet',   'KIND_SOIL_MOISTURE',          '0.0', 'NA', 'output'  , 'NO_COPY_BACK',
    /
 
 

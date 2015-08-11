@@ -79,9 +79,9 @@ public :: get_model_size,         &
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
 
-public :: jules_to_dart_state_vector,     &
+public :: jules_to_dart_state_vector,   &
           sv_to_restart_file,           &
-          get_jules_restart_filename,     &
+          get_jules_restart_filename,   &
           get_state_time,               &
           get_grid_vertval,             &
           compute_gridcell_value,       &
@@ -229,11 +229,6 @@ integer :: nlon     = -1
 integer :: nlat     = -1
 integer :: nsoil    = -1    ! Comes from jules_soil.nml
 
-integer :: nlatatm  = -1
-integer :: nlatrof  = -1
-integer :: nlonatm  = -1
-integer :: nlonrof  = -1
-
 real(r8), allocatable :: SOILLEVEL(:)
 real(r8), allocatable :: LONGITUDE(:,:)
 real(r8), allocatable ::  LATITUDE(:,:)
@@ -264,13 +259,10 @@ logical :: masked = .false.
 integer :: Nland = -1 ! Number of gridcells containing land
 integer :: Ncpool   = -1 ! Number of carbon pools
 integer :: Ntile      = -1 ! Number of plant functional types
-integer :: Nlevlak   = -1 ! Number of
 integer :: Nlevsno   = -1 ! Number of snow levels
 integer :: Nlevsno1  = -1 ! Number of snow level ... interfaces?
 integer :: Nlevtot   = -1 ! Number of total levels
 integer :: Nnumrad   = -1 ! Number of
-integer :: Nrtmlon   = -1 ! Number of river transport model longitudes
-integer :: Nrtmlat   = -1 ! Number of river transport model latitudes
 
 integer,  allocatable, dimension(:)  :: grid1d_ixy, grid1d_jxy ! 2D lon/lat index of corresponding gridcell
 integer,  allocatable, dimension(:)  :: land1d_ixy, land1d_jxy ! 2D lon/lat index of corresponding gridcell
@@ -317,6 +309,7 @@ INTERFACE DART_get_var
       MODULE PROCEDURE get_var_1d
       MODULE PROCEDURE get_var_2d
       MODULE PROCEDURE get_var_3d
+      MODULE PROCEDURE get_var_4d
 END INTERFACE
 
 INTERFACE get_state_time
@@ -563,8 +556,10 @@ subroutine static_init_model()
 ! Local variables - all the important ones have module scope
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=obstypelength)          :: dimname
+character(len=NF90_MAX_NAME)          :: dimname
 integer :: ncid, TimeDimID, VarID, dimlen, varsize
+integer :: ncidR ! handle to JULES restart file
+integer :: ncidO ! handle to JULES output  file 
 integer :: iunit, io, ivar
 integer :: i, j, xi, xj, index1, indexN, indx
 integer :: ss, dd
@@ -611,12 +606,12 @@ call error_handler(E_MSG,'static_init_model',string1)
 ! The jules restart files are intentionally lean and, in so doing,
 ! do not have the full lat/lon arrays nor any depth information.
 !
-ncid = 0; ! signal that netcdf file is closed
-call get_jules_metadata(ncid, jules_output_filename, 'open')
+ncidO = 0; ! signal that netcdf file is closed
+call get_jules_metadata(ncidO, jules_output_filename, 'open')
 
-allocate(LONGITUDE(nlon,nlat), LATITUDE(nlat,nlat),  SOILLEVEL(nsoil))
+allocate(LONGITUDE(nlon,nlat), LATITUDE(nlon,nlat),  SOILLEVEL(nsoil))
 
-call get_full_grid(ncid, jules_output_filename, 'close')
+call get_full_grid(ncidO, jules_output_filename, 'open')
 
 !---------------------------------------------------------------
 ! The jules grid in a restart file can take on two forms.
@@ -625,7 +620,7 @@ call get_full_grid(ncid, jules_output_filename, 'close')
 ! of useful land gridcells and the number of latitudes is 1.
 
 ! TJH FIXME ...
-! call get_sparse_dims(ncid, jules_restart_filename, 'open')
+! call get_sparse_dims(ncidO, jules_restart_filename, 'open')
 
 ! TJH allocate(grid1d_ixy(Nland), grid1d_jxy(Nland))
 ! TJH allocate(cols1d_ixy(Ncpool),   cols1d_jxy(Ncpool))
@@ -635,7 +630,7 @@ call get_full_grid(ncid, jules_output_filename, 'close')
 ! TJH if (Nlevsno > 0) allocate(zsno(Nlevsno,Ncpool))
 
 ! TJH FIXME 
-! call get_sparse_geog(ncid, jules_restart_filename, 'close')
+! call get_sparse_geog(ncidO, jules_restart_filename, 'close')
 
 !---------------------------------------------------------------
 ! Generate list of land units in each gridcell
@@ -646,11 +641,12 @@ allocate(gridCellInfo(nlon,nlat))
 
 !---------------------------------------------------------------
 ! Compile the list of jules variables to use in the creation
-! of the DART state vector.
+! of the DART state vector. This just checks to see that the
+! DART KIND is valid and that the variable was specified correctly.
+! Whether or not the JULES variables exist is checked in the
+! rather long loop that follows.
 
 nfields = parse_variable_table()
-
-stop  ! TJH EARLY EXIT
 
 ! Compute the offsets into the state vector for the start of each
 ! variable type. Requires reading shapes from the jules restart file.
@@ -665,6 +661,9 @@ do ivar = 1, nfields
    call SetVariableAttributes(ivar)
 
    ! Open the file for each variable and get dimensions, etc.
+   ! Since the JULES restart files have no metadata (!?)
+   ! we must get all the per-variable metadata from the 
+   ! (hopefully identical) variables in the output file.
 
    call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid), &
               'static_init_model','open '//trim(progvar(ivar)%origin))
@@ -684,6 +683,8 @@ do ivar = 1, nfields
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
+   ! FIXME ... at this point, we could check the same variable in the output file
+   ! to get the metadata
 
    if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
       call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
@@ -700,8 +701,6 @@ do ivar = 1, nfields
    endif
 
    ! Saving any FillValue, missing_value attributes so I can use it when I read and write ...
-   ! CESM1_1_1 ... no attributes in the restart file for rank1 or greater
-   ! variables.
 
    if (progvar(ivar)%xtype == NF90_INT) then
        if (nf90_get_att(ncid, VarID, '_FillValue'    , spvalINT) == NF90_NOERR) then
@@ -764,9 +763,13 @@ do ivar = 1, nfields
       write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
       write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
       write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
-      write(logfileunit,*) '  dimnames    ',(/ (trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims ) /)
-      write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
       write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+
+      do i = 1,progvar(ivar)%numdims
+         write(logfileunit,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
+                    i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
+      enddo
+
       write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
       write(logfileunit,*) '  index1      ',progvar(ivar)%index1
       write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
@@ -791,9 +794,13 @@ do ivar = 1, nfields
       write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
       write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
       write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
-      write(     *     ,*) '  dimnames    ',(/ (trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims ) /)
-      write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
       write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+
+      do i = 1,progvar(ivar)%numdims
+         write(  *,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
+                    i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
+      enddo
+
       write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
       write(     *     ,*) '  index1      ',progvar(ivar)%index1
       write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
@@ -821,341 +828,14 @@ model_size = progvar(nfields)%indexN
 
 if ((debug > 0) .and. do_output()) then
   write(logfileunit, *)
-  write(logfileunit,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
+  write(logfileunit,'("grid: nlon, nlat, nz =",3(1x,i6))') nlon, nlat, nsoil
   write(logfileunit, *)'model_size = ', model_size
   write(     *     , *)
-  write(     *     ,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
+  write(     *     ,'("grid: nlon, nlat, nz =",3(1x,i6))') nlon, nlat, nsoil
   write(     *     , *)'model_size = ', model_size
 endif
 
 allocate(ens_mean(model_size))
-
-!---------------------------------------------------------------
-! Create the metadata arrays that are the same shape as the state vector.
-! The metadata arrays will provide the ability to determine what grid cell is the parent
-! of the state vector index in question ... as well as the actual surface area.
-! This MUST stride through the state vector the same way the state vector is filled.
-
-allocate(lonixy(model_size), latjxy(model_size), levels(model_size), landarea(model_size))
-
-! Initialize all levels to surface. If there is a level, we will explicitly specify it.
-levels(:) = 0.0_r8
-
-do ivar=1, nfields
-
-   ! All variables are at the surface until proven otherwise.
-   progvar(ivar)%maxlevels = 1
-
-   indx = progvar(ivar)%index1
-
-   ! 1D variables are usually from the restart file
-   ! FIXME this same logic is used for 2D variables from the 'vector' file which
-   ! has a singleton dimension of 'time'
-
-   if (progvar(ivar)%numdims == 1) then
-
-      if ((debug > 8) .and. do_output()) then
-         write(*,*)
-         write(*,*)'variable ',trim(progvar(ivar)%varname)
-         write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
-      endif
-
-      SELECT CASE ( trim(progvar(ivar)%dimnames(1)) )
-         CASE ("gridcell")
-            do i = 1, progvar(ivar)%dimlens(1)
-               xi             = grid1d_ixy(i)
-               xj             = grid1d_jxy(i) ! always unity if masked
-               if (masked) then
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xi
-                  landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi)
-               else
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xj
-                  landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj)
-               endif
-               indx = indx + 1
-            enddo
-
-         CASE ("landunit")
-            do i = 1, progvar(ivar)%dimlens(1)
-               xi             = land1d_ixy(i)
-               xj             = land1d_jxy(i) ! always unity if masked
-               if (masked) then
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xi
-                  landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * land1d_wtxy(i)
-               else
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xj
-                  landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * land1d_wtxy(i)
-               endif
-               indx = indx + 1
-            enddo
-
-         CASE ("column")
-            do i = 1, progvar(ivar)%dimlens(1)
-               xi             = cols1d_ixy(i)
-               xj             = cols1d_jxy(i) ! always unity if masked
-               if (masked) then
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xi
-                  landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * cols1d_wtxy(i)
-               else
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xj
-                  landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * cols1d_wtxy(i)
-               endif
-               indx = indx + 1
-            enddo
-
-         CASE ("pft")
-            do i = 1, progvar(ivar)%dimlens(1)
-               xi             = pfts1d_ixy(i)
-               xj             = pfts1d_jxy(i) ! always unity if masked
-               if (masked) then
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xi
-                  landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * pfts1d_wtxy(i)
-               else
-                  lonixy(  indx) = xi
-                  latjxy(  indx) = xj
-                  landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * pfts1d_wtxy(i)
-               endif
-               indx = indx + 1
-            enddo
-
-         CASE DEFAULT
-            write(string1,*)'(1d) unknown Dimension name '//trim(progvar(ivar)%dimnames(1))// &
-             ' while trying to create metadata for '//trim(progvar(ivar)%varname)
-            call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
-
-      END SELECT
-
-   elseif (progvar(ivar)%numdims == 2) then
-
-      ! restart file variables may have 2 dimensions, one of which is layers.
-      ! vector_history files may have 2 dimensions, one of which is time
-      ! history file variables always have 3 dimension [time,lat,lon]
-
-      ! In the ncdump output, dimension 2 is the leftmost dimension.
-      ! Only dimension 2 matters for the weights.
-
-      if ((debug > 8) .and. do_output()) then
-         write(*,*)
-         write(*,*)'variable ',trim(progvar(ivar)%varname)
-         write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
-         write(*,*)'dimension 2 (j) ',progvar(ivar)%dimnames(2),progvar(ivar)%dimlens(2)
-      endif
-
-      SELECT CASE ( trim(progvar(ivar)%dimnames(2)) )
-         CASE ("gridcell")
-            if ((debug > 8) .and. do_output()) write(*,*)'length grid1d_ixy ',size(grid1d_ixy)
-            do j = 1, progvar(ivar)%dimlens(2)
-               xi = grid1d_ixy(j)
-               xj = grid1d_jxy(j) ! always unity if masked
-               do i = 1, progvar(ivar)%dimlens(1)
-                  if (masked) then
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xi
-                     landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi)
-                  else
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xj
-                     landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj)
-                  endif
-                  indx = indx + 1
-               enddo
-            enddo
-
-         CASE ("landunit")
-            if ((debug > 8) .and. do_output()) write(*,*)'length land1d_ixy ',size(land1d_ixy)
-            do j = 1, progvar(ivar)%dimlens(2)
-               xi = land1d_ixy(j)
-               xj = land1d_jxy(j) ! always unity if masked
-               do i = 1, progvar(ivar)%dimlens(1)
-                  if (masked) then
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xi
-                     landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * land1d_wtxy(j)
-                  else
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xj
-                     landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * land1d_wtxy(j)
-                  endif
-                  indx = indx + 1
-               enddo
-            enddo
-
-         CASE ("column") ! Column is the only coordinate that has vertical levels.
-                         ! The vertical levels are fully defined by the SOILLEVEL and
-                         ! levsno variables. SOILLEVEL is static, levsno varies by column.
-
-            progvar(ivar)%maxlevels = progvar(ivar)%dimlens(2)
-
-            if ((debug > 8) .and. do_output()) write(*,*)'length cols1d_ixy ',size(cols1d_ixy)
-            if ((debug > 8) .and. do_output()) write(*,*)'size zsno ',size(zsno,1), size(zsno,2)
-            if ((debug > 8) .and. do_output()) write(*,*)'nlevsno ',nlevsno
-
-            LANDCOLUMN : do j = 1, progvar(ivar)%dimlens(2)
-
-               call fill_levels(progvar(ivar)%dimnames(1),j,progvar(ivar)%dimlens(1),levtot)
-
-               xi = cols1d_ixy(j)
-               xj = cols1d_jxy(j) ! always unity if masked
-               VERTICAL :  do i = 1, progvar(ivar)%dimlens(1)
-                  levels(  indx) = levtot(i)
-                  if (masked) then
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xi
-                     landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * cols1d_wtxy(j)
-                  else
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xj
-                     landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * cols1d_wtxy(j)
-                  endif
-                  indx = indx + 1
-               enddo VERTICAL
-            enddo LANDCOLUMN
-
-         CASE ("pft")
-            if ((debug > 8) .and. do_output()) write(*,*)'length pfts1d_ixy ',size(pfts1d_ixy)
-            do j = 1, progvar(ivar)%dimlens(2)
-               xi = pfts1d_ixy(j)
-               xj = pfts1d_jxy(j) ! always unity if masked
-               do i = 1, progvar(ivar)%dimlens(1)
-                  if (masked) then
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xi
-                     landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * pfts1d_wtxy(j)
-                  else
-                     lonixy(  indx) = xi
-                     latjxy(  indx) = xj
-                     landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * pfts1d_wtxy(j)
-                  endif
-                  indx = indx + 1
-               enddo
-            enddo
-
-         CASE ("time")
-
-            ! The vector history files can have things 'pft,time' or 'column,time'
-
-            SELECT CASE ( trim(progvar(ivar)%dimnames(1)) )
-               CASE ("pft")
-                  do i = 1, progvar(ivar)%dimlens(1)
-                     xi             = pfts1d_ixy(i)
-                     xj             = pfts1d_jxy(i) ! always unity if masked
-                     if (masked) then
-                        lonixy(  indx) = xi
-                        latjxy(  indx) = xi
-                        landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * pfts1d_wtxy(i)
-                     else
-                        lonixy(  indx) = xi
-                        latjxy(  indx) = xj
-                        landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * pfts1d_wtxy(i)
-                     endif
-                     indx = indx + 1
-                  enddo
-
-               CASE ("column")
-                  do i = 1, progvar(ivar)%dimlens(1)
-                     xi             = cols1d_ixy(i)
-                     xj             = cols1d_jxy(i) ! always unity if masked
-                     if (masked) then
-                        lonixy(  indx) = xi
-                        latjxy(  indx) = xi
-                        landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi) * cols1d_wtxy(i)
-                     else
-                        lonixy(  indx) = xi
-                        latjxy(  indx) = xj
-                        landarea(indx) = AREA2D(xi,xj) * LANDFRAC2D(xi,xj) * cols1d_wtxy(i)
-                     endif
-                     indx = indx + 1
-                  enddo
-
-               CASE DEFAULT
-                  write(string1,*)'(2d) unknown first Dimension name '//trim(progvar(ivar)%dimnames(1))// &
-                   ' while trying to create metadata for '//trim(progvar(ivar)%varname)
-                  call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
-            END SELECT
-
-         CASE DEFAULT
-            write(string1,*)'(2d) unknown Dimension name '//trim(progvar(ivar)%dimnames(2))// &
-             ' while trying to create metadata for '//trim(progvar(ivar)%varname)
-            call error_handler(E_ERR,'static_init_model', string1, source, revision, revdate)
-
-      END SELECT
-
-
-   elseif (progvar(ivar)%numdims == 3) then
-
-      ! restart file variables never have 3 dimensions
-      ! vector_history variables   may have 3 dimensions [time, lat, lon]
-      ! history file variables always have 3 dimensions [time, lat, lon]
-      !     exception is float H2OSOI(time, SOILLEVEL, lat, lon) ... but we
-      !     have access to restart file h2osoi_[liq,ice]
-
-      if ((debug > 8) .and. do_output()) then
-         write(*,*)
-         write(*,*)'variable ',trim(progvar(ivar)%varname)
-         write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
-         write(*,*)'dimension 2 (j) ',progvar(ivar)%dimnames(2),progvar(ivar)%dimlens(2)
-         write(*,*)'dimension 3 (k) ',progvar(ivar)%dimnames(3),progvar(ivar)%dimlens(3)
-      endif
-
-      ! Remember the order is reversed from ncdump to fortran
-      ! The messages are in ncdump-order, checking is fortran-order
-      if ((trim(progvar(ivar)%dimnames(1)) .ne. 'x') .or. &
-          (trim(progvar(ivar)%dimnames(2)) .ne. 'y' ) .or. &
-          (trim(progvar(ivar)%dimnames(3)) .ne. 'time' )) then
-         write(string1,*)'3D variables must be [time,lat,lon] (as reported by ncdump)'
-         write(string2,*)trim(progvar(ivar)%varname),' is ', &
-           trim(progvar(ivar)%dimnames(3)), ' ', &
-           trim(progvar(ivar)%dimnames(2)), ' ', &
-           trim(progvar(ivar)%dimnames(1))
-         call error_handler(E_ERR,'static_init_model', string1, &
-                 source, revision, revdate, text2=string2)
-      endif
-
-      ! The get_var_3d() routine ensures there is only 1 timestep.
-      ! So there is no need to loop over dimlens(3) 
-
-      do j = 1, progvar(ivar)%dimlens(2)     ! time-invariant
-         do i = 1, progvar(ivar)%dimlens(1)  ! time-invariant
-            lonixy(  indx) = i
-            latjxy(  indx) = j
-            landarea(indx) = AREA2D(i,j) * LANDFRAC2D(i,j)
-            indx = indx + 1
-         enddo
-      enddo
-
-   else
-
-      ! Cannot support 4D variables yet.
-      ! These only occurr in 2D history files for variables with levels (and time)
-      ! i.e. H2OSOI(time, SOILLEVEL, lat, lon)
-      !
-      ! You can get the same information from the restart file, usually.
-
-      write(string1,*)'variables of rank ',progvar(ivar)%numdims,' are unsupported.'
-      write(string2,*)trim(progvar(ivar)%varname),' is dimensioned ',&
-                           progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-      call error_handler(E_ERR,'static_init_model', string1, source, revision, &
-                         revdate, text2=string2)
-
-   endif
-
-   indx = indx - 1
-   if (indx /= progvar(ivar)%indexN ) then
-      write(string1,*)'variable ',trim(progvar(ivar)%varname), &
-       ' is supposed to end at index ',progvar(ivar)%indexN
-      write(string2,*)'it ends at index ',indx
-      call error_handler(E_ERR,'static_init_model', string1, source, revision, &
-                         revdate, text2=string2)
-   endif
-
-enddo
 
 end subroutine static_init_model
 
@@ -1439,8 +1119,6 @@ else
              dimid =      pftDimID),'nc_write_model_atts', 'pft def_dim '//trim(filename))
    call nc_check(nf90_def_dim(ncid=ncFileID, name='SOILLEVEL',  len = nsoil, &
              dimid =  SOILLEVELDimID),'nc_write_model_atts', 'SOILLEVEL def_dim '//trim(filename))
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='levlak', len = nlevlak, &
-             dimid =   levlakDimID),'nc_write_model_atts', 'levlak def_dim '//trim(filename))
    call nc_check(nf90_def_dim(ncid=ncFileID, name='levsno', len = nlevsno, &
              dimid =   levsnoDimID),'nc_write_model_atts', 'levsno def_dim '//trim(filename))
    call nc_check(nf90_def_dim(ncid=ncFileID, name='levsno1', len = nlevsno1, &
@@ -1997,11 +1675,12 @@ real(r8),         intent(out) :: state_vector(:)
 type(time_type),  intent(out) :: restart_time
 
 ! temp space to hold data while we are reading it
-integer  :: i, j, ni, nj, ivar, indx, numsnowlevels
+integer  :: i, j, k, ni, nj, nk, ivar, indx, numsnowlevels
 integer,  allocatable, dimension(:)         :: snlsno
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
+real(r8), allocatable, dimension(:,:,:,:)   :: data_4d_array
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME) :: varname
@@ -2009,47 +1688,26 @@ integer :: io, TimeDimID, VarID, ncNdims, dimlen
 integer :: ncid
 character(len=256) :: myerrorstring
 
-call error_handler(E_ERR, 'jules_to_dart_state_vector', 'FIXME routine not written', source, revision, revdate)
+call error_handler(E_MSG, 'jules_to_dart_state_vector', 'FIXME routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
 state_vector = MISSING_R8
 
-! Must check anything with a dimension of 'levtot' or 'levsno' and manually
-! set the values to DART missing. If only it were that easy ...
-!
-! The treatment of snow-related variables is complicated.
-! The SNLSNO variable defines the number of snow layers with valid values.
-! HOWEVER, if the snow depth is < 0.01 m, the snow is not represented by a layer,
-! so the SNLSNO(i) is zero even though there is a trace of snow.
-! Even a trace amount of snow results in some sort of snow cover fraction.
-!
-! Lakes are treated differently.
-! The SNLSNO(i) is always zero, even though there is snow.
-! The snow over lakes is wholly contained in the bulk formulation variables
-! as opposed to the snow layer variables.
-
-! Some things must be gotten explicitly from the restart file - ONCE.
-! number of snow layers
-! time of restart file
-
-! allocate(snlsno(Ncolumn))
-call nc_check(nf90_open(trim(jules_restart_filename), NF90_NOWRITE, ncid), &
-              'jules_to_dart_state_vector', 'open SNLSNO'//jules_restart_filename)
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
-              'jules_to_dart_state_vector', 'inq_varid SNLSNO'//jules_restart_filename)
-call nc_check(nf90_get_var(ncid, VarID, snlsno), &
-              'jules_to_dart_state_vector', 'get_var SNLSNO'//jules_restart_filename)
+call nc_check(nf90_open(trim(jules_output_filename), NF90_NOWRITE, ncid), &
+              'jules_to_dart_state_vector', 'open for time '//jules_output_filename)
 
 restart_time = get_state_time(ncid)
 
-if (do_output()) call print_time(restart_time,'time in restart file '//jules_restart_filename)
-if (do_output()) call print_date(restart_time,'date in restart file '//jules_restart_filename)
+if (do_output()) call print_time(restart_time,'time of model state '//jules_output_filename)
+if (do_output()) call print_date(restart_time,'date of model state '//jules_output_filename)
 
-call nc_check(nf90_close(ncid),'jules_to_dart_state_vector','close '//jules_restart_filename)
+call nc_check(nf90_close(ncid),'jules_to_dart_state_vector','close '//jules_output_filename)
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
+! The DART state vector may be composed of variables from either the restart or output file.
+! Sometimes it is useful to have variables from the output file to use for forward ops.
 
 do ivar=1, nfields
 
@@ -2101,10 +1759,6 @@ do ivar=1, nfields
    enddo
 
    ! Pack the variable into the DART state vector
-   ! Could/should fill metadata arrays at the same time ...
-   ! As of 24 Aug 2011, jules was not consistent about using a single fill_value
-   ! or missing value, and the restart files didn't use the right attributes anyway ...
-   ! (bugzilla report 1401)
 
    indx = progvar(ivar)%index1
 
@@ -2122,69 +1776,16 @@ do ivar=1, nfields
 
    elseif (ncNdims == 2) then
 
+      ! restart file variables are at most 2D, and never have time
+      !   float canopy(tile, land) ;
+      !   float t_soil(soil, land) ;
+      !   float cs(scpool, land) ;
+      !   float gs(land) ;
+
       ni = progvar(ivar)%dimlens(1)
       nj = progvar(ivar)%dimlens(2)
       allocate(data_2d_array(ni, nj))
       call DART_get_var(ncid, varname, data_2d_array)
-
-      ! README: The values in unused snow layers must be assumed to be
-      ! indeterminate. If the layer is not in use, fill with a missing value.
-      ! (levsno,column) and (levtot,column) variables may be treated identically.
-      ! abs(snlsno(j)) defines the number of valid levels in each column -
-      ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
-      ! values are in the 1D variables, SNOWDP and frac_sno.
-
-      ! FIXME: Question, what happens to unused levels below ground? Are those
-      ! values 'special'?
-
-      if     ( (trim(progvar(ivar)%dimnames(1)) == 'levsno')   .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
-
-         do j = 1, nj  ! loop over columns
-            numsnowlevels = abs(snlsno(j))
-            do i = 1, Nlevsno - numsnowlevels  ! loop over layers
-               data_2d_array(i,j) = MISSING_R8
-            enddo
-         enddo
-
-      elseif ( (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
-
-         do j = 1, nj  ! loop over columns
-            numsnowlevels = abs(snlsno(j))
-            do i = 1, Nlevsno - numsnowlevels  ! loop over layers
-               data_2d_array(i,j) = MISSING_R8
-            enddo
-         enddo
-
-      endif
-
-      ! Block of checks that will hopefully be corrected in the
-      ! core jules code. There are some indeterminate values being
-      ! used instead of the missing_value code - and even then,
-      ! the missing_value code is not reliably implemented.
-
-      if (progvar(ivar)%varname == 'T_SOISNO') then
-         where(data_2d_array < 1.0_r8) data_2d_array = MISSING_R8
-         do j = 1,nj  ! T_SOISNO has missing data in lake columns
-           if (cols1d_ityplun(j) == LAKE) then
-           !  write(*,*)'Found a lake column resetting the following:'
-           !  write(*,*)data_2d_array(:,j)
-              data_2d_array(:,j) = MISSING_R8
-           endif
-         enddo
-      endif
-      if ((progvar(ivar)%varname == 'H2OSOI_LIQ')  .or. &
-          (progvar(ivar)%varname == 'H2OSOI_ICE')) then
-         where(data_2d_array < 0.0_r8) data_2d_array = MISSING_R8
-         do j = 1,nj  ! missing data in lake columns
-           if (cols1d_ityplun(j) == LAKE) then
-              data_2d_array(:,j) = MISSING_R8
-           endif
-         enddo
-      endif
-
-      ! Finally, pack it into the DART state vector.
 
       do j = 1, nj
       do i = 1, ni
@@ -2197,13 +1798,11 @@ do ivar=1, nfields
    elseif (ncNdims == 3) then
 
       ! restart file variables never have 3 dimensions
-      ! vector_history variables  may have 3 dimensions [time, lat, lon]
-      ! history file variables always have 3 dimensions [time, lat, lon]
-      !     exception is float H2OSOI(time, SOILLEVEL, lat, lon) ... but we
-      !     have access to restart file h2osoi_[liq,ice]
+      ! output  file variables may have 3 dimensions
+      !   float precip(time, y, x) ;
 
       if     ( (trim(progvar(ivar)%dimnames(1)) == 'x')   .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'lat')   .and. &
+               (trim(progvar(ivar)%dimnames(2)) == 'y')   .and. &
                (trim(progvar(ivar)%dimnames(3)) == 'time') ) then
 
          ni = progvar(ivar)%dimlens(1)
@@ -2212,10 +1811,6 @@ do ivar=1, nfields
 
          allocate(data_3d_array(ni, nj, 1))
          call DART_get_var(ncid, varname, data_3d_array)
-
-         ! In the jules history files, the _missing_value_ flag seems to be
-         ! applied correctly for PBOT, TBOT ... so there is no need for the
-         ! extra processing that is present in the previous loops.
 
          do j = 1, nj
          do i = 1, ni
@@ -2226,7 +1821,44 @@ do ivar=1, nfields
          deallocate(data_3d_array)
       else
 
-         write(string1, *) '3D variable unexpected shape -- only support nlon, nlat, time(=1)'
+         write(string1, *) '3D variable unexpected shape -- only support x, y, time(=1)'
+         write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
+         write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
+         call error_handler(E_ERR,'jules_to_dart_state_vector', string1, &
+                           source, revision, revdate, text2=string2, text3=string3)
+
+      endif
+
+   elseif (ncNdims == 4) then
+
+      ! output  file variables may have 4 dimensions
+      !   float soil_wet(time, soil, y, x)
+      !   float    esoil(time, tile, y, x)
+
+      if     ( (trim(progvar(ivar)%dimnames(1)) == 'x')   .and. &
+               (trim(progvar(ivar)%dimnames(2)) == 'y')   .and. &
+               (trim(progvar(ivar)%dimnames(4)) == 'time') ) then
+
+         ni = progvar(ivar)%dimlens(1)
+         nj = progvar(ivar)%dimlens(2)
+         nk = progvar(ivar)%dimlens(3)
+       ! nl = progvar(ivar)%dimlens(3) not needed ... time is always a singleton
+
+         allocate(data_4d_array(ni, nj, nk, 1))
+         call DART_get_var(ncid, varname, data_4d_array)
+
+         do k = 1, nk
+         do j = 1, nj
+         do i = 1, ni
+            state_vector(indx) = data_4d_array(i, j, k, 1)
+            indx = indx + 1
+         enddo
+         enddo
+         enddo
+         deallocate(data_4d_array)
+      else
+
+         write(string1, *) '4D variable unexpected shape -- only support x, y, xxx, time(=1)'
          write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
          write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
          call error_handler(E_ERR,'jules_to_dart_state_vector', string1, &
@@ -2255,8 +1887,6 @@ do ivar=1, nfields
    ncid = 0
 
 enddo
-
-deallocate(snlsno)
 
 end subroutine jules_to_dart_state_vector
 
@@ -2518,7 +2148,7 @@ call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
 if (attvalue(1:13) /= 'seconds since') then
    write(string1,*)'expecting time units of [seconds since ... ]'
    write(string2,*)'read time units of ['//trim(attvalue)//']'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
+   call error_handler(E_ERR, 'get_state_time_ncid:', string1, &
           source, revision, revdate, text2=string2)
 endif
 
@@ -2527,7 +2157,7 @@ if (ios /= 0) then
    write(string1,*)'Unable to read time units. Error status was ',ios
    write(string2,*)'expected "seconds since YYYY-MM-DD HH:MM:SS"'
    write(string3,*)'was      "'//trim(attvalue)//'"'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
+   call error_handler(E_ERR, 'get_state_time_ncid:', string1, &
           source, revision, revdate, text2=string2, text3=string3)
 endif
 
@@ -3241,10 +2871,8 @@ DimCheck : do i = 1,numdims
               'get_var_2d', string1)
 
    if ( dimIDs(i) == TimeDimID ) then
-
       call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen), &
             'get_var_2d', 'inquire_dimension time '//trim(varname))
-
       timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
       ncstart(i) = timeindex
       dimlens(i) = 1
@@ -3456,7 +3084,6 @@ DimCheck : do i = 1,numdims
                  'get_var_3d', trim(string1))
 
    if ( dimIDs(i) == TimeDimID ) then
-
        timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
        ncstart(i) = timeindex
        dimlens(i) = 1
@@ -3584,6 +3211,217 @@ else
 endif
 
 end subroutine get_var_3d
+
+
+!------------------------------------------------------------------
+!> (DART_get_var) get_var_4d
+!>
+!> This function will return a R8 array with the netCDF attributes applied.
+!> scale_factor, offset will be applied,
+!> missing_value, _FillValue will be replaced by the DART missing value ...
+!>
+!> If _FillValue is defined then it should be scalar and of the same type as the variable.
+!> If the variable is packed using scale_factor and add_offset attributes (see below),
+!> the _FillValue attribute should have the data type of the packed data.
+!>
+!> missing_value
+!> When scale_factor and add_offset are used for packing, the value(s) of the missing_value
+!> attribute should be specified in the domain of the data in the file (the packed data),
+!> so that missing values can be detected before the scale_factor and add_offset are applied.
+!>
+!> scale_factor
+!> If present for a variable, the data are to be multiplied by this factor after the data
+!> are read by the application that accesses the data.  If valid values are specified using
+!> the valid_min, valid_max, valid_range, or _FillValue attributes, those values should be
+!> specified in the domain of the data in the file (the packed data), so that they can be
+!> interpreted before the scale_factor and add_offset are applied.
+!>
+!> add_offset
+!> If present for a variable, this number is to be added to the data after it is read by
+!> the application that accesses the data. If both scale_factor and add_offset attributes
+!> are present, the data are first scaled before the offset is added.
+
+subroutine get_var_4d(ncid, varname, var4d)
+
+integer,                      intent(in)  :: ncid
+character(len=*),             intent(in)  :: varname
+real(r8), dimension(:,:,:,:), intent(out) :: var4d
+
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
+integer  :: i, TimeDimID, time_dimlen, timeindex
+integer  :: VarID, numdims, xtype, io1, io2
+integer  :: spvalINT
+real(r4) :: spvalR4
+real(r8) :: scale_factor, add_offset
+real(r8) :: spvalR8
+
+integer,  allocatable, dimension(:,:,:,:) :: intarray
+real(r4), allocatable, dimension(:,:,:,:) :: r4array
+
+if ( .not. module_initialized ) call static_init_model
+
+! a little whitespace makes this a lot more readable
+if (do_output() .and. (debug > 1)) then
+   write(*,*)
+   write(logfileunit,*)
+endif
+
+! 4D fields must have a time dimension.
+! Need to know the Time Dimension ID and length
+
+call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
+         'get_var_4d', 'inq_dimid time '//varname)
+call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
+         'get_var_4d', 'inquire_dimension time '//varname)
+
+call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_4d', 'inq_varid')
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
+              xtype=xtype), 'get_var_4d', 'inquire_variable '//varname)
+
+if ( (numdims /= 4)  ) then
+   write(string1,*) trim(varname)//' is not a 4D variable as expected.'
+   call error_handler(E_ERR,'get_var_4d',string1,source,revision,revdate)
+endif
+
+! only expecting [x,y,[soil,tile],time]
+
+ncstart(:) = 1
+nccount(:) = 1
+DimCheck : do i = 1,numdims
+
+   write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(varname)
+
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
+                 'get_var_4d', trim(string1))
+
+   if ( dimIDs(i) == TimeDimID ) then
+       timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
+       ncstart(i) = timeindex
+       dimlens(i) = 1
+
+   elseif ( size(var4d,i) /= dimlens(i) ) then
+      write(string1,*) trim(varname)//' has shape ', dimlens(1:numdims)
+      write(string2,*) 'which is not the expected shape of ', size(var4d,i)
+      call error_handler(E_ERR,'get_var_4d',string1,source,revision,revdate,text2=string2)
+   endif
+
+   nccount(i) = dimlens(i)
+
+enddo DimCheck
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)'get_var_4d: variable ['//trim(varname)//']'
+   write(*,*)'get_var_4d: start ',ncstart(1:numdims)
+   write(*,*)'get_var_4d: count ',nccount(1:numdims)
+endif
+
+if (xtype == NF90_INT) then
+
+   allocate(intarray(dimlens(1),dimlens(2),dimlens(3),1))
+   call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
+           start=ncstart(1:numdims), count=nccount(1:numdims)), &
+           'get_var_4d', 'get_var '//varname)
+   var4d = intarray  ! perform type conversion to desired output type
+
+   io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
+   if (  io1 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
+   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
+   if (  io2 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
+   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
+   io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
+
+   if ( (io1 == NF90_NOERR) .and. (io2 == NF90_NOERR) ) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor + add_offset
+   elseif (io1 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor
+   elseif (io2 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d + add_offset
+   endif
+
+   deallocate(intarray)
+
+elseif (xtype == NF90_FLOAT) then
+
+   allocate(r4array(dimlens(1),dimlens(2),dimlens(3),1))
+   call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
+           start=ncstart(1:numdims), count=nccount(1:numdims)), &
+           'get_var_4d', 'get_var '//varname)
+   var4d = r4array  ! perform type conversion to desired output type
+
+   io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
+   if (  io1 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
+   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
+   if (  io2 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
+   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
+   io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
+
+   if ( (io1 == NF90_NOERR) .and. (io2 == NF90_NOERR) ) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor + add_offset
+   elseif (io1 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor
+   elseif (io2 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d + add_offset
+   endif
+
+   deallocate(r4array)
+
+elseif (xtype == NF90_DOUBLE) then
+
+   call nc_check(nf90_get_var(ncid, VarID, values=var4d, &
+           start=ncstart(1:numdims), count=nccount(1:numdims)), &
+           'get_var_4d', 'get_var '//varname)
+
+   io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
+   if (  io1 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
+   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
+   if (  io2 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
+   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
+      call error_handler(E_MSG,'get_var_4d',string1)
+   endif
+
+   io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
+   io2 = nf90_get_att(ncid, VarID, 'add_offset'  , add_offset)
+
+   if ( (io1 == NF90_NOERR) .and. (io2 == NF90_NOERR) ) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor + add_offset
+   elseif (io1 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d * scale_factor
+   elseif (io2 == NF90_NOERR) then
+      where (var4d /= MISSING_R8) var4d = var4d + add_offset
+   endif
+
+else
+   write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
+   call error_handler(E_ERR,'get_var_4d',string1,source,revision,revdate)
+endif
+
+end subroutine get_var_4d
 
 
 !------------------------------------------------------------------
@@ -3989,11 +3827,6 @@ if (mySOILLEVEL /= nsoil) then
    call error_handler(E_ERR,'get_sparse_dims',string1,source,revision,revdate,text2=string2)
 endif
 
-call nc_check(nf90_inq_dimid(ncid, 'levlak', dimid), &
-            'get_sparse_dims','inq_dimid levlak '//trim(fname))
-call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nlevlak), &
-            'get_sparse_dims','inquire_dimension levlak '//trim(fname))
-
 call nc_check(nf90_inq_dimid(ncid, 'levtot', dimid), &
             'get_sparse_dims','inq_dimid levtot '//trim(fname))
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nlevtot), &
@@ -4022,18 +3855,6 @@ if (istatus == nf90_noerr) then
                'get_sparse_dims','inquire_dimension levsno1 '//trim(fname))
 endif
 
-istatus = nf90_inq_dimid(ncid, 'rtmlon', dimid)
-if (istatus == nf90_noerr) then
-   call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nrtmlon), &
-               'get_sparse_dims','inquire_dimension rtmlon '//trim(fname))
-endif
-
-istatus = nf90_inq_dimid(ncid, 'rtmlat', dimid)
-if (istatus == nf90_noerr) then
-   call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nrtmlat), &
-               'get_sparse_dims','inquire_dimension rtmlat '//trim(fname))
-endif
-
 if (cstat == 'close') then
    call nc_check(nf90_close(ncid),'get_sparse_dims','close '//trim(fname) )
    ncid = 0
@@ -4047,26 +3868,20 @@ if ((debug > 7) .and. do_output()) then
    write(logfileunit,*)'Ncpool   = ',Ncpool
    write(logfileunit,*)'Ntile      = ',Ntile
    write(logfileunit,*)'nsoil  = ',nsoil
-   write(logfileunit,*)'Nlevlak   = ',Nlevlak
    write(logfileunit,*)'Nlevsno   = ',Nlevsno
    write(logfileunit,*)'Nlevsno1  = ',Nlevsno1
    write(logfileunit,*)'Nlevtot   = ',Nlevtot
    write(logfileunit,*)'Nnumrad   = ',Nnumrad
-   write(logfileunit,*)'Nrtmlon   = ',Nrtmlon
-   write(logfileunit,*)'Nrtmlat   = ',Nrtmlat
    write(     *     ,*)
    write(     *     ,*)'get_sparse_dims output follows:'
    write(     *     ,*)'Nland = ',Nland
    write(     *     ,*)'Ncpool   = ',Ncpool
    write(     *     ,*)'Ntile      = ',Ntile
    write(     *     ,*)'nsoil  = ',nsoil
-   write(     *     ,*)'Nlevlak   = ',Nlevlak
    write(     *     ,*)'Nlevsno   = ',Nlevsno
    write(     *     ,*)'Nlevsno1  = ',Nlevsno1
    write(     *     ,*)'Nlevtot   = ',Nlevtot
    write(     *     ,*)'Nnumrad   = ',Nnumrad
-   write(     *     ,*)'Nrtmlon   = ',Nrtmlon
-   write(     *     ,*)'Nrtmlat   = ',Nrtmlat
 endif
 
 end subroutine get_sparse_dims
@@ -4249,7 +4064,7 @@ function set_model_time_step()
 
 type(time_type) :: set_model_time_step
 
-call error_handler(E_ERR, 'set_model_time_step', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine not tested')
 
 ! FIXME ... should check to see that time step is attainable given the JULES namelist values.
 
@@ -4746,8 +4561,6 @@ integer, intent(in) :: ivar
 integer  :: ios
 real(r8) :: minvalue, maxvalue
 
-call error_handler(E_ERR, 'SetVariableAttributes', 'FIXME routine not written', source, revision, revdate)
-
 progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
 progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
 progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
@@ -4767,13 +4580,11 @@ progvar(ivar)%has_fill_value    = .true.
 progvar(ivar)%has_missing_value = .true.
 progvar(ivar)%update            = .false.
 
-if (variable_table(ivar,VT_ORIGININDX) == 'VECTOR') then
-   progvar(ivar)%origin = trim(jules_vector_history_filename)
-elseif (variable_table(ivar,VT_ORIGININDX) == 'HISTORY') then
-   progvar(ivar)%origin = trim(jules_output_filename)
-else
-   variable_table(ivar,VT_ORIGININDX) = 'RESTART'
+if (variable_table(ivar,VT_ORIGININDX) == 'RESTART') then
    progvar(ivar)%origin = trim(jules_restart_filename)
+else
+   variable_table(ivar,VT_ORIGININDX) = 'OUTPUT'
+   progvar(ivar)%origin = trim(jules_output_filename)
 endif
 
 if ((variable_table(ivar,VT_STATEINDX)  == 'UPDATE') .and. &
@@ -4846,11 +4657,9 @@ integer :: VarID
 real(r8),  dimension(ntimes) :: mytimes
 character(len=NF90_MAX_NAME) :: attvalue
 
-type(time_type) :: thistime
+type(time_type) :: thistime, basetime
 integer :: ios, itime, basedays, baseseconds
 integer :: iyear, imonth, iday, ihour, imin, isec
-
-call error_handler(E_ERR, 'FindDesiredTimeIndx', 'FIXME routine not tested', source, revision, revdate)
 
 FindDesiredTimeIndx = MISSING_I   ! initialize to failure setting
 
@@ -4861,35 +4670,33 @@ call nc_check(nf90_get_var(  ncid, VarID, mytimes), &
 call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
         'FindDesiredTimeIndx:', 'time get_att units '//varname)
 
-! time:units = "days since 2004-01-01 00:00:00" ;
-!               1234567890
+! time:units = "seconds since 2004-01-01 00:00:00" ;
+!               12345678901234
 
-if (attvalue(1:10) /= 'days since') then
-   write(string1,*)'expecting time units of [days since ... ]'
+if (attvalue(1:13) /= 'seconds since') then
+   write(string1,*)'expecting time units of [seconds since ... ]'
    write(string2,*)'read time units of ['//trim(attvalue)//']'
    call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
           source, revision, revdate, text2=string2)
 endif
 
-read(attvalue,'(11x,i4,5(1x,i2))',iostat=ios)iyear,imonth,iday,ihour,imin,isec
+read(attvalue,'(14x,i4,5(1x,i2))',iostat=ios)iyear,imonth,iday,ihour,imin,isec
 if (ios /= 0) then
    write(string1,*)'Unable to read time units. Error status was ',ios
-   write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
+   write(string2,*)'expected "seconds since YYYY-MM-DD HH:MM:SS"'
    write(string3,*)'was      "'//trim(attvalue)//'"'
    call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
           source, revision, revdate, text2=string2, text3=string3)
 endif
 
-thistime = set_date(iyear, imonth, iday, ihour, imin, isec)
-call get_time(thistime, baseseconds, basedays)
+basetime = set_date(iyear, imonth, iday, ihour, imin, isec)
 
 ! convert each time to a DART time and compare to desired
 
 TIMELOOP : do itime = 1,ntimes
 
-   iday     = int(mytimes(itime))
-   isec     = (mytimes(itime) - iday)*86400
-   thistime = set_time(baseseconds+isec, basedays+iday)
+   isec     = int(mytimes(itime))
+   thistime = set_time(isec, 0) + basetime
 
    if (thistime == model_time) then
       FindDesiredTimeIndx = itime
@@ -4898,8 +4705,7 @@ TIMELOOP : do itime = 1,ntimes
 
 enddo TIMELOOP
 
-! FIXME ... do we actually need a perfect match ... or do we just use the last
-! one. History files may not have a perfect match to the restart file.
+! FIXME ... do we actually need a perfect match ... or do we just use the last one
 if ( FindDesiredTimeIndx == MISSING_I ) then
    call print_time(model_time,str='model time is ',iunit=logfileunit)
    call print_time(model_time,str='model time is ')
@@ -4956,7 +4762,7 @@ if (nsoil /= sm_levels) then
    write(string1,*)'Number of soil layers unknown.'
    write(string2,*)'Number of soil layers from namelist is ',sm_levels
    write(string3,*)'Number of soil layers from netCDF   is ',nsoil
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
+   call error_handler(E_ERR, 'Read_Jules_Soil_Namelist:', string1, &
           source, revision, revdate, text2=string2, text3=string3 )
 endif
 

@@ -79,8 +79,8 @@ iunit = open_restart_write(jules_to_dart_output_file)
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
-call print_date(model_time, str='jules_to_dart:jules  model date')
-call print_time(model_time, str='jules_to_dart:DART model time')
+call print_date(model_time, str='jules_to_dart: model date')
+call print_time(model_time, str='jules_to_dart: model time')
 
 call finalize_utilities('jules_to_dart')
 
