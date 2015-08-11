@@ -198,7 +198,7 @@
 
 &dart_to_jules_nml
    dart_to_jules_input_file   = 'dart_restart'
-   advance_time_present     = .false.
+   advance_time_present       = .true.
    /
 
 

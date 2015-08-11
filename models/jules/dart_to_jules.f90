@@ -23,13 +23,17 @@ program dart_to_jules
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
+
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, open_file, close_file, &
-                             error_handler, E_MSG
+                             error_handler, E_MSG, E_ERR, get_unit
+
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
-use time_manager_mod, only : time_type, print_time, print_date, operator(-), get_time
-use        model_mod, only : static_init_model, sv_to_restart_file, &
+
+use time_manager_mod, only : time_type, print_time, print_date, get_time, get_date
+
+use        model_mod, only : static_init_model, dart_to_jules_restart, &
                              get_model_size, get_jules_restart_filename
 
 implicit none
@@ -45,7 +49,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 !------------------------------------------------------------------
 
 character (len = 128) :: dart_to_jules_input_file = 'dart_restart'
-logical               :: advance_time_present   = .false.
+logical               :: advance_time_present     = .false.
 
 namelist /dart_to_jules_nml/ dart_to_jules_input_file, &
                            advance_time_present
@@ -101,27 +105,74 @@ call close_restart(iunit)
 ! update the current jules state vector
 !----------------------------------------------------------------------
 
-call sv_to_restart_file(statevector, jules_restart_filename, model_time)
+call dart_to_jules_restart( statevector )
 
 !----------------------------------------------------------------------
 ! Log what we think we're doing, and exit.
 !----------------------------------------------------------------------
 
-call print_date( model_time,'dart_to_jules:jules  model date')
-call print_time( model_time,'dart_to_jules:DART model time')
-call print_date( model_time,'dart_to_jules:jules  model date',logfileunit)
-call print_time( model_time,'dart_to_jules:DART model time',logfileunit)
+call print_date( model_time,'dart_to_jules:JULES model date')
+call print_time( model_time,'dart_to_jules:DART  model time')
+call print_date( model_time,'dart_to_jules:JULES model date',logfileunit)
+call print_time( model_time,'dart_to_jules:DART  model time',logfileunit)
 
 if ( advance_time_present ) then
-   call error_handler(E_MSG,'dart_to_jules','warning: DART not configured to advance jules', &
-            source, revision, revdate)
    call print_time(adv_to_time,'dart_to_jules:advance_to time')
    call print_date(adv_to_time,'dart_to_jules:advance_to date')
    call print_time(adv_to_time,'dart_to_jules:advance_to time',logfileunit)
    call print_date(adv_to_time,'dart_to_jules:advance_to date',logfileunit)
+
+   call write_jules_control_file('DART_time_control.txt',model_time, adv_to_time)
 endif
 
 call finalize_utilities('dart_to_jules')
+
+!======================================================================
+contains
+!======================================================================
+
+
+subroutine write_jules_control_file(filename, model_time, adv_to_time)
+
+character(len=*), intent(in) :: filename
+type(time_type),  intent(in) :: model_time
+type(time_type),  intent(in) :: adv_to_time
+
+integer :: file_unit, io
+integer :: year, month, day, hour, minute, second
+character(len=64) :: timestring
+
+! Write updated JULES namelist variables to a text file.
+! It is up to advance_model.csh to update the JULES namelist.
+! Write the information to a text file so we can grep the desired strings and
+! then update the right parts of the timesteps.nml - without having to write the
+! whole timesteps.nml. 
+
+file_unit = get_unit()
+open(unit = file_unit, file = trim(filename))
+
+call get_date(model_time, year, month, day, hour, minute, second)
+write(timestring,100) year, month, day, hour, minute, second
+
+write(*,*)' model time timestring is ',trim(timestring)
+
+write(file_unit, *, iostat=io) 'main_run_start = "',trim(timestring),'"'
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write main_run_start to '//trim(filename),source,revision,revdate)
+
+call get_date(adv_to_time, year, month, day, hour, minute, second)
+write(timestring,100) year, month, day, hour, minute, second
+
+write(file_unit, *, iostat=io) 'main_run_end   = "',trim(timestring),'"'
+if (io /= 0) call error_handler(E_ERR,'dart_to_model:', &
+   'cannot write main_run_end to '//trim(filename),source,revision,revdate)
+
+close(file_unit)
+
+100 format (i4,'-',i2.2,'-',i2.2,1x,i2.2,':',i2.2,':',i2.2)
+
+end subroutine write_jules_control_file
+
 
 end program dart_to_jules
 
