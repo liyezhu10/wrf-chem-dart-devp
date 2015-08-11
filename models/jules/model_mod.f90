@@ -138,7 +138,7 @@ integer, parameter :: BOUNDED_ABOVE = 2 ! ... maximum, but no minimum
 integer, parameter :: BOUNDED_BOTH  = 3 ! ... minimum and maximum
 
 integer :: nfields
-integer, parameter :: max_state_variables = 10
+integer, parameter :: max_state_variables = 20
 integer, parameter :: num_state_table_columns = 6
 character(len=obstypelength) :: variable_table(max_state_variables, num_state_table_columns)
 
@@ -392,7 +392,7 @@ integer  :: n
 ! levels
 ! progvar
 
-call error_handler(E_ERR, 'get_state_meta_data', 'FIXME routine not written', source, revision, revdate)
+call error_handler(E_ERR, 'get_state_meta_data', 'FIXME TJH routine not written', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -741,6 +741,28 @@ do ivar = 1, nfields
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), name=dimname, len=dimlen), &
                                           'static_init_model', string1)
 
+      ! The 'land' dimension of this variable must match the number 
+      ! of elements in the LONGITUDE, LATITUDE arrays.
+      ! The 'x' and 'y' dimensions in the output file already match
+      ! so there is no need to check those.
+      if ( (dimname == 'land') .and. (dimlen /= nlon*nlat) )then
+         write(string1,*)'dimension mismatch between restart and output'
+         write(string2,*)trim(progvar(ivar)%varname),' land dimension is ',dimlen
+         write(string3,*)'number of active land cells from output is ',nlon*nlat
+         call error_handler(E_ERR, 'static_init_model', string1, &
+                    source, revision, revdate, text2=string2, text3=string3)
+      endif
+
+      ! The 'soil' dimension of this variable must match the number 
+      ! of soil layers from the namelist
+      if ( (dimname == 'soil') .and. (dimlen /= nsoil) )then
+         write(string1,*)'dimension mismatch between file and namelist'
+         write(string2,*)trim(progvar(ivar)%varname),' soil dimension is ',dimlen
+         write(string3,*)'number of soil layers from namelist is ',nsoil
+         call error_handler(E_ERR, 'static_init_model', string1, &
+                    source, revision, revdate, text2=string2, text3=string3)
+      endif
+
       ! Only reserve space for a single time slice 
       if (dimIDs(i) == TimeDimID) dimlen = 1
 
@@ -988,7 +1010,7 @@ integer :: i, myndims
 
 character(len=128) :: filename
 
-call error_handler(E_ERR, 'nc_write_model_atts', 'FIXME routine not written', source, revision, revdate)
+call error_handler(E_ERR, 'nc_write_model_atts', 'FIXME TJH routine not written', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1687,8 +1709,6 @@ character(len=NF90_MAX_NAME) :: varname
 integer :: io, TimeDimID, VarID, ncNdims, dimlen
 integer :: ncid
 character(len=256) :: myerrorstring
-
-call error_handler(E_MSG, 'jules_to_dart_state_vector', 'FIXME routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 

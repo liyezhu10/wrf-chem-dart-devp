@@ -187,6 +187,7 @@
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      '0.0', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         '0.0', 'NA', 'restart' , 'UPDATE',
                 'soil_wet',   'KIND_SOIL_MOISTURE',          '0.0', 'NA', 'output'  , 'NO_COPY_BACK',
+                'latent_heat','KIND_LATENT_HEAT_FLUX',        'NA', 'NA', 'output'  , 'NO_COPY_BACK',
    /
 
 
