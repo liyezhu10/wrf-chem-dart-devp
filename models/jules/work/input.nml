@@ -182,7 +182,7 @@
                 'tstar_tile', 'KIND_SKIN_TEMPERATURE',       '0.0', 'NA', 'restart' , 'UPDATE',
                 't_soil',     'KIND_SOIL_TEMPERATURE',       '0.0', 'NA', 'restart' , 'UPDATE',
                 'cs',         'KIND_SOIL_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
-                'sthuf',      'KIND_SOIL_MOISTURE_FRACTION', '0.0', '1.0', 'restart' , 'UPDATE',
+                'sthuf',      'KIND_SOIL_MOISTURE_FRACTION', '0.0', '1.', 'restart' , 'UPDATE',
                 'snow_tile',  'KIND_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      '0.0', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         '0.0', 'NA', 'restart' , 'UPDATE',
