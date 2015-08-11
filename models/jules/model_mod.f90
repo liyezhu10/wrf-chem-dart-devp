@@ -345,7 +345,7 @@ subroutine adv_1step(x, time)
 real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
-call error_handler(E_ERR, 'adv_1step', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_ERR, 'adv_1step', 'FIXME RAFAEL routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -530,7 +530,7 @@ function get_model_time_step()
 
 type(time_type) :: get_model_time_step
 
-call error_handler(E_ERR, 'get_model_time_step', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_ERR, 'get_model_time_step', 'FIXME RAFAEL routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -897,11 +897,12 @@ subroutine init_time(time)
 
 type(time_type), intent(out) :: time
 
-call error_handler(E_ERR, 'init_time', 'FIXME routine not written', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
-! for now, just set to 0
+write(string1,*) 'No good way to specify an arbitrary initial time for JULES.'
+call error_handler(E_ERR,'init_time',string1,source,revision,revdate)
+
+! Just set to 0 to silence the compiler warnings.
 time = set_time(0,0)
 
 end subroutine init_time
@@ -921,10 +922,12 @@ subroutine init_conditions(x)
 
 real(r8), intent(out) :: x(:)
 
-call error_handler(E_ERR, 'init_conditions', 'FIXME routine not written', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
+write(string1,*) 'No good way to specify an arbitrary initial conditions for JULES.'
+call error_handler(E_ERR,'init_conditions',string1,source,revision,revdate)
+
+! Just set to 0 to silence the compiler warnings.
 x = 0.0_r8
 
 end subroutine init_conditions
@@ -1472,7 +1475,7 @@ logical,  intent(out) :: interf_provided
 integer :: i
 logical, save :: random_seq_init = .false.
 
-call error_handler(E_ERR, 'pert_model_state', 'FIXME routine not written', source, revision, revdate)
+call error_handler(E_ERR, 'pert_model_state', 'FIXME RAFAEL SHAMS routine not written', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1768,7 +1771,7 @@ integer         :: VarID, ncNdims, dimlen
 integer         :: ncFileID
 type(time_type) :: file_time
 
-call error_handler(E_MSG, 'dart_to_jules_restart', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_MSG, 'dart_to_jules_restart', 'FIXME RAFAEL routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1829,9 +1832,8 @@ UPDATE : do ivar=1, nfields
 
    enddo DimCheck
 
-   ! When called with a 4th argument, vector_to_prog_var() replaces the DART
-   ! missing code with the value in the corresponding variable in the netCDF file.
-   ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
+   ! When called with a 4th argument, vector_to_prog_var() 
+   ! clamps to physically meaningful values as specified in the model_mod namelist.
 
    if (progvar(ivar)%numdims == 1) then
 
@@ -3265,7 +3267,6 @@ end subroutine get_var_4d
 function get_model_time()
 type(time_type) :: get_model_time
 
-call error_handler(E_ERR, 'get_model_time', 'FIXME routine not tested', source, revision, revdate)
 if ( .not. module_initialized ) call static_init_model
 
 get_model_time = model_time
@@ -3284,11 +3285,7 @@ end function get_model_time
 !> convert the values from a 1d array, starting at an offset, into a 1d array.
 !>
 !> If the optional argument (ncid) is specified, some additional
-!> processing takes place. The variable in the netcdf is read.
-!> This must be the same shape as the intended output array.
-!> Anywhere the DART MISSING code is encountered in the input array,
-!> the corresponding (i.e. original) value from the netCDF file is
-!> used.
+!> processing takes place. 
 
 subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
 
@@ -3340,9 +3337,7 @@ if (present(ncid)) then
               data_1d_array = progvar(ivar)%minvalue
    endif
 
-else
-
-   ! replace the missing values with the original missing values.
+   ! Replace the DART missing value flag with the one JULES uses.
    ! FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
@@ -3417,8 +3412,6 @@ if (present(ncid)) then
               data_2d_array = progvar(ivar)%minvalue
    endif
 
-else
-
    ! replace the missing values with the original missing values.
    ! FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
@@ -3434,7 +3427,6 @@ else
 endif
 
 end subroutine vector_to_2d_prog_var
-
 
 
 !------------------------------------------------------------------
@@ -3644,7 +3636,7 @@ character(len=*), intent(in)    :: cstat
 
 integer :: VarID
 
-call error_handler(E_ERR, 'get_sparse_geog', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_ERR, 'get_sparse_geog', 'FIXME TJH routine not tested', source, revision, revdate)
 
 if (ncid == 0) then
    call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
@@ -3914,38 +3906,6 @@ end function parse_variable_table
 
 
 !------------------------------------------------------------------
-!> FindTimeDimension
-!>
-!> Find the Time Dimension ID in a netCDF file.
-!> If there is none - (spelled the obvious way) - the routine
-!> returns a negative number. You don't HAVE to have a TIME dimension.
-
-function FindTimeDimension(ncid) result(timedimid)
-
-integer             :: timedimid
-integer, intent(in) :: ncid
-
-integer :: nc_rc
-
-call error_handler(E_ERR, 'FindTimeDimension', 'FIXME routine not tested', source, revision, revdate)
-
-TimeDimID = -1 ! same as the netCDF library routines.
-
-nc_rc = nf90_inq_dimid(ncid,'TIME',dimid=TimeDimID)
-
-if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-     nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
-
-   if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-        nc_rc = nf90_inq_dimid(ncid,'time',dimid=TimeDimID)
-   endif
-
-endif
-
-end function FindTimeDimension
-
-
-!------------------------------------------------------------------
 !> define_var_dims()
 !> takes the N-dimensional variable and appends the DART
 !> dimensions of 'copy' and 'time'. If the variable initially had a 'time'
@@ -3962,7 +3922,7 @@ character(len=NF90_MAX_NAME),dimension(NF90_MAX_VAR_DIMS) :: dimnames
 
 integer :: i, mydimid
 
-call error_handler(E_ERR, 'define_var_dims', 'FIXME routine not tested', source, revision, revdate)
+call error_handler(E_MSG, 'define_var_dims', 'FIXME TJH routine not tested', source, revision, revdate)
 ndims = 0
 
 DIMLOOP : do i = 1,progvar(ivar)%numdims
@@ -4023,8 +3983,6 @@ character(len=*), intent(in) :: caller
 integer                      :: findVarIndex
 
 integer :: i
-
-call error_handler(E_ERR, 'findVarIndex', 'FIXME routine not tested', source, revision, revdate)
 
 findVarIndex = -1
 
@@ -4382,8 +4340,6 @@ namelist /jules_soil/ confrac, dzsoil_io, l_bedrock, l_dpsids_dsdz, &
 call find_namelist_in_file('jules_soil.nml', 'jules_soil', iunit)
 read(iunit, nml = jules_soil, iostat = io)
 call check_namelist_read(iunit, io, 'jules_soil')
-
-write(*, nml=jules_soil)  ! TJH DEBUG
 
 if (Nsoil /= sm_levels) then
    write(string1,*)'Number of soil layers unknown.'
