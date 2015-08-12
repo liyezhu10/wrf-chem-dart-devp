@@ -330,8 +330,8 @@ subroutine adv_1step(x, time)
 real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
-call error_handler(E_ERR, 'adv_1step', 'FIXME RAFAEL routine not tested', source, revision, revdate)
-
+call error_handler(E_MSG, 'adv_1step', 'FIXME RAFAEL routine not tested yet (needs long obs_seq file) ', source, revision, revdate)
+ 
 if ( .not. module_initialized ) call static_init_model
 
 if (do_output()) then
@@ -1394,19 +1394,9 @@ end function nc_write_model_vars
 !------------------------------------------------------------------
 !> pert_model_state
 !> Perturbs a single model state for generating initial ensembles.
-!> This (required interface) is unsupported in jules and any attempt
-!> to use it will cause DART to terminate.
-!>
-!> So far, we have generated intial ensembles by taking a single
-!> instance and replicating it N times - and pairing each of the
-!> instances with a unique atmospheric forcing file and integrating
-!> for some period of time till the ensemble demonstrates sufficient
-!> spread. This is an area of active research.
-!>
-!> The naieve approach does not work -- it generates negative
-!> snow cover fractions, for example.  Must check for out-of-range
-!> values specific to each type.
-!> The WRF model mod has something that might be useful.
+!> This (required interface) is unsupported in JULES and any attempt
+!> to use it will cause DART to terminate. Initial ensemble members
+!> are generated externally for JULES applications.
 
 subroutine pert_model_state(state, pert_state, interf_provided)
 
@@ -1417,12 +1407,12 @@ logical,  intent(out) :: interf_provided
 integer :: i
 logical, save :: random_seq_init = .false.
 
-call error_handler(E_ERR, 'pert_model_state', 'FIXME RAFAEL SHAMS routine not written', source, revision, revdate)
+call error_handler(E_MSG, 'pert_model_state', 'Unsupported for JULES (TJH please check!!!)', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_ERR,'pert_model_state', &
-                  'jules cannot be started from a single vector', &
+                  'JULES cannot be started from a single vector', &
                   source, revision, revdate, &
                   text2='see comments in jules/model_mod.f90::pert_model_state()')
 
@@ -3803,7 +3793,7 @@ function set_model_time_step()
 
 type(time_type) :: set_model_time_step
 
-call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine not tested')
+call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine is not tested')
 
 ! FIXME ... should check to see that time step is attainable given the JULES namelist values.
 
