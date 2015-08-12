@@ -174,9 +174,8 @@
    assimilation_period_days     = 1
    assimilation_period_seconds  = 0
    model_perturbation_amplitude = 0.2
-   output_state_vector          = .false.
    calendar                     = 'Gregorian'
-   debug                        = 90
+   debug                        = 9
    variables  = 'canopy',     'KIND_LAND_COVER_TYPE',        'NA',  'NA', 'restart' , 'NO_COPY_BACK',
                 'gs',         'KIND_SURFACE_CONDUCTANCE',    'NA',  'NA', 'restart' , 'UPDATE',
                 'tstar_tile', 'KIND_SKIN_TEMPERATURE',       '0.0', 'NA', 'restart' , 'UPDATE',
@@ -187,7 +186,7 @@
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      '0.0', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         '0.0', 'NA', 'restart' , 'UPDATE',
                 'soil_wet',   'KIND_SOIL_MOISTURE',          '0.0', 'NA', 'output'  , 'NO_COPY_BACK',
-                'latent_heat','KIND_LATENT_HEAT_FLUX',        'NA', 'NA', 'output'  , 'NO_COPY_BACK',
+                'latent_heat','KIND_LATENT_HEAT_FLUX',        'NA', 'NA', 'output'  , 'NO_COPY_BACK'
    /
 
 
@@ -328,7 +327,7 @@
    output_file          = "check_me_out"
    advance_time_present = .FALSE.
    verbose              = .TRUE.
-   test1thru            = 16
+   test1thru            = 5
    x_ind                = 720
    kind_of_interest     = 'T_SOISNO'
    loc_of_interest      = 287.5, 82.48, 0.35

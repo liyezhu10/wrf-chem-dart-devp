@@ -11,26 +11,33 @@ program model_mod_check
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength
+
 use    utilities_mod, only : initialize_utilities, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
                              check_namelist_read, finalize_utilities, &
                              error_handler, E_MSG
+
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
+
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE
+
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
                              init_diag_output, finalize_diag_output
+
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              read_time, get_time, set_time,  &
                              print_date, get_date, &
                              print_time, write_time, &
                              operator(-)
+
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
                              compute_gridcell_value, gridcell_components, &
-                             model_interpolate, DART_get_var, get_grid_vertval
+                             model_interpolate, DART_get_var, get_grid_vertval, &
+                             pert_model_state, get_model_time_step
 
 implicit none
 
@@ -44,12 +51,12 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129) :: input_file  = 'dart_ics'
-character (len = 129) :: output_file = 'check_me'
-logical               :: advance_time_present = .FALSE.
-logical               :: verbose              = .FALSE.
-integer               :: test1thru = -1
-integer               :: x_ind = -1
+character(len=256)     :: input_file  = 'dart_ics'
+character(len=256)     :: output_file = 'check_me'
+logical                :: advance_time_present = .FALSE.
+logical                :: verbose              = .FALSE.
+integer                :: test1thru = -1
+integer                :: x_ind = -1
 real(r8), dimension(3) :: loc_of_interest = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
 
@@ -62,9 +69,10 @@ namelist /model_mod_check_nml/ input_file, output_file, &
 
 integer :: ios_out, iunit, io
 integer :: x_size
+logical :: provided
 
 type(time_type)       :: model_time, adv_to_time
-real(r8), allocatable :: statevector(:)
+real(r8), allocatable :: statevector(:), pert_state(:)
 
 character(len=metadatalength) :: state_meta(1)
 type(netcdf_file_type) :: ncFileID
@@ -93,7 +101,7 @@ if (test1thru > 0) then
    write(*,*)
    write(*,*)'Testing static_init_model ...'
    call static_init_model()
-   write(*,*)'testing complete ...'
+   write(*,*)'static_init_model test complete ...'
 
 endif
 
@@ -103,7 +111,13 @@ if (test1thru > 1) then
    write(*,*)'Testing get_model_size ...'
    x_size = get_model_size()
    write(*,'(''state vector has length'',i10)') x_size
-   write(*,*)'testing complete ...'
+   write(*,*)'get_model_size test complete ...'
+
+   write(*,*)
+   write(*,*)'Testing get_model_time_step ...'
+   model_time = get_model_time_step()
+   call print_time(model_time,'model_mod_check:model time step')
+   write(*,*)'get_model_time_step test complete ...'
 
 endif
 
@@ -127,6 +141,8 @@ if (test1thru > 2) then
    call awrite_state_restart(model_time, statevector, iunit)
    call close_restart(iunit)
 
+   write(*,*)'trivial restart file "allones.ics" written.'
+
 endif
 
 !----------------------------------------------------------------------
@@ -137,7 +153,8 @@ endif
 if (test1thru > 3) then
 
    write(*,*)
-   write(*,*)'Reading '//trim(input_file)
+   write(*,*)'Reading ['//trim(input_file)//'] advance_time_present is ', &
+              advance_time_present
 
    iunit = open_restart_read(input_file)
    if ( advance_time_present ) then
@@ -147,8 +164,40 @@ if (test1thru > 3) then
    endif
 
    call close_restart(iunit)
-   call print_date( model_time,'model_mod_check:model date')
-   call print_time( model_time,'model_mod_check:model time')
+   call print_date( model_time,'model_mod_check:model   date')
+   call print_time( model_time,'model_mod_check:model   time')
+
+   if ( advance_time_present ) then
+      call print_date( adv_to_time,'model_mod_check:advance date')
+      call print_time( adv_to_time,'model_mod_check:advance time')
+   endif
+
+   write(*,*)'Read '//trim(input_file)//' complete.'
+   write(*,*)'test #4 complete'
+
+endif
+
+!----------------------------------------------------------------------
+! Write a slightly more complicated restart file. This one uses 
+! the DART state from 'input_file' and perturbs around that.
+!----------------------------------------------------------------------
+
+if (test1thru > 99) then
+
+   input_file = 'perturbed_ics.txt'
+
+   write(*,*)
+   write(*,*)'Testing pert_model_state - creating restart file ['//trim(input_file)//']'
+
+   allocate(pert_state(x_size))
+
+   call pert_model_state(statevector, pert_state, provided)
+
+   iunit = open_restart_write('perturbed_ics.txt')
+   call awrite_state_restart(model_time, pert_state, iunit)
+   call close_restart(iunit)
+
+   write(*,*)'Perturbed restart file ['//trim(input_file)//'] written.'
 
 endif
 
@@ -163,8 +212,9 @@ endif
 if (test1thru > 4) then
 
    write(*,*)
-   write(*,*)'Exercising the netCDF routines.'
+   write(*,*)'Exercising the netCDF routines. test #5'
    write(*,*)'Creating '//trim(output_file)//'.nc'
+   write(*,*)'from  '//trim(input_file)
 
    state_meta(1) = 'restart test'
    ncFileID = init_diag_output(trim(output_file),'just testing a restart', 1, state_meta)
@@ -173,20 +223,18 @@ if (test1thru > 4) then
 
    call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
+   write(*,*)'test #5 complete - netCDF file creation'
 endif
 
 !----------------------------------------------------------------------
 ! Checking get_state_meta_data (and get_state_indices, get_state_kind)
-! nx = 144; ny=72; nz=42; produce the expected values :
-!  U(       1 :  435456)
-!  V(  435457 :  870912)
-!  T(  870913 : 1306368)
-!  Q( 1306369 : 1741824)
-! PS( 1741825 : 1752193)    (only 144x72)
 !----------------------------------------------------------------------
 
 if (test1thru > 5) then
+   write(*,*)
+   write(*,*)'Testing check_meta_data ...'
    if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+   write(*,*)'Testing check_meta_data ... complete.'
 endif
 
 !----------------------------------------------------------------------
@@ -195,7 +243,10 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 6) then
+   write(*,*)
+   write(*,*)'Testing find_closest_gridpoint ...'
    if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+   write(*,*)'Testing find_closest_gridpoint ... complete.'
 endif
 
 !----------------------------------------------------------------------
@@ -204,7 +255,10 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 7) then
+   write(*,*)
+   write(*,*)'Testing gridcell_components ...'
    call gridcell_components( kind_of_interest )
+   write(*,*)'Testing gridcell_components ... complete.'
 endif
 
 !----------------------------------------------------------------------

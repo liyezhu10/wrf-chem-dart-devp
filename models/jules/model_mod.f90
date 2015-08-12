@@ -155,19 +155,16 @@ integer, parameter :: VT_STATEINDX    = 6 ! ... update (state) or not
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.2
-logical            :: output_state_vector = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: jules_restart_filename = 'jules_restart.nc'
 character(len=256) :: jules_output_filename = 'jules_history.nc'
-character(len=256) :: jules_vector_history_filename = 'jules_vector_history.nc'
 
 character(len=obstypelength) :: variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
    jules_restart_filename,      &
    jules_output_filename,       &
-   output_state_vector,         &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
@@ -243,11 +240,6 @@ logical :: masked = .false.
 !
 ! These are the 'sparse' type arrays pertaining to the land gridcells.
 !
-! ZSNO  contains the height of the middle of each snow layer;
-! ZISNO contains the height of the top of each snow layer;
-! DZSNO tells the snow thickness of each layer.
-! snow heights are stored as negative values
-
 ! Unlike the soil layers, snow layer thickness, as well as snow layer depth,
 ! may change as time goes on (due to snow metamorphism, overburden and the like).
 ! So there's no uniform levsno as SOILLEVEL coordinate variable.
@@ -267,8 +259,6 @@ integer,  allocatable, dimension(:)  :: pfts1d_ixy, pfts1d_jxy ! 2D lon/lat inde
 real(r8), allocatable, dimension(:)  :: land1d_wtxy    ! landunit weight relative to corresponding gridcell
 real(r8), allocatable, dimension(:)  :: cols1d_wtxy    ! column   weight relative to corresponding gridcell
 real(r8), allocatable, dimension(:)  :: pfts1d_wtxy    ! pft      weight relative to corresponding gridcell
-real(r8), allocatable, dimension(:)  :: levtot
-real(r8), allocatable, dimension(:,:):: zsno           ! (column,levsno) ... snow layer midpoint
 integer,  allocatable, dimension(:)  :: cols1d_ityplun ! columntype ... lake, forest, city ...
 
 !------------------------------------------------------------------------------
@@ -299,6 +289,7 @@ type(time_type) :: model_timestep  ! smallest time to adv model
 INTERFACE vector_to_prog_var
       MODULE PROCEDURE vector_to_1d_prog_var
       MODULE PROCEDURE vector_to_2d_prog_var
+      MODULE PROCEDURE vector_to_3d_prog_var
 END INTERFACE
 
 INTERFACE DART_get_var
@@ -529,8 +520,6 @@ end subroutine model_interpolate
 function get_model_time_step()
 
 type(time_type) :: get_model_time_step
-
-call error_handler(E_ERR, 'get_model_time_step', 'FIXME RAFAEL routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -841,7 +830,7 @@ enddo
 
 model_size = progvar(nfields)%indexN
 
-if ((debug > 0) .and. do_output()) then
+if ((debug > 99) .and. do_output()) then
   write(logfileunit, *)
   write(logfileunit,'("grid: Nlon, Nlat, Nsoil =",3(1x,i6))') Nlon, Nlat, Nsoil
   write(logfileunit, *)'model_size = ', model_size
@@ -1066,206 +1055,154 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'jules' ), &
            'nc_write_model_atts', 'model put '//trim(filename))
 
-!-------------------------------------------------------------------------------
-! Here is the extensible part. The simplest scenario is to output the state vector,
-! parsing the state vector into model-specific parts is complicated, and you need
-! to know the geometry, the output variables (PS,U,V,T,Q,...) etc. We're skipping
-! complicated part.
-!-------------------------------------------------------------------------------
+!----------------------------------------------------------------------------
+! We need to output the prognostic variables.
+!----------------------------------------------------------------------------
+! Define the new dimensions IDs
+!----------------------------------------------------------------------------
 
-if ( output_state_vector ) then
+call nc_check(nf90_def_dim(ncid=ncFileID, name='x', len = Nlon, &
+          dimid = nlonDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
 
-   !----------------------------------------------------------------------------
-   ! Create a variable for the state vector
-   !----------------------------------------------------------------------------
+call nc_check(nf90_def_dim(ncid=ncFileID, name='y', len = Nlat, &
+          dimid = nlatDimID),'nc_write_model_atts', 'lat def_dim '//trim(filename))
 
-  ! Define the state vector coordinate variable and some attributes.
-   call nc_check(nf90_def_var(ncid=ncFileID,name='StateVariable', xtype=nf90_int, &
-                 dimids=StateVarDimID, varid=StateVarVarID), 'nc_write_model_atts', &
-                 'statevariable def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarVarID,'long_name','State Variable ID'),&
-                 'nc_write_model_atts','statevariable long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, StateVarVarID, 'units','indexical'), &
-                 'nc_write_model_atts', 'statevariable units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarVarID,'valid_range',(/ 1,model_size /)),&
-                 'nc_write_model_atts', 'statevariable valid_range '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='soil', len = Nsoil, &
+          dimid = nsoilDimID),'nc_write_model_atts', 'soil def_dim '//trim(filename))
 
-   ! Define the actual (3D) state vector, which gets filled as time goes on ...
-   call nc_check(nf90_def_var(ncid=ncFileID, name='state', xtype=nf90_real, &
-                 dimids=(/StateVarDimID,MemberDimID,unlimitedDimID/),varid=StateVarID),&
-                 'nc_write_model_atts','state def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarID,'long_name','model state or fcopy'),&
-                 'nc_write_model_atts', 'state long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarID,'_FillValue',MISSING_R8),&
-                 'nc_write_model_atts', 'state FillValue '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarID,'missing_value',MISSING_R8),&
-                 'nc_write_model_atts', 'state missing_value '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='land', len = Nland, &
+          dimid = nlandDimID),'nc_write_model_atts', 'land def_dim '//trim(filename))
 
-   ! Leave define mode so we can fill the coordinate variable.
-   call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','state enddef '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='tile', len = Ntile, &
+          dimid = ntileDimID),'nc_write_model_atts', 'tile def_dim '//trim(filename))
 
-   ! Fill the state variable coordinate variable
-   call nc_check(nf90_put_var(ncFileID, StateVarVarID, (/ (i,i=1,model_size) /) ), &
-                 'nc_write_model_atts', 'state put_var '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='scpool', len = Nscpool, &
+          dimid = NscpoolDimID),'nc_write_model_atts', 'scpool def_dim '//trim(filename))
 
-else
+!----------------------------------------------------------------------------
+! Create the (empty) Coordinate Variables and the Attributes
+!----------------------------------------------------------------------------
 
-   !----------------------------------------------------------------------------
-   ! We need to output the prognostic variables.
-   !----------------------------------------------------------------------------
-   ! Define the new dimensions IDs
-   !----------------------------------------------------------------------------
+! Grid Longitudes
+call nc_check(nf90_def_var(ncFileID,name='lon', xtype=nf90_real, &
+              dimids=(/ nlonDimID, nlatDimID /), varid=VarID),&
+              'nc_write_model_atts', 'lon def_var '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate longitude'), &
+              'nc_write_model_atts', 'lon long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'X'),  &
+              'nc_write_model_atts', 'lon cartesian_axis '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
+              'nc_write_model_atts', 'lon units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+              'nc_write_model_atts', 'lon valid_range '//trim(filename))
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='lon', len = Nlon, &
-             dimid = nlonDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
+! Grid Latitudes
+call nc_check(nf90_def_var(ncFileID,name='lat', xtype=nf90_real, &
+              dimids=(/ nlonDimID, nlatDimID /), varid=VarID),&
+              'nc_write_model_atts', 'lat def_var '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate latitude'), &
+              'nc_write_model_atts', 'lat long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
+              'nc_write_model_atts', 'lat cartesian_axis '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
+              'nc_write_model_atts', 'lat units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
+              'nc_write_model_atts', 'lat valid_range '//trim(filename))
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='lat', len = Nlat, &
-             dimid = nlatDimID),'nc_write_model_atts', 'lat def_dim '//trim(filename))
+! subsurface levels
+call nc_check(nf90_def_var(ncFileID,name='soil', xtype=nf90_real, &
+              dimids=(/ nsoilDimID /), varid=VarID),&
+              'nc_write_model_atts', 'soil def_var '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate soil levels'), &
+              'nc_write_model_atts', 'soil long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
+              'nc_write_model_atts', 'soil cartesian_axis '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'm'),  &
+              'nc_write_model_atts', 'soil units '//trim(filename))
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='soil', len = Nsoil, &
-             dimid = nsoilDimID),'nc_write_model_atts', 'soil def_dim '//trim(filename))
+!----------------------------------------------------------------------------
+! Create the (empty) Prognostic Variables and the Attributes
+!----------------------------------------------------------------------------
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='land', len = Nland, &
-             dimid = nlandDimID),'nc_write_model_atts', 'land def_dim '//trim(filename))
+do ivar=1, nfields
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='tile', len = Ntile, &
-             dimid = ntileDimID),'nc_write_model_atts', 'tile def_dim '//trim(filename))
+   varname = trim(progvar(ivar)%varname)
+   string1 = trim(filename)//' '//trim(varname)
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='scpool', len = Nscpool, &
-             dimid = NscpoolDimID),'nc_write_model_atts', 'scpool def_dim '//trim(filename))
+   ! match shape of the variable to the dimension IDs
 
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Coordinate Variables and the Attributes
-   !----------------------------------------------------------------------------
+   call define_var_dims(ivar, ncFileID, MemberDimID, unlimitedDimID, myndims, mydimids)
 
-   ! Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='lon', xtype=nf90_real, &
-                 dimids=(/ nlonDimID /), varid=VarID),&
-                 'nc_write_model_atts', 'lon def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate longitude'), &
-                 'nc_write_model_atts', 'lon long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'X'),  &
-                 'nc_write_model_atts', 'lon cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'lon units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'lon valid_range '//trim(filename))
+   ! define the variable and set the attributes
 
-   ! Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='lat', xtype=nf90_real, &
-                 dimids=(/ nlatDimID /), varid=VarID),&
-                 'nc_write_model_atts', 'lat def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate latitude'), &
-                 'nc_write_model_atts', 'lat long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
-                 'nc_write_model_atts', 'lat cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'lat units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'lat valid_range '//trim(filename))
+   call nc_check(nf90_def_var(ncid=ncFileID, name=trim(varname), &
+                 xtype=progvar(ivar)%xtype, &
+                 dimids = mydimids(1:myndims), varid=VarID),&
+                 'nc_write_model_atts', trim(string1)//' def_var' )
 
-   ! subsurface levels
-   call nc_check(nf90_def_var(ncFileID,name='soil', xtype=nf90_real, &
-                 dimids=(/ nsoilDimID /), varid=VarID),&
-                 'nc_write_model_atts', 'soil def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate soil levels'), &
-                 'nc_write_model_atts', 'soil long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
-                 'nc_write_model_atts', 'soil cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'm'),  &
-                 'nc_write_model_atts', 'soil units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, VarID, &
+           'long_name', trim(progvar(ivar)%long_name)), &
+           'nc_write_model_atts', trim(string1)//' put_att long_name' )
+   call nc_check(nf90_put_att(ncFileID, VarID, &
+           'DART_kind', trim(progvar(ivar)%kind_string)), &
+           'nc_write_model_atts', trim(string1)//' put_att dart_kind' )
+   call nc_check(nf90_put_att(ncFileID, VarID, &
+           'units', trim(progvar(ivar)%units)), &
+           'nc_write_model_atts', trim(string1)//' put_att units' )
 
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Prognostic Variables and the Attributes
-   !----------------------------------------------------------------------------
+   ! Preserve the original missing_value/_FillValue code.
 
-   do ivar=1, nfields
-
-      varname = trim(progvar(ivar)%varname)
-      string1 = trim(filename)//' '//trim(varname)
-
-      ! match shape of the variable to the dimension IDs
-
-      call define_var_dims(ivar, ncFileID, MemberDimID, unlimitedDimID, myndims, mydimids)
-
-      ! define the variable and set the attributes
-
-      call nc_check(nf90_def_var(ncid=ncFileID, name=trim(varname), &
-                    xtype=progvar(ivar)%xtype, &
-                    dimids = mydimids(1:myndims), varid=VarID),&
-                    'nc_write_model_atts', trim(string1)//' def_var' )
-
+   if (  progvar(ivar)%xtype == NF90_INT ) then
       call nc_check(nf90_put_att(ncFileID, VarID, &
-              'long_name', trim(progvar(ivar)%long_name)), &
-              'nc_write_model_atts', trim(string1)//' put_att long_name' )
+              'missing_value', progvar(ivar)%spvalINT), &
+              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
       call nc_check(nf90_put_att(ncFileID, VarID, &
-              'DART_kind', trim(progvar(ivar)%kind_string)), &
-              'nc_write_model_atts', trim(string1)//' put_att dart_kind' )
+              '_FillValue',  progvar(ivar)%spvalINT), &
+              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+
+   elseif (  progvar(ivar)%xtype == NF90_FLOAT ) then
       call nc_check(nf90_put_att(ncFileID, VarID, &
-              'units', trim(progvar(ivar)%units)), &
-              'nc_write_model_atts', trim(string1)//' put_att units' )
+              'missing_value', progvar(ivar)%spvalR4), &
+              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
+      call nc_check(nf90_put_att(ncFileID, VarID, &
+              '_FillValue',  progvar(ivar)%spvalR4), &
+              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
 
-      ! Preserve the original missing_value/_FillValue code.
+   elseif (  progvar(ivar)%xtype == NF90_DOUBLE ) then
+      call nc_check(nf90_put_att(ncFileID, VarID, &
+              'missing_value', progvar(ivar)%spvalR8), &
+              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
+      call nc_check(nf90_put_att(ncFileID, VarID, &
+              '_FillValue',  progvar(ivar)%spvalR8), &
+              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+   endif
 
-      if (  progvar(ivar)%xtype == NF90_INT ) then
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 'missing_value', progvar(ivar)%spvalINT), &
-                 'nc_write_model_atts', trim(string1)//' put_att missing_value' )
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 '_FillValue',  progvar(ivar)%spvalINT), &
-                 'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+enddo
 
-      elseif (  progvar(ivar)%xtype == NF90_FLOAT ) then
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 'missing_value', progvar(ivar)%spvalR4), &
-                 'nc_write_model_atts', trim(string1)//' put_att missing_value' )
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 '_FillValue',  progvar(ivar)%spvalR4), &
-                 'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+!----------------------------------------------------------------------------
+! Finished with dimension/variable definitions, must end 'define' mode to fill.
+!----------------------------------------------------------------------------
 
-      elseif (  progvar(ivar)%xtype == NF90_DOUBLE ) then
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 'missing_value', progvar(ivar)%spvalR8), &
-                 'nc_write_model_atts', trim(string1)//' put_att missing_value' )
-         call nc_check(nf90_put_att(ncFileID, VarID, &
-                 '_FillValue',  progvar(ivar)%spvalR8), &
-                 'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
-      endif
+call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
-   enddo
+!----------------------------------------------------------------------------
+! Fill the coordinate variables
+!----------------------------------------------------------------------------
 
-   !----------------------------------------------------------------------------
-   ! Finished with dimension/variable definitions, must end 'define' mode to fill.
-   !----------------------------------------------------------------------------
+call nc_check(nf90_inq_varid(ncFileID, 'lon', VarID), &
+             'nc_write_model_atts', 'put_var lon '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, LONGITUDE ), &
+             'nc_write_model_atts', 'lon put_var '//trim(filename))
 
-   call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
+call nc_check(nf90_inq_varid(ncFileID, 'lat', VarID), &
+             'nc_write_model_atts', 'put_var lat '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, LATITUDE ), &
+             'nc_write_model_atts', 'lat put_var '//trim(filename))
 
-   !----------------------------------------------------------------------------
-   ! Fill the coordinate variables
-   !----------------------------------------------------------------------------
-
-   call nc_check(nf90_inq_varid(ncFileID, 'lon', VarID), &
-                'nc_write_model_atts', 'put_var lon '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, LONGITUDE ), &
-                'nc_write_model_atts', 'lon put_var '//trim(filename))
-
-   call nc_check(nf90_inq_varid(ncFileID, 'lat', VarID), &
-                'nc_write_model_atts', 'put_var lat '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, LATITUDE ), &
-                'nc_write_model_atts', 'lat put_var '//trim(filename))
-
-   call nc_check(nf90_inq_varid(ncFileID, 'soil', VarID), &
-                'nc_write_model_atts', 'put_var soil '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, SOILLEVEL ), &
-                'nc_write_model_atts', 'soil put_var '//trim(filename))
-
-endif
-
-!-------------------------------------------------------------------------------
-! Fill the variables we can
-!-------------------------------------------------------------------------------
-
-! none
+call nc_check(nf90_inq_varid(ncFileID, 'soil', VarID), &
+             'nc_write_model_atts', 'put_var soil '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, SOILLEVEL ), &
+             'nc_write_model_atts', 'soil put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -1299,8 +1236,12 @@ integer :: TimeDimID, CopyDimID
 
 real(r8), allocatable, dimension(:)       :: data_1d_array
 real(r8), allocatable, dimension(:,:)     :: data_2d_array
+real(r8), allocatable, dimension(:,:,:)   :: data_3d_array
 
 character(len=128) :: filename
+
+call error_handler(E_MSG, 'nc_write_model_vars', 'FIXME TJH routine not tested', &
+           source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1325,118 +1266,127 @@ call nc_check(nf90_inq_dimid(ncFileID, 'copy', dimid=CopyDimID), &
 call nc_check(nf90_inq_dimid(ncFileID, 'time', dimid=TimeDimID), &
             'nc_write_model_vars', 'inq_dimid time '//trim(filename))
 
-if ( output_state_vector ) then
+!----------------------------------------------------------------------------
+! We need to process the prognostic variables.
+!----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncFileID, 'state', VarID), &
-                 'nc_write_model_vars', 'state inq_varid '//trim(filename))
-   call nc_check(NF90_put_var(ncFileID,VarID,state_vec,start=(/1,copyindex,timeindex/)),&
-                 'nc_write_model_vars', 'state put_var '//trim(filename))
+do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
 
-else
+   varname = trim(progvar(ivar)%varname)
+   string2 = trim(filename)//' '//trim(varname)
 
-   !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
-   !----------------------------------------------------------------------------
+   ! Ensure netCDF variable is conformable with progvar quantity.
+   ! The TIME and Copy dimensions are intentionally not queried
+   ! by looping over the dimensions stored in the progvar type.
 
-   do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
+   call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+         'nc_write_model_vars', 'inq_varid '//trim(string2))
 
-      varname = trim(progvar(ivar)%varname)
-      string2 = trim(filename)//' '//trim(varname)
+   call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
+         'nc_write_model_vars', 'inquire '//trim(string2))
 
-      ! Ensure netCDF variable is conformable with progvar quantity.
-      ! The TIME and Copy dimensions are intentionally not queried
-      ! by looping over the dimensions stored in the progvar type.
+   ncstart = 1   ! These are arrays, actually
+   nccount = 1
+   DimCheck : do i = 1,progvar(ivar)%numdims
 
-      call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
-            'nc_write_model_vars', 'inq_varid '//trim(string2))
+      write(string1,'(a,i2,A)') 'inquire dimension ',i,trim(string2)
+      call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
+            'nc_write_model_vars', trim(string1))
 
-      call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'nc_write_model_vars', 'inquire '//trim(string2))
+      if (progvar(ivar)%dimnames(i) == 'time') cycle DimCheck
 
-      ncstart = 1   ! These are arrays, actually
-      nccount = 1
-      DimCheck : do i = 1,progvar(ivar)%numdims
-
-         write(string1,'(a,i2,A)') 'inquire dimension ',i,trim(string2)
-         call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
-               'nc_write_model_vars', trim(string1))
-
-         if (progvar(ivar)%dimnames(i) == 'time') cycle DimCheck
-
-         if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-            write(string1,*)trim(string2),' dim/dimlen ',i,dimlen, &
-                            ' not ',progvar(ivar)%dimlens(i)
-            write(string2,*)' but it should be.'
-            call error_handler(E_ERR, 'nc_write_model_vars', trim(string1), &
-                            source, revision, revdate, text2=trim(string2))
-         endif
-
-         nccount(i) = dimlen
-
-      enddo DimCheck
-
-      where(dimIDs == CopyDimID) ncstart = copyindex
-      where(dimIDs == CopyDimID) nccount = 1
-      where(dimIDs == TimeDimID) ncstart = timeindex
-      where(dimIDs == TimeDimID) nccount = 1
-
-      if ((debug > 0) .and. do_output()) then
-         write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',ncstart(1:ncNdims)
-         write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',nccount(1:ncNdims)
+      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+         write(string1,*)trim(string2),' dim/dimlen ',i,dimlen, &
+                         ' not ',progvar(ivar)%dimlens(i)
+         write(string2,*)' but it should be.'
+         call error_handler(E_ERR, 'nc_write_model_vars', trim(string1), &
+                         source, revision, revdate, text2=trim(string2))
       endif
 
-      ! Since 'time' is a singleton dimension, we can use the same logic
-      ! as if it the variable had one less dimension.
+      nccount(i) = dimlen
 
-      if (     (progvar(ivar)%numdims == 1) .or. &
-              ((progvar(ivar)%numdims == 2) .and. &
-               (progvar(ivar)%dimnames(2) == 'time')) )then
+   enddo DimCheck
 
-         if ( ncNdims /= 3 ) then
-            write(string1,*)trim(varname),' no room for copy,time dimensions.'
-            write(string2,*)'netcdf file should have 3 dimensions, has ',ncNdims
-            call error_handler(E_ERR, 'nc_write_model_vars', string1, &
-                            source, revision, revdate, text2=string2)
-         endif
+   where(dimIDs == CopyDimID) ncstart = copyindex
+   where(dimIDs == CopyDimID) nccount = 1
+   where(dimIDs == TimeDimID) ncstart = timeindex
+   where(dimIDs == TimeDimID) nccount = 1
 
-         allocate(data_1d_array( progvar(ivar)%dimlens(1) ) )
-         call vector_to_prog_var(state_vec, ivar, data_1d_array)
-         call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
-             start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
-                   'nc_write_model_vars', 'put_var '//trim(string2))
-         deallocate(data_1d_array)
+   if ((debug > 9) .and. do_output()) then
+      write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',ncstart(1:ncNdims)
+      write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',nccount(1:ncNdims)
+   endif
 
-      elseif ( (progvar(ivar)%numdims == 2) .or. &
-              ((progvar(ivar)%numdims == 3) .and. &
-               (progvar(ivar)%dimnames(3) == 'time')) )then
+   ! Since 'time' is a singleton dimension, we can use the same logic
+   ! as if it the variable had one less dimension.
 
-         if ( ncNdims /= 4 ) then
-            write(string1,*)trim(varname),' no room for copy,time dimensions.'
-            write(string2,*)'netcdf file should have 4 dimensions, has ',ncNdims
-            call error_handler(E_ERR, 'nc_write_model_vars', string1, &
-                            source, revision, revdate, text2=string2)
-         endif
+   if (     (progvar(ivar)%numdims == 1) .or. &
+           ((progvar(ivar)%numdims == 2) .and. &
+            (progvar(ivar)%dimnames(2) == 'time')) )then
 
-         allocate(data_2d_array( progvar(ivar)%dimlens(1),  &
-                                 progvar(ivar)%dimlens(2) ))
-         call vector_to_prog_var(state_vec, ivar, data_2d_array)
-         call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
-             start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
-                   'nc_write_model_vars', 'put_var '//trim(string2))
-         deallocate(data_2d_array)
-
-      else
-
-         write(string1,*)'do not know how to handle jules variables with more than 2 dimensions'
-         write(string2,*)trim(progvar(ivar)%varname),'has shape', &
-                              progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
-         call error_handler(E_ERR,'nc_write_model_vars',string1,source,revision,revdate)
-
+      if ( ncNdims /= 3 ) then
+         write(string1,*)trim(varname),' no room for copy,time dimensions.'
+         write(string2,*)'netcdf file should have 3 dimensions, has ',ncNdims
+         call error_handler(E_ERR, 'nc_write_model_vars', string1, &
+                         source, revision, revdate, text2=string2)
       endif
 
-   enddo
+      allocate(data_1d_array( progvar(ivar)%dimlens(1) ) )
+      call vector_to_prog_var(state_vec, ivar, data_1d_array)
+      call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
+          start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
+                'nc_write_model_vars', 'put_var '//trim(string2))
+      deallocate(data_1d_array)
 
-endif
+   elseif ( (progvar(ivar)%numdims == 2) .or. &
+           ((progvar(ivar)%numdims == 3) .and. &
+            (progvar(ivar)%dimnames(3) == 'time')) )then
+
+      if ( ncNdims /= 4 ) then
+         write(string1,*)trim(varname),' no room for copy,time dimensions.'
+         write(string2,*)'netcdf file should have 4 dimensions, has ',ncNdims
+         call error_handler(E_ERR, 'nc_write_model_vars', string1, &
+                         source, revision, revdate, text2=string2)
+      endif
+
+      allocate(data_2d_array( progvar(ivar)%dimlens(1),  &
+                              progvar(ivar)%dimlens(2) ))
+      call vector_to_prog_var(state_vec, ivar, data_2d_array)
+      call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
+          start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
+                'nc_write_model_vars', 'put_var '//trim(string2))
+      deallocate(data_2d_array)
+
+   elseif ( (progvar(ivar)%numdims == 3) .or. &
+           ((progvar(ivar)%numdims == 4) .and. &
+            (progvar(ivar)%dimnames(4) == 'time')) )then
+
+      if ( ncNdims /= 5 ) then
+         write(string1,*)trim(varname),' no room for copy,time dimensions.'
+         write(string2,*)'netcdf file should have 5 dimensions, has ',ncNdims
+         call error_handler(E_ERR, 'nc_write_model_vars', string1, &
+                         source, revision, revdate, text2=string2)
+      endif
+
+      allocate(data_3d_array( progvar(ivar)%dimlens(1),  &
+                              progvar(ivar)%dimlens(2),  &
+                              progvar(ivar)%dimlens(3) ))
+      call vector_to_prog_var(state_vec, ivar, data_3d_array)
+      call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
+          start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
+                'nc_write_model_vars', 'put_var '//trim(string2))
+      deallocate(data_3d_array)
+
+   else
+
+      write(string1,*)'do not know how to handle jules variables with more than 3 dimensions'
+      write(string2,*)trim(progvar(ivar)%varname),'has shape', &
+                           progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
+      call error_handler(E_ERR,'nc_write_model_vars',string1,source,revision,revdate)
+
+   endif
+
+enddo
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -3430,6 +3380,83 @@ end subroutine vector_to_2d_prog_var
 
 
 !------------------------------------------------------------------
+!> (vector_to_prog_var) vector_to_3d_prog_var 
+!>
+!> convert the values from a 1d array, starting at an offset,
+!> into a 3d array.
+
+subroutine vector_to_3d_prog_var(x, ivar, data_3d_array, ncid)
+
+real(r8), dimension(:),     intent(in)  :: x
+integer,                    intent(in)  :: ivar
+real(r8), dimension(:,:,:), intent(out) :: data_3d_array
+integer, OPTIONAL,          intent(in)  :: ncid
+
+integer :: i,j,k,ii, VarID
+real(r8), allocatable, dimension(:,:,:) :: org_array
+
+call error_handler(E_MSG, 'vector_to_3d_prog_var', 'FIXME routine not tested', source, revision, revdate)
+
+! unpack the right part of the DART state vector into a 1D array.
+
+ii = progvar(ivar)%index1
+
+do k = 1,progvar(ivar)%dimlens(3)
+do j = 1,progvar(ivar)%dimlens(2)
+do i = 1,progvar(ivar)%dimlens(1)
+   data_3d_array(i,j,k) = x(ii)
+   ii = ii + 1
+enddo
+enddo
+enddo
+
+ii = ii - 1
+if ( ii /= progvar(ivar)%indexN ) then
+   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
+   call error_handler(E_ERR,'vector_to_3d_prog_var', string1, &
+                    source, revision, revdate, text2=string2)
+endif
+
+! Apply the min/max values, if applicable
+! This should only be true when converting to a variable that will
+! be reinserted into the jules restart file. This is indicated
+! by the presence of the ncid variable.
+
+if (present(ncid)) then
+
+   if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
+       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_3d_array /= MISSING_R8) .and. &
+             (data_3d_array > progvar(ivar)%maxvalue)) &
+              data_3d_array = progvar(ivar)%maxvalue
+   endif
+
+   if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
+       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
+      where ((data_3d_array /= MISSING_R8) .and. &
+             (data_3d_array < progvar(ivar)%minvalue)) &
+              data_3d_array = progvar(ivar)%minvalue
+   endif
+
+   ! replace the missing values with the original missing values.
+   ! FIXME ... I am not sure if there would ever be any missing values
+   ! in a JULES restart file.
+
+   if     (progvar(ivar)%xtype == NF90_INT) then
+      where(data_3d_array == MISSING_I) data_3d_array = progvar(ivar)%spvalINT
+   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+      where(data_3d_array == MISSING_R4) data_3d_array = progvar(ivar)%spvalR4
+   elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+      where(data_3d_array == MISSING_R8) data_3d_array = progvar(ivar)%spvalR8
+   endif
+
+endif
+
+end subroutine vector_to_3d_prog_var
+
+
+!------------------------------------------------------------------
 !> get_jules_output_dimensions
 !>
 !> Read the dimensions from the history netcdf file.
@@ -3723,10 +3750,6 @@ call nc_check(nf90_inq_varid(ncid, 'pfts1d_wtxy', VarID),    'get_sparse_geog', 
 call nc_check(nf90_get_var(  ncid, VarID,   pfts1d_wtxy),    'get_sparse_geog', &
                                    'get_var pfts1d_wtxy '//trim(jules_restart_filename))
 
-! zsno is NOT optional ... so it IS a fatal error if it is not present (for now, anyway).
-! as read into fortran ... zsno(:,1) is the level closest to the sun.
-! as read into fortran ... zsno(:,5) is the level closest to the ground.
-
 if (cstat == 'close') then
    call nc_check(nf90_close(ncid),'get_sparse_geog','close '//trim(fname) )
    ncid = 0
@@ -3836,7 +3859,6 @@ character(len=NF90_MAX_NAME) :: state_or_aux  ! column 6
 ! We can do some miniminal checking along the way.
 ! Determining which file to check is going to be more complicated.
 
-
 ngood = 0
 MyLoop : do i = 1, max_state_variables
 
@@ -3922,7 +3944,6 @@ character(len=NF90_MAX_NAME),dimension(NF90_MAX_VAR_DIMS) :: dimnames
 
 integer :: i, mydimid
 
-call error_handler(E_MSG, 'define_var_dims', 'FIXME TJH routine not tested', source, revision, revdate)
 ndims = 0
 
 DIMLOOP : do i = 1,progvar(ivar)%numdims
@@ -3946,21 +3967,16 @@ ndims           = ndims + 1
 dimids(ndims)   = unlimitedDimid
 dimnames(ndims) = 'time'
 
-if ((debug > 8) .and. do_output()) then
+if ((debug > 9) .and. do_output()) then
 
    write(logfileunit,*)
    write(logfileunit,*)'define_var_dims knowledge'
-
-   write(logfileunit,*)trim(progvar(ivar)%varname),' has original     dimnames: ', &
-                   (/( trim(progvar(ivar)%dimnames(i))//' ',i=1,progvar(ivar)%numdims) /)
    write(logfileunit,*)trim(progvar(ivar)%varname),' repackaging into dimnames: ', &
                        (/ (trim(dimnames(i))//' ',i=1,ndims) /)
-
    write(logfileunit,*)'thus dimids ',dimids(1:ndims)
+
    write(     *     ,*)
    write(     *     ,*)'define_var_dims knowledge'
-   write(     *     ,*)trim(progvar(ivar)%varname),' has original     dimnames: ', &
-                   (/( trim(progvar(ivar)%dimnames(i))//' ',i=1,progvar(ivar)%numdims) /)
    write(     *     ,*)trim(progvar(ivar)%varname),' repackaging into dimnames: ', &
                        (/ (trim(dimnames(i))//' ',i=1,ndims) /)
    write(     *     ,*)'thus dimids ',dimids(1:ndims)
