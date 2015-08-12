@@ -365,9 +365,11 @@ integer, OPTIONAL, intent(out) :: var_type
 ! Local variables
 
 integer  :: n, varindex
-integer  :: lon_index
-integer  :: lat_index
-integer  :: lev_index
+integer  ::    lon_index
+integer  ::    lat_index
+integer  ::   soil_index
+integer  ::   tile_index
+integer  :: scpool_index
 real(r8) :: mylon, mylat, mylev
 
 ! Module variables
@@ -384,10 +386,13 @@ call error_handler(E_MSG, 'get_state_meta_data', 'FIXME TJH routine not finished
 if ( .not. module_initialized ) call static_init_model
 
 varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
-call get_state_indices(indx, lon_index, lat_index, lev_index, varindex)
+call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                             tile_index, scpool_index, varindex)
 
-call get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
-                                mylon, mylat, mylev)
+call get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
+                             mylon, mylat, mylev)
+
+stop  ! TJH early exit
 
 location = set_location( mylon, mylat, mylev, VERTISHEIGHT)
 
@@ -400,12 +405,12 @@ if (do_output() .and. (debug > 5)) then
       write(*,200) trim(progvar(varindex)%varname), indx, lon_index, lat_index
    elseif ( progvar(varindex)%rank == 3) then
       if (mylon > 180.0_r8) mylon =  mylon - 360.0_r8
-      write(*,300) trim(progvar(varindex)%varname), indx, lon_index, lat_index , lev_index, mylon, mylat, mylev
+      write(*,300) trim(progvar(varindex)%varname), indx, lon_index, lat_index , soil_index, mylon, mylat, mylev
    endif
 endif
 
  100 format(A,2(1x,i10))              ! varname, DART index, i
- 200 format(A,3(1x,i10))              ! varname, DART index, i, j
+ 200 format(A,1x,'DART index=',i10,' indx1=',i10,' indx2=',i10)
  300 format(A,4(1x,i10),3(1x,f18.10)) ! varname, DART index, i, j, k, and the 3 locations
 
 return
@@ -4431,15 +4436,19 @@ end subroutine Read_Tile_Fractions
 !> Given an integer index into the state vector structure, returns the
 !> associated array indices for lat, lon, and depth, as well as the type.
 
-subroutine get_state_indices(index_in, lon_index, lat_index, lev_index, varindex)
+subroutine get_state_indices(index_in, lon_index, lat_index, soil_index, &
+                             tile_index, scpool_index, varindex)
 
 integer, intent(in)    :: index_in
-integer, intent(out)   :: lon_index
-integer, intent(out)   :: lat_index
-integer, intent(out)   :: lev_index
+integer, intent(out)   ::    lon_index
+integer, intent(out)   ::    lat_index
+integer, intent(out)   ::   soil_index
+integer, intent(out)   ::   tile_index
+integer, intent(out)   :: scpool_index
 integer, intent(inout) :: varindex
 
 integer :: n, offset, ndim1, ndim2
+integer :: land_index, indx1, indx2, indx3
 
 call error_handler(E_MSG, 'get_state_indices', 'FIXME routine not tested', &
         source, revision, revdate)
@@ -4462,9 +4471,13 @@ if (varindex < 0) then
    enddo FindIndex
 endif
 
-lon_index = -1
-lat_index = -1
-lev_index = -1
+   lon_index = -1
+   lat_index = -1
+  soil_index = -1
+  tile_index = -1
+scpool_index = -1
+
+  land_index = -1
 
 offset = index_in - progvar(varindex)%index1 + 1
 
@@ -4473,29 +4486,81 @@ offset = index_in - progvar(varindex)%index1 + 1
 ! Furthermore, netCDF requires the time/unlimited dimension be the LAST
 ! (in Fortran) dimension, so we can just focus on the first N dimensions.
 ! Relying on integer arithmetic.
-!
-! We know the storage order is lon,lat,lev ...
-! FIXME ... may want to ensure at some point.
+
+lon_index = indx1
+lat_index = indx2
 
 if     ( progvar(varindex)%rank == 1) then
 
-   lon_index = offset
+   indx1 = offset
 
 elseif ( progvar(varindex)%rank == 2) then
 
-   ndim1 = progvar(varindex)%dimlens(1)
+   ! Nland always equals Nx*Ny. Always.
+   ! The lon,lat arrays are ALWAYS (Nx,Ny)
+   ! Sometimes Ny == 1 (in which case Nx == Nland)
+   ! So when (for example) Nland = 679, the lat,lon arrays are (679,1)
+   ! But when Nland = 800 (all cells land), the lat,lon arrays could be (20,40)
+   ! or (40,20) ... So I can correctly get the land_index, but I need to
+   ! decompose it into lon_index, lat_index 
+   !
+   ! variables like 
+   ! float latent_heat([time,] y,    x) 
+   ! float      t_soil(     soil, land)
+   ! float      canopy(     tile, land)
+   ! float          cs(   scpool, land)
+   ! Remember that the order in Fortran is reversed from the ncdump order.
 
-   lat_index = 1 + (offset - 1)/ndim1
-   lon_index = offset - (lat_index - 1)*ndim1
+   ndim1 = progvar(varindex)%dimlens(1)  ! either Nx or Nland
+
+   indx2 = 1 + (offset - 1)/ndim1
+   indx1 = offset - (indx2 - 1)*ndim1
+
+   ! Depending on the variable, the
+   ! 'indx2' is actually either 'soil_index' or 'tile_index' or ...
+   ! and 'indx1' is the index into the X-Y plane
+
+   if     (trim(progvar(varindex)%dimnames(2)) ==   'tile') then
+      land_index   = indx1
+      tile_index   = indx2
+   elseif (trim(progvar(varindex)%dimnames(2)) ==   'soil') then
+      land_index   = indx1
+      soil_index   = indx2
+   elseif (trim(progvar(varindex)%dimnames(2)) == 'scpool') then
+      land_index   = indx1
+      scpool_index = indx2
+   else
+      lon_index    = indx1
+      lat_index    = indx2
+   endif
+   
+   if (Nlat /= 1) then ! the X-Y plane needs to be further decomposed
+
+      ! If Nlat /= 1 then Nlon * Nlat is known to equal Nland
+      ! So if I have the index into 'Nland', I should be able
+      ! to unwrap the 'land_index' into Nlon,Nlat with the same algorithm
+
+      ndim1     = Nlon
+      offset    = land_index
+
+      lat_index = 1 + (offset - 1)/ndim1
+      lon_index = offset - (lat_index - 1)*ndim1
+
+   else
+
+      lon_index = indx1
+      lat_index = 1
+
+   endif
 
 elseif ( progvar(varindex)%rank == 3) then
 
    ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
    ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest
 
-   lev_index = 1 + (offset - 1)/(ndim1*ndim2)
-   lat_index = 1 + (offset - (lev_index-1)*ndim1*ndim2 -1)/ndim1
-   lon_index = offset - (lev_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
+   soil_index = 1 + (offset - 1)/(ndim1*ndim2)
+   lat_index = 1 + (offset - (soil_index-1)*ndim1*ndim2 -1)/ndim1
+   lon_index = offset - (soil_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
 
 else
    write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
@@ -4506,10 +4571,17 @@ endif
 
 if (do_output() .and. (debug > 7)) then
    print *, 'get_state_indices: asking for meta data about index ', index_in
-   print *, 'get_state_indices: variable   ', trim(progvar(varindex)%varname)
-   print *, 'get_state_indices: rank       ', progvar(varindex)%rank
-   print *, 'get_state_indices: dimensions ', progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
-   print *, 'get_state_indices: lon, lat, lev index = ', lon_index, lat_index, lev_index
+   print *, 'get_state_indices: variable      ', trim(progvar(varindex)%varname)
+   print *, 'get_state_indices: coordinates   ', trim(progvar(varindex)%coordinates)
+   print *, 'get_state_indices: rank          ', progvar(varindex)%rank
+   print *, 'get_state_indices: dimensions    ', progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
+   print *, 'get_state_indices: Nland, Nx, Ny ', Nland, Nlon, Nlat
+   print *, 'get_state_indices: lon    index = ',    lon_index, 'of ',Nlon
+   print *, 'get_state_indices: lat    index = ',    lat_index, 'of ',Nlat
+   print *, 'get_state_indices: soil   index = ',   soil_index
+   print *, 'get_state_indices: tile   index = ',   tile_index
+   print *, 'get_state_indices: scpool index = ', scpool_index
+   print *
 endif
 
 end subroutine get_state_indices
@@ -4520,13 +4592,13 @@ end subroutine get_state_indices
 !> Given an integer index into the state vector structure,
 !> return the longitude, latitude, and level
 
-subroutine get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
+subroutine get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
                                mylon, mylat, mylev)
 
 integer,  intent(in)  :: varindex
 integer,  intent(in)  :: lon_index
 integer,  intent(in)  :: lat_index
-integer,  intent(in)  :: lev_index
+integer,  intent(in)  :: soil_index
 real(r8), intent(out) :: mylon
 real(r8), intent(out) :: mylat
 real(r8), intent(out) :: mylev
@@ -4550,31 +4622,31 @@ if     ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
         (trim(progvar(varindex)%dimnames(3)) == 'soil')) then
    mylon =  LONGITUDE(lon_index, lat_index)
    mylat =   LATITUDE(lon_index, lat_index)
-   mylev =  SOILLEVEL(lev_index)
+   mylev =  SOILLEVEL(soil_index)
+
+elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'soil')) then
+   mylon = LONGITUDE(lon_index, lat_index)
+   mylat =  LATITUDE(lon_index, lat_index)
+   mylev =  SOILLEVEL(soil_index)
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'y')) then
    mylon = LONGITUDE(lon_index, lat_index)
    mylat =  LATITUDE(lon_index, lat_index)
-   mylev = 0.0_r8   ! SURFACE
+   mylev = 0.0_r8   ! UNDEFINED
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'tile')) then
-!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
-!  mylat = LATITUDE(lon_index, lat_index, lev_index)
-   mylev = 0.0_r8   ! SURFACE
-
-elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
-        (trim(progvar(varindex)%dimnames(2)) == 'soil')) then
-!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
-!  mylat = LATITUDE(lon_index, lat_index, lev_index)
-   mylev = 0.0_r8   ! SURFACE
+   mylon = LONGITUDE(lon_index, lat_index)
+   mylat =  LATITUDE(lon_index, lat_index)
+   mylev = 0.0_r8   ! UNDEFINED
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'scpool')) then
-!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
-!  mylat = LATITUDE(lon_index, lat_index, lev_index)
-   mylev = 0.0_r8   ! SURFACE
+   mylon = LONGITUDE(lon_index, lat_index)
+   mylat =  LATITUDE(lon_index, lat_index)
+   mylev = 0.0_r8   ! UNDEFINED
 
 else
 
