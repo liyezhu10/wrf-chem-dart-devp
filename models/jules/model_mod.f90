@@ -1523,10 +1523,10 @@ do ivar=1, nfields
    io = nf90_inq_dimid(ncid, 'time', TimeDimID)
    if (io /= NF90_NOERR) TimeDimID = MISSING_I
 
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
+   call nc_check(nf90_inq_varid(ncid, varname, VarID), &
             'jules_to_dart_state_vector', 'inq_varid '//trim(myerrorstring))
 
-   call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=ncNdims), &
+   call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=ncNdims), &
             'jules_to_dart_state_vector', 'inquire '//trim(myerrorstring))
 
    ! Check the rank of the variable
@@ -2459,7 +2459,7 @@ if (dimIDs(1) == TimeDimID) then
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 8)) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -2666,7 +2666,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. (debug > 8)) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -2877,7 +2877,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 8)) then
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -3088,7 +3088,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 8)) then
    write(*,*)'get_var_4d: variable ['//trim(varname)//']'
    write(*,*)'get_var_4d: start ',ncstart(1:numdims)
    write(*,*)'get_var_4d: count ',nccount(1:numdims)
