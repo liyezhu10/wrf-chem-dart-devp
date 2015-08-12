@@ -217,27 +217,24 @@ end type gridcellcolumns
 type(gridcellcolumns), allocatable, dimension(:,:), target :: gridCellInfo
 
 !------------------------------------------------------------------------------
-! Things that come from the jules history file.
-!
-! The LONGITUDE,LATITUDE arrays store the longitude and latitude of grid cell centers.
-! For the FV cores, there actually _are_ cells CENTERED at the poles.
 
-integer :: Nlon    = -1
-integer :: Nlat    = -1
-integer :: Nsoil   = -1
-integer :: Ntile   = -1
+integer :: Nlon    = -1   ! output file, AKA 'x'
+integer :: Nlat    = -1   ! output file, AKA 'y'
+integer :: Nsoil   = -1   ! output, restart, jules_soil.nml
+integer :: Ntile   = -1   ! output, restart
+integer :: Nland   = -1   ! Number of gridcells containing land
+integer :: Nscpool = -1   ! Number of soil carbon pools
 
-real(r8), allocatable :: SOILLEVEL(:)
-real(r8), allocatable :: LONGITUDE(:,:)
-real(r8), allocatable ::  LATITUDE(:,:)
+real(r8), allocatable :: LONGITUDE(:,:)    ! output file, grid cell centers
+real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
+real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
+
 real(r8), allocatable ::  AREA1D(:),   LANDFRAC1D(:)   ! masked grid
 real(r8), allocatable ::  AREA2D(:,:), LANDFRAC2D(:,:) ! 2D grid
 
 logical :: masked = .false.
 
 !------------------------------------------------------------------------------
-! Things that come from the jules restart file.
-!
 ! These are the 'sparse' type arrays pertaining to the land gridcells.
 !
 ! Unlike the soil layers, snow layer thickness, as well as snow layer depth,
@@ -248,9 +245,6 @@ logical :: masked = .false.
 ! all levels at a location, then
 ! scan along longitudes, then
 ! move to next latitude.
-
-integer :: Nland   = -1 ! Number of gridcells containing land
-integer :: Nscpool = -1 ! Number of soil carbon pools
 
 integer,  allocatable, dimension(:)  :: grid1d_ixy, grid1d_jxy ! 2D lon/lat index of corresponding gridcell
 integer,  allocatable, dimension(:)  :: land1d_ixy, land1d_jxy ! 2D lon/lat index of corresponding gridcell
@@ -989,8 +983,6 @@ integer :: i, myndims
 
 character(len=128) :: filename
 
-call error_handler(E_MSG, 'nc_write_model_atts', 'FIXME TJH routine not written', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
@@ -1020,9 +1012,9 @@ call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filen
 !-------------------------------------------------------------------------------
 
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='copy', dimid=MemberDimID), &
-                           'nc_write_model_atts', 'copy dimid '//trim(filename))
+                          'nc_write_model_atts', 'inq_dimid copy '//trim(filename))
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='time', dimid=  TimeDimID), &
-                           'nc_write_model_atts', 'time dimid '//trim(filename))
+                          'nc_write_model_atts', 'inq_dimid time '//trim(filename))
 
 if ( TimeDimID /= unlimitedDimId ) then
    write(string1,*)'Time Dimension ID ',TimeDimID, &
@@ -1034,7 +1026,7 @@ endif
 ! Define the model size / state variable dimension / whatever ...
 !-------------------------------------------------------------------------------
 call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
-        dimid = StateVarDimID),'nc_write_model_atts', 'state def_dim '//trim(filename))
+        dimid = StateVarDimID),'nc_write_model_atts', 'def_dim StateVariable '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes
@@ -1045,15 +1037,15 @@ write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
                   values(1), values(2), values(3), values(5), values(6), values(7)
 
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'creation_date' ,str1    ), &
-           'nc_write_model_atts', 'creation put '//trim(filename))
+           'nc_write_model_atts', 'put_att creation '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_source'  ,source  ), &
-           'nc_write_model_atts', 'source put '//trim(filename))
+           'nc_write_model_atts', 'put_att source '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revision',revision), &
-           'nc_write_model_atts', 'revision put '//trim(filename))
+           'nc_write_model_atts', 'put_att revision '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
-           'nc_write_model_atts', 'revdate put '//trim(filename))
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'jules' ), &
-           'nc_write_model_atts', 'model put '//trim(filename))
+           'nc_write_model_atts', 'put_att revdate '//trim(filename))
+call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'JULES' ), &
+           'nc_write_model_atts', 'put_att model '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! We need to output the prognostic variables.
@@ -1061,64 +1053,64 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'jules' ), &
 ! Define the new dimensions IDs
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name='x', len = Nlon, &
-          dimid = nlonDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='x' , len = Nlon, &
+          dimid=nlonDimID),   'nc_write_model_atts', 'def_dim lon '//trim(filename))
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name='y', len = Nlat, &
-          dimid = nlatDimID),'nc_write_model_atts', 'lat def_dim '//trim(filename))
+call nc_check(nf90_def_dim(ncid=ncFileID, name='y' , len = Nlat, &
+          dimid=nlatDimID),   'nc_write_model_atts', 'def_dim lat '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='soil', len = Nsoil, &
-          dimid = nsoilDimID),'nc_write_model_atts', 'soil def_dim '//trim(filename))
+          dimid=nsoilDimID),  'nc_write_model_atts', 'def_dim soil '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='land', len = Nland, &
-          dimid = nlandDimID),'nc_write_model_atts', 'land def_dim '//trim(filename))
+          dimid=nlandDimID),  'nc_write_model_atts', 'def_dim land '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='tile', len = Ntile, &
-          dimid = ntileDimID),'nc_write_model_atts', 'tile def_dim '//trim(filename))
+          dimid=ntileDimID),  'nc_write_model_atts', 'def_dim tile '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='scpool', len = Nscpool, &
-          dimid = NscpoolDimID),'nc_write_model_atts', 'scpool def_dim '//trim(filename))
+          dimid=NscpoolDimID),'nc_write_model_atts', 'def_dim scpool '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
 !----------------------------------------------------------------------------
 
 ! Grid Longitudes
-call nc_check(nf90_def_var(ncFileID,name='lon', xtype=nf90_real, &
+call nc_check(nf90_def_var(ncFileID,name='longitude', xtype=nf90_real, &
               dimids=(/ nlonDimID, nlatDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lon def_var '//trim(filename))
+              'nc_write_model_atts', 'def_var longitude '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate longitude'), &
-              'nc_write_model_atts', 'lon long_name '//trim(filename))
+              'nc_write_model_atts', 'put_att longitude long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'X'),  &
-              'nc_write_model_atts', 'lon cartesian_axis '//trim(filename))
+              'nc_write_model_atts', 'put_att longitude cartesian_axis '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
-              'nc_write_model_atts', 'lon units '//trim(filename))
+              'nc_write_model_atts', 'put_att longitude units '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-              'nc_write_model_atts', 'lon valid_range '//trim(filename))
+              'nc_write_model_atts', 'put_att longitude valid_range '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(nf90_def_var(ncFileID,name='lat', xtype=nf90_real, &
+call nc_check(nf90_def_var(ncFileID,name='latitude', xtype=nf90_real, &
               dimids=(/ nlonDimID, nlatDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lat def_var '//trim(filename))
+              'nc_write_model_atts', 'def_var latitude '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate latitude'), &
-              'nc_write_model_atts', 'lat long_name '//trim(filename))
+              'nc_write_model_atts', 'put_att latitude long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
-              'nc_write_model_atts', 'lat cartesian_axis '//trim(filename))
+              'nc_write_model_atts', 'put_att latitude cartesian_axis '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
-              'nc_write_model_atts', 'lat units '//trim(filename))
+              'nc_write_model_atts', 'put_att latitude units '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-              'nc_write_model_atts', 'lat valid_range '//trim(filename))
+              'nc_write_model_atts', 'put_att latitude valid_range '//trim(filename))
 
 ! subsurface levels
 call nc_check(nf90_def_var(ncFileID,name='soil', xtype=nf90_real, &
               dimids=(/ nsoilDimID /), varid=VarID),&
-              'nc_write_model_atts', 'soil def_var '//trim(filename))
+              'nc_write_model_atts', 'def_var soil '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate soil levels'), &
-              'nc_write_model_atts', 'soil long_name '//trim(filename))
+              'nc_write_model_atts', 'put_att soil long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
-              'nc_write_model_atts', 'soil cartesian_axis '//trim(filename))
+              'nc_write_model_atts', 'put_att soil cartesian_axis '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'm'),  &
-              'nc_write_model_atts', 'soil units '//trim(filename))
+              'nc_write_model_atts', 'put_att soil units '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Create the (empty) Prognostic Variables and the Attributes
@@ -1138,43 +1130,43 @@ do ivar=1, nfields
    call nc_check(nf90_def_var(ncid=ncFileID, name=trim(varname), &
                  xtype=progvar(ivar)%xtype, &
                  dimids = mydimids(1:myndims), varid=VarID),&
-                 'nc_write_model_atts', trim(string1)//' def_var' )
+                 'nc_write_model_atts', 'def_var '//trim(string1))
 
    call nc_check(nf90_put_att(ncFileID, VarID, &
            'long_name', trim(progvar(ivar)%long_name)), &
-           'nc_write_model_atts', trim(string1)//' put_att long_name' )
+           'nc_write_model_atts', 'put_att long_name '//trim(string1))
    call nc_check(nf90_put_att(ncFileID, VarID, &
            'DART_kind', trim(progvar(ivar)%kind_string)), &
-           'nc_write_model_atts', trim(string1)//' put_att dart_kind' )
+           'nc_write_model_atts', 'put_att DART_kind '//trim(string1))
    call nc_check(nf90_put_att(ncFileID, VarID, &
            'units', trim(progvar(ivar)%units)), &
-           'nc_write_model_atts', trim(string1)//' put_att units' )
+           'nc_write_model_atts', 'put_att units '//trim(string1))
 
    ! Preserve the original missing_value/_FillValue code.
 
    if (  progvar(ivar)%xtype == NF90_INT ) then
       call nc_check(nf90_put_att(ncFileID, VarID, &
               'missing_value', progvar(ivar)%spvalINT), &
-              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
+              'nc_write_model_atts', 'put_att missing_value '//trim(string1))
       call nc_check(nf90_put_att(ncFileID, VarID, &
               '_FillValue',  progvar(ivar)%spvalINT), &
-              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+              'nc_write_model_atts', 'put_att _FillValue '//trim(string1))
 
    elseif (  progvar(ivar)%xtype == NF90_FLOAT ) then
       call nc_check(nf90_put_att(ncFileID, VarID, &
               'missing_value', progvar(ivar)%spvalR4), &
-              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
+              'nc_write_model_atts', 'put_att missing_value '//trim(string1))
       call nc_check(nf90_put_att(ncFileID, VarID, &
               '_FillValue',  progvar(ivar)%spvalR4), &
-              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+              'nc_write_model_atts', 'put_att _FillValue '//trim(string1))
 
    elseif (  progvar(ivar)%xtype == NF90_DOUBLE ) then
       call nc_check(nf90_put_att(ncFileID, VarID, &
               'missing_value', progvar(ivar)%spvalR8), &
-              'nc_write_model_atts', trim(string1)//' put_att missing_value' )
+              'nc_write_model_atts', 'put_att missing_value '//trim(string1))
       call nc_check(nf90_put_att(ncFileID, VarID, &
               '_FillValue',  progvar(ivar)%spvalR8), &
-              'nc_write_model_atts', trim(string1)//' put_att _FillValue' )
+              'nc_write_model_atts', 'put_att _FillValue '//trim(string1))
    endif
 
 enddo
@@ -1189,20 +1181,20 @@ call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 ! Fill the coordinate variables
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_inq_varid(ncFileID, 'lon', VarID), &
-             'nc_write_model_atts', 'put_var lon '//trim(filename))
+call nc_check(nf90_inq_varid(ncFileID, 'longitude', VarID), &
+             'nc_write_model_atts', 'inq_varid longitude '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, VarID, LONGITUDE ), &
-             'nc_write_model_atts', 'lon put_var '//trim(filename))
+             'nc_write_model_atts', 'put_var longitude '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncFileID, 'lat', VarID), &
-             'nc_write_model_atts', 'put_var lat '//trim(filename))
+call nc_check(nf90_inq_varid(ncFileID, 'latitude', VarID), &
+             'nc_write_model_atts', 'inq_varid latitude '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, VarID, LATITUDE ), &
-             'nc_write_model_atts', 'lat put_var '//trim(filename))
+             'nc_write_model_atts', 'put_var latitude '//trim(filename))
 
 call nc_check(nf90_inq_varid(ncFileID, 'soil', VarID), &
-             'nc_write_model_atts', 'put_var soil '//trim(filename))
+             'nc_write_model_atts', 'inq_varid soil '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, VarID, SOILLEVEL ), &
-             'nc_write_model_atts', 'soil put_var '//trim(filename))
+             'nc_write_model_atts', 'put_var soil '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -2674,7 +2666,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 9)) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -3494,7 +3486,7 @@ call nc_check(nf90_inq_dimid(ncid, 'tile', dimid), &
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ntile), &
             'get_jules_output_dimensions','inquire_dimension tile '//trim(fname))
 
-if ((debug > 8) .and. do_output()) then
+if ((debug > 9) .and. do_output()) then
    write(logfileunit,*)
    write(logfileunit,*)'get_jules_output_dimensions output follows:'
    write(logfileunit,*)'Nlon  = ',Nlon
@@ -3569,7 +3561,7 @@ if (myNtile /= Ntile) then
               source, revision, revdate, text2=string2, text3=string3)
 endif
 
-if ((debug > 8) .and. do_output()) then
+if ((debug > 9) .and. do_output()) then
    write(logfileunit,*)
    write(logfileunit,*)'get_jules_restart_dimensions output follows:'
    write(logfileunit,*)'Nland   = ',Nland
