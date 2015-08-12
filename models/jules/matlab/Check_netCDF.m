@@ -14,14 +14,49 @@ jules_output  = '../work/jules_output.nc';
 dart_file     = 'check_me_out.nc';
 
 % The DART files have the extra 'copy' and are guaranteed to have a 'time'
+% but since these are singleton dimensions, they can be ignored.
+% ncread automatically squeezes out singleton dimensions.
 
-% No time dimension for these - easy.
 restart_variables = {'canopy', 'cs', 'gs', 'snow_tile', 'sthuf', 't_soil', 'tstar_tile', 'rho_snow', 'snow_depth'};
 
-% Must pick off last time 
-output_variables = { 'time', 'latitude', 'longitude', 'precip', 'latent_heat', 'smcl', 'soil_wet', 'esoil'};
+output_variables = {'latitude', 'longitude', 'latent_heat', 'soil_wet'};
 
-%% Work on the restart variables first
+for ivar=1:length(output_variables)
+
+   dart  = ncread(dart_file,output_variables{ivar});
+
+   % Must pick off last time 
+   vinfo = ncinfo(jules_output,output_variables{ivar});
+
+   if( any([vinfo.Dimensions.Unlimited]) )
+       unlimdim = find([vinfo.Dimensions.Unlimited] > 0);
+       count = [vinfo.Dimensions.Length];
+       start = ones(size(count));
+       start(unlimdim) = count(unlimdim);  
+       count(unlimdim) = 1;
+       jules = ncread(jules_output,output_variables{ivar},start,count);
+   else
+       jules = ncread(jules_output,output_variables{ivar});
+   end
+   
+   clf;
+   plot(jules(:))
+   hold on
+   plot(dart(:))
+   legend('jules','dart')
+   title(output_variables{ivar})
+
+   diff = jules - dart;
+   fprintf('Maximum %s difference %f \n', output_variables{ivar}, max(diff(:)))
+   fprintf('Minimum %s difference %f \n', output_variables{ivar}, min(diff(:)))
+
+   disp('Pausing, hit any key to continue ...')
+   pause;
+
+end
+
+
+%% Work on the restart variables
 %  netcdf jules_restart {
 %  dimensions:
 %          land = 679 ;
@@ -38,6 +73,7 @@ output_variables = { 'time', 'latitude', 'longitude', 'precip', 'latent_heat', '
 %          float tstar_tile(tile, land) ;
 %          float rho_snow(  tile, land) ;
 %          float snow_depth(tile, land) ;
+
 
 for ivar=1:length(restart_variables)
 
