@@ -40,9 +40,11 @@ cd       $temp_dir
 
 # Get the REQUIRED namelist files to the temp directory
 # SR: Copying all the namelist files of JULES to be on
-# the safe side. The namelist files have the exact names
+# the safe side, since some of them will be changed by DART.
+# The namelist files have the exact names
 # of the directories holding the input files. Therefore,
-# I do not think that it is necessary to copy them.
+# I do not think that it is necessary to copy the input files.
+
 cp ../jules_namelist/* .
 
 # Ensure that the input.nml has the required value for
@@ -91,19 +93,35 @@ while($state_copy <= $num_states)
    # which must be communicated to the model ... through the namelist
    #----------------------------------------------------------------------
    
-   # SR: Preparing files to run dart_to_jules
    cp -pv ../$input_file           dart_restart        >>& $logfile || exit 2
    cp -pv ../restart.$instance.nc  jules_restart.nc    >>& $logfile || exit 2
-   # SR: The last output file produced by JULES has to be copied as
-   # jules_output.nc
-   cd ./output
-   set jls_rst = `ls -1  *hour*nc | tail -1`
-   cp -pv $jls_rst                 jules_output.nc     >>& $logfile || exit 2
-   cd ..   
+
+   # The last output file produced by JULES has to be copied as jules_output.nc
+   set jls_rst = `ls -1rt  ./output/*hour*nc | tail -n 1`
+   ln -sf $jls_rst                 jules_output.nc     >>& $logfile || exit 2
    
-   # SR: All the required files are created. Now run dart_to_jules
+   # All the required files are created. Now run dart_to_jules
+   # This creates a file called DART_time_control.txt that has
+   # the information needed to update the JULES namelist to tell
+   # JULES how far to advance.
+   
    ../dart_to_jules                                    >>& $logfile || exit 2  
-   
+
+   set start_string = `grep "main_run_start"  DART_time_control.txt`
+   set  stop_string = `grep "main_run_end"    DART_time_control.txt`
+
+   sed -e "/ main_run_start /c\ ${start_string}" \
+       -e "/ main_run_end /c\ ${stop_string}" timesteps.nml >! timesteps.nml.update
+
+   if ( -e  timesteps.nml.updated ) then
+      echo "timesteps.nml updated with new start/stop time for ensemble member $ensemble_member" >> $logfile
+      mv -v timesteps.nml timesteps.nml.original
+      mv -v timesteps.nml.updated timesteps.nml
+   else
+      echo "ERROR timesteps.nml did not update correctly for ensemble member $ensemble_member." >> $logfile
+      exit 2
+   endif
+
    #----------------------------------------------------------------------
    # Block 3: Run the model
    #----------------------------------------------------------------------
@@ -114,7 +132,7 @@ while($state_copy <= $num_states)
 
    #----------------------------------------------------------------------
    # Block 4: Convert the model output to form needed by DART
-   # AT this point, the model has updated the information in tiegcm_restart_p.nc
+   # At this point, the model has updated the information in jules_restart.nc
    # We need to get that information back into the DART state vector.
    #
    # The updated information needs to be moved into CENTRALDIR in
