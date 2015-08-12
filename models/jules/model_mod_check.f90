@@ -232,7 +232,7 @@ endif
 
 if (test1thru > 5) then
    write(*,*)
-   write(*,*)'Testing check_meta_data ...'
+   write(*,*)'Testing check_meta_data ... for index ',x_ind
    if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
    write(*,*)'Testing check_meta_data ... complete.'
 endif
@@ -331,19 +331,18 @@ contains
 
 
 subroutine check_meta_data( iloc )
+! This routine can be extended to exhaustively report on
+! every model index.
 
 integer, intent(in) :: iloc
 type(location_type) :: loc
 integer             :: var_type
 character(len=129)  :: string1
 
-write(*,*)
-write(*,*)'Checking metadata routines.'
-
 call get_state_meta_data( iloc, loc, var_type)
 
 call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)' indx ',iloc,' is type ',var_type,trim(string1)
+write(*,*)'check_meta_data: indx ',iloc,' is type ',var_type,trim(string1)
 
 end subroutine check_meta_data
 

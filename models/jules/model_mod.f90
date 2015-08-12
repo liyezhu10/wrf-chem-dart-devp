@@ -106,25 +106,25 @@ type(random_seq_type) :: random_seq
 !
 !  The DART state vector may consist of things like:
 !
-!  The variables in the jules restart file that are used to create the
+!  The variables in the JULES restart file that are used to create the
 !  DART state vector are specified in the input.nml:model_nml namelist.
 !
 !------------------------------------------------------------------
 
-integer, parameter :: LAKE = 3
 
-! A gridcell may consist of up to 9 tiles. 
+! A gridcell may consist of up to 9 tiles.
+! 5 of the tiles are PFTs,
+! 4 of the tiles are non-vegetated classifications.
 ! The tiles occupy a fraction of the gridcell.
-! If the fractions do not add up to 100%, the
-! rest is considered bare soil (tile type 8),
-! WHETHER YOU SPECIFY IT OR NOT!
+! The fractions for each tile in each grid cell are 
+! contained in a file specified in 'ancillaries.nml'
 !
 ! tile types
 
 integer, parameter ::  BROADLEAF_TREE   = 1
 integer, parameter ::  NEEDLE_LEAF_TREE = 2
 integer, parameter ::  C3_GRASS         = 3
-integer, parameter ::  C4_GRASS         = 4 
+integer, parameter ::  C4_GRASS         = 4
 integer, parameter ::  SHRUBS           = 5
 integer, parameter ::  URBAN            = 6
 integer, parameter ::  INLAND_WATER     = 7
@@ -179,9 +179,11 @@ type progvartype
    character(len=NF90_MAX_NAME) :: varname
    character(len=NF90_MAX_NAME) :: long_name
    character(len=NF90_MAX_NAME) :: units
+   character(len=NF90_MAX_NAME) :: coordinates
    character(len=obstypelength), dimension(NF90_MAX_VAR_DIMS) :: dimnames
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
    integer  :: numdims
+   integer  :: rank        ! excludes the (singleton) time dimension if present
    integer  :: maxlevels
    integer  :: xtype
    integer  :: varsize     ! prod(dimlens(1:numdims))
@@ -331,7 +333,7 @@ real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
 call error_handler(E_MSG, 'adv_1step', 'FIXME RAFAEL routine not tested yet (needs long obs_seq file) ', source, revision, revdate)
- 
+
 if ( .not. module_initialized ) call static_init_model
 
 if (do_output()) then
@@ -362,7 +364,11 @@ integer, OPTIONAL, intent(out) :: var_type
 
 ! Local variables
 
-integer  :: n
+integer  :: n, varindex
+integer  :: lon_index
+integer  :: lat_index
+integer  :: lev_index
+real(r8) :: mylon, mylat, mylev
 
 ! Module variables
 
@@ -373,38 +379,43 @@ integer  :: n
 ! levels
 ! progvar
 
-call error_handler(E_ERR, 'get_state_meta_data', 'FIXME TJH routine not written', source, revision, revdate)
+call error_handler(E_MSG, 'get_state_meta_data', 'FIXME TJH routine not finished nor tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
-! TJH location = set_location( LONGITUDE(lonixy(indx)), LATITUDE(latjxy(indx)), levels(indx), VERTISHEIGHT)
+varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
+call get_state_indices(indx, lon_index, lat_index, lev_index, varindex)
 
-if (present(var_type)) then
+call get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
+                                mylon, mylat, mylev)
 
-   var_type = MISSING_I
+location = set_location( mylon, mylat, mylev, VERTISHEIGHT)
 
-   FINDTYPE : do n = 1,nfields
-      if((indx >= progvar(n)%index1) .and. &
-         (indx <= progvar(n)%indexN) ) then
-         var_type = progvar(n)%dart_kind
-         exit FINDTYPE
-      endif
-   enddo FINDTYPE
+if (present(var_type)) var_type = progvar(varindex)%dart_kind
 
-   if( var_type == MISSING_I ) then
-      write(string1,*) 'Problem, cannot find base_offset, indx is: ', indx
-      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
+if (do_output() .and. (debug > 5)) then
+   if     ( progvar(varindex)%rank == 1) then
+      write(*,100) trim(progvar(varindex)%varname), indx, lon_index
+   elseif ( progvar(varindex)%rank == 2) then
+      write(*,200) trim(progvar(varindex)%varname), indx, lon_index, lat_index
+   elseif ( progvar(varindex)%rank == 3) then
+      if (mylon > 180.0_r8) mylon =  mylon - 360.0_r8
+      write(*,300) trim(progvar(varindex)%varname), indx, lon_index, lat_index , lev_index, mylon, mylat, mylev
    endif
-
 endif
 
+ 100 format(A,2(1x,i10))              ! varname, DART index, i
+ 200 format(A,3(1x,i10))              ! varname, DART index, i, j
+ 300 format(A,4(1x,i10),3(1x,f18.10)) ! varname, DART index, i, j, k, and the 3 locations
+
 return
+
 end subroutine get_state_meta_data
 
 
 
 !------------------------------------------------------------------
-!> model_interpolate is the basis for all 'forward observation operator's 
+!> model_interpolate is the basis for all 'forward observation operator's
 !> For a given lat, lon, and height, interpolate the correct state value
 !> to that location for the filter from the jules state vectors
 !>
@@ -535,10 +546,10 @@ subroutine static_init_model()
 ! Local variables - all the important ones have module scope
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME)          :: dimname
+character(len=NF90_MAX_NAME)          :: dimname, coordinates
 integer :: ncid, TimeDimID, VarID, dimlen, varsize
 integer :: ncidR ! handle to JULES restart file
-integer :: ncidO ! handle to JULES output  file 
+integer :: ncidO ! handle to JULES output  file
 integer :: iunit, io, ivar
 integer :: i, j, xi, xj, index1, indexN, indx
 integer :: ss, dd
@@ -592,6 +603,7 @@ allocate(LONGITUDE(Nlon,Nlat), LATITUDE(Nlon,Nlat),  SOILLEVEL(Nsoil))
 
 ! The soil level values are only available from the namelist, apparently.
 call Read_Jules_Soil_Namelist()
+! call Read_Tile_Fractions()   TJH FIXME
 call get_full_grid(jules_output_filename)
 
 !---------------------------------------------------------------
@@ -605,7 +617,7 @@ call get_full_grid(jules_output_filename)
 ! TJH allocate(cols1d_wtxy(Nscpool),  cols1d_ityplun(Nscpool))
 ! TJH allocate(pfts1d_ixy(Ntile),      pfts1d_jxy(Ntile)     , pfts1d_wtxy(Ntile))
 
-! TJH FIXME 
+! TJH FIXME
 ! call get_sparse_geog(ncidO, jules_restart_filename, 'close')
 
 !---------------------------------------------------------------
@@ -632,13 +644,13 @@ index1  = 1;
 indexN  = 0;
 do ivar = 1, nfields
 
-   ! convey the information in the variable_table to each progvar. 
+   ! convey the information in the variable_table to each progvar.
 
    call SetVariableAttributes(ivar)
 
    ! Open the file for each variable and get dimensions, etc.
    ! Since the JULES restart files have no metadata (!?)
-   ! we must get all the per-variable metadata from the 
+   ! we must get all the per-variable metadata from the
    ! (hopefully identical) variables in the output file.
 
    call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid), &
@@ -656,6 +668,12 @@ do ivar = 1, nfields
    call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, &
                  ndims=progvar(ivar)%numdims, xtype=progvar(ivar)%xtype), &
             'static_init_model', 'inquire '//trim(string2))
+
+   ! by default, the rank and the number of dimensions are identical.
+   ! Since DART treats 'time' as a singleton dimension - the rank is one less
+   ! if one of the dimensions is 'time'.
+
+   progvar(ivar)%rank = progvar(ivar)%numdims
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
@@ -711,13 +729,14 @@ do ivar = 1, nfields
 
    varsize = 1
    dimlen  = 1
+   coordinates = ''
    DimensionLoop : do i = 1,progvar(ivar)%numdims
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), name=dimname, len=dimlen), &
                                           'static_init_model', string1)
 
-      ! The 'land' dimension of this variable must match the number 
+      ! The 'land' dimension of this variable must match the number
       ! of elements in the LONGITUDE, LATITUDE arrays.
       ! The 'x' and 'y' dimensions in the output file already match
       ! so there is no need to check those.
@@ -729,7 +748,7 @@ do ivar = 1, nfields
                     source, revision, revdate, text2=string2, text3=string3)
       endif
 
-      ! The 'soil' dimension of this variable must match the number 
+      ! The 'soil' dimension of this variable must match the number
       ! of soil layers from the namelist
       if ( (dimname == 'soil') .and. (dimlen /= Nsoil) )then
          write(string1,*)'dimension mismatch between file and namelist'
@@ -739,15 +758,24 @@ do ivar = 1, nfields
                     source, revision, revdate, text2=string2, text3=string3)
       endif
 
-      ! Only reserve space for a single time slice 
-      if (dimIDs(i) == TimeDimID) dimlen = 1
+      ! Only reserve space for a single time slice
+      if (dimIDs(i) == TimeDimID) then
+         dimlen = 1
+         progvar(ivar)%rank = progvar(ivar)%numdims - 1
+      endif
 
       progvar(ivar)%dimlens( i) = dimlen
       progvar(ivar)%dimnames(i) = dimname
       varsize = varsize * dimlen
 
+      ! For some purposes, it is nice to have a little coordinate array of all the 
+      ! dimnames pasted together with a minimal amount of whitespace separation.
+
+      write(coordinates,*) trim(coordinates)//' '//trim(dimname)
+
    enddo DimensionLoop
 
+   progvar(ivar)%coordinates = adjustl(coordinates)
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
    progvar(ivar)%indexN      = index1 + varsize - 1
@@ -756,65 +784,69 @@ do ivar = 1, nfields
    if ((debug > 0) .and. do_output()) then
       write(logfileunit,*)
       write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(logfileunit,*) '  filename    ',trim(progvar(ivar)%origin)
-      write(logfileunit,*) '  update      ',progvar(ivar)%update
-      write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
-      write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
-      write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
+      write(logfileunit,*) '  filename    :',trim(progvar(ivar)%origin)
+      write(logfileunit,*) '  update      :',progvar(ivar)%update
+      write(logfileunit,*) '  long_name   :',trim(progvar(ivar)%long_name)
+      write(logfileunit,*) '  units       :',trim(progvar(ivar)%units)
+      write(logfileunit,*) '  xtype       :',progvar(ivar)%xtype
+      write(logfileunit,*) '  rank        :',progvar(ivar)%rank
+      write(logfileunit,*) '  numdims     :',progvar(ivar)%numdims
+      write(logfileunit,*) '  coordinates :',trim(progvar(ivar)%coordinates)
 
       do i = 1,progvar(ivar)%numdims
          write(logfileunit,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
                     i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
       enddo
 
-      write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
-      write(logfileunit,*) '  index1      ',progvar(ivar)%index1
-      write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
-      write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
-      write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
-      write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
-      write(logfileunit,*) '  spvalR8     ',progvar(ivar)%spvalR8
-      write(logfileunit,*) '  missingINT  ',progvar(ivar)%missingINT
-      write(logfileunit,*) '  missingR4   ',progvar(ivar)%missingR4
-      write(logfileunit,*) '  missingR8   ',progvar(ivar)%missingR8
-      write(logfileunit,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-      write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-      write(logfileunit,*)'   rangeRestricted   ',progvar(ivar)%rangeRestricted
-      write(logfileunit,*)'   minvalue          ',progvar(ivar)%minvalue
-      write(logfileunit,*)'   maxvalue          ',progvar(ivar)%maxvalue
+      write(logfileunit,*) '  varsize     :',progvar(ivar)%varsize
+      write(logfileunit,*) '  index1      :',progvar(ivar)%index1
+      write(logfileunit,*) '  indexN      :',progvar(ivar)%indexN
+      write(logfileunit,*) '  dart_kind   :',progvar(ivar)%dart_kind
+      write(logfileunit,*) '  kind_string :',progvar(ivar)%kind_string
+      write(logfileunit,*) '  spvalINT    :',progvar(ivar)%spvalINT
+      write(logfileunit,*) '  spvalR4     :',progvar(ivar)%spvalR4
+      write(logfileunit,*) '  spvalR8     :',progvar(ivar)%spvalR8
+      write(logfileunit,*) '  missingINT  :',progvar(ivar)%missingINT
+      write(logfileunit,*) '  missingR4   :',progvar(ivar)%missingR4
+      write(logfileunit,*) '  missingR8   :',progvar(ivar)%missingR8
+      write(logfileunit,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
+      write(logfileunit,*) '  has_missing_value :',progvar(ivar)%has_missing_value
+      write(logfileunit,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
+      write(logfileunit,*)'   minvalue          :',progvar(ivar)%minvalue
+      write(logfileunit,*)'   maxvalue          :',progvar(ivar)%maxvalue
 
       write(     *     ,*)
       write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(     *     ,*) '  filename    ',trim(progvar(ivar)%origin)
-      write(     *     ,*) '  update      ',progvar(ivar)%update
-      write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
-      write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
-      write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
-      write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
+      write(     *     ,*) '  filename    :',trim(progvar(ivar)%origin)
+      write(     *     ,*) '  update      :',progvar(ivar)%update
+      write(     *     ,*) '  long_name   :',trim(progvar(ivar)%long_name)
+      write(     *     ,*) '  units       :',trim(progvar(ivar)%units)
+      write(     *     ,*) '  xtype       :',progvar(ivar)%xtype
+      write(     *     ,*) '  rank        :',progvar(ivar)%rank
+      write(     *     ,*) '  numdims     :',progvar(ivar)%numdims
+      write(     *     ,*) '  coordinates :',trim(progvar(ivar)%coordinates)
 
       do i = 1,progvar(ivar)%numdims
          write(  *,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
                     i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
       enddo
 
-      write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
-      write(     *     ,*) '  index1      ',progvar(ivar)%index1
-      write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
-      write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
-      write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
-      write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
-      write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4
-      write(     *     ,*) '  spvalR8     ',progvar(ivar)%spvalR8
-      write(     *     ,*) '  missingINT  ',progvar(ivar)%missingINT
-      write(     *     ,*) '  missingR4   ',progvar(ivar)%missingR4
-      write(     *     ,*) '  missingR8   ',progvar(ivar)%missingR8
-      write(     *     ,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-      write(     *     ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-      write(     *     ,*)'   rangeRestricted   ',progvar(ivar)%rangeRestricted
-      write(     *     ,*)'   minvalue          ',progvar(ivar)%minvalue
-      write(     *     ,*)'   maxvalue          ',progvar(ivar)%maxvalue
+      write(     *     ,*) '  varsize     :',progvar(ivar)%varsize
+      write(     *     ,*) '  index1      :',progvar(ivar)%index1
+      write(     *     ,*) '  indexN      :',progvar(ivar)%indexN
+      write(     *     ,*) '  dart_kind   :',progvar(ivar)%dart_kind
+      write(     *     ,*) '  kind_string :',progvar(ivar)%kind_string
+      write(     *     ,*) '  spvalINT    :',progvar(ivar)%spvalINT
+      write(     *     ,*) '  spvalR4     :',progvar(ivar)%spvalR4
+      write(     *     ,*) '  spvalR8     :',progvar(ivar)%spvalR8
+      write(     *     ,*) '  missingINT  :',progvar(ivar)%missingINT
+      write(     *     ,*) '  missingR4   :',progvar(ivar)%missingR4
+      write(     *     ,*) '  missingR8   :',progvar(ivar)%missingR8
+      write(     *     ,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
+      write(     *     ,*) '  has_missing_value :',progvar(ivar)%has_missing_value
+      write(     *     ,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
+      write(     *     ,*)'   minvalue          :',progvar(ivar)%minvalue
+      write(     *     ,*)'   maxvalue          :',progvar(ivar)%maxvalue
    endif
 
    call nc_check(nf90_close(ncid),'static_init_model','close '//trim(string2))
@@ -867,7 +899,7 @@ end subroutine end_model
 
 
 !------------------------------------------------------------------
-!> init_time 
+!> init_time
 !> Companion interface to init_conditions. Returns a time that is somehow
 !> appropriate for starting up a long integration of the model.
 !> At present, this is only used if the namelist parameter
@@ -982,6 +1014,9 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
 integer :: i, myndims
 
 character(len=128) :: filename
+
+call error_handler(E_MSG, 'nc_write_model_atts', 'FIXME routine not finished', &
+           text2='need to add the variable that describes the tile proportions.')
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1232,8 +1267,8 @@ real(r8), allocatable, dimension(:,:,:)   :: data_3d_array
 
 character(len=128) :: filename
 
-call error_handler(E_MSG, 'nc_write_model_vars', 'FIXME TJH routine not tested', &
-           source, revision, revdate)
+call error_handler(E_MSG, 'nc_write_model_vars', 'FIXME routine not finished', &
+           text2='need to add the variable that describes the tile proportions.')
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1407,8 +1442,6 @@ logical,  intent(out) :: interf_provided
 integer :: i
 logical, save :: random_seq_init = .false.
 
-call error_handler(E_MSG, 'pert_model_state', 'Unsupported for JULES (TJH please check!!!)', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_ERR,'pert_model_state', &
@@ -1539,9 +1572,9 @@ do ivar=1, nfields
       ! Time dimension will be unity in progvar, but not necessarily
       ! in origin file. We only want a single matching time.
       ! static_init_model() only reserves space for a single time.
-      
+
       if ( dimIDs(i) == TimeDimID ) dimlen = 1
-          
+
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(myerrorstring),' dim/dimlen ',i,dimlen, &
                               ' not ',progvar(ivar)%dimlens(i)
@@ -1733,7 +1766,7 @@ UPDATE : do ivar=1, nfields
    string2 = trim(progvar(ivar)%origin)//' '//trim(varname)
 
    if ( .not. progvar(ivar)%update ) then
-      write(string1,*)'intentionally not updating '//trim(string2) 
+      write(string1,*)'intentionally not updating '//trim(string2)
       write(string3,*)'as per namelist control in model_nml:variables'
       call error_handler(E_MSG, 'dart_to_jules_restart', string1, text2=string3)
       cycle UPDATE
@@ -1764,7 +1797,7 @@ UPDATE : do ivar=1, nfields
 
    enddo DimCheck
 
-   ! When called with a 4th argument, vector_to_prog_var() 
+   ! When called with a 4th argument, vector_to_prog_var()
    ! clamps to physically meaningful values as specified in the model_mod namelist.
 
    if (progvar(ivar)%numdims == 1) then
@@ -1896,7 +1929,7 @@ endif
 if (dimIDs(1) /= unlimitedDimID) then
    write(string1,*)'"time" is supposed to be the unlimited dimension.'
    call error_handler(E_ERR, 'get_state_time_ncid:', string1, &
-          source, revision, revdate) 
+          source, revision, revdate)
 endif
 
 call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=dimlen), &
@@ -2009,15 +2042,15 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH ! If the interpolation is good, the interp_val will be set to the
 ! TJH ! good value, and the last line here sets istatus to 0.
 ! TJH ! make any error codes set here be in the 10s
-! TJH 
+! TJH
 ! TJH interp_val = MISSING_R8  ! the DART bad value flag
 ! TJH istatus    = 99          ! unknown error
-! TJH 
+! TJH
 ! TJH loc        = get_location(location)  ! loc is in DEGREES
 ! TJH loc_lon    = loc(1)
 ! TJH loc_lat    = loc(2)
 ! TJH loc_lev    = loc(3)
-! TJH 
+! TJH
 ! TJH if ( loc_lev < 0.0_r8 ) then
 ! TJH    write(string1,*)'Cannot support above-ground vertical interpolation.'
 ! TJH    write(string2,*)'requested a value at a depth of ',loc_lev
@@ -2025,12 +2058,12 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
 ! TJH       source, revision, revdate, text2=string2, text3=string3)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! determine the portion of interest of the state vector
 ! TJH ivar   = findVarIndex(varstring, 'get_grid_vertval')
 ! TJH index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
 ! TJH indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
-! TJH 
+! TJH
 ! TJH ! BOMBPROOFING - check for a vertical dimension for this variable
 ! TJH if (progvar(ivar)%maxlevels < 2) then
 ! TJH    write(string1, *)'Variable '//trim(varstring)//' should not use this routine.'
@@ -2038,26 +2071,26 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
 ! TJH                   source, revision, revdate, text2=string2)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! determine the grid cell for the location
 ! TJH latinds  = minloc(abs(LATITUDE - loc_lat))   ! these return 'arrays' ...
 ! TJH loninds  = minloc(abs(LONGITUDE - loc_lon))   ! these return 'arrays' ...
 ! TJH gridlatj = latinds(1)
 ! TJH gridloni = loninds(1)
-! TJH 
+! TJH
 ! TJH if ((debug > 4) .and. do_output()) then
 ! TJH    write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ', &
 ! TJH               loc_lon,LONGITUDE(gridloni),gridloni,loc_lev
 ! TJH    write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ', &
 ! TJH               loc_lat,LATITUDE(gridlatj),gridlatj,loc_lev
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! Determine the level 'above' and 'below' the desired vertical
 ! TJH ! The above-ground 'depths' are calculated from ZISNO and are negative.
 ! TJH ! The 'depths' are all positive numbers, increasingly positive is deeper.
 ! TJH ! The variables currently supported use the subsurface definitions in
 ! TJH ! the module variable LEVNGRND.
-! TJH 
+! TJH
 ! TJH if (loc_lev  <= SOILLEVEL(1)) then  ! the top level is so close to the surface
 ! TJH    depthabove = SOILLEVEL(1)        ! just use the top level
 ! TJH    depthbelow = SOILLEVEL(1)
@@ -2065,7 +2098,7 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    depthabove    = maxval(SOILLEVEL)        ! fail or just use the deepest
 ! TJH    depthbelow    = maxval(SOILLEVEL)        ! I am using the deepest.
 ! TJH else
-! TJH 
+! TJH
 ! TJH    LAYERS : do indexi = 2,size(SOILLEVEL)
 ! TJH       if (loc_lev < SOILLEVEL(indexi)) then
 ! TJH          depthabove = SOILLEVEL(indexi-1)
@@ -2073,32 +2106,32 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH          exit LAYERS
 ! TJH       endif
 ! TJH    enddo LAYERS
-! TJH 
+! TJH
 ! TJH endif
-! TJH 
+! TJH
 ! TJH if ((debug > 4) .and. do_output()) then
 ! TJH    write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev', &
 ! TJH                    loc_lev,'>= depthabove',depthabove
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! Determine how many elements can contribute to the gridcell value.
 ! TJH ! There are multiple column-based contributors, each column has a
 ! TJH ! separate area-based weight. There are multiple levels.
 ! TJH ! I believe I have to keep track of all of them to sort out how to
 ! TJH ! calculate the gridcell value at a particular depth.
-! TJH 
+! TJH
 ! TJH counter1 = 0
 ! TJH counter2 = 0
 ! TJH GRIDCELL : do indexi = index1, indexN
 ! TJH    if ( lonixy(indexi) /=  gridloni )  cycle GRIDCELL
 ! TJH    if ( latjxy(indexi) /=  gridlatj )  cycle GRIDCELL
 ! TJH    if (      x(indexi) == MISSING_R8)  cycle GRIDCELL
-! TJH 
+! TJH
 ! TJH    if (levels(indexi) == depthabove) counter1 = counter1 + 1
 ! TJH    if (levels(indexi) == depthbelow) counter2 = counter2 + 1
-! TJH 
+! TJH
 ! TJH enddo GRIDCELL
-! TJH 
+! TJH
 ! TJH if ( (counter1+counter2) == 0 ) then
 ! TJH    if ((debug > 0) .and. do_output()) then
 ! TJH       write(string1, *)'statevector variable '//trim(varstring)//' had no viable data'
@@ -2109,22 +2142,22 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    endif
 ! TJH    return
 ! TJH endif
-! TJH 
+! TJH
 ! TJH allocate(above(counter1),below(counter2),myarea(max(counter1,counter2),2))
 ! TJH above  = MISSING_R8
 ! TJH below  = MISSING_R8
 ! TJH myarea = 0.0_r8
-! TJH 
+! TJH
 ! TJH counter1 = 0
 ! TJH counter2 = 0
 ! TJH ELEMENTS : do indexi = index1, indexN
-! TJH 
+! TJH
 ! TJH    if ( lonixy(indexi) /=  gridloni )  cycle ELEMENTS
 ! TJH    if ( latjxy(indexi) /=  gridlatj )  cycle ELEMENTS
 ! TJH    if (      x(indexi) == MISSING_R8)  cycle ELEMENTS
-! TJH 
+! TJH
 ! TJH !  write(*,*)'level ',indexi,' is ',levels(indexi),' location depth is ',loc_lev
-! TJH 
+! TJH
 ! TJH    if (levels(indexi)     == depthabove) then
 ! TJH       counter1            = counter1 + 1
 ! TJH       above( counter1)    =        x(indexi)
@@ -2135,12 +2168,12 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH       below( counter2)    =        x(indexi)
 ! TJH       myarea(counter2,2)  = landarea(indexi)
 ! TJH    endif
-! TJH 
+! TJH
 ! TJH    if ((levels(indexi) /= depthabove) .and. &
 ! TJH        (levels(indexi) /= depthbelow)) then
 ! TJH       cycle ELEMENTS
 ! TJH    endif
-! TJH 
+! TJH
 ! TJH    if ((debug > 4) .and. do_output()) then
 ! TJH    write(*,*)
 ! TJH    write(*,*)'gridcell location match at statevector index',indexi
@@ -2152,11 +2185,11 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    write(*,*)'gridcell LATITUDE is  (',LATITUDE(gridlatj),')'
 ! TJH    write(*,*)'depth        is  (',levels(indexi),')'
 ! TJH    endif
-! TJH 
+! TJH
 ! TJH enddo ELEMENTS
-! TJH 
+! TJH
 ! TJH ! could arise if the above or below was 'missing' ... but the mate was not.
-! TJH 
+! TJH
 ! TJH if ( counter1 /= counter2 ) then
 ! TJH    write(string1, *)'Variable '//trim(varstring)//' has peculiar interpolation problems.'
 ! TJH    write(string2, *)'uneven number of values "above" and "below"'
@@ -2165,11 +2198,11 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH                   text2=string2,text3=string3)
 ! TJH    return
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! Determine the value for the level above the depth of interest.
-! TJH 
+! TJH
 ! TJH total_area = sum(myarea(1:counter1,1))
-! TJH 
+! TJH
 ! TJH if ( total_area /= 0.0_r8 ) then
 ! TJH    ! normalize the area-based weights
 ! TJH    myarea(1:counter1,1) = myarea(1:counter1,1) / total_area
@@ -2181,11 +2214,11 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
 ! TJH                   source, revision, revdate, text2=string2,text3=string3)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! Determine the value for the level below the depth of interest.
-! TJH 
+! TJH
 ! TJH total_area = sum(myarea(1:counter2,2))
-! TJH 
+! TJH
 ! TJH if ( total_area /= 0.0_r8 ) then
 ! TJH    ! normalize the area-based weights
 ! TJH    myarea(1:counter2,2) = myarea(1:counter2,2) / total_area
@@ -2197,7 +2230,7 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
 ! TJH                   source, revision, revdate, text2=string2,text3=string3)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH if (depthbelow == depthabove) then
 ! TJH    topwght = 1.0_r8
 ! TJH    botwght = 0.0_r8
@@ -2205,10 +2238,10 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    topwght = (depthbelow - loc_lev) / (depthbelow - depthabove)
 ! TJH    botwght = (loc_lev - depthabove) / (depthbelow - depthabove)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH interp_val = value_above*topwght + value_below*botwght
 ! TJH istatus    = 0
-! TJH 
+! TJH
 ! TJH deallocate(above, below, myarea)
 
 end subroutine get_grid_vertval
@@ -2247,19 +2280,19 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH ! If the interpolation is good, the interp_val will be set to the
 ! TJH ! good value, and the last line here sets istatus to 0.
 ! TJH ! make any error codes set here be in the 10s
-! TJH 
+! TJH
 ! TJH interp_val = MISSING_R8  ! the DART bad value flag
 ! TJH istatus    = 99          ! unknown error
-! TJH 
+! TJH
 ! TJH loc        = get_location(location)  ! loc is in DEGREES
 ! TJH loc_lon    = loc(1)
 ! TJH loc_lat    = loc(2)
-! TJH 
+! TJH
 ! TJH ! determine the portion of interest of the state vector
 ! TJH ivar   = findVarIndex(varstring, 'compute_gridcell_value')
 ! TJH index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
 ! TJH indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
-! TJH 
+! TJH
 ! TJH ! BOMBPROOFING - check for a vertical dimension for this variable
 ! TJH if (progvar(ivar)%maxlevels > 1) then
 ! TJH    write(string1, *)'Variable '//trim(varstring)//' cannot use this routine.'
@@ -2267,40 +2300,40 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH    call error_handler(E_ERR,'compute_gridcell_value', string1, &
 ! TJH                   source, revision, revdate, text2=string2)
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! determine the grid cell for the location
 ! TJH latinds  = minloc(abs(LATITUDE - loc_lat))   ! these return 'arrays' ...
 ! TJH loninds  = minloc(abs(LONGITUDE - loc_lon))   ! these return 'arrays' ...
 ! TJH gridlatj = latinds(1)
 ! TJH gridloni = loninds(1)
-! TJH 
+! TJH
 ! TJH if ((debug > 5) .and. do_output()) then
 ! TJH    write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
 ! TJH                   loc_lon,LONGITUDE(gridloni),gridloni
 ! TJH    write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
 ! TJH                   loc_lat,LATITUDE(gridlatj),gridlatj
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! If there is no vertical component, the problem is greatly simplified.
 ! TJH ! Simply area-weight an average of all pieces in the grid cell.
-! TJH ! FIXME ... this is the loop that can exploit the knowledge of what 
+! TJH ! FIXME ... this is the loop that can exploit the knowledge of what
 ! TJH ! columnids or tileIds are needed for any particular gridcell.
 ! TJH ! gridCellInfo%tileIds, gridCellInfo%columnids
-! TJH 
+! TJH
 ! TJH counter    = 0
 ! TJH total      = 0.0_r8      ! temp storage for state vector
 ! TJH total_area = 0.0_r8      ! temp storage for area
 ! TJH ELEMENTS : do indexi = index1, indexN
-! TJH 
+! TJH
 ! TJH    if (   lonixy(indexi) /=  gridloni ) cycle ELEMENTS
 ! TJH    if (   latjxy(indexi) /=  gridlatj ) cycle ELEMENTS
 ! TJH    if (        x(indexi) == MISSING_R8) cycle ELEMENTS
 ! TJH    if ( landarea(indexi) ==   0.0_r8  ) cycle ELEMENTS
-! TJH 
+! TJH
 ! TJH    counter    = counter    + 1
 ! TJH    total      = total      + x(indexi)*landarea(indexi)
 ! TJH    total_area = total_area +           landarea(indexi)
-! TJH 
+! TJH
 ! TJH    if ((debug > 5) .and. do_output()) then
 ! TJH       write(*,*)
 ! TJH       write(*,*)'gridcell location match',counter,'at statevector index',indexi
@@ -2312,9 +2345,9 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH       write(*,*)'closest LATITUDE is       (',LATITUDE(gridlatj),')'
 ! TJH       write(*,*)'closest lev is       (',levels(indexi),')'
 ! TJH    endif
-! TJH 
+! TJH
 ! TJH enddo ELEMENTS
-! TJH 
+! TJH
 ! TJH if (total_area /= 0.0_r8) then ! All good.
 ! TJH    interp_val = total/total_area
 ! TJH    istatus    = 0
@@ -2327,7 +2360,7 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH                      text2=string2,text3=string3)
 ! TJH    endif
 ! TJH endif
-! TJH 
+! TJH
 ! TJH ! Print more information for the really curious
 ! TJH if ((debug > 5) .and. do_output()) then
 ! TJH    write(string1,*)'counter, total, total_area', counter, total, total_area
@@ -3194,7 +3227,7 @@ end subroutine get_var_4d
 
 
 !------------------------------------------------------------------
-!>  This routine 
+!>  This routine
 
 function get_model_time()
 type(time_type) :: get_model_time
@@ -3212,12 +3245,12 @@ end function get_model_time
 !==================================================================
 
 !------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_1d_prog_var 
+!> (vector_to_prog_var) vector_to_1d_prog_var
 !>
 !> convert the values from a 1d array, starting at an offset, into a 1d array.
 !>
 !> If the optional argument (ncid) is specified, some additional
-!> processing takes place. 
+!> processing takes place.
 
 subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
 
@@ -3228,8 +3261,6 @@ integer, OPTIONAL,        intent(in)  :: ncid
 
 integer :: i,ii, VarID
 real(r8), allocatable, dimension(:) :: org_array
-
-call error_handler(E_MSG, 'vector_to_1d_prog_var', 'FIXME routine not tested', source, revision, revdate)
 
 ! unpack the right part of the DART state vector into a 1D array.
 
@@ -3287,7 +3318,7 @@ end subroutine vector_to_1d_prog_var
 
 
 !------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_2d_prog_var 
+!> (vector_to_prog_var) vector_to_2d_prog_var
 !>
 !> convert the values from a 1d array, starting at an offset,
 !> into a 2d array.
@@ -3301,8 +3332,6 @@ integer, OPTIONAL,        intent(in)  :: ncid
 
 integer :: i,j,ii, VarID
 real(r8), allocatable, dimension(:,:) :: org_array
-
-call error_handler(E_MSG, 'vector_to_2d_prog_var', 'FIXME routine not tested', source, revision, revdate)
 
 ! unpack the right part of the DART state vector into a 1D array.
 
@@ -3362,7 +3391,7 @@ end subroutine vector_to_2d_prog_var
 
 
 !------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_3d_prog_var 
+!> (vector_to_prog_var) vector_to_3d_prog_var
 !>
 !> convert the values from a 1d array, starting at an offset,
 !> into a 3d array.
@@ -3376,8 +3405,6 @@ integer, OPTIONAL,          intent(in)  :: ncid
 
 integer :: i,j,k,ii, VarID
 real(r8), allocatable, dimension(:,:,:) :: org_array
-
-call error_handler(E_MSG, 'vector_to_3d_prog_var', 'FIXME routine not tested', source, revision, revdate)
 
 ! unpack the right part of the DART state vector into a 1D array.
 
@@ -4019,25 +4046,25 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 
 ! TJH gridCellInfo(:,:)%ncols = 0
 ! TJH gridCellInfo(:,:)%Ntiles = 0
-! TJH 
+! TJH
 ! TJH ! Count up how many columns are in each gridcell
-! TJH 
+! TJH
 ! TJH do ij = 1,Ncolumn
 ! TJH    ilon = cols1d_ixy(ij)
 ! TJH    ilat = cols1d_jxy(ij)
 ! TJH    gridCellInfo(ilon,ilat)%ncols = gridCellInfo(ilon,ilat)%ncols + 1
 ! TJH enddo
-! TJH 
+! TJH
 ! TJH ! Count up how many pfts are in each gridcell
-! TJH 
+! TJH
 ! TJH do ij = 1,Ntile
 ! TJH    ilon = pfts1d_ixy(ij)
 ! TJH    ilat = pfts1d_jxy(ij)
 ! TJH    gridCellInfo(ilon,ilat)%Ntiles = gridCellInfo(ilon,ilat)%Ntiles + 1
 ! TJH enddo
-! TJH 
+! TJH
 ! TJH ! Create storage for the list of column,pft indices
-! TJH 
+! TJH
 ! TJH do ilon = 1,Nlon
 ! TJH do ilat = 1,Nlat
 ! TJH    if ( gridCellInfo(ilon,ilat)%ncols > 0 ) then
@@ -4048,18 +4075,18 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 ! TJH    endif
 ! TJH enddo
 ! TJH enddo
-! TJH 
+! TJH
 ! TJH ! Fill the column pointer arrays
-! TJH 
+! TJH
 ! TJH currenticol(:,:) = 0
 ! TJH do ij = 1,Ncolumn
-! TJH 
+! TJH
 ! TJH    ilon = cols1d_ixy(ij)
 ! TJH    ilat = cols1d_jxy(ij)
-! TJH 
+! TJH
 ! TJH    currenticol(ilon,ilat) = currenticol(ilon,ilat) + 1
 ! TJH    icol = currenticol(ilon,ilat)
-! TJH 
+! TJH
 ! TJH    if ( icol <= gridCellInfo(ilon,ilat)%ncols ) then
 ! TJH       gridCellInfo(ilon,ilat)%columnids(icol) = ij
 ! TJH    else
@@ -4070,18 +4097,18 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 ! TJH                    source, revision, revdate, text2=string2)
 ! TJH    endif
 ! TJH enddo
-! TJH 
+! TJH
 ! TJH ! Fill the pft pointer arrays
-! TJH 
+! TJH
 ! TJH currentipft(:,:) = 0
 ! TJH do ij = 1,Ntile
-! TJH 
+! TJH
 ! TJH    ilon = pfts1d_ixy(ij)
 ! TJH    ilat = pfts1d_jxy(ij)
-! TJH 
+! TJH
 ! TJH    currentipft(ilon,ilat) = currentipft(ilon,ilat) + 1
 ! TJH    ipft = currentipft(ilon,ilat)
-! TJH 
+! TJH
 ! TJH    if ( ipft <= gridCellInfo(ilon,ilat)%Ntiles ) then
 ! TJH       gridCellInfo(ilon,ilat)%tileIds(ipft) = ij
 ! TJH    else
@@ -4092,13 +4119,13 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 ! TJH                    source, revision, revdate, text2=string2)
 ! TJH    endif
 ! TJH enddo
-! TJH 
+! TJH
 ! TJH ! Check block
-! TJH 
+! TJH
 ! TJH if ((debug > 99) .and. do_output()) then
-! TJH 
+! TJH
 ! TJH    iunit = open_file('gridcell_column_table.txt',form='formatted',action='write')
-! TJH 
+! TJH
 ! TJH    do ilon = 1,Nlon
 ! TJH    do ilat = 1,Nlat
 ! TJH       if (gridCellInfo(ilon,ilat)%ncols > 0) then
@@ -4108,11 +4135,11 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 ! TJH       endif
 ! TJH    enddo
 ! TJH    enddo
-! TJH 
+! TJH
 ! TJH    call close_file(iunit)
-! TJH 
+! TJH
 ! TJH    iunit = open_file('gridcell_pft_table.txt',form='formatted',action='write')
-! TJH 
+! TJH
 ! TJH    do ilon = 1,Nlon
 ! TJH    do ilat = 1,Nlat
 ! TJH       if (gridCellInfo(ilon,ilat)%Ntiles > 0) then
@@ -4122,9 +4149,9 @@ call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', sourc
 ! TJH       endif
 ! TJH    enddo
 ! TJH    enddo
-! TJH 
+! TJH
 ! TJH    call close_file(iunit)
-! TJH 
+! TJH
 ! TJH endif
 
 end subroutine SetLocatorArrays
@@ -4132,7 +4159,7 @@ end subroutine SetLocatorArrays
 
 !------------------------------------------------------------------
 !> SetVariableAttributes
-!> converts the information in the variable_table 
+!> converts the information in the variable_table
 !> to the progvar structure for each variable.
 !> If the numerical limit does not apply, it is set to MISSING_R8, even if
 !> it is the maximum that does not apply.
@@ -4145,22 +4172,31 @@ integer  :: ios
 real(r8) :: minvalue, maxvalue
 
 progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
-progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
-progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
-progvar(ivar)%maxlevels   = 0
+progvar(ivar)%long_name   = ''
+progvar(ivar)%units       = ''
+progvar(ivar)%coordinates = ''
+progvar(ivar)%dimnames    = ''
 progvar(ivar)%dimlens     = 0
-progvar(ivar)%dimnames    = ' '
-progvar(ivar)%spvalINT    = -9999        ! from CESM/jules jules_varcon.F90
-progvar(ivar)%spvalR4     = 1.e36_r4     ! from CESM/jules jules_varcon.F90
-progvar(ivar)%spvalR8     = 1.e36_r8     ! from CESM/jules jules_varcon.F90
-progvar(ivar)%missingINT  = MISSING_I
-progvar(ivar)%missingR4   = MISSING_R4
-progvar(ivar)%missingR8   = MISSING_R8
+progvar(ivar)%numdims     = 0
+progvar(ivar)%rank        = 0
+progvar(ivar)%maxlevels   = 0
+progvar(ivar)%xtype       = 0
+progvar(ivar)%varsize     = 0
+progvar(ivar)%index1      = 0
+progvar(ivar)%indexN      = 0
+progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
 progvar(ivar)%rangeRestricted   = BOUNDED_NONE
 progvar(ivar)%minvalue          = MISSING_R8
 progvar(ivar)%maxvalue          = MISSING_R8
+progvar(ivar)%spvalINT    = -9999
+progvar(ivar)%spvalR4     = -1.e20_r4    ! value in the JULES output file
+progvar(ivar)%spvalR8     = -1.e20_r8
+progvar(ivar)%missingINT  = MISSING_I
+progvar(ivar)%missingR4   = MISSING_R4
+progvar(ivar)%missingR8   = MISSING_R8
 progvar(ivar)%has_fill_value    = .true.
 progvar(ivar)%has_missing_value = .true.
+progvar(ivar)%kind_string       = trim(variable_table(ivar,VT_KINDINDX))
 progvar(ivar)%update            = .false.
 
 if (variable_table(ivar,VT_ORIGININDX) == 'RESTART') then
@@ -4322,7 +4358,7 @@ integer :: iunit, io, i
 integer, PARAMETER :: MAX_SOIL_LEVELS = 200
 
 real(r8) :: confrac
-real(r8) :: dzsoil_io(MAX_SOIL_LEVELS) 
+real(r8) :: dzsoil_io(MAX_SOIL_LEVELS)
 logical :: l_bedrock
 logical :: l_dpsids_dsdz
 logical :: l_soil_sat_down
@@ -4347,7 +4383,7 @@ if (Nsoil /= sm_levels) then
           source, revision, revdate, text2=string2, text3=string3 )
 endif
 
-! Add up the thicknesses 
+! Add up the thicknesses
 
 SOILLEVEL(1) = dzsoil_io(1)
 do i = 2,Nsoil
@@ -4355,6 +4391,203 @@ do i = 2,Nsoil
 enddo
 
 end subroutine Read_Jules_Soil_Namelist
+
+
+!------------------------------------------------------------------
+!> Read_Tile_Fractions
+!> reads the namelist specifying the tile fractions for each gridcell.
+
+subroutine Read_Tile_Fractions()
+
+! integer,  intent(out) :: Nsoil     ! were it not for module scope
+! real(r8), intent(out) :: SOILLEVEL ! were it not for module scope
+
+integer :: iunit, io, i
+
+character(len=256) :: file
+character(len=256) :: frac_name
+
+namelist /jules_frac/ file, frac_name
+
+call error_handler(E_MSG, 'Read_Tile_Fractions', 'FIXME routine not tested', &
+        source, revision, revdate)
+
+call find_namelist_in_file('ancillaries.nml', 'jules_frac', iunit)
+read(iunit, nml = jules_frac, iostat = io)
+call check_namelist_read(iunit, io, 'jules_frac')
+
+if ( .not. file_exist(file) ) then
+   write(string1,*) 'cannot open file <', trim(file),'> to read tile fractions.'
+   call error_handler(E_ERR,'Read_Tile_Fractions',string1,source,revision,revdate)
+endif
+
+! TJH FIXME ... actually read the variable, fill an array ... do something.
+
+end subroutine Read_Tile_Fractions
+
+
+!-----------------------------------------------------------------------
+!> get_state_indices
+!> Given an integer index into the state vector structure, returns the
+!> associated array indices for lat, lon, and depth, as well as the type.
+
+subroutine get_state_indices(index_in, lon_index, lat_index, lev_index, varindex)
+
+integer, intent(in)    :: index_in
+integer, intent(out)   :: lon_index
+integer, intent(out)   :: lat_index
+integer, intent(out)   :: lev_index
+integer, intent(inout) :: varindex
+
+integer :: n, offset, ndim1, ndim2
+
+call error_handler(E_MSG, 'get_state_indices', 'FIXME routine not tested', &
+        source, revision, revdate)
+
+if ((index_in < progvar(1)%index1) .or. &
+    (index_in > progvar(nfields)%indexN) ) then
+   write(string1,*) 'desired index ',index_in
+   write(string2,*) 'is not within the bounds of the DART address space.'
+   call error_handler(E_ERR,'get_state_indices',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+if (varindex < 0) then
+   ! Find the DART variable that spans the index of interest.
+   FindIndex : do n = 1,nfields
+      if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
+         varindex = n
+         exit FindIndex
+      endif
+   enddo FindIndex
+endif
+
+lon_index = -1
+lat_index = -1
+lev_index = -1
+
+offset = index_in - progvar(varindex)%index1 + 1
+
+! So now we know the variable and its shape. Remember that DART only
+! stores a single timestep, so any time dimension is a singleton.
+! Furthermore, netCDF requires the time/unlimited dimension be the LAST
+! (in Fortran) dimension, so we can just focus on the first N dimensions.
+! Relying on integer arithmetic.
+!
+! We know the storage order is lon,lat,lev ...
+! FIXME ... may want to ensure at some point.
+
+if     ( progvar(varindex)%rank == 1) then
+
+   lon_index = offset
+
+elseif ( progvar(varindex)%rank == 2) then
+
+   ndim1 = progvar(varindex)%dimlens(1)
+
+   lat_index = 1 + (offset - 1)/ndim1
+   lon_index = offset - (lat_index - 1)*ndim1
+
+elseif ( progvar(varindex)%rank == 3) then
+
+   ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
+   ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest
+
+   lev_index = 1 + (offset - 1)/(ndim1*ndim2)
+   lat_index = 1 + (offset - (lev_index-1)*ndim1*ndim2 -1)/ndim1
+   lon_index = offset - (lev_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
+
+else
+   write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
+   write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
+   call error_handler(E_ERR,'get_state_meta_data',string1, &
+         source,revision,revdate,text2=string2)
+endif
+
+if (do_output() .and. (debug > 7)) then
+   print *, 'get_state_indices: asking for meta data about index ', index_in
+   print *, 'get_state_indices: variable   ', trim(progvar(varindex)%varname)
+   print *, 'get_state_indices: rank       ', progvar(varindex)%rank
+   print *, 'get_state_indices: dimensions ', progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
+   print *, 'get_state_indices: lon, lat, lev index = ', lon_index, lat_index, lev_index
+endif
+
+end subroutine get_state_indices
+
+
+!-----------------------------------------------------------------------
+!>
+!> Given an integer index into the state vector structure,
+!> return the longitude, latitude, and level
+
+subroutine get_state_lonlatlev(varindex, lon_index, lat_index, lev_index, &
+                               mylon, mylat, mylev)
+
+integer,  intent(in)  :: varindex
+integer,  intent(in)  :: lon_index
+integer,  intent(in)  :: lat_index
+integer,  intent(in)  :: lev_index
+real(r8), intent(out) :: mylon
+real(r8), intent(out) :: mylat
+real(r8), intent(out) :: mylev
+
+integer :: i
+
+call error_handler(E_MSG, 'get_state_lonlatlev', 'FIXME routine not finished', &
+        source, revision, revdate)
+
+! These are the supported variable shapes.
+! (soil, land)
+! (tile, land)
+! (scpool, land)
+! (land)
+! (time, y, x)
+! (time, y, x)
+! (time, soil, y, x)
+
+if     ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'y') .and. &
+        (trim(progvar(varindex)%dimnames(3)) == 'soil')) then
+   mylon =  LONGITUDE(lon_index, lat_index)
+   mylat =   LATITUDE(lon_index, lat_index)
+   mylev =  SOILLEVEL(lev_index)
+
+elseif ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'y')) then
+   mylon = LONGITUDE(lon_index, lat_index)
+   mylat =  LATITUDE(lon_index, lat_index)
+   mylev = 0.0_r8   ! SURFACE
+
+elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'tile')) then
+!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
+!  mylat = LATITUDE(lon_index, lat_index, lev_index)
+   mylev = 0.0_r8   ! SURFACE
+
+elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'soil')) then
+!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
+!  mylat = LATITUDE(lon_index, lat_index, lev_index)
+   mylev = 0.0_r8   ! SURFACE
+
+elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
+        (trim(progvar(varindex)%dimnames(2)) == 'scpool')) then
+!  mylon = LONGITUDE(lon_index, lat_index, lev_index)
+!  mylat = LATITUDE(lon_index, lat_index, lev_index)
+   mylev = 0.0_r8   ! SURFACE
+
+else
+
+   ! FIXME ... should check for supported variable shapes much earlier on.
+
+   write(string1,*) 'unsupported variable shape of ['//trim(progvar(varindex)%coordinates)//']'
+   write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
+   call error_handler(E_ERR,'get_state_lonlatlev',string1, &
+         source,revision,revdate,text2=string2)
+
+endif
+
+end subroutine get_state_lonlatlev
 
 
 !===================================================================
