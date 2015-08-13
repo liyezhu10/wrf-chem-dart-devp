@@ -148,7 +148,7 @@ while($state_copy <= $num_states)
    ../jules.exe					       >>& $logfile || exit 3
    
 
-
+   ls -l *dump* *hour*
 
    foreach FILE (*.dump.*)
            set BASE=$FILE:r
@@ -158,11 +158,11 @@ while($state_copy <= $num_states)
            set MYSTRING=`printf "%05d" $SECONDS`
            mv $FILE $ROOT.$MYSTRING.nc
    end
-   
+   # By now all of the restart files will list alphabically and chronologically same. 
+   # We need to grab the latest time and use it to tag the output file. FIXME
    foreach FILE (*.hour.*)
            set BASE=$FILE:r
            set SECONDS=$BASE:e
-           set MYSTRING=`printf "%05d" $SECONDS`
            mv $FILE $BASE.$DATESTR.$MYSTRING.nc
    end
 
