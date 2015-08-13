@@ -333,6 +333,12 @@ I know esoil is not latent heat flux
 
 ! useful input for model_mod_check_nml ...
 ! For the case with all gridcells land
+   varsize     :         800    (gs 20.40)
+   index1      :       7201    (gs)
+   indexN      :       8000    (gs)
+   gs        7201      1  1
+   gs        7220      20 1
+   gs        7221      1  2
    varsize     :        3200    (t_soil 20.40.4)
    index1      :       15201    (t_soil)
    indexN      :       18400    (t_soil)
@@ -356,7 +362,7 @@ I know esoil is not latent heat flux
    advance_time_present = .FALSE.
    verbose              = .TRUE.
    test1thru            = 6
-   x_ind                = 40162
+   x_ind                = 7201
    kind_of_interest     = 'T_SOISNO'
    loc_of_interest      = 287.5, 82.48, 0.35
    /

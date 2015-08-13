@@ -371,6 +371,7 @@ integer  ::   soil_index
 integer  ::   tile_index
 integer  :: scpool_index
 real(r8) :: mylon, mylat, mylev
+integer  :: vert_coord
 
 ! Module variables
 
@@ -390,11 +391,9 @@ call get_state_indices(indx, lon_index, lat_index, soil_index, &
                              tile_index, scpool_index, varindex)
 
 call get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
-                             mylon, mylat, mylev)
+                             mylon, mylat, mylev, vert_coord)
 
-stop  ! TJH early exit
-
-location = set_location( mylon, mylat, mylev, VERTISHEIGHT)
+location = set_location( mylon, mylat, mylev, vert_coord)
 
 if (present(var_type)) var_type = progvar(varindex)%dart_kind
 
@@ -4450,7 +4449,7 @@ integer, intent(inout) :: varindex
 integer :: n, offset, ndim1, ndim2
 integer :: land_index, indx1, indx2, indx3
 
-call error_handler(E_MSG, 'get_state_indices', 'FIXME routine not tested', &
+call error_handler(E_MSG, 'get_state_indices', 'FIXME SHAMS - confirm corectness', &
         source, revision, revdate)
 
 if ((index_in < progvar(1)%index1) .or. &
@@ -4487,12 +4486,25 @@ offset = index_in - progvar(varindex)%index1 + 1
 ! (in Fortran) dimension, so we can just focus on the first N dimensions.
 ! Relying on integer arithmetic.
 
-lon_index = indx1
-lat_index = indx2
-
 if     ( progvar(varindex)%rank == 1) then
+   ! This can only be dimensioned 'land' ... possible FIXME ... check
 
-   indx1 = offset
+   if (Nlat /= 1) then ! the X-Y plane needs to be further decomposed
+
+      ! If Nlat /= 1 then Nlon * Nlat is known to equal Nland
+      ! So if I have the index into 'Nland', I should be able
+      ! to unwrap the 'offset' into Nlon,Nlat with the 2D algorithm
+
+      ndim1     = Nlon
+      lat_index = 1 + (offset - 1)/ndim1
+      lon_index = offset - (lat_index - 1)*ndim1
+
+   else
+
+      lon_index = indx1
+      lat_index = 1
+
+   endif
 
 elseif ( progvar(varindex)%rank == 2) then
 
@@ -4599,7 +4611,7 @@ else
          source, revision, revdate, text2=string2, text3=string3)
 endif
 
-if (do_output() .and. (debug > 7)) then
+if (do_output() .and. (debug > 9)) then
    print *, 'get_state_indices: asking for meta data about index ', index_in
    print *, 'get_state_indices: variable      ', trim(progvar(varindex)%varname)
    print *, 'get_state_indices: coordinates   ', trim(progvar(varindex)%coordinates)
@@ -4623,7 +4635,7 @@ end subroutine get_state_indices
 !> return the longitude, latitude, and level
 
 subroutine get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
-                               mylon, mylat, mylev)
+                               mylon, mylat, mylev, mycoordsystem)
 
 integer,  intent(in)  :: varindex
 integer,  intent(in)  :: lon_index
@@ -4632,6 +4644,7 @@ integer,  intent(in)  :: soil_index
 real(r8), intent(out) :: mylon
 real(r8), intent(out) :: mylat
 real(r8), intent(out) :: mylev
+integer,  intent(out) :: mycoordsystem
 
 integer :: i
 
@@ -4653,30 +4666,41 @@ if     ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
    mylon =  LONGITUDE(lon_index, lat_index)
    mylat =   LATITUDE(lon_index, lat_index)
    mylev =  SOILLEVEL(soil_index)
+   mycoordsystem = VERTISHEIGHT
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'soil')) then
    mylon = LONGITUDE(lon_index, lat_index)
    mylat =  LATITUDE(lon_index, lat_index)
    mylev =  SOILLEVEL(soil_index)
+   mycoordsystem = VERTISHEIGHT
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'y')) then
    mylon = LONGITUDE(lon_index, lat_index)
    mylat =  LATITUDE(lon_index, lat_index)
-   mylev = 0.0_r8   ! UNDEFINED
+   mylev = 0.0_r8
+   mycoordsystem = VERTISSURFACE
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'tile')) then
    mylon = LONGITUDE(lon_index, lat_index)
    mylat =  LATITUDE(lon_index, lat_index)
-   mylev = 0.0_r8   ! UNDEFINED
+   mylev = 0.0_r8
+   mycoordsystem = VERTISSURFACE
 
 elseif ((trim(progvar(varindex)%dimnames(1)) == 'land') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'scpool')) then
    mylon = LONGITUDE(lon_index, lat_index)
    mylat =  LATITUDE(lon_index, lat_index)
-   mylev = 0.0_r8   ! UNDEFINED
+   mylev = 0.0_r8
+   mycoordsystem = VERTISSURFACE
+
+elseif (trim(progvar(varindex)%coordinates) == 'land') then
+   mylon = LONGITUDE(lon_index, lat_index)
+   mylat =  LATITUDE(lon_index, lat_index)
+   mylev = 0.0_r8
+   mycoordsystem = VERTISSURFACE
 
 else
 

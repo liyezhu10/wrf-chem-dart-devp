@@ -342,7 +342,7 @@ character(len=129)  :: string1
 call get_state_meta_data( iloc, loc, var_type)
 
 call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)'check_meta_data: indx ',iloc,' is type ',var_type,trim(string1)
+write(*,*)'check_meta_data: indx ',iloc,' is at ',trim(string1)
 
 end subroutine check_meta_data
 
