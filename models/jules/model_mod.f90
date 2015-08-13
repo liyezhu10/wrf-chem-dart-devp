@@ -4504,7 +4504,7 @@ elseif ( progvar(varindex)%rank == 2) then
    ! or (40,20) ... So I can correctly get the land_index, but I need to
    ! decompose it into lon_index, lat_index 
    !
-   ! variables like 
+   ! (time does not count toward 'rank') variables like 
    ! float latent_heat([time,] y,    x) 
    ! float      t_soil(     soil, land)
    ! float      canopy(     tile, land)
@@ -4555,18 +4555,48 @@ elseif ( progvar(varindex)%rank == 2) then
 
 elseif ( progvar(varindex)%rank == 3) then
 
+   ! (time does not count toward 'rank') variables like 
+   ! float soil_wet(time, soil, y, x)
+   ! float    esoil(time, tile, y, x)
+   ! Remember that the order in Fortran is reversed from the ncdump order.
+   !
+   ! Since none of the rank 3 variables have 'land' as the fastest dimension
+   ! this case is easier than the rank 2 case.
+
    ndim1 = progvar(varindex)%dimlens(1)  ! num_fastest_dimension (Fortran leftmost)
    ndim2 = progvar(varindex)%dimlens(2)  ! num_next_fastest
 
-   soil_index = 1 + (offset - 1)/(ndim1*ndim2)
-   lat_index = 1 + (offset - (soil_index-1)*ndim1*ndim2 -1)/ndim1
-   lon_index = offset - (soil_index-1)*ndim1*ndim2 - (lat_index-1)*ndim1
+   indx3 = 1 + (offset - 1)/(ndim1*ndim2)
+   indx2 = 1 + (offset - (indx3-1)*ndim1*ndim2 -1)/ndim1
+   indx1 = offset - (indx3-1)*ndim1*ndim2 - (indx2-1)*ndim1
+
+   ! Depending on the variable, the
+   ! 'indx3' is actually either 'soil_index' or 'tile_index' or ...
+   ! and 'indx1' is the index into the X-Y plane
+
+   if     (trim(progvar(varindex)%dimnames(3)) ==   'tile') then
+      tile_index   = indx3
+   elseif (trim(progvar(varindex)%dimnames(3)) ==   'soil') then
+      soil_index   = indx3
+   elseif (trim(progvar(varindex)%dimnames(3)) == 'scpool') then
+      scpool_index = indx3
+   else
+      write(string1,*) 'No support for coordinates ', &
+                       trim(progvar(varindex)%coordinates)
+      write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
+      call error_handler(E_ERR,'get_state_indices:',string1, &
+            source,revision,revdate,text2=string2)
+   endif
+
+   lon_index = indx1
+   lat_index = indx2
 
 else
    write(string1,*) 'Does not support variables with rank ',progvar(varindex)%rank
-   write(string2,*) 'variable is ',trim(progvar(varindex)%varname)
-   call error_handler(E_ERR,'get_state_meta_data',string1, &
-         source,revision,revdate,text2=string2)
+   write(string2,*) 'variable     is ',trim(progvar(varindex)%varname)
+   write(string3,*) 'coordinates are ',trim(progvar(varindex)%coordinates)
+   call error_handler(E_ERR,'get_state_indices:',string1, &
+         source, revision, revdate, text2=string2, text3=string3)
 endif
 
 if (do_output() .and. (debug > 7)) then
@@ -4652,7 +4682,8 @@ else
 
    ! FIXME ... should check for supported variable shapes much earlier on.
 
-   write(string1,*) 'unsupported variable shape of ['//trim(progvar(varindex)%coordinates)//']'
+   write(string1,*) 'unsupported variable shape of ['// &
+                    &trim(progvar(varindex)%coordinates)//']'
    write(string2,*) 'for variable ',trim(progvar(varindex)%varname)
    call error_handler(E_ERR,'get_state_lonlatlev',string1, &
          source,revision,revdate,text2=string2)

@@ -186,9 +186,11 @@
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      'NA', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         'NA', 'NA', 'restart' , 'UPDATE',
                 'soil_wet',   'KIND_SOIL_MOISTURE',          'NA', 'NA', 'output'  , 'NO_COPY_BACK',
-                'latent_heat','KIND_LATENT_HEAT_FLUX',       'NA', 'NA', 'output'  , 'NO_COPY_BACK'
+                'esoil',      'KIND_LATENT_HEAT_FLUX',       'NA', 'NA', 'output'  , 'NO_COPY_BACK'
    /
 
+esoil is just used because it is (time, tile, y, x) ... needed a 4D with tile
+I know esoil is not latent heat flux
 
 &jules_to_dart_nml
    jules_to_dart_output_file  = 'dart_ics'
@@ -316,11 +318,37 @@
    /
 
 ! useful input for model_mod_check_nml ...
+! For the case with a land mask
+   t_soil [12902,15617] 679 land 4 soil ...
+   t_soil   12902 ...  1 1
+   t_soil   13581 ...  1 2
+   t_soil   14260 ...  1 3
+   t_soil   14270 ... 11 3
+   varsize             6111
+   index1             40062
+   indexN             46172
+   esoil    40062 ... 1 1 1
+   esoil    40162 ... 101 1 1
+   esoil    40741 ... 1 1 2
 
-   x_inds    of interest   720, 7000
-   loc_of_interest      = 287.5,  82.48, 0.35
-   loc_of_interest      = 287.5, -40.70, 0.35
-   loc_of_interest      =  90.0,  41.00, 0.35
+! useful input for model_mod_check_nml ...
+! For the case with all gridcells land
+   varsize     :        3200    (t_soil 20.40.4)
+   index1      :       15201    (t_soil)
+   indexN      :       18400    (t_soil)
+   t_soil   15201 ...  1 1 1
+   t_soil   15221 ...  1 2 1
+   t_soil   15241 ...  1 3 1
+   t_soil   15261 ...  1 4 1
+   t_soil   15265 ...  5 4 1
+   t_soil   18400 ...  20 40 4
+   varsize              7200    (esoil 20.40.9)
+   index1              47201    (esoil)
+   indexN              54400
+   esoil    47201 ...  1 1 1
+   esoil    48000 ...  20 40 1
+   esoil    48001 ...   1  1 2
+   esoil    54400 ...  20 40 9
 
 &model_mod_check_nml
    input_file           = "dart_ics"
@@ -328,7 +356,7 @@
    advance_time_present = .FALSE.
    verbose              = .TRUE.
    test1thru            = 6
-   x_ind                = 720
+   x_ind                = 40162
    kind_of_interest     = 'T_SOISNO'
    loc_of_interest      = 287.5, 82.48, 0.35
    /
