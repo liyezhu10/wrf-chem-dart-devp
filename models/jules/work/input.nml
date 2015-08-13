@@ -362,7 +362,7 @@ I know esoil is not latent heat flux
    advance_time_present = .FALSE.
    verbose              = .TRUE.
    test1thru            = 6
-   x_ind                = 7201
+   x_ind                = 15618
    kind_of_interest     = 'T_SOISNO'
    loc_of_interest      = 287.5, 82.48, 0.35
    /

@@ -4449,9 +4449,6 @@ integer, intent(inout) :: varindex
 integer :: n, offset, ndim1, ndim2
 integer :: land_index, indx1, indx2, indx3
 
-call error_handler(E_MSG, 'get_state_indices', 'FIXME SHAMS - confirm corectness', &
-        source, revision, revdate)
-
 if ((index_in < progvar(1)%index1) .or. &
     (index_in > progvar(nfields)%indexN) ) then
    write(string1,*) 'desired index ',index_in
