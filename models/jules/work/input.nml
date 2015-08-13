@@ -175,7 +175,7 @@
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.2
    calendar                     = 'Gregorian'
-   debug                        = 2
+   debug                        = 3
    variables  = 'canopy',     'KIND_CANOPY_WATER',           'NA', 'NA', 'restart' , 'NO_COPY_BACK',
                 'gs',         'KIND_SURFACE_CONDUCTANCE',    'NA', 'NA', 'restart' , 'UPDATE',
                 'tstar_tile', 'KIND_SKIN_TEMPERATURE',       'NA', 'NA', 'restart' , 'UPDATE',
@@ -361,9 +361,9 @@ I know esoil is not latent heat flux
    output_file          = "check_me_out"
    advance_time_present = .FALSE.
    verbose              = .TRUE.
-   test1thru            = 6
+   test1thru            = 7
    x_ind                = 15618
    kind_of_interest     = 'T_SOISNO'
-   loc_of_interest      = 287.5, 82.48, 0.35
+   loc_of_interest      = 358.45, 51.36, 0.10
    /
 

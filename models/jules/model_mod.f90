@@ -85,7 +85,6 @@ public :: jules_to_dart_state_vector,   &
           get_state_time,               &
           get_grid_vertval,             &
           compute_gridcell_value,       &
-          gridcell_components,          &
           DART_get_var,                 &
           get_model_time
 
@@ -382,8 +381,6 @@ integer  :: vert_coord
 ! levels
 ! progvar
 
-call error_handler(E_MSG, 'get_state_meta_data', 'FIXME TJH routine not finished nor tested', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
 varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
@@ -398,19 +395,14 @@ location = set_location( mylon, mylat, mylev, vert_coord)
 if (present(var_type)) var_type = progvar(varindex)%dart_kind
 
 if (do_output() .and. (debug > 5)) then
-   if     ( progvar(varindex)%rank == 1) then
-      write(*,100) trim(progvar(varindex)%varname), indx, lon_index
-   elseif ( progvar(varindex)%rank == 2) then
-      write(*,200) trim(progvar(varindex)%varname), indx, lon_index, lat_index
-   elseif ( progvar(varindex)%rank == 3) then
-      if (mylon > 180.0_r8) mylon =  mylon - 360.0_r8
-      write(*,300) trim(progvar(varindex)%varname), indx, lon_index, lat_index , soil_index, mylon, mylat, mylev
-   endif
+   write(*,301) trim(progvar(varindex)%varname)
+   write(*,300) trim(progvar(varindex)%varname), indx, &
+      lon_index, lat_index, soil_index, tile_index, scpool_index, &
+      mylon, mylat, mylev, vert_coord
 endif
 
- 100 format(A,2(1x,i10))              ! varname, DART index, i
- 200 format(A,1x,'DART index=',i10,' indx1=',i10,' indx2=',i10)
- 300 format(A,4(1x,i10),3(1x,f18.10)) ! varname, DART index, i, j, k, and the 3 locations
+ 301 format(A,' DART_index lonind latind levind   tile  cpool   longitude    latitude       level coordinatesys')
+ 300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
 
 return
 
@@ -787,7 +779,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ((debug > 2) .and. do_output()) then
+   if ((debug > 3) .and. do_output()) then
       write(logfileunit,*)
       write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
       write(logfileunit,*) '  filename    :',trim(progvar(ivar)%origin)
@@ -2375,39 +2367,6 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH endif
 
 end subroutine compute_gridcell_value
-
-
-!------------------------------------------------------------------
-!> gridcell_components
-!>
-!> In order to exercise some of the routines, it is necessary to know
-!> which gridcells have multiple land units
-!> which gridcells have multiple columns
-!> which gridcells have multiple PFTs
-!>
-!> This routine simply tells me which gridcells are 'interesting'.
-!> Each level counts separately. 1 column with 20 levels ... yields a count of 20
-!>
-!> It is very similar to SetLocatorArrays(), but only does the landunit,column,pft
-!> that the variable uses. It is also public - currently only used by
-!> model_mod_check.
-
-subroutine gridcell_components(varstring)
-
-character(len=*), intent(in) :: varstring    ! T_SOISNO, H2OSOI_LIQ
-
-! Local storage
-
-integer :: ivar, indexi, i, j
-integer, allocatable, dimension(:,:) :: countmat
-
-call error_handler(E_ERR, 'gridcell_components', 'FIXME routine not written', source, revision, revdate)
-
-if ( .not. module_initialized ) call static_init_model
-
-! Empty ... possibly not needed for jules.
-
-end subroutine gridcell_components
 
 
 !------------------------------------------------------------------
@@ -4190,6 +4149,7 @@ progvar(ivar)%xtype       = 0
 progvar(ivar)%varsize     = 0
 progvar(ivar)%index1      = 0
 progvar(ivar)%indexN      = 0
+progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
 progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
 progvar(ivar)%rangeRestricted   = BOUNDED_NONE
 progvar(ivar)%minvalue          = MISSING_R8
@@ -4202,7 +4162,6 @@ progvar(ivar)%missingR4   = MISSING_R4
 progvar(ivar)%missingR8   = MISSING_R8
 progvar(ivar)%has_fill_value    = .true.
 progvar(ivar)%has_missing_value = .true.
-progvar(ivar)%kind_string       = trim(variable_table(ivar,VT_KINDINDX))
 progvar(ivar)%update            = .false.
 
 if (variable_table(ivar,VT_ORIGININDX) == 'RESTART') then
@@ -4646,18 +4605,6 @@ real(r8), intent(out) :: mylev
 integer,  intent(out) :: mycoordsystem
 
 integer :: i
-
-call error_handler(E_MSG, 'get_state_lonlatlev', 'FIXME routine not finished', &
-        source, revision, revdate)
-
-! These are the supported variable shapes.
-! (soil, land)
-! (tile, land)
-! (scpool, land)
-! (land)
-! (time, y, x)
-! (time, y, x)
-! (time, soil, y, x)
 
 if     ((trim(progvar(varindex)%dimnames(1)) == 'x') .and. &
         (trim(progvar(varindex)%dimnames(2)) == 'y') .and. &

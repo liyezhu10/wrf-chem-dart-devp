@@ -35,7 +35,7 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              operator(-)
 
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             compute_gridcell_value, gridcell_components, &
+                             compute_gridcell_value, &
                              model_interpolate, DART_get_var, get_grid_vertval, &
                              pert_model_state, get_model_time_step
 
@@ -250,28 +250,16 @@ if (test1thru > 6) then
 endif
 
 !----------------------------------------------------------------------
-! Trying to find the state vector index closest to a particular ...
-! Checking for valid input is tricky ... we don't know much.
-!----------------------------------------------------------------------
-
-if (test1thru > 7) then
-   write(*,*)
-   write(*,*)'Testing gridcell_components ...'
-   call gridcell_components( kind_of_interest )
-   write(*,*)'Testing gridcell_components ... complete.'
-endif
-
-!----------------------------------------------------------------------
 ! Checking if the compute_gridcell_value works
 !----------------------------------------------------------------------
 
 if (test1thru > 8) then
    write(*,*)
-   write(*,*)'Testing compute_gridcell_value() with "frac_sno" ...'
+   write(*,*)'Testing compute_gridcell_value() with "t_soil" ...'
 
    loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 
-   call compute_gridcell_value(statevector, loc, "frac_sno", interp_val, ios_out)
+   call compute_gridcell_value(statevector, loc, "t_soil", interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'compute_gridcell_value : value is ',interp_val
@@ -281,11 +269,11 @@ if (test1thru > 8) then
 
 
    write(*,*)
-   write(*,*)'Testing get_grid_vertval() with "T_SOISNO" ...'
+   write(*,*)'Testing get_grid_vertval() with "esoil" ...'
 
    loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 
-   call get_grid_vertval(statevector, loc, "T_SOISNO", interp_val, ios_out)
+   call get_grid_vertval(statevector, loc, "esoil", interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'get_grid_vertval : value is ',interp_val
