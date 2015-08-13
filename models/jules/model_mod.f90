@@ -445,8 +445,6 @@ real(r8) :: llon, llat, lheight
 real(r8) :: interp_val_2
 integer  :: istatus_2
 
-call error_handler(E_ERR, 'model_interpolate', 'FIXME routine not written', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
 ! Let's assume failure.  Set return val to missing, then the code can
@@ -455,9 +453,13 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-interp_val   = MISSING_R8     ! the DART bad value flag
-interp_val_2 = MISSING_R8     ! the DART bad value flag
+interp_val   = MISSING_R8   ! the DART bad value flag
+interp_val_2 = MISSING_R8   ! the DART bad value flag
 istatus = 99                ! unknown error
+
+call error_handler(E_MSG, 'model_interpolate', 'FIXME routine not written', &
+         text2='returning without doing anything')
+return  ! FIXME EARLY RETURN
 
 ! Get the individual locations values
 
