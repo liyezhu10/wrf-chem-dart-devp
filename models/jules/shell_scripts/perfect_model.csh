@@ -44,7 +44,7 @@ else
    setenv JOBNAME     jules_perfect
    setenv JOBID       $$
    setenv MYQUEUE     Interactive
-   setenv MYHOST      $HOST
+   setenv MYHOST      `hostname`
 
 endif
 
@@ -102,11 +102,11 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set     DARTDIR = /dr_suess/forests/trees/JULES/ensembles
-      set    JULESDIR = /dr_suess/forests/trees/JULES/ensembles
-      set ENSEMBLEDIR = /dr_suess/forests/trees/JULES/ensembles
-      set  BASEOBSDIR = /dr_suess/forests/trees/wingdings
-      set  CENTRALDIR = /dr_suess/forests/${user}/DART/${JOBNAME}/job_${JOBID}
+      set     DARTDIR = /users/ar15645/DART_JULES_SVN/models/jules
+      set    JULESDIR = /users/hydroeng/JULES/jules-vn4.2/build/bin
+      set ENSEMBLEDIR = /users/ar15645/coupling_simulations/check_restart_files/namelist 
+      set  BASEOBSDIR = /users/ar15645/DART_JULES_SVN/models/jules/work
+      set  CENTRALDIR = /users/ar15645/run_dart_experiment
    breaksw
 endsw
 
@@ -133,14 +133,15 @@ ${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
 
 ${COPY} ${JULESDIR}/jules.exe                jules.exe || exit 1
-${COPY} ${DARTDIR}/data/namelist/*nml                . || exit 1
+${COPY} ${ENSEMBLEDIR}/*nml                          . || exit 1
+${COPY} ${ENSEMBLEDIR}/data/tile_fractions.dat       . || exit 1
 
 #-----------------------------------------------------------------------------
 # Get the empty observation sequence file ... or die right away.
 # This file will dictate the length of the JULES forecast.
 #-----------------------------------------------------------------------------
 
-set OBS_FILE = ${BASEOBSDIR}/201401/obs_seq.in
+set OBS_FILE = ${BASEOBSDIR}/obs_seq.in
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.in
@@ -177,8 +178,8 @@ sed -e "s#dart_ics#perfect_ics#" < input.nml.original >! input.nml
 
 # because pmo does not update the JULES state, we can simply link.
 # filter will modify the file, so it must be copied. 
-${LINK} ${ENSEMBLEDIR}/regional_norect.dump.20140102.10800.nc jules_restart.nc || exit 1
-${LINK} ${ENSEMBLEDIR}/regional_norect.hour.nc                jules_output.nc  || exit 1
+${LINK} ${ENSEMBLEDIR}/output/day0-1.dump.20140101.0.nc                   jules_restart.nc || exit 1
+${LINK} ${ENSEMBLEDIR}/output/day0-1.hour.nc                              jules_output.nc  || exit 1
 
 # the advance_model.csh script needs to have an instance number in the filename.
 # model_mod:static_init_model() cannot have an instance number in the filename.
