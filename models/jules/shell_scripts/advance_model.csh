@@ -24,7 +24,10 @@ set process = $1
 set num_states = $2
 set control_file = $3
 
+# These are information only, the second two can be deleted any time.
 echo "Starting advance_model for process $process at "`date`
+echo "Responsible for advancing $num_states "
+echo "Using a control file named $control_file"
 
 #--------------------------------------------------------------------------
 # Block 1: populate a run-time directory with the bits needed to run JULES.
@@ -45,7 +48,7 @@ cd       $temp_dir
 # of the directories holding the input files. Therefore,
 # I do not think that it is necessary to copy the input files.
 
-cp ../jules_namelist/* .
+\cp ../*nml . || exit 1
 
 # Ensure that the input.nml has the required value for
 # dart_to_model_nml:advance_time_present for this context.
@@ -53,15 +56,18 @@ cp ../jules_namelist/* .
 sed -e "/advance_time_present /c\ advance_time_present = .TRUE." \
        ../input.nml >! input.nml || exit 1
 
-# Check to see if you are running async==4 ... an mpirun.lsf situation
+# Check to see if you are running async==2 
+# single-threaded JULES executable being advanced without MPI
 set MYSTRING = `grep -A 42 filter_nml input.nml | grep async`
 set MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
 set ASYNC = $MYSTRING[2]
 
-if ($ASYNC == 4) then
-   set RUN_CMD = mpirun.lsf
-else
+if ($ASYNC == 2) then
    set RUN_CMD = ''
+else
+   echo "ERROR: JULES must be run with async==2"
+   echo "ERROR: JULES must be run with async==2"
+   exit 2
 endif
 
 # Loop through each state
@@ -95,10 +101,11 @@ while($state_copy <= $num_states)
    
    cp -pv ../$input_file           dart_restart        >>& $logfile || exit 2
    cp -pv ../restart.$instance.nc  jules_restart.nc    >>& $logfile || exit 2
+   ln -sf ../output.$instance.nc   jules_output.nc     >>& $logfile || exit 2
 
-   # The last output file produced by JULES has to be copied as jules_output.nc
-   set jls_rst = `ls -1rt  ./output/*hour*nc | tail -n 1`
-   ln -sf $jls_rst                 jules_output.nc     >>& $logfile || exit 2
+#  # The last output file produced by JULES has to be copied as jules_output.nc
+#  set jls_rst = `ls -1rt  ./output/*hour*nc | tail -n 1`
+#  ln -sf $jls_rst                 jules_output.nc     >>& $logfile || exit 2
    
    # All the required files are created. Now run dart_to_jules
    # This creates a file called DART_time_control.txt that has
@@ -110,13 +117,13 @@ while($state_copy <= $num_states)
    set start_string = `grep "main_run_start"  DART_time_control.txt`
    set  stop_string = `grep "main_run_end"    DART_time_control.txt`
 
-   sed -e "/ main_run_start /c\ ${start_string}" \
-       -e "/ main_run_end /c\ ${stop_string}" timesteps.nml >! timesteps.nml.update
+   sed -e "/main_run_start/c\${start_string}" \
+         -e "/main_run_end/c\${stop_string}" timesteps.nml >! timesteps.nml.update
 
-   if ( -e  timesteps.nml.updated ) then
-      echo "timesteps.nml updated with new start/stop time for ensemble member $ensemble_member" >> $logfile
+   if ( -e  timesteps.nml.update ) then
+      echo "timesteps.nml update with new start/stop time for ensemble member $ensemble_member" >> $logfile
       mv -v timesteps.nml timesteps.nml.original
-      mv -v timesteps.nml.updated timesteps.nml
+      mv -v timesteps.nml.update timesteps.nml
    else
       echo "ERROR timesteps.nml did not update correctly for ensemble member $ensemble_member." >> $logfile
       exit 2

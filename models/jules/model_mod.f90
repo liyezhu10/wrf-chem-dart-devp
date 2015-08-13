@@ -787,7 +787,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ((debug > 0) .and. do_output()) then
+   if ((debug > 2) .and. do_output()) then
       write(logfileunit,*)
       write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
       write(logfileunit,*) '  filename    :',trim(progvar(ivar)%origin)

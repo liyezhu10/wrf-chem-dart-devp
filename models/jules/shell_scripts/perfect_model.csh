@@ -88,10 +88,10 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set     DARTDIR = /glade/u/home/${USER}/DART/jules/models/jules
-      set    JULESDIR = /glade/u/home/${USER}/DART/jules/models/jules
-      set ENSEMBLEDIR = /glade/p/image/JULES/ensembles
-      set  BASEOBSDIR = /glade/p/image/Observations/land
+      set     DARTDIR = /glade/p/work/${USER}/DART/jules/models/jules
+      set    JULESDIR = /glade/p/work/${USER}/DART/jules/models/jules/work
+      set ENSEMBLEDIR = /glade/p/image/RDA_strawman/JULES_ensembles
+      set  BASEOBSDIR = /glade/p/image/Observations/land/pmo
       set  CENTRALDIR = /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
    breaksw
 
@@ -123,27 +123,24 @@ set myname = $0          # this is the name of this script
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
 # Get the JULES executable, control files, and data files.
+# The advance_model.csh needs dart_to_jules (but this script does not).
 #-----------------------------------------------------------------------------
 
-${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
-${COPY} ${DARTDIR}/work/jules_to_dart                . || exit 1
 ${COPY} ${DARTDIR}/work/input.nml   input.nml.original || exit 1
+${COPY} ${DARTDIR}/work/jules_to_dart                . || exit 1
+${COPY} ${DARTDIR}/work/dart_to_jules                . || exit 1
+${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
 ${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
-${COPY} ${DARTDIR}/work/obs_seq.in                   . || exit 1
 
 ${COPY} ${JULESDIR}/jules.exe                jules.exe || exit 1
-
-# because pmo does not update the JULES state, we can simply link.
-# filter will modify the file, so it must be copied. 
-${LINK} ${ENSEMBLEDIR}/regional_norect.dump.20140102.10800.nc jules_restart.nc || exit 1
-${LINK} ${ENSEMBLEDIR}/regional_norect.hour.nc                jules_output.nc  || exit 1
+${COPY} ${DARTDIR}/data/namelist/*nml                . || exit 1
 
 #-----------------------------------------------------------------------------
 # Get the empty observation sequence file ... or die right away.
 # This file will dictate the length of the JULES forecast.
 #-----------------------------------------------------------------------------
 
-set OBS_FILE = ${BASEOBSDIR}/obs_seq.in
+set OBS_FILE = ${BASEOBSDIR}/201401/obs_seq.in
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.in
@@ -166,7 +163,7 @@ endif
 # &perfect_model_obs_nml:  first_obs_seconds       = -1,
 # &perfect_model_obs_nml:  last_obs_days           = -1,
 # &perfect_model_obs_nml:  last_obs_seconds        = -1,
-# &jules_to_dart_nml:      jules_to_dart_output_file = 'dart_ics'
+# &jules_to_dart_nml:      jules_to_dart_output_file = 'perfect_ics'
 # &model_nml:              jules_restart_filename    = 'jules_restart.nc'
 # &model_nml:              jules_history_filename    = 'jules_history.nc'
 #=========================================================================
@@ -178,7 +175,19 @@ sed -e "s#dart_ics#perfect_ics#" < input.nml.original >! input.nml
 # At the end of the block, we have a DART initial condition file  perfect_ics
 #=========================================================================
 
-echo "`date` -- BEGIN jules-TO-DART"
+# because pmo does not update the JULES state, we can simply link.
+# filter will modify the file, so it must be copied. 
+${LINK} ${ENSEMBLEDIR}/regional_norect.dump.20140102.10800.nc jules_restart.nc || exit 1
+${LINK} ${ENSEMBLEDIR}/regional_norect.hour.nc                jules_output.nc  || exit 1
+
+# the advance_model.csh script needs to have an instance number in the filename.
+# model_mod:static_init_model() cannot have an instance number in the filename.
+# So - we just link the two for this part.
+
+${LINK} jules_restart.nc restart.0001.nc
+${LINK} jules_output.nc   output.0001.nc
+
+echo "`date` -- BEGIN JULES-TO-DART"
 
 ./jules_to_dart
 
@@ -188,7 +197,7 @@ if ($status != 0) then
    exit -3
 endif
 
-echo "`date` -- END jules-TO-DART"
+echo "`date` -- END JULES-TO-DART"
 
 #=========================================================================
 # Block 3: Advance the model and harvest the synthetic observations.
@@ -199,7 +208,7 @@ echo "`date` -- END jules-TO-DART"
 # perfect_restart ...... which we don't need
 #=========================================================================
 
-echo "`date` -- BEGIN jules PERFECT_MODEL_OBS"
+echo "`date` -- BEGIN JULES PERFECT_MODEL_OBS"
 
 ./perfect_model_obs
 
