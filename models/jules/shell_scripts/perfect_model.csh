@@ -126,7 +126,7 @@ set myname = $0          # this is the name of this script
 # The advance_model.csh needs dart_to_jules (but this script does not).
 #-----------------------------------------------------------------------------
 
-${COPY} ${DARTDIR}/work/input.nml   input.nml.original || exit 1
+${COPY} ${DARTDIR}/work/input.nml   input.nml          || exit 1
 ${COPY} ${DARTDIR}/work/jules_to_dart                . || exit 1
 ${COPY} ${DARTDIR}/work/dart_to_jules                . || exit 1
 ${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
@@ -155,7 +155,7 @@ endif
 # Block 1: Populate a run-time directory with the input needed to run DART.
 #
 # DART namelist settings required:
-# &perfect_model_obs_nml:  restart_in_file_name    = 'perfect_ics'
+# &perfect_model_obs_nml:  restart_in_file_name    = 'dart_ics'
 # &perfect_model_obs_nml:  obs_sequence_in_name    = 'obs_seq.in'
 # &perfect_model_obs_nml:  obs_sequence_out_name   = 'obs_seq.perfect'
 # &perfect_model_obs_nml:  init_time_days          = -1,
@@ -164,12 +164,12 @@ endif
 # &perfect_model_obs_nml:  first_obs_seconds       = -1,
 # &perfect_model_obs_nml:  last_obs_days           = -1,
 # &perfect_model_obs_nml:  last_obs_seconds        = -1,
-# &jules_to_dart_nml:      jules_to_dart_output_file = 'perfect_ics'
+# &jules_to_dart_nml:      jules_to_dart_output_file = 'dart_ics'
 # &model_nml:              jules_restart_filename    = 'jules_restart.nc'
 # &model_nml:              jules_history_filename    = 'jules_history.nc'
 #=========================================================================
 
-sed -e "s#dart_ics#perfect_ics#" < input.nml.original >! input.nml
+#sed -e "s#dart_ics#perfect_ics#" < input.nml.original >! input.nml
 
 #=========================================================================
 # Block 2: Convert 1 jules restart file to a DART initial conditions file.
@@ -178,15 +178,15 @@ sed -e "s#dart_ics#perfect_ics#" < input.nml.original >! input.nml
 
 # because pmo does not update the JULES state, we can simply link.
 # filter will modify the file, so it must be copied. 
-${LINK} ${ENSEMBLEDIR}/output/day0-1.dump.20140101.0.nc                   jules_restart.nc || exit 1
-${LINK} ${ENSEMBLEDIR}/output/day0-1.hour.nc                              jules_output.nc  || exit 1
+${LINK} ${ENSEMBLEDIR}/output/day0-1.dump.20140101.0.nc                   . || exit 1
+${LINK} ${ENSEMBLEDIR}/output/day0-1.hour.nc                              . || exit 1
 
 # the advance_model.csh script needs to have an instance number in the filename.
 # model_mod:static_init_model() cannot have an instance number in the filename.
 # So - we just link the two for this part.
 
-${LINK} jules_restart.nc restart.0001.nc
-${LINK} jules_output.nc   output.0001.nc
+${LINK} day0-1.dump.20140101.0.nc    jules_restart.nc
+${LINK} day0-1.hour.nc               jules_output.nc  
 
 echo "`date` -- BEGIN JULES-TO-DART"
 
@@ -219,9 +219,9 @@ if ($status != 0) then
    exit -4
 endif
 
-${MOVE} True_State.nc    ../jules_True_State.${LND_DATE_EXT}.nc
-${MOVE} obs_seq.perfect  ../jules_obs_seq.${LND_DATE_EXT}.perfect
-${MOVE} dart_log.out     ../jules_dart_log.${LND_DATE_EXT}.out
+#${MOVE} True_State.nc    ../jules_True_State.${LND_DATE_EXT}.nc
+#${MOVE} obs_seq.perfect  ../jules_obs_seq.${LND_DATE_EXT}.perfect
+#${MOVE} dart_log.out     ../jules_dart_log.${LND_DATE_EXT}.out
 
 echo "`date` -- END   jules PERFECT_MODEL_OBS"
 

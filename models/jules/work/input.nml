@@ -10,7 +10,7 @@
    last_obs_seconds      = -1
    output_interval       = 1
    trace_execution       = .false.
-   restart_in_file_name  = "perfect_ics"
+   restart_in_file_name  = "dart_ics"
    restart_out_file_name = "perfect_restart"
    obs_seq_in_file_name  = "obs_seq.in"
    obs_seq_out_file_name = "obs_seq.perfect"
@@ -30,7 +30,7 @@
    output_restart           = .true.
    obs_sequence_in_name     = "obs_seq.out"
    obs_sequence_out_name    = "obs_seq.final"
-   restart_in_file_name     = "filter_ics"
+   restart_in_file_name     = "dart_ics"
    restart_out_file_name    = "filter_restart"
    init_time_days           = -1
    init_time_seconds        = -1
@@ -185,7 +185,7 @@
                 'snow_tile',  'KIND_SNOW_WATER',             'NA', 'NA', 'restart' , 'UPDATE',
                 'rho_snow',   'KIND_SNOW_BULK_DENSITY',      'NA', 'NA', 'restart' , 'UPDATE',
                 'snow_depth', 'KIND_SNOW_THICKNESS',         'NA', 'NA', 'restart' , 'UPDATE',
-                'soil_wet',   'KIND_SOIL_MOISTURE',          'NA', 'NA', 'output'  , 'NO_COPY_BACK',
+                'smcl',       'KIND_SOIL_MOISTURE',          'NA', 'NA', 'output'  , 'NO_COPY_BACK',
                 'esoil',      'KIND_LATENT_HEAT_FLUX',       'NA', 'NA', 'output'  , 'NO_COPY_BACK'
    /
 

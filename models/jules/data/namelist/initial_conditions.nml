@@ -1,7 +1,7 @@
 &jules_initial
 const_val=0.0,275.0,10.0,0.0,50.0,0.75,0.75,278.0,
 dump_file=.false.,
-file='/users/ar15645/work/regional_simulations/data/initial_condition.nc',
+file='jules_restart.nc'
 nvars=8,
 total_snow=.true.,
 use_file=5*.false.,3*.true.,
