@@ -158,13 +158,24 @@ while($state_copy <= $num_states)
            set MYSTRING=`printf "%05d" $SECONDS`
            mv $FILE $ROOT.$MYSTRING.nc
    end
+   ls -l *dump* *hour*
    # By now all of the restart files will list alphabically and chronologically same. 
    # We need to grab the latest time and use it to tag the output file. FIXME
-   foreach FILE (*.hour.*)
-           set BASE=$FILE:r
-           set SECONDS=$BASE:e
-           mv $FILE $BASE.$DATESTR.$MYSTRING.nc
-   end
+   set OUTPUT=`ls -1 *hour*nc | tail -n 1`
+   set OFILEBASE=$OUTPUT:r
+
+   set RESTART=`ls -1 *dump*nc | tail -n 1`
+   set BASE=$RESTART:r
+   set SECONDS=$BASE:e
+   set ROOT=$BASE:r
+   set DATESTR=$ROOT:e
+   mv -v $OUTPUT $OFILEBASE.$DATESTR.$SECONDS.nc
+
+   #foreach FILE (*.hour.*)
+   #        set BASE=$FILE:r
+   #        set SECONDS=$BASE:e
+   #        mv $FILE $BASE.$DATESTR.$MYSTRING.nc
+   #end
 
    #----------------------------------------------------------------------
    # Block 4: Convert the model output to form needed by DART
