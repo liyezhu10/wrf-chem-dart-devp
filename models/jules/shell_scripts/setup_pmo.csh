@@ -6,12 +6,16 @@
 #
 # DART $Id$
 #
-# This script is designed to be submitted as a batch job but may be run from 
+# This script is designed to be submitted as a batch job but may be run from
 # the command line (as a single thread) to check for file motion, etc.
 # If running interactively, please comment out the part that actually runs filter.
 #
 #-----------------------------------------------------------------------------
-#
+# SR: This script sets up the perfect_model experiment by creating the central
+# directory and copying necessary files.
+#-----------------------------------------------------------------------------
+
+
 #BSUB -J jules_perfect
 #BSUB -o jules_perfect.%J.log
 #BSUB -P P3507xxxx
@@ -21,7 +25,7 @@
 #BSUB -N -u ${USER}@ucar.edu
 
 #----------------------------------------------------------------------
-# Turns out the scripts are a lot more flexible if you don't rely on 
+# Turns out the scripts are a lot more flexible if you don't rely on
 # the queuing-system-specific variables -- so I am converting them to
 # 'generic' names and using the generics throughout the remainder.
 #----------------------------------------------------------------------
@@ -104,7 +108,7 @@ switch ("`hostname`")
 
       set     DARTDIR = /users/ar15645/DART_JULES_SVN/models/jules
       set    JULESDIR = /users/hydroeng/JULES/jules-vn4.2/build/bin
-      set ENSEMBLEDIR = /users/ar15645/coupling_simulations/check_restart_files/namelist 
+      set ENSEMBLEDIR = /users/ar15645/coupling_simulations/check_restart_files/namelist
       set  BASEOBSDIR = /users/ar15645/DART_JULES_SVN/models/jules/work
       set  CENTRALDIR = /users/ar15645/run_dart_experiment
    breaksw
@@ -177,7 +181,7 @@ endif
 #=========================================================================
 
 # because pmo does not update the JULES state, we can simply link.
-# filter will modify the file, so it must be copied. 
+# filter will modify the file, so it must be copied.
 ${LINK} ${ENSEMBLEDIR}/output/running_now.dump.20140101.0.nc
 ${LINK} ${ENSEMBLEDIR}/output/running_now.hour.nc                         . || exit 1
 
@@ -186,7 +190,7 @@ ${LINK} ${ENSEMBLEDIR}/output/running_now.hour.nc                         . || e
 # So - we just link the two for this part.
 
 ${LINK} running_now.dump.20140101.0.nc    jules_restart.nc
-${LINK} running_now.hour.nc               jules_output.nc  
+${LINK} running_now.hour.nc               jules_output.nc
 
 echo "`date` -- BEGIN JULES-TO-DART"
 
@@ -199,48 +203,5 @@ if ($status != 0) then
 endif
 
 echo "`date` -- END JULES-TO-DART"
-#=========================================================================
-# Block 3: Advance the model and harvest the synthetic observations.
-# output files are:
-# True_state.nc   ...... the DART state
-# obs_seq.perfect ...... the synthetic observations
-# dart_log.out    ...... run-time output of all DART routines
-# perfect_restart ...... which we don't need
-#=========================================================================
 
-echo "`date` -- BEGIN JULES PERFECT_MODEL_OBS"
-
-./perfect_model_obs
-
-if ($status != 0) then
-   echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
-   echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
-   exit -4
-endif
-
-#${MOVE} True_State.nc    ../jules_True_State.${LND_DATE_EXT}.nc
-#${MOVE} obs_seq.perfect  ../jules_obs_seq.${LND_DATE_EXT}.perfect
-#${MOVE} dart_log.out     ../jules_dart_log.${LND_DATE_EXT}.out
-
-echo "`date` -- END   jules PERFECT_MODEL_OBS"
-#=========================================================================
-# Block 4: Update the jules restart file
-#=========================================================================
-
-# not needed ... perfect_model_obs does not update the model state.
-
-#-------------------------------------------------------------------------
-# Cleanup
-#-------------------------------------------------------------------------
-
-${REMOVE} perfect_ics dart_log.nml
-
-echo "`date` -- END   GENERATE jules TRUE STATE"
-
-exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
-
+echo "CENTRALDIR is ${CENTRALDIR}"

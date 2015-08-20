@@ -19,7 +19,6 @@
 # 1) process number of caller,
 # 2) the number of state copies belonging to that process, and
 # 3) the name of the filter_control_file for that process
-
 set process = $1
 set num_states = $2
 set control_file = $3
@@ -100,7 +99,6 @@ while($state_copy <= $num_states)
    echo "input_file  is $input_file"                   >> $logfile
    echo "output_file is $output_file"                  >> $logfile
    echo "Starting dart_to_jules at "`date`             >> $logfile
-
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by model.
    # Overwrite the appropriate variables of a JULES netCDF restart file.
@@ -124,12 +122,12 @@ while($state_copy <= $num_states)
    # JULES how far to advance.
 
    ../dart_to_jules                           >>& $logfile || exit 2
-
+   
    set start_string = `grep "main_run_start"  DART_time_control.txt`
    set  stop_string = `grep "main_run_end"    DART_time_control.txt`
 
    sed -e "/main_run_start/c\${start_string}" \
-         -e "/main_run_end/c\${stop_string}" timesteps.nml >! timesteps.nml.update >>& $logfile || exit 2
+         -e "/main_run_end/c\${stop_string}" timesteps.nml >! timesteps.nml.update || exit 2
 
    if ( -e  timesteps.nml.update ) then
       echo "timesteps.nml update with new start/stop time for ensemble member $ensemble_member" >> $logfile
@@ -139,7 +137,6 @@ while($state_copy <= $num_states)
       echo "ERROR timesteps.nml did not update correctly for ensemble member $ensemble_member." >> $logfile
       exit 2
    endif
-
    #----------------------------------------------------------------------
    # Block 3: Run the model, now that we know where to start and stop.
    #----------------------------------------------------------------------
