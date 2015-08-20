@@ -10,7 +10,7 @@ Feel free to add to the list as you see fit.
 
 Checklist DART-JULES
 
--    - Divide perfect_model.csh into a setup_pmo.csh and a run_pmo.csh
+- SR - Divide perfect_model.csh into a setup_pmo.csh and a run_pmo.csh (Comment: done, checked)
 -    - Establish a pool of ensemble members with instance names and 
           dates in the expected form along with appropriate sets of JULES 
           namelists and supporting resource files (e.g., mask file)
@@ -24,6 +24,6 @@ Checklist DART-JULES
 -    - Update the state-space Matlab scripts to support JULES 
 -    - Make sure the script exit strategy works with the link options in use 
 -    - Add JULES namelists to the diagnostic file output 
-- SR - to test new advance_model.csh with JULES 
+- SR - to test new advance_model.csh with JULES (Comment: new advance_model.csh works fine) 
 -    - Check FIXME along codes
 
