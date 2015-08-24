@@ -1,0 +1,15 @@
+&jules_frac
+file='./data/tile_fractions.dat',
+/
+&jules_soil_props
+const_val=1.21,0.48,0.0004,0.48,0.3,0.2,1185676.0,0.383,0.2,
+const_z=.false.,
+nvars=9,
+use_file=9*.false.,
+var='b','sathh','satcon','sm_sat','sm_crit','sm_wilt','hcap','hcon','albsoil',
+/
+&jules_agric
+/
+&jules_co2
+/
+
