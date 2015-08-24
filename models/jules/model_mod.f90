@@ -205,19 +205,47 @@ end type progvartype
 type(progvartype), dimension(max_state_variables) :: progvar
 
 !----------------------------------------------------------------------
-! how many and which columns are in each gridcell
+! The next structure is used when you know the gridcell indices
+! and want to know what indices of the DART state vector need to be queried.
+!
+! Each gridcell has 9 tiles for some variables, e.g. 
+!     esoil(time, tile, y, x) ;
+!
+! Each gridcell has 4 soil levels for some variables,
+!     smcl(time, soil, y, x)
+!
+! Each gridcell has some variables like:
+!    precip(time, y, x)
+!    latent_heat(time, y, x)
+! 
+! These can be scattered throughout the DART state vector.
+! It may be convenient to initialize a lookup table to avoid traversing
+! the DART state vector looking for gridcell constituents.
 !----------------------------------------------------------------------
 
-type gridcellcolumns !  given a gridcell, which columns contribute
-   private
-   integer  :: ncols
-   integer, pointer, dimension(:) :: columnids
-   integer  :: Ntiles
-   integer, pointer, dimension(:) :: tileIds
-end type gridcellcolumns
-type(gridcellcolumns), allocatable, dimension(:,:), target :: gridCellInfo
+type gridCellComponents
+    private
+    integer :: n
+    integer, pointer, dimension(:) :: dartIndex
+end type gridCellComponents
+type(gridCellComponents), allocatable, dimension(:,:), target :: gridCell
 
 !------------------------------------------------------------------------------
+! ancillaries.nml &jules_frac  frac_name='frac'
+! ancillaries.nml &jules_frac  file='frac_lai_canht.nc'
+!         float frac(type, y, x) ;          where type is 9
+!               frac:units = " " ;
+!               frac:_FillValue = -9999.f ;
+!
+! jules_surface_types.nml &jules_surface_types might be interesting ...
+!
+! model_grid.nml &jules_input_grid   nx,ny
+! model_grid.nml &jules_latlon      file='grid_lat_lon.nc'
+! model_grid.nml &jules_land_frac   file='land_fraction.nc'
+!
+! timesteps.nml  &jules_time        main_run_start='YYYY-MM-DD HH:MM:SS'
+! timesteps.nml  &jules_time        main_run_end='YYYY-MM-DD HH:MM:SS'
+! timesteps.nml  &jules_time        timestep_len=3600
 
 integer :: Nlon    = -1   ! output file, AKA 'x'
 integer :: Nlat    = -1   ! output file, AKA 'y'
@@ -230,8 +258,8 @@ real(r8), allocatable :: LONGITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
 
-real(r8), allocatable ::  AREA1D(:),   LANDFRAC1D(:)   ! masked grid
-real(r8), allocatable ::  AREA2D(:,:), LANDFRAC2D(:,:) ! 2D grid
+real(r8), allocatable ::  TILE_FRACTIONS(:,:,:) ! land unit types (nx,ny,[ntile,ntype])
+real(r8), allocatable ::  LAND_FRACTIONS(:,:)   ! land unit types (nx,ny)
 
 logical :: masked = .false.
 
@@ -593,15 +621,17 @@ call error_handler(E_MSG,'static_init_model',string1)
 ! The jules output file has the grid metadata.
 ! The jules restart files are intentionally lean and, in so doing,
 ! do not have the full lat/lon arrays nor any depth information.
-!
+
 call get_jules_output_dimensions( jules_output_filename )
 call get_jules_restart_dimensions(jules_restart_filename)
 
 allocate(LONGITUDE(Nlon,Nlat), LATITUDE(Nlon,Nlat),  SOILLEVEL(Nsoil))
+allocate(TILE_FRACTIONS(Nlon,Nlat,Ntile))
+allocate(LAND_FRACTIONS(Nlon,Nlat))
 
 ! The soil level values are only available from the namelist, apparently.
 call Read_Jules_Soil_Namelist()
-! call Read_Tile_Fractions()   TJH FIXME
+call Read_Tile_Fractions()
 call get_full_grid(jules_output_filename)
 
 !---------------------------------------------------------------
@@ -617,13 +647,6 @@ call get_full_grid(jules_output_filename)
 
 ! TJH FIXME
 ! call get_sparse_geog(ncidO, jules_restart_filename, 'close')
-
-!---------------------------------------------------------------
-! Generate list of land units in each gridcell
-
-allocate(gridCellInfo(Nlon,Nlat))
-! TJH FIXME
-! call SetLocatorArrays()
 
 !---------------------------------------------------------------
 ! Compile the list of jules variables to use in the creation
@@ -865,6 +888,12 @@ endif
 
 allocate(ens_mean(model_size))
 
+!---------------------------------------------------------------
+! Generate list of dart indices of interest for each gridcell
+
+allocate(gridCell(Nlon,Nlat))
+call setGridCellLookupTable()
+
 end subroutine static_init_model
 
 
@@ -878,13 +907,8 @@ subroutine end_model()
 
 call error_handler(E_ERR, 'end_model', 'FIXME routine not written', source, revision, revdate)
 
-if (masked) then
-   deallocate(AREA1D, LANDFRAC1D)
-else
-   deallocate(AREA2D, LANDFRAC2D)
-endif
-
 deallocate(LATITUDE, LONGITUDE, SOILLEVEL)
+deallocate(TILE_FRACTIONS, LAND_FRACTIONS)
 deallocate(grid1d_ixy, grid1d_jxy)
 deallocate(land1d_ixy, land1d_jxy, land1d_wtxy)
 deallocate(cols1d_ixy, cols1d_jxy, cols1d_wtxy, cols1d_ityplun)
@@ -2315,8 +2339,8 @@ if ( .not. module_initialized ) call static_init_model
 ! TJH ! If there is no vertical component, the problem is greatly simplified.
 ! TJH ! Simply area-weight an average of all pieces in the grid cell.
 ! TJH ! FIXME ... this is the loop that can exploit the knowledge of what
-! TJH ! columnids or tileIds are needed for any particular gridcell.
-! TJH ! gridCellInfo%tileIds, gridCellInfo%columnids
+! TJH ! columnids or dart_index are needed for any particular gridcell.
+! TJH ! gridCell%dart_index, gridCell%columnids
 ! TJH
 ! TJH counter    = 0
 ! TJH total      = 0.0_r8      ! temp storage for state vector
@@ -2397,11 +2421,12 @@ end subroutine compute_gridcell_value
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
 
-subroutine get_var_1d(ncid, varname, var1d)
+subroutine get_var_1d(ncid, varname, var1d, context)
 
-integer,                intent(in)  :: ncid
-character(len=*),       intent(in)  :: varname
-real(r8), dimension(:), intent(out) :: var1d
+integer,                    intent(in)  :: ncid
+character(len=*),           intent(in)  :: varname
+real(r8), dimension(:),     intent(out) :: var1d
+character(len=*), OPTIONAL, intent(in)  :: context
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
 integer  :: VarID, numdims, xtype, io1, io2
@@ -2425,11 +2450,11 @@ endif
 io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
 if (io1 /= NF90_NOERR) TimeDimID = MISSING_I
 
-call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//varname)
+call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//trim(varname))
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_1d', 'inquire_variable '//varname)
+              xtype=xtype), 'get_var_1d', 'inquire_variable '//trim(varname))
 call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
-              'get_var_1d', 'inquire_dimension '//varname)
+              'get_var_1d', 'inquire_dimension '//trim(varname))
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
@@ -2458,7 +2483,7 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
    var1d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -2493,7 +2518,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
    var1d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -2527,7 +2552,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var1d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//varname)
+           'get_var_1d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
@@ -2590,11 +2615,12 @@ end subroutine get_var_1d
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
 
-subroutine get_var_2d(ncid, varname, var2d)
+subroutine get_var_2d(ncid, varname, var2d, context)
 
-integer,                  intent(in)  :: ncid
-character(len=*),         intent(in)  :: varname
-real(r8), dimension(:,:), intent(out) :: var2d
+integer,                    intent(in)  :: ncid
+character(len=*),           intent(in)  :: varname
+real(r8), dimension(:,:),   intent(out) :: var2d
+character(len=*), OPTIONAL, intent(in)  :: context
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
 integer  :: VarID, numdims, xtype, io1, io2, i
@@ -2665,7 +2691,7 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
    var2d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -2700,7 +2726,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
    var2d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -2734,7 +2760,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var2d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//varname)
+           'get_var_2d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
@@ -2797,11 +2823,12 @@ end subroutine get_var_2d
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
 
-subroutine get_var_3d(ncid, varname, var3d)
+subroutine get_var_3d(ncid, varname, var3d, context)
 
 integer,                    intent(in)  :: ncid
 character(len=*),           intent(in)  :: varname
 real(r8), dimension(:,:,:), intent(out) :: var3d
+character(len=*), OPTIONAL, intent(in)  :: context
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
 integer  :: i, TimeDimID, time_dimlen, timeindex
@@ -2810,6 +2837,7 @@ integer  :: spvalINT
 real(r4) :: spvalR4
 real(r8) :: scale_factor, add_offset
 real(r8) :: spvalR8
+character(len=512) :: msgstring
 
 integer,  allocatable, dimension(:,:,:) :: intarray
 real(r4), allocatable, dimension(:,:,:) :: r4array
@@ -2822,30 +2850,37 @@ if (do_output() .and. (debug > 1)) then
    write(logfileunit,*)
 endif
 
-! 3D fields must have a time dimension.
-! Need to know the Time Dimension ID and length
+if (present(context)) then
+   msgstring = context
+else
+   msgstring = varname
+endif
 
-call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
-         'get_var_3d', 'inq_dimid time '//varname)
-call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_3d', 'inquire_dimension time '//varname)
+! 3D fields _may_ have a time dimension.
+! If so, we need to know the Time Dimension ID and length
+
+if ( nf90_inq_dimid(ncid, 'time', TimeDimID) == NF90_NOERR ) then
+   call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
+         'get_var_3d', 'inquire_dimension time '//trim(msgstring))
+else
+   TimeDimID = -999    ! an impossible value 
+   time_dimlen = 0
+endif
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_3d', 'inq_varid')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_3d', 'inquire_variable '//varname)
+              xtype=xtype), 'get_var_3d', 'inquire_variable '//trim(msgstring))
 
 if ( (numdims /= 3)  ) then
-   write(string1,*) trim(varname)//' is not a 3D variable as expected.'
+   write(string1,*) trim(msgstring)//' is not a 3D variable as expected.'
    call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
 endif
-
-! only expecting [Nlon,Nlat,time]
 
 ncstart(:) = 1
 nccount(:) = 1
 DimCheck : do i = 1,numdims
 
-   write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(varname)
+   write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(msgstring)
 
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
                  'get_var_3d', trim(string1))
@@ -2856,16 +2891,18 @@ DimCheck : do i = 1,numdims
        dimlens(i) = 1
 
    elseif ( size(var3d,i) /= dimlens(i) ) then
-      write(string1,*) trim(varname)//' has shape ', dimlens(1:numdims)
-      write(string2,*) 'which is not the expected shape of ', size(var3d,i)
-      call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate,text2=string2)
+      write(string1,*) trim(msgstring)//' dimension ',i,' is ', dimlens(i)
+      write(string2,*) 'which is not the expected size of ', size(var3d,i)
+      call error_handler(E_ERR, 'get_var_3d', string1, &
+                source, revision, revdate, text2=string2)
    endif
 
    nccount(i) = dimlens(i)
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. (debug > 2)) then
+   write(*,*)'get_var_3d: context ['//trim(msgstring)//']'
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -2876,20 +2913,20 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1),dimlens(2),dimlens(3)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(msgstring))
    var3d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
@@ -2911,20 +2948,20 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2),dimlens(3)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(msgstring))
    var3d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
@@ -2945,19 +2982,19 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var3d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_3d', 'get_var '//varname)
+           'get_var_3d', 'get_var '//trim(msgstring))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() ) then
-      write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
+      write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
@@ -3008,11 +3045,12 @@ end subroutine get_var_3d
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
 
-subroutine get_var_4d(ncid, varname, var4d)
+subroutine get_var_4d(ncid, varname, var4d, context)
 
 integer,                      intent(in)  :: ncid
 character(len=*),             intent(in)  :: varname
 real(r8), dimension(:,:,:,:), intent(out) :: var4d
+character(len=*), OPTIONAL,   intent(in)  :: context
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
 integer  :: i, TimeDimID, time_dimlen, timeindex
@@ -3037,13 +3075,13 @@ endif
 ! Need to know the Time Dimension ID and length
 
 call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
-         'get_var_4d', 'inq_dimid time '//varname)
+         'get_var_4d', 'inq_dimid time '//trim(varname))
 call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_4d', 'inquire_dimension time '//varname)
+         'get_var_4d', 'inquire_dimension time '//trim(varname))
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_4d', 'inq_varid')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_4d', 'inquire_variable '//varname)
+              xtype=xtype), 'get_var_4d', 'inquire_variable '//trim(varname))
 
 if ( (numdims /= 4)  ) then
    write(string1,*) trim(varname)//' is not a 4D variable as expected.'
@@ -3087,7 +3125,7 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1),dimlens(2),dimlens(3),1))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//varname)
+           'get_var_4d', 'get_var '//trim(varname))
    var4d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
@@ -3122,7 +3160,7 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2),dimlens(3),1))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//varname)
+           'get_var_4d', 'get_var '//trim(varname))
    var4d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
@@ -3156,7 +3194,7 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var4d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//varname)
+           'get_var_4d', 'get_var '//trim(varname))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
@@ -3991,135 +4029,76 @@ end function findVarIndex
 
 
 !------------------------------------------------------------------
-!> SetLocatorArrays
+!> setGridCellLookupTable
 !>
-!> This function will create the relational table that will indicate how many
-!> and which columns pertain to the gridcells. A companion function will
-!> return the column indices that are needed to recreate the gridcell value.
-!>
-!> This fills the gridCellInfo(:,:) structure.
-!> given a gridcell, the gridCellInfo(:,:) structure will indicate how many and
-!> which columns are part of the gridcell.
+!> This fills the gridCell(:,:) structure.
+!> given a JULES gridcell index, the gridCell(:,:) structure will indicate how many and
+!> what DART state vector elements are part of the gridcell.
 
-subroutine SetLocatorArrays()
+subroutine setGridCellLookupTable()
 
-integer :: ilon, ilat, ij, iunit
-integer :: icol, currenticol(Nlon,Nlat)
-integer :: ipft, currentipft(Nlon,Nlat)
+integer :: ix, iy, ij, iunit
+integer :: soil_index, tile_index, scpool_index, varindex  ! all dummies
 
-call error_handler(E_ERR, 'SetLocatorArrays', 'FIXME routine not written', source, revision, revdate)
+call error_handler(E_MSG, 'setGridCellLookupTable', 'FIXME routine not written', source, revision, revdate)
 
-! TJH gridCellInfo(:,:)%ncols = 0
-! TJH gridCellInfo(:,:)%Ntiles = 0
-! TJH
-! TJH ! Count up how many columns are in each gridcell
-! TJH
-! TJH do ij = 1,Ncolumn
-! TJH    ilon = cols1d_ixy(ij)
-! TJH    ilat = cols1d_jxy(ij)
-! TJH    gridCellInfo(ilon,ilat)%ncols = gridCellInfo(ilon,ilat)%ncols + 1
-! TJH enddo
-! TJH
-! TJH ! Count up how many pfts are in each gridcell
-! TJH
-! TJH do ij = 1,Ntile
-! TJH    ilon = pfts1d_ixy(ij)
-! TJH    ilat = pfts1d_jxy(ij)
-! TJH    gridCellInfo(ilon,ilat)%Ntiles = gridCellInfo(ilon,ilat)%Ntiles + 1
-! TJH enddo
-! TJH
-! TJH ! Create storage for the list of column,pft indices
-! TJH
-! TJH do ilon = 1,Nlon
-! TJH do ilat = 1,Nlat
-! TJH    if ( gridCellInfo(ilon,ilat)%ncols > 0 ) then
-! TJH       allocate( gridCellInfo(ilon,ilat)%columnids( gridCellInfo(ilon,ilat)%ncols ))
-! TJH    endif
-! TJH    if ( gridCellInfo(ilon,ilat)%Ntiles > 0 ) then
-! TJH       allocate( gridCellInfo(ilon,ilat)%tileIds( gridCellInfo(ilon,ilat)%Ntiles ))
-! TJH    endif
-! TJH enddo
-! TJH enddo
-! TJH
-! TJH ! Fill the column pointer arrays
-! TJH
-! TJH currenticol(:,:) = 0
-! TJH do ij = 1,Ncolumn
-! TJH
-! TJH    ilon = cols1d_ixy(ij)
-! TJH    ilat = cols1d_jxy(ij)
-! TJH
-! TJH    currenticol(ilon,ilat) = currenticol(ilon,ilat) + 1
-! TJH    icol = currenticol(ilon,ilat)
-! TJH
-! TJH    if ( icol <= gridCellInfo(ilon,ilat)%ncols ) then
-! TJH       gridCellInfo(ilon,ilat)%columnids(icol) = ij
-! TJH    else
-! TJH       write(string1,'(''gridcell('',i4,'','',i4,'') has at most '',i4,'' columns.'')') &
-! TJH          ilon, ilat, gridCellInfo(ilon,ilat)%ncols
-! TJH       write(string2,'(''Found '',i8,'' at dart index '',i12)') icol, ij
-! TJH       call error_handler(E_ERR, 'SetLocatorArrays', string1, &
-! TJH                    source, revision, revdate, text2=string2)
-! TJH    endif
-! TJH enddo
-! TJH
-! TJH ! Fill the pft pointer arrays
-! TJH
-! TJH currentipft(:,:) = 0
-! TJH do ij = 1,Ntile
-! TJH
-! TJH    ilon = pfts1d_ixy(ij)
-! TJH    ilat = pfts1d_jxy(ij)
-! TJH
-! TJH    currentipft(ilon,ilat) = currentipft(ilon,ilat) + 1
-! TJH    ipft = currentipft(ilon,ilat)
-! TJH
-! TJH    if ( ipft <= gridCellInfo(ilon,ilat)%Ntiles ) then
-! TJH       gridCellInfo(ilon,ilat)%tileIds(ipft) = ij
-! TJH    else
-! TJH       write(string1,'(''gridcell('',i4,'','',i4,'') has at most '',i4,'' pfts.'')') &
-! TJH          ilon, ilat, gridCellInfo(ilon,ilat)%Ntiles
-! TJH       write(string2,'(''Found '',i8,'' at dart index '',i12)') ipft, ij
-! TJH       call error_handler(E_ERR, 'SetLocatorArrays', string1, &
-! TJH                    source, revision, revdate, text2=string2)
-! TJH    endif
-! TJH enddo
-! TJH
-! TJH ! Check block
-! TJH
-! TJH if ((debug > 99) .and. do_output()) then
-! TJH
-! TJH    iunit = open_file('gridcell_column_table.txt',form='formatted',action='write')
-! TJH
-! TJH    do ilon = 1,Nlon
-! TJH    do ilat = 1,Nlat
-! TJH       if (gridCellInfo(ilon,ilat)%ncols > 0) then
-! TJH          write(iunit,'(''gridcell'',i8,1x,i8,'' has '', i6, '' columns:'')') &
-! TJH                    ilon,ilat,gridCellInfo(ilon,ilat)%ncols
-! TJH          write(iunit,*)gridCellInfo(ilon,ilat)%columnids
-! TJH       endif
-! TJH    enddo
-! TJH    enddo
-! TJH
-! TJH    call close_file(iunit)
-! TJH
-! TJH    iunit = open_file('gridcell_pft_table.txt',form='formatted',action='write')
-! TJH
-! TJH    do ilon = 1,Nlon
-! TJH    do ilat = 1,Nlat
-! TJH       if (gridCellInfo(ilon,ilat)%Ntiles > 0) then
-! TJH          write(iunit,'(''gridcell'',i8,1x,i8,'' has '', i6, '' pfts : '')') &
-! TJH                    ilon,ilat,gridCellInfo(ilon,ilat)%Ntiles
-! TJH          write(iunit,*)gridCellInfo(ilon,ilat)%tileIds
-! TJH       endif
-! TJH    enddo
-! TJH    enddo
-! TJH
-! TJH    call close_file(iunit)
-! TJH
-! TJH endif
+gridCell(:,:)%n = 0   ! everybody get nobody
 
-end subroutine SetLocatorArrays
+! Count up how many consituents are in each gridcell
+
+do ij = 1,model_size
+   varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
+   call get_state_indices(ij, ix, iy, soil_index, &
+                             tile_index, scpool_index, varindex)
+   gridCell(ix, iy)%n = gridCell(ix, iy)%n + 1
+enddo
+
+! Create storage for the list of indices
+
+do ix = 1,Nlon
+do iy = 1,Nlat
+   if ( gridCell(ix,iy)%n > 0 ) then
+      allocate( gridCell(ix,iy)%dartIndex(gridCell(ix,iy)%n) )
+   endif
+enddo
+enddo
+
+! Now that we know how many are in each gridcell, go back and fill the arrays
+! with the DART indices for each gridcell.
+
+gridCell(:,:)%n = 0   ! everybody get nobody - again
+
+do ij = 1,model_size
+
+   varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
+   call get_state_indices(ij, ix, iy, soil_index, &
+                             tile_index, scpool_index, varindex)
+
+   gridCell(ix, iy)%n = gridCell(ix, iy)%n + 1
+   gridCell(ix, iy)%dartIndex( gridCell(ix, iy)%n ) = ij
+
+enddo
+
+! Verification
+if ((debug > 1) .and. do_output()) then
+
+   iunit = open_file('gridcell_lookup_table.txt',form='formatted',action='write')
+
+   do ix = 1,Nlon
+   do iy = 1,Nlat
+      if (gridCell(ix,iy)%n > 0) then
+         write(iunit,'(''gridcell'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
+                   ix,iy,gridCell(ix,iy)%n
+         write(iunit,*)gridCell(ix,iy)%dartIndex
+      endif
+   enddo
+   enddo
+
+   call close_file(iunit)
+
+endif
+
+end subroutine setGridCellLookupTable
 
 
 !------------------------------------------------------------------
@@ -4360,21 +4339,19 @@ end subroutine Read_Jules_Soil_Namelist
 
 !------------------------------------------------------------------
 !> Read_Tile_Fractions
-!> reads the namelist specifying the tile fractions for each gridcell.
+!> reads the namelist specifying the name of the file containing the 
+!> tile fractions for each gridcell, and then reads the tile fractions.
 
 subroutine Read_Tile_Fractions()
 
-! integer,  intent(out) :: Nsoil     ! were it not for module scope
-! real(r8), intent(out) :: SOILLEVEL ! were it not for module scope
-
-integer :: iunit, io, i
+integer :: iunit, io, ncid
 
 character(len=256) :: file
 character(len=256) :: frac_name
 
 namelist /jules_frac/ file, frac_name
 
-call error_handler(E_MSG, 'Read_Tile_Fractions', 'FIXME routine not tested', &
+call error_handler(E_MSG, 'Read_Tile_Fractions', 'FIXME routine not fully tested', &
         source, revision, revdate)
 
 call find_namelist_in_file('ancillaries.nml', 'jules_frac', iunit)
@@ -4382,11 +4359,24 @@ read(iunit, nml = jules_frac, iostat = io)
 call check_namelist_read(iunit, io, 'jules_frac')
 
 if ( .not. file_exist(file) ) then
-   write(string1,*) 'cannot open file <', trim(file),'> to read tile fractions.'
-   call error_handler(E_ERR,'Read_Tile_Fractions',string1,source,revision,revdate)
+   write(string1,*)'cannot open file <', trim(file),'> to read tile fractions.'
+   write(string2,*)'filename came from ancillaries.nml &jules_frac "file"'
+   call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
+       source, revision, revdate, text2=string2)
 endif
 
-! TJH FIXME ... actually read the variable, fill an array ... do something.
+! Create a convenient string for messages
+string2 = trim(file)//' '//trim(frac_name)
+
+call nc_check(nf90_open(trim(file), NF90_NOWRITE, ncid), 'Read_Tile_Fractions','open '//trim(file))
+
+! The namelist might reference a file that is not compatible with the rest of the setup, 
+! DART_get_var automatically checks for matching dimensions.
+! It's the best we can do ... but not perfect.
+
+call DART_get_var(ncid, trim(frac_name), TILE_FRACTIONS, string2)
+
+call nc_check(nf90_close(ncid),'Read_Tile_Fractions','close '//trim(file))
 
 end subroutine Read_Tile_Fractions
 
