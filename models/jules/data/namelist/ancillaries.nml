@@ -1,5 +1,5 @@
 &jules_frac
-file='/users/ar15645/work/regional_simulations/data/frac_lai_canht.nc',
+file='frac_lai_canht.nc',
 frac_name='frac'
 /
 &jules_soil_props
