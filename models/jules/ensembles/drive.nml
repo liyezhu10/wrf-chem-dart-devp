@@ -2,7 +2,7 @@
 data_end='2034-01-01 00:00:00',
 data_period=3600,
 data_start='2014-01-01 00:00:00',
-file='data/spinup_forcing_hourly.dat',
+file='spinup_forcing_hourly.dat',
 interp=8*'nf',
 l_daily_disagg=.false.,
 l_imogen=.false.,
