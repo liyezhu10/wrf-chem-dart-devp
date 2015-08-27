@@ -6,51 +6,19 @@
 #
 # DART $Id$
 #
-# This script is designed to be submitted as a batch job but may be run from
-# the command line (as a single thread) to check for file motion, etc.
-# If running interactively, please comment out the part that actually runs filter.
-#
 #-----------------------------------------------------------------------------
-# SR: This script sets up the perfect_model experiment by creating the central
-# directory and copying necessary files.
+# This script is designed to be run interactively.
+# It sets up a "perfect_model" experiment by creating a directory that will
+# be used for the duration of the experiment, i.e. 'CENTRALDIR' and
+# populating it with the necessary files. 
+# After this stage is set - examine the contents of CENTRALDIR to ensure
+# the experiment is set up properly. If so, examine 'CENTRALDIR'/run_pmo.sh
+# and then execute it if it is correct.
 #-----------------------------------------------------------------------------
 
-
-#BSUB -J jules_perfect
-#BSUB -o jules_perfect.%J.log
-#BSUB -P P3507xxxx
-#BSUB -q premium
-#BSUB -n 1
-#BSUB -W 1:00
-#BSUB -N -u ${USER}@ucar.edu
-
-#----------------------------------------------------------------------
-# Turns out the scripts are a lot more flexible if you don't rely on
-# the queuing-system-specific variables -- so I am converting them to
-# 'generic' names and using the generics throughout the remainder.
-#----------------------------------------------------------------------
-
-if ($?LSB_HOSTS) then
-
-   setenv ORIGINALDIR $LS_SUBCWD
-   setenv JOBNAME     $LSB_JOBNAME
-   setenv JOBID       $LSB_JOBID
-   setenv MYQUEUE     $LSB_QUEUE
-   setenv MYHOST      $LSB_SUB_HOST
-
-else
-
-   #-------------------------------------------------------------------
-   # You can run this interactively to check syntax, file motion, etc.
-   #-------------------------------------------------------------------
-
-   setenv ORIGINALDIR `pwd`
-   setenv JOBNAME     jules_perfect
-   setenv JOBID       $$
-   setenv MYQUEUE     Interactive
-   setenv MYHOST      `hostname`
-
-endif
+setenv ORIGINALDIR `pwd`
+setenv JOBNAME     jules_perfect
+setenv JOBID       $$
 
 #----------------------------------------------------------------------
 # Just an echo of job attributes
@@ -58,9 +26,6 @@ endif
 
 echo
 echo "${JOBNAME} ($JOBID) submitted   from $ORIGINALDIR"
-echo "${JOBNAME} ($JOBID) submitted   from $MYHOST"
-echo "${JOBNAME} ($JOBID) running in queue $MYQUEUE"
-echo "${JOBNAME} ($JOBID) running       on $MYHOST"
 echo "${JOBNAME} ($JOBID) started   at "`date`
 echo
 
@@ -79,7 +44,7 @@ echo
 
 set nonomatch # suppress "rm" warnings if wildcard does not match anything
 
-# The FORCE options are not optional.
+# The FORCE option is not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
 
@@ -87,30 +52,28 @@ switch ("`hostname`")
 
    case ys*:
       # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
+      set   COPY = 'cp -v --preserve=timestamps'
+      set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
 
       set     DARTDIR = /glade/p/work/${USER}/DART/jules/models/jules
-      set    JULESDIR = /glade/p/work/${USER}/DART/jules/models/jules/work
-      set ENSEMBLEDIR = /glade/p/image/RDA_strawman/JULES_ensembles
-      set  BASEOBSDIR = /glade/p/image/Observations/land/pmo
+      set    JULESDIR = ${DARTDIR}/src/jules-vn4.2/build/bin
+      set ENSEMBLEDIR = /glade/p/work/thoar/DART/jules/models/jules/ensembles
+      set  BASEOBSDIR = /glade/p/work/thoar/DART/jules/models/jules/work
       set  CENTRALDIR = /glade/scratch/${user}/DART/${JOBNAME}/job_${JOBID}
    breaksw
 
    default:
       # Bristol "lorax"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
+      set   COPY = 'cp -v --preserve=timestamps'
+      set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
 
       set     DARTDIR = /users/ar15645/DART_JULES_SVN/models/jules
       set    JULESDIR = /users/hydroeng/JULES/jules-vn4.2/build/bin
       set ENSEMBLEDIR = /users/ar15645/coupling_simulations/check_restart_files/namelist
       set  BASEOBSDIR = /users/ar15645/DART_JULES_SVN/models/jules/work
-      set  CENTRALDIR = /users/ar15645/run_dart_experiment
+      set  CENTRALDIR = /users/ar15645/run_dart_experiment/job_${JOBID}
    breaksw
 endsw
 
@@ -130,15 +93,45 @@ set myname = $0          # this is the name of this script
 # The advance_model.csh needs dart_to_jules (but this script does not).
 #-----------------------------------------------------------------------------
 
-${COPY} ${DARTDIR}/work/input.nml            input.nml || exit 1
-${COPY} ${DARTDIR}/work/jules_to_dart                . || exit 1
-${COPY} ${DARTDIR}/work/dart_to_jules                . || exit 1
-${COPY} ${DARTDIR}/work/perfect_model_obs            . || exit 1
-${COPY} ${DARTDIR}/shell_scripts/advance_model.csh   . || exit 1
+foreach FILE ( ${DARTDIR}/work/input.nml   \
+               ${DARTDIR}/work/jules_to_dart   \
+               ${DARTDIR}/work/dart_to_jules   \
+               ${DARTDIR}/work/perfect_model_obs   \
+               ${DARTDIR}/shell_scripts/advance_model.csh   \
+               ${DARTDIR}/shell_scripts/run_pmo.csh    \
+               ${JULESDIR}/jules.exe    \
+               ${ENSEMBLEDIR}/*nml )
+   ${REMOVE} $FILE:t
+   ${COPY}   $FILE    . || exit 1
+end
 
-${COPY} ${JULESDIR}/jules.exe                jules.exe || exit 1
-${COPY} ${ENSEMBLEDIR}/*nml                          . || exit 1
-${COPY} ${ENSEMBLEDIR}/data/tile_fractions.dat       . || exit 1
+chmod 755 run_pmo.csh
+
+# JULES is highly configurable and - as far as I can tell - there are no
+# 'standard' filenames. We must read the JULES namelists and make sure the
+# required files are copied to the run directory.
+
+set FILESTRING = `grep -A 4 jules_frac ancillaries.nml | grep file | sed -e "s#file=##"`
+set TILEFRACTIONS = `echo $FILESTRING | sed -e "s#[']##g"`
+
+if (  -e   ${ENSEMBLEDIR}/${TILEFRACTIONS} ) then
+   ${LINK} ${ENSEMBLEDIR}/${TILEFRACTIONS} . || exit 1
+else
+   echo "ERROR ... no tile fraction/static data file >${ENSEMBLEDIR}/${TILEFRACTIONS}<"
+   echo "ERROR ... ancillaries.nml needs it."
+   exit -1
+endif
+
+set FILESTRING = `grep file drive.nml | sed -e "s#file=##"`
+set FORCINGFILE = `echo $FILESTRING | sed -e "s#[',]##g"`
+
+if (  -e   ${ENSEMBLEDIR}/${FORCINGFILE} ) then
+   ${LINK} ${ENSEMBLEDIR}/${FORCINGFILE} . || exit 1
+else
+   echo "ERROR ... no forcing file >${ENSEMBLEDIR}/${FORCINGFILE}<"
+   echo "ERROR ... drive.nml needs it."
+   exit -1
+endif
 
 #-----------------------------------------------------------------------------
 # Get the empty observation sequence file ... or die right away.
@@ -181,16 +174,30 @@ endif
 #=========================================================================
 
 # because pmo does not update the JULES state, we can simply link.
-# filter will modify the file, so it must be copied.
-${LINK} ${ENSEMBLEDIR}/output/running_now.dump.20140101.0.nc
-${LINK} ${ENSEMBLEDIR}/output/running_now.hour.nc                         . || exit 1
+# The advance_model.csh script needs to have filenames similar to what
+# naturally come out of a JULES model advance.
+# Since we are running jules_to_dart
+# model_mod:static_init_model() must have the 'generic' names,
+# so we link the same file to two names. 
 
-# the advance_model.csh script needs to have an instance number in the filename.
-# model_mod:static_init_model() cannot have an instance number in the filename.
-# So - we just link the two for this part.
+set RESTART = ${ENSEMBLEDIR}/ensemble.dump.0001.20140101.00000.nc
+set  OUTPUT = ${ENSEMBLEDIR}/ensemble.hour.0001.20140101.00000.nc
 
-${LINK} running_now.dump.20140101.0.nc    jules_restart.nc
-${LINK} running_now.hour.nc               jules_output.nc
+if (  -e   ${RESTART} ) then
+   ${LINK} ${RESTART} .
+   ${LINK} ${RESTART} jules_restart.nc
+else
+   echo "ERROR ... no JULES restart file <${RESTART}>"
+   exit -1
+endif
+
+if (  -e   ${OUTPUT} ) then
+   ${LINK} ${OUTPUT} .
+   ${LINK} ${OUTPUT} jules_output.nc
+else
+   echo "ERROR ... no JULES output file <${OUTPUT}>"
+   exit -1
+endif
 
 echo "`date` -- BEGIN JULES-TO-DART"
 
@@ -204,4 +211,19 @@ endif
 
 echo "`date` -- END JULES-TO-DART"
 
-echo "CENTRALDIR is ${CENTRALDIR}"
+echo ""
+echo "What to do next:"
+echo "1) cd ${CENTRALDIR}"
+echo "2) examine EVERYTHING"
+echo "3) make sure the JULES namlists are correct for this experiment."
+echo "4) make sure the DART  namlists are correct for this experiment."
+echo "5) After all that - execute (or submit)"
+echo "   ${CENTRALDIR}/run_pmo.csh"
+echo ""
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$

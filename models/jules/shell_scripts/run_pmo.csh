@@ -6,15 +6,17 @@
 #
 # DART $Id$
 #
-# This script is designed to be submitted as a batch job but may be run from
-# the command line (as a single thread) to check for file motion, etc.
-# If running interactively, please comment out the part that actually runs filter.
+# This script is intentionally not 'executable' until setup_pmo.csh 
+# copies it to CENTRALDIR and makes it executable.
+# After everything in CENTRALDIR is confirmed to be correct, this
+# script may be exectuted.
 #
 #-----------------------------------------------------------------------------
+# These directives (for LSF) may be ignored if not running under LSF.
 #
 #BSUB -J jules_perfect
 #BSUB -o jules_perfect.%J.log
-#BSUB -P P3507xxxx
+#BSUB -P NIMG0002
 #BSUB -q premium
 #BSUB -n 1
 #BSUB -W 1:00
@@ -23,16 +25,12 @@
 #-------------------------------------------------------------------------
 # Run
 #-------------------------------------------------------------------------
-set CENTRALDIR = /users/ar15645/run_dart_experiment
+
 set REMOVE = 'rm -fr'
-
-cd ${CENTRALDIR}
-
-set CENTRALDIR = `pwd`
 
 @ BAIL = 0
 foreach FILE ( input.nml jules_to_dart dart_to_jules  perfect_model_obs\
-               advance_model.csh jules.exe tile_fractions.dat\
+               advance_model.csh jules.exe \
                urban.nml triffid_params.nml timesteps.nml prescribed_data.nml\
                pft_params.nml nveg_params.nml model_grid.nml jules_vegetation.nml\
                jules_surface_types.nml jules_surface.nml jules_soil.nml jules_snow.nml\
@@ -41,7 +39,7 @@ foreach FILE ( input.nml jules_to_dart dart_to_jules  perfect_model_obs\
                ancillaries.nml output.nml )
 
    if ( ! -e $FILE ) then
-      echo "$FILE is needed but not present in CENTRALDIR"
+      echo "$FILE is needed but not present in `pwd`"
       @ BAIL = 1
    endif
 
@@ -61,8 +59,6 @@ if ($status != 0) then
    exit -4
 endif
 
-exit 0
-
 #${MOVE} True_State.nc    ../jules_True_State.${LND_DATE_EXT}.nc
 #${MOVE} obs_seq.perfect  ../jules_obs_seq.${LND_DATE_EXT}.perfect
 #${MOVE} dart_log.out     ../jules_dart_log.${LND_DATE_EXT}.out
@@ -73,9 +69,14 @@ echo "`date` -- END   jules PERFECT_MODEL_OBS"
 # Cleanup
 #-------------------------------------------------------------------------
 
-${REMOVE} perfect_ics dart_log.nml
+${REMOVE} dart_log.nml
 
 echo "`date` -- END   GENERATE jules TRUE STATE"
 
 exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

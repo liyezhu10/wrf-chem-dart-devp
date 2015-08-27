@@ -19,6 +19,7 @@
 # 1) process number of caller,
 # 2) the number of state copies belonging to that process, and
 # 3) the name of the filter_control_file for that process
+
 set process = $1
 set num_states = $2
 set control_file = $3
@@ -33,7 +34,7 @@ echo "Using a control file named $control_file"
 #--------------------------------------------------------------------------
 
 # Get unique name for temporary working directory for this process's stuff
-set temp_dir = `printf "advance_temp%04d" $process`
+set temp_dir = `printf "temp_advance_%04d" $process`
 
 # Create a clean temporary directory and go there
 \rm -rf  $temp_dir
@@ -49,6 +50,14 @@ cd       $temp_dir
 
 \cp ../*nml . || exit 1
 
+set FILESTRING = `grep -A 4 jules_frac ancillaries.nml | grep file | sed -e "s#file=##"`
+set TILEFRACTIONS = `echo $FILESTRING | sed -e "s#[']##g"`
+ln -s ../${TILEFRACTIONS} .
+
+set FILESTRING = `grep file drive.nml | sed -e "s#file=##"`
+set FORCINGFILE = `echo $FILESTRING | sed -e "s#[',]##g"`
+ln -s ../${FORCINGFILE} .
+
 # Ensure that the input.nml has the required value for
 # dart_to_model_nml:advance_time_present for this context.
 
@@ -57,9 +66,6 @@ sed -e "/advance_time_present /c\ advance_time_present = .TRUE." \
 
 sed -e "/^file/c\ file = 'jules_restart.nc'" \
        ../initial_conditions.nml >! initial_conditions.nml || exit 1
-
-sed -e "/^file/c\ file = '../tile_fractions.dat'" \
-       ../ancillaries.nml >! ancillaries.nml || exit 1
 
 sed -e "/^output_dir/c\output_dir = './'" \
        ../output.nml >! output.nml || exit 1
@@ -92,13 +98,14 @@ while($state_copy <= $num_states)
    set instance        = `printf "%04d" $ensemble_member`
 
    # make sure we have a clean logfile for this entire advance
-   set logfile = `printf "log_advance.%04d.txt"     $ensemble_member`
+   set logfile = `printf "advance_log.%04d.txt"     $ensemble_member`
 
    echo "control_file is ../$control_file"             >! $logfile
    echo "working on ensemble_member $ensemble_member"  >> $logfile
-   echo "input_file  is $input_file"                   >> $logfile
-   echo "output_file is $output_file"                  >> $logfile
+   echo "input_file  is ${input_file}"                 >> $logfile
+   echo "output_file is ${output_file}"                >> $logfile
    echo "Starting dart_to_jules at "`date`             >> $logfile
+
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by model.
    # Overwrite the appropriate variables of a JULES netCDF restart file.
@@ -107,14 +114,13 @@ while($state_copy <= $num_states)
    #----------------------------------------------------------------------
 
    # The last output file produced by JULES has to be copied as jules_output.nc
-   # FIXME .... must have the instance number in the filename.
 
-   set  JULES_OUTPUT = `ls -1 ../*hour*nc | tail -n 1`
-   set JULES_RESTART = `ls -1 ../*dump*nc | tail -n 1`
+   set  JULES_OUTPUT = `ls -1 ../*hour.${instance}.*nc | tail -n 1`
+   set JULES_RESTART = `ls -1 ../*dump.${instance}.*nc | tail -n 1`
 
-   ln -sf $JULES_OUTPUT   jules_output.nc     >>& $logfile || exit 2
-   ln -sf $JULES_RESTART  jules_restart.nc    >>& $logfile || exit 2
-   ln -sf ../$input_file  dart_restart        >>& $logfile || exit 2
+   ln -sf $JULES_OUTPUT    jules_output.nc     >>& $logfile || exit 2
+   ln -sf $JULES_RESTART   jules_restart.nc    >>& $logfile || exit 2
+   ln -sf ../${input_file} dart_restart        >>& $logfile || exit 2
 
    # All the required files are created. Now run dart_to_jules
    # This creates a file called DART_time_control.txt that has
@@ -191,7 +197,7 @@ while($state_copy <= $num_states)
 
    ../jules_to_dart                          >>& $logfile || exit 4
 
-   mv -v dart_ics  ../$output_file           >>& $logfile || exit 4
+   mv -v dart_ics  ../${output_file}         >>& $logfile || exit 4
 
    # The updated information also needs to be moved into CENTRALDIR in
    # preparation for the next cycle.
