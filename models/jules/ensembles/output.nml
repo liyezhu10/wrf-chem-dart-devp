@@ -1,0 +1,16 @@
+&jules_output
+nprofiles=1,
+output_dir='./',
+run_id='dart_advance',
+/
+&jules_output_profile
+file_period=0,
+nvars=7,
+output_main_run=.true.,
+output_period=3600,
+output_spinup=.false.,
+output_type=7*'S',
+profile_name='hour',
+var='precip','latent_heat','ftl_gb','smcl','t_soil','esoil','surf_roff',
+var_name='',
+/
