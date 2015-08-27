@@ -7,7 +7,7 @@ latitude=51.53,
 longitude=-1.48,
 /
 &jules_land_frac
-file='land_fraction.nc',
+file='static_data.nc',
 land_frac_name='land_fraction',
 /
 &jules_model_grid

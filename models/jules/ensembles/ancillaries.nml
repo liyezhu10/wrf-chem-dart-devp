@@ -1,5 +1,5 @@
 &jules_frac
-file='tile_fractions.nc'
+file='static_data.nc'
 frac_name='frac'
 /
 &jules_soil_props
