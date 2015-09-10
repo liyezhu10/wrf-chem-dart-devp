@@ -19,14 +19,16 @@ use time_manager_mod, only : time_type, set_time, get_time, set_date, get_date,&
                              operator(/=), operator(<=), operator(==)
 
 use     location_mod, only : location_type, get_dist, query_location,          &
-                             get_close_maxdist_init, get_close_type,           &
                              set_location, get_location, horiz_dist_only,      &
                              vert_is_undef,    VERTISUNDEF,                    &
                              vert_is_surface,  VERTISSURFACE,                  &
                              vert_is_level,    VERTISLEVEL,                    &
                              vert_is_pressure, VERTISPRESSURE,                 &
                              vert_is_height,   VERTISHEIGHT,                   &
-                             get_close_obs_init, get_close_obs, LocationDims
+                             get_close_maxdist_init, get_close_type,           &
+                             get_close_obs_init, get_close_obs_destroy,        &
+                             loc_get_close_obs => get_close_obs,               &
+                             LocationDims
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -45,7 +47,8 @@ use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,   &
                              KIND_WATER_TABLE_DEPTH,  &
                              KIND_GEOPOTENTIAL_HEIGHT,&
                              paramname_length,        &
-                             get_raw_obs_kind_index
+                             get_raw_obs_kind_index,  &
+                             get_raw_obs_kind_name
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -101,14 +104,14 @@ logical, save :: module_initialized = .false.
 
 type(random_seq_type) :: random_seq
 
-!------------------------------------------------------------------
+! -----------------------------------------------------------------
 !
 !  The DART state vector may consist of things like:
 !
 !  The variables in the JULES restart file that are used to create the
 !  DART state vector are specified in the input.nml:model_nml namelist.
 !
-!------------------------------------------------------------------
+! -----------------------------------------------------------------
 
 ! A gridcell may consist of up to 9 tiles.
 ! 5 of the tiles are PFTs,
@@ -203,7 +206,7 @@ end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
 
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 ! The next structure is used when you know the gridcell indices
 ! and want to know what indices of the DART state vector need to be queried.
 !
@@ -220,16 +223,16 @@ type(progvartype), dimension(max_state_variables) :: progvar
 ! These can be scattered throughout the DART state vector.
 ! It may be convenient to initialize a lookup table to avoid traversing
 ! the DART state vector looking for gridcell constituents.
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 
-type landCellComponents
+type sparseCellComponents
     private
     integer :: n
     integer, pointer, dimension(:) :: dartIndex
-end type landCellComponents
-type(landCellComponents), allocatable, dimension(:,:), target :: landCell
+end type sparseCellComponents
+type(sparseCellComponents), allocatable, dimension(:,:), target :: sparseCell
 
-!------------------------------------------------------------------------------
+! -----------------------------------------------------------------------------
 ! ancillaries.nml &jules_frac  frac_name='frac'
 ! ancillaries.nml &jules_frac  file='frac_lai_canht.nc'
 !         float frac(type, y, x) ;          where type is 9
@@ -268,14 +271,18 @@ real(r8), allocatable ::  LAND_FRACTIONS(  :,:)  ! gridcell proportion is land (
 real(r8), allocatable ::  INPUT_LONGITUDES(:,:)  ! gridcell longitudes (Nlon,Nlat)
 real(r8), allocatable ::  INPUT_LATITUDES( :,:)  ! gridcell latitudes  (Nlon,Nlat)
 
-!------------------------------------------------------------------------------
+type(location_type), allocatable :: sparse_locations(:)
+integer,             allocatable :: sparse_kinds(:)
+type(get_close_type) :: gc_state
+
+! -----------------------------------------------------------------------------
 ! These are the metadata arrays that are the same size as the state vector.
 
 real(r8), allocatable, dimension(:) :: ens_mean     ! may be needed for forward ops
 
-!------------------------------------------------------------------
+! -----------------------------------------------------------------
 ! module storage
-!------------------------------------------------------------------
+! -----------------------------------------------------------------
 
 integer         :: model_size      ! the state vector length
 type(time_type) :: model_time      ! valid time of the model state
@@ -307,11 +314,11 @@ contains
 ! All the REQUIRED interfaces come first - just by convention.
 !==================================================================
 
+!------------------------------------------------------------------
+!> Returns the size of the model as an integer.
+!> Required for all applications.
 
 function get_model_size()
-!------------------------------------------------------------------
-! Returns the size of the model as an integer.
-! Required for all applications.
 
 integer :: get_model_size
 
@@ -401,7 +408,6 @@ return
 end subroutine get_state_meta_data
 
 
-
 !------------------------------------------------------------------
 !> model_interpolate is the basis for all 'forward observation operator's
 !> For a given lat, lon, and height, interpolate the correct state value
@@ -428,6 +434,17 @@ real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
 real(r8) :: interp_val_2
 integer  :: istatus_2
+
+character(len=obstypelength) :: kind_name
+
+integer  :: i, x_index, y_index, indx, varindex, vert_coord
+integer  :: lon_index, lat_index, soil_index, tile_index, scpool_index
+integer  :: sparseindex(1)
+integer  :: num_close
+integer  :: close_ind(Nx*Ny)
+real(r8) :: dist(Nx*Ny)
+real(r8) :: mindistance
+real(r8) :: mylon, mylat, mylev
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -465,16 +482,85 @@ loc_array = get_location(location)
 llon      = loc_array(1)
 llat      = loc_array(2)
 lheight   = loc_array(3)
+kind_name = get_raw_obs_kind_name(obs_kind)
+
+! Generate the list of indices of the sparse locations that are 'close' candidates.
+
+call loc_get_close_obs(gc_state, location, 1, sparse_locations, sparse_kinds, &
+                       num_close, close_ind, dist)
+
+! FIXME : Sometimes the location is outside the model domain.
+! In this case, we cannot interpolate. This is not being checked right now.
+
+if (num_close == 0) then
+   istatus = 23
+   return
+elseif (do_output() .and. (debug > 0)) then
+
+   write(string1,*)'Requesting interpolation at ', llon, llat, lheight,' for ',trim(kind_name)
+   write(string2,*)'There are ',num_close,' close "sparse" grid locations.'
+   call error_handler(E_MSG, 'model_interpolate', string1, text2=string2)
+
+   write(*,*)'distances       are ',dist(1:num_close)
+   write(*,*)'indices         are ',close_ind(1:num_close)
+   write(*,*)'minimum distance is ',minval(dist(1:num_close))
+   write(*,*)'index of minimum is ',minloc(dist(1:num_close))
+   write(*,*)'sparse  index    is ',close_ind(minloc(dist(1:num_close)))
+
+endif
+
+! Now I know the index into the 'sparse' array (which is always Nx*Ny,1)
+! so I can decompose that into the x,y indices of the JULES model grid. 
+
+mindistance = minval(dist(1:num_close))
+sparseindex = close_ind(minloc(dist(1:num_close)))
+
+if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
+      y_index = 1 + (sparseindex(1) - 1)/Nx
+      x_index = sparseindex(1) - (y_index - 1)*Nx
+else
+      x_index = sparseindex(1)
+      y_index = 1
+endif
+
+! Now that I know the JULES model grid indices, I can query the sparseCell
+! structure to return the DART elements that are at that location.
+
+write(*,*) sparseCell(x_index,y_index)%n, ' viable elements at sparse location ', x_index, y_index
+do i = 1,sparseCell(x_index,y_index)%n
+
+   indx = sparseCell(x_index,y_index)%dartIndex(i)
+
+   write(*,*)'element ',i,' is DART index ',indx
+
+   varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
+   call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                             tile_index, scpool_index, varindex)
+
+   call get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
+                             mylon, mylat, mylev, vert_coord)
+  
+   if (do_output() .and. (debug > 0)) then
+   write(*,301) trim(progvar(varindex)%varname)
+   write(*,300) trim(progvar(varindex)%varname), indx, &
+      lon_index, lat_index, soil_index, tile_index, scpool_index, &
+      mylon, mylat, mylev, vert_coord
+   endif
+ 
+enddo
+
+ 301 format(A,' DART_index lonind latind levind   tile  cpool   longitude    latitude       level coordinatesys')
+ 300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
+   
 
 ! determine the input gridcell, then figure out which '1D gridcell' that
-! relates to, then use the landCell structure to determine what parts of 
+! relates to, then use the sparseCell structure to determine what parts of 
 ! the DART state might be of use ... -or- 
 
 if ( vert_is_surface(location) .or. &
      vert_is_undef(location) ) then
 
 elseif ( vert_is_height(location) ) then
-
 
 else
    ! don't know what to do here ...
@@ -483,7 +569,7 @@ else
    return
 endif
 
-call error_handler(E_MSG, 'model_interpolate', 'FIXME routine not written', &
+call error_handler(E_ERR, 'model_interpolate', 'FIXME routine not written', &
          text2='EARLY RETURN without doing anything')
 return  ! FIXME EARLY RETURN
 
@@ -560,7 +646,6 @@ end function get_model_time_step
 
 
 !------------------------------------------------------------------
-
 !> static_init_model
 !> Called to do one time initialization of the model.
 !>
@@ -601,7 +686,7 @@ if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values 
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
-!---------------------------------------------------------------
+! --------------------------------------------------------------
 ! Set the time step ... causes JULES namelists to be read.
 ! Ensures model_timestep is multiple of 'dynamics_timestep'
 
@@ -615,7 +700,7 @@ call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
 call error_handler(E_MSG,'static_init_model',string1)
 
-!---------------------------------------------------------------
+! --------------------------------------------------------------
 ! The 'Input' grids are always physically-based, the 'Model' grid
 ! may have all the non-land gridcells squeezed out of it.
 ! The JULES output file has the model grid metadata.
@@ -638,7 +723,7 @@ call Resolve_Input_Grid()
 call Read_Tile_Fractions()
 call Get_Model_Grid(jules_output_filename)
 
-!---------------------------------------------------------------
+! --------------------------------------------------------------
 ! Compile the list of JULES variables to use in the creation
 ! of the DART state vector. This just checks to see that the
 ! DART KIND is valid and that the variable was specified correctly.
@@ -878,11 +963,18 @@ endif
 
 allocate(ens_mean(model_size))
 
-!---------------------------------------------------------------
+! --------------------------------------------------------------
 ! Generate list of dart indices of interest for each gridcell
 
-allocate(landCell(Nx,Ny))
-call setLandCellLookupTable()
+allocate(sparseCell(Nx,Ny))
+call setSparseCellLookupTable()
+
+! --------------------------------------------------------------
+! Generate speedup table of 'close' items to figure out what gridcell
+! is close to some arbitrary (observation) location.
+
+call set_grid_locations_kinds()
+call init_interp()
 
 end subroutine static_init_model
 
@@ -893,12 +985,14 @@ end subroutine static_init_model
 
 subroutine end_model()
 
-   if (allocated(LATITUDE)      ) deallocate(LATITUDE) 
-   if (allocated(LONGITUDE)     ) deallocate(LONGITUDE) 
-   if (allocated(SOILLEVEL)     ) deallocate(SOILLEVEL)
-   if (allocated(TILE_FRACTIONS)) deallocate(TILE_FRACTIONS) 
-   if (allocated(LAND_FRACTIONS)) deallocate(LAND_FRACTIONS)
-   if (allocated(ens_mean)      ) deallocate(ens_mean)
+   if (allocated(LATITUDE)        ) deallocate(LATITUDE) 
+   if (allocated(LONGITUDE)       ) deallocate(LONGITUDE) 
+   if (allocated(SOILLEVEL)       ) deallocate(SOILLEVEL)
+   if (allocated(TILE_FRACTIONS)  ) deallocate(TILE_FRACTIONS) 
+   if (allocated(LAND_FRACTIONS)  ) deallocate(LAND_FRACTIONS)
+   if (allocated(ens_mean)        ) deallocate(ens_mean)
+   if (allocated(sparse_locations)) deallocate(sparse_locations)
+   if (allocated(sparse_kinds)    ) deallocate(sparse_kinds)
 
 end subroutine end_model
 
@@ -976,17 +1070,17 @@ integer              :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 ! variables if we just blast out one long state vector
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 
 integer :: StateVarDimID   ! netCDF pointer to state variable dimension (model size)
 integer :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
 integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimited)
 
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 ! variables if we parse the state vector into prognostic variables.
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 
 ! for the dimensions and coordinate variables
 integer ::   NxDimID
@@ -999,9 +1093,9 @@ integer :: NscpoolDimID
 ! for the prognostic variables
 integer :: ivar, VarID
 
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 ! local variables
-!----------------------------------------------------------------------
+! ---------------------------------------------------------------------
 
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
@@ -1025,29 +1119,29 @@ if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
-!--------------------------------------------------------------------
+! -------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
 ! or the fortran unit number.  but construct a string with at least
 ! the netcdf handle, so in case of error we can trace back to see
 ! which netcdf file is involved.
-!--------------------------------------------------------------------
+! -------------------------------------------------------------------
 
 write(filename,*) 'ncFileID', ncFileID
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file,
 ! and then put into define mode.
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 call nc_check(nf90_Inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID),&
                                    'nc_write_model_atts', 'inquire '//trim(filename))
 call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filename))
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! We need the dimension ID for the number of copies/ensemble members, and
 ! we might as well check to make sure that Time is the Unlimited dimension.
 ! Our job is create the 'model size' dimension.
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='copy', dimid=MemberDimID), &
                           'nc_write_model_atts', 'inq_dimid copy '//trim(filename))
@@ -1060,15 +1154,15 @@ if ( TimeDimID /= unlimitedDimId ) then
    call error_handler(E_ERR,'nc_write_model_atts', string1, source, revision, revdate)
 endif
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Define the model size / state variable dimension / whatever ...
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
         dimid = StateVarDimID),'nc_write_model_atts', 'def_dim StateVariable '//trim(filename))
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Write Global Attributes
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 call DATE_AND_TIME(crdate,crtime,crzone,values)
 write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
@@ -1085,11 +1179,11 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'JULES' ), &
            'nc_write_model_atts', 'put_att model '//trim(filename))
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! We need to output the prognostic variables.
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! Define the new dimensions IDs
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='x' , len = Nx, &
           dimid=NxDimID),   'nc_write_model_atts', 'def_dim x '//trim(filename))
@@ -1109,9 +1203,9 @@ call nc_check(nf90_def_dim(ncid=ncFileID, name='tile', len = Ntile, &
 call nc_check(nf90_def_dim(ncid=ncFileID, name='scpool', len = Nscpool, &
           dimid=NscpoolDimID),'nc_write_model_atts', 'def_dim scpool '//trim(filename))
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 ! Grid Longitudes
 call nc_check(nf90_def_var(ncFileID,name='longitude', xtype=nf90_real, &
@@ -1159,9 +1253,9 @@ call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'tile fractions'), &
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', ' '),  &
               'nc_write_model_atts', 'put_att tile_frac units '//trim(filename))
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! Create the (empty) Prognostic Variables and the Attributes
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 do ivar=1, nfields
 
@@ -1218,15 +1312,15 @@ do ivar=1, nfields
 
 enddo
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! Fill the coordinate variables
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 call nc_check(nf90_inq_varid(ncFileID, 'longitude', VarID), &
              'nc_write_model_atts', 'inq_varid longitude '//trim(filename))
@@ -1248,9 +1342,9 @@ call nc_check(nf90_inq_varid(ncFileID, 'tile_frac', VarID), &
 call nc_check(nf90_put_var(ncFileID, VarID, TILE_FRACTIONS ), &
              'nc_write_model_atts', 'put_var tile_frac '//trim(filename))
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 call nc_check(nf90_sync(ncFileID), 'nc_write_model_atts', 'atts sync')
 
 ierr = 0 ! If we got here, things went well.
@@ -1291,18 +1385,18 @@ if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
-!--------------------------------------------------------------------
+! -------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
 ! or the fortran unit number.  but construct a string with at least
 ! the netcdf handle, so in case of error we can trace back to see
 ! which netcdf file is involved.
-!--------------------------------------------------------------------
+! -------------------------------------------------------------------
 
 write(filename,*) 'ncFileID', ncFileID
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file,
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 call nc_check(nf90_inq_dimid(ncFileID, 'copy', dimid=CopyDimID), &
             'nc_write_model_vars', 'inq_dimid copy '//trim(filename))
@@ -1310,9 +1404,9 @@ call nc_check(nf90_inq_dimid(ncFileID, 'copy', dimid=CopyDimID), &
 call nc_check(nf90_inq_dimid(ncFileID, 'time', dimid=TimeDimID), &
             'nc_write_model_vars', 'inq_dimid time '//trim(filename))
 
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 ! We need to process the prognostic variables.
-!----------------------------------------------------------------------------
+! ---------------------------------------------------------------------------
 
 do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
 
@@ -1432,9 +1526,9 @@ do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
 
 enddo
 
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars', 'sync '//trim(filename))
 
@@ -1482,6 +1576,64 @@ do i=1,size(state)
 enddo
 
 end subroutine pert_model_state
+
+
+!-----------------------------------------------------------------------
+!>
+!> Given a DART location (referred to as "base") and a set of candidate
+!> locations & kinds (obs, obs_kind), returns the subset close to the
+!> "base", their indices, and their distances to the "base" ...
+!>
+!> For vertical distance computations, general philosophy is to convert all
+!> vertical coordinates to a common coordinate. This coordinate type is defined
+!> in the namelist with the variable "vert_localization_coord".
+!>
+!> This interface is required for all applications.
+
+subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
+                         obs, obs_kind, num_close, close_ind, dist)
+
+type(get_close_type), intent(in) :: gc
+type(location_type),  intent(in) :: base_obs_loc
+integer,              intent(in) :: base_obs_kind
+type(location_type),  intent(in) :: obs(:)
+integer,              intent(in) :: obs_kind(:)
+integer,              intent(out):: num_close
+integer,              intent(out):: close_ind(:)
+real(r8),  OPTIONAL,  intent(out):: dist(:)
+
+integer :: k
+
+if ( .not. module_initialized ) call static_init_model
+
+! Initialize variables to missing status
+
+num_close = 0
+close_ind = -99
+if (present(dist)) dist = 1.0e9   ! something big and positive (far away)
+
+! Get all the potentially close obs but no dist (optional argument dist(:)
+! is not present) This way, we are decreasing the number of distance
+! computations that will follow.  This is a horizontal-distance operation and
+! we don't need to have the relevant vertical coordinate information yet
+! (for obs).
+! FIXME - confirm that the close_ind() array does not benefit from having 
+! all the dry_land locations pruned out.
+
+call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
+                       num_close, close_ind)
+
+! Loop over potentially close subset of obs priors or state variables
+if (present(dist)) then
+do k = 1, num_close
+
+   dist(k) = get_dist(base_obs_loc,       obs(close_ind(k)), &
+                      base_obs_kind, obs_kind(close_ind(k)))
+
+enddo
+endif
+
+end subroutine get_close_obs
 
 
 !------------------------------------------------------------------
@@ -2009,6 +2161,10 @@ end function get_state_time_fname
 !> Calculate the expected vertical value for the gridcell.
 !> Each gridcell value is an area-weighted value of an unknown number of
 !> column-based quantities.
+!> The JULES depths describe the soil interfaces; the soil temperature in
+!> layer 1 is the average of the soil temperature in that layer, so if
+!> the first interface is 10cm deep, the soil temperature 'depth' is
+!> more accurately described as 5cm.
 
 subroutine get_grid_vertval(x, location, varstring, interp_val, istatus)
 
@@ -2067,7 +2223,7 @@ endif
 ! TJH endif
 
 ! determine the grid cell for the location
-! Once we know that, we can query the landCell structure which
+! Once we know that, we can query the sparseCell structure which
 ! contains a list of all the bits that contribute to that gridcell. 
 
 call FindEnclosingGridCell(loc_lon, loc_lat, ix, iy, istatus)
@@ -2250,10 +2406,9 @@ end subroutine get_grid_vertval
 !------------------------------------------------------------------
 !> compute_gridcell_value
 !>
-!> Each gridcell may contain values for several land units, each land unit may contain
-!> several columns, each column may contain several pft's. BUT this routine never
-!> aggregates across multiple pft's. So, each gridcell value
-!> is an area-weighted value of an unknown number of column-based quantities.
+!> Each gridcell may contain values for up to 9 land units/tiles/pfts whatever.
+!> Some variables may exist at multiple depths or pools.
+!> So, each gridcell value is a weighted combination.
 
 subroutine compute_gridcell_value(x, location, varstring, interp_val, istatus)
 
@@ -3220,10 +3375,10 @@ get_model_time = model_time
 end function get_model_time
 
 
-
 !==================================================================
 ! The remaining (private) interfaces come last
 !==================================================================
+
 
 !------------------------------------------------------------------
 !> (vector_to_prog_var) vector_to_1d_prog_var
@@ -3643,7 +3798,6 @@ end subroutine Get_Model_Grid
 !> all observations +/- half this timestep are assimilated.
 
 function set_model_time_step()
-!------------------------------------------------------------------
 
 type(time_type) :: set_model_time_step
 
@@ -3853,52 +4007,52 @@ end function findVarIndex
 
 
 !------------------------------------------------------------------
-!> setLandCellLookupTable
+!> setSparseCellLookupTable
 !>
-!> This fills the landCell(:,:) structure.
-!> given a pair of JULES 'model' indices (be it 1D or 2D), the landCell(:,:) 
+!> This fills the sparseCell(:,:) structure.
+!> given a pair of JULES 'model' indices (be it 1D or 2D), the sparseCell(:,:) 
 !> structure will indicate how many and what DART state vector elements
 !> are part of the cell(ix,iy).
 
-subroutine setLandCellLookupTable()
+subroutine setSparseCellLookupTable()
 
 integer :: ix, iy, ij, iunit
 integer :: soil_index, tile_index, scpool_index, varindex  ! all dummies
 
-call error_handler(E_MSG, 'setLandCellLookupTable', 'FIXME routine not fully tested.', source, revision, revdate)
+call error_handler(E_MSG, 'setSparseCellLookupTable', 'FIXME routine not fully tested.', source, revision, revdate)
 
-landCell(:,:)%n = 0   ! everybody get nobody
+sparseCell(:,:)%n = 0   ! everybody get nobody
 
-! Count up how many consituents are in each landcell
+! Count up how many consituents are in each sparseCell
 
 do ij = 1,model_size
    varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
    call get_state_indices(ij, ix, iy, soil_index, tile_index, scpool_index, varindex)
-   landCell(ix, iy)%n = landCell(ix, iy)%n + 1
+   sparseCell(ix, iy)%n = sparseCell(ix, iy)%n + 1
 enddo
 
 ! Create storage for the list of indices
 
 do iy = 1,Ny
 do ix = 1,Nx
-   if ( landCell(ix,iy)%n > 0 ) then
-      allocate( landCell(ix,iy)%dartIndex(landCell(ix,iy)%n) )
+   if ( sparseCell(ix,iy)%n > 0 ) then
+      allocate( sparseCell(ix,iy)%dartIndex(sparseCell(ix,iy)%n) )
    endif
 enddo
 enddo
 
-! Now that we know how many DART elements are in each landcell, go back and 
-! fill the arrays with the DART indices for each landcell.
+! Now that we know how many DART elements are in each sparseCell, go back and 
+! fill the arrays with the DART indices for each sparseCell.
 
-landCell(:,:)%n = 0   ! everybody get nobody - again
+sparseCell(:,:)%n = 0   ! everybody get nobody - again
 
 do ij = 1,model_size
 
    varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
    call get_state_indices(ij, ix, iy, soil_index, tile_index, scpool_index, varindex)
 
-   landCell(ix, iy)%n        = landCell(ix, iy)%n + 1
-   landCell(ix, iy)%dartIndex( landCell(ix, iy)%n ) = ij
+   sparseCell(ix, iy)%n        = sparseCell(ix, iy)%n + 1
+   sparseCell(ix, iy)%dartIndex( sparseCell(ix, iy)%n ) = ij
 
 enddo
 
@@ -3909,10 +4063,10 @@ if (do_output() .and. (debug > 1)) then
 
    do iy = 1,Ny
    do ix = 1,Nx
-      if (landCell(ix,iy)%n > 0) then
-         write(iunit,'(''landCell'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
-                   ix,iy,landCell(ix,iy)%n
-         write(iunit,*)landCell(ix,iy)%dartIndex
+      if (sparseCell(ix,iy)%n > 0) then
+         write(iunit,'(''sparseCell'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
+                   ix,iy,sparseCell(ix,iy)%n
+         write(iunit,*)sparseCell(ix,iy)%dartIndex
       endif
    enddo
    enddo
@@ -3921,7 +4075,7 @@ if (do_output() .and. (debug > 1)) then
 
 endif
 
-end subroutine setLandCellLookupTable
+end subroutine setSparseCellLookupTable
 
 
 !------------------------------------------------------------------
@@ -4152,6 +4306,11 @@ if (Nsoil /= sm_levels) then
 endif
 
 ! Add up the thicknesses
+! FIXME ... do we want the thicknesses or the midpoints?
+! The soil temperature in layer 1 is the average of that layer.
+! If the first thickness is 10cm, it is more accurate to
+! say the temperature 'depth' is 5cm, for example.
+! Could use some higher order function of temperature with depth, but ...
 
 SOILLEVEL(1) = dzsoil_io(1)
 do i = 2,Nsoil
@@ -4804,6 +4963,128 @@ endif
 end subroutine get_state_lonlatlev
 
 
+!-----------------------------------------------------------------------
+!>
+!> set_grid_locations_kinds() creates an array the size of the state with
+!>                       the location of each of the corresponding elements.
+
+subroutine set_grid_locations_kinds()
+
+integer  :: ix, iy, indx
+real(r8) :: mylon, mylat
+
+! FIXME at some point, having the sparse_locations() array should obviate
+! the need to keep the LONGITUDE, LATITUDE variables around. At present,
+! they are needed by nc_write_model_atts() - but that could be about it.
+
+allocate(sparse_locations(Nx*Ny))
+allocate(sparse_kinds(Nx*Ny))
+
+sparse_kinds = 1   ! This is a dummy because we have to satisfy get_close_obs() 
+                 ! get_close_obs() requires a kind, but this implementation does not.
+
+indx = 0
+do iy = 1,Ny
+do ix = 1,Nx
+
+    indx  = indx + 1
+    mylon = LONGITUDE(ix,iy)
+    mylat =  LATITUDE(ix,iy)
+
+    sparse_locations(indx) = set_location(mylon, mylat, 0.0_r8, VERTISUNDEF)
+enddo
+enddo
+
+end subroutine set_grid_locations_kinds
+
+
+!-----------------------------------------------------------------------
+!>
+!> init_interp() Initializes data structures needed for interpolation.
+!>
+!> General philosophy is to precompute a 'get_close' structure with
+!> a list of what state vector elements are within a certain distance
+!> of each other.
+
+subroutine init_interp()
+
+! This should be called at static_init_model time to avoid
+! having all this temporary storage in the middle of a run.
+!
+! DART has a 'get_close' type that divides the domain into a set of boxes
+! and tracks which locations are in which box. The get_close_obs() routine
+! then finds the box and the subsequent distances. The trick is to set up
+! the set of boxes parsimoniously.
+
+integer :: i, j
+
+real(r8) :: max_lon, max_lat, maxdist
+real(r8) :: lon_dist, lat_dist
+
+! Need to determine the likely maximum size of any of the gridcells.
+! the idea is to find a distance that allows us to find the surrounding
+! gridcell locations without finding 'too many' neighboring gridcells.
+!
+! Since this may be a point, regional, or global model, I am going 
+! to use the lat & lon values as proxies for the physical distance.
+! The maximum grid cell size from one grid should suffice.
+
+max_lon = 0.0_r8
+max_lat = 0.0_r8
+
+EW_lat : do j = 1, Nlat
+EW_lon : do i = 1, Nlon-1
+
+   lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i+1,j))
+   lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i+1,j))
+
+   ! FIXME the prime meridian is a problem ... 
+   ! hopefully, there are other gridcells 
+   if (lon_dist > 180.0_r8) cycle EW_lon
+
+   if(lon_dist > max_lon) max_lon = lon_dist
+   if(lat_dist > max_lat) max_lat = lat_dist
+
+enddo EW_lon
+enddo EW_lat
+
+NS_lat : do j = 1, Nlat-1
+NS_lon : do i = 1, Nlon
+
+   lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i,j+1))
+   lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i,j+1))
+
+   ! FIXME the prime meridian is a problem ... 
+   ! hopefully, there are other gridcells 
+   if (lon_dist > 180.0_r8) cycle NS_lon
+
+   if(lon_dist > max_lon) max_lon = lon_dist
+   if(lat_dist > max_lat) max_lat = lat_dist
+enddo NS_lon
+enddo NS_lat
+
+! FIXME ... what to do if max_lon = 0.0_r8
+
+! convert to radians
+max_lon = max_lon / rad2deg
+max_lat = max_lat / rad2deg
+maxdist = sqrt(max_lon*max_lon + max_lat*max_lat)
+
+if (do_output() .and. (debug > 1)) then
+   write(*,*)
+   write(*,*)'init_interp: summary'
+   write(*,*)'init_interp: Maximum distance ',maxdist, ' (radians) based on '
+   write(*,*)'init_interp: max_dlon = ', max_lon, 'radians', max_lon*rad2deg, 'degrees'
+   write(*,*)'init_interp: max_dlat = ', max_lat, 'radians', max_lat*rad2deg, 'degrees'
+   write(*,*)
+endif
+
+! maxdist unscaled resulted in NNN candidates for a location in the middle of the domain
+
+call get_close_maxdist_init(gc_state, maxdist)
+call get_close_obs_init(gc_state, Nx*Ny, sparse_locations)
+
+end subroutine init_interp
 
 
 !-----------------------------------------------------------------------
