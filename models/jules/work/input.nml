@@ -356,6 +356,9 @@ I know esoil is not latent heat flux
    esoil    48001 ...   1  1 2
    esoil    54400 ...  20 40 9
 
+   first layer  midpoint is 0.050
+   second layer midpoint is 0.225
+   0.085 is 1/5 of the way between the first and second layer.
 &model_mod_check_nml
    input_file           = "dart_ics"
    output_file          = "check_me_out"
@@ -364,6 +367,6 @@ I know esoil is not latent heat flux
    test1thru            = 8
    x_ind                = 15618
    kind_of_interest     = 'T_SOISNO'
-   loc_of_interest      = 358.45, 51.36, 0.10
+   loc_of_interest      = 358.3, 51.637, 0.085
    /
 

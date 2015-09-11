@@ -35,8 +35,7 @@ use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                              operator(-)
 
 use        model_mod, only : static_init_model, get_model_size, get_state_meta_data, &
-                             compute_gridcell_value, &
-                             model_interpolate, DART_get_var, get_grid_vertval, &
+                             model_interpolate, DART_get_var, &
                              pert_model_state, get_model_time_step
 
 implicit none
@@ -250,46 +249,14 @@ if (test1thru > 6) then
 endif
 
 !----------------------------------------------------------------------
-! Checking if the compute_gridcell_value works
-!----------------------------------------------------------------------
-
-if (test1thru > 8) then
-   write(*,*)
-   write(*,*)'Testing compute_gridcell_value() with "t_soil" ...'
-
-   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
-
-   call compute_gridcell_value(statevector, loc, "t_soil", interp_val, ios_out)
-
-   if ( ios_out == 0 ) then
-      write(*,*)'compute_gridcell_value : value is ',interp_val
-   else
-      write(*,*)'compute_gridcell_value : value is ',interp_val,'with error code',ios_out
-   endif
-
-
-   write(*,*)
-   write(*,*)'Testing get_grid_vertval() with "esoil" ...'
-
-   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
-
-   call get_grid_vertval(statevector, loc, "esoil", interp_val, ios_out)
-
-   if ( ios_out == 0 ) then
-      write(*,*)'get_grid_vertval : value is ',interp_val
-   else
-      write(*,*)'get_grid_vertval : value is ',interp_val,'with error code',ios_out
-   endif
-
-endif
-
-!----------------------------------------------------------------------
 ! Check the interpolation - print initially to STDOUT
 !----------------------------------------------------------------------
 
-if (test1thru > 9) then
+if (test1thru > 7) then
    write(*,*)
    write(*,*)'Testing model_interpolate() with KIND_SNOWCOVER_FRAC'
+
+   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 
    call model_interpolate(statevector, loc, KIND_SNOWCOVER_FRAC, interp_val, ios_out)
 
@@ -298,7 +265,6 @@ if (test1thru > 9) then
    else
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
-
 
    write(*,*)
    write(*,*)'Testing model_interpolate() with KIND_SOIL_TEMPERATURE'

@@ -28,7 +28,7 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              get_close_maxdist_init, get_close_type,           &
                              get_close_obs_init, get_close_obs_destroy,        &
                              loc_get_close_obs => get_close_obs,               &
-                             LocationDims
+                             LocationDims, write_location
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -86,8 +86,6 @@ public :: jules_to_dart_state_vector,   &
           dart_to_jules_restart,        &
           get_jules_restart_filename,   &
           get_state_time,               &
-          get_grid_vertval,             &
-          compute_gridcell_value,       &
           DART_get_var,                 &
           get_model_time
 
@@ -432,19 +430,22 @@ integer,             intent(out) :: istatus
 
 real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
-real(r8) :: interp_val_2
-integer  :: istatus_2
 
 character(len=obstypelength) :: kind_name
 
-integer  :: i, x_index, y_index, indx, varindex, vert_coord
+integer  :: varindex, testindex
+integer  :: i, x_index, y_index, indx, vert_coord
 integer  :: lon_index, lat_index, soil_index, tile_index, scpool_index
 integer  :: sparseindex(1)
-integer  :: num_close
+integer  :: num_close, ncontrib
 integer  :: close_ind(Nx*Ny)
-real(r8) :: dist(Nx*Ny)
+real(r8) :: distances(Nx*Ny)
 real(r8) :: mindistance
 real(r8) :: mylon, mylat, mylev
+real(r8), allocatable :: profile(:)
+
+integer  :: top, bot
+real(r8) :: slope, xtrcp
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -454,9 +455,8 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-interp_val   = MISSING_R8   ! the DART bad value flag
-interp_val_2 = MISSING_R8   ! the DART bad value flag
-istatus = 99                ! unknown error
+interp_val = MISSING_R8  ! the DART bad value flag
+istatus    = 99          ! unknown error
 
 ! If identity observation (obs_kind < 0), then no need to interpolate
 ! identity observation -> -(obs_kind)=DART state vector index
@@ -476,7 +476,7 @@ if ( obs_kind < 0 ) then
 
 endif
 
-! Get the individual locations values
+! Get the individual locations values - mostly for messages
 
 loc_array = get_location(location)
 llon      = loc_array(1)
@@ -484,36 +484,58 @@ llat      = loc_array(2)
 lheight   = loc_array(3)
 kind_name = get_raw_obs_kind_name(obs_kind)
 
+! Check to make sure we can interpolate this kind before we go through any more work.
+varindex = 0
+KindCheck : do i = 1,nfields
+   if (progvar(i)%kind_string == kind_name) then
+      varindex = i
+      exit KindCheck
+   endif
+enddo KindCheck
+
+if (varindex == 0) then
+   istatus = 97
+   return
+endif
+
 ! Generate the list of indices of the sparse locations that are 'close' candidates.
 
 call loc_get_close_obs(gc_state, location, 1, sparse_locations, sparse_kinds, &
-                       num_close, close_ind, dist)
+                       num_close, close_ind, distances)
 
 ! FIXME : Sometimes the location is outside the model domain.
 ! In this case, we cannot interpolate. This is not being checked right now.
+! This will return the closest one, even if it's not close enough. 'maxdist'
+! was determined from the input grid, observations outside the domain by more
+! than maxdist/2 but less than maxdist will still be 'close' even through they
+! should technically be considered to be an extrapolation ... and not considered?  
 
 if (num_close == 0) then
+
+   call write_location(num_close, location, charstring=string1)
    istatus = 23
    return
+
 elseif (do_output() .and. (debug > 0)) then
 
-   write(string1,*)'Requesting interpolation at ', llon, llat, lheight,' for ',trim(kind_name)
-   write(string2,*)'There are ',num_close,' close "sparse" grid locations.'
-   call error_handler(E_MSG, 'model_interpolate', string1, text2=string2)
+   write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
+   call write_location(istatus,location,charstring=string2)
+   write(string3,*)'There are ',num_close,' close "sparse" grid locations.'
+   call error_handler(E_MSG, 'model_interpolate', string1, text2=string2, text3=string3)
 
-   write(*,*)'distances       are ',dist(1:num_close)
+   write(*,*)'distances       are ',distances(1:num_close)
    write(*,*)'indices         are ',close_ind(1:num_close)
-   write(*,*)'minimum distance is ',minval(dist(1:num_close))
-   write(*,*)'index of minimum is ',minloc(dist(1:num_close))
-   write(*,*)'sparse  index    is ',close_ind(minloc(dist(1:num_close)))
+   write(*,*)'minimum distance is ',minval(distances(1:num_close))
+   write(*,*)'index of minimum is ',minloc(distances(1:num_close))
+   write(*,*)'sparse  index    is ',close_ind(minloc(distances(1:num_close)))
 
 endif
 
-! Now I know the index into the 'sparse' array (which is always Nx*Ny,1)
-! so I can decompose that into the x,y indices of the JULES model grid. 
+! Now that we have the index into the 'sparse' array (which is always Nx*Ny,1);
+! decompose it into the x,y indices of the JULES model grid. 
 
-mindistance = minval(dist(1:num_close))
-sparseindex = close_ind(minloc(dist(1:num_close)))
+mindistance = minval(distances(1:num_close))
+sparseindex = close_ind(minloc(distances(1:num_close)))
 
 if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
       y_index = 1 + (sparseindex(1) - 1)/Nx
@@ -525,105 +547,143 @@ endif
 
 ! Now that I know the JULES model grid indices, I can query the sparseCell
 ! structure to return the DART elements that are at that location.
+! This block is just a check.
 
-write(*,*) sparseCell(x_index,y_index)%n, ' viable elements at sparse location ', x_index, y_index
-do i = 1,sparseCell(x_index,y_index)%n
+if (do_output() .and. (debug > 9)) then
 
-   indx = sparseCell(x_index,y_index)%dartIndex(i)
-
-   write(*,*)'element ',i,' is DART index ',indx
-
-   varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
-   call get_state_indices(indx, lon_index, lat_index, soil_index, &
-                             tile_index, scpool_index, varindex)
-
-   call get_state_lonlatlev(varindex, lon_index, lat_index, soil_index, &
-                             mylon, mylat, mylev, vert_coord)
-  
-   if (do_output() .and. (debug > 0)) then
+   write(*,*) sparseCell(x_index,y_index)%n, ' viable elements at sparse location ', x_index, y_index
    write(*,301) trim(progvar(varindex)%varname)
-   write(*,300) trim(progvar(varindex)%varname), indx, &
-      lon_index, lat_index, soil_index, tile_index, scpool_index, &
-      mylon, mylat, mylev, vert_coord
-   endif
- 
-enddo
+   
+   do i = 1, sparseCell(x_index,y_index)%n
+      indx = sparseCell(x_index,y_index)%dartIndex(i)
+   
+      write(*,*)'element ',i,' is DART index ',indx
+
+      testindex = -1   
+      call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                                tile_index, scpool_index, testindex)
+   
+      call get_state_lonlatlev(testindex, lon_index, lat_index, soil_index, &
+                                mylon, mylat, mylev, vert_coord)
+
+      if ( testindex == varindex ) then ! this is an item of interest.
+         write(*,300) trim(progvar(varindex)%varname), indx, &
+            lon_index, lat_index, soil_index, tile_index, scpool_index, &
+            mylon, mylat, mylev, vert_coord
+      endif
+   enddo
+endif
 
  301 format(A,' DART_index lonind latind levind   tile  cpool   longitude    latitude       level coordinatesys')
  300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
+
+! some variables are (land,tile), some are (land,soil), (land,scpool)
+! so some results are simply a scalar (land,tile)
+! some results are vectors (land,soil), (land,scpool) and may need more 
+!
+! At this point:
+! x_index  is for the sparseCell structure
+! y_index  is for the sparseCell structure
+! varindex is the DART variable we need to interpolate
+!
+! each DART variable has attributes that will help us interpolate.
+! 'coordinates'    'land' and maybe one other ['tile','soil','scpool']
+! 'numdims'
+! 'dimlens'
+
+! write(*,*)'model_interpolate:',trim(progvar(varindex)%coordinates)
+! write(*,*)'model_interpolate:',progvar(varindex)%numdims
+! write(*,*)'model_interpolate:',progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
+! write(*,*)'model_interpolate:',progvar(varindex)%index1,progvar(varindex)%indexN
+
+select case (trim(progvar(varindex)%coordinates))
+
+case ('land tile')
+   ! Use tile_fraction mask to reconstitute the gridcell value
+
+case ('land soil')
+   ! must vertically interpolate to proper depth
+   allocate( profile(Nsoil) )
+   profile = 0.0_r8
+
+   ncontrib = 0
+WANTED : do i = 1, sparseCell(x_index,y_index)%n
+      indx = sparseCell(x_index,y_index)%dartIndex(i)
+
+      if ( (indx < progvar(varindex)%index1) .or. &
+           (indx > progvar(varindex)%indexN) ) cycle WANTED
+
+      call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                             tile_index, scpool_index, varindex)
+
+      write(*,*)'DEBUG ',indx, lon_index, lat_index, soil_index, x(indx)
+
+      profile(soil_index) = x(indx)
+
+      ncontrib = ncontrib + 1
    
+   enddo WANTED
 
-! determine the input gridcell, then figure out which '1D gridcell' that
-! relates to, then use the sparseCell structure to determine what parts of 
-! the DART state might be of use ... -or- 
-
-if ( vert_is_surface(location) .or. &
-     vert_is_undef(location) ) then
-
-elseif ( vert_is_height(location) ) then
-
-else
-   ! don't know what to do here ...
-   ! it is OK to fail ...
-   istatus = 97
-   return
-endif
-
-call error_handler(E_ERR, 'model_interpolate', 'FIXME routine not written', &
-         text2='EARLY RETURN without doing anything')
-return  ! FIXME EARLY RETURN
-
-
-if (do_output() .and. (debug > 6)) print *, 'requesting interpolation at ', llon, llat, lheight
-
-! FIXME may be better to check the %maxlevels and kick the interpolation to the
-! appropriate routine based on that ... or check the dimnames for the
-! vertical coordinate  ...
-
-if (obs_kind == KIND_SOIL_TEMPERATURE) then
-   call get_grid_vertval(x, location, 'T_SOISNO',  interp_val, istatus )
-
-elseif (obs_kind == KIND_SOIL_MOISTURE) then
-   ! TJH FIXME - actually ROLAND FIXME
-   ! This is terrible ... the COSMOS operator wants m3/m3 ... JULES is kg/m2
-   call get_grid_vertval(x, location, 'H2OSOI_LIQ',interp_val  , istatus   )
-   call get_grid_vertval(x, location, 'H2OSOI_ICE',interp_val_2, istatus_2 )
-   if ((istatus == 0) .and. (istatus_2 == 0)) then
-      interp_val = interp_val + interp_val_2
-   else
-      interp_val = MISSING_R8
-      istatus = 6
+   if (ncontrib /= Nsoil) then
+      write(string1,*)trim(progvar(varindex)%varname),'has coordinates', &
+                      trim(progvar(varindex)%coordinates)
+      write(string2,*)'but had ',ncontrib,' components instead of ',Nsoil  
+      write(string3,*)'Not right - stopping.'
+      call error_handler(E_ERR, 'model_interpolate', string1, &
+                 source, revision, revdate, text2=string2, text3=string3)
    endif
 
-elseif (obs_kind == KIND_LIQUID_WATER ) then
-   call get_grid_vertval(x, location, 'H2OSOI_LIQ',interp_val, istatus )
-elseif (obs_kind == KIND_ICE ) then
-   call get_grid_vertval(x, location, 'H2OSOI_ICE',interp_val, istatus )
-elseif (obs_kind == KIND_SNOWCOVER_FRAC ) then
-   call compute_gridcell_value(x, location, 'frac_sno', interp_val, istatus)
-elseif (obs_kind == KIND_LEAF_CARBON ) then
-   call compute_gridcell_value(x, location, 'leafc',    interp_val, istatus)
-elseif (obs_kind == KIND_WATER_TABLE_DEPTH ) then
-   call compute_gridcell_value(x, location, 'ZWT',    interp_val, istatus)
-elseif (obs_kind == KIND_SNOW_THICKNESS ) then
-   write(string1,*)'model_interpolate for DZSNO not written yet.'
-   call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
-   istatus = 5
-elseif ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
-   if (nint(lheight) > Nsoil) then
-      interp_val = MISSING_R8
-      istatus = 1
-   else
-      interp_val = SOILLEVEL(nint(lheight))
-      istatus = 0
-   endif
-else
-   write(string1,*)'model_interpolate not written for (integer) kind ',obs_kind
-   call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
-   istatus = 5
-endif
+   ! So now we have the soil profile at the location of interest.
+   ! Do the vertical interpolation and we're done.
 
-if (do_output() .and. (debug > 6)) write(*,*)'interp_val ',interp_val
+   if ( lheight <= SOILLEVEL(1) ) then
+      interp_val = profile(1)
+      istatus    = 0
+      return
+   endif
+
+   ! FIXME ... may want to put a depth limit on this ...
+   if ( lheight >= SOILLEVEL(Nsoil) ) then
+      interp_val = profile(Nsoil)
+      istatus    = 0
+      return
+   endif
+
+   ! OK - so we're somewhere in the middle ... do a simple
+   ! linear interpolation
+   Depth : do i = 2,Nsoil
+      if ( lheight < SOILLEVEL(i) ) then
+         top   = i-1
+         bot   = i
+         slope = (profile(bot) - profile(top)) / (SOILLEVEL(bot) - SOILLEVEL(top))
+         xtrcp =  profile(bot) - slope*SOILLEVEL(bot)
+         interp_val = slope * lheight + xtrcp
+         istatus = 0
+         return
+      endif
+   enddo Depth
+
+   deallocate(profile)
+
+case ('land scpool')
+
+   ! FIXME don't know what to do here ... what is scpool
+
+   write(string1,*)'second dimension <'//trim( progvar(varindex)%dimnames(2))//'>'
+   write(string2,*)'is not "tile", "soil", or "scpool"'
+   write(string3,*)'Unable to proceed - stopping.'
+   call error_handler(E_ERR, 'model_interpolate', string1, &
+              source, revision, revdate, text2=string2, text3=string3)
+
+case default
+
+   write(string1,*)'only supports specific interpolations.'
+   write(string2,*)trim(progvar(varindex)%varname),'has coordinates', &
+                   trim(progvar(varindex)%coordinates)
+   write(string3,*)'Unable to proceed - stopping.'
+   call error_handler(E_ERR, 'model_interpolate', string1, &
+              source, revision, revdate, text2=string2, text3=string3)
+end select
 
 end subroutine model_interpolate
 
@@ -973,7 +1033,7 @@ call setSparseCellLookupTable()
 ! Generate speedup table of 'close' items to figure out what gridcell
 ! is close to some arbitrary (observation) location.
 
-call set_grid_locations_kinds()
+call set_sparse_locations_kinds()
 call init_interp()
 
 end subroutine static_init_model
@@ -2153,377 +2213,6 @@ get_state_time_fname = get_state_time_ncid(ncid)
 call nc_check(nf90_close(ncid),'get_state_time_fname', 'close '//trim(filename))
 
 end function get_state_time_fname
-
-
-!------------------------------------------------------------------
-!> get_grid_vertval
-!>
-!> Calculate the expected vertical value for the gridcell.
-!> Each gridcell value is an area-weighted value of an unknown number of
-!> column-based quantities.
-!> The JULES depths describe the soil interfaces; the soil temperature in
-!> layer 1 is the average of the soil temperature in that layer, so if
-!> the first interface is 10cm deep, the soil temperature 'depth' is
-!> more accurately described as 5cm.
-
-subroutine get_grid_vertval(x, location, varstring, interp_val, istatus)
-
-real(r8),            intent(in)  :: x(:)         ! state vector
-type(location_type), intent(in)  :: location     ! location somewhere in a grid cell
-character(len=*),    intent(in)  :: varstring    ! T_SOISNO, H2OSOI_LIQ, H2OSOI_ICE
-real(r8),            intent(out) :: interp_val   ! area-weighted result
-integer,             intent(out) :: istatus      ! error code (0 == good)
-
-! Local storage
-
-integer  :: ivar, index1, indexN, indexi, counter1, counter2
-integer  :: ix, iy
-real(r8), dimension(LocationDims) :: loc
-real(r8) :: loc_lat, loc_lon, loc_lev
-real(r8) :: value_below, value_above, total_area
-real(r8) :: depthbelow, depthabove
-real(r8) :: topwght, botwght
-real(r8), dimension(1) :: loninds,latinds
-
-real(r8), allocatable, dimension(:)   :: above, below
-real(r8), allocatable, dimension(:,:) :: myarea
-
-call error_handler(E_MSG, 'get_grid_vertval', 'FIXME routine not written', source, revision, revdate)
-
-if ( .not. module_initialized ) call static_init_model
-
-! Let's assume failure.  Set return val to missing, then the code can
-! just set istatus to something indicating why it failed, and return.
-! If the interpolation is good, the interp_val will be set to the
-! good value, and the last line here sets istatus to 0.
-! make any error codes set here be in the 10s
-
-interp_val = MISSING_R8  ! the DART bad value flag
-istatus    = 99          ! unknown error
-
-loc        = get_location(location)  ! loc is in DEGREES
-loc_lon    = loc(1)
-loc_lat    = loc(2)
-loc_lev    = loc(3)
-
-if ( loc_lev < 0.0_r8 ) then
-   write(string1,*)'Cannot support above-ground vertical interpolation.'
-   write(string2,*)'requested a value at a depth of ',loc_lev
-   write(string3,*)'JULES has negative depths to indicate above-ground values.'
-   call error_handler(E_ERR,'get_grid_vertval', string1, &
-      source, revision, revdate, text2=string2, text3=string3)
-endif
-
-! TJH ! BOMBPROOFING - check for a vertical dimension for this variable
-! TJH if (progvar(ivar)%maxlevels < 2) then
-! TJH    write(string1, *)'Variable '//trim(varstring)//' should not use this routine.'
-! TJH    write(string2, *)'use compute_gridcell_value() instead.'
-! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
-! TJH                   source, revision, revdate, text2=string2)
-! TJH endif
-
-! determine the grid cell for the location
-! Once we know that, we can query the sparseCell structure which
-! contains a list of all the bits that contribute to that gridcell. 
-
-call FindEnclosingGridCell(loc_lon, loc_lat, ix, iy, istatus)
-if (istatus /= 0) return   ! Early return if no gridcell is 'close'.
-
-if ((debug > 0) .and. do_output()) then
-   write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ', &
-              loc_lon,LONGITUDE(ix,iy),ix,loc_lev
-   write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ', &
-              loc_lat,LATITUDE(ix,iy),iy,loc_lev
-endif
-
-! determine the portion of interest of the state vector
-ivar   = findVarIndex(varstring, 'get_grid_vertval')
-index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
-indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
-
-! TJH ! Determine the level 'above' and 'below' the desired vertical
-! TJH ! The above-ground 'depths' are calculated from ZISNO and are negative.
-! TJH ! The 'depths' are all positive numbers, increasingly positive is deeper.
-! TJH ! The variables currently supported use the subsurface definitions in
-! TJH ! the module variable LEVNGRND.
-! TJH
-! TJH if (loc_lev  <= SOILLEVEL(1)) then  ! the top level is so close to the surface
-! TJH    depthabove = SOILLEVEL(1)        ! just use the top level
-! TJH    depthbelow = SOILLEVEL(1)
-! TJH elseif (loc_lev >= maxval(SOILLEVEL)) then  ! at depth, however ... do we
-! TJH    depthabove    = maxval(SOILLEVEL)        ! fail or just use the deepest
-! TJH    depthbelow    = maxval(SOILLEVEL)        ! I am using the deepest.
-! TJH else
-! TJH
-! TJH    LAYERS : do indexi = 2,size(SOILLEVEL)
-! TJH       if (loc_lev < SOILLEVEL(indexi)) then
-! TJH          depthabove = SOILLEVEL(indexi-1)
-! TJH          depthbelow = SOILLEVEL(indexi  )
-! TJH          exit LAYERS
-! TJH       endif
-! TJH    enddo LAYERS
-! TJH
-! TJH endif
-! TJH
-! TJH if ((debug > 4) .and. do_output()) then
-! TJH    write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev', &
-! TJH                    loc_lev,'>= depthabove',depthabove
-! TJH endif
-! TJH
-! TJH ! Determine how many elements can contribute to the gridcell value.
-! TJH ! There are multiple column-based contributors, each column has a
-! TJH ! separate area-based weight. There are multiple levels.
-! TJH ! I believe I have to keep track of all of them to sort out how to
-! TJH ! calculate the gridcell value at a particular depth.
-! TJH
-! TJH counter1 = 0
-! TJH counter2 = 0
-! TJH GRIDCELL : do indexi = index1, indexN
-! TJH    if ( lonixy(indexi) /=  ix )  cycle GRIDCELL
-! TJH    if ( latjxy(indexi) /=  iy )  cycle GRIDCELL
-! TJH    if (      x(indexi) == MISSING_R8)  cycle GRIDCELL
-! TJH
-! TJH    if (levels(indexi) == depthabove) counter1 = counter1 + 1
-! TJH    if (levels(indexi) == depthbelow) counter2 = counter2 + 1
-! TJH
-! TJH enddo GRIDCELL
-! TJH
-! TJH if ( (counter1+counter2) == 0 ) then
-! TJH    if ((debug > 0) .and. do_output()) then
-! TJH       write(string1, *)'statevector variable '//trim(varstring)//' had no viable data'
-! TJH       write(string2, *)'at gridcell lon/lat = (',ix,',',iy,')'
-! TJH       write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
-! TJH       call error_handler(E_MSG,'get_grid_vertval', string1, &
-! TJH                      text2=string2,text3=string3)
-! TJH    endif
-! TJH    return
-! TJH endif
-! TJH
-! TJH allocate(above(counter1),below(counter2),myarea(max(counter1,counter2),2))
-! TJH above  = MISSING_R8
-! TJH below  = MISSING_R8
-! TJH myarea = 0.0_r8
-! TJH
-! TJH counter1 = 0
-! TJH counter2 = 0
-! TJH ELEMENTS : do indexi = index1, indexN
-! TJH
-! TJH    if ( lonixy(indexi) /=  ix )  cycle ELEMENTS
-! TJH    if ( latjxy(indexi) /=  iy )  cycle ELEMENTS
-! TJH    if (      x(indexi) == MISSING_R8)  cycle ELEMENTS
-! TJH
-! TJH !  write(*,*)'level ',indexi,' is ',levels(indexi),' location depth is ',loc_lev
-! TJH
-! TJH    if (levels(indexi)     == depthabove) then
-! TJH       counter1            = counter1 + 1
-! TJH       above( counter1)    =        x(indexi)
-! TJH       myarea(counter1,1)  = landarea(indexi)
-! TJH    endif
-! TJH    if (levels(indexi)     == depthbelow) then
-! TJH       counter2            = counter2 + 1
-! TJH       below( counter2)    =        x(indexi)
-! TJH       myarea(counter2,2)  = landarea(indexi)
-! TJH    endif
-! TJH
-! TJH    if ((levels(indexi) /= depthabove) .and. &
-! TJH        (levels(indexi) /= depthbelow)) then
-! TJH       cycle ELEMENTS
-! TJH    endif
-! TJH
-! TJH    if ((debug > 4) .and. do_output()) then
-! TJH    write(*,*)
-! TJH    write(*,*)'gridcell location match at statevector index',indexi
-! TJH    write(*,*)'statevector value is (',x(indexi),')'
-! TJH    write(*,*)'area is          (',landarea(indexi),')'
-! TJH    write(*,*)'LONGITUDE index is     (',lonixy(indexi),')'
-! TJH    write(*,*)'LATITUDE index is     (',latjxy(indexi),')'
-! TJH    write(*,*)'gridcell LONGITUDE is  (',LONGITUDE(ix),')'
-! TJH    write(*,*)'gridcell LATITUDE is  (',LATITUDE(iy),')'
-! TJH    write(*,*)'depth        is  (',levels(indexi),')'
-! TJH    endif
-! TJH
-! TJH enddo ELEMENTS
-! TJH
-! TJH ! could arise if the above or below was 'missing' ... but the mate was not.
-! TJH
-! TJH if ( counter1 /= counter2 ) then
-! TJH    write(string1, *)'Variable '//trim(varstring)//' has peculiar interpolation problems.'
-! TJH    write(string2, *)'uneven number of values "above" and "below"'
-! TJH    write(string3, *)'counter1 == ',counter1,' /= ',counter2,' == counter2'
-! TJH    call error_handler(E_MSG,'get_grid_vertval', string1, &
-! TJH                   text2=string2,text3=string3)
-! TJH    return
-! TJH endif
-! TJH
-! TJH ! Determine the value for the level above the depth of interest.
-! TJH
-! TJH total_area = sum(myarea(1:counter1,1))
-! TJH
-! TJH if ( total_area /= 0.0_r8 ) then
-! TJH    ! normalize the area-based weights
-! TJH    myarea(1:counter1,1) = myarea(1:counter1,1) / total_area
-! TJH    value_above = sum(above(1:counter1) * myarea(1:counter1,1))
-! TJH else
-! TJH    write(string1, *)'Variable '//trim(varstring)//' had no viable data above'
-! TJH    write(string2, *)'at gridcell lon/lat/lev = (',ix,',',iy,',',depthabove,')'
-! TJH    write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
-! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
-! TJH                   source, revision, revdate, text2=string2,text3=string3)
-! TJH endif
-! TJH
-! TJH ! Determine the value for the level below the depth of interest.
-! TJH
-! TJH total_area = sum(myarea(1:counter2,2))
-! TJH
-! TJH if ( total_area /= 0.0_r8 ) then
-! TJH    ! normalize the area-based weights
-! TJH    myarea(1:counter2,2) = myarea(1:counter2,2) / total_area
-! TJH    value_below = sum(below(1:counter2) * myarea(1:counter2,2))
-! TJH else
-! TJH    write(string1, *)'Variable '//trim(varstring)//' had no viable data below'
-! TJH    write(string2, *)'at gridcell lon/lat/lev = (',ix,',',iy,',',depthbelow,')'
-! TJH    write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
-! TJH    call error_handler(E_ERR,'get_grid_vertval', string1, &
-! TJH                   source, revision, revdate, text2=string2,text3=string3)
-! TJH endif
-! TJH
-! TJH if (depthbelow == depthabove) then
-! TJH    topwght = 1.0_r8
-! TJH    botwght = 0.0_r8
-! TJH else
-! TJH    topwght = (depthbelow - loc_lev) / (depthbelow - depthabove)
-! TJH    botwght = (loc_lev - depthabove) / (depthbelow - depthabove)
-! TJH endif
-! TJH
-! TJH interp_val = value_above*topwght + value_below*botwght
-! TJH istatus    = 0
-! TJH
-! TJH deallocate(above, below, myarea)
-
-end subroutine get_grid_vertval
-
-
-!------------------------------------------------------------------
-!> compute_gridcell_value
-!>
-!> Each gridcell may contain values for up to 9 land units/tiles/pfts whatever.
-!> Some variables may exist at multiple depths or pools.
-!> So, each gridcell value is a weighted combination.
-
-subroutine compute_gridcell_value(x, location, varstring, interp_val, istatus)
-
-real(r8),            intent(in)  :: x(:)         ! state vector
-type(location_type), intent(in)  :: location     ! location somewhere in a grid cell
-character(len=*),    intent(in)  :: varstring    ! frac_sno, leafc
-real(r8),            intent(out) :: interp_val   ! area-weighted result
-integer,             intent(out) :: istatus      ! error code (0 == good)
-
-! Local storage
-
-integer  :: ivar, index1, indexN, indexi, counter
-integer  :: gridloni,gridlatj
-real(r8) :: loc_lat, loc_lon
-real(r8) :: total, total_area
-real(r8), dimension(1) :: loninds,latinds
-real(r8), dimension(LocationDims) :: loc
-
-call error_handler(E_MSG, 'compute_gridcell_value', 'FIXME routine not tested', source, revision, revdate)
-if ( .not. module_initialized ) call static_init_model
-
-! TJH ! Let's assume failure.  Set return val to missing, then the code can
-! TJH ! just set istatus to something indicating why it failed, and return.
-! TJH ! If the interpolation is good, the interp_val will be set to the
-! TJH ! good value, and the last line here sets istatus to 0.
-! TJH ! make any error codes set here be in the 10s
-! TJH
-! TJH interp_val = MISSING_R8  ! the DART bad value flag
-! TJH istatus    = 99          ! unknown error
-! TJH
-! TJH loc        = get_location(location)  ! loc is in DEGREES
-! TJH loc_lon    = loc(1)
-! TJH loc_lat    = loc(2)
-! TJH
-! TJH ! determine the portion of interest of the state vector
-! TJH ivar   = findVarIndex(varstring, 'compute_gridcell_value')
-! TJH index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
-! TJH indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
-! TJH
-! TJH ! BOMBPROOFING - check for a vertical dimension for this variable
-! TJH if (progvar(ivar)%maxlevels > 1) then
-! TJH    write(string1, *)'Variable '//trim(varstring)//' cannot use this routine.'
-! TJH    write(string2, *)'use get_grid_vertval() instead.'
-! TJH    call error_handler(E_ERR,'compute_gridcell_value', string1, &
-! TJH                   source, revision, revdate, text2=string2)
-! TJH endif
-! TJH
-! TJH ! determine the grid cell for the location
-! TJH latinds  = minloc(abs(LATITUDE - loc_lat))   ! these return 'arrays' ...
-! TJH loninds  = minloc(abs(LONGITUDE - loc_lon))   ! these return 'arrays' ...
-! TJH gridlatj = latinds(1)
-! TJH gridloni = loninds(1)
-! TJH
-! TJH if ((debug > 5) .and. do_output()) then
-! TJH    write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
-! TJH                   loc_lon,LONGITUDE(gridloni),gridloni
-! TJH    write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
-! TJH                   loc_lat,LATITUDE(gridlatj),gridlatj
-! TJH endif
-! TJH
-! TJH ! If there is no vertical component, the problem is greatly simplified.
-! TJH ! Simply area-weight an average of all pieces in the grid cell.
-! TJH ! FIXME ... this is the loop that can exploit the knowledge of what
-! TJH ! columnids or dart_index are needed for any particular gridcell.
-! TJH ! gridCell%dart_index, gridCell%columnids
-! TJH
-! TJH counter    = 0
-! TJH total      = 0.0_r8      ! temp storage for state vector
-! TJH total_area = 0.0_r8      ! temp storage for area
-! TJH ELEMENTS : do indexi = index1, indexN
-! TJH
-! TJH    if (   lonixy(indexi) /=  gridloni ) cycle ELEMENTS
-! TJH    if (   latjxy(indexi) /=  gridlatj ) cycle ELEMENTS
-! TJH    if (        x(indexi) == MISSING_R8) cycle ELEMENTS
-! TJH    if ( landarea(indexi) ==   0.0_r8  ) cycle ELEMENTS
-! TJH
-! TJH    counter    = counter    + 1
-! TJH    total      = total      + x(indexi)*landarea(indexi)
-! TJH    total_area = total_area +           landarea(indexi)
-! TJH
-! TJH    if ((debug > 5) .and. do_output()) then
-! TJH       write(*,*)
-! TJH       write(*,*)'gridcell location match',counter,'at statevector index',indexi
-! TJH       write(*,*)'statevector value is (',x(indexi),')'
-! TJH       write(*,*)'area is              (',landarea(indexi),')'
-! TJH       write(*,*)'LONGITUDE index is         (',lonixy(indexi),')'
-! TJH       write(*,*)'LATITUDE index is         (',latjxy(indexi),')'
-! TJH       write(*,*)'closest LONGITUDE is       (',LONGITUDE(gridloni),')'
-! TJH       write(*,*)'closest LATITUDE is       (',LATITUDE(gridlatj),')'
-! TJH       write(*,*)'closest lev is       (',levels(indexi),')'
-! TJH    endif
-! TJH
-! TJH enddo ELEMENTS
-! TJH
-! TJH if (total_area /= 0.0_r8) then ! All good.
-! TJH    interp_val = total/total_area
-! TJH    istatus    = 0
-! TJH else
-! TJH    if ((debug > 4) .and. do_output()) then
-! TJH       write(string1, *)'Variable '//trim(varstring)//' had no viable data'
-! TJH       write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
-! TJH       write(string3, *)'obs lon/lat = (',loc_lon,',',loc_lat,')'
-! TJH       call error_handler(E_MSG,'compute_gridcell_value', string1, &
-! TJH                      text2=string2,text3=string3)
-! TJH    endif
-! TJH endif
-! TJH
-! TJH ! Print more information for the really curious
-! TJH if ((debug > 5) .and. do_output()) then
-! TJH    write(string1,*)'counter, total, total_area', counter, total, total_area
-! TJH    write(string2,*)'interp_val, istatus', interp_val, istatus
-! TJH    call error_handler(E_MSG,'compute_gridcell_value', string1, text2=string2)
-! TJH endif
-
-end subroutine compute_gridcell_value
 
 
 !------------------------------------------------------------------
@@ -4281,6 +3970,7 @@ integer, PARAMETER :: MAX_SOIL_LEVELS = 200
 
 real(r8) :: confrac
 real(r8) :: dzsoil_io(MAX_SOIL_LEVELS)
+real(r8) :: soil_interfaces(Nsoil + 1)
 logical :: l_bedrock
 logical :: l_dpsids_dsdz
 logical :: l_soil_sat_down
@@ -4305,16 +3995,19 @@ if (Nsoil /= sm_levels) then
           source, revision, revdate, text2=string2, text3=string3 )
 endif
 
-! Add up the thicknesses
-! FIXME ... do we want the thicknesses or the midpoints?
+! We want the midpoints of the soil layers.
 ! The soil temperature in layer 1 is the average of that layer.
 ! If the first thickness is 10cm, it is more accurate to
 ! say the temperature 'depth' is 5cm, for example.
 ! Could use some higher order function of temperature with depth, but ...
 
-SOILLEVEL(1) = dzsoil_io(1)
-do i = 2,Nsoil
-   SOILLEVEL(i) = SOILLEVEL(i-1) + dzsoil_io(i)
+soil_interfaces(1) = 0.0_r8
+do i = 2,Nsoil+1
+   soil_interfaces(i) = soil_interfaces(i-1) + dzsoil_io(i-1)
+enddo
+
+do i = 1,Nsoil
+   SOILLEVEL(i) = (soil_interfaces(i) + soil_interfaces(i+1)) / 2.0_r8
 enddo
 
 end subroutine Read_Jules_Soil_Namelist
@@ -4453,23 +4146,22 @@ end subroutine Resolve_Land_Fractions
 !------------------------------------------------------------------
 !> Resolve_Input_Grid
 !> reads the namelist specifying the name of the file containing the 
-!> latitude and longitudes of the physical input grid.
+!> latitude and longitudes of the (physical) input grid.
+!> The input grid is required to be reasonably 'regular'.
+!> It cannot consist of disjoint grid cells; one in Scotland, one
+!> in Ireland, for example.
 
 subroutine Resolve_Input_Grid()
 
-integer :: iunit, io, ncid, i
+integer :: iunit, io, ncid
 integer :: VarID, numdims
-integer :: ilon, ilat
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 
 character(len=256) :: file = 'none'
 character(len=256) :: lat_name = 'none'
 character(len=256) :: lon_name = 'none'
 
 namelist /jules_latlon/ file, lat_name, lon_name
-
-call error_handler(E_MSG, 'Resolve_Input_Grid', 'FIXME routine not fully tested', &
-        source, revision, revdate)
 
 ! the file that contains the land fraction must also contain the
 ! latitude and longitude matrices of the physical grid, not the grid
@@ -4712,30 +4404,39 @@ integer, intent(inout) :: varindex
 integer :: n, offset, ndim1, ndim2
 integer :: land_index, indx1, indx2, indx3
 
+! make sure this is valid index
 if ((index_in < progvar(1)%index1) .or. &
     (index_in > progvar(nfields)%indexN) ) then
    write(string1,*) 'desired index ',index_in
-   write(string2,*) 'is not within the bounds of the DART address space.'
+   write(string2,*) 'is not within the bounds of the DART address space of'
+   write(string3,*) progvar(1)%index1, progvar(nfields)%indexN
    call error_handler(E_ERR,'get_state_indices',string1, &
-         source,revision,revdate,text2=string2)
+         source,revision,revdate,text2=string2,text3=string3)
 endif
 
+! If need be, find the DART variable that spans the index of interest.
 if (varindex < 0) then
-   ! Find the DART variable that spans the index of interest.
    FindIndex : do n = 1,nfields
       if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
          varindex = n
          exit FindIndex
       endif
    enddo FindIndex
+elseif ((index_in < progvar(varindex)%index1) .or. &
+        (index_in > progvar(varindex)%indexN) ) then
+   write(string1,*) 'desired index ',index_in
+   write(string2,*) 'is not within the bounds of the DART address space for ', &
+                     trim(progvar(varindex)%varname)
+   write(string3,*) 'must be between',progvar(varindex)%index1, 'and ',progvar(varindex)%indexN
+   call error_handler(E_ERR,'get_state_indices',string1, &
+         source,revision,revdate,text2=string2,text3=string3)
 endif
 
-   x_index = -1
-   y_index = -1
+     x_index = -1
+     y_index = -1
   soil_index = -1
   tile_index = -1
 scpool_index = -1
-
   land_index = -1
 
 offset = index_in - progvar(varindex)%index1 + 1
@@ -4783,7 +4484,7 @@ elseif ( progvar(varindex)%rank == 2) then
    ! float          cs(   scpool, land)
    ! Remember that the order in Fortran is reversed from the ncdump order.
 
-   ndim1 = progvar(varindex)%dimlens(1)  ! either NxFIXME or Nland
+   ndim1 = progvar(varindex)%dimlens(1)
 
    indx2 = 1 + (offset - 1)/ndim1
    indx1 = offset - (indx2 - 1)*ndim1
@@ -4805,7 +4506,7 @@ elseif ( progvar(varindex)%rank == 2) then
       x_index    = indx1
       y_index    = indx2
    endif
-   
+
    if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
 
       ! If Ny /= 1 then Nx * Ny is known to equal Nland
@@ -4878,8 +4579,8 @@ if (do_output() .and. (debug > 9)) then
    print *, 'get_state_indices: rank          ', progvar(varindex)%rank
    print *, 'get_state_indices: dimensions    ', progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
    print *, 'get_state_indices: Nland, Nx, Ny ', Nland, Nx, Ny
-   print *, 'get_state_indices: x    index = ',    x_index, 'of ',Nx
-   print *, 'get_state_indices: y    index = ',    y_index, 'of ',Ny
+   print *, 'get_state_indices: x      index = ',    x_index, 'of ',Nx
+   print *, 'get_state_indices: y      index = ',    y_index, 'of ',Ny
    print *, 'get_state_indices: soil   index = ',   soil_index
    print *, 'get_state_indices: tile   index = ',   tile_index
    print *, 'get_state_indices: scpool index = ', scpool_index
@@ -4965,10 +4666,10 @@ end subroutine get_state_lonlatlev
 
 !-----------------------------------------------------------------------
 !>
-!> set_grid_locations_kinds() creates an array the size of the state with
+!> set_sparse_locations_kinds() creates an array the size of the state with
 !>                       the location of each of the corresponding elements.
 
-subroutine set_grid_locations_kinds()
+subroutine set_sparse_locations_kinds()
 
 integer  :: ix, iy, indx
 real(r8) :: mylon, mylat
@@ -4995,7 +4696,7 @@ do ix = 1,Nx
 enddo
 enddo
 
-end subroutine set_grid_locations_kinds
+end subroutine set_sparse_locations_kinds
 
 
 !-----------------------------------------------------------------------
@@ -5085,33 +4786,6 @@ call get_close_maxdist_init(gc_state, maxdist)
 call get_close_obs_init(gc_state, Nx*Ny, sparse_locations)
 
 end subroutine init_interp
-
-
-!-----------------------------------------------------------------------
-!>
-!> Given an arbitrary location, find the gridcell that contains the location.
-!> This is not as easy as it seems for 'arbitrary' gridcells.
-!> for now - simple exhaustive search to find the closest one,
-!> then must mask out the water gridcells, then must see if the location
-!> is outside the domain. Since we are only given gridcell centers ...
-
-subroutine FindEnclosingGridCell(rlon, rlat, ix, iy, istatus)
-
-real(r8),  intent(in) :: rlon
-real(r8),  intent(in) :: rlat
-integer,  intent(out) :: ix
-integer,  intent(out) :: iy
-integer,  intent(out) :: istatus
-
-ix = 1
-iy = 1
-istatus = 0
-
-string1 = 'FIXME Routine not written yet'
-call error_handler(E_MSG,'FindEnclosingGridCell',string1, &
-      source,revision,revdate,text2=string2)
-
-end subroutine FindEnclosingGridCell
 
 
 !===================================================================

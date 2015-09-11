@@ -59,3 +59,27 @@ Fri Aug 28 14:16:17 MDT 2015
    the land mask and tile fractions have dimensions Nx,Ny - but Nx is not 'x',
    and 'x' is 'land' ... bookkeeping nuisance in the DART diagnostic files.
 
+Questions for 3 Sep:
+
+*) Confirm that the depths are the locations of the variables - there are no
+   quantities which live 'off' the depths ... ACTUALLY ... the quantities are
+   representative of the entire layer, so is it probably more accurate to use
+   the midpoint of the layer as the 'depth'. 
+
+*) Go over the setup_pmo/run_pmo strategy.
+
+*) talk about the set_model_time_step() routine.
+
+*) ask Shams if he has any questions about this so far ...
+
+Status as of Fri Sep 11 15:59:03 MDT 2015
+   I believe I have most of model_interpolate working and I have pruned out a lot of the
+   dead code. The get_close() routine should be tested a bit more to make sure it gives
+   the right 'sparse' location - right now it is returning the proper one, but the test
+   location is nearly right ON a (sparse/model) grid cell.
+
+   Only the vertical interpolation has been tested.
+   The agggregation of the tiles has not been implemented.
+
+
+
