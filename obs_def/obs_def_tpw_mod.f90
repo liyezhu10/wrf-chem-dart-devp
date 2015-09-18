@@ -76,7 +76,8 @@ use time_manager_mod, only : time_type, read_time, write_time, &
                              set_time, set_time_missing
 use  assim_model_mod, only : interpolate
 use     obs_kind_mod, only : KIND_SURFACE_PRESSURE, KIND_SPECIFIC_HUMIDITY, &
-                             KIND_TOTAL_PRECIPITABLE_WATER, KIND_PRESSURE
+                             KIND_TOTAL_PRECIPITABLE_WATER, KIND_PRESSURE,  &
+                             KIND_CLOUD_LIQUID_WATER
 
 implicit none
 private
@@ -88,6 +89,7 @@ character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 logical, save :: module_initialized = .false.
 
@@ -98,20 +100,14 @@ real(r8), parameter :: density = 1000.0_r8   ! water density in kg/m^3
 
 integer :: max_pressure_intervals = 1000   ! increase as needed
 
-! default samples the atmosphere between the surface and 200 hPa 
-! at the model level numbers.  if model_levels is set false,
-! then the default samples at 40 heights, evenly divided in
-! linear steps in pressure between the surface and top.
+! sample the atmosphere between the surface and 200 hPa 
+! at the model level numbers.  can set the top higher if desired.
 
 logical  :: model_levels = .true.        ! if true, use model levels, ignores num_pres_int
 real(r8) :: pressure_top = 20000.0       ! top pressure in pascals
-logical  :: separate_surface_level = .true.  ! false: level 1 of 3d grid is sfc
-                                             ! true: sfc is separate from 3d grid
-integer  :: num_pressure_intervals = 40  ! number of intervals if model_levels is F
 
 
-namelist /obs_def_tpw_nml/ model_levels, pressure_top,  &
-                           separate_surface_level, num_pressure_intervals
+namelist /obs_def_tpw_nml/ model_levels, pressure_top
 
 contains
 
@@ -125,7 +121,7 @@ integer :: iunit, rc
 
 if (module_initialized) return
 
-call register_module(source, revision, revdate)
+call register_module(source,revision,revdate)
 module_initialized = .true.
 
 ! Read the namelist entry
@@ -156,6 +152,7 @@ subroutine get_expected_tpw(state_vector, location, tpw, istatus)
 !------------------------------------------------------------------------------
 !  Author: Hui Liu ,  Version 1.1: May 25, 2011 for WRF
 !  updated by n. collins  14 june 2012
+!  updated by n. collins   2 sept 2015 w/ input from glen romine
 !------------------------------------------------------------------------------
 
 real(r8),            intent(in)  :: state_vector(:)
@@ -164,14 +161,14 @@ real(r8),            intent(out) :: tpw
 integer,             intent(out) :: istatus
 
 ! local variables
-real(r8) :: lon, lat, height, obsloc(3)
+real(r8) :: lon, lat, height, obsloc(3), dp
 type(location_type) :: location2
 
 ! we'll compute the midpoint value for each pressure range, so allocate one
 ! more than the number of expected values.
 real(r8) :: pressure(max_pressure_intervals+1), qv(max_pressure_intervals+1)
-real(r8) :: pressure_interval, psfc
-integer  :: which_vert, k, lastk, first_non_surface_level
+real(r8) :: cloud_liq(max_pressure_intervals+1)
+integer  :: which_vert, k, lastk
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -185,26 +182,17 @@ istatus = 99
 ! check for bad values in the namelist which exceed the size of the
 ! arrays that are hardcoded here.
 
-if (num_pressure_intervals > max_pressure_intervals) then
-   call error_handler(E_ERR, 'get_expected_tpw', &
-                      'num_pressure_intervals greater than max allowed', &
-                      source, revision, revdate, &
-                      text2='increase max_pressure_intervals in obs_def_tpw_mod.f90', &
-                      text3='and recompile.');
-endif
-
 ! location is the lat/lon where we need to compute the column quantity
 obsloc   = get_location(location)
 lon      = obsloc(1)                       ! degree: 0 to 360
 lat      = obsloc(2)                       ! degree: -90 to 90
 
-! get the pressure at the surface first.
 
 ! This assumes the column is over an ocean where the surface
 ! is at 0m elevation.  If you are going to use this over land, the
 ! height below must be the elevation (in m) of the surface at this location.
 which_vert = VERTISSURFACE
-height = 0.0
+height = 0.0_r8
 location2 = set_location(lon, lat, height,  which_vert)
 
 ! interpolate the surface pressure and specific humidity at the desired location
@@ -219,101 +207,54 @@ call interpolate(state_vector, location2, KIND_SPECIFIC_HUMIDITY, qv(1), istatus
 if (istatus /= 0) then
    return
 endif
-
-! save this for use below
-psfc = pressure(1)
-
-! there are two options for constructing the column of values.  if 'model_levels'
-! is true, we query the model by vertical level number.  the 'separate_surface_level'
-! flag should be set to indicate if the lowest level of the 3d grid is the
-! surface or if the surface values are a separate quantity below the 3d grid.
-
-if (model_levels) then
-   
-   ! some models have a 3d grid of values and the lowest level contains
-   ! the surface quantities.  others have a separate field for the
-   ! surface values and the 3d grid starts at some given elevation.
-   ! if the namelist value 'separate_surface_level'  is true, we will
-   ! ask to interpolate a surface pressure first and then work up the
-   ! 3d column starting at level 1.  if it is false, we assume level 1
-   ! was the surface pressure and we start here at level 2.
-
-   if (separate_surface_level) then
-      first_non_surface_level = 1
-   else
-      first_non_surface_level = 2
-   endif
-
-   ! construct a pressure column on model levels
-
-   ! call the model until the interpolation call fails (above the top level)
-   ! (this is not a fatal error unless the first call fails).
-   ! also exit the loop if the pressure is above the namelist-specified pressure top
-
-   lastk = 2
-   LEVELS: do k=first_non_surface_level, 10000   ! something unreasonably large
-   
-      ! call the model_mod to get the pressure and specific humidity at each level 
-      ! from the model and fill out the pressure and qv arrays.  the model must
-      ! support a vertical type of level number.
-
-      which_vert = VERTISLEVEL
-      location2 = set_location(lon, lat, real(k, r8),  which_vert)
-
-      call interpolate(state_vector, location2, KIND_PRESSURE, pressure(lastk), istatus)
-      if (istatus /= 0 .or. pressure(lastk) < pressure_top) exit LEVELS
-
-      call interpolate(state_vector, location2, KIND_SPECIFIC_HUMIDITY, qv(lastk), istatus)
-      if (istatus /= 0) return
-   
-      lastk = lastk + 1
-   enddo LEVELS
-
-   lastk = lastk - 1
-
-   ! if we got no valid values, set istatus and return here.
-   ! 'tpw' return value is already set to missing_r8
-   if (lastk == 1) then 
-      istatus = 3
-      return
-   endif
-
-else
-
-   ! construct an explicit pressure column and get qv at each pressure level.
-   ! each column will be at a different set of heights because it
-   ! divides the surface pressure and 'pressure_top' evenly into 
-   ! 'num_pressure_intervals'.  so each column will have the same
-   ! number of samples, but each may be at different pressure values
-   ! depending on the surface pressure.
-   pressure_interval = (psfc - pressure_top)/num_pressure_intervals
-   lastk = num_pressure_intervals + 1
-   
-   ! construct a pressure column at fixed pressure intervals
-   ! pressure(1) is always the surface pressure.
-   do k=2, lastk
-      pressure(k) =  pressure(1) - pressure_interval * (k-1)
-   end do
-   
-   ! call the model_mod to get the specific humidity at each location from the model
-   ! and fill out the qv array.
-   do k=2, lastk
-
-      which_vert = VERTISPRESSURE
-      location2 = set_location(lon, lat, pressure(k),  which_vert)
-   
-      call interpolate(state_vector, location2,  KIND_SPECIFIC_HUMIDITY, qv(k), istatus)
-      if (istatus /= 0) return
-   
-   enddo
+call interpolate(state_vector, location2, KIND_CLOUD_LIQUID_WATER, cloud_liq(1), istatus)
+if (istatus /= 0) then
+   return
 endif
 
-! whichever way the column was made (pressure levels or model levels),
+! construct a pressure column on model levels
+
+! call the model until the interpolation call fails (above the top level)
+! (this is not a fatal error unless the first call fails).
+! also exit the loop if the pressure is above the namelist-specified pressure top
+
+lastk = 2
+LEVELS: do k=2, 10000   ! something unreasonably large
+   
+   ! call the model_mod to get the pressure and specific humidity at each level 
+   ! from the model and fill out the pressure and qv arrays.  the model must
+   ! support a vertical type of level number.
+
+   which_vert = VERTISLEVEL
+   location2 = set_location(lon, lat, real(k, r8),  which_vert)
+
+   call interpolate(state_vector, location2, KIND_PRESSURE, pressure(lastk), istatus)
+   if (istatus /= 0 .or. pressure(lastk) < pressure_top) exit LEVELS
+
+   call interpolate(state_vector, location2, KIND_SPECIFIC_HUMIDITY, qv(lastk), istatus)
+   if (istatus /= 0) return
+   
+   call interpolate(state_vector, location2, KIND_CLOUD_LIQUID_WATER, cloud_liq(lastk), istatus)
+   if (istatus /= 0) return
+   
+   lastk = lastk + 1
+enddo LEVELS
+
+lastk = lastk - 1
+
+! if we got no valid values, set istatus and return here.
+! 'tpw' return value is already set to missing_r8
+if (lastk == 1) then 
+   istatus = 3
+   return
+endif
+
 ! sum the values in the column, computing the area under the curve.
 ! pressure is in pascals (not hPa or mb), and moisture is in kg/kg.
 tpw = 0.0
 do k=1, lastk - 1
-   tpw = tpw + 0.5 * (qv(k) + qv(k+1) ) * (pressure(k) - pressure(k+1) )  
+   dp = pressure(k) - pressure(k+1)
+   tpw = tpw + qv(k) * dp + cloud_liq(k) * dp
 enddo
 
 ! convert to centimeters of water and return
