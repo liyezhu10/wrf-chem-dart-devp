@@ -128,7 +128,7 @@ while($state_copy <= $num_states)
    # JULES how far to advance.
 
    ../dart_to_jules                           >>& $logfile || exit 2
-   
+
    set start_string = `grep "main_run_start"  DART_time_control.txt`
    set  stop_string = `grep "main_run_end"    DART_time_control.txt`
 

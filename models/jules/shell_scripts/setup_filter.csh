@@ -55,6 +55,7 @@ switch ("`hostname`")
       set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
+      set   MOVE = 'mv -fv'
 
       set     DARTDIR = /glade/p/work/${USER}/DART/jules/models/jules
       set    JULESDIR = ${DARTDIR}/src/jules-vn4.2/build/bin
@@ -68,10 +69,11 @@ switch ("`hostname`")
       set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
+      set   MOVE = 'mv -fv'
 
       set     DARTDIR = /users/ar15645/DART_JULES_SVN/models/jules
       set    JULESDIR = /users/hydroeng/JULES/jules-vn4.2/build/bin
-      set ENSEMBLEDIR = //users/ar15645/coupling_simulations/synthetic_test_case 
+      set ENSEMBLEDIR = /users/ar15645/DART_JULES_SVN/models/jules/ensembles 
       set  BASEOBSDIR = /users/ar15645/DART_JULES_SVN/models/jules/work
       set  CENTRALDIR = /users/ar15645/run_dart_experiment/job_${JOBID}
    breaksw
@@ -96,16 +98,15 @@ set myname = $0          # this is the name of this script
 foreach FILE ( ${DARTDIR}/work/input.nml   \
                ${DARTDIR}/work/jules_to_dart   \
                ${DARTDIR}/work/dart_to_jules   \
-               ${DARTDIR}/work/perfect_model_obs   \
                ${DARTDIR}/shell_scripts/advance_model.csh   \
-               ${DARTDIR}/shell_scripts/run_pmo.csh    \
+               ${DARTDIR}/shell_scripts/run_filter.csh    \
+               ${DARTDIR}/work/filter    \
                ${JULESDIR}/jules.exe    \
                ${ENSEMBLEDIR}/*nml )
    ${REMOVE} $FILE:t
    ${COPY}   $FILE    . || exit 1
 end
 
-chmod 755 run_pmo.csh
 
 # JULES is highly configurable and - as far as I can tell - there are no
 # 'standard' filenames. We must read the JULES namelists and make sure the
@@ -138,10 +139,10 @@ endif
 # This file will dictate the length of the JULES forecast.
 #-----------------------------------------------------------------------------
 
-set OBS_FILE = ${BASEOBSDIR}/obs_seq.in
+set OBS_FILE = ${BASEOBSDIR}/obs_seq.out
 
 if (  -e   ${OBS_FILE} ) then
-   ${LINK} ${OBS_FILE} obs_seq.in
+   ${LINK} ${OBS_FILE} obs_seq.out
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
@@ -180,36 +181,54 @@ endif
 # model_mod:static_init_model() must have the 'generic' names,
 # so we link the same file to two names. 
 
-set RESTART = ${ENSEMBLEDIR}/synthetic.dump.0001.20140101.00000.nc
-set  OUTPUT = ${ENSEMBLEDIR}/synthetic.hour.0001.20140101.00000.nc
+set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
+set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
-if (  -e   ${RESTART} ) then
-   ${LINK} ${RESTART} .
-   ${LINK} ${RESTART} jules_restart.nc
-else
-   echo "ERROR ... no JULES restart file <${RESTART}>"
-   exit -1
-endif
+@ instance = 1
+while ( $instance <= $NUM_ENS )
+  set darticname    = `printf "filter_ics.%04d"                             $instance`
+  set julesrestart  = `printf "ensemble.dump.%04d.20140101.00000.nc"        $instance`
+  set julesoutput   = `printf "ensemble.hour.%04d.20140101.00000.nc"        $instance`
 
-if (  -e   ${OUTPUT} ) then
-   ${LINK} ${OUTPUT} .
-   ${LINK} ${OUTPUT} jules_output.nc
-else
-   echo "ERROR ... no JULES output file <${OUTPUT}>"
-   exit -1
-endif
+  # the advance_model.csh script needs to have an instance number in the filename.
+  # model_mod:static_init_model() cannot have an instance number in the filename.
+  # So - we just link the two for this part.
+  ${LINK} ${ENSEMBLEDIR}/ensemble.hour.20140101.00000.nc          jules_output.nc
+  ${LINK} ${ENSEMBLEDIR}/ensemble.hour.20140101.00000.nc          ${julesoutput}
+    
+  if (  -e   ${ENSEMBLEDIR}/${julesrestart} ) then
+    ${COPY} ${ENSEMBLEDIR}/${julesrestart}                        .
+    ${LINK} ${julesrestart}                                       jules_restart.nc
+  else
 
-echo "`date` -- BEGIN JULES-TO-DART"
+    echo "ERROR ... no restart file ${julesrestart}"
+    echo "ERROR ... no restart file ${julesrestart}" 
+    exit -1
+  endif
 
-./jules_to_dart
+  echo "`date` -- BEGIN JULES-TO-DART ${julesrestart}"
 
-if ($status != 0) then
-   echo "ERROR ... DART died in 'jules_to_dart' ... ERROR"
-   echo "ERROR ... DART died in 'jules_to_dart' ... ERROR"
-   exit -3
-endif
+  ./jules_to_dart
 
-echo "`date` -- END JULES-TO-DART"
+  if ($status != 0) then
+    echo "ERROR ... DART died in 'jules_to_dart' ... ERROR"
+    echo "ERROR ... DART died in 'jules_to_dart' ... ERROR"
+    exit -3
+  endif
+
+  echo "`date` -- END JULES-TO-DART ${julesrestart}"
+  if (-e dart_ics ) then
+        ${MOVE} dart_ics $darticname
+     else
+        echo "ERROR: File conversion from $tierestart to $darticname failed."
+        echo "ERROR: File conversion from $tierestart to $darticname failed."
+        echo "ERROR: File conversion from $tierestart to $darticname failed."
+        exit 2
+     endif
+  endif
+
+  @ instance++
+end
 
 echo ""
 echo "What to do next:"
@@ -218,7 +237,7 @@ echo "2) examine EVERYTHING"
 echo "3) make sure the JULES namlists are correct for this experiment."
 echo "4) make sure the DART  namlists are correct for this experiment."
 echo "5) After all that - execute (or submit)"
-echo "   ${CENTRALDIR}/run_pmo.csh"
+echo "   ${CENTRALDIR}/run_filter.csh"
 echo ""
 
 exit 0
