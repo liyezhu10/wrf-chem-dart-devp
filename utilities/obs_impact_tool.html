@@ -221,33 +221,29 @@ the file.
 <H2>EXAMPLES</H2>
 
 <P>
-To have radiosondes only affect upper air parts of
-the state and not surface pressure:
+To prevent chemistry species from impacting the meterological
+variables in the model state, and vice versa:
 </P>
 
 <div>
 <pre>
-GROUP upperairtypes
- RADIOSONDE_TEMPERATURE RADIOSONDE_SPECIFIC_HUMIDITY
- RADIOSONDE_U_WIND_COMPONENT RADIOSONDE_V_WIND_COMPONENT 
+GROUP chem
+ KIND_CO KIND_NO KIND_C2H4
 END GROUP
 
-GROUP upperairkinds
- KIND_U_WIND_COMPONENT KIND_V_WIND_COMPONENT 
- KIND_TEMPERATURE KIND_SPECIFIC_HUMIDITY
-END GROUP
-
-GROUP surfaceP
- KIND_SURFACE_PRESSURE
+GROUP met
+ ALLKINDS EXCEPT chem
 END GROUP
 
 IMPACT
- upperairtypes surfaceP      0.0
- surfaceP      upperairkinds 0.0
+ chem   met    0.0
+ met    chem   0.0
 END IMPACT
 
 </pre>
 </div>
+
+<P>
 </P>
 
 <!--==================================================================-->
