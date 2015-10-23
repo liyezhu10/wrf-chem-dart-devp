@@ -4,6 +4,11 @@
 !
 ! $Id$
 
+
+!> special version - computes both True_State and Prior, then
+!> True and Posterior, only printing out total err and spread for each
+!> skips the first 999 values.
+
 !> Program to read True_State.nc and Prior_Diag.nc (or Posterior_Diag.nc)
 !> and print out the time-mean total error and spread.  The matlab macros 
 !> do this with graphics, but if you want numerical output suitable for 
@@ -21,25 +26,22 @@
 !> or repeatedly in a loop, you may want to delete or truncate those files
 !> periodically.
 !>
-!> This program does not compute weighted errors.
+!> This program does compute any weighted errors.
 !> 
-!> FIXME: the output of this program is human-reader-friendly, but not
-!> easy to parse by another program when run in a script.  make the
-!> output easier to handle in scripting languages.  could be implemented
-!> by adding a 'brief' option to the namelist that just prints out the
-!> total error and spread including the 'skip start' value, with a simple 
-!> label and no other info.
 
-module support_routines_mod
+program compute_error
 
 use types_mod,     only : r8, metadatalength
 
-use utilities_mod, only : error_handler, E_MSG, E_ERR, nc_check
+use utilities_mod, only : initialize_utilities, register_module,     &
+                          error_handler, nmlfileunit, E_MSG, E_ERR,  &
+                          find_namelist_in_file, nc_check,           &
+                          check_namelist_read, finalize_utilities,   &
+                          do_nml_file, do_nml_term
                                 
 use netcdf
 
 implicit none
-private
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source = &
@@ -52,20 +54,14 @@ character(len = 512) :: message1, message2
 
 integer :: iunit, model_size, io, ierr
 integer :: ntimes, skip_start, i1, i2
-integer :: true_copy, ens_mean_copy, ens_spread_copy
+integer :: true_copy, ens_mean_copy1, ens_spread_copy1
+integer ::            ens_mean_copy2, ens_spread_copy2
 integer :: VarID
 
 real(r8), allocatable :: truth(:,:), ens_mean(:,:), ens_spread(:,:), zeros(:,:)
 real(r8), allocatable :: err_array(:), spread_array(:)
 
 real(r8) :: total_error, total_spread
-
-interface getdata
-   module procedure getchardata_nc
-   module procedure getintdata1d_nc
-   module procedure getrealdata1d_nc
-   module procedure getrealdata2d_nc
-end interface
 
 real(r8), parameter :: allowed_diff = epsilon(1.0_r8)*10.0_r8
 
@@ -82,10 +78,205 @@ type fileinfo
   character(len=512) :: fname
 end type fileinfo
 
-type(fileinfo) :: t, d
+type(fileinfo) :: t, d1, d2
 
-public :: find_error, findcopyindex, findlengths, confirm_modelsizes_match, &
-          getdata, findtimesubset, printout, construct_msg_string, fileinfo
+
+! Namelist variables
+
+character(len=256) :: diag_file_names(2)
+character(len=256) :: truth_file_name = 'True_State.nc'
+integer            :: skip_first_ntimes = 999
+integer            :: error_method = 1
+
+namelist /compute_error_nml/  &
+   diag_file_names,           &
+   truth_file_name,           &
+   skip_first_ntimes,         &
+   error_method
+
+!----------------------------------------------------------------
+! start of executable code
+!----------------------------------------------------------------
+
+call initialize_utilities('compute_error')
+
+call register_module(id)
+
+diag_file_names(1) = 'Prior_Diag.nc'
+diag_file_names(2) = 'Posterior_Diag.nc'
+
+if (.false.) then
+! Read the namelist entry and print it
+call find_namelist_in_file("input.nml", "compute_error_nml", iunit)
+read(iunit, nml = compute_error_nml, iostat = io)
+call check_namelist_read(iunit, io, "compute_error_nml")
+
+if (do_nml_file()) write(nmlfileunit, nml=compute_error_nml)
+if (do_nml_term()) write(     *     , nml=compute_error_nml)
+endif
+
+! record names for error messages, mostly.
+t%fname = trim(truth_file_name)
+d1%fname = trim(diag_file_names(1))
+d2%fname = trim(diag_file_names(2))
+
+! open truth, diag file
+ierr = nf90_open(path=trim(t%fname), mode=nf90_nowrite, ncid=t%ncid)
+call nc_check(ierr, 'compute_error', 'opening truth file')
+
+ierr = nf90_open(path=trim(d1%fname), mode=nf90_nowrite, ncid=d1%ncid)
+call nc_check(ierr, 'compute_error', 'opening diagnostic file 1')
+
+ierr = nf90_open(path=trim(d2%fname), mode=nf90_nowrite, ncid=d2%ncid)
+call nc_check(ierr, 'compute_error', 'opening diagnostic file 2')
+
+
+! collect the dimension ids and lengths we are going to use from the truth file:  
+!   copy, metadatalength, time and StateVariable.
+
+call findlengths(t)
+call findlengths(d1)
+call findlengths(d2)
+
+if (t%ntimes <= 0) then
+   write(message1, '(A)') 'file '//trim(t%fname)
+   call error_handler(E_ERR, 'findlengths', 'time dimension must have at least 1 value', &
+                      source, revision, revdate, text2=message1)
+endif
+if (d1%ntimes <= 0) then
+   write(message1, '(A)') 'file '//trim(d1%fname)
+   call error_handler(E_ERR, 'findlengths', 'time dimension must have at least 1 value', &
+                      source, revision, revdate, text2=message1)
+endif
+
+if (d2%ntimes <= 0) then
+   write(message1, '(A)') 'file '//trim(d2%fname)
+   call error_handler(E_ERR, 'findlengths', 'time dimension must have at least 1 value', &
+                      source, revision, revdate, text2=message1)
+endif
+
+call confirm_modelsizes_match(t, d1)
+call confirm_modelsizes_match(t, d2)
+
+! allocate space for data we are going to read, except for 'truth'.
+
+allocate(t%metadata(t%numcopies), t%timevals(t%ntimes))
+allocate(d1%metadata(d1%numcopies), d1%timevals(d1%ntimes))
+allocate(d2%metadata(d2%numcopies), d2%timevals(d2%ntimes))
+
+call getchardata_nc(t%ncid, "CopyMetaData", t%metadata)
+call getchardata_nc(d1%ncid, "CopyMetaData", d1%metadata)
+call getchardata_nc(d2%ncid, "CopyMetaData", d2%metadata)
+
+call getrealdata1d_nc(t%ncid, "time", t%timevals)
+call getrealdata1d_nc(d1%ncid, "time", d1%timevals)
+call getrealdata1d_nc(d2%ncid, "time", d2%timevals)
+
+call findtimesubset(t, d1, ntimes)
+call findtimesubset(t, d2, ntimes)
+model_size = t%model_size
+
+! allocate space for data now that we know the time overlap.
+allocate(truth(model_size, ntimes))
+allocate(ens_mean(model_size, ntimes), ens_spread(model_size, ntimes))
+allocate(zeros(model_size, ntimes), err_array(ntimes), spread_array(ntimes))
+
+! findcopyindex() dies with an error if the copy name is not found.
+call findcopyindex('CopyMetaData', t%metadata,  t%numcopies,  'true state',      t%fname,  true_copy)
+call findcopyindex('CopyMetaData', d1%metadata, d1%numcopies, 'ensemble mean',   d1%fname, ens_mean_copy1)
+call findcopyindex('CopyMetaData', d1%metadata, d1%numcopies, 'ensemble spread', d1%fname, ens_spread_copy1)
+call findcopyindex('CopyMetaData', d2%metadata, d2%numcopies, 'ensemble mean',   d2%fname, ens_mean_copy2)
+call findcopyindex('CopyMetaData', d2%metadata, d2%numcopies, 'ensemble spread', d2%fname, ens_spread_copy2)
+
+
+! get the data - truth, mean, spread - needed for the error calculation
+ierr = nf90_inq_varid(t%ncid, "state", VarID)
+call nc_check(ierr, 'compute_error', 'inq_varid state')
+
+ierr = nf90_get_var(t%ncid, VarID, truth, &
+                    start=(/ 1, true_copy, t%sindex /), &
+                    count=(/ model_size, 1, t%ntimes /))
+call nc_check(ierr, 'compute_error', 'get_var true state')
+
+
+ierr = nf90_inq_varid(d1%ncid, "state", VarID)
+call nc_check(ierr, 'compute_error', 'inq_varid state')
+
+ierr = nf90_get_var(d1%ncid, VarID, ens_mean, &
+                    start=(/ 1, ens_mean_copy1, d1%sindex /), &
+                    count=(/ model_size, 1, d1%ntimes /))
+call nc_check(ierr, 'compute_error', 'get_var state mean')
+ierr = nf90_get_var(d1%ncid, VarID, ens_spread, &
+                    start=(/ 1, ens_spread_copy1, d1%sindex /), &
+                    count=(/ model_size, 1, d1%ntimes /))
+call nc_check(ierr, 'compute_error', 'get_var state spread')
+
+
+! compute the error.  array is 'ntimes' long, each entry should be
+!  sqrt of sum of (truth - diag) squared.
+!  truth for spread is 0
+! then avg error value is err array / ntimes
+!
+! weighted error would be:  sqrt of sum of ((truth - diag)^2 * weights)
+! this codes does not do weights.
+
+zeros(:,:) = 0.0_r8
+
+if (skip_first_ntimes > 0 .and. ntimes > skip_first_ntimes+1) then
+   skip_start = skip_first_ntimes+1
+   call find_error(truth(:, skip_start:ntimes), &
+                   ens_mean(:, skip_start:ntimes), err_array(1:ntimes-skip_start+1), total_error)
+   call find_error(zeros(:, skip_start:ntimes), &
+                   ens_spread(:, skip_start:ntimes), spread_array(1:ntimes-skip_start+1), total_spread)
+else
+   ! compute and output first prior, then post
+   call find_error(truth, ens_mean, err_array, total_error)
+   call find_error(zeros, ens_spread, spread_array, total_spread)
+endif
+call printout('Prior     ', total_error, total_spread)
+
+
+ierr = nf90_inq_varid(d2%ncid, "state", VarID)
+call nc_check(ierr, 'compute_error', 'inq_varid state')
+
+ierr = nf90_get_var(d2%ncid, VarID, ens_mean, &
+                    start=(/ 1, ens_mean_copy2, d2%sindex /), &
+                    count=(/ model_size, 1, d2%ntimes /))
+call nc_check(ierr, 'compute_error', 'get_var state mean')
+ierr = nf90_get_var(d2%ncid, VarID, ens_spread, &
+                    start=(/ 1, ens_spread_copy2, d2%sindex /), &
+                    count=(/ model_size, 1, d2%ntimes /))
+call nc_check(ierr, 'compute_error', 'get_var state spread')
+
+if (skip_first_ntimes > 0 .and. ntimes > skip_first_ntimes+1) then
+   skip_start = skip_first_ntimes+1
+   call find_error(truth(:, skip_start:ntimes), &
+                   ens_mean(:, skip_start:ntimes), err_array(1:ntimes-skip_start+1), total_error)
+   call find_error(zeros(:, skip_start:ntimes), &
+                   ens_spread(:, skip_start:ntimes), spread_array(1:ntimes-skip_start+1), total_spread)
+
+
+else
+   ! compute and output first prior, then post
+   call find_error(truth, ens_mean, err_array, total_error)
+   call find_error(zeros, ens_spread, spread_array, total_spread)
+endif
+call printout('Posterior ', total_error, total_spread)
+
+! clean up
+
+deallocate(truth)
+deallocate(ens_mean, ens_spread, zeros, err_array, spread_array)
+
+ierr = nf90_close(t%ncid)
+call nc_check(ierr, 'compute_error', 'nc_close truth')
+ierr = nf90_close(d1%ncid) 
+call nc_check(ierr, 'compute_error', 'nc_close diag')
+ierr = nf90_close(d2%ncid) 
+call nc_check(ierr, 'compute_error', 'nc_close diag')
+
+
+call finalize_utilities('compute_error')
 
 contains
 
@@ -94,11 +285,10 @@ contains
 ! the routine that computes the time-series error array,
 ! plus returning the mean of that array.
 
-subroutine find_error(truth, diag, error_method, err_array, total_err)
+subroutine find_error(truth, diag, err_array, total_err)
 
 real(r8), intent(in)  :: truth(:,:)
 real(r8), intent(in)  :: diag(:,:)
-integer,  intent(in)  :: error_method
 real(r8), intent(out) :: err_array(:)
 real(r8), intent(out) :: total_err
 
@@ -128,11 +318,8 @@ err_array(:) = sqrt(sumsq)
 
 if (error_method == 1) then
   total_err = sum(err_array) / num_times / sqrt(real(model_size, r8))
-else if (error_method == 2) then
-  total_err = sum(err_array) / num_times 
 else
-   write(message1, *) 'namelist value "error_method" must be 1 or 2.  value was ', error_method
-   call error_handler(E_ERR, 'find_error', message1, source, revision, revdate)
+  total_err = sum(err_array) / num_times 
 endif
 
 deallocate(sumsq)
@@ -180,8 +367,7 @@ end subroutine findcopyindex
 ! if any of these are missing.
 
 subroutine findlengths(this)
-
-type(fileinfo), intent(inout) :: this
+ type(fileinfo), intent(inout) :: this
 
 integer :: ierr, dimid
 
@@ -220,7 +406,7 @@ type(fileinfo), intent(in) :: that
 
 if (this%model_size /= that%model_size) then
    write(message1, '(A)') 'model sizes must be identical in input files'
-   write(message2, '(A,2(I10))') 'sizes are ', this%model_size, that%model_size
+   write(message2, '(A,I10)') 'sizes are ', this%model_size, that%model_size
    call error_handler(E_ERR, 'confirm_modelsizes_match', message1, &
                       source, revision, revdate, text2=message2)
 endif
@@ -327,13 +513,20 @@ that%sindex = -1
 that%eindex = -1
 ntimes = 0
 
+!print *, 'truth: ', this%ntimes, this%timevals(1), this%timevals(this%ntimes)
+!print *, ' diag: ', that%ntimes, that%timevals(1), that%timevals(that%ntimes)
+
 ! see if the common case is true: that both time arrays are the same
 ! length and equal. if so, return happily.
 
 if (this%ntimes == that%ntimes) then
    timematch = .true.
+!print *, 'number of times matches'
    LOOP1: do i=1, this%ntimes
       if (abs(this%timevals(i) - that%timevals(i)) > allowed_diff) then
+!print *, 'values do not match at'
+!print *, abs(this%timevals(i) - that%timevals(i)), epsilon(thistime)
+!print *, (abs(this%timevals(i) - that%timevals(i)) > allowed_diff)
          timematch = .false.
          exit LOOP1
       endif
@@ -344,6 +537,7 @@ if (this%ntimes == that%ntimes) then
       that%sindex = 1
       this%eindex = ntimes
       that%eindex = ntimes
+!print *, 'returning at 1 with ', this%sindex, that%sindex, this%eindex, that%eindex
       return
    endif 
 endif
@@ -351,6 +545,7 @@ endif
 ! see if another case is true - that these time lists are disjoint sets.
 
 if (this%timevals(1) > that%timevals(that%ntimes)) then
+   print *, this%timevals(1), that%timevals(that%ntimes), ' a > b '
    write(message1, '(A)') 'all times in the diag file are before times in the truth file'
    write(message2, '(A)') 'no common times in the two input files'
    call error_handler(E_ERR, 'compare_lengths', message1, &
@@ -358,6 +553,7 @@ if (this%timevals(1) > that%timevals(that%ntimes)) then
 endif
 
 if (this%timevals(this%ntimes) < that%timevals(1)) then
+   print *, this%timevals(this%ntimes), that%timevals(1), ' a < b '
    write(message1, '(A)') 'all times in the diag file are after times in the truth file'
    write(message2, '(A)') 'no common times in the two input files'
    call error_handler(E_ERR, 'compare_lengths', message1, &
@@ -376,7 +572,10 @@ if (this%timevals(1) < that%timevals(1)) then
          exit LOOP2 
       endif
    enddo LOOP2
-   if (this%sindex < 0) goto 10  ! error
+   if (this%sindex < 0) then
+print *, 'this%sindex < 0'
+      goto 10  ! error
+   endif
 
 else
 
@@ -387,9 +586,14 @@ else
          exit LOOP3 
       endif
    enddo LOOP3
-   if (this%sindex < 0) goto 10  ! error
+   if (this%sindex < 0) then
+print *, 'this%sindex < 0'
+      goto 10  ! error
+   endif
 
 endif
+
+print *, 'set sindex ok, to vals', this%sindex, that%sindex
 
 ! sindex is now set.  start from sindex and stop when
 ! you run out of times or the values differ.
@@ -397,9 +601,15 @@ endif
 i = this%sindex
 j = that%sindex
 LOOP4: do 
+   print *, i,j, this%timevals(i), that%timevals(j)
 
    ! check to make sure the time intervals are the same in both files
-   if (abs(this%timevals(i) - that%timevals(j)) > allowed_diff) goto 10
+   if (abs(this%timevals(i) - that%timevals(j)) > allowed_diff) then
+print *, abs(this%timevals(i) - that%timevals(j)), epsilon(thistime)
+print *, this%timevals(i), that%timevals(j), allowed_diff
+print *, (abs(this%timevals(i) - that%timevals(j)) > allowed_diff)
+      goto 10  ! error
+   endif
 
    if (i+1 > this%ntimes) exit LOOP4
    if (j+1 > that%ntimes) exit LOOP4
@@ -412,11 +622,14 @@ enddo LOOP4
 this%eindex = i
 that%eindex = j
 
+print *, 'set eindex ok, to vals', this%eindex, that%eindex
+
 this%ntimes = this%eindex - this%sindex + 1
 that%ntimes = that%eindex - that%sindex + 1
 
 ntimes = this%ntimes
-
+print *, 'set ntimes to ', ntimes
+print *, 'returning at 2 with ', this%sindex, that%sindex, this%eindex, that%eindex
 return
 
 ! you only get here via an error goto
@@ -432,291 +645,17 @@ end subroutine findtimesubset
 
 !-----------------------------------------------------------------------
 
-subroutine printout(str1, rval1, ival1, rval1a, str2, rval2, ival2, rval2a)
+subroutine printout(str1, rval1, rval2)
 
 character(len=*),  intent(in) :: str1
 real(r8),          intent(in) :: rval1
-integer,           intent(in) :: ival1
-real(r8),          intent(in) :: rval1a
-character(len=*),  intent(in) :: str2
 real(r8),          intent(in) :: rval2
-integer,           intent(in) :: ival2
-real(r8),          intent(in) :: rval2a
 
-call error_handler(E_MSG,'', '')
-if (ival1 >= 0) then
-   write(message1, *) str1, rval1, ival1, rval1a
-else
-   write(message1, *) str1, rval1
-endif
-call error_handler(E_MSG, '', message1)
-if (ival2 >= 0) then
-   write(message1, *) str2, rval2, ival2, rval2a
-else
-   write(message1, *) str2, rval2
-endif
-call error_handler(E_MSG, '', message1)
+write(*, *) str1, rval1, rval2
 
 end subroutine printout
 
 !-----------------------------------------------------------------------
-
-! a bunch of messing around to construct a string from 2 strings
-! plus an integer, where i want the integer to be left justified
-! with no additional spaces.  you'd think there'd be a language
-! construct to do this, but no.  and there's additional messing
-! around because some compilers apparently have a problem with
-! nesting adjustl() and trim() even though nesting these functions
-! is perfectly legal in the language.
-
-function construct_msg_string(s1, skipcount, s2)
-
-integer,          intent(in) :: skipcount
-character(len=*), intent(in) :: s1
-character(len=*), intent(in) :: s2
-character(len=80)            :: construct_msg_string
-
-character(len=80) :: string1, string2
-
-! some versions of some compilers (possibly absoft, pgi) have problems
-! with some nested combinations of adjustl() and trim(). avoid the
-! whole issue by bouncing between 2 strings and using them separately.
-
-! the * format adds an initial blank space for the 'hollerith' character.
-! the second write will fail because string1 plus 1 character is longer
-! than string2.  it is ok with "(A)" because that keeps the original length.
-
-write(string1, *) skipcount
-write(string2, '(A)') adjustl(string1)
-write(string1, '(3(A,1X))') s1, trim(string2), s2
-
-construct_msg_string = string1
-
-end function construct_msg_string
-
-end module support_routines_mod
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-
-program compute_error
-
-use types_mod,     only : r8, metadatalength
-
-use utilities_mod, only : initialize_utilities, register_module,     &
-                          error_handler, nmlfileunit, E_MSG, E_ERR,  &
-                          find_namelist_in_file, nc_check,           &
-                          check_namelist_read, finalize_utilities,   &
-                          do_nml_file, do_nml_term
-                                
-use support_routines_mod 
-
-use netcdf
-
-implicit none
-
-! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
-character(len=128), parameter :: id  = "$Id$"
-
-character(len = 512) :: message1, message2
-
-integer :: iunit, model_size, io, ierr
-integer :: ntimes, skip_start, i1, i2
-integer :: true_copy, ens_mean_copy, ens_spread_copy
-integer :: VarID
-
-real(r8), allocatable :: truth(:,:), ens_mean(:,:), ens_spread(:,:), zeros(:,:)
-real(r8), allocatable :: err_array(:), spread_array(:)
-
-real(r8) :: total_error, total_spread
-
-real(r8), parameter :: allowed_diff = epsilon(1.0_r8)*10.0_r8
-
-type(fileinfo) :: t, d
-
-
-! Namelist variables
-
-character(len=256) :: diag_file_name  = 'Prior_Diag.nc'
-character(len=256) :: truth_file_name = 'True_State.nc'
-integer            :: skip_first_ntimes = 0
-integer            :: error_method = 1
-
-namelist /compute_error_nml/  &
-   diag_file_name,            &
-   truth_file_name,           &
-   skip_first_ntimes,         &
-   error_method
-
-!----------------------------------------------------------------
-! start of executable code
-!----------------------------------------------------------------
-
-call initialize_utilities('compute_error')
-
-call register_module(id)
-
-! Read the namelist entry and print it
-call find_namelist_in_file("input.nml", "compute_error_nml", iunit)
-read(iunit, nml = compute_error_nml, iostat = io)
-call check_namelist_read(iunit, io, "compute_error_nml")
-
-if (do_nml_file()) write(nmlfileunit, nml=compute_error_nml)
-if (do_nml_term()) write(     *     , nml=compute_error_nml)
-
-! record names for error messages, mostly.
-t%fname = trim(truth_file_name)
-d%fname = trim(diag_file_name)
-
-! open truth, diag file
-ierr = nf90_open(path=trim(truth_file_name), mode=nf90_nowrite, ncid=t%ncid)
-call nc_check(ierr, 'compute_error', 'opening truth file')
-
-ierr = nf90_open(path=trim(diag_file_name), mode=nf90_nowrite, ncid=d%ncid)
-call nc_check(ierr, 'compute_error', 'opening diagnostic file')
-
-
-! collect the dimension ids and lengths we are going to use from the truth file:  
-!   copy, metadatalength, time and StateVariable.
-
-call findlengths(t)
-call findlengths(d)
-
-if (t%ntimes <= 0) then
-   write(message1, '(A)') 'file '//trim(t%fname)
-   call error_handler(E_ERR, 'findlengths', 'time dimension must have at least 1 value', &
-                      source, revision, revdate, text2=message1)
-endif
-if (d%ntimes <= 0) then
-   write(message1, '(A)') 'file '//trim(d%fname)
-   call error_handler(E_ERR, 'findlengths', 'time dimension must have at least 1 value', &
-                      source, revision, revdate, text2=message1)
-endif
-
-call confirm_modelsizes_match(t, d)
-
-! allocate space for data we are going to read, except for 'truth'.
-
-allocate(t%metadata(t%numcopies), t%timevals(t%ntimes))
-allocate(d%metadata(d%numcopies), d%timevals(d%ntimes))
-
-call getdata(t%ncid, "CopyMetaData", t%metadata)
-call getdata(d%ncid, "CopyMetaData", d%metadata)
-
-call getdata(t%ncid, "time", t%timevals)
-call getdata(d%ncid, "time", d%timevals)
-
-call findtimesubset(t, d, ntimes)
-model_size = t%model_size
-
-! allocate space for data now that we know the time overlap.
-allocate(truth(model_size, ntimes))
-allocate(ens_mean(model_size, ntimes), ens_spread(model_size, ntimes))
-allocate(zeros(model_size, ntimes), err_array(ntimes), spread_array(ntimes))
-
-! findcopyindex() dies with an error if the copy name is not found.
-call findcopyindex('CopyMetaData', t%metadata, t%numcopies, 'true state',      t%fname, true_copy)
-call findcopyindex('CopyMetaData', d%metadata, d%numcopies, 'ensemble mean',   d%fname, ens_mean_copy)
-call findcopyindex('CopyMetaData', d%metadata, d%numcopies, 'ensemble spread', d%fname, ens_spread_copy)
-
-
-! get the data - truth, mean, spread - needed for the error calculation
-ierr = nf90_inq_varid(t%ncid, "state", VarID)
-call nc_check(ierr, 'compute_error', 'inq_varid state')
-
-ierr = nf90_get_var(t%ncid, VarID, truth, &
-                    start=(/ 1, true_copy, t%sindex /), &
-                    count=(/ model_size, 1, t%ntimes /))
-call nc_check(ierr, 'compute_error', 'get_var true state')
-
-ierr = nf90_inq_varid(d%ncid, "state", VarID)
-call nc_check(ierr, 'compute_error', 'inq_varid state')
-
-ierr = nf90_get_var(d%ncid, VarID, ens_mean, &
-                    start=(/ 1, ens_mean_copy, d%sindex /), &
-                    count=(/ model_size, 1, d%ntimes /))
-call nc_check(ierr, 'compute_error', 'get_var state mean')
-ierr = nf90_get_var(d%ncid, VarID, ens_spread, &
-                    start=(/ 1, ens_spread_copy, d%sindex /), &
-                    count=(/ model_size, 1, d%ntimes /))
-call nc_check(ierr, 'compute_error', 'get_var state spread')
-
-
-! compute the error.  array is 'ntimes' long, each entry should be
-!  sqrt of sum of (truth - diag) squared.
-!  truth for spread is 0
-! then avg error value is err array / ntimes
-!
-! weighted error would be:  sqrt of sum of ((truth - diag)^2 * weights)
-! this codes does not do weights.
-
-zeros(:,:) = 0.0_r8
-
-call find_error(truth, ens_mean, error_method, err_array, total_error)
-call find_error(zeros, ens_spread, error_method, spread_array, total_spread)
-
-! output
-
-call printout('Time-mean Ensemble Total  Error: ', total_error,  -1, -1.0_r8, &
-              'Time-mean Ensemble Total Spread: ', total_spread, -1, -1.0_r8)
-call error_handler(E_MSG,'', '')
-
-call printout('First  Error Value, Time Index/Value: ', err_array(1),    1, t%timevals(t%sindex), &
-              'First Spread Value, Time Index/Value: ', spread_array(1), 1, t%timevals(t%sindex))
-
-i1 = minloc(err_array, 1)
-i2 = minloc(spread_array, 1)
-call printout('Min    Error Value, Time Index/Value: ', err_array(i1),    i1, t%timevals(t%sindex+i1), &
-              'Min   Spread Value, Time Index/Value: ', spread_array(i2), i2, t%timevals(t%sindex+i2))
-
-i1 = maxloc(err_array, 1)
-i2 = maxloc(spread_array, 1)
-call printout('Max    Error Value, Time Index/Value: ', err_array(i1),    i1, t%timevals(t%sindex+i1), &
-              'Max   Spread Value, Time Index/Value: ', spread_array(i1), i2, t%timevals(t%sindex+i2))
-
-call printout('Last   Error Value, Time Index/Value: ', err_array(ntimes),    ntimes, t%timevals(t%eindex), &
-              'Last  Spread Value, Time Index/Value: ', spread_array(ntimes), ntimes, t%timevals(t%eindex))
-
-! if the namelist 'skip_first_ntimes' is greater than 0, compute error again
-! without those values.  intended use is to skip spinup spikes in error values.
-
-if (skip_first_ntimes > 0 .and. ntimes > skip_first_ntimes+1) then
-   skip_start = skip_first_ntimes+1
-   call find_error(truth(:, skip_start:ntimes), &
-                   ens_mean(:, skip_start:ntimes), error_method, &
-                   err_array(1:ntimes-skip_start+1), total_error)
-   call find_error(zeros(:, skip_start:ntimes), &
-                   ens_spread(:, skip_start:ntimes), error_method, &
-                   spread_array(1:ntimes-skip_start+1), total_spread)
-
-
-   message1 = construct_msg_string("Skip First", skip_first_ntimes, "Times,")
-   call error_handler(E_MSG,'', '')
-   call printout(trim(message1)//' Mean  Error: ', total_error,  -1, -1.0_r8, &
-                 trim(message1)//' Mean Spread: ', total_spread, -1, -1.0_r8)
-endif
-
-! FIXME: make an error handler call that just prints a blank line?  or error_handler(E_BLANK)
-call error_handler(E_MSG,'', '')
-
-! clean up
-
-deallocate(truth)
-deallocate(ens_mean, ens_spread, zeros, err_array, spread_array)
-
-ierr = nf90_close(t%ncid)
-call nc_check(ierr, 'compute_error', 'nc_close truth')
-ierr = nf90_close(d%ncid) 
-call nc_check(ierr, 'compute_error', 'nc_close diag')
-
-
-call finalize_utilities('compute_error')
-
 
 end program compute_error
 

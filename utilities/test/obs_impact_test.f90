@@ -100,7 +100,10 @@ program obs_impact_tool
 
 use      types_mod, only : r8
 use  utilities_mod, only : register_module, initialize_utilities, finalize_utilities
-use obs_impact_mod, only : create_impact_table
+use   obs_kind_mod, only : get_obs_kind_name, get_raw_obs_kind_name
+use obs_impact_mod, only : create_impact_table, &
+                           read_impact_table, allocate_impact_table, free_impact_table, &
+                           get_impact_table_name
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -111,17 +114,42 @@ character(len=128), parameter :: id  = "$Id$"
 
 
 real(r8), allocatable :: table(:,:)
+character(len=512) :: fname
+integer :: ntypes, nkinds
+integer :: i, j
 
 ! initialization and setup
 
-call initialize_utilities('obs_impact_tool')
+call initialize_utilities('obs_impact_test')
 call register_module(id)
 
-! build and output impact_table
+
+! build and output impact_table to a file
 call create_impact_table()
 
-! clean up
-call finalize_utilities('obs_impact_tool')
+
+! now test it as if you'd do at runtime - read in
+! table, and print the impacts that aren't 1.0
+
+call allocate_impact_table(table, ntypes, nkinds)
+
+! FIXME: table name needs to come from namelist
+fname = get_impact_table_name()
+call read_impact_table('fname', table, allow_any_values=.false.)
+
+print *, 'the impact table is ', ntypes, ' types by ', nkinds, ' kinds'
+print *, ' non-unity entries include: '
+do j=0, nkinds
+   do i=1, ntypes
+      if (table(i,j) /= 1.0_r8) then
+         write(*, '(2A33,F12.4)') get_obs_kind_name(i), get_raw_obs_kind_name(j), table(i, j)
+      endif
+   enddo
+enddo
+
+call free_impact_table(table)
+
+call finalize_utilities('obs_impact_test')
 
 end program
 

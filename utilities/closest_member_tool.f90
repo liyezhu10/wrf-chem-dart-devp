@@ -39,6 +39,7 @@ character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 integer               :: iunit, model_size, io, ens, i, j, kindindex
 integer, allocatable  :: index_list(:)
@@ -105,7 +106,7 @@ if(task_count() > 1) &
    call error_handler(E_ERR,'closest_member_tool','Only use single process', &
                       source,revision,revdate)
 
-call register_module(source,revision,revdate)
+call register_module(id)
 
 
 ! Read the namelist entry and print it

@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../mkmf/mkmf -p compute_error -t ../../mkmf/mkmf.template   \
- -a "../.." path_names_compute_error
+../../../mkmf/mkmf -p smoother_file_tool -t ../../../mkmf/mkmf.template   \
+ -a "../../.." path_names_smoother_file_tool
 
 exit $status
 

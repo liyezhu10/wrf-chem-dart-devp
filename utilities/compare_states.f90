@@ -34,6 +34,7 @@ character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 ! variables used to read the netcdf info
 integer, parameter :: maxd = 7
@@ -603,7 +604,7 @@ contains
 
 subroutine initialize_module
 
-  call register_module(source, revision, revdate)
+  call register_module(id)
   module_initialized = .true.
 
 end subroutine initialize_module

@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../mkmf/mkmf -p compare_states -t ../../mkmf/mkmf.template   \
- -a "../.." path_names_compare_states
+../../../mkmf/mkmf -p nml_test -t ../../../mkmf/mkmf.template   \
+ -a "../../.." path_names_nml_test
 
 exit $status
 

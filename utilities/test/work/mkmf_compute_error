@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../mkmf/mkmf -p compute_error_prior_post_skip1000 -t ../../mkmf/mkmf.template   \
- -a "../.." path_names_compute_error_prior_post_skip1000
+../../../mkmf/mkmf -p compute_error -t ../../../mkmf/mkmf.template   \
+ -a "../../.." path_names_compute_error
 
 exit $status
 

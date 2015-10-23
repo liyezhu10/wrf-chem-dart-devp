@@ -26,13 +26,15 @@ implicit none
 private
 
 public :: create_impact_table, &
-          allocate_impact_table, read_impact_table, free_impact_table
+          allocate_impact_table, read_impact_table, free_impact_table, &
+          get_impact_table_name
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 integer :: ios, i
 
@@ -333,6 +335,9 @@ character(len=*), intent(in)    :: kindname
 real(r8),         intent(in)    :: rvalue
 logical,          intent(in)    :: allow_any_values
 
+! change this to false to allow any value between 0 and 1
+logical, save :: must_be_on_or_off = .true.
+
 integer :: index1, index2
 
 ! expect exactly 3 tokens on these lines:
@@ -340,7 +345,7 @@ integer :: index1, index2
 
 index1 = get_obs_kind_index(typename)
 index2 = get_raw_obs_kind_index(kindname)
-print *, 'in set_impact, index values are: ', index1, index2
+!print *, 'in set_impact, index values are: ', index1, index2
 
 if (index1 < 0) then
    call error_handler(E_ERR, 'obs_impact', &
@@ -353,12 +358,25 @@ if (index2 < 0) then
                      source, revision, revdate, text2=errline, text3=readbuf)
 endif
 
+! options for the actual impact value here could be:  
+!   1. anything goes
+!   2. restrict range to between 0.0 and 1.0
+!   3. allow ONLY 0.0 or 1.0
+
 if (.not. allow_any_values) then
-   if (rvalue < 0.0_r8 .or. rvalue > 1.0_r8) then 
-      call error_handler(E_ERR, 'obs_impact', &
-                        'impact values must be between 0 and 1, inclusive', &
-                        source, revision, revdate, text2=readbuf, &
-                        text3='set "allow_any_impact_value=.true." in namelist to allow')
+   if (must_be_on_or_off) then
+      if (rvalue /= 0.0_r8 .and. rvalue /= 1.0_r8) then 
+         call error_handler(E_ERR, 'obs_impact', &
+                           'impact values must be 0 or 1', &
+                           source, revision, revdate, text2=readbuf)
+      endif
+   else 
+      if (rvalue < 0.0_r8 .or. rvalue > 1.0_r8) then 
+         call error_handler(E_ERR, 'obs_impact', &
+                           'impact values must be between 0 and 1, inclusive', &
+                           source, revision, revdate, text2=readbuf, &
+                           text3='set "allow_any_impact_value=.true." in namelist to allow')
+      endif
    endif
 endif
 
@@ -392,6 +410,17 @@ end subroutine free_impact_table
 !----------------------------------------------------------------------
 
 ! TOOL & RUNTIME:
+function get_impact_table_name()
+
+character(len=512) :: get_impact_table_name
+
+get_impact_table_name = output_filename
+
+end function get_impact_table_name
+
+!----------------------------------------------------------------------
+
+! TOOL & RUNTIME:
 subroutine initialize_module()
 
 integer :: funit
@@ -399,7 +428,7 @@ integer :: funit
 if (module_initialized) return
 
 module_initialized = .true.
-call register_module(source, revision, revdate)
+call register_module(id)
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "obs_impact_tool_nml", funit)
