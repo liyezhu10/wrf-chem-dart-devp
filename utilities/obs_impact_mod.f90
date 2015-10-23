@@ -116,10 +116,10 @@ logical, save :: module_initialized = .false.
 
 character(len=512) :: msgstring, msgstring2, msgstring3
 
-! input/output names, values, etc
-character(len=512) :: input_filename = ''
+! namelist: input/output names, values, etc
+character(len=512) :: input_filename  = ''
 character(len=512) :: output_filename = ''
-logical :: debug                  = .false.  ! .true. for more output
+logical :: debug = .false.  ! .true. for more output
 
 ! namelist
 namelist /obs_impact_tool_nml/  &

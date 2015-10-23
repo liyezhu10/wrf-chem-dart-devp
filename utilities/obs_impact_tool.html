@@ -26,6 +26,7 @@
 </table>
 
 <A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#Examples">EXAMPLES</A> /
 <A HREF="#Modules">MODULES</A> /
 <A HREF="#FilesUsed">FILES</A> /
 <A HREF="#References">REFERENCES</A> /
@@ -33,29 +34,109 @@
 <A HREF="#FuturePlans">PLANS</A> /
 <A HREF="#Legalese">TERMS OF USE</A>
 
+<A NAME="Overview"></A>
 <H2>Overview</H2>
 
 <P>
-Utility program to gener
-Utility program to compare fields in two NetCDF files and
-print out the min and max values from each file and the
-min and max of the differences between the two fields.
-The default is to compare all numeric variables in the files,
-but specific variables can be specified in the namelist or
-in a separate file.
-The two input NetCDF filenames are read from the console or
-can be echo'd into the standard input of the program.
+Utility program which assists in constructing a table that is read
+by filter at run time to alter how the assimilation
+of different types of observations impact the state vector values
+based on their dart kind, and other observations based on their 
+observation type or dart kind.  This tool allows users to group related
+collections of observation types and state vector kinds by name
+and then express the relationship of the named groups to each
+other in a concise way.
+</P>
+<P>
+At run time filter reads the output file from this tool
+and uses it to control the impact at assimilation time based
+on the relationships specified.
+</P>
+<P>
+This version of this tool requires the last numeric
+column to be 0.0 or 1.0, but future extensions may allow 
+different values to be used.
+</P>
+<P>
+All the listed observation types and state vector kinds
+must be known by the system.  If they are not, look at the
+&preprocess_nml :: input_items namelist which specifies
+which obs_def_xxx_mod.f90 files are included, which is
+where observation types are defined.  kinds are defined
+in the obs_kinds/DEFAULT_obs_kinds_mod.F90 file and
+are static.  (note you must add new kinds in 2 places 
+if you do alter this file.)
+</P>
+<P>
+This program can define groups of observation types and
+then describe the relationship of groups to groups.
+It can also define relationships by exceptions.
 </P>
 
 <P>
-If you want to restrict the comparison to only specific
-variables in the files, 
-specify the list of field names to compare either in
-the namelist, or put a list of fields, one per line,
-in a text file and specify the name of the text file.
-Only data arrays can be compared, not character arrays,
-strings, or attribute values.
+Format of the input file can be any combination of these
+types of sections:
 </P>
+
+<div>
+<pre>
+
+
+# hash mark starts a comment.
+
+# the GROUP keyword starts a group and must be followed
+# by a name.  All types or kinds listed before the END
+# line becomes members of this group.
+
+# GROUPs cannot contain nested groups.
+
+GROUP groupname1
+ KIND_xxx  KIND_xxx  KIND_xxx
+ KIND_xxx                          # comments can be here
+END GROUP
+
+GROUP groupname2
+ KIND_xxx  
+ KIND_xxx  
+ KIND_xxx
+ KIND_xxx
+END GROUP
+
+# GROUPs can also be defined by specifying ALL, ALLKINDS,
+# or ALLTYPES and then EXCEPT and listing the types or
+# kinds which should be removed from this group.
+# ALL EXCEPT must be the first line in a group, and all
+# subsequent items are removed from the list.
+# The items listed after EXCEPT can include the names
+# of other groups.
+
+GROUP groupnameM
+ALL EXCEPT KIND_xxx KIND_xxx
+KIND_xxx
+END GROUP
+
+GROUP groupnameN
+ALL EXCEPT groupnameY
+END GROUP
+
+
+# once any groups have been defined, a single instance
+# of the IMPACT table is specified by listing a TYPE,
+# KIND, or group in column 1, then a KIND or GROUP
+# in column 2 (the second name cannot be a specific type).
+# column 3 must be 0.0 or 1.0.  subsequent entries
+# that overlap previous entries have precedence
+# (last entry wins).
+
+IMPACT
+ KIND_xxx    KIND_xxx     0.0
+ KIND_xxx    groupname1   0.0
+ groupname1  KIND_xxx     0.0
+ groupname1  groupname1   0.0
+END IMPACT
+
+</pre>
+</div>
 
 <P>
 Namelist interface
@@ -82,12 +163,10 @@ prematurely terminating the namelist.
 <div class=namelist>
 <pre>
 &amp;obs_impact_tool_nml
-  do_all_numeric_fields = .true.,
-  fieldnames = '', 
-  fieldlist_file = '',
-  fail_on_missing_field = .true.,
-  debug = .false., 
-/
+  input_filename         = 'cross_correlations.txt'
+  output_filename        = 'control_impact_runtime.txt'
+  debug                  = .true.
+  /
 </pre>
 </div>
 
@@ -104,34 +183,22 @@ prematurely terminating the namelist.
 
 <TBODY valign=top>
 
-<TR><TD>do_all_numeric_fields</TD>
-    <TD>logical</TD>
-    <TD>If .true., all integer, float, and double variables in the
-NetCDF files will have their values compared.  If .false. the list of
-specific variables to be compared must be given either directly in
-the namelist in the <em class=code>fieldnames</em> item, or else the
-field names must be listed in an ASCII file, one name per line, and
-the name of that file is specified in <em class=code>fieldlist_file</em>.
+<TR><TD>input_filename</TD>
+    <TD>character(len=512)</TD>
+    <TD>Name of an ascii text file which describes how the interaction
+of observations to state vector values and observations to other observations
+should be controlled.  See the <a href="#Overview">Overview</a> section for 
+details about the format of the input file entries. 
 </TD></TR>
 
-<TR><TD>fieldnames</TD>
-    <TD>character list</TD>
-    <TD>One or more names of arrays in the NetCDF files to be compared.
-Only read if <em class=code>do_all_numeric_fields</em> is .false.
-</TD></TR>
-
-<TR><TD>fieldlist_file</TD>
-    <TD>character</TD>
-    <TD>Name of a text file containing the fieldnames, one per line.  It is an
-error to specify both the fieldnames namelist item and this one.
-Only read if <em class=code>do_all_numeric_fields</em> is .false.
-</TD></TR>
-
-<TR><TD>fail_on_missing_field</TD>
-    <TD>logical</TD>
-    <TD>If .true. and any one of the field names is not found in both files it is
-a fatal error.  If .false. a message is printed about the missing field but
-execution continues.
+<TR><TD>output_filename</TD>
+    <TD>character(len=512)</TD>
+    <TD>Name of an ascii text file which created by this tool.
+It can be read at filter run time to control the impact of observations
+on state vector items and other observation values.
+The format of this file is set by this tool and should
+not be modified by hand.  Rerun this tool to recreate
+the file.
 </TD></TR>
 
 <TR><TD>debug</TD>
@@ -145,17 +212,56 @@ execution continues.
 
 <br />
 <br />
+<P></P>
+
+<!--==================================================================-->
+
+<A NAME="Examples"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>EXAMPLES</H2>
+
+<P>
+To have radiosondes only affect upper air parts of
+the state and not surface pressure:
+</P>
+
+<div>
+<pre>
+GROUP upperairtypes
+ RADIOSONDE_TEMPERATURE RADIOSONDE_SPECIFIC_HUMIDITY
+ RADIOSONDE_U_WIND_COMPONENT RADIOSONDE_V_WIND_COMPONENT 
+END GROUP
+
+GROUP upperairkinds
+ KIND_U_WIND_COMPONENT KIND_V_WIND_COMPONENT 
+ KIND_TEMPERATURE KIND_SPECIFIC_HUMIDITY
+END GROUP
+
+GROUP surfaceP
+ KIND_SURFACE_PRESSURE
+END GROUP
+
+IMPACT
+ upperairtypes surfaceP      0.0
+ surfaceP      upperairkinds 0.0
+END IMPACT
+
+</pre>
+</div>
+</P>
 
 <!--==================================================================-->
 
 <A NAME="Modules"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>MODULES USED</H2>
+
 <PRE>
 types_mod
 utilities_mod
 parse_args_mod
 </PRE>
+<P></P>
 
 <!--==================================================================-->
 <!-- Describe the Files Used by this module.                          -->
@@ -164,9 +270,8 @@ parse_args_mod
 <A NAME="FilesUsed"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
-<UL><LI>two NetCDF input files
+<UL><LI>two text files, one input and one output.
     <LI>obs_impact_tool.nml 
-    <LI>field names text file (optionally)
 </UL>
 
 <!--==================================================================-->
@@ -197,28 +302,15 @@ parse_args_mod
                                    with this program</TD></TR>
 
 <TR><!-- routine --><TD VALIGN=top>obs_impact_tool</TD>
-    <!-- message --><TD VALIGN=top>must specify data days and times</TD>
-    <!-- comment --><TD VALIGN=top>If overwrite_data_time is true,
-       the namelist must include the new day and time.</TD></TR>
+    <!-- message --><TD VALIGN=top>cannot nest groups</TD>
+    <!-- comment --><TD VALIGN=top>Groups cannot contain other
+       groups.  You can exclude a group from another group.</TD></TR>
 
 <TR><!-- routine --><TD VALIGN=top>obs_impact_tool</TD>
-    <!-- message --><TD VALIGN=top>output_is_model_advance_file must 
-                                   be true to set advance time</TD>
-    <!-- comment --><TD VALIGN=top>If overwrite_advance_time is true,
-              output_is_model_advance_file must also be true.</TD></TR>
-
-<TR><!-- routine --><TD VALIGN=top>obs_impact_tool</TD>
-    <!-- message --><TD VALIGN=top>must specify advance days and times</TD>
-    <!-- comment --><TD VALIGN=top>If overwrite_advance_time is true,
-       the namelist must include the new day and time.</TD></TR>
-
-<TR><!-- routine --><TD VALIGN=top>obs_impact_tool</TD>
-    <!-- message --><TD VALIGN=top>overwrite_advance_time must be true 
-                                   if output file has advance time</TD>
-    <!-- comment --><TD VALIGN=top>If the incoming file does not have
-                 a model advance time, the output cannot have one unless
-                 the user gives one in the namelist, and sets 
-                 overwrite_advance_time to true.</TD></TR>
+    <!-- message --><TD VALIGN=top>Impact must be 0.0 or 1.0</TD>
+    <!-- comment --><TD VALIGN=top>Currently the impact can be
+       either full or nothing.  Contact the DART developers if you
+       want to experiment with other values.</TD></TR>
 
 </TABLE>
 </div>
@@ -248,7 +340,7 @@ none
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
+DART software - Copyright 2004 - 2015 UCAR.<br>
 This open source software is provided by UCAR, "as is",<br>
 without charge, subject to all terms of use at<br>
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
