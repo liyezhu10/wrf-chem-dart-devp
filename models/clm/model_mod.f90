@@ -107,14 +107,11 @@ public :: get_model_size,         &
 public :: clm_to_dart_state_vector,     &
           sv_to_restart_file,           &
           get_clm_restart_filename,     &
-          get_state_time,               &
           get_grid_vertval,             &
           compute_gridcell_value,       &
           gridcell_components,          &
           DART_get_var,                 &
-          get_model_time,               &
-          get_ncols_in_gridcell,        &
-          get_colids_in_gridcell
+          get_model_time
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -3725,18 +3722,6 @@ filename = trim(clm_restart_filename)
 end subroutine get_clm_restart_filename
 
 
-
-subroutine get_clm_history_filename( filename )
-
-character(len=*), intent(OUT) :: filename
-
-if ( .not. module_initialized ) call static_init_model
-
-filename = trim(clm_history_filename)
-
-end subroutine get_clm_history_filename
-
-
 !------------------------------------------------------------------
 
 
@@ -4977,6 +4962,12 @@ real(r4), dimension(7) :: vegdata
 real(r4), dimension(4) :: atmosdata
 real(r4), dimension(4) :: can_tran3_in
 real(r4) :: lai
+
+! TJH FIXME ... this whole routine needs to be reworked given the new paradigm of including
+! everything in the DART vector.
+write(string1, *) 'THIS ROUTINE IS FUNDAMENTALLY UNTESTED.'
+write(string2, *) 'DO NOT USE!'
+call error_handler(E_ERR,'get_brightness_temperature',string1,text2=string2)
 
 istatus  = 1
 obs_val  = MISSING_R8
