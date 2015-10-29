@@ -59,7 +59,8 @@ use          location_mod, only: location_type, get_location, set_location, &
                                  vert_is_level, query_location, &
                                  LocationDims, LocationName, LocationLName, &
                                  vert_is_pressure, vert_is_surface, &
-                                 get_close_maxdist_init, get_close_obs_init, get_close_obs
+                                 get_close_maxdist_init, get_close_obs_init, get_close_obs, &
+                                 VERTISSURFACE
 
 
 use        random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
@@ -73,6 +74,8 @@ use        utilities_mod, only : open_file, error_handler, E_ERR, E_MSG, &
 
 use          obs_kind_mod, only: KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                                  KIND_SURFACE_PRESSURE, KIND_TEMPERATURE
+
+use mpi_utilities_mod, only : my_task_id
 
 !-----------------------------------------------------------------------
 
@@ -188,7 +191,8 @@ integer, parameter :: timing_level = 1
 !-----------------------------------------------------------------------
 
 ! Stuff to allow addition of random 'sub-grid scale' noise
-!!!!!!type(random_seq_type) :: randseed
+! and also used in the pert_model_state() call.
+type(random_seq_type) :: randtype, randnoise
 logical :: first_call = .true.
 
 
@@ -275,7 +279,7 @@ call bgrid_physics(physics_window, 1.0_r8 * dt_atmos, Time_next, &
 ! Need to initialize random sequence on first call
 if(first_call) then
    !write(*, *) 'NOISE_SD is ', noise_sd
-   !!!!!!call init_random_seq(randseed)
+   !!!!!!call init_random_seq(randnoise)
    first_call = .false.
 endif
 
@@ -286,7 +290,7 @@ endif
 !      do k = 1, size(Var_dt%t, 3)
 !         temp_t = Var_dt%t(i, j, k)
          !!!!!!Var_dt%t(i, j, k) = &
-            !!!!!!(1.0_r8 + random_gaussian(randseed, 0.0_r8, dble(noise_sd))) * Var_dt%t(i, j, k)
+            !!!!!!(1.0_r8 + random_gaussian(randnoise, 0.0_r8, dble(noise_sd))) * Var_dt%t(i, j, k)
 !      end do
 !   end do
 !end do
@@ -1255,7 +1259,6 @@ if(vert_is_level(location) .or. vert_is_surface(location)) then
    val(1, 2) =  get_val(x, lon_below, lat_above, nint(level), itype)
    val(2, 1) =  get_val(x, lon_above, lat_below, nint(level), itype)
    val(2, 2) =  get_val(x, lon_above, lat_above, nint(level), itype)
-
 else
 ! Case of pressure specified in vertical
    val(1, 1) =  get_val_pressure(x, lon_below, lat_below, pressure, itype, istatus)
@@ -1265,7 +1268,6 @@ else
 endif
 
 ! Do the weighted average for interpolation
-!write(*, *) 'fracts ', lon_fract, lat_fract
 do i = 1, 2
    a(i) = lon_fract * val(2, i) + (1.0 - lon_fract) * val(1, i)
 end do
@@ -1356,8 +1358,8 @@ else
    if(ps_lon > 360.00_r8 .and. ps_lon < 360.00001_r8) ps_lon = 360.0_r8
 
    ! The vertical is not important for this interpolation -- still --
-   ! mark it as missing (-1.0) but give it some type information (2==pressure)
-   ps_location = set_location(ps_lon, v_lats(lat_index), -1.0_r8, 2 )
+   ! mark it as missing (-1.0) but give it some type of information
+   ps_location = set_location(ps_lon, v_lats(lat_index), -1.0_r8, VERTISSURFACE )
    call model_interpolate(x, ps_location, KIND_SURFACE_PRESSURE, ps(1,1), istatus)
 
 endif
@@ -1840,7 +1842,7 @@ endif
 !-------------------------------------------------------------------------------
 call check(nf90_sync(ncFileID),"atts sync")
 
-write (*,*)'nc_write_model_atts: netCDF file ',ncFileID,' is synched ...'
+!write (*,*)'nc_write_model_atts: netCDF file ',ncFileID,' is synched ...'
 
 contains
 
@@ -2058,16 +2060,42 @@ real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
 logical,  intent(out) :: interf_provided
 
+logical, save :: first_call = .true.
+integer :: i, j, k
+
 if ( .not. module_initialized ) call static_init_model
 
-interf_provided = .false.
+! option 1: let filter do the perturbs
+! (comment this out to select other options below)
+interf_provided = .true.
+return
+ 
+! (debug) option 2: tell filter we are going to perturb, but don't.
+! interf_provided = .true.
+! pert_state = state
+! return
 
-! you *cannot* set this to junk. in at least one
-! location the caller is passing the same
-! array into the first arg as the second.  doing this
-! corrupts the state vector completely. set it to the
-! incoming state if you must do something.
-pert_state = state ! Just to satisfy INTENT(OUT)
+! option 3: really perturb, t only
+
+interf_provided = .true.
+
+if (first_call) then
+   call init_random_seq(randtype, my_task_id()+1)
+   first_call = .false.
+endif
+
+call vector_to_prog_var(state, get_model_size(), global_Var)
+
+do k = 1, size(global_Var%t, 3)
+   do j = 1, size(global_Var%t, 2)
+      do i = 1, size(global_Var%t, 1)
+         global_Var%t(i, j, k) = global_Var%t(i, j, k) + &
+             random_gaussian(randtype, 0.0_r8, 0.01_r8)
+      end do
+   end do
+end do
+
+call prog_var_to_vector(global_Var, pert_state, get_model_size())
 
 end subroutine pert_model_state
 
