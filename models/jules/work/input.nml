@@ -25,12 +25,12 @@
 &filter_nml
    async                    = 2
    adv_ens_command          = "./advance_model.csh"
-   ens_size                 =  80
+   ens_size                 =  40
    start_from_restart       = .true.
    output_restart           = .true.
    obs_sequence_in_name     = "obs_seq.out"
    obs_sequence_out_name    = "obs_seq.final"
-   restart_in_file_name     = "dart_ics"
+   restart_in_file_name     = "filter_ics"
    restart_out_file_name    = "filter_restart"
    init_time_days           = -1
    init_time_seconds        = -1

@@ -57,21 +57,19 @@ if ($status != 0) then
    exit -4
 endif
 
-exit 0
-
 #${MOVE} True_State.nc    ../jules_True_State.${LND_DATE_EXT}.nc
 #${MOVE} obs_seq.perfect  ../jules_obs_seq.${LND_DATE_EXT}.perfect
 #${MOVE} dart_log.out     ../jules_dart_log.${LND_DATE_EXT}.out
 
-echo "`date` -- END   jules PERFECT_MODEL_OBS"
+echo "`date` -- END   jules   filter"
 
 #-------------------------------------------------------------------------
 # Cleanup
 #-------------------------------------------------------------------------
 
-${REMOVE} perfect_ics dart_log.nml
+${REMOVE} dart_log.nml
 
-echo "`date` -- END   GENERATE jules TRUE STATE"
+echo "`date` -- END  ASSIMILATE" 
 
 exit 0
 

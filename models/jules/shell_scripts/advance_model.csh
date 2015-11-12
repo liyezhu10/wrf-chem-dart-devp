@@ -118,9 +118,9 @@ while($state_copy <= $num_states)
    set  JULES_OUTPUT = `ls -1 ../*hour.${instance}.*nc | tail -n 1`
    set JULES_RESTART = `ls -1 ../*dump.${instance}.*nc | tail -n 1`
 
-   ln -sf $JULES_OUTPUT    jules_output.nc     >>& $logfile || exit 2
-   ln -sf $JULES_RESTART   jules_restart.nc    >>& $logfile || exit 2
-   ln -sf ../${input_file} dart_restart        >>& $logfile || exit 2
+   ln -svf $JULES_OUTPUT    jules_output.nc     >>& $logfile || exit 2
+   ln -svf $JULES_RESTART   jules_restart.nc    >>& $logfile || exit 2
+   ln -svf ../${input_file} dart_restart        >>& $logfile || exit 2
 
    # All the required files are created. Now run dart_to_jules
    # This creates a file called DART_time_control.txt that has
@@ -168,6 +168,8 @@ while($state_copy <= $num_states)
       set DATESTR=$ROOT:e
       set SECONDS=$BASE:e
       set MYSTRING=`printf "%05d" $SECONDS`
+      # SR: including ensemble number
+      set ens=`printf "%04d" $num_states`
       mv -v $FILE $ROOT.$MYSTRING.nc      >>& $logfile
    end
 

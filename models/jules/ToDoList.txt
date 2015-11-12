@@ -13,7 +13,7 @@ Checklist DART-JULES   (XX means DONE)
 - SR - Divide perfect_model.csh into a setup_pmo.csh and a run_pmo.csh (Comment: done, checked)
 - SR - Establish a pool of ensemble members with instance names and 
           dates in the expected form along with appropriate sets of JULES 
-          namelists and supporting resource files (e.g., mask file)
+          namelists and supporting resource files (e.g., mask file) (Comment: 40 ensembles for point scale run)
           RESOLVED: Shams created a Nx=3,Ny=5, Nlon=14,Nlat=1 case
                     'ensembles_synthetic_test_case'
 - SR - Build setup_filter.csh and run_filter.csh  
