@@ -219,7 +219,7 @@ type(progvartype), dimension(max_state_variables) :: progvar
 !    latent_heat(time, y, x)
 ! 
 ! These can be scattered throughout the DART state vector.
-! It may be convenient to initialize a lookup table to avoid traversing
+! It is convenient to initialize a lookup table to avoid traversing
 ! the DART state vector looking for gridcell constituents.
 ! ---------------------------------------------------------------------
 
@@ -257,6 +257,7 @@ integer :: Nscpool = -1   ! Number of soil carbon pools
 real(r8), allocatable :: LONGITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
+real(r8), allocatable :: TILE_FRACTIONS(:,:,:) ! land types (Nlon,Nlat,[Ntile,Ntype])
 
 ! The following variables come from the input datasets.
 ! These are 'physically' shaped (i.e. you can plot them easily)
@@ -264,7 +265,6 @@ real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
 integer :: Nlon    = -1   ! shape of physical (input) longitude/latitude matrix
 integer :: Nlat    = -1   ! shape of physical (input) longitude/latitude matrix
 
-real(r8), allocatable ::  TILE_FRACTIONS( :,:,:) ! land types (Nlon,Nlat,[Ntile,Ntype])
 real(r8), allocatable ::  LAND_FRACTIONS(  :,:)  ! gridcell proportion is land (Nlon,Nlat)
 real(r8), allocatable ::  INPUT_LONGITUDES(:,:)  ! gridcell longitudes (Nlon,Nlat)
 real(r8), allocatable ::  INPUT_LATITUDES( :,:)  ! gridcell latitudes  (Nlon,Nlat)
@@ -272,11 +272,6 @@ real(r8), allocatable ::  INPUT_LATITUDES( :,:)  ! gridcell latitudes  (Nlon,Nla
 type(location_type), allocatable :: sparse_locations(:)
 integer,             allocatable :: sparse_kinds(:)
 type(get_close_type) :: gc_state
-
-! -----------------------------------------------------------------------------
-! These are the metadata arrays that are the same size as the state vector.
-
-real(r8), allocatable, dimension(:) :: ens_mean     ! may be needed for forward ops
 
 ! -----------------------------------------------------------------
 ! module storage
@@ -503,7 +498,7 @@ endif
 call loc_get_close_obs(gc_state, location, 1, sparse_locations, sparse_kinds, &
                        num_close, close_ind, distances)
 
-! FIXME : Sometimes the location is outside the model domain.
+!>@TODO FIXME : Sometimes the location is outside the model domain.
 ! In this case, we cannot interpolate. This is not being checked right now.
 ! This will return the closest one, even if it's not close enough. 'maxdist'
 ! was determined from the input grid, observations outside the domain by more
@@ -599,7 +594,7 @@ endif
 select case (trim(progvar(varindex)%coordinates))
 
 case ('land tile')
-   ! Use tile_fraction mask to reconstitute the gridcell value
+   !>@TODO FIXME Use tile_fraction mask to reconstitute the gridcell value
 
 case ('land soil')
    ! must vertically interpolate to proper depth
@@ -642,7 +637,7 @@ WANTED : do i = 1, sparseCell(x_index,y_index)%n
       return
    endif
 
-   ! FIXME ... may want to put a depth limit on this ...
+   !>@TODO FIXME ... may want to put a depth limit on this ...
    if ( lheight >= SOILLEVEL(Nsoil) ) then
       interp_val = profile(Nsoil)
       istatus    = 0
@@ -667,7 +662,7 @@ WANTED : do i = 1, sparseCell(x_index,y_index)%n
 
 case ('land scpool')
 
-   ! FIXME don't know what to do here ... what is scpool
+   !>@TODO FIXME don't know what to do here ... what is scpool
 
    write(string1,*)'second dimension <'//trim( progvar(varindex)%dimnames(2))//'>'
    write(string2,*)'is not "tile", "soil", or "scpool"'
@@ -767,9 +762,23 @@ call error_handler(E_MSG,'static_init_model',string1)
 ! The JULES restart files are intentionally lean and, in so doing,
 ! do not have metadata.
 ! The JULES grid in an output  file can take on two forms.
-! If there is no masked (non-land) gridcells, it is a regular 2D grid.
+! If there are no masked (non-land) gridcells, it is a regular 2D grid.
 ! If a mask has been applied, the number of longitudes takes on the number
 ! of useful land gridcells and the number of latitudes is 1.
+
+
+!>@TODO FIXME
+!>@TODO FIXME
+!>@TODO FIXME
+! Everything should be done on the physical grid.
+! There should be a physical-grid-to-sparse-grid lookup table.
+! There should be a physical-grid-to-dart_index  lookup table.
+! Should cross-reference the sparse-grid lat/lon arrays
+! with the physical grid arrays to ensure that we understand
+! the packing order of the state variables.
+!>@TODO FIXME
+!>@TODO FIXME
+!>@TODO FIXME
 
 call get_jules_output_dimensions( jules_output_filename )
 call get_jules_restart_dimensions(jules_restart_filename)
@@ -833,7 +842,7 @@ do ivar = 1, nfields
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
-   ! FIXME ... at this point, we could check the same variable in the output file
+   !>@TODO FIXME ... we could check the same variable in the output file
    ! to get the metadata
 
    if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
@@ -937,73 +946,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if (do_output() .and. (debug > 3)) then
-      write(logfileunit,*)
-      write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(logfileunit,*) '  filename    :',trim(progvar(ivar)%origin)
-      write(logfileunit,*) '  update      :',progvar(ivar)%update
-      write(logfileunit,*) '  long_name   :',trim(progvar(ivar)%long_name)
-      write(logfileunit,*) '  units       :',trim(progvar(ivar)%units)
-      write(logfileunit,*) '  xtype       :',progvar(ivar)%xtype
-      write(logfileunit,*) '  rank        :',progvar(ivar)%rank
-      write(logfileunit,*) '  numdims     :',progvar(ivar)%numdims
-      write(logfileunit,*) '  coordinates :',trim(progvar(ivar)%coordinates)
-
-      do i = 1,progvar(ivar)%numdims
-         write(logfileunit,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
-                    i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
-      enddo
-
-      write(logfileunit,*) '  varsize     :',progvar(ivar)%varsize
-      write(logfileunit,*) '  index1      :',progvar(ivar)%index1
-      write(logfileunit,*) '  indexN      :',progvar(ivar)%indexN
-      write(logfileunit,*) '  dart_kind   :',progvar(ivar)%dart_kind
-      write(logfileunit,*) '  kind_string :',progvar(ivar)%kind_string
-      write(logfileunit,*) '  spvalINT    :',progvar(ivar)%spvalINT
-      write(logfileunit,*) '  spvalR4     :',progvar(ivar)%spvalR4
-      write(logfileunit,*) '  spvalR8     :',progvar(ivar)%spvalR8
-      write(logfileunit,*) '  missingINT  :',progvar(ivar)%missingINT
-      write(logfileunit,*) '  missingR4   :',progvar(ivar)%missingR4
-      write(logfileunit,*) '  missingR8   :',progvar(ivar)%missingR8
-      write(logfileunit,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
-      write(logfileunit,*) '  has_missing_value :',progvar(ivar)%has_missing_value
-      write(logfileunit,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
-      write(logfileunit,*)'   minvalue          :',progvar(ivar)%minvalue
-      write(logfileunit,*)'   maxvalue          :',progvar(ivar)%maxvalue
-
-      write(     *     ,*)
-      write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-      write(     *     ,*) '  filename    :',trim(progvar(ivar)%origin)
-      write(     *     ,*) '  update      :',progvar(ivar)%update
-      write(     *     ,*) '  long_name   :',trim(progvar(ivar)%long_name)
-      write(     *     ,*) '  units       :',trim(progvar(ivar)%units)
-      write(     *     ,*) '  xtype       :',progvar(ivar)%xtype
-      write(     *     ,*) '  rank        :',progvar(ivar)%rank
-      write(     *     ,*) '  numdims     :',progvar(ivar)%numdims
-      write(     *     ,*) '  coordinates :',trim(progvar(ivar)%coordinates)
-
-      do i = 1,progvar(ivar)%numdims
-         write(  *,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
-                    i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
-      enddo
-
-      write(     *     ,*) '  varsize     :',progvar(ivar)%varsize
-      write(     *     ,*) '  index1      :',progvar(ivar)%index1
-      write(     *     ,*) '  indexN      :',progvar(ivar)%indexN
-      write(     *     ,*) '  dart_kind   :',progvar(ivar)%dart_kind
-      write(     *     ,*) '  kind_string :',progvar(ivar)%kind_string
-      write(     *     ,*) '  spvalINT    :',progvar(ivar)%spvalINT
-      write(     *     ,*) '  spvalR4     :',progvar(ivar)%spvalR4
-      write(     *     ,*) '  spvalR8     :',progvar(ivar)%spvalR8
-      write(     *     ,*) '  missingINT  :',progvar(ivar)%missingINT
-      write(     *     ,*) '  missingR4   :',progvar(ivar)%missingR4
-      write(     *     ,*) '  missingR8   :',progvar(ivar)%missingR8
-      write(     *     ,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
-      write(     *     ,*) '  has_missing_value :',progvar(ivar)%has_missing_value
-      write(     *     ,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
-      write(     *     ,*)'   minvalue          :',progvar(ivar)%minvalue
-      write(     *     ,*)'   maxvalue          :',progvar(ivar)%maxvalue
-   endif
+   if (do_output() .and. (debug > 3)) call dump_structure(ivar)
 
    call nc_check(nf90_close(ncid),'static_init_model','close '//trim(string2))
    ncid = 0
@@ -1020,8 +963,6 @@ if (do_output() .and. (debug > 99)) then
   write(     *     ,'("grid: Nx, Ny, Nsoil =",3(1x,i6))') Nx, Ny, Nsoil
   write(     *     , *)'model_size = ', model_size
 endif
-
-allocate(ens_mean(model_size))
 
 ! --------------------------------------------------------------
 ! Generate list of dart indices of interest for each gridcell
@@ -1050,7 +991,6 @@ subroutine end_model()
    if (allocated(SOILLEVEL)       ) deallocate(SOILLEVEL)
    if (allocated(TILE_FRACTIONS)  ) deallocate(TILE_FRACTIONS) 
    if (allocated(LAND_FRACTIONS)  ) deallocate(LAND_FRACTIONS)
-   if (allocated(ens_mean)        ) deallocate(ens_mean)
    if (allocated(sparse_locations)) deallocate(sparse_locations)
    if (allocated(sparse_kinds)    ) deallocate(sparse_kinds)
 
@@ -1677,7 +1617,7 @@ if (present(dist)) dist = 1.0e9   ! something big and positive (far away)
 ! computations that will follow.  This is a horizontal-distance operation and
 ! we don't need to have the relevant vertical coordinate information yet
 ! (for obs).
-! FIXME - confirm that the close_ind() array does not benefit from having 
+!>@TODO FIXME - confirm that the close_ind() array does not benefit from having 
 ! all the dry_land locations pruned out.
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
@@ -1705,11 +1645,9 @@ subroutine ens_mean_for_model(filter_ens_mean)
 
 real(r8), intent(in) :: filter_ens_mean(:)
 
-call error_handler(E_ERR, 'ens_mean_for_model', 'FIXME routine not tested', source, revision, revdate)
-
 if ( .not. module_initialized ) call static_init_model
 
-ens_mean = filter_ens_mean
+! ens_mean = filter_ens_mean
 
 end subroutine ens_mean_for_model
 
@@ -1977,7 +1915,7 @@ endif
 call nc_check(nf90_open(trim(jules_restart_filename), NF90_WRITE, ncFileID), &
              'dart_to_jules_restart','open '//trim(jules_restart_filename))
 
-! FIXME ... if/when the restart file gets metadata indicating the time,
+!>@TODO FIXME ... if/when the restart file gets metadata indicating the time,
 ! it would be a good idea to check the model_time against the time in
 ! the restart file.
 
@@ -2054,7 +1992,7 @@ UPDATE : do ivar=1, nfields
                         source,revision,revdate)
    endif
 
-   ! TJH FIXME ... this works perfectly if it were not for a bug in netCDF.
+   !>@TODO FIXME ... this works perfectly if it were not for a bug in netCDF.
    ! When they fix the bug, this will be a useful thing to restore.
    ! Make note that the variable has been updated by DART
 !  call nc_check(nf90_Redef(ncFileID),'dart_to_jules_restart', 'redef '//trim(jules_restart_filename))
@@ -3125,7 +3063,7 @@ if (present(ncid)) then
    endif
 
    ! Replace the DART missing value flag with the one JULES uses.
-   ! FIXME ... I am not sure if there would ever be any missing values
+   !>@TODO FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3197,7 +3135,7 @@ if (present(ncid)) then
    endif
 
    ! replace the missing values with the original missing values.
-   ! FIXME ... I am not sure if there would ever be any missing values
+   !>@TODO FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3271,7 +3209,7 @@ if (present(ncid)) then
    endif
 
    ! replace the missing values with the original missing values.
-   ! FIXME ... I am not sure if there would ever be any missing values
+   !>@TODO FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3492,7 +3430,7 @@ type(time_type) :: set_model_time_step
 
 call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine is not tested')
 
-! FIXME ... should check to see that time step is attainable given the JULES namelist values.
+!>@TODO FIXME ... should check to see that time step is attainable given the JULES namelist values.
 
 set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
 
@@ -3934,7 +3872,7 @@ TIMELOOP : do itime = 1,ntimes
 
 enddo TIMELOOP
 
-! FIXME ... do we actually need a perfect match ... or do we just use the last one
+!>@TODO FIXME ... do we actually need a perfect match ... or do we just use the last one
 if ( FindDesiredTimeIndx == MISSING_I ) then
    call print_time(model_time,str='model time is ',iunit=logfileunit)
    call print_time(model_time,str='model time is ')
@@ -4097,10 +4035,8 @@ Nlat = dimlens(2)
 ! By allocating them all to the same size, DART_get_var() is responsible for
 ! making sure they are sized consistently.
 allocate(  LAND_FRACTIONS(Nlon,Nlat))
-allocate( INPUT_LATITUDES(Nlon,Nlat))
-allocate(INPUT_LONGITUDES(Nlon,Nlat))
 
-call DART_get_var(ncid, trim(land_frac_name), LAND_FRACTIONS, string3)
+call DART_get_var(ncid, trim(land_frac_name),   LAND_FRACTIONS, string3)
 
 call nc_check(nf90_close(ncid),'Resolve_Land_Fractions','close '//trim(file))
 
@@ -4111,7 +4047,7 @@ do ilon = 1,dimlens(1)
    ! JULES is binary - it's either all land or no land.
    if (LAND_FRACTIONS(ilon,ilat) > 0.0_r8) then
       nland = nland + 1
-      ! FIXME ... this is the place to create the table relating
+      !>@TODO FIXME ... this is the place to create the table relating
       ! land index to physical gridcell
    else
       if (do_output() .and. (debug > 1)) then
@@ -4211,6 +4147,8 @@ if (numdims /= 2) then
           source, revision, revdate, text2=string2)
 endif
 
+allocate( INPUT_LATITUDES(Nlon,Nlat))
+
 call DART_get_var(ncid, trim(lat_name), INPUT_LATITUDES, string3)
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4231,6 +4169,7 @@ if (numdims /= 2) then
           source, revision, revdate, text2=string2)
 endif
 
+allocate(INPUT_LONGITUDES(Nlon,Nlat))
 call DART_get_var(ncid, trim(lon_name), INPUT_LONGITUDES, string3)
 
 where (INPUT_LONGITUDES < 180.0_r8) INPUT_LONGITUDES = INPUT_LONGITUDES + 360.0_r8
@@ -4651,7 +4590,7 @@ elseif (trim(progvar(varindex)%coordinates) == 'land') then
 
 else
 
-   ! FIXME ... should check for supported variable shapes much earlier on.
+   !>@TODO FIXME ... should check for supported variable shapes much earlier on.
 
    write(string1,*) 'unsupported variable shape of ['// &
                     &trim(progvar(varindex)%coordinates)//']'
@@ -4674,7 +4613,7 @@ subroutine set_sparse_locations_kinds()
 integer  :: ix, iy, indx
 real(r8) :: mylon, mylat
 
-! FIXME at some point, having the sparse_locations() array should obviate
+!>@TODO FIXME at some point, having the sparse_locations() array should obviate
 ! the need to keep the LONGITUDE, LATITUDE variables around. At present,
 ! they are needed by nc_write_model_atts() - but that could be about it.
 
@@ -4739,7 +4678,7 @@ EW_lon : do i = 1, Nlon-1
    lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i+1,j))
    lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i+1,j))
 
-   ! FIXME the prime meridian is a problem ... 
+   !>@TODO FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
    if (lon_dist > 180.0_r8) cycle EW_lon
 
@@ -4755,7 +4694,7 @@ NS_lon : do i = 1, Nlon
    lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i,j+1))
    lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i,j+1))
 
-   ! FIXME the prime meridian is a problem ... 
+   !>@TODO FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
    if (lon_dist > 180.0_r8) cycle NS_lon
 
@@ -4764,7 +4703,7 @@ NS_lon : do i = 1, Nlon
 enddo NS_lon
 enddo NS_lat
 
-! FIXME ... what to do if max_lon = 0.0_r8
+!>@TODO FIXME ... what to do if max_lon = 0.0_r8
 
 ! convert to radians
 max_lon = max_lon / rad2deg
@@ -4786,6 +4725,88 @@ call get_close_maxdist_init(gc_state, maxdist)
 call get_close_obs_init(gc_state, Nx*Ny, sparse_locations)
 
 end subroutine init_interp
+
+!-----------------------------------------------------------------------
+!>
+!> dump_structure() simply prints a summary of everything in the progvar structure
+!>
+!> General philosophy is to precompute a 'get_close' structure with
+!> a list of what state vector elements are within a certain distance
+!> of each other.
+
+subroutine dump_structure(ivar)
+
+integer, intent(in) :: ivar
+
+integer :: i
+
+write(logfileunit,*)
+write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
+write(logfileunit,*) '  filename    :',trim(progvar(ivar)%origin)
+write(logfileunit,*) '  update      :',progvar(ivar)%update
+write(logfileunit,*) '  long_name   :',trim(progvar(ivar)%long_name)
+write(logfileunit,*) '  units       :',trim(progvar(ivar)%units)
+write(logfileunit,*) '  xtype       :',progvar(ivar)%xtype
+write(logfileunit,*) '  rank        :',progvar(ivar)%rank
+write(logfileunit,*) '  numdims     :',progvar(ivar)%numdims
+write(logfileunit,*) '  coordinates :',trim(progvar(ivar)%coordinates)
+
+do i = 1,progvar(ivar)%numdims
+   write(logfileunit,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
+              i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
+enddo
+
+write(logfileunit,*) '  varsize     :',progvar(ivar)%varsize
+write(logfileunit,*) '  index1      :',progvar(ivar)%index1
+write(logfileunit,*) '  indexN      :',progvar(ivar)%indexN
+write(logfileunit,*) '  dart_kind   :',progvar(ivar)%dart_kind
+write(logfileunit,*) '  kind_string :',progvar(ivar)%kind_string
+write(logfileunit,*) '  spvalINT    :',progvar(ivar)%spvalINT
+write(logfileunit,*) '  spvalR4     :',progvar(ivar)%spvalR4
+write(logfileunit,*) '  spvalR8     :',progvar(ivar)%spvalR8
+write(logfileunit,*) '  missingINT  :',progvar(ivar)%missingINT
+write(logfileunit,*) '  missingR4   :',progvar(ivar)%missingR4
+write(logfileunit,*) '  missingR8   :',progvar(ivar)%missingR8
+write(logfileunit,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
+write(logfileunit,*) '  has_missing_value :',progvar(ivar)%has_missing_value
+write(logfileunit,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
+write(logfileunit,*)'   minvalue          :',progvar(ivar)%minvalue
+write(logfileunit,*)'   maxvalue          :',progvar(ivar)%maxvalue
+
+write(     *     ,*)
+write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
+write(     *     ,*) '  filename    :',trim(progvar(ivar)%origin)
+write(     *     ,*) '  update      :',progvar(ivar)%update
+write(     *     ,*) '  long_name   :',trim(progvar(ivar)%long_name)
+write(     *     ,*) '  units       :',trim(progvar(ivar)%units)
+write(     *     ,*) '  xtype       :',progvar(ivar)%xtype
+write(     *     ,*) '  rank        :',progvar(ivar)%rank
+write(     *     ,*) '  numdims     :',progvar(ivar)%numdims
+write(     *     ,*) '  coordinates :',trim(progvar(ivar)%coordinates)
+
+do i = 1,progvar(ivar)%numdims
+   write(  *,'(''   dimension ('',i1,'') length '',i10,'' name '',A)') &
+              i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimnames(i))
+enddo
+
+write(     *     ,*) '  varsize     :',progvar(ivar)%varsize
+write(     *     ,*) '  index1      :',progvar(ivar)%index1
+write(     *     ,*) '  indexN      :',progvar(ivar)%indexN
+write(     *     ,*) '  dart_kind   :',progvar(ivar)%dart_kind
+write(     *     ,*) '  kind_string :',progvar(ivar)%kind_string
+write(     *     ,*) '  spvalINT    :',progvar(ivar)%spvalINT
+write(     *     ,*) '  spvalR4     :',progvar(ivar)%spvalR4
+write(     *     ,*) '  spvalR8     :',progvar(ivar)%spvalR8
+write(     *     ,*) '  missingINT  :',progvar(ivar)%missingINT
+write(     *     ,*) '  missingR4   :',progvar(ivar)%missingR4
+write(     *     ,*) '  missingR8   :',progvar(ivar)%missingR8
+write(     *     ,*) '  has_fill_value    :',progvar(ivar)%has_fill_value
+write(     *     ,*) '  has_missing_value :',progvar(ivar)%has_missing_value
+write(     *     ,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
+write(     *     ,*)'   minvalue          :',progvar(ivar)%minvalue
+write(     *     ,*)'   maxvalue          :',progvar(ivar)%maxvalue
+
+end subroutine dump_structure
 
 
 !===================================================================

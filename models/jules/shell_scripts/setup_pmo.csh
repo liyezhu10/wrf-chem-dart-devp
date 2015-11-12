@@ -180,8 +180,8 @@ endif
 # model_mod:static_init_model() must have the 'generic' names,
 # so we link the same file to two names. 
 
-set RESTART = ${ENSEMBLEDIR}/synthetic.dump.0001.20140101.00000.nc
-set  OUTPUT = ${ENSEMBLEDIR}/synthetic.hour.0001.20140101.00000.nc
+set RESTART = ${ENSEMBLEDIR}/ensemble.dump.0001.20140101.00000.nc
+set  OUTPUT = ${ENSEMBLEDIR}/ensemble.hour.0001.20140101.00000.nc
 
 if (  -e   ${RESTART} ) then
    ${LINK} ${RESTART} .

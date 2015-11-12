@@ -7,7 +7,6 @@ of the item in the list. This will prevent duplication of effort. I took the lib
 of assigning everyone a task - for an example. This list is by no means complete.
 Feel free to add to the list as you see fit.
 
-
 Checklist DART-JULES   (XX means DONE)
 
 - SR - Divide perfect_model.csh into a setup_pmo.csh and a run_pmo.csh (Comment: done, checked)
@@ -76,10 +75,18 @@ Status as of Fri Sep 11 15:59:03 MDT 2015
    I believe I have most of model_interpolate working and I have pruned out a lot of the
    dead code. The get_close() routine should be tested a bit more to make sure it gives
    the right 'sparse' location - right now it is returning the proper one, but the test
-   location is nearly right ON a (sparse/model) grid cell.
+   location is nearly right ON a (sparse/model) grid cell. Determine if the closest one is too far away ...
 
    Only the vertical interpolation has been tested.
    The agggregation of the tiles has not been implemented.
+
+Thu Nov 12 14:14:39 MST 2015
+
+   Decided that IFF the physically shaped lat/lon/tile_frac/land_mask arrays
+   are available, that we should always use them. Require them to be present?
+   Then, only a few lookup tables would be needed. Right now I'm struggling
+   with unpacking the tile fractions in the same manner as the state ...
+   making a lookup table is the right solution.
 
 
 

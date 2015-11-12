@@ -17,7 +17,7 @@
 #-----------------------------------------------------------------------------
 
 setenv ORIGINALDIR `pwd`
-setenv JOBNAME     jules_perfect
+setenv JOBNAME     jules_filter
 setenv JOBID       $$
 
 #----------------------------------------------------------------------
@@ -184,6 +184,8 @@ endif
 set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
 set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
+${LINK} ${ENSEMBLEDIR}/ensemble.hour.0001.20140101.00000.nc    jules_output.nc || exit 3
+
 @ instance = 1
 while ( $instance <= $NUM_ENS )
   set darticname    = `printf "filter_ics.%04d"                             $instance`
@@ -193,8 +195,7 @@ while ( $instance <= $NUM_ENS )
   # the advance_model.csh script needs to have an instance number in the filename.
   # model_mod:static_init_model() cannot have an instance number in the filename.
   # So - we just link the two for this part.
-  ${LINK} ${ENSEMBLEDIR}/ensemble.hour.20140101.00000.nc          jules_output.nc
-  ${LINK} ${ENSEMBLEDIR}/ensemble.hour.20140101.00000.nc          ${julesoutput}
+  ${LINK} ${ENSEMBLEDIR}/ensemble.hour.0001.20140101.00000.nc    ${julesoutput}  || exit 3
     
   if (  -e   ${ENSEMBLEDIR}/${julesrestart} ) then
     ${COPY} ${ENSEMBLEDIR}/${julesrestart}                        .
