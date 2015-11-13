@@ -387,6 +387,42 @@ coming from the restart file and marked 'UPDATE' <strong>will</strong> be update
 CLM restart file.
 </P>
 
+
+<H2>Snow Data Assimilation</H2>
+<P>Snow data assimilation is tricky business. CLM has different snow schemes and
+representations over lakes than on land. Glaciers are another matter.
+CLM4 is different than CLM4.5. Different ensemble members (CESM instances) may
+have different numbers of snow layers. For all these reasons and more, we strongly
+suggest that you thoroughly examine the DART update methodology (see routine
+<em class=file>model_mod.f90</em> <em class=program>update_snow()</em> )
+and your results.
+<br />   
+<br />   
+It is worth knowing that <strong>DART does not make snow if there is none present</strong>.
+Furthermore, if <strong>one or more</strong> ensemble members/instances does not have snow
+and the other ensemble members do have snow, the system is ill-determined. In this case,
+DART simply does nothing to the CLM column in question. The posterior and the prior for
+that particular column is the same for all ensemble members. Extending DART such that
+snow is handled in a better manner would be a great DA research effort, in my opinion.
+<br />   
+<br />   
+When all the ensemble members in a CLM column have snow, a description of the 
+strategy is as follows: The CLM variable <strong>H2OSNO</strong> must be part of the 
+DART state and must be flagged as UPDATE. The increments are calculated in the usual way.
+The original proportions of snow water and ice in each layer are preserved
+as the increment is distributed among the prognostic variables for snow in CLM: 
+<strong>SNOWDP, DZSNO, H2OSOI_LIQ,</strong> and <strong>H2OSOI_ICE</strong>.
+The exact algorithm is in the <em class=program>update_snow()</em> routine.
+<br />   
+<br />   
+Note that <strong>SNOWDP, DZSNO, H2OSOI_LIQ,</strong> and <strong>H2OSOI_ICE</strong>
+do not need to be part of the DART state vector. In fact, if they are part of the
+DART state vector, the posterior estimates of these variables is not conveyed
+to the CLM restart file because it may clash with the estimates from the
+<em class=program>update_snow()</em> routine. The posterior estimates of these
+variables will/may be used for other observation operators, however.
+</P>
+
 <P></P>
 
 <!--===================== DESCRIPTION OF A NAMELIST =====================-->

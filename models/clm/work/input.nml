@@ -185,8 +185,8 @@
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
    calendar                     = 'Gregorian'
-   debug                        = 9
    radiative_transfer_model     = 'memls'
+   debug                        = 1
    clm_variables  = 'frac_sno',    'KIND_SNOWCOVER_FRAC',         '0.0', '1.0', 'restart' , 'NO_COPY_BACK',
                     'H2OSNO',      'KIND_SNOW_WATER',             '0.0', 'NA' , 'restart' , 'UPDATE',
                     'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',          '0.0', 'NA' , 'restart' , 'UPDATE',

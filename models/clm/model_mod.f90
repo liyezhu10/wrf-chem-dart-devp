@@ -370,6 +370,7 @@ real(r8), allocatable, dimension(:) :: landarea     ! land area ... 'support' ..
 
 logical :: print_timestamps = .false.
 integer :: print_every_Nth  = 10000
+logical :: performing_snow_update = .false.
 
 !------------------------------------------------------------------
 ! module storage
@@ -386,6 +387,7 @@ INTERFACE vector_to_prog_var
 END INTERFACE
 
 INTERFACE DART_get_var
+      MODULE PROCEDURE get_var_1d_integer
       MODULE PROCEDURE get_var_1d
       MODULE PROCEDURE get_var_2d
       MODULE PROCEDURE get_var_3d
@@ -726,7 +728,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ((debug > 1) .and. do_output()) then
+   if (debug > 1 .and. do_output()) then
       write(logfileunit,*)
       write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
       write(logfileunit,*) '  filename    ',trim(progvar(ivar)%origin)
@@ -789,7 +791,7 @@ enddo
 
 model_size = progvar(nfields)%indexN
 
-if ((debug > 1) .and. do_output()) then
+if (debug > 99 .and. do_output()) then
   write(logfileunit, *)
   write(logfileunit,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
   write(logfileunit, *)'model_size = ', model_size
@@ -827,7 +829,7 @@ do ivar=1, nfields
 
    if (progvar(ivar)%numdims == 1) then
 
-      if ((debug > 8) .and. do_output()) then
+      if (debug > 8 .and. do_output()) then
          write(*,*)
          write(*,*)'variable ',trim(progvar(ivar)%varname)
          write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
@@ -914,7 +916,7 @@ do ivar=1, nfields
       ! In the ncdump output, dimension 2 is the leftmost dimension.
       ! Only dimension 2 matters for the weights.
 
-      if ((debug > 0) .and. do_output()) then
+      if (debug > 2 .and. do_output()) then
          write(*,*)
          write(*,*)'variable ',trim(progvar(ivar)%varname)
          write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
@@ -923,7 +925,7 @@ do ivar=1, nfields
 
       SELECT CASE ( trim(progvar(ivar)%dimnames(2)) )
          CASE ("gridcell")
-            if ((debug > 8) .and. do_output()) write(*,*)'length grid1d_ixy ',size(grid1d_ixy)
+            if (debug > 8 .and. do_output()) write(*,*)'length grid1d_ixy ',size(grid1d_ixy)
             do j = 1, progvar(ivar)%dimlens(2)
                xi = grid1d_ixy(j)
                xj = grid1d_jxy(j) ! nnnnn_jxy(:) always 1 if unstructured
@@ -942,7 +944,7 @@ do ivar=1, nfields
             enddo
 
          CASE ("landunit")
-            if ((debug > 8) .and. do_output()) write(*,*)'length land1d_ixy ',size(land1d_ixy)
+            if (debug > 8 .and. do_output()) write(*,*)'length land1d_ixy ',size(land1d_ixy)
             do j = 1, progvar(ivar)%dimlens(2)
                xi = land1d_ixy(j)
                xj = land1d_jxy(j) ! nnnnn_jxy(:) always 1 if unstructured
@@ -966,9 +968,9 @@ do ivar=1, nfields
 
             progvar(ivar)%maxlevels = progvar(ivar)%dimlens(2)
 
-            if ((debug > 8) .and. do_output()) write(*,*)'length cols1d_ixy ',size(cols1d_ixy)
-            if ((debug > 8) .and. do_output()) write(*,*)'size zsno ',size(zsno,1), size(zsno,2)
-            if ((debug > 8) .and. do_output()) write(*,*)'nlevsno ',nlevsno
+            if (debug > 8 .and. do_output()) write(*,*)'length cols1d_ixy ',size(cols1d_ixy)
+            if (debug > 8 .and. do_output()) write(*,*)'size zsno ',size(zsno,1), size(zsno,2)
+            if (debug > 8 .and. do_output()) write(*,*)'nlevsno ',nlevsno
 
             LANDCOLUMN : do j = 1, progvar(ivar)%dimlens(2)
 
@@ -992,7 +994,7 @@ do ivar=1, nfields
             enddo LANDCOLUMN
 
          CASE ("pft")
-            if ((debug > 8) .and. do_output()) write(*,*)'length pfts1d_ixy ',size(pfts1d_ixy)
+            if (debug > 8 .and. do_output()) write(*,*)'length pfts1d_ixy ',size(pfts1d_ixy)
             do j = 1, progvar(ivar)%dimlens(2)
                xi = pfts1d_ixy(j)
                xj = pfts1d_jxy(j) ! nnnnn_jxy(:) always 1 if unstructured
@@ -1086,7 +1088,7 @@ do ivar=1, nfields
       !     exception is float H2OSOI(time, levgrnd, lat, lon) ... but we
       !     have access to restart file h2osoi_[liq,ice]
 
-      if ((debug > 8) .and. do_output()) then
+      if (debug > 8 .and. do_output()) then
          write(*,*)
          write(*,*)'variable ',trim(progvar(ivar)%varname)
          write(*,*)'dimension 1 (i) ',progvar(ivar)%dimnames(1),progvar(ivar)%dimlens(1)
@@ -1848,7 +1850,7 @@ else
       where(dimIDs == TimeDimID) ncstart = timeindex
       where(dimIDs == TimeDimID) nccount = 1
 
-      if ((debug > 0) .and. do_output()) then
+      if (debug > 0 .and. do_output()) then
          write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',ncstart(1:ncNdims)
          write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',nccount(1:ncNdims)
       endif
@@ -2337,12 +2339,31 @@ UPDATE : do ivar=1, nfields
       cycle UPDATE
    endif
 
+   if (trim(varname) == 'H2OSNO') then
+      call update_snow(ivar, model_size, state_vector, ncFileID, filename)
+      cycle UPDATE
+   endif
+
+   ! FIXME ... question, really ... is it more sensible to just set the %update
+   ! to .false. for the variables in question much earlier in the process.
+   if ( performing_snow_update ) then
+      select case (varname)
+         case ('SNOWDP', 'DZSNO', 'H2OSOI_LIQ', 'H2OSOI_ICE')
+            write(string1,*)'intentionally not updating '//trim(string2)
+            write(string3,*)'posterior is coming from repartitioning of H2OSNO.'
+            call error_handler(E_MSG, 'sv_to_restart_file', string1, text2=string3)
+            cycle UPDATE
+         case default
+            ! nothing to do
+      end select   
+   endif
+
    if (trim(varname) == 'ZWT') then
       ! ZWT is calculated from WA and WT ... so we have to update those
       ! CLM variables based on the new ZWT from the assimilation.
       ! Simply updating ZWT will have no effect because upon restart
       ! CLM will calculate ZWT given the same old WA and WT.
-      call update_water_table_depth( ivar, state_vector, ncFileID, filename, dart_time)
+      call update_water_table_depth(ivar, state_vector, ncFileID, filename, dart_time)
       cycle UPDATE
    endif
 
@@ -2504,7 +2525,7 @@ llon      = loc_array(1)
 llat      = loc_array(2)
 lheight   = loc_array(3)
 
-if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
+if (debug > 6 .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
 
 ! Some applications just need to know the number of vertical levels.
 ! This is done by trying to 'interpolate' height on a large number of levels.
@@ -2591,7 +2612,7 @@ select case( obs_kind )
 
 end select
 
-if ((debug > 6) .and. do_output()) write(*,*)'interp_val ',interp_val
+if (debug > 6 .and. do_output()) write(*,*)'interp_val ',interp_val
 
 end subroutine model_interpolate
 
@@ -2657,7 +2678,7 @@ loninds  = minloc(abs(LON - loc_lon))   ! these return 'arrays' ...
 gridlatj = latinds(1)
 gridloni = loninds(1)
 
-if ((debug > 5) .and. do_output()) then
+if (debug > 5 .and. do_output()) then
    write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
                   loc_lon,LON(gridloni),gridloni
    write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
@@ -2684,7 +2705,7 @@ ELEMENTS : do indexi = index1, indexN
    total      = total      + x(indexi)*landarea(indexi)
    total_area = total_area +           landarea(indexi)
 
-   if ((debug > 5) .and. do_output()) then
+   if (debug > 5 .and. do_output()) then
       write(*,*)
       write(*,*)'gridcell location match',counter,'at statevector index',indexi
       write(*,*)'statevector value is (',x(indexi),')'
@@ -2702,7 +2723,7 @@ if (total_area /= 0.0_r8) then ! All good.
    interp_val = total/total_area
    istatus    = 0
 else
-   if ((debug > 4) .and. do_output()) then
+   if (debug > 4 .and. do_output()) then
       write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' had no viable data'
       write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
       write(string3, *)'obs lon/lat = (',loc_lon,',',loc_lat,')'
@@ -2712,7 +2733,7 @@ else
 endif
 
 ! Print more information for the really curious
-if ((debug > 5) .and. do_output()) then
+if (debug > 5 .and. do_output()) then
    write(string1,*)'counter, total, total_area', counter, total, total_area
    write(string2,*)'interp_val, istatus', interp_val, istatus
    call error_handler(E_MSG,'compute_gridcell_value', string1, text2=string2)
@@ -2799,7 +2820,7 @@ loninds  = minloc(abs(LON - loc_lon))   ! these return 'arrays' ...
 gridlatj = latinds(1)
 gridloni = loninds(1)
 
-if ((debug > 4) .and. do_output()) then
+if (debug > 4 .and. do_output()) then
    write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ', &
               loc_lon,LON(gridloni),gridloni,loc_lev
    write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ', &
@@ -2830,7 +2851,7 @@ else
 
 endif
 
-if ((debug > 4) .and. do_output()) then
+if (debug > 4 .and. do_output()) then
    write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev', &
                    loc_lev,'>= depthabove',depthabove
 endif
@@ -2854,7 +2875,7 @@ GRIDCELL : do indexi = index1, indexN
 enddo GRIDCELL
 
 if ( (counter1+counter2) == 0 ) then
-   if ((debug > 0) .and. do_output()) then
+   if (debug > 0 .and. do_output()) then
       write(string1, *)'statevector variable '//trim(varstring)//' had no viable data'
       write(string2, *)'at gridcell lon/lat = (',gridloni,',',gridlatj,')'
       write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
@@ -2889,7 +2910,7 @@ ELEMENTS : do indexi = index1, indexN
       myarea(counter2,2)  = landarea(indexi)
    endif
 
-   if ((debug > 4) .and. do_output()) then
+   if (debug > 4 .and. do_output()) then
       write(*,*)
       write(*,*)'gridcell location match at statevector index',indexi
       write(*,*)'statevector value is (',x(indexi),')'
@@ -3238,7 +3259,7 @@ if (present(latrof)) then
                'get_history_dims','inquire_dimension latrof '//trim(fname))
 endif
 
-if ((debug > 8) .and. do_output()) then
+if (debug > 8 .and. do_output()) then
    write(logfileunit,*)
    write(logfileunit,*)'get_history_dims output follows:'
    write(logfileunit,*)'nlon = ',nlon
@@ -3328,7 +3349,7 @@ endif
 
 ! A little sanity check
 
-if ((debug > 7) .and. do_output()) then
+if (debug > 7 .and. do_output()) then
 
    write(logfileunit,*)
    write(logfileunit,*)'history_file grid information as interpreted ...'
@@ -3472,7 +3493,7 @@ if (cstat == 'close') then
 endif
 
 ! Echo what we know if desired.
-if ((debug > 7) .and. do_output()) then
+if (debug > 7 .and. do_output()) then
    write(logfileunit,*)
    write(logfileunit,*)'get_sparse_dims output follows:'
    write(logfileunit,*)'ngridcell = ',ngridcell
@@ -3634,7 +3655,7 @@ endif
 
 ! A little sanity check
 
-if ((debug > 7) .and. do_output()) then
+if (debug > 7 .and. do_output()) then
 
    write(logfileunit,*)
    write(logfileunit,*)'Raw lat/lon information as read ...'
@@ -3862,7 +3883,7 @@ MyLoop : do i = 1, nrows
 
    ! Record the contents of the DART state vector
 
-   if ((debug > 8) .and. do_output()) then
+   if (debug > 8 .and. do_output()) then
       write(logfileunit,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2)),' ', &
                                                trim(table(i,3)), ' ', trim(table(i,4)),' ', &
                                                trim(table(i,5)), ' ', trim(table(i,6))
@@ -3897,7 +3918,18 @@ if (ngood == nrows) then
    call error_handler(E_MSG,'parse_variable_table',string1,text2=string2)
 endif
 
-! Check to see if zsno is part of the requested variables
+! We need to know if we are doing snow data assimilation or not.
+! If we are, then some variables which may be part of the DART state
+! should be skipped because only the increments from the total snow water 
+! equivalent are important.
+
+SNOW : do i = 1,ngood
+   if ( (trim(table(i,VT_VARNAMEINDX)) == 'H2OSNO') .and. &
+        (trim(table(i,VT_STATEINDX))   == 'UPDATE') )then
+      performing_snow_update = .true.
+      exit SNOW
+   endif
+enddo SNOW
 
 end subroutine parse_variable_table
 
@@ -3969,7 +4001,7 @@ ndims           = ndims + 1
 dimids(ndims)   = unlimitedDimid
 dimnames(ndims) = 'time'
 
-if ((debug > 8) .and. do_output()) then
+if (debug > 8 .and. do_output()) then
 
    write(logfileunit,*)
    write(logfileunit,*)'define_var_dims knowledge'
@@ -4141,7 +4173,7 @@ VARTYPES : do ivar = 1,nfields
 
 enddo VARTYPES
 
-if (do_output() .and. (debug > 0)) then
+if (debug > 0 .and. do_output()) then
    write(*,*)'exploring '//trim(varstring)
 
    do j = 1,nlat
@@ -4158,6 +4190,114 @@ endif
 deallocate(countmat)
 
 end subroutine gridcell_components
+
+
+subroutine get_var_1d_integer(ncid, varname, var1d)
+! This function will return a R8 array with the netCDF attributes applied.
+! scale_factor, offset will be applied,
+! missing_value, _FillValue will be replaced by the DART missing value ...
+
+! If _FillValue is defined then it should be scalar and of the same type as the variable.
+! If the variable is packed using scale_factor and add_offset attributes (see below),
+! the _FillValue attribute should have the data type of the packed data.
+!
+! missing_value
+! When scale_factor and add_offset are used for packing, the value(s) of the missing_value
+! attribute should be specified in the domain of the data in the file (the packed data),
+! so that missing values can be detected before the scale_factor and add_offset are applied.
+!
+! scale_factor
+! If present for a variable, the data are to be multiplied by this factor after the data
+! are read by the application that accesses the data.  If valid values are specified using
+! the valid_min, valid_max, valid_range, or _FillValue attributes, those values should be
+! specified in the domain of the data in the file (the packed data), so that they can be
+! interpreted before the scale_factor and add_offset are applied.
+!
+! add_offset
+! If present for a variable, this number is to be added to the data after it is read by
+! the application that accesses the data. If both scale_factor and add_offset attributes
+! are present, the data are first scaled before the offset is added.
+
+integer,                intent(in)  :: ncid
+character(len=*),       intent(in)  :: varname
+integer, dimension(:),  intent(out) :: var1d
+
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens, ncstart, nccount
+integer  :: VarID, numdims, xtype, io1, io2
+integer  :: TimeDimID, time_dimlen, timeindex
+integer  :: spvalINT
+
+integer,  allocatable, dimension(:) :: intarray
+
+if ( .not. module_initialized ) call static_init_model
+
+! a little whitespace makes this a lot more readable
+if (debug > 1 .and. do_output()) then
+   write(*,*)
+   write(logfileunit,*)
+endif
+
+io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
+if (io1 /= NF90_NOERR) TimeDimID = MISSING_I
+
+call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//varname)
+call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
+              xtype=xtype), 'get_var_1d', 'inquire_variable '//varname)
+call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
+              'get_var_1d', 'inquire_dimension '//varname)
+
+if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
+   write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
+   call error_handler(E_ERR,'get_var_1d',string1,source,revision,revdate)
+endif
+
+ncstart = 1
+nccount = dimlens(1)
+
+if (dimIDs(1) == TimeDimID) then
+   call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
+         'get_var_1d', 'inquire_dimension time '//trim(varname))
+   timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
+   ncstart(1) = timeindex
+   nccount(1) = 1
+endif
+
+if (debug > 1 .and. do_output()) then
+   write(*,*)'get_var_1d: variable ['//trim(varname)//']'
+   write(*,*)'get_var_1d: start ',ncstart(1:numdims)
+   write(*,*)'get_var_1d: count ',nccount(1:numdims)
+endif
+
+if (xtype == NF90_INT) then
+
+   allocate(intarray(dimlens(1)))
+   call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
+           start=ncstart(1:numdims), count=nccount(1:numdims)), &
+           'get_var_1d', 'get_var '//varname)
+   var1d = intarray  ! perform type conversion to desired output type
+
+   io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
+   if (  io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_I
+   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_I
+      call error_handler(E_MSG,'get_var_1d',string1)
+   endif
+
+   io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
+   if (  io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_I
+   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+      write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_I
+      call error_handler(E_MSG,'get_var_1d',string1)
+   endif
+
+   deallocate(intarray)
+
+else
+   write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
+   call error_handler(E_ERR,'get_var_1d_integer',string1,source,revision,revdate)
+endif
+
+end subroutine get_var_1d_integer
 
 
 
@@ -4205,7 +4345,7 @@ real(r4), allocatable, dimension(:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -4235,7 +4375,7 @@ if (dimIDs(1) == TimeDimID) then
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -4395,7 +4535,7 @@ real(r4), allocatable, dimension(:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -4441,7 +4581,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -4601,7 +4741,7 @@ real(r4), allocatable, dimension(:,:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -4650,7 +4790,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (debug > 1 .and. do_output()) then
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -4803,6 +4943,252 @@ if (findKindIndex < 1) then
 endif
 
 end function findKindIndex
+
+
+
+subroutine update_snow( ivar, N, state_vector, ncid, filename )
+!------------------------------------------------------------------
+! Each CLM instance may have a different number of snow layers.
+! During snow assimilation, the snow water equivalent (H2OSNO) must be
+! updated by the filter, but it is a diagnostic quantity as far as CLM4 is concerned.
+! The posterior H2OSNO must be repartitioned into the CLM prognostic variables:
+! DZSNO, H2OSOI_ICE, H2OSOI_LIQ, and SNOWDP.
+!
+! The snow water equivalent (H2OSNO) cannot be zero since H2OSNO is used to calculate the 
+! bulk snow density, which in turn is a parameter in the equation of Snow Cover Fraction.
+!
+! FIXME ... is this the right thing to do.
+! FIXME ... is this the right thing to do.
+! In order to avoid the negative values of H2OSNO produced by DART,
+! I added some "if" conditions to set the value of H2OSNO back to the value 
+! before assimilation if negative value is found.
+! FIXME ... is this the right thing to do.
+! FIXME ... is this the right thing to do.
+!
+! Algorithm written and implemented by Fei, recoded by Tim.
+!
+! The update of other variables will be calculated based on their physical relationships.
+!
+! SnowDensity(layer,column)  = (H2OSOI_LIQ(layer,column) + H2OSOI_ICE(layer,column))
+!                                            / DZSNO(layer,column)
+!
+! wt_swe(layer,column)       = H2OSOI_LIQ(layer,column)+H2OSOI_ICE(layer,column))
+!                                            / H2OSNO(column)                             
+!
+! wt_liq(layer,column)       = H2OSOI_LIQ(layer,column)/(H2OSOI_LIQ(layer,column)+
+!                               H2OSOI_ICE(layer,column))
+!
+! wt_ice(layer,column)       = 1-wt_liq(layer,column)
+!
+! GainH2OSNO_l(layer,column) = GainH2OSNO(column)*wt_swe(layer,column)
+!
+! GainH2O_LIQ(layer,column)  = GainH2OSNO_l(layer,column)*wt_liq(layer,column)
+!
+! GainH2O_ICE(layer,column)  = GainH2OSNO_l(layer,column)*(1-wt_liq(layer,column))
+!
+! GainDZSNO(layer,column)    = GainH2OSNO_l(layer,column)/SnowDensity(layer,column)
+!
+! H2OSOI_LIQ_update(layer,column) = H2OSOI_LIQ(layer,column)+GainH2O_LIQ(layer,column)
+!
+! H2OSOI_ICE_update(layer,column) = H2OSOI_ICE(layer,column)+GainH2O_ICE(layer,column)
+!
+! GainSNOWDP(column)         = sum(GainDZSNO(layer,column))
+!
+! SNOWDP_update(column)      = SNOWDP(column)+GainSNOWDP(column)
+!
+!=========================================================================
+!    double frac_sno(column) ;
+!            frac_sno:long_name = "fraction of ground covered by snow (0 to 1)" ;
+!            frac_sno:units = "unitless" ;
+!    int    SNLSNO(column) ;
+!            SNLSNO:long_name = "number of snow layers" ;
+!            SNLSNO:units = "unitless" ;
+!    double SNOWDP(column) ;
+!            SNOWDP:long_name = "snow depth" ;
+!            SNOWDP:units = "m" ;
+!    double H2OSNO(column) ;
+!            H2OSNO:long_name = "snow water" ;
+!            H2OSNO:units = "kg/m2" ;
+!    double H2OSOI_LIQ(column, levtot) ;
+!            H2OSOI_LIQ:long_name = "liquid water" ;
+!            H2OSOI_LIQ:units = "kg/m2" ;
+!    double H2OSOI_ICE(column, levtot) ;
+!            H2OSOI_ICE:long_name = "ice lens" ;
+!            H2OSOI_ICE:units = "kg/m2" ;
+!    double DZSNO(column, levsno) ;
+!            DZSNO:long_name = "snow layer thickness" ;
+!            DZSNO:units = "m" ;
+
+integer,          intent(in) :: ivar
+integer,          intent(in) :: N
+real(r8),         intent(in) :: state_vector(N)
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: filename
+
+! TJH FIXME see if we need both the _pr and _po sets of variables.
+integer  ::      snlsno(Ncolumn)
+real(r8) ::   h2osno_pr(ncolumn),         h2osno_po(ncolumn)
+real(r8) ::   snowdp_pr(ncolumn),         snowdp_po(ncolumn)
+real(r8) ::    dzsno_pr(nlevsno,ncolumn),  dzsno_po(nlevsno,ncolumn)
+real(r8) ::   h2oliq_pr(nlevsno,ncolumn), h2oliq_po(nlevsno,ncolumn)
+real(r8) ::   h2oice_pr(nlevsno,ncolumn), h2oice_po(nlevsno,ncolumn)
+real(r8) ::  gain_dzsno(nlevsno,ncolumn)
+
+real(r8) :: snowden, wt_swe, wt_liq, wt_ice
+real(r8) :: gain_h2oice
+real(r8) :: gain_h2oliq
+real(r8) :: gain_h2osno
+
+integer  :: icolumn, ilayer, c
+integer  :: VarID
+
+string3 = trim(filename)//' '//trim(progvar(ivar)%varname)
+
+if (trim(progvar(ivar)%varname) /= 'H2OSNO') then
+   write(string1,*)'must be called with H2OSNO.'
+   write(string2,*)'was called with < ',trim(progvar(ivar)%varname),' >'
+   call error_handler(E_MSG, 'update_snow', string1, &
+           source, revision, revdate, text2=string2 )
+endif
+
+! TJH FIXME ... AFTER TESTING, REMOVE THIS CHECK.
+write(string1,*)'WARNING: This routine is fundamentally untested.'
+write(string2,*)'WARNING: Exercise great care and check results thoroughly.'
+call error_handler(E_MSG, 'update_snow', string1, &
+                      source, revision, revdate, text2=string2)
+
+! Collect all the pieces that will need to be updated.
+! If these variables already exist in the DART state, just ignore.
+! They may have been useful for forward operators, but they should not 
+! be used for updating the snow.  DART_get_var() replaces missing 
+! values with DART missing_r8 (which is negative).
+
+call DART_get_var(ncid, 'SNLSNO'    , snlsno   )
+call DART_get_var(ncid, 'H2OSNO'    , h2osno_pr)
+call DART_get_var(ncid, 'SNOWDP'    , snowdp_pr)
+call DART_get_var(ncid, 'DZSNO'     ,  dzsno_pr)
+call DART_get_var(ncid, 'H2OSOI_LIQ', h2oliq_pr)
+call DART_get_var(ncid, 'H2OSOI_ICE', h2oice_pr)
+
+where (h2osno_pr < 0.0_r8) h2osno_pr = 0.0_r8
+where (snowdp_pr < 0.0_r8) snowdp_pr = 0.0_r8
+where ( dzsno_pr < 0.0_r8)  dzsno_pr = 0.0_r8
+where (h2oliq_pr < 0.0_r8) h2oliq_pr = 0.0_r8
+where (h2oice_pr < 0.0_r8) h2oice_pr = 0.0_r8
+
+h2osno_po = h2osno_pr
+snowdp_po = snowdp_pr
+ dzsno_po =  dzsno_pr
+h2oliq_po = h2oliq_pr
+h2oice_po = h2oice_pr
+
+! h2osno_po is the posterior of the total snow water equivalent.
+! When called with a 4th argument, vector_to_prog_var() replaces the DART
+! missing code with the value in the corresponding variable in the netCDF file.
+
+call vector_to_prog_var(state_vector, ivar, h2osno_po, ncid)
+
+where ( h2osno_po < 0.0_r8 ) h2osno_po = h2osno_pr
+
+
+! Adjust the variables to be consistant with the updated H2OSNO
+! Remember: snlsno has the NEGATIVE of the number of snow layers. 
+
+PARTITION: do icolumn = 1,ncolumn
+
+   if (h2osno_po(icolumn) < 0.0_r8) then
+
+      write(*,*)'negative value found: column ',icolumn
+
+      do ilayer=1,-snlsno(icolumn)
+
+         h2oliq_po(ilayer,icolumn) = 0.0_r8
+         h2oice_po(ilayer,icolumn) = 0.00001_r8
+          dzsno_po(ilayer,icolumn) = 0.00000001_r8   !FIXME. The value is kind of random.
+
+      enddo
+
+      snowdp_po(icolumn) = sum( dzsno_po(:,icolumn))
+      h2osno_po(icolumn) = sum(h2oice_po(:,icolumn))
+
+   else
+
+      if (snlsno(icolumn) < 0) then  ! If there IS snow in the column ...
+   
+         do c = 1,-snlsno(icolumn)
+            ilayer = 5-c+1
+
+            ! Calculate the snow density
+            if ( dzsno_pr(ilayer,icolumn) > 0.0_r8) then
+               snowden = (h2oliq_pr(ilayer,icolumn) + h2oice_pr(ilayer,icolumn)) / &
+                           dzsno_pr(ilayer,icolumn)
+            else
+               snowden = 0.0_r8
+            endif
+
+            ! Calculate the fraction of the SWE in this layer
+            if ( h2osno_pr(icolumn) > 0.0_r8 ) then
+               wt_swe = (h2oliq_pr(ilayer,icolumn) + h2oice_pr(ilayer,icolumn)) / &
+                                h2osno_pr(icolumn)
+            else
+               wt_swe = 0.0_r8
+            endif
+ 
+            ! Calculate the fraction of liquid (and ice) water in this layer  
+            if ( (h2oliq_pr(ilayer,icolumn) + h2oice_pr(ilayer,icolumn)) > 0.0_r8) then
+               wt_liq = h2oliq_pr(ilayer,icolumn) / &
+                       (h2oliq_pr(ilayer,icolumn) + h2oice_pr(ilayer,icolumn))
+               wt_ice = 1.0_r8 - wt_liq
+            else
+               wt_liq = 0.0_r8
+               wt_ice = 0.0_r8
+            endif
+  
+            gain_h2osno = (h2osno_po(icolumn) - h2osno_pr(icolumn)) * wt_swe
+            gain_h2oliq = gain_h2osno * wt_liq
+            gain_h2oice = gain_h2osno * wt_ice
+
+            if ( snowden > 0.0_r8 ) then
+               gain_dzsno(ilayer,icolumn) = gain_h2osno / snowden
+            else
+               gain_dzsno(ilayer,icolumn) = 0.0_r8
+            endif
+
+            h2oliq_po(ilayer,icolumn) = h2oliq_pr(ilayer,icolumn) + gain_h2oliq
+            h2oice_po(ilayer,icolumn) = h2oice_pr(ilayer,icolumn) + gain_h2oice
+             dzsno_po(ilayer,icolumn) =  dzsno_pr(ilayer,icolumn) + gain_dzsno(ilayer,icolumn)
+         enddo
+
+      endif
+
+      snowdp_po(icolumn) = snowdp_pr(icolumn) + sum(gain_dzsno(:,icolumn))
+
+   endif
+
+enddo PARTITION
+
+! Stuff the updated values into the CLM netCDF file.
+! Since CLM knows the number of snow layers, anything 'MISSING' is really 
+! a don't care, because those values are never used. Consequently,
+! I don't take herioc steps to replace the 0.0_r8 we have with the original MISSING or SPval.
+
+call nc_check(nf90_inq_varid(ncid,    'H2OSNO',     VarID), 'update_snow', 'inq_varid H2OSNO')
+call nc_check(nf90_put_var(  ncid,       VarID, h2osno_po), 'update_snow', 'put_var   H2OSNO')
+
+call nc_check(nf90_inq_varid(ncid,    'SNOWDP',     VarID), 'update_snow', 'inq_varid SNOWDP')
+call nc_check(nf90_put_var(  ncid,       VarID, snowdp_po), 'update_snow', 'put_var   SNOWDP')
+
+call nc_check(nf90_inq_varid(ncid,     'DZSNO',     VarID), 'update_snow', 'inq_varid DZSNO')
+call nc_check(nf90_put_var(  ncid,       VarID,  dzsno_po), 'update_snow', 'put_var   DZSNO')
+
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ',     VarID), 'update_snow', 'inq_varid H2OSOI_LIQ')
+call nc_check(nf90_put_var(  ncid,       VarID, h2oliq_po), 'update_snow', 'put_var   H2OSOI_LIQ')
+
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE',     VarID), 'update_snow', 'inq_varid H2OSOI_ICE')
+call nc_check(nf90_put_var(  ncid,       VarID, h2oice_po), 'update_snow', 'put_var   H2OSOI_ICE')
+
+end subroutine update_snow
+
 
 
 subroutine update_water_table_depth( ivar, state_vector, ncFileID, filename, dart_time)
@@ -5064,7 +5450,7 @@ ncols    = get_ncols_in_gridcell(ilon,ilat)
 ! Early return if there are no CLM columns at this location.
 ! Forward operator returns 'failed', but life goes on.
 if (ncols == 0) then
-   if ((debug > 3) .and. do_output()) then
+   if (debug > 3 .and. do_output()) then
       write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has no CLM columns - skipping.'
       write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
       call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
@@ -5081,7 +5467,7 @@ call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 ! FIXME Presently skipping gridcells with lakes.
 ! get_column_snow() must also modified to use bulk snow formulation for lakes.
 if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
-   if ((debug > 1) .and. do_output()) then
+   if (debug > 1 .and. do_output()) then
       write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
       write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
       call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
@@ -5103,7 +5489,7 @@ endif
 incidence_angle =      metadata(5)
 ens_index       =  int(metadata(6))
 
-if ((debug > 99) .and. do_output()) then
+if (debug > 99 .and. do_output()) then
    write(*,*)'TJH debug ... computing gridcell   ',ilon,ilat
    write(*,*)'TJH debug ... gridcell has columns ',columns_to_get
    write(*,*)'TJH debug ... ens_index            ',ens_index
@@ -5134,7 +5520,7 @@ ALLCOLUMNS : do icol = 1,ncols
    weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of column
    call get_column_snow(ncid, restart_filename, columns_to_get(icol)) ! allocates snowcolumn
 
-   if ( (debug > 2) .and. do_output() ) then
+   if (debug > 2 .and. do_output() ) then
       if (snowcolumn%nlayers < 1) then
          write(string1, *) 'column (',columns_to_get(icol),') has no snow'
          call error_handler(E_MSG,'get_brightness_temperature',string1)
@@ -5262,7 +5648,7 @@ ALLCOLUMNS : do icol = 1,ncols
                     vegdata, can_tran3_in, atmosdata, tb_out)
    endif
 
-   if ((debug > 2) .and. do_output()) then
+   if (debug > 2 .and. do_output()) then
       write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
    endif
 
@@ -5284,7 +5670,7 @@ call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(rest
 ! area-weight the average
 obs_val = sum(tb * weights) / sum(weights)
 
-if ((debug > 1) .and. do_output()) then
+if (debug > 1 .and. do_output()) then
    write(*,*)'tb      for all columns is ',tb
    write(*,*)'weights for all columns is ',weights
    write(*,*)'(weighted) obs value    is ',obs_val
@@ -5437,7 +5823,7 @@ call nc_check(nf90_get_var(  ncid, varid, LAIP_VALUE, start=ncstart, count=nccou
 !6) float H2OSOI(time, levgrnd, lat, lon); "volumetric soil water"; units = "mm3/mm3" ;
 
 ! Print a summary so far
-if ((debug > 3) .and. do_output()) then
+if (debug > 3 .and. do_output()) then
    write(*,*)'get_column_snow: raw CLM data for column ',snow_column
    write(*,*)'  # of snow layers, column ityp, ground temp :', snlsno, cols1d_ityplun(snow_column), t_grnd
    write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevsno)
@@ -5471,7 +5857,7 @@ do ij = 2,nlevgrnd-1
 enddo
 dzsoi(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
 
-if ((debug > 3) .and. do_output()) then
+if (debug > 3 .and. do_output()) then
    write(*,*)'lthickness       = ',dzsoi, ' m'
    write(*,*)'size(lthickness) = ',size(dzsoi)
    write(*,*)'nlevsno+1 = ', nlevsno+1
@@ -5483,7 +5869,7 @@ endif
 h2osoi_vol = h2osoi_liq(nlevsno+1)/(dzsoi(1)*DENH2O) &
            + h2osoi_ice(nlevsno+1)/(dzsoi(1)*DENICE)
 
-if ((debug > 3) .and. do_output()) then
+if (debug > 3 .and. do_output()) then
    write(*,*)'  size(h2osoi_liq)       :', size(h2osoi_liq)
    write(*,*)'  size(h2osoi_vol)       :', size(h2osoi_vol)
    write(*,*)'  h2osoi_liq             :', h2osoi_liq(nlevsno+1)
@@ -5512,7 +5898,7 @@ do ilayer = (nlevsno-nlayers+1),nlevsno
    snowcolumn%grain_radius(ij) = snw_rds(ilayer)
    snowcolumn%liquid_water(ij) = h2osoi_liq(ilayer)
    snowcolumn%temperature(ij)  = t_soisno(ilayer)
-   if ((debug > 3) .and. do_output()) &
+   if (debug > 3 .and. do_output()) &
       write(*,*)'   get_column_snow: filling column ',snow_column, &
                 ' layer ',ij,' with info from ilayer ',ilayer
 enddo
@@ -5568,7 +5954,7 @@ write(filename,110) trim(casename),trim(flavor),year,month,day,second
 
 if( file_exist(filename) ) then ! perfect model scenario
 
-   if ( (debug > 99) .and. do_output()) then
+   if (debug > 99 .and. do_output()) then
       write(string1,*)'Running in a perfect model configuration with ',trim(filename)
       call error_handler(E_MSG, 'model_mod:build_clm_instance_filename', string1)
    endif
@@ -5707,7 +6093,7 @@ p_w       = p_ws*rh2m_tmp/100;
 !c) compute absolute humidity (g/m^3)
 values%moist0  = 2.16679*p_w/(values%tbot); !moist0 = 7.5 [G/M^3]ground level water vapour (g/m^3)
 
-if ((debug > 0) .and. do_output()) then
+if (debug > 0 .and. do_output()) then
    write(*,*)
    write(*,*)trim(filename),' values for gridcell ',ilon,ilat
    write(*,*)'tv     is ',values%tv
@@ -5816,7 +6202,7 @@ enddo
 
 ! Check block
 
-if ((debug > 99) .and. do_output()) then
+if (debug > 99 .and. do_output()) then
 
    iunit = open_file('gridcell_column_table.txt',form='formatted',action='write')
 
@@ -6024,7 +6410,7 @@ if ( FindDesiredTimeIndx == MISSING_I ) then
           source, revision, revdate )
 endif
 
-if ((debug > 0) .and. do_output()) then
+if (debug > 3 .and. do_output()) then
    write(string1,*)trim(varname)//' matching time index is ',FindDesiredTimeIndx
    call error_handler(E_MSG, 'FindDesiredTimeIndx:', string1)
 endif
