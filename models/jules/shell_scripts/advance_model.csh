@@ -181,12 +181,22 @@ while($state_copy <= $num_states)
    set SECONDS=$BASE:e
    set ROOT=$BASE:r
    set DATESTR=$ROOT:e
+   set RFILEBASE=$ROOT:r
 
    set JULES_OUTPUT=`ls -1 *hour*nc | tail -n 1`
    set OFILEBASE=$JULES_OUTPUT:r
+   
+   # SR: We want instance number in JULES output file name. I am adding it.   
+   mv -v $JULES_OUTPUT   $OFILEBASE.$instance.$DATESTR.$SECONDS.nc    >>& $logfile
+   set    JULES_OUTPUT = $OFILEBASE.$instance.$DATESTR.$SECONDS.nc
 
-   mv -v $JULES_OUTPUT   $OFILEBASE.$DATESTR.$SECONDS.nc    >>& $logfile
-   set    JULES_OUTPUT = $OFILEBASE.$DATESTR.$SECONDS.nc
+   # SR: We want instance number in JULES restart file name. Don't be confused here.
+   # I am talking about the restart files being produced by running JULES for each
+   # ensemble member. Notice at the beginning of Block 4 that we are copying the
+   # output and restart files to the central directory as a preparation step for the
+   # next cycle.
+   mv -v $JULES_RESTART  $RFILEBASE.$instance.$DATESTR.$SECONDS.nc    >>& $logfile
+   set    JULES_RESTART = $RFILEBASE.$instance.$DATESTR.$SECONDS.nc
 
    #----------------------------------------------------------------------
    # Block 4: Convert the model output to form needed by DART
