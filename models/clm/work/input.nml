@@ -21,7 +21,6 @@
    print_every_nth_obs   = -1
    silence               = .false.
    /
-   obs_seq_in_file_name  = 'obs_seq.5coop.in'
 
 &filter_nml
    async                    = 0
@@ -149,7 +148,9 @@
                                 'AMSRE_BRIGHTNESS_T',
                                 'COSMOS_NEUTRON_INTENSITY',
                                 'SOIL_MOISTURE',
-                                'SURFACE_ALBEDO'
+                                'SOIL_TEMPERATURE',
+                                'SURFACE_ALBEDO',
+                                'MODIS_FPAR'
    evaluate_these_obs_types   = 'null'
    /
 
@@ -159,11 +160,6 @@
    netCDF_large_file_support  = .true.
    /
 
-
-# nolton:Desktop/CLM/camforcing_daily.clm2.r.2000-12-31-00000.nc
-# nolton:Desktop/CLM/camforcing_daily.clm2.h0.2000-12-31-00000.nc
-# nolton:Desktop/CLM/timing_128inst_1month_avectCopy_speedup_US-Ha1_ICN.clm2.1.r.0001-02-01-00000.nc
-# The definitions for most of the DART kinds are in obs_def_tower_mod.f90, obs_def_brightnessT_mod.f90
 
 # Each variable must have 6 entries.
 # 1: variable name
@@ -180,60 +176,55 @@
 # There is no point specifying min/max values for variables not marked 'UPDATE'
 
 &model_nml
-   casename                     = 'cesm_standard'
    clm_restart_filename         = 'clm_restart.nc'
    clm_history_filename         = 'clm_history.nc'
    clm_vector_history_filename  = 'clm_vector_history.nc'
+   casename                     = 'clm_dart'
    assimilation_period_days     = 2
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.2
    output_state_vector          = .false.
    calendar                     = 'Gregorian'
+   debug                        = 9
    radiative_transfer_model     = 'memls'
-   debug                        = 0
-   clm_variables = 'frac_sno',    'KIND_SNOWCOVER_FRAC',         '0.0', '1.0', 'restart' , 'UPDATE',
-                   'H2OSNO',      'KIND_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
-                   'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',          '0.0', 'NA', 'restart' , 'UPDATE',
-                   'H2OSOI_ICE',  'KIND_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
-                   'T_SOISNO',    'KIND_SOIL_TEMPERATURE',       '0.0', 'NA', 'restart' , 'UPDATE',
-                   'cpool',       'KIND_CARBON',                 '0.0', 'NA', 'restart' , 'UPDATE',
-                   'frootc',      'KIND_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
-                   'leafc',       'KIND_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
-                   'leafn',       'KIND_LEAF_NITROGEN',          '0.0', 'NA', 'restart' , 'UPDATE',
-                   'TV',          'KIND_VEGETATION_TEMPERATURE',  'NA', 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'TLAI',        'KIND_LEAF_AREA_INDEX',         'NA', 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'RH2M_R',      'KIND_SPECIFIC_HUMIDITY',       'NA', 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'FSRVDLN',     'KIND_RADIATION_VISIBLE_UP',    'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                   'FSRNDLN',     'KIND_RADIATION_NEAR_IR_UP',    'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                   'FSDSVDLN',    'KIND_RADIATION_VISIBLE_DOWN',  'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                   'FSDSNDLN',    'KIND_RADIATION_NEAR_IR_DOWN',  'NA', 'NA', 'history' , 'NO_COPY_BACK'
+   clm_variables  = 'frac_sno',    'KIND_SNOWCOVER_FRAC',         '0.0', '1.0', 'restart' , 'NO_COPY_BACK',
+                    'H2OSNO',      'KIND_SNOW_WATER',             '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',          '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'H2OSOI_ICE',  'KIND_ICE',                    '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'T_SOISNO',    'KIND_SOIL_TEMPERATURE',       'NA' , 'NA' , 'restart' , 'UPDATE',
+                    'cpool',       'KIND_CARBON',                 '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'frootc',      'KIND_ROOT_CARBON',            '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'frootn',      'KIND_ROOT_NITROGEN',          '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'leafc',       'KIND_LEAF_CARBON',            '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'leafn',       'KIND_LEAF_NITROGEN',          '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'livecrootc',  'KIND_LIVE_ROOT_CARBON',       '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'deadcrootc',  'KIND_DEAD_ROOT_CARBON',       '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'livestemc',   'KIND_LIVE_STEM_CARBON',       '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'deadstemc',   'KIND_DEAD_STEM_CARBON',       '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'livecrootn',  'KIND_LIVE_ROOT_NITROGEN',     '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'deadcrootn',  'KIND_DEAD_ROOT_NITROGEN',     '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'livestemn',   'KIND_LIVE_STEM_NITROGEN',     '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'deadstemn',   'KIND_DEAD_STEM_NITROGEN',     '0.0', 'NA' , 'restart' , 'UPDATE',
+                    'LAIP_VALUE',  'KIND_LEAF_AREA_INDEX',        '0.0', 'NA' , 'restart' , 'NO_COPY_BACK',
+                    'SNOWDP',      'KIND_SNOW_THICKNESS',         '0.0', 'NA' , 'history' , 'NO_COPY_BACK',
+                    'NEP',         'KIND_NET_CARBON_PRODUCTION',  '0.0', 'NA' , 'history' , 'NO_COPY_BACK',
+                    'FSRVDLN',     'KIND_RADIATION_VISIBLE_UP',   'NA' , 'NA' , 'history' , 'NO_COPY_BACK',
+                    'FSRNDLN',     'KIND_RADIATION_NEAR_IR_UP',   'NA' , 'NA' , 'history' , 'NO_COPY_BACK',
+                    'FSDSVDLN',    'KIND_RADIATION_VISIBLE_DOWN', 'NA' , 'NA' , 'history' , 'NO_COPY_BACK',
+                    'FSDSNDLN',    'KIND_RADIATION_NEAR_IR_DOWN', 'NA' , 'NA' , 'history' , 'NO_COPY_BACK',
+                    'TSAI',        'KIND_STEM_AREA_INDEX',        '0.0', 'NA' , 'history' , 'NO_COPY_BACK',
+                    'TLAI',        'KIND_LEAF_AREA_INDEX',        '0.0', 'NA' , 'vector'  , 'NO_COPY_BACK',
+                    'TV',          'KIND_VEGETATION_TEMPERATURE', 'NA' , 'NA' , 'vector'  , 'NO_COPY_BACK',
+                    'RH2M_R',      'KIND_SPECIFIC_HUMIDITY',      '0.0', 'NA' , 'vector'  , 'NO_COPY_BACK',
+                    'PBOT',        'KIND_SURFACE_PRESSURE',       '0.0', 'NA' , 'vector'  , 'NO_COPY_BACK',
+                    'TBOT',        'KIND_TEMPERATURE',            'NA' , 'NA' , 'vector'  , 'NO_COPY_BACK'
    /
 
-# small list of potentially interesting variables.
-#                   'PBOT',        'KIND_SURFACE_PRESSURE',       'NA', 'NA', 'vector'  , 'NO_COPY_BACK',
-#                   'TBOT',        'KIND_TEMPERATURE',            'NA', 'NA', 'vector'  , 'NO_COPY_BACK',
-#                   'livecrootc',  'KIND_ROOT_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'deadcrootc',  'KIND_ROOT_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'livestemc',   'KIND_STEM_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'deadstemc',   'KIND_STEM_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'frootn',      'KIND_ROOT_NITROGEN',          'NA', 'NA', 'restart' , 'UPDATE',
-#                   'livecrootn',  'KIND_ROOT_NITROGEN',          'NA', 'NA', 'restart' , 'UPDATE',
-#                   'deadcrootn',  'KIND_ROOT_NITROGEN',          'NA', 'NA', 'restart' , 'UPDATE',
-#                   'livestemn',   'KIND_STEM_NITROGEN',          'NA', 'NA', 'restart' , 'UPDATE',
-#                   'deadstemn',   'KIND_STEM_NITROGEN',          'NA', 'NA', 'restart' , 'UPDATE',
-#                   'litr1c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'litr2c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'litr3c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'soil1c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'soil2c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'soil3c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart' , 'UPDATE',
-#                   'soil4c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart' , 'UPDATE'
-#
-# update_snow() takes H2OSNO and updates the four following:
-#                   'SNOWDP',      'KIND_SNOW_THICKNESS',         'NA', 'NA', 'restart', 'UPDATE',
-#                   'H2OSOI_LIQ',  'KIND_LIQUID_WATER',           'NA', 'NA', 'restart', 'UPDATE',
-#                   'H2OSOI_ICE',  'KIND_ICE',                    'NA', 'NA', 'restart', 'UPDATE',
-#                   'T_SOISNO',    'KIND_SOIL_TEMPERATURE',       'NA', 'NA', 'restart', 'UPDATE'
+# See the clm model_mod.html for a larger listing of CLM variables and their associated DART KINDs.
+# Be aware that some variables exist in both restart and history files, so it makes a difference where
+# the variable comes from. Only those in the CESM restart file are relevant for future model advances. 
+# The list is by no means complete.
+
 
 &clm_to_dart_nml
    clm_to_dart_output_file  = 'dart_ics'

@@ -62,6 +62,7 @@ use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,           &
                              KIND_DEAD_STEM_CARBON,           &
                              KIND_LEAF_NITROGEN,              &
                              KIND_LEAF_AREA_INDEX,            &
+                             KIND_STEM_AREA_INDEX,            &
                              KIND_NET_PRIMARY_PROD_FLUX,      &
                              KIND_BIOMASS,                    &
                              KIND_WATER_TABLE_DEPTH,          &
@@ -2543,7 +2544,8 @@ select case( obs_kind )
 
       call get_grid_vertval(x, location, obs_kind, interp_val, istatus)
 
-   case ( KIND_SNOWCOVER_FRAC,        KIND_LEAF_AREA_INDEX,        &
+   case ( KIND_SNOWCOVER_FRAC, &
+          KIND_LEAF_AREA_INDEX,       KIND_STEM_AREA_INDEX,        &
           KIND_LEAF_CARBON,           KIND_LEAF_NITROGEN,          &
           KIND_WATER_TABLE_DEPTH,     KIND_VEGETATION_TEMPERATURE, &
           KIND_FPAR_SUNLIT_DIRECT,    KIND_FPAR_SUNLIT_DIFFUSE,    &
@@ -2588,9 +2590,6 @@ select case( obs_kind )
       istatus = 5
 
 end select
-
-
-
 
 if ((debug > 6) .and. do_output()) write(*,*)'interp_val ',interp_val
 
