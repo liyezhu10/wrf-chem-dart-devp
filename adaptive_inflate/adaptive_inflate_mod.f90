@@ -33,6 +33,7 @@ character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 ! Manages both observation space and state space inflation
 ! Handles initial values and restarts, diagnostic output, and computations
@@ -97,7 +98,7 @@ real(r8) :: minmax_mean(2), minmax_sd(2)
 ! Record the module version if this is first initialize call
 if(.not. initialized) then
    initialized = .true.
-   call register_module(source, revision, revdate)
+   call register_module(id)
 endif
 
 ! If non-deterministic inflation is being done, need to initialize random sequence.
