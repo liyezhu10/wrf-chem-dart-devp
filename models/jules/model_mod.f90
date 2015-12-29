@@ -159,6 +159,7 @@ character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: jules_restart_filename = 'jules_restart.nc'
 character(len=256) :: jules_output_filename = 'jules_history.nc'
 
+
 character(len=obstypelength) :: variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
@@ -231,43 +232,50 @@ end type sparseCellComponents
 type(sparseCellComponents), allocatable, dimension(:,:), target :: sparseCell
 
 ! -----------------------------------------------------------------------------
-! ancillaries.nml &jules_frac  frac_name='frac'
-! ancillaries.nml &jules_frac  file='frac_lai_canht.nc'
-!         float frac(type, y, x) ;          where type is 9
-!               frac:units = " " ;
-!               frac:_FillValue = -9999.f ;
+! ancillaries.nml &jules_frac      file='frac_lai_canht.nc' -or- 'static_input.nc'
+! ancillaries.nml &jules_frac      frac_name='frac'
+!
+! model_grid.nml &jules_latlon     file='grid_lat_lon.nc' -or- 'static_input.nc'
+!                                  lat_name='latitude'
+!                                  lon_name='longitude'
+!
+! model_grid.nml &jules_land_frac  file='land_fraction.nc' -or- 'static_input.nc'
+!                                  land_frac_name='land_mask'
+!
+! timesteps.nml  &jules_time       main_run_start='YYYY-MM-DD HH:MM:SS'
+! timesteps.nml  &jules_time       main_run_end='YYYY-MM-DD HH:MM:SS'
+! timesteps.nml  &jules_time       timestep_len=3600
 !
 ! jules_surface_types.nml &jules_surface_types might be interesting ...
 !
-! model_grid.nml &jules_input_grid  Nlon,Nlat
-! model_grid.nml &jules_latlon      file='grid_lat_lon.nc'
-! model_grid.nml &jules_land_frac   file='land_fraction.nc'
-!
-! timesteps.nml  &jules_time        main_run_start='YYYY-MM-DD HH:MM:SS'
-! timesteps.nml  &jules_time        main_run_end='YYYY-MM-DD HH:MM:SS'
-! timesteps.nml  &jules_time        timestep_len=3600
+character(len=256) :: tile_fraction_file   = 'none'
+character(len=256) :: land_fraction_file   = 'none'
+character(len=256) :: physical_latlon_file = 'none'
+character(len=NF90_MAX_NAME) :: tilefraction_variable = 'none'
+character(len=NF90_MAX_NAME) :: landfraction_variable = 'none'
+character(len=NF90_MAX_NAME) :: physical_lon_variable = 'none'
+character(len=NF90_MAX_NAME) :: physical_lat_variable = 'none'
 
-integer :: Nx      = -1   ! output file, AKA 'x'
-integer :: Ny      = -1   ! output file, AKA 'y'
-integer :: Nsoil   = -1   ! output, restart, jules_soil.nml
-integer :: Ntile   = -1   ! output, restart
-integer :: Nland   = -1   ! Number of gridcells containing land
-integer :: Nscpool = -1   ! Number of soil carbon pools
+integer :: Nx_model = -1   ! output file, AKA 'x'
+integer :: Ny_model = -1   ! output file, AKA 'y'
+integer :: Nsoil    = -1   ! output, restart, jules_soil.nml
+integer :: Ntile    = -1   ! output, restart
+integer :: Nland    = -1   ! Number of gridcells containing land
+integer :: Nscpool  = -1   ! Number of soil carbon pools
 
 real(r8), allocatable :: LONGITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
-real(r8), allocatable :: TILE_FRACTIONS(:,:,:) ! land types (Nlon,Nlat,[Ntile,Ntype])
 
-! The following variables come from the input datasets.
-! These are 'physically' shaped (i.e. you can plot them easily)
+! The following variables are 'physically' shaped (i.e. you can plot them easily)
 
-integer :: Nlon    = -1   ! shape of physical (input) longitude/latitude matrix
-integer :: Nlat    = -1   ! shape of physical (input) longitude/latitude matrix
+integer :: Nlon = -1   ! shape of physical (input) longitude/latitude matrix
+integer :: Nlat = -1   ! shape of physical (input) longitude/latitude matrix
 
-real(r8), allocatable ::  LAND_FRACTIONS(  :,:)  ! gridcell proportion is land (Nlon,Nlat)
-real(r8), allocatable ::  INPUT_LONGITUDES(:,:)  ! gridcell longitudes (Nlon,Nlat)
-real(r8), allocatable ::  INPUT_LATITUDES( :,:)  ! gridcell latitudes  (Nlon,Nlat)
+real(r8), allocatable :: tile_fractions(:,:,:)    ! land types (Nlon,Nlat,[Ntile,Ntype])
+real(r8), allocatable :: land_fractions(:,:)      ! gridcell proportion is land (Nlon,Nlat)
+real(r8), allocatable :: physical_longitudes(:,:)
+real(r8), allocatable :: physical_latitudes( :,:)
 
 type(location_type), allocatable :: sparse_locations(:)
 integer,             allocatable :: sparse_kinds(:)
@@ -348,6 +356,7 @@ call error_handler(E_ERR,'adv_1step',string1,source,revision,revdate,text2=strin
 ! just so suppress compiler warnings. code unreachable
 x(:) = MISSING_R8
 
+return
 end subroutine adv_1step
 
 
@@ -386,7 +395,7 @@ location = set_location( mylon, mylat, mylev, vert_coord)
 
 if (present(var_type)) var_type = progvar(varindex)%dart_kind
 
-if (do_output() .and. (debug > 5)) then
+if (do_output() .and. debug > 5) then
    write(*,301) trim(progvar(varindex)%varname)
    write(*,300) trim(progvar(varindex)%varname), indx, &
       lon_index, lat_index, soil_index, tile_index, scpool_index, &
@@ -397,7 +406,6 @@ endif
  300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
 
 return
-
 end subroutine get_state_meta_data
 
 
@@ -433,8 +441,8 @@ integer  :: i, x_index, y_index, indx, vert_coord
 integer  :: lon_index, lat_index, soil_index, tile_index, scpool_index
 integer  :: sparseindex(1)
 integer  :: num_close, ncontrib
-integer  :: close_ind(Nx*Ny)
-real(r8) :: distances(Nx*Ny)
+integer  :: close_ind(Nx_model*Ny_model)
+real(r8) :: distances(Nx_model*Ny_model)
 real(r8) :: mindistance
 real(r8) :: mylon, mylat, mylev
 real(r8), allocatable :: profile(:)
@@ -511,7 +519,7 @@ if (num_close == 0) then
    istatus = 23
    return
 
-elseif (do_output() .and. (debug > 0)) then
+elseif (do_output() .and. debug > 0) then
 
    write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
    call write_location(istatus,location,charstring=string2)
@@ -526,15 +534,15 @@ elseif (do_output() .and. (debug > 0)) then
 
 endif
 
-! Now that we have the index into the 'sparse' array (which is always Nx*Ny,1);
+! Now that we have the index into the 'sparse' array (which is always Nx_model*Ny_model,1);
 ! decompose it into the x,y indices of the JULES model grid. 
 
 mindistance = minval(distances(1:num_close))
 sparseindex = close_ind(minloc(distances(1:num_close)))
 
-if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
-      y_index = 1 + (sparseindex(1) - 1)/Nx
-      x_index = sparseindex(1) - (y_index - 1)*Nx
+if (Ny_model /= 1) then ! the X-Y plane needs to be further decomposed
+      y_index = 1 + (sparseindex(1) - 1)/Nx_model
+      x_index = sparseindex(1) - (y_index - 1)*Nx_model
 else
       x_index = sparseindex(1)
       y_index = 1
@@ -544,7 +552,7 @@ endif
 ! structure to return the DART elements that are at that location.
 ! This block is just a check.
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. debug > 9) then
 
    write(*,*) sparseCell(x_index,y_index)%n, ' viable elements at sparse location ', x_index, y_index
    write(*,301) trim(progvar(varindex)%varname)
@@ -680,6 +688,7 @@ case default
               source, revision, revdate, text2=string2, text3=string3)
 end select
 
+return
 end subroutine model_interpolate
 
 
@@ -761,11 +770,10 @@ call error_handler(E_MSG,'static_init_model',string1)
 ! The JULES output file has the model grid metadata.
 ! The JULES restart files are intentionally lean and, in so doing,
 ! do not have metadata.
-! The JULES grid in an output  file can take on two forms.
+! The JULES grid in an output file can take on two forms.
 ! If there are no masked (non-land) gridcells, it is a regular 2D grid.
 ! If a mask has been applied, the number of longitudes takes on the number
 ! of useful land gridcells and the number of latitudes is 1.
-
 
 !>@TODO FIXME
 !>@TODO FIXME
@@ -783,13 +791,15 @@ call error_handler(E_MSG,'static_init_model',string1)
 call get_jules_output_dimensions( jules_output_filename )
 call get_jules_restart_dimensions(jules_restart_filename)
 
-allocate(LONGITUDE(Nx,Ny), LATITUDE(Nx,Ny),  SOILLEVEL(Nsoil))
-allocate(TILE_FRACTIONS(Nx,Ny,Ntile))
+! need to know the filenames for the physical grid information
 
-call Read_Jules_Soil_Namelist()
-call Resolve_Land_Fractions()
-call Resolve_Input_Grid()
-call Read_Tile_Fractions()
+call get_physical_filenames()   ! from jules namelist files
+call set_physical_grid(physical_latlon_file)
+call set_land_fractions(land_fraction_file)
+call set_tile_fractions(tile_fraction_file)
+
+call get_soil_levels()
+
 call Get_Model_Grid(jules_output_filename)
 
 ! --------------------------------------------------------------
@@ -905,10 +915,10 @@ do ivar = 1, nfields
       ! of elements in the LONGITUDE, LATITUDE arrays.
       ! The 'x' and 'y' dimensions in the output file already match
       ! so there is no need to check those.
-      if ( (dimname == 'land') .and. (dimlen /= Nx*Ny) )then
+      if ( (dimname == 'land') .and. (dimlen /= Nx_model*Ny_model) )then
          write(string1,*)'dimension mismatch between restart and output'
          write(string2,*)trim(progvar(ivar)%varname),' land dimension is ',dimlen
-         write(string3,*)'number of active land cells from output is ',Nx*Ny
+         write(string3,*)'number of active land cells from output is ',Nx_model*Ny_model
          call error_handler(E_ERR, 'static_init_model', string1, &
                     source, revision, revdate, text2=string2, text3=string3)
       endif
@@ -946,7 +956,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if (do_output() .and. (debug > 3)) call dump_structure(ivar)
+   if (do_output() .and. debug > 3) call dump_structure(ivar)
 
    call nc_check(nf90_close(ncid),'static_init_model','close '//trim(string2))
    ncid = 0
@@ -955,19 +965,19 @@ enddo
 
 model_size = progvar(nfields)%indexN
 
-if (do_output() .and. (debug > 99)) then
+if (do_output() .and. debug > 99) then
   write(logfileunit, *)
-  write(logfileunit,'("grid: Nx, Ny, Nsoil =",3(1x,i6))') Nx, Ny, Nsoil
+  write(logfileunit,'("grid: Nx_model, Ny_model, Nsoil =",3(1x,i6))') Nx_model, Ny_model, Nsoil
   write(logfileunit, *)'model_size = ', model_size
   write(     *     , *)
-  write(     *     ,'("grid: Nx, Ny, Nsoil =",3(1x,i6))') Nx, Ny, Nsoil
+  write(     *     ,'("grid: Nx_model, Ny_model, Nsoil =",3(1x,i6))') Nx_model, Ny_model, Nsoil
   write(     *     , *)'model_size = ', model_size
 endif
 
 ! --------------------------------------------------------------
 ! Generate list of dart indices of interest for each gridcell
 
-allocate(sparseCell(Nx,Ny))
+allocate(sparseCell(Nx_model,Ny_model))
 call setSparseCellLookupTable()
 
 ! --------------------------------------------------------------
@@ -977,6 +987,7 @@ call setSparseCellLookupTable()
 call set_sparse_locations_kinds()
 call init_interp()
 
+return
 end subroutine static_init_model
 
 
@@ -989,11 +1000,12 @@ subroutine end_model()
    if (allocated(LATITUDE)        ) deallocate(LATITUDE) 
    if (allocated(LONGITUDE)       ) deallocate(LONGITUDE) 
    if (allocated(SOILLEVEL)       ) deallocate(SOILLEVEL)
-   if (allocated(TILE_FRACTIONS)  ) deallocate(TILE_FRACTIONS) 
-   if (allocated(LAND_FRACTIONS)  ) deallocate(LAND_FRACTIONS)
+   if (allocated(tile_fractions)  ) deallocate(tile_fractions) 
+   if (allocated(land_fractions)  ) deallocate(land_fractions)
    if (allocated(sparse_locations)) deallocate(sparse_locations)
    if (allocated(sparse_kinds)    ) deallocate(sparse_kinds)
 
+return
 end subroutine end_model
 
 
@@ -1019,6 +1031,7 @@ call error_handler(E_ERR,'init_time',string1,source,revision,revdate)
 ! Just set to 0 to silence the compiler warnings.
 time = set_time(0,0)
 
+return
 end subroutine init_time
 
 
@@ -1044,6 +1057,7 @@ call error_handler(E_ERR,'init_conditions',string1,source,revision,revdate)
 ! Just set to 0 to silence the compiler warnings.
 x = 0.0_r8
 
+return
 end subroutine init_conditions
 
 
@@ -1083,11 +1097,13 @@ integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimit
 ! ---------------------------------------------------------------------
 
 ! for the dimensions and coordinate variables
-integer ::   NxDimID
-integer ::   NyDimID
+integer ::   NlonDimID   ! Physical grid longitude dimension
+integer ::   NlatDimID   ! Physical grid latitude  dimension
+integer ::   NxDimID     ! model grid dimension
+integer ::   NyDimID     ! model grid dimension
 integer ::  nsoilDimID
-integer ::  nlandDimID
-integer ::  ntileDimID
+integer ::  nlandDimID   ! number of land grid cells 
+integer ::  ntileDimID   ! number of PFTs -aka- vegetation tiles
 integer :: NscpoolDimID
 
 ! for the prognostic variables
@@ -1185,10 +1201,10 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'JULES' ), &
 ! Define the new dimensions IDs
 ! ---------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name='x' , len = Nx, &
+call nc_check(nf90_def_dim(ncid=ncFileID, name='x' , len = Nx_model, &
           dimid=NxDimID),   'nc_write_model_atts', 'def_dim x '//trim(filename))
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name='y' , len = Ny, &
+call nc_check(nf90_def_dim(ncid=ncFileID, name='y' , len = Ny_model, &
           dimid=NyDimID),   'nc_write_model_atts', 'def_dim y '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='soil', len = Nsoil, &
@@ -1203,34 +1219,40 @@ call nc_check(nf90_def_dim(ncid=ncFileID, name='tile', len = Ntile, &
 call nc_check(nf90_def_dim(ncid=ncFileID, name='scpool', len = Nscpool, &
           dimid=NscpoolDimID),'nc_write_model_atts', 'def_dim scpool '//trim(filename))
 
+call nc_check(nf90_def_dim(ncid=ncFileID, name='longitude', len = Nlon, &
+          dimid=NlonDimID),'nc_write_model_atts', 'def_dim longitude '//trim(filename))
+
+call nc_check(nf90_def_dim(ncid=ncFileID, name='latitude', len = Nlat, &
+          dimid=NlatDimID),'nc_write_model_atts', 'def_dim latitude '//trim(filename))
+
 ! ---------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
 ! ---------------------------------------------------------------------------
 
-! Grid Longitudes
-call nc_check(nf90_def_var(ncFileID,name='longitude', xtype=nf90_real, &
+! Model Grid Longitudes
+call nc_check(nf90_def_var(ncFileID,name='x', xtype=nf90_real, &
               dimids=(/ NxDimID, NyDimID /), varid=VarID),&
-              'nc_write_model_atts', 'def_var longitude '//trim(filename))
-call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate longitude'), &
+              'nc_write_model_atts', 'def_var x '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'model-space longitude'), &
               'nc_write_model_atts', 'put_att longitude long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'X'),  &
               'nc_write_model_atts', 'put_att longitude cartesian_axis '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
               'nc_write_model_atts', 'put_att longitude units '//trim(filename))
-call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r4, 360.0_r4 /)), &
               'nc_write_model_atts', 'put_att longitude valid_range '//trim(filename))
 
-! Grid Latitudes
-call nc_check(nf90_def_var(ncFileID,name='latitude', xtype=nf90_real, &
+! Model Grid Latitudes
+call nc_check(nf90_def_var(ncFileID,name='y', xtype=nf90_real, &
               dimids=(/ NxDimID, NyDimID /), varid=VarID),&
-              'nc_write_model_atts', 'def_var latitude '//trim(filename))
-call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'coordinate latitude'), &
+              'nc_write_model_atts', 'def_var y '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'model-space latitude'), &
               'nc_write_model_atts', 'put_att latitude long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
               'nc_write_model_atts', 'put_att latitude cartesian_axis '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
               'nc_write_model_atts', 'put_att latitude units '//trim(filename))
-call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
+call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r4, 90.0_r4 /)), &
               'nc_write_model_atts', 'put_att latitude valid_range '//trim(filename))
 
 ! subsurface levels
@@ -1244,14 +1266,56 @@ call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Z'),   &
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'm'),  &
               'nc_write_model_atts', 'put_att soil units '//trim(filename))
 
-! tile fractions
+! Physical Grid Longitudes
+call nc_check(nf90_def_var(ncFileID,name='longitude', xtype=nf90_real, &
+              dimids=(/ NlonDimID, NlatDimID /), varid=VarID),&
+              'nc_write_model_atts', 'def_var longitude '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'physical-space longitude'), &
+              'nc_write_model_atts', 'put_att longitude long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'X'),  &
+              'nc_write_model_atts', 'put_att longitude cartesian_axis '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_east'), &
+              'nc_write_model_atts', 'put_att longitude units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'valid_range', (/ 0.0_r4, 360.0_r4 /)), &
+              'nc_write_model_atts', 'put_att longitude valid_range '//trim(filename))
+
+! Physical Grid Latitudes
+call nc_check(nf90_def_var(ncFileID,name='latitude', xtype=nf90_real, &
+              dimids=(/ NlonDimID, NlatDimID /), varid=VarID),&
+              'nc_write_model_atts', 'def_var latitude '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'physical-space latitude'), &
+              'nc_write_model_atts', 'put_att latitude long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'cartesian_axis', 'Y'),   &
+              'nc_write_model_atts', 'put_att latitude cartesian_axis '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', 'degrees_north'),  &
+              'nc_write_model_atts', 'put_att latitude units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ -90.0_r4, 90.0_r4 /)), &
+              'nc_write_model_atts', 'put_att latitude valid_range '//trim(filename))
+
+! Physical Grid tile fractions
 call nc_check(nf90_def_var(ncFileID,name='tile_frac', xtype=nf90_real, &
-              dimids=(/ NxDimID, NyDimID, nTileDimID /), varid=VarID),&
+              dimids=(/ NlonDimID, NlatDimID, nTileDimID /), varid=VarID),&
               'nc_write_model_atts', 'def_var tile_frac '//trim(filename))
-call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'tile fractions'), &
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'physical-space tile fractions'), &
               'nc_write_model_atts', 'put_att tile_frac long_name '//trim(filename))
 call nc_check(nf90_put_att(ncFileID,  VarID, 'units', ' '),  &
               'nc_write_model_atts', 'put_att tile_frac units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ 0.0_r4, 1.0_r4 /)), &
+              'nc_write_model_atts', 'put_att tile_frac valid_range '//trim(filename))
+
+! FIXME ... do we need a model grid tile fractions ... and if so, what
+! dimensions should it use ... nland -or- nx and ny ... what variables use it?
+
+! Physical Grid land fractions
+call nc_check(nf90_def_var(ncFileID,name='land_fractions', xtype=nf90_real, &
+              dimids=(/ NlonDimID, NlatDimID /), varid=VarID),&
+              'nc_write_model_atts', 'def_var land_fractions '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'physical-space land fractions'), &
+              'nc_write_model_atts', 'put_att land_fractions long_name '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID, 'units', ' '),  &
+              'nc_write_model_atts', 'put_att land_fractions units '//trim(filename))
+call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ 0.0_r4, 1.0_r4 /)), &
+              'nc_write_model_atts', 'put_att land_fractions valid_range '//trim(filename))
 
 ! ---------------------------------------------------------------------------
 ! Create the (empty) Prognostic Variables and the Attributes
@@ -1322,12 +1386,12 @@ call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 ! Fill the coordinate variables
 ! ---------------------------------------------------------------------------
 
-call nc_check(nf90_inq_varid(ncFileID, 'longitude', VarID), &
+call nc_check(nf90_inq_varid(ncFileID, 'x', VarID), &
              'nc_write_model_atts', 'inq_varid longitude '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, VarID, LONGITUDE ), &
              'nc_write_model_atts', 'put_var longitude '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncFileID, 'latitude', VarID), &
+call nc_check(nf90_inq_varid(ncFileID, 'y', VarID), &
              'nc_write_model_atts', 'inq_varid latitude '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, VarID, LATITUDE ), &
              'nc_write_model_atts', 'put_var latitude '//trim(filename))
@@ -1337,10 +1401,25 @@ call nc_check(nf90_inq_varid(ncFileID, 'soil', VarID), &
 call nc_check(nf90_put_var(ncFileID, VarID, SOILLEVEL ), &
              'nc_write_model_atts', 'put_var soil '//trim(filename))
 
+call nc_check(nf90_inq_varid(ncFileID, 'longitude', VarID), &
+             'nc_write_model_atts', 'inq_varid longitude '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, physical_longitudes ), &
+             'nc_write_model_atts', 'put_var longitude '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncFileID, 'latitude', VarID), &
+             'nc_write_model_atts', 'inq_varid latitude '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, physical_latitudes ), &
+             'nc_write_model_atts', 'put_var latitude '//trim(filename))
+
 call nc_check(nf90_inq_varid(ncFileID, 'tile_frac', VarID), &
              'nc_write_model_atts', 'inq_varid tile_frac '//trim(filename))
-call nc_check(nf90_put_var(ncFileID, VarID, TILE_FRACTIONS ), &
+call nc_check(nf90_put_var(ncFileID, VarID, tile_fractions ), &
              'nc_write_model_atts', 'put_var tile_frac '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncFileID, 'land_fractions', VarID), &
+             'nc_write_model_atts', 'inq_varid land_fractions '//trim(filename))
+call nc_check(nf90_put_var(ncFileID, VarID, land_fractions ), &
+             'nc_write_model_atts', 'put_var land_fractions '//trim(filename))
 
 ! ------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -1450,7 +1529,7 @@ do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
    where(dimIDs == TimeDimID) ncstart = timeindex
    where(dimIDs == TimeDimID) nccount = 1
 
-   if (do_output() .and. (debug > 9)) then
+   if (do_output() .and. debug > 9) then
       write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',ncstart(1:ncNdims)
       write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',nccount(1:ncNdims)
    endif
@@ -1575,6 +1654,7 @@ do i=1,size(state)
                                    model_perturbation_amplitude)
 enddo
 
+return
 end subroutine pert_model_state
 
 
@@ -1631,8 +1711,10 @@ do k = 1, num_close
                       base_obs_kind, obs_kind(close_ind(k)))
 
 enddo
+   ! FIXME
 endif
 
+return
 end subroutine get_close_obs
 
 
@@ -1649,6 +1731,7 @@ if ( .not. module_initialized ) call static_init_model
 
 ! ens_mean = filter_ens_mean
 
+return
 end subroutine ens_mean_for_model
 
 
@@ -1879,6 +1962,7 @@ do ivar=1, nfields
 
 enddo
 
+return
 end subroutine jules_to_dart_state_vector
 
 
@@ -2005,6 +2089,7 @@ enddo UPDATE
 call nc_check(nf90_close(ncFileID),'dart_to_jules_restart','close '//trim(jules_restart_filename))
 ncFileID = 0
 
+return
 end subroutine dart_to_jules_restart
 
 
@@ -2021,6 +2106,7 @@ if ( .not. module_initialized ) call static_init_model
 
 filename = trim(jules_restart_filename)
 
+return
 end subroutine get_jules_restart_filename
 
 
@@ -2195,6 +2281,7 @@ integer  :: spvalINT
 real(r4) :: spvalR4
 real(r8) :: scale_factor, add_offset
 real(r8) :: spvalR8
+character(len=512) :: msgstring
 
 integer,  allocatable, dimension(:) :: intarray
 real(r4), allocatable, dimension(:) :: r4array
@@ -2202,19 +2289,25 @@ real(r4), allocatable, dimension(:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)
    write(logfileunit,*)
+endif
+
+if (present(context)) then
+   msgstring = context
+else
+   msgstring = varname
 endif
 
 io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
 if (io1 /= NF90_NOERR) TimeDimID = MISSING_I
 
-call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//trim(varname))
+call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_1d', 'inq_varid '//trim(msgstring))
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_1d', 'inquire_variable '//trim(varname))
+              xtype=xtype), 'get_var_1d', 'inquire_variable '//trim(msgstring))
 call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
-              'get_var_1d', 'inquire_dimension '//trim(varname))
+              'get_var_1d', 'inquire_dimension '//trim(msgstring))
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
@@ -2226,13 +2319,13 @@ nccount = dimlens(1)
 
 if (dimIDs(1) == TimeDimID) then
    call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_1d', 'inquire_dimension time '//trim(varname))
+         'get_var_1d', 'inquire_dimension time '//trim(msgstring))
    timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
    ncstart(1) = timeindex
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -2243,19 +2336,19 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//trim(varname))
+           'get_var_1d', 'get_var '//trim(msgstring))
    var1d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
@@ -2278,19 +2371,19 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//trim(varname))
+           'get_var_1d', 'get_var '//trim(msgstring))
    var1d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
@@ -2312,18 +2405,18 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var1d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_1d', 'get_var '//trim(varname))
+           'get_var_1d', 'get_var '//trim(msgstring))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_1d',string1)
    endif
@@ -2340,10 +2433,11 @@ elseif (xtype == NF90_DOUBLE) then
    endif
 
 else
-   write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
+   write(string1,*) trim(msgstring)//' has unsupported (by DART) xtype of', xtype
    call error_handler(E_ERR,'get_var_1d',string1,source,revision,revdate)
 endif
 
+return
 end subroutine get_var_1d
 
 
@@ -2389,6 +2483,7 @@ integer  :: spvalINT
 real(r4) :: spvalR4
 real(r8) :: scale_factor, add_offset
 real(r8) :: spvalR8
+character(len=512) :: msgstring
 
 integer,  allocatable, dimension(:,:) :: intarray
 real(r4), allocatable, dimension(:,:) :: r4array
@@ -2396,9 +2491,15 @@ real(r4), allocatable, dimension(:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)
    write(logfileunit,*)
+endif
+
+if (present(context)) then
+   msgstring = context
+else
+   msgstring = varname
 endif
 
 io1 = nf90_inq_dimid(ncid, 'time', TimeDimID)
@@ -2418,14 +2519,14 @@ nccount(:) = 1
 
 DimCheck : do i = 1,numdims
 
-   write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(varname)
+   write(string1,'(a,i2,1x,A)') 'inquire dimension ',i,trim(msgstring)
 
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
               'get_var_2d', string1)
 
    if ( dimIDs(i) == TimeDimID ) then
       call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen), &
-            'get_var_2d', 'inquire_dimension time '//trim(varname))
+            'get_var_2d', 'inquire_dimension time '//trim(msgstring))
       timeindex  = FindDesiredTimeIndx(ncid, time_dimlen, varname)
       ncstart(i) = timeindex
       dimlens(i) = 1
@@ -2440,7 +2541,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -2451,19 +2552,19 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//trim(varname))
+           'get_var_2d', 'get_var '//trim(msgstring))
    var2d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
@@ -2486,19 +2587,19 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2)))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//trim(varname))
+           'get_var_2d', 'get_var '//trim(msgstring))
    var2d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
@@ -2520,18 +2621,18 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var2d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_2d', 'get_var '//trim(varname))
+           'get_var_2d', 'get_var '//trim(msgstring))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_2d',string1)
    endif
@@ -2552,6 +2653,7 @@ else
    call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
 endif
 
+return
 end subroutine get_var_2d
 
 
@@ -2605,7 +2707,7 @@ real(r4), allocatable, dimension(:,:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -2661,7 +2763,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)'get_var_3d: context ['//trim(msgstring)//']'
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
@@ -2678,14 +2780,14 @@ if (xtype == NF90_INT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
@@ -2713,14 +2815,14 @@ elseif (xtype == NF90_FLOAT) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
@@ -2746,14 +2848,14 @@ elseif (xtype == NF90_DOUBLE) then
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_3d',string1)
    endif
@@ -2774,6 +2876,7 @@ else
    call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
 endif
 
+return
 end subroutine get_var_3d
 
 
@@ -2819,6 +2922,7 @@ integer  :: spvalINT
 real(r4) :: spvalR4
 real(r8) :: scale_factor, add_offset
 real(r8) :: spvalR8
+character(len=512) :: msgstring
 
 integer,  allocatable, dimension(:,:,:,:) :: intarray
 real(r4), allocatable, dimension(:,:,:,:) :: r4array
@@ -2826,22 +2930,28 @@ real(r4), allocatable, dimension(:,:,:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)
    write(logfileunit,*)
+endif
+
+if (present(context)) then
+   msgstring = context
+else
+   msgstring = varname
 endif
 
 ! 4D fields must have a time dimension.
 ! Need to know the Time Dimension ID and length
 
 call nc_check(nf90_inq_dimid(ncid, 'time', TimeDimID), &
-         'get_var_4d', 'inq_dimid time '//trim(varname))
+         'get_var_4d', 'inq_dimid time '//trim(msgstring))
 call nc_check(nf90_inquire_dimension(ncid, TimeDimID, len=time_dimlen ), &
-         'get_var_4d', 'inquire_dimension time '//trim(varname))
+         'get_var_4d', 'inquire_dimension time '//trim(msgstring))
 
 call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), 'get_var_4d', 'inq_varid')
 call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, &
-              xtype=xtype), 'get_var_4d', 'inquire_variable '//trim(varname))
+              xtype=xtype), 'get_var_4d', 'inquire_variable '//trim(msgstring))
 
 if ( (numdims /= 4)  ) then
    write(string1,*) trim(varname)//' is not a 4D variable as expected.'
@@ -2874,7 +2984,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 8)) then
+if (do_output() .and. debug > 8) then
    write(*,*)'get_var_4d: variable ['//trim(varname)//']'
    write(*,*)'get_var_4d: start ',ncstart(1:numdims)
    write(*,*)'get_var_4d: count ',nccount(1:numdims)
@@ -2885,19 +2995,19 @@ if (xtype == NF90_INT) then
    allocate(intarray(dimlens(1),dimlens(2),dimlens(3),1))
    call nc_check(nf90_get_var(ncid, VarID, values=intarray, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//trim(varname))
+           'get_var_4d', 'get_var '//trim(msgstring))
    var4d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
@@ -2920,19 +3030,19 @@ elseif (xtype == NF90_FLOAT) then
    allocate(r4array(dimlens(1),dimlens(2),dimlens(3),1))
    call nc_check(nf90_get_var(ncid, VarID, values=r4array, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//trim(varname))
+           'get_var_4d', 'get_var '//trim(msgstring))
    var4d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
@@ -2954,18 +3064,18 @@ elseif (xtype == NF90_DOUBLE) then
 
    call nc_check(nf90_get_var(ncid, VarID, values=var4d, &
            start=ncstart(1:numdims), count=nccount(1:numdims)), &
-           'get_var_4d', 'get_var '//trim(varname))
+           'get_var_4d', 'get_var '//trim(msgstring))
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
    if (  io1 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() .and. (debug > 8) ) then
+   if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
       call error_handler(E_MSG,'get_var_4d',string1)
    endif
@@ -2986,6 +3096,7 @@ else
    call error_handler(E_ERR,'get_var_4d',string1,source,revision,revdate)
 endif
 
+return
 end subroutine get_var_4d
 
 
@@ -3076,6 +3187,7 @@ if (present(ncid)) then
 
 endif
 
+return
 end subroutine vector_to_1d_prog_var
 
 
@@ -3148,6 +3260,7 @@ if (present(ncid)) then
 
 endif
 
+return
 end subroutine vector_to_2d_prog_var
 
 
@@ -3222,6 +3335,7 @@ if (present(ncid)) then
 
 endif
 
+return
 end subroutine vector_to_3d_prog_var
 
 
@@ -3238,19 +3352,19 @@ character(len=*), intent(in) :: fname
 integer :: dimid
 integer :: ncid
 
-! sets module variables Nx, Ny, Nsoil, Ntile
+! sets module variables Nx_model, Ny_model, Nsoil, Ntile
 
 call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
             'get_jules_output_dimensions','open '//trim(fname))
 
 call nc_check(nf90_inq_dimid(ncid, 'x', dimid), &
             'get_jules_output_dimensions','inq_dimid x '//trim(fname))
-call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nx), &
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Nx_model), &
             'get_jules_output_dimensions','inquire_dimension x '//trim(fname))
 
 call nc_check(nf90_inq_dimid(ncid, 'y', dimid), &
             'get_jules_output_dimensions','inq_dimid y '//trim(fname))
-call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ny), &
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ny_model), &
             'get_jules_output_dimensions','inquire_dimension y '//trim(fname))
 
 call nc_check(nf90_inq_dimid(ncid, 'soil', dimid), &
@@ -3263,23 +3377,24 @@ call nc_check(nf90_inq_dimid(ncid, 'tile', dimid), &
 call nc_check(nf90_inquire_dimension(ncid, dimid, len=Ntile), &
             'get_jules_output_dimensions','inquire_dimension tile '//trim(fname))
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. debug > 9) then
    write(logfileunit,*)
    write(logfileunit,*)'get_jules_output_dimensions output follows:'
-   write(logfileunit,*)'Nx    = ',Nx
-   write(logfileunit,*)'Ny    = ',Ny
-   write(logfileunit,*)'Nsoil = ',Nsoil
-   write(logfileunit,*)'Ntile = ',Ntile
+   write(logfileunit,*)'Nx_model = ',Nx_model
+   write(logfileunit,*)'Ny_model = ',Ny_model
+   write(logfileunit,*)'Nsoil    = ',Nsoil
+   write(logfileunit,*)'Ntile    = ',Ntile
    write(     *     ,*)
    write(     *     ,*)'get_jules_output_dimensions output follows:'
-   write(     *     ,*)'Nx    = ',Nx
-   write(     *     ,*)'Ny    = ',Ny
-   write(     *     ,*)'Nsoil = ',Nsoil
-   write(     *     ,*)'Ntile = ',Ntile
+   write(     *     ,*)'Nx_model = ',Nx_model
+   write(     *     ,*)'Ny_model = ',Ny_model
+   write(     *     ,*)'Nsoil    = ',Nsoil
+   write(     *     ,*)'Ntile    = ',Ntile
 endif
 
 call nc_check(nf90_close(ncid),'get_jules_output_dimensions','close '//trim(fname) )
 
+return
 end subroutine get_jules_output_dimensions
 
 
@@ -3338,7 +3453,7 @@ if (myNtile /= Ntile) then
               source, revision, revdate, text2=string2, text3=string3)
 endif
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. debug > 9) then
    write(logfileunit,*)
    write(logfileunit,*)'get_jules_restart_dimensions output follows:'
    write(logfileunit,*)'Nland   = ',Nland
@@ -3355,6 +3470,7 @@ endif
 
 call nc_check(nf90_close(ncid),'get_jules_restart_dimensions','close '//trim(fname) )
 
+return
 end subroutine get_jules_restart_dimensions
 
 
@@ -3370,15 +3486,14 @@ character(len=*), intent(in) :: fname
 
 integer :: ncid
 
-! Make sure the variables are the right size ...
-! at some point in the future ...
-
 call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
         'Get_Model_Grid','open '//trim(fname))
 
 ! The lat/lon matrices in the history file have been masked by
 ! the land values such that the wet cells are 'missing' values.
 ! This makes it less than useful for us.
+
+allocate(LONGITUDE(Nx_model,Ny_model), LATITUDE(Nx_model,Ny_model))
 
 call DART_get_var(ncid, 'longitude', LONGITUDE)
 call DART_get_var(ncid, 'latitude',  LATITUDE)
@@ -3400,7 +3515,7 @@ call nc_check(nf90_close(ncid),'Get_Model_Grid','close '//trim(fname) )
 
 ! A little sanity check
 
-if (do_output() .and. (debug > 7)) then
+if (do_output() .and. debug > 0) then
 
    write(logfileunit,*)
    write(logfileunit,*)'history_file grid information as interpreted ...'
@@ -3414,6 +3529,14 @@ if (do_output() .and. (debug > 7)) then
    write(     *     ,*)'SOILLEVEL  is ', SOILLEVEL
 
 endif
+
+! FIXME ... put in a check to see if we strip out just the land cells from
+! the physical_longitudes() and physical_latitudes() arrays, we get the same
+! thing in the same order as the LATITUDE and LONGITUDE arrays.
+! They are still needed for the DART diagnostic netCDF output, but that's all.
+
+! deallocate(LONGITUDE)
+! deallocate(LATITUDE)
 
 return
 end subroutine Get_Model_Grid
@@ -3517,7 +3640,7 @@ MyLoop : do i = 1, max_state_variables
 
    ! Record the contents of the DART state vector
 
-   if (do_output() .and. (debug > 8)) then
+   if (do_output() .and. debug > 8) then
       write(logfileunit,*)'variable ',i,' is ',trim(variable_table(i,1)), ' ', &
                                                trim(variable_table(i,2)), ' ', &
                                                trim(variable_table(i,3)), ' ', &
@@ -3584,7 +3707,7 @@ ndims           = ndims + 1
 dimids(ndims)   = unlimitedDimid
 dimnames(ndims) = 'time'
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. debug > 0) then
 
    write(logfileunit,*)
    write(logfileunit,*)'define_var_dims knowledge'
@@ -3660,8 +3783,8 @@ enddo
 
 ! Create storage for the list of indices
 
-do iy = 1,Ny
-do ix = 1,Nx
+do iy = 1,Ny_model
+do ix = 1,Nx_model
    if ( sparseCell(ix,iy)%n > 0 ) then
       allocate( sparseCell(ix,iy)%dartIndex(sparseCell(ix,iy)%n) )
    endif
@@ -3684,12 +3807,12 @@ do ij = 1,model_size
 enddo
 
 ! Verification
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. debug > 1) then
 
    iunit = open_file('gridcell_lookup_table.txt',form='formatted',action='write')
 
-   do iy = 1,Ny
-   do ix = 1,Nx
+   do iy = 1,Ny_model
+   do ix = 1,Nx_model
       if (sparseCell(ix,iy)%n > 0) then
          write(iunit,'(''sparseCell'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
                    ix,iy,sparseCell(ix,iy)%n
@@ -3702,6 +3825,7 @@ if (do_output() .and. (debug > 1)) then
 
 endif
 
+return
 end subroutine setSparseCellLookupTable
 
 
@@ -3805,6 +3929,7 @@ if ( progvar(ivar)%rangeRestricted == BOUNDED_BOTH ) then
    endif
 endif
 
+return
 end subroutine SetVariableAttributes
 
 
@@ -3883,7 +4008,7 @@ if ( FindDesiredTimeIndx == MISSING_I ) then
           source, revision, revdate )
 endif
 
-if (do_output() .and. (debug > 0)) then
+if (do_output() .and. debug > 0) then
    write(string1,*)trim(varname)//' matching time index is ',FindDesiredTimeIndx
    call error_handler(E_MSG, 'FindDesiredTimeIndx:', string1)
 endif
@@ -3892,16 +4017,16 @@ end function FindDesiredTimeIndx
 
 
 !------------------------------------------------------------------
-!> Read_Jules_Soil_Namelist
+!> get_soil_levels
 !> reads the namelist specifying the number of soil layers and the
 !> associated layer thicknesses. DART wants the soil layer depth,
 !> so the thicknesses are converted to depths.
 !> The soil level values are only available from the namelist, apparently.
 
-subroutine Read_Jules_Soil_Namelist()
+subroutine get_soil_levels()
 
-! integer,  intent(out) :: Nsoil     ! were it not for module scope
-! real(r8), intent(out) :: SOILLEVEL ! were it not for module scope
+! integer,  intent(out) :: Nsoil        ! were it not for module scope
+! real(r8), intent(out) :: SOILLEVEL(:) ! were it not for module scope
 
 integer :: iunit, io, i
 integer, PARAMETER :: MAX_SOIL_LEVELS = 200
@@ -3929,9 +4054,11 @@ if (Nsoil /= sm_levels) then
    write(string1,*)'Number of soil layers unknown.'
    write(string2,*)'Number of soil layers from namelist is ',sm_levels
    write(string3,*)'Number of soil layers from netCDF   is ',Nsoil
-   call error_handler(E_ERR, 'Read_Jules_Soil_Namelist:', string1, &
+   call error_handler(E_ERR, 'get_soil_levels:', string1, &
           source, revision, revdate, text2=string2, text3=string3 )
 endif
+
+allocate(SOILLEVEL(Nsoil))
 
 ! We want the midpoints of the soil layers.
 ! The soil temperature in layer 1 is the average of that layer.
@@ -3948,300 +4075,233 @@ do i = 1,Nsoil
    SOILLEVEL(i) = (soil_interfaces(i) + soil_interfaces(i+1)) / 2.0_r8
 enddo
 
-end subroutine Read_Jules_Soil_Namelist
+return
+end subroutine get_soil_levels
 
 
 !------------------------------------------------------------------
-!> Resolve_Land_Fractions
-!> reads the namelist specifying the name of the file containing the 
-!> land fractions for each gridcell, and then reads the land fractions.
-!> Since the land fraction variable is usually a physical-space representation,
-!> and the DART state vector is only the land cells, knowing which physical-space
-!> gridcells to skip is useful in understanding the tile fractions (may be
-!> physical space) and latitude/longitudes (also may be physical space). 
+!> set_physical_grid
+!> reads the latitude and longitude matrices for the physical grid
 !>
-!> The packing order from physical space to 1D is longitude-then-latitude,
-!> starting at latitude = 1.
+!>         float latitude(y, x) ;
+!>                latitude:units = " " ;
+!>                latitude:_FillValue = -9999.f ;
+!>        float longitude(y, x) ;
+!>                longitude:units = " " ;
+!>                longitude:_FillValue = -9999.f ;
+!>
+!> in this context, 'x' and 'y' are 'Nlon' and 'Nlat', respectively.
+!> the model sizes are called Nx_model, Ny_model by DART.
 
-subroutine Resolve_Land_Fractions()
+subroutine set_physical_grid(filename)
 
-integer :: iunit, io, ncid, i
+character(len=*), intent(in) :: filename
+
+integer :: ncid, i
 integer :: VarID, numdims
-integer :: ilon, ilat
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
 
-character(len=256) :: file = 'none'
-character(len=256) :: land_frac_name = 'none'
+if ( .not. file_exist(filename) ) then
+   write(string1,*)'cannot open file <', trim(filename),'> to read physical locations.'
+   write(string2,*)'filename came from model_grid.nml &jules_latlon "file"'
+   call error_handler(E_ERR, 'set_physical_grid', string1, &
+       source, revision, revdate, text2=string2)
+endif
 
-namelist /jules_land_frac/ file, land_frac_name
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+        'set_physical_grid', 'open '//trim(filename))
 
-call error_handler(E_MSG, 'Resolve_Land_Fractions', 'FIXME routine not fully tested', &
-        source, revision, revdate)
+! Create a convenient string for messages
+string3 = trim(filename)//' '//trim(physical_lon_variable)
+
+! The physical grid dimensions are based on the shape of the longitude variable.
+
+call nc_check(nf90_inq_varid(ncid, trim(physical_lon_variable), VarID), &
+         'set_physical_grid', 'inq_varid lon_name '//trim(string3))
+
+call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
+         'set_physical_grid', 'inquire '//trim(string3))
+
+if (numdims /= 2) then
+   write(string1,*)trim(string3)//' expected to have 2 dimensions, has ',numdims
+   write(string2,*)'unable to proceed.'
+   call error_handler(E_ERR, 'set_physical_grid', string1, &
+          source, revision, revdate, text2=string2)
+endif
+
+do i = 1,numdims
+   call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
+      'set_physical_grid', 'inquire dimension '//trim(string3))
+enddo
+
+Nlon = dimlens(1) ! set global variable for number of longitudes of physical grid
+Nlat = dimlens(2) ! set global variable for number of latitudes  of physical grid
+
+allocate(physical_longitudes(Nlon,Nlat))
+allocate(physical_latitudes( Nlon,Nlat))
+
+! Actually get the longitude variable
+
+call DART_get_var(ncid, trim(physical_lon_variable), physical_longitudes, string3)
+
+where (physical_longitudes < 180.0_r8) physical_longitudes = physical_longitudes + 360.0_r8
+
+! Get the latitude variable
+
+string3 = trim(filename)//' '//trim(physical_lat_variable)
+
+call nc_check(nf90_inq_varid(ncid, trim(physical_lat_variable), VarID), &
+         'set_physical_grid', 'inq_varid lat_name '//trim(string3))
+
+call DART_get_var(ncid, trim(physical_lat_variable), physical_latitudes, string3)
+
+! Clean up
+
+call nc_check(nf90_close(ncid),'set_physical_grid','close '//trim(filename))
+
+if (do_output() .and. debug > 99) then
+   write(logfileunit,*)
+   write(logfileunit,*)'Summary of lat/lon in '//trim(filename)
+   write(logfileunit,*)'lat shape      ', shape(physical_latitudes)
+   write(logfileunit,*)'lat minval     ',minval(physical_latitudes)
+   write(logfileunit,*)'lat maxval     ',maxval(physical_latitudes)
+   write(logfileunit,*)'lon shape      ', shape(physical_longitudes)
+   write(logfileunit,*)'lon minval     ',minval(physical_longitudes)
+   write(logfileunit,*)'lon maxval     ',maxval(physical_longitudes)
+   write(     *     ,*)
+   write(     *     ,*)'Summary of lat/lon in '//trim(filename)
+   write(     *     ,*)'lat shape      ', shape(physical_latitudes)
+   write(     *     ,*)'lat minval     ',minval(physical_latitudes)
+   write(     *     ,*)'lat maxval     ',maxval(physical_latitudes)
+   write(     *     ,*)'lon shape      ', shape(physical_longitudes)
+   write(     *     ,*)'lon minval     ',minval(physical_longitudes)
+   write(     *     ,*)'lon maxval     ',maxval(physical_longitudes)
+endif
+
+return
+end subroutine set_physical_grid
+
+
+!------------------------------------------------------------------
+!> set_land_fractions
+!> reads the land fractions for each physical grid cell
+
+subroutine set_land_fractions(filename)
+
+character(len=*), intent(in) :: filename
+
+integer :: ncid, i
+integer :: VarID, numdims
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
 
 ! the file that contains the land fraction must also contain the
 ! latitude and longitude matrices of the physical grid, not the grid
 ! that just contains the 'land' gridcells. As such, the 'full' shape of
 ! the land fraction, latitude, and longitude matrices 
+!
+!         float frac(type, y, x) ;          where type is 9
+!               frac:units = " " ;
+!               frac:_FillValue = -9999.f ;
 
-call find_namelist_in_file('model_grid.nml', 'jules_land_frac', iunit)
-read(iunit, nml = jules_land_frac, iostat = io)
-call check_namelist_read(iunit, io, 'jules_land_frac')
-
-if ( trim(file) == 'none' ) then ! implicitly, all land.
-   allocate(LAND_FRACTIONS(Nx,Ny))
-   LAND_FRACTIONS = 1.0_r8
+if ( trim(filename) == 'none' ) then ! implicitly, all land.
+   allocate(land_fractions(Nlon,Nlat))
+   land_fractions = 1.0_r8
    return
 endif
 
-if ( .not. file_exist(file) ) then
-   write(string1,*)'cannot open file <', trim(file),'> to read land fractions.'
+if ( .not. file_exist(filename) ) then
+   write(string1,*)'cannot open file <', trim(filename),'> to read land fractions.'
    write(string2,*)'filename came from model_grid.nml &jules_land_frac "file"'
-   call error_handler(E_ERR, 'Resolve_Land_Fractions', string1, &
+   call error_handler(E_ERR, 'set_land_fractions', string1, &
        source, revision, revdate, text2=string2)
 endif
 
-call nc_check(nf90_open(trim(file), NF90_NOWRITE, ncid), &
-        'Resolve_Land_Fractions', 'open '//trim(file))
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+        'set_land_fractions', 'open '//trim(filename))
 
 ! Create a convenient string for messages
-string3 = trim(file)//' '//trim(land_frac_name)
+string3 = trim(filename)//' '//trim(landfraction_variable)
 
 ! The land fractions come from the input grid, which is always 'physical' 
 ! (x,y are 'full grid'). The only way to relate which physical-space tile fraction
 ! to the model-space tile fractions is to skip the non-land physical-space gridcells.
 ! The packing order is longitude-then-latitude. 
 
-call nc_check(nf90_inq_varid(ncid, trim(land_frac_name), VarID), &
-         'Resolve_Land_Fractions', 'inq_varid '//trim(string3))
+call nc_check(nf90_inq_varid(ncid, trim(landfraction_variable), VarID), &
+         'set_land_fractions', 'inq_varid '//trim(string3))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-         'Resolve_Land_Fractions', 'inquire '//trim(string3))
+         'set_land_fractions', 'inquire '//trim(string3))
 
 if (numdims /= 2) then
    write(string1,*)trim(string3)//' expected to have 2 dimensions, has ',numdims
    write(string2,*)'unable to proceed.'
-   call error_handler(E_ERR, 'Resolve_Land_Fractions', string1, &
+   call error_handler(E_ERR, 'set_land_fractions', string1, &
           source, revision, revdate, text2=string2)
 endif
 
 do i = 1,numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
-      'Resolve_Land_Fractions', 'inquire dimension '//trim(string3))
+      'set_land_fractions', 'inquire dimension '//trim(string3))
 enddo
 
-Nlon = dimlens(1)
-Nlat = dimlens(2)
+! Check to see if land mask is the same shape as the physical lat & lon arrays
 
-! By allocating them all to the same size, DART_get_var() is responsible for
-! making sure they are sized consistently.
-allocate(  LAND_FRACTIONS(Nlon,Nlat))
-
-call DART_get_var(ncid, trim(land_frac_name),   LAND_FRACTIONS, string3)
-
-call nc_check(nf90_close(ncid),'Resolve_Land_Fractions','close '//trim(file))
-
-! stride through in the packing order
-nland = 0
-do ilat = 1,dimlens(2)
-do ilon = 1,dimlens(1)
-   ! JULES is binary - it's either all land or no land.
-   if (LAND_FRACTIONS(ilon,ilat) > 0.0_r8) then
-      nland = nland + 1
-      !>@TODO FIXME ... this is the place to create the table relating
-      ! land index to physical gridcell
-   else
-      if (do_output() .and. (debug > 1)) then
-         write(string1,*)'gridcell (i,j) ',ilon, ilat, ' is not land.'
-         call error_handler(E_MSG, 'Resolve_Land_Fractions:', string1)
-      endif
-   endif
-enddo
-enddo
-
-if (nland /= Nx*Ny) then
-   write(string1,*)trim(string3)//' expected to have ',Nx*Ny,' land gridcells.'
-   write(string2,*)'Found ',nland,'. Unable to proceed.'
-   call error_handler(E_ERR, 'Resolve_Land_Fractions', string1, &
+if (dimlens(1) /= Nlon) then
+   write(string1,*)trim(string3)//' expected to have ',Nlon,' longitudes.'
+   write(string2,*)'Found ',dimlens(1),'. Unable to proceed.'
+   call error_handler(E_ERR, 'set_land_fractions', string1, &
           source, revision, revdate, text2=string2)
 endif
 
-if (do_output() .and. (debug > 99)) then
-   write(logfileunit,*)
-   write(logfileunit,*)'Summary of '//trim(string3)
-   write(logfileunit,*)'shape      ',dimlens(1:numdims)
-   write(logfileunit,*)'nland      ',nland
-   write(     *     ,*)
-   write(     *     ,*)'Summary of '//trim(string3)
-   write(     *     ,*)'shape      ',dimlens(1:numdims)
-   write(     *     ,*)'nland      ',nland
+if (dimlens(2) /= Nlat) then
+   write(string1,*)trim(string3)//' expected to have ',Nlat,' latitudes.'
+   write(string2,*)'Found ',dimlens(2),'. Unable to proceed.'
+   call error_handler(E_ERR, 'set_land_fractions', string1, &
+          source, revision, revdate, text2=string2)
 endif
 
-end subroutine Resolve_Land_Fractions
+! DART_get_var() is responsible for making sure variable is expected shape.
+allocate(land_fractions(Nlon,Nlat))
+
+call DART_get_var(ncid, trim(landfraction_variable), land_fractions, string3)
+
+call nc_check(nf90_close(ncid),'set_land_fractions','close '//trim(filename))
+
+if (do_output() .and. debug > 0) then
+   write(logfileunit,*)
+   write(logfileunit,*)'set_land_fractions:Summary of '//trim(string3)
+   write(logfileunit,*)'set_land_fractions:shape      ',dimlens(1:numdims)
+   
+   write(     *     ,*)
+   write(     *     ,*)'set_land_fractions:Summary of '//trim(string3)
+   write(     *     ,*)'set_land_fractions:shape      ',dimlens(1:numdims)
+
+   ! FIXME ... report on number of non-land & land gridcells
+endif
+
+return
+end subroutine set_land_fractions
 
 
 !------------------------------------------------------------------
-!> Resolve_Input_Grid
-!> reads the namelist specifying the name of the file containing the 
-!> latitude and longitudes of the (physical) input grid.
-!> The input grid is required to be reasonably 'regular'.
-!> It cannot consist of disjoint grid cells; one in Scotland, one
-!> in Ireland, for example.
-
-subroutine Resolve_Input_Grid()
-
-integer :: iunit, io, ncid
-integer :: VarID, numdims
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-
-character(len=256) :: file = 'none'
-character(len=256) :: lat_name = 'none'
-character(len=256) :: lon_name = 'none'
-
-namelist /jules_latlon/ file, lat_name, lon_name
-
-! the file that contains the land fraction must also contain the
-! latitude and longitude matrices of the physical grid, not the grid
-! that just contains the 'land' gridcells. As such, the 'full' shape of
-! the land fraction, latitude, and longitude matrices 
-
-! Resolve_Land_Fractions has been called at this point and allocated space
-! for the input latitude and longitude matrices, so we do not have to
-! check the expected shape here.  DART_get_var() does that.
-
-call find_namelist_in_file('model_grid.nml', 'jules_latlon', iunit)
-read(iunit, nml = jules_latlon, iostat = io)
-call check_namelist_read(iunit, io, 'jules_latlon')
-
-if ( trim(file) == 'none' ) then ! single column case, maybe
-   write(string1,*)'No latlon file to read input grid latitudes and longitudes.'
-   write(string2,*)'filename should come from model_grid.nml &jules_latlon "file"'
-   call error_handler(E_ERR, 'Resolve_Input_Grid', string1, &
-       source, revision, revdate, text2=string2)
-endif
-
-if ( .not. file_exist(file) ) then
-   write(string1,*)'cannot open file <', trim(file),'> to read lats and lons.'
-   write(string2,*)'filename came from model_grid.nml &jules_latlon "file"'
-   call error_handler(E_ERR, 'Resolve_Input_Grid', string1, &
-       source, revision, revdate, text2=string2)
-endif
-
-call nc_check(nf90_open(trim(file), NF90_NOWRITE, ncid), &
-        'Resolve_Input_Grid', 'open '//trim(file))
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Read latitudes
-
-string3 = trim(file)//' '//trim(lat_name)
-
-call nc_check(nf90_inq_varid(ncid, trim(lat_name), VarID), &
-         'Resolve_Input_Grid', 'inq_varid '//trim(string3))
-
-call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-         'Resolve_Input_Grid', 'inquire '//trim(string3))
-
-if (numdims /= 2) then
-   write(string1,*)trim(string3)//' expected to have 2 dimensions, has ',numdims
-   write(string2,*)'unable to proceed.'
-   call error_handler(E_ERR, 'Resolve_Input_Grid', string1, &
-          source, revision, revdate, text2=string2)
-endif
-
-allocate( INPUT_LATITUDES(Nlon,Nlat))
-
-call DART_get_var(ncid, trim(lat_name), INPUT_LATITUDES, string3)
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Read longitudes
-
-string3 = trim(file)//' '//trim(lon_name)
-
-call nc_check(nf90_inq_varid(ncid, trim(lon_name), VarID), &
-         'Resolve_Input_Grid', 'inq_varid '//trim(string3))
-
-call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-         'Resolve_Input_Grid', 'inquire '//trim(string3))
-
-if (numdims /= 2) then
-   write(string1,*)trim(string3)//' expected to have 2 dimensions, has ',numdims
-   write(string2,*)'unable to proceed.'
-   call error_handler(E_ERR, 'Resolve_Input_Grid', string1, &
-          source, revision, revdate, text2=string2)
-endif
-
-allocate(INPUT_LONGITUDES(Nlon,Nlat))
-call DART_get_var(ncid, trim(lon_name), INPUT_LONGITUDES, string3)
-
-where (INPUT_LONGITUDES < 180.0_r8) INPUT_LONGITUDES = INPUT_LONGITUDES + 360.0_r8
-
-call nc_check(nf90_close(ncid),'Resolve_Input_Grid','close '//trim(file))
-
-if (do_output() .and. (debug > 0)) then
-   write(logfileunit,*)
-   write(logfileunit,*)'Summary of lat/lon in '//trim(file)
-   write(logfileunit,*)'lat shape      ', shape(INPUT_LATITUDES)
-   write(logfileunit,*)'lat minval     ',minval(INPUT_LATITUDES)
-   write(logfileunit,*)'lat maxval     ',maxval(INPUT_LATITUDES)
-   write(logfileunit,*)'lon shape      ', shape(INPUT_LONGITUDES)
-   write(logfileunit,*)'lon minval     ',minval(INPUT_LONGITUDES)
-   write(logfileunit,*)'lon maxval     ',maxval(INPUT_LONGITUDES)
-   write(     *     ,*)
-   write(     *     ,*)'Summary of lat/lon in '//trim(file)
-   write(     *     ,*)'lat shape      ', shape(INPUT_LATITUDES)
-   write(     *     ,*)'lat minval     ',minval(INPUT_LATITUDES)
-   write(     *     ,*)'lat maxval     ',maxval(INPUT_LATITUDES)
-   write(     *     ,*)'lon shape      ', shape(INPUT_LONGITUDES)
-   write(     *     ,*)'lon minval     ',minval(INPUT_LONGITUDES)
-   write(     *     ,*)'lon maxval     ',maxval(INPUT_LONGITUDES)
-endif
-
-end subroutine Resolve_Input_Grid
-
-
-!------------------------------------------------------------------
-!> Read_Tile_Fractions
+!> set_tile_fractions
 !> reads the namelist specifying the name of the file containing the 
 !> tile fractions for each gridcell, and then reads the tile fractions.
 
-subroutine Read_Tile_Fractions()
+subroutine set_tile_fractions(filename)
 
-integer :: iunit, io, ncid, i
+character(len=*), intent(in) :: filename
+
+integer :: ncid, i
 integer :: VarID, numdims
-integer :: myNlon, myNlat, ix, iy, iland
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
-real(r8), allocatable :: fractions(:,:,:)
-
-character(len=256) :: file = 'none'
-character(len=256) :: frac_name = 'none'
-
-namelist /jules_frac/ file, frac_name
-
-call error_handler(E_MSG, 'Read_Tile_Fractions', 'FIXME routine not fully tested', &
-        source, revision, revdate)
-
-call find_namelist_in_file('ancillaries.nml', 'jules_frac', iunit)
-read(iunit, nml = jules_frac, iostat = io)
-call check_namelist_read(iunit, io, 'jules_frac')
-
-if ( trim(file) == 'none' ) then
-   write(string1,*)'tile fraction file not specified.'
-   write(string2,*)'filename should come from ancillaries.nml &jules_frac "file"'
-   write(string3,*)'unable to proceed.'
-   call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
-       source, revision, revdate, text2=string2, text3=string3)
-endif
-
-if ( .not. file_exist(file) ) then
-   write(string1,*)'cannot open file <', trim(file),'> to read tile fractions.'
-   write(string2,*)'filename came from ancillaries.nml &jules_frac "file"'
-   call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
-       source, revision, revdate, text2=string2)
-endif
 
 ! Create a convenient string for messages
-string3 = trim(file)//' '//trim(frac_name)
+string3 = trim(filename)//' '//trim(tilefraction_variable)
 
-call nc_check(nf90_open(trim(file), NF90_NOWRITE, ncid), 'Read_Tile_Fractions','open '//trim(file))
+call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
+             'set_tile_fractions','open '//trim(filename))
 
 ! Depending on some namelist settings, the shape of the tile fractions may be
 ! 'physical' (x,y are 'full grid') or 'sparse' (x=nland,y=1). If the restart/output 
@@ -4249,79 +4309,80 @@ call nc_check(nf90_open(trim(file), NF90_NOWRITE, ncid), 'Read_Tile_Fractions','
 ! should be used is to read the physical-space land mask.
 ! The ordering of the land cells is longitude-then-latitude. 
 
-call nc_check(nf90_inq_varid(ncid, trim(frac_name), VarID), &
-         'Read_Tile_Fractions', 'inq_varid '//trim(string3))
+call nc_check(nf90_inq_varid(ncid, trim(tilefraction_variable), VarID), &
+         'set_tile_fractions', 'inq_varid '//trim(string3))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-         'Read_Tile_Fractions', 'inquire '//trim(string3))
+         'set_tile_fractions', 'inquire '//trim(string3))
 
 do i = 1,numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlens(i)), &
-      'Read_Tile_Fractions', 'inquire dimension '//trim(string3))
+      'set_tile_fractions', 'inquire dimension '//trim(string3))
 enddo
 
 if ( numdims /= 3) then
    write(string1,*)'<', trim(string3),'> has shape',dimlens(1:numdims)
    write(string2,*)'Expected 3 dimensions. Unable to proceed.'
-   call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
+   call error_handler(E_ERR, 'set_tile_fractions', string1, &
        source, revision, revdate, text2=string2)
 endif
-
-! The first two of these dimensions must match the dimensions of the land mask.
-
-myNlon = dimlens(1)
-myNlat = dimlens(2)
 
 if (dimlens(3) /= Ntile) then
    write(string1,*)trim(string3)//' has wrong number of tiles (dimension 3).'
    write(string2,*)'expected ',Ntile,' got ',dimlens(3)
-   call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
+   call error_handler(E_ERR, 'set_tile_fractions', string1, &
           source, revision, revdate, text2=string2)
 endif
 
-if ( (myNlon == Nx) .and. (myNlat == Ny) ) then
+allocate(tile_fractions(Nlon, Nlat, Ntile))
 
-   call DART_get_var(ncid, trim(frac_name), TILE_FRACTIONS, string3)
-   call nc_check(nf90_close(ncid),'Read_Tile_Fractions','close '//trim(string3))
-   return
+call DART_get_var(ncid, trim(tilefraction_variable), tile_fractions, string3)
+call nc_check(nf90_close(ncid),'set_tile_fractions','close '//trim(string3))
 
-else
+!TJH FIXME   ! If the physical grid contains gridcells that are not land, 
+!TJH FIXME   ! we need to 
+!TJH FIXME   ! need to check again.
+!TJH FIXME
+!TJH FIXME   write(string1,*)trim(string3),' has shape ',dimlens(1:numdims)
+!TJH FIXME   write(string2,*)'Expected ',shape(tile_fractions),' must use land mask to resolve.'
+!TJH FIXME   call error_handler(E_MSG, 'set_tile_fractions', string1, &
+!TJH FIXME          source, revision, revdate, text2=string2)
+!TJH FIXME
+!TJH FIXME   if ( Ny_model /= 1 ) then
+!TJH FIXME      write(string1,*)trim(string3),' has shape ',dimlens(1:numdims)
+!TJH FIXME      write(string2,*)'which is not conformable with ',Nx_model,Ny_model,Ntile
+!TJH FIXME      call error_handler(E_ERR, 'set_tile_fractions', string1, &
+!TJH FIXME             source, revision, revdate, text2=string2)
+!TJH FIXME   endif
+!TJH FIXME
+!TJH FIXME   allocate(fractions(myNlon,myNlat,Ntile))
+!TJH FIXME   call DART_get_var(ncid, trim(frac_name), fractions, string3)
+!TJH FIXME   call nc_check(nf90_close(ncid),'set_tile_fractions','close '//trim(file))
+!TJH FIXME
+!TJH FIXME   iland = 0
+!TJH FIXME   do iy = 1,myNlat
+!TJH FIXME   do ix = 1,myNlon
+!TJH FIXME      if (land_fractions(ix,iy) > 0.0_r8) then
+!TJH FIXME         iland = iland + 1 
+!TJH FIXME         tile_fractions(iland,1,:) = fractions(ix,iy,:)
+!TJH FIXME      endif
+!TJH FIXME   enddo
+!TJH FIXME   enddo
 
-   ! Since we already checked that the number of land points defined in the
-   ! land mask matches the number of land points defined by Nx - we don't
-   ! need to check again.
+if (do_output() .and. debug > 99) then
+   write(logfileunit,*)
+   write(logfileunit,*)'set_tile_fractions:Summary of '//trim(string3)
+   write(logfileunit,*)'set_tile_fractions:shape      ',shape(tile_fractions)
+   
+   write(     *     ,*)
+   write(     *     ,*)'set_tile_fractions:Summary of '//trim(string3)
+   write(     *     ,*)'set_tile_fractions:shape      ',shape(tile_fractions)
 
-   write(string1,*)trim(string3),' has shape ',dimlens(1:numdims)
-   write(string2,*)'Expected ',shape(TILE_FRACTIONS),' must use land mask to resolve.'
-   call error_handler(E_MSG, 'Read_Tile_Fractions', string1, &
-          source, revision, revdate, text2=string2)
-
-   if ( Ny /= 1 ) then
-      write(string1,*)trim(string3),' has shape ',dimlens(1:numdims)
-      write(string2,*)'which is not conformable with ',Nx,Ny,Ntile
-      call error_handler(E_ERR, 'Read_Tile_Fractions', string1, &
-             source, revision, revdate, text2=string2)
-   endif
-
-   allocate(fractions(myNlon,myNlat,Ntile))
-   call DART_get_var(ncid, trim(frac_name), fractions, string3)
-   call nc_check(nf90_close(ncid),'Read_Tile_Fractions','close '//trim(file))
-
-   iland = 0
-   do iy = 1,myNlat
-   do ix = 1,myNlon
-      if (LAND_FRACTIONS(ix,iy) > 0.0_r8) then
-         iland = iland + 1 
-         TILE_FRACTIONS(iland,1,:) = fractions(ix,iy,:)
-      endif
-   enddo
-   enddo
-
-   deallocate(fractions)
-
+   ! FIXME ... report min/max?
 endif
 
-end subroutine Read_Tile_Fractions
+return
+end subroutine set_tile_fractions
 
 
 !-----------------------------------------------------------------------
@@ -4389,13 +4450,13 @@ offset = index_in - progvar(varindex)%index1 + 1
 if     ( progvar(varindex)%rank == 1) then
    ! This can only be dimensioned 'land' ... possible FIXME ... check
 
-   if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
+   if (Ny_model /= 1) then ! the X-Y plane needs to be further decomposed
 
-      ! If Ny /= 1 then Nx * Ny is known to equal Nland
+      ! If Ny_model /= 1 then Nx_model * Ny_model is known to equal Nland
       ! So if I have the index into 'Nland', I should be able
-      ! to unwrap the 'offset' into Nx,Ny with the 2D algorithm
+      ! to unwrap the 'offset' into Nx_model,Ny_model with the 2D algorithm
 
-      ndim1     = Nx
+      ndim1     = Nx_model
       y_index = 1 + (offset - 1)/ndim1
       x_index = offset - (y_index - 1)*ndim1
 
@@ -4408,9 +4469,9 @@ if     ( progvar(varindex)%rank == 1) then
 
 elseif ( progvar(varindex)%rank == 2) then
 
-   ! Nland always equals Nx*Ny. Always.
-   ! The lon,lat arrays are ALWAYS (Nx,Ny)
-   ! Sometimes Ny == 1 (in which case Nx == Nland)
+   ! Nland always equals Nx_model*Ny_model. Always.
+   ! The lon,lat arrays are ALWAYS (Nx_model,Ny_model)
+   ! Sometimes Ny_model == 1 (in which case Nx_model == Nland)
    ! So when (for example) Nland = 679, the lat,lon arrays are (679,1)
    ! But when Nland = 800 (all cells land), the lat,lon arrays could be (20,40)
    ! or (40,20) ... So I can correctly get the land_index, but I need to
@@ -4446,13 +4507,13 @@ elseif ( progvar(varindex)%rank == 2) then
       y_index    = indx2
    endif
 
-   if (Ny /= 1) then ! the X-Y plane needs to be further decomposed
+   if (Ny_model /= 1) then ! the X-Y plane needs to be further decomposed
 
-      ! If Ny /= 1 then Nx * Ny is known to equal Nland
+      ! If Ny_model /= 1 then Nx_model * Ny_model is known to equal Nland
       ! So if I have the index into 'Nland', I should be able
-      ! to unwrap the 'land_index' into Nx,Ny with the same algorithm
+      ! to unwrap the 'land_index' into Nx_model,Ny_model with the same algorithm
 
-      ndim1     = Nx
+      ndim1     = Nx_model
       offset    = land_index
 
       y_index = 1 + (offset - 1)/ndim1
@@ -4511,21 +4572,22 @@ else
          source, revision, revdate, text2=string2, text3=string3)
 endif
 
-if (do_output() .and. (debug > 9)) then
+if (do_output() .and. debug > 9) then
    print *, 'get_state_indices: asking for meta data about index ', index_in
    print *, 'get_state_indices: variable      ', trim(progvar(varindex)%varname)
    print *, 'get_state_indices: coordinates   ', trim(progvar(varindex)%coordinates)
    print *, 'get_state_indices: rank          ', progvar(varindex)%rank
    print *, 'get_state_indices: dimensions    ', progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
-   print *, 'get_state_indices: Nland, Nx, Ny ', Nland, Nx, Ny
-   print *, 'get_state_indices: x      index = ',    x_index, 'of ',Nx
-   print *, 'get_state_indices: y      index = ',    y_index, 'of ',Ny
+   print *, 'get_state_indices: Nland, Nx_model, Ny_model ', Nland, Nx_model, Ny_model
+   print *, 'get_state_indices: x      index = ',    x_index, 'of ',Nx_model
+   print *, 'get_state_indices: y      index = ',    y_index, 'of ',Ny_model
    print *, 'get_state_indices: soil   index = ',   soil_index
    print *, 'get_state_indices: tile   index = ',   tile_index
    print *, 'get_state_indices: scpool index = ', scpool_index
    print *
 endif
 
+return
 end subroutine get_state_indices
 
 
@@ -4600,6 +4662,7 @@ else
 
 endif
 
+return
 end subroutine get_state_lonlatlev
 
 
@@ -4617,15 +4680,15 @@ real(r8) :: mylon, mylat
 ! the need to keep the LONGITUDE, LATITUDE variables around. At present,
 ! they are needed by nc_write_model_atts() - but that could be about it.
 
-allocate(sparse_locations(Nx*Ny))
-allocate(sparse_kinds(Nx*Ny))
+allocate(sparse_locations(Nx_model*Ny_model))
+allocate(sparse_kinds(Nx_model*Ny_model))
 
 sparse_kinds = 1   ! This is a dummy because we have to satisfy get_close_obs() 
                  ! get_close_obs() requires a kind, but this implementation does not.
 
 indx = 0
-do iy = 1,Ny
-do ix = 1,Nx
+do iy = 1,Ny_model
+do ix = 1,Nx_model
 
     indx  = indx + 1
     mylon = LONGITUDE(ix,iy)
@@ -4635,6 +4698,7 @@ do ix = 1,Nx
 enddo
 enddo
 
+return
 end subroutine set_sparse_locations_kinds
 
 
@@ -4675,8 +4739,8 @@ max_lat = 0.0_r8
 EW_lat : do j = 1, Nlat
 EW_lon : do i = 1, Nlon-1
 
-   lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i+1,j))
-   lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i+1,j))
+   lat_dist = abs(physical_latitudes( i,j) - physical_latitudes( i+1,j))
+   lon_dist = abs(physical_longitudes(i,j) - physical_longitudes(i+1,j))
 
    !>@TODO FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
@@ -4691,8 +4755,8 @@ enddo EW_lat
 NS_lat : do j = 1, Nlat-1
 NS_lon : do i = 1, Nlon
 
-   lat_dist = abs(INPUT_LATITUDES( i,j) - INPUT_LATITUDES( i,j+1))
-   lon_dist = abs(INPUT_LONGITUDES(i,j) - INPUT_LONGITUDES(i,j+1))
+   lat_dist = abs(physical_latitudes( i,j) - physical_latitudes( i,j+1))
+   lon_dist = abs(physical_longitudes(i,j) - physical_longitudes(i,j+1))
 
    !>@TODO FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
@@ -4710,7 +4774,7 @@ max_lon = max_lon / rad2deg
 max_lat = max_lat / rad2deg
 maxdist = sqrt(max_lon*max_lon + max_lat*max_lat)
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. debug > 1) then
    write(*,*)
    write(*,*)'init_interp: summary'
    write(*,*)'init_interp: Maximum distance ',maxdist, ' (radians) based on '
@@ -4722,9 +4786,11 @@ endif
 ! maxdist unscaled resulted in NNN candidates for a location in the middle of the domain
 
 call get_close_maxdist_init(gc_state, maxdist)
-call get_close_obs_init(gc_state, Nx*Ny, sparse_locations)
+call get_close_obs_init(gc_state, Nx_model*Ny_model, sparse_locations)
 
+return
 end subroutine init_interp
+
 
 !-----------------------------------------------------------------------
 !>
@@ -4806,8 +4872,135 @@ write(     *     ,*)'   rangeRestricted   :',progvar(ivar)%rangeRestricted
 write(     *     ,*)'   minvalue          :',progvar(ivar)%minvalue
 write(     *     ,*)'   maxvalue          :',progvar(ivar)%maxvalue
 
+return
 end subroutine dump_structure
 
+
+!-----------------------------------------------------------------------
+!>
+!> get the names of that files that contain the physically-shaped variables. 
+!> the land fraction mask,
+!> the tile fraction mask, that sort of stuff.
+
+subroutine get_physical_filenames()
+
+! module variables set by this routine:
+! physical_latlon_file 
+! land_fraction_file 
+! landfraction_variable 
+
+integer :: iunit, io
+
+character(len=256) :: file = 'none'
+character(len=256) :: lat_name = 'none'
+character(len=256) :: lon_name = 'none'
+character(len=256) :: land_frac_name = 'none'
+character(len=256) :: frac_name = 'none'
+
+namelist /jules_latlon/ file, lat_name, lon_name
+
+namelist /jules_land_frac/ file, land_frac_name
+
+namelist /jules_frac/ file, frac_name
+
+! Read the land fraction filename and variable name first
+
+call find_namelist_in_file('model_grid.nml', 'jules_land_frac', iunit)
+read(iunit, nml = jules_land_frac, iostat = io)
+call check_namelist_read(iunit, io, 'jules_land_frac')
+
+land_fraction_file = file
+landfraction_variable = land_frac_name
+
+! if ( trim(file) == 'none' ) then ! implicitly, all land.
+!    allocate(land_fractions(Nx_model,Ny_model))
+!    land_fractions = 1.0_r8
+!    return
+! endif
+
+if ( (trim(file) /= 'none') .and. (.not. file_exist(file)) ) then
+   write(string1,*)'cannot open file <', trim(file),'> to read land fractions.'
+   write(string2,*)'filename came from model_grid.nml &jules_land_frac "file"'
+   call error_handler(E_ERR, 'get_physical_filenames', string1, &
+       source, revision, revdate, text2=string2)
+endif
+
+! Read the namelist specifying the physical grid
+
+file = 'none'
+
+call find_namelist_in_file('model_grid.nml', 'jules_latlon', iunit)
+read(iunit, nml = jules_latlon, iostat = io)
+call check_namelist_read(iunit, io, 'jules_latlon')
+
+if ( trim(file) == 'none' ) then ! single column case, maybe
+   write(string1,*)'No latlon file to read input grid latitudes and longitudes.'
+   write(string2,*)'filename should come from model_grid.nml &jules_latlon "file"'
+   call error_handler(E_ERR, 'get_physical_filenames', string1, &
+       source, revision, revdate, text2=string2)
+endif
+
+if ( .not. file_exist(file) ) then
+   write(string1,*)'cannot open file <', trim(file),'> to read lats and lons.'
+   write(string2,*)'filename came from model_grid.nml &jules_latlon "file"'
+   call error_handler(E_ERR, 'get_physical_filenames', string1, &
+       source, revision, revdate, text2=string2)
+endif
+
+physical_latlon_file  = file
+physical_lon_variable = lon_name
+physical_lat_variable = lat_name
+
+! Read the namelist specifying the tile fractions
+
+file = 'none'
+
+call find_namelist_in_file('ancillaries.nml', 'jules_frac', iunit)
+read(iunit, nml = jules_frac, iostat = io)
+call check_namelist_read(iunit, io, 'jules_frac')
+
+if ( trim(file) == 'none' ) then
+   write(string1,*)'tile fraction file not specified.'
+   write(string2,*)'filename should come from ancillaries.nml &jules_frac "file"'
+   write(string3,*)'unable to proceed.'
+   call error_handler(E_ERR, 'get_physical_filenames', string1, &
+       source, revision, revdate, text2=string2, text3=string3)
+endif
+
+if ( .not. file_exist(file) ) then
+   write(string1,*)'cannot open file <', trim(file),'> to read tile fractions.'
+   write(string2,*)'filename came from ancillaries.nml &jules_frac "file"'
+   call error_handler(E_ERR, 'get_physical_filenames', string1, &
+       source, revision, revdate, text2=string2)
+endif
+
+tile_fraction_file  = file
+tilefraction_variable = frac_name
+
+! Print a little summary if so desired.
+
+if (do_output() .and. debug > 99) then
+   write(     *     ,*)
+   write(     *     ,*)'tile_fraction_file     is <'//trim(tile_fraction_file)//'>'
+   write(     *     ,*)'tile fraction variable is <'//trim(tilefraction_variable)//'>'
+   write(     *     ,*)'land_fraction_file     is <'//trim(land_fraction_file)//'>'
+   write(     *     ,*)'land fraction variable is <'//trim(landfraction_variable)//'>'
+   write(     *     ,*)'physical_latlon_file   is <'//trim(physical_latlon_file)//'>'
+   write(     *     ,*)'longitude variable     is <'//trim(physical_lon_variable)//'>'
+   write(     *     ,*)'latitude variable      is <'//trim(physical_lat_variable)//'>'
+
+   write(logfileunit,*)
+   write(logfileunit,*)'tile_fraction_file     is <'//trim(tile_fraction_file)//'>'
+   write(logfileunit,*)'tile fraction variable is <'//trim(tilefraction_variable)//'>'
+   write(logfileunit,*)'land_fraction_file     is <'//trim(land_fraction_file)//'>'
+   write(logfileunit,*)'land fraction variable is <'//trim(landfraction_variable)//'>'
+   write(logfileunit,*)'physical_latlon_file   is <'//trim(physical_latlon_file)//'>'
+   write(logfileunit,*)'longitude variable     is <'//trim(physical_lon_variable)//'>'
+   write(logfileunit,*)'latitude variable      is <'//trim(physical_lat_variable)//'>'
+endif
+
+return
+end subroutine get_physical_filenames
 
 !===================================================================
 ! End of model_mod
