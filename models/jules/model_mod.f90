@@ -206,30 +206,32 @@ end type progvartype
 type(progvartype), dimension(max_state_variables) :: progvar
 
 ! ---------------------------------------------------------------------
-! The next structure is used when you know the gridcell indices
-! and want to know what indices of the DART state vector need to be queried.
-!
-! Each gridcell has 9 tiles for some variables, e.g. 
-!     esoil(time, tile, y, x) ;
-!
-! Each gridcell has 4 soil levels for some variables,
-!     smcl(time, soil, y, x)
-!
-! Each gridcell has some variables like:
-!    precip(time, y, x)
-!    latent_heat(time, y, x)
-! 
-! These can be scattered throughout the DART state vector.
-! It is convenient to initialize a lookup table to avoid traversing
-! the DART state vector looking for gridcell constituents.
-! ---------------------------------------------------------------------
+! The LatLon_to_dart structure is used when you know the 
+! physical latitude and longitude gridcell indices and want to know 
+! what indices of the DART state vector need to be queried.
 
-type sparseCellComponents
+type LatLon_to_dart
     private
     integer :: n
     integer, pointer, dimension(:) :: dartIndex
-end type sparseCellComponents
-type(sparseCellComponents), allocatable, dimension(:,:), target :: sparseCell
+end type LatLon_to_dart
+type(LatLon_to_dart), allocatable, dimension(:,:), target :: ij_to_dart
+
+integer, allocatable, dimension(:,:) :: ij_to_land
+
+! ---------------------------------------------------------------------
+! Convert the land index to the 'parent' lat / lon gridcell
+! This is like a sparse matrix representation.
+! At present, since the dimension of y is forced to be 1 such that
+! the size of x is equal to nland, ... the land_to_LatLon structure
+! can be used with either 'ix' or 'iland' as the index 
+
+type land_to_LatLon
+    private
+    integer :: latindex
+    integer :: lonindex
+end type land_to_LatLon
+type(land_to_LatLon), allocatable, dimension(:), target :: land_to_ij
 
 ! -----------------------------------------------------------------------------
 ! ancillaries.nml &jules_frac      file='frac_lai_canht.nc' -or- 'static_input.nc'
@@ -278,8 +280,8 @@ real(r8), allocatable :: land_mask(:,:)      ! gridcell fraction of land (Nlon,N
 real(r8), allocatable :: physical_longitudes(:,:)
 real(r8), allocatable :: physical_latitudes( :,:)
 
-type(location_type), allocatable :: sparse_locations(:)
-integer,             allocatable :: sparse_kinds(:)
+type(location_type), allocatable :: statespace_locations(:)
+integer,             allocatable :: statespace_kinds(:)
 type(get_close_type) :: gc_state
 
 ! -----------------------------------------------------------------
@@ -440,10 +442,10 @@ character(len=obstypelength) :: kind_name
 integer  :: varindex, testindex
 integer  :: i, x_index, y_index, indx, vert_coord
 integer  :: lon_index, lat_index, soil_index, tile_index, scpool_index
-integer  :: sparseindex(1)
+integer  :: closest_index(1)
 integer  :: num_close, ncontrib
-integer  :: close_ind(Nx_model*Ny_model)
-real(r8) :: distances(Nx_model*Ny_model)
+integer  :: close_ind(Nlon*Nlat)
+real(r8) :: distances(Nlon*Nlat)
 real(r8) :: mindistance
 real(r8) :: mylon, mylat, mylev
 real(r8), allocatable :: profile(:)
@@ -502,9 +504,9 @@ if (varindex == 0) then
    return
 endif
 
-! Generate the list of indices of the sparse locations that are 'close' candidates.
+! Generate the list of physical gridcell indices of the sparse locations that are 'close' candidates.
 
-call loc_get_close_obs(gc_state, location, 1, sparse_locations, sparse_kinds, &
+call loc_get_close_obs(gc_state, location, 1, statespace_locations, statespace_kinds, &
                        num_close, close_ind, distances)
 
 !>@TODO FIXME : Sometimes the location is outside the model domain.
@@ -535,35 +537,42 @@ elseif (do_output() .and. debug > 0) then
 
 endif
 
-! We now have the index into the 'sparse' array (which is always Nx_model*Ny_model,1);
-! decompose it into the x,y indices of the JULES model grid. 
-
 mindistance = minval(distances(1:num_close))
-sparseindex = close_ind(minloc(distances(1:num_close)))
+closest_index = close_ind(minloc(distances(1:num_close)))
 
-if (Ny_model /= 1) then ! the X-Y plane needs to be further decomposed
-      y_index = 1 + (sparseindex(1) - 1)/Nx_model
-      x_index = sparseindex(1) - (y_index - 1)*Nx_model
-else
-      x_index = sparseindex(1)
-      y_index = 1
+! We now have the closest index [1, Nlon*Nlat] and need to 
+! decompose it into the lat,lon indices of the JULES physical grid.
+
+y_index = 1 + (closest_index(1) - 1)/Nlon
+x_index = closest_index(1) - (y_index - 1)*Nlon
+
+if( land_mask(x_index, y_index) < 1.0_r8 ) then
+   ! Closest gridcell is not land.
+
+   if (do_output() .and. debug > 0) then
+   !>@TODO FIXME   left off here ... put a location at the water gridcell and test.
+   endif
+
+   istatus = 99
+   return
 endif
 
-! Now that I know the JULES model grid indices, I can query the sparseCell
+!>@TODO FIXME Still need to see if the closest physical gridcell is close enough,
+
 ! structure to return the DART elements that are at that location.
 ! This block is just a check.
 
-if (do_output() .and. debug > 9) then
+if (do_output() .and. debug > 0) then
 
-   write(*,*) sparseCell(x_index,y_index)%n, &
-              ' viable elements at sparse location ', x_index, y_index
+   write(*,*)'Closest index is ',closest_index,' decodes to ',x_index, y_index
+
+   write(*,*) ij_to_dart(x_index,y_index)%n, &
+              'DART elements from parent gridcell ', x_index, y_index
    write(*,301) trim(progvar(varindex)%varname)
    
-   do i = 1, sparseCell(x_index,y_index)%n
-      indx = sparseCell(x_index,y_index)%dartIndex(i)
+   do i = 1, ij_to_dart(x_index,y_index)%n
+      indx = ij_to_dart(x_index,y_index)%dartIndex(i)
    
-      write(*,*)'element ',i,' is DART index ',indx
-
       testindex = -1   
       call get_state_indices(indx, lon_index, lat_index, soil_index, &
                                 tile_index, scpool_index, testindex)
@@ -587,8 +596,8 @@ endif
 ! some results are vectors (land,soil), (land,scpool) and may need more 
 !
 ! At this point:
-! x_index  is for the sparseCell structure
-! y_index  is for the sparseCell structure
+! x_index  is for the ij_to_dart structure
+! y_index  is for the ij_to_dart structure
 ! varindex is the DART variable we need to interpolate
 !
 ! each DART variable has attributes that will help us interpolate.
@@ -601,6 +610,8 @@ endif
 ! write(*,*)'model_interpolate:',progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
 ! write(*,*)'model_interpolate:',progvar(varindex)%index1,progvar(varindex)%indexN
 
+!>@TODO FIXME left off here - checking ij_to_dart, etc.
+
 select case (trim(progvar(varindex)%coordinates))
 
 case ('land tile')
@@ -612,8 +623,8 @@ case ('land soil')
    profile = 0.0_r8
 
    ncontrib = 0
-WANTED : do i = 1, sparseCell(x_index,y_index)%n
-      indx = sparseCell(x_index,y_index)%dartIndex(i)
+WANTED : do i = 1, ij_to_dart(x_index,y_index)%n
+      indx = ij_to_dart(x_index,y_index)%dartIndex(i)
 
       if ( (indx < progvar(varindex)%index1) .or. &
            (indx > progvar(varindex)%indexN) ) cycle WANTED
@@ -773,22 +784,10 @@ call error_handler(E_MSG,'static_init_model',string1)
 ! The JULES restart files are intentionally lean and, in so doing,
 ! do not have metadata.
 ! The JULES grid in an output file can take on two forms.
-! If there are no masked (non-land) gridcells, it is a regular 2D grid.
+! If there are no masked (non-land) gridcells, it can be a regular 2D grid.
 ! If a mask has been applied, the number of longitudes takes on the number
 ! of useful land gridcells and the number of latitudes is 1.
-
-!>@TODO FIXME
-!>@TODO FIXME
-!>@TODO FIXME
-! Everything should be done on the physical grid.
-! There should be a physical-grid-to-sparse-grid lookup table.
-! There should be a physical-grid-to-dart_index  lookup table.
-! Should cross-reference the sparse-grid lat/lon arrays
-! with the physical grid arrays to ensure that we understand
-! the packing order of the state variables.
-!>@TODO FIXME
-!>@TODO FIXME
-!>@TODO FIXME
+! DART only supports the 'masked' version, i.e. the 1D version.
 
 call get_jules_output_dimensions()
 call get_jules_restart_dimensions()
@@ -979,10 +978,10 @@ if (do_output() .and. debug > 99) then
 endif
 
 ! --------------------------------------------------------------
-! Generate list of dart indices of interest for each gridcell
+! Generate list of dart indices for each gridcell
 
-allocate(sparseCell(Nx_model,Ny_model))
-call setSparseCellLookupTable()
+allocate(ij_to_dart(Nlon,Nlat))
+call determine_parent_gridcells()
 
 ! --------------------------------------------------------------
 ! Generate speedup table of 'close' items to figure out what gridcell
@@ -1011,8 +1010,11 @@ subroutine end_model()
    if (allocated(physical_latitudes)     ) deallocate(physical_latitudes) 
    if (allocated(physical_tile_fractions)) deallocate(physical_tile_fractions) 
 
-   if (allocated(sparse_locations)       ) deallocate(sparse_locations)
-   if (allocated(sparse_kinds)           ) deallocate(sparse_kinds)
+   if (allocated(statespace_locations)   ) deallocate(statespace_locations)
+   if (allocated(statespace_kinds)       ) deallocate(statespace_kinds)
+
+   if (allocated(land_to_ij)             ) deallocate(land_to_ij)
+   if (allocated(ij_to_land)             ) deallocate(ij_to_land)
 
 return
 end subroutine end_model
@@ -1320,7 +1322,7 @@ call nc_check(nf90_put_att(ncFileID,  VarID, 'units', ' '),  &
 call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ 0.0_r4, 1.0_r4 /)), &
               'nc_write_model_atts', 'put_att physical_tile_fractions valid_range '//trim(filename))
 
-! FIXME ... do we need a model grid tile fractions ... and if so, what
+!>@TODO FIXME ... do we need a model grid tile fractions ... and if so, what
 ! dimensions should it use ... nland -or- nx and ny ... what variables use it?
 
 ! Physical Grid land fractions
@@ -1732,7 +1734,7 @@ do k = 1, num_close
                       base_obs_kind, obs_kind(close_ind(k)))
 
 enddo
-   ! FIXME
+   !>@TODO FIXME
 endif
 
 return
@@ -3552,16 +3554,23 @@ subroutine Get_Model_Grid(fname)
 
 character(len=*), intent(in) :: fname
 
-integer :: ncid
+integer  :: ncid
+integer  :: iland, ix, iy
+real(r8) :: total_mismatch_lon
+real(r8) :: total_mismatch_lat
 
 call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
         'Get_Model_Grid','open '//trim(fname))
 
-! The lat/lon matrices in the history file have been masked by
-! the land values such that the wet cells are 'missing' values.
-! This makes it less than useful for us.
+! The lat/lon matrices in the history file have been 'packed' so
+! that only land gridcells are represented.
+! This means we need arrays to convert between physical lat/lon
+! grids and the 'packed' arrays.
 
-allocate(LONGITUDE(Nx_model,Ny_model), LATITUDE(Nx_model,Ny_model))
+allocate(LONGITUDE(Nx_model,Ny_model))
+allocate( LATITUDE(Nx_model,Ny_model))
+allocate(land_to_ij(Nland))
+allocate(ij_to_land(Nlon,Nlat))
 
 call DART_get_var(ncid, 'longitude', LONGITUDE)
 call DART_get_var(ncid, 'latitude',  LATITUDE)
@@ -3598,12 +3607,57 @@ if (do_output() .and. debug > 0) then
 
 endif
 
-! check to see if we strip out the land cells in the same fashion as JULES
+! Confirm that we strip out the land cells in the same fashion as JULES
+! This used to be in a routine called confirm_unwrapping()
+! Create the lookup arrays relating land cell to lat/lon gridcell, etc.
 
-if (debug > 0) call confirm_unwrapping()
+total_mismatch_lon = 0.0_r8
+total_mismatch_lat = 0.0_r8
+iland = 0
+do iy = 1,Nlat
+do ix = 1,Nlon
+   if (land_mask(ix,iy) > 0.0_r8) then
 
-! deallocate(LONGITUDE)
-! deallocate(LATITUDE)
+      iland = iland + 1 
+
+      land_tile_fractions(iland,1,:) = physical_tile_fractions(ix,iy,:)
+
+      total_mismatch_lon = total_mismatch_lon + &
+                           LONGITUDE(iland,1) - physical_longitudes(ix,iy)
+      total_mismatch_lat = total_mismatch_lat + &
+                           LATITUDE( iland,1) - physical_latitudes( ix,iy)
+
+      if (do_output() .and. debug > 99) write(*,100) iland, ix, iy, &
+          LONGITUDE(iland,1) - physical_longitudes(ix,iy), &
+           LATITUDE(iland,1) - physical_latitudes( ix,iy)
+
+      ! construct the lookup tables here since we know the
+      ! unrolling will be correct
+
+      land_to_ij(iland)%lonindex = ix
+      land_to_ij(iland)%latindex = iy
+      ij_to_land(ix,iy)          = iland
+
+   endif
+enddo
+enddo
+
+ 100 format('iland, ix, iy, londiff, latdiff',3(1x,i5),2(1x,f14.9))
+
+if (iland /= Nland) then
+   write(string1,*)'Unexpected number of land cells.'
+   write(string2,*)'expected ',Nland,' got ',iland
+   call error_handler(E_ERR, 'Get_Model_Grid', string1, &
+          source, revision, revdate, text2=string2)
+endif
+
+if ((total_mismatch_lon > 0.001) .or. (total_mismatch_lat > 0.001)) then
+   write(string1,*)'Check mapping between model gridcell layout and physical layout.'
+   write(string2,*)'total mismatch of land cell longitudes is ',total_mismatch_lon
+   write(string3,*)'total mismatch of land cell latitudes  is ',total_mismatch_lat
+   call error_handler(E_ERR, 'Get_Model_Grid', string1, &
+          source, revision, revdate, text2=string2, text3=string3)
+endif
 
 return
 end subroutine Get_Model_Grid
@@ -3826,54 +3880,64 @@ end function findVarIndex
 
 
 !------------------------------------------------------------------
-!> setSparseCellLookupTable
+!> determine_parent_gridcells
 !>
-!> This fills the sparseCell(:,:) structure.
-!> given a pair of JULES 'model' indices (be it 1D or 2D), the sparseCell(:,:) 
-!> structure will indicate how many and what DART state vector elements
-!> are part of the cell(ix,iy).
+!> This fills the ij_to_dart structure.
+!> After ij_to_dart is filled, a pair of (physical) lon/lat gridcell indices
+!> can be used to address how many - and what - dart state vector components
+!> are from that (parent) gridcell.
 
-subroutine setSparseCellLookupTable()
+subroutine determine_parent_gridcells()
 
-integer :: ix, iy, ij, iunit
 integer :: soil_index, tile_index, scpool_index, varindex  ! all dummies
+integer :: ij, iunit
+integer :: ilon, ilat   ! physical grid indices
+integer ::   ix,   iy   ! model grid indices
 
-call error_handler(E_MSG, 'setSparseCellLookupTable', &
-                   'FIXME routine not fully tested.', source, revision, revdate)
+ij_to_dart(:,:)%n = 0   ! everybody gets nobody
 
-sparseCell(:,:)%n = 0   ! everybody get nobody
-
-! Count up how many consituents are in each sparseCell
+! Since get_state_indices() can return the 'land' cell index ('ix')
+! and we have a way to convert the land index back to its parent gridcell
+! (using land_to_ij) we can simply traverse the entire model structure once
+! and count up how many DART contributions are in each parent gridcell.
+! Once we know how many DART contributions are in each gridcell, we can allocate
+! space to hold an array that holds the DART indices that came from that gridcell.
 
 do ij = 1,model_size
    varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
    call get_state_indices(ij, ix, iy, soil_index, tile_index, scpool_index, varindex)
-   sparseCell(ix, iy)%n = sparseCell(ix, iy)%n + 1
+
+   ! remember, iy will always equal 1 ... ix is iland
+   ilon = land_to_ij(ix)%lonindex
+   ilat = land_to_ij(ix)%latindex
+
+   ij_to_dart(ilon, ilat)%n = ij_to_dart(ilon, ilat)%n + 1
 enddo
 
 ! Create storage for the list of indices
 
-do iy = 1,Ny_model
-do ix = 1,Nx_model
-   if ( sparseCell(ix,iy)%n > 0 ) then
-      allocate( sparseCell(ix,iy)%dartIndex(sparseCell(ix,iy)%n) )
+do ilat = 1,Nlat
+do ilon = 1,Nlon
+   if ( ij_to_dart(ilon,ilat)%n > 0 ) then
+      allocate( ij_to_dart(ilon,ilat)%dartIndex(ij_to_dart(ilon,ilat)%n) )
    endif
 enddo
 enddo
 
-! Now that we know how many DART elements are in each sparseCell, go back and 
-! fill the arrays with the DART indices for each sparseCell.
+! Now that we know how many DART elements are in each parent gridcell,
+! go back and fill ij_to_dart with the DART indices.
 
-sparseCell(:,:)%n = 0   ! everybody get nobody - again
+ij_to_dart(:,:)%n = 0   ! everybody gets nobody - again
 
 do ij = 1,model_size
-
    varindex  = -1 ! if varindex is negative, get_state_indices will calculate it
    call get_state_indices(ij, ix, iy, soil_index, tile_index, scpool_index, varindex)
 
-   sparseCell(ix, iy)%n        = sparseCell(ix, iy)%n + 1
-   sparseCell(ix, iy)%dartIndex( sparseCell(ix, iy)%n ) = ij
+   ilon = land_to_ij(ix)%lonindex
+   ilat = land_to_ij(ix)%latindex
 
+   ij_to_dart(ilon, ilat)%n        = ij_to_dart(ilon, ilat)%n + 1
+   ij_to_dart(ilon, ilat)%dartIndex( ij_to_dart(ilon, ilat)%n ) = ij
 enddo
 
 ! Verification
@@ -3881,13 +3945,12 @@ if (do_output() .and. debug > 1) then
 
    iunit = open_file('gridcell_lookup_table.txt',form='formatted',action='write')
 
-   do iy = 1,Ny_model
-   do ix = 1,Nx_model
-      if (sparseCell(ix,iy)%n > 0) then
-         write(iunit,'(''sparseCell'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
-                   ix,iy,sparseCell(ix,iy)%n
-         write(iunit,*)sparseCell(ix,iy)%dartIndex
-      endif
+   do ilat = 1,Nlat
+   do ilon = 1,Nlon
+      write(iunit,'(''ij_to_dart'',i8,1x,i8,'' has '', i6, '' constituents:'')') &
+                   ilon,ilat,ij_to_dart(ilon,ilat)%n
+      if (ij_to_dart(ilon,ilat)%n > 0) &
+         write(iunit,*) ij_to_dart(ilon,ilat)%dartIndex
    enddo
    enddo
 
@@ -3896,7 +3959,7 @@ if (do_output() .and. debug > 1) then
 endif
 
 return
-end subroutine setSparseCellLookupTable
+end subroutine determine_parent_gridcells
 
 
 !------------------------------------------------------------------
@@ -4345,7 +4408,7 @@ if (do_output() .and. debug > 99) then
    write(     *     ,*)'set_land_mask:Summary of '//trim(string3)
    write(     *     ,*)'set_land_mask:shape      ',dimlens(1:numdims)
 
-   ! FIXME ... report on number of non-land & land gridcells
+   !>@TODO FIXME ... report on number of non-land & land gridcells
 endif
 
 return
@@ -4440,35 +4503,11 @@ if (do_output() .and. debug > 99) then
    write(     *     ,*)'set_tile_fractions:Summary of '//trim(string3)
    write(     *     ,*)'set_tile_fractions:shape      ',shape(physical_tile_fractions)
 
-   ! FIXME ... report min/max?
+   !>@TODO FIXME ... report min/max?
 endif
 
 return
 end subroutine set_tile_fractions
-
-
-!-----------------------------------------------------------------------
-!> physical_to_model_indices
-!> Given the physical grid latitude and longitude index,
-!> return the model-based xindex,yindex
-
-subroutine physical_to_model_indices()
-
-   ! FIXME  needs to be written
-
-end subroutine physical_to_model_indices
-
-
-!-----------------------------------------------------------------------
-!> model_to_physical_to_model_indices
-!> Given the model-based xindex,yindex,
-!> return the  physical grid latitude and longitude index
-
-subroutine model_to_physical_indices()
-
-   ! FIXME  needs to be written
-
-end subroutine model_to_physical_indices
 
 
 !-----------------------------------------------------------------------
@@ -4755,33 +4794,29 @@ end subroutine get_state_lonlatlev
 
 !-----------------------------------------------------------------------
 !>
-!> set_sparse_locations_kinds() creates an array the size of the state with
-!>                       the location of each of the corresponding elements.
+!> set_sparse_locations_kinds() creates an array the size of the physical
+!> grid with the location of each of the corresponding gridcell centers.
 
 subroutine set_sparse_locations_kinds()
 
 integer  :: ix, iy, indx
 real(r8) :: mylon, mylat
 
-!>@TODO FIXME at some point, having the sparse_locations() array should obviate
-! the need to keep the LONGITUDE, LATITUDE variables around. At present,
-! they are needed by nc_write_model_atts() - but that could be about it.
+allocate(statespace_locations(Nlon*Nlat))
+allocate(statespace_kinds(Nlon*Nlat))
 
-allocate(sparse_locations(Nx_model*Ny_model))
-allocate(sparse_kinds(Nx_model*Ny_model))
-
-sparse_kinds = 1   ! This is a dummy because we have to satisfy get_close_obs() 
+statespace_kinds = 1   ! This is a dummy because we have to satisfy get_close_obs() 
                  ! get_close_obs() requires a kind, but this implementation does not.
 
 indx = 0
-do iy = 1,Ny_model
-do ix = 1,Nx_model
+do iy = 1,Nlat
+do ix = 1,Nlon
 
     indx  = indx + 1
-    mylon = LONGITUDE(ix,iy)
-    mylat =  LATITUDE(ix,iy)
+    mylon = physical_longitudes(ix,iy)
+    mylat = physical_latitudes( ix,iy)
 
-    sparse_locations(indx) = set_location(mylon, mylat, 0.0_r8, VERTISUNDEF)
+    statespace_locations(indx) = set_location(mylon, mylat, 0.0_r8, VERTISUNDEF)
 enddo
 enddo
 
@@ -4873,7 +4908,7 @@ endif
 ! maxdist unscaled resulted in NNN candidates for a location in the middle of the domain
 
 call get_close_maxdist_init(gc_state, maxdist)
-call get_close_obs_init(gc_state, Nx_model*Ny_model, sparse_locations)
+call get_close_obs_init(gc_state, Nlon*Nlat, statespace_locations)
 
 return
 end subroutine init_interp
@@ -5084,45 +5119,6 @@ return
 end subroutine get_physical_filenames
 
 
-!-----------------------------------------------------------------------
-!> confirm_unwrapping
-! check to see if we strip out just the land cells from
-! the physical_longitudes() and physical_latitudes() arrays, we get the same
-! thing in the same order as the LATITUDE and LONGITUDE arrays.
-
-subroutine confirm_unwrapping()
-
-integer :: iland, ix, iy
-
-iland = 0
-do iy = 1,Nlat
-do ix = 1,Nlon
-   if (land_mask(ix,iy) > 0.0_r8) then
-      iland = iland + 1 
-
-      land_tile_fractions(iland,1,:) = physical_tile_fractions(ix,iy,:)
-
-      write(*,100) iland, ix, iy, &
-          LONGITUDE(iland,1) - physical_longitudes(ix,iy), &
-           LATITUDE(iland,1) - physical_latitudes( ix,iy)
-!     land_tile_fractions(iland,1,:) - physical_tile_fractions(ix,iy,:)
-
-      ! FIXME construct the lookup tables right here?
-
-   endif
-enddo
-enddo
-
- 100 format('iland, ix, iy, londiff, latdiff',3(1x,i5),2(1x,f14.9))
-
-if (iland /= Nland) then
-   write(string1,*)trim(string3)//' does not have expected number of land cells.'
-   write(string2,*)'expected ',Nland,' got ',iland
-   call error_handler(E_ERR, 'set_tile_fractions', string1, &
-          source, revision, revdate, text2=string2)
-endif
-
-end subroutine confirm_unwrapping
 
 !===================================================================
 ! End of model_mod
