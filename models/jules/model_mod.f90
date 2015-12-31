@@ -519,10 +519,22 @@ call loc_get_close_obs(gc_state, location, 1, statespace_locations, statespace_k
 if (num_close == 0) then
 
    call write_location(num_close, location, charstring=string1)
+   call error_handler(E_MSG, 'model_interpolate', string1, text2='nothing close')
    istatus = 23
    return
 
-elseif (do_output() .and. debug > 0) then
+endif
+
+mindistance   =           minval(distances(1:num_close))
+closest_index = close_ind(minloc(distances(1:num_close)))
+
+! We now have the closest index [1, Nlon*Nlat] (i.e. statespace format) and need
+! to decompose it into the lat,lon indices of the JULES physical grid.
+
+y_index = 1 + (closest_index(1) - 1)/Nlon
+x_index = closest_index(1) - (y_index - 1)*Nlon
+
+if (do_output() .and. debug > 0) then
 
    write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
    call write_location(istatus,location,charstring=string2)
@@ -531,40 +543,52 @@ elseif (do_output() .and. debug > 0) then
 
    write(*,*)'distances       are ',distances(1:num_close)
    write(*,*)'indices         are ',close_ind(1:num_close)
-   write(*,*)'minimum distance is ',minval(distances(1:num_close))
-   write(*,*)'index of minimum is ',minloc(distances(1:num_close))
-   write(*,*)'sparse  index    is ',close_ind(minloc(distances(1:num_close)))
+   write(*,*)'minimum distance is ',mindistance
+   write(*,*)'statespace index is ',closest_index
+   write(*,*)'physical lon  index ',x_index
+   write(*,*)'physical lat  index ',y_index
 
 endif
 
-mindistance = minval(distances(1:num_close))
-closest_index = close_ind(minloc(distances(1:num_close)))
-
-! We now have the closest index [1, Nlon*Nlat] and need to 
-! decompose it into the lat,lon indices of the JULES physical grid.
-
-y_index = 1 + (closest_index(1) - 1)/Nlon
-x_index = closest_index(1) - (y_index - 1)*Nlon
+! Closest gridcell is not land.
 
 if( land_mask(x_index, y_index) < 1.0_r8 ) then
-   ! Closest gridcell is not land.
 
    if (do_output() .and. debug > 0) then
-   !>@TODO FIXME   left off here ... put a location at the water gridcell and test.
+      write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
+      call write_location(istatus,location,charstring=string2)
+      write(string3,*)'which is apparently not a land gridcell.'
+      call error_handler(E_MSG, 'model_interpolate', string1, &
+                                text2=string2, text3=string3)
    endif
 
    istatus = 99
    return
 endif
 
-!>@TODO FIXME Still need to see if the closest physical gridcell is close enough,
+! Check to ensure the observation is within the physical domain.
+! Prevents against extrapolation.
+
+istatus = is_location_in_domain(llon, llat, x_index, y_index)
+
+if (istatus /= 0) then
+
+   if (do_output() .and. debug > 0) then
+      write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
+      call write_location(istatus,location,charstring=string2)
+      write(string3,*)'which is outside the domain.'
+      call error_handler(E_MSG, 'model_interpolate', string1, &
+                                text2=string2, text3=string3)
+   endif
+   
+   istatus = 99
+   return
+endif
 
 ! structure to return the DART elements that are at that location.
 ! This block is just a check.
 
 if (do_output() .and. debug > 0) then
-
-   write(*,*)'Closest index is ',closest_index,' decodes to ',x_index, y_index
 
    write(*,*) ij_to_dart(x_index,y_index)%n, &
               'DART elements from parent gridcell ', x_index, y_index
@@ -5117,6 +5141,135 @@ endif
 
 return
 end subroutine get_physical_filenames
+
+
+!-----------------------------------------------------------------------
+!> is_location_in_domain
+!>
+!> Checks to see that if the location is physically within the domain.
+!> Since the grid is not required to be 'regular', this is a bit more
+!> complicated than it would be for grids that can be defined by a single
+!> array of latitudes and another array of longitudes.
+!> Since there is no way to know exactly what the outermost edges are
+!> (for a non-regular grid), we are just assuming it is half the width
+!> of the next interior distance.
+!>
+!>@TODO  FIXME ... what about wrapping?
+
+function is_location_in_domain(lon, lat, x_i, y_i) result(istatus)
+
+real(r8), intent(in)  :: lon      ! candidate longitude
+real(r8), intent(in)  :: lat      ! candidate latitude
+integer,  intent(in)  :: x_i      ! index of physical longitude gridcell
+integer,  intent(in)  :: y_i      ! index of physical latitude gridcell
+integer              :: istatus   ! return value of function 0 == good
+
+real(r8) :: dx, dy
+real(r8) :: lon_boundary
+real(r8) :: lat_boundary
+
+istatus = -1  ! out-of-bounds until proven otherwise
+
+! If the index is not the first or last, it must be in the interior of the
+! grid and so it is in the domain. Easy.
+if ( (x_i > 1) .and. (x_i < Nlon) .and.  &
+     (y_i > 1) .and. (y_i < Nlat) ) then
+   istatus = 0
+   return
+endif
+
+if (y_i ==    1) dy = physical_latitudes(x_i,y_i  ) - physical_latitudes(x_i,y_i+1)
+if (y_i == Nlat) dy = physical_latitudes(x_i,y_i-1) - physical_latitudes(x_i,y_i  )
+
+if (x_i ==    1) dx = physical_longitudes(x_i+1,y_i) - physical_longitudes(x_i  ,y_i)
+if (x_i == Nlon) dx = physical_longitudes(x_i  ,y_i) - physical_longitudes(x_i-1,y_i)
+
+if ( (x_i == 1) .and. (y_i == 1) ) then ! farthest west, farthest north.
+
+   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
+   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
+
+   if (do_output() .and. debug > 0) then
+      write(*,*)'edge, obs, longitude', &
+                 lon_boundary, '?', lon, '?', physical_longitudes(x_i,y_i)
+      write(*,*)'latitude, obs, edge ', &
+                 physical_latitudes(x_i,y_i), '?', lat, '?', lat_boundary 
+   endif
+
+   if (lon < lon_boundary) return   ! out-of-bounds
+   if (lat > lat_boundary) return   ! out-of-bounds
+
+elseif ( (x_i == Nlon) .and. (y_i == 1) ) then ! farthest east, farthest north.
+
+   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
+   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
+
+   if (do_output() .and. debug > 0) then
+      write(*,*)'longitude, obs, edge', &
+                 physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
+      write(*,*)'latitude,  obs, edge', &
+                 physical_latitudes( x_i,y_i), '?', lat, '?', lat_boundary 
+   endif
+
+   if (lon > lon_boundary) return   ! out-of-bounds
+   if (lat > lat_boundary) return   ! out-of-bounds
+
+elseif ( (x_i == Nlon) .and. (y_i == Nlat) ) then ! farthest east, farthest south.
+
+   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
+   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
+
+   if (do_output() .and. debug > 0) then
+      write(*,*)'longitude, obs, edge', &
+                 physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
+      write(*,*)'edge,  obs, latitude', &
+                 lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
+   endif
+
+   if (lon > lon_boundary) return   ! out-of-bounds
+   if (lat < lat_boundary) return   ! out-of-bounds
+
+elseif ( (x_i == 1) .and. (y_i == Nlat) ) then ! farthest west, farthest south.
+
+   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
+   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
+
+   if (do_output() .and. debug > 0) then
+      write(*,*)'edge, obs, longitude', &
+                 lon_boundary , '?', lon, '?', physical_longitudes(x_i,y_i)
+      write(*,*)'edge,  obs, latitude', &
+                 lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
+   endif
+
+   if (lon < lon_boundary) return   ! out-of-bounds
+   if (lat < lat_boundary) return   ! out-of-bounds
+ 
+elseif ( x_i == 1 ) then
+
+   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
+   if (lon < lon_boundary) return   ! out-of-bounds
+
+elseif ( x_i == Nlon ) then
+
+   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
+   if (lon > lon_boundary) return   ! out-of-bounds
+
+elseif ( y_i == 1 ) then
+
+   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
+   if (lat > lat_boundary) return   ! out-of-bounds
+
+elseif ( y_i == Nlat ) then
+
+   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
+   if (lat < lat_boundary) return   ! out-of-bounds
+
+endif
+
+istatus = 0
+return
+end function is_location_in_domain
+
 
 
 
