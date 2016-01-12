@@ -28,7 +28,8 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              get_close_maxdist_init, get_close_type,           &
                              get_close_obs_init, get_close_obs_destroy,        &
                              loc_get_close_obs => get_close_obs,               &
-                             LocationDims, write_location
+                             LocationDims, write_location,                     &
+                             is_location_in_region
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -270,6 +271,9 @@ real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable :: SOILLEVEL(:)      ! jules_soil.nml, soil interfaces
 real(r4), allocatable :: land_tile_fractions(:,:,:)
 
+type(location_type) :: ll_boundary   ! lower  left grid BOUNDARY
+type(location_type) :: ur_boundary  ! upper right grid BOUNDARY
+
 ! The following variables are 'physically' shaped (i.e. you can plot them easily)
 
 integer :: Nlon = -1   ! shape of physical (input) longitude/latitude matrix
@@ -504,25 +508,35 @@ if (varindex == 0) then
    return
 endif
 
-! Generate the list of physical gridcell indices of the sparse locations that are 'close' candidates.
+! Check to ensure the observation is within the physical domain.
+! Prevents against extrapolation.
+!> @ todo FIXME return some specific error code that will indicate it 
+!>        is outside the domain ... See JIRA ticket DARTSUP-294
+
+if( .not. is_location_in_region(location, ll_boundary, ur_boundary)) then
+
+   if (do_output() .and. debug > 2) then
+      write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
+      call write_location(istatus,location,charstring=string2)
+      write(string3,*)'which is outside the domain.'
+      call error_handler(E_MSG, 'model_interpolate', string1, &
+                                text2=string2, text3=string3)
+   endif
+   
+   istatus = 96
+   return
+endif
+
+! Generate the list of physical gridcell indices that are 'close' to the observation.
 
 call loc_get_close_obs(gc_state, location, 1, statespace_locations, statespace_kinds, &
                        num_close, close_ind, distances)
 
-!>@TODO FIXME : Sometimes the location is outside the model domain.
-! In this case, we cannot interpolate. This is not being checked right now.
-! This will return the closest one, even if it's not close enough. 'maxdist'
-! was determined from the input grid, observations outside the domain by more
-! than maxdist/2 but less than maxdist will still be 'close' even through they
-! should technically be considered to be an extrapolation ... and not considered?  
-
 if (num_close == 0) then
-
    call write_location(num_close, location, charstring=string1)
    call error_handler(E_MSG, 'model_interpolate', string1, text2='nothing close')
-   istatus = 23
+   istatus = 95
    return
-
 endif
 
 mindistance   =           minval(distances(1:num_close))
@@ -534,7 +548,7 @@ closest_index = close_ind(minloc(distances(1:num_close)))
 y_index = 1 + (closest_index(1) - 1)/Nlon
 x_index = closest_index(1) - (y_index - 1)*Nlon
 
-if (do_output() .and. debug > 0) then
+if (do_output() .and. debug > 3) then
 
    write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
    call write_location(istatus,location,charstring=string2)
@@ -554,7 +568,7 @@ endif
 
 if( land_mask(x_index, y_index) < 1.0_r8 ) then
 
-   if (do_output() .and. debug > 0) then
+   if (do_output() .and. debug > 2) then
       write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
       call write_location(istatus,location,charstring=string2)
       write(string3,*)'which is apparently not a land gridcell.'
@@ -562,33 +576,14 @@ if( land_mask(x_index, y_index) < 1.0_r8 ) then
                                 text2=string2, text3=string3)
    endif
 
-   istatus = 99
-   return
-endif
-
-! Check to ensure the observation is within the physical domain.
-! Prevents against extrapolation.
-
-istatus = is_location_in_domain(llon, llat, x_index, y_index)
-
-if (istatus /= 0) then
-
-   if (do_output() .and. debug > 0) then
-      write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
-      call write_location(istatus,location,charstring=string2)
-      write(string3,*)'which is outside the domain.'
-      call error_handler(E_MSG, 'model_interpolate', string1, &
-                                text2=string2, text3=string3)
-   endif
-   
-   istatus = 99
+   istatus = 94
    return
 endif
 
 ! structure to return the DART elements that are at that location.
 ! This block is just a check.
 
-if (do_output() .and. debug > 0) then
+if (do_output() .and. debug > 2) then
 
    write(*,*) ij_to_dart(x_index,y_index)%n, &
               'DART elements from parent gridcell ', x_index, y_index
@@ -634,12 +629,12 @@ endif
 ! write(*,*)'model_interpolate:',progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
 ! write(*,*)'model_interpolate:',progvar(varindex)%index1,progvar(varindex)%indexN
 
-!>@TODO FIXME left off here - checking ij_to_dart, etc.
+!> @todo FIXME left off here - checking ij_to_dart, etc.
 
 select case (trim(progvar(varindex)%coordinates))
 
 case ('land tile')
-   !>@TODO FIXME Use tile_fraction mask to reconstitute the gridcell value
+   !> @todo FIXME Use tile_fraction mask to reconstitute the gridcell value
 
 case ('land soil')
    ! must vertically interpolate to proper depth
@@ -682,7 +677,7 @@ WANTED : do i = 1, ij_to_dart(x_index,y_index)%n
       return
    endif
 
-   !>@TODO FIXME ... may want to put a depth limit on this ...
+   !> @todo FIXME ... may want to put a depth limit on this ...
    if ( lheight >= SOILLEVEL(Nsoil) ) then
       interp_val = profile(Nsoil)
       istatus    = 0
@@ -707,7 +702,7 @@ WANTED : do i = 1, ij_to_dart(x_index,y_index)%n
 
 case ('land scpool')
 
-   !>@TODO FIXME don't know what to do here ... what is scpool
+   !> @todo FIXME don't know what to do here ... what is scpool
 
    write(string1,*)'second dimension <'//trim( progvar(varindex)%dimnames(2))//'>'
    write(string2,*)'is not "tile", "soil", or "scpool"'
@@ -820,6 +815,7 @@ call get_jules_restart_dimensions()
 
 call get_physical_filenames()   ! from jules namelist files
 call set_physical_grid(physical_latlon_file)
+call set_grid_boundary()
 call set_land_mask(land_fraction_file)
 call set_tile_fractions(tile_fraction_file)
 
@@ -877,7 +873,7 @@ do ivar = 1, nfields
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
-   !>@TODO FIXME ... we could check the same variable in the output file
+   !> @todo FIXME ... we could check the same variable in the output file
    ! to get the metadata
 
    if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
@@ -1346,7 +1342,7 @@ call nc_check(nf90_put_att(ncFileID,  VarID, 'units', ' '),  &
 call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ 0.0_r4, 1.0_r4 /)), &
               'nc_write_model_atts', 'put_att physical_tile_fractions valid_range '//trim(filename))
 
-!>@TODO FIXME ... do we need a model grid tile fractions ... and if so, what
+!> @todo FIXME ... do we need a model grid tile fractions ... and if so, what
 ! dimensions should it use ... nland -or- nx and ny ... what variables use it?
 
 ! Physical Grid land fractions
@@ -1744,7 +1740,7 @@ if (present(dist)) dist = 1.0e9   ! something big and positive (far away)
 ! computations that will follow.  This is a horizontal-distance operation and
 ! we don't need to have the relevant vertical coordinate information yet
 ! (for obs).
-!>@TODO FIXME - confirm that the close_ind() array does not benefit from having 
+!> @todo FIXME - confirm that the close_ind() array does not benefit from having 
 ! all the dry_land locations pruned out.
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
@@ -1758,7 +1754,7 @@ do k = 1, num_close
                       base_obs_kind, obs_kind(close_ind(k)))
 
 enddo
-   !>@TODO FIXME
+   !> @todo FIXME
 endif
 
 return
@@ -2054,7 +2050,7 @@ endif
 call nc_check(nf90_open(trim(jules_restart_filename), NF90_WRITE, ncFileID), &
              'dart_to_jules_restart','open '//trim(jules_restart_filename))
 
-!>@TODO FIXME ... if/when the restart file gets metadata indicating the time,
+!> @todo FIXME ... if/when the restart file gets metadata indicating the time,
 ! it would be a good idea to check the model_time against the time in
 ! the restart file.
 
@@ -2132,7 +2128,7 @@ UPDATE : do ivar=1, nfields
                         source,revision,revdate)
    endif
 
-   !>@TODO FIXME ... this works perfectly if it were not for a bug in netCDF.
+   !> @todo FIXME ... this works perfectly if it were not for a bug in netCDF.
    ! When they fix the bug, this will be a useful thing to restore.
    ! Make note that the variable has been updated by DART
 !  call nc_check(nf90_Redef(ncFileID),'dart_to_jules_restart', &
@@ -3235,7 +3231,7 @@ if (present(ncid)) then
    endif
 
    ! Replace the DART missing value flag with the one JULES uses.
-   !>@TODO FIXME ... I am not sure if there would ever be any missing values
+   !> @todo FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3308,7 +3304,7 @@ if (present(ncid)) then
    endif
 
    ! replace the missing values with the original missing values.
-   !>@TODO FIXME ... I am not sure if there would ever be any missing values
+   !> @todo FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3383,7 +3379,7 @@ if (present(ncid)) then
    endif
 
    ! replace the missing values with the original missing values.
-   !>@TODO FIXME ... I am not sure if there would ever be any missing values
+   !> @todo FIXME ... I am not sure if there would ever be any missing values
    ! in a JULES restart file.
 
    if     (progvar(ivar)%xtype == NF90_INT) then
@@ -3698,7 +3694,7 @@ type(time_type) :: set_model_time_step
 
 call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine is not tested')
 
-!>@TODO FIXME ... should check to see that time step is attainable given the JULES namelist values.
+!> @todo FIXME ... should check to see that time step is attainable given the JULES namelist values.
 
 set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
 
@@ -4155,7 +4151,7 @@ TIMELOOP : do itime = 1,ntimes
 
 enddo TIMELOOP
 
-!>@TODO FIXME ... do we actually need a perfect match ... or do we just use the last one
+!> @todo FIXME ... do we actually need a perfect match ... or do we just use the last one
 if ( FindDesiredTimeIndx == MISSING_I ) then
    call print_time(model_time,str='model time is ',iunit=logfileunit)
    call print_time(model_time,str='model time is ')
@@ -4432,7 +4428,7 @@ if (do_output() .and. debug > 99) then
    write(     *     ,*)'set_land_mask:Summary of '//trim(string3)
    write(     *     ,*)'set_land_mask:shape      ',dimlens(1:numdims)
 
-   !>@TODO FIXME ... report on number of non-land & land gridcells
+   !> @todo FIXME ... report on number of non-land & land gridcells
 endif
 
 return
@@ -4527,7 +4523,7 @@ if (do_output() .and. debug > 99) then
    write(     *     ,*)'set_tile_fractions:Summary of '//trim(string3)
    write(     *     ,*)'set_tile_fractions:shape      ',shape(physical_tile_fractions)
 
-   !>@TODO FIXME ... report min/max?
+   !> @todo FIXME ... report min/max?
 endif
 
 return
@@ -4802,7 +4798,7 @@ elseif (trim(progvar(varindex)%coordinates) == 'land') then
 
 else
 
-   !>@TODO FIXME ... should check for supported variable shapes much earlier on.
+   !> @todo FIXME ... should check for supported variable shapes much earlier on.
 
    write(string1,*) 'unsupported variable shape of ['// &
                     &trim(progvar(varindex)%coordinates)//']'
@@ -4888,7 +4884,7 @@ EW_lon : do i = 1, Nlon-1
    lat_dist = abs(physical_latitudes( i,j) - physical_latitudes( i+1,j))
    lon_dist = abs(physical_longitudes(i,j) - physical_longitudes(i+1,j))
 
-   !>@TODO FIXME the prime meridian is a problem ... 
+   !> @todo FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
    if (lon_dist > 180.0_r8) cycle EW_lon
 
@@ -4904,7 +4900,7 @@ NS_lon : do i = 1, Nlon
    lat_dist = abs(physical_latitudes( i,j) - physical_latitudes( i,j+1))
    lon_dist = abs(physical_longitudes(i,j) - physical_longitudes(i,j+1))
 
-   !>@TODO FIXME the prime meridian is a problem ... 
+   !> @todo FIXME the prime meridian is a problem ... 
    ! hopefully, there are other gridcells 
    if (lon_dist > 180.0_r8) cycle NS_lon
 
@@ -4913,7 +4909,7 @@ NS_lon : do i = 1, Nlon
 enddo NS_lon
 enddo NS_lat
 
-!>@TODO FIXME ... what to do if max_lon = 0.0_r8
+!> @todo FIXME ... what to do if max_lon = 0.0_r8
 
 ! convert to radians
 max_lon = max_lon / rad2deg
@@ -5154,7 +5150,7 @@ end subroutine get_physical_filenames
 !> (for a non-regular grid), we are just assuming it is half the width
 !> of the next interior distance.
 !>
-!>@TODO  FIXME ... what about wrapping?
+!> @todo  FIXME ... what about wrapping?
 
 function is_location_in_domain(lon, lat, x_i, y_i) result(istatus)
 
@@ -5189,12 +5185,12 @@ if ( (x_i == 1) .and. (y_i == 1) ) then ! farthest west, farthest north.
    lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
    lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
 
-   if (do_output() .and. debug > 0) then
-      write(*,*)'edge, obs, longitude', &
-                 lon_boundary, '?', lon, '?', physical_longitudes(x_i,y_i)
-      write(*,*)'latitude, obs, edge ', &
-                 physical_latitudes(x_i,y_i), '?', lat, '?', lat_boundary 
-   endif
+!  if (do_output() .and. debug > 0) then
+!     write(*,*)'edge, obs, longitude', &
+!                lon_boundary, '?', lon, '?', physical_longitudes(x_i,y_i)
+!     write(*,*)'latitude, obs, edge ', &
+!                physical_latitudes(x_i,y_i), '?', lat, '?', lat_boundary 
+!  endif
 
    if (lon < lon_boundary) return   ! out-of-bounds
    if (lat > lat_boundary) return   ! out-of-bounds
@@ -5204,12 +5200,12 @@ elseif ( (x_i == Nlon) .and. (y_i == 1) ) then ! farthest east, farthest north.
    lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
    lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
 
-   if (do_output() .and. debug > 0) then
-      write(*,*)'longitude, obs, edge', &
-                 physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
-      write(*,*)'latitude,  obs, edge', &
-                 physical_latitudes( x_i,y_i), '?', lat, '?', lat_boundary 
-   endif
+!  if (do_output() .and. debug > 0) then
+!     write(*,*)'longitude, obs, edge', &
+!                physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
+!     write(*,*)'latitude,  obs, edge', &
+!                physical_latitudes( x_i,y_i), '?', lat, '?', lat_boundary 
+!  endif
 
    if (lon > lon_boundary) return   ! out-of-bounds
    if (lat > lat_boundary) return   ! out-of-bounds
@@ -5219,12 +5215,12 @@ elseif ( (x_i == Nlon) .and. (y_i == Nlat) ) then ! farthest east, farthest sout
    lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
    lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
 
-   if (do_output() .and. debug > 0) then
-      write(*,*)'longitude, obs, edge', &
-                 physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
-      write(*,*)'edge,  obs, latitude', &
-                 lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
-   endif
+!  if (do_output() .and. debug > 0) then
+!     write(*,*)'longitude, obs, edge', &
+!                physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
+!     write(*,*)'edge,  obs, latitude', &
+!                lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
+!  endif
 
    if (lon > lon_boundary) return   ! out-of-bounds
    if (lat < lat_boundary) return   ! out-of-bounds
@@ -5234,12 +5230,12 @@ elseif ( (x_i == 1) .and. (y_i == Nlat) ) then ! farthest west, farthest south.
    lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
    lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
 
-   if (do_output() .and. debug > 0) then
-      write(*,*)'edge, obs, longitude', &
-                 lon_boundary , '?', lon, '?', physical_longitudes(x_i,y_i)
-      write(*,*)'edge,  obs, latitude', &
-                 lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
-   endif
+!  if (do_output() .and. debug > 0) then
+!     write(*,*)'edge, obs, longitude', &
+!                lon_boundary , '?', lon, '?', physical_longitudes(x_i,y_i)
+!     write(*,*)'edge,  obs, latitude', &
+!                lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
+!  endif
 
    if (lon < lon_boundary) return   ! out-of-bounds
    if (lat < lat_boundary) return   ! out-of-bounds
@@ -5271,7 +5267,65 @@ return
 end function is_location_in_domain
 
 
+!-----------------------------------------------------------------------
+!>
+!> Set the outermost edge of the domain. The gridcell locations as given
+!> represent the gridcell centers. The edges must be computed.
+!> Care is taken to consider spanning the prime meridian.
+!>
 
+subroutine set_grid_boundary()
+
+! type(location_type) :: ll_boundary   ! lower  left grid BOUNDARY
+! type(location_type) :: ur_boundary  ! upper right grid BOUNDARY
+
+integer  :: x_i, y_i
+real(r8) :: dx, dy, lon_boundary, lat_boundary
+
+! Extend the grid by half a gridcell in both directions.
+! 1,1 is the UPPER left we want the LOWER left ... x==1, y==Nlat
+
+x_i = 1
+y_i = Nlat
+
+!> @todo FIXME what if dx wraps ...
+
+dx = abs(physical_longitudes(x_i+1, y_i  ) - physical_longitudes(x_i, y_i))
+dy = abs(physical_latitudes( x_i  , y_i-1) - physical_latitudes( x_i, y_i))
+
+!> @todo FIXME what if lon_boundary wraps ...
+
+lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
+lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
+
+ll_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
+
+! UPPER right is ... x==Nlon, y==1
+
+x_i = Nlon
+y_i = 1
+
+dx = abs(physical_longitudes(x_i, y_i  ) - physical_longitudes(x_i-1, y_i))
+dy = abs(physical_latitudes( x_i, y_i+1) - physical_latitudes( x_i  , y_i))
+
+lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
+lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
+
+ur_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
+
+write(*,*)'TJH test ... debug is ',debug
+
+if (debug > 0) then
+   call write_location(x_i, ll_boundary, charstring=string3)
+   write(string1,*)'lower left  boundary ',trim(string3)
+   call write_location(x_i, ur_boundary, charstring=string3)
+   write(string2,*)'upper right boundary ',trim(string3)
+   call error_handler(E_MSG, 'set_grid_boundary', string1, text2=string2)
+endif
+
+!> @todo FIXME check to see what happens if upper right is > 360.0 and location is < 10.0
+
+end subroutine set_grid_boundary
 
 !===================================================================
 ! End of model_mod
