@@ -175,7 +175,7 @@
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.2
    calendar                     = 'Gregorian'
-   debug                        = 3
+   debug                        = 1
    variables  = 'canopy',     'KIND_CANOPY_WATER',           'NA', 'NA', 'restart' , 'NO_COPY_BACK',
                 'gs',         'KIND_SURFACE_CONDUCTANCE',    'NA', 'NA', 'restart' , 'UPDATE',
                 'tstar_tile', 'KIND_SKIN_TEMPERATURE',       'NA', 'NA', 'restart' , 'UPDATE',
@@ -317,56 +317,32 @@ I know esoil is not latent heat flux
    verbose    = .false.
    /
 
-! useful input for model_mod_check_nml ...
-! For the case with a land mask
-   t_soil [12902,15617] 679 land 4 soil ...
-   t_soil   12902 ...  1 1
-   t_soil   13581 ...  1 2
-   t_soil   14260 ...  1 3
-   t_soil   14270 ... 11 3
-   varsize             6111
-   index1             40062
-   indexN             46172
-   esoil    40062 ... 1 1 1
-   esoil    40162 ... 101 1 1
-   esoil    40741 ... 1 1 2
+   gridcell 1,1 = 358.2875, 51.67083
+   gridcell 1,2 = 358.2875, 51.66250
+   gridcell 1,3 = 358.2875, 51.65417
+   gridcell 1,4 = 358.2875, 51.64583
+   gridcell 1,5 = 358.2875, 51.63750
 
-! useful input for model_mod_check_nml ...
-! For the case with all gridcells land
-   varsize     :         800    (gs 20.40)
-   index1      :       7201    (gs)
-   indexN      :       8000    (gs)
-   gs        7201      1  1
-   gs        7220      20 1
-   gs        7221      1  2
-   varsize     :        3200    (t_soil 20.40.4)
-   index1      :       15201    (t_soil)
-   indexN      :       18400    (t_soil)
-   t_soil   15201 ...  1 1 1
-   t_soil   15221 ...  1 2 1
-   t_soil   15241 ...  1 3 1
-   t_soil   15261 ...  1 4 1
-   t_soil   15265 ...  5 4 1
-   t_soil   18400 ...  20 40 4
-   varsize              7200    (esoil 20.40.9)
-   index1              47201    (esoil)
-   indexN              54400
-   esoil    47201 ...  1 1 1
-   esoil    48000 ...  20 40 1
-   esoil    48001 ...   1  1 2
-   esoil    54400 ...  20 40 9
+   gridcell 2,1 = 358.2958, 51.67083
+   gridcell 2,2 = 358.2958, 51.66250
+   gridcell 2,3 = 358.2958, 51.65417   ! water
+   gridcell 2,4 = 358.2958, 51.64583
+   gridcell 2,5 = 358.2958, 51.63750
 
-   first layer  midpoint is 0.050
-   second layer midpoint is 0.225
-   0.085 is 1/5 of the way between the first and second layer.
+   gridcell 3,1 = 358.3042, 51.67083
+   gridcell 3,2 = 358.3042, 51.66250
+   gridcell 3,3 = 358.3042, 51.65417
+   gridcell 3,4 = 358.3042, 51.64583
+   gridcell 3,5 = 358.3042, 51.63750
+
 &model_mod_check_nml
    input_file           = "dart_ics"
    output_file          = "check_me_out"
    advance_time_present = .FALSE.
    verbose              = .TRUE.
    test1thru            = 8
-   x_ind                = 15618
-   kind_of_interest     = 'T_SOISNO'
-   loc_of_interest      = 358.3, 51.637, 0.085
+   x_ind                = 500
+   kind_of_interest     = 'KIND_SOIL_TEMPERATURE'
+   loc_of_interest      = 358.3004, 51.65834, 0.085
    /
 

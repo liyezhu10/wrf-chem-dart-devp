@@ -20,8 +20,7 @@ use    utilities_mod, only : initialize_utilities, nc_check, &
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 
-use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE
+use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index
 
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
@@ -78,6 +77,7 @@ type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
 real(r8) :: interp_val
+integer :: mykindindex
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information.
@@ -232,7 +232,11 @@ endif
 if (test1thru > 5) then
    write(*,*)
    write(*,*)'Testing check_meta_data ... for index ',x_ind
-   if ( x_ind > 0 .and. x_ind <= x_size ) call check_meta_data( x_ind )
+   if ( x_ind > 0 .and. x_ind <= x_size ) then
+      call check_meta_data( x_ind )
+   else
+      write(*,*)'index ',x_ind,' is out-of-bounds. Try something between 1 and ',x_size
+   endif
    write(*,*)'Testing check_meta_data ... complete.'
 endif
 
@@ -253,23 +257,15 @@ endif
 !----------------------------------------------------------------------
 
 if (test1thru > 7) then
+
+   mykindindex = get_raw_obs_kind_index(kind_of_interest)
    write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_SNOWCOVER_FRAC'
+   write(*,*)'Testing model_interpolate() with ',trim(kind_of_interest)
+   write(*,*)'get_raw_obs_kind_index(kind_of_interest) is ',mykindindex
 
-   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
-
-   call model_interpolate(statevector, loc, KIND_SNOWCOVER_FRAC, interp_val, ios_out)
-
-   if ( ios_out == 0 ) then
-      write(*,*)'model_interpolate : value is ',interp_val
-   else
-      write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
-   endif
-
-   write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_SOIL_TEMPERATURE'
-
-   call model_interpolate(statevector, loc, KIND_SOIL_TEMPERATURE, interp_val, ios_out)
+   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), &
+                      VERTISHEIGHT)
+   call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'model_interpolate : value is ',interp_val
@@ -296,7 +292,7 @@ character(len=129)  :: string1
 call get_state_meta_data( iloc, loc, var_type)
 
 call write_location(42, loc, fform='formatted', charstring=string1)
-write(*,*)'check_meta_data: indx ',iloc,' is at ',trim(string1)
+write(*,*)'check_meta_data: DART index ',iloc,' is at ',trim(string1)
 
 end subroutine check_meta_data
 

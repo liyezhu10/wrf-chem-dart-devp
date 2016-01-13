@@ -265,6 +265,7 @@ integer :: Nsoil    = -1   ! output, restart, jules_soil.nml
 integer :: Ntile    = -1   ! output, restart
 integer :: Nland    = -1   ! Number of gridcells containing land
 integer :: Nscpool  = -1   ! Number of soil carbon pools
+integer :: Npft     = -1   ! Number of plant types
 
 real(r8), allocatable :: LONGITUDE(:,:)    ! output file, grid cell centers
 real(r8), allocatable ::  LATITUDE(:,:)    ! output file, grid cell centers
@@ -347,7 +348,7 @@ subroutine adv_1step(x, time)
 real(r8),        intent(inout) :: x(:)
 type(time_type), intent(in)    :: time
 
-call error_handler(E_MSG, 'adv_1step', 'FIXME RAFAEL routine not tested yet (needs long obs_seq file) ', source, revision, revdate)
+call error_handler(E_MSG, 'adv_1step:', 'FIXME RAFAEL routine not tested yet (needs long obs_seq file) ', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -380,8 +381,8 @@ integer, OPTIONAL, intent(out) :: var_type
 
 ! Local variables
 
-integer  ::    lon_index
-integer  ::    lat_index
+integer  ::    lon_index   ! in the statespace framework, not physical space
+integer  ::    lat_index   ! in the statespace framework, not physical space
 integer  ::   soil_index
 integer  ::   tile_index
 integer  :: scpool_index
@@ -409,7 +410,7 @@ if (do_output() .and. debug > 5) then
       mylon, mylat, mylev, vert_coord
 endif
 
- 301 format(A,' DART_index lonind latind levind   tile  cpool   longitude    latitude       level coordinatesys')
+ 301 format(A,' DART_index  x_ind  y_ind levind   tile  cpool   longitude    latitude       level coord          value')
  300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
 
 return
@@ -443,7 +444,7 @@ real(r8) :: llon, llat, lheight
 
 character(len=obstypelength) :: kind_name
 
-integer  :: varindex, testindex
+integer  :: varindex, testindex, itile
 integer  :: i, x_index, y_index, indx, vert_coord
 integer  :: lon_index, lat_index, soil_index, tile_index, scpool_index
 integer  :: closest_index(1)
@@ -519,7 +520,7 @@ if( .not. is_location_in_region(location, ll_boundary, ur_boundary)) then
       write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
       call write_location(istatus,location,charstring=string2)
       write(string3,*)'which is outside the domain.'
-      call error_handler(E_MSG, 'model_interpolate', string1, &
+      call error_handler(E_MSG, 'model_interpolate:', string1, &
                                 text2=string2, text3=string3)
    endif
    
@@ -534,7 +535,7 @@ call loc_get_close_obs(gc_state, location, 1, statespace_locations, statespace_k
 
 if (num_close == 0) then
    call write_location(num_close, location, charstring=string1)
-   call error_handler(E_MSG, 'model_interpolate', string1, text2='nothing close')
+   call error_handler(E_MSG, 'model_interpolate:', string1, text2='nothing close')
    istatus = 95
    return
 endif
@@ -553,7 +554,7 @@ if (do_output() .and. debug > 3) then
    write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
    call write_location(istatus,location,charstring=string2)
    write(string3,*)'There are ',num_close,' close "sparse" grid locations.'
-   call error_handler(E_MSG, 'model_interpolate', string1, text2=string2, text3=string3)
+   call error_handler(E_MSG, 'model_interpolate:', string1, text2=string2, text3=string3)
 
    write(*,*)'distances       are ',distances(1:num_close)
    write(*,*)'indices         are ',close_ind(1:num_close)
@@ -572,7 +573,7 @@ if( land_mask(x_index, y_index) < 1.0_r8 ) then
       write(string1,*)'Requesting interpolation for ',trim(kind_name), ' at'
       call write_location(istatus,location,charstring=string2)
       write(string3,*)'which is apparently not a land gridcell.'
-      call error_handler(E_MSG, 'model_interpolate', string1, &
+      call error_handler(E_MSG, 'model_interpolate:', string1, &
                                 text2=string2, text3=string3)
    endif
 
@@ -602,41 +603,68 @@ if (do_output() .and. debug > 2) then
       if ( testindex == varindex ) then ! this is an item of interest.
          write(*,300) trim(progvar(varindex)%varname), indx, &
             lon_index, lat_index, soil_index, tile_index, scpool_index, &
-            mylon, mylat, mylev, vert_coord
+            mylon, mylat, mylev, vert_coord, x(indx)
       endif
    enddo
 endif
 
- 301 format(A,' DART_index lonind latind levind   tile  cpool   longitude    latitude       level coordinatesys')
- 300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3)
+ 301 format(A,' DART_index  x_ind  y_ind levind   tile  cpool   longitude    latitude       level coord          value')
+ 300 format(A,1x,i10,5(1x,i6),3(1x,f11.6),1x,i3,1x,f16.7)
 
 ! some variables are (land,tile), some are (land,soil), (land,scpool)
 ! so some results are simply a scalar (land,tile)
 ! some results are vectors (land,soil), (land,scpool) and may need more 
 !
+! Since get_state_indices works with any shape variable,
+! we can treat the 'x y tile time' case the same as 'land tile'.
+! Similarly for other cases.
+!
 ! At this point:
 ! x_index  is for the ij_to_dart structure
 ! y_index  is for the ij_to_dart structure
 ! varindex is the DART variable we need to interpolate
-!
-! each DART variable has attributes that will help us interpolate.
-! 'coordinates'    'land' and maybe one other ['tile','soil','scpool']
-! 'numdims'
-! 'dimlens'
-
-! write(*,*)'model_interpolate:',trim(progvar(varindex)%coordinates)
-! write(*,*)'model_interpolate:',progvar(varindex)%numdims
-! write(*,*)'model_interpolate:',progvar(varindex)%dimlens(1:progvar(varindex)%numdims)
-! write(*,*)'model_interpolate:',progvar(varindex)%index1,progvar(varindex)%indexN
-
-!> @todo FIXME left off here - checking ij_to_dart, etc.
 
 select case (trim(progvar(varindex)%coordinates))
 
-case ('land tile')
-   !> @todo FIXME Use tile_fraction mask to reconstitute the gridcell value
+case ('land tile','x y tile time') ! There is no vertical dimension ... 
 
-case ('land soil')
+   if (debug > 2) then
+      do itile = 1,Ntile
+         write(string1,*)'physical x_i,y_i,tile_fraction ',x_index,y_index,itile, &
+                physical_tile_fractions(x_index,y_index,itile)
+         call error_handler(E_MSG,'model_interpolate:',string1)
+      enddo
+   endif
+
+   interp_val = 0.0_r8
+
+   ! Create the weighted average of the gridcell value based on
+   ! the tile fractions of that particular gridcell 
+
+   do i = 1, ij_to_dart(x_index,y_index)%n
+      indx = ij_to_dart(x_index,y_index)%dartIndex(i)
+   
+      testindex = -1   
+      call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                                tile_index, scpool_index, testindex)
+
+      if (testindex == varindex ) then
+
+         interp_val = interp_val + &
+                      physical_tile_fractions(x_index,y_index,tile_index) * x(indx)
+
+         if (debug > 2) then
+            write(string1,*)'tile_fraction * x += weighted_sum ', & 
+            physical_tile_fractions(x_index,y_index,tile_index), x(indx), interp_val
+            call error_handler(E_MSG,'model_interpolate:',string1)
+         endif
+
+      endif
+   enddo
+
+   istatus = 0
+
+case ('land soil','x y soil time')
    ! must vertically interpolate to proper depth
    allocate( profile(Nsoil) )
    profile = 0.0_r8
@@ -650,8 +678,6 @@ WANTED : do i = 1, ij_to_dart(x_index,y_index)%n
 
       call get_state_indices(indx, lon_index, lat_index, soil_index, &
                              tile_index, scpool_index, varindex)
-
-      write(*,*)'DEBUG ',indx, lon_index, lat_index, soil_index, x(indx)
 
       profile(soil_index) = x(indx)
 
@@ -700,21 +726,57 @@ WANTED : do i = 1, ij_to_dart(x_index,y_index)%n
 
    deallocate(profile)
 
-case ('land scpool')
+case ('land scpool','x y scpool time')
 
    !> @todo FIXME don't know what to do here ... what is scpool
+   !> if scpool is a singleton dimension - I suspect we can just use it
+   !> the problem comes up when the scpool dimension is > 1
 
-   write(string1,*)'second dimension <'//trim( progvar(varindex)%dimnames(2))//'>'
-   write(string2,*)'is not "tile", "soil", or "scpool"'
-   write(string3,*)'Unable to proceed - stopping.'
+   write(string1,*)'variable ',trim(progvar(varindex)%varname)
+   write(string2,*)'has dimensions <'//trim( progvar(varindex)%coordinates)//'>'
+   write(string3,*)'which contains "scpool" - Unable to proceed - stopping.'
    call error_handler(E_ERR, 'model_interpolate', string1, &
               source, revision, revdate, text2=string2, text3=string3)
+
+   ! if the dimension of scpool is just '1', I think the simple case('land')
+   ! has the same logic that we want ...
+
+case ('land','x y')
+
+   do i = 1, ij_to_dart(x_index,y_index)%n
+      indx = ij_to_dart(x_index,y_index)%dartIndex(i)
+   
+      testindex = -1   
+      call get_state_indices(indx, lon_index, lat_index, soil_index, &
+                                tile_index, scpool_index, testindex)
+
+      if (testindex == varindex ) then
+
+         if (debug > 2) then
+            write(string1,*)'only land dimension', & 
+            x_index, y_index, indx, x(indx), interp_val
+            call error_handler(E_MSG,'model_interpolate:',string1)
+         endif
+
+         if (interp_val /= MISSING_R8) then
+            write(string1,*)'more than 1 value for ',trim(progvar(varindex)%varname)
+            write(string2,*)'at the desired location. Unexpected. Stopping.'
+            call error_handler(E_ERR, 'model_interpolate', string1, &
+                       source, revision, revdate, text2=string2)
+         else
+            interp_val = x(indx)
+         endif
+
+      endif
+   enddo
+
+   istatus = 0
 
 case default
 
    write(string1,*)'only supports specific interpolations.'
-   write(string2,*)trim(progvar(varindex)%varname),'has coordinates', &
-                   trim(progvar(varindex)%coordinates)
+   write(string2,*)trim(progvar(varindex)%varname),' has coordinates "', &
+                   trim(progvar(varindex)%coordinates),'"'
    write(string3,*)'Unable to proceed - stopping.'
    call error_handler(E_ERR, 'model_interpolate', string1, &
               source, revision, revdate, text2=string2, text3=string3)
@@ -778,9 +840,9 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_output()) call error_handler(E_MSG,'static_init_model','model_nml values are')
+if (do_output()) call error_handler(E_MSG,'static_init_model:','model_nml values are')
 if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+if (do_output() .and. debug > 3) write(     *     , nml=model_nml)
 
 ! --------------------------------------------------------------
 ! Set the time step ... causes JULES namelists to be read.
@@ -794,7 +856,7 @@ model_timestep = set_model_time_step()
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 
 write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,'static_init_model',string1)
+call error_handler(E_MSG,'static_init_model:',string1)
 
 ! --------------------------------------------------------------
 ! The 'Input' grids are always physically-based, the 'Model' grid
@@ -977,7 +1039,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if (do_output() .and. debug > 3) call dump_structure(ivar)
+   if (do_output() .and. debug > 0) call dump_structure(ivar)
 
    call nc_check(nf90_close(ncid),'static_init_model','close '//trim(string2))
    ncid = 0
@@ -1134,7 +1196,7 @@ integer ::   NxDimID     ! model grid dimension
 integer ::   NyDimID     ! model grid dimension
 integer ::  nsoilDimID
 integer ::  nlandDimID   ! number of land grid cells 
-integer ::  ntileDimID   ! number of PFTs -aka- vegetation tiles
+integer ::  ntileDimID   ! number of tiles
 integer :: NscpoolDimID
 
 ! for the prognostic variables
@@ -2036,7 +2098,7 @@ character(len=NF90_MAX_NAME)          :: varname
 integer         :: VarID, ncNdims, dimlen
 integer         :: ncFileID
 
-call error_handler(E_MSG, 'dart_to_jules_restart', 'FIXME RAFAEL routine not tested', source, revision, revdate)
+call error_handler(E_MSG, 'dart_to_jules_restart:', 'FIXME RAFAEL routine not tested', source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2068,7 +2130,7 @@ UPDATE : do ivar=1, nfields
    if ( .not. progvar(ivar)%update ) then
       write(string1,*)'intentionally not updating '//trim(string2)
       write(string3,*)'as per namelist control in model_nml:variables'
-      call error_handler(E_MSG, 'dart_to_jules_restart', string1, text2=string3)
+      call error_handler(E_MSG, 'dart_to_jules_restart:', string1, text2=string3)
       cycle UPDATE
    endif
 
@@ -2400,14 +2462,14 @@ if (xtype == NF90_INT) then
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2435,14 +2497,14 @@ elseif (xtype == NF90_FLOAT) then
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2468,14 +2530,14 @@ elseif (xtype == NF90_DOUBLE) then
    if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2616,14 +2678,14 @@ if (xtype == NF90_INT) then
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2651,14 +2713,14 @@ elseif (xtype == NF90_FLOAT) then
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2684,14 +2746,14 @@ elseif (xtype == NF90_DOUBLE) then
    if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2839,14 +2901,14 @@ if (xtype == NF90_INT) then
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2874,14 +2936,14 @@ elseif (xtype == NF90_FLOAT) then
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -2907,14 +2969,14 @@ elseif (xtype == NF90_DOUBLE) then
    if (  io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(msgstring)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3059,14 +3121,14 @@ if (xtype == NF90_INT) then
    if (  io1 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
    if (  io2 == NF90_NOERR) where (intarray == spvalINT) var4d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3094,14 +3156,14 @@ elseif (xtype == NF90_FLOAT) then
    if (  io1 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
    if (  io2 == NF90_NOERR) where (r4array == spvalR4) var4d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3127,14 +3189,14 @@ elseif (xtype == NF90_DOUBLE) then
    if (  io1 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
    if ( (io1 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
    if (  io2 == NF90_NOERR) where (var4d == spvalR8) var4d = MISSING_R8
    if ( (io2 == NF90_NOERR) .and. do_output() .and. debug > 8 ) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_4d',string1)
+      call error_handler(E_MSG,'get_var_4d:',string1)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3692,7 +3754,7 @@ function set_model_time_step()
 
 type(time_type) :: set_model_time_step
 
-call error_handler(E_MSG, 'set_model_time_step', 'FIXME SHAMS routine is not tested')
+call error_handler(E_MSG, 'set_model_time_step:', 'FIXME SHAMS routine is not tested')
 
 !> @todo FIXME ... should check to see that time step is attainable given the JULES namelist values.
 
@@ -3802,7 +3864,7 @@ enddo MyLoop
 if (ngood == max_state_variables) then
    string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'parse_variable_table',string1,text2=string2)
+   call error_handler(E_MSG,'parse_variable_table:',string1,text2=string2)
 endif
 
 end function parse_variable_table
@@ -4445,7 +4507,7 @@ subroutine set_tile_fractions(filename)
 character(len=*), intent(in) :: filename
 
 integer :: ncid, i
-integer :: VarID, numdims
+integer :: VarID, numdims, dimid
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
 
 integer :: iland, ix, iy
@@ -4491,6 +4553,12 @@ allocate(physical_tile_fractions(Nlon, Nlat, Ntile))
 allocate(land_tile_fractions(Nx_model, Ny_model, Ntile))
 
 call DART_get_var(ncid, trim(tilefraction_variable), physical_tile_fractions, string3)
+
+call nc_check(nf90_inq_dimid(ncid, 'pft', dimid), &
+            'set_tile_fractions', 'inq_dimid pft '//trim(filename))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=Npft), &
+            'set_tile_fractions', 'inquire_dimension pft '//trim(filename))
+
 call nc_check(nf90_close(ncid),'set_tile_fractions','close '//trim(string3))
 
 ! confirm_unwrapping() has confirmed that if we store the land cells in this order,
@@ -4518,10 +4586,12 @@ if (do_output() .and. debug > 99) then
    write(logfileunit,*)
    write(logfileunit,*)'set_tile_fractions:Summary of '//trim(string3)
    write(logfileunit,*)'set_tile_fractions:shape      ',shape(physical_tile_fractions)
+   write(logfileunit,*)'set_tile_fractions:Npft = ',Npft
    
    write(     *     ,*)
    write(     *     ,*)'set_tile_fractions:Summary of '//trim(string3)
    write(     *     ,*)'set_tile_fractions:shape      ',shape(physical_tile_fractions)
+   write(     *     ,*)'set_tile_fractions:Npft = ',Npft
 
    !> @todo FIXME ... report min/max?
 endif
@@ -5140,134 +5210,6 @@ end subroutine get_physical_filenames
 
 
 !-----------------------------------------------------------------------
-!> is_location_in_domain
-!>
-!> Checks to see that if the location is physically within the domain.
-!> Since the grid is not required to be 'regular', this is a bit more
-!> complicated than it would be for grids that can be defined by a single
-!> array of latitudes and another array of longitudes.
-!> Since there is no way to know exactly what the outermost edges are
-!> (for a non-regular grid), we are just assuming it is half the width
-!> of the next interior distance.
-!>
-!> @todo  FIXME ... what about wrapping?
-
-function is_location_in_domain(lon, lat, x_i, y_i) result(istatus)
-
-real(r8), intent(in)  :: lon      ! candidate longitude
-real(r8), intent(in)  :: lat      ! candidate latitude
-integer,  intent(in)  :: x_i      ! index of physical longitude gridcell
-integer,  intent(in)  :: y_i      ! index of physical latitude gridcell
-integer              :: istatus   ! return value of function 0 == good
-
-real(r8) :: dx, dy
-real(r8) :: lon_boundary
-real(r8) :: lat_boundary
-
-istatus = -1  ! out-of-bounds until proven otherwise
-
-! If the index is not the first or last, it must be in the interior of the
-! grid and so it is in the domain. Easy.
-if ( (x_i > 1) .and. (x_i < Nlon) .and.  &
-     (y_i > 1) .and. (y_i < Nlat) ) then
-   istatus = 0
-   return
-endif
-
-if (y_i ==    1) dy = physical_latitudes(x_i,y_i  ) - physical_latitudes(x_i,y_i+1)
-if (y_i == Nlat) dy = physical_latitudes(x_i,y_i-1) - physical_latitudes(x_i,y_i  )
-
-if (x_i ==    1) dx = physical_longitudes(x_i+1,y_i) - physical_longitudes(x_i  ,y_i)
-if (x_i == Nlon) dx = physical_longitudes(x_i  ,y_i) - physical_longitudes(x_i-1,y_i)
-
-if ( (x_i == 1) .and. (y_i == 1) ) then ! farthest west, farthest north.
-
-   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
-   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
-
-!  if (do_output() .and. debug > 0) then
-!     write(*,*)'edge, obs, longitude', &
-!                lon_boundary, '?', lon, '?', physical_longitudes(x_i,y_i)
-!     write(*,*)'latitude, obs, edge ', &
-!                physical_latitudes(x_i,y_i), '?', lat, '?', lat_boundary 
-!  endif
-
-   if (lon < lon_boundary) return   ! out-of-bounds
-   if (lat > lat_boundary) return   ! out-of-bounds
-
-elseif ( (x_i == Nlon) .and. (y_i == 1) ) then ! farthest east, farthest north.
-
-   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
-   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
-
-!  if (do_output() .and. debug > 0) then
-!     write(*,*)'longitude, obs, edge', &
-!                physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
-!     write(*,*)'latitude,  obs, edge', &
-!                physical_latitudes( x_i,y_i), '?', lat, '?', lat_boundary 
-!  endif
-
-   if (lon > lon_boundary) return   ! out-of-bounds
-   if (lat > lat_boundary) return   ! out-of-bounds
-
-elseif ( (x_i == Nlon) .and. (y_i == Nlat) ) then ! farthest east, farthest south.
-
-   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
-   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
-
-!  if (do_output() .and. debug > 0) then
-!     write(*,*)'longitude, obs, edge', &
-!                physical_longitudes(x_i,y_i), '?', lon, '?', lon_boundary 
-!     write(*,*)'edge,  obs, latitude', &
-!                lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
-!  endif
-
-   if (lon > lon_boundary) return   ! out-of-bounds
-   if (lat < lat_boundary) return   ! out-of-bounds
-
-elseif ( (x_i == 1) .and. (y_i == Nlat) ) then ! farthest west, farthest south.
-
-   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
-   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
-
-!  if (do_output() .and. debug > 0) then
-!     write(*,*)'edge, obs, longitude', &
-!                lon_boundary , '?', lon, '?', physical_longitudes(x_i,y_i)
-!     write(*,*)'edge,  obs, latitude', &
-!                lat_boundary, '?', lat, '?', physical_latitudes(x_i,y_i)
-!  endif
-
-   if (lon < lon_boundary) return   ! out-of-bounds
-   if (lat < lat_boundary) return   ! out-of-bounds
- 
-elseif ( x_i == 1 ) then
-
-   lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
-   if (lon < lon_boundary) return   ! out-of-bounds
-
-elseif ( x_i == Nlon ) then
-
-   lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
-   if (lon > lon_boundary) return   ! out-of-bounds
-
-elseif ( y_i == 1 ) then
-
-   lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
-   if (lat > lat_boundary) return   ! out-of-bounds
-
-elseif ( y_i == Nlat ) then
-
-   lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
-   if (lat < lat_boundary) return   ! out-of-bounds
-
-endif
-
-istatus = 0
-return
-end function is_location_in_domain
-
-
-!-----------------------------------------------------------------------
 !>
 !> Set the outermost edge of the domain. The gridcell locations as given
 !> represent the gridcell centers. The edges must be computed.
@@ -5313,14 +5255,12 @@ lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
 
 ur_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
 
-write(*,*)'TJH test ... debug is ',debug
-
 if (debug > 0) then
    call write_location(x_i, ll_boundary, charstring=string3)
    write(string1,*)'lower left  boundary ',trim(string3)
    call write_location(x_i, ur_boundary, charstring=string3)
    write(string2,*)'upper right boundary ',trim(string3)
-   call error_handler(E_MSG, 'set_grid_boundary', string1, text2=string2)
+   call error_handler(E_MSG, 'set_grid_boundary:', string1, text2=string2)
 endif
 
 !> @todo FIXME check to see what happens if upper right is > 360.0 and location is < 10.0
