@@ -4,22 +4,21 @@
 !
 ! $Id$
 
-program jules_to_dart
+!-----------------------------------------------------------------------
+!> purpose: interface between jules and DART
+!>
+!> method: Read jules "restart" files of model state
+!>         Reform fields into a DART state vector (control vector).
+!>         Write out state vector in "proprietary" format for DART.
+!>         The output is a "DART restart file" format.
+!> 
+!> USAGE:  The jules filename is read from the jules_in namelist
+!>         <edit jules_to_dart_output_file in input.nml:jules_to_dart_nml>
+!>         jules_to_dart
+!>
+!> author: Tim Hoar 10 August 2015
 
-!----------------------------------------------------------------------
-! purpose: interface between jules and DART
-!
-! method: Read jules "restart" files of model state
-!         Reform fields into a DART state vector (control vector).
-!         Write out state vector in "proprietary" format for DART.
-!         The output is a "DART restart file" format.
-! 
-! USAGE:  The jules filename is read from the jules_in namelist
-!         <edit jules_to_dart_output_file in input.nml:jules_to_dart_nml>
-!         jules_to_dart
-!
-! author: Tim Hoar 10 August 2015
-!----------------------------------------------------------------------
+program jules_to_dart
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
@@ -40,7 +39,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-character(len=512) :: jules_to_dart_output_file  = 'dart_ics'
+character(len=256) :: jules_to_dart_output_file  = 'dart_ics'
 
 namelist /jules_to_dart_nml/ jules_to_dart_output_file
 
@@ -56,22 +55,15 @@ real(r8), allocatable :: statevector(:)
 
 call initialize_utilities(progname='jules_to_dart')
 
-!----------------------------------------------------------------------
 ! Read the namelist to get the output filename.
-!----------------------------------------------------------------------
 
 call find_namelist_in_file("input.nml", "jules_to_dart_nml", iunit)
 read(iunit, nml = jules_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "jules_to_dart_nml") ! closes, too.
 
-!----------------------------------------------------------------------
-! get to work
-!----------------------------------------------------------------------
-
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-! Each variable specifies its own file of origin.
 call jules_to_dart_state_vector(statevector, model_time) 
 
 iunit = open_restart_write(jules_to_dart_output_file)

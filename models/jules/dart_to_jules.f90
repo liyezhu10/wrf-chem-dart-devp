@@ -4,23 +4,22 @@
 !
 ! $Id$
 
-program dart_to_jules
+!-----------------------------------------------------------------------
+!> purpose: interface between DART and the jules model
+!> 
+!> method: Read DART state vector and overwrite values in a jules restart file.
+!>         If the DART state vector has an 'advance_to_time' present, 
+!>         it is read ... but nothing happens with it at this time.
+!>         DART is NEVER expected to advance jules.
+!>
+!>         The dart_to_jules_nml namelist setting for advance_time_present 
+!>         determines whether or not the input file has an 'advance_to_time'.
+!>         Typically, only temporary files like 'assim_model_state_ic' have
+!>         an 'advance_to_time'.
+!> 
+!> author: Tim Hoar 10 August 2015
 
-!----------------------------------------------------------------------
-! purpose: interface between DART and the jules model
-!
-! method: Read DART state vector and overwrite values in a jules restart file.
-!         If the DART state vector has an 'advance_to_time' present, 
-!         it is read ... but nothing happens with it at this time.
-!         DART is NEVER expected to advance jules.
-!
-!         The dart_to_jules_nml namelist setting for advance_time_present 
-!         determines whether or not the input file has an 'advance_to_time'.
-!         Typically, only temporary files like 'assim_model_state_ic' have
-!         an 'advance_to_time'.
-!
-! author: Tim Hoar 12 July 2011
-!----------------------------------------------------------------------
+program dart_to_jules
 
 use        types_mod, only : r8
 
@@ -48,8 +47,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_jules_input_file = 'dart_restart'
-logical               :: advance_time_present     = .false.
+character(len=256) :: dart_to_jules_input_file = 'dart_restart'
+logical            :: advance_time_present     = .false.
 
 namelist /dart_to_jules_nml/ dart_to_jules_input_file, &
                            advance_time_present

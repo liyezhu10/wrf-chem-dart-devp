@@ -4,9 +4,17 @@
 !
 ! $Id$
 
-module model_mod
+!-----------------------------------------------------------------------
+!>
+!> This is the interface between JULES and DART.
+!> There are 16 required public interfaces whose arguments CANNOT be changed.
+!> There are potentially many more public routines that are typically
+!> used by the converter programs. As the converter programs get phased out
+!> with the impending native netCDF read/write capability, these extra
+!> public interfaces may not need to be public. 
+!>
 
-! This is the interface between JULES and DART.
+module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, SECPERDAY, MISSING_R8,                    &
@@ -323,9 +331,11 @@ contains
 ! All the REQUIRED interfaces come first - just by convention.
 !==================================================================
 
-!------------------------------------------------------------------
-!> Returns the size of the model as an integer.
+!-----------------------------------------------------------------------
+!>
+!> Returns the size of the DART state vector (i.e. model) as an integer.
 !> Required for all applications.
+!>
 
 function get_model_size()
 
@@ -338,10 +348,15 @@ get_model_size = model_size
 end function get_model_size
 
 
-!------------------------------------------------------------------
-!> adv_1step is responsible for advancing JULES as a subroutine call.
+!-----------------------------------------------------------------------
+!>
+!> Responsible for advancing JULES as a subroutine call.
 !> since JULES is not subroutine callable, this is a stub.
 !> any 'async' value other than 0 will result in an error.
+!>
+!> @param x the model state before and after the model advance.
+!> @param time the desired time at the end of the model advance.
+!>
 
 subroutine adv_1step(x, time)
 
@@ -368,10 +383,19 @@ return
 end subroutine adv_1step
 
 
-!------------------------------------------------------------------
-!> get_state_meta_data is responsible for returning DART metadata.
+!-----------------------------------------------------------------------
+!>
 !> Given an integer index into the state vector structure, returns the
-!> associated array indices for lat, lon, and height, as well as the type.
+!> associated location. A second intent(out) optional argument kind
+!> can be returned if the model has more than one type of field (for
+!> instance temperature and zonal wind component). This interface is
+!> required for all filter applications as it is required for computing
+!> the distance between observations and state variables.
+!>
+!> @param indx the index into the DART state vector
+!> @param location the location at that index
+!> @param var_type the DART KIND at that index
+!>
 
 subroutine get_state_meta_data(indx, location, var_type)
 
@@ -417,10 +441,17 @@ return
 end subroutine get_state_meta_data
 
 
-!------------------------------------------------------------------
-!> model_interpolate is the basis for all 'forward observation operator's
+!-----------------------------------------------------------------------
+!>
+!> The basis for all 'forward observation operators'.
 !> For a given lat, lon, and height, interpolate the correct state value
 !> to that location for the filter from the JULES state vectors
+!>
+!> The type of the variable being interpolated is obs_type since 
+!> normally this is used to find the expected value of an observation 
+!> at some location. The interpolated value is returned in interp_val 
+!> and istatus is 0 for success. NOTE: This is a workhorse routine and is
+!> the basis for all the forward observation operator code.
 !>
 !> Reconstructing the vertical profile of the gridcell is complicated.
 !> Each land unit/column can have a different number of vertical levels.
@@ -428,6 +459,18 @@ end subroutine get_state_meta_data
 !> Impossible to know which elements are 'above' and 'below' without
 !> finding all the elements in the first place. The vertical information
 !> is in the levels() array for each state vector component.
+!>
+!> @param x the DART state vector
+!> @param location the location of interest
+!> @param obs_kind the DART KIND of interest
+!> @param interp_val the estimated value of the DART state at the location 
+!>          of interest (the interpolated value).
+!> @param istatus interpolation status ... 0 == success, /=0 is a failure
+!>
+!> @todo FIXME use some unique error code if the location is technically
+!> outside the domain, i.e. an extrapolation. At some point it will be
+!> useful to know if the interpolation failed because of some illegal
+!> state as opposed to simply being outside the domain.
 
 subroutine model_interpolate(x, location, obs_kind, interp_val, istatus)
 
@@ -786,11 +829,11 @@ return
 end subroutine model_interpolate
 
 
-!------------------------------------------------------------------
-!> get_model_time_step
-!> Returns the the time step of the model; the smallest increment
-!> in time that the model is capable of advancing the state in a given
-!> implementation. This interface is required for all applications.
+!-----------------------------------------------------------------------
+!>
+!> Returns the the time step of the model; the smallest increment in 
+!> time that the model is capable of advancing the JULES state.
+!>
 
 function get_model_time_step()
 
@@ -803,12 +846,18 @@ get_model_time_step = model_timestep
 end function get_model_time_step
 
 
-!------------------------------------------------------------------
-!> static_init_model
-!> Called to do one time initialization of the model.
+!-----------------------------------------------------------------------
 !>
-!> All the grid information comes from the initialization of
-!> the dart_jules_mod module.
+!> Called to do one-time initialization of the model.
+!> In this case, it reads in the grid information, the namelist
+!> containing the variables of interest, where to get them, their size, 
+!> their associated DART KIND, etc.
+!>
+!> In addition to harvesting the model metadata (grid,
+!> desired model advance step, etc.), it also fills a structure
+!> containing information about what variables are where in the DART
+!> framework.
+!>
 
 subroutine static_init_model()
 
@@ -844,7 +893,6 @@ if (do_output()) call error_handler(E_MSG,'static_init_model:','model_nml values
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output() .and. debug > 3) write(     *     , nml=model_nml)
 
-! --------------------------------------------------------------
 ! Set the time step ... causes JULES namelists to be read.
 ! Ensures model_timestep is multiple of 'dynamics_timestep'
 
@@ -858,7 +906,6 @@ call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
 call error_handler(E_MSG,'static_init_model:',string1)
 
-! --------------------------------------------------------------
 ! The 'Input' grids are always physically-based, the 'Model' grid
 ! may have all the non-land gridcells squeezed out of it.
 ! The JULES output file has the model grid metadata.
@@ -885,7 +932,6 @@ call get_soil_levels()
 
 call Get_Model_Grid(jules_output_filename)
 
-! --------------------------------------------------------------
 ! Compile the list of JULES variables to use in the creation
 ! of the DART state vector. This just checks to see that the
 ! DART KIND is valid and that the variable was specified correctly.
@@ -1059,13 +1105,11 @@ if (do_output() .and. debug > 99) then
   write(     *     , *)'model_size = ', model_size
 endif
 
-! --------------------------------------------------------------
 ! Generate list of dart indices for each gridcell
 
 allocate(ij_to_dart(Nlon,Nlat))
 call determine_parent_gridcells()
 
-! --------------------------------------------------------------
 ! Generate speedup table of 'close' items to figure out what gridcell
 ! is close to some arbitrary (observation) location.
 
@@ -1076,9 +1120,10 @@ return
 end subroutine static_init_model
 
 
-!------------------------------------------------------------------
-!> end_model
+!-----------------------------------------------------------------------
+!>
 !> Does any shutdown and clean-up needed for model.
+!>
 
 subroutine end_model()
 
@@ -1102,8 +1147,8 @@ return
 end subroutine end_model
 
 
-!------------------------------------------------------------------
-!> init_time
+!-----------------------------------------------------------------------
+!>
 !> Companion interface to init_conditions. Returns a time that is somehow
 !> appropriate for starting up a long integration of the model.
 !> At present, this is only used if the namelist parameter
@@ -1111,6 +1156,12 @@ end subroutine end_model
 !> If this option is not to be used in perfect_model_obs, or if no
 !> synthetic data experiments using perfect_model_obs are planned,
 !> this can be a NULL INTERFACE.
+!>
+!> NOTE: Since JULES cannot start in this manner,
+!> DART will intentionally generate a fatal error.
+!>
+!> @param time the time to associate with the initial state
+!>
 
 subroutine init_time(time)
 
@@ -1128,8 +1179,8 @@ return
 end subroutine init_time
 
 
-!------------------------------------------------------------------
-!> init_conditions
+!-----------------------------------------------------------------------
+!>
 !> Returns a model state vector, x, that is some sort of appropriate
 !> initial condition for starting up a long integration of the model.
 !> At present, this is only used if the namelist parameter
@@ -1137,6 +1188,11 @@ end subroutine init_time
 !> If this option is not to be used in perfect_model_obs, or if no
 !> synthetic data experiments using perfect_model_obs are planned,
 !> this can be a NULL INTERFACE.
+!>
+!> NOTE: This is not supported for JULES and will generate a FATAL ERROR. 
+!>       However, this is a required interface - so it must be present.
+!>
+!> @param x the JULES initial conditions  
 
 subroutine init_conditions(x)
 
@@ -1154,21 +1210,16 @@ return
 end subroutine init_conditions
 
 
-!------------------------------------------------------------------
-!> nc_write_model_atts
-!> Writes the model-specific attributes to a netCDF file.
-!> This includes coordinate variables and some metadata, but NOT
-!> the actual model state.
-!
-!> Typical sequence for adding new dimensions,variables,attributes:
-!> NF90_OPEN             ! open existing netCDF dataset
-!>    NF90_redef         ! put into define mode
-!>    NF90_def_dim       ! define additional dimensions (if any)
-!>    NF90_def_var       ! define variables: from name, type, and dims
-!>    NF90_put_att       ! assign attribute values
-!> NF90_ENDDEF           ! end definitions: leave define mode
-!>    NF90_put_var       ! provide values for variable
-!> NF90_CLOSE            ! close: save updated netCDF dataset
+!-----------------------------------------------------------------------
+!>
+!> Writes the model-specific attributes to a DART 'diagnostic' netCDF file.
+!> This includes coordinate variables and some metadata, but NOT the
+!> actual DART state. That may be done multiple times in nc_write_model_vars()
+!>
+!> @param ncFileID the netCDF handle of the DART diagnostic file opened by
+!>                 assim_model_mod:init_diag_output
+!> @param ierr status ... 0 == all went well, /= 0 failure
+!>
 
 function nc_write_model_atts( ncFileID ) result (ierr)
 
@@ -1177,17 +1228,13 @@ integer              :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
-! ---------------------------------------------------------------------
 ! variables if we just blast out one long state vector
-! ---------------------------------------------------------------------
 
 integer :: StateVarDimID   ! netCDF pointer to state variable dimension (model size)
 integer :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
 integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimited)
 
-! ---------------------------------------------------------------------
 ! variables if we parse the state vector into prognostic variables.
-! ---------------------------------------------------------------------
 
 ! for the dimensions and coordinate variables
 integer ::   NlonDimID   ! Physical grid longitude dimension
@@ -1202,9 +1249,7 @@ integer :: NscpoolDimID
 ! for the prognostic variables
 integer :: ivar, VarID
 
-! ---------------------------------------------------------------------
 ! local variables
-! ---------------------------------------------------------------------
 
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
@@ -1224,29 +1269,23 @@ if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
-! -------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
 ! or the fortran unit number.  but construct a string with at least
 ! the netcdf handle, so in case of error we can trace back to see
 ! which netcdf file is involved.
-! -------------------------------------------------------------------
 
 write(filename,*) 'ncFileID', ncFileID
 
-! ------------------------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file,
 ! and then put into define mode.
-! ------------------------------------------------------------------------------
 
 call nc_check(nf90_Inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID),&
                                    'nc_write_model_atts', 'inquire '//trim(filename))
 call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filename))
 
-! ------------------------------------------------------------------------------
 ! We need the dimension ID for the number of copies/ensemble members, and
 ! we might as well check to make sure that Time is the Unlimited dimension.
 ! Our job is create the 'model size' dimension.
-! ------------------------------------------------------------------------------
 
 call nc_check(nf90_inq_dimid(ncid=ncFileID, name='copy', dimid=MemberDimID), &
                           'nc_write_model_atts', 'inq_dimid copy '//trim(filename))
@@ -1259,16 +1298,12 @@ if ( TimeDimID /= unlimitedDimId ) then
    call error_handler(E_ERR,'nc_write_model_atts', string1, source, revision, revdate)
 endif
 
-! ------------------------------------------------------------------------------
 ! Define the model size / state variable dimension / whatever ...
-! ------------------------------------------------------------------------------
 call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
         dimid = StateVarDimID),'nc_write_model_atts', &
        'def_dim StateVariable '//trim(filename))
 
-! ------------------------------------------------------------------------------
 ! Write Global Attributes
-! ------------------------------------------------------------------------------
 
 call DATE_AND_TIME(crdate,crtime,crzone,values)
 write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
@@ -1285,11 +1320,8 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'JULES' ), &
            'nc_write_model_atts', 'put_att model '//trim(filename))
 
-! ---------------------------------------------------------------------------
 ! We need to output the prognostic variables.
-! ---------------------------------------------------------------------------
 ! Define the new dimensions IDs
-! ---------------------------------------------------------------------------
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='x' , len = Nx_model, &
           dimid=NxDimID),   'nc_write_model_atts', 'def_dim x '//trim(filename))
@@ -1315,9 +1347,7 @@ call nc_check(nf90_def_dim(ncid=ncFileID, name='longitude', len = Nlon, &
 call nc_check(nf90_def_dim(ncid=ncFileID, name='latitude', len = Nlat, &
           dimid=NlatDimID),'nc_write_model_atts', 'def_dim latitude '//trim(filename))
 
-! ---------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
-! ---------------------------------------------------------------------------
 
 ! Model Grid Longitudes
 call nc_check(nf90_def_var(ncFileID,name='x', xtype=nf90_real, &
@@ -1420,9 +1450,7 @@ call nc_check(nf90_put_att(ncFileID,  VarID,'valid_range',(/ 0.0_r4, 1.0_r4 /)),
 call nc_check(nf90_put_att(ncFileID,  VarID, 'comment', '1==land, 0==not land'),  &
               'nc_write_model_atts', 'put_att land_mask units '//trim(filename))
 
-! ---------------------------------------------------------------------------
 ! Create the (empty) Prognostic Variables and the Attributes
-! ---------------------------------------------------------------------------
 
 do ivar=1, nfields
 
@@ -1479,15 +1507,11 @@ do ivar=1, nfields
 
 enddo
 
-! ---------------------------------------------------------------------------
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
-! ---------------------------------------------------------------------------
 
 call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
-! ---------------------------------------------------------------------------
 ! Fill the coordinate variables
-! ---------------------------------------------------------------------------
 
 call nc_check(nf90_inq_varid(ncFileID, 'x', VarID), &
              'nc_write_model_atts', 'inq_varid longitude '//trim(filename))
@@ -1529,9 +1553,7 @@ call nc_check(nf90_inq_varid(ncFileID, 'land_tile_fractions', VarID), &
 call nc_check(nf90_put_var(ncFileID, VarID, land_tile_fractions ), &
              'nc_write_model_atts', 'put_var land_tile_fractions '//trim(filename))
 
-! ------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
-! ------------------------------------------------------------------------------
 call nc_check(nf90_sync(ncFileID), 'nc_write_model_atts', 'atts sync')
 
 ierr = 0 ! If we got here, things went well.
@@ -1539,20 +1561,26 @@ ierr = 0 ! If we got here, things went well.
 end function nc_write_model_atts
 
 
-!------------------------------------------------------------------
-!> nc_write_model_vars
-!> Writes the model variables to a netCDF file.
-!
-!> All errors are fatal, so the
-!> return code is always '0 == normal', since the fatal errors stop execution.
+!-----------------------------------------------------------------------
+!>
+!> With each assimilation cycle, the DART prior and posterior files get
+!> inserted into the DART diagnostic files. This routine appends the new
+!> states into the unlimited dimension slot.
+!>
+!> @param ncFileID the netCDF file ID of the DART diagnostic file in question
+!> @param state_vec the DART state to insert into the diagnostic file
+!> @param copyindex the 'copy' index ... ensemble mean, member 23, etc.
+!> @param timeindex the index into the unlimited (time) dimension
+!> @param ierr error code. All errors are fatal. 0 == success.
+!>
 
 function nc_write_model_vars( ncFileID, state_vec, copyindex, timeindex ) result (ierr)
 
-integer,                intent(in) :: ncFileID      ! netCDF file identifier
-real(r8), dimension(:), intent(in) :: state_vec
-integer,                intent(in) :: copyindex
-integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
+integer,  intent(in) :: ncFileID      ! netCDF file identifier
+real(r8), intent(in) :: state_vec(:)
+integer,  intent(in) :: copyindex
+integer,  intent(in) :: timeindex
+integer              :: ierr          ! return value of function
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, ncstart, nccount
 character(len=NF90_MAX_NAME)          :: varname
@@ -1569,18 +1597,14 @@ if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
-! -------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
 ! or the fortran unit number.  but construct a string with at least
 ! the netcdf handle, so in case of error we can trace back to see
 ! which netcdf file is involved.
-! -------------------------------------------------------------------
 
 write(filename,*) 'ncFileID', ncFileID
 
-! ------------------------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file,
-! ------------------------------------------------------------------------------
 
 call nc_check(nf90_inq_dimid(ncFileID, 'copy', dimid=CopyDimID), &
             'nc_write_model_vars', 'inq_dimid copy '//trim(filename))
@@ -1588,9 +1612,7 @@ call nc_check(nf90_inq_dimid(ncFileID, 'copy', dimid=CopyDimID), &
 call nc_check(nf90_inq_dimid(ncFileID, 'time', dimid=TimeDimID), &
             'nc_write_model_vars', 'inq_dimid time '//trim(filename))
 
-! ---------------------------------------------------------------------------
 ! We need to process the prognostic variables.
-! ---------------------------------------------------------------------------
 
 do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
 
@@ -1710,9 +1732,7 @@ do ivar = 1,nfields  ! Very similar to loop in dart_to_jules_restart
 
 enddo
 
-! ------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
-! ------------------------------------------------------------------------------
 
 call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars', 'sync '//trim(filename))
 
@@ -1721,12 +1741,28 @@ ierr = 0 ! If we got here, things went well.
 end function nc_write_model_vars
 
 
-!------------------------------------------------------------------
-!> pert_model_state
+!-----------------------------------------------------------------------
+!>
 !> Perturbs a single model state for generating initial ensembles.
 !> This (required interface) is unsupported in JULES and any attempt
 !> to use it will cause DART to terminate. Initial ensemble members
 !> are generated externally for JULES applications.
+!>
+!> A model may choose to provide a NULL INTERFACE by returning
+!> .false. for the interf_provided argument. This indicates to
+!> the filter that if it needs to generate perturbed states, it
+!> may do so by adding a perturbation to each model state
+!> variable independently. The interf_provided argument
+!> should be returned as .true. if the model wants to do its own
+!> perturbing of states.
+!> 
+!> @param state the base DART state vector to perturb
+!> @param pert_state the (new) perturbed DART state vector
+!> @param interf_provided logical flag that indicates that this routine
+!>               is unique for JULES. TRUE means this routine will
+!>               somehow create the perturbed state, FALSE means
+!>               the default perturb routine will be used.
+!> 
 
 subroutine pert_model_state(state, pert_state, interf_provided)
 
@@ -1769,20 +1805,24 @@ end subroutine pert_model_state
 !> locations & kinds (obs, obs_kind), returns the subset close to the
 !> "base", their indices, and their distances to the "base" ...
 !>
-!> For vertical distance computations, general philosophy is to convert all
-!> vertical coordinates to a common coordinate. This coordinate type is defined
-!> in the namelist with the variable "vert_localization_coord".
+!> @param gc precomputed 'get_close_type' to speed up candidate selection 
+!> @param base_obs_loc location of the observation in question
+!> @param base_obs_kind DART KIND of observation in question
+!> @param locs array of comparison locations
+!> @param loc_kind matching array of KINDs for the comparison locations
+!> @param num_close the number of locs locations that are within the prespecified distance (information contained in 'gc')
+!> @param close_ind the indices of the locs locations that are 'close'
+!> @param dist the distances of each of the close locations.
 !>
-!> This interface is required for all applications.
 
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                         obs, obs_kind, num_close, close_ind, dist)
+                         locs, loc_kind, num_close, close_ind, dist)
 
 type(get_close_type), intent(in) :: gc
 type(location_type),  intent(in) :: base_obs_loc
 integer,              intent(in) :: base_obs_kind
-type(location_type),  intent(in) :: obs(:)
-integer,              intent(in) :: obs_kind(:)
+type(location_type),  intent(in) :: locs(:)
+integer,              intent(in) :: loc_kind(:)
 integer,              intent(out):: num_close
 integer,              intent(out):: close_ind(:)
 real(r8),  OPTIONAL,  intent(out):: dist(:)
@@ -1805,15 +1845,15 @@ if (present(dist)) dist = 1.0e9   ! something big and positive (far away)
 !> @todo FIXME - confirm that the close_ind() array does not benefit from having 
 ! all the dry_land locations pruned out.
 
-call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
+call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, locs, loc_kind, &
                        num_close, close_ind)
 
 ! Loop over potentially close subset of obs priors or state variables
 if (present(dist)) then
 do k = 1, num_close
 
-   dist(k) = get_dist(base_obs_loc,       obs(close_ind(k)), &
-                      base_obs_kind, obs_kind(close_ind(k)))
+   dist(k) = get_dist(base_obs_loc,       locs(close_ind(k)), &
+                      base_obs_kind, loc_kind(close_ind(k)))
 
 enddo
    !> @todo FIXME
@@ -1823,10 +1863,14 @@ return
 end subroutine get_close_obs
 
 
-!------------------------------------------------------------------
-!> ens_mean_for_model
+!-----------------------------------------------------------------------
+!>
 !> If needed by the model interface, this is the current mean
-!> for all state vector items across all ensembles.
+!> for all state vector items across all ensembles. The ensemble mean
+!> may or may not be needed by JULES.
+!>
+!> @param filter_ens_mean the ensemble mean DART state vector
+!>
 
 subroutine ens_mean_for_model(filter_ens_mean)
 
@@ -1845,11 +1889,12 @@ end subroutine ens_mean_for_model
 !==================================================================
 
 
-!------------------------------------------------------------------
-!> jules_to_dart_state_vector
+!-----------------------------------------------------------------------
+!>
 !> Reads the current time and state variables from a JULES restart
 !> file and packs them into a dart state vector. This better happen
 !> in the same fashion as the metadata arrays are built.
+!>
 
 subroutine jules_to_dart_state_vector(state_vector, restart_time)
 
@@ -2079,10 +2124,11 @@ return
 end subroutine jules_to_dart_state_vector
 
 
-!------------------------------------------------------------------
-!> dart_to_jules_restart
+!-----------------------------------------------------------------------
+!>
 !> Writes the current time and state variables from a dart state
 !> vector (1d array) into a JULES netcdf restart file.
+!>
 
 subroutine dart_to_jules_restart( state_vector )
 
@@ -2210,10 +2256,11 @@ return
 end subroutine dart_to_jules_restart
 
 
-!------------------------------------------------------------------
-!> get_jules_restart_filename
+!-----------------------------------------------------------------------
+!>
 !> provides access to the filename normally in module storage
 !> the filename originally comes from the dart namelist.
+!>
 
 subroutine get_jules_restart_filename( filename )
 
@@ -2227,8 +2274,8 @@ return
 end subroutine get_jules_restart_filename
 
 
-!------------------------------------------------------------------
-!> (get_state_time): get_state_time_ncid
+!-----------------------------------------------------------------------
+!>
 !> Since the JULES restart files do not have the time as part of the
 !> metadata, the times must be read from the companion output file.
 !> The last time in the output file is the time used as the valid time
@@ -2240,6 +2287,7 @@ end subroutine get_jules_restart_filename
 !>           time:units = "seconds since 2014-01-01 03:00:00" ;
 !>           time:bounds = "time_bounds" ;
 !>           time:calendar = "standard" ;
+!>
 
 function get_state_time_ncid( ncid )
 
@@ -2329,9 +2377,10 @@ get_state_time_ncid = base_time + forecast_length
 end function get_state_time_ncid
 
 
-!------------------------------------------------------------------
-!> (get_state_time): get_state_time_fname
+!-----------------------------------------------------------------------
+!>
 !> sometimes it is useful to use the netCDF file name
+!>
 
 function get_state_time_fname(filename)
 
@@ -2357,8 +2406,7 @@ call nc_check(nf90_close(ncid),'get_state_time_fname', 'close '//trim(filename))
 end function get_state_time_fname
 
 
-!------------------------------------------------------------------
-!> (DART_get_var) get_var_1d
+!-----------------------------------------------------------------------
 !>
 !> This function will return a R8 array with the netCDF attributes applied.
 !> scale_factor, offset will be applied,
@@ -2384,6 +2432,7 @@ end function get_state_time_fname
 !> If present for a variable, this number is to be added to the data after it is read by
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
+!>
 
 subroutine get_var_1d(ncid, varname, var1d, context)
 
@@ -2560,8 +2609,7 @@ return
 end subroutine get_var_1d
 
 
-!------------------------------------------------------------------
-!> (DART_get_var) get_var_2d
+!-----------------------------------------------------------------------
 !>
 !> This function will return a R8 array with the netCDF attributes applied.
 !> scale_factor, offset will be applied,
@@ -2587,6 +2635,7 @@ end subroutine get_var_1d
 !> If present for a variable, this number is to be added to the data after it is read by
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
+!>
 
 subroutine get_var_2d(ncid, varname, var2d, context)
 
@@ -2776,8 +2825,7 @@ return
 end subroutine get_var_2d
 
 
-!------------------------------------------------------------------
-!> (DART_get_var) get_var_3d
+!-----------------------------------------------------------------------
 !>
 !> This function will return a R8 array with the netCDF attributes applied.
 !> scale_factor, offset will be applied,
@@ -2803,6 +2851,7 @@ end subroutine get_var_2d
 !> If present for a variable, this number is to be added to the data after it is read by
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
+!>
 
 subroutine get_var_3d(ncid, varname, var3d, context)
 
@@ -2999,8 +3048,7 @@ return
 end subroutine get_var_3d
 
 
-!------------------------------------------------------------------
-!> (DART_get_var) get_var_4d
+!-----------------------------------------------------------------------
 !>
 !> This function will return a R8 array with the netCDF attributes applied.
 !> scale_factor, offset will be applied,
@@ -3026,6 +3074,7 @@ end subroutine get_var_3d
 !> If present for a variable, this number is to be added to the data after it is read by
 !> the application that accesses the data. If both scale_factor and add_offset attributes
 !> are present, the data are first scaled before the offset is added.
+!>
 
 subroutine get_var_4d(ncid, varname, var4d, context)
 
@@ -3219,8 +3268,9 @@ return
 end subroutine get_var_4d
 
 
-!------------------------------------------------------------------
+!-----------------------------------------------------------------------
 !>  This routine
+!>
 
 function get_model_time()
 type(time_type) :: get_model_time
@@ -3237,13 +3287,13 @@ end function get_model_time
 !==================================================================
 
 
-!------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_1d_prog_var
+!-----------------------------------------------------------------------
 !>
 !> convert the values from a 1d array, starting at an offset, into a 1d array.
 !>
 !> If the optional argument (ncid) is specified, some additional
 !> processing takes place.
+!>
 
 subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
 
@@ -3310,11 +3360,11 @@ return
 end subroutine vector_to_1d_prog_var
 
 
-!------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_2d_prog_var
+!-----------------------------------------------------------------------
 !>
 !> convert the values from a 1d array, starting at an offset,
 !> into a 2d array.
+!>
 
 subroutine vector_to_2d_prog_var(x, ivar, data_2d_array, ncid)
 
@@ -3383,11 +3433,11 @@ return
 end subroutine vector_to_2d_prog_var
 
 
-!------------------------------------------------------------------
-!> (vector_to_prog_var) vector_to_3d_prog_var
+!-----------------------------------------------------------------------
 !>
 !> convert the values from a 1d array, starting at an offset,
 !> into a 3d array.
+!>
 
 subroutine vector_to_3d_prog_var(x, ivar, data_3d_array, ncid)
 
@@ -3458,11 +3508,11 @@ return
 end subroutine vector_to_3d_prog_var
 
 
-!------------------------------------------------------------------
-!> get_jules_output_dimensions
+!-----------------------------------------------------------------------
 !>
 !> Read the dimensions from the history netcdf file.
 !> The file name comes from module storage ... namelist.
+!>
 
 subroutine get_jules_output_dimensions()
 
@@ -3533,11 +3583,11 @@ return
 end subroutine get_jules_output_dimensions
 
 
-!------------------------------------------------------------------
-!> get_jules_restart_dimensions
+!-----------------------------------------------------------------------
 !>
 !> Read the dimensions from the history netcdf file.
 !> The file name comes from module storage ... namelist.
+!>
 
 subroutine get_jules_restart_dimensions()
 
@@ -3626,11 +3676,11 @@ return
 end subroutine get_jules_restart_dimensions
 
 
-!------------------------------------------------------------------
-!> Get_Model_Grid
+!-----------------------------------------------------------------------
 !>
 !> Read the model grid dimensions from the JULES output netcdf file.
 !> LONGITUDE, LATITUDE ... all have module scope
+!>
 
 subroutine Get_Model_Grid(fname)
 
@@ -3745,10 +3795,11 @@ return
 end subroutine Get_Model_Grid
 
 
-!------------------------------------------------------------------
-!> set_model_time_step
+!-----------------------------------------------------------------------
+!>
 !> This defines the window used for assimilation.
 !> all observations +/- half this timestep are assimilated.
+!>
 
 function set_model_time_step()
 
@@ -3763,8 +3814,7 @@ set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_
 end function set_model_time_step
 
 
-!------------------------------------------------------------------
-!> parse_variable_table
+!-----------------------------------------------------------------------
 !>
 !>  This routine checks the user input against the variables available in the
 !>  input netcdf file to see if it is possible to construct the DART state vector
@@ -3783,6 +3833,7 @@ end function set_model_time_step
 !>     only variables marked '.r', 'UPDATE' will be modified for JULES.
 !>
 !>  The calling code should check to see if the variable exists.
+!>
 
 function parse_variable_table() result(ngood)
 
@@ -3870,12 +3921,13 @@ endif
 end function parse_variable_table
 
 
-!------------------------------------------------------------------
-!> define_var_dims()
+!-----------------------------------------------------------------------
+!>
 !> takes the N-dimensional variable and appends the DART
 !> dimensions of 'copy' and 'time'. If the variable initially had a 'time'
 !> dimension, it is ignored because (by construction) it is a singleton
 !> dimension.
+!>
 
 subroutine define_var_dims(ivar, ncid, memberdimid, unlimiteddimid, ndims, dimids)
 
@@ -3931,11 +3983,10 @@ return
 end subroutine define_var_dims
 
 
-!------------------------------------------------------------------
-!> findVarIndex
+!-----------------------------------------------------------------------
 !>
 !> finds the index into the progvar structure for the named variable
-
+!>
 
 function findVarIndex(varstring, caller)
 character(len=*), intent(in) :: varstring
@@ -3961,13 +4012,13 @@ endif
 end function findVarIndex
 
 
-!------------------------------------------------------------------
-!> determine_parent_gridcells
+!-----------------------------------------------------------------------
 !>
 !> This fills the ij_to_dart structure.
 !> After ij_to_dart is filled, a pair of (physical) lon/lat gridcell indices
 !> can be used to address how many - and what - dart state vector components
 !> are from that (parent) gridcell.
+!>
 
 subroutine determine_parent_gridcells()
 
@@ -4044,12 +4095,13 @@ return
 end subroutine determine_parent_gridcells
 
 
-!------------------------------------------------------------------
-!> SetVariableAttributes
+!-----------------------------------------------------------------------
+!>
 !> converts the information in the variable_table
 !> to the progvar structure for each variable.
 !> If the numerical limit does not apply, it is set to MISSING_R8, even if
 !> it is the maximum that does not apply.
+!>
 
 subroutine SetVariableAttributes(ivar)
 
@@ -4149,10 +4201,11 @@ return
 end subroutine SetVariableAttributes
 
 
-!------------------------------------------------------------------
-!> FindDesiredTimeIndx
+!-----------------------------------------------------------------------
+!>
 !> returns the index into the time array that matches
 !> the model_time from the JULES restart file.
+!>
 
 function FindDesiredTimeIndx(ncid, ntimes, varname)
 
@@ -4232,12 +4285,13 @@ endif
 end function FindDesiredTimeIndx
 
 
-!------------------------------------------------------------------
-!> get_soil_levels
+!-----------------------------------------------------------------------
+!>
 !> reads the namelist specifying the number of soil layers and the
 !> associated layer thicknesses. DART wants the soil layer depth,
 !> so the thicknesses are converted to depths.
 !> The soil level values are only available from the namelist, apparently.
+!>
 
 subroutine get_soil_levels()
 
@@ -4295,8 +4349,8 @@ return
 end subroutine get_soil_levels
 
 
-!------------------------------------------------------------------
-!> set_physical_grid
+!-----------------------------------------------------------------------
+!>
 !> reads the latitude and longitude matrices for the physical grid
 !>
 !>         float latitude(y, x) ;
@@ -4308,6 +4362,7 @@ end subroutine get_soil_levels
 !>
 !> in this context, 'x' and 'y' are 'Nlon' and 'Nlat', respectively.
 !> the model sizes are called Nx_model, Ny_model by DART.
+!>
 
 subroutine set_physical_grid(filename)
 
@@ -4399,9 +4454,10 @@ return
 end subroutine set_physical_grid
 
 
-!------------------------------------------------------------------
-!> set_land_mask
+!-----------------------------------------------------------------------
+!>
 !> reads the land fractions for each physical grid cell
+!>
 
 subroutine set_land_mask(filename)
 
@@ -4497,10 +4553,11 @@ return
 end subroutine set_land_mask
 
 
-!------------------------------------------------------------------
-!> set_tile_fractions
+!-----------------------------------------------------------------------
+!>
 !> reads the namelist specifying the name of the file containing the 
 !> tile fractions for each gridcell, and then reads the tile fractions.
+!>
 
 subroutine set_tile_fractions(filename)
 
@@ -4601,9 +4658,10 @@ end subroutine set_tile_fractions
 
 
 !-----------------------------------------------------------------------
-!> get_state_indices
+!>
 !> Given an integer index into the state vector structure, returns the
 !> associated array indices for lat, lon, and depth, as well as the type.
+!>
 
 subroutine get_state_indices(index_in, x_index, y_index, soil_index, &
                              tile_index, scpool_index, varindex)
@@ -4811,6 +4869,7 @@ end subroutine get_state_indices
 !>
 !> Given an integer index into the state vector structure,
 !> return the longitude, latitude, and level
+!>
 
 subroutine get_state_lonlatlev(varindex, x_index, y_index, soil_index, &
                                mylon, mylat, mylev, mycoordsystem)
@@ -4886,6 +4945,7 @@ end subroutine get_state_lonlatlev
 !>
 !> set_sparse_locations_kinds() creates an array the size of the physical
 !> grid with the location of each of the corresponding gridcell centers.
+!>
 
 subroutine set_sparse_locations_kinds()
 
@@ -4921,6 +4981,7 @@ end subroutine set_sparse_locations_kinds
 !> General philosophy is to precompute a 'get_close' structure with
 !> a list of what state vector elements are within a certain distance
 !> of each other.
+!>
 
 subroutine init_interp()
 
@@ -5006,11 +5067,12 @@ end subroutine init_interp
 
 !-----------------------------------------------------------------------
 !>
-!> dump_structure() simply prints a summary of everything in the progvar structure
+!> Simply prints a summary of everything in the progvar structure.
 !>
 !> General philosophy is to precompute a 'get_close' structure with
 !> a list of what state vector elements are within a certain distance
 !> of each other.
+!>
 
 subroutine dump_structure(ivar)
 
@@ -5090,9 +5152,10 @@ end subroutine dump_structure
 
 !-----------------------------------------------------------------------
 !>
-!> get the names of that files that contain the physically-shaped variables. 
+!> Get the names of that files that contain the physically-shaped variables. 
 !> the land fraction mask,
 !> the tile fraction mask, that sort of stuff.
+!>
 
 subroutine get_physical_filenames()
 
