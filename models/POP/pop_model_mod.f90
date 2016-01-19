@@ -15,18 +15,16 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              operator(*),  operator(+), operator(-),           &
                              operator(>),  operator(<), operator(/),           &
                              operator(/=), operator(<=)
-use     location_mod, only : location_type, get_dist,                          &
-                             set_location,                                     &
+use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
+                             get_close_obs_init, set_location,                 &
                              VERTISHEIGHT, get_location, vert_is_height,       &
                              vert_is_level, vert_is_surface,                   &
-                             get_close_obs, get_close_type
+                             loc_get_close_obs => get_close_obs, get_close_type
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, do_output, to_upper,                    &
+                             nc_check, do_output,                              &
                              find_namelist_in_file, check_namelist_read,       &
-                             open_file, file_exist, find_textfile_dims,        &
-                             file_to_text, do_output, do_nml_file, do_nml_term, &
-                             nmlfileunit
+                             file_exist, find_textfile_dims, file_to_text
 use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SALINITY, KIND_DRY_LAND,   &
                              KIND_U_CURRENT_COMPONENT,                         &
                              KIND_V_CURRENT_COMPONENT, KIND_SEA_SURFACE_HEIGHT, &
@@ -46,25 +44,27 @@ private
 
 ! these routines must be public and you cannot change
 ! the arguments - they will be called *from* the DART code.
-public :: pop_get_model_size,         &
-          pop_adv_1step,              &
-          pop_get_state_meta_data,    &
-          pop_model_interpolate,      &
-          pop_get_model_time_step,    &
-          pop_static_init_model,      &
-          pop_end_model,              &
-          pop_init_time,              &
-          pop_init_conditions,        &
-          pop_nc_write_model_atts,    &
-          pop_nc_write_model_vars,    &
-          pop_pert_model_state,       &
-          pop_get_close_obs,          &
-          pop_ens_mean_for_model
+public :: get_model_size,         &
+          adv_1step,              &
+          get_state_meta_data,    &
+          model_interpolate,      &
+          get_model_time_step,    &
+          static_init_model,      &
+          end_model,              &
+          init_time,              &
+          init_conditions,        &
+          nc_write_model_atts,    &
+          nc_write_model_vars,    &
+          pert_model_state,       &
+          get_close_maxdist_init, &
+          get_close_obs_init,     &
+          get_close_obs,          &
+          ens_mean_for_model
 
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
-public :: pop_get_gridsize, pop_restart_file_to_sv, pop_sv_to_restart_file, &
-          get_pop_restart_filename, pop_test_interpolation
+public :: get_gridsize, restart_file_to_sv, sv_to_restart_file, &
+          get_pop_restart_filename, test_interpolation
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -78,7 +78,7 @@ logical, save :: module_initialized = .false.
 ! Storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
 
-! things which can/should be in the model_nml
+! things which can/should be in the pop_model_nml
 logical  :: output_state_vector = .true.
 integer  :: assimilation_period_days = 1
 integer  :: assimilation_period_seconds = 0
@@ -221,8 +221,6 @@ integer, allocatable :: u_dipole_lat_list(:), t_dipole_lat_list(:)
 ! Need to check for pole quads: for now we are not interpolating in them
 integer :: pole_x, t_pole_y, u_pole_y
 
-
-
 ! Have a global variable saying whether this is dipole or regular lon-lat grid
 ! This should be initialized static_init_model. Code to do this is below.
 logical :: dipole_grid
@@ -232,7 +230,7 @@ contains
 !------------------------------------------------------------------
 !------------------------------------------------------------------
 
-subroutine pop_static_init_model()
+subroutine static_init_model()
 
 ! Called to do one time initialization of the model. In this case,
 ! it reads in the grid information.
@@ -269,8 +267,9 @@ read(iunit, nml = pop_model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'pop_model_nml')
 
 ! Record the namelist values used for the run
-if (do_nml_file()) write(nmlfileunit, nml=pop_model_nml)
-if (do_nml_term()) write(     *     , nml=pop_model_nml)
+call error_handler(E_MSG,'static_init_model','pop_model_nml values are',' ',' ',' ')
+if (do_output()) write(logfileunit, nml=pop_model_nml)
+if (do_output()) write(     *     , nml=pop_model_nml)
 
 
 ! Set the time step ... causes POP namelists to be read.
@@ -296,7 +295,6 @@ allocate( KMT(Nx,Ny),  KMU(Nx,Ny))
 allocate(  HT(Nx,Ny),   HU(Nx,Ny))
 allocate(     ZC(Nz),      ZG(Nz))
 
-
 ! Fill them in.
 ! horiz grid initializes ULAT/LON, TLAT/LON as well.
 ! kmt initializes HT/HU if present in input file.
@@ -306,7 +304,6 @@ call read_vert_grid( Nz, ZC, ZG)
 
 if (debug > 2) call write_grid_netcdf() ! DEBUG only
 if (debug > 2) call write_grid_interptest() ! DEBUG only
-
 
 ! compute the offsets into the state vector for the start of each
 ! different variable type.
@@ -340,7 +337,7 @@ call dpth2pres(Nz, ZC, pressure)
 ! Initialize the interpolation routines
 call init_interp()
 
-end subroutine pop_static_init_model
+end subroutine static_init_model
 
 !------------------------------------------------------------
 
@@ -387,11 +384,20 @@ real(r8) :: u_c_lons(4), u_c_lats(4), t_c_lons(4), t_c_lats(4), pole_row_lon
 integer  :: i, j, k, pindex
 integer  :: reg_lon_ind(2), reg_lat_ind(2), u_total, t_total, u_index, t_index
 logical  :: is_pole
+integer  :: surf_index
 
 allocate(ureg_list_lon(num_reg_x, num_reg_y, max_reg_list_num))
 allocate(ureg_list_lat(num_reg_x, num_reg_y, max_reg_list_num))
 allocate(treg_list_lon(num_reg_x, num_reg_y, max_reg_list_num))
 allocate(treg_list_lat(num_reg_x, num_reg_y, max_reg_list_num))
+
+! this is the level threshold for deciding whether we are over land
+! or water.  to be valid all 4 corners of the quad must have a level
+! number greater than this index.  (so 0 excludes all land points.)
+! if you wanted to assimilate only in regions where the water depth is
+! deeper than some threshold, set this index to N and only quads where
+! all the level numbers are N+1 or deeper will be used.
+surf_index = 1
 
 ! Begin by finding the quad that contains the pole for the dipole t_grid. 
 ! To do this locate the u quad with the pole on its right boundary. This is on
@@ -423,9 +429,8 @@ do i = 1, nx
    ! There's no wraparound in y, one box less than grid boundaries
    do j = 1, ny - 1
       
-      ! Only update regular boxes that contain all wet corners (kmu>0)
-      if(all_wet_corners(kmu, i, j)) then
-
+      ! Only update regular boxes that contain all wet corners
+      if( all_corners_wet(KIND_U_CURRENT_COMPONENT,i,j,surf_index) ) then
          ! Set up array of lons and lats for the corners of these u quads
          call get_quad_corners(ulon, i, j, u_c_lons)
          call get_quad_corners(ulat, i, j, u_c_lats)
@@ -433,26 +438,24 @@ do i = 1, nx
          ! Get list of regular boxes that cover this u dipole quad
          ! false indicates that for the u grid there's nothing special about pole
          call reg_box_overlap(u_c_lons, u_c_lats, .false., reg_lon_ind, reg_lat_ind)         
-
          ! Update the temporary data structures for the u quad 
          call update_reg_list(u_dipole_num, ureg_list_lon, &
-                              ureg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
+            ureg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
       endif 
 
       ! Repeat for t dipole quads.
-      ! Only update regular boxes that contain all wet corners (kmt>0)
-      if(all_wet_corners(kmt, i, j)) then
-
+      ! Only update regular boxes that contain all wet corners
+      if( all_corners_wet(KIND_TEMPERATURE,i,j,surf_index) ) then
          ! Set up array of lons and lats for the corners of these t quads
          call get_quad_corners(tlon, i, j, t_c_lons)
          call get_quad_corners(tlat, i, j, t_c_lats)
 
          ! Is this the pole quad for the T grid?
          is_pole = (i == pole_x .and. j == t_pole_y)
-
+         
          call reg_box_overlap(t_c_lons, t_c_lats, is_pole, reg_lon_ind, reg_lat_ind)         
          call update_reg_list(t_dipole_num, treg_list_lon, &
-                              treg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
+            treg_list_lat, reg_lon_ind, reg_lat_ind, i, j)
       endif
    enddo
 enddo
@@ -630,34 +633,6 @@ end subroutine reg_box_overlap
 
 !------------------------------------------------------------
 
-function all_wet_corners(d, i, j)
- integer, intent(in)  :: d(:, :)
- integer, intent(in)  :: i, j
- logical              :: all_wet_corners
-
-! pass in the proper depth array.  this routine returns true only
-! if all the corners have a non-zero depth.
-
-integer :: ip1
-
-! set to fail so we can return early.
-all_wet_corners = .false.
-
-! Have to worry about wrapping in longitude but not in latitude
-ip1 = i + 1
-if(ip1 > nx) ip1 = 1
-
-if (d(i,   j  ) <= 0) return
-if (d(ip1, j  ) <= 0) return
-if (d(ip1, j+1) <= 0) return
-if (d(i,   j+1) <= 0) return
-
-all_wet_corners = .true.
-
-end function all_wet_corners
-
-!------------------------------------------------------------
-
 subroutine get_quad_corners(x, i, j, corners)
  real(r8), intent(in)  :: x(:, :)
  integer,  intent(in)  :: i, j
@@ -719,7 +694,7 @@ end subroutine update_reg_list
 
 !------------------------------------------------------------
 
-subroutine pop_init_conditions(x)
+subroutine init_conditions(x)
  real(r8), intent(out) :: x(:)
 
 ! Returns a model state vector, x, that is some sort of appropriate
@@ -740,11 +715,11 @@ call error_handler(E_ERR,'init_conditions', &
 ! about an intent(out) variable not being set to a value.
 x = 0.0_r8
 
-end subroutine pop_init_conditions
+end subroutine init_conditions
 
 !------------------------------------------------------------------
 
-subroutine pop_adv_1step(x, time)
+subroutine adv_1step(x, time)
  real(r8),        intent(inout) :: x(:)
  type(time_type), intent(in)    :: time
 
@@ -756,26 +731,26 @@ call error_handler(E_ERR,'adv_1step', &
                   'POP model cannot be called as a subroutine; async cannot = 0', &
                   source, revision, revdate)
 
-end subroutine pop_adv_1step
+end subroutine adv_1step
 
 !------------------------------------------------------------------
 
-function pop_get_model_size()
- integer :: pop_get_model_size
+function get_model_size()
+ integer :: get_model_size
 
 ! Returns the size of the model as an integer. Required for all
 ! applications.
 
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
-pop_get_model_size = model_size
+get_model_size = model_size
 
-end function pop_get_model_size
+end function get_model_size
 
 !------------------------------------------------------------------
 
-subroutine pop_init_time(time)
+subroutine init_time(time)
  type(time_type), intent(out) :: time
 
 ! Companion interface to init_conditions. Returns a time that is
@@ -796,11 +771,11 @@ call error_handler(E_ERR,'init_time', &
 ! about an intent(out) variable not being set to a value.
 time = set_time(0,0)
 
-end subroutine pop_init_time
+end subroutine init_time
 
 !------------------------------------------------------------------
 
-subroutine pop_model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
  real(r8),            intent(in) :: x(:)
  type(location_type), intent(in) :: location
  integer,             intent(in) :: obs_type
@@ -822,7 +797,7 @@ real(r8)       :: top_val, bot_val
 integer        :: hstatus
 logical        :: convert_to_ssh
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! print data min/max values
 if (debug > 2) call print_ranges(x)
@@ -925,7 +900,7 @@ call do_interp(x, base_offset, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_type, interp_val, istatus)
 if (debug > 1) print *, 'interp val, istatus = ', interp_val, istatus
 
-end subroutine pop_model_interpolate
+end subroutine model_interpolate
 
 !------------------------------------------------------------------
 
@@ -949,10 +924,10 @@ end subroutine pop_model_interpolate
 
 !------------------------------------------------------------------
 
-subroutine lon_lat_interpolate(x, lon, lat, var_type, height, interp_val, istatus)
+subroutine lon_lat_interpolate(x, lon, lat, var_type, height_ind, interp_val, istatus)
  real(r8), intent(in) :: x(:)
  real(r8), intent(in) :: lon, lat
- integer,  intent(in) :: var_type, height
+ integer,  intent(in) :: var_type, height_ind
  real(r8), intent(out) :: interp_val
  integer,  intent(out) :: istatus
 
@@ -971,7 +946,7 @@ real(r8) :: p(4), x_corners(4), y_corners(4), xbot, xtop
 real(r8) :: lon_fract, lat_fract
 logical  :: masked
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! Succesful return has istatus of 0
 istatus = 0
@@ -1024,6 +999,7 @@ if(dipole_grid) then
 
       call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
          t_dipole_lon_list, t_dipole_lat_list, lon_bot, lat_bot, istatus)
+
       ! Fail on bad istatus return
       if(istatus /= 0) return
 
@@ -1036,6 +1012,7 @@ if(dipole_grid) then
       ! Getting corners for accurate interpolation
       call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
       call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
+
    endif
 
 else
@@ -1070,25 +1047,25 @@ if(lon_top > nx) lon_top = 1
 
 ! Get the values at the four corners of the box or quad
 ! Corners go around counterclockwise from lower left
-p(1) = get_val(lon_bot, lat_bot, nx, x, var_type, height, masked)
+p(1) = get_val(lon_bot, lat_bot, nx, x, var_type, height_ind, masked)
 if(masked) then
    istatus = 3
    return
 endif
 
-p(2) = get_val(lon_top, lat_bot, nx, x, var_type, height, masked)
+p(2) = get_val(lon_top, lat_bot, nx, x, var_type, height_ind, masked)
 if(masked) then
    istatus = 3
    return
 endif
 
-p(3) = get_val(lon_top, lat_top, nx, x, var_type, height, masked)
+p(3) = get_val(lon_top, lat_top, nx, x, var_type, height_ind, masked)
 if(masked) then
    istatus = 3
    return
 endif
 
-p(4) = get_val(lon_bot, lat_top, nx, x, var_type, height, masked)
+p(4) = get_val(lon_bot, lat_top, nx, x, var_type, height_ind, masked)
 if(masked) then
    istatus = 3
    return
@@ -1109,8 +1086,8 @@ end subroutine lon_lat_interpolate
 
 !------------------------------------------------------------
 
-function get_val(lon_index, lat_index, nlon, x, var_type, height, masked)
- integer,     intent(in) :: lon_index, lat_index, nlon, var_type, height
+function get_val(lon_index, lat_index, nlon, x, var_type, height_ind, masked)
+ integer,     intent(in) :: lon_index, lat_index, nlon, var_type, height_ind
  real(r8),    intent(in) :: x(:)
  logical,    intent(out) :: masked
  real(r8)                :: get_val
@@ -1119,10 +1096,10 @@ function get_val(lon_index, lat_index, nlon, x, var_type, height, masked)
 ! 'masked' returns true if this is NOT a valid grid location (e.g. land, or
 ! below the ocean floor in shallower areas).
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! check the land/ocean bottom map and return if not valid water cell.
-if(is_dry_land(var_type, lon_index, lat_index, height)) then
+if(is_dry_land(var_type, lon_index, lat_index, height_ind)) then
    masked = .true.
    get_val = MISSING_R8
    return
@@ -1191,7 +1168,7 @@ subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
 integer  :: i
 real(r8) :: dist_bot, dist_top
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! This is inefficient, someone could clean it up since longitudes are regularly spaced
 ! But note that they don't have to start at 0
@@ -1236,7 +1213,7 @@ subroutine lat_bounds(lat, nlats, lat_array, bot, top, fract, istatus)
 ! Local storage
 integer :: i
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! Success should return 0, failure a positive number.
 istatus = 0
@@ -1275,7 +1252,7 @@ function lon_dist(lon1, lon2)
 ! If lon1 is less than 180 degrees east of lon2 the distance is negative
 ! If lon1 is less than 180 degrees west of lon2 the distance is positive
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 lon_dist = lon2 - lon1
 if(lon_dist >= -180.0_r8 .and. lon_dist <= 180.0_r8) then
@@ -1632,7 +1609,7 @@ subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
 ! Local variables
 integer   :: i
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! Succesful istatus is 0
 ! Make any failure here return istatus in the 20s
@@ -1676,22 +1653,22 @@ end subroutine height_bounds
 
 !------------------------------------------------------------------
 
-function pop_get_model_time_step()
- type(time_type) :: pop_get_model_time_step
+function get_model_time_step()
+ type(time_type) :: get_model_time_step
 
 ! Returns the the time step of the model; the smallest increment
 ! in time that the model is capable of advancing the state in a given
 ! implementation. This interface is required for all applications.
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
-pop_get_model_time_step = model_timestep
+get_model_time_step = model_timestep
 
-end function pop_get_model_time_step
+end function get_model_time_step
 
 !------------------------------------------------------------------
 
-subroutine pop_get_state_meta_data(index_in, location, var_type)
+subroutine get_state_meta_data(index_in, location, var_type)
  integer,             intent(in)  :: index_in
  type(location_type), intent(out) :: location
  integer,             intent(out), optional :: var_type
@@ -1733,7 +1710,7 @@ if (present(var_type)) then
    endif
 endif
 
-end subroutine pop_get_state_meta_data
+end subroutine get_state_meta_data
 
 !------------------------------------------------------------------
 
@@ -1747,7 +1724,7 @@ subroutine get_state_indices(index_in, lat_index, lon_index, depth_index, var_ty
 
 integer :: startind, offset
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 if (debug > 5) print *, 'asking for meta data about index ', index_in
 
@@ -1776,7 +1753,7 @@ subroutine get_state_kind(index_in, var_type, startind, offset)
 ! and both the starting offset for this kind, as well as the offset into
 ! the block of this kind.
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 if (debug > 5) print *, 'asking for meta data about index ', index_in
 
@@ -1817,7 +1794,7 @@ subroutine get_state_kind_inc_dry(index_in, var_type)
 
 integer :: lon_index, lat_index, depth_index, startind, offset
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 call get_state_kind(index_in, var_type, startind, offset)
 
@@ -1839,7 +1816,7 @@ end subroutine get_state_kind_inc_dry
 
 !------------------------------------------------------------------
 
-subroutine pop_end_model()
+subroutine end_model()
 
 ! Shutdown and clean-up.
 
@@ -1849,11 +1826,11 @@ subroutine pop_end_model()
 if (allocated(ULAT)) deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU, HT, HU)
 if (allocated(ZC))   deallocate(ZC, ZG, pressure)
 
-end subroutine pop_end_model
+end subroutine end_model
 
 !------------------------------------------------------------------
 
-function pop_nc_write_model_atts( ncFileID ) result (ierr)
+function nc_write_model_atts( ncFileID ) result (ierr)
  integer, intent(in)  :: ncFileID      ! netCDF file identifier
  integer              :: ierr          ! return value of function
 
@@ -1925,7 +1902,7 @@ character(len=NF90_MAX_NAME) :: str1
 integer :: i
 character(len=128)  :: filename
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
@@ -2310,11 +2287,11 @@ call nc_check(nf90_sync(ncFileID), 'nc_write_model_atts', 'atts sync')
 
 ierr = 0 ! If we got here, things went well.
 
-end function pop_nc_write_model_atts
+end function nc_write_model_atts
 
 !------------------------------------------------------------------
 
-function pop_nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
+function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
  integer,                intent(in) :: ncFileID      ! netCDF file identifier
  real(r8), dimension(:), intent(in) :: statevec
  integer,                intent(in) :: copyindex
@@ -2350,7 +2327,7 @@ real(r8), dimension(Nx,Ny,Nz) :: data_3d
 real(r8), dimension(Nx,Ny)    :: data_2d
 character(len=128)  :: filename
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
@@ -2430,11 +2407,11 @@ call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars', 'sync '//trim(filename
 
 ierr = 0 ! If we got here, things went well.
 
-end function pop_nc_write_model_vars
+end function nc_write_model_vars
 
 !------------------------------------------------------------------
 
-subroutine pop_pert_model_state(state, pert_state, interf_provided)
+subroutine pert_model_state(state, pert_state, interf_provided)
  real(r8), intent(in)  :: state(:)
  real(r8), intent(out) :: pert_state(:)
  logical,  intent(out) :: interf_provided
@@ -2452,7 +2429,7 @@ subroutine pop_pert_model_state(state, pert_state, interf_provided)
 integer :: i, var_type
 logical, save :: random_seq_init = .false.
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
 
@@ -2475,11 +2452,11 @@ do i=1,size(state)
 enddo
 
 
-end subroutine pop_pert_model_state
+end subroutine pert_model_state
 
 !------------------------------------------------------------------
 
-subroutine pop_ens_mean_for_model(ens_mean)
+subroutine ens_mean_for_model(ens_mean)
  real(r8), intent(in) :: ens_mean(:)
 
 ! If needed by the model interface, this is the current mean
@@ -2487,10 +2464,10 @@ subroutine pop_ens_mean_for_model(ens_mean)
 ! code to allocate space and save a copy if it is going to be used
 ! later on.  For now, we are ignoring it.
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 
-end subroutine pop_ens_mean_for_model
+end subroutine ens_mean_for_model
 
 !------------------------------------------------------------------
 
@@ -2538,7 +2515,7 @@ end subroutine print_ranges
 
 !------------------------------------------------------------------
 
-subroutine pop_restart_file_to_sv(filename, state_vector, model_time)
+subroutine restart_file_to_sv(filename, state_vector, model_time)
  character(len=*), intent(in)    :: filename 
  real(r8),         intent(inout) :: state_vector(:)
  type(time_type),  intent(out)   :: model_time
@@ -2556,7 +2533,7 @@ integer :: VarID, numdims, dimlen
 integer :: ncid, iyear, imonth, iday, ihour, iminute, isecond
 character(len=256) :: myerrorstring 
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 state_vector = MISSING_R8
 
@@ -2713,11 +2690,11 @@ do ivar=(n3dfields+1), (n3dfields+n2dfields)
 
 enddo
 
-end subroutine pop_restart_file_to_sv
+end subroutine restart_file_to_sv
 
 !------------------------------------------------------------------
 
-subroutine pop_sv_to_restart_file(state_vector, filename, statedate)
+subroutine sv_to_restart_file(state_vector, filename, statedate)
  real(r8),         intent(in) :: state_vector(:)
  character(len=*), intent(in) :: filename 
  type(time_type),  intent(in) :: statedate
@@ -2741,7 +2718,7 @@ integer :: i, ivar, ncid, VarID, numdims, dimlen
 ! Get the show underway
 !----------------------------------------------------------------------
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 ! Check that the input file exists. 
 ! make sure the time tag in the restart file matches 
@@ -2859,7 +2836,7 @@ enddo
 
 call nc_check(nf90_close(ncid), 'sv_to_restart_file', 'close '//trim(filename))
 
-end subroutine pop_sv_to_restart_file
+end subroutine sv_to_restart_file
 
 !------------------------------------------------------------------
 
@@ -2875,7 +2852,7 @@ integer :: i,j,ii
 integer :: dim1,dim2
 character(len=128) :: varname
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 dim1 = size(data_2d_array,1)
 dim2 = size(data_2d_array,2)
@@ -2916,7 +2893,7 @@ integer :: i,j,k,ii
 integer :: dim1,dim2,dim3
 character(len=128) :: varname
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 dim1 = size(data_3d_array,1)
 dim2 = size(data_3d_array,2)
@@ -2952,18 +2929,18 @@ end subroutine vector_to_3d_prog_var
 
 !------------------------------------------------------------------
 
-subroutine pop_get_gridsize(num_x, num_y, num_z)
+subroutine get_gridsize(num_x, num_y, num_z)
  integer, intent(out) :: num_x, num_y, num_z
 
 ! public utility routine.
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
  num_x = Nx
  num_y = Ny
  num_z = Nz
 
-end subroutine pop_get_gridsize
+end subroutine get_gridsize
 
 !------------------------------------------------------------------
 
@@ -2977,7 +2954,7 @@ function is_dry_land(obs_type, lon_index, lat_index, hgt_index)
 
 logical :: is_ugrid
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 is_dry_land = .FALSE.    ! start out thinking everything is wet.
 
@@ -2998,7 +2975,7 @@ function is_on_ugrid(obs_type)
 
 !  returns true if U, V -- everything else is on T grid
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 is_on_ugrid = .FALSE.
 
@@ -3006,6 +2983,33 @@ if ((obs_type == KIND_U_CURRENT_COMPONENT)  .or.  &
     (obs_type == KIND_V_CURRENT_COMPONENT)) is_on_ugrid = .TRUE.
 
 end function is_on_ugrid
+
+!------------------------------------------------------------------
+
+function all_corners_wet(obs_kind, lon_ind, lat_ind, hgt_ind)
+
+ integer, intent(in)  :: obs_kind, lon_ind, lat_ind, hgt_ind
+ logical :: all_corners_wet
+
+ integer :: lon_ind_p1
+
+! returns true only if all of the corners are above land
+ 
+! set to fail so we can return early.
+all_corners_wet = .false. 
+
+! Have to worry about wrapping in longitude but not in latitude
+lon_ind_p1 = lon_ind + 1
+if(lon_ind_p1 > nx) lon_ind_p1 = 1
+
+if ( is_dry_land(obs_kind, lon_ind,    lat_ind,   hgt_ind)) return
+if ( is_dry_land(obs_kind, lon_ind_p1, lat_ind,   hgt_ind)) return
+if ( is_dry_land(obs_kind, lon_ind_p1, lat_ind+1, hgt_ind)) return
+if ( is_dry_land(obs_kind, lon_ind,    lat_ind+1, hgt_ind)) return
+
+all_corners_wet = .true.
+
+end function all_corners_wet
 
 !------------------------------------------------------------------
 
@@ -3020,7 +3024,7 @@ integer :: ZGvarid, ZCvarid, KMTvarid, KMUvarid
 
 integer :: dimids(2);
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 nlon = size(ULAT,1)
 nlat = size(ULAT,2)
@@ -3085,7 +3089,7 @@ end subroutine write_grid_netcdf
 
 !------------------------------------------------------------------
 
-subroutine pop_get_close_obs(gc, base_obs_loc, base_obs_kind, &
+subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs, obs_kind, num_close, close_ind, dist)
 
  type(get_close_type),              intent(in) :: gc
@@ -3119,7 +3123,7 @@ if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 ! we don't need to have the relevant vertical coordinate information yet 
 ! (for obs).
 
-call get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
+call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind)
 
 ! Loop over potentially close subset of obs priors or state variables
@@ -3137,7 +3141,7 @@ do k = 1, num_close
 enddo
 endif
 
-end subroutine pop_get_close_obs
+end subroutine get_close_obs
 
 !------------------------------------------------------------------
 
@@ -3152,7 +3156,7 @@ integer  :: i, j
 real(r8) :: rowmat(Nx,1), colmat(1,Ny), dmat(Nx,Ny)
 real(r8) :: rtlon, rulon, rtlat, rulat, u_val, t_val
 
-if ( .not. module_initialized ) call pop_static_init_model
+if ( .not. module_initialized ) call static_init_model
 
 !----------------------------------------------------------------------
 ! Generate a 'Regular' grid with the same rough 'shape' as the dipole grid
@@ -3224,14 +3228,14 @@ end subroutine write_grid_interptest
 
 !------------------------------------------------------------------
 
-subroutine pop_test_interpolation(test_casenum)
+subroutine test_interpolation(test_casenum)
  integer, intent(in) :: test_casenum
 
 ! rigorous test of the interpolation routine.
 
 ! This is storage just used for temporary test driver
 integer :: imain, jmain, index, istatus, nx_temp, ny_temp
-integer :: dnx_temp, dny_temp, height
+integer :: dnx_temp, dny_temp, height_ind
 real(r8) :: ti, tj
 
 ! Storage for testing interpolation to a different grid
@@ -3313,11 +3317,11 @@ do jmain = 1, ny
    enddo
 enddo
 
-! dummy out vertical; let height always = 1 and allow
+! dummy out vertical; let height_ind always = 1 and allow
 ! all grid points to be processed.
 kmt = 2
 kmu = 2
-height = 1
+height_ind = 1
 
 ! Initialize the interpolation data structure for this grid.
 call init_interp()
@@ -3376,7 +3380,7 @@ do imain = 1, dnx
       ! Interpolate U from the first grid to the second grid
 
       call lon_lat_interpolate(reg_u_x, dulon(imain, jmain), dulat(imain, jmain), &
-         KIND_U_CURRENT_COMPONENT, height, dipole_u(imain, jmain), istatus)
+         KIND_U_CURRENT_COMPONENT, height_ind, dipole_u(imain, jmain), istatus)
 
       if ( istatus /= 0 ) then
          write(msgstring,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' U interp failed - code '',i4)') &
@@ -3389,7 +3393,7 @@ do imain = 1, dnx
       ! Interpolate U from the first grid to the second grid
 
       call lon_lat_interpolate(reg_t_x, dtlon(imain, jmain), dtlat(imain, jmain), &
-         KIND_POTENTIAL_TEMPERATURE, height, dipole_t(imain, jmain), istatus)
+         KIND_POTENTIAL_TEMPERATURE, height_ind, dipole_t(imain, jmain), istatus)
 
       if ( istatus /= 0 ) then
          write(msgstring,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' T interp failed - code '',i4)') &
@@ -3402,7 +3406,7 @@ do imain = 1, dnx
    enddo
 enddo
 
-end subroutine pop_test_interpolation
+end subroutine test_interpolation
 
 !------------------------------------------------------------------
 
@@ -3677,7 +3681,6 @@ end subroutine dpth2pres
 
 !------------------------------------------------------------------
 !------------------------------------------------------------------
-
 
 !------------------------------------------------------------------
 ! End of model_mod

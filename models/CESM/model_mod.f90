@@ -14,7 +14,7 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date,                           &
                              operator(*),  operator(+), operator(-),           &
                              operator(>),  operator(<), operator(/),           &
-                             operator(/=), operator(<=)
+                             operator(/=), operator(<=), operator(==)
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              get_location, loc_get_close_obs => get_close_obs, &
@@ -28,9 +28,77 @@ use    utilities_mod, only : register_module, error_handler,                   &
 use     obs_kind_mod     ! for now, include all
 
 
-use pop_model_mod
-use clm_model_mod
-use cam_model_mod
+use pop_model_mod, only :                         &
+  pop_get_model_size      => get_model_size,      &
+  pop_adv_1step           => adv_1step,           &
+  pop_get_state_meta_data => get_state_meta_data, &
+  pop_model_interpolate   => model_interpolate,   &
+  pop_get_model_time_step => get_model_time_step, &
+  pop_static_init_model   => static_init_model,   &
+  pop_end_model           => end_model,           &
+  pop_init_time           => init_time,           &
+  pop_init_conditions     => init_conditions,     &
+  pop_nc_write_model_atts => nc_write_model_atts, &
+  pop_nc_write_model_vars => nc_write_model_vars, &
+  pop_pert_model_state    => pert_model_state,    &
+  pop_ens_mean_for_model  => ens_mean_for_model,  &
+  pop_get_close_obs       => get_close_obs,       &
+  pop_restart_file_to_sv  => restart_file_to_sv,  &
+  pop_sv_to_restart_file  => sv_to_restart_file,  &
+  pop_get_gridsize        => get_gridsize,        &
+  pop_test_interpolation  => test_interpolation
+
+use cam_model_mod, only :                            &
+  cam_get_model_size       => get_model_size,        &
+  cam_adv_1step            => adv_1step,             &
+  cam_get_state_meta_data  => get_state_meta_data,   &
+  cam_model_interpolate    => model_interpolate,     &
+  cam_get_model_time_step  => get_model_time_step,   &
+  cam_static_init_model    => static_init_model,     &
+  cam_end_model            => end_model,             &
+  cam_init_time            => init_time,             &
+  cam_init_conditions      => init_conditions,       &
+  cam_nc_write_model_atts  => nc_write_model_atts,   &
+  cam_nc_write_model_vars  => nc_write_model_vars,   &
+  cam_pert_model_state     => pert_model_state,      &
+  cam_ens_mean_for_model   => ens_mean_for_model,    &
+  cam_get_close_obs        => get_close_obs,         &
+  cam_model_type           => model_type,            &
+  cam_prog_var_to_vector   => prog_var_to_vector,    &
+  cam_vector_to_prog_var   => vector_to_prog_var,    &
+  cam_read_cam_init        => read_cam_init,         &
+  cam_init_model_instance  => init_model_instance,   &
+  cam_end_model_instance   => end_model_instance,    &
+  cam_write_cam_init       => write_cam_init,        &
+  cam_write_cam_times      => write_cam_times,       &
+  cam_state_vector_to_model => state_vector_to_model, &
+  cam_model_to_state_vector => model_to_state_vector
+
+
+use clm_model_mod, only :                             &
+  clm_get_model_size       => get_model_size,         &
+  clm_adv_1step            => adv_1step,              &
+  clm_get_state_meta_data  => get_state_meta_data,    &
+  clm_model_interpolate    => model_interpolate,      &
+  clm_get_model_time_step  => get_model_time_step,    &
+  clm_static_init_model    => static_init_model,      &
+  clm_end_model            => end_model,              &
+  clm_init_time            => init_time,              &
+  clm_init_conditions      => init_conditions,        &
+  clm_nc_write_model_atts  => nc_write_model_atts,    &
+  clm_nc_write_model_vars  => nc_write_model_vars,    &
+  clm_pert_model_state     => pert_model_state,       &
+  clm_ens_mean_for_model   => ens_mean_for_model,     &
+  clm_sv_to_restart_file   => sv_to_restart_file,     &
+  clm_to_dart_state_vector,  &
+   get_gridsize,             &
+   get_clm_restart_filename, &
+   get_state_time,           &
+   get_grid_vertval,         &
+   compute_gridcell_value,   &
+   DART_get_var,             &
+   get_model_time
+
 
 
 use typesizes
@@ -233,10 +301,10 @@ end subroutine init_time
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_kind, interp_val, istatus)
  real(r8),            intent(in) :: x(:)
  type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_type
+ integer,             intent(in) :: obs_kind
  real(r8),           intent(out) :: interp_val
  integer,            intent(out) :: istatus
 
@@ -268,17 +336,17 @@ llon  = loc_array(1)
 llat  = loc_array(2)
 lvert = loc_array(3)
 
-if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lvert
+if (debug > 1) print *, 'requesting interpolation of ', obs_kind, ' at ', llon, llat, lvert
 
-call which_model_obs(obs_type, modelname)
+call which_model_obs(obs_kind, modelname)
 call set_start_end(modelname, x_start, x_end)
 
 if (modelname == 'CAM') then
-   call cam_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
+   call cam_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
 else if (modelname == 'POP') then
-   call pop_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
+   call pop_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
 else if (modelname == 'CLM') then
-   call clm_model_interpolate(x(x_start:x_end), location, obs_type, interp_val, istatus)
+   call clm_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
 else
    return
 endif
@@ -721,26 +789,30 @@ if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 ! distances should be the same or different in different mediums
 ! (e.g air vs water vs soil/snow)
 
-call which_model_obs(base_obs_type, modelname)
-select case (modelname)
-   case ('CAM')
+! this needs to call all the get close routines for active components
+! and merge the lists when done.
+
+! if we go back to generic kinds, then which_model_obs() needs to
+! take a kind and this is a real specific type
+
+!  FIXME:  @TODO
+if (include_CAM) then
       call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
                              locs, loc_kind, num_close, close_ind, dist)
-
-   case ('POP')
+endif
+! save original close_ind list
+if (include_POP) then
       call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
                              locs, loc_kind, num_close, close_ind, dist)
-
-   case ('CLM')
+endif
+! merge lists & dists together
+if (include_CLM) then
       call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
                              locs, loc_kind, num_close, close_ind, dist)
+endif
+! merge lists & dists together
 
-   case default
-      call error_handler(E_ERR, 'get_close_obs', 'error determining right model to use', &
-                      source, revision, revdate)
-end select
-
-
+ 
 end subroutine get_close_obs
 
 !------------------------------------------------------------------
@@ -807,23 +879,23 @@ end subroutine which_model_state
 
 !------------------------------------------------------------------
 
-subroutine which_model_obs(obs_type, modelname)
- integer,          intent(in)  :: obs_type
+subroutine which_model_obs(obs_kind, modelname)
+ integer,          intent(in)  :: obs_kind
  character(len=*), intent(out) :: modelname
 
-! FIXME: this needs to be beefed up with all possible obs types
+! FIXME: this needs to be beefed up with all possible obs kinds
 ! and which model would have the best forward operator for it.
 
-select case (obs_type)
-   case (RADIOSONDE_TEMPERATURE)
+select case (obs_kind)
+   case (KIND_AIR_TEMPERATURE)
       modelname = 'CAM'
-   case (RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COMPONENT)
+   case (KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
       modelname = 'CAM'
  
-   case (XBT_TEMPERATURE, ARGO_TEMPERATURE, FLOAT_TEMPERATURE)
+   case (KIND_WATER_TEMPERATURE)
       modelname = 'POP'
 
-   case (LEAF_CARBON)
+   case (KIND_CARBON)
       modelname = 'CLM'
 
    case default
