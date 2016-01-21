@@ -17,7 +17,7 @@ use        types_mod, only : r8, MISSING_R8
 use time_manager_mod, only : time_type, set_time
 use     location_mod, only : location_type,      get_close_maxdist_init, &
                              get_close_obs_init, get_close_obs, set_location, &
-                             set_location_missing
+                             set_location_missing, get_close_state
 use    utilities_mod, only : register_module, error_handler, nc_check, &
                              E_ERR, E_MSG
                              ! nmlfileunit, do_output, do_nml_file, do_nml_term,  &
@@ -44,6 +44,7 @@ public :: get_model_size,         &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
+          get_close_state,        &
           ens_mean_for_model
 
 ! not required by DART but for larger models can be useful for
