@@ -111,12 +111,13 @@
    write_binary_obs_sequence = .false.
   /
 
-   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
 
 &obs_kind_nml
-     evaluate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
+   assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
                                 'XBT_TEMPERATURE'
   /
+  !   evaluate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
+  !                              'XBT_TEMPERATURE'
 
 &preprocess_nml
            overwrite_output = .true.,
@@ -149,7 +150,7 @@
    include_CAM = .false.
    include_POP = .true.
    include_CLM = .false.
-   debug       = 9
+   debug       = 0
   /
 
 &clm_model_nml
@@ -392,8 +393,9 @@
    verbose    = .false.
   /
 
+   !filename_in = 'obs_seq.final.culled'
 &obs_assim_count_nml
-   filename_in = 'obs_seq.final.culled'
+   filename_in = 'obs_seq.final'
    calendar = 'GREGORIAN'
 /
 

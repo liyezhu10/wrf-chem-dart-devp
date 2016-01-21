@@ -21,7 +21,7 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_type, loc_get_close_state => get_close_state
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, to_upper, file_to_text,                 &
+                             nc_check, to_upper, file_to_text, do_output,      &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
                              do_nml_file, do_nml_term, nmlfileunit
@@ -200,7 +200,6 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 if (include_CAM) call cam_static_init_model()
 if (include_POP) call pop_static_init_model()
 if (include_CLM) call clm_static_init_model()
-
 
 model_timestep = get_model_time_step()
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
@@ -450,15 +449,16 @@ call set_start_end(componentname, x_start, x_end)
 
 select case (componentname)
    case ('CAM')
-      call cam_get_state_meta_data(index_in - x_start, location, var_type)
+      call cam_get_state_meta_data(index_in - x_start + 1, location, var_type)
 
    case ('POP')
-      call pop_get_state_meta_data(index_in - x_start, location, var_type)
+      call pop_get_state_meta_data(index_in - x_start + 1, location, var_type)
 
    case ('CLM')
-      call clm_get_state_meta_data(index_in - x_start, location, var_type)
+      call clm_get_state_meta_data(index_in - x_start + 1, location, var_type)
 
    case default
+      ! this should not happen
       call error_handler(E_ERR, 'get_state_meta_data', 'error determining right model to use', &
                       source, revision, revdate)
 end select
@@ -960,18 +960,19 @@ subroutine set_start_end(componentname, x_start, x_end)
  character(len=*), intent(in)  :: componentname
  integer,          intent(out) :: x_start, x_end
 
+! @TODO this assumes a fixed order
 select case (componentname)
    case ('CAM')
       x_start = 1
-      x_end = cam_model_size
+      x_end = x_start + cam_model_size - 1
 
    case ('POP') 
       x_start = cam_model_size + 1
-      x_end = x_start + pop_model_size
+      x_end = x_start + pop_model_size - 1
 
    case ('CLM')
       x_start = cam_model_size + pop_model_size + 1
-      x_end = x_start + clm_model_size 
+      x_end = x_start + clm_model_size - 1
 
    case default
       x_start = -1
@@ -1030,7 +1031,7 @@ select case (obs_kind)
    case (KIND_WATER_TEMPERATURE)
       componentname = 'POP'
    case (KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT)
-      componentname = 'CAM'
+      componentname = 'POP'
 
    case (KIND_CARBON)
       componentname = 'CLM'
@@ -1041,7 +1042,29 @@ select case (obs_kind)
 
 end select
 
+if (.not. valid_component(componentname)) componentname = 'NULL'
+
 end subroutine which_model_obs
+
+!------------------------------------------------------------------
+
+function valid_component(componentname)
+ character(len=*), intent(in)  :: componentname
+ logical :: valid_component
+
+! assume failure
+valid_component = .false.
+
+select case (componentname)
+   case ('CAM')
+      if (include_CAM) valid_component = .TRUE.
+   case ('POP')
+      if (include_POP) valid_component = .TRUE.
+   case ('CLM')
+      if (include_CLM) valid_component = .TRUE.
+end select
+
+end function valid_component
 
 !------------------------------------------------------------------
 ! End of model_mod

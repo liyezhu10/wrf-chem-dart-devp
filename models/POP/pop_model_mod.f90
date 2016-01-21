@@ -1686,6 +1686,7 @@ real(r8) :: lat, lon, depth
 integer :: lon_index, lat_index, depth_index, local_var
 
 call get_state_indices(index_in, lat_index, lon_index, depth_index, local_var)
+if (lon_index < 0 .or. lat_index < 0) print *, index_in, lon_index, lat_index, depth_index, local_var
 
 if (is_on_ugrid(local_var)) then
    lon = ULON(lon_index, lat_index)
@@ -1742,6 +1743,7 @@ lat_index = (offset - ((depth_index-1)*Nx*Ny)) / Nx + 1
 lon_index =  offset - ((depth_index-1)*Nx*Ny) - ((lat_index-1)*Nx) + 1
 
 if (debug > 5) print *, 'lon, lat, depth index = ', lon_index, lat_index, depth_index
+if (index_in < 1 .or. index_in > model_size) print *, 'index_in: ', index_in, ' lon/lat/depth ind: ', lon_index, lat_index, depth_index, ' type: ', var_type
 
 end subroutine get_state_indices
 
@@ -1758,6 +1760,7 @@ subroutine get_state_kind(index_in, var_type, startind, offset)
 if ( .not. module_initialized ) call static_init_model
 
 if (debug > 5) print *, 'asking for meta data about index ', index_in
+if (index_in < 1 .or. index_in > model_size) print *, 'get_state_kind, index_in: ', index_in
 
 if (index_in < start_index(S_index+1)) then
    var_type = KIND_SALINITY  
