@@ -5,7 +5,7 @@
 ! $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
-! TEMPERATURE,          KIND_TEMPERATURE,         COMMON_CODE
+! TEMPERATURE,          KIND_AIR_TEMPERATURE,     COMMON_CODE
 ! SURFACE_PRESSURE,     KIND_SURFACE_PRESSURE,    COMMON_CODE
 ! SKIN_TEMPERATURE,     KIND_SKIN_TEMPERATURE,    COMMON_CODE
 ! TES_NADIR_OBS,        KIND_NADIR_RADIANCE
@@ -59,7 +59,7 @@ use     location_mod, only : location_type, set_location, get_location, &
 use  assim_model_mod, only : interpolate
 
 use     obs_kind_mod, only : KIND_SURFACE_PRESSURE, &
-                             KIND_TEMPERATURE, &
+                             KIND_AIR_TEMPERATURE, &
                              KIND_SKIN_TEMPERATURE, &
                              KIND_NADIR_RADIANCE
 
@@ -792,7 +792,7 @@ isoP = isothermalP
 which_vert = VERTISPRESSURE
 ptmp = isoP * 1.0e2_r8
 location2 = set_location( lon, lat, ptmp, which_vert )
-call interpolate( state, location2, KIND_TEMPERATURE, isothermalT, istat )
+call interpolate( state, location2, KIND_AIR_TEMPERATURE, isothermalT, istat )
 if (debug) print*, 'isothermalT = ', isothermalT
 ! If we had trouble it is MOST LIKELY because isothermalP is above the model's
 !   value of ptop -- try lowering (in altitude) isothermalP.  For now we will
@@ -804,7 +804,7 @@ if ( istat > 0 ) then
       isoP = 2.0_r8 * isoP
       ptmp = 2.0_r8 * ptmp
       location2 = set_location( lon, lat, ptmp, which_vert )
-      call interpolate( state, location2, KIND_TEMPERATURE, isothermalT, istat )
+      call interpolate( state, location2, KIND_AIR_TEMPERATURE, isothermalT, istat )
       if (debug) print*, 'k = ', k, '  isothermalT = ', isothermalT
       write(errstring, *)'lowered isothermalP, key = ',teskey,'; new isoP = ', isoP
       call error_handler(E_MSG,'get_expected_TES_nadir_obs', errstring, &
@@ -834,7 +834,7 @@ do k = 1, N_layers
       ! For model interpolation, make sure we are back in Pa
       ptmp = ret_p(k) * 1.0e2_r8
       location2 = set_location( lon, lat, ptmp, which_vert )
-      call interpolate( state, location2, KIND_TEMPERATURE, ret_t( k ), istat )
+      call interpolate( state, location2, KIND_AIR_TEMPERATURE, ret_t( k ), istat )
       if ( istat > 0 ) then
          write(errstring, *)'trouble with T interpolation, key = ', teskey, '; istat = ', &
                                istat,'; level k = ', k

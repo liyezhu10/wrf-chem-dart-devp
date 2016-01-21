@@ -8,7 +8,7 @@
 ! each column can be at most 32 characters wide.
 ! xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 ! BEGIN DART PREPROCESS KIND LIST
-! SAT_TEMPERATURE,                 KIND_TEMPERATURE,                COMMON_CODE
+! SAT_TEMPERATURE,                 KIND_AIR_TEMPERATURE,            COMMON_CODE
 ! SAT_TEMPERATURE_ELECTRON,        KIND_TEMPERATURE_ELECTRON,       COMMON_CODE
 ! SAT_TEMPERATURE_ION,             KIND_TEMPERATURE_ION,            COMMON_CODE
 ! SAT_DENSITY_NEUTRAL_O3P,         KIND_DENSITY_NEUTRAL_O3P,        COMMON_CODE
@@ -112,7 +112,7 @@ use     location_mod, only : location_type, get_location, set_location, &
 use  assim_model_mod, only : interpolate
 use     obs_kind_mod, only : KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
                              KIND_MOLEC_OXYGEN_MIXING_RATIO, &
-                             KIND_TEMPERATURE, &
+                             KIND_AIR_TEMPERATURE, &
                              KIND_PRESSURE, &
                              KIND_DENSITY, &
                              KIND_DENSITY_ION_E, &
@@ -192,7 +192,7 @@ if (istatus /= 0) then
    obs_val = MISSING_R8
    return
 endif
-call interpolate(x, location, KIND_TEMPERATURE, temperature, istatus)
+call interpolate(x, location, KIND_AIR_TEMPERATURE, temperature, istatus)
 if (istatus /= 0) then
    obs_val = MISSING_R8
    return

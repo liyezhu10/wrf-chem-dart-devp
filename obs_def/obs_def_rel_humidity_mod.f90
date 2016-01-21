@@ -59,7 +59,7 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, write_location, &
                              read_location, vert_is_pressure
 use  assim_model_mod, only : interpolate
-use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_PRESSURE, KIND_VAPOR_MIXING_RATIO
+use     obs_kind_mod, only : KIND_AIR_TEMPERATURE, KIND_PRESSURE, KIND_VAPOR_MIXING_RATIO
 
 implicit none
 private
@@ -116,7 +116,7 @@ if (istatus /= 0 .or. qvap < 0.0_r8) then
 endif
 
 !  interpolate the temperature to the desired location
-call interpolate(state_vector, location, KIND_TEMPERATURE, tmpk, istatus)
+call interpolate(state_vector, location, KIND_AIR_TEMPERATURE, tmpk, istatus)
 if (istatus /= 0 .or. tmpk <= 0.0_r8) then
    rh = missing_r8
    if (istatus == 0) istatus = 99

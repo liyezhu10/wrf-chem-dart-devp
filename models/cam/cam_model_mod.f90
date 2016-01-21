@@ -147,7 +147,8 @@ use location_mod,      only : location_type, get_location, set_location, query_l
                               VERTISUNDEF, VERTISSURFACE, VERTISLEVEL,                           &
                               VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT, write_location,   &
                               get_close_type, get_close_maxdist_init, get_close_obs_init,        &
-                              get_close_obs_destroy,get_dist,loc_get_close_obs => get_close_obs
+                              get_close_obs_destroy,get_dist,loc_get_close_obs => get_close_obs, &
+                              get_close_state
 
 use xyz_location_mod, only : xyz_location_type, xyz_get_close_maxdist_init,          &
                              xyz_get_close_type, xyz_set_location, xyz_get_location, &
@@ -233,7 +234,8 @@ public ::                                                            &
    pert_model_state, get_state_meta_data, model_interpolate,         &
    nc_write_model_atts, nc_write_model_vars,                         &
    init_conditions, init_time, adv_1step, end_model,                 &
-   get_close_maxdist_init, get_close_obs_init, get_close_obs, ens_mean_for_model
+   get_close_maxdist_init, get_close_obs_init, get_close_obs,        &
+   ens_mean_for_model, get_close_state
 
 ! Why were these in public?   get_close_maxdist_init, get_close_obs_init, &
 ! Because assim_model needs them to be there.

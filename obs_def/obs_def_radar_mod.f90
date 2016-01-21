@@ -111,7 +111,7 @@ use     location_mod, only : location_type, write_location, read_location, &
                              interactive_location, get_location
 use  assim_model_mod, only : interpolate
 use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                             KIND_TEMPERATURE, KIND_VERTICAL_VELOCITY,     &
+                             KIND_AIR_TEMPERATURE, KIND_VERTICAL_VELOCITY, &
                              KIND_RAINWATER_MIXING_RATIO, KIND_DENSITY,    &
                              KIND_GRAUPEL_MIXING_RATIO,                    &
                              KIND_SNOW_MIXING_RATIO,                       &
@@ -997,7 +997,7 @@ if (microphysics_type == 1 .or. microphysics_type == 2) then
       precip_fall_speed = missing_r8
       return
    endif
-   call interpolate(state_vector, location, KIND_TEMPERATURE, temp, istatus)
+   call interpolate(state_vector, location, KIND_AIR_TEMPERATURE, temp, istatus)
    if (istatus /= 0) then
       precip_fall_speed = missing_r8
       return
@@ -1147,7 +1147,7 @@ if (istatus /= 0) then
          return
       endif
    
-      call interpolate(state_vector, location, KIND_TEMPERATURE, temp, istatus)
+      call interpolate(state_vector, location, KIND_AIR_TEMPERATURE, temp, istatus)
       if (istatus /= 0) then
          ref = missing_r8
          return

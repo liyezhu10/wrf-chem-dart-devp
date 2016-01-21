@@ -18,13 +18,14 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              get_location, loc_get_close_obs => get_close_obs, &
-                             get_close_type
+                             get_close_type, loc_get_close_state => get_close_state
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, to_upper, file_to_text,                 &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
                              do_nml_file, do_nml_term, nmlfileunit
+
 use     obs_kind_mod     ! for now, include all
 
 
@@ -43,6 +44,7 @@ use pop_model_mod, only :                         &
   pop_pert_model_state    => pert_model_state,    &
   pop_ens_mean_for_model  => ens_mean_for_model,  &
   pop_get_close_obs       => get_close_obs,       &
+  pop_get_close_state     => get_close_state,     &
   pop_restart_file_to_sv  => restart_file_to_sv,  &
   pop_sv_to_restart_file  => sv_to_restart_file,  &
   pop_get_gridsize        => get_gridsize,        &
@@ -63,6 +65,7 @@ use cam_model_mod, only :                            &
   cam_pert_model_state     => pert_model_state,      &
   cam_ens_mean_for_model   => ens_mean_for_model,    &
   cam_get_close_obs        => get_close_obs,         &
+  cam_get_close_state      => get_close_state,       &
   cam_model_type           => model_type,            &
   cam_prog_var_to_vector   => prog_var_to_vector,    &
   cam_vector_to_prog_var   => vector_to_prog_var,    &
@@ -124,7 +127,8 @@ public :: get_model_size,         &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
-          ens_mean_for_model, &
+          get_close_state,        &
+          ens_mean_for_model,     &
   restart_file_to_sv, &
   sv_to_restart_file, &
   get_cesm_restart_filename
@@ -222,9 +226,9 @@ subroutine init_conditions(x)
 character(len=128) :: msgstring2, msgstring3
 
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
-msgstring3 = 'use cesm_to_dart to generate an initial state'
+msgstring3 = "use cesm_to_dart to generate an initial state"
 call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  CESM model has no built-in default state', &
+                  'CESM model interface has no built-in default state', &
                   source, revision, revdate, &
                   text2=msgstring2, text3=msgstring3)
 
@@ -244,9 +248,14 @@ subroutine adv_1step(x, time)
 ! timestep advance.  CESM cannot be called this way, so fatal error
 ! if this routine is called.
 
+character(len=128) :: msgstring2, msgstring3
+
+msgstring2 = "DART cannot advance the CESM model; all observations must be within"
+msgstring3 = "the current assimilation window.  Check the first/last obs times."
 call error_handler(E_ERR,'adv_1step', &
-                  'CESM model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
+                  'CESM model cannot be called as a subroutine.', &
+                  source, revision, revdate, &
+                  text2=msgstring2, text3=msgstring3)
 
 end subroutine adv_1step
 
@@ -289,7 +298,7 @@ character(len=128) :: msgstring2, msgstring3
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 msgstring3 = 'use cesm_to_dart to generate an initial state which contains a timestamp'
 call error_handler(E_ERR,'init_time', &
-                  'WARNING!!  CESM model has no built-in default time', &
+                  'CESM model interface has no built-in default time', &
                   source, revision, revdate, &
                   text2=msgstring2, text3=msgstring3)
 
@@ -316,7 +325,7 @@ subroutine model_interpolate(x, location, obs_kind, interp_val, istatus)
 
 real(r8) :: llon, llat, lvert, loc_array(3)
 integer  :: x_start, x_end
-character(len=32) :: modelname
+character(len=32) :: componentname
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -338,14 +347,17 @@ lvert = loc_array(3)
 
 if (debug > 1) print *, 'requesting interpolation of ', obs_kind, ' at ', llon, llat, lvert
 
-call which_model_obs(obs_kind, modelname)
-call set_start_end(modelname, x_start, x_end)
+! based on generic kind, decide which component should compute the forward operator.
+! if we add support for more complicated forward operators that span components
+! add code at a higher level in an obs_def mod and do the computation there.
+call which_model_obs(obs_kind, componentname)
+call set_start_end(componentname, x_start, x_end)
 
-if (modelname == 'CAM') then
+if (componentname == 'CAM') then
    call cam_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
-else if (modelname == 'POP') then
+else if (componentname == 'POP') then
    call pop_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
-else if (modelname == 'CLM') then
+else if (componentname == 'CLM') then
    call clm_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
 else
    return
@@ -428,15 +440,15 @@ subroutine get_state_meta_data(index_in, location, var_type)
 
 real(r8) :: lat, lon, vert
 integer  :: x_start, x_end
-character(len=32) :: modelname
+character(len=32) :: componentname
 
 ! figure out what offset in the state vector we are at, and then
 ! call the right sub-model
 
-call which_model_state(index_in, modelname)
-call set_start_end(modelname, x_start, x_end)
+call which_model_state(index_in, componentname)
+call set_start_end(componentname, x_start, x_end)
 
-select case (modelname)
+select case (componentname)
    case ('CAM')
       call cam_get_state_meta_data(index_in - x_start, location, var_type)
 
@@ -618,7 +630,7 @@ else if (all(tristate > 0) == 2) then
 else
    call error_handler(E_MSG, 'pert_model_state', &
       'if any models use a perturb routine, all models must use a perturb routine', &
-      source, revision, revdate, text2='overriding local pert routines and using filters')
+      source, revision, revdate, text2='overriding local pert routines and using filter code')
    interf_provided = .false.
 endif
 
@@ -775,8 +787,7 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_type, &
 ! vertical coordinates to a common coordinate. This coordinate type is defined
 ! in the namelist with the variable "vert_localization_coord".
 
-integer :: t_ind, k
-character(len=32) :: modelname
+character(len=32) :: componentname
 
 ! Initialize variables to missing status
 num_close = 0
@@ -795,12 +806,27 @@ if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 ! if we go back to generic kinds, then which_model_obs() needs to
 ! take a kind and this is a real specific type
 
+! we have to allow vertical conversions per component - and then
+! what, sum them?  this needs help.
+
+! @TODO:  for now, bypass the model-specific routines and call
+! the raw location mod code.   this may mess up land points in pop
+! and won't allow top-of-model changes in cam, and no vertical conversion
+! will be done.  but it may run with horizontal only.
+
+call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                       locs, loc_kind, num_close, close_ind, dist)
+
+return
+
+! NOT REACHED NOT REACHED NOT REACHED
+
 !  FIXME:  @TODO
 if (include_CAM) then
       call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
                              locs, loc_kind, num_close, close_ind, dist)
 endif
-! save original close_ind list
+! save original close_ind list?
 if (include_POP) then
       call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
                              locs, loc_kind, num_close, close_ind, dist)
@@ -816,16 +842,125 @@ endif
 end subroutine get_close_obs
 
 !------------------------------------------------------------------
+
+subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
+                          locs, loc_kind, num_close, close_ind, dist)
+
+ type(get_close_type), intent(in)    :: gc
+ type(location_type),  intent(in)    :: base_obs_loc
+ integer,              intent(in)    :: base_obs_type
+ type(location_type),  intent(inout) :: locs(:)
+ integer,              intent(in)    :: loc_kind(:)
+ integer,              intent(out)   :: num_close
+ integer,              intent(out)   :: close_ind(:)
+ real(r8),  optional,  intent(out)   :: dist(:)
+
+! Given a DART location (referred to as "base") and a set of candidate
+! locations & kinds (obs, obs_kind), returns the subset close to the
+! "base", their indices, and their distances to the "base" ...
+
+! For vertical distance computations, general philosophy is to convert all
+! vertical coordinates to a common coordinate. This coordinate type is defined
+! in the namelist with the variable "vert_localization_coord".
+
+integer :: whole_list, cur_start, cur_end
+character(len=32) :: componentname
+
+integer,  allocatable :: unified_close_ind(:)
+real(r8), allocatable :: unified_dist(:)
+
+! Initialize variables to missing status
+whole_list = size(close_ind)
+allocate(unified_close_ind(whole_list), unified_dist(whole_list))
+num_close = 0
+close_ind(:) = -1
+unified_close_ind = -1
+if (present(dist)) dist = 1.0e9   !something big and positive (far away)
+unified_dist = 1.0e9
+
+! FIXME: in a real unified model_mod, these would all be called
+! and any state vector items from any model are potentially close.
+! the vertical conversions are one issue; the other is whether the
+! distances should be the same or different in different mediums
+! (e.g air vs water vs soil/snow)
+
+! this needs to call all the get close routines for active components
+! and merge the lists when done.
+
+! if we go back to generic kinds, then which_model_obs() needs to
+! take a kind and this is a real specific type
+
+! @TODO - need to sort and uniq the list in case models agree on
+! the same locations.  and what if they give different distances?
+ 
+! @TODO:  for now, bypass the model-specific routines and call
+! the raw location mod code.   this may mess up land points in pop
+! and won't allow top-of-model changes in cam, and no vertical conversion
+! will be done.  but it may run with horizontal only.
+
+call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                       locs, loc_kind, num_close, close_ind, dist)
+
+deallocate(unified_close_ind, unified_dist)
+
+return
+
+! NOT REACHED NOT REACHED NOT REACHED
+
+cur_start = 1
+cur_end = 1
+
+!  concatinate each list as it is computed
+if (include_CAM) then
+      call cam_get_close_state(gc, base_obs_loc, base_obs_type, &
+                               locs, loc_kind, num_close, close_ind, dist)
+      cur_end = cur_start + num_close - 1
+      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+      if (present(dist)) &
+         unified_dist(cur_start:cur_end) = dist(1:num_close)
+      cur_start = cur_start + num_close
+endif
+
+if (include_POP) then
+      call pop_get_close_state(gc, base_obs_loc, base_obs_type, &
+                               locs, loc_kind, num_close, close_ind, dist)
+      cur_end = cur_start + num_close - 1
+      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+      if (present(dist)) &
+         unified_dist(cur_start:cur_end) = dist(1:num_close)
+      cur_start = cur_start + num_close
+endif
+
+if (include_CLM) then
+      call loc_get_close_state(gc, base_obs_loc, base_obs_type, &
+                               locs, loc_kind, num_close, close_ind, dist)
+      cur_end = cur_start + num_close - 1
+      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+      if (present(dist)) &
+         unified_dist(cur_start:cur_end) = dist(1:num_close)
+      cur_start = cur_start + num_close
+endif
+
+! and return combined lists and counts
+num_close = cur_start
+close_ind = unified_close_ind
+if (present(dist)) dist = unified_dist
+
+deallocate(unified_close_ind, unified_dist)
+ 
+end subroutine get_close_state
+
+!------------------------------------------------------------------
 !------------------------------------------------------------------
 ! additional worker routines which figure out which of the other
 ! components should be called.
 !------------------------------------------------------------------
 
-subroutine set_start_end(modelname, x_start, x_end)
- character(len=*), intent(in)  :: modelname
+subroutine set_start_end(componentname, x_start, x_end)
+ character(len=*), intent(in)  :: componentname
  integer,          intent(out) :: x_start, x_end
 
-select case (modelname)
+select case (componentname)
    case ('CAM')
       x_start = 1
       x_end = cam_model_size
@@ -848,59 +983,61 @@ end subroutine set_start_end
 
 !------------------------------------------------------------------
 
-subroutine which_model_state(x_offset, modelname)
+subroutine which_model_state(x_offset, componentname)
  integer,          intent(in)  :: x_offset
- character(len=*), intent(out) :: modelname
+ character(len=*), intent(out) :: componentname
 
 integer :: x_start, x_end
 
 call set_start_end('CAM', x_start, x_end)
 if (x_offset >= x_start .and. x_offset <= x_end) then
-   modelname = 'CAM'
+   componentname = 'CAM'
    return
 endif
  
 call set_start_end('POP', x_start, x_end)
 if (x_offset >= x_start .and. x_offset <= x_end) then
-   modelname = 'POP'
+   componentname = 'POP'
    return
 endif
  
 call set_start_end('CLM', x_start, x_end)
 if (x_offset >= x_start .and. x_offset <= x_end) then
-   modelname = 'CLM'
+   componentname = 'CLM'
    return
 endif
  
 ! unknown
-modelname = 'NULL'
+componentname = 'NULL'
 
 end subroutine which_model_state
 
 !------------------------------------------------------------------
 
-subroutine which_model_obs(obs_kind, modelname)
+subroutine which_model_obs(obs_kind, componentname)
  integer,          intent(in)  :: obs_kind
- character(len=*), intent(out) :: modelname
+ character(len=*), intent(out) :: componentname
 
 ! FIXME: this needs to be beefed up with all possible obs kinds
 ! and which model would have the best forward operator for it.
 
 select case (obs_kind)
    case (KIND_AIR_TEMPERATURE)
-      modelname = 'CAM'
+      componentname = 'CAM'
    case (KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
-      modelname = 'CAM'
+      componentname = 'CAM'
  
    case (KIND_WATER_TEMPERATURE)
-      modelname = 'POP'
+      componentname = 'POP'
+   case (KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT)
+      componentname = 'CAM'
 
    case (KIND_CARBON)
-      modelname = 'CLM'
+      componentname = 'CLM'
 
    case default
       ! unknown
-      modelname = 'NULL'
+      componentname = 'NULL'
 
 end select
 

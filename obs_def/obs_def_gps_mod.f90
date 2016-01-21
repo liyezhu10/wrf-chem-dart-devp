@@ -12,7 +12,7 @@
 ! files (e.g. for the obs_diag program) might be a larger number than 100K.
 
 ! BEGIN DART PREPROCESS KIND LIST
-! TEMPERATURE,        KIND_TEMPERATURE,        COMMON_CODE
+! TEMPERATURE,        KIND_AIR_TEMPERATURE,    COMMON_CODE
 ! SPECIFIC_HUMIDITY,  KIND_SPECIFIC_HUMIDITY,  COMMON_CODE
 ! PRESSURE,           KIND_PRESSURE,           COMMON_CODE
 ! GPSRO_REFRACTIVITY, KIND_GPSRO
@@ -62,7 +62,7 @@ use     location_mod, only : location_type, set_location, get_location, &
                              VERTISHEIGHT
 use  assim_model_mod, only : interpolate
 
-use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY, &
+use     obs_kind_mod, only : KIND_AIR_TEMPERATURE, KIND_SPECIFIC_HUMIDITY, &
                              KIND_PRESSURE
 
 implicit none
@@ -586,7 +586,7 @@ location2 = set_location(lon2, lat, height,  which_vert)
 istatus0 = 3
 ref00 = missing_r8
 
-call interpolate(state_vector, location2,  KIND_TEMPERATURE,       t, istatus0)
+call interpolate(state_vector, location2,  KIND_AIR_TEMPERATURE,   t, istatus0)
 if (istatus0 > 0) return
 call interpolate(state_vector, location2,  KIND_SPECIFIC_HUMIDITY, q, istatus0)
 if (istatus0 > 0) return

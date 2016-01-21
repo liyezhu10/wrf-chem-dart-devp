@@ -42,7 +42,8 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              vert_is_level,    VERTISLEVEL,                    &
                              vert_is_pressure, VERTISPRESSURE,                 &
                              vert_is_height,   VERTISHEIGHT,                   &
-                             get_close_obs_init, get_close_obs, LocationDims
+                             get_close_obs_init, get_close_obs, LocationDims,  &
+                             get_close_state
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -100,6 +101,7 @@ public :: get_model_size,         &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
+          get_close_state,        &
           ens_mean_for_model
 
 ! generally useful routines for various support purposes.

@@ -38,7 +38,7 @@ private
 public :: location_type, get_location, set_location, &
           set_location_missing, is_location_in_region, &
           write_location, read_location, interactive_location, query_location, &
-          LocationDims, LocationName, LocationLName, get_close_obs, &
+          LocationDims, LocationName, LocationLName, get_close_obs, get_close_state, &
           get_close_maxdist_init, get_close_obs_init, get_close_type, &
           operator(==), operator(/=), get_dist, get_close_obs_destroy, &
           nc_write_location_atts, nc_get_location_varids, nc_write_location, &
@@ -1512,6 +1512,27 @@ deallocate(gc%type_to_cutoff_map)
 deallocate(gc%gtt)
 
 end subroutine get_close_obs_destroy
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_state(gc, base_obs_loc, base_obs_type, locs, loc_kind, &
+   num_close, close_ind, dist)
+
+! the location module does not differentiate between observation locations
+! and model state locations, but it can be useful for the model to know
+! the difference.  so here, 'locs' are state locations.  in get_close_obs
+! they are observation locations.  here they use the same code.
+
+type(get_close_type), intent(in)  :: gc
+type(location_type),  intent(in)  :: base_obs_loc, locs(:)
+integer,              intent(in)  :: base_obs_type, loc_kind(:)
+integer,              intent(out) :: num_close, close_ind(:)
+real(r8), optional,   intent(out) :: dist(:)
+
+call get_close_obs(gc, base_obs_loc, base_obs_type, locs, loc_kind, &
+                   num_close, close_ind, dist)
+
+end subroutine get_close_state
 
 !----------------------------------------------------------------------------
 

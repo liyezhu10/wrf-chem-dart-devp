@@ -66,10 +66,7 @@ use        types_mod, only : r8, missing_r8, ps0, PI, gravity
 use    utilities_mod, only : register_module, error_handler, E_ERR
 use     location_mod, only : location_type, write_location, read_location
 use  assim_model_mod, only : interpolate
-use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                             KIND_TEMPERATURE, KIND_VERTICAL_VELOCITY, &
-                             KIND_RAINWATER_MIXING_RATIO, KIND_DENSITY, &
-                             KIND_VORTEX_LAT, KIND_VORTEX_LON, KIND_VORTEX_PMIN, &
+use     obs_kind_mod, only : KIND_VORTEX_LAT, KIND_VORTEX_LON, KIND_VORTEX_PMIN, &
                              KIND_VORTEX_WMAX
 
 implicit none
