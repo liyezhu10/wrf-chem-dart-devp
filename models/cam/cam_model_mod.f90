@@ -170,7 +170,7 @@ use xyz_location_mod, only : xyz_location_type, xyz_get_close_maxdist_init,     
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, KIND_PRESSURE,       &
-                             KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY,   &
+                             KIND_SURFACE_PRESSURE, KIND_AIR_TEMPERATURE, KIND_SPECIFIC_HUMIDITY,   &
                              KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE, KIND_CLOUD_FRACTION,      &
                              KIND_GRAV_WAVE_DRAG_EFFIC, KIND_GRAV_WAVE_STRESS_FRACTION,         &
                              KIND_SURFACE_ELEVATION,                                            &
@@ -2429,7 +2429,7 @@ if (TYPE_FRACLDV /= MISSING_I) &
 ! dart_to_cam_types(KIND_SEA_SURFACE_TEMPERATURE  ?  ) = TYPE_TSOCN
 
 ! Physically 3D fields
-dart_to_cam_types(KIND_TEMPERATURE)        = TYPE_T
+dart_to_cam_types(KIND_AIR_TEMPERATURE)        = TYPE_T
 dart_to_cam_types(KIND_U_WIND_COMPONENT)   = TYPE_U
 dart_to_cam_types(KIND_V_WIND_COMPONENT)   = TYPE_V
 dart_to_cam_types(KIND_SPECIFIC_HUMIDITY)  = TYPE_Q
@@ -2445,7 +2445,7 @@ dart_to_cam_types(KIND_NH3) = TYPE_NH3
 ! dart_to_cam_types(KIND_O)   = TYPE_O
 dart_to_cam_types(KIND_O3)  = TYPE_O3
 
-if (TYPE_T      /= MISSING_I) cam_to_dart_kinds(TYPE_T)      = KIND_TEMPERATURE
+if (TYPE_T      /= MISSING_I) cam_to_dart_kinds(TYPE_T)      = KIND_AIR_TEMPERATURE
 if (TYPE_U      /= MISSING_I) cam_to_dart_kinds(TYPE_U)      = KIND_U_WIND_COMPONENT
 if (TYPE_V      /= MISSING_I) cam_to_dart_kinds(TYPE_V)      = KIND_V_WIND_COMPONENT
 if (TYPE_Q      /= MISSING_I) cam_to_dart_kinds(TYPE_Q)      = KIND_SPECIFIC_HUMIDITY
@@ -6981,7 +6981,7 @@ if (l_rectang) then
       ! construct a location with the same lat/lon but cycle though the model levels
       temp_obs_loc = set_location(lon_lat_lev(1), lon_lat_lev(2), real(k,r8), VERTISLEVEL)
 
-      call interp_lonlat(vec, temp_obs_loc, KIND_TEMPERATURE, t(k), vstatus)
+      call interp_lonlat(vec, temp_obs_loc, KIND_AIR_TEMPERATURE, t(k), vstatus)
       if (vstatus == 1) then
          write(string1,'(A,I2,A)') 'Temperature level ',k, &
               ' could not be interpolated in interp_lonlat'
@@ -7017,7 +7017,7 @@ else ! for cubed sphere:
       temp_obs_loc = set_location(lon_lat_lev(1), lon_lat_lev(2), real(k,r8), VERTISLEVEL)
 
       ! Use corners found in a previous call, e.g. from convert_vert PS before T and Q columns.
-      call interp_cubed_sphere(vec, temp_obs_loc, KIND_TEMPERATURE, t(k), vstatus, cell_corners, l, m)
+      call interp_cubed_sphere(vec, temp_obs_loc, KIND_AIR_TEMPERATURE, t(k), vstatus, cell_corners, l, m)
       if (vstatus == 1) then
          write(string1,'(A,I2,A)') 'Temperature level ',k, &
               ' could not be interpolated in interp_cubed_sphere'

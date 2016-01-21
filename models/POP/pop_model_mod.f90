@@ -26,7 +26,7 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              nc_check, do_output,                              &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
-use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SALINITY, KIND_DRY_LAND,   &
+use     obs_kind_mod, only : KIND_WATER_TEMPERATURE, KIND_SALINITY, KIND_DRY_LAND,   &
                              KIND_U_CURRENT_COMPONENT,                         &
                              KIND_V_CURRENT_COMPONENT, KIND_SEA_SURFACE_HEIGHT, &
                              KIND_SEA_SURFACE_PRESSURE, KIND_POTENTIAL_TEMPERATURE
@@ -447,7 +447,7 @@ do i = 1, nx
 
       ! Repeat for t dipole quads.
       ! Only update regular boxes that contain all wet corners
-      if( all_corners_wet(KIND_TEMPERATURE,i,j,surf_index) ) then
+      if( all_corners_wet(KIND_WATER_TEMPERATURE,i,j,surf_index) ) then
          ! Set up array of lons and lats for the corners of these t quads
          call get_quad_corners(tlon, i, j, t_c_lons)
          call get_quad_corners(tlat, i, j, t_c_lats)
@@ -843,7 +843,7 @@ endif
 ! salinity, and pressure based on depth.  call a routine that
 ! interpolates all three, does the conversion, and returns the
 ! sensible/in-situ temperature.
-if(obs_type == KIND_TEMPERATURE) then
+if(obs_type == KIND_WATER_TEMPERATURE) then
    ! we know how to interpolate this from potential temp,
    ! salinity, and pressure based on depth.
    call compute_temperature(x, llon, llat, lheight, interp_val, istatus)
