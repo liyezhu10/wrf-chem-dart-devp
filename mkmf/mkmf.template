@@ -1,4 +1,4 @@
-# Template for Intel ifort and Mac OSX
+# Template for Intel Fortran Compiler on Linux clusters and workstations.
 #
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -87,6 +87,9 @@
 #              in ascii format.  applies to all unformatted fortran i/o.
 #     -assume  byterecl ... more 'industry-standard' direct-access behavior
 #              controls what units the RECL (record length) specifier returns.
+#     -prof-gen=srcpos generates code coverage information at runtime.
+#              results converted into displayable html pages by the 'codecov' tool.
+#              remove .spi and .dpi files between runs.
 #
 # Runtime environment variables that influence the compiler behavior:
 #
@@ -96,10 +99,12 @@
 #
 # IF YOU HAVE MORE CURRENT COMPILER INFORMATION, PLEASE SHARE IT WITH US.
 
+COMPILER=ifort
 MPIFC = mpif90
 MPILD = mpif90
 FC = ifort
 LD = ifort
+
 
 # DISCUSSION ABOUT NETCDF. DART works with both V3 and V4 flavors of netCDF.
 # Some V4 installations also require the HDF5 libraries. Some don't.
@@ -110,7 +115,7 @@ LD = ifort
 # LIBS = -L$(NETCDF)/lib -lnetcdf
 # LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 # LIBS = -L$(NETCDF)/lib -lnetcdf           -lcurl -lhdf5_hl -lhdf5 -lz -lm
-# LIBS = -L$(NETCDF)/lib -lnetcdf -lnetcdff -lcurl -lhdf5_hl -lhdf5 -lz -lm
+# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhdf5 -lz -lm
 #
 # If you get an error "ld: library not found for -lnetcdff" (note 2 f's),
 # remove it from the LIBS line. The same is true for any library. If 'ld'
@@ -123,24 +128,26 @@ LD = ifort
 # NETCDF = /opt/local
 
 INCS = -I$(NETCDF)/include
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lcurl
-
-# for Intel 9.x:
-#FFLAGS  = $(INCS) -O2
-#LDFLAGS = $(INCS) -Wl,-stack_size,10000000 $(LIBS)
-
-# for Intel 10.x and beyond:
-FFLAGS  = $(INCS) -O2 -m64 -heap-arrays -vec-report0 
-LDFLAGS = $(INCS) $(LIBS)
+LIBS = -L$(NETCDF)/lib -L/opt/local/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhdf5 -lz -lm
+#FFLAGS  = -O $(INCS) -prof-gen=srcpos
+#FFLAGS  = -O $(INCS) 
+#FFLAGS  = -O $(INCS) -warn argument_checking,declarations,uncalled,unused 
+LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
-# FFLAGS = -g -C -check noarg_temp_created -fpe0 -vec-report0 \
-#          -fp-model precise  -ftrapuv -traceback \
+FFLAGS = -g -C -check noarg_temp_created -fpe0 \
+          -fp-model precise  -ftrapuv -traceback -Wl,-no_pie $(INCS)
 #          -warn argument_checking,declarations,uncalled,unused $(INCS)
+#
+# for speed on yellowstone (verify against a run with with -O and -fp-model precise
+#        that the numerical differences aren't too large to be acceptable):
+# FFLAGS = -O3 -axavx -ipo -vec-report0 $(INCS)
+#
+# Some optimized (BLAS, LAPACK) libraries may be available with:
+# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lmkl -lmkl_lapack -lguide -lpthread
 #
 # If you get this error: libimf.so: warning: warning: feupdateenv is not implemented
 # try adding: -limf -lm to your LIBS line.
-
 
 # <next few lines under version control, do not edit>
 # $URL$

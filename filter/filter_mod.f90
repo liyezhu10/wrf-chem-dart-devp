@@ -74,6 +74,9 @@ integer            :: trace_level, timestamp_level
 ! Defining whether diagnostics are for prior or posterior
 integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
 
+! @TODO: hack for CAM/POP/CLM cross-component diagnostics
+character(len=3)  :: component_name(3) = (/ 'cam', 'pop', 'clm' /)
+
 !----------------------------------------------------------------
 ! Namelist input with default values
 !
@@ -161,7 +164,8 @@ subroutine filter_main()
 
 type(ensemble_type)         :: ens_handle, obs_ens_handle, forward_op_ens_handle
 type(obs_sequence_type)     :: seq
-type(netcdf_file_type)      :: PriorStateUnit, PosteriorStateUnit
+! @TODO: hack for the CAM/POP/CLM cross-component assimilation
+type(netcdf_file_type)      :: PriorStateUnit(3), PosteriorStateUnit(3)
 type(time_type)             :: time1, first_obs_time, last_obs_time
 type(time_type)             :: curr_ens_time, next_ens_time, window_time
 type(adaptive_inflate_type) :: prior_inflate, post_inflate
@@ -346,11 +350,14 @@ call timestamp_message('Before initializing output files')
 
 ! Initialize the output sequences and state files and set their meta data
 if(my_task_id() == 0) then
-   call filter_generate_copy_meta_data(seq, prior_inflate, &
-      PriorStateUnit, PosteriorStateUnit, in_obs_copy, output_state_mean_index, &
-      output_state_spread_index, prior_obs_mean_index, posterior_obs_mean_index, &
-      prior_obs_spread_index, posterior_obs_spread_index)
-   if(ds) call smoother_gen_copy_meta_data(num_output_state_members, output_inflation)
+   do i=1, 3
+      call filter_generate_copy_meta_data(seq, prior_inflate, &
+         PriorStateUnit(i), PosteriorStateUnit(i), component_name(i), &
+         in_obs_copy, output_state_mean_index, &
+         output_state_spread_index, prior_obs_mean_index, posterior_obs_mean_index, &
+         prior_obs_spread_index, posterior_obs_spread_index)
+      if(ds) call smoother_gen_copy_meta_data(num_output_state_members, output_inflation)
+   enddo
 else
    output_state_mean_index = 0
    output_state_spread_index = 0
@@ -572,11 +579,14 @@ AdvanceTime : do
        (time_step_number / output_interval * output_interval == time_step_number)) then
       call trace_message('Before prior state space diagnostics')
       call timestamp_message('Before prior state space diagnostics')
-      call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit, ens_handle, &
-         model_size, num_output_state_members, &
-         output_state_mean_index, output_state_spread_index, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+      do i=1, 3
+         call filter_state_space_diagnostics(curr_ens_time, PriorStateUnit(i), &
+            component_name(i), ens_handle, &
+            model_size, num_output_state_members, &
+            output_state_mean_index, output_state_spread_index, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            prior_inflate, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
+      enddo
       call timestamp_message('After  prior state space diagnostics')
       call trace_message('After  prior state space diagnostics')
    endif
@@ -680,17 +690,20 @@ AdvanceTime : do
        (time_step_number / output_interval * output_interval == time_step_number)) then
       call trace_message('Before posterior state space diagnostics')
       call timestamp_message('Before posterior state space diagnostics')
-      call filter_state_space_diagnostics(curr_ens_time, PosteriorStateUnit, ens_handle, &
-         model_size, num_output_state_members, output_state_mean_index, &
-         output_state_spread_index, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
+      do i=1, 3
+         call filter_state_space_diagnostics(curr_ens_time, PosteriorStateUnit(i), &
+            component_name(i), ens_handle, &
+            model_size, num_output_state_members, output_state_mean_index, &
+            output_state_spread_index, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            post_inflate, POST_INF_COPY, POST_INF_SD_COPY)
       ! Cyclic storage for lags with most recent pointed to by smoother_head
       ! ens_mean is passed to avoid extra temp storage in diagnostics
 
-      call smoother_ss_diagnostics(model_size, num_output_state_members, &
-         output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
-         POST_INF_COPY, POST_INF_SD_COPY)
+         call smoother_ss_diagnostics(model_size, num_output_state_members, &
+            output_inflation, ens_mean, ENS_MEAN_COPY, ENS_SD_COPY, &
+            POST_INF_COPY, POST_INF_SD_COPY)
+      enddo
       call timestamp_message('After  posterior state space diagnostics')
       call trace_message('After  posterior state space diagnostics')
    endif
@@ -768,8 +781,10 @@ call trace_message('End of main filter assimilation loop, starting cleanup', 'fi
 call trace_message('Before finalizing diagnostics files')
 ! properly dispose of the diagnostics files
 if(my_task_id() == 0) then
-   ierr = finalize_diag_output(PriorStateUnit)
-   ierr = finalize_diag_output(PosteriorStateUnit)
+   do i=1, 3
+      ierr = finalize_diag_output(PriorStateUnit(i))
+      ierr = finalize_diag_output(PosteriorStateUnit(i))
+   enddo
 endif
 call trace_message('After  finalizing diagnostics files')
 
@@ -838,14 +853,16 @@ end subroutine filter_main
 
 !-----------------------------------------------------------
 
-subroutine filter_generate_copy_meta_data(seq, prior_inflate, PriorStateUnit, &
-   PosteriorStateUnit, in_obs_copy, output_state_mean_index, &
+subroutine filter_generate_copy_meta_data(seq, prior_inflate, prior_unit, &
+   post_unit, cname, &
+   in_obs_copy, output_state_mean_index, &
    output_state_spread_index, prior_obs_mean_index, posterior_obs_mean_index, &
    prior_obs_spread_index, posterior_obs_spread_index)
 
 type(obs_sequence_type),     intent(inout) :: seq
 type(adaptive_inflate_type), intent(in)    :: prior_inflate
-type(netcdf_file_type),      intent(inout) :: PriorStateUnit, PosteriorStateUnit
+type(netcdf_file_type),      intent(inout) :: prior_unit, post_unit
+character(len=*),            intent(in)    :: cname
 integer,                     intent(out)   :: output_state_mean_index, output_state_spread_index
 integer,                     intent(in)    :: in_obs_copy
 integer,                     intent(out)   :: prior_obs_mean_index, posterior_obs_mean_index
@@ -861,6 +878,7 @@ character(len=metadatalength) :: prior_meta_data, posterior_meta_data
 ! Posterior file contains the posterior inflation mean and spread only
 character(len=metadatalength) :: state_meta(num_output_state_members + 4)
 integer :: i, ensemble_offset, num_state_copies, num_obs_copies
+character(len=64) :: priorfilename, postfilename
 
 
 ! Section for state variables + other generated data stored with them.
@@ -898,12 +916,17 @@ if(output_inflation) then
    state_meta(num_state_copies)   = 'inflation sd'
 endif
 
+! @TODO: filenames are now passed in, so each diagnostic file
+! can have a different name per component
 
 ! Set up diagnostic output for model state, if output is desired
-PriorStateUnit     = init_diag_output('Prior_Diag', &
-                        'prior ensemble state', num_state_copies, state_meta)
-PosteriorStateUnit = init_diag_output('Posterior_Diag', &
-                        'posterior ensemble state', num_state_copies, state_meta)
+
+priorfilename = trim(cname)//'_Prior_Diag'
+postfilename = trim(cname)//'_Posterior_Diag'
+prior_unit = init_diag_output(priorfilename, cname, &
+                'prior ensemble state', num_state_copies, state_meta)
+post_unit = init_diag_output(postfilename, cname, &
+                'posterior ensemble state', num_state_copies, state_meta)
 
 
 ! Set the metadata for the observations.

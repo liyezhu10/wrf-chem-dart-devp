@@ -211,7 +211,7 @@ call trace_message('After  reading in ensemble restart file')
 call trace_message('Before initializing output diagnostic file')
 state_meta(1) = 'true state'
 ! Set up output of truth for state
-StateUnit = init_diag_output('True_State', 'true state from control', 1, state_meta)
+StateUnit = init_diag_output('True_State', 'pmo', 'true state from control', 1, state_meta)
 call trace_message('After  initializing output diagnostic file')
 
 ! Get the time of the first observation in the sequence

@@ -327,7 +327,7 @@ do i = 1, num_lags
    ! Generate file name and metadata for lag i output
    write(file_name, '("Lag_", i5.5, "_Diag")') i
    write(meta_data_string, '("lag ", i5.5, " state")') i
-   SmootherStateUnit(i) = init_diag_output(file_name, meta_data_string, &
+   SmootherStateUnit(i) = init_diag_output(file_name, 'smooth', meta_data_string, &
       num_state_copies, state_meta)
 end do
 
@@ -475,12 +475,13 @@ end subroutine smoother_mean_spread
 
 !-----------------------------------------------------------
 
-subroutine filter_state_space_diagnostics(curr_ens_time, out_unit, ens_handle, model_size, &
+subroutine filter_state_space_diagnostics(curr_ens_time, out_unit, cname, ens_handle, model_size, &
             num_output_state_members, output_state_mean_index, output_state_spread_index, &
            output_inflation, temp_ens, ENS_MEAN_COPY, ENS_SD_COPY, inflate, INF_COPY, INF_SD_COPY)
 
 type(time_type),             intent(in)    :: curr_ens_time
 type(netcdf_file_type),      intent(inout) :: out_unit
+character(len=*),            intent(in)    :: cname   ! component name for xcomponent
 type(ensemble_type),         intent(inout) :: ens_handle
 integer,                     intent(in)    :: model_size, num_output_state_members
 integer,                     intent(in)    :: output_state_mean_index, output_state_spread_index
@@ -504,12 +505,12 @@ endif
 ! Output ensemble mean
 call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_MEAN_COPY, temp_ens)
 if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens,  &
-   output_state_mean_index)
+   output_state_mean_index, cname)
 
 ! Output ensemble spread
 call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, ENS_SD_COPY, temp_ens) 
 if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens, &
-   output_state_spread_index)
+   output_state_spread_index, cname)
 
 ! Compute the offset for copies of the ensemble
 ens_offset = 2
@@ -518,7 +519,7 @@ ens_offset = 2
 do j = 1, num_output_state_members
    ! Get this state copy to task 0; then output it
    call get_copy(map_task_to_pe(ens_handle, 0), ens_handle, j, temp_ens, temp_time)
-   if(my_task_id() == 0) call aoutput_diagnostics( out_unit, temp_time, temp_ens, ens_offset + j)
+   if(my_task_id() == 0) call aoutput_diagnostics( out_unit, temp_time, temp_ens, ens_offset + j, cname)
 end do
 
 ! Unless specifically asked not to, output inflation
@@ -531,8 +532,8 @@ if (output_inflation) then
       temp_ens = 1.0_r8
    endif
 
-   if(my_task_id() == 0) call aoutput_diagnostics(out_unit,  curr_ens_time, temp_ens, &
-     ens_offset + num_output_state_members + 1)  
+   if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens, &
+     ens_offset + num_output_state_members + 1, cname)  
 
 
    if(do_varying_ss_inflate(inflate) .or. do_single_ss_inflate(inflate)) then
@@ -543,7 +544,7 @@ if (output_inflation) then
    endif
 
    if(my_task_id() == 0) call aoutput_diagnostics(out_unit, curr_ens_time, temp_ens, &
-      ens_offset + num_output_state_members + 2) 
+      ens_offset + num_output_state_members + 2, cname) 
 
 endif
 
@@ -575,7 +576,7 @@ do i = 1, num_current_lags
    call all_copies_to_all_vars(lag_handle(smoother_index))
    ! only ensemble copies have the time
    call filter_state_space_diagnostics(lag_handle(smoother_index)%time(1), SmootherStateUnit(i), &
-      lag_handle(smoother_index), model_size, num_output_state_members, &
+      'smooth', lag_handle(smoother_index), model_size, num_output_state_members, &
       smoother_state_mean_index, smoother_state_spread_index, output_inflation, temp_ens, &
       ENS_MEAN_COPY, ENS_SD_COPY, lag_inflate, POST_INF_COPY, POST_INF_SD_COPY)
 end do

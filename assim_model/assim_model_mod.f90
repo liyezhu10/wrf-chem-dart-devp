@@ -173,7 +173,7 @@ end subroutine static_init_assim_model
 
 
 
-function init_diag_output(FileName, global_meta_data, &
+function init_diag_output(FileName, cname, global_meta_data, &
                   copies_of_field_per_time, meta_data_per_copy, lagID) result(ncFileID)
 !--------------------------------------------------------------------------------
 !
@@ -204,7 +204,7 @@ use typeSizes
 use netcdf
 implicit none
 
-character(len=*), intent(in) :: FileName, global_meta_data
+character(len=*), intent(in) :: FileName, cname, global_meta_data
 integer,          intent(in) :: copies_of_field_per_time
 character(len=*), intent(in) :: meta_data_per_copy(copies_of_field_per_time)
 integer, OPTIONAL,intent(in) :: lagID
@@ -383,7 +383,7 @@ call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFile
 ! Define the model-specific components
 !-------------------------------------------------------------------------------
 
-i =  nc_write_model_atts( ncFileID%ncid )
+i =  nc_write_model_atts( ncFileID%ncid , cname)
 if ( i /= 0 ) then
    write(msgstring, *)'nc_write_model_atts  bombed with error ', i
    call error_handler(E_MSG,'init_diag_output',msgstring,source,revision,revdate)
@@ -1088,7 +1088,7 @@ end subroutine output_diagnostics
 
 
 
-subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index)
+subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index, cname)
 !-------------------------------------------------------------------
 ! Outputs the "state" to the supplied netCDF file. 
 !
@@ -1117,6 +1117,7 @@ type(netcdf_file_type), intent(inout) :: ncFileID
 type(time_type),   intent(in) :: model_time
 real(r8),          intent(in) :: model_state(:)
 integer, optional, intent(in) :: copy_index
+character(len=*), optional, intent(in) :: cname
 
 integer :: i, timeindex, copyindex
 integer :: is1,id1
@@ -1144,7 +1145,11 @@ endif
 ! model_mod:nc_write_model_vars knows nothing about assim_model_types,
 ! so we must pass the components.
 
-i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex) 
+if (present(cname)) then
+   i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex, cname) 
+else
+   i = nc_write_model_vars(ncFileID%ncid, model_state, copyindex, timeindex, 'unknown') 
+endif
 
 end subroutine aoutput_diagnostics
 

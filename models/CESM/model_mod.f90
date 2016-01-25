@@ -480,83 +480,62 @@ end subroutine end_model
 
 !------------------------------------------------------------------
 
-function nc_write_model_atts(ncFileID)
+function nc_write_model_atts(ncFileID, model)
  integer, intent(in)  :: ncFileID            ! netCDF file identifier
+ character(len=*), optional, intent(in) :: model
  integer              :: nc_write_model_atts ! function return value
 
 integer :: rc
 
 if ( .not. module_initialized ) call static_init_model
 
-if (include_CAM) then
-   rc = cam_nc_write_model_atts(ncFileID)
-   if (rc /= 0) then
-      nc_write_model_atts = rc
+if (present(model)) then
+   if (model == 'cam') then
+      nc_write_model_atts = cam_nc_write_model_atts(ncFileID)
+      return
+   else if (model == 'pop') then
+      nc_write_model_atts = pop_nc_write_model_atts(ncFileID)
+      return
+   else if (model == 'clm') then
+      nc_write_model_atts = clm_nc_write_model_atts(ncFileID)
       return
    endif
 endif
 
-if (include_POP) then
-   rc = pop_nc_write_model_atts(ncFileID)
-   if (rc /= 0) then
-      nc_write_model_atts = rc
-      return
-   endif
-endif
-
-if (include_CLM) then
-   rc = clm_nc_write_model_atts(ncFileID)
-   if (rc /= 0) then
-      nc_write_model_atts = rc
-      return
-   endif
-endif
-
-nc_write_model_atts = 0 ! If we got here, things went well.
+nc_write_model_atts = -1 ! If we got here, bad things happened
 
 end function nc_write_model_atts
 
 !------------------------------------------------------------------
 
-function nc_write_model_vars(ncFileID, statevec, copyindex, timeindex) 
+function nc_write_model_vars(ncFileID, statevec, copyindex, timeindex, model) 
  integer,                intent(in) :: ncFileID            ! netCDF file identifier
  real(r8), dimension(:), intent(in) :: statevec
  integer,                intent(in) :: copyindex
  integer,                intent(in) :: timeindex
+ character(len=*), optional, intent(in) :: model
  integer                            :: nc_write_model_vars ! function return value
 
 integer :: rc, x_start, x_end
 
 if ( .not. module_initialized ) call static_init_model
 
-if (include_CAM) then
-   call set_start_end('CAM', x_start, x_end)
-   rc = cam_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
-   if (rc /= 0) then
-      nc_write_model_vars = rc
+if (present(model)) then
+   if (model == 'cam') then
+      call set_start_end('CAM', x_start, x_end)
+      nc_write_model_vars = cam_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
       return
+   else if (model == 'pop') then
+      call set_start_end('POP', x_start, x_end)
+      nc_write_model_vars = pop_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
+   else if (model == 'clm') then
+      call set_start_end('clm', x_start, x_end)
+      nc_write_model_vars = clm_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
    endif
+
 endif
 
-if (include_POP) then
-   call set_start_end('POP', x_start, x_end)
-   rc = pop_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
-   if (rc /= 0) then
-      nc_write_model_vars = rc
-      return
-   endif
-endif
-
-if (include_CLM) then
-   call set_start_end('CLM', x_start, x_end)
-   rc = clm_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
-   if (rc /= 0) then
-      nc_write_model_vars = rc
-      return
-   endif
-endif
-
-nc_write_model_vars = 0 ! If we got here, things went well.
+nc_write_model_vars = -1 ! If we got here, bad things happened
 
 end function nc_write_model_vars
 
