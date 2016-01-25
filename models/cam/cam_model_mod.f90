@@ -470,8 +470,7 @@ type(time_type) :: Time_step_atmos
 ! Random sequence and init for pert_model_state
 logical                 :: first_pert_call = .true.
 type(random_seq_type)   :: random_seq
-integer                 :: ens_member = 0
-logical                 :: output_task0
+logical                 :: doout
 
 ! common message string used by many subroutines
 character(len=512) :: string1, string2, string3
@@ -673,19 +672,7 @@ read(iunit, nml = cam_model_nml, iostat = io)
 call check_namelist_read(iunit, io, "cam_model_nml")
 call verify_namelist()
 
-! Stand-alone CAM (not CESM) uses the first block of the if statement.
-! Set the printed output logical variable to reduce printed output;
-
-if (file_exist('element')) then
-   iunit = get_unit()
-   open(unit=iunit, file='element', form='formatted')
-   read(iunit,*) ens_member
-   close(iunit)
-   output_task0 = .false.
-   if (ens_member == 1) output_task0 = .true.
-else
-   output_task0 = do_output()
-endif
+doout = do_output()
 
 ! Record the namelist values
 if (do_nml_file()) write(nmlfileunit, nml=cam_model_nml)
@@ -693,7 +680,7 @@ if (do_nml_term()) write(    *      , nml=cam_model_nml)
 
 ! Set the model minimum time step from the namelist seconds and days input
 Time_step_atmos = set_time(Time_step_seconds, Time_step_days)
-if (print_details .and. output_task0) call print_time(Time_step_atmos)
+if (print_details .and. doout) call print_time(Time_step_atmos)
 
 ! Open CAM 'initial' file to read dimensions and coordinates of fields.
 call nc_check(nf90_open(path=trim(model_config_file), mode=nf90_nowrite, ncid=nc_file_ID), &
@@ -715,7 +702,7 @@ enddo
 do i=1,state_num_3d
    model_size = model_size + s_dim_3d(1,i) * s_dim_3d(2,i) * s_dim_3d(3,i)
 enddo
-if (output_task0) then
+if (doout) then
    write(string1, '(A,I9)') 'CAM state vector size: ', model_size
    call error_handler(E_MSG, 'static_init_model', string1)
 endif
@@ -996,7 +983,7 @@ allocate(dim_names(num_dims), dim_sizes(num_dims))
 do i = 1,num_dims
    call nc_check(nf90_inquire_dimension(nc_file_ID, i, dim_names(i), dim_sizes(i)), &
                  'read_cam_init_size', 'inquire for '//trim(dim_names(i)))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'Dims info = ',i, trim(dim_names(i)), dim_sizes(i)
       call error_handler(E_MSG, 'read_cam_init_size', string1,source,revision,revdate)
    endif
@@ -1041,7 +1028,7 @@ else
    s_dim_max(1:3, 3) = 0
 endif
 
-if (print_details .and. output_task0 ) then
+if (print_details .and. doout ) then
    if (state_num_1d > 0) then
       write(string1,*) 's_dim_1d = ',s_dim_1d
       write(string2,*) (s_dim_max(i,1),i=1,3)
@@ -1100,7 +1087,7 @@ do i=1,tot_chars+1
       char_version(nchars:nchars) = model_version(i:i)
    endif
 enddo
-if (output_task0) then
+if (doout) then
    if (print_details) then
       write(string1,'(A,A10,4(I3,2X))') 'model_version, version(1:4) = ' &
                                   ,model_version,(int_version(i),i=1,4)
@@ -1295,7 +1282,7 @@ endif
 if (file_exist(trim(file_name))) then
    call nc_check(nf90_open(path=trim(file_name), mode=nf90_nowrite, ncid=nc_file_ID), &
               'static_init_model:read_cam_2Dreal', 'opening '//trim(file_name))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1, *) 'file_name for ',cfield,' is ', trim(file_name)
       call error_handler(E_MSG, 'read_cam_2Dreal', string1,source,revision,revdate)
    endif
@@ -1427,7 +1414,7 @@ field_dim_IDs = MISSING_I                  !Array of dimension IDs for cfield
 if (file_exist(file_name)) then
    call nc_check(nf90_open(path=trim(file_name), mode=nf90_nowrite, ncid=nc_file_ID), &
               'read_cam_2Dint', 'opening '//trim(file_name))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'file_name for ',cfield,' is ', trim(file_name)
       call error_handler(E_MSG, 'read_cam_2Dint', string1,source,revision,revdate)
    endif
@@ -1452,7 +1439,7 @@ if (file_exist(file_name)) then
       name_dim2 = 'no2ndDim'
    endif
 
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) cfield,' dimensions num_dim1, num_dim2 = ',num_dim1, num_dim2
       call error_handler(E_MSG, 'read_cam_2Dint', string1,source,revision,revdate)
    endif
@@ -1902,12 +1889,12 @@ if (nc_size == ncol .and. trim(nc_name) == 'ncol') then
    b             = MISSING_R8
    x_ax_bearings = MISSING_R8
 
-   if (allocated(centers) .and. output_task0 .and. print_details) then
+   if (allocated(centers) .and. doout .and. print_details) then
       shp = shape(centers)
       write(string1,*) 'Shape of centers = ',shp
       call error_handler(E_MSG,'nc_read_cs_grid_file',string1,source,revision,revdate)
    endif
-   if (allocated(corners) .and. output_task0 .and. print_details) then
+   if (allocated(corners) .and. doout .and. print_details) then
       shp = shape(corners)
       write(string1,*) 'Shape of corners = ',shp
       call error_handler(E_MSG,'nc_read_cs_grid_file',string1,source,revision,revdate)
@@ -2010,7 +1997,7 @@ character(len=nf90_max_name), intent(out) :: att_vals(nflds)
 integer :: i, ierr
 integer :: nc_var_ID, att_type
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) 'nc_read_model_atts: reading ',trim(att)
       call error_handler(E_MSG, 'nc_read_model_atts', string1,source,revision,revdate)
 endif
@@ -2025,7 +2012,7 @@ do i = 1,nflds
    if (ierr == nf90_noerr) then
       call nc_check(nf90_get_att(nc_file_ID, nc_var_ID, att, att_vals(i)), &
                     'nc_read_model_atts', 'get_att '//trim(att))
-      if (print_details .and. output_task0) then
+      if (print_details .and. doout) then
          write(string1,'(A,1X,I6,1X,A,1X,A)') att, nc_var_ID, cflds(i), trim(att_vals(i))
          call error_handler(E_MSG, 'nc_read_model_atts', string1,source,revision,revdate)
       endif
@@ -2052,7 +2039,7 @@ ierr = nf90_inquire_attribute(nc_file_ID, NF90_GLOBAL, att)
 if (ierr == nf90_noerr) then
    call nc_check(nf90_get_att(nc_file_ID, NF90_GLOBAL, att, att_val), &
                  'nc_read_global_int_att', 'get_att '//trim(att))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,'(A,I5,2A, I6)') 'nc_read_global_int_att for file ',nc_file_ID, &
                                     ' attribute and value = ',trim(att), att_val
       call error_handler(E_MSG, 'nc_read_global_int_att', string1,source,revision,revdate)
@@ -2110,7 +2097,7 @@ if (ncerr /= nf90_noerr ) then
    return
 endif
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) 'After inquire_variable for ',cfield,' coord_dimid = ',coord_dimid(1)
    call error_handler(E_MSG, 'read_cam_coord', string1,source,revision,revdate)
 endif
@@ -2149,7 +2136,7 @@ do i=1,num_atts
                     'read_cam_coord', 'get_att '//trim(att_name) )
 
    else
-      if (output_task0) then
+      if (doout) then
          write(string1,*) '                ignoring attribute ',trim(att_name),    &
                     ' because it is not a character type'
          call error_handler(E_MSG, 'read_cam_coord', string1,source,revision,revdate)
@@ -2197,7 +2184,7 @@ else
    endif
 endif
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,'(3A,I6,A,I8,A,1pE12.4)')  'reading ',cfield,' using id ',nc_var_ID,  &
           ' size ',coord_size,' resolution ', var%resolution
    write(string2,*) 'first, last val: ', var%vals(1),var%vals(coord_size)
@@ -2350,7 +2337,7 @@ if (nfld /= nflds) then
    call error_handler(E_ERR, 'order_state_fields', string1, source, revision, revdate)
 endif
 
-if (output_task0) then
+if (doout) then
    if (print_details) then
       write(string1,'(A)') 'State vector is composed of these fields: '
       call error_handler(E_MSG, 'order_state_fields', string1, source, revision, revdate)
@@ -2462,7 +2449,7 @@ if (TYPE_NH3    /= MISSING_I) cam_to_dart_kinds(TYPE_NH3) = KIND_NH3
 if (TYPE_O3     /= MISSING_I) cam_to_dart_kinds(TYPE_O3)  = KIND_O3
 
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) 'OBS_KIND   FIELD_TYPE'
    call error_handler(E_MSG, 'map_kinds', string1,source,revision,revdate)
    do i=1,300
@@ -2603,7 +2590,7 @@ endif
 
 model_time = set_date(iyear,imonth,iday,ihour,imin,isec)
 
-if (output_task0) then
+if (doout) then
    call print_date(model_time,' read_cam_init ... input date')
    call print_time(model_time,' read_cam_init ... input time')
    call print_date(model_time,' read_cam_init ... input date',logfileunit)
@@ -2623,7 +2610,7 @@ do i= 1, state_num_0d
    ifld = ifld + 1
    call nc_check(nf90_inq_varid(nc_file_ID, cflds(ifld), nc_var_ID), &
                 'read_cam_init', 'inq_varid '//trim(cflds(ifld)))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'reading ',cflds(ifld),' using id ',nc_var_ID
       call error_handler(E_ERR, 'read_cam_init', string1,source,revision,revdate)
    endif
@@ -2639,7 +2626,7 @@ do i= 1, state_num_1d
    ifld = ifld + 1
    call nc_check(nf90_inq_varid(nc_file_ID, cflds(ifld), nc_var_ID), &
                 'read_cam_init', 'inq_varid '//trim(cflds(ifld)))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'reading ',cflds(ifld),' using id ',nc_var_ID
       call error_handler(E_MSG, 'read_cam_init', string1,source,revision,revdate)
    endif
@@ -2655,7 +2642,7 @@ do i= 1, state_num_2d
    ifld = ifld + 1
    call nc_check(nf90_inq_varid(nc_file_ID, cflds(ifld), nc_var_ID), &
                 'read_cam_init', 'inq_varid '//trim(cflds(ifld)))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'reading ',cflds(ifld),' using id ',nc_var_ID
       call error_handler(E_MSG, 'read_cam_init', string1,source,revision,revdate)
    endif
@@ -2688,7 +2675,7 @@ do i=1, state_num_3d
    ifld = ifld + 1
    call nc_check(nf90_inq_varid(nc_file_ID, cflds(ifld), nc_var_ID), &
                 'read_cam_init', 'inq_varid '//trim(cflds(ifld)))
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,*) 'reading ',cflds(ifld),' using id ',nc_var_ID
       call error_handler(E_MSG, 'read_cam_init', string1,source,revision,revdate)
    endif
@@ -2848,7 +2835,7 @@ endif
 allocate(temp_3d(f_dim_max(1,3),f_dim_max(2,3),f_dim_max(3,3)))
 allocate(temp_2d(f_dim_max(1,2),f_dim_max(2,2)))
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) 'write_cam_init; f_dim_max(:2) = ',f_dim_max(1,2),f_dim_max(2,2)
    call error_handler(E_MSG, 'write_cam_init', string1,source,revision,revdate)
 endif
@@ -3459,7 +3446,7 @@ call nc_check(nf90_put_att(nc_file_ID, NF90_GLOBAL, "model","CAM"),             
 
 ! They have different dimids for this file than they had for caminput.nc
 ! P_id serves as a map between the 2 sets.
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) 'num_dims = ',num_dims
    write(string2,*) ' dimens,       name,  size, cam dim_id, P[oste]rior id'
    call error_handler(E_MSG, 'nc_write_model_atts', string1,source,revision,revdate, text2=string2)
@@ -3476,7 +3463,7 @@ do i = 1,num_dims
      ! time, not P0
      P_id(i) = 0
    endif
-   if (print_details .and. output_task0) then
+   if (print_details .and. doout) then
       write(string1,'(I5,1X,A13,1X,2(I7,2X))') i,trim(dim_names(i)),dim_sizes(i), P_id(num_dims)
       call error_handler(E_MSG, 'nc_write_model_atts', string1,source,revision,revdate)
    endif
@@ -3486,7 +3473,7 @@ call nc_check(nf90_def_dim(ncid=nc_file_ID, name="scalar",   len=1, dimid=scalar
              ,'nc_write_model_atts', 'def_dim scalar')
 call nc_check(nf90_def_dim(ncid=nc_file_ID, name="P0",   len=1, dimid=P_id(num_dims+1)) &
              ,'nc_write_model_atts', 'def_dim scalar')
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,'(I5,1X,A13,1X,2(I7,2X))') i,'P0',P0%length, P_id(i)
    call error_handler(E_MSG, 'nc_write_model_atts', string1,source,revision,revdate)
 endif
@@ -3570,7 +3557,7 @@ if (P0%label /= ' ')  then
    call write_cam_coord_def(nc_file_ID,'P0',P0  , dim_id, grid_id(g_id))
 endif
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,*) '1d field#, grid_id, grid_names_1d'
    call error_handler(E_MSG, 'nc_write_model_atts', string1,source,revision,revdate)
    do i=1,grid_num_1d
@@ -4050,7 +4037,7 @@ if (cell_corners(1) == MISSING_I) then
 ! !    cell_corners, l, and m, are being passed in from convert_vert:model_heights
 endif
 
-if (print_details .and. output_task0) then
+if (print_details .and. doout) then
    write(string1,'(A,4I8)') 'cell_corners = ',(cell_corners(i), i=1,4)
    write(string2,'(A,I8,A,1p2E20.12) ')'{lon,lat}(',cell_corners(4),') = ', &
         lon%vals(cell_corners(4)), lat%vals(cell_corners(4))
@@ -4384,7 +4371,7 @@ if (m_neg /= MISSING_R8) then
    endif
 
    ! Informational output, if the observation is exactly on the m-axis
-   if (l_neg == 0.0_r8 .and. output_task0) then
+   if (l_neg == 0.0_r8 .and. doout) then
       write(string1,'(A,I6,1X,1p4E12.4)') 'l_neg cell, x_o - a(2)*m = ',cell, x_o ,a(2,origin,cell),m
       call error_handler(E_MSG, 'unit_square_location', string1,source,revision,revdate)
    endif
@@ -4392,7 +4379,7 @@ if (m_neg /= MISSING_R8) then
 endif
 
 ! Informational output, if the observation is exactly on the m-axis
-if (l == 0.0_r8 .and. output_task0) then
+if (l == 0.0_r8 .and. doout) then
    write(string1,'(A,I6,1X,1p4E12.4)') 'Ob is on x-axis: l-cell, x_o - a(2)*m = ',cell, x_o ,a(2,origin,cell),m
    call error_handler(E_MSG, 'unit_square_location', string1,source,revision,revdate)
 endif
@@ -5913,7 +5900,7 @@ call xyz_find_nearest(cs_gc_xyz, pointloc, cs_locs_xyz, closest_node, rc)
 
 ! decide what to do if we don't find anything.
 if (rc /= 0 .or. closest_node < 0) then
-   if (output_task0) then
+   if (doout) then
       write(string1,*) 'cannot find a nearest node to lon, lat: ', lon, lat
       call error_handler(E_WARN, 'find_closest_node', string1,source,revision,revdate)
       ! newFIXME; should this be E_ERR instead?
@@ -6036,18 +6023,10 @@ Vars2Perturb : do pert_fld=1,100
 
       call error_handler(E_MSG,'pert_model_state', 'Perturbing '//trim(pert_names(pert_fld)))
 
-      ! FIXME : below is not robust. ens_member is always 0 in CESM context.
-      !         Probably should remove this option from future versions; hasn't been used for years.
-
       !  Choose mode of perturbations/resets;
-      if (pert_sd(pert_fld) <= 0.0_r8 ) then
-         ! Set each ensemble member to its own constant value,
-         ! as found in pert_base_vals(ens_member).
-         ! This only works when setting a single field = to a different constant value
-         ! for each ensemble member.
-         ! Could add more fields by overloading pert_base_vals and
-         ! adding code to find those values.
-         mode = ens_member
+      if (pert_sd(pert_fld) <= 0.0_r8 .and. pert_sd(perf_fld) /= MISSING_R8) then
+         call error_handler(E_ERR, 'pert_model_state: can no longer support negative pert_sd() values', &
+                                    source, revision, revdate)
       else
          ! Set each *field* to it's own pert_base_val +/- pert_sd
          mode = pert_fld
@@ -6815,7 +6794,7 @@ else
       call plevs_cam(ps(m,1), dim_lev, p(1:dim_lev,m,1))
    enddo
 
-   if (output_task0) then
+   if (doout) then
       write(string1,*) 'Finished assignment of PS for ',dim1,' elements.  Will write ',dim_lev,' levels'
       call error_handler(E_MSG, 'set_ps_arrays', string1,source,revision,revdate)
       do n=1,dim_lev

@@ -22,6 +22,7 @@
    silence               = .false.,
   /
 
+   !restart_in_file_name     = "dart_ics.20080601",
 &filter_nml
    async                    = 0,
    adv_ens_command          = "no_advance_script",
@@ -30,10 +31,10 @@
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "dart_ics.20080601",
+   restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
-   init_time_days           = -1,
-   init_time_seconds        = -1,
+   init_time_days           = 148805,
+   init_time_seconds        = 0,
    first_obs_days           = -1,
    first_obs_seconds        = -1,
    last_obs_days            = -1,
@@ -147,7 +148,7 @@
 
 ! CESM model namelist
 &model_nml
-   include_CAM = .false.
+   include_CAM = .true.
    include_POP = .true.
    include_CLM = .false.
    debug       = 0
@@ -177,7 +178,7 @@
    which_vert_1d       = 0,
    which_vert_2d       = -1,
    which_vert_3d       = 6*1,
-   pert_names          = 'T', 'US', 'VS',
+   pert_names          = 'T', 
    pert_sd             = 0.20,
    pert_base_vals      = -888888.0d0,
    highest_obs_pressure_Pa   = 1000.0,

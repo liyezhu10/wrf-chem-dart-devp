@@ -196,6 +196,10 @@ call check_namelist_read(iunit, io, 'model_nml')
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
+if (.not. include_CAM .and. .not. include_POP .and. .not. include_CLM) then
+   write(msgstring,*)'at least one component must be selected in the &model_nml namelist'
+   call error_handler(E_ERR,'static_init_model',msgstring,source,revision,revdate)
+endif
 
 if (include_CAM) call cam_static_init_model()
 if (include_POP) call pop_static_init_model()
@@ -490,13 +494,13 @@ integer :: rc
 if ( .not. module_initialized ) call static_init_model
 
 if (present(model)) then
-   if (model == 'cam') then
+   if (model == 'cam' .and. include_CAM) then
       nc_write_model_atts = cam_nc_write_model_atts(ncFileID)
       return
-   else if (model == 'pop') then
+   else if (model == 'pop' .and. include_POP) then
       nc_write_model_atts = pop_nc_write_model_atts(ncFileID)
       return
-   else if (model == 'clm') then
+   else if (model == 'clm' .and. include_CLM) then
       nc_write_model_atts = clm_nc_write_model_atts(ncFileID)
       return
    endif
@@ -521,14 +525,14 @@ integer :: rc, x_start, x_end
 if ( .not. module_initialized ) call static_init_model
 
 if (present(model)) then
-   if (model == 'cam') then
+   if (model == 'cam' .and. include_CAM) then
       call set_start_end('CAM', x_start, x_end)
       nc_write_model_vars = cam_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
       return
-   else if (model == 'pop') then
+   else if (model == 'pop' .and. include_POP) then
       call set_start_end('POP', x_start, x_end)
       nc_write_model_vars = pop_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
-   else if (model == 'clm') then
+   else if (model == 'clm' .and. include_CLM) then
       call set_start_end('clm', x_start, x_end)
       nc_write_model_vars = clm_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
    endif
@@ -557,7 +561,7 @@ subroutine pert_model_state(state, pert_state, interf_provided)
 ! perturbing of states.
 
 integer :: x_start, x_end
-logical :: had_interface
+logical :: had_interface, minv, maxv
 integer :: tristate(3) 
 
 
@@ -602,15 +606,21 @@ endif
 ! FIXME: we cannot handle the case where some models want to
 ! perturb on their own and some want filter to do it.  it has to
 ! be every model or no models at this point.
-if (all(tristate > 0) == 1) then
-   interf_provided = .true.
-else if (all(tristate > 0) == 2) then
-   interf_provided = .false.
-else
+
+minv = minval(tristate(minloc(tristate, tristate /= 0)))
+maxv = maxval(tristate(maxloc(tristate, tristate /= 0)))
+
+if (minv /= maxv) then
    call error_handler(E_MSG, 'pert_model_state', &
       'if any models use a perturb routine, all models must use a perturb routine', &
       source, revision, revdate, text2='overriding local pert routines and using filter code')
    interf_provided = .false.
+else
+   if (minv == 1) then
+      interf_provided = .true.
+   else if (minv == 2) then
+      interf_provided = .false.
+   endif
 endif
 
 

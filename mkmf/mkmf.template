@@ -135,8 +135,9 @@ LIBS = -L$(NETCDF)/lib -L/opt/local/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhd
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
-FFLAGS = -g -C -check noarg_temp_created -fpe0 \
-          -fp-model precise  -ftrapuv -traceback -Wl,-no_pie $(INCS)
+FFLAGS = -g -C -check noarg_temp_created -fpe0 -vec-report0 \
+         -fp-model precise  -ftrapuv -traceback -convert big_endian $(INCS)
+
 #          -warn argument_checking,declarations,uncalled,unused $(INCS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
