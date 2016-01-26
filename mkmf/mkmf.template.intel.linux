@@ -73,6 +73,10 @@
 #                which have priority over the others.
 #                (for those running on yellowstone, -axavx will enable the advanced
 #                vector instructions available on the sandy bridge processors.)
+#     -assume buffered_io   allows the ifort runtime library to buffer writes
+#                before sending them to disk.  in a simple obs_sequence_tool test 
+#                on yellowstone it cut the system time by 10x and cut the overall 
+#                run time by almost a third.
 #
 # FFLAGS   possibly useful, not normally used by DART
 #     -fpp     run Fortran preprocessor on source files prior to compilation
@@ -108,9 +112,9 @@ LD = ifort
 # installations. Here are some candidates, you might just have to resort to
 # trial and error:
 # LIBS = -L$(NETCDF)/lib -lnetcdf
-# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
+# LIBS = -L$(NETCDF)/lib -lnetcdf -lnetcdff
 # LIBS = -L$(NETCDF)/lib -lnetcdf           -lcurl -lhdf5_hl -lhdf5 -lz -lm
-# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhdf5 -lz -lm
+# LIBS = -L$(NETCDF)/lib -lnetcdf -lnetcdff -lcurl -lhdf5_hl -lhdf5 -lz -lm
 #
 # If you get an error "ld: library not found for -lnetcdff" (note 2 f's),
 # remove it from the LIBS line. The same is true for any library. If 'ld'
@@ -123,8 +127,8 @@ LD = ifort
 # NETCDF = /opt/local
 
 INCS = -I$(NETCDF)/include
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-FFLAGS  = -O -vec-report0 $(INCS)
+LIBS = -L$(NETCDF)/lib -lnetcdf -lnetcdff
+FFLAGS  = -O -vec-report0 -assume buffered_io $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
@@ -134,7 +138,7 @@ LDFLAGS = $(FFLAGS) $(LIBS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
 #        that the numerical differences aren't too large to be acceptable):
-# FFLAGS = -O3 -axavx -ipo -vec-report0 $(INCS)
+# FFLAGS = -O3 -axavx -ipo -vec-report0 -assume buffered_io $(INCS)
 #
 # Some optimized (BLAS, LAPACK) libraries may be available with:
 # LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lmkl -lmkl_lapack -lguide -lpthread
