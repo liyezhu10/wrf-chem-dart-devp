@@ -6024,7 +6024,7 @@ Vars2Perturb : do pert_fld=1,100
       call error_handler(E_MSG,'pert_model_state', 'Perturbing '//trim(pert_names(pert_fld)))
 
       !  Choose mode of perturbations/resets;
-      if (pert_sd(pert_fld) <= 0.0_r8 .and. pert_sd(perf_fld) /= MISSING_R8) then
+      if (pert_sd(pert_fld) <= 0.0_r8 .and. pert_sd(pert_fld) /= MISSING_R8) then
          call error_handler(E_ERR, 'pert_model_state: can no longer support negative pert_sd() values', &
                                     source, revision, revdate)
       else
