@@ -2527,9 +2527,13 @@ lheight   = loc_array(3)
 
 if (debug > 6 .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
 
+! FIXME may be better to check the %maxlevels and kick the interpolation to the
+! appropriate routine based on that ... or check the dimnames for the
+! vertical coordinate  ...
+
 ! Some applications just need to know the number of vertical levels.
 ! This is done by trying to 'interpolate' height on a large number of levels.
-! When the interpolation fails, you've gone one level too far.
+! When the interpolation fails, you've gone one level too far. 
 
 if ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
    if (nint(lheight) > nlevgrnd) then
@@ -2541,6 +2545,8 @@ if ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
    endif
    return ! Early Return
 endif
+
+if ((debug > 6) .and. do_output()) write(*,*)'interp_val ',interp_val
 
 ! Standard method of interpolation.
 ! get_grid_vertval()       for quantities that have a vertical profile.
@@ -2910,7 +2916,12 @@ ELEMENTS : do indexi = index1, indexN
       myarea(counter2,2)  = landarea(indexi)
    endif
 
-   if (debug > 4 .and. do_output()) then
+   if ((levels(indexi) /= depthabove) .and. &
+       (levels(indexi) /= depthbelow)) then
+      cycle ELEMENTS
+   endif
+
+   if ((debug > 4) .and. do_output()) then
       write(*,*)
       write(*,*)'gridcell location match at statevector index',indexi
       write(*,*)'statevector value is (',x(indexi),')'
