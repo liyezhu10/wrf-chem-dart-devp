@@ -849,6 +849,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             if(varying_ss_inflate > 0.0_r8 .and. varying_ss_inflate_sd > 0.0_r8) then
                ! Gamma is less than 1 for varying ss, see adaptive inflate module
                gamma = reg_factor * abs(correl(group))
+
                ! Deflate the inflated variance using the INITIAL state inflate
                ! value (before these obs started gumming it up).
                ens_obs_mean = orig_obs_prior_mean(group)
@@ -878,6 +879,11 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                ! Update the inflation values
                call update_inflation(inflate, varying_ss_inflate, varying_ss_inflate_sd, &
                   r_mean, r_var, obs(1), obs_err_var, gamma)
+            else
+               ! if we don't go into the previous if block, make sure these
+               ! have good values going out for the block below
+               r_mean = orig_obs_prior_mean(group)
+               r_var =  orig_obs_prior_var(group)
             endif
 
             ! Update adaptive values if posterior outlier_ratio test doesn't fail.
