@@ -22,6 +22,7 @@ program advance_time
 !   - can specify output date format
 !   - can output Julian day
 !   - can output Gregorian days and seconds (since year 1601)
+!   - can output in CESM time format (ccyy-mm-dd-fffff where fffff is seconds of day)
 !
 ! e.g:
 !  echo 20070730      12         | advance_time    # advance 12 h 
@@ -33,6 +34,7 @@ program advance_time
 !  echo 2007073006    120 -j     | advance_time    # advance 120 h, and print year and Julian day
 !  echo 2007073006    120 -J     | advance_time    # advance 120 h, print year, Julian day, hour, minute and second
 !  echo 2007073006    0 -g       | advance_time    # print Gregorian day and second (since year 1601)
+!  echo 2007073006    0 -c       | advance_time    # print CESM format time (ccyy-mm-dd-fffff where fffff is sec of day)
 !
 
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
@@ -52,7 +54,7 @@ character(len=128), parameter :: revdate  = "$Date$"
    integer :: ccyy, mm, dd, hh, nn, ss, dday, dh, dn, ds, gday, gsec
    integer :: nargum, i
    character(len=80), dimension(10) :: argum
-   character(len=14) :: ccyymmddhhnnss
+   character(len=16) :: ccyymmddhhnnss
    character(len=80) :: out_date_format, dtime
    character(len=256) :: in_string
    integer :: datelen
@@ -75,7 +77,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
    if ( nargum < 2 ) then
       write(unit=stdout, fmt='(a)') &
-         'Usage:   echo ccyymmddhh[nnss] [+|-]dt[d|h|m|s] [-w|-W|-wrf|-WRF] [-f|-F date_format] [-j|-J] [-g|-G] | advance_time'
+         'Usage:   echo ccyymmddhh[nnss] [+|-]dt[d|h|m|s] [-w|-W|-wrf|-WRF] [-f|-F date_format] [-j|-J] [-g|-G] [-c|-C] | advance_time'
       write(unit=stdout, fmt='(a)') &
          'Option:  -w|-W|-wrf|-WRF  output in wrf date format as ccyy-mm-dd_hh:nn:ss'
       write(unit=stdout, fmt='(a)') &
@@ -102,6 +104,8 @@ character(len=128), parameter :: revdate  = "$Date$"
          '         echo 2007073006    120 -J     | advance_time    # advance 120 h, print year, Julian day, hour, minute and second'
       write(unit=stdout, fmt='(a)') &
          '         echo 2007073006    0 -g       | advance_time    # print Gregorian day and second (since year 1601)'
+      write(unit=stdout, fmt='(a)') &
+         '         echo 2007073006    0 -c       | advance_time    # print CESM format time (ccyy-mm-dd-fffff where fffff is sec of day)'
       write(unit=stdout, fmt='(a)') ''
       stop 'try again.'
    end if
@@ -123,6 +127,15 @@ character(len=128), parameter :: revdate  = "$Date$"
       ss = 0
    else if (datelen == 14) then
       read(ccyymmddhhnnss(1:14), fmt='(i4, 5i2)')  ccyy, mm, dd, hh, nn, ss
+   else if (datelen == 13) then
+      read(ccyymmddhhnnss(1:13), fmt='(i4, 2i2, i5)')  ccyy, mm, dd, ss
+      if (ss >= 86400) then
+        stop 'seconds-of-day  must be less than 86400'
+      endif
+      hh = ss / 3600
+      ss = ss - hh * 3600
+      nn = ss / 60
+      ss = ss - nn * 60
    else
       stop 'wrong input date'
    endif
@@ -194,6 +207,10 @@ character(len=128), parameter :: revdate  = "$Date$"
               call get_time(base_time, gsec, gday)
               write(unit=stdout, fmt='(I8,I8)') gday, gsec
               i = i+1
+           case ('-c','-C')
+              out_date_format = 'ccyy-mm-dd-fffff'
+              write(unit=stdout, fmt='(a)') trim(formatCESMdate(ccyy,mm,dd,hh,nn,ss))
+              i = i+1
            case default
               i = i+1
         end select
@@ -205,10 +222,10 @@ contains
 
 function parsedate(datein)
    character(len=80) :: datein
-   character(len=14) :: parsedate
+   character(len=16) :: parsedate
    character(len=1 ) :: ch
    integer :: n, i
-   parsedate = '00000000000000'
+   parsedate = '0000000000000000'
    i=0
    do n = 1, len_trim(datein)
       ch = datein(n:n)
@@ -217,11 +234,15 @@ function parsedate(datein)
          parsedate(i:i)=ch
       end if
    end do
-   if (parsedate(11:14) == '0000') then
+   if (i == 13 .and. parsedate(14:16) == '000') then
+       parsedate(14:16) = ''
+       return  ! CESM format
+   else if (parsedate(11:14) == '0000') then
       parsedate(11:14) = ''
    else if(parsedate(13:14) == '00') then
       parsedate(13:14) = ''
    end if
+   if (parsedate(15:16) == '00') parsedate(15:16) = ''
    return 
 end function parsedate
 
@@ -292,6 +313,16 @@ function formatdate(datein,dateform)
    if (is /= 0) formatdate(is:is+1) = datein(13:14)
    return
 end function formatdate
+
+function formatCESMdate(ccyy,mm,dd,hh,nn,ss)
+   integer :: ccyy, mm, dd, hh, nn, ss
+   character(len=80) :: formatCESMdate
+   integer :: fffff
+
+   fffff = hh*3600 + nn*60 + ss
+   write(formatCESMdate, '(i4.4,1a,2(i2.2,1a),i5.5)') ccyy, '-', mm, '-', dd, '-', fffff
+   return
+end function formatCESMdate
 
 
 end program advance_time
