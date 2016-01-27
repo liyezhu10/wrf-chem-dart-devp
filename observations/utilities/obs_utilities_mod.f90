@@ -419,9 +419,9 @@ subroutine getvar_int(ncid, varname, darray, dmiss)
  integer,            intent(out)  :: darray(:)
  integer,  optional, intent(out)  :: dmiss
 
-integer  :: varid, nfrc
-real(r8) :: fill, miss
-logical  :: found_miss
+integer :: varid, nfrc
+integer :: fill, miss
+logical :: found_miss
 
 ! read the data for the requested array, and get the fill value
 call nc_check( nf90_inq_varid(ncid, varname, varid), &
@@ -699,9 +699,9 @@ subroutine getvar_int_2d(ncid, varname, darray, dmiss)
  integer,            intent(out)  :: darray(:,:)
  integer,  optional, intent(out)  :: dmiss
 
-integer  :: varid, nfrc
-real(r8) :: fill, miss
-logical  :: found_miss
+integer :: varid, nfrc
+integer :: fill, miss
+logical :: found_miss
 
 ! read the data for the requested array, and get the fill value
 call nc_check( nf90_inq_varid(ncid, varname, varid), &
