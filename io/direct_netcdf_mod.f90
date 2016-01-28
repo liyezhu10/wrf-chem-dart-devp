@@ -667,7 +667,9 @@ if ( minclamp /= missing_r8 ) then
                   'Clamping '//trim(varname)//', values out of bounds.', &
                    source,revision,revdate, text2=msgstring)
 
-      variable = max(minclamp, variable)
+      where (variable /= missing_r8)
+         variable = max(minclamp, variable)
+      endwhere
    endif
 endif ! min range set
 
