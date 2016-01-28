@@ -1,0 +1,11 @@
+&utilities_nml
+   module_details = .false.,
+   write_nml = 'none'
+/
+
+&mpi_utilities_nml
+/
+
+&state_structure_test_nml
+  test1 = 1  ,
+/
