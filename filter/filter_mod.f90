@@ -83,6 +83,10 @@ use copies_on_off_mod, only : ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, &
                               SPARE_PRIOR_INF_SPREAD, SPARE_POST_INF_MEAN, &
                               SPARE_POST_INF_SPREAD, query_copy_present
 
+!>@todo FIXME : This is not the right way to do this.  Should we have a new
+!>              interface to modify the state within the model_mod that can 
+!>              go through assim_model?
+use model_mod,         only : mark_missing_r8
 !------------------------------------------------------------------------------
 
 implicit none
@@ -393,6 +397,9 @@ file_info = io_filenames_init(state_ens_handle, single_restart_file_in, single_r
 
 call read_state(state_ens_handle, file_info, read_time_from_file, time1, &
                 prior_inflate, post_inflate, perturb_from_single_instance)
+
+!>@todo FIXME : Not the right approach.  Just for initial testing.
+call mark_missing_r8(state_ens_handle)
 
 ! This must be after read_state
 call get_minmax_task_zero(prior_inflate, state_ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)

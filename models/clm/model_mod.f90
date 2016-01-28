@@ -77,10 +77,17 @@ use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,       &
 
  use ensemble_manager_mod, only : ensemble_type, &
                                   map_pe_to_task, &
-                                  get_var_owner_index
+                                  get_var_owner_index, &
+                                  all_copies_to_all_vars, &
+                                  all_vars_to_all_copies
 
 use distributed_state_mod, only : get_state
-use state_structure_mod,   only : add_domain
+use state_structure_mod,   only : add_domain, state_structure_info,   &
+                                  get_index_start, get_index_end,     &
+                                  get_num_domains, get_num_variables, &
+                                  get_num_dims, get_dim_name,         &
+                                  get_dim_length, get_variable_name
+
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -129,7 +136,8 @@ public :: get_gridsize,                 &
           gridcell_components,          &
           DART_get_var,                 &
           get_model_time,               &
-          construct_file_name_in
+          construct_file_name_in,       &
+          mark_missing_r8
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -181,6 +189,8 @@ integer, parameter :: VT_MINVALINDX   = 3 ! ... minimum value if any
 integer, parameter :: VT_MAXVALINDX   = 4 ! ... maximum value if any
 integer, parameter :: VT_ORIGININDX   = 5 ! ... file of origin
 integer, parameter :: VT_STATEINDX    = 6 ! ... update (state) or not
+
+integer :: domain_count = 0
 
 ! things which can/should be in the model_nml
 
@@ -235,6 +245,7 @@ type progvartype
    character(len=paramname_length) :: kind_string
    character(len=512) :: origin    ! the file it came from
    logical  :: update
+   integer  :: domain
 end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
@@ -420,7 +431,7 @@ integer, OPTIONAL, intent(out)     :: var_type
 ! Local variables
 
 integer  :: n
-
+character(len=32) :: varstring
 ! Module variables
 
 ! LON
@@ -439,8 +450,9 @@ if (present(var_type)) then
    var_type = MISSING_I
 
    FINDTYPE : do n = 1,nfields
-      if((indx >= progvar(n)%index1) .and. &
-         (indx <= progvar(n)%indexN) ) then
+      varstring = progvar(n)%varname
+      if((indx >= get_index_start(progvar(n)%domain, varstring)).and. &
+         (indx <= get_index_end(progvar(n)%domain, varstring)) ) then
          var_type = progvar(n)%dart_kind
          exit FINDTYPE
       endif
@@ -499,6 +511,7 @@ real(r8) :: spvalR8
 character(len=paramname_length) :: var_names(max_state_variables)
 real(r8) :: var_ranges(max_state_variables,2)
 integer :: nvars, domid
+logical :: var_update(max_state_variables)
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -758,6 +771,23 @@ if ((debug > 0) .and. do_output()) then
   write(     *     , *)'model_size = ', model_size
 endif
 
+! Must group the variables according to the file they come from.
+!> @TODO FIXME ... add_domain() must do the right thing if nvars == 0
+!> @TODO FIXME ... io_filenames_nml:rpointer_file order must somehow match 
+!> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
+
+call cluster_variables(clm_restart_filename, nvars, var_names, var_ranges, var_update)
+domid =     add_domain(clm_restart_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+call state_structure_info(domid)
+
+call cluster_variables(clm_history_filename, nvars, var_names, var_ranges, var_update)
+domid =     add_domain(clm_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+call state_structure_info(domid)
+
+call cluster_variables(clm_vector_history_filename, nvars, var_names, var_ranges, var_update)
+domid =     add_domain(clm_vector_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+call state_structure_info(domid)
+
 !---------------------------------------------------------------
 ! Create the metadata arrays that are the same shape as the state vector.
 ! The metadata arrays will provide the ability to determine what grid cell is the parent
@@ -774,7 +804,7 @@ do ivar=1, nfields
    ! All variables are at the surface until proven otherwise.
    progvar(ivar)%maxlevels = 1
 
-   indx = progvar(ivar)%index1
+   indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
 
    ! 1D variables are usually from the restart file
    ! FIXME this same logic is used for 2D variables from the 'vector' file which
@@ -1095,7 +1125,7 @@ do ivar=1, nfields
    endif
 
    indx = indx - 1
-   if (indx /= progvar(ivar)%indexN ) then
+   if (indx /= get_index_end(progvar(ivar)%domain, progvar(ivar)%varname) ) then
       write(string1,*)'variable ',trim(progvar(ivar)%varname), &
        ' is supposed to end at index ',progvar(ivar)%indexN
       write(string2,*)'it ends at index ',indx
@@ -1104,20 +1134,6 @@ do ivar=1, nfields
    endif
 
 enddo
-
-! Must group the variables according to the file they come from.
-!> @TODO FIXME ... add_domain() must do the right thing if nvars == 0
-!> @TODO FIXME ... io_filenames_nml:rpointer_file order must somehow match 
-!> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
-
-call cluster_variables(clm_restart_filename, nvars, var_names,            var_ranges)
-domid =     add_domain(clm_restart_filename, nvars, var_names, clamp_vals=var_ranges)
-
-call cluster_variables(clm_history_filename, nvars, var_names,            var_ranges)
-domid =     add_domain(clm_history_filename, nvars, var_names, clamp_vals=var_ranges)
-
-call cluster_variables(clm_vector_history_filename, nvars, var_names,            var_ranges)
-domid =     add_domain(clm_vector_history_filename, nvars, var_names, clamp_vals=var_ranges)
 
 end subroutine static_init_model
 
@@ -2178,7 +2194,7 @@ do ivar=1, nfields
    ! or missing value, and the restart files didn't use the right attributes anyway ...
    ! (bugzilla report 1401)
 
-   indx = progvar(ivar)%index1
+   indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
 
    if (ncNdims == 1) then
 
@@ -2316,7 +2332,7 @@ do ivar=1, nfields
    endif
 
    indx = indx - 1
-   if ( indx /= progvar(ivar)%indexN ) then
+   if ( indx /= get_index_end(progvar(ivar)%domain, progvar(ivar)%varname ) ) then
       write(string1, *)'Variable '//trim(varname)//' filled wrong.'
       write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
       call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
@@ -2486,7 +2502,7 @@ end subroutine sv_to_restart_file
 !==================================================================
 
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_kind, interp_val, istatus)
 
 
 ! PURPOSE:
@@ -2516,7 +2532,7 @@ type(ensemble_type),    intent(in)  :: state_handle
 integer,                intent(in)  :: ens_size
 type(location_type),    intent(in)  :: location
 integer,                intent(in)  :: obs_kind
-real(r8),               intent(out) :: expected_obs(ens_size)
+real(r8),               intent(out) :: interp_val(ens_size)
 integer,                intent(out) :: istatus(ens_size)
 
 
@@ -2528,6 +2544,7 @@ integer  :: imem
 integer  :: istatus_2(ens_size)
 real(r8) :: interp_val_2(ens_size)
 character(len=paramname_length) :: kind_string
+integer :: track_status(ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2537,9 +2554,10 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-expected_obs = MISSING_R8     ! the DART bad value flag
+interp_val   = MISSING_R8     ! the DART bad value flag
 interp_val_2 = MISSING_R8     ! the DART bad value flag
 istatus = 99                ! unknown error
+track_status = 0
 
 ! Get the individual locations values
 
@@ -2549,6 +2567,21 @@ llat      = loc_array(2)
 lheight   = loc_array(3)
 
 if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
+
+! Some applications just need to know the number of vertical levels.
+! This is done by trying to 'interpolate' height on a large number of levels.
+! When the interpolation fails, you've gone one level too far. 
+
+if ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
+   if (nint(lheight) > nlevgrnd) then
+      interp_val = MISSING_R8
+      istatus = 1
+   else
+      interp_val = LEVGRND(nint(lheight))
+      istatus = 0
+   endif
+   return ! Early Return
+endif
 
 ! Standard method of interpolation.
 ! get_grid_vertval()       for quantities that have a vertical profile.
@@ -2560,26 +2593,26 @@ select case( obs_kind )
 
       ! TJH FIXME - actually ROLAND FIXME
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
-      call get_grid_vertval(state_handle, ens_size, location, KIND_LIQUID_WATER, expected_obs,  istatus)
+      call get_grid_vertval(state_handle, ens_size, location, KIND_LIQUID_WATER, interp_val,  istatus)
       call get_grid_vertval(state_handle, ens_size, location, KIND_ICE,          interp_val_2, istatus_2)
-
-      do imem = 1,ens_size
-         if ((istatus(imem) == 0) .and. (istatus_2(imem) == 0)) then
-            expected_obs(imem) = expected_obs(imem) + interp_val_2(imem)
-         else
-            expected_obs(imem) = MISSING_R8
-            istatus(imem)      = 6
-         endif
-      enddo
+      where ((istatus == 0) .and. (istatus_2 == 0))
+         interp_val = interp_val + interp_val_2
+      elsewhere
+         interp_val = MISSING_R8
+         istatus = 6
+         track_status = 6
+      endwhere   
 
    case ( KIND_SOIL_TEMPERATURE, KIND_LIQUID_WATER, KIND_ICE )
 
-      call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+      call get_grid_vertval(state_handle, ens_size, location, obs_kind, interp_val, istatus)
 
-   case ( KIND_SNOWCOVER_FRAC, KIND_LEAF_AREA_INDEX, KIND_LEAF_CARBON, KIND_WATER_TABLE_DEPTH, &
-          KIND_VEGETATION_TEMPERATURE)
+   case ( KIND_SNOWCOVER_FRAC, KIND_LEAF_AREA_INDEX, KIND_LEAF_CARBON, &
+          KIND_WATER_TABLE_DEPTH, KIND_VEGETATION_TEMPERATURE, KIND_FPAR, &
+          KIND_FPAR_SUNLIT_DIRECT, KIND_FPAR_SUNLIT_DIFFUSE, &
+          KIND_FPAR_SHADED_DIRECT, KIND_FPAR_SHADED_DIFFUSE)
 
-      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, interp_val, istatus)
 
    case default
 
@@ -2589,11 +2622,12 @@ select case( obs_kind )
       write(string2,*)'AKA '//trim(kind_string)
       call error_handler(E_ERR, 'model_interpolate', string1, &
              source, revision, revdate, text2=string2)
+      interp_val = MISSING_R8
       istatus = 5
 
 end select
 
-if ((debug > 6) .and. do_output()) write(*,*)'expected_obs ',expected_obs
+if ((debug > 6) .and. do_output()) write(*,*)'interp_val ',interp_val
 
 end subroutine model_interpolate
 
@@ -2630,6 +2664,7 @@ real(r8), dimension(1) :: loninds,latinds
 real(r8), dimension(LocationDims) :: loc
 integer :: imem
 character(len=paramname_length) :: varstring
+integer :: track_status(ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2641,6 +2676,7 @@ if ( .not. module_initialized ) call static_init_model
 
 interp_val = MISSING_R8  ! the DART bad value flag
 istatus    = 99          ! unknown error
+track_status = 0         ! assume passing
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
@@ -2648,8 +2684,8 @@ loc_lat    = loc(2)
 
 ! determine the portion of interest of the state vector
 ivar   = findKindIndex(kind_index, 'compute_gridcell_value')
-index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
-indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
+index1 = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, start looking here
+indexN = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, stop  looking here
 
 varstring = progvar(ivar)%varname ! used in error messages
 
@@ -2696,6 +2732,10 @@ ELEMENTS : do indexi = index1, indexN
          counter(imem)    = counter(imem)    + 1
          total(imem)      = total(imem)      + state(imem)*landarea(indexi)
          total_area(imem) = total_area(imem) +       landarea(indexi)
+      else
+         track_status(imem) = 31
+         total(imem)      = MISSING_R8
+         total_area(imem) = MISSING_R8
       endif
    enddo
 
@@ -2714,18 +2754,24 @@ ELEMENTS : do indexi = index1, indexN
 enddo ELEMENTS
 
 
-if (all(total_area /= 0.0_r8)) then ! All good.
-   interp_val = total/total_area
-   istatus    = 0
-else
-   if ((debug > 4) .and. do_output()) then
-      write(string1, *)'Variable '//trim(varstring)//' had no viable data'
-      write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
-      write(string3, *)'obs lon/lat = (',loc_lon,',',loc_lat,')'
-      call error_handler(E_MSG,'compute_gridcell_value', string1, &
-                     text2=string2,text3=string3)
-   endif
-endif
+where (total_area /= 0.0_r8 .and. track_status == 0) ! All good.
+   interp_val    = total/total_area
+   istatus       = 0
+   track_status  = 0
+elsewhere (total_area == 0.0 .or. track_status /= 0) ! Not good
+   interp_val    = MISSING_R8
+   istatus       = 32
+   track_status  = 32
+endwhere
+!# if( any(track_status == 32) ) then
+!#    if ((debug > 4) .and. do_output()) then
+!#       write(string1, *)'Variable '//trim(varstring)//' had no viable data'
+!#       write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
+!#       write(string3, *)'obs lon/lat = (',loc_lon,',',loc_lat,')'
+!#       call error_handler(E_MSG,'compute_gridcell_value', string1, &
+!#                      text2=string2,text3=string3)
+!#    endif
+!# endif
 
 !> @todo FIXME Need to print debugging info for any task, not just task 0
 ! Print more information for the really curious
@@ -2776,6 +2822,7 @@ integer :: counter, counter_above, counter_below
 integer :: imem
 real(r8) :: state(ens_size)
 character(len=paramname_length) :: varstring
+integer :: track_status(ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2787,6 +2834,7 @@ if ( .not. module_initialized ) call static_init_model
 
 interp_val = MISSING_R8  ! the DART bad value flag
 istatus    = 99          ! unknown error
+track_status = 0
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
@@ -2803,8 +2851,8 @@ endif
 
 ! determine the portion of interest of the state vector
 ivar   = findKindIndex(kind_index, 'get_grid_vertval')
-index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
-indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
+index1 = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, start looking here
+indexN = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, stop  looking here
 
 varstring = progvar(ivar)%varname ! used in a lot of error messages
 
@@ -2872,6 +2920,8 @@ GRIDCELL : do indexi = index1, indexN
 
    if ( lonixy(indexi) /=  gridloni )  cycle GRIDCELL
    if ( latjxy(indexi) /=  gridlatj )  cycle GRIDCELL
+   ! state = get_state(indexi, state_handle)
+   ! if ( any( state == MISSING_R8 )  )  cycle GRIDCELL
 
    if (levels(indexi) == depthabove) counter1 = counter1 + 1
    if (levels(indexi) == depthbelow) counter2 = counter2 + 1
@@ -2915,17 +2965,24 @@ ELEMENTS : do indexi = index1, indexN
    if (levels(indexi) == depthabove) then
 
       counter_above           = counter_above + 1
-      above(:, counter_above) = state
-      where(state /= MISSING_R8) area_above(:, counter_above) = landarea(indexi)
+      where(state /= MISSING_R8) 
+         above(:, counter_above) = state
+         area_above(:, counter_above) = landarea(indexi)
+      elsewhere(state == MISSING_R8) 
+         track_status = 21
+      endwhere
+   endif
 
-   elseif(levels(indexi) == depthbelow) then
+   if(levels(indexi) == depthbelow) then
 
       counter_below            = counter_below + 1
-      below(:, counter_below)    =  state
-      where(state /= MISSING_R8) area_below(:, counter_below) = landarea(indexi)
+      where(state /= MISSING_R8) 
+         below(:, counter_below)  =  state
+         area_below(:, counter_below) = landarea(indexi)
+      elsewhere(state == MISSING_R8) 
+         track_status = 22
+      endwhere
 
-   else
-      cycle ELEMENTS
    endif
 
    if ((debug > 4) .and. do_output()) then
@@ -2958,7 +3015,7 @@ do imem = 1, ens_size
    ! Determine the value for the level above the depth of interest.
    total_area(imem) = sum(area_above(imem, :))
 
-   if ( total_area(imem) /= 0.0_r8 ) then
+   if ( total_area(imem) /= 0.0_r8 .and. track_status(imem) == 0) then
       ! normalize the area-based weights
       area_above(imem, :) = area_above(imem, :) / total_area(imem)
       value_above(imem) = sum(above(imem, :) * area_above(imem, :))
@@ -2973,7 +3030,7 @@ do imem = 1, ens_size
    ! Determine the value for the level below the depth of interest.
    total_area(imem) = sum(area_below(imem, :))
 
-   if ( total_area(imem) /= 0.0_r8 ) then
+   if ( total_area(imem) /= 0.0_r8 .and. track_status(imem) == 0 ) then
       ! normalize the area-based weights
       area_below(imem, :) = area_below(imem, :) / total_area(imem)
       value_below(imem) = sum(below(imem, :) * area_below(imem, :))
@@ -2995,8 +3052,13 @@ else
    botwght = (loc_lev - depthabove) / (depthbelow - depthabove)
 endif
 
-interp_val = value_above*topwght + value_below*botwght
-istatus      = 0
+where ( track_status == 0 ) 
+   interp_val = value_above*topwght + value_below*botwght
+   istatus      = 0
+elsewhere ( track_status /= 0 )
+   interp_val = MISSING_R8
+   istatus = track_status
+endwhere
 
 deallocate(above, below, area_above, area_below)
 
@@ -3022,20 +3084,20 @@ integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
 integer, OPTIONAL,        intent(in)  :: ncid
 
-integer :: i,ii, VarID
+integer :: i,ii,ei, VarID
 real(r8), allocatable, dimension(:) :: org_array
 
 ! unpack the right part of the DART state vector into a 1D array.
 
-ii = progvar(ivar)%index1
-
+ii = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+ei = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname)
 do i = 1, progvar(ivar)%dimlens(1)
    data_1d_array(i) = x(ii)
    ii = ii + 1
 enddo
 
 ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
+if ( ii /= ei ) then
    write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
    write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
    call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
@@ -3116,12 +3178,13 @@ integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
 integer, OPTIONAL,        intent(in)  :: ncid
 
-integer :: i,j,ii, VarID
+integer :: i,j,ii,ei,VarID
 real(r8), allocatable, dimension(:,:) :: org_array
 
 ! unpack the right part of the DART state vector into a 1D array.
 
-ii = progvar(ivar)%index1
+ii = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+ei = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname)
 
 do j = 1,progvar(ivar)%dimlens(2)
 do i = 1,progvar(ivar)%dimlens(1)
@@ -3131,7 +3194,7 @@ enddo
 enddo
 
 ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
+if ( ii /= ei ) then
    write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
    write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
    call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
@@ -4162,7 +4225,8 @@ VARTYPES : do ivar = 1,nfields
     if ( trim(progvar(ivar)%varname) /= varstring) cycle VARTYPES
 
     ! Create a count of all the multiples in a gridcell
-    do indexi = progvar(ivar)%index1, progvar(ivar)%indexN
+    do indexi = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname), &
+                get_index_end(progvar(ivar)%domain, progvar(ivar)%varname)
        i = lonixy(indexi)
        j = latjxy(indexi)
        countmat(i,j) = countmat(i,j) + 1
@@ -5142,17 +5206,20 @@ end function FindDesiredTimeIndx
 
 
 
-subroutine cluster_variables(filename, nvars, var_names, var_ranges)
+subroutine cluster_variables(filename, nvars, var_names, var_ranges, var_update)
 character(len=*), intent(in)  :: filename
 integer,          intent(out) :: nvars
 character(len=*), intent(out) :: var_names(:)
 real(r8),         intent(out) :: var_ranges(:,:)
+logical,          intent(out) :: var_update(:)
 
 integer :: ivar
 
 nvars      = 0
 var_names  = 'no_variable_specified'
 var_ranges = MISSING_R8
+
+domain_count = domain_count + 1
 
 do ivar = 1,nfields
 
@@ -5161,8 +5228,9 @@ do ivar = 1,nfields
       var_names(nvars)    = progvar(ivar)%varname
       var_ranges(nvars,1) = progvar(ivar)%minvalue
       var_ranges(nvars,2) = progvar(ivar)%maxvalue
+      var_update(nvars)   = progvar(ivar)%update
+      progvar(ivar)%domain = domain_count
    endif
-
 enddo
 
 !>@todo FIXME ... this summary message is not finished
@@ -5174,6 +5242,160 @@ if (do_output() .and. debug > 99) then
 endif
 
 end subroutine cluster_variables
+
+
+
+subroutine mark_missing_r8(ens_handle)
+!------------------------------------------------------------------
+! Modifies the state to include missing_r8 values for unused snow levels.
+! This comes from clm_to_dart_state_vector.  This is needed when reading
+! directly from netcdf files.
+
+type(ensemble_type), intent(inout) :: ens_handle
+
+! temp space to hold data while we are reading it
+integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
+integer,  allocatable, dimension(:) :: snlsno
+real(r8), allocatable, dimension(:) :: tmp_array
+
+integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+character(len=NF90_MAX_NAME) :: varname
+integer :: io, TimeDimID, VarID, ncNdims, dimlen
+integer :: ncid
+character(len=256) :: myerrorstring
+
+integer :: numdoms, numvars
+integer :: start_index, end_index
+
+if ( .not. module_initialized ) call static_init_model
+
+allocate(snlsno(ncolumn))
+call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
+              'clm_to_dart_state_vector', 'open SNLSNO'//clm_restart_filename)
+call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
+              'clm_to_dart_state_vector', 'inq_varid SNLSNO'//clm_restart_filename)
+call nc_check(nf90_get_var(ncid, VarID, snlsno), &
+              'clm_to_dart_state_vector', 'get_var SNLSNO'//clm_restart_filename)
+
+! Start counting and filling the state vector one item at a time,
+! repacking the Nd arrays into a single 1d list of numbers.
+
+! Pack the variable into the DART state vector
+! Could/should fill metadata arrays at the same time ...
+! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
+! or missing value, and the restart files didn't use the right attributes anyway ...
+! (bugzilla report 1401)
+
+!>@todo FIXME: I am sure we can do this without having var complete.  This is just
+!>             the quickest way to test for now.
+if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+call all_copies_to_all_vars(ens_handle)
+
+numdoms = get_num_domains()
+
+do idom = 1, numdoms
+   numvars = get_num_variables(idom)
+   do ivar = 1, numvars
+
+      indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+   
+      ! README: The values in unused snow layers must be assumed to be
+      ! indeterminate. If the layer is not in use, fill with a missing value.
+      ! (levsno,column) and (levtot,column) variables may be treated identically.
+      ! abs(snlsno(j)) defines the number of valid levels in each column -
+      ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
+      ! values are in the 1D variables, SNOWDP and frac_sno.
+   
+      ! FIXME: Question, what happens to unused levels below ground? Are those
+      ! values 'special'?
+      ncNDims = get_num_dims(idom,ivar)
+      if (ncNdims == 2) then
+
+         ni = get_dim_length(idom,ivar,1) 
+         nj = get_dim_length(idom,ivar,2) 
+
+         allocate(tmp_array(ni*nj))
+         do icopy = 1, ens_handle%my_num_copies
+            if     ( (get_dim_name(idom,ivar,1) == 'levsno')   .and. &
+                     (get_dim_name(idom,ivar,2) == 'column') ) then
+
+               start_index = get_index_start(idom,ivar)
+               end_index   = get_index_end(idom,ivar)
+
+               tmp_array = ens_handle%vars(start_index:end_index,icopy)
+
+               do j = 1, nj  ! loop over columns
+                  numsnowlevels = abs(snlsno(j))
+                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
+                     tmp_array(i + (j-1)*ni) = MISSING_R8
+                  enddo
+               enddo
+
+               ens_handle%vars(start_index:end_index,icopy) = tmp_array
+
+            elseif ( (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
+                     (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
+   
+               start_index = get_index_start(idom,ivar)
+               end_index   = get_index_end(idom,ivar)
+
+               tmp_array = ens_handle%vars(start_index:end_index,icopy)
+
+               do j = 1, nj  ! loop over columns
+                  numsnowlevels = abs(snlsno(j))
+                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
+                     tmp_array(i + (j-1)*ni) = MISSING_R8
+                  enddo
+               enddo
+
+               ens_handle%vars(start_index:end_index,icopy) = tmp_array
+   
+            endif
+   
+            ! Block of checks that will hopefully be corrected in the
+            ! core CLM code. There are some indeterminate values being
+            ! used instead of the missing_value code - and even then,
+            ! the missing_value code is not reliably implemented.
+   
+            if (get_variable_name(idom,ivar) == 'T_SOISNO') then
+               where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
+               do j = 1,nj  ! T_SOISNO has missing data in lake columns
+                 if (cols1d_ityplun(j) == LAKE) then
+                    do i = 1,ni
+                    !  write(*,*)'Found a lake column resetting the following:'
+                    !  write(*,*)data_2d_array(:,j)
+                       tmp_array(i + (j-1)*ni) = MISSING_R8
+                    enddo
+                 endif
+               enddo
+               ens_handle%vars(start_index:end_index,icopy) = tmp_array
+            endif
+            if ((progvar(ivar)%varname == 'H2OSOI_LIQ')  .or. &
+                (progvar(ivar)%varname == 'H2OSOI_ICE')) then
+               where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
+               do j = 1,nj  ! missing data in lake columns
+                 if (cols1d_ityplun(j) == LAKE) then
+                    do i = 1,ni
+                       tmp_array(i + (j-1)*ni) = MISSING_R8
+                    enddo
+                 endif
+               enddo
+               ens_handle%vars(start_index:end_index,icopy) = tmp_array
+            endif
+         enddo
+
+         deallocate(tmp_array) 
+   
+      endif
+   enddo
+enddo
+
+call all_vars_to_all_copies (ens_handle)
+deallocate(ens_handle%vars)
+
+deallocate(snlsno)
+
+end subroutine mark_missing_r8
 
 !===================================================================
 ! End of model_mod
