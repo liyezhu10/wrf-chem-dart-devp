@@ -4,6 +4,10 @@
 !
 ! $Id$
 
+!> This file contains a module and a program. The module exists only to enclose
+!> a comparison routine that's needed by the sort module.  The actual program
+!> follows.
+
 !> Utility to sort observations at the same time into a consistent order.  
 !> Obs sequence files are guarenteed to be traversed in time order, so 
 !> running them through the standard obs_sequence_tool will physically 
@@ -17,10 +21,6 @@
 !> time in a particular order (e.g. all the radar obs before the others)
 !> and this might allow us to support that.
 
-!> This file contains a module and a program. The module exists only to enclose
-!> a comparison routine that's needed by the sort module.  The actual program
-!> follows.
-
 module special_sort
 
 use        types_mod, only : r8
@@ -28,7 +28,6 @@ use     location_mod, only : location_type, get_location, LocationDims,        &
                              write_location 
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind,     &
                              get_obs_def_location, get_obs_def_error_variance
-use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name, get_obs_kind_index
 use time_manager_mod, only : time_type, operator(>), operator(==),             &
                              operator(<), operator(/=), print_time
 use obs_sequence_mod, only : obs_type, get_obs_def
@@ -46,8 +45,7 @@ type(obs_type), allocatable :: obs_this_bin(:)
 contains
 
 
-!---------------------------------------------------------------------
-
+!-----------------------------------------------------------------------
 !> The sort module code will call this function with i, j, which is a
 !> request to compare obs_this_bin(i) and obs_this_bin(j).
 !> They should have identical times so the compare needs to be by 
@@ -60,10 +58,15 @@ contains
 !> at assimilation time there is an advantage to having obs at the same 
 !> location be together in the input file - distances can be cached and 
 !> reused for better performance.
+!>
+!> @param i index of first bin to compare
+!> @param j index of other bin to compare
+!>
 
 function obssort(i, j)
 
-integer, intent(in) :: i, j
+integer, intent(in) :: i
+integer, intent(in) :: j
 integer :: obssort
 
 type(obs_def_type)  :: this_obs_def1, this_obs_def2
@@ -171,13 +174,12 @@ end function obssort
 
 end module special_sort
 
-!---------------------------------------------------------------------
-
-
+!-----------------------------------------------------------------------
 !> Open an obs sequence file and reorder observations that have the same
 !> timestamp so they have a reproducible order.  Could be used to make
 !> two obs_sequence files which have had different processing have their
 !> observations in the same order, or look for duplicate observations.
+!>
 
 program obs_sort
 
@@ -185,8 +187,7 @@ use        types_mod, only : r8, metadatalength
 use    utilities_mod, only : register_module, initialize_utilities,            &
                              find_namelist_in_file, check_namelist_read,       &
                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
-                             do_nml_file, do_nml_term, get_next_filename,      &
-                             open_file, close_file, finalize_utilities
+                             do_nml_file, do_nml_term, finalize_utilities
 use         sort_mod, only : index_sort
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind
 use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name
@@ -195,7 +196,7 @@ use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
                              operator(/=), get_calendar_type, NO_CALENDAR,     &
                              operator(-)
 use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
-                             init_obs, assignment(=), get_obs_def,             &
+                             init_obs, assignment(=),                          &
                              init_obs_sequence, static_init_obs_sequence,      &
                              read_obs_seq_header, read_obs_seq, get_num_obs,   &
                              get_first_obs, get_next_obs, get_obs_def,         &
@@ -203,17 +204,11 @@ use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
                              get_copy_meta_data, get_qc_meta_data,             &
                              set_copy_meta_data, set_qc_meta_data,             &
                              destroy_obs, destroy_obs_sequence,                &
-                             get_num_key_range, get_obs_key, get_qc
+                             get_num_key_range, get_obs_key
 
 use special_sort
 
 implicit none
-
-!interface 
-! integer function obssort(i, j)
-!   integer, intent(in) :: i, j
-! end function obssort
-!end interface
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -222,7 +217,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 type(obs_sequence_type) :: seq_in, seq_out
-type(obs_type)          :: obs_in, next_obs_in, last_obs
+type(obs_type)          :: obs_in, next_obs_in
 type(obs_type)          :: obs_out, prev_obs_out
 type(time_type)         :: this_time, prev_time
 logical                 :: is_this_last
@@ -232,13 +227,13 @@ integer                 :: num_inserted, iunit, io, i, j
 integer                 :: max_num_obs, file_id, sort_count
 integer                 :: num_rejected_badqc, num_rejected_diffqc
 integer                 :: num_rejected_other
-integer, allocatable    :: index(:)
-character(len = 129)    :: read_format
+integer, allocatable    :: indices(:)
+character(len=129)      :: read_format
 logical                 :: pre_I_format, cal
-character(len = 256)    :: msgstring, msgstring1, msgstring2
+character(len=512)      :: msgstring, msgstring1, msgstring2
 type(obs_def_type)      :: this_obs_def
 
-character(len = metadatalength) :: meta_data
+character(len=metadatalength) :: meta_data
 
 ! could go into namelist if you wanted more control
 integer, parameter      :: print_every = 5000
@@ -246,29 +241,25 @@ integer, parameter      :: print_every = 5000
 ! lazy, pick big number.  make it bigger if too small.
 integer, parameter :: max_obs_input_types = 500
 
-!----------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! Namelist input with default values
 
-
-character(len = 160) :: filename_in = ''
-character(len = 160) :: filename_out = ''
-
-logical              :: print_only    = .false.
-character(len=32)    :: calendar      = 'Gregorian'
-
-! true for more output
-logical              :: debug = .false.
+character(len=160) :: filename_in  = ''
+character(len=160) :: filename_out = ''
+logical            :: print_only   = .false.
+character(len=32)  :: calendar     = 'Gregorian'
+logical            :: debug        = .false.  ! true for more output
 
 namelist /obs_sort_nml/ &
          filename_in, filename_out, &
          print_only, calendar, debug
 
-!----------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! Start of the program:
 !
 ! Process each input observation sequence file in turn, optionally
 ! selecting observations to insert into the output sequence file.
-!----------------------------------------------------------------
+!-----------------------------------------------------------------------
 
 call setup()
 
@@ -313,6 +304,8 @@ call error_handler(E_MSG,'obs_sort',msgstring, &
 call read_obs_seq(filename_in, 0, 0, 0, seq_in)
 
 ! sanity check - ensure the linked list times are in increasing time order
+! Some observation sequences that have not been created with the DART tools
+! have been known to violate this assumption. 
 call validate_obs_seq_time(seq_in, filename_in)
 
 ! output is same size (or less) than input, generally.
@@ -329,7 +322,7 @@ call init_obs(     obs_out, num_copies_in, num_qc_in)
 call init_obs(prev_obs_out, num_copies_in, num_qc_in)
    
 ! space for sorting obs with the same timestamp
-allocate(obs_this_bin(max_num_obs), index(max_num_obs))
+allocate(obs_this_bin(max_num_obs), indices(max_num_obs))
 do i=1, max_num_obs
    call init_obs(obs_this_bin(i), num_copies_in, num_qc_in)
 enddo
@@ -348,12 +341,13 @@ enddo
 ! is this needed?
 if (print_only) call print_obs_seq(seq_in, filename_in)
 
-!-------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! Start to insert obs from sequence_in into sequence_out
 !
 ! NOTE: insert_obs_in_seq CHANGES the obs passed in.
 !       Must pass a copy of incoming obs to insert_obs_in_seq.
-!--------------------------------------------------------------
+!-----------------------------------------------------------------------
+
 num_inserted = 0
 num_rejected_badqc = 0
 num_rejected_diffqc = 0
@@ -409,20 +403,20 @@ if ( get_first_obs(seq_in, obs_in) )  then
 
          if (debug) print *, 'out of loop, sort_count = ', sort_count
          ! sort obs here
-         call index_sort(index, sort_count, obssort)
-         if (debug) print *, 'sorted index:'
-         if (debug) print *, index(1:sort_count)
+         call index_sort(indices, sort_count, obssort)
+         if (debug) print *, 'sorted indices:'
+         if (debug) print *, indices(1:sort_count)
 
          if (num_inserted > 0) then
-            call insert_obs_in_seq(seq_out, obs_this_bin(index(1)), prev_obs_out)
+            call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)), prev_obs_out)
          else
-            call insert_obs_in_seq(seq_out, obs_this_bin(index(1)))
+            call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)))
          endif
 
-         prev_obs_out = obs_this_bin(index(1))
+         prev_obs_out = obs_this_bin(indices(1))
          do i=2, sort_count
-            call insert_obs_in_seq(seq_out, obs_this_bin(index(i)), prev_obs_out)
-            prev_obs_out = obs_this_bin(index(i))
+            call insert_obs_in_seq(seq_out, obs_this_bin(indices(i)), prev_obs_out)
+            prev_obs_out = obs_this_bin(indices(i))
          enddo
    
          num_inserted = num_inserted + sort_count
@@ -504,20 +498,24 @@ call destroy_obs(next_obs_in )
 call destroy_obs(     obs_out)
 !call destroy_obs(prev_obs_out)  ! copy of something already deleted
 
+! what about deallocating obs_this_bin(max_num_obs)
+deallocate(indices)
+
 call shutdown()
 
-!---------------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! end of main program.
-!---------------------------------------------------------------------
+!-----------------------------------------------------------------------
 
 
 contains
 
 
-!---------------------------------------------------------------------
+!-----------------------------------------------------------------------
+!> Initialize modules used
+
 subroutine setup()
 
-! Initialize modules used that require it
 call initialize_utilities('obs_sort')
 call register_module(source,revision,revdate)
 call static_init_obs_sequence()
@@ -525,7 +523,8 @@ call static_init_obs_sequence()
 end subroutine setup
 
 
-!---------------------------------------------------------------------
+!-----------------------------------------------------------------------
+!> Finalize modules used
 subroutine shutdown()
 
 call finalize_utilities('obs_sort')
@@ -533,20 +532,24 @@ call finalize_utilities('obs_sort')
 end subroutine shutdown
 
 
-!---------------------------------------------------------------------
-subroutine print_obs_seq(seq_in, filename)
+!-----------------------------------------------------------------------
+!> prints out a quick table of obs types and counts, overall start and
+!> stop times, and metadata strings and counts.
+!> you can get more info by running the obs_diag program.
+!>
+!> @param seq observation sequence of interest 
+!> @param filename the file that was the origin of the observation sequence.
+!>                 Used for messages.
 
-! you can get more info by running the obs_diag program, but this
-! prints out a quick table of obs types and counts, overall start and
-! stop times, and metadata strings and counts.
+subroutine print_obs_seq(seq, filename)
 
-type(obs_sequence_type), intent(in) :: seq_in
-character(len=*), intent(in)        :: filename
+type(obs_sequence_type), intent(in) :: seq
+character(len=*),        intent(in) :: filename
 
 type(obs_type)          :: obs, next_obs
 type(obs_def_type)      :: this_obs_def
 logical                 :: is_there_one, is_this_last
-integer                 :: size_seq_in
+integer                 :: size_seq
 integer                 :: i
 integer                 :: this_obs_kind
 ! max_obs_kinds is a public from obs_kind_mod.f90 and really is
@@ -563,18 +566,18 @@ identity_count = 0
 ! make sure there are obs left to process before going on.
 ! num_obs should be ok since we just constructed this seq so it should
 ! have no unlinked obs.  if it might for some reason, use this instead:
-! size_seq_in = get_num_key_range(seq_in)     !current size of seq_in
+! size_seq = get_num_key_range(seq)     !current size of seq
 
-size_seq_in = get_num_obs(seq_in)
-if (size_seq_in == 0) then
+size_seq = get_num_obs(seq)
+if (size_seq == 0) then
    msgstring = 'Obs_seq file '//trim(filename)//' is empty.'
    call error_handler(E_MSG,'obs_sort',msgstring)
    return
 endif
 
 ! Initialize individual observation variables 
-call init_obs(     obs, get_num_copies(seq_in), get_num_qc(seq_in))
-call init_obs(next_obs, get_num_copies(seq_in), get_num_qc(seq_in))
+call init_obs(     obs, get_num_copies(seq), get_num_qc(seq))
+call init_obs(next_obs, get_num_copies(seq), get_num_qc(seq))
 
 ! blank line
 call error_handler(E_MSG,'',' ')
@@ -582,12 +585,11 @@ call error_handler(E_MSG,'',' ')
 write(msgstring,*) 'Processing sequence file ', trim(filename)
 call error_handler(E_MSG,'',msgstring)
 
-call print_metadata(seq_in, filename)
+call print_metadata(seq, filename)
 
-!-------------------------------------------------------------
-! Start to process obs from seq_in
-!--------------------------------------------------------------
-is_there_one = get_first_obs(seq_in, obs)
+! Start to process obs from seq
+
+is_there_one = get_first_obs(seq, obs)
 
 if ( .not. is_there_one )  then
    write(msgstring,*)'no first observation in ',trim(filename)
@@ -611,10 +613,11 @@ ObsLoop : do while ( .not. is_this_last)
    else
       type_count(this_obs_kind) = type_count(this_obs_kind) + 1
    endif
+
 !   print *, 'obs kind index = ', this_obs_kind
 !   if(this_obs_kind > 0)print *, 'obs name = ', get_obs_kind_name(this_obs_kind)
 
-   call get_next_obs(seq_in, obs, next_obs, is_this_last)
+   call get_next_obs(seq, obs, next_obs, is_this_last)
    if (.not. is_this_last) then 
       obs = next_obs
    else
@@ -625,7 +628,7 @@ ObsLoop : do while ( .not. is_this_last)
 enddo ObsLoop
 
 
-write(msgstring, *) 'Number of obs processed  :          ', size_seq_in
+write(msgstring, *) 'Number of obs processed  :          ', size_seq
 call error_handler(E_MSG, '', msgstring)
 write(msgstring, *) '---------------------------------------------------------'
 call error_handler(E_MSG, '', msgstring)
@@ -653,7 +656,14 @@ call destroy_obs(next_obs)
 end subroutine print_obs_seq
 
 
-!---------------------------------------------------------------------
+!-----------------------------------------------------------------------
+!> ensures the observation sequence is temporally ascending when 
+!> traversed as a linked list.
+!>
+!> @param seq observation sequence of interest 
+!> @param filename the file that was the origin of the observation sequence.
+!>                 Used for messages.
+
 subroutine validate_obs_seq_time(seq, filename)
 
 ! this eventually belongs in the obs_seq_mod code, but for now
@@ -690,9 +700,8 @@ call init_obs(next_obs, get_num_copies(seq), get_num_qc(seq))
 
 obs_count = 0
 
-!-------------------------------------------------------------
 ! Start to process obs from seq
-!--------------------------------------------------------------
+
 is_there_one = get_first_obs(seq, obs)
 
 ! we already tested for 0 obs above, so there should be a first obs here.
@@ -764,26 +773,27 @@ endif
 end subroutine validate_obs_seq_time
 
 
-!---------------------------------------------------------------------
-subroutine print_metadata(seq, fname)
+!-----------------------------------------------------------------------
+!> print the (trimmed) metadata strings
+!>
+!> @param seq observation sequence of interest 
+!> @param filename the file that was the origin of the observation sequence.
+!>                 Used for messages.
 
-!
-! print out the metadata strings, trimmed
-!
+subroutine print_metadata(seq, filename)
 
-type(obs_sequence_type), intent(in) :: seq
-character(len=*), optional :: fname
+type(obs_sequence_type),    intent(in) :: seq
+character(len=*), optional, intent(in) :: filename
 
 integer :: num_copies , num_qc, i
 character(len=metadatalength) :: str
-character(len=255) :: msgstring3
 
 num_copies = get_num_copies(seq)
 num_qc     = get_num_qc(    seq)
 
 if ( num_copies < 0 .or. num_qc < 0 ) then
-   write(msgstring3,*)' illegal copy or obs count in file '//trim(fname)
-   call error_handler(E_ERR, 'obs_sort', msgstring3, &
+   write(msgstring,*)' illegal copy or obs count in file '//trim(filename)
+   call error_handler(E_ERR, 'obs_sort', msgstring, &
                       source, revision, revdate)
 endif
 

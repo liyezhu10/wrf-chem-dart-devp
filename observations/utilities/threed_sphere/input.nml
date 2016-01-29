@@ -134,6 +134,15 @@
   /
 
 
+&obs_sort_nml
+   filename_in  = 'obs_seq_cam_new.final'
+   filename_out = 'obs_seq_cam_new.sorted'
+   print_only   = .false.
+   calendar     = 'Gregorian'
+   debug        = .false.
+  /
+
+
 &restart_file_tool_nml
    input_file_name              = "filter_restart",        
    output_file_name             = "filter_updated_restart",

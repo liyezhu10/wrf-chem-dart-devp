@@ -17,7 +17,7 @@ integer :: i
 call set_calendar_type(GREGORIAN)
 
 print *, ' '
-print * ,' testing gregorian calendar 1980 to 1910'
+print * ,' testing gregorian calendar 1890 to 1910'
 do i = 1890, 1910
 
  mytime = set_date(i, 1, 1, 0, 0, 0)
@@ -30,8 +30,8 @@ do i = 1890, 1910
 enddo
 
 print *, ' '
-print * ,' testing gregorian calendar 1990 to 2010'
-do i = 1990, 2010
+print * ,' testing gregorian calendar 1990 to 2016'
+do i = 1990, 2016
 
  mytime = set_date(i, 1, 1, 0, 0, 0)
  if (leap_year(mytime)) then
