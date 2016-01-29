@@ -5248,7 +5248,7 @@ end subroutine cluster_variables
 subroutine mark_missing_r8(ens_handle)
 !------------------------------------------------------------------
 ! Modifies the state to include missing_r8 values for unused snow levels.
-! This comes from clm_to_dart_state_vector.  This is needed when reading
+! This comes from makr_missing_r8.  This is needed when reading
 ! directly from netcdf files.
 
 type(ensemble_type), intent(inout) :: ens_handle
@@ -5271,11 +5271,11 @@ if ( .not. module_initialized ) call static_init_model
 
 allocate(snlsno(ncolumn))
 call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
-              'clm_to_dart_state_vector', 'open SNLSNO'//clm_restart_filename)
+              'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
 call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
-              'clm_to_dart_state_vector', 'inq_varid SNLSNO'//clm_restart_filename)
+              'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
 call nc_check(nf90_get_var(ncid, VarID, snlsno), &
-              'clm_to_dart_state_vector', 'get_var SNLSNO'//clm_restart_filename)
+              'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -5316,8 +5316,8 @@ do idom = 1, numdoms
 
          allocate(tmp_array(ni*nj))
          do icopy = 1, ens_handle%my_num_copies
-            if     ( (get_dim_name(idom,ivar,1) == 'levsno')   .and. &
-                     (get_dim_name(idom,ivar,2) == 'column') ) then
+            if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
+                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
 
                start_index = get_index_start(idom,ivar)
                end_index   = get_index_end(idom,ivar)
@@ -5333,8 +5333,8 @@ do idom = 1, numdoms
 
                ens_handle%vars(start_index:end_index,icopy) = tmp_array
 
-            elseif ( (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
-                     (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
+            elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
+                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
    
                start_index = get_index_start(idom,ivar)
                end_index   = get_index_end(idom,ivar)
@@ -5357,7 +5357,7 @@ do idom = 1, numdoms
             ! used instead of the missing_value code - and even then,
             ! the missing_value code is not reliably implemented.
    
-            if (get_variable_name(idom,ivar) == 'T_SOISNO') then
+            if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
                where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
                do j = 1,nj  ! T_SOISNO has missing data in lake columns
                  if (cols1d_ityplun(j) == LAKE) then
@@ -5370,8 +5370,8 @@ do idom = 1, numdoms
                enddo
                ens_handle%vars(start_index:end_index,icopy) = tmp_array
             endif
-            if ((progvar(ivar)%varname == 'H2OSOI_LIQ')  .or. &
-                (progvar(ivar)%varname == 'H2OSOI_ICE')) then
+            if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
+                (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
                where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
                do j = 1,nj  ! missing data in lake columns
                  if (cols1d_ityplun(j) == LAKE) then
