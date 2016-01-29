@@ -399,7 +399,9 @@ call read_state(state_ens_handle, file_info, read_time_from_file, time1, &
                 prior_inflate, post_inflate, perturb_from_single_instance)
 
 !>@todo FIXME : Not the right approach.  Just for initial testing.
-call mark_missing_r8(state_ens_handle)
+if ( direct_netcdf_read ) then
+   call mark_missing_r8(state_ens_handle)
+endif
 
 ! This must be after read_state
 call get_minmax_task_zero(prior_inflate, state_ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
