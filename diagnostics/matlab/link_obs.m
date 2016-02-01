@@ -90,6 +90,8 @@ end
 
 obs.ObsCopyString = obs.CopyString;
 obs.CopyString    = copy.CopyString;
+obs.region(5)     = min(obs.z); % use observation Z to specify vertical region
+obs.region(6)     = max(obs.z);
 
 %% Now pack the data in the same fashion as the cell array of column labels.
 
