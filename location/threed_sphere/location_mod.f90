@@ -39,7 +39,7 @@ public :: location_type, get_location, set_location, &
           set_location_missing, is_location_in_region, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, get_close_obs, get_close_state, &
-          get_close_maxdist_init, get_close_obs_init, get_close_type, &
+          get_close_maxdist_init, get_close_obs_init, get_close_state_init, get_close_type, &
           operator(==), operator(/=), get_dist, get_close_obs_destroy, &
           nc_write_location_atts, nc_get_location_varids, nc_write_location, &
           vert_is_height, vert_is_pressure, vert_is_undef, vert_is_level, &
@@ -1341,6 +1341,20 @@ do i=1, gc%nt
 enddo
 
 end subroutine get_close_maxdist_init
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_state_init(gc, num, locs)
+ 
+! Initializes part of get_close accelerator that depends on the particular loc
+
+type(get_close_type), intent(inout) :: gc
+integer,              intent(in)    :: num
+type(location_type),  intent(in)    :: locs(num)
+
+call get_close_obs_init(gc, num, locs)
+
+end subroutine get_close_state_init
 
 !----------------------------------------------------------------------------
 

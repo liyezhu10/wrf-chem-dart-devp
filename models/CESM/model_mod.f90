@@ -16,9 +16,10 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              operator(>),  operator(<), operator(/),           &
                              operator(/=), operator(<=), operator(==)
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
-                             get_close_obs_init, set_location,                 &
-                             get_location, loc_get_close_obs => get_close_obs, &
-                             get_close_type, loc_get_close_state => get_close_state
+                             get_close_obs_init, get_close_state_init,         &
+                             set_location, get_location, get_close_type,       &
+                             loc_get_close_obs => get_close_obs,               &
+                             loc_get_close_state => get_close_state
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, to_upper, file_to_text, do_output,      &
@@ -126,6 +127,7 @@ public :: get_model_size,         &
           pert_model_state,       &
           get_close_maxdist_init, &
           get_close_obs_init,     &
+          get_close_state_init,   &
           get_close_obs,          &
           get_close_state,        &
           ens_mean_for_model,     &

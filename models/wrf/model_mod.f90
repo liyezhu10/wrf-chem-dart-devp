@@ -31,7 +31,8 @@ use      location_mod, only : location_type, get_location, set_location, &
                               VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
                               VERTISSCALEHEIGHT, &
                               get_close_type, get_dist, get_close_maxdist_init, &
-                              get_close_obs_init, loc_get_close_obs => get_close_obs
+                              get_close_obs_init, loc_get_close_obs => get_close_obs, &
+                              get_close_state_init
 
 use     utilities_mod, only : file_exist, open_file, close_file, &
                               register_module, error_handler, E_ERR, E_WARN, &
@@ -106,7 +107,8 @@ public ::  get_model_size,                    &
            get_close_obs,                     &
            ens_mean_for_model,                &
            get_close_maxdist_init,            &
-           get_close_obs_init
+           get_close_obs_init,                &
+           get_close_state_init
 
 !  public stubs 
 public ::  adv_1step,       &
