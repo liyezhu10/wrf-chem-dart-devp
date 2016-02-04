@@ -996,7 +996,7 @@ real(r8)            :: mod_sfc_elevation
 real(r8) :: x_ill(ens_size), x_iul(ens_size), x_ilr(ens_size), x_iur(ens_size), ugrid(ens_size), vgrid(ens_size)
 real(r8) :: x_ugrid_1(ens_size), x_ugrid_2(ens_size), x_ugrid_3(ens_size), x_ugrid_4(ens_size)
 real(r8) :: x_vgrid_1(ens_size), x_vgrid_2(ens_size), x_vgrid_3(ens_size), x_vgrid_4(ens_size)
-integer  :: e, count, uk !< index varibles for loop
+integer  :: e, kcount, uk !< index varibles for loop
 real(r8) :: failedcopies(ens_size)
 integer, allocatable  :: uniquek(:)
 integer  :: ksort(ens_size)
@@ -1290,18 +1290,9 @@ else
    enddo
 
    ! Set a working integer k value -- if (int(zloc) < 1), then k = 1
-   k = max(1,int(zloc)) !HK k is now ensemble size
+   k = max(1,int(zloc))  ! k is an ensemble-sized array 
 
-
-   ! Find the unique k values
-   ksort = sort(k)
-
-   count = 1
-   do e = 2, ens_size
-       if ( ksort(e) /= ksort(e-1) ) count = count + 1
-   enddo
-
-   allocate(uniquek(count))
+   call keep_unique_vals(k, kcount, uniquek)
  
    uk = 1
    do e = 1, ens_size
@@ -1444,7 +1435,7 @@ else
             call toGrid(xloc_u,i_u,dx_u,dxm_u)
             call toGrid(yloc_v,j_v,dy_v,dym_v)
 
-            do uk = 1, count ! for the different ks
+            do uk = 1, kcount ! for the different ks
 
                ! Check to make sure retrieved integer gridpoints are in valid range
                if ( boundsCheck( i_u, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_u) .and. &
@@ -1599,7 +1590,7 @@ else
 
          if ( wrf%dom(id)%type_t >= 0 ) then
 
-            do uk = 1, count ! for the different ks
+            do uk = 1, kcount ! for the different ks
 
                ! Check to make sure retrieved integer gridpoints are in valid range
                if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -1693,7 +1684,7 @@ else
 
          if ( wrf%dom(id)%type_t >= 0 ) then
 
-            do uk = 1, count
+            do uk = 1, kcount
 
             ! Check to make sure retrieved integer gridpoints are in valid range
             if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -1756,7 +1747,7 @@ else
    ! 1.d Density (Rho)
    elseif (obs_kind == KIND_DENSITY) then
 
-      do uk = 1, count ! for the different ks
+      do uk = 1, kcount ! for the different ks
 
       ! Check to make sure retrieved integer gridpoints are in valid range
       if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -1811,6 +1802,10 @@ else
       zloc = zloc + 0.5_r8
       k = max(1,int(zloc))  !> @todo what should you do with this?
 
+      ! recompute the unique levels again since we've modified the list
+      deallocate(uniquek)
+      call keep_unique_vals(k, kcount, uniquek)
+
      call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle )
      if (all(fld == missing_r8)) goto 200
 
@@ -1826,7 +1821,7 @@ else
          ! First confirm that vapor mixing ratio is in the DART state vector
          if ( wrf%dom(id)%type_qv >= 0 ) then
 
-            UNIQUEK_LOOP: do uk = 1, count ! for the different ks
+            UNIQUEK_LOOP: do uk = 1, kcount ! for the different ks
 
                ! Check to make sure retrieved integer gridpoints are in valid range
                if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -1936,7 +1931,7 @@ else
             ! This is for the 3D pressure field -- surface pressure later
       if(.not. surf_var) then
 
-         do uk = 1, count
+         do uk = 1, kcount
 
          ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -2027,7 +2022,7 @@ else
    else if ( obs_kind == KIND_VORTEX_LAT  .or. obs_kind == KIND_VORTEX_LON .or. &
              obs_kind == KIND_VORTEX_PMIN .or. obs_kind == KIND_VORTEX_WMAX ) then
 
-      do uk = 1, count ! for the different ks
+      do uk = 1, kcount ! for the different ks
 
       ! Check to make sure retrieved integer gridpoints are in valid range
       if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
@@ -8928,6 +8923,47 @@ call nc_check( nf90_put_var(ncid, var_id, timestring), &
                'write_model_time', 'put_var Times' )
 
 end subroutine write_model_time
+
+!--------------------------------------------------------------------
+
+!> this routine computes the number of unique values in arrayin,
+!> allocates space in arrayout (so the caller should pass in an
+!> unallocated but allocatable array), and returns the number of
+!> items (which is the same as the size of arrayout) in sizeout.
+!> the caller must deallocate arrayout() when done.
+
+subroutine keep_unique_vals(arrayin, sizeout, arrayout)
+
+integer,              intent(in)  :: arrayin(:)
+integer,              intent(out) :: sizeout
+integer, allocatable, intent(out) :: arrayout(:)
+
+integer :: insize, sorted(size(arrayin))
+integer :: i, nextu, itemcount
+
+! count the unique values and sort them
+insize = size(arrayin)
+
+sorted = sort(arrayin)
+
+sizeout = 1
+do i = 2, insize
+   if ( sorted(i) /= sorted(i-1) ) sizeout = sizeout + 1
+enddo
+
+allocate(arrayout(sizeout))
+
+arrayout(1) = sorted(1)
+
+nextu = 2
+do i = 2, insize
+   if ( sorted(i) /= sorted(i-1) ) then
+      arrayout(nextu) = sorted(i)
+      nextu = nextu + 1
+   endif
+enddo
+
+end subroutine keep_unique_vals
 
 !--------------------------------------------------------------------
 
