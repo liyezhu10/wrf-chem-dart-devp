@@ -15,9 +15,10 @@ module model_mod
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r8, MISSING_R8
 use time_manager_mod, only : time_type, set_time
-use     location_mod, only : location_type,      get_close_maxdist_init, &
+use     location_mod, only : location_type, get_close_maxdist_init, &
                              get_close_obs_init, get_close_obs, set_location, &
-                             set_location_missing, get_close_state
+                             get_close_state_init, get_close_state, &
+                             set_location_missing
 use    utilities_mod, only : register_module, error_handler, nc_check, &
                              E_ERR, E_MSG
                              ! nmlfileunit, do_output, do_nml_file, do_nml_term,  &
@@ -44,6 +45,7 @@ public :: get_model_size,         &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
+          get_close_state_init,   &
           get_close_state,        &
           ens_mean_for_model
 
@@ -288,7 +290,7 @@ end subroutine end_model
 
 
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+function nc_write_model_atts( ncFileID , cname) result (ierr)
 !------------------------------------------------------------------
 ! TJH 24 Oct 2006 -- Writes the model-specific attributes to a netCDF file.
 !     This includes coordinate variables and some metadata, but NOT
@@ -332,6 +334,7 @@ use typeSizes
 use netcdf
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
+character(len=*), intent(in), optional :: cname   ! optional component name
 integer              :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
@@ -473,7 +476,7 @@ end function nc_write_model_atts
 
 
 
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
+function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex, cname ) result (ierr)         
 !------------------------------------------------------------------
 ! TJH 24 Oct 2006 -- Writes the model variables to a netCDF file.
 !
@@ -504,6 +507,7 @@ integer,                intent(in) :: ncFileID      ! netCDF file identifier
 real(r8), dimension(:), intent(in) :: statevec
 integer,                intent(in) :: copyindex
 integer,                intent(in) :: timeindex
+character(len=*), intent(in), optional :: cname   ! optional component name
 integer                            :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
