@@ -1,5 +1,6 @@
 assim_model/assim_model_mod.f90
 common/types_mod.f90
+cross_comp/cross_comp_localization_mod.f90
 location/threed_sphere/location_mod.f90
 location/threed_cartesian/xyz_location_mod.f90
 models/CESM/cesm_to_dart.f90

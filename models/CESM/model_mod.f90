@@ -19,13 +19,16 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, get_close_state_init,         &
                              set_location, get_location, get_close_type,       &
                              loc_get_close_obs => get_close_obs,               &
-                             loc_get_close_state => get_close_state
+                             loc_get_close_state => get_close_state,           &
+                             query_location
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, to_upper, file_to_text, do_output,      &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
                              do_nml_file, do_nml_term, nmlfileunit
+use cross_comp_localization_mod, only : get_vert_alpha, get_xcomp_dist
+
 
 use     obs_kind_mod     ! for now, include all
 
@@ -779,6 +782,9 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_type, &
 ! in the namelist with the variable "vert_localization_coord".
 
 character(len=32) :: componentname
+integer :: i, this, base_obs_kind
+real(r8) :: horiz_dist, vert_dist_proxy
+integer :: vert1, vert2
 
 ! Initialize variables to missing status
 num_close = 0
@@ -805,8 +811,39 @@ if (present(dist)) dist = 1.0e9   !something big and positive (far away)
 ! and won't allow top-of-model changes in cam, and no vertical conversion
 ! will be done.  but it may run with horizontal only.
 
+! NO DISTANCES YET!
 call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                       locs, loc_kind, num_close, close_ind, dist)
+                       locs, loc_kind, num_close, close_ind)
+
+if (.not. present(dist)) return
+
+! get these once before looping below
+base_obs_kind = get_obs_kind_var_type(base_obs_type)
+vert1 = query_location(base_obs_loc)
+
+do i=1, num_close
+   ! compute the horizontal here and then if cross component do something
+   ! different in the vertical.
+   this = close_ind(i)
+   if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
+       (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
+      dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))
+      ! or
+      !horiz_dist = get_dist(base_obs_loc, locs(this), &
+      !                      base_obs_type, loc_kind(this), no_vert = .true.)
+      !vert_dist_proxy = get_vert_alpha(base_loc_obs, loc(this), base_obs_kind, loc_kind(this))
+      !dist(i) = sqrt(horiz_dist**2 + vert_dist_proxy**2)
+   else
+      vert2 = query_location(locs(this))
+      ! FIXME: we should be converting in the vertical for those we know how to convert
+      ! ( e.g. height obs in the atmosphere -> pressure)
+      if (vert1 /= vert2) then
+         dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this), no_vert=.true.)
+      else
+         dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this))
+      endif
+   endif
+enddo
 
 return
 
@@ -889,14 +926,20 @@ unified_dist = 1.0e9
 ! and won't allow top-of-model changes in cam, and no vertical conversion
 ! will be done.  but it may run with horizontal only.
 
+call get_close_obs(gc, base_obs_loc, base_obs_type, &
+                   locs, loc_kind, num_close, close_ind, dist)
+
+deallocate(unified_close_ind, unified_dist)
+return
+
+! NOT REACHED NOT REACHED NOT REACHED
+
 call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
                        locs, loc_kind, num_close, close_ind, dist)
 
 deallocate(unified_close_ind, unified_dist)
-
 return
 
-! NOT REACHED NOT REACHED NOT REACHED
 
 cur_start = 1
 cur_end = 1
