@@ -91,8 +91,8 @@ type netcdf_var_type
    ! character(len=NF90_MAX_NAME) :: long_name
    ! character(len=NF90_MAX_NAME) :: units
    integer     :: var_size = 0
-   integer(i8) :: index1 ! location in dart state vector of first occurrence
-   integer(i8) :: indexN ! location in dart state vector of last  occurrence
+   integer(i8) :: index1 = -1 ! location in dart state vector of first occurrence
+   integer(i8) :: indexN = -1 ! location in dart state vector of last  occurrence
    
    ! dimension information
    integer :: numdims  = 0 ! number of dims - excluding TIME?
@@ -297,6 +297,8 @@ state%domain(dom_id)%variable(1)%varname   = 'state'
 ! state%domain(dom_id)%variable(1)%units     = ''
 state%domain(dom_id)%variable(1)%numdims   = 1
 state%domain(dom_id)%variable(1)%var_size  = model_size
+state%domain(dom_id)%variable(1)%index1  = 1
+state%domain(dom_id)%variable(1)%indexN  = model_size
 
 ! dimension
 state%domain(dom_id)%variable(1)%dimname(1) = 'model_size'
@@ -779,7 +781,7 @@ integer :: ivar, idom
 get_sum_variables_below = 0
 
 do idom = 1, dom_id -1
-   get_sum_variables_below = get_sum_variables_below + get_domain_size(dom_id)
+   get_sum_variables_below = get_sum_variables_below + get_domain_size(idom)
 enddo
 
 do ivar = 1, start_var -1
