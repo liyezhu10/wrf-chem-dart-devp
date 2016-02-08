@@ -405,9 +405,9 @@ endif
 
 ! This must be after read_state
 call get_minmax_task_zero(prior_inflate, state_ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
-call log_inflation_info(prior_inflate, 'Prior')
+call log_inflation_info(prior_inflate, state_ens_handle%my_pe, 'Prior')
 call get_minmax_task_zero(post_inflate, state_ens_handle, POST_INF_COPY, POST_INF_SD_COPY)
-call log_inflation_info(post_inflate, 'Posterior')
+call log_inflation_info(post_inflate, state_ens_handle%my_pe, 'Posterior')
 
 
 if (perturb_from_single_instance) then
