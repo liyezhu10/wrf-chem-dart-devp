@@ -2964,6 +2964,11 @@ if ( .not. module_initialized ) call time_manager_init
 
   if (present(iunit)) unit_in = iunit
 
+  ! make this routine silently return if there is no calendar.
+  ! that way we can always call it without having to check each 
+  ! time first.
+  if ( calendar_type == NO_CALENDAR ) return
+
   call get_date (time,y,mo,d,h,m,s)
 
   ! print_date assumes an Earth calendar -- so check for calendar_type  

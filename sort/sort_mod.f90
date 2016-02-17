@@ -102,19 +102,19 @@ end function slow_sort
 !> A simple real(r8) indexed sort. Compares the values of the items in the x()
 !> array (length 'num') and returns an integer index array with the order
 !> to traverse the x() array in sorted order.  x() is unchanged. 
-!> index() does not have to be initialized before calling this routine.
-!> usage: do i=1,num;  x(index(i)) is next item in sorted order; enddo
+!> indx() does not have to be initialized before calling this routine.
+!> usage: do i=1,num;  x(indx(i)) is next item in sorted order; enddo
 !>
 !> @param x the (real) array to sort
-!> @param index the sorted indices 
+!> @param indx the sorted indices 
 !> @param num the length of x
 !>
 
-subroutine slow_index_sort(x, index, num)
+subroutine slow_index_sort(x, indx, num)
 
 integer,  intent(in)  :: num
 real(r8), intent(in)  :: x(num)
-integer,  intent(out) :: index(num)
+integer,  intent(out) :: indx(num)
 
 integer :: i, j, k, itmp
 
@@ -122,17 +122,17 @@ if ( .not. module_initialized ) call initialize_module
 
 ! Initialize the index array to input order
 do i = 1, num
-   index(i) = i
+   indx(i) = i
 enddo
 
 ! Do a O(N^2) sort
 do j = 1, num
    do k = 1, num - 1
       ! Exchange two elements if they are in the wrong order
-      if(x(index(k)) > x(index(k+1))) then
-         itmp = index(k)
-         index(k) = index(k+1)
-         index(k+1) = itmp
+      if(x(indx(k)) > x(indx(k+1))) then
+         itmp = indx(k)
+         indx(k) = indx(k+1)
+         indx(k+1) = itmp
       endif
    enddo
 enddo
@@ -278,18 +278,18 @@ end function isort
 !> Uses a heap sort algorithm on x(), returns integer array of sorted indices.
 !> x(num) array returned unchanged; index array doesn't need to be 
 !> initialized before this call. 
-!> usage: do i=1,num;  x(index(i)) is next item in sorted order; enddo
+!> usage: do i=1,num;  x(indx(i)) is next item in sorted order; enddo
 !> This differs from index_sort_int only in the data type of the x() array.
 !>
 !> @param x the (real) array to sort
-!> @param index the array of integers
+!> @param indx the array of integers
 !> @param num the length of x
 !>
-subroutine index_sort_real(x, index, num)
+subroutine index_sort_real(x, indx, num)
 
 integer,  intent(in)  :: num
 real(r8), intent(in)  :: x(num)
-integer,  intent(out) :: index(num)
+integer,  intent(out) :: indx(num)
 
 integer  :: ind, i, j, l_val_index, level
 real(r8) :: l_val
@@ -299,7 +299,7 @@ if ( .not. module_initialized ) call initialize_module
 
 ! Initialize the index array to input order
 do i = 1, num
-   index(i) = i
+   indx(i) = i
 enddo
 
 ! Only one element, just send it back
@@ -313,16 +313,16 @@ do
    ! Keep going down levels until bottom
    if(level > 1) then
       level = level - 1
-      l_val = x(index(level))
-      l_val_index = index(level)
+      l_val = x(indx(level))
+      l_val_index = indx(level)
    else
-      l_val = x(index(ind))
-      l_val_index = index(ind)
+      l_val = x(indx(ind))
+      l_val_index = indx(ind)
 
-      index(ind) = index(1)
+      indx(ind) = indx(1)
       ind = ind - 1
       if(ind == 1) then
-         index(1) = l_val_index
+         indx(1) = l_val_index
          return
       endif
    endif
@@ -332,10 +332,10 @@ do
 
    do while(j <= ind)
       if(j < ind) then
-         if(x(index(j)) < x(index(j + 1))) j = j + 1
+         if(x(indx(j)) < x(indx(j + 1))) j = j + 1
       endif
-      if(l_val < x(index(j))) then
-         index(i) = index(j)
+      if(l_val < x(indx(j))) then
+         indx(i) = indx(j)
          i = j
          j = 2 * j
       else
@@ -343,7 +343,7 @@ do
       endif
 
    enddo
-   index(i) = l_val_index
+   indx(i) = l_val_index
 
 enddo
 
@@ -354,19 +354,19 @@ end subroutine index_sort_real
 !> Uses a heap sort algorithm on x(), returns integer array of sorted indices.
 !> x(num) array returned unchanged; index array doesn't need to be 
 !> initialized before this call. 
-!> usage: do i=1,num;  x(index(i)) is next item in sorted order; enddo
+!> usage: do i=1,num;  x(indx(i)) is next item in sorted order; enddo
 !> This differs from index_sort_real only in the data type of the x() array.
 !>
 !> @param x the (integer) array to sort
-!> @param index the array of integers
+!> @param indx the array of integers
 !> @param num the length of x
 !>
 
-subroutine index_sort_int(x, index, num)
+subroutine index_sort_int(x, indx, num)
 
 integer, intent(in)  :: num
 integer, intent(in)  :: x(num)
-integer, intent(out) :: index(num)
+integer, intent(out) :: indx(num)
 
 integer :: ind, i, j, l_val_index, level
 integer :: l_val
@@ -375,7 +375,7 @@ if ( .not. module_initialized ) call initialize_module
 
 ! Initialize the index array to input order
 do i = 1, num
-   index(i) = i
+   indx(i) = i
 enddo
 
 ! Only one element, just send it back
@@ -389,16 +389,16 @@ do
    ! Keep going down levels until bottom
    if(level > 1) then
       level = level - 1
-      l_val = x(index(level))
-      l_val_index = index(level)
+      l_val = x(indx(level))
+      l_val_index = indx(level)
    else
-      l_val = x(index(ind))
-      l_val_index = index(ind)
+      l_val = x(indx(ind))
+      l_val_index = indx(ind)
 
-      index(ind) = index(1)
+      indx(ind) = indx(1)
       ind = ind - 1
       if(ind == 1) then
-         index(1) = l_val_index
+         indx(1) = l_val_index
          return
       endif
    endif
@@ -408,10 +408,10 @@ do
 
    do while(j <= ind)
       if(j < ind) then
-         if(x(index(j)) < x(index(j + 1))) j = j + 1
+         if(x(indx(j)) < x(indx(j + 1))) j = j + 1
       endif
-      if(l_val < x(index(j))) then
-         index(i) = index(j)
+      if(l_val < x(indx(j))) then
+         indx(i) = indx(j)
          i = j
          j = 2 * j
       else
@@ -419,7 +419,7 @@ do
       endif
 
    enddo
-   index(i) = l_val_index
+   indx(i) = l_val_index
 
 enddo
 
@@ -438,17 +438,17 @@ end subroutine index_sort_int
 !> ordering between them.  
 !> This seems to work best when the comparefunc() is a public routine inside
 !> a module so the interface specification is known to the compiler.
-!> usage: do i=1,num; mything(index(i)) is next item in sorted order; enddo
+!> usage: do i=1,num; mything(indx(i)) is next item in sorted order; enddo
 !>
-!> @param index the array of integers
+!> @param indx the array of integers
 !> @param num the length of x
 !> @param comparefunc the name of the comparator function
 !>
 
-subroutine index_sort_user(index, num, comparefunc)
+subroutine index_sort_user(indx, num, comparefunc)
 
 integer,  intent(in)  :: num
-integer,  intent(out) :: index(num)
+integer,  intent(out) :: indx(num)
 interface
   integer function comparefunc(a, b)
     integer, intent(in) :: a, b
@@ -462,7 +462,7 @@ if ( .not. module_initialized ) call initialize_module
 
 ! Initialize the index array to input order
 do i = 1, num
-   index(i) = i
+   indx(i) = i
 enddo
 
 ! Only one element, just send it back
@@ -476,14 +476,14 @@ do
    ! Keep going down levels until bottom
    if(level > 1) then
       level = level - 1
-      l_val_index = index(level)
+      l_val_index = indx(level)
    else
-      l_val_index = index(ind)
+      l_val_index = indx(ind)
 
-      index(ind) = index(1)
+      indx(ind) = indx(1)
       ind = ind - 1
       if(ind == 1) then
-        index(1) = l_val_index
+        indx(1) = l_val_index
         return
       endif
    endif
@@ -493,12 +493,12 @@ do
 
    do while(j <= ind)
       if(j < ind) then
-         compval = comparefunc(index(j), index(j+1))
+         compval = comparefunc(indx(j), indx(j+1))
          if(compval < 0) j = j + 1
       endif
-      compval = comparefunc(l_val_index, index(j))
+      compval = comparefunc(l_val_index, indx(j))
       if(compval < 0) then
-         index(i) = index(j)
+         indx(i) = indx(j)
          i = j
          j = 2 * j
       else
@@ -506,7 +506,7 @@ do
       endif
 
    enddo
-   index(i) = l_val_index
+   indx(i) = l_val_index
 
 enddo
 

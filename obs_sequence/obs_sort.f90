@@ -48,8 +48,8 @@ contains
 !-----------------------------------------------------------------------
 !> The sort module code will call this function with i, j, which is a
 !> request to compare obs_this_bin(i) and obs_this_bin(j).
-!> They should have identical times so the compare needs to be by 
-!> location, type, value, etc.   
+!> It will sort first by time, then by location, type, value, etc.
+!>
 !> Must return -1 if i < j ; 0 if i == j ; 1 if i > j
 !>
 !> If you want to change what values are used to order the obs do it here.
@@ -59,8 +59,8 @@ contains
 !> location be together in the input file - distances can be cached and 
 !> reused for better performance.
 !>
-!> @param i index of first bin to compare
-!> @param j index of other bin to compare
+!> @param i index of first obs to compare
+!> @param j index of other obs to compare
 !>
 
 function obssort(i, j)
@@ -99,14 +99,6 @@ this_kind2 = get_obs_kind(this_obs_def2)
 this_var1 = get_obs_def_error_variance(this_obs_def1)
 this_var2 = get_obs_def_error_variance(this_obs_def2)
 
-if (this_time1 /= this_time2) then
-  print *, 'error, times not the same'
-  print *, 'comparing items ', i, j
-  call print_time(this_time1, 'time1')
-  call print_time(this_time2, 'time2')
-  stop
-endif
-
 if (local_debug) then
   print *, 'comparing items ', i, j
   call print_time(this_time1, 'time: ')
@@ -118,6 +110,15 @@ if (local_debug) then
   print *, trim(locstring1)
   print *, trim(locstring2)
   print *, ''
+endif
+
+! sort first by time
+if (this_time1 > this_time2) then
+   obssort = 1
+   return
+else if (this_time1 < this_time2) then
+   obssort = -1
+   return
 endif
 
 ! try for a general location solution
@@ -157,18 +158,7 @@ endif
 ! have no way to know about that.)
 obssort = 0
 
-if (local_debug) then
-  print *, 'decided items ', i, j, ' are same'
-  call print_time(this_time1, 'time: ')
-  print *, 'kinds ', this_kind1, this_kind2
-  print *, 'vars ', this_var1, this_var2
-  call write_location(0, this_loc1, charstring=locstring1)
-  call write_location(0, this_loc2, charstring=locstring2)
-  print *, 'locs: '
-  print *, trim(locstring1)
-  print *, trim(locstring2)
-  print *, ''
-endif
+if (local_debug) print *, 'decided items ', i, j, ' are same'
 
 end function obssort
 
@@ -183,28 +173,29 @@ end module special_sort
 
 program obs_sort
 
-use        types_mod, only : r8, metadatalength
-use    utilities_mod, only : register_module, initialize_utilities,            &
-                             find_namelist_in_file, check_namelist_read,       &
-                             error_handler, E_ERR, E_MSG, nmlfileunit,         &
-                             do_nml_file, do_nml_term, finalize_utilities
-use         sort_mod, only : index_sort
-use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind
-use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name
-use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
-                             print_date, set_calendar_type, operator(==),      &
-                             operator(/=), get_calendar_type, NO_CALENDAR,     &
-                             operator(-)
-use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
-                             init_obs, assignment(=),                          &
-                             init_obs_sequence, static_init_obs_sequence,      &
-                             read_obs_seq_header, read_obs_seq, get_num_obs,   &
-                             get_first_obs, get_next_obs, get_obs_def,         &
-                             insert_obs_in_seq, get_num_copies, get_num_qc,    &
-                             get_copy_meta_data, get_qc_meta_data,             &
-                             set_copy_meta_data, set_qc_meta_data,             &
-                             destroy_obs, destroy_obs_sequence,                &
-                             get_num_key_range, get_obs_key
+use         types_mod, only : r8, metadatalength
+use     utilities_mod, only : register_module, initialize_utilities,            &
+                              find_namelist_in_file, check_namelist_read,       &
+                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
+                              do_nml_file, do_nml_term, finalize_utilities
+use          sort_mod, only : index_sort
+use       obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind
+use      obs_kind_mod, only : max_obs_kinds, get_obs_kind_name
+use  time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
+                              print_date, set_calendar_type, operator(==),      &
+                              operator(/=), get_calendar_type, NO_CALENDAR,     &
+                              operator(-)
+use  obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
+                              init_obs, assignment(=),                          &
+                              init_obs_sequence, static_init_obs_sequence,      &
+                              read_obs_seq_header, read_obs_seq, get_num_obs,   &
+                              get_first_obs, get_next_obs, get_obs_def,         &
+                              insert_obs_in_seq, get_num_copies, get_num_qc,    &
+                              get_copy_meta_data, get_qc_meta_data,             &
+                              set_copy_meta_data, set_qc_meta_data,             &
+                              destroy_obs, destroy_obs_sequence,                &
+                              get_num_key_range, get_obs_key
+use obs_utilities_mod, only : print_obs_seq, validate_obs_seq_time, print_metadata
 
 use special_sort
 
@@ -353,118 +344,119 @@ num_rejected_badqc = 0
 num_rejected_diffqc = 0
 num_rejected_other = 0
 
-if ( get_first_obs(seq_in, obs_in) )  then
+! initialize "obs_in" here by calling get_first_obs() so we 
+! can get the first obs_def to prime the loop below
 
-   is_this_last = .false.
-   next_obs_in = obs_in
-   call get_obs_def(obs_in, this_obs_def)
-   prev_time = get_obs_def_time(this_obs_def)
-
-   ObsLoop : do while ( .not. is_this_last )
-
-      obs_in = next_obs_in
-
-      ! obs_out will be modified when it is inserted in the output sequence
-      ! so we have to make a copy of obs_in before modifiying it.
-      obs_out = obs_in
-
-      ! see if this obs is the same time as the prev obs
-      ! if not, carry on by putting it into the output.
-      ! if it's the same time, we have to sort first.
-
-      call get_obs_def(obs_out, this_obs_def)
-      this_time = get_obs_def_time(this_obs_def)
-      if (debug) print *, 'next observation: '
-      if (debug) call print_time(this_time, 'obs_in this_time')
-      if (debug) call print_time(prev_time, 'obs_in prev_time')
-
-      if (prev_time == this_time) then
-
-         if (debug) print *, 'matched prev_time'
-         sort_count = 0
-
-         SortObsLoop : do while ( .not. is_this_last )
-
-            obs_in = next_obs_in
-
-            sort_count = sort_count + 1
-            obs_this_bin(sort_count) = obs_in
-
-            call get_next_obs(seq_in, obs_in, next_obs_in, is_this_last)
-
-            call get_obs_def(next_obs_in, this_obs_def)
-            this_time = get_obs_def_time(this_obs_def)
-            if (debug) call print_time(this_time, 'next_obs_in')
-            if (debug) print *, 'sort_count = ', sort_count
-
-            if (prev_time /= this_time) exit SortObsLoop
-
-         enddo SortObsLoop
-
-         if (debug) print *, 'out of loop, sort_count = ', sort_count
-         ! sort obs here
-         call index_sort(indices, sort_count, obssort)
-         if (debug) print *, 'sorted indices:'
-         if (debug) print *, indices(1:sort_count)
-
-         if (num_inserted > 0) then
-            call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)), prev_obs_out)
-         else
-            call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)))
-         endif
-
-         prev_obs_out = obs_this_bin(indices(1))
-         do i=2, sort_count
-            call insert_obs_in_seq(seq_out, obs_this_bin(indices(i)), prev_obs_out)
-            prev_obs_out = obs_this_bin(indices(i))
-         enddo
-   
-         num_inserted = num_inserted + sort_count
-
-         prev_time = this_time
-
-         if (print_every > 0) then
-            if ((mod(num_inserted,print_every) == 0) .or. &
-                (num_inserted > print_every)) then
-               print*, 'inserted number ',num_inserted,' of ',size_seq_out
-            endif
-         endif
-   
-         ! no call to get_next_obs() because we've already done it
-
-      else
-
-         ! Since the stride through the observation sequence file is always
-         ! guaranteed to be in temporally-ascending order, we can use the
-         ! 'previous' observation as the starting point to search for the
-         ! correct insertion point.  This speeds up the insert code a lot.
-   
-         if (num_inserted > 0) then
-            call insert_obs_in_seq(seq_out, obs_out, prev_obs_out)
-         else
-            call insert_obs_in_seq(seq_out, obs_out)
-         endif
-   
-         prev_obs_out = obs_out  ! update position in seq for next insert
-         num_inserted = num_inserted + 1
-
-         prev_time = this_time
-
-         if (print_every > 0) then
-            if (mod(num_inserted,print_every) == 0) then
-               print*, 'inserted number ',num_inserted,' of ',size_seq_out
-            endif
-         endif
-   
-         call get_next_obs(seq_in, obs_in, next_obs_in, is_this_last)
-      endif
-
-   enddo ObsLoop
-
-else
-   write(msgstring, *)'no first observation in ',trim(filename_in)
+if (.not. get_first_obs(seq_in, obs_in) )  then
+   write(msgstring, *)'error getting first observation in ',trim(filename_in)
    call error_handler(E_MSG,'obs_sort', msgstring)
 endif
+
+is_this_last = .false.
+next_obs_in = obs_in
+call get_obs_def(obs_in, this_obs_def)
+prev_time = get_obs_def_time(this_obs_def)
+
+ObsLoop : do while ( .not. is_this_last )
+
+   obs_in = next_obs_in
+
+   ! obs_out will be modified when it is inserted in the output sequence
+   ! so we have to make a copy of obs_in before modifiying it.
+   obs_out = obs_in
+
+   ! see if this obs is the same time as the prev obs
+   ! if not, carry on by putting it into the output.
+   ! if it's the same time, we have to sort first.
+
+   call get_obs_def(obs_out, this_obs_def)
+   this_time = get_obs_def_time(this_obs_def)
+   if (debug) print *, 'next observation: '
+   if (debug) call print_time(this_time, 'obs_in this_time')
+   if (debug) call print_time(prev_time, 'obs_in prev_time')
+
+   if (prev_time == this_time) then
+
+      if (debug) print *, 'matched prev_time'
+      sort_count = 0
+
+      SortObsLoop : do while ( .not. is_this_last )
+
+         obs_in = next_obs_in
+
+         sort_count = sort_count + 1
+         obs_this_bin(sort_count) = obs_in
+
+         call get_next_obs(seq_in, obs_in, next_obs_in, is_this_last)
+
+         call get_obs_def(next_obs_in, this_obs_def)
+         this_time = get_obs_def_time(this_obs_def)
+         if (debug) call print_time(this_time, 'next_obs_in')
+         if (debug) print *, 'sort_count = ', sort_count
+
+         if (prev_time /= this_time) exit SortObsLoop
+
+      enddo SortObsLoop
+
+      if (debug) print *, 'out of loop, sort_count = ', sort_count
+      ! sort obs here
+      call index_sort(indices, sort_count, obssort)
+      if (debug) print *, 'sorted indices:'
+      if (debug) print *, indices(1:sort_count)
+
+      if (num_inserted > 0) then
+         call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)), prev_obs_out)
+      else
+         call insert_obs_in_seq(seq_out, obs_this_bin(indices(1)))
+      endif
+
+      prev_obs_out = obs_this_bin(indices(1))
+      do i=2, sort_count
+         call insert_obs_in_seq(seq_out, obs_this_bin(indices(i)), prev_obs_out)
+         prev_obs_out = obs_this_bin(indices(i))
+      enddo
+
+      num_inserted = num_inserted + sort_count
+
+      prev_time = this_time
+
+      if (print_every > 0) then
+         if ((mod(num_inserted,print_every) == 0) .or. &
+             (num_inserted > print_every)) then
+            print*, 'inserted number ',num_inserted,' of ',size_seq_out
+         endif
+      endif
+
+      ! no call to get_next_obs() because we've already done it
+
+   else
+
+      ! Since the stride through the observation sequence file is always
+      ! guaranteed to be in temporally-ascending order, we can use the
+      ! 'previous' observation as the starting point to search for the
+      ! correct insertion point.  This speeds up the insert code a lot.
+
+      if (num_inserted > 0) then
+         call insert_obs_in_seq(seq_out, obs_out, prev_obs_out)
+      else
+         call insert_obs_in_seq(seq_out, obs_out)
+      endif
+
+      prev_obs_out = obs_out  ! update position in seq for next insert
+      num_inserted = num_inserted + 1
+
+      prev_time = this_time
+
+      if (print_every > 0) then
+         if (mod(num_inserted,print_every) == 0) then
+            print*, 'inserted number ',num_inserted,' of ',size_seq_out
+         endif
+      endif
+
+      call get_next_obs(seq_in, obs_in, next_obs_in, is_this_last)
+   endif
+
+enddo ObsLoop
 
 if (.not. print_only) then
    print*, '---------  Obs seqs '
@@ -472,7 +464,6 @@ if (.not. print_only) then
    print*, 'Number of obs copied to output  :         ', num_inserted
    print*, '---------------------------------------------------------'
 endif
-
 
 
 write(msgstring, *) 'Starting to process output sequence file ', &
@@ -496,10 +487,10 @@ call destroy_obs_sequence(seq_out)
 call destroy_obs(     obs_in )
 call destroy_obs(next_obs_in )
 call destroy_obs(     obs_out)
-!call destroy_obs(prev_obs_out)  ! copy of something already deleted
+! do not destroy prev_obs_out; deleting obs_out destroys it as well
 
-! what about deallocating obs_this_bin(max_num_obs)
-deallocate(indices)
+
+deallocate(indices, obs_this_bin)
 
 call shutdown()
 
@@ -532,288 +523,6 @@ call finalize_utilities('obs_sort')
 end subroutine shutdown
 
 
-!-----------------------------------------------------------------------
-!> prints out a quick table of obs types and counts, overall start and
-!> stop times, and metadata strings and counts.
-!> you can get more info by running the obs_diag program.
-!>
-!> @param seq observation sequence of interest 
-!> @param filename the file that was the origin of the observation sequence.
-!>                 Used for messages.
-
-subroutine print_obs_seq(seq, filename)
-
-type(obs_sequence_type), intent(in) :: seq
-character(len=*),        intent(in) :: filename
-
-type(obs_type)          :: obs, next_obs
-type(obs_def_type)      :: this_obs_def
-logical                 :: is_there_one, is_this_last
-integer                 :: size_seq
-integer                 :: i
-integer                 :: this_obs_kind
-! max_obs_kinds is a public from obs_kind_mod.f90 and really is
-! counting the max number of types, not kinds
-integer                 :: type_count(max_obs_kinds), identity_count
-
-
-! Initialize input obs_types
-do i = 1, max_obs_kinds
-   type_count(i) = 0
-enddo
-identity_count = 0
-
-! make sure there are obs left to process before going on.
-! num_obs should be ok since we just constructed this seq so it should
-! have no unlinked obs.  if it might for some reason, use this instead:
-! size_seq = get_num_key_range(seq)     !current size of seq
-
-size_seq = get_num_obs(seq)
-if (size_seq == 0) then
-   msgstring = 'Obs_seq file '//trim(filename)//' is empty.'
-   call error_handler(E_MSG,'obs_sort',msgstring)
-   return
-endif
-
-! Initialize individual observation variables 
-call init_obs(     obs, get_num_copies(seq), get_num_qc(seq))
-call init_obs(next_obs, get_num_copies(seq), get_num_qc(seq))
-
-! blank line
-call error_handler(E_MSG,'',' ')
-
-write(msgstring,*) 'Processing sequence file ', trim(filename)
-call error_handler(E_MSG,'',msgstring)
-
-call print_metadata(seq, filename)
-
-! Start to process obs from seq
-
-is_there_one = get_first_obs(seq, obs)
-
-if ( .not. is_there_one )  then
-   write(msgstring,*)'no first observation in ',trim(filename)
-   call error_handler(E_MSG,'obs_sort', msgstring)
-endif
-
-! process it here
-is_this_last = .false.
-
-call get_obs_def(obs, this_obs_def)
-call print_time(get_obs_def_time(this_obs_def), ' First timestamp: ')
-! does not work with NO_CALENDAR
-if (cal) call print_date(get_obs_def_time(this_obs_def), '   calendar Date: ')
-
-ObsLoop : do while ( .not. is_this_last)
-
-   call get_obs_def(obs, this_obs_def)
-   this_obs_kind = get_obs_kind(this_obs_def)
-   if (this_obs_kind < 0) then
-      identity_count = identity_count + 1
-   else
-      type_count(this_obs_kind) = type_count(this_obs_kind) + 1
-   endif
-
-!   print *, 'obs kind index = ', this_obs_kind
-!   if(this_obs_kind > 0)print *, 'obs name = ', get_obs_kind_name(this_obs_kind)
-
-   call get_next_obs(seq, obs, next_obs, is_this_last)
-   if (.not. is_this_last) then 
-      obs = next_obs
-   else
-      call print_time(get_obs_def_time(this_obs_def), '  Last timestamp: ')
-      if (cal) call print_date(get_obs_def_time(this_obs_def), '   calendar Date: ')
-   endif
-
-enddo ObsLoop
-
-
-write(msgstring, *) 'Number of obs processed  :          ', size_seq
-call error_handler(E_MSG, '', msgstring)
-write(msgstring, *) '---------------------------------------------------------'
-call error_handler(E_MSG, '', msgstring)
-do i = 1, max_obs_kinds
-   if (type_count(i) > 0) then 
-      write(msgstring, '(a32,i8,a)') trim(get_obs_kind_name(i)), &
-                                     type_count(i), ' obs'
-      call error_handler(E_MSG, '', msgstring)
-   endif
-enddo
-if (identity_count > 0) then 
-   write(msgstring, '(a32,i8,a)') 'Identity observations', &
-                                  identity_count, ' obs'
-   call error_handler(E_MSG, '', msgstring)
-endif
-
-! another blank line
-call error_handler(E_MSG, '', ' ')
-
-! Time to clean up
-
-call destroy_obs(     obs)
-call destroy_obs(next_obs)
-
-end subroutine print_obs_seq
-
-
-!-----------------------------------------------------------------------
-!> ensures the observation sequence is temporally ascending when 
-!> traversed as a linked list.
-!>
-!> @param seq observation sequence of interest 
-!> @param filename the file that was the origin of the observation sequence.
-!>                 Used for messages.
-
-subroutine validate_obs_seq_time(seq, filename)
-
-! this eventually belongs in the obs_seq_mod code, but for now
-! try it out here.  we just fixed a hole in the interactive create
-! routine which would silently let you create out-of-time-order
-! linked lists, which gave no errors but didn't assimilate the
-! right obs at the right time when running filter.   this runs
-! through the times in the entire sequence, ensuring they are
-! monotonically increasing in time.  this should help catch any
-! bad files which were created with older versions of code.
-
-type(obs_sequence_type), intent(in) :: seq
-character(len=*),        intent(in) :: filename
-
-type(obs_type)          :: obs, next_obs
-type(obs_def_type)      :: this_obs_def
-logical                 :: is_there_one, is_this_last
-integer                 :: size_seq, obs_count
-integer                 :: key
-type(time_type)         :: last_time, this_time
-
-
-! make sure there are obs left to process before going on.
-size_seq = get_num_obs(seq) 
-if (size_seq == 0) then
-   msgstring = 'Obs_seq file '//trim(filename)//' is empty.'
-   call error_handler(E_MSG,'obs_sort:validate',msgstring)
-   return
-endif
-
-! Initialize individual observation variables 
-call init_obs(     obs, get_num_copies(seq), get_num_qc(seq))
-call init_obs(next_obs, get_num_copies(seq), get_num_qc(seq))
-
-obs_count = 0
-
-! Start to process obs from seq
-
-is_there_one = get_first_obs(seq, obs)
-
-! we already tested for 0 obs above, so there should be a first obs here.
-if ( .not. is_there_one )  then
-   write(msgstring,*)'no first obs in sequence ' // trim(filename)
-   call error_handler(E_ERR,'obs_sort:validate', &
-                      msgstring, source, revision, revdate)
-   return
-endif
-
-is_this_last = .false.
-last_time = set_time(0, 0)
-ObsLoop : do while ( .not. is_this_last)
-
-   call get_obs_def(obs, this_obs_def)
-   this_time = get_obs_def_time(this_obs_def)
-
-   if (last_time > this_time) then
-      ! bad time order of observations in linked list
-      call print_time(last_time, ' previous timestamp: ')
-      if (cal) call print_date(last_time, '      calendar date: ')
-      call print_time(this_time, '     next timestamp: ')
-      if (cal) call print_date(this_time, '      calendar date: ')
-
-      key = get_obs_key(obs)
-      write(msgstring1,*)'obs number ', key, ' has earlier time than previous obs'
-      write(msgstring2,*)'observations must be in increasing time order, file ' // trim(filename)
-      call error_handler(E_ERR,'obs_sort:validate', msgstring2, &
-                         source, revision, revdate, &
-                         text2=msgstring1)
-   endif
-
-   last_time = this_time
-   obs_count = obs_count + 1
-
-   call get_next_obs(seq, obs, next_obs, is_this_last)
-   if (.not. is_this_last) obs = next_obs
-
-enddo ObsLoop
-
-! clean up
-call destroy_obs(     obs)
-call destroy_obs(next_obs)
-
-! technically not a time validation, but easy to check.  obs_count should never
-! be larger than size_seq - that's a fatal error.  obs_count < size_seq would 
-! suggest there are obs in the file that aren't part of the linked list.  
-! this does not necessarily indicate a fatal error but it's not a common 
-! situation and might indicate someone should check on the file.
-if (obs_count /= size_seq) then
-   write(msgstring,*) 'input sequence ', trim(filename)
-   call error_handler(E_MSG,'obs_sort:validate', msgstring)
-
-   write(msgstring,*) 'total obs in file: ', size_seq, '  obs in linked list: ', obs_count
-   if (obs_count > size_seq) then
-      ! this is a fatal error
-      write(msgstring1,*) 'linked list obs_count > total size_seq, should not happen'
-      call error_handler(E_ERR,'obs_sort:validate', msgstring, &
-                         source, revision, revdate, &
-                         text2=msgstring1)
-   else
-      ! just warning msg
-      write(msgstring1,*) 'only observations in linked list will be processed'
-      call error_handler(E_MSG,'obs_sort:validate', msgstring, &
-                         source, revision, revdate, text2=msgstring1)
-   endif
-endif
-
-end subroutine validate_obs_seq_time
-
-
-!-----------------------------------------------------------------------
-!> print the (trimmed) metadata strings
-!>
-!> @param seq observation sequence of interest 
-!> @param filename the file that was the origin of the observation sequence.
-!>                 Used for messages.
-
-subroutine print_metadata(seq, filename)
-
-type(obs_sequence_type),    intent(in) :: seq
-character(len=*), optional, intent(in) :: filename
-
-integer :: num_copies , num_qc, i
-character(len=metadatalength) :: str
-
-num_copies = get_num_copies(seq)
-num_qc     = get_num_qc(    seq)
-
-if ( num_copies < 0 .or. num_qc < 0 ) then
-   write(msgstring,*)' illegal copy or obs count in file '//trim(filename)
-   call error_handler(E_ERR, 'obs_sort', msgstring, &
-                      source, revision, revdate)
-endif
-
-MetaDataLoop : do i=1, num_copies
-   str = get_copy_meta_data(seq,i)
-
-   write(msgstring,*)'Data Metadata: ',trim(str)
-   call error_handler(E_MSG, '', msgstring)
-
-enddo MetaDataLoop
-
-QCMetaData : do i=1, num_qc
-   str = get_qc_meta_data(seq,i)
-
-   write(msgstring,*)'  QC Metadata: ', trim(str)
-   call error_handler(E_MSG, '', msgstring)
-
-enddo QCMetaData
-
-end subroutine print_metadata
 
 end program obs_sort
 
