@@ -269,13 +269,13 @@ do n = 1, len_trim(datein)
    endif
 enddo
 
-if (i == 13 .and. parsedate(14:16) == '000') then
-    parsedate(14:16) = ''
-    return  ! CESM format
-elseif (parsedate(11:14) == '0000') then
-   parsedate(11:14) = ''
-elseif(parsedate(13:14) == '00') then
-   parsedate(13:14) = ''
+if (i == 13) then
+   parsedate(14:16) = ''
+   return  ! CESM format
+elseif (parsedate(11:16) == '000000') then
+   parsedate(11:16) = ''
+elseif(parsedate(13:16) == '0000') then
+   parsedate(13:16) = ''
 endif
 
 if (parsedate(15:16) == '00') parsedate(15:16) = ''
