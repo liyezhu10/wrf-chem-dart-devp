@@ -74,7 +74,7 @@ public :: create_3d_obs,    &
 
 ! module global storage
 character(len=NF90_MAX_NAME) :: missing_name = ''
-character(256) :: msgstring, msgstring1, msgstring2
+character(512) :: msgstring, msgstring1, msgstring2
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
