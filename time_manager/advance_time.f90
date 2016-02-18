@@ -80,7 +80,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 integer :: ccyy, mm, dd, hh, nn, ss, dday, dh, dn, ds, gday, gsec
 integer :: nargum, i
 character(len=80), dimension(10) :: argum
-character(len=16) :: ccyymmddhhnnss
+character(len=14) :: ccyymmddhhnnss
 character(len=80) :: out_date_format, dtime
 character(len=256) :: in_string
 integer :: datelen
@@ -206,10 +206,13 @@ call get_date(base_time, ccyy, mm, dd, hh, nn, ss)
 
 write(ccyymmddhhnnss(1:14), fmt='(i4, 5i2.2)')  ccyy, mm, dd, hh, nn, ss
 if ( nargum == 2 ) then
+write(12, *) 'datelen,nn,ss ', datelen, nn, ss
+   if (datelen == 13) datelen=10
    if (datelen<14) then
       if(nn /= 0) datelen=12
       if(ss /= 0) datelen=14
    endif
+write(12, *) 'datelen,nn,ss ', datelen, nn, ss
    write(unit=stdout, fmt='(a)') ccyymmddhhnnss(1:datelen)
 elseif ( nargum > 2 ) then
    i = 3
@@ -254,12 +257,12 @@ contains
 
 function parsedate(datein)
 character(len=*), intent(in) :: datein
-character(len=16) :: parsedate
+character(len=14) :: parsedate
 
 character(len=1 ) :: ch
 integer :: n, i
 
-parsedate = '0000000000000000'
+parsedate = '00000000000000'
 i=0
 do n = 1, len_trim(datein)
    ch = datein(n:n)
@@ -270,15 +273,14 @@ do n = 1, len_trim(datein)
 enddo
 
 if (i == 13) then
-   parsedate(14:16) = ''
+   parsedate(14:14) = ''
    return  ! CESM format
-elseif (parsedate(11:16) == '000000') then
-   parsedate(11:16) = ''
-elseif(parsedate(13:16) == '0000') then
-   parsedate(13:16) = ''
+elseif (parsedate(11:14) == '0000') then
+   parsedate(11:14) = ''
+elseif(parsedate(13:14) == '00') then
+   parsedate(13:14) = ''
 endif
 
-if (parsedate(15:16) == '00') parsedate(15:16) = ''
 return
 
 end function parsedate

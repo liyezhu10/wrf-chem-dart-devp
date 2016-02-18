@@ -4,6 +4,9 @@
 !
 ! $Id$
 
+!> @FIXME: this needs to be automated so the results can
+!> be checked and print pass/fail from inside the program.
+
 program timetest
 
 use time_manager_mod, only : set_calendar_type, GREGORIAN, time_type, &
