@@ -33,7 +33,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: msgstring
+character(len=512) :: msgstring
 logical, save :: module_initialized = .false.
 
 character(len=256) :: ic_filename      = 'openggcm.r.nc'

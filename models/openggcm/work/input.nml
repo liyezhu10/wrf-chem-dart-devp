@@ -122,25 +122,9 @@
   /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SALINITY',         'TEMPERATURE',
-                            'APB_SALINITY',     'APB_TEMPERATURE',
-                           'ADCP_SALINITY',    'ADCP_TEMPERATURE',
-                           'ARGO_SALINITY',    'ARGO_TEMPERATURE',
-                         'BOTTLE_SALINITY',  'BOTTLE_TEMPERATURE',
-                            'CTD_SALINITY',     'CTD_TEMPERATURE',
-                            'DBT_SALINITY',     'DBT_TEMPERATURE',
-                        'DRIFTER_SALINITY', 'DRIFTER_TEMPERATURE',
-                          'FLOAT_SALINITY',   'FLOAT_TEMPERATURE',
-                         'GLIDER_SALINITY',  'GLIDER_TEMPERATURE',
-                            'MBT_SALINITY',     'MBT_TEMPERATURE',
-                        'MOORING_SALINITY', 'MOORING_TEMPERATURE',
-                            'STD_SALINITY',     'STD_TEMPERATURE',
-                           'TCTD_SALINITY',    'TCTD_TEMPERATURE',
-                            'XBT_SALINITY',     'XBT_TEMPERATURE',
-                           'XCTD_SALINITY',    'XCTD_TEMPERATURE',
-    evaluate_these_obs_types = 'SEA_SURFACE_HEIGHT',
-                                'U_CURRENT_COMPONENT',
-                                'V_CURRENT_COMPONENT'
+   assimilate_these_obs_types = 'CHAMP_DENSITY',
+                                'GPS_PROFILE'
+    evaluate_these_obs_types  = 'GND_GPS_VTEC'
   /
 
 &preprocess_nml
@@ -148,7 +132,7 @@
    output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
     output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
-   input_files              = '../../../obs_def/obs_def_ocean_mod.f90'
+   input_files              = '../../../obs_def/obs_def_upper_atm_mod.f90'
   /
 
 &assim_model_nml
@@ -156,25 +140,31 @@
   /
 
 &model_nml
-   assimilation_period_days     = 1,
-   assimilation_period_seconds  = 0,
-   model_perturbation_amplitude = 0.2,
-   output_state_vector          = .false.,
-   debug                        = 0,
-   model_state_variables        = 'SALT_CUR ', 'KIND_SALINITY             ', 'UPDATE',
-                                  'TEMP_CUR ', 'KIND_POTENTIAL_TEMPERATURE', 'UPDATE',
-                                  'UVEL_CUR ', 'KIND_U_CURRENT_COMPONENT  ', 'UPDATE',
-                                  'VVEL_CUR ', 'KIND_V_CURRENT_COMPONENT  ', 'UPDATE',
-                                  'PSURF_CUR', 'KIND_SEA_SURFACE_PRESSURE ', 'UPDATE'
+   debug                       = 1
+   output_state_vector         = .false.
+   tiegcm_restart_file_name    = 'tiegcm_restart_p.nc'
+   tiegcm_secondary_file_name  = 'tiegcm_s.nc'
+   tiegcm_namelist_file_name   = 'tiegcm.nml'
+   assimilation_period_seconds = 3600
+   estimate_f10_7              = .false.
+   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
+               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
+               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
+               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
+               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
+               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK' 
+   /
 
+&openggcm_to_dart_nml
+   openggcm_to_dart_output_file  = 'dart_ics',
   /
 
-&pop_to_dart_nml
-   pop_to_dart_output_file  = 'dart_ics',
-  /
-
-&dart_to_pop_nml
-   dart_to_pop_input_file   = 'dart_restart',
+&dart_to_openggcm_nml
+   dart_to_openggcm_input_file   = 'dart_restart',
    advance_time_present     = .false.
   /
 
@@ -344,8 +334,20 @@
   /
 
 &io_filenames_nml
-  restart_in_stub = 'pop.r.'
+  restart_in_stub = 'openggcm.r.'
   /  
 
 &quality_control_nml
   /  
+
+
+&model_to_dart_nml
+   file_out      = 'dart_ics'
+   /
+
+&dart_to_model_nml
+   file_in              = 'dart_restart'
+   file_namelist_out    = 'namelist_update'
+   advance_time_present = .false.
+   /
+
