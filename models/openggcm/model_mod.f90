@@ -359,7 +359,6 @@ integer        :: ind
 integer        :: hgt_bot, hgt_top
 real(r8)       :: hgt_fract
 integer        :: hstatus
-logical        :: convert_to_ssh
 integer        :: e
 
 if ( .not. module_initialized ) call static_init_model
@@ -399,36 +398,13 @@ else   ! if pressure or undefined, we don't know what to do
    return
 endif
 
-! kind (in-situ) temperature is a combination of potential temp,
-! salinity, and pressure based on depth.  call a routine that
-! interpolates all three, does the conversion, and returns the
-! sensible/in-situ temperature.
-if(obs_type == KIND_TEMPERATURE) then
-   ! we know how to interpolate this from potential temp,
-   ! salinity, and pressure based on depth.
-   call compute_temperature(state_handle, ens_size, llon, llat, lheight, expected_obs, istatus)
-   if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
-   return
-endif
-
-
 ! The following kinds are either in the state vector (so you
 ! can simply interpolate to find the value) or they are a simple
 ! transformation of something in the state vector.
 
-convert_to_ssh = .FALSE.
-
 SELECT CASE (obs_type)
-   CASE (KIND_SALINITY,              &
-         KIND_POTENTIAL_TEMPERATURE, &
-         KIND_U_CURRENT_COMPONENT,   &
-         KIND_V_CURRENT_COMPONENT,   &
-         KIND_SEA_SURFACE_PRESSURE)
+   CASE (KIND_ELECTRON_DENSITY)
       base_offset = get_index_start(domain_id, get_varid_from_kind(obs_type))
-
-   CASE (KIND_SEA_SURFACE_HEIGHT)
-      base_offset = get_index_start(domain_id, get_varid_from_kind(KIND_SEA_SURFACE_PRESSURE))
-      convert_to_ssh = .TRUE. ! simple linear transform of PSURF
 
    CASE DEFAULT
       ! Not a legal type for interpolation, return istatus error
@@ -437,16 +413,8 @@ SELECT CASE (obs_type)
 
 END SELECT
 
-! For Sea Surface Height or Pressure don't need the vertical coordinate
-! SSP needs to be converted to a SSH if height is required.
 if( vert_is_surface(location) ) then
-   ! HK CHECK surface observations
    call lon_lat_interpolate(state_handle, ens_size, base_offset, llon, llat, obs_type, 1, expected_obs, istatus)
-   do e = 1, ens_size
-      if (convert_to_ssh .and. (istatus(e) == 0)) then !HK why check istatus?
-         expected_obs(e) = expected_obs(e) / 980.6_r8   ! openggcm uses CGS units
-      endif
-   enddo
 
    if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
    return
@@ -495,7 +463,6 @@ integer  :: x_ind, y_ind
 real(r8) :: x_corners(4), y_corners(4)
 real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
 real(r8) :: lon_fract, lat_fract
-logical  :: masked
 integer  :: quad_status
 integer  :: e
 
@@ -504,97 +471,10 @@ if ( .not. module_initialized ) call static_init_model
 ! Succesful return has istatus of 0
 istatus = 0
 
-! Get the lower left corner for either grid type
-if(dipole_grid) then
-   ! Figure out which of the regular grid boxes this is in
-   call get_reg_box_indices(lon, lat, x_ind, y_ind)
-
-   ! Is this on the U or T grid?
-   if(is_on_ugrid(var_type)) then
-      ! On U grid
-      num_inds =  u_dipole_num  (x_ind, y_ind)
-      start_ind = u_dipole_start(x_ind, y_ind)
-
-      ! If there are no quads overlapping, can't do interpolation
-      if(num_inds == 0) then
-         istatus = 1
-         return
-      endif
-
-      ! Search the list of quads to see if (lon, lat) is in one
-      call get_dipole_quad(lon, lat, ulon, ulat, num_inds, start_ind, &
-         u_dipole_lon_list, u_dipole_lat_list, lon_bot, lat_bot, quad_status)
-      ! Fail on bad istatus return
-      if(quad_status /= 0) then
-         istatus = quad_status
-         return
-      endif
-
-      ! Getting corners for accurate interpolation
-      call get_quad_corners(ulon, lon_bot, lat_bot, x_corners)
-      call get_quad_corners(ulat, lon_bot, lat_bot, y_corners)
-
-      ! Fail if point is in one of the U boxes that go through the
-      ! pole (this could be fixed up if necessary)
-      if(lat_bot == u_pole_y .and. (lon_bot == pole_x -1 .or. &
-         lon_bot == pole_x)) then
-         istatus = 4
-         return
-      endif
-
-   else
-      ! On T grid
-      num_inds =  t_dipole_num  (x_ind, y_ind)
-      start_ind = t_dipole_start(x_ind, y_ind)
-
-      ! If there are no quads overlapping, can't do interpolation
-      if(num_inds == 0) then
-         istatus = 1
-         return
-      endif
-
-      call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
-         t_dipole_lon_list, t_dipole_lat_list, lon_bot, lat_bot, quad_status)
-
-      ! Fail on bad istatus return
-      if(quad_status /= 0) then
-         istatus = quad_status
-         return
-      endif
-
-      ! Fail if point is in T box that covers pole
-      if(lon_bot == pole_x .and. lat_bot == t_pole_y) then
-         istatus = 5
-         return
-      endif
-
-      ! Getting corners for accurate interpolation
-      call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
-      call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
-
-   endif
-
-else
-   ! This is an irregular grid
-   ! U and V are on velocity grid
-   if (is_on_ugrid(var_type)) then
-      ! Get the corner indices and the fraction of the distance between
-      call get_irreg_box(lon, lat, ulon, ulat, &
-         lon_bot, lat_bot, lon_fract, lat_fract, quad_status)
-   else
-      ! Eta, T and S are on the T grid
-      ! Get the corner indices
-      call get_irreg_box(lon, lat, tlon, tlat, &
-         lon_bot, lat_bot, lon_fract, lat_fract, quad_status)
-   endif
-
-   ! Return passing through error status
-   if(quad_status /= 0) then
-      istatus = quad_status
-      return
-   endif
-
-endif
+!> @TODO FIXME this is where we need to find the lat/lon corners
+! Getting corners for accurate interpolation
+call get_quad_corners(ulon, lon_bot, lat_bot, x_corners)
+call get_quad_corners(ulat, lon_bot, lat_bot, y_corners)
 
 ! Find the indices to get the values for interpolating
 lat_top = lat_bot + 1
@@ -609,83 +489,41 @@ if(lon_top > nx) lon_top = 1
 
 ! Get the values at the four corners of the box or quad
 ! Corners go around counterclockwise from lower left
-p(1, :) = get_val(lon_bot, lat_bot, nx, state_handle, offset, ens_size, var_type, height, masked)
-if(masked) then
-   istatus = 3
-   return
-endif
+p(1, :) = get_val(lon_bot, lat_bot, nx, state_handle, offset, ens_size, var_type, height)
+p(2, :) = get_val(lon_top, lat_bot, nx, state_handle, offset, ens_size, var_type, height)
 
+p(3, :) = get_val(lon_top, lat_top, nx, state_handle, offset, ens_size, var_type, height)
+p(4, :) = get_val(lon_bot, lat_top, nx, state_handle, offset, ens_size, var_type, height)
 
-p(2, :) = get_val(lon_top, lat_bot, nx, state_handle, offset, ens_size, var_type, height, masked)
-if(masked) then
-   istatus = 3
-   return
-endif
-
-
-
-p(3, :) = get_val(lon_top, lat_top, nx, state_handle, offset, ens_size, var_type, height, masked)
-if(masked) then
-   istatus = 3
-   return
-endif
-
-p(4, :) = get_val(lon_bot, lat_top, nx, state_handle, offset, ens_size, var_type, height, masked)
-if(masked) then
-   istatus = 3
-   return
-endif
-
-! Full bilinear interpolation for quads
-if(dipole_grid) then
-   do e = 1, ens_size
-      call quad_bilinear_interp(lon, lat, x_corners, y_corners, p(:,e), ens_size, expected_obs(e))
-   enddo
-else
-   ! Rectangular biliear interpolation
-   xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
-   xtop = p(4, :) + lon_fract * (p(3, :) - p(4, :))
-   ! Now interpolate in latitude
-   expected_obs = xbot + lat_fract * (xtop - xbot)
-endif
+! Rectangular biliear interpolation
+xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
+xtop = p(4, :) + lon_fract * (p(3, :) - p(4, :))
+! Now interpolate in latitude
+expected_obs = xbot + lat_fract * (xtop - xbot)
 
 end subroutine lon_lat_interpolate
 
 !------------------------------------------------------------
 
-function get_val(lon_index, lat_index, nlon, state_handle, offset, ens_size, var_type, height, masked)
+function get_val(lon_index, lat_index, nlon, state_handle, offset, ens_size, var_type, height)
  integer,             intent(in)  :: lon_index, lat_index, nlon, var_type, height
  type(ensemble_type), intent(in)  :: state_handle
  integer(i8),         intent(in)  :: offset
  integer,             intent(in)  :: ens_size
- logical,             intent(out) :: masked
 
  real(r8)    :: get_val(ens_size)
  integer(i8) :: state_index
 
 ! Returns the value from a single level array given the lat and lon indices
-! 'masked' returns true if this is NOT a valid grid location (e.g. land, or
-! below the ocean floor in shallower areas).
 
 if ( .not. module_initialized ) call static_init_model
 
-! check the land/ocean bottom map and return if not valid water cell.
-if(is_dry_land(var_type, lon_index, lat_index, height)) then
-   masked = .true.
-   get_val = MISSING_R8
-   return
-endif
-
+!> @TODO FIXME is this still right?
 ! state index must be 8byte integer
 state_index = int(lat_index - 1,i8)*int(nlon,i8) + int(lon_index,i8) + int(offset-1,i8)
 
-! Layout has lons varying most rapidly
-!get_val = x((lat_index - 1) * nlon + lon_index)
 ! The x above is only a horizontal slice, not the whole state.   HK WHY -1?
 get_val = get_state(state_index, state_handle)
-
-! this is a valid ocean water cell, not land or below ocean floor
-masked = .false.
 
 end function get_val
 
@@ -899,10 +737,10 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, depth_index, var_id=var_id)
 call get_state_kind(var_id, local_var)
 
-if (local_var == KIND_SEA_SURFACE_HEIGHT) then
-   depth = 0.0_r8
-else
+if (local_var == KIND_ELECTRON_DENSITY) then
    depth = ZC(depth_index)
+else
+   depth = 0.0_r8
 endif
 
 if (debug > 5) print *, 'lon, lat, depth = ', lon, lat, depth
@@ -911,9 +749,6 @@ location = set_location(lon, lat, depth, VERTISHEIGHT)
 
 if (present(var_type)) then
    var_type = local_var
-   if(is_dry_land(var_type, lon_index, lat_index, depth_index)) then
-      var_type = KIND_DRY_LAND
-   endif
 endif
 
 end subroutine get_state_meta_data
@@ -961,29 +796,6 @@ if ( .not. module_initialized ) call static_init_model
 var_type = state_kinds_list(var_ind)
 
 end subroutine get_state_kind
-
-!------------------------------------------------------------------
-
-subroutine get_state_kind_inc_dry(index_in, var_type)
- integer(i8), intent(in)  :: index_in
- integer,     intent(out) :: var_type
-
-! Given an integer index into the state vector structure, returns the
-! type, taking into account the ocean bottom and dry land.
-
-integer :: lon_index, lat_index, depth_index, var_id
-
-if ( .not. module_initialized ) call static_init_model
-
-call get_model_variable_indices(index_in, lon_index, lat_index, depth_index, var_id=var_id)
-call get_state_kind(var_id, var_type)
-
-! if on land or below ocean floor, replace type with dry land.
-if(is_dry_land(var_type, lon_index, lat_index, depth_index)) then
-   var_type = KIND_DRY_LAND
-endif
-
-end subroutine get_state_kind_inc_dry
 
 !------------------------------------------------------------------
 
