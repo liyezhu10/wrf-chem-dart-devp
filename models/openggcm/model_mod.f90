@@ -152,6 +152,7 @@ integer :: nfields
 integer :: nlon, nlat, nvert
 
 real(r8) :: grid_longitude(:), grid_latitude(:)
+real(r8) :: levels(:)
 
 type(time_type) :: model_time, model_timestep
 
@@ -225,47 +226,25 @@ call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 ! get data dimensions, then allocate space, then open the files
 ! and actually fill in the arrays.
 
-call get_horiz_grid_dims(Nx, Ny)
-call get_vert_grid_dim(Nz)
+call get_horiz_grid_dims(nlon, nlat)
+call get_vert_grid_dim(nvert)
 
 ! Allocate space for grid variables. 
-allocate(ULAT(Nx,Ny), ULON(Nx,Ny), TLAT(Nx,Ny), TLON(Nx,Ny))
-allocate( KMT(Nx,Ny),  KMU(Nx,Ny))
-allocate(  HT(Nx,Ny),   HU(Nx,Ny))
-allocate(     ZC(Nz),      ZG(Nz))
+allocate(grid_longitude(nlon), grid_latitude(nlat))
+allocate(levels(nvert))
 
-! Fill them in.
-! horiz grid initializes ULAT/LON, TLAT/LON as well.
-! kmt initializes HT/HU if present in input file.
-call read_horiz_grid(Nx, Ny, ULAT, ULON, TLAT, TLON)
-call read_topography(Nx, Ny,  KMT,  KMU)
-call read_vert_grid( Nz, ZC, ZG)
+! Fill them in. get the size from the array size.
+call read_horiz_grid(grid_longitude, grid_latitude)
+call read_vert_grid(levels)
 
 if (debug > 2) call write_grid_netcdf() ! DEBUG only
-if (debug > 2) call write_grid_interptest() ! DEBUG only
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
 call verify_state_variables(model_state_variables, nfields, variable_table, state_kinds_list, update_var_list)
 
-! in spite of the staggering, all grids are the same size
-! and offset by half a grid cell.  4 are 3D and 1 is 2D.
-!  e.g. S,T,U,V = 256 x 225 x 70
-!  e.g. PSURF = 256 x 225
-
-if (do_output()) write(logfileunit, *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
-if (do_output()) write(     *     , *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
-! initialize the pressure array - pressure in bars
-allocate(pressure(Nz))
-call dpth2pres(Nz, ZC, pressure)
-
-! Initialize the interpolation routines
-call init_interp()
-
-!> @todo 'openggcm.r.nc' is hardcoded in dart_openggcm_mod.f90
-domain_id = add_domain('openggcm.r.nc', nfields, &
+!> @todo  - need input filename, hardcode for now to openggcm.nc
+domain_id = add_domain('openggcm.nc', nfields, &
                        var_names = variable_table(1:nfields, VAR_NAME_INDEX), &
                        update_list = update_var_list(1:nfields))
 
@@ -290,7 +269,7 @@ character(len=128) :: msgstring2, msgstring3
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 msgstring3 = 'use openggcm_to_dart to generate an initial state'
 call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  openggcm model has no built-in default state', &
+                  'ERROR!!  openggcm model has no built-in default state', &
                   source, revision, revdate, &
                   text2=msgstring2, text3=msgstring3)
 
@@ -346,7 +325,7 @@ character(len=128) :: msgstring2, msgstring3
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 msgstring3 = 'use openggcm_to_dart to generate an initial state which contains a timestamp'
 call error_handler(E_ERR,'init_time', &
-                  'WARNING!!  openggcm model has no built-in default time', &
+                  'ERROR!!  openggcm model has no built-in default time', &
                   source, revision, revdate, &
                   text2=msgstring2, text3=msgstring3)
 
@@ -367,7 +346,7 @@ subroutine model_interpolate(state_handle, ens_size, location, obs_type, expecte
  integer,            intent(out) :: istatus(ens_size)
  real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
 
-! Model interpolate will interpolate any state variable (S, T, U, V, PSURF) to
+! Model interpolate will interpolate any state variable
 ! the given location given a state vector. The type of the variable being
 ! interpolated is obs_type since normally this is used to find the expected
 ! value of an observation at some location. The interpolated value is 
@@ -413,7 +392,7 @@ elseif (vert_is_level(location)) then
       istatus = 11
       return
    else
-      lheight = zc(ind)
+      lheight = level(ind)
    endif
 else   ! if pressure or undefined, we don't know what to do
    istatus = 17
