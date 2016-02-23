@@ -103,6 +103,7 @@ integer, parameter :: VAR_KIND_INDEX = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
 
 ! things which can/should be in the model_nml
+character(len=NF90_MAX_NAME) :: opengccm_template
 integer  :: assimilation_period_days = 1
 integer  :: assimilation_period_seconds = 0
 real(r8) :: model_perturbation_amplitude = 0.2
@@ -110,6 +111,7 @@ character(len=paramname_length) :: model_state_variables(max_state_variables * n
 integer  :: debug = 0   ! turn up for more and more debug messages
 
 namelist /model_nml/  &
+   opengccm_template,           &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
@@ -206,7 +208,7 @@ call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 
 !> @TODO FIXME
 
-ncid = get_grid_template_fileid()
+ncid = get_grid_template_fileid(opengccm_template)
 
 call get_grid_sizes(ncid, nlon, nlat, nvert)
 
@@ -233,7 +235,7 @@ enddo
 call verify_state_variables(model_state_variables, nfields, variable_table, state_kinds_list, update_var_list)
 
 !> @todo  - need input filename, hardcode for now to openggcm.nc
-domain_id = add_domain('openggcm.nc', nfields, &
+domain_id = add_domain(opengccm_template, nfields, &
                        var_names = variable_table(1:nfields, VAR_NAME_INDEX), &
                        update_list = update_var_list(1:nfields))
 
@@ -715,7 +717,7 @@ subroutine get_state_meta_data(state_handle, index_in, location, var_type)
 ! the distance between observations and state variables.
 
 real(r8) :: lat, lon, height
-integer :: lon_index, lat_index, height_index, local_var, var_id
+integer  :: lon_index, lat_index, height_index, local_var, var_id
 
 if ( .not. module_initialized ) call static_init_model
 
