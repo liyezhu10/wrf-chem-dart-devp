@@ -678,7 +678,15 @@ subroutine interactive_obs_def(obs_def, key)
 type(obs_def_type), intent(inout) :: obs_def
 integer,               intent(in) :: key
 
+! FIXME: hack!!! remove this if we can stop passing an
+! ensemble handle into get_state_meta_data()  
+!> @todo remove ens handle from get_state_meta_data
+
+type(ensemble_type) :: cache_ens_handle
+
 if ( .not. module_initialized ) call initialize_module
+
+call init_ensemble_manager(cache_ens_handle, 0, int(0,i8), 1, 1, 1)
 
 ! Get the observation kind WANT A STRING OPTION, TOO?
 obs_def%kind = get_kind_from_menu()
@@ -704,8 +712,8 @@ end select
 ! Get location from state meta_data
 if(obs_def%kind < 0) then
 ! Get the location of this from model
-   !call get_state_meta_data(-1 * obs_def%kind, obs_def%location)
-   call error_handler(E_ERR, 'broken by Helen', 'get_state_meta_data')
+   call get_state_meta_data_distrib(cache_ens_handle, -1_i8 * obs_def%kind, obs_def%location)
+   call error_handler(E_MSG, 'hacked by nancy', 'get_state_meta_data')
 else! Get the location
    call interactive_location(obs_def%location)
 endif
@@ -717,6 +725,7 @@ write(*, *) 'Input error variance for this observation definition '
 read(*, *) obs_def%error_variance
 
 ! TJH -- might want to do some sort of error checking (i.e. for positive values)
+call end_ensemble_manager(cache_ens_handle)
 
 end subroutine interactive_obs_def
 
