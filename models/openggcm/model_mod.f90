@@ -716,23 +716,23 @@ subroutine get_state_meta_data(state_handle, index_in, location, var_type)
 ! required for all filter applications as it is required for computing
 ! the distance between observations and state variables.
 
-real(r8) :: lat, lon, depth
-integer :: lon_index, lat_index, depth_index, local_var, var_id
+real(r8) :: lat, lon, height
+integer :: lon_index, lat_index, height_index, local_var, var_id
 
 if ( .not. module_initialized ) call static_init_model
 
-call get_model_variable_indices(index_in, lon_index, lat_index, depth_index, var_id=var_id)
+call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 call get_state_kind(var_id, local_var)
 
 if (local_var == KIND_ELECTRON_DENSITY) then
-   depth = levels(depth_index)
+   height = levels(height_index)
 else
-   depth = 0.0_r8
+   height = 0.0_r8
 endif
 
-if (debug > 5) print *, 'lon, lat, depth = ', lon, lat, depth
+if (debug > 5) print *, 'lon, lat, height = ', lon, lat, height
 
-location = set_location(lon, lat, depth, VERTISHEIGHT)
+location = set_location(lon, lat, height, VERTISHEIGHT)
 
 if (present(var_type)) then
    var_type = local_var
