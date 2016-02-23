@@ -300,10 +300,10 @@
 &model_mod_check_nml
    verbose               = .true.
    restart_in_file_name  = 'openggcm'
-   test1thru             = 2
+   test1thru             = 3
    loc_of_interest       = 320.0, 18.0, 1.0
-   x_ind                 = 10
-   kind_of_interest      = 'KIND_ELECTRIC_POTENTIAL'
+   x_ind                 = 373
+   kind_of_interest      = 'KIND_ELECTRON_DENSITY'
    interp_test_lonrange  = 0.0, 359.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = -89.0, 89.0

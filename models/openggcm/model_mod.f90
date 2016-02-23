@@ -1291,15 +1291,22 @@ write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
 end function construct_file_name_in
 
 !--------------------------------------------------------------------
-!> read the time from the input file
-!> Stolen from openggcm model_mod.f90 restart_to_sv
+!> read the time from template file
 function read_model_time(filename)
 
 character(len=1024) :: filename
 type(time_type) :: read_model_time
 
-integer :: ncid !< netcdf file id
-!#! integer :: iyear, imonth, iday, ihour, iminute, isecond
+! netcdf variables
+integer :: ncFileID, VarID
+
+! fractional days
+real(r8) :: days
+
+! interger conversion of fractional days
+integer :: seconds, whole_days
+
+type(time_type) :: base_time
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1308,29 +1315,23 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,'read_model_time',msgstring,source,revision,revdate)
 endif
 
-!#! call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-!#!                   'read_model_time', 'open '//trim(filename))
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iyear'  , iyear), &
-!#!                   'read_model_time', 'get_att iyear')
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'imonth' , imonth), &
-!#!                   'read_model_time', 'get_att imonth')
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iday'   , iday), &
-!#!                   'read_model_time', 'get_att iday')
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'ihour'  , ihour), &
-!#!                   'read_model_time', 'get_att ihour')
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'iminute', iminute), &
-!#!                   'read_model_time', 'get_att iminute')
-!#! call nc_check( nf90_get_att(ncid, NF90_GLOBAL, 'isecond', isecond), &
-!#!                   'read_model_time', 'get_att isecond')
+call nc_check( nf90_open(filename, NF90_NOWRITE, ncFileID), &
+                  'read_model_time', 'open '//filename )
 
-!#! read_model_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
+call nc_check(NF90_inq_varid(ncFileID, 'time', VarID), &
+              'read_model_time', 'time inq_varid')
 
+call nc_check(NF90_get_var(ncFileID, VarID, days), &
+              'read_model_time', 'time get_var')
 
-!>@todo FIXME : Need to get from netcdf file once Tim has written
-read_model_time = set_date(2016, 2, 16, 0, 0, 0)
+!>@todo FIXME : Should be grabbing this information from the attributes
+!>              harcoded for now.
+base_time = set_date(1900,1,1,0,0)
 
+whole_days = floor(days)
+seconds    = nint( (days - whole_days)*86400 )
 
-
+read_model_time = base_time + set_time(seconds, whole_days)
 
 end function read_model_time
 
