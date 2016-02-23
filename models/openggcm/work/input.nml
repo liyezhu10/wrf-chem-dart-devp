@@ -313,6 +313,7 @@
   /
 
 &model_nml
+   openggcm_template            = "openggcm.nc"
    assimilation_period_days     = 0 
    assimilation_period_seconds  = 1
    model_perturbation_amplitude = 0.1
