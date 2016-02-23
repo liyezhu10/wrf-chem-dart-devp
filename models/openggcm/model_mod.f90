@@ -468,6 +468,8 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 !> find the lower and upper indices which enclose the given value
+!> in this model, the data at lon 0 is replicated at lon 360, so no special
+!> wrap case is needed.
 call lon_bounds(lon, nlon, grid_longitude, lon_bot, lon_top, lon_fract)
 call lat_bounds(lat, nlat, grid_latitude, lat_bot, lat_top, lat_fract, istatus(1))
 if (istatus(1) /= 0) then
@@ -527,35 +529,26 @@ subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
 ! Given a longitude lon, the array of longitudes for grid boundaries, and the
 ! number of longitudes in the grid, returns the indices of the longitude
 ! below and above the location longitude and the fraction of the distance
-! between. It is assumed that the longitude wraps around for a global grid. 
-! Since longitude grids are going to be regularly spaced, this could be made more efficient.
-! Algorithm fails for a silly grid that has only two longitudes separated by 180 degrees.
+! between.  This code assumes that the first and last rows are replicated
+! and identical (e.g. 0 and 360 both have entries in the array)
 
 ! Local storage
 integer  :: i
-real(r8) :: dist_bot, dist_top
 
 if ( .not. module_initialized ) call static_init_model
 
-! This is inefficient, someone could clean it up since longitudes are regularly spaced
-! But note that they don't have to start at 0
 do i = 2, nlons
-   dist_bot = lon_dist(lon, lon_array(i - 1))
-   dist_top = lon_dist(lon, lon_array(i))
-   if(dist_bot <= 0 .and. dist_top > 0) then
-      bot = i - 1
+   if (lon < lon_array(i)) then
+      bot = i-1
       top = i
-      fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
+      fract = (lon - lon_array(bot)) / (lon_array(top) - lon_array(bot))
       return
    endif
 enddo
 
-! Falling off the end means it's in between; wraparound
-bot = nlons
-top = 1
-dist_bot = lon_dist(lon, lon_array(bot))
-dist_top = lon_dist(lon, lon_array(top)) 
-fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
+write(msgstring, *) 'looking for lon ', lon
+call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon', &
+                   source, revision, revdate, text2=msgstring)
 
 end subroutine lon_bounds
 
