@@ -119,16 +119,7 @@ namelist /model_nml/  &
    debug
 
 !------------------------------------------------------------------
-!
-! The default DART state vector (control vector) will consist of:  S, T, U, V, PSURF
-! (Salinity, Temperature, U velocity, V velocity, Sea Surface Height).
-! S, T are 3D arrays, located at cell centers.  U,V are at grid cell corners.
-! PSURF is a 2D field (X,Y only).  The Z direction is downward. 
-! 
-! Additional variables can be read into the state vector using the 
-! model_state_variables namelist by specifying the netcdf variable name
-! dart kind string and an update string.  Currently the update string
-! is not being used.
+! fields in the state vector
 !------------------------------------------------------------------
 
 ! Number of fields in the state vector
@@ -164,7 +155,7 @@ subroutine static_init_model()
 ! Called to do one time initialization of the model. In this case,
 ! it reads in the grid information.
 
-integer :: iunit, io
+integer :: iunit, io, i
 integer :: ss, dd
 
 ! The Plan:
@@ -215,12 +206,29 @@ call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 ! get data dimensions, then allocate space, then open the files
 ! and actually fill in the arrays.
 
+!> @TODO FIXME
+nlon = 360
+nlat = 180
+call error_handler(E_MSG, 'static_init_model', 'fixed grid sizes: 360 x 180')
+
+nvert = 1
 
 ! Allocate space for grid variables. 
 allocate(grid_longitude(nlon), grid_latitude(nlat))
 allocate(levels(nvert))
 
-! Fill them in. get the size from the array size.
+! Fill them in. FIXME: get this from netcdf file.
+call error_handler(E_MSG, 'static_init_model', 'setting grid to 1 degree; hardcoded')
+do i=1, nlon
+   grid_longitude(i) = i
+enddo
+do i=1, nlat
+   grid_latitude(i) = i - 90
+enddo
+do i=1, nvert
+   levels(i) = i
+enddo
+   
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
