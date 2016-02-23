@@ -21,7 +21,7 @@ program openggcm_to_netcdf
 ! author: Tim Hoar 6/24/09
 !----------------------------------------------------------------------
 
-use        types_mod, only : r4
+use        types_mod, only : r4, r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              open_file, close_file, nc_check
@@ -52,21 +52,20 @@ namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_output_file, &
 
 integer               :: io, iunit
 type(time_type)       :: model_time
-real(r4), allocatable :: statevector(:)
-real(r4), allocatable :: datmat(:,:)
+real(r4), allocatable :: statevector(:,:)
+real(r8), allocatable :: latitude(:)
+real(r8), allocatable :: longitude(:)
 
+integer :: iyear, imonth, iday, ihour, iminute, isecond
+integer :: ilat, ilon
 integer :: nthe, nphi
+real(r8) :: dlat, dlon
 
-integer :: ncid, NtheDimID, NphiDimID, VarID
+integer :: ncid, NtheDimID, NphiDimID, VarID, LonVarID, LatVarID
 
 !----------------------------------------------------------------------
 
 call initialize_utilities(progname='openggcm_to_netcdf')
-
-!----------------------------------------------------------------------
-! Call model_mod:static_init_model(), which reads the namelists
-! to set calendar type, starting date, deltaT, etc.
-!----------------------------------------------------------------------
 
 !----------------------------------------------------------------------
 ! Read the namelist to get the input and output filenames.
@@ -83,12 +82,31 @@ write(*,'(''openggcm_to_netcdf:converting openggcm restart file '',A, &
 
 
 iunit = open_file(openggcm_to_netcdf_input_file, form='unformatted',action='read')
+!read(iunit) iyear, imonth, iday, ihour, iminute, isecond
 read(iunit) nphi, nthe
-write(*,*)'TJH nphi, nthe is ',nphi, nthe
-allocate(statevector(nphi*nthe))
+allocate(statevector(nphi,nthe))
+allocate(latitude(nthe), longitude(nphi))
 read(iunit) statevector
 call close_file(iunit)
 
+iyear   = 2004
+imonth  = 5
+iday    = 8
+ihour   = 9
+iminute = 0
+isecond = 0
+
+dlat = 180.0_r8/real(nthe-1,r8)
+do ilat = 1,nthe  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
+   latitude(ilat) = dlat*real(ilat-1,r8)
+enddo
+
+dlon = 360.0_r8/real(nphi-1,r8)
+do ilon = 1,nphi  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
+   longitude(ilon) = dlon*real(ilon-1,r8)
+enddo
+
+write(*,*)'TJH nphi, nthe is ',nphi, nthe
 write(*,*)'file size should be ',4 + 4+4 + 4 + 4 + nphi*nthe*4 + 4
 
 call nc_check(nf90_create(openggcm_to_netcdf_output_file, NF90_CLOBBER, ncid),'openggcm_to_netcdf')
@@ -97,11 +115,29 @@ call nc_check(nf90_create(openggcm_to_netcdf_output_file, NF90_CLOBBER, ncid),'o
 
 call nc_check(nf90_def_dim(ncid, 'nphi', nphi, NphiDimID),'openggcm_to_netcdf')
 call nc_check(nf90_def_dim(ncid, 'nthe', nthe, NtheDimID),'openggcm_to_netcdf')
-call nc_check(nf90_def_var(ncid, 'pot', nf90_real, (/ NphiDimID, NtheDimID /), VarID),'openggcm_to_netcdf')
+
+call nc_check(nf90_def_var(ncid, 'nphi', nf90_real, (/ NphiDimID /), LonVarID),'openggcm_to_netcdf')
+call nc_check(nf90_put_att(ncid, LonVarID, 'short_name', 'geomagnetic longitude'), &
+                  'put_att nphi:short_name: openggcm_to_netcdf')
+
+call nc_check(nf90_def_var(ncid, 'nthe', nf90_real, (/ NtheDimID /), LatVarID),'openggcm_to_netcdf')
+call nc_check(nf90_put_att(ncid, LatVarID, 'short_name', 'geomagnetic latitude'), &
+                  'put_att nthe:short_name: openggcm_to_netcdf')
+
+call nc_check(nf90_def_var(ncid, 'pot' , nf90_real, (/ NphiDimID, NtheDimID /), VarID),'openggcm_to_netcdf')
+
+call nc_check(nf90_put_att(ncid, VarID, 'short_name', 'electric potential'), &
+                  'put_att pot:short_name: openggcm_to_netcdf')
+call nc_check(nf90_put_att(ncid, VarID, 'long_name', 'ionosphere electric potential'), &
+                  'put_att pot:short_name: openggcm_to_netcdf')
+call nc_check(nf90_put_att(ncid, VarID, 'units', 'volts'), &
+                  'put_att pot:short_name: openggcm_to_netcdf')
+
 call nc_check(nf90_enddef(ncid),'openggcm_to_netcdf')
 
-datmat = reshape(statevector, (/ nphi, nthe /))
-call nc_check(nf90_put_var(ncid,  VarID,  datmat),'openggcm_to_netcdf')
+call nc_check(nf90_put_var(ncid, LonVarID,   longitude),'openggcm_to_netcdf')
+call nc_check(nf90_put_var(ncid, LatVarID,    latitude),'openggcm_to_netcdf')
+call nc_check(nf90_put_var(ncid,    VarID, statevector),'openggcm_to_netcdf')
 
 call nc_check(nf90_close(ncid),'openggcm_to_netcdf')
 
