@@ -39,7 +39,8 @@ use distributed_state_mod, only : get_state
 use state_structure_mod,   only : add_domain, get_model_variable_indices,        &
                                   get_num_variables, get_index_start,            &
                                   get_num_dims, get_domain_size, get_kind_index, &
-                                  get_varid_from_kind, get_dart_vector_index
+                                  get_varid_from_kind, get_dart_vector_index,    &
+                                  state_structure_info
 use dart_time_io_mod,      only : write_model_time
 
 use typesizes
@@ -232,6 +233,8 @@ domain_id = add_domain(openggcm_template, nfields, &
                        kind_list   = state_kinds_list(1:nfields), &
                        update_list = update_var_list (1:nfields))
 
+call state_structure_info(domain_id)
+
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
 
@@ -399,8 +402,11 @@ endif
 ! can simply interpolate to find the value) or they are a simple
 ! transformation of something in the state vector.
 
+!@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
+!>             if you have an invalid kind you can simply return.
 SELECT CASE (obs_kind)
-   CASE (KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL)
+   !>@todo FIXME : in the future we could like to interpolate KIND_ELECTRON_DENSITY
+   CASE (KIND_ELECTRIC_POTENTIAL)
       ! these kinds are ok
 
    CASE DEFAULT
@@ -505,13 +511,21 @@ function get_val(lon_index, lat_index, height_index, var_kind, state_handle, ens
 
  real(r8)    :: get_val(ens_size)
  integer(i8) :: state_index
+ integer     :: dart_kind
 
 ! Returns the value from a single level array given the lat and lon indices
 
 if ( .not. module_initialized ) call static_init_model
 
+dart_kind = get_varid_from_kind(domain_id, var_kind)
+
+if (dart_kind < 0 ) then
+   call error_handler(E_ERR, 'get_val', 'dart kind < 0 should not happen ', &
+                      source, revision, revdate)
+endif   
+
 state_index = get_dart_vector_index(lon_index, lat_index, height_index, &
-                                    domain_id, get_varid_from_kind(domain_id, var_kind))
+                                    domain_id, dart_kind)
 
 get_val = get_state(state_index, state_handle)
 
@@ -579,17 +593,17 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 ! Check for too far south or north
-if(lat < lat_array(1)) then
+if(lat > lat_array(1)) then
    istatus = 1
    return
-else if(lat > lat_array(nlats)) then
+else if(lat < lat_array(nlats)) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
 do i = 2, nlats
-   if(lat <= lat_array(i)) then
+   if(lat >= lat_array(i)) then
       bot = i - 1
       top = i
       fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
