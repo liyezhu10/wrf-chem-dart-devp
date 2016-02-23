@@ -19,7 +19,8 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              VERTISUNDEF, VERTISHEIGHT, get_location,          &
                              vert_is_height, vert_is_level, vert_is_surface,   &
-                             loc_get_close_obs => get_close_obs, get_close_type
+                             vert_is_undef, get_close_type,                    &
+                             loc_get_close_obs => get_close_obs
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, do_output, to_upper,                    &
@@ -38,7 +39,7 @@ use distributed_state_mod, only : get_state
 use state_structure_mod,   only : add_domain, get_model_variable_indices,        &
                                   get_num_variables, get_index_start,            &
                                   get_num_dims, get_domain_size, get_kind_index, &
-                                  get_varid_from_kind
+                                  get_varid_from_kind, get_dart_vector_index
 use dart_time_io_mod,      only : write_model_time
 
 use typesizes
@@ -82,6 +83,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=512) :: string1
 character(len=512) :: string2
 character(len=512) :: msgstring
+
+integer, parameter :: VERT_LEVEL_1 = 1
 
 logical, save :: module_initialized = .false.
 
@@ -318,18 +321,18 @@ end subroutine init_time
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_type, expected_obs, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
  type(ensemble_type), intent(in) :: state_handle
  integer,             intent(in) :: ens_size
  type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_type
+ integer,             intent(in) :: obs_kind
  integer,            intent(out) :: istatus(ens_size)
  real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
 
 ! Model interpolate will interpolate any state variable
-! the given location given a state vector. The type of the variable being
-! interpolated is obs_type since normally this is used to find the expected
+! the given location given a state vector. The 'generic kind' of the variable being
+! interpolated is obs_kind since normally this is used to find the expected
 ! value of an observation at some location. The interpolated value is 
 ! returned in interp_val and istatus is 0 for success.
 
@@ -349,6 +352,10 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
+!> @TODO FIXME should this start as istatus = 0 so we can use
+!> track_istatus().   are there more than one of these and can
+!> they be combined?
+
 expected_obs(:) = MISSING_R8     ! the DART bad value flag
 istatus(:) = 99                ! unknown error
 
@@ -358,14 +365,21 @@ llon    = loc_array(1)
 llat    = loc_array(2)
 lheight = loc_array(3)
 
-if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
+if (debug > 1) print *, 'requesting interpolation of ', obs_kind, ' at ', llon, llat, lheight
 
-if( vert_is_height(location) ) then
-   ! Nothing to do 
-elseif ( vert_is_surface(location) ) then
-   ! Nothing to do 
+if( vert_is_undef(location) ) then
+   ! this is what we expect and it is ok
+elseif ( vert_is_height(location) ) then
+   ! this is what we expect and it is ok
+   ! once we write the code to search in the vertical
+   write(msgstring,*)'requesting interp of an obs on height, not supported yet'
+   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 elseif (vert_is_level(location)) then
-   ! convert the levels index to an actual depth 
+   write(msgstring,*)'requesting interp of an obs on level, not supported yet'
+   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
+
+   !> @TODO FIXME something like this
+   ! convert the levels index to an actual height 
    ind = nint(loc_array(3))
    if ( (ind < 1) .or. (ind > size(levels)) ) then 
       istatus = 11
@@ -373,7 +387,10 @@ elseif (vert_is_level(location)) then
    else
       lheight = levels(ind)
    endif
-else   ! if pressure or undefined, we don't know what to do
+else   ! if pressure or surface we don't know what to do
+   write(msgstring,*)'requesting interp of an obs on pressure or surface, not supported yet'
+   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
+
    istatus = 17
    return
 endif
@@ -382,9 +399,9 @@ endif
 ! can simply interpolate to find the value) or they are a simple
 ! transformation of something in the state vector.
 
-SELECT CASE (obs_type)
-   CASE (KIND_ELECTRON_DENSITY)
-      base_offset = get_index_start(domain_id, get_varid_from_kind(domain_id, obs_type))
+SELECT CASE (obs_kind)
+   CASE (KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL)
+      ! these kinds are ok
 
    CASE DEFAULT
       ! Not a legal type for interpolation, return istatus error
@@ -393,12 +410,17 @@ SELECT CASE (obs_type)
 
 END SELECT
 
-if( vert_is_surface(location) ) then
-   call lon_lat_interpolate(state_handle, ens_size, base_offset, llon, llat, obs_type, 1, expected_obs, istatus)
+if( vert_is_undef(location) ) then
+   call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, VERT_LEVEL_1, &
+                            expected_obs, istatus)
 
    if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
    return
 endif
+
+
+write(msgstring,*)'did not expect to get here, error'
+call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
 ! Get the bounding vertical levels and the fraction between bottom and top
 call height_bounds(lheight, nvert, levels, hgt_bot, hgt_top, hgt_fract, hstatus)
@@ -411,7 +433,7 @@ endif
 ! the top level, then do a linear interpolation in the vertical to get the
 ! final value.  this sets both interp_val and istatus.
 call do_interp(state_handle, ens_size, base_offset, hgt_bot, hgt_top, hgt_fract, &
-               llon, llat, obs_type, expected_obs, istatus)
+               llon, llat, obs_kind, expected_obs, istatus)
 if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
 
 end subroutine model_interpolate
@@ -419,22 +441,19 @@ end subroutine model_interpolate
 !------------------------------------------------------------------
 
 !------------------------------------------------------------------
-!> Is height ens_size? Should quad status be ens_size?
-subroutine lon_lat_interpolate(state_handle, ens_size, offset, lon, lat, var_type, height, expected_obs, istatus)
+
+subroutine lon_lat_interpolate(state_handle, ens_size, var_kind, lon, lat, height_index, &
+                               expected_obs, istatus)
+
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
-integer(i8),         intent(in)  :: offset ! Not sure if this is the best way to do this
+integer,             intent(in)  :: var_kind
 real(r8),            intent(in)  :: lon, lat
-integer,             intent(in)  :: var_type, height
+integer,             intent(in)  :: height_index
 real(r8),            intent(out) :: expected_obs(ens_size)
 integer,             intent(out) :: istatus(ens_size)
 
-! Subroutine to interpolate to a lon lat location given the state vector
-! for that level, x. This works just on one horizontal slice.
-! NOTE: Using array sections to pass in the x array may be inefficient on some
-! compiler/platform setups. Might want to pass in the entire array with a base
-! offset value instead of the section if this is an issue.
-! This routine works for either the dipole or a regular lat-lon grid.
+! Subroutine to interpolate to a lon lat location given the state handle.
 ! Successful interpolation returns istatus=0.
 
 ! Local storage
@@ -448,33 +467,25 @@ if ( .not. module_initialized ) call static_init_model
 ! Succesful return has istatus of 0
 istatus = 0
 
-!> @TODO FIXME this is where we need to find the lat/lon corners
-! Getting corners for accurate interpolation
-!#! call get_quad_corners(grid_longitude, lon_bot, lat_bot, x_corners)
-!#! call get_quad_corners(grid_latitude, lon_bot, lat_bot, y_corners)
-
-! Find the indices to get the values for interpolating
-lat_top = lat_bot + 1
-if(lat_top > nlat) then
-   istatus = 2
+!> find the lower and upper indices which enclose the given value
+call lon_bounds(lon, nlon, grid_longitude, lon_bot, lon_top, lon_fract)
+call lat_bounds(lat, nlat, grid_latitude, lat_bot, lat_top, lat_fract, istatus(1))
+if (istatus(1) /= 0) then
+   istatus(:) = 18 
    return
 endif
 
-! Watch for wraparound in longitude
-lon_top = lon_bot + 1
-if(lon_top > nlon) lon_top = 1
-
 ! Get the values at the four corners of the box or quad
 ! Corners go around counterclockwise from lower left
-p(1, :) = get_val(lon_bot, lat_bot, nlon, state_handle, offset, ens_size, var_type, height)
-p(2, :) = get_val(lon_top, lat_bot, nlon, state_handle, offset, ens_size, var_type, height)
+p(1, :) = get_val(lon_bot, lat_bot, height_index, var_kind, state_handle, ens_size)
+p(2, :) = get_val(lon_top, lat_bot, height_index, var_kind, state_handle, ens_size)
+p(3, :) = get_val(lon_top, lat_top, height_index, var_kind, state_handle, ens_size)
+p(4, :) = get_val(lon_bot, lat_top, height_index, var_kind, state_handle, ens_size)
 
-p(3, :) = get_val(lon_top, lat_top, nlon, state_handle, offset, ens_size, var_type, height)
-p(4, :) = get_val(lon_bot, lat_top, nlon, state_handle, offset, ens_size, var_type, height)
-
-! Rectangular biliear interpolation
+! Rectangular bilinear interpolation
 xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
 xtop = p(4, :) + lon_fract * (p(3, :) - p(4, :))
+
 ! Now interpolate in latitude
 expected_obs = xbot + lat_fract * (xtop - xbot)
 
@@ -482,10 +493,12 @@ end subroutine lon_lat_interpolate
 
 !------------------------------------------------------------
 
-function get_val(lon_index, lat_index, nlon, state_handle, offset, ens_size, var_type, height)
- integer,             intent(in)  :: lon_index, lat_index, nlon, var_type, height
+function get_val(lon_index, lat_index, height_index, var_kind, state_handle, ens_size)
+ integer,             intent(in)  :: lon_index
+ integer,             intent(in)  :: lat_index
+ integer,             intent(in)  :: height_index
+ integer,             intent(in)  :: var_kind
  type(ensemble_type), intent(in)  :: state_handle
- integer(i8),         intent(in)  :: offset
  integer,             intent(in)  :: ens_size
 
  real(r8)    :: get_val(ens_size)
@@ -495,11 +508,9 @@ function get_val(lon_index, lat_index, nlon, state_handle, offset, ens_size, var
 
 if ( .not. module_initialized ) call static_init_model
 
-!> @TODO FIXME is this still right?
-! state index must be 8byte integer
-state_index = int(lat_index - 1,i8)*int(nlon,i8) + int(lon_index,i8) + int(offset-1,i8)
+state_index = get_dart_vector_index(lon_index, lat_index, height_index, &
+                                    domain_id, get_varid_from_kind(domain_id, var_kind))
 
-! The x above is only a horizontal slice, not the whole state.   HK WHY -1?
 get_val = get_state(state_index, state_handle)
 
 end function get_val
@@ -509,7 +520,7 @@ end function get_val
 subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
  real(r8),    intent(in) :: lon
  integer,     intent(in) :: nlons
- real(r8),    intent(in) :: lon_array(:, :)
+ real(r8),    intent(in) :: lon_array(:)
  integer,    intent(out) :: bot, top
  real(r8),   intent(out) :: fract
 
@@ -529,8 +540,8 @@ if ( .not. module_initialized ) call static_init_model
 ! This is inefficient, someone could clean it up since longitudes are regularly spaced
 ! But note that they don't have to start at 0
 do i = 2, nlons
-   dist_bot = lon_dist(lon, lon_array(i - 1, 1))
-   dist_top = lon_dist(lon, lon_array(i, 1))
+   dist_bot = lon_dist(lon, lon_array(i - 1))
+   dist_top = lon_dist(lon, lon_array(i))
    if(dist_bot <= 0 .and. dist_top > 0) then
       bot = i - 1
       top = i
@@ -542,8 +553,8 @@ enddo
 ! Falling off the end means it's in between; wraparound
 bot = nlons
 top = 1
-dist_bot = lon_dist(lon, lon_array(bot, 1))
-dist_top = lon_dist(lon, lon_array(top, 1)) 
+dist_bot = lon_dist(lon, lon_array(bot))
+dist_top = lon_dist(lon, lon_array(top)) 
 fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
 
 end subroutine lon_bounds
@@ -553,7 +564,7 @@ end subroutine lon_bounds
 subroutine lat_bounds(lat, nlats, lat_array, bot, top, fract, istatus)
  real(r8),   intent(in) :: lat
  integer,    intent(in) :: nlats
- real(r8),   intent(in) :: lat_array(:, :)
+ real(r8),   intent(in) :: lat_array(:)
  integer,   intent(out) :: bot, top
  real(r8),  intent(out) :: fract
  integer,   intent(out) :: istatus
@@ -575,20 +586,20 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 ! Check for too far south or north
-if(lat < lat_array(1, 1)) then
+if(lat < lat_array(1)) then
    istatus = 1
    return
-else if(lat > lat_array(1, nlats)) then
+else if(lat > lat_array(nlats)) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
 do i = 2, nlats
-   if(lat <= lat_array(1, i)) then
+   if(lat <= lat_array(i)) then
       bot = i - 1
       top = i
-      fract = (lat - lat_array(1, bot)) / (lat_array(1, top) - lat_array(1, bot))
+      fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
       return
    endif
 enddo
@@ -771,7 +782,7 @@ integer, intent(out) :: nvert
 ! netcdf variables
 integer :: DimID
 
-nvert = 1
+nvert = 10
 
 call nc_check(NF90_inq_dimid(ncid=ncFileID, name='nphi', dimid=DimID), &
                            'get_grid_sizes','inq_dimid nphi')
@@ -808,6 +819,8 @@ call nc_check(NF90_inq_varid(ncFileID, 'nthe', VarID), &
 call nc_check(NF90_get_var(ncFileID, VarID, grid_latitude), &
               'read_horiz_grid', 'nthe get_var')
 
+! native coordinates are 'co-latitudes' where 0 is the north pole
+! and 180 is the south pole.  map to 90 -> -90 for the locations module.
 grid_latitude(:) = 90.0_r8 - grid_latitude(:)
 
 end subroutine read_horiz_grid
@@ -818,10 +831,14 @@ subroutine read_vert_levels(ncFileID)
 
 integer, intent(in)  :: ncFileID
 
+integer :: i
+
 ! netcdf variables
 integer :: VarID
 
-!>@todo FIXME
+!> @todo FIXME - get this from the netcdf file once we
+!> have some 3d fields to test.
+
 !#! call nc_check(NF90_inq_varid(ncFileID, 'xxxx', VarID), &
 !#!               'read_vert_levels', 'xxxx inq_varid')
 !#! 
@@ -829,7 +846,9 @@ integer :: VarID
 !#!               'read_vert_levels', 'xxxx get_var')
 !#! 
 
-levels(1) = 1
+do i=1, nvert
+   levels(i) = real(i, r8)
+enddo
 
 end subroutine read_vert_levels
 
@@ -1174,14 +1193,14 @@ end subroutine get_close_obs
 !------------------------------------------------------------------
 
 subroutine do_interp(state_handle, ens_size, base_offset, hgt_bot, hgt_top, hgt_fract, &
-                     llon, llat, obs_type, expected_obs, istatus)
+                     llon, llat, obs_kind, expected_obs, istatus)
 
 type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: ens_Size
 integer(i8),         intent(in) :: base_offset
 integer,             intent(in) :: hgt_bot, hgt_top
 real(r8),            intent(in) :: hgt_fract, llon, llat
-integer,             intent(in) :: obs_type
+integer,             intent(in) :: obs_kind
 real(r8),           intent(out) :: expected_obs(ens_size)
 integer,           intent(out) :: istatus(ens_size)
  
@@ -1193,39 +1212,32 @@ integer(i8) :: offset
 real(r8)    :: bot_val(ens_size), top_val(ens_size)
 integer     :: e
 integer     :: temp_status(ens_size)
+logical     :: return_now
 
+istatus(:) = 0
 
-! Find the base location for the bottom height and interpolate horizontally 
-!  on this level.  Do bottom first in case it is below the ocean floor; can
-!  avoid the second horizontal interpolation.
-offset = base_offset + (hgt_bot - 1) * nlon * nlat
-if (debug > 6) &
-   print *, 'bot, field, abs offset: ', hgt_bot, base_offset, offset
+!> @TODO FIXME this should work like the forward operators,
+!> where we have the option to bail as soon as any ensemble member
+!> fails, or carry on to the bitter end to see what values the
+!> successful ensemble members returned, and/or how many were successful.
 
-call lon_lat_interpolate(state_handle, ens_size, offset, llon, llat, obs_type, hgt_bot, bot_val, temp_status)
-! Failed istatus from interpolate means give up
-istatus = temp_status
-if(all(istatus /= 0)) return
-if (debug > 6) &
-   print *, 'bot_val = ', bot_val
+call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
+call track_status(ens_size, temp_status, bot_val, istatus, return_now)
+if (debug > 6) print *, 'bot_val = ', bot_val
+if (return_now) return
 
-! Find the base location for the top height and interpolate horizontally 
-!  on this level.
-offset = base_offset + (hgt_top - 1) * nlon * nlat
-if (debug > 6) &
-   print *, 'top, field, abs offset: ', hgt_top, base_offset, offset
-
-call lon_lat_interpolate(state_handle, ens_size, offset, llon, llat, obs_type, hgt_top, top_val, temp_status)
-do e = 1, ens_size
-   if(temp_status(e) /= 0) istatus(e) = temp_status(e)
-enddo
-! Failed istatus from interpolate means give up
-if(all(istatus /= 0)) return
-if (debug > 6) &
-   print *, 'top_val = ', top_val
+call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, hgt_top, top_val, temp_status)
+if (debug > 6) print *, 'top_val = ', top_val
+call track_status(ens_size, temp_status, top_val, istatus, return_now)
+if (return_now) return
 
 ! Then weight them by the vertical fraction and return
-expected_obs = bot_val + hgt_fract * (top_val - bot_val)
+where (istatus == 0) 
+   expected_obs = bot_val + hgt_fract * (top_val - bot_val)
+elsewhere
+   expected_obs = MISSING_R8
+endwhere
+
 if (debug > 2) print *, 'do_interp: interp val = ',expected_obs
 
 
@@ -1402,6 +1414,43 @@ enddo MyLoop
 
 end subroutine verify_state_variables
 
+!> @TODO FIXME: this should be in the utilities mod!!!
+
+!----------------------------------------------------------------------
+!> track_status can be used to keep track of the status of
+!> each ensemble member during multiple calls to model_interpolate
+!> for a given obs_def.
+!> It assumes that you are starting with istatus(:) = 0
+!> If debugging, return_now is only set to true if all istatuses are non-zero
+!> If not debugging, return_now is set to true if any istatues are non-zero
+!>  and any remaining zero istatues are set to 1.
+subroutine track_status(ens_size, val_istatus, val_data, istatus, return_now)
+
+integer,  intent(in)    :: ens_size
+integer,  intent(in)    :: val_istatus(ens_size)
+real(r8), intent(inout) :: val_data(ens_size) !> expected_obs for obs_def
+integer,  intent(inout) :: istatus(ens_size) !> istatus for obs_def
+logical,  intent(out)   :: return_now
+
+where (istatus == 0) istatus = val_istatus
+where (istatus /= 0) val_data = MISSING_R8
+
+return_now = .false.
+if (debug > 0) then
+   if( all(istatus /= 0))then
+      return_now = .true.
+      val_data(:) = missing_r8
+   endif
+else
+   if( any(istatus /= 0)) then
+      return_now = .true.
+      val_data(:) = missing_r8
+      where (istatus == 0) istatus = 1
+   endif
+endif
+
+end subroutine track_status
+!----------------------------------------------------------------------
 !------------------------------------------------------------------
 ! End of model_mod
 !------------------------------------------------------------------
