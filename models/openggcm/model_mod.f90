@@ -103,7 +103,6 @@ integer, parameter :: VAR_KIND_INDEX = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
 
 ! things which can/should be in the model_nml
-logical  :: output_state_vector = .true.
 integer  :: assimilation_period_days = 1
 integer  :: assimilation_period_seconds = 0
 real(r8) :: model_perturbation_amplitude = 0.2
@@ -111,7 +110,6 @@ character(len=paramname_length) :: model_state_variables(max_state_variables * n
 integer  :: debug = 0   ! turn up for more and more debug messages
 
 namelist /model_nml/  &
-   output_state_vector,         &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
@@ -1208,7 +1206,8 @@ character(len=1024)            :: construct_file_name_in
 ! stub is found in input.nml io_filename_nml
 ! restart files typically are of the form
 ! openggcm.r0001.nc
-write(construct_file_name_in, '(A, i4.4, A)') trim(stub), copy, ".nc"
+! write(construct_file_name_in, '(A, i4.4, A)') trim(stub), copy, ".nc"
+write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
 
 
 end function construct_file_name_in
@@ -1247,7 +1246,11 @@ endif
 !#!                   'read_model_time', 'get_att isecond')
 
 !#! read_model_time = set_date(iyear, imonth, iday, ihour, iminute, isecond)
-read_model_time = set_date(0, 0, 0, 0, 0, 0)
+
+
+!>@todo FIXME : Need to get from netcdf file once Tim has written
+read_model_time = set_date(2016, 2, 16, 0, 0, 0)
+
 
 
 
