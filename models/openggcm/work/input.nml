@@ -147,17 +147,19 @@
    tiegcm_namelist_file_name   = 'tiegcm.nml'
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
-   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
-               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
-               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
-               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
-               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
+   variables = 'PHI',   'KIND_ELECTRIC_DENSITY',        'NA',  'NA',      'restart',    'UPDATE'
    /
+
+!   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
+!               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+!               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
+!               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
+!               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+!	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+!               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
+!               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
+!               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
+!               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
 
 &openggcm_to_netcdf_nml
    openggcm_to_netcdf_input_file  = '../data/da0002.dart.pot'

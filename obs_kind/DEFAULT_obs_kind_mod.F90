@@ -186,7 +186,7 @@ integer, parameter, public :: &
 
 ! kinds for OpenGGCM
 integer, parameter, public :: &
-    KIND_ELECTRON_POTENTIAL          = 66
+    KIND_ELECTRIC_POTENTIAL          = 66
 
 
 ! kinds for planetary remote sensing (wglawson, c.lee)
@@ -552,7 +552,7 @@ obs_kind_names(62) = obs_kind_type(KIND_LANDMASK, 'KIND_LANDMASK')
 obs_kind_names(63) = obs_kind_type(KIND_EDGE_NORMAL_SPEED, 'KIND_EDGE_NORMAL_SPEED')
 obs_kind_names(64) = obs_kind_type(KIND_CLW_PATH, 'KIND_CLW_PATH')
 obs_kind_names(65) = obs_kind_type(KIND_WIND_TURBINE_POWER, 'KIND_WIND_TURBINE_POWER')
-obs_kind_names(66) = obs_kind_type(KIND_ELECTRON_POTENTIAL, 'KIND_ELECTRON_POTENTIAL')
+obs_kind_names(66) = obs_kind_type(KIND_ELECTRIC_POTENTIAL, 'KIND_ELECTRIC_POTENTIAL')
 
 obs_kind_names(70) = obs_kind_type(KIND_SKIN_TEMPERATURE, 'KIND_SKIN_TEMPERATURE')
 obs_kind_names(71) = obs_kind_type(KIND_NADIR_RADIANCE, 'KIND_NADIR_RADIANCE')

@@ -25,7 +25,7 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              nc_check, do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
-use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRON_POTENTIAL,   &
+use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL,   &
                              get_raw_obs_kind_index, get_raw_obs_kind_name,    &
                              paramname_length 
 use mpi_utilities_mod, only: my_task_id, task_count
