@@ -216,19 +216,8 @@ call get_grid_sizes(ncid, nlon, nlat, nvert)
 allocate(grid_longitude(nlon), grid_latitude(nlat))
 allocate(levels(nvert))
 
-call get_horiz_grid
-! Fill them in. FIXME: get this from netcdf file.
-call error_handler(E_MSG, 'static_init_model', 'setting grid to 1 degree; hardcoded')
-do i=1, nlon
-   grid_longitude(i) = i
-enddo
-do i=1, nlat
-   grid_latitude(i) = i - 90
-enddo
-do i=1, nvert
-   levels(i) = i
-enddo
-   
+call read_horiz_grid(ncid)
+call read_vert_levels(ncid)
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
@@ -808,35 +797,80 @@ function get_grid_template_fileid(filename)
 character(len=*), intent(in) :: filename
 integer get_grid_template_fileid
 
-get_grid_template_fileid = netcdf_open return
+call nc_check( nf90_open(filename, NF90_NOWRITE, get_grid_template_fileid), &
+                  'get_grid_template_fileid', 'open '//trim(filename))
 
 end function get_grid_template_fileid
 
 !------------------------------------------------------------------
 
-subroutine get_grid_sizes(ncid, nlon, nlat, nvert)
+subroutine get_grid_sizes(ncFileID, nlon, nlat, nvert)
 
-integer, intent(in)  :: ncid
+integer, intent(in)  :: ncFileID
 integer, intent(out) :: nlon
 integer, intent(out) :: nlat
 integer, intent(out) :: nvert
 
-! read these from netcdf file
-nlon = 121
-nlat = 361
-nvert = 10
+! netcdf variables
+integer :: DimID
+
+nvert = 1
+
+call nc_check(NF90_inq_dimid(ncid=ncFileID, name='nphi', dimid=DimID), &
+                           'get_grid_sizes','inq_dimid nphi')
+
+call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=nlon), &
+              'get_grid_sizes', 'inqure_dimension nphi')
+
+call nc_check(NF90_inq_dimid(ncid=ncFileID, name='nthe', dimid=DimID), &
+                           'get_grid_sizes','inq_dimid nthe')
+
+call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=nlat), &
+              'get_grid_sizes', 'inqure_dimension nthe')
 
 end subroutine get_grid_sizes
 
 !------------------------------------------------------------------
 
-subroutine read_horiz_grid()
+subroutine read_horiz_grid(ncFileID)
+
+integer, intent(in)  :: ncFileID
+
+! netcdf variables
+integer :: VarID
+
+call nc_check(NF90_inq_varid(ncFileID, 'nphi', VarID), &
+              'read_horiz_grid', 'nphi inq_varid')
+
+call nc_check(NF90_get_var(ncFileID, VarID, grid_longitude), &
+              'read_horiz_grid', 'nphi get_var')
+
+call nc_check(NF90_inq_varid(ncFileID, 'nthe', VarID), &
+              'read_horiz_grid', 'nthe inq_varid')
+
+call nc_check(NF90_get_var(ncFileID, VarID, grid_latitude), &
+              'read_horiz_grid', 'nthe get_var')
 
 end subroutine read_horiz_grid
 
 !------------------------------------------------------------------
 
-subroutine read_vert_levels()
+subroutine read_vert_levels(ncFileID)
+
+integer, intent(in)  :: ncFileID
+
+! netcdf variables
+integer :: VarID
+
+!>@todo FIXME
+!#! call nc_check(NF90_inq_varid(ncFileID, 'xxxx', VarID), &
+!#!               'read_vert_levels', 'xxxx inq_varid')
+!#! 
+!#! call nc_check(NF90_get_var(ncFileID, VarID, levels), &
+!#!               'read_vert_levels', 'xxxx get_var')
+!#! 
+
+levels(1) = 1
 
 end subroutine read_vert_levels
 
