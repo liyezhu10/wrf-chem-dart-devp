@@ -73,8 +73,6 @@
 
 &state_vector_io_nml
    single_precision_output    = .false.
-   single_restart_file_out    = .false.
-   perturbation_amplitude     = 0.2
    write_binary_restart_files = .false.
 /
 
@@ -138,28 +136,6 @@
 &assim_model_nml
    netCDF_large_file_support  = .true.
   /
-
-&model_nml
-   debug                       = 1
-   output_state_vector         = .false.
-   tiegcm_restart_file_name    = 'tiegcm_restart_p.nc'
-   tiegcm_secondary_file_name  = 'tiegcm_s.nc'
-   tiegcm_namelist_file_name   = 'tiegcm.nml'
-   assimilation_period_seconds = 3600
-   estimate_f10_7              = .false.
-   variables = 'PHI',   'KIND_ELECTRIC_DENSITY',        'NA',  'NA',      'restart',    'UPDATE'
-   /
-
-!   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
-!               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-!               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
-!               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
-!               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-!	       'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-!               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'restart',    'NO_COPY_BACK',
-!               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'restart',    'NO_COPY_BACK',
-!               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-!               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
 
 &openggcm_to_netcdf_nml
    openggcm_to_netcdf_input_file  = '../data/da0002.dart.pot'
@@ -322,11 +298,11 @@
   /
 
 &model_mod_check_nml
-   verbose               = .FALSE.
-   test1thru             = 5
+   verbose               = .true.
+   test1thru             = 1
    loc_of_interest       = 320.0, 18.0, 5.0
    x_ind                 = 10
-   kind_of_interest      = 'KIND_U_CURRENT_COMPONENT'
+   kind_of_interest      = 'KIND_ELECTRIC_POTENTIAL'
    interp_test_lonrange  = 0.0, 359.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = -89.0, 89.0
@@ -334,6 +310,15 @@
    interp_test_vertrange = 1000.0,  1005.0
    interp_test_dvert     = 2000.0
    interp_test_vertcoord = 'VERTISHEIGHT'
+  /
+
+&model_nml
+   assimilation_period_days     = 0 
+   assimilation_period_seconds  = 1
+   model_perturbation_amplitude = 0.1
+   model_state_variables        = 
+      'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE',
+   debug
   /
 
 &io_filenames_nml
