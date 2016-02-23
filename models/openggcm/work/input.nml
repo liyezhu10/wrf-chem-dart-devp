@@ -99,7 +99,6 @@
   /
 
 &ensemble_manager_nml
-   single_restart_file_in  = .false.
    layout                  = 1
    tasks_per_node          = 1
   /
@@ -299,7 +298,7 @@
 
 &model_mod_check_nml
    verbose               = .true.
-   test1thru             = 1
+   test1thru             = 2
    loc_of_interest       = 320.0, 18.0, 5.0
    x_ind                 = 10
    kind_of_interest      = 'KIND_ELECTRIC_POTENTIAL'
