@@ -76,8 +76,8 @@ read(iunit, nml = openggcm_to_netcdf_nml, iostat = io)
 call check_namelist_read(iunit, io, "openggcm_to_netcdf_nml")
 
 if (verbose) then
-   write(string1,*)'..  converting openggcm binary file >'//trim(openggcm_to_netcdf_input_file)//'<'
-   write(string2,*)'to netcdf file >'//trim(openggcm_to_netcdf_output_file)//'<'
+   write(string1,*)"..  converting openggcm binary file '"//trim(openggcm_to_netcdf_input_file)//"'"
+   write(string2,*)"to netcdf file '"//trim(openggcm_to_netcdf_output_file)//"'"
    call error_handler(E_MSG,'openggcm_to_netcdf',string1, text2=string2)
 endif
 
