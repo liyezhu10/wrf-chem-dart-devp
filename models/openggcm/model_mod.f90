@@ -711,6 +711,7 @@ integer  :: lon_index, lat_index, height_index, local_var, var_id
 if ( .not. module_initialized ) call static_init_model
 
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
+! get from state structure
 call get_state_kind(var_id, local_var)
 
 lon = grid_longitude(lon_index)
@@ -850,6 +851,8 @@ call nc_check(NF90_inq_varid(ncFileID, 'nthe', VarID), &
 
 call nc_check(NF90_get_var(ncFileID, VarID, grid_latitude), &
               'read_horiz_grid', 'nthe get_var')
+
+grid_latitude(:) = 90.0_r8 - grid_latitude(:)
 
 end subroutine read_horiz_grid
 
