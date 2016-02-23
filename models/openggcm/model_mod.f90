@@ -25,11 +25,9 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              nc_check, do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
-use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_SALINITY, KIND_DRY_LAND, &
-                             KIND_U_CURRENT_COMPONENT,KIND_V_CURRENT_COMPONENT,   &
-                             KIND_SEA_SURFACE_HEIGHT, KIND_SEA_SURFACE_PRESSURE,  &
-                             KIND_POTENTIAL_TEMPERATURE, get_raw_obs_kind_index,  &
-                             get_raw_obs_kind_name, paramname_length 
+use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRON_POTENTIAL,   &
+                             get_raw_obs_kind_index, get_raw_obs_kind_name,    &
+                             paramname_length 
 use mpi_utilities_mod, only: my_task_id, task_count
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_copy_owner_index, &
@@ -1128,21 +1126,6 @@ dist = 1.0e9   !something big and positive (far away)
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind)
 
-! Loop over potentially close subset of obs priors or state variables
-!if (present(dist)) then
-do k = 1, num_close
-
-   t_ind = close_ind(k)
-
-   ! if dry land, leave original 1e9 value.  otherwise, compute real dist.
-   if (obs_kind(t_ind) /= KIND_DRY_LAND) then
-      dist(k) = get_dist(base_obs_loc,       obs(t_ind), &
-                         base_obs_kind, obs_kind(t_ind))
-   endif
-
-enddo
-!endif
-
 end subroutine get_close_obs
 
 !------------------------------------------------------------------
@@ -1368,17 +1351,6 @@ MyLoop : do i = 1, nrows
    ngood = ngood + 1
 enddo MyLoop
 
-! check to see if temp and salinity are both in the state otherwise you will not
-! be able to interpolate in XXX subroutine
-if ( any(kind_list == KIND_SALINITY) ) then
-   ! check to see that temperature is also in the variable list
-   if ( .not. any(kind_list == KIND_POTENTIAL_TEMPERATURE) ) then
-      write(string1,'(A)') 'in order to compute temperature you need to have both '
-      write(string2,'(A)') 'KIND_SALINITY and KIND_POTENTIAL_TEMPERATURE in the model state'
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
-   endif
-endif
- 
 end subroutine verify_state_variables
 
 !------------------------------------------------------------------
