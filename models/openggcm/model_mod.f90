@@ -17,8 +17,8 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              operator(/=), operator(<=)
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
-                             VERTISHEIGHT, get_location, vert_is_height,       &
-                             vert_is_level, vert_is_surface,                   &
+                             VERTISUNDEF, VERTISHEIGHT, get_location,          &
+                             vert_is_height, vert_is_level, vert_is_surface,   &
                              loc_get_close_obs => get_close_obs, get_close_type
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -722,15 +722,18 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 call get_state_kind(var_id, local_var)
 
-if (local_var == KIND_ELECTRON_DENSITY) then
-   height = levels(height_index)
+lon = grid_longitude(lon_index)
+lat = grid_latitude(lat_index)
+
+if (local_var == KIND_ELECTRIC_POTENTIAL) then
+   height   = 0.0_r8
+   location = set_location(lon, lat, height, VERTISUNDEF)
 else
-   height = 0.0_r8
+   height   = levels(height_index)
+   location = set_location(lon, lat, height, VERTISHEIGHT)
 endif
 
 if (debug > 5) print *, 'lon, lat, height = ', lon, lat, height
-
-location = set_location(lon, lat, height, VERTISHEIGHT)
 
 if (present(var_type)) then
    var_type = local_var
