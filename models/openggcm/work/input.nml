@@ -142,9 +142,10 @@
    verbose = .true.
   /
 
-&dart_to_openggcm_nml
-   dart_to_openggcm_input_file   = 'dart_restart'
-   advance_time_present     = .false.
+&netcdf_to_openggcm_nml
+   netcdf_to_openggcm_input_file  = 'openggcm.nc'
+   netcdf_to_openggcm_output_file = 'openggcm.pot.dat'
+   verbose = .true.
   /
 
 &location_nml

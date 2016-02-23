@@ -39,8 +39,8 @@ character(len=256) :: openggcm_to_netcdf_input_file  = '../data/da0002.dart.pot'
 character(len=256) :: openggcm_to_netcdf_output_file = 'openggcm.nc'
 logical            :: verbose = .false.
 
-namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_output_file, &
-                                  openggcm_to_netcdf_input_file, &
+namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file, &
+                                  openggcm_to_netcdf_output_file, &
                                   verbose
 
 !-----------------------------------------------------------------------

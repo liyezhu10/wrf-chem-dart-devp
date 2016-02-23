@@ -1,0 +1,18 @@
+Jimmy creates these binary files on trillian.
+
+da0002.dart.pot   has one variable in it:
+
+   read(iunit,iostat=io) nphi, nthe
+   read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
+   allocate(statevector(nphi,nthe))
+   read(iunit,iostat=io) statevector
+
+DART.ctim   also has one variable (oxygen ion density) in it:
+The coordinates are forthcoming
+
+   read(iunit,iostat=io) n1, nu2, nu3
+   read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
+   allocate(statevector(n1,nu2,nu3))
+   read(iunit,iostat=io) statevector
+
+
