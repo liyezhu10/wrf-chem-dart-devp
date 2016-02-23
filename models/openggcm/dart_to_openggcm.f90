@@ -25,11 +25,10 @@ program dart_to_openggcm
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit
+                             logfileunit, error_handler, E_ERR
 use  state_vector_io_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-)
-use        model_mod, only : static_init_model, sv_to_restart_file, &
-                             get_model_size, get_openggcm_restart_filename
+use        model_mod, only : static_init_model, get_model_size
 use     dart_openggcm_mod, only : write_openggcm_namelist
 
 implicit none
@@ -77,8 +76,6 @@ call find_namelist_in_file("input.nml", "dart_to_openggcm_nml", iunit)
 read(iunit, nml = dart_to_openggcm_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_openggcm_nml")
 
-call get_openggcm_restart_filename( openggcm_restart_filename )
-
 write(*,*)
 write(*,'(''dart_to_openggcm:converting DART file '',A, &
       &'' to openggcm restart file '',A)') &
@@ -103,7 +100,10 @@ call close_restart(iunit)
 ! time_manager_nml: stop_option, stop_count increments
 !----------------------------------------------------------------------
 
-call sv_to_restart_file(statevector, openggcm_restart_filename, model_time)
+call error_handler(E_ERR, "dart_to_openggcm", "convert routine not implemented yet - FIXME!", &
+   source, revision, revdate)
+    
+!call sv_to_restart_file(statevector, openggcm_restart_filename, model_time)
 
 if ( advance_time_present ) then
    call write_openggcm_namelist(model_time, adv_to_time)
