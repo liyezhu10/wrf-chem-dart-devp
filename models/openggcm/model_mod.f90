@@ -153,7 +153,7 @@ subroutine static_init_model()
 ! Called to do one time initialization of the model. In this case,
 ! it reads in the grid information.
 
-integer :: iunit, io, i
+integer :: iunit, io, i, ncid
 integer :: ss, dd
 
 ! The Plan:
@@ -205,16 +205,16 @@ call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 ! and actually fill in the arrays.
 
 !> @TODO FIXME
-nlon = 360
-nlat = 180
-call error_handler(E_MSG, 'static_init_model', 'fixed grid sizes: 360 x 180')
 
-nvert = 1
+ncid = get_grid_template_fileid()
+
+call get_grid_sizes(ncid, nlon, nlat, nvert)
 
 ! Allocate space for grid variables. 
 allocate(grid_longitude(nlon), grid_latitude(nlat))
 allocate(levels(nvert))
 
+call get_horiz_grid
 ! Fill them in. FIXME: get this from netcdf file.
 call error_handler(E_MSG, 'static_init_model', 'setting grid to 1 degree; hardcoded')
 do i=1, nlon
@@ -798,6 +798,45 @@ if (allocated(grid_latitude)) deallocate(grid_latitude, grid_longitude)
 if (allocated(levels))        deallocate(levels)
 
 end subroutine end_model
+
+!------------------------------------------------------------------
+
+function get_grid_template_fileid(filename)
+
+character(len=*), intent(in) :: filename
+integer get_grid_template_fileid
+
+get_grid_template_fileid = netcdf_open return
+
+end function get_grid_template_fileid
+
+!------------------------------------------------------------------
+
+subroutine get_grid_sizes(ncid, nlon, nlat, nvert)
+
+integer, intent(in)  :: ncid
+integer, intent(out) :: nlon
+integer, intent(out) :: nlat
+integer, intent(out) :: nvert
+
+! read these from netcdf file
+nlon = 121
+nlat = 361
+nvert = 10
+
+end subroutine get_grid_sizes
+
+!------------------------------------------------------------------
+
+subroutine read_horiz_grid()
+
+end subroutine read_horiz_grid
+
+!------------------------------------------------------------------
+
+subroutine read_vert_levels()
+
+end subroutine read_vert_levels
 
 !------------------------------------------------------------------
 
