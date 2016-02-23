@@ -35,10 +35,10 @@ use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_copy_owner_
 
 use distributed_state_mod, only : get_state
 
-use state_structure_mod,   only : add_domain, get_model_variable_indices, &
-                                  get_num_variables, get_index_start, &
-                                  get_num_dims, get_domain_size
-
+use state_structure_mod,   only : add_domain, get_model_variable_indices,        &
+                                  get_num_variables, get_index_start,            &
+                                  get_num_dims, get_domain_size, get_kind_index, &
+                                  get_varid_from_kind
 use dart_time_io_mod,      only : write_model_time
 
 use typesizes
@@ -225,8 +225,9 @@ call verify_state_variables(model_state_variables, nfields, variable_table, stat
 
 !> @todo  - need input filename, hardcode for now to openggcm.nc
 domain_id = add_domain(openggcm_template, nfields, &
-                       var_names = variable_table(1:nfields, VAR_NAME_INDEX), &
-                       update_list = update_var_list(1:nfields))
+                       var_names   = variable_table  (1:nfields , VAR_NAME_INDEX), &
+                       kind_list   = state_kinds_list(1:nfields), &
+                       update_list = update_var_list (1:nfields))
 
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
@@ -383,7 +384,7 @@ endif
 
 SELECT CASE (obs_type)
    CASE (KIND_ELECTRON_DENSITY)
-      base_offset = get_index_start(domain_id, get_varid_from_kind(obs_type))
+      base_offset = get_index_start(domain_id, get_varid_from_kind(domain_id, obs_type))
 
    CASE DEFAULT
       ! Not a legal type for interpolation, return istatus error
@@ -711,8 +712,7 @@ integer  :: lon_index, lat_index, height_index, local_var, var_id
 if ( .not. module_initialized ) call static_init_model
 
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
-! get from state structure
-call get_state_kind(var_id, local_var)
+local_var = get_kind_index(domain_id, var_id)
 
 lon = grid_longitude(lon_index)
 lat = grid_latitude(lat_index)
@@ -732,50 +732,6 @@ if (present(var_type)) then
 endif
 
 end subroutine get_state_meta_data
-
-!--------------------------------------------------------------------
-
-function get_varid_from_kind(dart_kind)
-
-integer, intent(in) :: dart_kind
-integer             :: get_varid_from_kind
-
-! given a kind, return what variable number it is
-
-integer :: i
-
-do i = 1, get_num_variables(domain_id)
-   if (dart_kind == state_kinds_list(i)) then
-      get_varid_from_kind = i
-      return
-   endif
-end do
-
-write(string1, *) 'Kind ', dart_kind, ' not found in state vector'
-write(string2, *) 'AKA ', get_raw_obs_kind_name(dart_kind), ' not found in state vector'
-call error_handler(E_MSG,'get_varid_from_kind', string1, &
-                   source, revision, revdate, text2=string2)
-
-get_varid_from_kind = -1
-
-end function get_varid_from_kind
-
-
-!------------------------------------------------------------------
-
-subroutine get_state_kind(var_ind, var_type)
- integer, intent(in)  :: var_ind
- integer, intent(out) :: var_type
-
-! Given an integer index into the state vector structure, returns the kind,
-! and both the starting offset for this kind, as well as the offset into
-! the block of this kind.
-
-if ( .not. module_initialized ) call static_init_model
-
-var_type = state_kinds_list(var_ind)
-
-end subroutine get_state_kind
 
 !------------------------------------------------------------------
 
