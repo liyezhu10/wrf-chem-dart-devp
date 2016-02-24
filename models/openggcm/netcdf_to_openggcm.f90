@@ -31,6 +31,8 @@ use time_manager_mod, only : time_type, print_time, print_date, set_calendar_typ
                              set_date, get_date, set_time, get_time, &
                              operator(+)
 
+use netcdf_mod     ! just to compile and test this
+
 use netcdf
 
 implicit none
