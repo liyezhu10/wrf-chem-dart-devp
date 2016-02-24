@@ -11,10 +11,10 @@ module model_mod
 ! Modules that are absolutely required for use are listed
 use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
-                             print_time, print_date,                           &
+                             print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
                              operator(>),  operator(<), operator(/),           &
-                             operator(/=), operator(<=)
+                             operator(/=), operator(<=), GREGORIAN
 use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              VERTISUNDEF, VERTISHEIGHT, get_location,          &
@@ -195,11 +195,13 @@ call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
 if (do_output()) write(logfileunit, nml=model_nml)
 if (do_output()) write(     *     , nml=model_nml)
 
+! set calendar type
+call set_calendar_type(GREGORIAN)
 
 ! Set the time step ... causes openggcm namelists to be read.
 ! Ensures model_timestep is multiple of 'ocean_dynamics_timestep'
 
-model_timestep = set_time(0,0)
+model_timestep = set_time(assimilation_period_days,assimilation_period_seconds)
 
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 
@@ -552,7 +554,7 @@ integer  :: i
 if ( .not. module_initialized ) call static_init_model
 
 do i = 2, nlons
-   if (lon < lon_array(i)) then
+   if (lon <= lon_array(i)) then
       bot = i-1
       top = i
       fract = (lon - lon_array(bot)) / (lon_array(top) - lon_array(bot))
@@ -920,7 +922,7 @@ if ( .not. module_initialized ) call static_init_model
 ierr = -1 ! assume things go poorly
 
 ! have dart write out the state variables using the state structure
-model_mod_writes_state_variables = .true. 
+model_mod_writes_state_variables = .false. 
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
@@ -1193,7 +1195,13 @@ dist = 1.0e9   !something big and positive (far away)
 ! (for obs).
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
-                       num_close, close_ind)
+                       num_close, close_ind, dist)
+
+!#! print *, 'num_close', num_close 
+!#! 
+!#! do k = 1, num_close
+!#!    print *, k, close_ind(k)
+!#! enddo
 
 end subroutine get_close_obs
 

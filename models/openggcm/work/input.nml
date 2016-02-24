@@ -1,5 +1,8 @@
 &state_space_diag_nml
-/
+   make_diagnostic_files = .false.
+   single_file           = .false.
+   netCDF_large_file_support = .true.
+   /
 
 &perfect_model_obs_nml
    start_from_restart    = .true.
@@ -12,29 +15,29 @@
    last_obs_days         = -1
    last_obs_seconds      = -1
    output_interval       = 1
-   trace_execution       = .false.
-   restart_in_file_name  = "perfect_ics"
+   restart_in_file_name  = "openggcm"
    restart_out_file_name = "perfect_restart"
    obs_seq_in_file_name  = "obs_seq.in"
    obs_seq_out_file_name = "obs_seq.perfect"
    adv_ens_command       = "no_CESM_advance_script"
    output_timestamps     = .false.
-   trace_execution       = .false.
+   trace_execution       = .true.
    output_forward_op_errors = .false.
    print_every_nth_obs   = -1
    silence               = .false.
+   direct_netcdf_read    = .true.
+   direct_netcdf_write   = .true.
   /
 
 &filter_nml
    async                    = 4
    adv_ens_command          = "no_CESM_advance_script"
-   ens_size                 =  23
-   start_from_restart       = .true.
+   ens_size                 =  3
    output_restart           = .true.
    obs_sequence_in_name     = "obs_seq.out"
    obs_sequence_out_name    = "obs_seq.final"
    restart_in_file_name     = "openggcm"
-   restart_out_file_name    = "filter_restart"
+   restart_out_file_name    = "openggcm_out"
    init_time_days           = -1
    init_time_seconds        = -1
    first_obs_days           = -1
@@ -45,18 +48,24 @@
    num_output_obs_members   = 10
    output_interval          = 1
    num_groups               = 1
-   input_qc_threshold       =  1.0
-   outlier_threshold        =  3.0
    output_forward_op_errors = .false.
+   output_restart_mean      = .true.,
    output_timestamps        = .false.
    output_inflation         = .true.
-   trace_execution          = .false.
+   trace_execution          = .true.
    silence                  = .false.
+   direct_netcdf_read       = .true.
+   direct_netcdf_write      = .true.
+   distributed_state        = .false.
+   single_restart_file_in   = .true.,
+   single_restart_file_out  = .false.,
+   perturb_from_single_instance = .true.
+   perturbation_amplitude   = 0.2,
 
    inf_flavor                  = 0,                       0
    inf_initial_from_restart    = .false.,                 .false.
    inf_sd_initial_from_restart = .false.,                 .false.
-   inf_output_restart          = .true.,                  .true.
+   inf_output_restart          = .false.,                  .true.
    inf_deterministic           = .true.,                  .true.
    inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics'
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart'
@@ -67,8 +76,6 @@
    inf_lower_bound             = 1.0,                     1.0
    inf_upper_bound             = 1000000.0,               1000000.0
    inf_sd_lower_bound          = 0.6,                     0.6
-   direct_netcdf_read = .true.
-   direct_netcdf_write = .true.
   /
 
 &state_vector_io_nml
@@ -119,9 +126,8 @@
   /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'CHAMP_DENSITY',
-                                'GPS_PROFILE'
-    evaluate_these_obs_types  = 'GND_GPS_VTEC'
+   assimilate_these_obs_types = 'SUPER_DARN_ELECTRIC_POTENTIAL',
+    evaluate_these_obs_types  = ''
   /
 
 &preprocess_nml
@@ -301,23 +307,23 @@
 &model_mod_check_nml
    verbose               = .true.
    restart_in_file_name  = 'openggcm'
-   test1thru             = 3
+   test1thru             = 5
+   x_ind                 = 1
    loc_of_interest       = 320.0, 18.0, 1.0
-   x_ind                 = 373
-   kind_of_interest      = 'KIND_ELECTRON_DENSITY'
-   interp_test_lonrange  = 0.0, 359.0
+   kind_of_interest      = 'KIND_ELECTRIC_POTENTIAL'
+   interp_test_lonrange  = 0.0, 360.0
    interp_test_dlon      = 1.0
-   interp_test_latrange  = -89.0, 89.0
+   interp_test_latrange  = -90.0, 90.0
    interp_test_dlat      = 1.0
-   interp_test_vertrange = 1000.0,  1005.0
-   interp_test_dvert     = 2000.0
-   interp_test_vertcoord = 'VERTISHEIGHT'
+   interp_test_vertrange = 1.0,  2.0
+   interp_test_dvert     = 1.0
+   interp_test_vertcoord = 'VERTISUNDEF'
   /
 
 &model_nml
    openggcm_template            = "openggcm.nc"
    assimilation_period_days     = 0 
-   assimilation_period_seconds  = 1
+   assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.1
    model_state_variables        = 
       'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE',
@@ -341,4 +347,7 @@
    file_namelist_out    = 'namelist_update'
    advance_time_present = .false.
    /
-
+&quality_control_mod_nml
+   outlier_threshold        = -1.0
+   input_qc_threshold       =  1.0
+/
