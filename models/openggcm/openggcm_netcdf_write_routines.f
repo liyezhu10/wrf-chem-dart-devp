@@ -27,6 +27,9 @@
       integer :: VarID
       integer :: io1, io2
       
+!     io1 = nf90_redef(ncid) 
+!     call nc_check(io1, 'wr_netcdf_model_time', 'redef')
+
       io1 = nf90_def_var(ncid, 'time', nf90_double, VarID)
       io2 = nf90_put_att(ncid, VarID, 'units', 'seconds since 1966-01-01')
 
@@ -90,30 +93,39 @@
       enddo
       
       !-----------------------------------------------------------------------
+
+      io = nf90_redef(ncid) 
+      call nc_check(io, 'wr_netcdf_ctim_grid', 'redef')
       
       io1 = nf90_def_dim(ncid, 'cg_lon', nlon, LonDimID)
       io2 = nf90_def_var(ncid, 'cg_lon', nf90_real, (/ LonDimID /), LonVarID)
       io3 = nf90_put_att(ncid, LonVarID, 'short_name', 'geographic longitude' )
+      io  = nf90_put_att(ncid, LonVarID, 'units', 'degrees')
       
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_lon')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_lon')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_lon short_name')
+      call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_lon units')
       
       io1 = nf90_def_dim(ncid, 'cg_lat', nlat, LatDimID)
       io2 = nf90_def_var(ncid, 'cg_lat', nf90_real, (/ LatDimID /), LatVarID)
       io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic latitude')
+      io  = nf90_put_att(ncid, LatVarID, 'units', 'degrees')
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_lat')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_lat')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_lat short_name')
+      call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_lat units')
 
       io1 = nf90_def_dim(ncid, 'cg_height', nheight, HeightDimID)
       io2 = nf90_def_var(ncid, 'cg_height', nf90_real, (/ HeightDimID /), HeightVarID)
-      io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic height')
+      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'geographic height')
+      io  = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers')
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_height')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_height')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_height short_name')
+      call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_height units')
 
       ! leave define mode so we can fill
       
@@ -182,6 +194,9 @@
       enddo
       
       !-----------------------------------------------------------------------
+
+      io = nf90_redef(ncid) 
+      call nc_check(io, 'wr_netcdf_interface_grid', 'redef')
       
       io1 = nf90_def_dim(ncid, 'ig_lon', nlon, LonDimID)
       io2 = nf90_def_var(ncid, 'ig_lon', nf90_real, (/ LonDimID /), LonVarID)
@@ -439,8 +454,6 @@
           error_msg = nf90_strerror(istatus)
       endif
       
-      write(*,*)'ERROR: '//trim(subr_name)//' '//trim(error_msg)
-      write(*,*)'ERROR: '//trim(subr_name)//' '//trim(error_msg)
       write(*,*)'ERROR: '//trim(subr_name)//' '//trim(error_msg)
       stop
       
