@@ -167,11 +167,8 @@
       
       !=======================================================================
 
-      write(*,*)'ERROR: wr_netcdf_interface_grid not written, not tested'
-      write(*,*)'ERROR: wr_netcdf_interface_grid not written, not tested'
-      write(*,*)'ERROR: wr_netcdf_interface_grid not written, not tested'
-      write(*,*)'ERROR: wr_netcdf_interface_grid not written, not tested'
-      stop
+      write(*,*)'WARNING: wr_netcdf_interface_grid not tested'
+!     stop
 
       !-----------------------------------------------------------------------
       ! calculate the required metadata
@@ -201,26 +198,32 @@
       io1 = nf90_def_dim(ncid, 'ig_lon', nlon, LonDimID)
       io2 = nf90_def_var(ncid, 'ig_lon', nf90_real, (/ LonDimID /), LonVarID)
       io3 = nf90_put_att(ncid, LonVarID, 'short_name', 'geographic longitude' )
+      io  = nf90_put_att(ncid, LonVarID, 'units', 'degrees' )
       
       call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_lon')
       call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_lon')
       call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lon short_name')
+      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_lon units')
       
       io1 = nf90_def_dim(ncid, 'ig_lat', nlat, LatDimID)
       io2 = nf90_def_var(ncid, 'ig_lat', nf90_real, (/ LatDimID /), LatVarID)
       io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic latitude')
+      io  = nf90_put_att(ncid, LatVarID, 'units', 'degrees' )
 
       call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_lat')
       call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_lat')
       call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lat short_name')
+      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_lat units')
 
       io1 = nf90_def_dim(ncid, 'ig_height', nheight, HeightDimID)
       io2 = nf90_def_var(ncid, 'ig_height', nf90_real, (/ HeightDimID /), HeightVarID)
-      io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic height')
+      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'geographic height')
+      io  = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers' )
 
       call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_height')
       call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_height')
       call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_height short_name')
+      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_height units')
 
       ! leave define mode so we can fill
       

@@ -28,7 +28,6 @@ use       netcdf_mod, only :  wr_netcdf_model_time, &
                               wr_netcdf_2D, &
                               wr_netcdf_3D
 
-
 use netcdf
 implicit none
 
@@ -57,19 +56,14 @@ namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file, &
 integer               :: io, iunit
 type(time_type)       :: model_time, model_time_base, model_time_offset
 real(r8), allocatable :: tensor3D(:,:,:)
+real(r4), allocatable :: tensor2D(:,:)
 real(r4), allocatable :: datmat(:,:,:)
-real(r4), allocatable :: height(:,:,:)
-real(r4), allocatable :: latitude(:)
-real(r4), allocatable :: longitude(:)
 real(digits12) :: time_offset_seconds
 
-integer  :: ncid, NtheDimID, NphiDimID, NzDimID
-integer  :: VarID, TimeVarID, LonVarID, LatVarID, LevVarID
+integer  :: ncid
 
 integer  :: iyear, imonth, iday, ihour, iminute, isecond
-integer  :: ilat, ilon, iz
 integer  :: nthe, nphi, nz
-real(r8) :: dlat, dlon, dz
 
 character(len=512) :: string1, string2
 
@@ -140,15 +134,49 @@ datmat = tensor3D
 
 call close_file(iunit)
 
-write(*,*)'TJH file size is expected to be ', &
-          4 + 6*4 + 4 +&
-          4 + 3*4 + 4 +&
-          4 + nphi*nthe*nz*8 + 4
 
 call wr_netcdf_ctim_grid(ncid,nphi,nthe,nz)
-!call wr_netcdf_interface_grid(ncid,nphi,nthe,nz)
 call wr_netcdf_3D(ncid,'ctim',datmat,'ion','degrees kelvin','ionospheric miracle')
 
+
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
+
+iunit = open_file('../data/da0002.dart.pot', form='unformatted',action='read')
+
+read(iunit,iostat=io) nphi, nthe
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
+   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
+
+read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read time record of 6 integers'
+   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''iyear, imonth, iday, ihour, iminute, isecond '',i4,4(1x,i2),1x,i5)') &
+                    iyear, imonth, iday, ihour, iminute, isecond
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
+
+allocate(tensor2D(nphi,nthe))
+
+read(iunit,iostat=io) tensor2D
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read the "pot" variable.'
+   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+endif
+call close_file(iunit)
+
+call wr_netcdf_interface_grid(ncid,nphi,nthe,1)
+call wr_netcdf_2D(ncid,'interface',tensor2D,'pot','degrees trout','potential miracle')
+
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 
 call nc_check(nf90_close(ncid),'openggcm_to_netcdf')
 
