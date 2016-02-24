@@ -494,8 +494,9 @@ istatus = 0
 !> find the lower and upper indices which enclose the given value
 !> in this model, the data at lon 0 is replicated at lon 360, so no special
 !> wrap case is needed.
-call lon_bounds(lon, geo_grid%nlon, geo_grid%grid_longitude, lon_bot, lon_top, lon_fract)
-call lat_bounds(lat, geo_grid%nlat, geo_grid%grid_latitude,  lat_bot, lat_top, lat_fract, istatus(1))
+call lon_bounds(lon, geo_grid, lon_bot, lon_top, lon_fract)
+call lat_bounds(lat, geo_grid, lat_bot, lat_top, lat_fract, istatus(1))
+
 if (istatus(1) /= 0) then
    istatus(:) = 18 
    return
@@ -551,12 +552,11 @@ end function get_val
 
 !------------------------------------------------------------
 
-subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
- real(r8),    intent(in) :: lon
- integer,     intent(in) :: nlons
- real(r8),    intent(in) :: lon_array(:)
- integer,    intent(out) :: bot, top
- real(r8),   intent(out) :: fract
+subroutine lon_bounds(lon, grid_handle, bot, top, fract)
+ real(r8),        intent(in) :: lon
+ type(grid_type), intent(in) :: grid_handle
+ integer,        intent(out) :: bot, top
+ real(r8),       intent(out) :: fract
 
 ! Given a longitude lon, the array of longitudes for grid boundaries, and the
 ! number of longitudes in the grid, returns the indices of the longitude
@@ -569,11 +569,12 @@ integer  :: i
 
 if ( .not. module_initialized ) call static_init_model
 
-do i = 2, nlons
-   if (lon <= lon_array(i)) then
+do i = 2, grid_handle%nlon
+   if (lon <= grid_handle%grid_longitude(i)) then
       bot = i-1
       top = i
-      fract = (lon - lon_array(bot)) / (lon_array(top) - lon_array(bot))
+      fract = (lon - grid_handle%grid_longitude(bot)) / &
+              (grid_handle%grid_longitude(top) - grid_handle%grid_longitude(bot))
       return
    endif
 enddo
@@ -586,13 +587,12 @@ end subroutine lon_bounds
 
 !-------------------------------------------------------------
 
-subroutine lat_bounds(lat, nlats, lat_array, bot, top, fract, istatus)
- real(r8),   intent(in) :: lat
- integer,    intent(in) :: nlats
- real(r8),   intent(in) :: lat_array(:)
- integer,   intent(out) :: bot, top
- real(r8),  intent(out) :: fract
- integer,   intent(out) :: istatus
+subroutine lat_bounds(lat, grid_handle, bot, top, fract, istatus)
+ real(r8),        intent(in)  :: lat
+ type(grid_type), intent(in)  :: grid_handle
+ integer,         intent(out) :: bot, top
+ real(r8),        intent(out) :: fract
+ integer,         intent(out) :: istatus
 
 ! Given a latitude lat, the array of latitudes for grid boundaries, and the
 ! number of latitudes in the grid, returns the indices of the latitude
@@ -611,24 +611,24 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 ! Check for too far south or north
-if(lat > lat_array(1)) then
+if(lat > grid_handle%grid_latitude(1)) then
    istatus = 1
    return
-else if(lat < lat_array(nlats)) then
+else if(lat < grid_handle%grid_latitude(grid_handle%nlat)) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
-do i = 2, nlats
-   if(lat >= lat_array(i)) then
+do i = 2, grid_handle%nlat
+   if(lat >= grid_handle%grid_latitude(i)) then
       bot = i - 1
       top = i
-      fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
+      fract = (lat - grid_handle%grid_latitude(bot)) / &
+              (grid_handle%grid_latitude(top) - grid_handle%grid_latitude(bot))
       return
    endif
 enddo
-
 ! Shouldn't get here. Might want to fail really hard through error handler
 istatus = 40
 
