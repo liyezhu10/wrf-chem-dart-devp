@@ -49,18 +49,19 @@ namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file, &
 
 integer               :: io, iunit
 type(time_type)       :: model_time, model_time_base, model_time_offset
-real(r4), allocatable :: statevector(:,:)
-real(r8), allocatable :: latitude(:)
-real(r8), allocatable :: longitude(:)
+real(r8), allocatable :: tensor3D(:,:,:)
+real(r4), allocatable :: height(:,:,:)
+real(r4), allocatable :: latitude(:)
+real(r4), allocatable :: longitude(:)
 real(digits12) :: time_offset_seconds
 
-integer  :: ncid, NtheDimID, NphiDimID, VarID, LonVarID, LatVarID
-integer  :: TimeVarID
+integer  :: ncid, NtheDimID, NphiDimID, NzDimID
+integer  :: VarID, TimeVarID, LonVarID, LatVarID, LevVarID
 
 integer  :: iyear, imonth, iday, ihour, iminute, isecond
-integer  :: ilat, ilon
-integer  :: nthe, nphi
-real(r8) :: dlat, dlon
+integer  :: ilat, ilon, iz
+integer  :: nthe, nphi, nz
+real(r8) :: dlat, dlon, dz
 
 character(len=512) :: string1, string2
 
@@ -85,15 +86,6 @@ endif
 
 iunit = open_file(openggcm_to_netcdf_input_file, form='unformatted',action='read')
 
-read(iunit,iostat=io) nphi, nthe
-if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read nphi, nthe'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
-elseif (verbose) then
-   write(string1,'(''nphi, nthe'',2(1x,i6))'), nphi, nthe
-   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
-endif
-
 read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
 if (io /= 0) then
    write(string1,*)'read error was ',io,' when trying to read time record of 6 integers'
@@ -104,9 +96,20 @@ elseif (verbose) then
    call error_handler(E_MSG,'openggcm_to_netcdf',string1)
 endif
 
-allocate(statevector(nphi,nthe))
+read(iunit,iostat=io) nphi, nthe, nz
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
+   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
+
+allocate(tensor3D(nphi,nthe,nz), &
+           height(nphi,nthe,nz))
 allocate(latitude(nthe), longitude(nphi))
-read(iunit,iostat=io) statevector
+
+read(iunit,iostat=io) tensor3D
 if (io /= 0) then
    write(string1,*)'read error was ',io,' when trying to read the "pot" variable.'
    call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
@@ -114,17 +117,27 @@ endif
 
 call close_file(iunit)
 
+write(*,*)'TJH file size is expected to be ', &
+          4 + 6*4 + 4 +&
+          4 + 3*4 + 4 +&
+          4 + nphi*nthe*nz*8 + 4
+
 ! The test file has year since 1900 ... 
 iyear = iyear + 1900
 
-dlat = 180.0_r8/real(nthe-1,r8)
+dlat = 180.0_r4/real(nthe-1,r4)
 do ilat = 1,nthe  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
-   latitude(ilat) = dlat*real(ilat-1,r8)
+   latitude(ilat) = dlat*real(ilat-1,r4)
 enddo
 
-dlon = 360.0_r8/real(nphi-1,r8)
-do ilon = 1,nphi  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
-   longitude(ilon) = dlon*real(ilon-1,r8)
+dlon = 360.0_r4/real(nphi-1,r4)
+do ilon = 1,nphi
+   longitude(ilon) = dlon*real(ilon-1,r4)
+enddo
+
+dz = 500.0_r4/real(nz,r4)
+do iz = 1,nz
+   height(:,:,iz) = dz*real(iz-1,r4)
 enddo
 
 call set_calendar_type('Gregorian')
@@ -145,6 +158,7 @@ call nc_check(nf90_create(openggcm_to_netcdf_output_file, NF90_CLOBBER, ncid),'o
 
 call nc_check(nf90_def_dim(ncid, 'nphi', nphi, NphiDimID),'def_dim nphi')
 call nc_check(nf90_def_dim(ncid, 'nthe', nthe, NtheDimID),'def_dim nthe')
+call nc_check(nf90_def_dim(ncid, 'height', nz,   NzDimID),'def_dim height')
 
 call nc_check(nf90_def_var(ncid, 'time', nf90_double, TimeVarID),'def_var time')
 call nc_check(nf90_put_att(ncid, TimeVarID, 'units', 'days since 1900-01-01'), 'put_att:time:units')
@@ -157,20 +171,25 @@ call nc_check(nf90_def_var(ncid, 'nthe', nf90_real, (/ NtheDimID /), LatVarID),'
 call nc_check(nf90_put_att(ncid, LatVarID, 'short_name', 'geomagnetic latitude'), &
                   'put_att nthe:short_name')
 
-call nc_check(nf90_def_var(ncid, 'pot' , nf90_real, (/ NphiDimID, NtheDimID /), VarID),'def_var:pot')
+call nc_check(nf90_def_var(ncid, 'height', nf90_real, (/ NphiDimID, NtheDimID, NzDimID /), LevVarID),'def_var:height')
+call nc_check(nf90_put_att(ncid, LevVarID, 'short_name', 'height'), 'put_att height:short_name')
+call nc_check(nf90_put_att(ncid, LevVarID, 'units', 'kilometers'), 'put_att height:units')
 
-call nc_check(nf90_put_att(ncid, VarID, 'short_name', 'electric potential'), &
-                  'put_att pot:short_name')
-call nc_check(nf90_put_att(ncid, VarID, 'long_name', 'ionosphere electric potential'), &
-                  'put_att pot:long_name')
-call nc_check(nf90_put_att(ncid, VarID, 'units', 'volts'), &
-                  'put_att pot:units')
+call nc_check(nf90_def_var(ncid, 'ion' , nf90_real, (/ NphiDimID, NtheDimID, NzDimID /), VarID),'def_var:ion')
+
+call nc_check(nf90_put_att(ncid, VarID, 'short_name', 'ion'), &
+                  'put_att ion:short_name')
+call nc_check(nf90_put_att(ncid, VarID, 'long_name', 'some kind of ion'), &
+                  'put_att ion:long_name')
+call nc_check(nf90_put_att(ncid, VarID, 'units', 'charge'), &
+                  'put_att ion:units')
 
 call nc_check(nf90_enddef(ncid),'enddef')
 
 call nc_check(nf90_put_var(ncid,  LonVarID,           longitude),'put_var: lon')
 call nc_check(nf90_put_var(ncid,  LatVarID,            latitude),'put_var: lat')
-call nc_check(nf90_put_var(ncid,     VarID,         statevector),'put_var: pot')
+call nc_check(nf90_put_var(ncid,  LevVarID,              height),'put_var: height')
+call nc_check(nf90_put_var(ncid,     VarID,            tensor3D),'put_var: ion')
 call nc_check(nf90_put_var(ncid, TimeVarID, time_offset_seconds),'put_var: time')
 
 call nc_check(nf90_close(ncid),'openggcm_to_netcdf')
