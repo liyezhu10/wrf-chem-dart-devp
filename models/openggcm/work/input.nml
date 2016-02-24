@@ -322,12 +322,12 @@
   /
 
 &model_nml
-   openggcm_template            = "openggcm.nc"
+   openggcm_template            = "openggcm3D.nc"
    assimilation_period_days     = 0 
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.1
    model_state_variables        = 
-      'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE',
+      'ion', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE',
    debug
   /
 
@@ -335,19 +335,10 @@
   restart_in_stub = 'openggcm.r.'
   /
 
-&quality_control_nml
-  /
-
-
 &model_to_dart_nml
    file_out      = 'dart_ics'
    /
 
-&dart_to_model_nml
-   file_in              = 'dart_restart'
-   file_namelist_out    = 'namelist_update'
-   advance_time_present = .false.
-   /
 &quality_control_mod_nml
    outlier_threshold        = -1.0
    input_qc_threshold       =  1.0

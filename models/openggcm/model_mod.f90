@@ -80,6 +80,12 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+interface get_data
+   module procedure get_data_1d
+   module procedure get_data_3d
+end interface get_data
+
+
 ! message strings
 character(len=512) :: string1
 character(len=512) :: string2
@@ -132,11 +138,17 @@ integer :: nfields
 ! Grid parameters - the values will be read from the
 ! openggcm netcdf restart file
 
-! the size of the grid
-integer :: nlon, nlat, nvert
+type grid_type
+   ! the size of the grid
+   integer :: nlon, nlat, nheight
 
-real(r8), allocatable :: grid_longitude(:), grid_latitude(:)
-real(r8), allocatable :: levels(:)
+   ! grid information
+   real(r8), allocatable :: grid_longitude(:), grid_latitude(:)
+   real(r8), allocatable :: levels(:,:,:)
+
+end type grid_type
+
+type(grid_type) :: geo_grid, mag_grid
 
 type(time_type) :: model_time, model_timestep
 
@@ -216,14 +228,17 @@ call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 
 ncid = get_grid_template_fileid(openggcm_template)
 
-call get_grid_sizes(ncid, nlon, nlat, nvert)
+call get_grid_sizes(ncid, geo_grid, 'cg_lon', 'cg_lat','cg_height')
+call get_grid_sizes(ncid, mag_grid, 'mg_lon', 'mg_lat')
 
-! Allocate space for grid variables. 
-allocate(grid_longitude(nlon), grid_latitude(nlat))
-allocate(levels(nvert))
+! allocate space for geographic and magnetic grids
+call allocate_grid_space(geo_grid)
+call allocate_grid_space(mag_grid)
 
-call read_horiz_grid(ncid)
-call read_vert_levels(ncid)
+call read_horiz_grid(ncid, geo_grid, 'cg_lon','cg_lat', is_co_latitude=.false.)
+call read_horiz_grid(ncid, mag_grid, 'mg_lon','mg_lat', is_co_latitude=.true.) 
+
+call read_vert_levels(ncid,geo_grid,'cg_height')
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
@@ -386,11 +401,12 @@ elseif (vert_is_level(location)) then
    !> @TODO FIXME something like this
    ! convert the levels index to an actual height 
    ind = nint(loc_array(3))
-   if ( (ind < 1) .or. (ind > size(levels)) ) then 
+   if ( (ind < 1) .or. (ind > size(geo_grid%levels,3)) ) then 
       istatus = 11
       return
    else
-      lheight = levels(ind)
+      !>@TODO FIXME : assuming everything is flat at the moment
+      lheight = geo_grid%levels(1,1,ind)
    endif
 else   ! if pressure or surface we don't know what to do
    write(msgstring,*)'requesting interp of an obs on pressure or surface, not supported yet'
@@ -431,7 +447,7 @@ write(msgstring,*)'did not expect to get here, error'
 call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
 ! Get the bounding vertical levels and the fraction between bottom and top
-call height_bounds(lheight, nvert, levels, hgt_bot, hgt_top, hgt_fract, hstatus)
+call height_bounds(lheight, geo_grid%nheight, geo_grid%levels, hgt_bot, hgt_top, hgt_fract, hstatus)
 if(hstatus /= 0) then
    istatus = 12
    return
@@ -478,8 +494,8 @@ istatus = 0
 !> find the lower and upper indices which enclose the given value
 !> in this model, the data at lon 0 is replicated at lon 360, so no special
 !> wrap case is needed.
-call lon_bounds(lon, nlon, grid_longitude, lon_bot, lon_top, lon_fract)
-call lat_bounds(lat, nlat, grid_latitude, lat_bot, lat_top, lat_fract, istatus(1))
+call lon_bounds(lon, geo_grid%nlon, geo_grid%grid_longitude, lon_bot, lon_top, lon_fract)
+call lat_bounds(lat, geo_grid%nlat, geo_grid%grid_latitude,  lat_bot, lat_top, lat_fract, istatus(1))
 if (istatus(1) /= 0) then
    istatus(:) = 18 
    return
@@ -734,14 +750,14 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
-lon = grid_longitude(lon_index)
-lat = grid_latitude(lat_index)
+lon = geo_grid%grid_longitude(lon_index)
+lat = geo_grid%grid_latitude(lat_index)
 
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
    height   = 0.0_r8
    location = set_location(lon, lat, height, VERTISUNDEF)
 else
-   height   = levels(height_index)
+   height   = geo_grid%levels(lon_index, lat_index, height_index)
    location = set_location(lon, lat, height, VERTISHEIGHT)
 endif
 
@@ -762,8 +778,8 @@ subroutine end_model()
 ! assume if one is allocated, they all were.  if no one ever
 ! called the init routine, don't try to dealloc something that
 ! was never alloc'd.
-if (allocated(grid_latitude)) deallocate(grid_latitude, grid_longitude)
-if (allocated(levels))        deallocate(levels)
+call deallocate_grid_space(geo_grid)
+call deallocate_grid_space(mag_grid)
 
 end subroutine end_model
 
@@ -781,83 +797,74 @@ end function get_grid_template_fileid
 
 !------------------------------------------------------------------
 
-subroutine get_grid_sizes(ncFileID, nlon, nlat, nvert)
+subroutine get_grid_sizes(ncFileID, grid_handle, lon_name, lat_name, vert_name)
 
-integer, intent(in)  :: ncFileID
-integer, intent(out) :: nlon
-integer, intent(out) :: nlat
-integer, intent(out) :: nvert
+integer,                    intent(in)    :: ncFileID
+type(grid_type),            intent(inout) :: grid_handle
+character(len=*),           intent(in)    :: lon_name
+character(len=*),           intent(in)    :: lat_name
+character(len=*), optional, intent(in)    :: vert_name
 
 ! netcdf variables
 integer :: DimID
 
-nvert = 10
+call nc_check(NF90_inq_dimid(ncid=ncFileID, name=lon_name, dimid=DimID), &
+                           'get_grid_sizes','inq_dimid '//trim(lon_name))
 
-call nc_check(NF90_inq_dimid(ncid=ncFileID, name='nphi', dimid=DimID), &
-                           'get_grid_sizes','inq_dimid nphi')
+call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nlon), &
+              'get_grid_sizes', 'inquire_dimension '//trim(lon_name))
 
-call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=nlon), &
-              'get_grid_sizes', 'inqure_dimension nphi')
+call nc_check(NF90_inq_dimid(ncid=ncFileID, name=lat_name, dimid=DimID), &
+                           'get_grid_sizes','inq_dimid '//trim(lat_name))
 
-call nc_check(NF90_inq_dimid(ncid=ncFileID, name='nthe', dimid=DimID), &
-                           'get_grid_sizes','inq_dimid nthe')
+call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nlat), &
+              'get_grid_sizes', 'inquire_dimension '//trim(lat_name))
 
-call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=nlat), &
-              'get_grid_sizes', 'inqure_dimension nthe')
+if (present(vert_name)) then
+   call nc_check(NF90_inq_dimid(ncid=ncFileID, name=vert_name, dimid=DimID), &
+                              'get_grid_sizes','inq_dimid '//trim(vert_name))
+   
+   call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nheight), &
+                 'get_grid_sizes', 'inquire_dimension '//trim(vert_name))
+else
+  grid_handle%nheight = 1
+endif
 
 end subroutine get_grid_sizes
 
 !------------------------------------------------------------------
 
-subroutine read_horiz_grid(ncFileID)
+subroutine read_horiz_grid(ncFileID, grid_handle, lon_name, lat_name, is_co_latitude)
 
-integer, intent(in)  :: ncFileID
+integer,          intent(in)    :: ncFileID
+type(grid_type),  intent(inout) :: grid_handle
+character(len=*), intent(in)    :: lon_name
+character(len=*), intent(in)    :: lat_name
+logical,          intent(in)    :: is_co_latitude
 
 ! netcdf variables
 integer :: VarID
 
-call nc_check(NF90_inq_varid(ncFileID, 'nphi', VarID), &
-              'read_horiz_grid', 'nphi inq_varid')
+call get_data(ncFileID, lon_name, grid_handle%grid_longitude, 'read_horiz_grid')
+call get_data(ncFileID, lat_name, grid_handle%grid_latitude,  'read_horiz_grid')
 
-call nc_check(NF90_get_var(ncFileID, VarID, grid_longitude), &
-              'read_horiz_grid', 'nphi get_var')
-
-call nc_check(NF90_inq_varid(ncFileID, 'nthe', VarID), &
-              'read_horiz_grid', 'nthe inq_varid')
-
-call nc_check(NF90_get_var(ncFileID, VarID, grid_latitude), &
-              'read_horiz_grid', 'nthe get_var')
-
-! native coordinates are 'co-latitudes' where 0 is the north pole
-! and 180 is the south pole.  map to 90 -> -90 for the locations module.
-grid_latitude(:) = 90.0_r8 - grid_latitude(:)
+if (is_co_latitude) then 
+   ! native coordinates are 'co-latitudes' where 0 is the north pole
+   ! and 180 is the south pole.  map to 90 -> -90 for the locations module.
+   grid_handle%grid_latitude(:) = 90.0_r8 - grid_handle%grid_latitude(:)
+endif 
 
 end subroutine read_horiz_grid
 
 !------------------------------------------------------------------
 
-subroutine read_vert_levels(ncFileID)
+subroutine read_vert_levels(ncFileID, grid_handle, height_name)
 
-integer, intent(in)  :: ncFileID
+integer,          intent(in)    :: ncFileID
+type(grid_type),  intent(inout) :: grid_handle
+character(len=*), intent(in)    :: height_name
 
-integer :: i
-
-! netcdf variables
-integer :: VarID
-
-!> @todo FIXME - get this from the netcdf file once we
-!> have some 3d fields to test.
-
-!#! call nc_check(NF90_inq_varid(ncFileID, 'xxxx', VarID), &
-!#!               'read_vert_levels', 'xxxx inq_varid')
-!#! 
-!#! call nc_check(NF90_get_var(ncFileID, VarID, levels), &
-!#!               'read_vert_levels', 'xxxx get_var')
-!#! 
-
-do i=1, nvert
-   levels(i) = real(i, r8)
-enddo
+call get_data(ncFileID, height_name, grid_handle%levels, 'read_vert_levels')
 
 end subroutine read_vert_levels
 
@@ -966,11 +973,11 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'openggcm' ), &
 !----------------------------------------------------------------------------
 
 call nc_check(nf90_def_dim(ncid=ncFileID, name='lon', &
-       len = nlon, dimid = NlonDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
+       len = geo_grid%nlon, dimid = NlonDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
 call nc_check(nf90_def_dim(ncid=ncFileID, name='lat', &
-       len = nlat, dimid = NlatDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
+       len = geo_grid%nlat, dimid = NlatDimID),'nc_write_model_atts', 'lon def_dim '//trim(filename))
 call nc_check(nf90_def_dim(ncid=ncFileID, name='lev', &
-       len = nvert, dimid = NvertDimID),'nc_write_model_atts', 'lev def_dim '//trim(filename))
+       len = geo_grid%nheight, dimid = NvertDimID),'nc_write_model_atts', 'lev def_dim '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
@@ -1014,11 +1021,11 @@ call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 ! Fill the coordinate variables
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_put_var(ncFileID, lonVarID, grid_longitude ), &
+call nc_check(nf90_put_var(ncFileID, lonVarID, geo_grid%grid_longitude ), &
              'nc_write_model_atts', 'grid_longitude put_var '//trim(filename))
-call nc_check(nf90_put_var(ncFileID, latVarID, grid_latitude ), &
+call nc_check(nf90_put_var(ncFileID, latVarID, geo_grid%grid_latitude ), &
              'nc_write_model_atts', 'grid_latitude put_var '//trim(filename))
-call nc_check(nf90_put_var(ncFileID, levelVarID, levels ), &
+call nc_check(nf90_put_var(ncFileID, levelVarID, geo_grid%levels ), &
              'nc_write_model_atts', 'levels put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
@@ -1231,11 +1238,6 @@ logical     :: return_now
 
 istatus(:) = 0
 
-!> @TODO FIXME this should work like the forward operators,
-!> where we have the option to bail as soon as any ensemble member
-!> fails, or carry on to the bitter end to see what values the
-!> successful ensemble members returned, and/or how many were successful.
-
 call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
 call track_status(ens_size, temp_status, bot_val, istatus, return_now)
 if (debug > 6) print *, 'bot_val = ', bot_val
@@ -1270,6 +1272,7 @@ character(len=1024)            :: construct_file_name_in
 ! stub is found in input.nml io_filename_nml
 ! restart files typically are of the form
 ! openggcm.r0001.nc
+
 ! write(construct_file_name_in, '(A, i4.4, A)') trim(stub), copy, ".nc"
 write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
 
@@ -1465,6 +1468,91 @@ else
 endif
 
 end subroutine track_status
+
+!----------------------------------------------------------------------
+
+subroutine allocate_grid_space(grid_handle)
+type(grid_type), intent(inout) :: grid_handle
+
+! Allocate space for grid variables. 
+allocate(grid_handle%grid_longitude(grid_handle%nlon))
+allocate(grid_handle%grid_latitude(grid_handle%nlat))
+allocate(grid_handle%levels(grid_handle%nlon, grid_handle%nlat, grid_handle%nheight))
+
+end subroutine allocate_grid_space
+
+!----------------------------------------------------------------------
+
+subroutine deallocate_grid_space(grid_handle)
+type(grid_type), intent(inout) :: grid_handle
+
+! deAllocate space for grid variables. 
+if (allocated(grid_handle%grid_longitude))  deallocate(grid_handle%grid_longitude)
+if (allocated(grid_handle%grid_latitude))   deallocate(grid_handle%grid_latitude)
+if (allocated(grid_handle%levels))          deallocate(grid_handle%levels)
+
+end subroutine deallocate_grid_space
+
+!------------------------------------------------------------------
+
+function get_dim(ncFileID, dim_name, caller_name)
+
+integer,          intent(in)    :: ncFileID
+character(len=*), intent(in)    :: dim_name
+character(len=*), intent(in)    :: caller_name
+integer :: get_dim
+
+! netcdf variables
+integer :: DimID
+
+call nc_check(NF90_inq_dimid(ncid=ncFileID, name=dim_name, dimid=DimID), &
+                             caller_name,' inq_dimid '//trim(dim_name))
+
+call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=get_dim), &
+                             caller_name, 'inquire_dimension '//trim(dim_name))
+
+end function get_dim
+
+!------------------------------------------------------------------
+
+subroutine get_data_1d(ncFileID, var_name, data_array, caller_name)
+
+integer,          intent(in)    :: ncFileID
+real(r8),         intent(out)    :: data_array(:)
+character(len=*), intent(in)    :: var_name
+character(len=*), intent(in)    :: caller_name
+
+! netcdf variables
+integer :: VarID
+
+call nc_check(NF90_inq_varid(ncFileID, var_name, VarID), &
+              caller_name//' get_data', trim(var_name)//' inq_varid')
+
+call nc_check(NF90_get_var(ncFileID, VarID, data_array), &
+              caller_name//' get_data', trim(var_name)//' get_var')
+
+end subroutine get_data_1d
+
+!----------------------------------------------------------------------
+
+subroutine get_data_3d(ncFileID, var_name, data_array, caller_name)
+
+integer,          intent(in)    :: ncFileID
+real(r8),         intent(out)    :: data_array(:,:,:)
+character(len=*), intent(in)    :: var_name
+character(len=*), intent(in)    :: caller_name
+
+! netcdf variables
+integer :: VarID
+
+call nc_check(NF90_inq_varid(ncFileID, var_name, VarID), &
+              caller_name//' get_data', trim(var_name)//' inq_varid')
+
+call nc_check(NF90_get_var(ncFileID, VarID, data_array), &
+              caller_name//' get_data', trim(var_name)//' get_var')
+
+end subroutine get_data_3d
+
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
 ! End of model_mod
