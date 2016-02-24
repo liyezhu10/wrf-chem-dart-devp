@@ -1369,7 +1369,7 @@ var_id = -1
 end function get_varid_from_varname
 
 !-------------------------------------------------------------------------------
-!> Return variable id given a dart kind string
+!> Return variable id given a dart kind index
 !-------------------------------------------------------------------------------
 function get_varid_from_kind(dom_id, dart_kind_index) result(var_id)
 
