@@ -93,6 +93,9 @@ character(len=512) :: msgstring
 
 integer, parameter :: VERT_LEVEL_1 = 1
 
+integer, parameter :: GEOMETRIC_GRID = 1
+integer, parameter :: MAGNETIC_GRID  = 2
+
 logical, save :: module_initialized = .false.
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -106,6 +109,7 @@ integer, parameter :: num_state_table_columns = 3
 character(len=paramname_length) :: variable_table( max_state_variables, num_state_table_columns )
 integer :: state_kinds_list( max_state_variables )
 logical :: update_var_list( max_state_variables )
+integer :: grid_info_list( max_state_variables )
 
 ! identifiers for variable_table
 integer, parameter :: VAR_NAME_INDEX = 1
@@ -143,7 +147,7 @@ type grid_type
    integer :: nlon, nlat, nheight
 
    ! grid information
-   real(r8), allocatable :: grid_longitude(:), grid_latitude(:)
+   real(r8), allocatable :: longitude(:), latitude(:)
    real(r8), allocatable :: levels(:,:,:)
 
 end type grid_type
@@ -242,7 +246,8 @@ call read_vert_levels(ncid,geo_grid,'cg_height')
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
-call verify_state_variables(model_state_variables, nfields, variable_table, state_kinds_list, update_var_list)
+call verify_state_variables(model_state_variables, nfields, variable_table, &
+                            state_kinds_list, update_var_list, grid_info_list)
 
 !> @todo  - need input filename, hardcode for now to openggcm.nc
 domain_id = add_domain(openggcm_template, nfields, &
@@ -464,8 +469,6 @@ end subroutine model_interpolate
 
 !------------------------------------------------------------------
 
-!------------------------------------------------------------------
-
 subroutine lon_lat_interpolate(state_handle, ens_size, var_kind, lon, lat, height_index, &
                                expected_obs, istatus)
 
@@ -570,11 +573,11 @@ integer  :: i
 if ( .not. module_initialized ) call static_init_model
 
 do i = 2, grid_handle%nlon
-   if (lon <= grid_handle%grid_longitude(i)) then
+   if (lon <= grid_handle%longitude(i)) then
       bot = i-1
       top = i
-      fract = (lon - grid_handle%grid_longitude(bot)) / &
-              (grid_handle%grid_longitude(top) - grid_handle%grid_longitude(bot))
+      fract = (lon - grid_handle%longitude(bot)) / &
+              (grid_handle%longitude(top) - grid_handle%longitude(bot))
       return
    endif
 enddo
@@ -611,21 +614,21 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 ! Check for too far south or north
-if(lat > grid_handle%grid_latitude(1)) then
+if(lat > grid_handle%latitude(1)) then
    istatus = 1
    return
-else if(lat < grid_handle%grid_latitude(grid_handle%nlat)) then
+else if(lat < grid_handle%latitude(grid_handle%nlat)) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
 do i = 2, grid_handle%nlat
-   if(lat >= grid_handle%grid_latitude(i)) then
+   if(lat >= grid_handle%latitude(i)) then
       bot = i - 1
       top = i
-      fract = (lat - grid_handle%grid_latitude(bot)) / &
-              (grid_handle%grid_latitude(top) - grid_handle%grid_latitude(bot))
+      fract = (lat - grid_handle%latitude(bot)) / &
+              (grid_handle%latitude(top) - grid_handle%latitude(bot))
       return
    endif
 enddo
@@ -750,8 +753,13 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
-lon = geo_grid%grid_longitude(lon_index)
-lat = geo_grid%grid_latitude(lat_index)
+lon = geo_grid%longitude(lon_index)
+lat = geo_grid%latitude(lat_index)
+
+!>@todo FIXME : if local var is on mag grid then we need to convert to geo grid
+if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
+   ! call convert routines get some new lon/lat values
+endif
 
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
    height   = 0.0_r8
@@ -845,13 +853,13 @@ logical,          intent(in)    :: is_co_latitude
 ! netcdf variables
 integer :: VarID
 
-call get_data(ncFileID, lon_name, grid_handle%grid_longitude, 'read_horiz_grid')
-call get_data(ncFileID, lat_name, grid_handle%grid_latitude,  'read_horiz_grid')
+call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
+call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
 
 if (is_co_latitude) then 
    ! native coordinates are 'co-latitudes' where 0 is the north pole
    ! and 180 is the south pole.  map to 90 -> -90 for the locations module.
-   grid_handle%grid_latitude(:) = 90.0_r8 - grid_handle%grid_latitude(:)
+   grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
 endif 
 
 end subroutine read_horiz_grid
@@ -1021,9 +1029,9 @@ call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 ! Fill the coordinate variables
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_put_var(ncFileID, lonVarID, geo_grid%grid_longitude ), &
+call nc_check(nf90_put_var(ncFileID, lonVarID, geo_grid%longitude ), &
              'nc_write_model_atts', 'grid_longitude put_var '//trim(filename))
-call nc_check(nf90_put_var(ncFileID, latVarID, geo_grid%grid_latitude ), &
+call nc_check(nf90_put_var(ncFileID, latVarID, geo_grid%latitude ), &
              'nc_write_model_atts', 'grid_latitude put_var '//trim(filename))
 call nc_check(nf90_put_var(ncFileID, levelVarID, geo_grid%levels ), &
              'nc_write_model_atts', 'levels put_var '//trim(filename))
@@ -1354,18 +1362,19 @@ end subroutine vert_convert
 !> that there are valid entries for the dart_kind. 
 !> Returns a table with columns:  
 !>
-!>    netcdf_variable_name ; dart_kind_string ; update_string
+!>    netcdf_variable_name ; dart_kind_string ; update_string ; grid_type
 !>
-subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var )
+subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var, grid_type )
 
 character(len=*),  intent(inout) :: state_variables(:)
 integer,           intent(out) :: ngood
 character(len=*),  intent(out) :: table(:,:)
-integer,           intent(out) :: kind_list(:)   ! kind number
-logical, optional, intent(out) :: update_var(:) ! logical update
+integer,           intent(out) :: kind_list(:)  ! kind number
+logical,           intent(out) :: update_var(:) ! logical update
+integer,           intent(out) :: grid_type(:)  ! kind number
 
 integer :: nrows, i
-character(len=NF90_MAX_NAME) :: varname, dartstr, update
+character(len=NF90_MAX_NAME) :: varname, dartstr, update, gridname
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1380,19 +1389,27 @@ endif
 
 MyLoop : do i = 1, nrows
 
-   varname = trim(state_variables(3*i -2))
-   dartstr = trim(state_variables(3*i -1))
-   update  = trim(state_variables(3*i   ))
+   varname  = trim(state_variables(3*i -3))
+   dartstr  = trim(state_variables(3*i -2))
+   update   = trim(state_variables(3*i -1))
+   gridname = trim(state_variables(3*i   ))
    
    call to_upper(update)
 
    table(i,1) = trim(varname)
    table(i,2) = trim(dartstr)
    table(i,3) = trim(update)
+   table(i,4) = trim(gridname)
 
-   if ( table(i,1) == ' ' .and. table(i,2) == ' ' .and. table(i,3) == ' ') exit MyLoop ! Found end of list.
+   if ( table(i,1) == ' ' .and. &
+        table(i,2) == ' ' .and. &
+        table(i,3) == ' ' .and. &
+        table(i,3) == ' ') exit MyLoop ! Found end of list.
 
-   if ( table(i,1) == ' ' .or. table(i,2) == ' ' .or. table(i,3) == ' ' ) then
+   if ( table(i,1) == ' ' .or. &
+        table(i,2) == ' ' .or. &
+        table(i,3) == ' ' .or. &
+        table(i,4) == ' ') then
       string1 = 'model_nml:model_state_variables not fully specified'
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif
@@ -1407,18 +1424,30 @@ MyLoop : do i = 1, nrows
    
    ! Make sure the update variable has a valid name
 
-   if ( present(update_var) )then
-      SELECT CASE (update)
-         CASE ('UPDATE')
-            update_var(i) = .true.
-         CASE ('NO_COPY_BACK')
-            update_var(i) = .false.
-         CASE DEFAULT
-            write(string1,'(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
-            write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update)
-            call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
-      END SELECT
-   endif
+   SELECT CASE (update)
+      CASE ('UPDATE')
+         update_var(i) = .true.
+      CASE ('NO_COPY_BACK')
+         update_var(i) = .false.
+      CASE DEFAULT
+         write(string1,'(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
+         write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update)
+         call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
+   END SELECT
+
+   ! Make sure the update variable has a valid name
+
+   SELECT CASE (gridname)
+      CASE ('GEOMETRIC_GRID')
+         grid_type(i) = GEOMETRIC_GRID
+      CASE ('MAGNETIC_GRID')
+         grid_type(i) = MAGNETIC_GRID
+      CASE DEFAULT
+         write(string1,'(A)')  'only GEOMETRIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
+         write(string2,'(8A)') 'you provided : ',&
+              trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
+         call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
+   END SELECT
 
    ! Record the contents of the DART state vector
 
@@ -1475,8 +1504,8 @@ subroutine allocate_grid_space(grid_handle)
 type(grid_type), intent(inout) :: grid_handle
 
 ! Allocate space for grid variables. 
-allocate(grid_handle%grid_longitude(grid_handle%nlon))
-allocate(grid_handle%grid_latitude(grid_handle%nlat))
+allocate(grid_handle%longitude(grid_handle%nlon))
+allocate(grid_handle%latitude(grid_handle%nlat))
 allocate(grid_handle%levels(grid_handle%nlon, grid_handle%nlat, grid_handle%nheight))
 
 end subroutine allocate_grid_space
@@ -1487,9 +1516,9 @@ subroutine deallocate_grid_space(grid_handle)
 type(grid_type), intent(inout) :: grid_handle
 
 ! deAllocate space for grid variables. 
-if (allocated(grid_handle%grid_longitude))  deallocate(grid_handle%grid_longitude)
-if (allocated(grid_handle%grid_latitude))   deallocate(grid_handle%grid_latitude)
-if (allocated(grid_handle%levels))          deallocate(grid_handle%levels)
+if (allocated(grid_handle%longitude))  deallocate(grid_handle%longitude)
+if (allocated(grid_handle%latitude))   deallocate(grid_handle%latitude)
+if (allocated(grid_handle%levels))     deallocate(grid_handle%levels)
 
 end subroutine deallocate_grid_space
 
@@ -1552,6 +1581,27 @@ call nc_check(NF90_get_var(ncFileID, VarID, data_array), &
               caller_name//' get_data', trim(var_name)//' get_var')
 
 end subroutine get_data_3d
+
+!----------------------------------------------------------------------
+
+function get_grid_type(dart_kind)
+
+integer, intent(in) :: dart_kind
+integer :: get_grid_type
+
+integer :: i
+
+do i = 1,nfields
+   if ( dart_kind == state_kinds_list(i) ) then
+      get_grid_type = grid_info_list(i)
+      return
+   endif
+enddo
+
+write(msgstring,*)' Can not find dart kind : ', get_raw_obs_kind_name(dart_kind) 
+call error_handler(E_ERR,'get_grid_type',msgstring,source,revision,revdate)
+
+end function get_grid_type
 
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
