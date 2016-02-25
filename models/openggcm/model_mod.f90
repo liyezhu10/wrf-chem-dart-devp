@@ -9,7 +9,8 @@ module model_mod
 ! This is the interface between the openggcm ocean model and DART.
 
 ! Modules that are absolutely required for use are listed
-use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI
+use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
+                                earth_radius
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
@@ -44,7 +45,7 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices,       
                                   state_structure_info
 use dart_time_io_mod,      only : write_model_time
 
-use cotr_mod,              only : transform, cotr_set, cotr
+use cotr_mod,              only : transform, cotr_set, cotr, xyzdeg, degxyz
 
 use typesizes
 use netcdf 
@@ -277,6 +278,10 @@ if (do_output()) write(*,*) 'model_size = ', model_size
 ! set the transform geo -> magnetic grid
 call initialize_openggcm_transform(openggcm_template)
 
+! call test_transform()
+! 
+! call exit(0)
+
 end subroutine static_init_model
 
 !------------------------------------------------------------------
@@ -346,9 +351,9 @@ lheight = loc_array(3)
 
 if (debug > 1) print *, 'requesting interpolation of ', obs_kind, ' at ', llon, llat, lheight
 
-call get_state_meta_data(state_handle, 39360_i8, bob)
+call get_state_meta_data(state_handle, 37929_i8, bob)
 call write_location(0, bob, charstring=outstr)
-print *, 'location of state index 39360 is ', trim(outstr)
+print *, 'location of state index 37929 is ', trim(outstr)
 
 if( vert_is_undef(location) ) then
    ! this is what we expect and it is ok
@@ -389,11 +394,9 @@ thisgrid = get_grid_type(obs_kind)
 !>             if you have an invalid kind you can simply return.
 SELECT CASE (thisgrid)
    CASE (MAGNETIC_GRID)
-      call cotr(openggcm_transform, 'geo', 'mag', &
-                real(llon,r4), real(llat,r4), real(lheight,r4), mlon, mlat, mheight)
-      llon = mlon
-      llat = mlat
-      lheight = mheight
+      ! call transform_mag_to_geo(llon, llat, lheight, 1)
+
+      call transform_mag_to_geo(llon, llat, lheight, 2)
 
       mygrid => mag_grid
 
@@ -475,7 +478,8 @@ call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 if (debug > 0) then
    print *, 'in lon_lat_interp, lon/lat, lon bot/top, lat bot/top: ', &
             lon, lat, lon_bot, lon_top, lat_bot, lat_top
-   
+   print *, "grid handle conv lon : " , grid_handle%conv_2d_lon(lon_bot,lat_bot) 
+   print *, "grid handle conv lat : " , grid_handle%conv_2d_lat(lon_bot,lat_bot) 
 state_index = get_dart_vector_index(lon_bot, lat_bot, 1, &
                                     domain_id, get_varid_from_kind(domain_id, var_kind))
    print *, 'state index for bottom corner is: ', state_index
@@ -833,13 +837,17 @@ integer :: VarID
 if (is_conv) then
    call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
+   print *, 'read before lat', grid_handle%conv_2d_lat(1,1)
+   print *, 'read before llon', grid_handle%conv_2d_lon(1,1)
    if (is_co_latitude) grid_handle%conv_2d_lat(:,:) = 90.0_r8 - grid_handle%conv_2d_lat(:,:)
-   if (minval(grid_handle%conv_2d_lon) < 0) grid_handle%conv_2d_lon = grid_handle%conv_2d_lon + 180.0_r8
+   where(grid_handle%conv_2d_lon < 0) grid_handle%conv_2d_lon = grid_handle%conv_2d_lon + 360.0_r8
+   print *, 'read after lat', grid_handle%conv_2d_lat(1,1)
+   print *, 'read after llon', grid_handle%conv_2d_lon(1,1)
 else
    call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
    if (is_co_latitude) grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
-   if (minval(grid_handle%longitude) < 0) grid_handle%longitude = grid_handle%longitude + 180.0_r8
+   where(grid_handle%longitude < 0) grid_handle%longitude = grid_handle%longitude + 360.0_r8
 endif
 
 end subroutine read_horiz_grid
@@ -1188,7 +1196,7 @@ dist = 1.0e9   !something big and positive (far away)
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
 
-if (debug > 0) then
+if (debug > 1) then
    print *, 'num close = ', num_close
    do i=1,num_close
       print *, i, close_ind(i), dist(i)
@@ -1269,7 +1277,7 @@ end function construct_file_name_in
 !> read the time from template file
 function read_model_time(filename)
 
-character(len=1024) :: filename
+character(len=*), intent(in) :: filename
 type(time_type) :: read_model_time
 
 ! netcdf variables
@@ -1284,6 +1292,9 @@ integer :: seconds
 type(time_type) :: base_time
 
 if ( .not. module_initialized ) call static_init_model
+
+print *, 'read model time filename : ' , trim(filename), len_trim(filename)
+print *, 'file exist',file_exist(filename), filename
 
 if ( .not. file_exist(filename) ) then
    write(msgstring,*) 'cannot open file ', trim(filename),' for reading.'
@@ -1719,18 +1730,104 @@ end subroutine add_string_att
 !----------------------------------------------------------------------
 
 subroutine initialize_openggcm_transform(filename)
-character(len=*), intent(in)    :: filename
+character(len=*), intent(inout) :: filename
+
 type(time_type) :: dart_time
 integer :: yr,mo,dy,hr,mn,se
+
+print *, 'initialize transform filename : ' , trim(filename), len_trim(filename)
 
 dart_time = read_model_time(filename)
 
 call get_date(dart_time, yr, mo, dy, hr, mn, se)
 
-call cotr_set(yr,mo,dy,hr,mn,se,openggcm_transform)
+call cotr_set(yr,mo,dy,hr,mn,real(se,r4),openggcm_transform)
 
 end subroutine initialize_openggcm_transform
 
+!----------------------------------------------------------------------
+
+subroutine transform_mag_to_geo(llon, llat, lheight, direction)
+real(r8), intent(inout) :: llon, llat, lheight
+integer,  intent(in) :: direction
+
+real(r4) :: xin, xout, yin, yout, zin, zout
+
+if (lheight == MISSING_R8) then
+   lheight = 0.0_r8 + earth_radius
+else
+   lheight = lheight + earth_radius
+endif
+
+print *, 'geo1 llon    ', llon
+print *, 'geo1 llat    ', llat
+!print *, 'geo1 lheight ', lheight
+
+if (llon > 180.0_r8) llon = llon - 360.0_r8
+llat = 90.0_r8 - llat
+
+print *, 'geo2 llon    ', llon
+print *, 'geo2 llat    ', llat
+!print *, 'geo2 lheight ', lheight
+
+! transform spherical coordinates to cartesian
+call degxyz(lheight, llon, llat, xin, yin, zin)
+
+  print *, 'xin ', xin 
+  print *, 'yin ', yin
+  print *, 'zin ', zin
+
+if (direction == 1) then
+
+  ! transform from geographic to magnetic grid
+  call cotr(openggcm_transform, 'geo', 'mag', &
+            xin, yin, zin, xout, yout, zout)
+  
+else
+  call cotr(openggcm_transform, 'mag', 'geo', &
+            xin, yin, zin, xout, yout, zout)
+endif
+
+print *, 'xout ', xout 
+print *, 'yout ', yout
+print *, 'zout ', zout
+
+! transform cartesian coordinates to spherical 
+call xyzdeg(xout, yout, zout, lheight, llon, llat)
+
+print *, 'mag1 lon    ', llon
+print *, 'mag1 lat    ', llat
+!print *, 'mag1 height ', lheight
+
+if (llon < 0.0_r8) llon = llon + 360.0_r8
+llat = 90.0_r8 - llat
+
+print *, 'mag2 lon    ', llon
+print *, 'mag2 lat    ', llat
+!print *, 'mag2 height ', lheight
+
+end subroutine transform_mag_to_geo
+
+!----------------------------------------------------------------------
+
+subroutine test_transform()
+real(r8) :: lon, lat, height
+real(r8) :: mlon, mlat, mheight
+
+lon    =  0.0_r8
+lat    = 89.0_r8
+height =  0.0_r8
+
+call transform_mag_to_geo(lon, lat, height, 2)
+
+print *, 'test lon     ', lon
+print *, 'test lat     ', lat
+print *, 'test lheight ', height
+
+print *, 'conv 2d lon', mag_grid%conv_2d_lon(1,1)
+print *, 'conv 2d lat', mag_grid%conv_2d_lat(1,1)
+
+end subroutine test_transform
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
 ! End of model_mod
