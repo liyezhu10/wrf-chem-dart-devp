@@ -1,3 +1,8 @@
+! This code may (or may not) be part of the COAMPS distribution,
+! So it is not protected by the DART copyright agreement.
+!
+! DART $Id: coamps_flat_file_mod.f90 6256 2013-06-12 16:19:10Z thoar $
+
 !This module contains (pure) f90 code in fixed-format with modules.  
 !There is no fppn necessary to compile it. For the sake of future 
 !projects, it might be nice to keep it that way :-) -- MLG
@@ -1057,3 +1062,8 @@
 
       end module cotr_mod
 
+! <next few lines under version control, do not edit>
+! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/rma_openggcm/models/coamps/coamps_flat_file_mod.f90 $
+! $Id: coamps_flat_file_mod.f90 6256 2013-06-12 16:19:10Z thoar $
+! $Revision: 6256 $
+! $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
