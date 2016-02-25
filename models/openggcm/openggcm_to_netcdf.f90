@@ -136,6 +136,7 @@ call close_file(iunit)
 
 
 call wr_netcdf_ctim_grid(ncid,nphi,nthe,nz)
+!call wr_netcdf_3D(ncid,'ctim',size(datmat,1),size(datmat,2),size(datmat,3),datmat,'ion','degrees kelvin','ionospheric miracle')
 call wr_netcdf_3D(ncid,'ctim',datmat,'ion','degrees kelvin','ionospheric miracle')
 
 
@@ -173,7 +174,7 @@ endif
 call close_file(iunit)
 
 call wr_netcdf_interface_grid(ncid,nphi,nthe,7)
-call wr_netcdf_2D(ncid,'interface',tensor2D,'pot','degrees trout','potential miracle')
+call wr_netcdf_2D(ncid,'interface',size(tensor2D,1),size(tensor2D,2),tensor2D,'pot','degrees trout','potential miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------

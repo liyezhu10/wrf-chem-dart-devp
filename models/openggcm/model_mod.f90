@@ -145,7 +145,10 @@ type grid_type
    !real(r8), allocatable :: heights(:,:,:)
    real(r8), allocatable :: heights(:)
 
+   ! optional conversion grid - 2d arrays: (lon, lat)
+   real(r8), allocatable :: conv_2d_lon(:,:), conv_2d_lat(:,:)
 end type grid_type
+
 
 !------------------------------------------------------------------
 ! Global Variables 
@@ -235,8 +238,8 @@ call get_grid_sizes(ncid, geo_grid, 'cg_lon', 'cg_lat','cg_height')
 call get_grid_sizes(ncid, mag_grid, 'ig_lon', 'ig_lat')
 
 ! allocate space for geographic and magnetic grids
-call allocate_grid_space(geo_grid)
-call allocate_grid_space(mag_grid)
+call allocate_grid_space(geo_grid, conv=.true.)
+call allocate_grid_space(mag_grid, conv=.false.)
 
 ! read in geographic and magnetic grids
 call read_horiz_grid(ncid, geo_grid, 'cg_lon','cg_lat', is_co_latitude=.false.)
@@ -731,12 +734,14 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
-lon = geo_grid%longitude(lon_index)
-lat = geo_grid%latitude(lat_index)
+!> we are getting a mapping array between magnetic -> geogrid
 
-!>@todo FIXME : if local var is on mag grid then we need to convert to geo grid
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
-   ! call convert routines get some new lon/lat values
+   lon = mag_grid%conv_2d_lon(lon_index, lat_index)
+   lat = mag_grid%conv_2d_lat(lon_index, lat_index)
+else
+   lon = geo_grid%longitude(lon_index)
+   lat = geo_grid%latitude(lat_index)
 endif
 
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
@@ -1474,13 +1479,20 @@ end subroutine track_status
 
 !----------------------------------------------------------------------
 
-subroutine allocate_grid_space(grid_handle)
+subroutine allocate_grid_space(grid_handle, conv)
+
 type(grid_type), intent(inout) :: grid_handle
+logical,         intent(in)    :: conv
 
 ! Allocate space for grid variables. 
 allocate(grid_handle%longitude(grid_handle%nlon))
 allocate(grid_handle%latitude(grid_handle%nlat))
 allocate(grid_handle%heights(grid_handle%nheight))
+
+if (conv) then
+   allocate(grid_handle%conv_2d_lon(grid_handle%nlon,grid_handle%nlat))
+   allocate(grid_handle%conv_2d_lat(grid_handle%nlon,grid_handle%nlat))
+endif
 
 end subroutine allocate_grid_space
 
@@ -1493,6 +1505,9 @@ type(grid_type), intent(inout) :: grid_handle
 if (allocated(grid_handle%longitude))  deallocate(grid_handle%longitude)
 if (allocated(grid_handle%latitude))   deallocate(grid_handle%latitude)
 if (allocated(grid_handle%heights))    deallocate(grid_handle%heights)
+
+if (allocated(grid_handle%conv_2d_lon)) deallocate(grid_handle%conv_2d_lon)
+if (allocated(grid_handle%conv_2d_lat)) deallocate(grid_handle%conv_2d_lat)
 
 end subroutine deallocate_grid_space
 
