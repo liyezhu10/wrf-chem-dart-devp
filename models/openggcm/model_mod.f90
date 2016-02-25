@@ -1255,8 +1255,8 @@ integer :: ncFileID, VarID
 ! fractional days
 real(r8) :: days
 
-! interger conversion of fractional days
-integer :: seconds, whole_days
+! time in seconds since a base
+integer :: seconds
 
 type(time_type) :: base_time
 
@@ -1273,17 +1273,14 @@ call nc_check( NF90_open(filename, NF90_NOWRITE, ncFileID), &
 call nc_check(NF90_inq_varid(ncFileID, 'time', VarID), &
               'read_model_time', 'time inq_varid')
 
-call nc_check(NF90_get_var(ncFileID, VarID, days), &
+call nc_check(NF90_get_var(ncFileID, VarID, seconds), &
               'read_model_time', 'time get_var')
 
 !>@todo FIXME : Should be grabbing this information from the attributes
 !>              harcoded for now.
-base_time = set_date(1900,1,1,0,0)
+base_time = set_date(1966,1,1,0,0)
 
-whole_days = floor(days)
-seconds    = nint( (days - whole_days)*86400 )
-
-read_model_time = base_time + set_time(seconds, whole_days)
+read_model_time = base_time + set_time(seconds)
 
 end function read_model_time
 
