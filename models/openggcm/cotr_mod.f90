@@ -30,7 +30,7 @@
       implicit none
 
       private 
-      public :: transform, cotr_set, cotr
+      public :: transform, cotr_set, cotr, xyzdeg, degxyz
 
       real*8,parameter,private :: rad=17.45329252d-3
       real*8,parameter,private :: deg=57.29577951d0
@@ -149,7 +149,7 @@
 !doc-                    i.e. colatitude system
 !doc-
       implicit none
-      real x,y,z,r,p,t
+      real*8 x,y,z,r,p,t
       r=sqrt(x*x+y*y+z*z)
       p=0.0
       if(abs(x)+abs(y).gt.0.0)p=deg*atan2(y,x)
@@ -200,8 +200,8 @@
 !doc-
       implicit none
 
-      real r,p,t,x,y,z
-      real pp,tt,st
+      real*8 r,p,t,x,y,z
+      real*8 pp,tt,st
 
       pp=p*rad
       tt=t*rad
@@ -813,39 +813,39 @@
       call cotr_set_1(iy,mo,id,ih,mi,sec,tran)
       end subroutine cotr_set_r8
 
-!---------------------------------------------------------------
-      subroutine mhdmlt(iy,mo,id,ih,mi,se,pmhd,tmhd,xmlt,colat)
-!---------------------------------------------------------------
-!cdoc-  
-!cdoc-FUNCTION:
-!cdoc-  convert MHD logitude (-180,180) and colatitude (0,180)
-!cdoc-  to magnetic local time (0-24) and colatitude
-!cdoc-
-!cdoc-PARAMETERS:
-!cdoc-  iy,mo,id,ih,mi,se (in):  time in UT
-!cdoc-  pmhd (in,real):  deg longitude in MHD system (-180.0,180.0)
-!cdoc-  tmhd (in,real):  deg colatitude in MHD system (0.0,180.0)
-!cdoc-  xmlt (out,real): hours magnetic local time (0.0-24.0)
-!cdoc-  colat (out,real): deg magnetic colatitude (0.0,180.0)
-!cdoc-
-      implicit none
-
-      type(transform) :: tran
-      integer iy,mo,id,ih,mi
-      real se,pmhd,tmhd,xmlt,colat
-
-      real x1,y1,z1,x2,y2,z2
-      real rr,pp,tt
-
-      call cotr_set(iy,mo,id,ih,mi,se,tran)
-      call degxyz(1.0,pmhd,tmhd,x1,y1,z1)
-      call cotr(tran,'mhd','sm ',x1,y1,z1,x2,y2,z2)
-      call xyzdeg(x2,y2,z2,rr,pp,tt)
-      colat=tt
-      xmlt=(pp+180.0)/15.0
-      return
-      end subroutine mhdmlt
-
+!#! !---------------------------------------------------------------
+!#!       subroutine mhdmlt(iy,mo,id,ih,mi,se,pmhd,tmhd,xmlt,colat)
+!#! !---------------------------------------------------------------
+!#! !cdoc-  
+!#! !cdoc-FUNCTION:
+!#! !cdoc-  convert MHD logitude (-180,180) and colatitude (0,180)
+!#! !cdoc-  to magnetic local time (0-24) and colatitude
+!#! !cdoc-
+!#! !cdoc-PARAMETERS:
+!#! !cdoc-  iy,mo,id,ih,mi,se (in):  time in UT
+!#! !cdoc-  pmhd (in,real):  deg longitude in MHD system (-180.0,180.0)
+!#! !cdoc-  tmhd (in,real):  deg colatitude in MHD system (0.0,180.0)
+!#! !cdoc-  xmlt (out,real): hours magnetic local time (0.0-24.0)
+!#! !cdoc-  colat (out,real): deg magnetic colatitude (0.0,180.0)
+!#! !cdoc-
+!#!       implicit none
+!#! 
+!#!       type(transform) :: tran
+!#!       integer iy,mo,id,ih,mi
+!#!       real se,pmhd,tmhd,xmlt,colat
+!#! 
+!#!       real x1,y1,z1,x2,y2,z2
+!#!       real rr,pp,tt
+!#! 
+!#!       call cotr_set(iy,mo,id,ih,mi,se,tran)
+!#!       call degxyz(1.0,pmhd,tmhd,x1,y1,z1)
+!#!       call cotr(tran,'mhd','sm ',x1,y1,z1,x2,y2,z2)
+!#!       call xyzdeg(x2,y2,z2,rr,pp,tt)
+!#!       colat=tt
+!#!       xmlt=(pp+180.0)/15.0
+!#!       return
+!#!       end subroutine mhdmlt
+!#! 
 !#! !---------------------------------------------------------
 !#!       subroutine diptil_1(iy,mo,id,ih,mi,se,degsun,degy)
 !#! !---------------------------------------------------------
