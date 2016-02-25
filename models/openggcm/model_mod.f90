@@ -679,14 +679,26 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
+if (debug > 0) then
+   print *, 'in get_state_meta_data'
+   print *, 'state vector index: ', index_in
+   print *, 'computed indices (lon/lat/hgt): ', lon_index, lat_index, height_index
+   print *, 'var type: ', trim(get_raw_obs_kind_name(var_id))
+endif
+
 !> we are getting a mapping array between magnetic -> geogrid
 
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
    lat = mag_grid%conv_2d_lat(lon_index, lat_index)
+   print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
+   print *, 'mag grid, geo results: ', lon, lat
 else
    lon = geo_grid%longitude(lon_index)
    lat = geo_grid%latitude(lat_index)
+   if (debug > 0) then
+      print *, 'geo grid, results: ', lon, lat
+   endif
 endif
 
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
@@ -1348,16 +1360,16 @@ end subroutine init_time
 !> that there are valid entries for the dart_kind. 
 !> Returns a table with columns:  
 !>
-!>    netcdf_variable_name ; dart_kind_string ; update_string ; grid_type
+!>    netcdf_variable_name ; dart_kind_string ; update_string ; grid_id
 !>
-subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var, grid_type )
+subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var, grid_id )
 
 character(len=*),  intent(inout) :: state_variables(:)
 integer,           intent(out) :: ngood
 character(len=*),  intent(out) :: table(:,:)
 integer,           intent(out) :: kind_list(:)  ! kind number
 logical,           intent(out) :: update_var(:) ! logical update
-integer,           intent(out) :: grid_type(:)  ! kind number
+integer,           intent(out) :: grid_id(:)  ! kind number
 
 integer :: nrows, i
 character(len=NF90_MAX_NAME) :: varname, dartstr, update, gridname
@@ -1417,7 +1429,7 @@ MyLoop : do i = 1, nrows
          update_var(i) = .false.
       CASE DEFAULT
          write(string1,'(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
-         write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update)
+         write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
          call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
    END SELECT
 
@@ -1425,9 +1437,9 @@ MyLoop : do i = 1, nrows
 
    SELECT CASE (gridname)
       CASE ('GEOGRAPHIC_GRID')
-         grid_type(i) = GEOGRAPHIC_GRID
+         grid_id(i) = GEOGRAPHIC_GRID
       CASE ('MAGNETIC_GRID')
-         grid_type(i) = MAGNETIC_GRID
+         grid_id(i) = MAGNETIC_GRID
       CASE DEFAULT
          write(string1,'(A)')  'only GEOGRAPHIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
          write(string2,'(8A)') 'you provided : ',&
@@ -1438,7 +1450,8 @@ MyLoop : do i = 1, nrows
    ! Record the contents of the DART state vector
 
    if (do_output()) then
-      write(string1,'(A,I2,6A)') 'variable ',i,' is ',trim(varname), ', ', trim(dartstr), ', ', trim(update)
+      write(string1,'(A,I2,8A)') 'variable ',i,' is ',trim(varname), ', ', &
+                                  trim(dartstr), ', ', trim(update), ', ', trim(gridname)
       call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate)
    endif
 
