@@ -142,15 +142,15 @@
    netCDF_large_file_support  = .true.
   /
 
-   openggcm_to_netcdf_input_file  = '../data/da0002.dart.pot'
 &openggcm_to_netcdf_nml
-   openggcm_to_netcdf_input_file  = '../data/DART.ctim'
+   openggcm_to_netcdf_input_file1  = '../data/da0002.dart.pot'
+   openggcm_to_netcdf_input_file2  = '../data/DART.ctim'
    openggcm_to_netcdf_output_file = 'openggcm3D.nc'
    verbose = .true.
   /
 
 &netcdf_to_openggcm_nml
-   netcdf_to_openggcm_input_file  = 'openggcm.nc'
+   netcdf_to_openggcm_input_file  = 'openggcm3D.nc'
    netcdf_to_openggcm_output_file = 'openggcm.pot.dat'
    verbose = .true.
   /

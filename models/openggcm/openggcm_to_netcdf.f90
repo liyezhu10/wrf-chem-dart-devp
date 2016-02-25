@@ -41,11 +41,13 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-character(len=256) :: openggcm_to_netcdf_input_file  = '../data/da0002.dart.pot'
+character(len=256) :: openggcm_to_netcdf_input_file1 = '../data/da0002.dart.pot'
+character(len=256) :: openggcm_to_netcdf_input_file2 = '../data/DART.ctim'
 character(len=256) :: openggcm_to_netcdf_output_file = 'openggcm.nc'
 logical            :: verbose = .false.
 
-namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file, &
+namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file1, &
+                                  openggcm_to_netcdf_input_file2, &
                                   openggcm_to_netcdf_output_file, &
                                   verbose
 
@@ -56,7 +58,7 @@ namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file, &
 integer               :: io, iunit
 type(time_type)       :: model_time, model_time_base, model_time_offset
 real(r8), allocatable :: tensor3D(:,:,:)
-real(r4), allocatable :: tensor2D(:,:)
+real(r4), allocatable :: tensor2D(:,:), zkm(:)
 real(digits12) :: time_offset_seconds
 
 integer  :: ncid
@@ -64,7 +66,7 @@ integer  :: ncid
 integer  :: iyear, imonth, iday, ihour, iminute, isecond
 integer  :: nthe, nphi, nz
 
-character(len=512) :: string1, string2
+character(len=512) :: string1, string2, string3
 
 !=======================================================================
 
@@ -78,9 +80,10 @@ read(iunit, nml = openggcm_to_netcdf_nml, iostat = io)
 call check_namelist_read(iunit, io, "openggcm_to_netcdf_nml")
 
 if (verbose) then
-   write(string1,*)"..  converting openggcm binary file '"//trim(openggcm_to_netcdf_input_file)//"'"
-   write(string2,*)"to netcdf file '"//trim(openggcm_to_netcdf_output_file)//"'"
-   call error_handler(E_MSG,'openggcm_to_netcdf',string1, text2=string2)
+   write(string1,*)"..  converting openggcm binary files '"//trim(openggcm_to_netcdf_input_file1)//"'"
+   write(string2,*)"and '"//trim(openggcm_to_netcdf_input_file2)//"'"
+   write(string3,*)"to netcdf file '"//trim(openggcm_to_netcdf_output_file)//"'"
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1, text2=string2, text3=string3)
 endif
 
 call set_calendar_type('Gregorian')
@@ -92,12 +95,21 @@ call nc_check(nf90_create(openggcm_to_netcdf_output_file, NF90_CLOBBER, ncid),'o
 
 !-----------------------------------------------------------------------
 
-iunit = open_file(openggcm_to_netcdf_input_file, form='unformatted',action='read')
+iunit = open_file(openggcm_to_netcdf_input_file1, form='unformatted',action='read')
+
+read(iunit,iostat=io) nphi, nthe
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read nphi, nthe'
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''nphi, nthe'',2(1x,i6))'), nphi, nthe
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
 
 read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
 if (io /= 0) then
    write(string1,*)'read error was ',io,' when trying to read time record of 6 integers'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
 elseif (verbose) then
    write(string1,'(''iyear, imonth, iday, ihour, iminute, isecond '',i4,4(1x,i2),1x,i5)') &
                     iyear, imonth, iday, ihour, iminute, isecond
@@ -112,58 +124,12 @@ time_offset_seconds = real(iday,digits12)*86400.0_digits12 + real(isecond,digits
 
 call wr_netcdf_model_time(ncid, time_offset_seconds)
 
-read(iunit,iostat=io) nphi, nthe, nz
-if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
-elseif (verbose) then
-   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
-   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
-endif
-
-allocate(tensor3D(nphi,nthe,nz))
-
-read(iunit,iostat=io) tensor3D
-if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read the "pot" variable.'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
-endif
-
-call close_file(iunit)
-
-call wr_netcdf_ctim_grid(ncid,nphi,nthe,nz)
-call wr_netcdf_r8_3D(ncid,'ctim',nphi,nthe,nz,tensor3D,'ion','degrees kelvin','ionospheric miracle')
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-
-iunit = open_file('../data/da0002.dart.pot', form='unformatted',action='read')
-
-read(iunit,iostat=io) nphi, nthe
-if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
-elseif (verbose) then
-   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
-   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
-endif
-
-read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
-if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read time record of 6 integers'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
-elseif (verbose) then
-   write(string1,'(''iyear, imonth, iday, ihour, iminute, isecond '',i4,4(1x,i2),1x,i5)') &
-                    iyear, imonth, iday, ihour, iminute, isecond
-   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
-endif
-
 allocate(tensor2D(nphi,nthe))
 
 read(iunit,iostat=io) tensor2D
 if (io /= 0) then
    write(string1,*)'read error was ',io,' when trying to read the "pot" variable.'
-   call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
 endif
 call close_file(iunit)
 
@@ -173,6 +139,45 @@ call wr_netcdf_r4_2D(ncid,'interface',nphi,nthe,tensor2D,'pot','degrees trout','
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 
+iunit = open_file(openggcm_to_netcdf_input_file2, form='unformatted',action='read')
+
+read(iunit,iostat=io) iyear, imonth, iday, ihour, iminute, isecond
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read time record of 6 integers'
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''iyear, imonth, iday, ihour, iminute, isecond '',i4,4(1x,i2),1x,i5)') &
+                    iyear, imonth, iday, ihour, iminute, isecond
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
+
+read(iunit,iostat=io) nphi, nthe, nz
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
+elseif (verbose) then
+   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
+   call error_handler(E_MSG,'openggcm_to_netcdf',string1)
+endif
+
+allocate(tensor3D(nphi,nthe,nz),zkm(nz))
+
+read(iunit,iostat=io) tensor3D
+if (io /= 0) then
+   write(string1,*)'read error was ',io,' when trying to read the "ion" variable.'
+   call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
+endif
+
+call close_file(iunit)
+
+call wr_netcdf_ctim_grid(ncid,nphi,'cg_lon','degrees','geographic longitude', &
+                              nthe,'cg_lat','degrees','geographic latitude', &
+                            nz,zkm,'cg_height','kilometers','height')
+
+call wr_netcdf_r8_3D(ncid,'ctim',nphi,nthe,nz,tensor3D,'ion','degrees kelvin','ionospheric miracle')
+
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 call nc_check(nf90_close(ncid),'openggcm_to_netcdf')
 
 call finalize_utilities('openggcm_to_netcdf')

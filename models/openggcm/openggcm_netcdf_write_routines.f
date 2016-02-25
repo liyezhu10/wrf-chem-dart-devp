@@ -16,6 +16,14 @@
 
       contains
 
+!===================================================================
+
+      subroutine death()
+
+      stop
+
+      end subroutine death
+
 !=======================================================================
 ! This is F90 code written with F77 syntax because (for expediency) it will
 ! simply be appended to the mhd-iono.for file.
@@ -25,6 +33,8 @@
 ! Furthermore, the build mechanism of openggcm cannot tolerate having a
 ! module contained inside the mhd-iono.for   file, so the module baggage
 ! must be stripped off when appending to mhd-iono.for.
+!
+! ... delete everything above this line when appending
 !=======================================================================
 
       subroutine wr_netcdf_model_time(ncid, model_time)
@@ -54,15 +64,21 @@
 
 !=======================================================================
 
-      subroutine wr_netcdf_ctim_grid(ncid, nlon, nlat, nheight)
+      subroutine wr_netcdf_ctim_grid(ncid, nlon, nlonname, nlonunits, nlonshort,
+     &                                     nlat, nlatname, nlatunits, nlatshort,
+     &                 nheight, height, nheightname, nheightunits, nheightshort)
 
       use netcdf
       implicit none
 
       integer, intent(in) :: ncid
       integer, intent(in) :: nlon
+      character(len=*), intent(in) :: nlonname, nlonunits, nlonshort
       integer, intent(in) :: nlat
+      character(len=*), intent(in) :: nlatname, nlatunits, nlatshort
       integer, intent(in) :: nheight
+      real*4,  intent(in) :: height(nheight)
+      character(len=*), intent(in) :: nheightname, nheightunits, nheightshort
 
       !-----------------------------------------------------------------------
       ! local storage
@@ -70,18 +86,17 @@
 
       real*4, allocatable :: longitude(:)
       real*4, allocatable :: latitude(:)
-      real*4, allocatable :: height(:)
-      real*4  :: dlat, dlon, dheight
+      real*4  :: dlat, dlon
 
       integer :: LonDimID, LatDimID, HeightDimID
       integer :: LonVarID, LatVarID, HeightVarID
       integer :: io, io1, io2, io3
-      integer :: ilat, ilon, iheight
+      integer :: ilat, ilon
 
       !-----------------------------------------------------------------------
       ! calculate the required metadata
 
-      allocate(longitude(nlon), latitude(nlat), height(nheight))
+      allocate(longitude(nlon), latitude(nlat))
 
       dlon = 360.0/real(nlon-1)
       do ilon = 1,nlon
@@ -89,13 +104,8 @@
       enddo
 
       dlat = 180.0/real(nlat-1)
-      do ilat = 1,nlat  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
-         latitude(ilat) = dlat*real(ilat-1)
-      enddo
-
-      dheight = 500.0/real(nheight)   ! TJH FIXME ... bogus height array
-      do iheight = 1,nheight
-         height(iheight) = dheight*real(iheight-1)
+      do ilat = 1,nlat           ! from south-to-north
+         latitude(ilat) = dlat*real(ilat-1) - 90.0
       enddo
 
       !-----------------------------------------------------------------------
@@ -103,30 +113,30 @@
       io = nf90_redef(ncid)
       call nc_check(io, 'wr_netcdf_ctim_grid', 'redef')
 
-      io1 = nf90_def_dim(ncid, 'cg_lon', nlon, LonDimID)
-      io2 = nf90_def_var(ncid, 'cg_lon', nf90_real, (/ LonDimID /), LonVarID)
-      io3 = nf90_put_att(ncid, LonVarID, 'short_name', 'geographic longitude' )
-      io  = nf90_put_att(ncid, LonVarID, 'units', 'degrees')
+      io1 = nf90_def_dim(ncid, trim(nlonname), nlon, LonDimID)
+      io2 = nf90_def_var(ncid, trim(nlonname), nf90_real, (/ LonDimID /), LonVarID)
+      io3 = nf90_put_att(ncid, LonVarID, 'short_name', trim(nlonshort) )
+      io  = nf90_put_att(ncid, LonVarID, 'units', trim(nlonunits))
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_lon')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_lon')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_lon short_name')
       call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_lon units')
 
-      io1 = nf90_def_dim(ncid, 'cg_lat', nlat, LatDimID)
-      io2 = nf90_def_var(ncid, 'cg_lat', nf90_real, (/ LatDimID /), LatVarID)
-      io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic latitude')
-      io  = nf90_put_att(ncid, LatVarID, 'units', 'degrees')
+      io1 = nf90_def_dim(ncid, trim(nlatname), nlat, LatDimID)
+      io2 = nf90_def_var(ncid, trim(nlatname), nf90_real, (/ LatDimID /), LatVarID)
+      io3 = nf90_put_att(ncid, LatVarID, 'short_name', trim(nlatshort))
+      io  = nf90_put_att(ncid, LatVarID, 'units', trim(nlatunits))
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_lat')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_lat')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_lat short_name')
       call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_lat units')
 
-      io1 = nf90_def_dim(ncid, 'cg_height', nheight, HeightDimID)
-      io2 = nf90_def_var(ncid, 'cg_height', nf90_real, (/ HeightDimID /), HeightVarID)
-      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'height')
-      io  = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers')
+      io1 = nf90_def_dim(ncid, trim(nheightname), nheight, HeightDimID)
+      io2 = nf90_def_var(ncid, trim(nheightname), nf90_real, (/ HeightDimID /), HeightVarID)
+      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', trim(nheightshort))
+      io  = nf90_put_att(ncid, HeightVarID, 'units', trim(nheightunits))
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_height')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_height')
@@ -273,7 +283,7 @@
          call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
       else
          write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         stop
+         call death()
       endif
 
       ! Make sure the netcdf dimensions match the incoming variable
@@ -283,7 +293,7 @@
 
       if (nlon /= size(tensor,1)) then
          write(*,*)'ERROR :: failed dimension '//trim(tensorname)
-         stop
+         call death()
       endif
 
       !-----------------------------------------------------------------------
@@ -333,7 +343,7 @@
          call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
       else
          write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         stop
+         call death()
       endif
 
       ! Make sure the netcdf dimensions match the incoming variable
@@ -346,12 +356,14 @@
 
       if (nlon /= size(tensor,1)) then
          write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+         call death()
       endif
 
       if (nlat /= size(tensor,2)) then
          write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+         call death()
       endif
 
       !-----------------------------------------------------------------------
@@ -401,7 +413,7 @@
          call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
       else
          write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         stop
+         call death()
       endif
 
       ! Make sure the netcdf dimensions match the incoming variable
@@ -414,12 +426,14 @@
 
       if (nlon /= size(tensor,1)) then
          write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+         call death()
       endif
 
       if (nlat /= size(tensor,2)) then
          write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+         call death()
       endif
 
       !-----------------------------------------------------------------------
@@ -471,7 +485,7 @@
          call  get_interface_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
       else
          write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         stop
+         call death()
       endif
 
       ! Make sure the netcdf dimensions match the incoming variable
@@ -486,17 +500,20 @@
 
       if (nlon /= size(tensor,1)) then
          write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+         call death()
       endif
 
       if (nlat /= size(tensor,2)) then
          write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+         call death()
       endif
 
       if (nheight /= size(tensor,3)) then
          write(*,*)'ERROR :: failed height dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nheight,' got ',size(tensor,3)
+         call death()
       endif
 
       ! If everything is consistent, go ahead and define it
@@ -551,7 +568,7 @@
          call  get_interface_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
       else
          write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         stop
+         call death()
       endif
 
       ! Make sure the netcdf dimensions match the incoming variable
@@ -566,17 +583,20 @@
 
       if (nlon /= size(tensor,1)) then
          write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+         call death()
       endif
 
       if (nlat /= size(tensor,2)) then
          write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+         call death()
       endif
 
       if (nheight /= size(tensor,3)) then
          write(*,*)'ERROR :: failed height dimension '//trim(tensorname)
-         stop
+         write(*,*)'ERROR :: expected ',nheight,' got ',size(tensor,3)
+         call death()
       endif
 
       ! If everything is consistent, go ahead and define it
@@ -672,7 +692,7 @@
       error_msg = trim(context) // ': ' // trim(nf90_strerror(istatus))
 
       write(*,*)'ERROR: '//trim(subr_name)//' '//trim(error_msg)
-      stop
+      call death()
 
       end subroutine nc_check
 

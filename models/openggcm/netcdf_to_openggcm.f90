@@ -22,7 +22,7 @@ program netcdf_to_openggcm
 ! author: Tim Hoar 23 Feb 16
 !-----------------------------------------------------------------------
 
-use        types_mod, only : r4, r8, digits12
+use        types_mod, only : r4, r8, digits12, i8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
                              logfileunit, error_handler, E_ERR, E_MSG, nc_check, &
@@ -31,7 +31,7 @@ use time_manager_mod, only : time_type, print_time, print_date, set_calendar_typ
                              set_date, get_date, set_time, get_time, &
                              operator(+)
 
-use netcdf_mod     ! just to compile and test this
+use netcdf_read_mod     ! just to compile and test this
 
 use netcdf
 
@@ -118,21 +118,22 @@ do dimi = 1,ncNdims
    write(string1,'(''inquire "pot" dimension'',i2,A)') dimi
    call nc_check(nf90_inquire_dimension(ncid,dimIDs(dimi),name=dimnames(dimi),len=dimlens(dimi)), &
                     'netcdf_to_openggcm', string1)
-   if (trim(dimnames(dimi)) == 'nthe') nthe = dimlens(dimi)
-   if (trim(dimnames(dimi)) == 'nphi') nphi = dimlens(dimi)
+   if (trim(dimnames(dimi)) == 'ig_lat') nthe = dimlens(dimi)
+   if (trim(dimnames(dimi)) == 'ig_lon') nphi = dimlens(dimi)
 enddo
 
 if (nthe < 1) then
-   write(string1,*)"dimension 'nthe' not found"
+   write(string1,*)"dimension 'ig_lat' not found"
    call error_handler(E_ERR,'netcdf_to_openggcm',string1, source, revision, revdate)
 endif 
 if (nphi < 1) then
-   write(string1,*)"dimension 'nphi' not found"
+   write(string1,*)"dimension 'ig_lon' not found"
    call error_handler(E_ERR,'netcdf_to_openggcm',string1, source, revision, revdate)
 endif 
 
 allocate(statevector(nphi,nthe))
-call nc_check(nf90_get_var(ncid, VarID, values=statevector), 'netcdf_to_openggcm', 'get_var "pot"')
+
+call rd_netcdf_r4_2D(ncid,'pot',nphi,nthe,statevector)
 
 call set_calendar_type('Gregorian')
 call get_model_time(ncid, model_time)
@@ -141,6 +142,8 @@ call get_date(model_time, iyear, imonth, iday, ihour, iminute, isecond)
 call nc_check(nf90_close(ncid),'netcdf_to_openggcm', 'close')
 
 ! This is the inverse of the
+iyear = iyear - 1900
+
 iunit = open_file(netcdf_to_openggcm_output_file, form='unformatted',action='write')
 write(iunit)nphi,nthe
 write(iunit)iyear, imonth, iday, ihour, iminute, isecond
@@ -173,31 +176,33 @@ real(digits12) :: length_of_run
 character(len=NF90_MAX_NAME) :: unitstring
 type(time_type) :: model_time_base, model_time_offset
 integer :: iyear, imonth, iday, isecond
+integer(i8) :: ibigday
 
 call nc_check(nf90_inq_varid(ncid, 'time', varid),            'get_model_time','inq_varid time')
 call nc_check(nf90_get_var(ncid, varid, values=length_of_run),'get_model_time','get_var time')
 call nc_check(nf90_get_att(ncid, varid, 'units', unitstring), 'get_model_time','get_att time:units')
 
-if (unitstring(1:11) == 'days since ') then
-   read(unitstring,'(11x,i4,2(1x,i2))',iostat=io)iyear,imonth,iday
+if (unitstring(1:14) == 'seconds since ') then
+   read(unitstring,'(14x,i4,2(1x,i2))',iostat=io)iyear,imonth,iday
    if (io /= 0) then
       write(string1,*)'Unable to parse year/month/day from units. Error status was ',io
-      write(string2,*)'expected something like "days since YYYY-MM-DD"'
+      write(string2,*)'expected something like "seconds since YYYY-MM-DD"'
       write(string3,*)'was                     "'//trim(unitstring)//'"'
       call error_handler(E_ERR, 'get_model_time', string1, &
           source, revision, revdate, text2=string2, text3=string3)
    endif
 else
    write(string1,*)'Unable to read time units.'
-   write(string2,*)'expected "days since YYYY-MM-DD"'
+   write(string2,*)'expected "seconds since YYYY-MM-DD"'
    write(string3,*)'was      "'//trim(unitstring)//'"'
    call error_handler(E_ERR, 'get_model_time', string1, &
           source, revision, revdate, text2=string2, text3=string3)
 endif
 
 model_time_base = set_date(iyear, imonth, iday)
-iday            = int(length_of_run)
-isecond         = (length_of_run - real(iday,digits12))*86400.0_r8
+ibigday         = int(length_of_run,i8)/86400_i8
+iday            = int(ibigday)
+isecond         = length_of_run - real(iday,digits12)*86400.0_digits12
 model_time_offset = set_time(isecond, iday)
 model_time = model_time_base + model_time_offset
 
