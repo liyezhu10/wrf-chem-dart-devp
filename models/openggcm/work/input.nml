@@ -327,7 +327,7 @@
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.1
    model_state_variables        = 
-      'ion', 'KIND_ELECTRON_DENSITY',   'UPDATE', 'GEOMETRIC_GRID',
+      'ion', 'KIND_ELECTRON_DENSITY',   'UPDATE', 'GEOGRAPHIC_GRID',
       'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE', 'MAGNETIC_GRID',
    debug = 1
   /

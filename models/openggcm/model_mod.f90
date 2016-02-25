@@ -82,6 +82,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 interface get_data
    module procedure get_data_1d
+   module procedure get_data_2d
    module procedure get_data_3d
 end interface get_data
 
@@ -92,7 +93,7 @@ character(len=512) :: msgstring
 
 integer, parameter :: VERT_LEVEL_1 = 1
 
-integer, parameter :: GEOMETRIC_GRID = 1
+integer, parameter :: GEOGRAPHIC_GRID = 1
 integer, parameter :: MAGNETIC_GRID  = 2
 
 logical, save :: module_initialized = .false.
@@ -238,15 +239,19 @@ call get_grid_sizes(ncid, geo_grid, 'cg_lon', 'cg_lat','cg_height')
 call get_grid_sizes(ncid, mag_grid, 'ig_lon', 'ig_lat')
 
 ! allocate space for geographic and magnetic grids
-call allocate_grid_space(geo_grid, conv=.true.)
-call allocate_grid_space(mag_grid, conv=.false.)
+call allocate_grid_space(geo_grid, conv=.false.)
+call allocate_grid_space(mag_grid, conv=.true.)
 
-! read in geographic and magnetic grids
+! read in geographic and magnetic grids, and for the mag grid read
+! in the 2d conversion arrays to go to geographic coords
 call read_horiz_grid(ncid, geo_grid, 'cg_lon','cg_lat', is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon','ig_lat', is_co_latitude=.true.) 
 
-! only geographic grid contains vertical heights
+call read_conv_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat')
+
+!>@ TODO FIXME - i think this isn't true -- only geographic grid contains vertical heights
 call read_vert_levels(ncid,geo_grid,'cg_height')
+call read_vert_levels(ncid,mag_grid,'ig_height')
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings, 
@@ -305,7 +310,7 @@ integer(i8) :: base_offset
 integer     :: ind
 integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
-integer     :: hstatus
+integer     :: hstatus, thisgrid
 type(grid_type), pointer :: mygrid
 
 if ( .not. module_initialized ) call static_init_model
@@ -364,27 +369,26 @@ endif
 ! can simply interpolate to find the value) or they are a simple
 ! transformation of something in the state vector.
 
+thisgrid = get_grid_type(obs_kind)
+
 !@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
 !>             if you have an invalid kind you can simply return.
-SELECT CASE (obs_kind)
-   !>@todo FIXME : in the future we would like to interpolate KIND_ELECTRON_DENSITY
-   !CASE (KIND_ELECTRON_DENSITY)
-   !   ! these kinds are ok
-   !   mygrid => geo_grid
-
-   CASE (KIND_ELECTRIC_POTENTIAL)
-      ! these kinds are ok
+SELECT CASE (thisgrid)
+   CASE (MAGNETIC_GRID)
       mygrid => mag_grid
 
-   CASE DEFAULT
-      ! Not a legal type for interpolation, return istatus error
-      istatus = 15
-      return
+   CASE (GEOGRAPHIC_GRID)
+      mygrid => geo_grid
+
+   case default
+      call error_handler(E_ERR, 'model_interpolate', 'unknown grid type, should not happen', &
+            source, revision, revdate)
 
 END SELECT
 
+
 if( vert_is_undef(location) ) then
-   call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, VERT_LEVEL_1, &
+   call lon_lat_interpolate(state_handle, ens_size, mygrid, obs_kind, llon, llat, VERT_LEVEL_1, &
                             expected_obs, istatus)
 
    if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
@@ -405,7 +409,7 @@ endif
 ! do a 2d interpolation for the value at the bottom level, then again for
 ! the top level, then do a linear interpolation in the vertical to get the
 ! final value.  this sets both interp_val and istatus.
-call do_interp(state_handle, ens_size, base_offset, hgt_bot, hgt_top, hgt_fract, &
+call do_interp(state_handle, ens_size, mygrid, base_offset, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_kind, expected_obs, istatus)
 if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
 
@@ -413,11 +417,12 @@ end subroutine model_interpolate
 
 !------------------------------------------------------------------
 
-subroutine lon_lat_interpolate(state_handle, ens_size, var_kind, lon, lat, height_index, &
-                               expected_obs, istatus)
+subroutine lon_lat_interpolate(state_handle, ens_size, grid_handle, var_kind, &
+                               lon, lat, height_index, expected_obs, istatus)
 
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
+type(grid_type),     intent(in)  :: grid_handle
 integer,             intent(in)  :: var_kind
 real(r8),            intent(in)  :: lon, lat
 integer,             intent(in)  :: height_index
@@ -441,8 +446,8 @@ istatus = 0
 !> find the lower and upper indices which enclose the given value
 !> in this model, the data at lon 0 is replicated at lon 360, so no special
 !> wrap case is needed.
-call lon_bounds(lon, geo_grid, lon_bot, lon_top, lon_fract)
-call lat_bounds(lat, geo_grid, lat_bot, lat_top, lat_fract, istatus(1))
+call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
+call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 
 if (istatus(1) /= 0) then
    istatus(:) = 18 
@@ -773,6 +778,23 @@ if (is_co_latitude) then
 endif 
 
 end subroutine read_horiz_grid
+
+!------------------------------------------------------------------
+
+subroutine read_conv_horiz_grid(ncFileID, grid_handle, lon_name, lat_name)
+
+integer,          intent(in)    :: ncFileID
+type(grid_type),  intent(inout) :: grid_handle
+character(len=*), intent(in)    :: lon_name
+character(len=*), intent(in)    :: lat_name
+
+! netcdf variables
+integer :: VarID
+
+call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
+call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
+
+end subroutine read_conv_horiz_grid
 
 !------------------------------------------------------------------
 
@@ -1122,11 +1144,12 @@ end subroutine get_close_obs
 
 !------------------------------------------------------------------
 
-subroutine do_interp(state_handle, ens_size, base_offset, hgt_bot, hgt_top, hgt_fract, &
+subroutine do_interp(state_handle, ens_size, grid_handle, base_offset, hgt_bot, hgt_top, hgt_fract, &
                      llon, llat, obs_kind, expected_obs, istatus)
 
 type(ensemble_type), intent(in) :: state_handle
-integer,             intent(in) :: ens_Size
+integer,             intent(in) :: ens_size
+type(grid_type),     intent(in) :: grid_handle
 integer(i8),         intent(in) :: base_offset
 integer,             intent(in) :: hgt_bot, hgt_top
 real(r8),            intent(in) :: hgt_fract, llon, llat
@@ -1146,12 +1169,12 @@ logical     :: return_now
 
 istatus(:) = 0
 
-call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
+call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
 call track_status(ens_size, temp_status, bot_val, istatus, return_now)
 if (debug > 6) print *, 'bot_val = ', bot_val
 if (return_now) return
 
-call lon_lat_interpolate(state_handle, ens_size, obs_kind, llon, llat, hgt_top, top_val, temp_status)
+call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_top, top_val, temp_status)
 if (debug > 6) print *, 'top_val = ', top_val
 call track_status(ens_size, temp_status, top_val, istatus, return_now)
 if (return_now) return
@@ -1401,12 +1424,12 @@ MyLoop : do i = 1, nrows
    ! Make sure the update variable has a valid name
 
    SELECT CASE (gridname)
-      CASE ('GEOMETRIC_GRID')
-         grid_type(i) = GEOMETRIC_GRID
+      CASE ('GEOGRAPHIC_GRID')
+         grid_type(i) = GEOGRAPHIC_GRID
       CASE ('MAGNETIC_GRID')
          grid_type(i) = MAGNETIC_GRID
       CASE DEFAULT
-         write(string1,'(A)')  'only GEOMETRIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
+         write(string1,'(A)')  'only GEOGRAPHIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
          write(string2,'(8A)') 'you provided : ',&
               trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
          call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
@@ -1565,7 +1588,7 @@ end function set_dim
 subroutine get_data_1d(ncFileID, var_name, data_array, context)
 
 integer,          intent(in)    :: ncFileID
-real(r8),         intent(out)    :: data_array(:)
+real(r8),         intent(out)   :: data_array(:)
 character(len=*), intent(in)    :: var_name
 character(len=*), intent(in)    :: context
 
@@ -1579,6 +1602,26 @@ rc = NF90_get_var(ncFileID, VarID, data_array)
 call nc_check(rc, trim(context)//' getting data for 1d array '//trim(var_name))
 
 end subroutine get_data_1d
+
+!------------------------------------------------------------------
+
+subroutine get_data_2d(ncFileID, var_name, data_array, context)
+
+integer,          intent(in)    :: ncFileID
+real(r8),         intent(out)   :: data_array(:,:)
+character(len=*), intent(in)    :: var_name
+character(len=*), intent(in)    :: context
+
+! netcdf variables
+integer :: VarID, rc
+
+rc = NF90_inq_varid(ncFileID, var_name, VarID)
+call nc_check(rc, trim(context)//' inquiring for 2d array '//trim(var_name))
+
+rc = NF90_get_var(ncFileID, VarID, data_array)
+call nc_check(rc, trim(context)//' getting data for 2d array '//trim(var_name))
+
+end subroutine get_data_2d
 
 !----------------------------------------------------------------------
 
