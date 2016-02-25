@@ -85,7 +85,6 @@ interface get_data
    module procedure get_data_3d
 end interface get_data
 
-
 ! message strings
 character(len=512) :: string1
 character(len=512) :: string2
@@ -108,18 +107,18 @@ integer, parameter :: num_state_table_columns = 3
 ! larger than paramname_length = 32.
 character(len=paramname_length) :: variable_table( max_state_variables, num_state_table_columns )
 integer :: state_kinds_list( max_state_variables )
-logical :: update_var_list( max_state_variables )
-integer :: grid_info_list( max_state_variables )
+logical ::  update_var_list( max_state_variables )
+integer ::   grid_info_list( max_state_variables )
 
 ! identifiers for variable_table
-integer, parameter :: VAR_NAME_INDEX = 1
-integer, parameter :: VAR_KIND_INDEX = 2
+integer, parameter :: VAR_NAME_INDEX   = 1
+integer, parameter :: VAR_KIND_INDEX   = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
 
 ! things which can/should be in the model_nml
 character(len=NF90_MAX_NAME) :: openggcm_template
-integer  :: assimilation_period_days = 1
-integer  :: assimilation_period_seconds = 0
+integer  :: assimilation_period_days     = 1
+integer  :: assimilation_period_seconds  = 0
 real(r8) :: model_perturbation_amplitude = 0.2
 character(len=paramname_length) :: model_state_variables(max_state_variables * num_state_table_columns ) = ' '
 integer  :: debug = 0   ! turn up for more and more debug messages
@@ -132,16 +131,7 @@ namelist /model_nml/  &
    model_state_variables,       &
    debug
 
-!------------------------------------------------------------------
-! fields in the state vector
-!------------------------------------------------------------------
-
-! Number of fields in the state vector
-integer :: nfields
-
-! Grid parameters - the values will be read from the
-! openggcm netcdf restart file
-
+! Generic grid type to hold CTIM and Magnetic grid information
 type grid_type
    ! the size of the grid
    integer :: nlon, nlat, nheight
@@ -152,17 +142,24 @@ type grid_type
 
 end type grid_type
 
+!------------------------------------------------------------------
+! Global Variables 
+!------------------------------------------------------------------
+
+! Number of fields in the state vector
+integer :: nfields
+
+
+! Geometric (CTIM) Grid and Magnetic Grid
 type(grid_type) :: geo_grid, mag_grid
 
+! Global Time Variables
 type(time_type) :: model_time, model_timestep
 
-integer(i8) :: model_size    ! the state vector length
+! The state vector length
+integer(i8) :: model_size
 
-
-!------------------------------------------------
-
-
-! global domain id to be used by routines in state_structure_mod
+! Domain id to be used by routines in state_structure_mod
 integer :: domain_id
 
 contains
@@ -224,11 +221,8 @@ call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 write(msgstring,*)'assimilation period is ',dd,' days ',ss,' seconds'
 call error_handler(E_MSG,'static_init_model',msgstring,source,revision,revdate)
 
-
 ! get data dimensions, then allocate space, then open the files
 ! and actually fill in the arrays.
-
-!> @TODO FIXME
 
 ncid = get_grid_template_fileid(openggcm_template)
 
@@ -239,23 +233,26 @@ call get_grid_sizes(ncid, mag_grid, 'mg_lon', 'mg_lat')
 call allocate_grid_space(geo_grid)
 call allocate_grid_space(mag_grid)
 
+! read in geographic and magnetic grids
 call read_horiz_grid(ncid, geo_grid, 'cg_lon','cg_lat', is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'mg_lon','mg_lat', is_co_latitude=.true.) 
 
+! only geographic grid contains vertical levels
 call read_vert_levels(ncid,geo_grid,'cg_height')
 
 ! verify that the model_state_variables namelist was filled in correctly.  
-! returns variable_table which has variable names, kinds and update strings.
+! returns variable_table which has variable names, kinds and update strings, 
+! and grid information.
 call verify_state_variables(model_state_variables, nfields, variable_table, &
                             state_kinds_list, update_var_list, grid_info_list)
 
-!> @todo  - need input filename, hardcode for now to openggcm.nc
+! Fill up the state structure with information from the model template file
 domain_id = add_domain(openggcm_template, nfields, &
                        var_names   = variable_table  (1:nfields , VAR_NAME_INDEX), &
                        kind_list   = state_kinds_list(1:nfields), &
                        update_list = update_var_list (1:nfields))
 
-call state_structure_info(domain_id)
+if (debug > 0) call state_structure_info(domain_id)
 
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
@@ -312,7 +309,6 @@ function get_model_size()
 ! Returns the size of the model as an integer. Required for all
 ! applications.
 
-
 if ( .not. module_initialized ) call static_init_model
 
 get_model_size = model_size
@@ -362,12 +358,12 @@ subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expecte
 ! returned in interp_val and istatus is 0 for success.
 
 ! Local storage
-real(r8)       :: loc_array(3), llon, llat, lheight
-integer(i8)    :: base_offset
-integer        :: ind
-integer        :: hgt_bot, hgt_top
-real(r8)       :: hgt_fract
-integer        :: hstatus
+real(r8)    :: loc_array(3), llon, llat, lheight
+integer(i8) :: base_offset
+integer     :: ind
+integer     :: hgt_bot, hgt_top
+real(r8)    :: hgt_fract
+integer     :: hstatus
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -382,7 +378,7 @@ if ( .not. module_initialized ) call static_init_model
 !> they be combined?
 
 expected_obs(:) = MISSING_R8     ! the DART bad value flag
-istatus(:) = 99                ! unknown error
+istatus(:)      = 99             ! unknown error
 
 ! Get the individual locations values
 loc_array = get_location(location)
@@ -428,7 +424,7 @@ endif
 !@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
 !>             if you have an invalid kind you can simply return.
 SELECT CASE (obs_kind)
-   !>@todo FIXME : in the future we could like to interpolate KIND_ELECTRON_DENSITY
+   !>@todo FIXME : in the future we would like to interpolate KIND_ELECTRON_DENSITY
    CASE (KIND_ELECTRIC_POTENTIAL)
       ! these kinds are ok
 
@@ -637,35 +633,12 @@ istatus = 40
 
 end subroutine lat_bounds
 
-!------------------------------------------------------------------
-
-function lon_dist(lon1, lon2)
- real(r8), intent(in) :: lon1, lon2
- real(r8)             :: lon_dist
-
-! Returns the smallest signed distance between lon1 and lon2 on the sphere
-! If lon1 is less than 180 degrees east of lon2 the distance is negative
-! If lon1 is less than 180 degrees west of lon2 the distance is positive
-
-if ( .not. module_initialized ) call static_init_model
-
-lon_dist = lon2 - lon1
-if(lon_dist >= -180.0_r8 .and. lon_dist <= 180.0_r8) then
-   return
-else if(lon_dist < -180.0_r8) then
-   lon_dist = lon_dist + 360.0_r8
-else
-   lon_dist = lon_dist - 360.0_r8
-endif
-
-end function lon_dist
-
 !------------------------------------------------------------
 
 subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
- real(r8),    intent(in) :: lheight
- integer,     intent(in) :: nheights
- real(r8),    intent(in) :: hgt_array(nheights)
+ real(r8),   intent(in)  :: lheight
+ integer,    intent(in)  :: nheights
+ real(r8),   intent(in)  :: hgt_array(nheights)
  integer,    intent(out) :: bot, top
  real(r8),   intent(out) :: fract
  integer,    intent(out) :: istatus
@@ -794,9 +767,8 @@ end subroutine end_model
 !------------------------------------------------------------------
 
 function get_grid_template_fileid(filename)
-
 character(len=*), intent(in) :: filename
-integer get_grid_template_fileid
+integer :: get_grid_template_fileid
 
 call nc_check( nf90_open(filename, NF90_NOWRITE, get_grid_template_fileid), &
                   'get_grid_template_fileid', 'open '//trim(filename))
@@ -805,37 +777,25 @@ end function get_grid_template_fileid
 
 !------------------------------------------------------------------
 
-subroutine get_grid_sizes(ncFileID, grid_handle, lon_name, lat_name, vert_name)
+subroutine get_grid_sizes(ncFileID, grid_handle, lon_name, lat_name, height_name)
 
 integer,                    intent(in)    :: ncFileID
 type(grid_type),            intent(inout) :: grid_handle
 character(len=*),           intent(in)    :: lon_name
 character(len=*),           intent(in)    :: lat_name
-character(len=*), optional, intent(in)    :: vert_name
+character(len=*), optional, intent(in)    :: height_name
 
 ! netcdf variables
 integer :: DimID
 
-call nc_check(NF90_inq_dimid(ncid=ncFileID, name=lon_name, dimid=DimID), &
-                           'get_grid_sizes','inq_dimid '//trim(lon_name))
+grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
 
-call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nlon), &
-              'get_grid_sizes', 'inquire_dimension '//trim(lon_name))
+grid_handle%nlat = get_dim(ncFileID,lat_name, 'get_grid_sizes')
 
-call nc_check(NF90_inq_dimid(ncid=ncFileID, name=lat_name, dimid=DimID), &
-                           'get_grid_sizes','inq_dimid '//trim(lat_name))
-
-call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nlat), &
-              'get_grid_sizes', 'inquire_dimension '//trim(lat_name))
-
-if (present(vert_name)) then
-   call nc_check(NF90_inq_dimid(ncid=ncFileID, name=vert_name, dimid=DimID), &
-                              'get_grid_sizes','inq_dimid '//trim(vert_name))
-   
-   call nc_check(NF90_inquire_dimension(ncFileID, DimID, len=grid_handle%nheight), &
-                 'get_grid_sizes', 'inquire_dimension '//trim(vert_name))
+if (present(height_name)) then
+   grid_handle%nheight = get_dim(ncFileID, height_name, 'get_grid_sizes')
 else
-  grid_handle%nheight = 1
+   grid_handle%nheight = 1
 endif
 
 end subroutine get_grid_sizes
@@ -883,13 +843,9 @@ function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) resul
  logical, intent(out) :: model_mod_writes_state_variables
  integer              :: ierr          ! return value of function
 
-! TJH -- Writes the model-specific attributes to a netCDF file.
-!     This includes coordinate variables and some metadata, but NOT
-!     the model state vector.
-!
-! assim_model_mod:init_diag_output uses information from the location_mod
-!     to define the location dimension and variable ID. All we need to do
-!     is query, verify, and fill ...
+! Writes the model-specific attributes to a netCDF file.
+!     This includes coordinate variables for the geometric and
+!     magnetic grids
 !
 ! Typical sequence for adding new dimensions,variables,attributes:
 ! NF90_OPEN             ! open existing netCDF dataset
@@ -1021,6 +977,11 @@ call nc_check(nf90_put_att(ncFileID, levelVarID, 'comment', &
                'more positive is closer to the center of the earth'),  &
               'nc_write_model_atts', 'levels comment '//trim(filename))
 
+!----------------------------------------------------------------------------
+! Write out Magnetic Grid attributes
+!----------------------------------------------------------------------------
+!>@todo FIXME : need to write out magnetic grid attributes
+
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
 call nc_check(nf90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
@@ -1065,7 +1026,10 @@ function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result 
  integer,                intent(in) :: timeindex
  integer                            :: ierr          ! return value of function
 
-! DEFINE ANY EXTRA VARIABLES OTHER THAN THOSE IN THE STATE
+! Define variables in state.  Do not need to to use this since
+! model_mod_writes_state_variables = .false. in nc_write_model_atts
+! So DART takes care of writting out state variable information
+! using the state structure.
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1211,12 +1175,6 @@ dist = 1.0e9   !something big and positive (far away)
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
-
-!#! print *, 'num_close', num_close 
-!#! 
-!#! do k = 1, num_close
-!#!    print *, k, close_ind(k)
-!#! enddo
 
 end subroutine get_close_obs
 
