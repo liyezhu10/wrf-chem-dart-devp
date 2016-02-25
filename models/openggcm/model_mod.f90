@@ -20,7 +20,7 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              VERTISUNDEF, VERTISHEIGHT, get_location,          &
                              vert_is_height, vert_is_level, vert_is_surface,   &
                              vert_is_undef, get_close_type,                    &
-                             loc_get_close_obs => get_close_obs, write_location
+                             loc_get_close_obs => get_close_obs
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, do_output, to_upper,                    &
@@ -43,6 +43,8 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices,       
                                   get_varid_from_kind, get_dart_vector_index,    &
                                   state_structure_info
 use dart_time_io_mod,      only : write_model_time
+
+use cotr_mod,              only : transform, cotr_set, cotr
 
 use typesizes
 use netcdf 
@@ -86,6 +88,9 @@ interface get_data
    module procedure get_data_2d
    module procedure get_data_3d
 end interface get_data
+
+! transform type openggcm
+type(transform) :: openggcm_transform
 
 ! message strings
 character(len=512) :: string1
@@ -269,6 +274,8 @@ if (debug > 0) call state_structure_info(domain_id)
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
 
+! set the transform geo -> magnetic grid
+call initialize_openggcm_transform(openggcm_template)
 
 end subroutine static_init_model
 
@@ -305,15 +312,13 @@ subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expecte
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
+real(r4)    :: mlon, mlat, mheight
 integer(i8) :: base_offset
 integer     :: ind
 integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
 integer     :: hstatus, thisgrid
 type(grid_type), pointer :: mygrid
-
-type(location_type) :: bob
-character(len=128) :: outstr
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -337,10 +342,6 @@ llat    = loc_array(2)
 lheight = loc_array(3)
 
 if (debug > 1) print *, 'requesting interpolation of ', obs_kind, ' at ', llon, llat, lheight
-
-call get_state_meta_data(state_handle, 39360_i8, bob)
-call write_location(0, bob, charstring=outstr)
-print *, 'location of state index 39360 is ', trim(outstr)
 
 if( vert_is_undef(location) ) then
    ! this is what we expect and it is ok
@@ -381,15 +382,18 @@ thisgrid = get_grid_type(obs_kind)
 !>             if you have an invalid kind you can simply return.
 SELECT CASE (thisgrid)
    CASE (MAGNETIC_GRID)
+      call cotr(openggcm_transform, 'geo', 'mag', &
+                real(llon,r4), real(llat,r4), real(lheight,r4), mlon, mlat, mheight)
+      llon = mlon
+      llat = mlat
+      lheight = mheight
+
       mygrid => mag_grid
-      ! need to convert geo to mag here
-      call error_handler(E_ERR, 'model_interpolate', 'missing geo -> mag conversion', &
-        source, revision, revdate)
 
    CASE (GEOGRAPHIC_GRID)
       mygrid => geo_grid
 
-   case default
+   CASE DEFAULT
       call error_handler(E_ERR, 'model_interpolate', 'unknown grid type, should not happen', &
             source, revision, revdate)
 
@@ -397,7 +401,6 @@ END SELECT
 
 
 if( vert_is_undef(location) ) then
-print *, 'vert is undef is true'
    call lon_lat_interpolate(state_handle, ens_size, mygrid, obs_kind, llon, llat, VERT_LEVEL_1, &
                             expected_obs, istatus)
 
@@ -448,8 +451,6 @@ real(r8) :: x_corners(4), y_corners(4)
 real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
 real(r8) :: lon_fract, lat_fract
 
-integer :: varid, state_index   ! DEBUG
-
 if ( .not. module_initialized ) call static_init_model
 
 ! Succesful return has istatus of 0
@@ -460,15 +461,6 @@ istatus = 0
 !> wrap case is needed.
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
 call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
-
-if (debug > 0) then
-   print *, 'in lon_lat_interp, lon/lat, lon bot/top, lat bot/top: ', &
-            lon, lat, lon_bot, lon_top, lat_bot, lat_top
-   
-state_index = get_dart_vector_index(lon_bot, lat_bot, 1, &
-                                    domain_id, get_varid_from_kind(domain_id, var_kind))
-   print *, 'state index for bottom corner is: ', state_index
-endif
 
 if (istatus(1) /= 0) then
    istatus(:) = 18 
@@ -481,10 +473,6 @@ p(1, :) = get_val(lon_bot, lat_bot, height_index, var_kind, state_handle, ens_si
 p(2, :) = get_val(lon_top, lat_bot, height_index, var_kind, state_handle, ens_size)
 p(3, :) = get_val(lon_top, lat_top, height_index, var_kind, state_handle, ens_size)
 p(4, :) = get_val(lon_bot, lat_top, height_index, var_kind, state_handle, ens_size)
-
-if (debug > 0) then
-  print *, 'got corners, ens 1: ', p(:, 1)
-endif
 
 ! Rectangular bilinear interpolation
 xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
@@ -704,7 +692,7 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
-if (debug > 8) then
+if (debug > 0) then
    print *, 'in get_state_meta_data'
    print *, 'state vector index: ', index_in
    print *, 'computed indices (lon/lat/hgt): ', lon_index, lat_index, height_index
@@ -716,14 +704,14 @@ endif
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
    lat = mag_grid%conv_2d_lat(lon_index, lat_index)
-   if (debug > 2) then
+   if (debug > 0) then
       print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
       print *, 'mag grid, geo results: ', lon, lat
    endif
 else
    lon = geo_grid%longitude(lon_index)
    lat = geo_grid%latitude(lat_index)
-   if (debug > 8) then
+   if (debug > 0) then
       print *, 'geo grid, results: ', lon, lat
    endif
 endif
@@ -1159,7 +1147,7 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
 ! vertical coordinates to a common coordinate. This coordinate type is defined
 ! in the namelist with the variable "vert_localization_coord".
 
-integer :: t_ind, i
+integer :: t_ind, k
 
 ! Initialize variables to missing status
 
@@ -1176,13 +1164,6 @@ dist = 1.0e9   !something big and positive (far away)
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
-
-if (debug > 0) then
-   print *, 'num close = ', num_close
-   do i=1,num_close
-      print *, i, close_ind(i), dist(i)
-   enddo
-endif
 
 end subroutine get_close_obs
 
@@ -1704,6 +1685,21 @@ rc = NF90_put_att(ncFileID, varid, attname, attval)
 call nc_check(rc, trim(context)//' putting attribute '//trim(attname))
 
 end subroutine add_string_att
+
+!----------------------------------------------------------------------
+
+subroutine initialize_openggcm_transform(filename)
+character(len=*), intent(in)    :: filename
+type(time_type) :: dart_time
+integer :: yr,mo,dy,hr,mn,se
+
+dart_time = read_model_time(filename)
+
+call get_date(dart_time, yr, mo, dy, hr, mn, se)
+
+call cotr_set(yr,mo,dy,hr,mn,se,openggcm_transform)
+
+end subroutine initialize_openggcm_transform
 
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
