@@ -25,8 +25,8 @@ use time_manager_mod, only : time_type, print_time, print_date, set_date, &
 use       netcdf_mod, only :  wr_netcdf_model_time, &
                               wr_netcdf_ctim_grid, &
                               wr_netcdf_interface_grid, &
-                              wr_netcdf_2D, &
-                              wr_netcdf_3D
+                              wr_netcdf_r4_2D, &
+                              wr_netcdf_r8_3D
 
 use netcdf
 implicit none
@@ -57,7 +57,6 @@ integer               :: io, iunit
 type(time_type)       :: model_time, model_time_base, model_time_offset
 real(r8), allocatable :: tensor3D(:,:,:)
 real(r4), allocatable :: tensor2D(:,:)
-real(r4), allocatable :: datmat(:,:,:)
 real(digits12) :: time_offset_seconds
 
 integer  :: ncid
@@ -123,22 +122,17 @@ elseif (verbose) then
 endif
 
 allocate(tensor3D(nphi,nthe,nz))
-allocate(datmat(nphi,nthe,nz))
 
 read(iunit,iostat=io) tensor3D
 if (io /= 0) then
    write(string1,*)'read error was ',io,' when trying to read the "pot" variable.'
    call error_handler(E_ERR,'real_obs_sequence', string1, source, revision, revdate)
 endif
-datmat = tensor3D
 
 call close_file(iunit)
 
-
 call wr_netcdf_ctim_grid(ncid,nphi,nthe,nz)
-!call wr_netcdf_3D(ncid,'ctim',size(datmat,1),size(datmat,2),size(datmat,3),datmat,'ion','degrees kelvin','ionospheric miracle')
-call wr_netcdf_3D(ncid,'ctim',datmat,'ion','degrees kelvin','ionospheric miracle')
-
+call wr_netcdf_r8_3D(ncid,'ctim',nphi,nthe,nz,tensor3D,'ion','degrees kelvin','ionospheric miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
@@ -174,7 +168,7 @@ endif
 call close_file(iunit)
 
 call wr_netcdf_interface_grid(ncid,nphi,nthe,7)
-call wr_netcdf_2D(ncid,'interface',size(tensor2D,1),size(tensor2D,2),tensor2D,'pot','degrees trout','potential miracle')
+call wr_netcdf_r4_2D(ncid,'interface',nphi,nthe,tensor2D,'pot','degrees trout','potential miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
