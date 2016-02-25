@@ -25,7 +25,8 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
-                             file_exist, find_textfile_dims, file_to_text
+                             file_exist, find_textfile_dims, file_to_text,     &
+                             do_nml_file, do_nml_term, nmlfileunit
 use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL,   &
                              get_raw_obs_kind_index, get_raw_obs_kind_name,    &
                              paramname_length 
@@ -213,9 +214,8 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
-if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
+if (do_nml_term()) write(     *     , nml=model_nml)
 
 ! set calendar type
 call set_calendar_type(GREGORIAN)
@@ -244,10 +244,9 @@ call allocate_grid_space(mag_grid, conv=.true.)
 
 ! read in geographic and magnetic grids, and for the mag grid read
 ! in the 2d conversion arrays to go to geographic coords
-call read_horiz_grid(ncid, geo_grid, 'cg_lon','cg_lat', is_co_latitude=.false.)
-call read_horiz_grid(ncid, mag_grid, 'ig_lon','ig_lat', is_co_latitude=.true.) 
-
-call read_conv_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat')
+call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.true.)
+call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
+call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
 
 !>@ TODO FIXME - i think this isn't true -- only geographic grid contains vertical heights
 call read_vert_levels(ncid,geo_grid,'cg_height')
@@ -683,7 +682,7 @@ if (debug > 0) then
    print *, 'in get_state_meta_data'
    print *, 'state vector index: ', index_in
    print *, 'computed indices (lon/lat/hgt): ', lon_index, lat_index, height_index
-   print *, 'var type: ', trim(get_raw_obs_kind_name(var_id))
+   print *, 'var type: ', trim(get_raw_obs_kind_name(local_var))
 endif
 
 !> we are getting a mapping array between magnetic -> geogrid
@@ -691,8 +690,10 @@ endif
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
    lat = mag_grid%conv_2d_lat(lon_index, lat_index)
-   print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
-   print *, 'mag grid, geo results: ', lon, lat
+   if (debug > 0) then
+      print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
+      print *, 'mag grid, geo results: ', lon, lat
+   endif
 else
    lon = geo_grid%longitude(lon_index)
    lat = geo_grid%latitude(lat_index)
@@ -769,44 +770,42 @@ end subroutine get_grid_sizes
 
 !------------------------------------------------------------------
 
-subroutine read_horiz_grid(ncFileID, grid_handle, lon_name, lat_name, is_co_latitude)
+subroutine read_horiz_grid(ncFileID, grid_handle, lon_name, lat_name, is_conv, is_co_latitude)
 
 integer,          intent(in)    :: ncFileID
 type(grid_type),  intent(inout) :: grid_handle
 character(len=*), intent(in)    :: lon_name
 character(len=*), intent(in)    :: lat_name
+logical,          intent(in)    :: is_conv
 logical,          intent(in)    :: is_co_latitude
 
 ! netcdf variables
 integer :: VarID
 
-call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
-call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
+! is_conv:  if true, read the data into the conversion grid.
+! otherwise read into the normal lat/lon arrays.
 
-if (is_co_latitude) then 
-   ! native coordinates are 'co-latitudes' where 0 is the north pole
-   ! and 180 is the south pole.  map to 90 -> -90 for the locations module.
-   grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
-endif 
+! is_co_latitude:  if true, subtract 90 from the lat values
+! co_latitudes start at 0 at the north pole and go to 180 at the south.
+! "normal" latitudes for us are -90 at the south pole up to 90 at the north.
+
+!> @TODO FIXME: make sure we understand whether we expect longitudes to be
+!> 0-360 coming in, or if they are coming in as -180 to 180 and need to be
+!> shifted by us.
+
+if (is_conv) then
+   call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
+   call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
+   if (is_co_latitude) grid_handle%conv_2d_lat(:,:) = 90.0_r8 - grid_handle%conv_2d_lat(:,:)
+   if (minval(grid_handle%conv_2d_lon) < 0) grid_handle%conv_2d_lon = grid_handle%conv_2d_lon + 180.0_r8
+else
+   call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
+   call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
+   if (is_co_latitude) grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
+   if (minval(grid_handle%longitude) < 0) grid_handle%longitude = grid_handle%longitude + 180.0_r8
+endif
 
 end subroutine read_horiz_grid
-
-!------------------------------------------------------------------
-
-subroutine read_conv_horiz_grid(ncFileID, grid_handle, lon_name, lat_name)
-
-integer,          intent(in)    :: ncFileID
-type(grid_type),  intent(inout) :: grid_handle
-character(len=*), intent(in)    :: lon_name
-character(len=*), intent(in)    :: lat_name
-
-! netcdf variables
-integer :: VarID
-
-call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
-call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
-
-end subroutine read_conv_horiz_grid
 
 !------------------------------------------------------------------
 
