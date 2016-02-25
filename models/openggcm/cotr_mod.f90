@@ -22,20 +22,24 @@
 !-------------------------------------------------------------
 
       module cotr_mod
+      implicit none
+
+      private 
+      public :: transform, cotr_set, cotr
 
       real*8,parameter,private :: rad=17.45329252d-3
       real*8,parameter,private :: deg=57.29577951d0
 
       type transform
-      integer :: iscalled
-      integer :: icalled = 1
-      real*8,dimension(3,3,2) :: tmpmat
-      real*8,dimension(3,3) :: cmat
-      real*8,dimension(3,3,-7:7) :: pmat
-      real*8 :: t0
-      integer :: year,month,day,hour,minute
-      real :: seconds
-      character(len=4) :: ccfr,ccto
+         integer :: iscalled
+         integer :: icalled = 1
+         real*8,dimension(3,3,2) :: tmpmat
+         real*8,dimension(3,3) :: cmat
+         real*8,dimension(3,3,-7:7) :: pmat
+         real*8 :: t0
+         integer :: year,month,day,hour,minute
+         real :: seconds
+         character(len=4) :: ccfr,ccto
       end type transform
       
       ! JH: from new_cotr.f90
