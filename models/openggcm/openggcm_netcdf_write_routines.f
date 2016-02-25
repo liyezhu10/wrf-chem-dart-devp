@@ -36,7 +36,7 @@
       call nc_check(io1, 'wr_netcdf_model_time', 'def_var time')
       call nc_check(io2, 'wr_netcdf_model_time', 'put_att:time:units')
       
-      io1 = nf90_enddef(ncid)
+      io1 = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io1, 'wr_netcdf_model_time', 'enddef')
       
       io1 = nf90_put_var(ncid, VarID, model_time)
@@ -62,8 +62,8 @@
       ! local storage
       !-----------------------------------------------------------------------
       
-      real*4, allocatable :: latitude(:)
       real*4, allocatable :: longitude(:)
+      real*4, allocatable :: latitude(:)
       real*4, allocatable :: height(:)
       real*4  :: dlat, dlon, dheight
       
@@ -119,17 +119,15 @@
 
       io1 = nf90_def_dim(ncid, 'cg_height', nheight, HeightDimID)
       io2 = nf90_def_var(ncid, 'cg_height', nf90_real, (/ HeightDimID /), HeightVarID)
-      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'geographic height')
+      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'height')
       io  = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers')
 
       call nc_check(io1, 'wr_netcdf_ctim_grid', 'def_dim cg_height')
       call nc_check(io2, 'wr_netcdf_ctim_grid', 'def_var cg_height')
       call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_att cg_height short_name')
       call nc_check(io , 'wr_netcdf_ctim_grid', 'put_att cg_height units')
-
-      ! leave define mode so we can fill
       
-      io = nf90_enddef(ncid)
+      io = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io, 'wr_netcdf_ctim_grid', 'enddef')
       
       io1 = nf90_put_var(ncid,    LonVarID, longitude)
@@ -155,8 +153,8 @@
       ! local storage
       !-----------------------------------------------------------------------
       
-      real*4, allocatable :: latitude(:)
       real*4, allocatable :: longitude(:)
+      real*4, allocatable :: latitude(:)
       real*4, allocatable :: height(:)
       real*4  :: dlat, dlon, dheight
       
@@ -167,11 +165,7 @@
       
       !=======================================================================
 
-      write(*,*)'WARNING: wr_netcdf_interface_grid not tested'
-!     stop
-
-      !-----------------------------------------------------------------------
-      ! calculate the required metadata
+      ! calculate the required metadata with BOGUS VALUES at the moment
       
       allocate(longitude(nlon), latitude(nlat), height(nheight))
       
@@ -195,39 +189,42 @@
       io = nf90_redef(ncid) 
       call nc_check(io, 'wr_netcdf_interface_grid', 'redef')
       
-      io1 = nf90_def_dim(ncid, 'ig_lon', nlon, LonDimID)
-      io2 = nf90_def_var(ncid, 'ig_lon', nf90_real, (/ LonDimID /), LonVarID)
-      io3 = nf90_put_att(ncid, LonVarID, 'short_name', 'geographic longitude' )
-      io  = nf90_put_att(ncid, LonVarID, 'units', 'degrees' )
-      
+      io1 = nf90_def_dim(ncid, 'ig_lon'   , nlon   , LonDimID)
+      io2 = nf90_def_dim(ncid, 'ig_lat'   , nlat   , LatDimID)
+      io3 = nf90_def_dim(ncid, 'ig_height', nheight, HeightDimID)
+
       call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_lon')
-      call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_lon')
-      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lon short_name')
-      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_lon units')
+      call nc_check(io2, 'wr_netcdf_interface_grid', 'def_dim ig_lat')
+      call nc_check(io3, 'wr_netcdf_interface_grid', 'def_dim ig_height')
+
+      io1 = nf90_def_var(ncid, 'ig_lon', nf90_real, (/ LonDimID /), LonVarID)
+      io2 = nf90_put_att(ncid, LonVarID, 'short_name', 'magnetic longitude' )
+      io3 = nf90_put_att(ncid, LonVarID, 'units', 'degrees' )
       
-      io1 = nf90_def_dim(ncid, 'ig_lat', nlat, LatDimID)
-      io2 = nf90_def_var(ncid, 'ig_lat', nf90_real, (/ LatDimID /), LatVarID)
-      io3 = nf90_put_att(ncid, LatVarID, 'short_name', 'geographic latitude')
-      io  = nf90_put_att(ncid, LatVarID, 'units', 'degrees' )
-
-      call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_lat')
-      call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_lat')
-      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lat short_name')
-      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_lat units')
-
-      io1 = nf90_def_dim(ncid, 'ig_height', nheight, HeightDimID)
-      io2 = nf90_def_var(ncid, 'ig_height', nf90_real, (/ HeightDimID /), HeightVarID)
-      io3 = nf90_put_att(ncid, HeightVarID, 'short_name', 'geographic height')
-      io  = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers' )
-
-      call nc_check(io1, 'wr_netcdf_interface_grid', 'def_dim ig_height')
-      call nc_check(io2, 'wr_netcdf_interface_grid', 'def_var ig_height')
-      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_height short_name')
-      call nc_check(io , 'wr_netcdf_interface_grid', 'put_att ig_height units')
-
-      ! leave define mode so we can fill
+      call nc_check(io1, 'wr_netcdf_interface_grid', 'def_var ig_lon')
+      call nc_check(io2, 'wr_netcdf_interface_grid', 'put_att ig_lon short_name')
+      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lon units')
       
-      io = nf90_enddef(ncid)
+      io1 = nf90_def_var(ncid, 'ig_lat', nf90_real, (/ LatDimID /), LatVarID)
+      io2 = nf90_put_att(ncid, LatVarID, 'short_name', 'magnetic latitude')
+      io3 = nf90_put_att(ncid, LatVarID, 'units', 'degrees' )
+
+      call nc_check(io1, 'wr_netcdf_interface_grid', 'def_var ig_lat')
+      call nc_check(io2, 'wr_netcdf_interface_grid', 'put_att ig_lat short_name')
+      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_lat units')
+
+      io1 = nf90_def_var(ncid, 'ig_height', nf90_real, (/ HeightDimID /), HeightVarID)
+      io2 = nf90_put_att(ncid, HeightVarID, 'short_name', 'height')
+      io3 = nf90_put_att(ncid, HeightVarID, 'units', 'kilometers' )
+
+      call nc_check(io1, 'wr_netcdf_interface_grid', 'def_var ig_height')
+      call nc_check(io2, 'wr_netcdf_interface_grid', 'put_att ig_height short_name')
+      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_height units')
+
+      ! must also put out some information so DART can convert magnetic lon/lat to
+      ! geographic lon/lat on demand.
+      
+      io = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io, 'wr_netcdf_interface_grid', 'enddef')
       
       io1 = nf90_put_var(ncid,    LonVarID, longitude)
@@ -309,9 +306,7 @@
       call nc_check(io2, 'wr_netcdf_3D', 'put_att short_name'//trim(tensorname))
       call nc_check(io3, 'wr_netcdf_3D', 'put_att units'//trim(tensorname))
       
-      ! leave define mode so we can fill
-      
-      io = nf90_enddef(ncid)
+      io = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io, 'wr_netcdf_3D', 'enddef')
       
       io = nf90_put_var(ncid,     VarID, tensor)
@@ -376,9 +371,7 @@
       call nc_check(io2, 'wr_netcdf_2D', 'put_att short_name'//trim(tensorname))
       call nc_check(io3, 'wr_netcdf_2D', 'put_att units'//trim(tensorname))
       
-      ! leave define mode so we can fill
-      
-      io = nf90_enddef(ncid)
+      io = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io, 'wr_netcdf_2D', 'enddef'//trim(tensorname))
       
       io = nf90_put_var(ncid, VarID, tensor)

@@ -172,7 +172,7 @@ if (io /= 0) then
 endif
 call close_file(iunit)
 
-call wr_netcdf_interface_grid(ncid,nphi,nthe,1)
+call wr_netcdf_interface_grid(ncid,nphi,nthe,7)
 call wr_netcdf_2D(ncid,'interface',tensor2D,'pot','degrees trout','potential miracle')
 
 !-----------------------------------------------------------------------
