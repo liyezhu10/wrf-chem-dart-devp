@@ -159,7 +159,7 @@ integer :: nfields
 
 
 ! Geometric (CTIM) Grid and Magnetic Grid
-type(grid_type) :: geo_grid, mag_grid
+type(grid_type), target :: geo_grid, mag_grid
 
 ! Global Time Variables
 type(time_type) :: model_time, model_timestep
@@ -268,47 +268,6 @@ if (do_output()) write(*,*) 'model_size = ', model_size
 
 end subroutine static_init_model
 
-!------------------------------------------------------------
-
-subroutine init_conditions(x)
- real(r8), intent(out) :: x(:)
-
-! Returns a model state vector, x, that is some sort of appropriate
-! initial condition for starting up a long integration of the model.
-! At present, this is only used if the namelist parameter 
-! start_from_restart is set to .false. in the program perfect_model_obs.
-
-character(len=128) :: msgstring2, msgstring3
-
-msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
-msgstring3 = 'use openggcm_to_dart to generate an initial state'
-call error_handler(E_ERR,'init_conditions', &
-                  'ERROR!!  openggcm model has no built-in default state', &
-                  source, revision, revdate, &
-                  text2=msgstring2, text3=msgstring3)
-
-! this code never reached - just here to avoid compiler warnings
-! about an intent(out) variable not being set to a value.
-x = 0.0_r8
-
-end subroutine init_conditions
-
-!------------------------------------------------------------------
-
-subroutine adv_1step(x, time)
- real(r8),        intent(inout) :: x(:)
- type(time_type), intent(in)    :: time
-
-! If the model could be called as a subroutine, does a single
-! timestep advance.  openggcm cannot be called this way, so fatal error
-! if this routine is called.
-
-call error_handler(E_ERR,'adv_1step', &
-                  'openggcm model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-
-end subroutine adv_1step
-
 !------------------------------------------------------------------
 
 function get_model_size()
@@ -322,31 +281,6 @@ if ( .not. module_initialized ) call static_init_model
 get_model_size = model_size
 
 end function get_model_size
-
-!------------------------------------------------------------------
-
-subroutine init_time(time)
- type(time_type), intent(out) :: time
-
-! Companion interface to init_conditions. Returns a time that is
-! appropriate for starting up a long integration of the model.
-! At present, this is only used if the namelist parameter 
-! start_from_restart is set to .false. in the program perfect_model_obs.
-
-character(len=128) :: msgstring2, msgstring3
-
-msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
-msgstring3 = 'use openggcm_to_dart to generate an initial state which contains a timestamp'
-call error_handler(E_ERR,'init_time', &
-                  'ERROR!!  openggcm model has no built-in default time', &
-                  source, revision, revdate, &
-                  text2=msgstring2, text3=msgstring3)
-
-! this code never reached - just here to avoid compiler warnings
-! about an intent(out) variable not being set to a value.
-time = set_time(0,0)
-
-end subroutine init_time
 
 !------------------------------------------------------------------
 
@@ -372,6 +306,7 @@ integer     :: ind
 integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
 integer     :: hstatus
+type(grid_type), pointer :: mygrid
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -433,8 +368,13 @@ endif
 !>             if you have an invalid kind you can simply return.
 SELECT CASE (obs_kind)
    !>@todo FIXME : in the future we would like to interpolate KIND_ELECTRON_DENSITY
+   !CASE (KIND_ELECTRON_DENSITY)
+   !   ! these kinds are ok
+   !   mygrid => geo_grid
+
    CASE (KIND_ELECTRIC_POTENTIAL)
       ! these kinds are ok
+      mygrid => mag_grid
 
    CASE DEFAULT
       ! Not a legal type for interpolation, return istatus error
@@ -456,7 +396,7 @@ write(msgstring,*)'did not expect to get here, error'
 call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
 ! Get the bounding vertical heights and the fraction between bottom and top
-call height_bounds(lheight, geo_grid%nheight, geo_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
+call height_bounds(lheight, mygrid%nheight, mygrid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
 if(hstatus /= 0) then
    istatus = 12
    return
@@ -1313,6 +1253,72 @@ integer,             intent(out) :: istatus
 istatus = 0
 
 end subroutine vert_convert
+
+!------------------------------------------------------------
+
+subroutine init_conditions(x)
+ real(r8), intent(out) :: x(:)
+
+! Returns a model state vector, x, that is some sort of appropriate
+! initial condition for starting up a long integration of the model.
+! At present, this is only used if the namelist parameter 
+! start_from_restart is set to .false. in the program perfect_model_obs.
+
+character(len=128) :: msgstring2, msgstring3
+
+msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
+msgstring3 = 'use openggcm_to_dart to generate an initial state'
+call error_handler(E_ERR,'init_conditions', &
+                  'ERROR!!  openggcm model has no built-in default state', &
+                  source, revision, revdate, &
+                  text2=msgstring2, text3=msgstring3)
+
+! this code never reached - just here to avoid compiler warnings
+! about an intent(out) variable not being set to a value.
+x = 0.0_r8
+
+end subroutine init_conditions
+
+!------------------------------------------------------------------
+
+subroutine adv_1step(x, time)
+ real(r8),        intent(inout) :: x(:)
+ type(time_type), intent(in)    :: time
+
+! If the model could be called as a subroutine, does a single
+! timestep advance.  openggcm cannot be called this way, so fatal error
+! if this routine is called.
+
+call error_handler(E_ERR,'adv_1step', &
+                  'openggcm model cannot be called as a subroutine; async cannot = 0', &
+                  source, revision, revdate)
+
+end subroutine adv_1step
+
+!------------------------------------------------------------------
+
+subroutine init_time(time)
+ type(time_type), intent(out) :: time
+
+! Companion interface to init_conditions. Returns a time that is
+! appropriate for starting up a long integration of the model.
+! At present, this is only used if the namelist parameter 
+! start_from_restart is set to .false. in the program perfect_model_obs.
+
+character(len=128) :: msgstring2, msgstring3
+
+msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
+msgstring3 = 'use openggcm_to_dart to generate an initial state which contains a timestamp'
+call error_handler(E_ERR,'init_time', &
+                  'ERROR!!  openggcm model has no built-in default time', &
+                  source, revision, revdate, &
+                  text2=msgstring2, text3=msgstring3)
+
+! this code never reached - just here to avoid compiler warnings
+! about an intent(out) variable not being set to a value.
+time = set_time(0,0)
+
+end subroutine init_time
 
 !------------------------------------------------------------------
 !> Verify that the namelist was filled in correctly, and check
