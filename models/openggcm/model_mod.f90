@@ -1344,10 +1344,10 @@ endif
 
 MyLoop : do i = 1, nrows
 
-   varname  = trim(state_variables(3*i -3))
-   dartstr  = trim(state_variables(3*i -2))
-   update   = trim(state_variables(3*i -1))
-   gridname = trim(state_variables(3*i   ))
+   varname  = trim(state_variables(4*i -3))
+   dartstr  = trim(state_variables(4*i -2))
+   update   = trim(state_variables(4*i -1))
+   gridname = trim(state_variables(4*i   ))
    
    call to_upper(update)
 
@@ -1359,7 +1359,7 @@ MyLoop : do i = 1, nrows
    if ( table(i,1) == ' ' .and. &
         table(i,2) == ' ' .and. &
         table(i,3) == ' ' .and. &
-        table(i,3) == ' ') exit MyLoop ! Found end of list.
+        table(i,4) == ' ') exit MyLoop ! Found end of list.
 
    if ( table(i,1) == ' ' .or. &
         table(i,2) == ' ' .or. &

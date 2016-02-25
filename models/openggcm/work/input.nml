@@ -327,8 +327,9 @@
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.1
    model_state_variables        = 
-      'ion', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE',
-   debug
+      'ion', 'KIND_ELECTRON_DENSITY',   'UPDATE', 'GEOMETRIC_GRID',
+      'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE', 'MAGNETIC_GRID',
+   debug = 1
   /
 
 &io_filenames_nml
@@ -339,7 +340,7 @@
    file_out      = 'dart_ics'
    /
 
-&quality_control_mod_nml
+&quality_control_nml
    outlier_threshold        = -1.0
    input_qc_threshold       =  1.0
 /
