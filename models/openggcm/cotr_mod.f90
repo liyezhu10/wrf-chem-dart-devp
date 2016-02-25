@@ -149,7 +149,8 @@
 !doc-                    i.e. colatitude system
 !doc-
       implicit none
-      real*8 x,y,z,r,p,t
+      real*4 x,y,z
+      real*8 r,p,t
       r=sqrt(x*x+y*y+z*z)
       p=0.0
       if(abs(x)+abs(y).gt.0.0)p=deg*atan2(y,x)
@@ -200,7 +201,8 @@
 !doc-
       implicit none
 
-      real*8 r,p,t,x,y,z
+      real*8 r,p,t
+      real*4 x,y,z
       real*8 pp,tt,st
 
       pp=p*rad
