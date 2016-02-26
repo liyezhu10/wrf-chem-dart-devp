@@ -491,6 +491,8 @@ istatus = 0
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
 call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 
+call find_conv_bounds(lon, lat, grid_handle)
+
 if (debug > 0) then
    print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
    print *, 'in lon_lat_interp, indx lon bot/top, lat bot/top: ', &
@@ -604,6 +606,70 @@ call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon
                    source, revision, revdate, text2=msgstring)
 
 end subroutine lon_bounds
+
+!------------------------------------------------------------
+
+subroutine find_conv_bounds(lon, lat, grid_handle)
+ real(r8),        intent(in) :: lon, lat
+ type(grid_type), intent(in) :: grid_handle
+
+! exhaustively look for the grid box that encloses the given lon/lat
+
+! Local storage
+integer  :: i, j
+real(r8) :: llon, llat
+
+if ( .not. module_initialized ) call static_init_model
+
+print *, 'find_conv_bounds looking for indices for ', lon, lat
+llat = 90 - lat
+llon = lon
+print *, 'changing to: ', llon, llat
+
+do i = 1, grid_handle%nlon-1
+  do j = 1, grid_handle%nlat-1
+   print *, 'i, j indx: ', i, j
+   print *, llon, '>', grid_handle%conv_2d_lon(i,  j  )
+   print *, llon, '<', grid_handle%conv_2d_lon(i+1,j  )
+   print *, llon, '>', grid_handle%conv_2d_lon(i,  j+1)
+   print *, llon, '<', grid_handle%conv_2d_lon(i+1,j+1)
+   print *, llat, '>', grid_handle%conv_2d_lat(i,  j  )
+   print *, llat, '<', grid_handle%conv_2d_lat(i  ,j+1)
+   print *, llat, '>', grid_handle%conv_2d_lat(i+1,j  )
+   print *, llat, '<', grid_handle%conv_2d_lat(i+1,j+1)
+   if ((llon >= grid_handle%conv_2d_lon(i,  j  )) .and. &
+       (llon <= grid_handle%conv_2d_lon(i+1,j  )) .or. &
+       (llon >= grid_handle%conv_2d_lon(i,  j+1)) .and. &
+       (llon <= grid_handle%conv_2d_lon(i+1,j+1)) .or. &
+       (llat >= grid_handle%conv_2d_lat(i,  j  )) .and. &
+       (llat <= grid_handle%conv_2d_lat(i  ,j+1)) .or. &
+       (llat >= grid_handle%conv_2d_lat(i+1,j  )) .and. &
+       (llat <= grid_handle%conv_2d_lat(i+1,j+1))) then
+      print *, 'i, j indx: ', i, j
+      print *, 'i,   j   vals: ', grid_handle%conv_2d_lon(i,  j  ), grid_handle%conv_2d_lat(i,  j  )
+      print *, 'i+1, j   vals: ', grid_handle%conv_2d_lon(i+1,j  ), grid_handle%conv_2d_lat(i+1,j  )
+      print *, 'i,   j+1 vals: ', grid_handle%conv_2d_lon(i,  j+1), grid_handle%conv_2d_lat(i,  j+1)
+      print *, 'i+1, j+1 vals: ', grid_handle%conv_2d_lon(i+1,j+1), grid_handle%conv_2d_lat(i+1,j+1)
+   endif
+ ! if the code above works, fix the broken code below
+   if ((llon >= grid_handle%conv_2d_lon(i,  j  )) .and. &
+       (llon <= grid_handle%conv_2d_lon(i+1,j  )) .and. &
+       (llon >= grid_handle%conv_2d_lon(i,  j+1)) .and. &
+       (llon <= grid_handle%conv_2d_lon(i+1,j+1)) .and. &
+       (llat >= grid_handle%conv_2d_lat(i,  j  )) .and. &
+       (llat <= grid_handle%conv_2d_lat(i+1,j  )) .and. &
+       (llat >= grid_handle%conv_2d_lat(i,  j+1)) .and. &
+       (llat <= grid_handle%conv_2d_lat(i+1,j+1))) then
+ print *, 'think i,j is good: ', i, j
+      return
+   endif
+ enddo
+enddo
+
+call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon/lat', &
+                   source, revision, revdate)
+
+end subroutine find_conv_bounds
 
 !-------------------------------------------------------------
 
@@ -867,6 +933,7 @@ integer :: VarID
 !> shifted by us.
 
 if (is_conv) then
+
    call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
 
@@ -882,12 +949,15 @@ if (is_conv) then
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,88), grid_handle%conv_2d_lat(103,88)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
+
 else
+
    call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
 
    if (is_co_latitude) grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
    where(grid_handle%longitude < 0) grid_handle%longitude = grid_handle%longitude + 360.0_r8
+
 endif
 
 end subroutine read_horiz_grid
