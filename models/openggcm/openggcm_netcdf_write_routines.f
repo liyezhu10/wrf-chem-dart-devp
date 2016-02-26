@@ -1,7 +1,11 @@
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
       module netcdf_mod
 
-      use netcdf
       implicit none
       private
 
@@ -16,14 +20,6 @@
      &          wr_netcdf_r8_3D
 
       contains
-
-!===================================================================
-
-      subroutine death()
-
-      stop
-
-      end subroutine death
 
 !=======================================================================
 ! This is F90 code written with F77 syntax because (for expediency) it will
@@ -663,6 +659,8 @@
       end subroutine wr_netcdf_r8_3D
 
 !=======================================================================
+! .... remove everything below here when putting into openggcm
+!=======================================================================
 
       subroutine nc_check(istatus, subr_name, context)
 
@@ -687,8 +685,20 @@
       end subroutine nc_check
 
 !===================================================================
-! End of netcdf module
+
+      subroutine death()
+
+      stop
+
+      end subroutine death
+
 !===================================================================
 
       end module netcdf_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 

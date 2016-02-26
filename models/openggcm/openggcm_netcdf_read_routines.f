@@ -1,9 +1,15 @@
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
       module netcdf_read_mod
 
       implicit none
       private
 
+      public :: rd_netcdf_r4_1D, rd_netcdf_r4_1D
       public :: rd_netcdf_r4_2D, rd_netcdf_r4_3D
       public :: rd_netcdf_r8_2D, rd_netcdf_r8_3D
 
@@ -19,7 +25,71 @@
 ! module contained inside the mhd-iono.for   file, so the module baggage
 ! must be stripped off when appending to mhd-iono.for.
 !
-! .... rip out everything above here when putting into openggcm
+! ... delete everything above this line when appending
+!=======================================================================
+
+      subroutine rd_netcdf_r4_1D(ncid, tensorname, dim1, tensor)
+
+      use netcdf
+      implicit none
+
+      integer,          intent(in)  :: ncid
+      character(len=*), intent(in)  :: tensorname
+      integer,          intent(in)  :: dim1
+      real*4,           intent(out) :: tensor(dim1)
+
+      integer :: dim1ID, dim2ID, dim3ID, VarID
+      integer :: ndim1, ndim2, ndim3
+      integer :: io
+
+      io = nf90_inq_varid(ncid, tensorname, VarID)
+      call nc_check(io, 'rd_netcdf_r4_1D', 'inq_varid: '//trim(tensorname))
+
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+
+      if (dim1 /= ndim1) then
+         write(*,*)'ERROR :: rd_netcdf_r4_1D: failed dimensions '//trim(tensorname),dim1
+         write(*,*)'ERROR :: rd_netcdf_r4_1D: expected dimensions ',ndim1
+         call death()
+      endif
+
+      io = nf90_get_var(ncid, VarID, tensor)
+      call nc_check(io, 'rd_netcdf_r4_1D', 'get_var: '//trim(tensorname))
+
+      end subroutine rd_netcdf_r4_1D
+
+!=======================================================================
+
+      subroutine rd_netcdf_r8_1D(ncid, tensorname, dim1, tensor)
+
+      use netcdf
+      implicit none
+
+      integer,          intent(in)  :: ncid
+      character(len=*), intent(in)  :: tensorname
+      integer,          intent(in)  :: dim1
+      real*4,           intent(out) :: tensor(dim1)
+
+      integer :: dim1ID, dim2ID, dim3ID, VarID
+      integer :: ndim1, ndim2, ndim3
+      integer :: io
+
+      io = nf90_inq_varid(ncid, tensorname, VarID)
+      call nc_check(io, 'rd_netcdf_r8_1D', 'inq_varid: '//trim(tensorname))
+
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+
+      if (dim1 /= ndim1) then
+         write(*,*)'ERROR :: rd_netcdf_r8_1D: failed dimensions '//trim(tensorname),dim1
+         write(*,*)'ERROR :: rd_netcdf_r8_1D: expected dimensions ',ndim1
+         call death()
+      endif
+
+      io = nf90_get_var(ncid, VarID, tensor)
+      call nc_check(io, 'rd_netcdf_r8_1D', 'get_var: '//trim(tensorname))
+
+      end subroutine rd_netcdf_r8_1D
+
 !=======================================================================
 
       subroutine rd_netcdf_r4_2D(ncid, tensorname, dim1, dim2, tensor)
@@ -39,7 +109,7 @@
       io = nf90_inq_varid(ncid, tensorname, VarID)
       call nc_check(io, 'rd_netcdf_r4_2D', 'inq_varid: '//trim(tensorname))
 
-      call  get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
 
       if ((dim1 /= ndim1) .or. (dim2 /= ndim2)) then
          write(*,*)'ERROR :: rd_netcdf_r4_2D: failed dimensions '//trim(tensorname),dim1,dim2
@@ -53,7 +123,6 @@
       end subroutine rd_netcdf_r4_2D
 
 !=======================================================================
-
 
       subroutine rd_netcdf_r8_2D(ncid, tensorname, dim1, dim2, tensor)
 
@@ -72,7 +141,7 @@
       io = nf90_inq_varid(ncid, tensorname, VarID)
       call nc_check(io, 'rd_netcdf_r8_2D', 'inq_varid: '//trim(tensorname))
 
-      call  get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
 
       if ((dim1 /= ndim1) .or. (dim2 /= ndim2)) then
          write(*,*)'ERROR :: rd_netcdf_r8_2D: failed dimensions '//trim(tensorname),dim1,dim2
@@ -104,7 +173,7 @@
       io = nf90_inq_varid(ncid, tensorname, VarID)
       call nc_check(io, 'rd_netcdf_r4_3D', 'inq_varid: '//trim(tensorname))
 
-      call  get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
 
       if ((dim1 /= ndim1) .or. (dim2 /= ndim2) .or. (dim3 /= ndim3)) then
          write(*,*)'ERROR :: rd_netcdf_r4_3D: failed dimensions '//trim(tensorname),dim1,dim2,dim3
@@ -136,7 +205,7 @@
       io = nf90_inq_varid(ncid, tensorname, VarID)
       call nc_check(io, 'rd_netcdf_r8_3D', 'inq_varid: '//trim(tensorname))
 
-      call  get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
+      call get_dimensions(ncid, VarID, tensorname, dim1ID, ndim1, dim2ID, ndim2, dim3ID, ndim3)
 
       if ((dim1 /= ndim1) .or. (dim2 /= ndim2) .or. (dim3 /= ndim3)) then
          write(*,*)'ERROR :: rd_netcdf_r8_3D: failed dimensions '//trim(tensorname),dim1,dim2,dim3
@@ -200,12 +269,11 @@
 
       ndim3  = dimlens(3)
       dim3ID =  dimids(3)
-      
+
       end subroutine get_dimensions
 
 !=======================================================================
-! End of netcdf_read_mod 
-! .... rip out everything below here when putting into openggcm
+! .... remove everything below here when putting into openggcm
 !=======================================================================
 
       subroutine nc_check(istatus, subr_name, context)
@@ -226,7 +294,7 @@
       error_msg = trim(context) // ': ' // trim(nf90_strerror(istatus))
 
       write(*,*)'ERROR: '//trim(subr_name)//' '//trim(error_msg)
-      stop
+      call death()
 
       end subroutine nc_check
 
@@ -241,4 +309,11 @@
 !===================================================================
 
       end module netcdf_read_mod
+
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
