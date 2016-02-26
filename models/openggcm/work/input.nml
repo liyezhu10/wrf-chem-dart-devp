@@ -95,7 +95,7 @@
 # cutoff of 0.03 (radians) is about 200km
 &assim_tools_nml
    filter_kind                     = 1
-   cutoff                          = 0.20
+   cutoff                          = 0.10
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
    sampling_error_correction       = .false.
@@ -127,6 +127,7 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'SUPER_DARN_ELECTRIC_POTENTIAL',
+                                'GPS_PROFILE'
     evaluate_these_obs_types  = ''
   /
 
@@ -171,6 +172,7 @@
    module_details = .false.
    logfilename = 'dart_log.out'
    nmlfilename = 'dart_log.nml'
+   write_nml = 'file'
   /
 
 &mpi_utilities_nml
@@ -307,7 +309,7 @@
 
 &model_mod_check_nml
    verbose               = .true.
-   restart_in_file_name  = 'openggcm'
+   restart_in_file_name  = 'openggcm3D'
    test1thru             = 5
    x_ind                 = 1
    loc_of_interest       = 320.0, 18.0, 1.0
@@ -327,9 +329,9 @@
    assimilation_period_seconds  = 3600
    model_perturbation_amplitude = 0.1
    model_state_variables        = 
-      'ion', 'KIND_ELECTRON_DENSITY',   'UPDATE', 'GEOGRAPHIC_GRID',
-      'pot', 'KIND_ELECTRIC_POTENTIAL', 'UPDATE', 'MAGNETIC_GRID',
-   debug = 1
+      'oplus', 'KIND_ELECTRON_DENSITY',   'UPDATE', 'GEOGRAPHIC_GRID',
+      'pot',   'KIND_ELECTRIC_POTENTIAL', 'UPDATE', 'MAGNETIC_GRID',
+   debug = 3
   /
 
 &io_filenames_nml
