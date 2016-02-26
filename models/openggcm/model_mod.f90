@@ -433,10 +433,6 @@ print *, 'vert is undef is true'
    return
 endif
 
-
-write(msgstring,*)'did not expect to get here, error'
-call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
-
 if ( get_grid_type(obs_kind) == MAGNETIC_GRID ) then 
    call height_bounds(lheight, mag_grid%nheight, mag_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
 else if ( get_grid_type(obs_kind) == GEOGRAPHIC_GRID ) then
