@@ -58,7 +58,8 @@ namelist /openggcm_to_netcdf_nml/ openggcm_to_netcdf_input_file1, &
 integer               :: io, iunit
 type(time_type)       :: model_time, model_time_base, model_time_offset
 real(r8), allocatable :: tensor3D(:,:,:)
-real(r4), allocatable :: tensor2D(:,:), zkm(:)
+real(r4), allocatable :: tensor2D(:,:)
+real(r8), allocatable :: zkm(:)
 real(digits12) :: time_offset_seconds
 
 integer  :: ncid
@@ -134,7 +135,7 @@ endif
 call close_file(iunit)
 
 call wr_netcdf_interface_grid(ncid,nphi,nthe,7)
-call wr_netcdf_r4_2D(ncid,'interface',nphi,nthe,tensor2D,'pot','degrees trout','potential miracle')
+call wr_netcdf_r4_2D(ncid,nphi,'ig_lon',nthe,'ig_lat',tensor2D,'pot','degrees trout','potential miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
@@ -151,16 +152,16 @@ elseif (verbose) then
    call error_handler(E_MSG,'openggcm_to_netcdf',string1)
 endif
 
-read(iunit,iostat=io) nphi, nthe, nz
+read(iunit,iostat=io) nz, nthe, nphi
 if (io /= 0) then
-   write(string1,*)'read error was ',io,' when trying to read nphi, nthe, nz'
+   write(string1,*)'read error was ',io,' when trying to read nz, nthe, nphi'
    call error_handler(E_ERR,'openggcm_to_netcdf', string1, source, revision, revdate)
 elseif (verbose) then
-   write(string1,'(''nphi, nthe, nz'',3(1x,i6))'), nphi, nthe, nz
+   write(string1,'(''nz, nthe, nphi'',3(1x,i6))'), nz, nthe, nphi
    call error_handler(E_MSG,'openggcm_to_netcdf',string1)
 endif
 
-allocate(tensor3D(nphi,nthe,nz),zkm(nz))
+allocate(tensor3D(nz,nthe,nphi),zkm(nz))
 
 read(iunit,iostat=io) tensor3D
 if (io /= 0) then
@@ -174,7 +175,7 @@ call wr_netcdf_ctim_grid(ncid,nphi,'cg_lon','degrees','geographic longitude', &
                               nthe,'cg_lat','degrees','geographic latitude', &
                             nz,zkm,'cg_height','kilometers','height')
 
-call wr_netcdf_r8_3D(ncid,'ctim',nphi,nthe,nz,tensor3D,'ion','degrees kelvin','ionospheric miracle')
+call wr_netcdf_r8_3D(ncid,nz,'cg_height',nphi,'cg_lat',nthe,'cg_lon',tensor3D,'ion','degrees kelvin','ionospheric miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------

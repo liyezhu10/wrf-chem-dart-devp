@@ -9,6 +9,7 @@
      &          wr_netcdf_ctim_grid,
      &          wr_netcdf_interface_grid,
      &          wr_netcdf_r4_1D,
+     &          wr_netcdf_r8_1D,
      &          wr_netcdf_r4_2D,
      &          wr_netcdf_r8_2D,
      &          wr_netcdf_r4_3D,
@@ -52,13 +53,13 @@
       io2 = nf90_put_att(ncid, VarID, 'units', 'seconds since 1966-01-01')
 
       call nc_check(io1, 'wr_netcdf_model_time', 'def_var time')
-      call nc_check(io2, 'wr_netcdf_model_time', 'put_att:time:units')
+      call nc_check(io2, 'wr_netcdf_model_time', 'put_att time units')
 
       io1 = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io1, 'wr_netcdf_model_time', 'enddef')
 
       io1 = nf90_put_var(ncid, VarID, model_time)
-      call nc_check(io1, 'wr_netcdf_model_time', 'put_var: model_time')
+      call nc_check(io1, 'wr_netcdf_model_time', 'put_var model_time')
 
       end subroutine wr_netcdf_model_time
 
@@ -77,7 +78,7 @@
       integer, intent(in) :: nlat
       character(len=*), intent(in) :: nlatname, nlatunits, nlatshort
       integer, intent(in) :: nheight
-      real*4,  intent(in) :: height(nheight)
+      real*8,  intent(in) :: height(nheight)
       character(len=*), intent(in) :: nheightname, nheightunits, nheightshort
 
       !-----------------------------------------------------------------------
@@ -150,9 +151,9 @@
       io2 = nf90_put_var(ncid,    LatVarID,  latitude)
       io3 = nf90_put_var(ncid, HeightVarID,    height)
 
-      call nc_check(io1, 'wr_netcdf_ctim_grid', 'put_var: cg_lon')
-      call nc_check(io2, 'wr_netcdf_ctim_grid', 'put_var: cg_lat')
-      call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_var: cg_height')
+      call nc_check(io1, 'wr_netcdf_ctim_grid', 'put_var cg_lon')
+      call nc_check(io2, 'wr_netcdf_ctim_grid', 'put_var cg_lat')
+      call nc_check(io3, 'wr_netcdf_ctim_grid', 'put_var cg_height')
 
       end subroutine wr_netcdf_ctim_grid
 
@@ -250,22 +251,22 @@
       io2 = nf90_put_var(ncid,    LatVarID,  latitude)
       io3 = nf90_put_var(ncid, HeightVarID,    height)
 
-      call nc_check(io1, 'wr_netcdf_interface_grid', 'put_var: ig_lon')
-      call nc_check(io2, 'wr_netcdf_interface_grid', 'put_var: ig_lat')
-      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_var: ig_height')
+      call nc_check(io1, 'wr_netcdf_interface_grid', 'put_var ig_lon')
+      call nc_check(io2, 'wr_netcdf_interface_grid', 'put_var ig_lat')
+      call nc_check(io3, 'wr_netcdf_interface_grid', 'put_var ig_height')
 
       end subroutine wr_netcdf_interface_grid
 
 !=======================================================================
 
-      subroutine wr_netcdf_r4_1D(ncid, gridtype, dim1, tensor, tensorname, tensorunits, tensorshort)
+      subroutine wr_netcdf_r4_1D(ncid, dim1, dim1name, tensor, tensorname, tensorunits, tensorshort)
 
       use netcdf
       implicit none
 
       integer,          intent(in) :: ncid
-      character(len=*), intent(in) :: gridtype ! 'ctim' or 'interface'
       integer,          intent(in) :: dim1
+      character(len=*), intent(in) :: dim1name
       real*4,           intent(in) :: tensor(dim1)
       character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
@@ -273,59 +274,112 @@
       ! local storage
       !-----------------------------------------------------------------------
 
-      integer :: LonDimID, LatDimID, LevDimID, VarID
+      integer :: Dim1_ID, VarID
       integer :: io, io1, io2, io3
-      integer :: nlon
+      integer :: dim1length
 
-      if (trim(gridtype) == 'ctim') then
-         call  get_ctim_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      elseif (trim(gridtype) == 'interface') then
-         call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      else
-         write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         call death()
-      endif
-
+      !-----------------------------------------------------------------------
       ! Make sure the netcdf dimensions match the incoming variable
 
-      io1 = nf90_inquire_dimension(ncid, LonDimID, len=nlon)
-      call nc_check(io1, 'wr_netcdf_r4_1D', 'inquire lon dimension length'//trim(tensorname))
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      call nc_check(io1, 'wr_netcdf_r4_1D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
 
-      if (nlon /= size(tensor,1)) then
-         write(*,*)'ERROR :: failed dimension '//trim(tensorname)
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      call nc_check(io1, 'wr_netcdf_r4_1D', 'inquire_dimension '//trim(dim1name)//' '//trim(tensorname))
+
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
          call death()
       endif
 
       !-----------------------------------------------------------------------
       io = nf90_redef(ncid)
-      call nc_check(io, 'wr_netcdf_r4_1D', 'redef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_1D', 'redef '//trim(tensorname))
 
-      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ LonDimID /), VarID)
+      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ Dim1_ID /), VarID)
       io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
       io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
 
-      call nc_check(io1, 'wr_netcdf_r4_1D', 'def_var:'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r4_1D', 'put_att short_name'//trim(tensorname))
-      call nc_check(io3, 'wr_netcdf_r4_1D', 'put_att units'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r4_1D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_1D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r4_1D', 'put_att units '//trim(tensorname))
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
-      call nc_check(io, 'wr_netcdf_r4_1D', 'enddef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_1D', 'enddef '//trim(tensorname))
 
       io = nf90_put_var(ncid, VarID, tensor)
-      call nc_check(io, 'wr_netcdf_r4_1D', 'put_var: '//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_1D', 'put_var '//trim(tensorname))
 
       end subroutine wr_netcdf_r4_1D
 
 !=======================================================================
 
-      subroutine wr_netcdf_r4_2D(ncid, gridtype, dim1, dim2, tensor, tensorname, tensorunits, tensorshort)
+      subroutine wr_netcdf_r8_1D(ncid, dim1, dim1name, tensor, tensorname, tensorunits, tensorshort)
 
       use netcdf
       implicit none
 
       integer,          intent(in) :: ncid
-      character(len=*), intent(in) :: gridtype ! 'ctim' or 'interface'
+      integer,          intent(in) :: dim1
+      character(len=*), intent(in) :: dim1name
+      real*8,           intent(in) :: tensor(dim1)
+      character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
+
+      !-----------------------------------------------------------------------
+      ! local storage
+      !-----------------------------------------------------------------------
+
+      integer :: Dim1_ID, VarID
+      integer :: io, io1, io2, io3
+      integer :: dim1length
+
+      !-----------------------------------------------------------------------
+      ! Make sure the netcdf dimensions match the incoming variable
+
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      call nc_check(io1, 'wr_netcdf_r8_1D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
+
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      call nc_check(io1, 'wr_netcdf_r8_1D', 'inquire_dimension '//trim(dim1name)//' '//trim(tensorname))
+
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
+         call death()
+      endif
+
+      !-----------------------------------------------------------------------
+      io = nf90_redef(ncid)
+      call nc_check(io, 'wr_netcdf_r8_1D', 'redef '//trim(tensorname))
+
+      io1 = nf90_def_var(ncid, tensorname, nf90_double, (/ Dim1_ID /), VarID)
+      io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
+      io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
+
+      call nc_check(io1, 'wr_netcdf_r8_1D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_1D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r8_1D', 'put_att units '//trim(tensorname))
+
+      io = nf90_enddef(ncid) ! leave define mode so we can fill
+      call nc_check(io, 'wr_netcdf_r8_1D', 'enddef '//trim(tensorname))
+
+      io = nf90_put_var(ncid, VarID, tensor)
+      call nc_check(io, 'wr_netcdf_r8_1D', 'put_var '//trim(tensorname))
+
+      end subroutine wr_netcdf_r8_1D
+
+
+!=======================================================================
+
+      subroutine wr_netcdf_r4_2D(ncid, dim1, dim1name, dim2, dim2name, tensor, tensorname, tensorunits, tensorshort)
+
+      use netcdf
+      implicit none
+
+      integer,          intent(in) :: ncid
       integer,          intent(in) :: dim1, dim2
+      character(len=*), intent(in) :: dim1name, dim2name
       real*4,           intent(in) :: tensor(dim1,dim2)
       character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
@@ -333,69 +387,65 @@
       ! local storage
       !-----------------------------------------------------------------------
 
-      integer :: LonDimID, LatDimID, LevDimID, VarID
+      integer :: Dim1_ID, Dim2_ID, VarID
       integer :: io, io1, io2, io3
-      integer :: nlon, nlat
+      integer :: dim1length, dim2length
 
-      if (trim(gridtype) == 'ctim') then
-         call  get_ctim_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      elseif (trim(gridtype) == 'interface') then
-         call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      else
-         write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         call death()
-      endif
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      io2 = nf90_inq_dimid(ncid, trim(dim2name), Dim2_ID)
+
+      call nc_check(io1, 'wr_netcdf_r4_2D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_2D', 'inq_dimid '//trim(dim2name)//' '//trim(tensorname))
 
       ! Make sure the netcdf dimensions match the incoming variable
 
-      io1 = nf90_inquire_dimension(ncid, LonDimID, len=nlon)
-      io2 = nf90_inquire_dimension(ncid, LatDimID, len=nlat)
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      io2 = nf90_inquire_dimension(ncid, Dim2_ID, len=dim2length)
 
-      call nc_check(io1, 'wr_netcdf_r4_2D', 'inquire lon dimension length'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r4_2D', 'inquire lat dimension length'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r4_2D', 'inquire dimension length'//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_2D', 'inquire dimension length'//trim(dim2name)//' '//trim(tensorname))
 
-      if (nlon /= size(tensor,1)) then
-         write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
          call death()
       endif
 
-      if (nlat /= size(tensor,2)) then
-         write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+      if (dim2length /= size(tensor,2)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim2name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim2length,' expected ',size(tensor,2)
          call death()
       endif
 
-      !-----------------------------------------------------------------------
       io = nf90_redef(ncid)
-      call nc_check(io, 'wr_netcdf_r4_2D', 'redef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_2D', 'redef '//trim(tensorname))
 
-      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ LonDimID, LatDimID /), VarID)
+      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ Dim1_ID, Dim2_ID /), VarID)
       io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
       io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
 
-      call nc_check(io1, 'wr_netcdf_r4_2D', 'def_var:'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r4_2D', 'put_att short_name'//trim(tensorname))
-      call nc_check(io3, 'wr_netcdf_r4_2D', 'put_att units'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r4_2D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_2D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r4_2D', 'put_att units '//trim(tensorname))
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
-      call nc_check(io, 'wr_netcdf_r4_2D', 'enddef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_2D', 'enddef '//trim(tensorname))
 
       io = nf90_put_var(ncid, VarID, tensor)
-      call nc_check(io, 'wr_netcdf_r4_2D', 'put_var: '//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r4_2D', 'put_var '//trim(tensorname))
 
       end subroutine wr_netcdf_r4_2D
 
 !=======================================================================
 
-      subroutine wr_netcdf_r8_2D(ncid, gridtype, dim1, dim2, tensor, tensorname, tensorunits, tensorshort)
+      subroutine wr_netcdf_r8_2D(ncid, dim1, dim1name, dim2, dim2name, tensor, tensorname, tensorunits, tensorshort)
 
       use netcdf
       implicit none
 
       integer,          intent(in) :: ncid
-      character(len=*), intent(in) :: gridtype ! 'ctim' or 'interface'
       integer,          intent(in) :: dim1, dim2
+      character(len=*), intent(in) :: dim1name, dim2name
       real*8,           intent(in) :: tensor(dim1,dim2)
       character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
@@ -403,69 +453,65 @@
       ! local storage
       !-----------------------------------------------------------------------
 
-      integer :: LonDimID, LatDimID, LevDimID, VarID
+      integer :: Dim1_ID, Dim2_ID, VarID
       integer :: io, io1, io2, io3
-      integer :: nlon, nlat
+      integer :: dim1length, dim2length
 
-      if (trim(gridtype) == 'ctim') then
-         call  get_ctim_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      elseif (trim(gridtype) == 'interface') then
-         call  get_interface_dimension_ids(ncid, lonDimID, latDimID, LevDimID)
-      else
-         write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         call death()
-      endif
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      io2 = nf90_inq_dimid(ncid, trim(dim2name), Dim2_ID)
+
+      call nc_check(io1, 'wr_netcdf_r8_2D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_2D', 'inq_dimid '//trim(dim2name)//' '//trim(tensorname))
 
       ! Make sure the netcdf dimensions match the incoming variable
 
-      io1 = nf90_inquire_dimension(ncid, LonDimID, len=nlon)
-      io2 = nf90_inquire_dimension(ncid, LatDimID, len=nlat)
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      io2 = nf90_inquire_dimension(ncid, Dim2_ID, len=dim2length)
 
-      call nc_check(io1, 'wr_netcdf_r8_2D', 'inquire lon dimension length'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r8_2D', 'inquire lat dimension length'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r8_2D', 'inquire dimension length'//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_2D', 'inquire dimension length'//trim(dim2name)//' '//trim(tensorname))
 
-      if (nlon /= size(tensor,1)) then
-         write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
          call death()
       endif
 
-      if (nlat /= size(tensor,2)) then
-         write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+      if (dim2length /= size(tensor,2)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim2name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim2length,' expected ',size(tensor,2)
          call death()
       endif
 
-      !-----------------------------------------------------------------------
       io = nf90_redef(ncid)
-      call nc_check(io, 'wr_netcdf_r8_2D', 'redef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r8_2D', 'redef '//trim(tensorname))
 
-      io1 = nf90_def_var(ncid, tensorname, nf90_double, (/ LonDimID, LatDimID /), VarID)
+      io1 = nf90_def_var(ncid, tensorname, nf90_double, (/ Dim1_ID, Dim2_ID /), VarID)
       io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
       io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
 
-      call nc_check(io1, 'wr_netcdf_r8_2D', 'def_var:'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r8_2D', 'put_att short_name'//trim(tensorname))
-      call nc_check(io3, 'wr_netcdf_r8_2D', 'put_att units'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r8_2D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_2D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r8_2D', 'put_att units '//trim(tensorname))
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
-      call nc_check(io, 'wr_netcdf_r8_2D', 'enddef'//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r8_2D', 'enddef '//trim(tensorname))
 
       io = nf90_put_var(ncid, VarID, tensor)
-      call nc_check(io, 'wr_netcdf_r8_2D', 'put_var: '//trim(tensorname))
+      call nc_check(io, 'wr_netcdf_r8_2D', 'put_var '//trim(tensorname))
 
       end subroutine wr_netcdf_r8_2D
 
 !=======================================================================
 
-      subroutine wr_netcdf_r4_3D(ncid, gridtype, dim1, dim2, dim3, tensor, tensorname, tensorunits, tensorshort)
+      subroutine wr_netcdf_r4_3D(ncid, dim1, dim1name, dim2, dim2name, dim3, dim3name, tensor, tensorname, tensorunits, tensorshort)
 
       use netcdf
       implicit none
 
       integer,          intent(in) :: ncid
-      character(len=*), intent(in) :: gridtype ! 'ctim' or 'interface'
       integer,          intent(in) :: dim1, dim2, dim3
+      character(len=*), intent(in) :: dim1name, dim2name, dim3name
       real*4,           intent(in) :: tensor(dim1,dim2,dim3)
       character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
@@ -473,46 +519,45 @@
       ! local storage
       !-----------------------------------------------------------------------
 
-      integer :: LonDimID, LatDimID, HeightDimID, VarID
+      integer :: Dim1_ID, Dim2_ID, Dim3_ID, VarID
       integer :: io, io1, io2, io3
-      integer :: nlon, nlat, nheight
+      integer :: dim1length, dim2length, dim3length
 
       !-----------------------------------------------------------------------
 
-      if (trim(gridtype) == 'ctim') then
-         call  get_ctim_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-      elseif (trim(gridtype) == 'interface') then
-         call  get_interface_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-      else
-         write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         call death()
-      endif
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      io2 = nf90_inq_dimid(ncid, trim(dim2name), Dim2_ID)
+      io3 = nf90_inq_dimid(ncid, trim(dim3name), Dim3_ID)
+
+      call nc_check(io1, 'wr_netcdf_r4_3D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_3D', 'inq_dimid '//trim(dim2name)//' '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r4_3D', 'inq_dimid '//trim(dim3name)//' '//trim(tensorname))
 
       ! Make sure the netcdf dimensions match the incoming variable
 
-      io1 = nf90_inquire_dimension(ncid,    LonDimID, len=nlon)
-      io2 = nf90_inquire_dimension(ncid,    LatDimID, len=nlat)
-      io3 = nf90_inquire_dimension(ncid, HeightDimID, len=nheight)
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      io2 = nf90_inquire_dimension(ncid, Dim2_ID, len=dim2length)
+      io3 = nf90_inquire_dimension(ncid, Dim3_ID, len=dim3length)
 
-      call nc_check(io1, 'wr_netcdf_r4_3D', 'inquire lon    dimension length')
-      call nc_check(io2, 'wr_netcdf_r4_3D', 'inquire lat    dimension length')
-      call nc_check(io3, 'wr_netcdf_r4_3D', 'inquire height dimension length')
+      call nc_check(io1, 'wr_netcdf_r4_3D', 'inquire dimension length'//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_3D', 'inquire dimension length'//trim(dim2name)//' '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r4_3D', 'inquire dimension length'//trim(dim3name)//' '//trim(tensorname))
 
-      if (nlon /= size(tensor,1)) then
-         write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
          call death()
       endif
 
-      if (nlat /= size(tensor,2)) then
-         write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+      if (dim2length /= size(tensor,2)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim2length,' expected ',size(tensor,2)
          call death()
       endif
 
-      if (nheight /= size(tensor,3)) then
-         write(*,*)'ERROR :: failed height dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nheight,' got ',size(tensor,3)
+      if (dim3length /= size(tensor,3)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim3length,' expected ',size(tensor,3)
          call death()
       endif
 
@@ -521,34 +566,32 @@
       io = nf90_redef(ncid)
       call nc_check(io, 'wr_netcdf_r4_3D', 'redef '//trim(tensorname))
 
-      ! Now define the variable/tensor/hyperslab
-
-      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ LonDimID, LatDimID, HeightDimID /), VarID)
+      io1 = nf90_def_var(ncid, tensorname, nf90_real, (/ Dim1_ID, Dim2_ID, Dim3_ID /), VarID)
       io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
       io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
 
-      call nc_check(io1, 'wr_netcdf_r4_3D', 'def_var:'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r4_3D', 'put_att short_name'//trim(tensorname))
-      call nc_check(io3, 'wr_netcdf_r4_3D', 'put_att units'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r4_3D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r4_3D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r4_3D', 'put_att units '//trim(tensorname))
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
-      call nc_check(io, 'wr_netcdf_r4_3D', 'enddef')
+      call nc_check(io, 'wr_netcdf_r4_3D', 'enddef '//trim(tensorname))
 
       io = nf90_put_var(ncid,     VarID, tensor)
-      call nc_check(io, 'wr_netcdf_r4_3D', 'put_var: tensor')
+      call nc_check(io, 'wr_netcdf_r4_3D', 'put_var '//trim(tensorname))
 
       end subroutine wr_netcdf_r4_3D
 
 !=======================================================================
 
-      subroutine wr_netcdf_r8_3D(ncid, gridtype, dim1, dim2, dim3, tensor, tensorname, tensorunits, tensorshort)
+      subroutine wr_netcdf_r8_3D(ncid, dim1, dim1name, dim2, dim2name, dim3, dim3name, tensor, tensorname, tensorunits, tensorshort)
 
       use netcdf
       implicit none
 
       integer,          intent(in) :: ncid
-      character(len=*), intent(in) :: gridtype ! 'ctim' or 'interface'
       integer,          intent(in) :: dim1, dim2, dim3
+      character(len=*), intent(in) :: dim1name, dim2name, dim3name
       real*8,           intent(in) :: tensor(dim1,dim2,dim3)
       character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
@@ -556,46 +599,45 @@
       ! local storage
       !-----------------------------------------------------------------------
 
-      integer :: LonDimID, LatDimID, HeightDimID, VarID
+      integer :: Dim1_ID, Dim2_ID, Dim3_ID, VarID
       integer :: io, io1, io2, io3
-      integer :: nlon, nlat, nheight
+      integer :: dim1length, dim2length, dim3length
 
       !-----------------------------------------------------------------------
 
-      if (trim(gridtype) == 'ctim') then
-         call  get_ctim_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-      elseif (trim(gridtype) == 'interface') then
-         call  get_interface_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-      else
-         write(*,*)"ERROR :: unknown grid type '"//trim(gridtype)//"'"
-         call death()
-      endif
+      io1 = nf90_inq_dimid(ncid, trim(dim1name), Dim1_ID)
+      io2 = nf90_inq_dimid(ncid, trim(dim2name), Dim2_ID)
+      io3 = nf90_inq_dimid(ncid, trim(dim3name), Dim3_ID)
+
+      call nc_check(io1, 'wr_netcdf_r8_3D', 'inq_dimid '//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_3D', 'inq_dimid '//trim(dim2name)//' '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r8_3D', 'inq_dimid '//trim(dim3name)//' '//trim(tensorname))
 
       ! Make sure the netcdf dimensions match the incoming variable
 
-      io1 = nf90_inquire_dimension(ncid,    LonDimID, len=nlon)
-      io2 = nf90_inquire_dimension(ncid,    LatDimID, len=nlat)
-      io3 = nf90_inquire_dimension(ncid, HeightDimID, len=nheight)
+      io1 = nf90_inquire_dimension(ncid, Dim1_ID, len=dim1length)
+      io2 = nf90_inquire_dimension(ncid, Dim2_ID, len=dim2length)
+      io3 = nf90_inquire_dimension(ncid, Dim3_ID, len=dim3length)
 
-      call nc_check(io1, 'wr_netcdf_r8_3D', 'inquire lon    dimension length')
-      call nc_check(io2, 'wr_netcdf_r8_3D', 'inquire lat    dimension length')
-      call nc_check(io3, 'wr_netcdf_r8_3D', 'inquire height dimension length')
+      call nc_check(io1, 'wr_netcdf_r8_3D', 'inquire dimension length'//trim(dim1name)//' '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_3D', 'inquire dimension length'//trim(dim2name)//' '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r8_3D', 'inquire dimension length'//trim(dim3name)//' '//trim(tensorname))
 
-      if (nlon /= size(tensor,1)) then
-         write(*,*)'ERROR :: failed longitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlon,' got ',size(tensor,1)
+      if (dim1length /= size(tensor,1)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim1length,' expected ',size(tensor,1)
          call death()
       endif
 
-      if (nlat /= size(tensor,2)) then
-         write(*,*)'ERROR :: failed latitude dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nlat,' got ',size(tensor,2)
+      if (dim2length /= size(tensor,2)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim2length,' expected ',size(tensor,2)
          call death()
       endif
 
-      if (nheight /= size(tensor,3)) then
-         write(*,*)'ERROR :: failed height dimension '//trim(tensorname)
-         write(*,*)'ERROR :: expected ',nheight,' got ',size(tensor,3)
+      if (dim3length /= size(tensor,3)) then
+         write(*,*)'ERROR :: failed dimension '//trim(dim1name)//' '//trim(tensorname)
+         write(*,*)'ERROR :: got ',dim3length,' expected ',size(tensor,3)
          call death()
       endif
 
@@ -604,73 +646,21 @@
       io = nf90_redef(ncid)
       call nc_check(io, 'wr_netcdf_r8_3D', 'redef '//trim(tensorname))
 
-      ! Now define the variable/tensor/hyperslab
-
-      io1 = nf90_def_var(ncid, tensorname, nf90_double, (/ LonDimID, LatDimID, HeightDimID /), VarID)
+      io1 = nf90_def_var(ncid, tensorname, nf90_double, (/ Dim1_ID, Dim2_ID, Dim3_ID /), VarID)
       io2 = nf90_put_att(ncid, VarID, 'short_name', trim(tensorshort))
       io3 = nf90_put_att(ncid, VarID,      'units', trim(tensorunits))
 
-      call nc_check(io1, 'wr_netcdf_r8_3D', 'def_var:'//trim(tensorname))
-      call nc_check(io2, 'wr_netcdf_r8_3D', 'put_att short_name'//trim(tensorname))
-      call nc_check(io3, 'wr_netcdf_r8_3D', 'put_att units'//trim(tensorname))
+      call nc_check(io1, 'wr_netcdf_r8_3D', 'def_var '//trim(tensorname))
+      call nc_check(io2, 'wr_netcdf_r8_3D', 'put_att short_name '//trim(tensorname))
+      call nc_check(io3, 'wr_netcdf_r8_3D', 'put_att units '//trim(tensorname))
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
-      call nc_check(io, 'wr_netcdf_r8_3D', 'enddef')
+      call nc_check(io, 'wr_netcdf_r8_3D', 'enddef '//trim(tensorname))
 
       io = nf90_put_var(ncid,     VarID, tensor)
-      call nc_check(io, 'wr_netcdf_r8_3D', 'put_var: tensor')
+      call nc_check(io, 'wr_netcdf_r8_3D', 'put_var '//trim(tensorname))
 
       end subroutine wr_netcdf_r8_3D
-
-!=======================================================================
-
-      subroutine get_ctim_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-
-      use netcdf
-      implicit none
-
-      integer, intent(in)  :: ncid
-      integer, intent(out) :: lonDimID, latDimID
-      integer, intent(out) :: heightDimID
-
-      integer :: io1, io2, io3
-
-      ! We know the dimension names
-
-      io1 = nf90_inq_dimid(ncid, 'cg_lon', lonDimID)
-      io2 = nf90_inq_dimid(ncid, 'cg_lat', latDimID)
-      io3 = nf90_inq_dimid(ncid, 'cg_height', heightDimID)
-
-      call nc_check(io1, 'get_ctim_dimension_ids', 'inq_dimid cg_lon')
-      call nc_check(io2, 'get_ctim_dimension_ids', 'inq_dimid cg_lat')
-      call nc_check(io3, 'get_ctim_dimension_ids', 'inq_dimid cg_height')
-
-      end subroutine get_ctim_dimension_ids
-
-!=======================================================================
-
-      subroutine get_interface_dimension_ids(ncid, lonDimID, latDimID, heightDimID)
-
-      use netcdf
-      implicit none
-
-      integer, intent(in)  :: ncid
-      integer, intent(out) :: lonDimID, latDimID
-      integer, intent(out) :: heightDimID
-
-      integer :: io1, io2, io3
-
-      ! We know the dimension names
-
-      io1 = nf90_inq_dimid(ncid, 'ig_lon', lonDimID)
-      io2 = nf90_inq_dimid(ncid, 'ig_lat', latDimID)
-      io3 = nf90_inq_dimid(ncid, 'ig_height', heightDimID)
-
-      call nc_check(io1, 'get_interface_dimension_ids', 'inq_dimid ig_lon')
-      call nc_check(io2, 'get_interface_dimension_ids', 'inq_dimid ig_lat')
-      call nc_check(io3, 'get_interface_dimension_ids', 'inq_dimid ig_height')
-
-      end subroutine get_interface_dimension_ids
 
 !=======================================================================
 

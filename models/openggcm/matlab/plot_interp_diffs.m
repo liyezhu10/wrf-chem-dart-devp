@@ -1,7 +1,7 @@
-function plot_interp_diffs(fname)
+function oplus = plot_interp_diffs(fname)
 %%
 % 
-%    fname = 'dart.oplus.bin';
+%    fname = '../data/dart.oplus2.bin';
 %    plot_interp_diffs(fname)
 %
 
@@ -13,9 +13,9 @@ function plot_interp_diffs(fname)
 
 ggcm = fopen(fname,'r');
 byte = fread(ggcm,1,'int32');
-dim1 = fread(ggcm,1,'int32')
-dim2 = fread(ggcm,1,'int32')
-dim3 = fread(ggcm,1,'int32')
+dim1 = fread(ggcm,1,'int32');
+dim2 = fread(ggcm,1,'int32');
+dim3 = fread(ggcm,1,'int32');
 byte = fread(ggcm,1,'int32');
 
 byte = fread(ggcm,1,'int32');
@@ -24,9 +24,13 @@ byte = fread(ggcm,1,'int32');
 stat = fclose(ggcm);
 
 datmat = reshape(gdat,dim1,dim2,dim3);
+size(datmat)
+
+
+figure(1)
 
 level = 1;
-h = imagesc(squeeze(datmat(:,:,level)));
+imagesc(squeeze(datmat(:,:,level)));
 
 h= title({sprintf('%s level %d',fname, level), sprintf('%d -x- %d -x- %d',dim1,dim2,dim3)});
 set(gca,'YDir','normal');
@@ -36,6 +40,19 @@ axis image
 wysiwyg
 set(gca,'FontSize',20)
 colorbar('southoutside')
+
+figure(2)
+
+f2 = '../data/DATA.ionos2.nc';
+oplus = nc_varget(f2,'oplus');
+
+size(oplus)
+
+imagesc(squeeze(oplus(:,:,level)));
+set(gca,'Ydir','normal')
+axis image
+colorbar('southoutside')
+
 
 % <next few lines under version control, do not edit>
 % $URL$
