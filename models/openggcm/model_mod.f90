@@ -101,7 +101,7 @@ character(len=512) :: msgstring
 integer, parameter :: VERT_LEVEL_1 = 1
 
 integer, parameter :: GEOGRAPHIC_GRID = 1
-integer, parameter :: MAGNETIC_GRID  = 2
+integer, parameter :: MAGNETIC_GRID   = 2
 
 integer, parameter :: MAG_TO_GEO = 1
 integer, parameter :: GEO_TO_MAG = 2
@@ -253,7 +253,7 @@ call allocate_grid_space(mag_grid, conv=.true.)
 
 ! read in geographic and magnetic grids, and for the mag grid read
 ! in the 2d conversion arrays to go to geographic coords
-call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.true.)
+call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
 call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
 
