@@ -365,8 +365,6 @@ if( vert_is_undef(location) ) then
 elseif ( vert_is_height(location) ) then
    ! this is what we expect and it is ok
    ! once we write the code to search in the vertical
-   write(msgstring,*)'requesting interp of an obs on height, not supported yet'
-   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 elseif (vert_is_level(location)) then
    write(msgstring,*)'requesting interp of an obs on level, not supported yet'
    call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
@@ -438,8 +436,15 @@ endif
 write(msgstring,*)'did not expect to get here, error'
 call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
-! Get the bounding vertical heights and the fraction between bottom and top
-call height_bounds(lheight, mygrid%nheight, mygrid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
+if ( get_grid_type(obs_kind) == MAGNETIC_GRID ) then 
+   call height_bounds(lheight, mag_grid%nheight, mag_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
+else if ( get_grid_type(obs_kind) == GEOGRAPHIC_GRID ) then
+   call height_bounds(lheight, geo_grid%nheight, geo_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
+else
+   write(msgstring,*)'requesting interp of an unknown grid'
+   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
+endif
+
 if(hstatus /= 0) then
    istatus = 12
    return
