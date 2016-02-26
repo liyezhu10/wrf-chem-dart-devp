@@ -616,7 +616,6 @@ subroutine find_conv_bounds(lon, lat, grid_handle)
 
 ! Local storage
 integer  :: i, j
-real(r8) :: llon, llat
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -624,38 +623,34 @@ print *, 'find_conv_bounds looking for indices for ', lon, lat
 
 do i = 1, grid_handle%nlon-1
   do j = 1, grid_handle%nlat-1
-   print *, 'i, j indx: ', i, j
-   print *, llon, '>', grid_handle%conv_2d_lon(i,  j  )
-   print *, llon, '<', grid_handle%conv_2d_lon(i+1,j  )
-   print *, llon, '>', grid_handle%conv_2d_lon(i,  j+1)
-   print *, llon, '<', grid_handle%conv_2d_lon(i+1,j+1)
-   print *, llat, '>', grid_handle%conv_2d_lat(i,  j  )
-   print *, llat, '<', grid_handle%conv_2d_lat(i  ,j+1)
-   print *, llat, '>', grid_handle%conv_2d_lat(i+1,j  )
-   print *, llat, '<', grid_handle%conv_2d_lat(i+1,j+1)
-   if ((llon >= grid_handle%conv_2d_lon(i,  j  )) .and. &
-       (llon <= grid_handle%conv_2d_lon(i+1,j  )) .or. &
-       (llon >= grid_handle%conv_2d_lon(i,  j+1)) .and. &
-       (llon <= grid_handle%conv_2d_lon(i+1,j+1)) .or. &
-       (llat >= grid_handle%conv_2d_lat(i,  j  )) .and. &
-       (llat <= grid_handle%conv_2d_lat(i  ,j+1)) .or. &
-       (llat >= grid_handle%conv_2d_lat(i+1,j  )) .and. &
-       (llat <= grid_handle%conv_2d_lat(i+1,j+1))) then
+   !print *, 'i, j indx: ', i, j
+   !print *, lon, '>', grid_handle%conv_2d_lon(i,  j  )
+   !print *, lon, '<', grid_handle%conv_2d_lon(i+1,j  )
+   !print *, lat, '>', grid_handle%conv_2d_lon(i  ,j+1)
+   !print *, lon, '<', grid_handle%conv_2d_lon(i+1,j+1)
+   !print *, lat, '<', grid_handle%conv_2d_lat(i,  j  )
+   !print *, lat, '>', grid_handle%conv_2d_lat(i  ,j+1)
+   !print *, lat, '<', grid_handle%conv_2d_lat(i+1,j  )
+   !print *, lat, '>', grid_handle%conv_2d_lat(i+1,j+1)
+   if (between(lon, grid_handle%conv_2d_lon(i  ,j  ), grid_handle%conv_2d_lon(i+1,j  )) .or. &
+       between(lon, grid_handle%conv_2d_lon(i  ,j+1), grid_handle%conv_2d_lon(i+1,j+1)) .or. &
+       between(lat, grid_handle%conv_2d_lat(i  ,j  ), grid_handle%conv_2d_lon(i  ,j  )) .or. &
+       between(lat, grid_handle%conv_2d_lat(i+1,j  ), grid_handle%conv_2d_lon(i+1,j+1))) then
       print *, 'i, j indx: ', i, j
       print *, 'i,   j   vals: ', grid_handle%conv_2d_lon(i,  j  ), grid_handle%conv_2d_lat(i,  j  )
-      print *, 'i+1, j   vals: ', grid_handle%conv_2d_lon(i+1,j  ), grid_handle%conv_2d_lat(i+1,j  )
       print *, 'i,   j+1 vals: ', grid_handle%conv_2d_lon(i,  j+1), grid_handle%conv_2d_lat(i,  j+1)
+      print *, 'i+1, j   vals: ', grid_handle%conv_2d_lon(i+1,j  ), grid_handle%conv_2d_lat(i+1,j  )
       print *, 'i+1, j+1 vals: ', grid_handle%conv_2d_lon(i+1,j+1), grid_handle%conv_2d_lat(i+1,j+1)
    endif
  ! if the code above works, fix the broken code below
-   if ((llon >= grid_handle%conv_2d_lon(i,  j  )) .and. &
-       (llon <= grid_handle%conv_2d_lon(i+1,j  )) .and. &
-       (llon >= grid_handle%conv_2d_lon(i,  j+1)) .and. &
-       (llon <= grid_handle%conv_2d_lon(i+1,j+1)) .and. &
-       (llat >= grid_handle%conv_2d_lat(i,  j  )) .and. &
-       (llat <= grid_handle%conv_2d_lat(i+1,j  )) .and. &
-       (llat >= grid_handle%conv_2d_lat(i,  j+1)) .and. &
-       (llat <= grid_handle%conv_2d_lat(i+1,j+1))) then
+   if ((lon >= grid_handle%conv_2d_lon(i  ,j  )) .and. &
+       (lon <= grid_handle%conv_2d_lon(i+1,j  )) .and. &
+       (lon <= grid_handle%conv_2d_lon(i  ,j+1)) .and. &
+       (lon >= grid_handle%conv_2d_lon(i+1,j+1)) .and. &
+       (lat >= grid_handle%conv_2d_lat(i  ,j  )) .and. &
+       (lat <= grid_handle%conv_2d_lat(i  ,j+1)) .and. &
+       (lat >= grid_handle%conv_2d_lat(i+1,j  )) .and. &
+       (lat <= grid_handle%conv_2d_lat(i+1,j+1))) then
  print *, 'think i,j is good: ', i, j
       return
    endif
@@ -1911,6 +1906,27 @@ end subroutine transform_mag_geo
 
 !----------------------------------------------------------------------
 
+function between(a, b, c)
+
+real(r8), intent(in) :: a, b, c
+logical :: between
+
+if (b >= c .and. a >=c .and. a <= b) then
+  between = .true.
+  return
+endif
+
+if (c >= b .and. a >=b .and. a <= c) then
+  between = .true.
+  return
+endif
+
+between = .false.
+
+end function between
+
+!----------------------------------------------------------------------
+
 subroutine test_transform()
 real(r8) :: lon, lat, height
 real(r8) :: mlon, mlat, mheight
@@ -1929,6 +1945,7 @@ print *, 'conv 2d lon', mag_grid%conv_2d_lon(1,1)
 print *, 'conv 2d lat', mag_grid%conv_2d_lat(1,1)
 
 end subroutine test_transform
+
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
 ! End of model_mod
