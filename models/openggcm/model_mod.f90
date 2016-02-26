@@ -27,7 +27,8 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              nc_check, do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text,     &
-                             do_nml_file, do_nml_term, nmlfileunit
+                             do_nml_file, do_nml_term, nmlfileunit, open_file, &
+                             close_file
 use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL,   &
                              get_raw_obs_kind_index, get_raw_obs_kind_name,    &
                              paramname_length 
@@ -256,7 +257,8 @@ call allocate_grid_space(mag_grid, conv=.true.)
 ! in the 2d conversion arrays to go to geographic coords
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
-call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
+! call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
+call read_geo_grid()
 
 call read_vert_levels(ncid,geo_grid,'cg_height')
 call read_vert_levels(ncid,mag_grid,'ig_height')
@@ -1022,6 +1024,37 @@ else
 endif
 
 end subroutine read_horiz_grid
+
+!------------------------------------------------------------------
+
+subroutine read_geo_grid()
+
+integer :: iunit
+integer :: xlon, xlat
+real(r4), allocatable, dimension(:,:) :: tmp_conv_2d_array
+iunit = open_file('dart.geo_grids.bin', form='unformatted', action='read')
+
+read(iunit) xlon, xlat
+
+print *, 'geo_lon ', xlon, 'geo_lat ', xlat
+allocate(tmp_conv_2d_array(xlon,xlat))
+
+read(iunit) tmp_conv_2d_array
+mag_grid%conv_2d_lon = tmp_conv_2d_array
+
+read(iunit) tmp_conv_2d_array
+mag_grid%conv_2d_lat = tmp_conv_2d_array
+
+deallocate(tmp_conv_2d_array)
+
+call close_file(iunit)
+
+mag_grid%conv_2d_lat(:,:) = 90.0_r8 - mag_grid%conv_2d_lat(:,:)
+mag_grid%uses_colatitude = .true.
+
+where(mag_grid%conv_2d_lon < 0) mag_grid%conv_2d_lon = mag_grid%conv_2d_lon + 360.0_r8
+
+end subroutine read_geo_grid
 
 !------------------------------------------------------------------
 
