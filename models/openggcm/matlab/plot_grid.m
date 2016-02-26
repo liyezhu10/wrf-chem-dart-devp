@@ -1,4 +1,4 @@
-function plot_grid(fname)
+function h4 = plot_grid(fname)
 %% plot_grid ... plots the ULAT,ULON and TLAT,TLON variables from a netcdf file.
 % 
 % fname = 'DATA.ionos2.nc';
@@ -27,10 +27,27 @@ figure(1); clf; orient landscape
 h1 = plot(cgx,cgy,'ko'); hold on;
 h2 = plot(igx,igy,'rx');
 h3 = plot(geo_lon,geo_lat,'gd');
-% legend([h1,h2,h3],'geographic','magnetic','mag2geo')
 title({'geographic is black o','magnetic is red x', 'mag2geo is green d'})
 xlabel('longitude')
 ylabel('latitude')
+set(gca,'FontSize',20)
+
+hold off;
+
+%% Now plot just the first ROW
+figure(2); clf; orient landscape
+
+size(igx)
+size(geo_lon)
+
+h2 = plot(igx(:,1),igy(:,1),'rx'); hold on;
+h3 = plot(geo_lon(:,1),geo_lat(:,1),'gd');
+title({'magnetic is red x', 'mag2geo is green d','FIRST ROW ONLY','element (1,1) is black'})
+xlabel('longitude')
+ylabel('latitude')
+h4 = plot(igx(1,1),igy(1,1),'kx','LineWidth',2,'MarkerFaceColor','k');
+h5 = plot(geo_lon(1,1),geo_lat(1,1),'kd','LineWidth',2,'MarkerFaceColor','k');
+set(gca,'FontSize',20)
 
 hold off;
 
