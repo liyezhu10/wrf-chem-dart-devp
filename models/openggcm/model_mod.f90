@@ -149,6 +149,7 @@ type grid_type
 
    ! grid information
    real(r8), allocatable :: longitude(:), latitude(:)
+   logical :: uses_colatitude
   
    ! decide if we can get away with 1D heights or if they
    ! have to be per-column.  would prefer 1D for simplicity
@@ -493,9 +494,13 @@ istatus = 0
 !> in this model, the data at lon 0 is replicated at lon 360, so no special
 !> wrap case is needed.
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
-call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
+if (grid_handle%uses_colatitude) then
+   call colat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
+else
+   call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
+endif
 
-call find_conv_bounds(240.0_r8, 40.0_r8, grid_handle)
+!call find_conv_bounds(240.0_r8, 40.0_r8, grid_handle)
 
 if (debug > 0) then
    print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
@@ -694,6 +699,59 @@ istatus = 0
 
 print *, 'lat_bounds looking for index for ', lat
 ! Check for too far south or north
+if(lat < grid_handle%latitude(1)) then
+   istatus = 1
+   return
+else if(lat > grid_handle%latitude(grid_handle%nlat)) then
+   istatus = 2
+   return
+endif
+
+! In the middle, search through
+do i = 2, grid_handle%nlat
+   !print *, i, grid_handle%latitude(i)
+   if(lat <= grid_handle%latitude(i)) then
+      bot = i - 1
+      top = i
+      fract = (lat - grid_handle%latitude(bot)) / &
+              (grid_handle%latitude(top) - grid_handle%latitude(bot))
+      print *, 'bot/top indx fract: ', bot, top, fract
+      print *, 'bot/top vals: ', grid_handle%latitude(bot), grid_handle%latitude(top)
+      return
+   endif
+enddo
+! Shouldn't get here. Might want to fail really hard through error handler
+istatus = 40
+
+end subroutine lat_bounds
+
+!-------------------------------------------------------------
+
+subroutine colat_bounds(lat, grid_handle, bot, top, fract, istatus)
+ real(r8),        intent(in)  :: lat
+ type(grid_type), intent(in)  :: grid_handle
+ integer,         intent(out) :: bot, top
+ real(r8),        intent(out) :: fract
+ integer,         intent(out) :: istatus
+
+! Given a latitude lat, the array of colatitudes for grid boundaries, and the
+! number of latitudes in the grid, returns the indices of the latitude
+! below and above the location latitude and the fraction of the distance
+! between. istatus is returned as 0 unless the location latitude is 
+! south of the southernmost grid point (1 returned) or north of the 
+! northernmost (2 returned). If one really had lots of polar obs would 
+! want to worry about interpolating around poles.
+
+! Local storage
+integer :: i
+
+if ( .not. module_initialized ) call static_init_model
+
+! Success should return 0, failure a positive number.
+istatus = 0
+
+print *, 'lat_bounds looking for index for ', lat
+! Check for too far south or north
 if(lat > grid_handle%latitude(1)) then
    istatus = 1
    return
@@ -718,7 +776,7 @@ enddo
 ! Shouldn't get here. Might want to fail really hard through error handler
 istatus = 40
 
-end subroutine lat_bounds
+end subroutine colat_bounds
 
 !------------------------------------------------------------
 
@@ -938,7 +996,13 @@ if (is_conv) then
    print *, 'read before llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
    print *, 'read before llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
 
-   if (is_co_latitude) grid_handle%conv_2d_lat(:,:) = 90.0_r8 - grid_handle%conv_2d_lat(:,:)
+   if (is_co_latitude) then
+      grid_handle%conv_2d_lat(:,:) = 90.0_r8 - grid_handle%conv_2d_lat(:,:)
+      grid_handle%uses_colatitude = .true.
+   else
+      grid_handle%uses_colatitude = .false.
+   endif
+
    where(grid_handle%conv_2d_lon < 0) grid_handle%conv_2d_lon = grid_handle%conv_2d_lon + 360.0_r8
 
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,88), grid_handle%conv_2d_lat(102,88)
@@ -951,7 +1015,13 @@ else
    call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%latitude,  'read_horiz_grid')
 
-   if (is_co_latitude) grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
+   if (is_co_latitude) then
+      grid_handle%latitude(:) = 90.0_r8 - grid_handle%latitude(:)
+      grid_handle%uses_colatitude = .true.
+   else
+      grid_handle%uses_colatitude = .false.
+   endif
+
    where(grid_handle%longitude < 0) grid_handle%longitude = grid_handle%longitude + 360.0_r8
 
 endif
