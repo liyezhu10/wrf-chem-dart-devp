@@ -257,7 +257,6 @@ call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_c
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
 call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
 
-!>@ TODO FIXME - i think this isn't true -- only geographic grid contains vertical heights
 call read_vert_levels(ncid,geo_grid,'cg_height')
 call read_vert_levels(ncid,mag_grid,'ig_height')
 
@@ -491,7 +490,7 @@ istatus = 0
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
 call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 
-call find_conv_bounds(lon, lat, grid_handle)
+call find_conv_bounds(240.0_r8, 40.0_r8, grid_handle)
 
 if (debug > 0) then
    print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
@@ -622,9 +621,6 @@ real(r8) :: llon, llat
 if ( .not. module_initialized ) call static_init_model
 
 print *, 'find_conv_bounds looking for indices for ', lon, lat
-llat = 90 - lat
-llon = lon
-print *, 'changing to: ', llon, llat
 
 do i = 1, grid_handle%nlon-1
   do j = 1, grid_handle%nlat-1
@@ -949,7 +945,7 @@ if (is_conv) then
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,88), grid_handle%conv_2d_lat(103,88)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
-
+    
 else
 
    call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
