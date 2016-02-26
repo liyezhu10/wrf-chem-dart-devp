@@ -499,15 +499,15 @@ endif
 !call find_conv_bounds(240.0_r8, 40.0_r8, grid_handle)
 
 if (debug > 0) then
-   print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
-   print *, 'in lon_lat_interp, indx lon bot/top, lat bot/top: ', &
-             lon_bot, lon_top, lat_bot, lat_top
-   print *, 'coordinates for corners: '
-   print *, "ll : " , grid_handle%conv_2d_lon(lon_bot,lat_bot), grid_handle%conv_2d_lat(lon_bot,lat_bot) 
-   print *, "lr : " , grid_handle%conv_2d_lon(lon_top,lat_bot), grid_handle%conv_2d_lat(lon_top,lat_bot) 
-   print *, "ul : " , grid_handle%conv_2d_lon(lon_bot,lat_top), grid_handle%conv_2d_lat(lon_bot,lat_top) 
-   print *, "ur : " , grid_handle%conv_2d_lon(lon_top,lat_top), grid_handle%conv_2d_lat(lon_top,lat_top) 
-   print *, ''
+   !print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
+   !print *, 'in lon_lat_interp, indx lon bot/top, lat bot/top: ', &
+   !          lon_bot, lon_top, lat_bot, lat_top
+   !print *, 'coordinates for corners: '
+   !print *, "ll : " , grid_handle%conv_2d_lon(lon_bot,lat_bot), grid_handle%conv_2d_lat(lon_bot,lat_bot) 
+   !print *, "lr : " , grid_handle%conv_2d_lon(lon_top,lat_bot), grid_handle%conv_2d_lat(lon_top,lat_bot) 
+   !print *, "ul : " , grid_handle%conv_2d_lon(lon_bot,lat_top), grid_handle%conv_2d_lat(lon_bot,lat_top) 
+   !print *, "ur : " , grid_handle%conv_2d_lon(lon_top,lat_top), grid_handle%conv_2d_lat(lon_top,lat_top) 
+   !print *, ''
 
    !print *, "grid handle conv lon : " , grid_handle%conv_2d_lon(lon_bot,lat_bot) 
    !print *, "grid handle conv lat : " , grid_handle%conv_2d_lat(lon_bot,lat_bot) 
@@ -803,12 +803,11 @@ istatus = 0
 ! than the depth of this box's center are just given the value of the
 ! top box.
 if(lheight <= hgt_array(1)) then
-   top = 1
-   bot = 2
+   bot = 1
+   top = 2
    ! NOTE: the fract definition is the relative distance from bottom to top
    fract = 1.0_r8 
-if (debug > 7) print *, 'above first level in height'
-if (debug > 7) print *, 'hgt_array, top, bot, fract=', hgt_array(1), top, bot, fract
+    if (debug > 0) print *, 'above first level in height'
    return
 endif
 
@@ -816,10 +815,10 @@ endif
 do i = 2, nheights
    ! If the location is shallower than this entry, it must be in this box
    if(lheight < hgt_array(i)) then
-      top = i -1
-      bot = i
-      fract = (hgt_array(bot) - lheight) / (hgt_array(bot) - hgt_array(top))
-if (debug > 7) print *, 'i, hgt_array, top, bot, fract=', i, hgt_array(i), top, bot, fract
+      top = i
+      bot = i -1
+      fract = (lheight - hgt_array(bot)) / (hgt_array(top) - hgt_array(bot))
+      if (debug > 0) print *, 'i, hgt_array, top, bot, fract=', i, hgt_array(i), top, bot, fract
       return
    endif
 enddo
