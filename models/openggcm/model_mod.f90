@@ -511,9 +511,9 @@ if (debug > 0) then
 
    !print *, "grid handle conv lon : " , grid_handle%conv_2d_lon(lon_bot,lat_bot) 
    !print *, "grid handle conv lat : " , grid_handle%conv_2d_lat(lon_bot,lat_bot) 
-!state_index = get_dart_vector_index(lon_bot, lat_bot, 1, &
-!                                    domain_id, get_varid_from_kind(domain_id, var_kind))
-!   print *, 'state index for bottom corner is: ', state_index
+   !state_index = get_dart_vector_index(lon_bot, lat_bot, 1, &
+   !                                    domain_id, get_varid_from_kind(domain_id, var_kind))
+   !   print *, 'state index for bottom corner is: ', state_index
 endif
 
 if (istatus(1) /= 0) then
@@ -2005,7 +2005,7 @@ lon    =  0.0_r8
 lat    = 89.0_r8
 height =  0.0_r8
 
-call transform_mag_to_geo(lon, lat, height, 2)
+call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
 
 print *, 'test lon     ', lon
 print *, 'test lat     ', lat
