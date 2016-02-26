@@ -880,14 +880,14 @@ endif
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
    lat = mag_grid%conv_2d_lat(lon_index, lat_index)
-   if (debug > 0) then
+   if (debug > 3) then
       print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
       print *, 'mag grid, geo results: ', lon, lat
    endif
 else
    lon = geo_grid%longitude(lon_index)
    lat = geo_grid%latitude(lat_index)
-   if (debug > 0) then
+   if (debug > 3) then
       print *, 'geo grid, results: ', lon, lat
    endif
 endif
