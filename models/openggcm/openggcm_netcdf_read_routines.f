@@ -9,9 +9,9 @@
       implicit none
       private
 
-      public :: rd_netcdf_r4_1D, rd_netcdf_r4_1D
-      public :: rd_netcdf_r4_2D, rd_netcdf_r4_3D
-      public :: rd_netcdf_r8_2D, rd_netcdf_r8_3D
+      public :: rd_netcdf_r4_1D, rd_netcdf_r8_1D
+      public :: rd_netcdf_r4_2D, rd_netcdf_r8_2D
+      public :: rd_netcdf_r4_3D, rd_netcdf_r8_3D
 
       contains
 
