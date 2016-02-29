@@ -6,7 +6,7 @@
 
 module model_mod
 
-! This is the interface between the openggcm ocean model and DART.
+!> This is the interface between the openggcm ocean model and DART.
 
 ! Modules that are absolutely required for use are listed
 use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
@@ -85,28 +85,34 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+! Return netcdf data array given a variable name
 interface get_data
    module procedure get_data_1d
    module procedure get_data_2d
    module procedure get_data_3d
 end interface get_data
 
-! transform type openggcm
+! Transform type openggcm, this come directly from the 
+! openggmc source code that had been modified and put
+! as a subroutine in cotr_mod.nml
 type(transform) :: openggcm_transform
 
-! message strings
+! Message strings
 character(len=512) :: string1
 character(len=512) :: string2
 character(len=512) :: msgstring
 
 integer, parameter :: VERT_LEVEL_1 = 1
 
+! Grid types
 integer, parameter :: GEOGRAPHIC_GRID = 1
 integer, parameter :: MAGNETIC_GRID   = 2
 
+! Grid convertion direction
 integer, parameter :: MAG_TO_GEO = 1
 integer, parameter :: GEO_TO_MAG = 2
 
+! Logical to keep track of if we have initialized static_init_model
 logical, save :: module_initialized = .false.
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -170,7 +176,6 @@ end type grid_type
 ! Number of fields in the state vector
 integer :: nfields
 
-
 ! Geometric (CTIM) Grid and Magnetic Grid
 type(grid_type), target :: geo_grid, mag_grid
 
@@ -190,11 +195,12 @@ contains
 
 subroutine static_init_model()
 
-! Called to do one time initialization of the model. In this case,
-! it reads in the grid information.
+ !> Called to do one time initialization of the model. In this case,
+ !> it reads in the grid information.
 
 integer :: iunit, io, ncid
 integer :: ss, dd
+
 
 ! The Plan:
 !
@@ -203,9 +209,9 @@ integer :: ss, dd
 !  
 !   allocate space, and read in actual grid values
 !
-!   figure out model timestep.  FIXME: from where?
+!   !>@todo FIXME: figure out model time step. from where?
 !
-!   Compute the model size.
+!   compute the model size.
 !
 !   set the index numbers where the field types change
 !
@@ -257,6 +263,7 @@ call allocate_grid_space(mag_grid, conv=.true.)
 ! in the 2d conversion arrays to go to geographic coords
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
+!>@todo FIXME : can we take this call out and remove is_conv from read_horiz_grid?
 ! call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
 call read_geo_grid()
 
@@ -292,10 +299,11 @@ end subroutine static_init_model
 !------------------------------------------------------------------
 
 function get_model_size()
+
  integer(i8) :: get_model_size
 
-! Returns the size of the model as an integer. Required for all
-! applications.
+ !> Returns the size of the model as an integer. Required for all
+ !> applications.
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -307,18 +315,18 @@ end function get_model_size
 
 subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
- type(ensemble_type), intent(in) :: state_handle
- integer,             intent(in) :: ens_size
- type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_kind
- integer,            intent(out) :: istatus(ens_size)
+ type(ensemble_type), intent(in) :: state_handle !< ensemble handle to interpolate
+ integer,             intent(in) :: ens_size !< number of ensembles
+ type(location_type), intent(in) :: location !< location to interpolate to
+ integer,             intent(in) :: obs_kind !< dart kind to interpolate
+ integer,            intent(out) :: istatus(ens_size) !< array of returned statuses
  real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
 
-! Model interpolate will interpolate any state variable
-! the given location given a state vector. The 'generic kind' of the variable being
-! interpolated is obs_kind since normally this is used to find the expected
-! value of an observation at some location. The interpolated value is 
-! returned in interp_val and istatus is 0 for success.
+ !> Model interpolate will interpolate any state variable
+ !> the given location given a state vector. The 'generic kind' of the variable being
+ !> interpolated is obs_kind since normally this is used to find the expected
+ !> value of an observation at some location. The interpolated value is 
+ !> returned in interp_val and istatus is 0 for success.
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
@@ -341,7 +349,7 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-!> @TODO FIXME should this start as istatus = 0 so we can use
+!> @todo FIXME should this start as istatus = 0 so we can use
 !> track_istatus().   are there more than one of these and can
 !> they be combined?
 
@@ -372,14 +380,14 @@ elseif (vert_is_level(location)) then
    write(msgstring,*)'requesting interp of an obs on level, not supported yet'
    call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
-   !> @TODO FIXME something like this
+   !> @todo FIXME something like this
    ! convert the heights index to an actual height 
    ind = nint(loc_array(3))
    if ( (ind < 1) .or. (ind > size(geo_grid%heights,1)) ) then 
       istatus = 11
       return
    else
-      !>@TODO FIXME : assuming everything is flat at the moment
+      !>@todo FIXME : assuming everything is flat at the moment
       lheight = geo_grid%heights(1)
    endif
 else   ! if pressure or surface we don't know what to do
@@ -396,8 +404,8 @@ endif
 
 thisgrid = get_grid_type(obs_kind)
 
-!@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
-!>             if you have an invalid kind you can simply return.
+!>@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
+!>              if you have an invalid kind you can simply return.
 SELECT CASE (thisgrid)
    CASE (MAGNETIC_GRID)
 
@@ -452,7 +460,7 @@ endif
 ! do a 2d interpolation for the value at the bottom level, then again for
 ! the top level, then do a linear interpolation in the vertical to get the
 ! final value.  this sets both interp_val and istatus.
-call do_interp(state_handle, ens_size, mygrid, base_offset, hgt_bot, hgt_top, hgt_fract, &
+call do_interp(state_handle, ens_size, mygrid, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_kind, expected_obs, istatus)
 if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
 
@@ -463,17 +471,18 @@ end subroutine model_interpolate
 subroutine lon_lat_interpolate(state_handle, ens_size, grid_handle, var_kind, &
                                lon, lat, height_index, expected_obs, istatus)
 
-type(ensemble_type), intent(in)  :: state_handle
-integer,             intent(in)  :: ens_size
-type(grid_type),     intent(in)  :: grid_handle
-integer,             intent(in)  :: var_kind
-real(r8),            intent(in)  :: lon, lat
-integer,             intent(in)  :: height_index
-real(r8),            intent(out) :: expected_obs(ens_size)
-integer,             intent(out) :: istatus(ens_size)
+ type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
+ integer,             intent(in)  :: ens_size !< ensemble size
+ type(grid_type),     intent(in)  :: grid_handle !< geo or mag grid
+ integer,             intent(in)  :: var_kind !< dart variable kind
+ real(r8),            intent(in)  :: lon !< longitude to interpolate
+ real(r8),            intent(in)  :: lat !< latitude to interpolate
+ integer,             intent(in)  :: height_index !< height index to interpolate
+ real(r8),            intent(out) :: expected_obs(ens_size) !< returned interpolations
+ integer,             intent(out) :: istatus(ens_size) !< returned statuses
 
-! Subroutine to interpolate to a lon lat location given the state handle.
-! Successful interpolation returns istatus=0.
+!> Subroutine to interpolate to a lon lat location given the state handle.
+!> Successful interpolation returns istatus=0.
 
 ! Local storage, 
 integer  :: lat_bot, lat_top, lon_bot, lon_top
@@ -487,9 +496,9 @@ if ( .not. module_initialized ) call static_init_model
 ! Succesful return has istatus of 0
 istatus = 0
 
-!> find the lower and upper indices which enclose the given value
-!> in this model, the data at lon 0 is replicated at lon 360, so no special
-!> wrap case is needed.
+! find the lower and upper indices which enclose the given value
+! in this model, the data at lon 0 is replicated at lon 360, so no special
+! wrap case is needed.
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
 if (grid_handle%uses_colatitude) then
    call colat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
@@ -545,18 +554,20 @@ end subroutine lon_lat_interpolate
 !------------------------------------------------------------
 
 function get_val(lon_index, lat_index, height_index, var_kind, state_handle, ens_size)
- integer,             intent(in)  :: lon_index
- integer,             intent(in)  :: lat_index
- integer,             intent(in)  :: height_index
- integer,             intent(in)  :: var_kind
- type(ensemble_type), intent(in)  :: state_handle
- integer,             intent(in)  :: ens_size
 
- real(r8)    :: get_val(ens_size)
- integer(i8) :: state_index
- integer     :: dart_kind
+ integer,             intent(in)  :: lon_index !< longitude index
+ integer,             intent(in)  :: lat_index !< lattude index
+ integer,             intent(in)  :: height_index !< height index
+ integer,             intent(in)  :: var_kind !< dart variable kind
+ type(ensemble_type), intent(in)  :: state_handle !< ensemble handle for state vector
+ integer,             intent(in)  :: ens_size !< size of the ensemble
 
-! Returns the value from a single level array given the lat and lon indices
+ !> Returns the value from a single level array given the lat and lon indices
+
+! Local variables
+real(r8)    :: get_val(ens_size)
+integer(i8) :: state_index
+integer     :: dart_kind
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -577,16 +588,18 @@ end function get_val
 !------------------------------------------------------------
 
 subroutine lon_bounds(lon, grid_handle, bot, top, fract)
- real(r8),        intent(in) :: lon
- type(grid_type), intent(in) :: grid_handle
- integer,        intent(out) :: bot, top
- real(r8),       intent(out) :: fract
 
-! Given a longitude lon, the array of longitudes for grid boundaries, and the
-! number of longitudes in the grid, returns the indices of the longitude
-! below and above the location longitude and the fraction of the distance
-! between.  This code assumes that the first and last rows are replicated
-! and identical (e.g. 0 and 360 both have entries in the array)
+ real(r8),        intent(in)  :: lon !< input longitude
+ type(grid_type), intent(in)  :: grid_handle  !< geo or mag grid
+ integer,         intent(out) :: bot !< index of bottom layer
+ integer,         intent(out) :: top !< index of top layer
+ real(r8),        intent(out) :: fract !< fraction between layers
+
+ !> Given a longitude lon, the array of longitudes for grid boundaries, and the
+ !> number of longitudes in the grid, returns the indices of the longitude
+ !> below and above the location longitude and the fraction of the distance
+ !> between.  This code assumes that the first and last rows are replicated
+ !> and identical (e.g. 0 and 360 both have entries in the array)
 
 ! Local storage
 integer  :: i
@@ -616,11 +629,13 @@ end subroutine lon_bounds
 !------------------------------------------------------------
 
 subroutine find_conv_bounds(lon, lat, grid_handle)
- real(r8),        intent(in) :: lon, lat
- type(grid_type), intent(in) :: grid_handle
 
-! exhaustively look for the grid box that encloses the given lon/lat
-! DEBUGGING ONLY
+ real(r8),        intent(in) :: lon !< longitude
+ real(r8),        intent(in) :: lat !< latitude
+ type(grid_type), intent(in) :: grid_handle !< geo or mag grid
+
+ !> exhaustively look for the grid box that encloses the given lon/lat
+ !> DEBUGGING ONLY
 
 ! Local storage
 integer  :: i, j
@@ -673,19 +688,21 @@ end subroutine find_conv_bounds
 !-------------------------------------------------------------
 
 subroutine lat_bounds(lat, grid_handle, bot, top, fract, istatus)
- real(r8),        intent(in)  :: lat
- type(grid_type), intent(in)  :: grid_handle
- integer,         intent(out) :: bot, top
- real(r8),        intent(out) :: fract
- integer,         intent(out) :: istatus
 
-! Given a latitude lat, the array of latitudes for grid boundaries, and the
-! number of latitudes in the grid, returns the indices of the latitude
-! below and above the location latitude and the fraction of the distance
-! between. istatus is returned as 0 unless the location latitude is 
-! south of the southernmost grid point (1 returned) or north of the 
-! northernmost (2 returned). If one really had lots of polar obs would 
-! want to worry about interpolating around poles.
+ real(r8),        intent(in)  :: lat !< input latitude
+ type(grid_type), intent(in)  :: grid_handle  !< geo or mag grid
+ integer,         intent(out) :: bot !< index of bottom layer
+ integer,         intent(out) :: top !< index of top layer
+ real(r8),        intent(out) :: fract !< fraction between layers
+ integer,         intent(out) :: istatus !< return status
+
+ !> Given a latitude lat, the array of latitudes for grid boundaries, and the
+ !> number of latitudes in the grid, returns the indices of the latitude
+ !> below and above the location latitude and the fraction of the distance
+ !> between. istatus is returned as 0 unless the location latitude is 
+ !> south of the southernmost grid point (1 returned) or north of the 
+ !> northernmost (2 returned). If one really had lots of polar obs would 
+ !> want to worry about interpolating around poles.
 
 ! Local storage
 integer :: i
@@ -726,19 +743,21 @@ end subroutine lat_bounds
 !-------------------------------------------------------------
 
 subroutine colat_bounds(lat, grid_handle, bot, top, fract, istatus)
- real(r8),        intent(in)  :: lat
- type(grid_type), intent(in)  :: grid_handle
- integer,         intent(out) :: bot, top
- real(r8),        intent(out) :: fract
- integer,         intent(out) :: istatus
 
-! Given a latitude lat, the array of colatitudes for grid boundaries, and the
-! number of latitudes in the grid, returns the indices of the latitude
-! below and above the location latitude and the fraction of the distance
-! between. istatus is returned as 0 unless the location latitude is 
-! south of the southernmost grid point (1 returned) or north of the 
-! northernmost (2 returned). If one really had lots of polar obs would 
-! want to worry about interpolating around poles.
+ real(r8),        intent(in)  :: lat          !< input latitude
+ type(grid_type), intent(in)  :: grid_handle  !< geo or mag grid
+ integer,         intent(out) :: bot          !< index of bottom layer
+ integer,         intent(out) :: top          !< index of top layer
+ real(r8),        intent(out) :: fract        !< fraction between layers
+ integer,         intent(out) :: istatus !< return status
+
+ !> Given a latitude lat, the array of colatitudes for grid boundaries, and the
+ !> number of latitudes in the grid, returns the indices of the latitude
+ !> below and above the location latitude and the fraction of the distance
+ !> between. istatus is returned as 0 unless the location latitude is 
+ !> south of the southernmost grid point (1 returned) or north of the 
+ !> northernmost (2 returned). If one really had lots of polar obs would 
+ !> want to worry about interpolating around poles.
 
 ! Local storage
 integer :: i
@@ -779,12 +798,17 @@ end subroutine colat_bounds
 !------------------------------------------------------------
 
 subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
- real(r8),   intent(in)  :: lheight
- integer,    intent(in)  :: nheights
- real(r8),   intent(in)  :: hgt_array(nheights)
- integer,    intent(out) :: bot, top
- real(r8),   intent(out) :: fract
- integer,    intent(out) :: istatus
+
+ real(r8),   intent(in)  :: lheight             !< height location
+ integer,    intent(in)  :: nheights            !< number of total heights
+ real(r8),   intent(in)  :: hgt_array(nheights) !< array of heights
+ integer,    intent(out) :: bot                 !< bottom bounding height
+ integer,    intent(out) :: top                 !< top bounding height
+ real(r8),   intent(out) :: fract               !< fraction inbetween
+ integer,    intent(out) :: istatus             !< return status
+
+ !> find the index top and bottom index for a variable given an lheight and an
+ !> array of heights.
 
 ! Local variables
 integer   :: i
@@ -797,9 +821,10 @@ istatus = 0
 
 ! The level array contains the depths of the center of the vertical grid boxes
 ! In this case (unlike how we handle the MIT depths), positive is really down.
-! FIXME: in the MIT model, we're given box widths and we compute the centers,
-! and we computed them with larger negative numbers being deeper.  Here,
-! larger positive numbers are deeper.
+!#! !>@todo FIXM : do we still need this FIXME?
+!#! ! FIXME: in the MIT model, we're given box widths and we compute the centers,
+!#! ! and we computed them with larger negative numbers being deeper.  Here,
+!#! ! larger positive numbers are deeper.
 
 ! It is assumed that the top box is shallow and any observations shallower
 ! than the depth of this box's center are just given the value of the
@@ -833,11 +858,12 @@ end subroutine height_bounds
 !------------------------------------------------------------------
 
 function get_model_time_step()
- type(time_type) :: get_model_time_step
 
-! Returns the the time step of the model; the smallest increment
-! in time that the model is capable of advancing the state in a given
-! implementation. This interface is required for all applications.
+ type(time_type) :: get_model_time_step !< returned timestep
+
+ !> Returns the the time step of the model; the smallest increment
+ !> in time that the model is capable of advancing the state in a given
+ !> implementation. This interface is required for all applications.
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -848,17 +874,18 @@ end function get_model_time_step
 !------------------------------------------------------------------
 
 subroutine get_state_meta_data(state_handle, index_in, location, var_type)
- type(ensemble_type), intent(in)  :: state_handle
- integer(i8),         intent(in)  :: index_in
- type(location_type), intent(out) :: location
- integer,             intent(out), optional :: var_type
 
-! Given an integer index into the state vector structure, returns the
-! associated location. A second intent(out) optional argument kind
-! can be returned if the model has more than one type of field (for
-! instance temperature and zonal wind component). This interface is
-! required for all filter applications as it is required for computing
-! the distance between observations and state variables.
+ type(ensemble_type),           intent(in)  :: state_handle  !< state ensemble handle
+ integer(i8),                   intent(in)  :: index_in !< dart state index of interest
+ type(location_type),           intent(out) :: location !< locartion of interest
+ integer,             optional, intent(out) :: var_type !< optional dart kind return
+
+ !> Given an integer index into the state vector structure, returns the
+ !> associated location. A second intent(out) optional argument kind
+ !> can be returned if the model has more than one type of field (for
+ !> instance temperature and zonal wind component). This interface is
+ !> required for all filter applications as it is required for computing
+ !> the distance between observations and state variables.
 
 real(r8) :: lat, lon, height
 integer  :: lon_index, lat_index, height_index, local_var, var_id
@@ -875,7 +902,7 @@ if (debug > 6) then
    print *, 'var type: ', trim(get_raw_obs_kind_name(local_var))
 endif
 
-!> we are getting a mapping array between magnetic -> geogrid
+! we are getting a mapping array between magnetic -> geogrid
 
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
@@ -912,7 +939,7 @@ end subroutine get_state_meta_data
 
 subroutine end_model()
 
-! Shutdown and clean-up.
+ !> Shutdown and clean-up.
 
 ! assume if one is allocated, they all were.  if no one ever
 ! called the init routine, don't try to dealloc something that
@@ -925,8 +952,10 @@ end subroutine end_model
 !------------------------------------------------------------------
 
 function get_grid_template_fileid(filename)
-character(len=*), intent(in) :: filename
-integer :: get_grid_template_fileid
+ character(len=*), intent(in) :: filename
+ integer :: get_grid_template_fileid
+
+ !> get netcdf id of template file
 
 call nc_check( NF90_open(filename, NF90_NOWRITE, get_grid_template_fileid), &
                   'get_grid_template_fileid', 'open '//trim(filename))
@@ -937,11 +966,14 @@ end function get_grid_template_fileid
 
 subroutine get_grid_sizes(ncFileID, grid_handle, lon_name, lat_name, height_name)
 
-integer,                    intent(in)    :: ncFileID
-type(grid_type),            intent(inout) :: grid_handle
-character(len=*),           intent(in)    :: lon_name
-character(len=*),           intent(in)    :: lat_name
-character(len=*), optional, intent(in)    :: height_name
+ integer,                    intent(in)    :: ncFileID !< netcdf file id
+ type(grid_type),            intent(inout) :: grid_handle !< geo or mag grid
+ character(len=*),           intent(in)    :: lon_name !< longitude name
+ character(len=*),           intent(in)    :: lat_name !< latitude name
+ character(len=*), optional, intent(in)    :: height_name !< height name
+
+ !> get grid sizes given netcdf id, lon, lat and height name. results
+ !> are store in the provided grid handle
 
 grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
 
@@ -959,23 +991,23 @@ end subroutine get_grid_sizes
 
 subroutine read_horiz_grid(ncFileID, grid_handle, lon_name, lat_name, is_conv, is_co_latitude)
 
-integer,          intent(in)    :: ncFileID
-type(grid_type),  intent(inout) :: grid_handle
-character(len=*), intent(in)    :: lon_name
-character(len=*), intent(in)    :: lat_name
-logical,          intent(in)    :: is_conv
-logical,          intent(in)    :: is_co_latitude
-
-! is_conv:  if true, read the data into the conversion grid.
-! otherwise read into the normal lat/lon arrays.
-
-! is_co_latitude:  if true, subtract 90 from the lat values
-! co_latitudes start at 0 at the north pole and go to 180 at the south.
-! "normal" latitudes for us are -90 at the south pole up to 90 at the north.
-
-!> @TODO FIXME: make sure we understand whether we expect longitudes to be
-!> 0-360 coming in, or if they are coming in as -180 to 180 and need to be
-!> shifted by us.
+ integer,          intent(in)    :: ncFileID !< netcdf file id for grid
+ type(grid_type),  intent(inout) :: grid_handle !< grid handle to be read into
+ character(len=*), intent(in)    :: lon_name !< longitude variable name
+ character(len=*), intent(in)    :: lat_name !< latitude variable name
+ logical,          intent(in)    :: is_conv !< fill conversion grid
+ logical,          intent(in)    :: is_co_latitude !< is grid in co-latitude
+ 
+ !> is_conv:  if true, read the data into the conversion grid.
+ !> otherwise read into the normal lat/lon arrays.
+ 
+ !> is_co_latitude:  if true, subtract 90 from the lat values
+ !> co_latitudes start at 0 at the north pole and go to 180 at the south.
+ !> "normal" latitudes for us are -90 at the south pole up to 90 at the north.
+ 
+ !> @todo FIXME: make sure we understand whether we expect longitudes to be
+ !> 0-360 coming in, or if they are coming in as -180 to 180 and need to be
+ !> shifted by us.
 
 if (is_conv) then
 
@@ -1023,6 +1055,9 @@ end subroutine read_horiz_grid
 
 subroutine read_geo_grid()
 
+ !> Read the geometric grid from a fortran binary file
+
+! Local variables
 integer :: iunit
 integer :: xlon, xlat
 real(r4), allocatable, dimension(:,:) :: tmp_conv_2d_array
@@ -1054,9 +1089,11 @@ end subroutine read_geo_grid
 
 subroutine read_vert_levels(ncFileID, grid_handle, height_name)
 
-integer,          intent(in)    :: ncFileID
-type(grid_type),  intent(inout) :: grid_handle
-character(len=*), intent(in)    :: height_name
+ integer,          intent(in)    :: ncFileID !< netcdf id with vertical information
+ type(grid_type),  intent(inout) :: grid_handle !< geo or mag grid
+ character(len=*), intent(in)    :: height_name !< name of height variable
+
+ !> Read the geometric grid from a fortran binary file
 
 call get_data(ncFileID, height_name, grid_handle%heights, 'read_vert_levels')
 
@@ -1065,23 +1102,25 @@ end subroutine read_vert_levels
 !------------------------------------------------------------------
 
 function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
- integer, intent(in)  :: ncFileID      ! netCDF file identifier
- logical, intent(out) :: model_mod_writes_state_variables
- integer              :: ierr          ! return value of function
 
-! Writes the model-specific attributes to a netCDF file.
-!     This includes coordinate variables for the geometric and
-!     magnetic grids
-!
-! Typical sequence for adding new dimensions,variables,attributes:
-! NF90_OPEN             ! open existing netCDF dataset
-!    NF90_redef         ! put into define mode 
-!    NF90_def_dim       ! define additional dimensions (if any)
-!    NF90_def_var       ! define variables: from name, type, and dims
-!    NF90_put_att       ! assign attribute values
-! NF90_ENDDEF           ! end definitions: leave define mode
-!    NF90_put_var       ! provide values for variable
-! NF90_CLOSE            ! close: save updated netCDF dataset
+ integer, intent(in)  :: ncFileID !> netCDF file identifier
+ logical, intent(out) :: model_mod_writes_state_variables !< false if you want DART to 
+                                                          !< write state variables
+ integer              :: ierr !>return value of function
+
+ !> Writes the model-specific attributes to a netCDF file.
+ !>     This includes coordinate variables for the geometric and
+ !>     magnetic grids
+
+!  Typical sequence for adding new dimensions,variables,attributes:
+!  NF90_OPEN             ! open existing netCDF dataset
+!     NF90_redef         ! put into define mode 
+!     NF90_def_dim       ! define additional dimensions (if any)
+!     NF90_def_var       ! define variables: from name, type, and dims
+!     NF90_put_att       ! assign attribute values
+!  NF90_ENDDEF           ! end definitions: leave define mode
+!     NF90_put_var       ! provide values for variable
+!  NF90_CLOSE            ! close: save updated netCDF dataset
 
 !----------------------------------------------------------------------
 ! variables if we parse the state vector into prognostic variables.
@@ -1219,16 +1258,17 @@ end function nc_write_model_atts
 !------------------------------------------------------------------
 
 function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
- integer,                intent(in) :: ncFileID      ! netCDF file identifier
- real(r8), dimension(:), intent(in) :: statevec
- integer,                intent(in) :: copyindex
- integer,                intent(in) :: timeindex
- integer                            :: ierr          ! return value of function
 
-! Define variables in state.  Do not need to to use this since
-! model_mod_writes_state_variables = .false. in nc_write_model_atts
-! So DART takes care of writting out state variable information
-! using the state structure.
+ integer,                intent(in) :: ncFileID !< netCDF file identifier
+ real(r8), dimension(:), intent(in) :: statevec !< dart state vector
+ integer,                intent(in) :: copyindex !< copy number index
+ integer,                intent(in) :: timeindex !< time index from model
+ integer                            :: ierr !< return value of function
+
+ !> Define variables in state.  Do not need to to use this since
+ !> model_mod_writes_state_variables = .false. in nc_write_model_atts
+ !> So DART takes care of writting out state variable information
+ !> using the state structure.
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1240,19 +1280,19 @@ end function nc_write_model_vars
 
 subroutine pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provided)
 
- type(ensemble_type), intent(inout) :: state_ens_handle
- integer,             intent(in)    :: ens_size
- real(r8),            intent(in)    :: pert_amp
- logical,             intent(out)   :: interf_provided
+ type(ensemble_type), intent(inout) :: state_ens_handle !< state ensemble handle
+ integer,             intent(in)    :: ens_size !< ensemble size
+ real(r8),            intent(in)    :: pert_amp !< perterbation amplitude
+ logical,             intent(out)   :: interf_provided !< have you provided an interface?
 
-! Perturbs state copies for generating initial ensembles.
-! A model may choose to provide a NULL INTERFACE by returning
-! .false. for the interf_provided argument. This indicates to
-! the filter that if it needs to generate perturbed states, it
-! may do so by adding a perturbation to each model state 
-! variable independently. The interf_provided argument
-! should be returned as .true. if the model wants to do its own
-! perturbing of states.
+ !> Perturbs state copies for generating initial ensembles.
+ !> A model may choose to provide a NULL INTERFACE by returning
+ !> .false. for the interf_provided argument. This indicates to
+ !> the filter that if it needs to generate perturbed states, it
+ !> may do so by adding a perturbation to each model state 
+ !> variable independently. The interf_provided argument
+ !> should be returned as .true. if the model wants to do its own
+ !> perturbing of states.
 
 integer     :: j,i 
 integer(i8) :: dart_index
@@ -1290,18 +1330,20 @@ endif
 end subroutine pert_model_copies
 
 !------------------------------------------------------------------
-!> Perturb the state such that the perturbation is bitwise with
-!> a perturbed Lanai.
-!> Note:
-!> * This is not bitwise with itself (like Lanai) if task_count < ens_size
-!> * This is very slow because you have a loop around the length of the
-!> state inside a loop around the ensemble.
-!> If a task has more than one copy then the random number
-!> sequence continues from the end of one copy to the start of the other.
+
 subroutine pert_model_copies_bitwise_lanai(ens_handle, ens_size)
 
-type(ensemble_type), intent(inout) :: ens_handle
-integer,             intent(in)    :: ens_size
+ type(ensemble_type), intent(inout) :: ens_handle !< state ensemble handle 
+ integer,             intent(in)    :: ens_size !< ensemble size
+
+ !> Perturb the state such that the perturbation is bitwise with
+ !> a perturbed Lanai.
+ !> Note:
+ !> * This is not bitwise with itself (like Lanai) if task_count < ens_size
+ !> * This is very slow because you have a loop around the length of the
+ !> state inside a loop around the ensemble.
+ !> If a task has more than one copy then the random number
+ !> sequence continues from the end of one copy to the start of the other.
 
 type(random_seq_type) :: r(ens_size)
 integer     :: i ! loop variable
@@ -1339,23 +1381,24 @@ end subroutine pert_model_copies_bitwise_lanai
 
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs, obs_kind, num_close, close_ind, dist, state_handle)
- type(ensemble_type),               intent(in) :: state_handle
- type(get_close_type),              intent(in) :: gc
- type(location_type),               intent(in) :: base_obs_loc
- integer,                           intent(in) :: base_obs_kind
- type(location_type), dimension(:), intent(in) :: obs
- integer,             dimension(:), intent(in) :: obs_kind
- integer,                           intent(out):: num_close
- integer,             dimension(:), intent(out):: close_ind
- real(r8),            dimension(:), intent(out):: dist !does this need to be optional? It is not in WRF
+ type(ensemble_type),               intent(in) :: state_handle !< state ensemble handle
+ type(get_close_type),              intent(in) :: gc !< get_close_type handle
+ type(location_type),               intent(in) :: base_obs_loc !< base observation location
+ integer,                           intent(in) :: base_obs_kind !< base dart observation kind
+ type(location_type), dimension(:), intent(in) :: obs !< observation sequence
+ integer,             dimension(:), intent(in) :: obs_kind !< dart kind
+ integer,                           intent(out):: num_close !< number of close found
+ integer,             dimension(:), intent(out):: close_ind !< list of close indicies
+ real(r8),            dimension(:), intent(out):: dist !< list of distances of close observations
+                                                       !< todo FIXME : does this need to be optional? It is not in WRF
 
-! Given a DART location (referred to as "base") and a set of candidate
-! locations & kinds (obs, obs_kind), returns the subset close to the
-! "base", their indices, and their distances to the "base" ...
-
-! For vertical distance computations, general philosophy is to convert all
-! vertical coordinates to a common coordinate. This coordinate type is defined
-! in the namelist with the variable "vert_localization_coord".
+ !> Given a DART location (referred to as "base") and a set of candidate
+ !> locations & kinds (obs, obs_kind), returns the subset close to the
+ !> "base", their indices, and their distances to the "base" ...
+ 
+ !> For vertical distance computations, general philosophy is to convert all
+ !> vertical coordinates to a common coordinate. This coordinate type is defined
+ !> in the namelist with the variable "vert_localization_coord".
 
 integer :: i
 
@@ -1386,22 +1429,24 @@ end subroutine get_close_obs
 
 !------------------------------------------------------------------
 
-subroutine do_interp(state_handle, ens_size, grid_handle, base_offset, hgt_bot, hgt_top, hgt_fract, &
+subroutine do_interp(state_handle, ens_size, grid_handle, hgt_bot, hgt_top, hgt_fract, &
                      llon, llat, obs_kind, expected_obs, istatus)
 
-type(ensemble_type), intent(in) :: state_handle
-integer,             intent(in) :: ens_size
-type(grid_type),     intent(in) :: grid_handle
-integer(i8),         intent(in) :: base_offset
-integer,             intent(in) :: hgt_bot, hgt_top
-real(r8),            intent(in) :: hgt_fract, llon, llat
-integer,             intent(in) :: obs_kind
-real(r8),           intent(out) :: expected_obs(ens_size)
-integer,           intent(out) :: istatus(ens_size)
- 
-! do a 2d horizontal interpolation for the value at the bottom level, 
-! then again for the top level, then do a linear interpolation in the 
-! vertical to get the final value.
+ type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
+ integer,             intent(in)  :: ens_size !< ensemble size
+ type(grid_type),     intent(in)  :: grid_handle !< geo or mag grid
+ integer,             intent(in)  :: hgt_bot !< index to bottom bound
+ integer,             intent(in)  :: hgt_top !< index to top bound
+ real(r8),            intent(in)  :: hgt_fract !< fraction inbetween top and bottom
+ real(r8),            intent(in)  :: llon !< longitude to interpolate
+ real(r8),            intent(in)  :: llat !< latitude to interpolate
+ integer,             intent(in)  :: obs_kind !< dart kind
+ real(r8),            intent(out) :: expected_obs(ens_size) !< interpolated value
+ integer,             intent(out) :: istatus(ens_size) !< status of interpolation
+  
+ !> do a 2d horizontal interpolation for the value at the bottom level, 
+ !> then again for the top level, then do a linear interpolation in the 
+ !> vertical to get the final value.
 
 real(r8)    :: bot_val(ens_size), top_val(ens_size)
 integer     :: temp_status(ens_size)
@@ -1432,13 +1477,15 @@ if (debug > 2) print *, 'do_interp: interp val = ',expected_obs
 end subroutine do_interp
 
 !--------------------------------------------------------------------
-!> construct restart file name for reading
+
 function construct_file_name_in(stub, domain, copy)
 
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
+ character(len=512), intent(in) :: stub !< stubname of file
+ integer,            intent(in) :: domain !< domain of file
+ integer,            intent(in) :: copy !< copy number (i.e. ensemble number)
+ character(len=1024)            :: construct_file_name_in !< constructed filename
+
+ !> construct restart file name for reading
 
 ! stub is found in input.nml io_filename_nml
 ! restart files typically are of the form
@@ -1451,18 +1498,18 @@ write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
 end function construct_file_name_in
 
 !--------------------------------------------------------------------
-!> read the time from template file
 function read_model_time(filename)
 
-character(len=*), intent(in) :: filename
-type(time_type) :: read_model_time
+ character(len=*), intent(in) :: filename !< file to get time
+ type(time_type) :: read_model_time !< returned time from file
+
+ !> read the time from template file
 
 ! netcdf variables
 integer :: ncFileID, VarID
 
-! time in seconds since a base
+! time variables
 integer :: seconds
-
 type(time_type) :: base_time
 
 if ( .not. module_initialized ) call static_init_model
@@ -1492,25 +1539,29 @@ read_model_time = base_time + set_time(seconds)
 end function read_model_time
 
 !--------------------------------------------------------------------
-!> pass the vertical localization coordinate to assim_tools_mod
+
 function query_vert_localization_coord()
 
-integer :: query_vert_localization_coord
+ integer :: query_vert_localization_coord !< return which height we want to 
+                                          !< localize in
+
+ !> pass the vertical localization coordinate to assim_tools_mod
 
 query_vert_localization_coord = 1 ! any old value
 
 end function query_vert_localization_coord
 
 !--------------------------------------------------------------------
-!> This is used in the filter_assim. The vertical conversion is done using the 
-!> mean state.
-!> Calling this is a waste of time
+
 subroutine vert_convert(state_handle, location, obs_kind, istatus)
 
-type(ensemble_type), intent(in)  :: state_handle
-type(location_type), intent(in)  :: location
-integer,             intent(in)  :: obs_kind
-integer,             intent(out) :: istatus
+type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
+type(location_type), intent(in)  :: location !< location to convert
+integer,             intent(in)  :: obs_kind !< dart kind
+integer,             intent(out) :: istatus !< status of conversion
+
+!> This is used in the filter_assim. The vertical conversion is done using the 
+!> mean state.  Calling this is a waste of time
 
 istatus = 0
 
@@ -1519,12 +1570,13 @@ end subroutine vert_convert
 !------------------------------------------------------------
 
 subroutine init_conditions(x)
- real(r8), intent(out) :: x(:)
 
-! Returns a model state vector, x, that is some sort of appropriate
-! initial condition for starting up a long integration of the model.
-! At present, this is only used if the namelist parameter 
-! start_from_restart is set to .false. in the program perfect_model_obs.
+ real(r8), intent(out) :: x(:) !< initalize state from scratch
+
+ !> Returns a model state vector, x, that is some sort of appropriate
+ !> initial condition for starting up a long integration of the model.
+ !> At present, this is only used if the namelist parameter 
+ !> start_from_restart is set to .false. in the program perfect_model_obs.
 
 character(len=128) :: msgstring2, msgstring3
 
@@ -1544,12 +1596,13 @@ end subroutine init_conditions
 !------------------------------------------------------------------
 
 subroutine adv_1step(x, time)
- real(r8),        intent(inout) :: x(:)
- type(time_type), intent(in)    :: time
 
-! If the model could be called as a subroutine, does a single
-! timestep advance.  openggcm cannot be called this way, so fatal error
-! if this routine is called.
+ real(r8),        intent(inout) :: x(:) !< state vector
+ type(time_type), intent(in)    :: time !< time stamp for state_vector
+
+ !> If the model could be called as a subroutine, does a single
+ !> timestep advance.  openggcm cannot be called this way, so fatal error
+ !> if this routine is called.
 
 call error_handler(E_ERR,'adv_1step', &
                   'openggcm model cannot be called as a subroutine; async cannot = 0', &
@@ -1560,12 +1613,13 @@ end subroutine adv_1step
 !------------------------------------------------------------------
 
 subroutine init_time(time)
- type(time_type), intent(out) :: time
 
-! Companion interface to init_conditions. Returns a time that is
-! appropriate for starting up a long integration of the model.
-! At present, this is only used if the namelist parameter 
-! start_from_restart is set to .false. in the program perfect_model_obs.
+ type(time_type), intent(out) :: time !< time restart file
+
+ !> Companion interface to init_conditions. Returns a time that is
+ !> appropriate for starting up a long integration of the model.
+ !> At present, this is only used if the namelist parameter 
+ !> start_from_restart is set to .false. in the program perfect_model_obs.
 
 character(len=128) :: msgstring2, msgstring3
 
@@ -1583,20 +1637,22 @@ time = set_time(0,0)
 end subroutine init_time
 
 !------------------------------------------------------------------
-!> Verify that the namelist was filled in correctly, and check
-!> that there are valid entries for the dart_kind. 
-!> Returns a table with columns:  
-!>
-!>    netcdf_variable_name ; dart_kind_string ; update_string ; grid_id
-!>
+
 subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var, grid_id )
 
-character(len=*),  intent(inout) :: state_variables(:)
-integer,           intent(out) :: ngood
-character(len=*),  intent(out) :: table(:,:)
-integer,           intent(out) :: kind_list(:)  ! kind number
-logical,           intent(out) :: update_var(:) ! logical update
-integer,           intent(out) :: grid_id(:)  ! kind number
+ character(len=*),  intent(inout) :: state_variables(:) !< list of state variables and attributes from nml
+ integer,           intent(out) :: ngood !< number of good namelist values or nfields
+ character(len=*),  intent(out) :: table(:,:) !< 2d table with information from namelist
+ integer,           intent(out) :: kind_list(:) !< dart kind
+ logical,           intent(out) :: update_var(:) !< list of logical update information
+ integer,           intent(out) :: grid_id(:) !< list of dart kind numbers
+ 
+ !> Verify that the namelist was filled in correctly, and check
+ !> that there are valid entries for the dart_kind. 
+ !> Returns a table with columns:  
+ !>
+ !>    netcdf_variable_name ; dart_kind_string ; update_string ; grid_id
+ !>
 
 integer :: nrows, i
 character(len=NF90_MAX_NAME) :: varname, dartstr, update, gridname
@@ -1691,8 +1747,10 @@ end subroutine verify_state_variables
 
 function get_grid_type(dart_kind)
 
-integer, intent(in) :: dart_kind
-integer :: get_grid_type
+ integer, intent(in) :: dart_kind !< dart kind
+ integer :: get_grid_type !< returned grid
+ 
+ !> determine if grid is geographic or magnetic given a dart kind
 
 integer :: i
 
@@ -1710,7 +1768,13 @@ end function get_grid_type
 
 !----------------------------------------------------------------------
 
-!> @TODO FIXME: this should be in the utilities mod!!!
+subroutine track_status(ens_size, val_istatus, val_data, istatus, return_now)
+
+integer,  intent(in)    :: ens_size
+integer,  intent(in)    :: val_istatus(ens_size)
+real(r8), intent(inout) :: val_data(ens_size) !> expected_obs for obs_def
+integer,  intent(inout) :: istatus(ens_size) !> istatus for obs_def
+logical,  intent(out)   :: return_now
 
 !> track_status can be used to keep track of the status of
 !> each ensemble member during multiple calls to model_interpolate
@@ -1719,13 +1783,8 @@ end function get_grid_type
 !> If debugging, return_now is only set to true if all istatuses are non-zero
 !> If not debugging, return_now is set to true if any istatues are non-zero
 !>  and any remaining zero istatues are set to 1.
-subroutine track_status(ens_size, val_istatus, val_data, istatus, return_now)
 
-integer,  intent(in)    :: ens_size
-integer,  intent(in)    :: val_istatus(ens_size)
-real(r8), intent(inout) :: val_data(ens_size) !> expected_obs for obs_def
-integer,  intent(inout) :: istatus(ens_size) !> istatus for obs_def
-logical,  intent(out)   :: return_now
+!> @todo FIXME: this should be in the utilities mod!!!
 
 where (istatus == 0) istatus = val_istatus
 where (istatus /= 0) val_data = MISSING_R8
@@ -1750,10 +1809,11 @@ end subroutine track_status
 
 subroutine allocate_grid_space(grid_handle, conv)
 
-type(grid_type), intent(inout) :: grid_handle
-logical,         intent(in)    :: conv
+ type(grid_type), intent(inout) :: grid_handle !< geo or grid handle
+ logical,         intent(in)    :: conv !< is this a converted geo grid
+ 
+ !> Allocate space for grid variables. 
 
-! Allocate space for grid variables. 
 allocate(grid_handle%longitude(grid_handle%nlon))
 allocate(grid_handle%latitude(grid_handle%nlat))
 allocate(grid_handle%heights(grid_handle%nheight))
@@ -1768,9 +1828,11 @@ end subroutine allocate_grid_space
 !----------------------------------------------------------------------
 
 subroutine deallocate_grid_space(grid_handle)
-type(grid_type), intent(inout) :: grid_handle
 
-! deAllocate space for grid variables. 
+ type(grid_type), intent(inout) :: grid_handle !< geo or grid handle
+
+ !> Deallocate space for grid variables. 
+
 if (allocated(grid_handle%longitude))  deallocate(grid_handle%longitude)
 if (allocated(grid_handle%latitude))   deallocate(grid_handle%latitude)
 if (allocated(grid_handle%heights))    deallocate(grid_handle%heights)
@@ -1782,17 +1844,20 @@ end subroutine deallocate_grid_space
 
 !------------------------------------------------------------------
 
-!> @TODO FIXME: the following routines should be in a netcdf utils 
+!> @todo FIXME: the following routines should be in a netcdf utils 
 !> module somewhere
 
 !------------------------------------------------------------------
 
 function get_dim(ncFileID, dim_name, context)
 
-integer,          intent(in)    :: ncFileID
-character(len=*), intent(in)    :: dim_name
-character(len=*), intent(in)    :: context
-integer :: get_dim
+ integer,          intent(in)    :: ncFileID !< netcdf file id
+ character(len=*), intent(in)    :: dim_name !< dimension name of interest
+ character(len=*), intent(in)    :: context !< routine calling from
+ integer :: get_dim !< returns the lenght of the dimension
+ 
+ !< returns the lenght of the dimension from a given a dimension name
+ !< and netcdf file id
 
 ! netcdf variables
 integer :: DimID, rc
@@ -1809,11 +1874,15 @@ end function get_dim
 
 function set_dim(ncFileID, dim_name, dim_val, context)
 
-integer,          intent(in)    :: ncFileID
-character(len=*), intent(in)    :: dim_name
-integer,          intent(in)    :: dim_val
-character(len=*), intent(in)    :: context
-integer :: set_dim
+ integer,          intent(in)    :: ncFileID !< netcdf id
+ character(len=*), intent(in)    :: dim_name !< dimension name
+ integer,          intent(in)    :: dim_val !< dimension length
+ character(len=*), intent(in)    :: context !< routine calling from
+ integer :: set_dim !< netcdf id to the defined dimension
+
+ !< gives a netcdf file dimension given a dimension name and length.
+ !< returns the value of the netcdf dimension id.
+
 
 ! netcdf variables
 integer :: rc
@@ -1827,10 +1896,12 @@ end function set_dim
 
 subroutine get_data_1d(ncFileID, var_name, data_array, context)
 
-integer,          intent(in)    :: ncFileID
-real(r8),         intent(out)   :: data_array(:)
-character(len=*), intent(in)    :: var_name
-character(len=*), intent(in)    :: context
+ integer,          intent(in)    :: ncFileID !< netcdf id
+ real(r8),         intent(out)   :: data_array(:) !< id array of values
+ character(len=*), intent(in)    :: var_name !< variable of interest
+ character(len=*), intent(in)    :: context !< routine called from
+ 
+ !> grab 1d variable data from netcdf file
 
 ! netcdf variables
 integer :: VarID, rc
@@ -1847,10 +1918,12 @@ end subroutine get_data_1d
 
 subroutine get_data_2d(ncFileID, var_name, data_array, context)
 
-integer,          intent(in)    :: ncFileID
-real(r8),         intent(out)   :: data_array(:,:)
-character(len=*), intent(in)    :: var_name
-character(len=*), intent(in)    :: context
+ integer,          intent(in)    :: ncFileID !< netcdf id
+ real(r8),         intent(out)   :: data_array(:,:) !< id array of values
+ character(len=*), intent(in)    :: var_name !< variable of interest
+ character(len=*), intent(in)    :: context !< routine called from
+ 
+ !> grab 2d variable data from netcdf file
 
 ! netcdf variables
 integer :: VarID, rc
@@ -1867,10 +1940,12 @@ end subroutine get_data_2d
 
 subroutine get_data_3d(ncFileID, var_name, data_array, context)
 
-integer,          intent(in)    :: ncFileID
-real(r8),         intent(out)   :: data_array(:,:,:)
-character(len=*), intent(in)    :: var_name
-character(len=*), intent(in)    :: context
+ integer,          intent(in)    :: ncFileID !< netcdf id
+ real(r8),         intent(out)   :: data_array(:,:,:) !< id array of values
+ character(len=*), intent(in)    :: var_name !< variable of interest
+ character(len=*), intent(in)    :: context !< routine called from
+ 
+ !> grab 3d variable data from netcdf file
 
 ! netcdf variables
 integer :: VarID, rc
@@ -1887,12 +1962,15 @@ end subroutine get_data_3d
 
 subroutine add_string_att(ncFileID, varid, attname, attval, context)
 
-integer,          intent(in)    :: ncFileID
-integer,          intent(in)    :: varid
-character(len=*), intent(in)    :: attname
-character(len=*), intent(in)    :: attval
-character(len=*), intent(in)    :: context
+ integer,          intent(in)    :: ncFileID !< netcdf file id
+ integer,          intent(in)    :: varid !< netcdf variable id
+ character(len=*), intent(in)    :: attname !< netcdf attribute name
+ character(len=*), intent(in)    :: attval !< netcdf attrivute value
+ character(len=*), intent(in)    :: context !< routine called by
 
+ !> add string attribute to netcdf file
+
+!netcdf variables
 integer :: rc
 
 rc = NF90_put_att(ncFileID, varid, attname, attval)
@@ -1903,7 +1981,10 @@ end subroutine add_string_att
 !----------------------------------------------------------------------
 
 subroutine initialize_openggcm_transform(filename)
-character(len=*), intent(inout) :: filename
+
+ character(len=*), intent(inout) :: filename !< file with time openggcm time information
+
+ !> initialize transform type from cort_mod
 
 type(time_type) :: dart_time
 integer :: yr,mo,dy,hr,mn,se
@@ -1921,8 +2002,15 @@ end subroutine initialize_openggcm_transform
 !----------------------------------------------------------------------
 
 subroutine transform_mag_geo(llon, llat, lheight, direction)
-real(r8), intent(inout) :: llon, llat, lheight
-integer,  intent(in) :: direction
+
+ real(r8), intent(inout) :: llon !< longitude
+ real(r8), intent(inout) :: llat !< latitude
+ real(r8), intent(inout) :: lheight !< height
+ integer,  intent(in) :: direction !< direction (global parameters)
+
+ !> transform grid from geo->magnetic or vice-versa. 
+ !> currently we only need it to translate from magnetic to geo.
+ !> direction options GEO_TO_MAG or MAG_TO_GEO
 
 real(r4) :: xin, xout, yin, yout, zin, zout
 
@@ -1981,8 +2069,8 @@ end subroutine transform_mag_geo
 
 function between(a, b, c)
 
-real(r8), intent(in) :: a, b, c
-logical :: between
+ real(r8), intent(in) :: a, b, c
+ logical :: between
 
 if (b >= c .and. a >=c .and. a <= b) then
   between = .true.
@@ -2001,6 +2089,9 @@ end function between
 !----------------------------------------------------------------------
 
 subroutine test_transform()
+
+!> simple test from transforming between geographic and matnetic grid
+
 real(r8) :: lon, lat, height
 
 ! hard coded location variables for testing
