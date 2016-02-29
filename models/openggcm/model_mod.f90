@@ -193,7 +193,7 @@ subroutine static_init_model()
 ! Called to do one time initialization of the model. In this case,
 ! it reads in the grid information.
 
-integer :: iunit, io, i, ncid
+integer :: iunit, io, ncid
 integer :: ss, dd
 
 ! The Plan:
@@ -322,7 +322,6 @@ subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expecte
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
-real(r4)    :: mlon, mlat, mheight
 integer(i8) :: base_offset
 integer     :: ind
 integer     :: hgt_bot, hgt_top
@@ -330,8 +329,9 @@ real(r8)    :: hgt_fract
 integer     :: hstatus, thisgrid
 type(grid_type), pointer :: mygrid
 
-type(location_type) :: bob
-character(len=128) :: outstr
+!! for DEBUGGING
+!type(location_type) :: bob
+!character(len=128) :: outstr
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -476,12 +476,11 @@ integer,             intent(out) :: istatus(ens_size)
 ! Successful interpolation returns istatus=0.
 
 ! Local storage, 
-integer  :: lat_bot, lat_top, lon_bot, lon_top, num_inds, start_ind, i
-real(r8) :: x_corners(4), y_corners(4)
+integer  :: lat_bot, lat_top, lon_bot, lon_top
 real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
 real(r8) :: lon_fract, lat_fract
 
-integer :: varid, state_index   ! DEBUG
+! integer :: varid, state_index   ! DEBUG
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -621,6 +620,7 @@ subroutine find_conv_bounds(lon, lat, grid_handle)
  type(grid_type), intent(in) :: grid_handle
 
 ! exhaustively look for the grid box that encloses the given lon/lat
+! DEBUGGING ONLY
 
 ! Local storage
 integer  :: i, j
@@ -943,9 +943,6 @@ character(len=*),           intent(in)    :: lon_name
 character(len=*),           intent(in)    :: lat_name
 character(len=*), optional, intent(in)    :: height_name
 
-! netcdf variables
-integer :: DimID
-
 grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
 
 grid_handle%nlat = get_dim(ncFileID,lat_name, 'get_grid_sizes')
@@ -968,9 +965,6 @@ character(len=*), intent(in)    :: lon_name
 character(len=*), intent(in)    :: lat_name
 logical,          intent(in)    :: is_conv
 logical,          intent(in)    :: is_co_latitude
-
-! netcdf variables
-integer :: VarID
 
 ! is_conv:  if true, read the data into the conversion grid.
 ! otherwise read into the normal lat/lon arrays.
@@ -1098,14 +1092,6 @@ integer :: NlonDimID, NlatDimID, NhgtDimID
 integer :: lonVarID, latVarID, levelVarID
 
 !----------------------------------------------------------------------
-! variables for the namelist output
-!----------------------------------------------------------------------
-
-character(len=129), allocatable, dimension(:) :: textblock
-integer :: nmlVarID
-logical :: has_openggcm_namelist
-
-!----------------------------------------------------------------------
 ! local variables 
 !----------------------------------------------------------------------
 
@@ -1222,17 +1208,6 @@ call nc_check(NF90_put_var(ncFileID, levelVarID, geo_grid%heights ), &
              'nc_write_model_atts', 'heights put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
-! Fill the variables we can
-!-------------------------------------------------------------------------------
-
-if (has_openggcm_namelist) then
-   call file_to_text('openggcm_in', textblock)
-   call nc_check(NF90_put_var(ncFileID, nmlVarID, textblock ), &
-                 'nc_write_model_atts', 'put_var nmlVarID')
-   deallocate(textblock)
-endif
-
-!-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
 call nc_check(NF90_sync(ncFileID), 'nc_write_model_atts', 'atts sync')
@@ -1257,6 +1232,8 @@ function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result 
 
 if ( .not. module_initialized ) call static_init_model
 
+ierr = 0 ! If we got here, things went well.
+
 end function nc_write_model_vars
 
 !------------------------------------------------------------------
@@ -1277,7 +1254,6 @@ subroutine pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provid
 ! should be returned as .true. if the model wants to do its own
 ! perturbing of states.
 
-integer     :: var_type
 integer     :: j,i 
 integer(i8) :: dart_index
 
@@ -1331,7 +1307,6 @@ type(random_seq_type) :: r(ens_size)
 integer     :: i ! loop variable
 integer(i8) :: j ! loop variable
 real(r8)    :: random_number
-integer     :: var_type
 integer     :: sequence_to_use
 integer     :: owner, owners_index
 integer     :: copy_owner
@@ -1382,7 +1357,7 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
 ! vertical coordinates to a common coordinate. This coordinate type is defined
 ! in the namelist with the variable "vert_localization_coord".
 
-integer :: t_ind, i
+integer :: i
 
 ! Initialize variables to missing status
 
@@ -1428,9 +1403,7 @@ integer,           intent(out) :: istatus(ens_size)
 ! then again for the top level, then do a linear interpolation in the 
 ! vertical to get the final value.
 
-integer(i8) :: offset
 real(r8)    :: bot_val(ens_size), top_val(ens_size)
-integer     :: e
 integer     :: temp_status(ens_size)
 logical     :: return_now
 
@@ -1486,9 +1459,6 @@ type(time_type) :: read_model_time
 
 ! netcdf variables
 integer :: ncFileID, VarID
-
-! fractional days
-real(r8) :: days
 
 ! time in seconds since a base
 integer :: seconds
@@ -1846,7 +1816,7 @@ character(len=*), intent(in)    :: context
 integer :: set_dim
 
 ! netcdf variables
-integer :: DimID, rc
+integer :: rc
 
 rc = NF90_def_dim(ncid=ncFileID, name=dim_name, len=dim_val, dimid=set_dim)
 call nc_check(rc, trim(context)//' setting dimension '//trim(dim_name))
@@ -2032,8 +2002,8 @@ end function between
 
 subroutine test_transform()
 real(r8) :: lon, lat, height
-real(r8) :: mlon, mlat, mheight
 
+! hard coded location variables for testing
 lon    =  0.0_r8
 lat    = 89.0_r8
 height =  0.0_r8
