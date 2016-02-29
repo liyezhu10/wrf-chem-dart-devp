@@ -4,9 +4,9 @@
 !
 ! $Id$
 
-module model_mod
+!> This is the interface between the openggcm space weather model and DART.
 
-!> This is the interface between the openggcm ocean model and DART.
+module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
@@ -819,16 +819,6 @@ if ( .not. module_initialized ) call static_init_model
 ! Make any failure here return istatus in the 20s
 istatus = 0
 
-! The level array contains the depths of the center of the vertical grid boxes
-! In this case (unlike how we handle the MIT depths), positive is really down.
-!#! !>@todo FIXM : do we still need this FIXME?
-!#! ! FIXME: in the MIT model, we're given box widths and we compute the centers,
-!#! ! and we computed them with larger negative numbers being deeper.  Here,
-!#! ! larger positive numbers are deeper.
-
-! It is assumed that the top box is shallow and any observations shallower
-! than the depth of this box's center are just given the value of the
-! top box.
 if(lheight <= hgt_array(1)) then
    bot = 1
    top = 2
