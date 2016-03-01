@@ -4,7 +4,7 @@
 !
 ! $Id$
 
-      module netcdf_mod
+      module netcdf_write_mod
 
       implicit none
       private
@@ -12,12 +12,16 @@
       public :: wr_netcdf_model_time,
      &          wr_netcdf_ctim_grid,
      &          wr_netcdf_interface_grid,
-     &          wr_netcdf_r4_1D,
-     &          wr_netcdf_r8_1D,
-     &          wr_netcdf_r4_2D,
-     &          wr_netcdf_r8_2D,
-     &          wr_netcdf_r4_3D,
-     &          wr_netcdf_r8_3D
+     &          wr_netcdf
+
+      interface wr_netcdf
+         module procedure wr_netcdf_r4_1D
+         module procedure wr_netcdf_r4_2D
+         module procedure wr_netcdf_r4_3D
+         module procedure wr_netcdf_r8_1D
+         module procedure wr_netcdf_r8_2D
+         module procedure wr_netcdf_r8_3D
+      end interface wr_netcdf
 
       contains
 
@@ -694,7 +698,7 @@
 
 !===================================================================
 
-      end module netcdf_mod
+      end module netcdf_write_mod
 
 ! <next few lines under version control, do not edit>
 ! $URL$

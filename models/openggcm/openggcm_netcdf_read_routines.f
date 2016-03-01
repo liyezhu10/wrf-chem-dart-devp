@@ -9,9 +9,16 @@
       implicit none
       private
 
-      public :: rd_netcdf_r4_1D, rd_netcdf_r8_1D
-      public :: rd_netcdf_r4_2D, rd_netcdf_r8_2D
-      public :: rd_netcdf_r4_3D, rd_netcdf_r8_3D
+      public :: rd_netcdf
+
+      interface rd_netcdf
+         module procedure rd_netcdf_r4_1D
+         module procedure rd_netcdf_r4_2D
+         module procedure rd_netcdf_r4_3D
+         module procedure rd_netcdf_r8_1D
+         module procedure rd_netcdf_r8_2D
+         module procedure rd_netcdf_r8_3D
+      end interface rd_netcdf
 
       contains
 
@@ -68,7 +75,7 @@
       integer,          intent(in)  :: ncid
       character(len=*), intent(in)  :: tensorname
       integer,          intent(in)  :: dim1
-      real*4,           intent(out) :: tensor(dim1)
+      real*8,           intent(out) :: tensor(dim1)
 
       integer :: dim1ID, dim2ID, dim3ID, VarID
       integer :: ndim1, ndim2, ndim3

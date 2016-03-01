@@ -22,11 +22,11 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use time_manager_mod, only : time_type, print_time, print_date, set_date, &
                              set_calendar_type, operator(-), get_time
 
-use       netcdf_mod, only :  wr_netcdf_model_time, &
+use netcdf_write_mod, only :  wr_netcdf_model_time, &
                               wr_netcdf_ctim_grid, &
                               wr_netcdf_interface_grid, &
-                              wr_netcdf_r4_2D, &
-                              wr_netcdf_r8_3D
+                              wr_netcdf, &
+                              wr_netcdf
 
 use netcdf
 implicit none
@@ -135,7 +135,7 @@ endif
 call close_file(iunit)
 
 call wr_netcdf_interface_grid(ncid,nphi,nthe,7)
-call wr_netcdf_r4_2D(ncid,nphi,'ig_lon',nthe,'ig_lat',tensor2D,'pot','degrees trout','potential miracle')
+call wr_netcdf(ncid,nphi,'ig_lon',nthe,'ig_lat',tensor2D,'pot','degrees trout','potential miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
@@ -175,7 +175,7 @@ call wr_netcdf_ctim_grid(ncid,nphi,'cg_lon','degrees','geographic longitude', &
                               nthe,'cg_lat','degrees','geographic latitude', &
                             nz,zkm,'cg_height','kilometers','height')
 
-call wr_netcdf_r8_3D(ncid,nz,'cg_height',nphi,'cg_lat',nthe,'cg_lon',tensor3D,'ion','degrees kelvin','ionospheric miracle')
+call wr_netcdf(ncid,nz,'cg_height',nphi,'cg_lat',nthe,'cg_lon',tensor3D,'ion','degrees kelvin','ionospheric miracle')
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------

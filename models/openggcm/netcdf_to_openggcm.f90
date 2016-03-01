@@ -31,7 +31,7 @@ use time_manager_mod, only : time_type, print_time, print_date, set_calendar_typ
                              set_date, get_date, set_time, get_time, &
                              operator(+)
 
-use netcdf_read_mod     ! just to compile and test this
+use  netcdf_read_mod, only : rd_netcdf
 
 use netcdf
 
@@ -133,7 +133,7 @@ endif
 
 allocate(statevector(nphi,nthe))
 
-call rd_netcdf_r4_2D(ncid,'pot',nphi,nthe,statevector)
+call rd_netcdf(ncid,'pot',nphi,nthe,statevector)
 
 call set_calendar_type('Gregorian')
 call get_model_time(ncid, model_time)
