@@ -50,6 +50,7 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices,       
                                   get_num_variables, get_index_start,            &
                                   get_num_dims, get_domain_size, get_kind_index, &
                                   get_varid_from_kind, get_dart_vector_index,    &
+                                  get_dim_name, get_variable_name,               &
                                   state_structure_info
 
 use dart_time_io_mod,      only : write_model_time
@@ -128,7 +129,7 @@ type(random_seq_type) :: random_seq
 
 ! DART state vector contents are specified in the input.nml:&model_nml namelist.
 integer, parameter :: max_state_variables = 10 
-integer, parameter :: num_state_table_columns = 3
+integer, parameter :: num_state_table_columns = 4
 ! NOTE: may need to increase character length if netcdf variables are
 ! larger than paramname_length = 32.
 character(len=paramname_length) :: variable_table( max_state_variables, num_state_table_columns )
@@ -258,8 +259,8 @@ call allocate_grid_space(mag_grid, conv=.true.)
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
 !>@todo FIXME : can we take this call out and remove is_conv from read_horiz_grid?
-! call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
-call read_geo_grid()
+call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
+! call read_geo_grid()
 
 call read_vert_levels(ncid,geo_grid,'cg_height')
 call read_vert_levels(ncid,mag_grid,'ig_height')
@@ -285,7 +286,7 @@ if (do_output()) write(*,*) 'model_size = ', model_size
 call initialize_openggcm_transform(openggcm_template)
 
 ! call test_transform()
-! 
+!
 ! call exit(0)
 
 !call dump_grids()
@@ -840,7 +841,7 @@ do i = 2, nheights
       top = i
       bot = i -1
       fract = (lheight - hgt_array(bot)) / (hgt_array(top) - hgt_array(bot))
-      if (debug > 0) print *, 'i, hgt_array, top, bot, fract=', i, hgt_array(i), top, bot, fract
+      if (debug > 0) print *, 'i, hgt_array(top), hgt_array(bot), top, bot, fract=', i, hgt_array(top), hgt_array(bot), top, bot, fract
       return
    endif
 enddo
@@ -883,10 +884,40 @@ integer,             optional, intent(out) :: var_type !< optional dart kind ret
 real(r8) :: lat, lon, height
 integer  :: lon_index, lat_index, height_index, local_var, var_id
 
+integer  :: jdim, numdims, state_loc(3)
+character(len=NF90_MAX_NAME) :: dimname
+
 if ( .not. module_initialized ) call static_init_model
 
-call get_model_variable_indices(index_in, lon_index, lat_index, height_index, var_id=var_id)
+
+call get_model_variable_indices(index_in, state_loc(1), state_loc(2), state_loc(3), var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
+
+numdims = get_num_dims(domain_id, var_id)
+!print *, 'state_loc : ', state_loc
+
+do jdim = 1,numdims
+   dimname = get_dim_name(domain_id, var_id, jdim)
+   !print *, 'dimname : ', trim(dimname), jdim 
+   SELECT CASE (trim(dimname))
+      CASE ('cg_lon','ig_lon')
+         lon_index = state_loc(jdim)
+         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
+         !print*, 'lon_index = ', lon_index
+      CASE ('cg_lat','ig_lat')
+         lat_index = state_loc(jdim)
+         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
+         !print*, 'lat_index = ', lat_index
+      CASE ('cg_height','ig_height')
+         height_index = state_loc(jdim)
+         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
+         !print*, 'height_index = ', height_index
+      CASE DEFAULT
+         write(msgstring,*) 'cannot dimension ', trim(dimname),' for variable', get_variable_name(domain_id, var_id)
+         call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
+       
+   END SELECT
+enddo
 
 if (debug > 6) then
    print *, 'in get_state_meta_data'
@@ -1024,7 +1055,7 @@ if (is_conv) then
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,88), grid_handle%conv_2d_lat(103,88)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
    print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
-    
+
 else
 
    call get_data(ncFileID, lon_name, grid_handle%longitude, 'read_horiz_grid')
@@ -2009,27 +2040,28 @@ end subroutine initialize_openggcm_transform
 
 subroutine transform_mag_geo(llon, llat, lheight, direction)
 
-real(r8), intent(inout) :: llon !< longitude
-real(r8), intent(inout) :: llat !< latitude
+real(r8), intent(inout) :: llon !< dart longitude [0,360]
+real(r8), intent(inout) :: llat !< dart latitude [-90,90]
 real(r8), intent(inout) :: lheight !< height
-integer,  intent(in) :: direction !< direction (global parameters)
+integer,  intent(in)    :: direction
 
 real(r4) :: xin, xout, yin, yout, zin, zout
 
 character(len=4) :: dirstrin, dirstrout
 
 if (direction == MAG_TO_GEO) then
-   dirstrin  = 'mag'
+   dirstrin  = 'sm '
    dirstrout = 'geo'
 else if (direction == GEO_TO_MAG) then
    dirstrin  = 'geo'
-   dirstrout = 'mag'
+   dirstrout = 'sm '
 else
   call error_handler(E_ERR, 'transform_mag_geo', &
           'unexpected direction input, should not happen', &
            source, revision, revdate)
 endif
 
+! cort_mod is expecting height from center of earth
 if (lheight == MISSING_R8) then
    lheight = 0.0_r8 + earth_radius
 else
@@ -2038,7 +2070,9 @@ endif
 
 if (debug > 9) print *, 'dart coord '//dirstrin//' in  lon/lat/height ', llon, llat, lheight
 
+! degxyz requires longitude to be between -180 and 180
 if (llon > 180.0_r8) llon = llon - 360.0_r8
+! degxyz requires latitude to be between 0 and 180
 llat = 90.0_r8 - llat
 
 if (debug > 9) print *, 'cotr coord '//dirstrin//' in  lon/lat/height ', llon, llat, lheight
@@ -2051,7 +2085,6 @@ if (debug > 9) print *, 'in  x/y/z ', xin, yin, zin
 ! transform from geographic to magnetic grid or back
 call cotr(openggcm_transform, dirstrin, dirstrout, &
           xin, yin, zin, xout, yout, zout)
-  
 
 if (debug > 9) print *, 'out x/y/z ', xout, yout, zout 
 
@@ -2060,7 +2093,9 @@ call xyzdeg(xout, yout, zout, lheight, llon, llat)
 
 if (debug > 9) print *, 'cotr coord '//dirstrout//' out lon/lat/height ', llon, llat, lheight
 
+! transform back to dart longitude coordinates [0,360]
 if (llon < 0.0_r8) llon = llon + 360.0_r8
+! transform back to dart latitude coordinates [-90,90]
 llat = 90.0_r8 - llat
 
 if (debug > 9) print *, 'dart coord '//dirstrout//' out lon/lat/height ', llon, llat, lheight
@@ -2098,20 +2133,63 @@ end function between
 subroutine test_transform()
 
 real(r8) :: lon, lat, height
+integer  :: indlon, indlat
 
-! hard coded location variables for testing
-lon    =  0.0_r8
-lat    = 89.0_r8
+! testing from geographic to magnetic
+
+lon    = 240.0_r8
+lat    =  40.0_r8
 height =  0.0_r8
 
+print *, ' ' 
+print *, 'TEST 1 geo->mag then mag->geo'
+print *, ' ' 
+print *, 'testing lon,lat,height ', lon, lat, height
+
+call transform_mag_geo(lon, lat, height, GEO_TO_MAG)
+print *, 'geo->sm  : lon,lat,height ', lon, lat, height
+
 call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
+print *, 'sm ->geo : lon,lat,height ', lon, lat, height
 
-print *, 'test lon     ', lon
-print *, 'test lat     ', lat
-print *, 'test lheight ', height
+! testing from magnetic to geographic
 
-print *, 'conv 2d lon', mag_grid%conv_2d_lon(1,1)
-print *, 'conv 2d lat', mag_grid%conv_2d_lat(1,1)
+lon    = 185.63699110357035_r8
+lat    =  46.441819318593993_r8
+height =  0.0_r8
+
+print *, ' ' 
+print *, 'TEST 2 mag->geo then geo->mag'
+print *, ' ' 
+print *, 'testing lon,lat,height ', lon, lat, height
+
+call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
+print *, 'sm ->geo : lon,lat,height ', lon, lat, height
+
+call transform_mag_geo(lon, lat, height, GEO_TO_MAG)
+print *, 'geo->sm  : lon,lat,height ', lon, lat, height
+
+! testing from magnetic to geographic
+indlon = 13
+indlat = 81
+
+lon    = mag_grid%longitude(indlon)
+lat    = mag_grid%latitude (indlat)
+height =  0.0_r8
+
+print *, ' ' 
+print *, 'TEST 3 conv_2d_lat conv_2d_lon'
+print *, ' ' 
+print *, 'testing lon,lat ', lon, lat
+print *, 'lonindex, latindex ', indlon, indlat
+
+call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
+print *, 'sm ->geo : lon,lat = ', lon, lat
+print *, 'conv_2d(lon,lat)   = ', mag_grid%conv_2d_lon(indlon,indlat), &
+                                  mag_grid%conv_2d_lat(indlon,indlat)
+
+! print *, 'conv 2d lon', mag_grid%conv_2d_lon(1,1)
+! print *, 'conv 2d lat', mag_grid%conv_2d_lat(1,1)
 
 end subroutine test_transform
 
