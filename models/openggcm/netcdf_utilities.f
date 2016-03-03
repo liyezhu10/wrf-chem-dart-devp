@@ -4,6 +4,11 @@
 !
 ! $Id$
 
+! README ...
+! To test this routine I needed to make a routine called 'death()' to match
+! what is being used in openggcm. NETCDF_UTILITIES:DEATH() SHOULD NOT BE
+! USED WHEN THIS MODULE IS USED WITH OPENGGCM. 
+
       module netcdf_utilities
 
       implicit none
@@ -12,7 +17,7 @@
       public :: wr_netcdf_model_time,
      &          wr_netcdf_ctim_grid,
      &          wr_netcdf_interface_grid,
-     &          wr_netcdf
+     &          wr_netcdf,
      &          rd_netcdf
 
       interface wr_netcdf

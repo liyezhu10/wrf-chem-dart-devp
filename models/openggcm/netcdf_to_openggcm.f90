@@ -11,10 +11,10 @@ program netcdf_to_openggcm
 !
 ! method: Read DART state vector and overwrite values in a openggcm restart file.
 !         If the DART state vector has an 'advance_to_time' present, a
-!         file called openggcm_in.DART is created with a time_manager_nml namelist 
+!         file called openggcm_in.DART is created with a time_manager_nml namelist
 !         appropriate to advance openggcm to the requested time.
 !
-!         The netcdf_to_openggcm_nml namelist setting for advance_time_present 
+!         The netcdf_to_openggcm_nml namelist setting for advance_time_present
 !         determines whether or not the input file has an 'advance_to_time'.
 !         Typically, only temporary files like 'assim_model_state_ic' have
 !         an 'advance_to_time'.
@@ -31,7 +31,7 @@ use time_manager_mod, only : time_type, print_time, print_date, set_calendar_typ
                              set_date, get_date, set_time, get_time, &
                              operator(+)
 
-use  netcdf_read_mod, only : rd_netcdf
+use netcdf_utilities, only : rd_netcdf
 
 use netcdf
 
@@ -60,7 +60,7 @@ namelist /netcdf_to_openggcm_nml/ netcdf_to_openggcm_input_file, &
 !-----------------------------------------------------------------------
 
 integer               :: iunit, io, dimi
-type(time_type)       :: model_time 
+type(time_type)       :: model_time
 real(r4), allocatable :: statevector(:,:)
 
 integer  :: nthe, nphi
@@ -77,7 +77,7 @@ character(len=512) :: string1, string2, string3
 call initialize_utilities(progname='netcdf_to_openggcm')
 
 !-----------------------------------------------------------------------
-! Read the namelist to get the input and output filenames. 
+! Read the namelist to get the input and output filenames.
 
 call find_namelist_in_file("input.nml", "netcdf_to_openggcm_nml", iunit)
 read(iunit, nml = netcdf_to_openggcm_nml, iostat = io)
@@ -125,11 +125,11 @@ enddo
 if (nthe < 1) then
    write(string1,*)"dimension 'ig_lat' not found"
    call error_handler(E_ERR,'netcdf_to_openggcm',string1, source, revision, revdate)
-endif 
+endif
 if (nphi < 1) then
    write(string1,*)"dimension 'ig_lon' not found"
    call error_handler(E_ERR,'netcdf_to_openggcm',string1, source, revision, revdate)
-endif 
+endif
 
 allocate(statevector(nphi,nthe))
 

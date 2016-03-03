@@ -22,7 +22,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, &
 use time_manager_mod, only : time_type, print_time, print_date, set_date, &
                              set_calendar_type, operator(-), get_time
 
-use netcdf_write_mod, only :  wr_netcdf_model_time, &
+use netcdf_utilities, only :  wr_netcdf_model_time, &
                               wr_netcdf_ctim_grid, &
                               wr_netcdf_interface_grid, &
                               wr_netcdf, &
