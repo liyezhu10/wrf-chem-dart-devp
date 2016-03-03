@@ -258,9 +258,8 @@ call allocate_grid_space(mag_grid, conv=.true.)
 ! in the 2d conversion arrays to go to geographic coords
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
-!>@todo FIXME : can we take this call out and remove is_conv from read_horiz_grid?
 call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
-! call read_geo_grid()
+call read_geo_grid()
 
 call read_vert_levels(ncid,geo_grid,'cg_height')
 call read_vert_levels(ncid,mag_grid,'ig_height')
@@ -566,19 +565,48 @@ integer,             intent(in)  :: ens_size !< size of the ensemble
 ! Local variables
 real(r8)    :: get_val(ens_size)
 integer(i8) :: state_index
-integer     :: dart_kind
+integer     :: var_id
+
+integer :: numdims, jdim
+integer, dimension(3) :: state_ind
+character(len=NF90_MAX_NAME) :: dimname
 
 if ( .not. module_initialized ) call static_init_model
 
-dart_kind = get_varid_from_kind(domain_id, var_kind)
-
-if (dart_kind < 0 ) then
+if (var_kind < 0 ) then
    call error_handler(E_ERR, 'get_val', 'dart kind < 0 should not happen ', &
                       source, revision, revdate)
 endif   
 
-state_index = get_dart_vector_index(lon_index, lat_index, height_index, &
-                                    domain_id, dart_kind)
+! variables can come in in different lat, lon orders.  Need to sort
+! them so that the fastes varying index goes in first to get_dart_vector_index
+!>@todo FIXME : we should probably just precompute a mapping of how the
+!>              variables store their indicies so we do not have to compute
+!>              this over and over again.
+var_id = get_varid_from_kind(domain_id, var_kind)
+
+numdims = get_num_dims(domain_id, var_id)
+
+do jdim = 1,numdims
+   dimname = get_dim_name(domain_id, var_id, jdim)
+   SELECT CASE (trim(dimname))
+      CASE ('cg_lon','ig_lon')
+         state_ind(jdim) = lon_index
+      CASE ('cg_lat','ig_lat')
+         state_ind(jdim) = lat_index
+      CASE ('cg_height','ig_height')
+         state_ind(jdim) = height_index
+      CASE DEFAULT
+         write(msgstring,*) 'cannot dimension ', trim(dimname),' for variable', get_variable_name(domain_id, var_id)
+         call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
+       
+   END SELECT
+enddo
+
+state_index = get_dart_vector_index(state_ind(1), state_ind(2), state_ind(3), &
+                                    domain_id, var_id)
+
+print *, ' get_val : state_index, ', state_index, state_ind(1), state_ind(2), state_ind(3)
 
 get_val = get_state(state_index, state_handle)
 
@@ -947,11 +975,33 @@ if (local_var == KIND_ELECTRIC_POTENTIAL) then
    height   = 0.0_r8
    location = set_location(lon, lat, height, VERTISUNDEF)
 else
-   height   = geo_grid%heights(height_index)
+   height   = geo_grid%heights(1)
    location = set_location(lon, lat, height, VERTISHEIGHT)
 endif
 
 if (debug > 5) print *, 'lon, lat, height = ', lon, lat, height
+
+!if (lon_index == 14 .and. lat_index == 66 .and. height_index == 17) then
+!   print *, 'found (lon/lat/hgt): ', lon_index, lat_index, height_index
+!   print *, 'state vector index: ', index_in
+!   print *, 'state val ', get_state(index_in, state_handle)
+!   print *, 'lon, lat, height = ', lon, lat, height
+!endif
+!
+!if (lon_index == 63 .and. lat_index == 88) then
+!   print *, 'found (lon/lat/hgt): ', lon_index, lat_index
+!   print *, 'state vector index: ', index_in
+!   print *, 'state val ', get_state(index_in, state_handle)
+!   print *, 'lon, lat, height = ', lon, lat, height
+!endif
+!
+!if (index_in == 136904) then
+!   print *, 'for index_in ', index_in
+!   print *, 'state val ', get_state(index_in, state_handle)
+!   print *, 'index (lon/lat/hgt): ', lon_index, lat_index, height_index
+!   print *, 'get_dart_ind(lon_i, lat_i, height_i) ', get_dart_vector_index(lon_index, lat_index, height_index, domain_id, var_id)
+!   print *, 'lon, lat, height = ', lon, lat, height
+!endif
 
 if (present(var_type)) then
    var_type = local_var
