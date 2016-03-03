@@ -962,7 +962,7 @@ character(len=*), intent(out), optional :: kind_string
 integer     :: local_ind
 integer(i8) :: index_abs, index_start, index_end
 integer     :: ndims, nvars, ndomains
-integer     :: idom, ivar
+integer     :: idom, ivar, i
 integer     :: domid, varid
 integer, allocatable :: dsize(:)
 
@@ -1277,7 +1277,7 @@ do ivar = 1, num_vars
    array_lengths(1:num_dims) = get_dim_lengths(dom_id,ivar)
    do jdim = 1, num_dims
        dim_name = get_dim_name(dom_id, ivar, jdim)
-       write(*,'("  dim_id[",I2,"] ",A15," , length = ",I6)') array_ids(jdim), &
+       write(*,'("  dim_id[",I2,"] ",A15," , length = ",I6)') jdim,           &
                                                               trim(dim_name), &
                                                               array_lengths(jdim)
    enddo
