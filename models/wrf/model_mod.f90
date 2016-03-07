@@ -996,7 +996,7 @@ real(r8)            :: mod_sfc_elevation
 real(r8) :: x_ill(ens_size), x_iul(ens_size), x_ilr(ens_size), x_iur(ens_size), ugrid(ens_size), vgrid(ens_size)
 real(r8) :: x_ugrid_1(ens_size), x_ugrid_2(ens_size), x_ugrid_3(ens_size), x_ugrid_4(ens_size)
 real(r8) :: x_vgrid_1(ens_size), x_vgrid_2(ens_size), x_vgrid_3(ens_size), x_vgrid_4(ens_size)
-integer  :: e, kcount, uk !< index varibles for loop
+integer  :: e, kcount, uk !< index variables for loop
 real(r8) :: failedcopies(ens_size)
 integer, allocatable  :: uniquek(:)
 integer  :: ksort(ens_size)
@@ -2708,6 +2708,7 @@ else
       istatus = 3
       if (debug) print*, 'unrecognized obs KIND, value = ', obs_kind
       deallocate(v_h, v_p)
+      if (allocated(uniquek)) deallocate(uniquek)
       return
 
    endif
@@ -4905,100 +4906,95 @@ real(r8), intent(in)  :: dx,dy,dxm,dym
 integer, intent(in)   :: ens_size
 real(r8), intent(out) :: v_p(0:n, ens_size)
 type(ensemble_type), intent(in)  :: state_handle
-integer e !< for ensemble loop
 
-integer, dimension(2) :: ll, lr, ul, ur
-integer(i8)           :: ill, ilr, iul, iur
-integer               :: k, rc
-real(r8), allocatable :: pres1(:), pres2(:), pres3(:), pres4(:)
-logical  :: debug = .false.
+integer     :: ll(2), lr(2), ul(2), ur(2)
+integer(i8) :: ill, ilr, iul, iur
+integer     :: k, rc
+real(r8)    :: pres1(ens_size), pres2(ens_size), pres3(ens_size), pres4(ens_size)
+real(r8)    :: x_ill(ens_size), x_ilr(ens_size), x_iul(ens_size), x_iur(ens_size)
+real(r8)    :: lev2_ill(ens_size), lev2_ilr(ens_size), lev2_iul(ens_size), lev2_iur(ens_size)
+logical     :: debug = .false.
+logical     :: need_level_2
 
-!HK 
-real(r8), allocatable :: x_ill(:), x_ilr(:), x_iul(:), x_iur(:)
-
-allocate(pres1(ens_size), pres2(ens_size), pres3(ens_size), pres4(ens_size))
-allocate(x_ill(ens_size), x_ilr(ens_size), x_iul(ens_size), x_iur(ens_size))
-
-if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-     boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
-
-   call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-   if ( rc .ne. 0 ) &
-        print*, 'model_mod.f90 :: get_model_pressure_profile :: getCorners rc = ', rc
+if ( .not. boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .or. &
+     .not. boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
+   v_p(:,:) = missing_r8
+   return
+endif
 
 
-   do k=1,n
-      pres1 = model_pressure_t_distrib(ll(1), ll(2), k,id,state_handle, ens_size)
-      pres2 = model_pressure_t_distrib(lr(1), lr(2), k,id,state_handle, ens_size)
-      pres3 = model_pressure_t_distrib(ul(1), ul(2), k,id,state_handle, ens_size)
-      pres4 = model_pressure_t_distrib(ur(1), ur(2), k,id,state_handle, ens_size)
+call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+if ( rc .ne. 0 ) &
+   print*, 'model_mod.f90 :: get_model_pressure_profile :: getCorners rc = ', rc
 
-      v_p(k, :) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size)
-   enddo
+! if we don't have the surface pressure in the state, we need
+! level 2 of the pressure to extrapolate below level 1.
+need_level_2 = (wrf%dom(id)%type_ps < 0)
+
+! compute the pressure profile from levels 1 to N
+do k=1,n
+   pres1 = model_pressure_t_distrib(ll(1), ll(2), k,id,state_handle, ens_size)
+   pres2 = model_pressure_t_distrib(lr(1), lr(2), k,id,state_handle, ens_size)
+   pres3 = model_pressure_t_distrib(ul(1), ul(2), k,id,state_handle, ens_size)
+   pres4 = model_pressure_t_distrib(ur(1), ur(2), k,id,state_handle, ens_size)
+
+   ! if we need to extrapolate later, save level 2 corners since we have them now.
+   if (k==2 .and. need_level_2) then
+      lev2_ill(:) = pres1(:)
+      lev2_ilr(:) = pres2(:)
+      lev2_iul(:) = pres3(:)
+      lev2_iur(:) = pres4(:)
+   endif
+
+   v_p(k, :) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size)
+enddo
 
 
-   if (debug) &
-        print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n, :)
+if (debug) &
+   print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n, :)
 
-   if ( wrf%dom(id)%type_ps >= 0 ) then
+! interpolate surface pressure for the first entry (index 0) in the v_p() array.
+! if the surface pressure field (ps) is in the state vector, use it.
+! otherwise try to extrapolate down from pressure levels 1 and 2.
 
-      ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps, id)
-      ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps, id)
-      iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps, id)
-      iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps, id)
+if ( wrf%dom(id)%type_ps >= 0 ) then
 
-      x_ill = get_state(ill, state_handle)
-      x_ilr = get_state(ilr, state_handle)
-      x_iul = get_state(iul, state_handle)
-      x_iur = get_state(iur, state_handle)
+   ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps, id)
+   ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps, id)
+   iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps, id)
+   iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps, id)
 
-      ! I'm not quite sure where this comes from, but I will trust them on it....
-      ! Do you have to do this per ensemble?
-      !> @todo This is messy
-      do e = 1,ens_size
+   x_ill = get_state(ill, state_handle)
+   x_ilr = get_state(ilr, state_handle)
+   x_iul = get_state(iul, state_handle)
+   x_iur = get_state(iur, state_handle)
 
-         if ( x_ill(e) /= 0.0_r8 .and. x_ilr(e) /= 0.0_r8 .and. x_iul(e) /= 0.0_r8 .and. &
-              x_iur(e) /= 0.0_r8 ) then
+   ! we could check minval at the start and if 0, die then.
+   ! this test could be expensive.
+   if ( any(x_ill(:) == 0.0_r8) .or. &
+        any(x_ilr(:) == 0.0_r8) .or. &
+        any(x_iul(:) == 0.0_r8) .or. &
+        any(x_iur(:) == 0.0_r8) ) then
 
-            v_p(0,e:e) = interp_4pressure_distrib(x_ill(e:e), x_ilr(e:e), x_iul(e:e), x_iur(e:e), dx, dxm, dy, dym, 1)
-
-         else
-
-            ! HK I think this is a bug, you are just  going to grab the first copy - is this fixed?
-            ! in each iteration of the loop
-            call error_handler(E_WARN, 'model_mod.f90 check for correctness', 'Helen')
-            pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
-            pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
-            pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
-            pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
-
-            v_p(0,e:e) = interp_4pressure_distrib(pres1(e:e), pres2(e:e), pres3(e:e), pres4(e:e), dx, dxm, dy, dym, 1, &
-                  extrapolate=.true., edgep=v_p(1,e))
-
-         endif
-
-      enddo
-
-   else
-
-      pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
-      pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
-      pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
-      pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
-
-      v_p(0,:) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size, &
-              extrapolate=.true., edgep=v_p(1,:))
+      call error_handler(E_ERR, 'get_model_pressure_profile_distrib:', &
+            "unexpectedly found 0s in the surface pressure field", &
+             source, revision, revdate)
 
    endif
 
-   if (debug) &
-        print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0, :)
+   v_p(0,:) = interp_4pressure_distrib(x_ill(:), x_ilr(:), x_iul(:), x_iur(:), dx, dxm, dy, dym, 1)
+
 else
-   v_p(:,:) = missing_r8
+
+   ! surface pressure is not in the state vector.  extrapolate from levels 1 and 2 of the MU field.
+
+   v_p(0,:) = interp_4pressure_distrib(lev2_ill(:), lev2_ilr(:), lev2_iul(:), lev2_iur(:), dx, dxm, dy, dym, 1, &
+              extrapolate=.true., edgep=v_p(1,:))
 
 endif
 
-deallocate(pres1, pres2, pres3, pres4, x_ill, x_ilr, x_iul, x_iur)
+if (debug) &
+   print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0, :)
 
 end subroutine get_model_pressure_profile_distrib
 
