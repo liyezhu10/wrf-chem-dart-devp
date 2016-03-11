@@ -440,14 +440,7 @@ print *, 'vert is undef is true'
    return
 endif
 
-if ( get_grid_type(obs_kind) == MAGNETIC_GRID ) then 
-   call height_bounds(lheight, mag_grid%nheight, mag_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
-else if ( get_grid_type(obs_kind) == GEOGRAPHIC_GRID ) then
-   call height_bounds(lheight, geo_grid%nheight, geo_grid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
-else
-   write(msgstring,*)'requesting interp of an unknown grid'
-   call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
-endif
+call height_bounds(lheight, mygrid%nheight, mygrid%heights, hgt_bot, hgt_top, hgt_fract, hstatus)
 
 if(hstatus /= 0) then
    istatus = 12
@@ -460,6 +453,8 @@ endif
 call do_interp(state_handle, ens_size, mygrid, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_kind, expected_obs, istatus)
 if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
+
+nullify(mygrid)
 
 end subroutine model_interpolate
 
@@ -573,6 +568,8 @@ character(len=NF90_MAX_NAME) :: dimname
 
 if ( .not. module_initialized ) call static_init_model
 
+state_ind(:) = 1
+
 if (var_kind < 0 ) then
    call error_handler(E_ERR, 'get_val', 'dart kind < 0 should not happen ', &
                       source, revision, revdate)
@@ -607,6 +604,7 @@ state_index = get_dart_vector_index(state_ind(1), state_ind(2), state_ind(3), &
                                     domain_id, var_id)
 
 print *, ' get_val : state_index, ', state_index, state_ind(1), state_ind(2), state_ind(3)
+print *, ' var_id, var_kind, numdims : ', var_id, var_kind, numdims
 
 get_val = get_state(state_index, state_handle)
 
@@ -980,28 +978,6 @@ else
 endif
 
 if (debug > 5) print *, 'lon, lat, height = ', lon, lat, height
-
-!if (lon_index == 14 .and. lat_index == 66 .and. height_index == 17) then
-!   print *, 'found (lon/lat/hgt): ', lon_index, lat_index, height_index
-!   print *, 'state vector index: ', index_in
-!   print *, 'state val ', get_state(index_in, state_handle)
-!   print *, 'lon, lat, height = ', lon, lat, height
-!endif
-!
-!if (lon_index == 63 .and. lat_index == 88) then
-!   print *, 'found (lon/lat/hgt): ', lon_index, lat_index
-!   print *, 'state vector index: ', index_in
-!   print *, 'state val ', get_state(index_in, state_handle)
-!   print *, 'lon, lat, height = ', lon, lat, height
-!endif
-!
-!if (index_in == 136904) then
-!   print *, 'for index_in ', index_in
-!   print *, 'state val ', get_state(index_in, state_handle)
-!   print *, 'index (lon/lat/hgt): ', lon_index, lat_index, height_index
-!   print *, 'get_dart_ind(lon_i, lat_i, height_i) ', get_dart_vector_index(lon_index, lat_index, height_index, domain_id, var_id)
-!   print *, 'lon, lat, height = ', lon, lat, height
-!endif
 
 if (present(var_type)) then
    var_type = local_var
