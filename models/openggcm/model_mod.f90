@@ -136,11 +136,17 @@ character(len=paramname_length) :: variable_table( max_state_variables, num_stat
 integer :: state_kinds_list( max_state_variables )
 logical ::  update_var_list( max_state_variables )
 integer ::   grid_info_list( max_state_variables )
+integer ::   dim_order_list( max_state_variables, 3 )
 
 ! identifiers for variable_table
 integer, parameter :: VAR_NAME_INDEX   = 1
 integer, parameter :: VAR_KIND_INDEX   = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
+
+! identifiers for LAT, LON and HEIGHT
+integer, parameter :: VAR_LAT_INDEX   = 1
+integer, parameter :: VAR_LON_INDEX   = 2
+integer, parameter :: VAR_HGT_INDEX = 3
 
 ! things which can/should be in the model_nml
 character(len=NF90_MAX_NAME) :: openggcm_template
@@ -277,6 +283,8 @@ domain_id = add_domain(openggcm_template, nfields, &
                        update_list = update_var_list (1:nfields))
 
 if (debug > 0) call state_structure_info(domain_id)
+
+call make_dim_order_table(nfields)
 
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
@@ -575,30 +583,11 @@ if (var_kind < 0 ) then
                       source, revision, revdate)
 endif   
 
-! variables can come in in different lat, lon orders.  Need to sort
-! them so that the fastes varying index goes in first to get_dart_vector_index
-!>@todo FIXME : we should probably just precompute a mapping of how the
-!>              variables store their indicies so we do not have to compute
-!>              this over and over again.
 var_id = get_varid_from_kind(domain_id, var_kind)
 
-numdims = get_num_dims(domain_id, var_id)
-
-do jdim = 1,numdims
-   dimname = get_dim_name(domain_id, var_id, jdim)
-   SELECT CASE (trim(dimname))
-      CASE ('cg_lon','ig_lon')
-         state_ind(jdim) = lon_index
-      CASE ('cg_lat','ig_lat')
-         state_ind(jdim) = lat_index
-      CASE ('cg_height','ig_height')
-         state_ind(jdim) = height_index
-      CASE DEFAULT
-         write(msgstring,*) 'cannot dimension ', trim(dimname),' for variable', get_variable_name(domain_id, var_id)
-         call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
-       
-   END SELECT
-enddo
+state_ind(dim_order_list(var_id, VAR_LON_INDEX)) = lon_index
+state_ind(dim_order_list(var_id, VAR_LAT_INDEX)) = lat_index
+state_ind(dim_order_list(var_id, VAR_HGT_INDEX)) = height_index
 
 state_index = get_dart_vector_index(state_ind(1), state_ind(2), state_ind(3), &
                                     domain_id, var_id)
@@ -919,31 +908,9 @@ if ( .not. module_initialized ) call static_init_model
 call get_model_variable_indices(index_in, state_loc(1), state_loc(2), state_loc(3), var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
 
-numdims = get_num_dims(domain_id, var_id)
-!print *, 'state_loc : ', state_loc
-
-do jdim = 1,numdims
-   dimname = get_dim_name(domain_id, var_id, jdim)
-   !print *, 'dimname : ', trim(dimname), jdim 
-   SELECT CASE (trim(dimname))
-      CASE ('cg_lon','ig_lon')
-         lon_index = state_loc(jdim)
-         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
-         !print*, 'lon_index = ', lon_index
-      CASE ('cg_lat','ig_lat')
-         lat_index = state_loc(jdim)
-         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
-         !print*, 'lat_index = ', lat_index
-      CASE ('cg_height','ig_height')
-         height_index = state_loc(jdim)
-         !print*, 'dimname, jdim : ', trim(dimname), jdim, numdims-jdim+1
-         !print*, 'height_index = ', height_index
-      CASE DEFAULT
-         write(msgstring,*) 'cannot dimension ', trim(dimname),' for variable', get_variable_name(domain_id, var_id)
-         call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
-       
-   END SELECT
-enddo
+lon_index    = state_loc(dim_order_list(var_id, VAR_LON_INDEX))
+lat_index    = state_loc(dim_order_list(var_id, VAR_LAT_INDEX))
+height_index = state_loc(dim_order_list(var_id, VAR_HGT_INDEX))
 
 if (debug > 6) then
    print *, 'in get_state_meta_data'
@@ -2258,6 +2225,54 @@ enddo
 ! trans geo l/l near it to mag lat/lon
 
 end subroutine dump_grids
+
+!----------------------------------------------------------------------
+
+!> order variables dimension according to the fastest varying
+!> dimension.  information is stored as :
+!>
+!>    VAR_ID  LON_DIMID  LAT_DIMID  HGT_DIMID
+!>
+!> for variables witout height dimension ID is set to one.  this
+!> is to not confuse state_structure routines
+
+subroutine make_dim_order_table(ngood)
+integer, intent(in) :: ngood !< number of good fields
+
+integer :: ivar, jdim, numdims
+character(len=NF90_MAX_NAME) :: dimname
+
+! initialize list
+dim_order_list(:,:) = 1
+
+do ivar = 1,ngood
+   numdims = get_num_dims(domain_id, ivar)
+   do jdim = 1,numdims
+      dimname = get_dim_name(domain_id, ivar, jdim)
+      SELECT CASE (trim(dimname))
+         CASE ('cg_lon','ig_lon')
+            dim_order_list(ivar, VAR_LON_INDEX) = jdim
+         CASE ('cg_lat','ig_lat')
+            dim_order_list(ivar, VAR_LAT_INDEX) = jdim
+         CASE ('cg_height','ig_height')
+            dim_order_list(ivar, VAR_HGT_INDEX) = jdim
+         CASE DEFAULT
+            write(msgstring,*) 'cannot dimension ', trim(dimname),&
+                               ' for variable', get_variable_name(domain_id, ivar)
+            call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
+      END SELECT
+   enddo
+enddo
+
+if (debug > 1)
+   write(*,*) '       LON LAT HGT'
+   do ivar = 1,ngood
+        write(*,'(A,I2,A,A5,I2,2X,I2,2X,I2)') 'var[',ivar, '] ', trim(get_variable_name(domain_id, ivar)), &
+                                 dim_order_list(ivar,1),dim_order_list(ivar,2), dim_order_list(ivar,3)
+   enddo
+enddo
+
+end subroutine make_dim_order_table
 
 !----------------------------------------------------------------------
 !------------------------------------------------------------------
