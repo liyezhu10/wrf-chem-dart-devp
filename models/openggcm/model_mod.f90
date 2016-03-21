@@ -257,11 +257,13 @@ call get_grid_sizes(ncid, geo_grid, 'cg_lon', 'cg_lat','cg_height')
 call get_grid_sizes(ncid, mag_grid, 'ig_lon', 'ig_lat')
 
 ! allocate space for geographic and magnetic grids
+
 call allocate_grid_space(geo_grid, conv=.false.)
 call allocate_grid_space(mag_grid, conv=.true.)
 
 ! read in geographic and magnetic grids, and for the mag grid read
 ! in the 2d conversion arrays to go to geographic coords
+
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
 call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
@@ -272,10 +274,12 @@ call read_vert_levels(ncid,mag_grid,'ig_height')
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings, 
 ! and grid information.
+
 call verify_state_variables(model_state_variables, nfields, variable_table, &
                             state_kinds_list, update_var_list, grid_info_list)
 
-! Fill up the state structure with information from the model template file
+! fill up the state structure with information from the model template file
+
 domain_id = add_domain(openggcm_template, nfields, &
                        var_names   = variable_table  (1:nfields , VAR_NAME_INDEX), &
                        kind_list   = state_kinds_list(1:nfields), &
@@ -283,6 +287,7 @@ domain_id = add_domain(openggcm_template, nfields, &
 
 if (debug > 0) call state_structure_info(domain_id)
 
+! order the dimensions according to lat, lon and height
 call make_dim_order_table(nfields)
 
 model_size = get_domain_size(domain_id)
@@ -290,12 +295,6 @@ if (do_output()) write(*,*) 'model_size = ', model_size
 
 ! set the transform geo -> magnetic grid
 call initialize_openggcm_transform(openggcm_template)
-
-! call test_transform()
-!
-! call exit(0)
-
-!call dump_grids()
 
 end subroutine static_init_model
 
@@ -339,10 +338,6 @@ integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
 integer     :: hstatus
 type(grid_type), pointer :: mygrid
-
-!! for DEBUGGING
-!type(location_type) :: bob
-!character(len=128) :: outstr
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -398,9 +393,7 @@ endif
 
 SELECT CASE (get_grid_type(obs_kind))
    CASE (MAGNETIC_GRID)
-
       call transform_mag_geo(llon, llat, lheight, GEO_TO_MAG)
-
       mygrid => mag_grid
 
    CASE (GEOGRAPHIC_GRID)
@@ -409,7 +402,6 @@ SELECT CASE (get_grid_type(obs_kind))
    case default
       call error_handler(E_ERR, 'model_interpolate', 'unknown grid type, should not happen', &
             source, revision, revdate)
-
 END SELECT
 
 
@@ -460,8 +452,6 @@ integer  :: lat_bot, lat_top, lon_bot, lon_top
 real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
 real(r8) :: lon_fract, lat_fract
 
-! integer :: varid, state_index   ! DEBUG
-
 if ( .not. module_initialized ) call static_init_model
 
 ! Succesful return has istatus of 0
@@ -471,6 +461,7 @@ istatus = 0
 ! in this model, the data at lon 0 is replicated at lon 360, so no special
 ! wrap case is needed.
 call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
+
 if (grid_handle%uses_colatitude) then
    call colat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 else
@@ -625,8 +616,10 @@ do i = 2, grid_handle%nlat
       return
    endif
 enddo
-! Shouldn't get here. Might want to fail really hard through error handler
-istatus = 40
+
+write(msgstring, *) 'looking for lat ', lat
+call error_handler(E_ERR, 'lat_bounds', 'reached end of loop without finding lat', &
+                   source, revision, revdate, text2=msgstring)
 
 end subroutine lat_bounds
 
@@ -682,8 +675,10 @@ do i = 2, grid_handle%nlat
       return
    endif
 enddo
-! Shouldn't get here. Might want to fail really hard through error handler
-istatus = 40
+
+write(msgstring, *) 'looking for colat ', lat
+call error_handler(E_ERR, 'colat_bounds', 'reached end of loop without finding colat', &
+                   source, revision, revdate, text2=msgstring)
 
 end subroutine colat_bounds
 
@@ -873,10 +868,6 @@ character(len=*), intent(in)    :: lat_name !< latitude variable name
 logical,          intent(in)    :: is_conv !< fill conversion grid
 logical,          intent(in)    :: is_co_latitude !< is grid in co-latitude
  
-!> @todo FIXME: make sure we understand whether we expect longitudes to be
-!> 0-360 coming in, or if they are coming in as -180 to 180 and need to be
-!> shifted by us.
-
 if (is_conv) then
 
    call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
@@ -1121,7 +1112,7 @@ logical :: lanai_bitwise
 if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
-lanai_bitwise = .true.
+lanai_bitwise   = .true.
 
 if (lanai_bitwise) then
    call pert_model_copies_bitwise_lanai(state_ens_handle, ens_size)
@@ -1221,8 +1212,7 @@ real(r8),            dimension(:), intent(out):: dist !< list of distances of cl
 
 num_close = 0
 close_ind = -99
-!if (present(dist)) dist = 1.0e9   !something big and positive (far away)
-dist = 1.0e9   !something big and positive (far away)
+dist      = 1.0e9   !something big and positive (far away)
 
 ! Get all the potentially close obs but no dist (optional argument dist(:)
 ! is not present) This way, we are decreasing the number of distance
@@ -1262,11 +1252,13 @@ logical     :: return_now
 
 istatus(:) = 0
 
-call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
+call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, &
+                         llon, llat, hgt_bot, bot_val, temp_status)
 call track_status(ens_size, temp_status, bot_val, istatus, return_now)
 if (return_now) return
 
-call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_top, top_val, temp_status)
+call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, &
+                         llon, llat, hgt_top, top_val, temp_status)
 call track_status(ens_size, temp_status, top_val, istatus, return_now)
 if (return_now) return
 
@@ -1276,8 +1268,6 @@ where (istatus == 0)
 elsewhere
    expected_obs = MISSING_R8
 endwhere
-
-
 
 end subroutine do_interp
 
@@ -1295,7 +1285,6 @@ integer,            intent(in) :: domain !< domain of file
 integer,            intent(in) :: copy !< copy number (i.e. ensemble number)
 character(len=1024)            :: construct_file_name_in !< constructed filename
 
-! write(construct_file_name_in, '(A, i4.4, A)') trim(stub), copy, ".nc"
 write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
 
 end function construct_file_name_in
@@ -1877,105 +1866,6 @@ end subroutine transform_mag_geo
 
 !----------------------------------------------------------------------
 
-!> simple test from transforming between geographic and matnetic grid
-
-subroutine test_transform()
-
-real(r8) :: lon, lat, height
-integer  :: indlon, indlat
-
-! testing from geographic to magnetic
-
-lon    = 240.0_r8
-lat    =  40.0_r8
-height =  0.0_r8
-
-print *, ' ' 
-print *, 'TEST 1 geo->mag then mag->geo'
-print *, ' ' 
-print *, 'testing lon,lat,height ', lon, lat, height
-
-call transform_mag_geo(lon, lat, height, GEO_TO_MAG)
-print *, 'geo->sm  : lon,lat,height ', lon, lat, height
-
-call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
-print *, 'sm ->geo : lon,lat,height ', lon, lat, height
-
-! testing from magnetic to geographic
-
-lon    = 185.63699110357035_r8
-lat    =  46.441819318593993_r8
-height =  0.0_r8
-
-print *, ' ' 
-print *, 'TEST 2 mag->geo then geo->mag'
-print *, ' ' 
-print *, 'testing lon,lat,height ', lon, lat, height
-
-call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
-print *, 'sm ->geo : lon,lat,height ', lon, lat, height
-
-call transform_mag_geo(lon, lat, height, GEO_TO_MAG)
-print *, 'geo->sm  : lon,lat,height ', lon, lat, height
-
-! testing from magnetic to geographic
-indlon = 13
-indlat = 81
-
-lon    = mag_grid%longitude(indlon)
-lat    = mag_grid%latitude (indlat)
-height =  0.0_r8
-
-print *, ' ' 
-print *, 'TEST 3 conv_2d_lat conv_2d_lon'
-print *, ' ' 
-print *, 'testing lon,lat ', lon, lat
-print *, 'lonindex, latindex ', indlon, indlat
-
-call transform_mag_geo(lon, lat, height, MAG_TO_GEO)
-print *, 'sm ->geo : lon,lat = ', lon, lat
-print *, 'conv_2d(lon,lat)   = ', mag_grid%conv_2d_lon(indlon,indlat), &
-                                  mag_grid%conv_2d_lat(indlon,indlat)
-
-end subroutine test_transform
-
-!----------------------------------------------------------------------
-
-!> very verbose routine to dump the full grid information
-
-subroutine dump_grids()
-
-integer :: i, j
-real(r8) :: llon, llat, rad
-
-print *, 'index i/j, mag lon/lat, convgeo lon/lat, xform lon/lat:'
-do j=1, mag_grid%nlat
- do i=1, mag_grid%nlon
-   llon = mag_grid%longitude(i)
-   llat = mag_grid%latitude(j)
-   rad = earth_radius
-   call transform_mag_geo(llon, llat, rad, MAG_TO_GEO)
-   print *, i, j, mag_grid%longitude(i), mag_grid%latitude(j), &
-                  mag_grid%conv_2d_lon(i,j), mag_grid%conv_2d_lat(i,j), &
-                  llon, llat
- enddo
-enddo
-print *, 'index i/j, geo lon/lat, xform lon/lat:'
-do j=1, geo_grid%nlat
- do i=1, geo_grid%nlon
-   llon = geo_grid%longitude(i)
-   llat = geo_grid%latitude(j)
-   rad = earth_radius
-   call transform_mag_geo(llon, llat, rad, GEO_TO_MAG)
-   print *, i, j, geo_grid%longitude(i), geo_grid%latitude(j), &
-                  llon, llat
- enddo
-enddo
-
-end subroutine dump_grids
-
-!----------------------------------------------------------------------
-
 !> recording the storage order of the dimensions for each variable.
 !>
 !> lon_index is   dim_order_list(VAR_ID, VAR_LON_INDEX)
@@ -1987,15 +1877,14 @@ end subroutine dump_grids
 subroutine make_dim_order_table(ngood)
 integer, intent(in) :: ngood !< number of good fields
 
-integer :: ivar, jdim, numdims
+integer :: ivar, jdim
 character(len=NF90_MAX_NAME) :: dimname
 
 ! initialize list
 dim_order_list(:,:) = 1
 
 do ivar = 1,ngood
-   numdims = get_num_dims(domain_id, ivar)
-   do jdim = 1,numdims
+   do jdim = 1,get_num_dims(domain_id, ivar)
       dimname = get_dim_name(domain_id, ivar, jdim)
       SELECT CASE (trim(dimname))
          CASE ('cg_lon','ig_lon')
