@@ -2264,13 +2264,13 @@ do ivar = 1,ngood
    enddo
 enddo
 
-if (debug > 1)
+if (debug > 1) then
    write(*,*) '       LON LAT HGT'
    do ivar = 1,ngood
         write(*,'(A,I2,A,A5,I2,2X,I2,2X,I2)') 'var[',ivar, '] ', trim(get_variable_name(domain_id, ivar)), &
                                  dim_order_list(ivar,1),dim_order_list(ivar,2), dim_order_list(ivar,3)
    enddo
-enddo
+endif
 
 end subroutine make_dim_order_table
 
