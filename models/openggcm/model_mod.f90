@@ -265,7 +265,6 @@ call allocate_grid_space(mag_grid, conv=.true.)
 call read_horiz_grid(ncid, geo_grid, 'cg_lon',  'cg_lat',  is_conv=.false., is_co_latitude=.false.)
 call read_horiz_grid(ncid, mag_grid, 'ig_lon',  'ig_lat',  is_conv=.false., is_co_latitude=.true.) 
 call read_horiz_grid(ncid, mag_grid, 'geo_lon', 'geo_lat', is_conv=.true.,  is_co_latitude=.true.)
-call read_geo_grid()
 
 call read_vert_levels(ncid,geo_grid,'cg_height')
 call read_vert_levels(ncid,mag_grid,'ig_height')
@@ -912,42 +911,6 @@ end subroutine read_horiz_grid
 
 !------------------------------------------------------------------
 
-!> Read the geometric grid from a fortran binary file
-!> Only needed for debugging - this data should come from
-!> the netcdf grid file.
-
-subroutine read_geo_grid()
-
-! Local variables
-integer :: iunit
-integer :: xlon, xlat
-real(r4), allocatable, dimension(:,:) :: tmp_conv_2d_array
-
-iunit = open_file('dart.geo_grids.bin', form='unformatted', action='read')
-
-read(iunit) xlon, xlat
-
-allocate(tmp_conv_2d_array(xlon,xlat))
-
-read(iunit) tmp_conv_2d_array
-mag_grid%conv_2d_lon = tmp_conv_2d_array
-
-read(iunit) tmp_conv_2d_array
-mag_grid%conv_2d_lat = tmp_conv_2d_array
-
-deallocate(tmp_conv_2d_array)
-
-call close_file(iunit)
-
-mag_grid%conv_2d_lat(:,:) = 90.0_r8 - mag_grid%conv_2d_lat(:,:)
-mag_grid%uses_colatitude = .true.
-
-where(mag_grid%conv_2d_lon < 0) mag_grid%conv_2d_lon = mag_grid%conv_2d_lon + 360.0_r8
-
-end subroutine read_geo_grid
-
-!------------------------------------------------------------------
-
 !> Read the height array from a netcdf file.
 
 subroutine read_vert_levels(ncFileID, grid_handle, height_name)
@@ -1355,7 +1318,7 @@ type(time_type) :: base_time
 
 if ( .not. module_initialized ) call static_init_model
 
-print *, 'read model time filename : ' , trim(filename), len_trim(filename)
+print *, 'read model time filename : ' , trim(filename)
 
 if ( .not. file_exist(filename) ) then
    write(msgstring,*) 'cannot open file ', trim(filename),' for reading.'
@@ -1844,7 +1807,7 @@ character(len=*), intent(inout) :: filename !< file with openggcm time informati
 type(time_type) :: dart_time
 integer :: yr,mo,dy,hr,mn,se
 
-print *, 'initialize transform filename : ' , trim(filename), len_trim(filename)
+print *, 'initialize transform filename : ' , trim(filename)
 
 dart_time = read_model_time(filename)
 
