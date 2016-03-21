@@ -347,10 +347,6 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-!> @todo FIXME should this start as istatus = 0 so we can use
-!> track_istatus().   are there more than one of these and can
-!> they be combined?
-
 expected_obs(:) = MISSING_R8     ! the DART bad value flag
 istatus(:)      = 99             ! unknown error
 
