@@ -120,7 +120,7 @@
       enddo
 
       dlat = 180.0/real(nlat-1)
-      do ilat = 1,nlat           ! from south-to-north
+      do ilat = 1,nlat           ! from south-to-north for the geographic grid
          latitude(ilat) = dlat*real(ilat-1) - 90.0
       enddo
 
@@ -201,6 +201,7 @@
       !=======================================================================
 
       ! calculate the required metadata with BOGUS VALUES at the moment
+      ! for the height array
 
       allocate(longitude(nlon), latitude(nlat), height(nheight))
 
@@ -255,9 +256,6 @@
       call nc_check(io1, 'wr_netcdf_interface_grid', 'def_var ig_height')
       call nc_check(io2, 'wr_netcdf_interface_grid', 'put_att ig_height short_name')
       call nc_check(io3, 'wr_netcdf_interface_grid', 'put_att ig_height units')
-
-      ! must also put out some information so DART can convert magnetic lon/lat to
-      ! geographic lon/lat on demand.
 
       io = nf90_enddef(ncid) ! leave define mode so we can fill
       call nc_check(io, 'wr_netcdf_interface_grid', 'enddef')
