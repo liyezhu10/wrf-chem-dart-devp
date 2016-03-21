@@ -146,7 +146,7 @@ integer, parameter :: VAR_UPDATE_INDEX = 3
 ! identifiers for LAT, LON and HEIGHT
 integer, parameter :: VAR_LAT_INDEX   = 1
 integer, parameter :: VAR_LON_INDEX   = 2
-integer, parameter :: VAR_HGT_INDEX = 3
+integer, parameter :: VAR_HGT_INDEX   = 3
 
 ! things which can/should be in the model_nml
 character(len=NF90_MAX_NAME) :: openggcm_template
@@ -335,11 +335,10 @@ integer,            intent(out) :: istatus(ens_size) !< array of returned status
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
-integer(i8) :: base_offset
 integer     :: ind
 integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
-integer     :: hstatus, thisgrid
+integer     :: hstatus
 type(grid_type), pointer :: mygrid
 
 !! for DEBUGGING
@@ -366,15 +365,6 @@ loc_array = get_location(location)
 llon    = loc_array(1)
 llat    = loc_array(2)
 lheight = loc_array(3)
-
-if (debug > 1) then
-   print *, 'requesting interpolation of ', obs_kind, trim(get_raw_obs_kind_name(obs_kind))
-   print *, ' located at ', llon, llat, lheight
-endif
-
-!call get_state_meta_data(state_handle, 37929_i8, bob)
-!call write_location(0, bob, charstring=outstr)
-!print *, 'location of state index 37929 is ', trim(outstr)
 
 if( vert_is_undef(location) ) then
    ! this is what we expect and it is ok
@@ -407,25 +397,10 @@ endif
 ! can simply interpolate to find the value) or they are a simple
 ! transformation of something in the state vector.
 
-thisgrid = get_grid_type(obs_kind)
-
-!>@todo FIXME : this whole case statement should replaced by get_varid_from_kind,
-!>              if you have an invalid kind you can simply return.
-SELECT CASE (thisgrid)
+SELECT CASE (get_grid_type(obs_kind))
    CASE (MAGNETIC_GRID)
 
-print *, 'xform1 start '
-print *, 'before: ', llon, llat, lheight
       call transform_mag_geo(llon, llat, lheight, GEO_TO_MAG)
-print *, 'after : ', llon, llat, lheight
-print *, 'xform1 end '
-
-      !call transform_mag_geo(llon, llat, lheight, MAG_TO_GEO)
-      !print *, 'after going back xform: ', llon, llat, lheight
-      !print *, 'xform2 start '
-      !call transform_mag_geo(llon, llat, lheight, GEO_TO_MAG)
-      !print *, 'forward again    xform: ', llon, llat, lheight
-      !print *, 'xform2 end '
 
       mygrid => mag_grid
 
@@ -440,11 +415,9 @@ END SELECT
 
 
 if( vert_is_undef(location) ) then
-print *, 'vert is undef is true'
    call lon_lat_interpolate(state_handle, ens_size, mygrid, obs_kind, llon, llat, VERT_LEVEL_1, &
                             expected_obs, istatus)
 
-   if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
    return
 endif
 
@@ -460,7 +433,6 @@ endif
 ! final value.  this sets both interp_val and istatus.
 call do_interp(state_handle, ens_size, mygrid, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_kind, expected_obs, istatus)
-if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
 
 nullify(mygrid)
 
@@ -506,26 +478,6 @@ else
    call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
 endif
 
-!call find_conv_bounds(240.0_r8, 40.0_r8, grid_handle)
-
-if (debug > 0) then
-   !print *, 'in lon_lat_interp, vals lon/lat: ', lon, lat
-   !print *, 'in lon_lat_interp, indx lon bot/top, lat bot/top: ', &
-   !          lon_bot, lon_top, lat_bot, lat_top
-   !print *, 'coordinates for corners: '
-   !print *, "ll : " , grid_handle%conv_2d_lon(lon_bot,lat_bot), grid_handle%conv_2d_lat(lon_bot,lat_bot) 
-   !print *, "lr : " , grid_handle%conv_2d_lon(lon_top,lat_bot), grid_handle%conv_2d_lat(lon_top,lat_bot) 
-   !print *, "ul : " , grid_handle%conv_2d_lon(lon_bot,lat_top), grid_handle%conv_2d_lat(lon_bot,lat_top) 
-   !print *, "ur : " , grid_handle%conv_2d_lon(lon_top,lat_top), grid_handle%conv_2d_lat(lon_top,lat_top) 
-   !print *, ''
-
-   !print *, "grid handle conv lon : " , grid_handle%conv_2d_lon(lon_bot,lat_bot) 
-   !print *, "grid handle conv lat : " , grid_handle%conv_2d_lat(lon_bot,lat_bot) 
-   !state_index = get_dart_vector_index(lon_bot, lat_bot, 1, &
-   !                                    domain_id, get_varid_from_kind(domain_id, var_kind))
-   !   print *, 'state index for bottom corner is: ', state_index
-endif
-
 if (istatus(1) /= 0) then
    istatus(:) = 18 
    return
@@ -537,10 +489,6 @@ p(1, :) = get_val(lon_bot, lat_bot, height_index, var_kind, state_handle, ens_si
 p(2, :) = get_val(lon_top, lat_bot, height_index, var_kind, state_handle, ens_size)
 p(3, :) = get_val(lon_top, lat_top, height_index, var_kind, state_handle, ens_size)
 p(4, :) = get_val(lon_bot, lat_top, height_index, var_kind, state_handle, ens_size)
-
-if (debug > 0) then
-  print *, 'got corners, ens 1: ', p(:, 1)
-endif
 
 ! Rectangular bilinear interpolation
 xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
@@ -570,9 +518,7 @@ real(r8)    :: get_val(ens_size)
 integer(i8) :: state_index
 integer     :: var_id
 
-integer :: numdims, jdim
 integer, dimension(3) :: state_ind
-character(len=NF90_MAX_NAME) :: dimname
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -591,9 +537,6 @@ state_ind(dim_order_list(var_id, VAR_HGT_INDEX)) = height_index
 
 state_index = get_dart_vector_index(state_ind(1), state_ind(2), state_ind(3), &
                                     domain_id, var_id)
-
-print *, ' get_val : state_index, ', state_index, state_ind(1), state_ind(2), state_ind(3)
-print *, ' var_id, var_kind, numdims : ', var_id, var_kind, numdims
 
 get_val = get_state(state_index, state_handle)
 
@@ -620,16 +563,12 @@ integer  :: i
 
 if ( .not. module_initialized ) call static_init_model
 
-print *, 'lon_bounds looking for index for ', lon
 do i = 2, grid_handle%nlon
-   !print *, i, grid_handle%longitude(i)
    if (lon <= grid_handle%longitude(i)) then
       bot = i-1
       top = i
       fract = (lon - grid_handle%longitude(bot)) / &
               (grid_handle%longitude(top) - grid_handle%longitude(bot))
-      print *, 'bot/top indx fract: ', bot, top, fract
-      print *, 'bot/top vals: ', grid_handle%longitude(bot), grid_handle%longitude(top)
       return
    endif
 enddo
@@ -639,65 +578,6 @@ call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon
                    source, revision, revdate, text2=msgstring)
 
 end subroutine lon_bounds
-
-!------------------------------------------------------------
-
-!> exhaustively look for the grid box that encloses the given lon/lat
-!> DEBUGGING ONLY
-
-subroutine find_conv_bounds(lon, lat, grid_handle)
-
-real(r8),        intent(in) :: lon !< longitude
-real(r8),        intent(in) :: lat !< latitude
-type(grid_type), intent(in) :: grid_handle !< geo or mag grid
-
-! Local storage
-integer  :: i, j
-
-if ( .not. module_initialized ) call static_init_model
-
-print *, 'find_conv_bounds looking for indices for ', lon, lat
-
-do i = 1, grid_handle%nlon-1
-  do j = 1, grid_handle%nlat-1
-   !print *, 'i, j indx: ', i, j
-   !print *, lon, '>', grid_handle%conv_2d_lon(i,  j  )
-   !print *, lon, '<', grid_handle%conv_2d_lon(i+1,j  )
-   !print *, lat, '>', grid_handle%conv_2d_lon(i  ,j+1)
-   !print *, lon, '<', grid_handle%conv_2d_lon(i+1,j+1)
-   !print *, lat, '<', grid_handle%conv_2d_lat(i,  j  )
-   !print *, lat, '>', grid_handle%conv_2d_lat(i  ,j+1)
-   !print *, lat, '<', grid_handle%conv_2d_lat(i+1,j  )
-   !print *, lat, '>', grid_handle%conv_2d_lat(i+1,j+1)
-   if (between(lon, grid_handle%conv_2d_lon(i  ,j  ), grid_handle%conv_2d_lon(i+1,j  )) .or. &
-       between(lon, grid_handle%conv_2d_lon(i  ,j+1), grid_handle%conv_2d_lon(i+1,j+1)) .or. &
-       between(lat, grid_handle%conv_2d_lat(i  ,j  ), grid_handle%conv_2d_lon(i  ,j  )) .or. &
-       between(lat, grid_handle%conv_2d_lat(i+1,j  ), grid_handle%conv_2d_lon(i+1,j+1))) then
-      print *, 'i, j indx: ', i, j
-      print *, 'i,   j   vals: ', grid_handle%conv_2d_lon(i,  j  ), grid_handle%conv_2d_lat(i,  j  )
-      print *, 'i,   j+1 vals: ', grid_handle%conv_2d_lon(i,  j+1), grid_handle%conv_2d_lat(i,  j+1)
-      print *, 'i+1, j   vals: ', grid_handle%conv_2d_lon(i+1,j  ), grid_handle%conv_2d_lat(i+1,j  )
-      print *, 'i+1, j+1 vals: ', grid_handle%conv_2d_lon(i+1,j+1), grid_handle%conv_2d_lat(i+1,j+1)
-   endif
- ! if the code above works, fix the broken code below
-   if ((lon >= grid_handle%conv_2d_lon(i  ,j  )) .and. &
-       (lon <= grid_handle%conv_2d_lon(i+1,j  )) .and. &
-       (lon <= grid_handle%conv_2d_lon(i  ,j+1)) .and. &
-       (lon >= grid_handle%conv_2d_lon(i+1,j+1)) .and. &
-       (lat >= grid_handle%conv_2d_lat(i  ,j  )) .and. &
-       (lat <= grid_handle%conv_2d_lat(i  ,j+1)) .and. &
-       (lat >= grid_handle%conv_2d_lat(i+1,j  )) .and. &
-       (lat <= grid_handle%conv_2d_lat(i+1,j+1))) then
- print *, 'think i,j is good: ', i, j
-      return
-   endif
- enddo
-enddo
-
-call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon/lat', &
-                   source, revision, revdate)
-
-end subroutine find_conv_bounds
 
 !-------------------------------------------------------------
 
@@ -727,7 +607,6 @@ if ( .not. module_initialized ) call static_init_model
 ! Success should return 0, failure a positive number.
 istatus = 0
 
-print *, 'lat_bounds looking for index for ', lat
 ! Check for too far south or north
 if(lat < grid_handle%latitude(1)) then
    istatus = 1
@@ -739,14 +618,11 @@ endif
 
 ! In the middle, search through
 do i = 2, grid_handle%nlat
-   !print *, i, grid_handle%latitude(i)
    if(lat <= grid_handle%latitude(i)) then
       bot = i - 1
       top = i
       fract = (lat - grid_handle%latitude(bot)) / &
               (grid_handle%latitude(top) - grid_handle%latitude(bot))
-      print *, 'bot/top indx fract: ', bot, top, fract
-      print *, 'bot/top vals: ', grid_handle%latitude(bot), grid_handle%latitude(top)
       return
    endif
 enddo
@@ -788,7 +664,6 @@ if ( .not. module_initialized ) call static_init_model
 ! Success should return 0, failure a positive number.
 istatus = 0
 
-print *, 'lat_bounds looking for index for ', lat
 ! Check for too far south or north
 if(lat > grid_handle%latitude(1)) then
    istatus = 1
@@ -800,14 +675,11 @@ endif
 
 ! In the middle, search through
 do i = 2, grid_handle%nlat
-   !print *, i, grid_handle%latitude(i)
    if(lat >= grid_handle%latitude(i)) then
       bot = i - 1
       top = i
       fract = (lat - grid_handle%latitude(bot)) / &
               (grid_handle%latitude(top) - grid_handle%latitude(bot))
-      print *, 'bot/top indx fract: ', bot, top, fract
-      print *, 'bot/top vals: ', grid_handle%latitude(bot), grid_handle%latitude(top)
       return
    endif
 enddo
@@ -845,7 +717,6 @@ if(lheight <= hgt_array(1)) then
    top = 2
    ! NOTE: the fract definition is the relative distance from bottom to top
    fract = 1.0_r8 
-    if (debug > 0) print *, 'above first level in height'
    return
 endif
 
@@ -856,7 +727,6 @@ do i = 2, nheights
       top = i
       bot = i -1
       fract = (lheight - hgt_array(bot)) / (hgt_array(top) - hgt_array(bot))
-      if (debug > 0) print *, 'i, hgt_array(top), hgt_array(bot), top, bot, fract=', i, hgt_array(top), hgt_array(bot), top, bot, fract
       return
    endif
 enddo
@@ -899,8 +769,7 @@ integer,             optional, intent(out) :: var_type !< optional dart kind ret
 real(r8) :: lat, lon, height
 integer  :: lon_index, lat_index, height_index, local_var, var_id
 
-integer  :: jdim, numdims, state_loc(3)
-character(len=NF90_MAX_NAME) :: dimname
+integer  :: state_loc(3)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -912,28 +781,14 @@ lon_index    = state_loc(dim_order_list(var_id, VAR_LON_INDEX))
 lat_index    = state_loc(dim_order_list(var_id, VAR_LAT_INDEX))
 height_index = state_loc(dim_order_list(var_id, VAR_HGT_INDEX))
 
-if (debug > 6) then
-   print *, 'in get_state_meta_data'
-   print *, 'state vector index: ', index_in
-   print *, 'computed indices (lon/lat/hgt): ', lon_index, lat_index, height_index
-   print *, 'var type: ', trim(get_raw_obs_kind_name(local_var))
-endif
-
 ! we are getting a mapping array between magnetic -> geogrid
 
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
    lon = mag_grid%conv_2d_lon(lon_index, lat_index)
    lat = mag_grid%conv_2d_lat(lon_index, lat_index)
-   if (debug > 3) then
-      print *, 'mag grid, mag results: ', mag_grid%longitude(lon_index), mag_grid%latitude(lat_index)
-      print *, 'mag grid, geo results: ', lon, lat
-   endif
 else
    lon = geo_grid%longitude(lon_index)
    lat = geo_grid%latitude(lat_index)
-   if (debug > 3) then
-      print *, 'geo grid, results: ', lon, lat
-   endif
 endif
 
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
@@ -943,8 +798,6 @@ else
    height   = geo_grid%heights(1)
    location = set_location(lon, lat, height, VERTISHEIGHT)
 endif
-
-if (debug > 5) print *, 'lon, lat, height = ', lon, lat, height
 
 if (present(var_type)) then
    var_type = local_var
@@ -1030,11 +883,6 @@ if (is_conv) then
    call get_data(ncFileID, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
    call get_data(ncFileID, lat_name, grid_handle%conv_2d_lat, 'read_conv_horiz_grid')
 
-   print *, 'read before llon/llat', grid_handle%conv_2d_lon(102,88), grid_handle%conv_2d_lat(102,88)
-   print *, 'read before llon/llat', grid_handle%conv_2d_lon(103,88), grid_handle%conv_2d_lat(103,88)
-   print *, 'read before llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
-   print *, 'read before llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
-
    if (is_co_latitude) then
       grid_handle%conv_2d_lat(:,:) = 90.0_r8 - grid_handle%conv_2d_lat(:,:)
       grid_handle%uses_colatitude = .true.
@@ -1043,11 +891,6 @@ if (is_conv) then
    endif
 
    where(grid_handle%conv_2d_lon < 0) grid_handle%conv_2d_lon = grid_handle%conv_2d_lon + 360.0_r8
-
-   print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,88), grid_handle%conv_2d_lat(102,88)
-   print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,88), grid_handle%conv_2d_lat(103,88)
-   print *, 'read after  llon/llat', grid_handle%conv_2d_lon(102,89), grid_handle%conv_2d_lat(102,89)
-   print *, 'read after  llon/llat', grid_handle%conv_2d_lon(103,89), grid_handle%conv_2d_lat(103,89)
 
 else
 
@@ -1084,7 +927,6 @@ iunit = open_file('dart.geo_grids.bin', form='unformatted', action='read')
 
 read(iunit) xlon, xlat
 
-print *, 'geo_lon ', xlon, 'geo_lat ', xlat
 allocate(tmp_conv_2d_array(xlon,xlat))
 
 read(iunit) tmp_conv_2d_array
@@ -1412,8 +1254,6 @@ integer,                           intent(out):: num_close !< number of close fo
 integer,             dimension(:), intent(out):: close_ind !< list of close indicies
 real(r8),            dimension(:), intent(out):: dist !< list of distances of close observations
 
-integer :: i
-
 ! Initialize variables to missing status
 
 num_close = 0
@@ -1429,13 +1269,6 @@ dist = 1.0e9   !something big and positive (far away)
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
-
-if (debug > 6) then
-   print *, 'num close = ', num_close
-   do i=1,num_close
-      print *, i, close_ind(i), dist(i)
-   enddo
-endif
 
 end subroutine get_close_obs
 
@@ -1468,11 +1301,9 @@ istatus(:) = 0
 
 call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_bot, bot_val, temp_status)
 call track_status(ens_size, temp_status, bot_val, istatus, return_now)
-if (debug > 6) print *, 'bot_val = ', bot_val
 if (return_now) return
 
 call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, llon, llat, hgt_top, top_val, temp_status)
-if (debug > 6) print *, 'top_val = ', top_val
 call track_status(ens_size, temp_status, top_val, istatus, return_now)
 if (return_now) return
 
@@ -1483,7 +1314,6 @@ elsewhere
    expected_obs = MISSING_R8
 endwhere
 
-if (debug > 2) print *, 'do_interp: interp val = ',expected_obs
 
 
 end subroutine do_interp
@@ -1557,7 +1387,6 @@ function query_vert_localization_coord()
 
 integer :: query_vert_localization_coord !< return which height we want to 
                                          !< localize in
-
 
 query_vert_localization_coord = VERTISHEIGHT
 
@@ -2061,63 +1890,27 @@ else
    lheight = lheight + earth_radius
 endif
 
-if (debug > 9) print *, 'dart coord '//dirstrin//' in  lon/lat/height ', llon, llat, lheight
-
 ! degxyz requires longitude to be between -180 and 180
 if (llon > 180.0_r8) llon = llon - 360.0_r8
 ! degxyz requires latitude to be between 0 and 180
 llat = 90.0_r8 - llat
 
-if (debug > 9) print *, 'cotr coord '//dirstrin//' in  lon/lat/height ', llon, llat, lheight
-
 ! transform spherical coordinates to cartesian
 call degxyz(lheight, llon, llat, xin, yin, zin)
-
-if (debug > 9) print *, 'in  x/y/z ', xin, yin, zin 
 
 ! transform from geographic to magnetic grid or back
 call cotr(openggcm_transform, dirstrin, dirstrout, &
           xin, yin, zin, xout, yout, zout)
 
-if (debug > 9) print *, 'out x/y/z ', xout, yout, zout 
-
 ! transform cartesian coordinates to spherical 
 call xyzdeg(xout, yout, zout, lheight, llon, llat)
-
-if (debug > 9) print *, 'cotr coord '//dirstrout//' out lon/lat/height ', llon, llat, lheight
 
 ! transform back to dart longitude coordinates [0,360]
 if (llon < 0.0_r8) llon = llon + 360.0_r8
 ! transform back to dart latitude coordinates [-90,90]
 llat = 90.0_r8 - llat
 
-if (debug > 9) print *, 'dart coord '//dirstrout//' out lon/lat/height ', llon, llat, lheight
-
 end subroutine transform_mag_geo
-
-!----------------------------------------------------------------------
-
-!> helper function to return whether a is between b and c.
-!> b and c can be in either order, b>c or c>b
-
-function between(a, b, c)
-
-real(r8), intent(in) :: a, b, c
-logical :: between
-
-if (b >= c .and. a >=c .and. a <= b) then
-  between = .true.
-  return
-endif
-
-if (c >= b .and. a >=b .and. a <= c) then
-  between = .true.
-  return
-endif
-
-between = .false.
-
-end function between
 
 !----------------------------------------------------------------------
 
@@ -2181,9 +1974,6 @@ print *, 'sm ->geo : lon,lat = ', lon, lat
 print *, 'conv_2d(lon,lat)   = ', mag_grid%conv_2d_lon(indlon,indlat), &
                                   mag_grid%conv_2d_lat(indlon,indlat)
 
-! print *, 'conv 2d lon', mag_grid%conv_2d_lon(1,1)
-! print *, 'conv 2d lat', mag_grid%conv_2d_lat(1,1)
-
 end subroutine test_transform
 
 !----------------------------------------------------------------------
@@ -2219,22 +2009,17 @@ do j=1, geo_grid%nlat
  enddo
 enddo
 
-! ??
-! trans mag lat/lon to geo l/l
-! print geo coords
-! trans geo l/l near it to mag lat/lon
-
 end subroutine dump_grids
 
 !----------------------------------------------------------------------
 
-!> order variables dimension according to the fastest varying
-!> dimension.  information is stored as :
+!> recording the storage order of the dimensions for each variable.
 !>
-!>    VAR_ID  LON_DIMID  LAT_DIMID  HGT_DIMID
+!> lon_index is   dim_order_list(VAR_ID, VAR_LON_INDEX)
+!> lat_index is   dim_order_list(VAR_ID, VAR_LAT_INDEX)
+!> hgt_index is   dim_order_list(VAR_ID, VAR_HGT_INDEX)
 !>
-!> for variables witout height dimension ID is set to one.  this
-!> is to not confuse state_structure routines
+!> variables without a height dimension, VAR_HGT_INDEX is set to one.
 
 subroutine make_dim_order_table(ngood)
 integer, intent(in) :: ngood !< number of good fields
@@ -2257,20 +2042,12 @@ do ivar = 1,ngood
          CASE ('cg_height','ig_height')
             dim_order_list(ivar, VAR_HGT_INDEX) = jdim
          CASE DEFAULT
-            write(msgstring,*) 'cannot dimension ', trim(dimname),&
+            write(msgstring,*) 'cannot find dimension ', trim(dimname),&
                                ' for variable', get_variable_name(domain_id, ivar)
-            call error_handler(E_ERR,'get_state_meta_data',msgstring,source,revision,revdate)
+            call error_handler(E_ERR,'make_dim_order_table',msgstring,source,revision,revdate)
       END SELECT
    enddo
 enddo
-
-if (debug > 1) then
-   write(*,*) '       LON LAT HGT'
-   do ivar = 1,ngood
-        write(*,'(A,I2,A,A5,I2,2X,I2,2X,I2)') 'var[',ivar, '] ', trim(get_variable_name(domain_id, ivar)), &
-                                 dim_order_list(ivar,1),dim_order_list(ivar,2), dim_order_list(ivar,3)
-   enddo
-endif
 
 end subroutine make_dim_order_table
 
