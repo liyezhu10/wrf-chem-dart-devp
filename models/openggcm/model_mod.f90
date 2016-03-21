@@ -934,13 +934,13 @@ integer              :: ierr !>return value of function
 !     NF90_put_var       ! provide values for variable
 !  NF90_CLOSE            ! close: save updated netCDF dataset
 
-!----------------------------------------------------------------------
-! variables if we parse the state vector into prognostic variables.
-!----------------------------------------------------------------------
+integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
 ! for the dimensions and coordinate variables
 integer :: NlonDimID, NlatDimID, NhgtDimID
-integer :: lonVarID, latVarID, levelVarID
+integer :: geoLonVarID, geoLatVarID, geoHeightVarID
+integer :: magLonVarID, magLatVarID, magHeightVarID
+integer ::  coLonVarID,  coLatVarID
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -961,7 +961,9 @@ if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
 
-! have dart write out the state variables using the state structure
+!-------------------------------------------------------------------------------
+! Have dart write out the prognostic variables
+!-------------------------------------------------------------------------------
 model_mod_writes_state_variables = .false. 
 
 !--------------------------------------------------------------------
@@ -972,6 +974,15 @@ model_mod_writes_state_variables = .false.
 !--------------------------------------------------------------------
 
 write(filename,*) 'ncFileID', ncFileID
+
+!-------------------------------------------------------------------------------
+! make sure ncFileID refers to an open netCDF file, 
+! and then put into define mode.
+!-------------------------------------------------------------------------------
+
+call nc_check(nf90_Inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID),&
+                                   'nc_write_model_atts', 'inquire '//trim(filename))
+call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
@@ -987,76 +998,129 @@ call add_string_att(ncFileID, NF90_GLOBAL, 'model_revision',revision,  filename)
 call add_string_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate,   filename)
 call add_string_att(ncFileID, NF90_GLOBAL, 'model',        'openggcm', filename)
 
-!-------------------------------------------------------------------------------
-! Here is the extensible part. The simplest scenario is to output the state vector,
-! parsing the state vector into model-specific parts is complicated, and you need
-! to know the geometry, the output variables (PS,U,V,T,Q,...) etc. We're skipping
-! complicated part.
-!-------------------------------------------------------------------------------
-
 !----------------------------------------------------------------------------
 ! We need to output grid information
 !----------------------------------------------------------------------------
 ! Define the new dimensions IDs
 !----------------------------------------------------------------------------
 
-NlonDimID = set_dim(ncFileID, 'lon', geo_grid%nlon,    filename)
-NlatDimID = set_dim(ncFileID, 'lat', geo_grid%nlat,    filename)
-NhgtDimID = set_dim(ncFileID, 'hgt', geo_grid%nheight, filename)
+NlonDimID = set_dim(ncFileID, 'geo_lon', geo_grid%nlon,    filename)
+NlatDimID = set_dim(ncFileID, 'geo_lat', geo_grid%nlat,    filename)
+NhgtDimID = set_dim(ncFileID, 'geo_hgt', geo_grid%nheight, filename)
 
 !----------------------------------------------------------------------------
 ! Create the (empty) Coordinate Variables and the Attributes
 !----------------------------------------------------------------------------
 
+!----------------------------------------------------------------------------
+! Write out Geographic Grid attributes
+!----------------------------------------------------------------------------
+
 ! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='grid_longitude', xtype=NF90_real, &
-              dimids=(/ NlonDimID, NlatDimID /), varid=lonVarID),&
-              'nc_write_model_atts', 'grid_longitude def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  lonVarID, 'long_name', 'longitudes of U,V grid'), &
-              'nc_write_model_atts', 'grid_longitude long_name '//trim(filename))
+call nc_check(NF90_def_var(ncFileID,name='geo lon', xtype=NF90_real, &
+              dimids=NlonDimID, varid=geoLonVarID),&
+              'nc_write_model_atts', 'geo lon def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  geoLonVarID, 'long_name', 'longitudes of geo grid'), &
+              'nc_write_model_atts', 'geo lat long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='grid_latitude', xtype=NF90_real, &
-              dimids=(/ NlonDimID, NlatDimID /), varid=latVarID),&
-              'nc_write_model_atts', 'grid_latitude def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  latVarID, 'long_name', 'latitudes of U,V grid'), &
-              'nc_write_model_atts', 'grid_latitude long_name '//trim(filename))
+call nc_check(NF90_def_var(ncFileID,name='geo lat', xtype=NF90_real, &
+              dimids=NlatDimID, varid=geoLatVarID),&
+              'nc_write_model_atts', 'geo lat def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  geoLatVarID, 'long_name', 'latitudes of geo grid'), &
+              'nc_write_model_atts', 'geo lat long_name '//trim(filename))
 
-! Levels
-call nc_check(NF90_def_var(ncFileID,name='heights', xtype=NF90_real, &
-              dimids=NhgtDimID, varid= levelVarID), &
-              'nc_write_model_atts', 'heights def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, levelVarID, 'long_name', 'depth at grid edges'), &
-              'nc_write_model_atts', 'heights long_name '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, levelVarID, 'cartesian_axis', 'Z'),   &
-              'nc_write_model_atts', 'heights cartesian_axis '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, levelVarID, 'units', 'meters'),  &
-              'nc_write_model_atts', 'heights units '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, levelVarID, 'positive', 'down'),  &
-              'nc_write_model_atts', 'heights units '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, levelVarID, 'comment', &
-               'more positive is closer to the center of the earth'),  &
-              'nc_write_model_atts', 'heights comment '//trim(filename))
+! Heights
+call nc_check(NF90_def_var(ncFileID,name='geo heights', xtype=NF90_real, &
+              dimids=NhgtDimID, varid= geoHeightVarID), &
+              'nc_write_model_atts', 'geo heights def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID, geoHeightVarID, 'long_name', 'height of geo grid'), &
+              'nc_write_model_atts', 'geo heights long_name '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Write out Magnetic Grid attributes
 !----------------------------------------------------------------------------
-!>@todo FIXME : need to write out magnetic grid attributes
+
+NlonDimID = set_dim(ncFileID, 'mag_lon', mag_grid%nlon,    filename)
+NlatDimID = set_dim(ncFileID, 'mag_lat', mag_grid%nlat,    filename)
+NhgtDimID = set_dim(ncFileID, 'mag_hgt', mag_grid%nheight, filename)
+
+! Grid Longitudes
+call nc_check(NF90_def_var(ncFileID,name='mag lon', xtype=NF90_real, &
+              dimids=NlonDimID, varid=magLonVarID),&
+              'nc_write_model_atts', 'mag lon def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  magLonVarID, 'long_name', 'longitudes mag grid'), &
+              'nc_write_model_atts', 'mag lon long_name '//trim(filename))
+
+! Grid Latitudes
+call nc_check(NF90_def_var(ncFileID,name='mag lat', xtype=NF90_real, &
+              dimids=NlatDimID, varid=magLatVarID),&
+              'nc_write_model_atts', 'mag lat def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  magLatVarID, 'long_name', 'latitudes of mag grid'), &
+              'nc_write_model_atts', 'mag lat long_name '//trim(filename))
+
+! Heights
+call nc_check(NF90_def_var(ncFileID,name='mag heights', xtype=NF90_real, &
+              dimids=NhgtDimID, varid= magHeightVarID), &
+              'nc_write_model_atts', 'mag heights def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID, magHeightVarID, 'long_name', 'height for mag grid'), &
+              'nc_write_model_atts', 'mag heights long_name '//trim(filename))
+
+!----------------------------------------------------------------------------
+! Write out Co-Latitude Grid attributes
+!----------------------------------------------------------------------------
+
+NlonDimID = set_dim(ncFileID, 'co_lon', mag_grid%nlon,    filename)
+NlatDimID = set_dim(ncFileID, 'co_lat', mag_grid%nlat,    filename)
+
+! Grid Longitudes
+call nc_check(NF90_def_var(ncFileID,name='co lon', xtype=NF90_real, &
+              dimids=(/ NlonDimID, NlatDimID /), varid=coLonVarID),&
+              'nc_write_model_atts', 'co lon def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  coLonVarID, 'long_name', 'longitudes co grid'), &
+              'nc_write_model_atts', 'co lon long_name '//trim(filename))
+
+! Grid Latitudes
+call nc_check(NF90_def_var(ncFileID,name='co lat', xtype=NF90_real, &
+              dimids=(/ NlonDimID, NlatDimID /), varid=coLatVarID),&
+              'nc_write_model_atts', 'co lat def_var '//trim(filename))
+call nc_check(NF90_put_att(ncFileID,  coLatVarID, 'long_name', 'latitudes of co grid'), &
+              'nc_write_model_atts', 'co lat long_name '//trim(filename))
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
 call nc_check(NF90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 
 !----------------------------------------------------------------------------
-! Fill the coordinate variables
+! Fill Geographic Grid values
 !----------------------------------------------------------------------------
 
-call nc_check(NF90_put_var(ncFileID, lonVarID, geo_grid%longitude ), &
-             'nc_write_model_atts', 'grid_longitude put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, latVarID, geo_grid%latitude ), &
-             'nc_write_model_atts', 'grid_latitude put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, levelVarID, geo_grid%heights ), &
-             'nc_write_model_atts', 'heights put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, geoLonVarID, geo_grid%longitude ), &
+             'nc_write_model_atts', 'geo lon put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, geoLatVarID, geo_grid%latitude ), &
+             'nc_write_model_atts', 'geo lat put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, geoHeightVarID, geo_grid%heights ), &
+             'nc_write_model_atts', 'geo heights put_var '//trim(filename))
+
+!----------------------------------------------------------------------------
+! Fill Magnetic Grid values
+!----------------------------------------------------------------------------
+
+call nc_check(NF90_put_var(ncFileID, magLonVarID, mag_grid%longitude ), &
+             'nc_write_model_atts', 'mag lon put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, magLatVarID, mag_grid%latitude ), &
+             'nc_write_model_atts', 'mag lat put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, magHeightVarID, mag_grid%heights ), &
+             'nc_write_model_atts', 'mag heights put_var '//trim(filename))
+
+!----------------------------------------------------------------------------
+! Fill Co-Latitude Grid values
+!----------------------------------------------------------------------------
+
+call nc_check(NF90_put_var(ncFileID, coLonVarID, mag_grid%conv_2d_lon(:,:)), &
+             'nc_write_model_atts', 'co lon put_var '//trim(filename))
+call nc_check(NF90_put_var(ncFileID, coLatVarID, mag_grid%conv_2d_lat(:,:) ), &
+             'nc_write_model_atts', 'co lat put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -1108,7 +1172,7 @@ logical :: lanai_bitwise
 if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
-lanai_bitwise   = .true.
+lanai_bitwise   = .false.
 
 if (lanai_bitwise) then
    call pert_model_copies_bitwise_lanai(state_ens_handle, ens_size)
@@ -1124,7 +1188,7 @@ else
       do j=1, ens_size
          state_ens_handle%copies(j,i) = random_gaussian(random_seq, &
             state_ens_handle%copies(j,i), &
-            model_perturbation_amplitude)
+            model_perturbation_amplitude*state_ens_handle%copies(j,i))
       enddo
    enddo
 
