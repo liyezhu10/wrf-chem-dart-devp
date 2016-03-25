@@ -245,6 +245,10 @@ switch lower(pinfo.model)
 
       pinfo = GetMPAS_ATMInfo(pinfo, fname, 'PlotPhaseSpace');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, fname, 'PlotPhaseSpace');
+
    case {'sqg'}
 
       pinfo = GetSqgInfo(pinfo, fname, 'PlotPhaseSpace');

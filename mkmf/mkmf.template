@@ -20,9 +20,6 @@
 #  -fbounds-check      add runtime-checking for out-of-range array indices
 #  -ffpe-trap=invalid,zero,overflow
 #                      stop on floating point errors
-#  -Wuninitialized     catch uninitialized variables
-#  -Wunused            issue warning for unused variables - keeps code clean
-
 #
 #  earlier versions of this mkmf file listed 'precision' as one of the options on
 #  the fpe-trap line.  this is not recommended anymore as some of the gfortran internal
@@ -32,7 +29,6 @@
 #
 # -ffree-form          forces input file to be read as free format regardless
 #                      of what file extension it has.
-# -ffree-line-length-none   ... handles "long" lines
 #
 # -fdefault-real-8     force all real variables to be real*8.  not needed for DART code
 #                      since all real variables in DART are declared with a size.

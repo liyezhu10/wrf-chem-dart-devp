@@ -89,6 +89,10 @@ switch lower(pinfo.model)
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
+   
    case {'mpas_atm'}
 
       pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');

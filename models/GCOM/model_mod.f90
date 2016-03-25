@@ -5745,6 +5745,10 @@ real(r8) :: meters_to_radians
 ! lat & lon values as proxies for the physical distance.
 ! The maximum grid cell size from one grid should suffice.
 
+! FIXME ... this is going to be difficult at the poles because the grid
+! could span Greenwich and adjacent longitudes could be HUGELY different.
+! solution might be to use xyz location mod a'la mpas_atm.
+
 max_lon = 0.0_r8
 max_lat = 0.0_r8
 max_lev = 0.0_r8

@@ -177,7 +177,7 @@ switch lower(pinfo.model)
             legend boxoff
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam','sqg','pop'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','wrf','cam','sqg','pop','gcom'}
 
       clf;
 

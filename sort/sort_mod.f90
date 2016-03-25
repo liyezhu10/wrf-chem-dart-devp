@@ -7,7 +7,7 @@
 module sort_mod
 
 use     types_mod, only : r8
-use utilities_mod, only : register_module
+use utilities_mod, only : register_module, E_ERR, error_handler
 
 implicit none
 private
@@ -78,38 +78,50 @@ end function slow_sort
 
 !=======================================================================
 
-   subroutine slow_index_sort(dist, index, num)
+   subroutine slow_index_sort(dist, indices, num)
 
 !  real(r8) indexed sort
 
    implicit none
 
-   integer num, index(num)
-   real(r8) dist(num)
-   integer i, j, k, itmp
+   real(r8), intent(in)  :: dist(:)
+   integer,  intent(out) :: indices(:)
+   integer,  intent(in)  :: num
+
+   integer  :: i, j, k, itmp
+
+if (size(dist) /= num) then
+    call error_handler(E_ERR,'slow_index_sort','distance is wrong length', &
+               source, revision, revdate)
+endif
+
+if (size(indices) /= num) then
+    call error_handler(E_ERR,'slow_index_sort','distance is wrong length', &
+               source, revision, revdate)
+endif
 
 if ( .not. module_initialized ) call initialize_module
 
 !  INITIALIZE THE INDEX ARRAY TO INPUT ORDER
 do i = 1, num
-   index(i) = i
+   indices(i) = i
 end do
 
 !  DO A SILLY N^2 SORT
 do j = 1, num
    do k = 1, num - 1
 !  EXCHANGE TWO ELEMENTS IF THEY RE IN THE WRONG ORDER
-      if(dist(index(k)) > dist(index(k+1))) then
-         itmp = index(k)
-         index(k) = index(k+1)
-         index(k+1) = itmp
+      if(dist(indices(k)) > dist(indices(k+1))) then
+         itmp = indices(k)
+         indices(k) = indices(k+1)
+         indices(k+1) = itmp
       endif
    end do
 end do
 
 !  TEMPORARY PRINT OUT TO CHECK SORT
 !   do 30 j = 1, num
-! 30      write(*, *) j, dist(index(j))
+! 30      write(*, *) j, dist(indices(j))
 !   return
    end subroutine slow_index_sort
 
@@ -247,14 +259,14 @@ end function isort
 !=========================================================================
 
 
-subroutine index_sort_real(x, index, num)
+subroutine index_sort_real(x, indices, num)
 
 ! Uses a heap sort alogrithm on x, returns array of sorted indices
 implicit none
 
 integer,  intent(in)  :: num
 real(r8), intent(in)  :: x(num)
-integer,  intent(out) :: index(num)
+integer,  intent(out) :: indices(num)
 
 integer  :: ind, i, j, l_val_index, level
 real(r8) :: l_val
@@ -264,7 +276,7 @@ if ( .not. module_initialized ) call initialize_module
 
 !  INITIALIZE THE INDEX ARRAY TO INPUT ORDER
 do i = 1, num
-   index(i) = i
+   indices(i) = i
 end do
 
 ! Only one element, just send it back
@@ -278,17 +290,17 @@ do
    ! Keep going down levels until bottom
    if(level > 1) then
       level = level - 1
-      l_val = x(index(level))
-      l_val_index = index(level)
+      l_val = x(indices(level))
+      l_val_index = indices(level)
    else
-      l_val = x(index(ind))
-      l_val_index = index(ind)
+      l_val = x(indices(ind))
+      l_val_index = indices(ind)
 
 
-      index(ind) = index(1)
+      indices(ind) = indices(1)
       ind = ind - 1
       if(ind == 1) then
-         index(1) = l_val_index
+         indices(1) = l_val_index
          return
       endif
    endif
@@ -298,10 +310,10 @@ do
 
    do while(j <= ind)
       if(j < ind) then
-         if(x(index(j)) < x(index(j + 1))) j = j + 1
+         if(x(indices(j)) < x(indices(j + 1))) j = j + 1
       endif
-      if(l_val < x(index(j))) then
-         index(i) = index(j)
+      if(l_val < x(indices(j))) then
+         indices(i) = indices(j)
          i = j
          j = 2 * j
       else
@@ -309,7 +321,7 @@ do
       endif
 
    end do
-   index(i) = l_val_index
+   indices(i) = l_val_index
 
 end do
 
@@ -319,15 +331,15 @@ end subroutine index_sort_real
 !=========================================================================
 
 
-subroutine index_sort_int(x, index, num)
+subroutine index_sort_int(x, indices, num)
 
 ! Uses a heap sort alogrithm on x (an array of integers)
 !  returns array of sorted indices and the sorted array
 implicit none
 
 integer,  intent(in)  :: num
-integer, intent(in)  :: x(num)
-integer,  intent(out) :: index(num)
+integer,  intent(in)  :: x(num)
+integer,  intent(out) :: indices(num)
 
 integer  :: ind, i, j, l_val_index, level
 integer :: l_val
@@ -336,7 +348,7 @@ if ( .not. module_initialized ) call initialize_module
 
 !  INITIALIZE THE INDEX ARRAY TO INPUT ORDER
 do i = 1, num
-  index(i) = i
+  indices(i) = i
 end do
 
 ! Only one element, just send it back
@@ -350,17 +362,17 @@ do
   ! Keep going down levels until bottom
   if(level > 1) then
     level = level - 1
-    l_val = x(index(level))
-    l_val_index = index(level)
+    l_val = x(indices(level))
+    l_val_index = indices(level)
    else
-     l_val = x(index(ind))
-     l_val_index = index(ind)
+     l_val = x(indices(ind))
+     l_val_index = indices(ind)
 
 
-  index(ind) = index(1)
+  indices(ind) = indices(1)
   ind = ind - 1
     if(ind == 1) then
-      index(1) = l_val_index
+      indices(1) = l_val_index
     return
     endif
   endif
@@ -370,10 +382,10 @@ do
 
   do while(j <= ind)
     if(j < ind) then
-      if(x(index(j)) < x(index(j + 1))) j = j + 1
+      if(x(indices(j)) < x(indices(j + 1))) j = j + 1
     endif
-    if(l_val < x(index(j))) then
-      index(i) = index(j)
+    if(l_val < x(indices(j))) then
+      indices(i) = indices(j)
       i = j
       j = 2 * j
     else
@@ -382,7 +394,7 @@ do
 
    end do
 
-   index(i) = l_val_index
+   indices(i) = l_val_index
 
 end do
 

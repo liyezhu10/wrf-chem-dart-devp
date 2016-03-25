@@ -95,6 +95,10 @@ switch lower(pinfo.model)
       pinfo.copyindices = SetCopyID2(pinfo.prior_file);
       pinfo.copies      = length(pinfo.copyindices);
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, prior_file, 'PlotSawtooth');
+
    case {'mpas_atm'}
 
       pinfo = GetMPAS_ATMInfo(pinfo, prior_file, 'PlotSawtooth');

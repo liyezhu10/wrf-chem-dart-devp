@@ -50,6 +50,9 @@ switch lower(pinfo.model)
    case {'pe2lyr'}
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotTotalErr');
 
+   case {'gcom'}
+      pinfo = GetGCOM_oceanInfo(pinfo, diagn_file, 'PlotTotalErr');
+
    case {'mitgcm_ocean'}
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotTotalErr');
 

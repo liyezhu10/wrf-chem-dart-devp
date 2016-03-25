@@ -1291,7 +1291,7 @@ if ( dimids(1) /= unlimitedDimID ) call error_handler(E_ERR,'nc_append_time', &
            'unlimited dimension expected to be slowest-moving',source,revision,revdate)
 
 ! make sure the mirror and the netcdf file are in sync
-call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, name=varname, len=lngth ), &
+call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, varname, lngth ), &
            'nc_append_time', 'inquire_dimension unlimited')
 
 if (lngth /= ncFileId%Ntimes) then
@@ -1328,11 +1328,6 @@ call get_time(time, secs, days)         ! get time components to append
 realtime = days + secs/86400.0_digits12 ! time base is "days since ..."
 lngth           = lngth + 1             ! index of new time
 ncFileID%Ntimes = lngth                 ! new working length of time mirror
-
-write(*,*)'assim_model_mod:nc_append_time:TJH debug realtime  is ',realtime
-write(*,*)'assim_model_mod:nc_append_time:TJH debug lngth     is ',lngth
-write(*,*)'assim_model_mod:nc_append_time:TJH debug TimeVarID is ',TimeVarID
-write(*,*)'assim_model_mod:nc_append_time:TJH debug ncid      is ',ncid
 
 call nc_check(nf90_put_var(ncid, TimeVarID, realtime, start=(/ lngth /) ), &
            'nc_append_time', 'put_var time')
@@ -1409,18 +1404,14 @@ ncid = ncFileID%ncid
 !        if the statetime > last netcdf time ... append a time ...
 
 call nc_check(NF90_Sync(ncid), 'nc_get_tindex', 'sync '//trim(ncFileID%fname))
-
 call nc_check(NF90_Inquire(ncid, nDimensions, nVariables, nAttributes, unlimitedDimID), &
               'nc_get_tindex', 'inquire '//trim(ncFileID%fname))
-
-call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, name=varname, len=nTlen), &
-              'nc_get_tindex', 'inquire_dimension unlimited '//trim(ncFileID%fname))
-
 call nc_check(NF90_Inq_Varid(ncid, "time", TimeVarID), &
               'nc_get_tindex', 'inq_varid time '//trim(ncFileID%fname))
-
 call nc_check(NF90_Inquire_Variable(ncid, TimeVarID, varname, xtype, ndims, dimids, nAtts), &
               'nc_get_tindex', 'inquire_variable time '//trim(ncFileID%fname))
+call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, varname, nTlen), &
+              'nc_get_tindex', 'inquire_dimension unlimited '//trim(ncFileID%fname))
 
 ! Sanity check all cases first.
 

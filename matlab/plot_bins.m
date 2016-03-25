@@ -79,6 +79,10 @@ switch lower(pinfo.model)
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotBins');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, diagn_file, 'PlotBins');
+   
    case {'mitgcm_ocean'}
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotBins');

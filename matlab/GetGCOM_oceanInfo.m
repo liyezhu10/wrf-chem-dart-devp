@@ -65,21 +65,31 @@ switch lower(deblank(routine))
         
         disp('Getting information for the ''base'' variable.')
         [base_time, base_tmeind] = GetTime(     base_var,times);
-        [base_lvl,  base_lvlind] = getLevelIndex(    base_var,levels);
-        [base_lat,  base_latind] = getLatitudeIndex( base_var,YG,YC);
-        [base_lon,  base_lonind] = getLongitudeIndex(base_var,XG,XC);
+        base_lvlind = getLevelIndex();
+        base_latind = getLatitudeIndex();
+        base_lonind = getLongitudeIndex();
         
         disp('Getting information for the ''comparison'' variable.')
-        comp_var                = getVariableProperties(pinfo.vars,          base_var);
-        [comp_lvl, comp_lvlind] = getLevelIndex(    comp_var,levels,    base_lvl);
+        comp_var_metadata = getVariableProperties(metadata);
+        comp_lvlind       = getLevelIndex(base_lvlind);
         
-        pinfo.fname     = fname      ;
-        pinfo.base_var  = base_var ; pinfo.comp_var    = comp_var   ;
-        pinfo.base_time = base_time; pinfo.base_tmeind = base_tmeind;
-        pinfo.base_lvl  = base_lvl ; pinfo.base_lvlind = base_lvlind;
-        pinfo.base_lat  = base_lat ; pinfo.base_latind = base_latind;
-        pinfo.base_lon  = base_lon ; pinfo.base_lonind = base_lonind;
-        pinfo.comp_lvl  = comp_lvl ; pinfo.comp_lvlind = comp_lvlind;
+        pinfo.fname       = fname;
+        pinfo.base_var    = metadata.varname;
+        pinfo.comp_var    = comp_var_metadata.varname;
+        pinfo.base_tmeind = base_tmeind;
+        pinfo.base_time   = metadata.time(base_tmeind);
+        pinfo.base_lonind = base_lonind;
+        pinfo.base_latind = base_latind;
+        pinfo.base_lvlind = base_lvlind;
+        pinfo.base_lon    = metadata.longitude(base_lonind, base_latind, base_lvlind);
+        pinfo.base_lat    = metadata.latitude( base_lonind, base_latind, base_lvlind);
+        pinfo.base_lvl    = metadata.level(    base_lonind, base_latind, base_lvlind);
+
+        % The level is just for annotation purposes for the entire 'level' - 
+        % cannot be correct for a general curvilinear coordinate system, but
+        % we need to annotate something.
+        pinfo.comp_lvlind = comp_lvlind;
+        pinfo.comp_lvl    = comp_var_metadata.level(base_lonind, base_latind, comp_lvlind);
         
     case 'plotvarvarcorrel'
         
@@ -107,7 +117,7 @@ switch lower(deblank(routine))
         
     case 'plotsawtooth'
         
-        base_var          = getVariableProperties(pinfo.vars);
+        base_var        = getVariableProperties(pinfo.vars);
         [level, lvlind] = getLevelIndex(    base_var,levels);
         [  lat, latind] = getLatitudeIndex( base_var,YG,YC);
         [  lon, lonind] = getLongitudeIndex(base_var,XG,XC);

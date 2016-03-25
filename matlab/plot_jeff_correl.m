@@ -110,6 +110,10 @@ switch lower(pinfo.model)
 
       pinfo = GetMITgcm_oceanInfo(pinfo, fname, 'PlotVarVarCorrel');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, fname, 'PlotVarVarCorrel');
+
    case {'mpas_atm'}
 
       pinfo = GetMPAS_ATMInfo(pinfo, fname, 'PlotVarVarCorrel');

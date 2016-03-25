@@ -268,6 +268,11 @@ switch lower(pinfo.model)
 
       PBL1DTotalError( pinfo )
 
+   case 'gcom'
+      %% MIT general circulation ocean model
+
+      GCOMoceanTotalError( pinfo )
+
    case 'mitgcm_ocean'
       %% MIT general circulation ocean model
 
@@ -341,6 +346,159 @@ title('PBL_1d mean error of U over time ... all levels.')
 xdates(pinfo.time)
 ylabel('mean (all levels) total error')
 axis([-Inf Inf 0 Inf])
+
+
+function GCOMoceanTotalError( pinfo )
+%% -------------------------------------------------------------------
+% netcdf has only prognostic variables.
+% We are going to plot the total error (over a horizontal slice)
+% for each variable and annotate an area-weighted total.
+%---------------------------------------------------------------------
+
+tstart = pinfo.truth_time(1);
+tcount = pinfo.truth_time(2);
+dstart = pinfo.diagn_time(1);
+dcount = pinfo.diagn_time(2);
+
+% Since the models are "compatible", get the info from either one.
+ulon3D       = nc_varget(pinfo.truth_file, 'lon'); num_XC  = length(ulon3D  );
+ulat3D       = nc_varget(pinfo.truth_file, 'lat'); num_YC  = length(ulat3D  );
+ulev3D       = nc_varget(pinfo.truth_file, 'lev'); num_ZC  = length(ulev3D );
+
+XG        = nc_varget(pinfo.truth_file, 'ulon');
+YG        = nc_varget(pinfo.truth_file, 'ulat');
+
+XC= squeeze(ulon3D(:,:,1));
+YC = squeeze(ulat3D(:,1,:));
+ZC = squeeze(ulev3D(:,:,1));
+
+% XC = Ulon(:);
+% YC = Ulat(:);
+% ZC = Ulev(:);
+num_times = pinfo.time_series_length;
+
+
+
+% Initialize storage for error averaging
+rms          = zeros(num_times, pinfo.num_state_vars, num_ZC);
+spread_final = zeros(num_times, pinfo.num_state_vars, num_ZC);
+
+% Get the indices for the true state, ensemble mean and spread
+% The metadata is queried to determine which "copy" is appropriate.
+truth_index      = get_copy_index(pinfo.truth_file, 'true state');
+ens_mean_index   = get_copy_index(pinfo.diagn_file, 'ensemble mean');
+ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
+
+% Calculate weights for area-averaging.
+twts = reshape(SphereWeights(XC, YC),1,num_YC*num_XC);   % Grid Centers
+vwts = reshape(SphereWeights(XG, YG),1,num_YC*num_XC);   % Grid edGes
+
+%----------------------------------------------------------------------
+% temperature ...  num_times x num_levels x num_lats x num_lons
+% GetLevel returns a    num_times x num_lats*num_lons   2Darray.
+%----------------------------------------------------------------------
+
+for ilevel = 1:num_ZC,     % Loop through all levels
+for ivar=1:pinfo.num_state_vars-1,  % knowing ssh is last
+
+   fprintf('Processing level %d of %d ...\n',ilevel,num_ZC)
+   %-------------------------------------------------------------------
+   % all vars organized    num_times x num_levels x num_lats x num_lons
+   %-------------------------------------------------------------------
+
+   truth  = GetLevel(pinfo.truth_file, pinfo.vars{ivar},      truth_index, ilevel, tstart, tcount);
+   ens    = GetLevel(pinfo.diagn_file, pinfo.vars{ivar},   ens_mean_index, ilevel, dstart, dcount);
+   spread = GetLevel(pinfo.diagn_file, pinfo.vars{ivar}, ens_spread_index, ilevel, dstart, dcount);
+
+   landmask = find(isfinite(truth(1,:))); % presume all members have same mask
+   vweights = vwts(landmask);
+   tweights = twts(landmask);
+
+   mytruth  =  truth(:,landmask);
+   myens    =    ens(:,landmask);
+   myspread = spread(:,landmask);
+
+   switch lower(pinfo.vars{ivar})
+      case {'v'}
+         err        = total_err(              mytruth,    myens, vweights);
+         err_spread = total_err(zeros(size(myspread)), myspread, vweights);
+      otherwise
+         err        = total_err(              mytruth,    myens, tweights);
+         err_spread = total_err(zeros(size(myspread)), myspread, tweights);
+   end
+
+            rms(:, ivar, ilevel) = err;
+   spread_final(:, ivar, ilevel) = err_spread;
+
+end
+end % End of level loop
+
+clear truth ens spread err err_spread
+
+%----------------------------------------------------------------------
+% surface pressure has only one level.
+% Get2D   returns a   num_times x num_lats*num_lons   2Darray.
+%----------------------------------------------------------------------
+
+disp('Processing sea surface height ...')
+
+ivar   = find(strcmp(pinfo.vars,'SSH'));
+ilevel = 1;
+
+truth      = Get2D(pinfo.truth_file, 'SSH',      truth_index, tstart, tcount);
+ens        = Get2D(pinfo.diagn_file, 'SSH',   ens_mean_index, dstart, dcount);
+spread     = Get2D(pinfo.diagn_file, 'SSH', ens_spread_index, dstart, dcount);
+
+landmask   = find(isfinite(truth(1,:))); % presume all members have same mask
+tweights   = twts(landmask);
+
+mytruth    =  truth(:,landmask);
+myens      =    ens(:,landmask);
+myspread   = spread(:,landmask);
+
+err        = total_err(              mytruth,    myens, tweights );
+err_spread = total_err(zeros(size(myspread)), myspread, tweights );
+
+         rms(:,ivar,ilevel) = err;         % spatial mean
+spread_final(:,ivar,ilevel) = err_spread;  % spatial mean
+
+clear truth ens spread err err_spread
+
+%----------------------------------------------------------------------
+% Each variable in its own figure window
+%----------------------------------------------------------------------
+for ivar=1:pinfo.num_state_vars,
+
+   figure(ivar); clf;
+      varunits = nc_attget(pinfo.truth_file,pinfo.vars{ivar},'units');
+
+      s1 = sprintf('%s %s Ensemble Mean', pinfo.model,pinfo.vars{ivar});
+
+      switch lower(pinfo.vars{ivar})
+         case {'ssh'}
+            plot(pinfo.time,          rms(:, ivar, 1), '-'); hold on;
+            plot(pinfo.time, spread_final(:, ivar, 1), '--');
+
+            s{1} = sprintf('time-mean Ensemble Mean Total Error = %f', mean(         rms(:, ivar, 1)));
+            s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(spread_final(:, ivar, 1)));
+         otherwise
+            plot(pinfo.time, squeeze(         rms(:, ivar, :)),'-'); hold on;
+            plot(pinfo.time, squeeze(spread_final(:, ivar, :)),'--');
+
+            for i = 1:num_ZC,
+               s{i       } = sprintf('level %d error  %.3f', i,mean(         rms(:, ivar, i)));
+               s{i+num_ZC} = sprintf('level %d spread %.3f', i,mean(spread_final(:, ivar, i)));
+            end
+      end
+
+      h = legend(s); legend(h,'boxoff')
+      grid on;
+      xdates(pinfo.time)
+      ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
+      title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
+
+end
+
 
 
 

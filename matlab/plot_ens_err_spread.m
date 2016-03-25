@@ -70,6 +70,10 @@ switch lower(pinfo.model)
 
       pinfo = GetPe2lyrInfo(pinfo, truth_file, 'PlotEnsErrSpread');
 
+   case {'gcom'}
+
+      pinfo = GetGCOM_oceanInfo(pinfo, truth_file, 'PlotEnsErrSpread');
+      
    case {'mitgcm_ocean'}
 
       pinfo = GetMITgcm_oceanInfo(pinfo, truth_file, 'PlotEnsErrSpread');

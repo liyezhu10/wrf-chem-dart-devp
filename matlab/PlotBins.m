@@ -139,7 +139,7 @@ switch lower(pinfo.model)
          axis tight
       end
 
-   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf','mpas_atm','mpas_ocn','sqg','pop'}
+   case {'fms_bgrid','pe2lyr','mitgcm_ocean','cam','wrf','mpas_atm','mpas_ocn','sqg','pop','gcom'}
 
       % It is intended that all 3D models have all the required information
       % set in the corresponding Get<model>Info.m script.

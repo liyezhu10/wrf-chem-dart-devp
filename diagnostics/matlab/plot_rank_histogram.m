@@ -1,4 +1,4 @@
-function plotdat = plot_rank_histogram(fname, timeindex, varargin)
+functon plotdat = plot_rank_histogram(fname, timeindex, varargin)
 %% plot_rank_histogram plots the rank histogram of the observations - segregated by level and variable.
 % Part of the observation-space diagnostics routines.
 %
@@ -227,6 +227,7 @@ for ivar = 1:plotdat.nvars
                               plotdat.nlevels, plotdat.nregions);
 
    % Collapse the time dimension if need be.
+
    if ( timeindex < 0 )
       guess             = sum(guess,1);
       rhist             = sum(rhist,1);
