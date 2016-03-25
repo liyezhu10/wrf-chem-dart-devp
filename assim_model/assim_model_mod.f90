@@ -28,7 +28,8 @@ use     model_mod, only : get_model_size, static_init_model, get_state_meta_data
                           nc_write_model_vars, pert_model_state,                   &
                           get_close_maxdist_init, get_close_obs_init,              &
                           get_close_state_init, get_close_obs, get_close_state,    &
-                          ens_mean_for_model
+                          ens_mean_for_model, model_convert_vert_obs,              &
+                          model_convert_vert_state
 
 implicit none
 private
@@ -45,7 +46,7 @@ public :: static_init_assim_model, init_diag_output, get_model_size,            
           nc_get_tindex, get_model_time_step, open_restart_read, open_restart_write,       &
           close_restart, adv_1step, aget_initial_condition, get_close_maxdist_init,        &
           get_close_obs_init, get_close_state_init, get_close_obs, get_close_state,        &
-          ens_mean_for_model
+          ens_mean_for_model, convert_vert_obs, convert_vert_state
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -1239,6 +1240,32 @@ get_model_state_vector = assim_model%state_vector
 end function get_model_state_vector
 
 
+!--------------------------------------------------------------------
+
+subroutine convert_vert_obs(item_count, loc_list, kind_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: kind_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+call model_convert_vert_obs(item_count, loc_list, kind_list, vertical_localization_coordinate)
+
+end subroutine convert_vert_obs
+
+!--------------------------------------------------------------------
+
+subroutine convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: kind_list(item_count)
+integer,             intent(in)    :: indx_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+call model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+
+end subroutine convert_vert_state
 
 
 function nc_append_time(ncFileID, time) result(lngth)

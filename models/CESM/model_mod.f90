@@ -52,6 +52,8 @@ use pop_model_mod, only :                         &
   pop_restart_file_to_sv  => restart_file_to_sv,  &
   pop_sv_to_restart_file  => sv_to_restart_file,  &
   pop_get_gridsize        => get_gridsize,        &
+  pop_model_convert_vert_obs    => model_convert_vert_obs,   &
+  pop_model_convert_vert_state  => model_convert_vert_state, &
   pop_test_interpolation  => test_interpolation
 
 use cam_model_mod, only :                            &
@@ -79,7 +81,9 @@ use cam_model_mod, only :                            &
   cam_write_cam_init       => write_cam_init,        &
   cam_write_cam_times      => write_cam_times,       &
   cam_state_vector_to_model => state_vector_to_model, &
-  cam_model_to_state_vector => model_to_state_vector
+  cam_model_to_state_vector => model_to_state_vector, &
+  cam_model_convert_vert_obs      => model_convert_vert_obs,  &
+  cam_model_convert_vert_state    => model_convert_vert_state
 
 
 use clm_model_mod, only :                             &
@@ -97,6 +101,8 @@ use clm_model_mod, only :                             &
   clm_pert_model_state     => pert_model_state,       &
   clm_ens_mean_for_model   => ens_mean_for_model,     &
   clm_sv_to_restart_file   => sv_to_restart_file,     &
+  clm_model_convert_vert_obs     => model_convert_vert_obs,   &
+  clm_model_convert_vert_state   => model_convert_vert_state, &
   clm_to_dart_state_vector,  &
    get_gridsize,             &
    get_clm_restart_filename, &
@@ -134,6 +140,8 @@ public :: get_model_size,         &
           get_close_obs,          &
           get_close_state,        &
           ens_mean_for_model,     &
+          model_convert_vert_obs, &
+          model_convert_vert_state, &
   restart_file_to_sv, &
   sv_to_restart_file, &
   get_cesm_restart_filename
@@ -664,6 +672,174 @@ end subroutine ens_mean_for_model
 
 !------------------------------------------------------------------
 
+subroutine model_convert_vert_obs(item_count, loc_list, type_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: type_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+integer :: i, sublist_count
+type(location_type), allocatable :: loc_sublist(:)
+integer, allocatable :: type_sublist(:)
+
+if ( .not. module_initialized ) call static_init_model
+
+if (include_CAM) then
+   ! tricky - here we have to extract the obs types for atm only
+   sublist_count = 0
+   do i=1, item_count
+      if (type_list(i) == RADIOSONDE_TEMPERATURE) sublist_count = sublist_count + 1
+   enddo
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), type_sublist(sublist_count))
+      sublist_count = 0
+      do i=1, item_count
+         if (type_list(i) == RADIOSONDE_TEMPERATURE) then
+             sublist_count = sublist_count + 1
+             loc_sublist(sublist_count)  = loc_list(i)
+             type_sublist(sublist_count) = type_list(i)
+         endif
+      enddo
+ 
+      call cam_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, vertical_localization_coordinate)
+
+      do i=1, item_count
+         if (type_list(i) == RADIOSONDE_TEMPERATURE) then
+             sublist_count = sublist_count + 1
+             loc_list(i) = loc_sublist(sublist_count) 
+         endif
+      enddo
+      deallocate(loc_sublist, type_sublist)
+   endif
+endif
+
+if (include_POP) then
+   ! tricky - here we have to extract the obs types for ocn only
+   sublist_count = 0
+   do i=1, item_count
+      if (type_list(i) == XBT_TEMPERATURE) sublist_count = sublist_count + 1
+   enddo
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), type_sublist(sublist_count))
+      sublist_count = 0
+      do i=1, item_count
+         if (type_list(i) == XBT_TEMPERATURE) then
+             sublist_count = sublist_count + 1
+             loc_sublist(sublist_count)  = loc_list(i)
+             type_sublist(sublist_count) = type_list(i)
+         endif
+      enddo
+ 
+      call pop_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, vertical_localization_coordinate)
+
+      do i=1, item_count
+         if (type_list(i) == XBT_TEMPERATURE) then
+             sublist_count = sublist_count + 1
+             loc_list(i) = loc_sublist(sublist_count) 
+         endif
+      enddo
+      deallocate(loc_sublist, type_sublist)
+   endif
+endif
+
+if (include_CLM) then
+   call clm_model_convert_vert_obs(item_count, loc_list, type_list, vertical_localization_coordinate)
+endif
+
+end subroutine model_convert_vert_obs
+
+!------------------------------------------------------------------
+
+subroutine model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: kind_list(item_count)
+integer,             intent(in)    :: indx_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+integer :: x_start, x_end
+integer :: i, sublist_count
+type(location_type), allocatable :: loc_sublist(:)
+integer, allocatable :: kind_sublist(:), indx_sublist(:)
+
+if ( .not. module_initialized ) call static_init_model
+
+if (include_CAM) then
+   ! tricky - here we have to extract only the locs for CAM
+   call set_start_end('CAM', x_start, x_end)
+   ! FIXME: put this in a subr since we're going to do it 3 times
+   sublist_count = 0
+   do i=1, item_count
+      if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) sublist_count = sublist_count + 1
+   enddo
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), indx_sublist(sublist_count))
+      sublist_count = 0
+      do i=1, item_count
+         if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
+             sublist_count = sublist_count + 1
+             loc_sublist(sublist_count)  = loc_list(i)
+             kind_sublist(sublist_count) = kind_list(i)
+             indx_sublist(sublist_count) = indx_list(i)
+         endif
+      enddo
+ 
+      call cam_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, vertical_localization_coordinate)
+ 
+      do i=1, item_count
+         if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
+             sublist_count = sublist_count + 1
+             loc_list(i) = loc_sublist(sublist_count) 
+         endif
+      enddo
+      deallocate(loc_sublist, kind_sublist, indx_sublist)
+   endif
+endif
+
+if (include_POP) then
+   ! tricky - here we have to extract only the locs for POP
+   call set_start_end('POP', x_start, x_end)
+   ! FIXME: put this in a subr since we're going to do it 3 times
+   sublist_count = 0
+   do i=1, item_count
+      if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) sublist_count = sublist_count + 1
+   enddo
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), indx_sublist(sublist_count))
+      sublist_count = 0
+      do i=1, item_count
+         if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
+             sublist_count = sublist_count + 1
+             loc_sublist(sublist_count)  = loc_list(i)
+             kind_sublist(sublist_count) = kind_list(i)
+             indx_sublist(sublist_count) = indx_list(i)
+         endif
+      enddo
+ 
+      call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, vertical_localization_coordinate)
+
+      do i=1, item_count
+         if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
+             sublist_count = sublist_count + 1
+             loc_list(i) = loc_sublist(sublist_count) 
+         endif
+      enddo
+      deallocate(loc_sublist, kind_sublist, indx_sublist)
+   endif
+endif
+
+if (include_CLM) then
+   call set_start_end('CLM', x_start, x_end)
+   ! FIXME: ditto
+   call clm_model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+endif
+
+end subroutine model_convert_vert_state
+
+!------------------------------------------------------------------
+
 subroutine restart_file_to_sv(filenames, state_vector, model_time)
  character(len=*), intent(in)    :: filenames(:)
  real(r8),         intent(inout) :: state_vector(:)
@@ -785,6 +961,7 @@ character(len=32) :: componentname
 integer :: i, this, base_obs_kind
 real(r8) :: horiz_dist, vert_dist_proxy
 integer :: vert1, vert2
+integer, save :: n = 1
 
 ! Initialize variables to missing status
 num_close = 0
@@ -821,10 +998,15 @@ if (.not. present(dist)) return
 base_obs_kind = get_obs_kind_var_type(base_obs_type)
 vert1 = query_location(base_obs_loc)
 
+
+
 do i=1, num_close
    ! compute the horizontal here and then if cross component do something
    ! different in the vertical.
    this = close_ind(i)
+   vert2 = query_location(locs(this))
+if (mod(n, 1000) == 1) print *, 'vert1, 2: ', vert1, vert2
+n = n + 1
    if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
        (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
       dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))

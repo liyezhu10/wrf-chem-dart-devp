@@ -235,7 +235,8 @@ public ::                                                            &
    nc_write_model_atts, nc_write_model_vars,                         &
    init_conditions, init_time, adv_1step, end_model,                 &
    get_close_maxdist_init, get_close_obs_init, get_close_obs,        &
-   ens_mean_for_model, get_close_state
+   ens_mean_for_model, get_close_state, model_convert_vert_obs,      &
+   model_convert_vert_state
 
 ! Why were these in public?   get_close_maxdist_init, get_close_obs_init, &
 ! Because assim_model needs them to be there.
@@ -3154,7 +3155,7 @@ State_1D: do i=1,state_num_1d
       else
          ! ? Should this be able to return a vertical location for VERTIS{LEVEL,PRESSURE,HEIGHT,VERTISSCALEHEIGHT}?
          !   That is, should users be able to define a CAM(5 and earlier) state variable with those which_verts?
-         !   NO
+         !   NO  (nsc - why not?)
          write(string1,*) 'a 1-D state variable with only a vertical coordinate cannot be handled ', &
                           'by location_mod (yet).  Fix the which_vert_1d of ',cflds(nfld)
          call error_handler(E_ERR, 'get_state_meta_data', string1, source, revision, revdate);
@@ -5492,7 +5493,7 @@ if (base_which == VERTISPRESSURE .and. vert_coord == 'pressure') then
    local_base_array   = get_location(base_obs_loc)  ! needed in num_close loop
    local_base_which   = base_which
 else
-   call convert_vert(base_array, base_which, base_obs_loc, base_obs_kind, &
+   call cam_convert_vert(base_array, base_which, base_obs_loc, base_obs_kind, &
                      local_base_array, local_base_which)
    local_base_obs_loc = set_location(base_array(1), base_array(2), local_base_array(3), &
                                      local_base_which)
@@ -5532,7 +5533,7 @@ do k = 1, num_close
       local_obs_which    = local_base_which
 
    else
-      call convert_vert(obs_array, obs_which, locs(t_ind), kinds(t_ind), &
+      call cam_convert_vert(obs_array, obs_which, locs(t_ind), kinds(t_ind), &
                         local_obs_array, local_obs_which)
 
       ! save the converted location back into the original list.
@@ -5601,8 +5602,121 @@ enddo
 end subroutine get_close_obs
 
 !-----------------------------------------------------------------------
+!>
+!> model_convert_vert_obs takes as input a list of obs locations, a list of specific
+!> dart types, and optionally a preferred vertical coordinate (which can be
+!> overridden by the model_mod if it prefers.)
+!>
+!> it should convert all the vertical coordinates to the perferred type.
+!> to do the conversion, if ensemble data is needed, the mean should be used.
+!>
+!> @param[in] item_count
+!> The number of items in the following lists.
+!>
+!> @param[inout] loc_list(:)
+!> The DART location_type locations to be updated/converted in the vertical.
+!> 
+!> @param[in]    type_list(:)
+!> The specific DART TYPEs of the locations
+!> 
+!> @param[in]   vertical_localization_coordinate
+!> The suggested vertical to return.  The model_mod can ignore this if there
+!> is a good reason, otherwise this is the vertical that should be returned.
 
-subroutine convert_vert(old_array, old_which, old_loc, old_kind, new_array, new_which)
+
+subroutine model_convert_vert_obs(item_count, loc_list, type_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: type_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+integer  :: i, base_which, local_base_which, base_kind
+real(r8) :: base_array(3), local_base_array(3), obs_array(3), local_obs_array(3)
+
+if (.not. module_initialized) call static_init_model()
+
+local_base_which = VERTISPRESSURE
+
+! whereever loc_list(:) vert type is not pressure; convert it to pressure
+do i=1, item_count
+   base_which = nint(query_location(loc_list(i)))
+   base_array = get_location(loc_list(i))
+   base_kind = get_obs_kind_var_type(type_list(i))
+   
+   if (base_which /= VERTISPRESSURE) then
+      call cam_convert_vert(base_array, base_which, loc_list(i), base_kind, &
+                        local_base_array, local_base_which)
+      loc_list(i) = set_location(base_array(1), base_array(2), local_base_array(3), &
+                                 local_base_which)
+   endif
+enddo
+
+end subroutine model_convert_vert_obs
+
+!-----------------------------------------------------------------------
+!>
+!> model_convert_vert_state takes as input a list of state vector locations, 
+!> a list of generic dart kinds, the offset into the state vector, and
+!> optionally a preferred vertical coordinate (which can be
+!> overridden by the model_mod if it prefers.)
+!>
+!> it should convert all the vertical coordinates to the perferred type.
+!> to do the conversion, if ensemble data is needed, the mean should be used.
+!>
+!> @param[in] item_count
+!> The number of items in the following lists.
+!>
+!> @param[inout] loc_list(:)
+!> The DART location_type locations to be updated/converted in the vertical.
+!> 
+!> @param[in]    kind_list(:)
+!> The generic DART KINDs of the locations
+!> 
+!> @param[in]    indx_list(:)
+!> The integer offsets into the state vector for each location
+!> 
+!> @param[in]   vertical_localization_coordinate
+!> The suggested vertical to return.  The model_mod can ignore this if there
+!> is a good reason, otherwise this is the vertical that should be returned.
+
+
+subroutine model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+
+integer,             intent(in)    :: item_count
+type(location_type), intent(inout) :: loc_list(item_count)
+integer,             intent(in)    :: kind_list(item_count)
+integer,             intent(in)    :: indx_list(item_count)
+integer,             intent(in)    :: vertical_localization_coordinate
+
+integer  :: i, base_which, local_base_which
+real(r8) :: base_array(3), local_base_array(3), obs_array(3), local_obs_array(3)
+
+if (.not. module_initialized) call static_init_model()
+
+local_base_which = VERTISPRESSURE
+
+! FIXME: could we just look up the lat/lon from the state vector index
+! and compute the pressure at that gridpoint faster??
+
+! whereever loc_list(:) vert type is not pressure; convert it to pressure
+do i=1, item_count
+   base_which = nint(query_location(loc_list(i)))
+   base_array = get_location(loc_list(i))
+   
+   if (base_which /= VERTISPRESSURE) then
+      call cam_convert_vert(base_array, base_which, loc_list(i), kind_list(i), &
+                        local_base_array, local_base_which)
+      loc_list(i) = set_location(base_array(1), base_array(2), local_base_array(3), &
+                                 local_base_which)
+   endif
+enddo
+
+end subroutine model_convert_vert_state
+
+!-----------------------------------------------------------------------
+
+subroutine cam_convert_vert(old_array, old_which, old_loc, old_kind, new_array, new_which)
 
 ! Uses model information and subroutines to convert the vertical location of an ob
 ! (prior, model state variable, or actual ob) into the standard vertical coordinate
@@ -5632,7 +5746,7 @@ cell_corners = MISSING_I    ! corners of the cell which contains the ob
 
 if (allocate_ps) then
    write(string1,*) 'Cannot proceed because ps arrays have not been allocated and filled'
-   call error_handler(E_ERR, 'convert_vert', string1,source,revision,revdate)
+   call error_handler(E_ERR, 'cam_convert_vert', string1,source,revision,revdate)
 endif
 
 ! this code does not alter the lat/lon, only the vertical.
@@ -5653,7 +5767,7 @@ if (.not. (old_which == VERTISPRESSURE .or. old_which == VERTISHEIGHT  .or. &
    write(string1,'(A,3(F12.5,1x),A,I2)') 'obs at (', old_array,  &
         ') has unsupported vertical type = ',old_which
    write(string2,*) 'See location_mod.f90; VERTISxxx to decode this vertical type'
-   call error_handler(E_ERR, 'convert_vert', string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR, 'cam_convert_vert', string1,source,revision,revdate,text2=string2)
 endif
 
 ! Need lon and lat indices to select ps for calc of p_col for vertical conversion.
@@ -5671,7 +5785,7 @@ if (old_which == VERTISLEVEL ) then
    if (cam_type < 0) then
       write(string1,*)'old_kind  is ',old_kind,' | cam_type is ',cam_type
       write(string2,*)'get_raw_obs_kind_name of old_kind ', trim(get_raw_obs_kind_name(old_kind))
-      call error_handler(E_ERR,'convert_vert',string1,source,revision,revdate,text2=string2)
+      call error_handler(E_ERR,'cam_convert_vert',string1,source,revision,revdate,text2=string2)
    endif
 
    if (l_rectang) then
@@ -5730,7 +5844,7 @@ else
    if (istatus == 1) then
       write(string1,'(A,I8)') 'interp_X failed for KIND_SURFACE_PRESSURE.'
       call write_location(0, old_loc, charstring=string2)
-      call error_handler(E_ERR, 'convert_vert', string1,source,revision,revdate, text2=string2)
+      call error_handler(E_ERR, 'cam_convert_vert', string1,source,revision,revdate, text2=string2)
    endif
 
    call plevs_cam(p_surf, num_levs, p_col)
@@ -5795,7 +5909,7 @@ elseif (old_which == VERTISHEIGHT) then
    call model_heights(num_levs, ens_mean, p_surf, old_loc,  model_h, istatus)
    if (istatus == 1) then
       write(string1, *) 'model_heights failed'
-      call error_handler(E_ERR, 'convert_vert', string1)
+      call error_handler(E_ERR, 'cam_convert_vert', string1)
       ! return
    endif
 
@@ -5818,7 +5932,7 @@ elseif (old_which == VERTISHEIGHT) then
       frac = 1.0_r8
       write(string1, *) 'ob height ',old_array(3),' above CAM levels at ' &
                           ,old_array(1) ,old_array(2) ,' for kind',old_kind
-      call error_handler(E_MSG, 'convert_vert', string1,source,revision,revdate)
+      call error_handler(E_MSG, 'cam_convert_vert', string1,source,revision,revdate)
    elseif (bot_lev <= num_levs) then
       ! within model levels
       frac = (old_array(3) - model_h(bot_lev)) / (model_h(top_lev) - model_h(bot_lev))
@@ -5827,7 +5941,7 @@ elseif (old_which == VERTISHEIGHT) then
       frac = 0.0_r8
       write(string1, *) 'ob height ',old_array(3),' below CAM levels at ' &
                           ,old_array(1) ,old_array(2) ,' for kind',old_kind
-      call error_handler(E_MSG, 'convert_vert', string1,source,revision,revdate)
+      call error_handler(E_MSG, 'cam_convert_vert', string1,source,revision,revdate)
    endif
 
    old_pressure = (1.0_r8 - frac) * p_col(bot_lev) + frac * p_col(top_lev)
@@ -5840,13 +5954,13 @@ elseif (old_which == VERTISHEIGHT) then
    endif
 
 else
-   write(string1, *) 'model which_vert = ',old_which,' not handled in convert_vert '
-   call error_handler(E_ERR, 'convert_vert', string1,source,revision,revdate)
+   write(string1, *) 'model which_vert = ',old_which,' not handled in cam_convert_vert '
+   call error_handler(E_ERR, 'cam_convert_vert', string1,source,revision,revdate)
 endif
 
 return
 
-end subroutine convert_vert
+end subroutine cam_convert_vert
 
 !------------------------------------------------------------
 ! Subroutines from mpas_atm/model_mod.f90, for using cartesian coordinates to

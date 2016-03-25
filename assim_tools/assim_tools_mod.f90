@@ -55,7 +55,8 @@ use time_manager_mod,     only : time_type, get_time
 
 use assim_model_mod,      only : get_state_meta_data, get_close_maxdist_init,             &
                                  get_close_obs_init, get_close_state_init,                &
-                                 get_close_obs, get_close_state
+                                 get_close_obs, get_close_state, convert_vert_obs,        &
+                                 convert_vert_state
 
 implicit none
 private
@@ -120,6 +121,10 @@ logical  :: sampling_error_correction       = .false.
 integer  :: adaptive_localization_threshold = -1
 real(r8) :: adaptive_cutoff_floor           = 0.0_r8
 integer  :: print_every_nth_obs             = 0
+! FIXME: this is what i want
+!character(len=32) :: vertical_localization_coordinate = 'PRESSURE'
+! this is fast to code
+integer  :: vertical_localization_coordinate = 2
 
 ! since this is in the namelist, it has to have a fixed size.
 ! the arrays are initialized to a known value before the namelist
@@ -492,6 +497,16 @@ call get_my_vars(ens_handle, my_state_indx)
 do i = 1, ens_handle%my_num_vars
    call get_state_meta_data(my_state_indx(i), my_state_loc(i), my_state_kind(i))
 end do
+
+! FIXME: 
+! call convert_vert() here for obs and state.  vert coordinate is
+! suggested vertical coordinate; model_mods are permitted to override
+! this if they have a good reason.  this is called on every task, even
+! those without a copy of the state, and only one task has a copy of
+! the ensemble mean, so the model is going to have to have saved a copy
+! of the ens_mean to do the convert.
+call convert_vert_obs(obs_ens_handle%my_num_vars, my_obs_loc(:), my_obs_kind(:), vertical_localization_coordinate)
+call convert_vert_state(ens_handle%my_num_vars, my_state_loc(:), my_state_kind(:), my_state_indx(i), vertical_localization_coordinate)
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
 ! INCREMENTS. OWNING PE WOULD SHIP IT'S PRIOR TO THIS ONE

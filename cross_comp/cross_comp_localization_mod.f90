@@ -227,7 +227,7 @@ elseif ( vert_is_pressure(loc_state) ) then
    endif
    ! print*,'STATE HAS THE PRESSURE COORDINATE'
 else
-   print*,'ERROR,EITHER OBS OR STATE MUST HAVE A PRESSURE COORDINATE'
+   !print*,'ERROR,EITHER OBS OR STATE MUST HAVE A PRESSURE COORDINATE'
    alpha = 0.0
 endif 
 
@@ -239,7 +239,7 @@ else if ( vert_is_height(loc_state) ) then
    alpha2 = exp(-(this_loc_state(3)/L(ilat))**2)
    !print*,'STATE HAS THE DEPTH COORDINATE'
 else
-   print*,'ERROR,EITHER OBS OR STATE MUST HAVE A HEIGHT COORDINATE'
+   !print*,'ERROR,EITHER OBS OR STATE MUST HAVE A HEIGHT COORDINATE'
    alpha2= 0.0
 endif
 
