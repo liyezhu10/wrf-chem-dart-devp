@@ -264,13 +264,13 @@ for i = 1:ndims
                start(i) = copy1;
                count(i) = copyN;
            case {'surf','unde','hlev','mlev','plev','heig','leve','bott', ...
-                 'ilev','nver','levt','levs','nzp1'}
+                 'ilev','nver','levt','levs','dept','nzp1'}
                start(i) = level1;
                count(i) = levelN;
-           case {'tmpj','sout','nyp1'}
+           case {'tmpj','sout','slat','iyrt','nyp1'}
                start(i) = lat1;
                count(i) = latN;
-           case {'tmpi','west','nxp1'}
+           case {'tmpi','west','slon','ixrt','nxp1'}
                start(i) = lon1;
                count(i) = lonN;
            case {'stat','xdim','ydim','loc1'}
@@ -304,13 +304,13 @@ for i = 1:ndims
            case 't'
                start(i) = time1;
                count(i) = timeN;
-           case {'lev','z','nz'}
+           case {'lev','z','nz','k'}
                start(i) = level1;
                count(i) = levelN;
-           case {'lat','y','ny'}
+           case {'lat','y','ny','iy','j'}
                start(i) = lat1;
                count(i) = latN;
-           case {'lon','x','nx'}
+           case {'lon','x','nx','ix','i'}
                start(i) = lon1;
                count(i) = lonN;
            case 'pft'

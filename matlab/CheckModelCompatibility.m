@@ -283,6 +283,13 @@ switch lower(modelname)
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
          
+   case {'pop'}
+      dnum_lons = dim_length(fname,'i');
+      dnum_lats = dim_length(fname,'j');
+      dnum_lvls = dim_length(fname,'k');
+         x = 3;
+         y = [dnum_lons dnum_lats dnum_lvls];
+
    case {'mpas_atm'}
 
       dnum_cells = dim_length(fname,'nCells');
