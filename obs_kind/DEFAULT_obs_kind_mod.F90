@@ -337,12 +337,13 @@ integer, parameter, public :: &
     KIND_VELOCITY_VERTICAL_N4S       = 283, &
     KIND_VELOCITY_VERTICAL_NO        = 284, &
     KIND_GND_GPS_VTEC                = 285, &
-    KIND_DENSITY_ION_OP              = 286
+    KIND_DENSITY_ION_OP              = 286, &
+    KIND_TOTAL_ELECTRON_CONTENT      = 287
 
 ! kinds for WRF-Hydro (James McCreight)
 integer, parameter, public :: &
-  KIND_STREAMFLOW                    = 290, &
-  KIND_SURFACE_HEAD                  = 291
+    KIND_STREAMFLOW                  = 290, &
+    KIND_SURFACE_HEAD                = 291
 
 ! more land kinds
 integer, parameter, public :: &
@@ -684,6 +685,7 @@ obs_kind_names(283) = obs_kind_type(KIND_VELOCITY_VERTICAL_N4S, 'KIND_VELOCITY_V
 obs_kind_names(284) = obs_kind_type(KIND_VELOCITY_VERTICAL_NO, 'KIND_VELOCITY_VERTICAL_NO')
 obs_kind_names(285) = obs_kind_type(KIND_GND_GPS_VTEC, 'KIND_GND_GPS_VTEC')
 obs_kind_names(286) = obs_kind_type(KIND_DENSITY_ION_OP, 'KIND_DENSITY_ION_OP')
+obs_kind_names(287) = obs_kind_type(KIND_TOTAL_ELECTRON_CONTENT, 'KIND_TOTAL_ELECTRON_CONTENT')
 
 obs_kind_names(290) = obs_kind_type(KIND_STREAMFLOW, 'KIND_STREAMFLOW')
 obs_kind_names(291) = obs_kind_type(KIND_SURFACE_HEAD, 'KIND_SURFACE_HEAD')
@@ -873,9 +875,9 @@ character(len=paramname_length) :: get_raw_obs_kind_name
 
 if (.not. module_initialized) call initialize_module
 
-if (obs_kind_ind < 1 .or. obs_kind_ind > max_obs_generic) then
+if (obs_kind_ind < 0 .or. obs_kind_ind > max_obs_generic) then
    write(msg_string,'(A,I6,A,I6)') 'generic kind number ', obs_kind_ind, &
-                                   ' must be between 1 and ', max_obs_generic
+                                   ' must be between 0 and ', max_obs_generic
    call error_handler(E_ERR, 'get_raw_obs_kind_name', msg_string, &
                       source, revision, revdate)
 endif
@@ -931,7 +933,7 @@ if (.not. module_initialized) call initialize_module
 
 string1 = adjustl(obs_kind_name)
 
-do i = 1, max_obs_generic
+do i = 0, max_obs_generic
    if(trim(string1) == trim(obs_kind_names(i)%name)) then
       get_raw_obs_kind_index = i
       return
