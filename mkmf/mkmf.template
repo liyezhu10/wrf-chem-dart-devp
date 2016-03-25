@@ -20,6 +20,9 @@
 #  -fbounds-check      add runtime-checking for out-of-range array indices
 #  -ffpe-trap=invalid,zero,overflow
 #                      stop on floating point errors
+#  -Wuninitialized     catch uninitialized variables
+#  -Wunused            issue warning for unused variables - keeps code clean
+
 #
 #  earlier versions of this mkmf file listed 'precision' as one of the options on
 #  the fpe-trap line.  this is not recommended anymore as some of the gfortran internal
@@ -29,6 +32,7 @@
 #
 # -ffree-form          forces input file to be read as free format regardless
 #                      of what file extension it has.
+# -ffree-line-length-none   ... handles "long" lines
 #
 # -fdefault-real-8     force all real variables to be real*8.  not needed for DART code
 #                      since all real variables in DART are declared with a size.
@@ -76,19 +80,16 @@ LD = gfortran
 # remove it from the LIBS line. The same is true for any library. If 'ld'
 # does not complain - it worked.
 
-# If your NETCDF environment variable is not set correctly,
-# uncomment the following line and set value to where lib and include
-# are found for the netcdf files that match this compiler.
-#
-# NETCDF = /usr/lib64
+# See ~thoar/.bash_profile for an example how to automatically set NETCDFLIBDIR
+# and NETCDFMODDIR for dulcinea's login and compute nodes.
 
-INCS = -I$(NETCDF)/include
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-# FFLAGS  = -O2 -ffree-line-length-none $(INCS)
+INCS = -I${NETCDFMODDIR}
+LIBS = -L${NETCDFLIBDIR} -lnetcdff -lnetcdf
+FFLAGS  = -O2 -ffree-line-length-none $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
-FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
-            -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
+# FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
+#          -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$
