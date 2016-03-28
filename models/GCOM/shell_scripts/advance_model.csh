@@ -52,6 +52,7 @@ cd         $temp_dir
 
 ${LINK} ../gcom_geometry.nc      .  || exit 1
 ${LINK} ../Grid.dat              .  || exit 1
+${LINK} ../Gridll.dat              .  || exit 1
 ${LINK} ../ProbSize.dat          .  || exit 1
 
 # Ensure that the input.nml has the required value for

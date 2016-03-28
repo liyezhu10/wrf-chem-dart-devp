@@ -37,6 +37,11 @@
 ## -q <arg>   Queue name
 ## -l nodes=xx:ppn=16   request xx nodes and 16 processors on each node.
 ## -l walltime=hh:mm:ss request hh wallclock hours of runtime ..
+##PBS -l nodes=node12+node13
+##PBS -l nodes=reserved
+##PBS -l nodes=node13:ppn=15+node9:ppn=15
+##PBS -l nodes=2:ppn=15:reserved
+##PBS -l walltime=24:00:00
 ##==============================================================================
 #
 #PBS -N gcom_filter
@@ -44,8 +49,7 @@
 #PBS -e gcom_filter.err
 #PBS -o gcom_filter.log
 #PBS -q batch
-#PBS -l nodes=2:ppn=8:reserved
-#PBS -l walltime=2:00:00
+#PBS -l nodes=2:ppn=15
 #
 ##==============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
@@ -83,7 +87,6 @@ if ($?PBS_QUEUE) then
    #----------------------------------------------------------------------------
    # This is used by PBS
    #----------------------------------------------------------------------------
-
    setenv ORIGINALDIR   $PBS_O_WORKDIR
    setenv JOBNAME       $PBS_JOBNAME
    setenv JOBID         $PBS_JOBID
@@ -157,11 +160,11 @@ switch ("`hostname`")
       setenv REMOVE 'rm -fr'
 
       setenv  EXPERIMENT /cinci/${USER}/deep_storage
-      setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
-      setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
-      setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
-      setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
-      setenv ENSEMBLEDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv  CENTRALDIR /usr/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv     DARTDIR /home/${USER}/DART-UCOAM/models/GCOM
+      setenv    SERUCOAM /home/${USER}/serucoamATMG-UVsmall
+      setenv  BASEOBSDIR /home/${USER}/DART-UCOAM/models/GCOM/work
+      setenv ENSEMBLEDIR /home/${USER}/serucoamATMG-UVsmall
    breaksw
 
    default:
@@ -170,13 +173,12 @@ switch ("`hostname`")
       setenv   COPY 'cp -v --preserve=timestamps'
       setenv   LINK 'ln -vs'
       setenv REMOVE 'rm -fr'
-
-      setenv  EXPERIMENT /gcemproject/${USER}/${JOBNAME}
-      setenv  CENTRALDIR /raid/scratch/${USER}/${JOBNAME}/job_${JOBID}
-      setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
-      setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
-      setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
-      setenv ENSEMBLEDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
+      setenv  EXPERIMENT /cinci/${USER}/deep_storage
+      setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
+      setenv     DARTDIR /home/${USER}/DART-UCOAM/models/GCOM
+      setenv    SERUCOAM /home/${USER}/serucoamAT
+      setenv  BASEOBSDIR /home/${USER}/DART-UCOAM/models/GCOM/work
+      setenv ENSEMBLEDIR /home/${USER}/DART-UCOAM/models/GCOM/serucoam
    breaksw
 
 endsw
@@ -222,6 +224,7 @@ echo "`date` -- Assembling the GCOM pieces."
 
 ${COPY} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
+${COPY} ${SERUCOAM}/Gridll.dat        Gridll.dat      || exit 1
 ${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
 ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
 

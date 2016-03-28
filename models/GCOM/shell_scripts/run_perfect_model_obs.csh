@@ -44,8 +44,8 @@
 #PBS -e gcom_pmo.err
 #PBS -o gcom_pmo.out
 #PBS -q batch
-#PBS -l nodes=1:ppn=1:mpi
-#PBS -l walltime=12:00:00
+#PBS -l nodes=1:ppn=1:reserved
+#PBS -l walltime=24:00:00
 #
 ##==============================================================================
 ## This block of directives constitutes the preamble for the LSF queuing system
@@ -89,7 +89,7 @@ if ($?PBS_QUEUE) then
    setenv JOBID       $PBS_JOBID
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
-   setenv RUN_CMD     "mpirun -np 1 -machinefile $PBS_NODEFILE"
+  setenv RUN_CMD     "mpirun -np 1 -machinefile $PBS_NODEFILE"
 
 else if ($?LSB_QUEUE) then
 
@@ -154,11 +154,12 @@ switch ("`hostname`")
       setenv   LINK 'ln -fvs'
       setenv REMOVE 'rm -fr'
 
-      setenv  EXPERIMENT /cinci/${USER}/deep_storage
-      setenv  CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
-      setenv     DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
-      setenv    SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
-      setenv  BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
+      setenv  EXPERIMENT /usr/scratch/${USER}/deep_storage
+      setenv  CENTRALDIR /usr/scratch/${USER}/${JOBNAME}/job_${JOBID}
+      setenv     DARTDIR /home/${USER}/DART-UCOAM/models/GCOM
+      setenv    SERUCOAM /home/${USER}/serucoamATMG-UVsmall
+#     setenv    SERUCOAM /home/${USER}/serucoamsvn
+      setenv  BASEOBSDIR /home/${USER}/DART-UCOAM/models/GCOM/work
    breaksw
 
    default:
@@ -168,11 +169,11 @@ switch ("`hostname`")
       setenv   LINK 'ln -fvs'
       setenv REMOVE 'rm -fr'
 
-      setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
-      setenv CENTRALDIR /raid/scratch/${USER}/${JOBNAME}/job_${JOBID}
-      setenv    DARTDIR /home/${USER}/svn/DART/UCOAM/models/GCOM
-      setenv   SERUCOAM /home/${USER}/svn/DART/UCOAM/models/GCOM/serucoam
-      setenv BASEOBSDIR /home/${USER}/svn/DART/UCOAM/models/GCOM/work
+     # setenv EXPERIMENT /gcemproject/${USER}/${JOBNAME}
+      setenv CENTRALDIR /cinci/${USER}/${JOBNAME}/job_${JOBID}
+      setenv    DARTDIR /home/${USER}/DART-UCOAM/models/GCOM
+      setenv   SERUCOAM /home/${USER}/serucoamAT
+      setenv BASEOBSDIR /home/${USER}/DART-UCOAM/models/GCOM/work
    breaksw
 
 endsw
@@ -217,6 +218,7 @@ echo "`date` -- Assembling the GCOM pieces."
 
 ${COPY} ${SERUCOAM}/Main.exe          gcom.serial.exe || exit 1
 ${COPY} ${SERUCOAM}/Grid.dat          Grid.dat        || exit 1
+${COPY} ${SERUCOAM}/Gridll.dat          Gridll.dat        || exit 1
 ${COPY} ${SERUCOAM}/ProbSize.dat      ProbSize.dat    || exit 1
 ${COPY} ${SERUCOAM}/param.dat         param.dat       || exit 1
 ${COPY} ${SERUCOAM}/gcom_restart.nc   gcom_restart.nc || exit 1
