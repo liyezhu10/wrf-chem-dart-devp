@@ -3615,6 +3615,7 @@ iunit = open_file('dart_gcom_timeinfo.txt',form='formatted',action='write')
 
 call get_date(current_time, iyear, imonth, iday, ihour, imin, iseconds)
 write(iunit,100)"Start_Time = 'seconds since ",iyear,imonth,iday,ihour,imin,iseconds
+!write(iunit,100)"Start_Time = ", iyear,imonth,iday,ihour,imin,iseconds
 100 format (A,i4.4,"-",i2.2,"-",i2.2,1x,i2.2,":",i2.2,":",i2.2,"'")
 
 forecast_duration = forecast_stop_time - current_time
@@ -5885,6 +5886,7 @@ if ( count(distances(2:num_neighbors) <= tiny(0.0_r8)) > 0 ) then
    call error_handler(E_MSG,'inverse_distance_interpolation', string1)
    istatus = 9
    return
+   !stop
 endif
 
 ! Check if one and only one has a zero distance, just use it.
