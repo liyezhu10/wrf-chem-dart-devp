@@ -43,7 +43,7 @@
    num_output_obs_members   = 10,
    output_interval          = 1,
    num_groups               = 1,
-   input_qc_threshold       =  1.0,
+   input_qc_threshold       =  4.0,
    outlier_threshold        =  -1.0,
    output_forward_op_errors = .false.,
    output_timestamps        = .false.,
@@ -86,7 +86,10 @@
    adaptive_localization_threshold = -1,
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 0
+   print_every_nth_obs             = 100
+   adjust_obs_impact  = .false.
+   obs_impact_filename = ''
+   allow_any_impact_values = .false.
   /
 
 &ensemble_manager_nml
@@ -181,9 +184,9 @@
    pert_names          = 'T', 
    pert_sd             = 0.20,
    pert_base_vals      = -888888.0d0,
-   highest_obs_pressure_Pa   = 1000.0,
-   highest_state_pressure_Pa = 1500.0,
-   max_obs_lat_degree        = 89.0,
+   highest_obs_pressure_Pa   = 100.0,
+   highest_state_pressure_Pa = 150.0,
+   max_obs_lat_degree        = 89.9,
    Time_step_seconds   = 21600,
    Time_step_days      = 0,
    print_details       = .false.,

@@ -4535,7 +4535,7 @@ character(len=8)   :: lon_name, lat_name, lev_name
 ! So assume that observed fields are not missing any dimensions.
 
 ! Start with failure, then change as warranted.
-istatus    = 1
+istatus    = 99
 vstatus    = MISSING_I
 vals       = MISSING_R8
 interp_val = MISSING_R8
@@ -4705,6 +4705,7 @@ elseif (vert_is_level(obs_loc)) then
    ! Pobs end
 
 elseif (vert_is_pressure(obs_loc)) then
+print *, 'in vert_is_pressure'
       call get_val_pressure(st_vec,lon_ind_below,lat_ind_below,lon_lat_lev(3),obs_kind,vals(1,1),vstatus)
    if (vstatus /= 1) &
       call get_val_pressure(st_vec,lon_ind_below,lat_ind_above,lon_lat_lev(3),obs_kind,vals(1,2),vstatus)
@@ -4712,6 +4713,7 @@ elseif (vert_is_pressure(obs_loc)) then
       call get_val_pressure(st_vec,lon_ind_above,lat_ind_below,lon_lat_lev(3),obs_kind,vals(2,1),vstatus)
    if (vstatus /= 1) &
       call get_val_pressure(st_vec,lon_ind_above,lat_ind_above,lon_lat_lev(3),obs_kind,vals(2,2),vstatus)
+print *, 'vstatus: ', vstatus
 
 elseif (vert_is_height(obs_loc)) then
       call get_val_height(st_vec, lon_ind_below, lat_ind_below, lon_lat_lev(3), obs_loc, obs_kind, vals(1,1), vstatus)
@@ -4758,6 +4760,7 @@ endif
 ! E.g. it's too far north and it's above the highest_obs_pressure_Pa.
 ! What istatus to return? a 2 (or more) digit number?  Like vstatus*10 + 4?
 if (vstatus == 1) then
+ istatus = 88
    return     ! Failed to get value for interpolation; return istatus = 1
               ! Error will be handled by calling routines?
 else
@@ -4812,7 +4815,7 @@ integer               :: vstatus, num_levs, i, lowest_ok
 real(r8)              :: p_surf, threshold
 
 ! Start with failure condition
-istatus = 1
+istatus = 101
 vstatus = 1
 val = MISSING_R8
 
@@ -4882,7 +4885,7 @@ integer               :: top_lev, bot_lev, i, vstatus, num_levs
 integer               :: fld_index
 
 ! No errors to start with
-istatus = 1
+istatus = 102
 vstatus = 1
 val     = MISSING_R8
 
@@ -4928,6 +4931,7 @@ call plevs_cam(p_surf, num_levs, p_col)
 if (pressure <= p_col(1) .or. pressure >= p_col(num_levs)) then
    ! Exclude obs below the model's lowest level and above the highest level
    ! We *could* possibly use ps and p(num_levs) to interpolate for points below the lowest level.
+print *, 'excluded because not between ', p_col(1), pressure, p_col(num_levs)
    return
 endif
 

@@ -371,10 +371,13 @@ call set_start_end(componentname, x_start, x_end)
 
 if (componentname == 'CAM') then
    call cam_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
+if (istatus > 0) print *, 'CAM obs_kind, istatus = ', obs_kind, istatus
 else if (componentname == 'POP') then
    call pop_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
+if (istatus > 0) print *, 'POP obs_kind, istatus = ', obs_kind, istatus
 else if (componentname == 'CLM') then
    call clm_model_interpolate(x(x_start:x_end), location, obs_kind, interp_val, istatus)
+if (istatus > 0) print *, 'CLM obs_kind, istatus = ', obs_kind, istatus
 else
    return
 endif
@@ -1005,11 +1008,14 @@ do i=1, num_close
    ! different in the vertical.
    this = close_ind(i)
    vert2 = query_location(locs(this))
-if (mod(n, 1000) == 1) print *, 'vert1, 2: ', vert1, vert2
+!if (mod(n, 1000) == 1 .and. vert1 /= vert2) print *, 'vert1, 2: ', vert1, vert2
 n = n + 1
    if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
        (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
       dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))
+if (dist(i) == 0) then
+print *, '0 distance: ', base_obs_kind, loc_kind(this), vert1, vert2
+endif
       ! or
       !horiz_dist = get_dist(base_obs_loc, locs(this), &
       !                      base_obs_type, loc_kind(this), no_vert = .true.)
