@@ -107,9 +107,9 @@ end interface get_data
 type(transform) :: openggcm_transform
 
 ! Message strings
-character(len=512) :: string1
-character(len=512) :: string2
 character(len=512) :: msgstring
+character(len=512) :: msgstring2
+character(len=512) :: msgstring3
 
 integer, parameter :: VERT_LEVEL_1 = 1
 
@@ -118,8 +118,8 @@ integer, parameter :: GEOGRAPHIC_GRID = 1
 integer, parameter :: MAGNETIC_GRID   = 2
 
 ! Grid convertion direction
-integer, parameter :: MAG_TO_GEO = 1
-integer, parameter :: GEO_TO_MAG = 2
+integer, parameter :: SM_TO_GEO = 1
+integer, parameter :: GEO_TO_SM = 2
 
 ! Logical to keep track of if we have initialized static_init_model
 logical, save :: module_initialized = .false.
@@ -288,10 +288,14 @@ domain_id = add_domain(openggcm_template, nfields, &
 if (debug > 0) call state_structure_info(domain_id)
 
 ! order the dimensions according to lat, lon and height
+
 call make_dim_order_table(nfields)
 
+! only one domain in the model at the moment.
+
 model_size = get_domain_size(domain_id)
-if (do_output()) write(*,*) 'model_size = ', model_size
+write(msgstring,*)'model_size = ', model_size
+call error_handler(E_MSG,'model_interpolate',msgstring,source,revision,revdate)
 
 ! set the transform geo -> magnetic grid
 call initialize_openggcm_transform(openggcm_template)
@@ -330,6 +334,7 @@ type(location_type), intent(in) :: location !< dart location to interpolate to
 integer,             intent(in) :: obs_kind !< dart kind to interpolate
 real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
 integer,            intent(out) :: istatus(ens_size) !< array of returned statuses
+
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
@@ -383,19 +388,18 @@ else   ! if pressure or surface we don't know what to do
    return
 endif
 
-! The following kinds are either in the state vector (so you
-! can simply interpolate to find the value) or they are a simple
-! transformation of something in the state vector.
+! Determine which grid the incoming observation is on. If the observation
+! is on the magnetic grid transform it to the geographic grid.
 
 SELECT CASE (get_grid_type(obs_kind))
    CASE (MAGNETIC_GRID)
-      call transform_mag_geo(llon, llat, lheight, GEO_TO_MAG)
+      call transform_mag_geo(llon, llat, lheight, GEO_TO_SM)
       mygrid => mag_grid
 
    CASE (GEOGRAPHIC_GRID)
       mygrid => geo_grid
 
-   case default
+   CASE DEFAULT
       call error_handler(E_ERR, 'model_interpolate', 'unknown grid type, should not happen', &
             source, revision, revdate)
 END SELECT
@@ -421,8 +425,6 @@ endif
 call do_interp(state_handle, ens_size, mygrid, hgt_bot, hgt_top, hgt_fract, &
                llon, llat, obs_kind, expected_obs, istatus)
 
-nullify(mygrid)
-
 end subroutine model_interpolate
 
 !------------------------------------------------------------------
@@ -443,12 +445,11 @@ integer,             intent(in)  :: height_index !< height index to interpolate
 real(r8),            intent(out) :: expected_obs(ens_size) !< returned interpolations
 integer,             intent(out) :: istatus(ens_size) !< returned statuses
 
+
 ! Local storage, 
 integer  :: lat_bot, lat_top, lon_bot, lon_top
 real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
 real(r8) :: lon_fract, lat_fract
-
-if ( .not. module_initialized ) call static_init_model
 
 ! Succesful return has istatus of 0
 istatus = 0
@@ -504,24 +505,22 @@ real(r8)    :: get_val(ens_size)
 integer(i8) :: state_index
 integer     :: var_id
 
-integer, dimension(3) :: state_ind
-
-if ( .not. module_initialized ) call static_init_model
-
-state_ind(:) = 1
+integer, dimension(3) :: dim_index
 
 if (var_kind < 0 ) then
-   call error_handler(E_ERR, 'get_val', 'dart kind < 0 should not happen ', &
-                      source, revision, revdate)
+   write(msgstring,*) 'dart kind < 0 which should not happen'
+   write(msgstring2,*) 'the dart kind provided is : ', var_kind
+   call error_handler(E_ERR, 'get_val', msgstring, &
+                      source, revision, revdate, text2=msgstring2)
 endif   
 
 var_id = get_varid_from_kind(domain_id, var_kind)
 
-state_ind(dim_order_list(var_id, VAR_LON_INDEX)) = lon_index
-state_ind(dim_order_list(var_id, VAR_LAT_INDEX)) = lat_index
-state_ind(dim_order_list(var_id, VAR_HGT_INDEX)) = height_index
+dim_index(dim_order_list(var_id, VAR_LON_INDEX)) = lon_index
+dim_index(dim_order_list(var_id, VAR_LAT_INDEX)) = lat_index
+dim_index(dim_order_list(var_id, VAR_HGT_INDEX)) = height_index
 
-state_index = get_dart_vector_index(state_ind(1), state_ind(2), state_ind(3), &
+state_index = get_dart_vector_index(dim_index(1), dim_index(2), dim_index(3), &
                                     domain_id, var_id)
 
 get_val = get_state(state_index, state_handle)
@@ -544,10 +543,9 @@ integer,         intent(out) :: bot !< index of bottom layer
 integer,         intent(out) :: top !< index of top layer
 real(r8),        intent(out) :: fract !< fraction between layers
 
+
 ! Local storage
 integer  :: i
-
-if ( .not. module_initialized ) call static_init_model
 
 do i = 2, grid_handle%nlon
    if (lon <= grid_handle%longitude(i)) then
@@ -587,8 +585,6 @@ integer,         intent(out) :: istatus !< return status
 
 ! Local storage
 integer :: i
-
-if ( .not. module_initialized ) call static_init_model
 
 ! Success should return 0, failure a positive number.
 istatus = 0
@@ -644,10 +640,9 @@ integer,         intent(out) :: top          !< index of top layer
 real(r8),        intent(out) :: fract        !< fraction between layers
 integer,         intent(out) :: istatus      !< return status
 
+
 ! Local storage
 integer :: i
-
-if ( .not. module_initialized ) call static_init_model
 
 ! Success should return 0, failure a positive number.
 istatus = 0
@@ -693,10 +688,9 @@ integer,    intent(out) :: top                 !< top bounding height
 real(r8),   intent(out) :: fract               !< fraction inbetween
 integer,    intent(out) :: istatus             !< return status
 
+
 ! Local variables
 integer   :: i
-
-if ( .not. module_initialized ) call static_init_model
 
 ! Succesful istatus is 0
 ! Make any failure here return istatus in the 20s
@@ -722,6 +716,10 @@ do i = 2, nheights
 enddo
 
 ! Falling off the end means the location is higher than the model top.
+bot   = -1
+top   = -1
+fract = -1.0_r8
+
 istatus = 20
 
 end subroutine height_bounds
@@ -756,13 +754,13 @@ integer(i8),                   intent(in)  :: index_in !< dart state index of in
 type(location_type),           intent(out) :: location !< locartion of interest
 integer,             optional, intent(out) :: var_type !< optional dart kind return
 
+
+! Local variables
 real(r8) :: lat, lon, height
 integer  :: lon_index, lat_index, height_index, local_var, var_id
-
 integer  :: state_loc(3)
 
 if ( .not. module_initialized ) call static_init_model
-
 
 call get_model_variable_indices(index_in, state_loc(1), state_loc(2), state_loc(3), var_id=var_id)
 local_var = get_kind_index(domain_id, var_id)
@@ -781,6 +779,8 @@ else
    lat = geo_grid%latitude(lat_index)
 endif
 
+! Here we are ASSUMING that electric potential is a 2D
+! variable.  If this is NOT the case FIX HERE!
 if (local_var == KIND_ELECTRIC_POTENTIAL) then
    height   = 0.0_r8
    location = set_location(lon, lat, height, VERTISUNDEF)
@@ -834,8 +834,8 @@ character(len=*),           intent(in)    :: lon_name !< longitude name
 character(len=*),           intent(in)    :: lat_name !< latitude name
 character(len=*), optional, intent(in)    :: height_name !< height name
 
-grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
 
+grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
 grid_handle%nlat = get_dim(ncFileID,lat_name, 'get_grid_sizes')
 
 if (present(height_name)) then
@@ -863,6 +863,7 @@ character(len=*), intent(in)    :: lon_name !< longitude variable name
 character(len=*), intent(in)    :: lat_name !< latitude variable name
 logical,          intent(in)    :: is_conv !< fill conversion grid
 logical,          intent(in)    :: is_co_latitude !< is grid in co-latitude
+
  
 if (is_conv) then
 
@@ -920,9 +921,9 @@ end subroutine read_vert_levels
 function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
 
 integer, intent(in)  :: ncFileID !> netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables !< false if you want DART to 
-                                                         !< write state variables
-integer              :: ierr !>return value of function
+logical, intent(out) :: model_mod_writes_state_variables !< false if you want DART to write the state variables
+integer              :: ierr !> return error status
+
 
 !  Typical sequence for adding new dimensions,variables,attributes:
 !  NF90_OPEN             ! open existing netCDF dataset
@@ -934,6 +935,10 @@ integer              :: ierr !>return value of function
 !     NF90_put_var       ! provide values for variable
 !  NF90_CLOSE            ! close: save updated netCDF dataset
 
+!----------------------------------------------------------------------
+! local variables 
+!----------------------------------------------------------------------
+
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
 ! for the dimensions and coordinate variables
@@ -942,9 +947,6 @@ integer :: geoLonVarID, geoLatVarID, geoHeightVarID
 integer :: magLonVarID, magLatVarID, magHeightVarID
 integer ::  coLonVarID,  coLatVarID
 
-!----------------------------------------------------------------------
-! local variables 
-!----------------------------------------------------------------------
 
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
@@ -1016,26 +1018,25 @@ NhgtDimID = set_dim(ncFileID, 'geo_hgt', geo_grid%nheight, filename)
 ! Write out Geographic Grid attributes
 !----------------------------------------------------------------------------
 
-! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='geo lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='geo_lon', xtype=NF90_real, &
               dimids=NlonDimID, varid=geoLonVarID),&
-              'nc_write_model_atts', 'geo lon def_var '//trim(filename))
+              'nc_write_model_atts', 'geo_lon def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  geoLonVarID, 'long_name', 'longitudes of geo grid'), &
-              'nc_write_model_atts', 'geo lat long_name '//trim(filename))
+              'nc_write_model_atts', 'geo_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='geo lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='geo_lat', xtype=NF90_real, &
               dimids=NlatDimID, varid=geoLatVarID),&
-              'nc_write_model_atts', 'geo lat def_var '//trim(filename))
+              'nc_write_model_atts', 'geo_lat def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  geoLatVarID, 'long_name', 'latitudes of geo grid'), &
-              'nc_write_model_atts', 'geo lat long_name '//trim(filename))
+              'nc_write_model_atts', 'geo_lat long_name '//trim(filename))
 
 ! Heights
-call nc_check(NF90_def_var(ncFileID,name='geo heights', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='geo_heights', xtype=NF90_real, &
               dimids=NhgtDimID, varid= geoHeightVarID), &
-              'nc_write_model_atts', 'geo heights def_var '//trim(filename))
+              'nc_write_model_atts', 'geo_heights def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID, geoHeightVarID, 'long_name', 'height of geo grid'), &
-              'nc_write_model_atts', 'geo heights long_name '//trim(filename))
+              'nc_write_model_atts', 'geo_heights long_name '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Write out Magnetic Grid attributes
@@ -1046,25 +1047,25 @@ NlatDimID = set_dim(ncFileID, 'mag_lat', mag_grid%nlat,    filename)
 NhgtDimID = set_dim(ncFileID, 'mag_hgt', mag_grid%nheight, filename)
 
 ! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='mag lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='mag_lon', xtype=NF90_real, &
               dimids=NlonDimID, varid=magLonVarID),&
-              'nc_write_model_atts', 'mag lon def_var '//trim(filename))
+              'nc_write_model_atts', 'mag_lon def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  magLonVarID, 'long_name', 'longitudes mag grid'), &
-              'nc_write_model_atts', 'mag lon long_name '//trim(filename))
+              'nc_write_model_atts', 'mag_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='mag lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='mag_lat', xtype=NF90_real, &
               dimids=NlatDimID, varid=magLatVarID),&
-              'nc_write_model_atts', 'mag lat def_var '//trim(filename))
+              'nc_write_model_atts', 'mag_lat def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  magLatVarID, 'long_name', 'latitudes of mag grid'), &
-              'nc_write_model_atts', 'mag lat long_name '//trim(filename))
+              'nc_write_model_atts', 'mag_lat long_name '//trim(filename))
 
 ! Heights
-call nc_check(NF90_def_var(ncFileID,name='mag heights', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='mag_heights', xtype=NF90_real, &
               dimids=NhgtDimID, varid= magHeightVarID), &
-              'nc_write_model_atts', 'mag heights def_var '//trim(filename))
+              'nc_write_model_atts', 'mag_heights def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID, magHeightVarID, 'long_name', 'height for mag grid'), &
-              'nc_write_model_atts', 'mag heights long_name '//trim(filename))
+              'nc_write_model_atts', 'mag_heights long_name '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Write out Co-Latitude Grid attributes
@@ -1074,18 +1075,18 @@ NlonDimID = set_dim(ncFileID, 'co_lon', mag_grid%nlon,    filename)
 NlatDimID = set_dim(ncFileID, 'co_lat', mag_grid%nlat,    filename)
 
 ! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='co lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='co_lon', xtype=NF90_real, &
               dimids=(/ NlonDimID, NlatDimID /), varid=coLonVarID),&
-              'nc_write_model_atts', 'co lon def_var '//trim(filename))
+              'nc_write_model_atts', 'co_lon def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  coLonVarID, 'long_name', 'longitudes co grid'), &
-              'nc_write_model_atts', 'co lon long_name '//trim(filename))
+              'nc_write_model_atts', 'co_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='co lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncFileID,name='co_lat', xtype=NF90_real, &
               dimids=(/ NlonDimID, NlatDimID /), varid=coLatVarID),&
-              'nc_write_model_atts', 'co lat def_var '//trim(filename))
+              'nc_write_model_atts', 'co_lat def_var '//trim(filename))
 call nc_check(NF90_put_att(ncFileID,  coLatVarID, 'long_name', 'latitudes of co grid'), &
-              'nc_write_model_atts', 'co lat long_name '//trim(filename))
+              'nc_write_model_atts', 'co_lat long_name '//trim(filename))
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
@@ -1096,31 +1097,31 @@ call nc_check(NF90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
 !----------------------------------------------------------------------------
 
 call nc_check(NF90_put_var(ncFileID, geoLonVarID, geo_grid%longitude ), &
-             'nc_write_model_atts', 'geo lon put_var '//trim(filename))
+             'nc_write_model_atts', 'geo_lon put_var '//trim(filename))
 call nc_check(NF90_put_var(ncFileID, geoLatVarID, geo_grid%latitude ), &
-             'nc_write_model_atts', 'geo lat put_var '//trim(filename))
+             'nc_write_model_atts', 'geo_lat put_var '//trim(filename))
 call nc_check(NF90_put_var(ncFileID, geoHeightVarID, geo_grid%heights ), &
-             'nc_write_model_atts', 'geo heights put_var '//trim(filename))
+             'nc_write_model_atts', 'geo_heights put_var '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Fill Magnetic Grid values
 !----------------------------------------------------------------------------
 
 call nc_check(NF90_put_var(ncFileID, magLonVarID, mag_grid%longitude ), &
-             'nc_write_model_atts', 'mag lon put_var '//trim(filename))
+             'nc_write_model_atts', 'mag_lon put_var '//trim(filename))
 call nc_check(NF90_put_var(ncFileID, magLatVarID, mag_grid%latitude ), &
-             'nc_write_model_atts', 'mag lat put_var '//trim(filename))
+             'nc_write_model_atts', 'mag_lat put_var '//trim(filename))
 call nc_check(NF90_put_var(ncFileID, magHeightVarID, mag_grid%heights ), &
-             'nc_write_model_atts', 'mag heights put_var '//trim(filename))
+             'nc_write_model_atts', 'mag_heights put_var '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Fill Co-Latitude Grid values
 !----------------------------------------------------------------------------
 
 call nc_check(NF90_put_var(ncFileID, coLonVarID, mag_grid%conv_2d_lon(:,:)), &
-             'nc_write_model_atts', 'co lon put_var '//trim(filename))
+             'nc_write_model_atts', 'co_lon put_var '//trim(filename))
 call nc_check(NF90_put_var(ncFileID, coLatVarID, mag_grid%conv_2d_lat(:,:) ), &
-             'nc_write_model_atts', 'co lat put_var '//trim(filename))
+             'nc_write_model_atts', 'co_lat put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -1133,10 +1134,10 @@ end function nc_write_model_atts
 
 !------------------------------------------------------------------
 
-!> Define variables in state.  Do not need to to use this since
-!> model_mod_writes_state_variables = .false. in nc_write_model_atts
-!> So DART takes care of writing out state variable information
-!> using the state structure.
+!> Do not need to to use this since state_space_diag_mod takes care 
+!> of writing out the state variables. This is because :
+!>
+!>   model_mod_writes_state_variables = .false. in nc_write_model_atts
 
 function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
 integer,                intent(in) :: ncFileID !< netCDF file identifier
@@ -1145,9 +1146,10 @@ integer,                intent(in) :: copyindex !< copy number index
 integer,                intent(in) :: timeindex !< time index from model
 integer                            :: ierr !< return value of function
 
+
 if ( .not. module_initialized ) call static_init_model
 
-ierr = 0 ! If we got here, things went well.
+ierr = 0
 
 end function nc_write_model_vars
 
@@ -1162,88 +1164,38 @@ integer,             intent(in)    :: ens_size !< ensemble size
 real(r8),            intent(in)    :: pert_amp !< perterbation amplitude
 logical,             intent(out)   :: interf_provided !< have you provided an interface?
 
-integer     :: j,i 
+
+! Local Variables
+integer     :: i, j
 integer(i8) :: dart_index
 
 ! Storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
-logical :: lanai_bitwise
 
 if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
-lanai_bitwise   = .false.
 
-if (lanai_bitwise) then
-   call pert_model_copies_bitwise_lanai(state_ens_handle, ens_size)
-else
+! Initialize random number sequence
+call init_random_seq(random_seq, my_task_id())
 
-   ! Initialize random number sequence
-   call init_random_seq(random_seq, my_task_id())
-
-   ! only perturb the actual ocean cells; leave the land and
-   ! ocean floor values alone.
-   do i=1,state_ens_handle%my_num_vars
-      dart_index = state_ens_handle%my_vars(i)
-      do j=1, ens_size
-         state_ens_handle%copies(j,i) = random_gaussian(random_seq, &
-            state_ens_handle%copies(j,i), &
-            model_perturbation_amplitude*state_ens_handle%copies(j,i))
-      enddo
+! perturb the state using random gaussian noise
+do i=1,state_ens_handle%my_num_vars
+   dart_index = state_ens_handle%my_vars(i)
+   do j=1, ens_size
+      ! Since potential and electron density have such radically different values
+      ! we weight the standard deviation with the actual state value so that noise 
+      ! created is closer to the actual values in the state. NOTE: If the value is
+      ! state value is zero the standard deviation will be zero and your values will
+      ! not be perturbed.
+      state_ens_handle%copies(j,i) = random_gaussian(random_seq, &
+         mean               = state_ens_handle%copies(j,i),      &
+         standard_deviation = state_ens_handle%copies(j,i)*model_perturbation_amplitude)
    enddo
-
-endif
+enddo
 
 
 end subroutine pert_model_copies
-
-!------------------------------------------------------------------
-
-!> Perturb the state such that the perturbation is bitwise with
-!> a perturbed Lanai.
-!> Note:
-!> * This is not bitwise with itself (like Lanai) if task_count < ens_size
-!> * This is very slow because you have a loop around the length of the
-!> state inside a loop around the ensemble.
-!> If a task has more than one copy then the random number
-!> sequence continues from the end of one copy to the start of the other.
-
-subroutine pert_model_copies_bitwise_lanai(ens_handle, ens_size)
-
-type(ensemble_type), intent(inout) :: ens_handle !< state ensemble handle 
-integer,             intent(in)    :: ens_size !< ensemble size
-
-type(random_seq_type) :: r(ens_size)
-integer     :: i ! loop variable
-integer(i8) :: j ! loop variable
-real(r8)    :: random_number
-integer     :: sequence_to_use
-integer     :: owner, owners_index
-integer     :: copy_owner
-
-do i = 1, min(ens_size, task_count())
-   call init_random_seq(r(i), map_pe_to_task(ens_handle,i-1)) ! my_task_id in Lanai
-   sequence_to_use = i 
-enddo
-
-
-do i = 1, ens_size
-
-   call get_copy_owner_index(i, copy_owner, owners_index) ! owners index not used. Distribution type 1
-   sequence_to_use = copy_owner + 1
-   do j = 1, ens_handle%num_vars
-
-     random_number = random_gaussian(r(sequence_to_use), 0.0_r8, model_perturbation_amplitude)
-     call get_var_owner_index(j, owner, owners_index)
-     if (ens_handle%my_pe==owner) then
-        ens_handle%copies(i, owners_index) = ens_handle%copies(i, owners_index) + random_number
-     endif
-
-   enddo
-
-enddo
-
-end subroutine pert_model_copies_bitwise_lanai
 
 !------------------------------------------------------------------
 
@@ -1266,19 +1218,8 @@ type(location_type), dimension(:), intent(in) :: obs !< observation sequence
 integer,             dimension(:), intent(in) :: obs_kind !< dart kind
 integer,                           intent(out):: num_close !< number of close found
 integer,             dimension(:), intent(out):: close_ind !< list of close indicies
-real(r8),            dimension(:), intent(out):: dist !< list of distances of close observations
+real(r8), optional,  dimension(:), intent(out):: dist !< list of distances of close observations
 
-! Initialize variables to missing status
-
-num_close = 0
-close_ind = -99
-dist      = 1.0e9   !something big and positive (far away)
-
-! Get all the potentially close obs but no dist (optional argument dist(:)
-! is not present) This way, we are decreasing the number of distance
-! computations that will follow.  This is a horizontal-distance operation and
-! we don't need to have the relevant vertical coordinate information yet 
-! (for obs).
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
@@ -1305,12 +1246,14 @@ real(r8),            intent(in)  :: llat !< latitude to interpolate
 integer,             intent(in)  :: obs_kind !< dart kind
 real(r8),            intent(out) :: expected_obs(ens_size) !< interpolated value
 integer,             intent(out) :: istatus(ens_size) !< status of interpolation
-  
+
+
+! Local Variables
 real(r8)    :: bot_val(ens_size), top_val(ens_size)
 integer     :: temp_status(ens_size)
 logical     :: return_now
 
-istatus(:) = 0
+istatus(:) = 0 ! need to start with istatus = 0 for track status to work properly
 
 call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, &
                          llon, llat, hgt_bot, bot_val, temp_status)
@@ -1336,7 +1279,7 @@ end subroutine do_interp
 !> construct restart file name for reading
 !>
 !> stub is found in input.nml io_filename_nml
-!> restart files typically are of the form openggcm.r0001.nc
+!> restart files typically are of the form openggcm3D_0001.nc
 
 function construct_file_name_in(stub, domain, copy)
 
@@ -1345,7 +1288,8 @@ integer,            intent(in) :: domain !< domain of file
 integer,            intent(in) :: copy !< copy number (i.e. ensemble number)
 character(len=1024)            :: construct_file_name_in !< constructed filename
 
-write(construct_file_name_in, '(A, A)') trim(stub), ".nc"
+
+write(construct_file_name_in, '(A,''_'',I4.4,''.nc'')') trim(stub), copy
 
 end function construct_file_name_in
 
@@ -1358,6 +1302,7 @@ function read_model_time(filename)
 character(len=*), intent(in) :: filename !< file to get time
 type(time_type) :: read_model_time !< returned time from file
 
+
 ! netcdf variables
 integer :: ncFileID, VarID
 
@@ -1366,8 +1311,6 @@ integer :: seconds
 type(time_type) :: base_time
 
 if ( .not. module_initialized ) call static_init_model
-
-print *, 'read model time filename : ' , trim(filename)
 
 if ( .not. file_exist(filename) ) then
    write(msgstring,*) 'cannot open file ', trim(filename),' for reading.'
@@ -1383,8 +1326,8 @@ call nc_check(NF90_inq_varid(ncFileID, 'time', VarID), &
 call nc_check(NF90_get_var(ncFileID, VarID, seconds), &
               'read_model_time', 'time get_var')
 
-!>@todo FIXME : Should be grabbing this information from the attributes
-!>              harcoded for now.
+!>@todo FIXME : Should be grabbing the base model time from the 
+!>              time variable attributes. This is hardcoded for now.
 base_time = set_date(1966,1,1,0,0)
 
 read_model_time = base_time + set_time(seconds)
@@ -1433,7 +1376,6 @@ subroutine init_conditions(x)
 
 real(r8), intent(out) :: x(:) !< initalize state from scratch
 
-character(len=128) :: msgstring2, msgstring3
 
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 msgstring3 = 'use openggcm_to_dart to generate an initial state'
@@ -1476,7 +1418,6 @@ subroutine init_time(time)
 
 type(time_type), intent(out) :: time !< time restart file
 
-character(len=128) :: msgstring2, msgstring3
 
 msgstring2 = "cannot run perfect_model_obs with 'start_from_restart = .false.' "
 msgstring3 = 'use openggcm_to_dart to generate an initial state which contains a timestamp'
@@ -1508,19 +1449,19 @@ character(len=*), intent(out)   :: table(:,:) !< 2d table with information from 
 integer,          intent(out)   :: kind_list(:) !< dart kind
 logical,          intent(out)   :: update_var(:) !< list of logical update information
 integer,          intent(out)   :: grid_id(:) !< list of dart kind numbers
- 
+
+
+! Local Variables
 integer :: nrows, i
 character(len=NF90_MAX_NAME) :: varname, dartstr, update, gridname
-
-if ( .not. module_initialized ) call static_init_model
 
 nrows = size(table,1)
 
 ngood = 0
 
 if ( state_variables(1) == ' ' ) then ! no model_state_variables namelist provided
-   string1 = 'model_nml:model_state_variables not specified using default variables'
-   call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+   msgstring = 'model_nml:model_state_variables not specified using default variables'
+   call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate)
 endif
 
 MyLoop : do i = 1, nrows
@@ -1546,16 +1487,16 @@ MyLoop : do i = 1, nrows
         table(i,2) == ' ' .or. &
         table(i,3) == ' ' .or. &
         table(i,4) == ' ') then
-      string1 = 'model_nml:model_state_variables not fully specified'
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+      msgstring = 'model_nml:model_state_variables not fully specified'
+      call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate)
    endif
 
    ! Make sure DART kind is valid
 
    kind_list(i) = get_raw_obs_kind_index(dartstr)
    if( kind_list(i)  < 0 ) then
-      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+      write(msgstring,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
+      call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate)
    endif
    
    ! Make sure the update variable has a valid name
@@ -1566,9 +1507,9 @@ MyLoop : do i = 1, nrows
       CASE ('NO_COPY_BACK')
          update_var(i) = .false.
       CASE DEFAULT
-         write(string1,'(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
-         write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
-         call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
+         write(msgstring, '(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
+         write(msgstring2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
+         call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate, text2=msgstring2)
    END SELECT
 
    ! Make sure the update variable has a valid name
@@ -1579,18 +1520,18 @@ MyLoop : do i = 1, nrows
       CASE ('MAGNETIC_GRID')
          grid_id(i) = MAGNETIC_GRID
       CASE DEFAULT
-         write(string1,'(A)')  'only GEOGRAPHIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
-         write(string2,'(8A)') 'you provided : ',&
-              trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
-         call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate, text2=string2)
+         write(msgstring, '(A)')  'only GEOGRAPHIC_GRID or MAGNETIC_GRID supported in model_state_variable namelist'
+         write(msgstring2,'(8A)') 'you provided : ',&
+                               trim(varname), ', ', trim(dartstr), ', ', trim(update), ', ', trim(gridname)
+         call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate, text2=msgstring2)
    END SELECT
 
    ! Record the contents of the DART state vector
 
    if (do_output()) then
-      write(string1,'(A,I2,8A)') 'variable ',i,' is ',trim(varname), ', ', &
+      write(msgstring,'(A,I2,8A)') 'variable ',i,' is ',trim(varname), ', ', &
                                   trim(dartstr), ', ', trim(update), ', ', trim(gridname)
-      call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate)
+      call error_handler(E_MSG,'verify_state_variables',msgstring,source,revision,revdate)
    endif
 
    ngood = ngood + 1
@@ -1608,6 +1549,8 @@ function get_grid_type(dart_kind)
 integer, intent(in) :: dart_kind !< dart kind
 integer :: get_grid_type !< returned grid
 
+
+! Local Variables
 integer :: i
 
 do i = 1,nfields
@@ -1617,7 +1560,7 @@ do i = 1,nfields
    endif
 enddo
 
-write(msgstring,*)' Can not find dart kind : ', get_raw_obs_kind_name(dart_kind) 
+write(msgstring,*)' Can not find grid type for : ', get_raw_obs_kind_name(dart_kind)
 call error_handler(E_ERR,'get_grid_type',msgstring,source,revision,revdate)
 
 end function get_grid_type
@@ -1641,6 +1584,7 @@ integer,  intent(in)    :: val_istatus(ens_size)
 real(r8), intent(inout) :: val_data(ens_size) !> expected_obs for obs_def
 integer,  intent(inout) :: istatus(ens_size) !> istatus for obs_def
 logical,  intent(out)   :: return_now
+
 
 where (istatus == 0) istatus = val_istatus
 where (istatus /= 0) val_data = MISSING_R8
@@ -1670,7 +1614,7 @@ subroutine allocate_grid_space(grid_handle, conv)
 
 type(grid_type), intent(inout) :: grid_handle !< geo or mag grid handle
 logical,         intent(in)    :: conv !< if true, the grid has conversion arrays
- 
+
 
 allocate(grid_handle%longitude(grid_handle%nlon))
 allocate(grid_handle%latitude(grid_handle%nlat))
@@ -1717,7 +1661,8 @@ integer,          intent(in)    :: ncFileID !< netcdf file id
 character(len=*), intent(in)    :: dim_name !< dimension name of interest
 character(len=*), intent(in)    :: context !< routine calling from
 integer :: get_dim !< returns the length of the dimension
- 
+
+
 ! netcdf variables
 integer :: DimID, rc
 
@@ -1731,7 +1676,7 @@ end function get_dim
 
 !------------------------------------------------------------------
 
-!< gives a netcdf file dimension given a dimension name and length.
+!< sets a netcdf file dimension given a dimension name and length.
 !< returns the value of the netcdf dimension id.
 
 function set_dim(ncFileID, dim_name, dim_val, context)
@@ -1853,10 +1798,9 @@ subroutine initialize_openggcm_transform(filename)
 character(len=*), intent(inout) :: filename !< file with openggcm time information
 
 
+! Local Variables
 type(time_type) :: dart_time
 integer :: yr,mo,dy,hr,mn,se
-
-print *, 'initialize transform filename : ' , trim(filename)
 
 dart_time = read_model_time(filename)
 
@@ -1870,7 +1814,7 @@ end subroutine initialize_openggcm_transform
 
 !> transform grid from geo->magnetic or vice-versa. 
 !> currently we only need it to translate from magnetic to geo.
-!> direction options GEO_TO_MAG or MAG_TO_GEO
+!> direction options GEO_TO_SM or SM_TO_GEO
 
 subroutine transform_mag_geo(llon, llat, lheight, direction)
 
@@ -1879,14 +1823,15 @@ real(r8), intent(inout) :: llat !< dart latitude [-90,90]
 real(r8), intent(inout) :: lheight !< height
 integer,  intent(in)    :: direction
 
-real(r4) :: xin, xout, yin, yout, zin, zout
 
+! Local Variables
+real(r4) :: xin, xout, yin, yout, zin, zout
 character(len=4) :: dirstrin, dirstrout
 
-if (direction == MAG_TO_GEO) then
+if (direction == SM_TO_GEO) then
    dirstrin  = 'sm '
    dirstrout = 'geo'
-else if (direction == GEO_TO_MAG) then
+else if (direction == GEO_TO_SM) then
    dirstrin  = 'geo'
    dirstrout = 'sm '
 else
@@ -1937,6 +1882,8 @@ end subroutine transform_mag_geo
 subroutine make_dim_order_table(ngood)
 integer, intent(in) :: ngood !< number of good fields
 
+
+! Local Variables
 integer :: ivar, jdim
 character(len=NF90_MAX_NAME) :: dimname
 
