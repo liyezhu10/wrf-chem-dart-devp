@@ -3708,9 +3708,6 @@ call DART_get_var(ncid, 'longitude', LONGITUDE)
 call DART_get_var(ncid, 'latitude',  LATITUDE)
 
 ! just to make sure we are [0,360] and [-90,90]
-! SR: if longiutde < 0,longiutde = longiutde + 180
-write(*,*)'longitudes is ',LONGITUDE
-!where (LONGITUDE <   0.0_r8) LONGITUDE = LONGITUDE + 180.0_r8
 where (LONGITUDE <   0.0_r8) LONGITUDE = LONGITUDE + 360.0_r8
 where (LONGITUDE > 360.0_r8) LONGITUDE = LONGITUDE - 360.0_r8
 
@@ -4370,7 +4367,7 @@ subroutine set_physical_grid(filename)
 
 character(len=*), intent(in) :: filename
 
-integer :: ncid, i
+integer :: ncid, i, j
 integer :: VarID, numdims
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, dimlens
 
@@ -4450,6 +4447,16 @@ if (do_output() .and. debug > 99) then
    write(     *     ,*)'lon shape      ', shape(physical_longitudes)
    write(     *     ,*)'lon minval     ',minval(physical_longitudes)
    write(     *     ,*)'lon maxval     ',maxval(physical_longitudes)
+endif
+
+if (do_output() .and. debug > 99) then
+   write(*,*)'checking physical_longitude(i,j),physical_latitude(i,j)'
+   do j = 1,Nlat
+   do i = 1,Nlon
+      write(*,'(''('',i1,1x,i1,'') ='',2(1x,f14.6) )'), i, j, &
+                physical_longitudes(i,j), physical_latitudes(i,j)
+   enddo
+   enddo
 endif
 
 return
@@ -5283,41 +5290,45 @@ end subroutine get_physical_filenames
 
 subroutine set_grid_boundary()
 
-! type(location_type) :: ll_boundary   ! lower  left grid BOUNDARY
+! the physical grid is stored (Nlon,Nlat) ... with the following layout 
+! physical_longitudes(  : ,1) specify the westernmost longitudes 
+! physical_longitudes(  1 ,1) specifies the NorthWest corner
+! physical_longitudes(Nlon,1) specifies the SouthWest corner
+!
+! physical_longitudes(   :,Nlat) specify the easternmost longitudes 
+! physical_longitudes(   1,Nlat) specifies the NorthEast corner
+! physical_longitudes(Nlon,Nlat) specifies the SouthEast corner
+
+! type(location_type) :: ll_boundary  ! lower  left grid BOUNDARY
 ! type(location_type) :: ur_boundary  ! upper right grid BOUNDARY
 
 integer  :: x_i, y_i
 real(r8) :: dx, dy, lon_boundary, lat_boundary
 
-! Extend the grid by half a gridcell in both directions.
-! 1,1 is the UPPER left we want the LOWER left ... x==1, y==Nlat
+! LOWER left ... aka ... southwest
 
-x_i = 1
-y_i = Nlat
+x_i = Nlon
+y_i = 1
 
 !> @todo FIXME what if dx wraps ...
 
-dx = abs(physical_longitudes(x_i+1, y_i  ) - physical_longitudes(x_i, y_i))
-dy = abs(physical_latitudes( x_i  , y_i-1) - physical_latitudes( x_i, y_i))
+dx = physical_longitudes(x_i  , y_i+1) - physical_longitudes(x_i, y_i)
+dy = physical_latitudes( x_i-1, y_i  ) - physical_latitudes( x_i, y_i)
 
 !> @todo FIXME what if lon_boundary wraps ...
 
 lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
 lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
 
-PRINT *, 'Shams'
-PRINT *, physical_latitudes( x_i  , y_i-1) , physical_latitudes( x_i, y_i)
-PRINT *, physical_latitudes(x_i,y_i) , dy/2.0_r8 , lat_boundary
-
 ll_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
 
-! UPPER right is ... x==Nlon, y==1
+! UPPER right ... aka northeast
 
-x_i = Nlon
-y_i = 1
+x_i = 1
+y_i = Nlat
 
-dx = abs(physical_longitudes(x_i, y_i  ) - physical_longitudes(x_i-1, y_i))
-dy = abs(physical_latitudes( x_i, y_i+1) - physical_latitudes( x_i  , y_i))
+dx = abs(physical_longitudes(x_i, y_i) - physical_longitudes(x_i, y_i-1))
+dy = abs(physical_latitudes( x_i, y_i) - physical_latitudes( x_i+1, y_i))
 
 lon_boundary = physical_longitudes(x_i,y_i) + dx/2.0_r8
 lat_boundary = physical_latitudes( x_i,y_i) + dy/2.0_r8
@@ -5326,7 +5337,7 @@ ur_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
 
 if (debug > 0) then
    call write_location(x_i, ll_boundary, charstring=string3)
-   write(string1,*)'lower left  boundary ',trim(string3)
+   write(string1,*)'..  lower left  boundary ',trim(string3)
    call write_location(x_i, ur_boundary, charstring=string3)
    write(string2,*)'upper right boundary ',trim(string3)
    call error_handler(E_MSG, 'set_grid_boundary:', string1, text2=string2)
