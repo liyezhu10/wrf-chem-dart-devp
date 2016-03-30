@@ -3708,7 +3708,9 @@ call DART_get_var(ncid, 'longitude', LONGITUDE)
 call DART_get_var(ncid, 'latitude',  LATITUDE)
 
 ! just to make sure we are [0,360] and [-90,90]
-
+! SR: if longiutde < 0,longiutde = longiutde + 180
+write(*,*)'longitudes is ',LONGITUDE
+!where (LONGITUDE <   0.0_r8) LONGITUDE = LONGITUDE + 180.0_r8
 where (LONGITUDE <   0.0_r8) LONGITUDE = LONGITUDE + 360.0_r8
 where (LONGITUDE > 360.0_r8) LONGITUDE = LONGITUDE - 360.0_r8
 
@@ -3734,7 +3736,7 @@ if (do_output() .and. debug > 0) then
    write(     *     ,*)
    write(     *     ,*)'history_file grid information as interpreted ...'
    write(     *     ,*)'longitude  range ', minval(LONGITUDE), maxval(LONGITUDE)
-   write(     *     ,*)'longitude  range ', minval( LATITUDE), maxval(LATITUDE)
+   write(     *     ,*)'latitude   range ', minval( LATITUDE), maxval(LATITUDE)
    write(     *     ,*)'SOILLEVEL  is ', SOILLEVEL
 
 endif
@@ -4415,7 +4417,7 @@ allocate(physical_latitudes( Nlon,Nlat))
 
 call DART_get_var(ncid, trim(physical_lon_variable), physical_longitudes, string3)
 
-where (physical_longitudes < 180.0_r8) &
+where (physical_longitudes < 0.0_r8) &
        physical_longitudes = physical_longitudes + 360.0_r8
 
 ! Get the latitude variable
@@ -5302,6 +5304,10 @@ dy = abs(physical_latitudes( x_i  , y_i-1) - physical_latitudes( x_i, y_i))
 
 lon_boundary = physical_longitudes(x_i,y_i) - dx/2.0_r8
 lat_boundary = physical_latitudes( x_i,y_i) - dy/2.0_r8
+
+PRINT *, 'Shams'
+PRINT *, physical_latitudes( x_i  , y_i-1) , physical_latitudes( x_i, y_i)
+PRINT *, physical_latitudes(x_i,y_i) , dy/2.0_r8 , lat_boundary
 
 ll_boundary = set_location(lon_boundary, lat_boundary, 0.0_r8, VERTISUNDEF)
 
