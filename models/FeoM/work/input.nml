@@ -22,46 +22,46 @@
    /
 
 &filter_nml
-   async                    = 2,
+   async                    = 5,
    adv_ens_command          = "../shell_scripts/advance_model.csh",
-   ens_size                 = 3,
-   start_from_restart       = .false.,
+   ens_size                 = 30,
+   start_from_restart       = .true.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "perfect_ics",
+   restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
-   init_time_days           = -1,
-   init_time_seconds        = -1,
-   first_obs_days           = -1,
-   first_obs_seconds        = -1,
-   last_obs_days            = -1,
-   last_obs_seconds         = -1,
+   init_time_days           = 1,
+   init_time_seconds        = 0,
+   first_obs_days           = 0,
+   first_obs_seconds        = 43201,
+   last_obs_days            = 1,
+   last_obs_seconds         = 43200,
    num_output_state_members = 2,
    num_output_obs_members   = 2,
    output_interval          = 1,
    num_groups               = 1,
-   input_qc_threshold       =  3.0,
-   outlier_threshold        =  3.0,
-   output_forward_op_errors = .false.,
-   output_timestamps        = .false.,
+   input_qc_threshold       = 3.0,
+   outlier_threshold        = 100.0,
+   output_forward_op_errors = .true.,
+   output_timestamps        = .true.,
    output_inflation         = .true.,
    trace_execution          = .true.,
    silence                  = .false.,
 
    inf_flavor                  = 0,                       0,
-   inf_initial_from_restart    = .false.,                 .false.,
-   inf_sd_initial_from_restart = .false.,                 .false.,
+   inf_initial_from_restart    = .false.,                  .false.,
+   inf_sd_initial_from_restart = .true.,                  .false.,
    inf_output_restart          = .true.,                  .true.,
    inf_deterministic           = .true.,                  .true.,
    inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-   inf_initial                 = 1.0,                     1.0,
+   inf_initial                 = 1.02,                    1.02,
    inf_sd_initial              = 0.6,                     0.0,
    inf_damping                 = 0.9,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 1000000.0,               1000000.0,
+   inf_upper_bound             = 100.0,                   100.0,
    inf_sd_lower_bound          = 0.6,                     0.0
    /
 
@@ -77,29 +77,29 @@
    /
 
 &ensemble_manager_nml
-   single_restart_file_in  = .true.,
-   single_restart_file_out = .true.,
+   single_restart_file_in  = .false.,
+   single_restart_file_out = .false.,
    perturbation_amplitude  = 0.2
    /
 
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 1000000.0,
+   cutoff                          = 1,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
-   adaptive_localization_threshold = -1,
-   output_localization_diagnostics = .false.,
+   adaptive_localization_threshold = 5,
+   output_localization_diagnostics = .true.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 0
+   print_every_nth_obs             = 1
    /
 
 &location_nml
-   horiz_dist_only             = .true.,
+   horiz_dist_only             = .false.,
    vert_normalization_pressure = 100000.0,
-   vert_normalization_height   = 10000.0,
-   vert_normalization_level    = 20.0,
-   approximate_distance        = .true.,
+   vert_normalization_height   = 200.0,
+   vert_normalization_level    = 10.0,
+   approximate_distance        = .false.,
    nlon                        = 71,
    nlat                        = 36,
    output_box_info             = .false.,
@@ -129,8 +129,6 @@
 # to compute it.)
 # ARGO_U_CURRENT_COMPONENT,      KIND_U_CURRENT_COMPONENT
 # ARGO_V_CURRENT_COMPONENT,      KIND_V_CURRENT_COMPONENT
-# ARGO_SALINITY,                 KIND_SALINITY
-# ARGO_TEMPERATURE,              KIND_TEMPERATURE
 # ADCP_U_CURRENT_COMPONENT,      KIND_U_CURRENT_COMPONENT
 # ADCP_V_CURRENT_COMPONENT,      KIND_V_CURRENT_COMPONENT
 # ADCP_SALINITY,                 KIND_SALINITY
@@ -175,29 +173,29 @@
 # SATELLITE_INFRARED_SST,        KIND_TEMPERATURE
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'null',
-   evaluate_these_obs_types = 'ARGO_TEMPERATURE'
+   assimilate_these_obs_types = 'SALINITY', 'TEMPERATURE'
+   evaluate_these_obs_types = '', ''
    /
 
 &assim_model_nml
    write_binary_restart_files = .true.,
-   netCDF_large_file_support  = .false.
+   netCDF_large_file_support  = .true.
    /
 
 &model_nml
-   model_analysis_filename      = '../data/mpas_ocean_in.nc'
-   grid_definition_filename     = '../data/mpas_ocean_in.nc'
-   assimilation_period_days     = 0,
-   assimilation_period_seconds  = 3600,
+   model_analysis_filename      = '/work/ans051/TSS/INI09/ENS01/ENS01.2009.oce.nc',
+   grid_definition_filename     = '',
    output_state_vector          = .true., 
+   assimilation_period_days     = 0,
+   assimilation_period_seconds  = 86400,
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
    use_u_for_wind               = .false.,
    use_rbf_option               = 2,
    update_u_from_reconstruct    = .false.,
    use_increments_for_u_update  = .false.,
-   xyzdebug                     = 0,
-   debug                        = 2
+   xyzdebug                     = 10,
+   debug                        = 10
    /
 
 # NOTE: h(nVertLevels,nCells,Time) is layer thickness, not SSH
@@ -211,21 +209,20 @@
 #                          'u',      'KIND_EDGE_NORMAL_SPEED',
 #                'temperature',      'KIND_POTENTIAL_TEMPERATURE',
 
-&mpas_vars_nml
-   mpas_state_variables = 'temperature',            'KIND_TEMPERATURE',
-                          'salinity',               'KIND_SALINITY',
-                          'rho',                    'KIND_DENSITY',
-                          'uReconstructMeridional', 'KIND_U_CURRENT_COMPONENT',
-                          'uReconstructZonal',      'KIND_V_CURRENT_COMPONENT',
+&feom_vars_nml
+   feom_state_variables = 'salt', 'KIND_SALINITY',
+                          'temp', 'KIND_TEMPERATURE'
+
   /
 
 &model_to_dart_nml
-   model_to_dart_output_file  = 'dart_ics',
+   model_to_dart_output_file  = 'filter_ics.0001',
+   print_data_ranges=.false.
   /
 
 &dart_to_model_nml
-   dart_to_model_input_file = 'dart_restart',
-   advance_time_present     = .true.,
+   dart_to_model_input_file = 'filter_restart.0001',
+   advance_time_present     = .false.,
   / 
 
 &utilities_nml
@@ -287,7 +284,7 @@
 &restart_file_tool_nml
    input_file_name              = "filter_restart",
    output_file_name             = "filter_updated_restart",
-   ens_size                     = 1,
+   ens_size                     = 30,
    single_restart_file_in       = .true.,
    single_restart_file_out      = .true.,
    write_binary_restart_files   = .true.,
@@ -334,14 +331,14 @@
    kind_of_interest = 'KIND_DENSITY',
 
 &model_mod_check_nml
-   dart_input_file      = 'dart.second',
+   dart_input_file      = 'filter_ics.0001',
    output_file           = 'check_me',
    advance_time_present  = .FALSE.,
    verbose               = .FALSE.,
-   test1thru             = 10,
-   x_ind                = 300 ,
-   loc_of_interest       = 240.0, 0.0, 10000.0,
-   kind_of_interest       = 'KIND_TEMPERATURE',
+   test1thru             = 3,
+   x_ind                = 1 ,
+   loc_of_interest       = 26.0922, 40.1513, 12.0,
+   kind_of_interest       = 'KIND_SALINITY',
    interp_test_lonrange  = 0.0, 359.0,
    interp_test_dlon      = 1.0,
    interp_test_latrange  = -89.0, 89.0,
@@ -350,3 +347,4 @@
    interp_test_dvert     = 200.0,
    interp_test_vertcoord = 'VERTISHEIGHT'
    /
+
