@@ -48,11 +48,6 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              get_close_obs_init, get_close_obs_destroy,        &
                              loc_get_close_obs => get_close_obs
 
-!                             use xyz_location_mod, only : xyz_location_type, xyz_get_close_maxdist_init,    &
-!                             xyz_get_close_type, xyz_set_location, xyz_get_location, &
-!                             xyz_get_close_obs_init, xyz_get_close_obs_destroy, &
-!                             xyz_find_nearest
-
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, do_output, to_upper, nmlfileunit,       &
