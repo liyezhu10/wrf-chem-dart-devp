@@ -118,7 +118,6 @@ public :: get_model_size,         &
 ! the interfaces here can be changed as appropriate.
 
 public :: get_model_analysis_filename,  &
-          get_grid_definition_filename, &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
           get_analysis_time,            &
@@ -159,8 +158,6 @@ type(random_seq_type) :: random_seq
 
 ! Structure for computing distances to cell centers, and assorted arrays
 ! needed for the get_close code.
-!type(xyz_get_close_type)             :: cc_gc
-!type(xyz_location_type), allocatable :: cell_locs(:)
 
 ! not part of the namelist because in the ocean it's not clear
 ! that we need to worry about log pressure in the vertical.
@@ -181,21 +178,12 @@ character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
 
 ! if .false. use U/V reconstructed winds tri interp at centers for wind forward ops
 ! if .true.  use edge normal winds (u) with RBF functs for wind forward ops
-logical :: use_u_for_wind = .false.
 
 ! if using rbf, options 1,2,3 control how many points go into the rbf.
 ! larger numbers use more points from further away
-integer :: use_rbf_option = 2
 
 ! if .false. edge normal winds (u) should be in state vector and are written out directly
 ! if .true.  edge normal winds (u) are updated based on U/V reconstructed winds
-logical :: update_u_from_reconstruct = .true.
-
-! only if update_u_from_reconstruct is true,
-! if .false. use the cell center u,v reconstructed values to update edge winds
-! if .true., read in the original u,v winds, compute the increments after the
-! assimilation, and use only the increments to update the edge winds
-logical :: use_increments_for_u_update = .true.
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -208,9 +196,6 @@ namelist /model_nml/             &
    calendar,                     &
    debug,                        &
    xyzdebug,                     &
-   use_u_for_wind,               &
-   use_rbf_option,               &
-   update_u_from_reconstruct,    &
    use_increments_for_u_update
 
 ! DART state vector contents are specified in the input.nml:&feom_vars_nml namelist.
@@ -218,6 +203,8 @@ integer, parameter :: max_state_variables = 80
 integer, parameter :: num_state_table_columns = 2
 integer, parameter :: num_bounds_table_columns = 4
 character(len=NF90_MAX_NAME) :: feom_state_variables(max_state_variables * num_state_table_columns ) = ' '
+
+!todo FIXME : use the state bounds to clamp variables out of range
 character(len=NF90_MAX_NAME) :: mpas_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
 character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_table_columns )
 
@@ -242,8 +229,6 @@ type progvartype
    integer :: numdims       ! number of dims - excluding TIME
    integer :: numvertical   ! number of vertical levels in variable
    integer :: numcells      ! number of horizontal locations (cell centers)
-   integer :: numedges      ! number of horizontal locations (edges for velocity components)
-!   logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
    integer :: varsize       ! prod(dimlens(1:numdims))
    integer :: index1        ! location in dart state vector of first occurrence
    integer :: indexN        ! location in dart state vector of last  occurrence
@@ -268,26 +253,14 @@ integer :: vertexDegree  = -1  ! Max number of cells/edges that touch any vertex
 
 ! scalar grid positions
 
-! FIXME: we read in a lot of metadata about the grids.  if space becomes an
-! issue we could consider reading in only the x,y,z arrays for all the items
-! plus the radius, and then compute the lat/lon for locations needed by
-! get_state_meta_data() on demand.  most of the computations we need to do
-! are actually easier in xyz coords (no issue with poles).
-
-! FIXME: it may be desirable to read in xCell(:), yCell(:), zCell(:)
-! to keep from having to compute them on demand, especially since we
-! have converted the radian lat/lon of the cell centers into degrees.
-! we have to convert back, then take a few sin and cos to get xyz.
-! time/space/accuracy tradeoff here.
-
 real(r8), allocatable :: xVertex(:), yVertex(:), zVertex(:)
 real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
 real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
 real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
+
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
-real(r8), allocatable :: zGridFace(:,:)   ! geometric depth at cell faces   (nVertLevelsP1,nCells)
-real(r8), allocatable :: zGridCenter(:,:) ! geometric depth at cell centers (nVertLevels,  nCells)
+
 real(r8), allocatable :: zGridEdge(:,:)   ! geometric depth at edge centers (nVertLevels,  nEdges)
 
 real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be computed instead
@@ -295,7 +268,6 @@ real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be 
 real(r8), allocatable :: hZLevel(:)   ! layer thicknesses - maybe - FIXME
 !real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
 
-integer,  allocatable :: cellsOnVertex(:,:) ! list of cell centers defining a triangle
 integer,  allocatable :: verticesOnCell(:,:)
 
 integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
@@ -476,16 +448,6 @@ call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells))
 allocate(hZLevel(nVertLevels))
-!allocate(zGridFace(nVertLevelsP1, nCells))
-!allocate(zGridCenter(nVertLevels, nCells))
-
-!allocate(cellsOnVertex(vertexDegree, nVertices))
-!allocate(nEdgesOnCell(nCells))
-!allocate(edgesOnCell(maxEdges, nCells))
-!allocate(cellsOnEdge(2, nEdges))
-!allocate(verticesOnCell(maxEdges, nCells))
-!allocate(edgeNormalVectors(3, nEdges))
-!allocate(xVertex(nVertices), yVertex(nVertices), zVertex(nVertices))
 
 ! see if U is in the state vector list.  if not, don't read in or
 ! use any of the Edge arrays to save space.
@@ -542,7 +504,6 @@ do ivar = 1, nfields
    progvar(ivar)%numvertical = 1
    progvar(ivar)%dimlens     = MISSING_I
    progvar(ivar)%numcells    = MISSING_I
-   progvar(ivar)%numedges    = MISSING_I
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
@@ -593,8 +554,6 @@ do ivar = 1, nfields
             progvar(ivar)%numcells = myDim_nod2d
          case ('nodes_3d')
             progvar(ivar)%numcells = myDim_nod3d
-!         case ('nEdges')
-            progvar(ivar)%numedges = MISSING_I
 !         case ('nVertL')  ! nVertLevels, nVertLevelsP1, nVertLevelsP2
             progvar(ivar)%numvertical = max_num_layers
       end select
@@ -604,15 +563,6 @@ do ivar = 1, nfields
    ! this call sets: clamping, bounds, and out_of_range_fail in the progvar entry
 !   call get_variable_bounds(mpas_state_bounds, ivar)
 
-!   if (progvar(ivar)%numvertical == nVertLevels) then
-!      progvar(ivar)%ZonHalf = .TRUE.
-!   else
-!      progvar(ivar)%ZonHalf = .FALSE.
-!   endif
-
-   if (varname == 'u') has_edge_u = .true.
-   if (varname == 'uReconstructZonal' .or. &
-       varname == 'uReconstructMeridional') has_uvreconstruct = .true.
 
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
@@ -705,8 +655,6 @@ endif
 
 if (     progvar(nf)%numcells /= MISSING_I) then
    nxp = progvar(nf)%numcells
-elseif ( progvar(nf)%numedges /= MISSING_I) then
-   nxp = progvar(nf)%numedges
 else
      write(string1,*) 'ERROR, ',trim(progvar(nf)%varname),' is not defined on edges or cells'
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
@@ -720,13 +668,7 @@ print*, "nzp,iloc,vloc: ",nzp,iloc,vloc
 ! the zGrid array contains the location of the cell top and bottom faces, so it has one
 ! more value than the number of cells in each column.  for locations of cell centers
 ! you have to take the midpoint of the top and bottom face of the cell.
-!if ( progvar(nf)%ZonHalf ) then
-!  depth = zGridCenter(vloc,iloc)
-!else if (nzp <= 1) then
-!  depth = zGridFace(1,iloc)
-!else
-!  depth = zGridFace(vloc,iloc)
-!endif
+
 depth=layerdepth(vloc)
 
 if (nzp <= 1) then
@@ -1443,9 +1385,6 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
-if (allocated(zGridFace))      deallocate(zGridFace)
-if (allocated(zGridCenter))    deallocate(zGridCenter)
-if (allocated(cellsOnVertex))  deallocate(cellsOnVertex)
 if (allocated(nEdgesOnCell))   deallocate(nEdgesOnCell)
 if (allocated(edgesOnCell))    deallocate(edgesOnCell)
 if (allocated(cellsOnEdge))    deallocate(cellsOnEdge)
@@ -1785,22 +1724,6 @@ end subroutine get_model_analysis_filename
 
 !-------------------------------------------------------------------
 
-subroutine get_grid_definition_filename( filename )
-
-! return the name of the grid_definition filename that was set
-! in the model_nml namelist
-
-character(len=*), intent(out) :: filename
-
-if ( .not. module_initialized ) call static_init_model
-
-filename = trim(grid_definition_filename)
-
-end subroutine get_grid_definition_filename
-
-
-!-------------------------------------------------------------------
-
 subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 
 ! Reads the current time and state variables from a mpas analysis
@@ -2033,13 +1956,6 @@ PROGVARLOOP : do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
-   if ( varname == 'u' .and. update_u_from_reconstruct ) then
-      write(string1, *) 'skipping update of edge normal winds (u) because'
-      write(string2, *) 'update_u_from_reconstruct is True'
-      call error_handler(E_MSG,'statevector_to_analysis_file',string1,&
-                         source,revision,revdate, text2=string2)
-      cycle PROGVARLOOP
-   endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
    ! The TIME and Copy dimensions are intentionally not queried
@@ -2603,7 +2519,7 @@ subroutine get_grid()
 !
 ! The file name comes from module storage ... namelist.
 ! This reads in the following arrays:
-!   latCell, lonCell, zGridFace, cellsOnVertex (all in module global storage)
+!   latCell, lonCell, all in module global storage)
 
 integer  :: ncid, VarID, numdims, dimlen, i
 
@@ -2618,43 +2534,13 @@ lonCell = coord_nod2D(1,:)
 
 ! Read the variables
 
-! FIXME ...   inq_varid edgeNormalVectors ../data/mpas_out.nc: NetCDF: Variable not found
-!edgeNormalVectors(:,:) = MISSING_R8
-! call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
-!       'get_grid', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
-! call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
-!       'get_grid', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
-! A little sanity check
 if ((debug > 9) .and. do_output()) then
 
    write(*,*)
    write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
    write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
    write(*,*)'hZLevel           range ',minval(hZLevel),           maxval(hZLevel)
-!   write(*,*)'cellsOnVertex     range ',minval(cellsOnVertex),     maxval(cellsOnVertex)
-!   write(*,*)'edgeNormalVectors range ',minval(edgeNormalVectors), maxval(edgeNormalVectors)
-!   write(*,*)'nEdgesOnCell      range ',minval(nEdgesOnCell),      maxval(nEdgesOnCell)
-!   write(*,*)'EdgesOnCell       range ',minval(EdgesOnCell),       maxval(EdgesOnCell)
-!   write(*,*)'cellsOnEdge       range ',minval(cellsOnEdge),       maxval(cellsOnEdge)
-!   if(data_on_edges) then
-!      write(*,*)'latEdge        range ',minval(latEdge),           maxval(latEdge)
-!      write(*,*)'lonEdge        range ',minval(lonEdge),           maxval(lonEdge)
-!      write(*,*)'xEdge          range ',minval(xEdge),             maxval(xEdge)
-!      write(*,*)'yEdge          range ',minval(yEdge),             maxval(yEdge)
-!      write(*,*)'zEdge          range ',minval(zEdge),             maxval(zEdge)
-!   endif
-!   write(*,*)'xVertex           range ',minval(xVertex),           maxval(xVertex)
-!   write(*,*)'yVertex           range ',minval(yVertex),           maxval(yVertex)
-!   write(*,*)'zVertex           range ',minval(zVertex),           maxval(zVertex)
-!   write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
-!   write(*,*)'maxLevelEdgeTop   range ',minval(maxLevelEdgeTop),   maxval(maxLevelEdgeTop)
-!   if (allocated(boundaryEdge)) &
-!   write(*,*)'boundaryEdge      range ',minval(boundaryEdge),      maxval(boundaryEdge)
-!   if (allocated(boundaryVertex)) &
-!   write(*,*)'boundaryVertex    range ',minval(boundaryVertex),    maxval(boundaryVertex)
-!   if (allocated(maxLevelCell)) &
-!   write(*,*)'maxLevelCell      range ',minval(maxLevelCell),      maxval(maxLevelCell)
-!
+
 endif
 
 end subroutine get_grid
@@ -3041,8 +2927,6 @@ integer,  intent(in)           :: ivar
 !%!    integer :: numdims       ! number of dims - excluding TIME
 !%!    integer :: numvertical   ! number of vertical levels in variable
 !%!    integer :: numcells      ! number of horizontal locations (typically cell centers)
-!%!    integer :: numedges
-!%!    logical :: ZonHalf       ! vertical coordinate has dimension nVertLevels
 !%!    integer :: varsize       ! prod(dimlens(1:numdims))
 !%!    integer :: index1        ! location in dart state vector of first occurrence
 !%!    integer :: indexN        ! location in dart state vector of last  occurrence
@@ -3076,10 +2960,6 @@ write(logfileunit,*) '  numvertical ',progvar(ivar)%numvertical
 write(     *     ,*) '  numvertical ',progvar(ivar)%numvertical
 write(logfileunit,*) '  numcells    ',progvar(ivar)%numcells
 write(     *     ,*) '  numcells    ',progvar(ivar)%numcells
-write(logfileunit,*) '  numedges    ',progvar(ivar)%numedges
-write(     *     ,*) '  numedges    ',progvar(ivar)%numedges
-!write(logfileunit,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
-!write(     *     ,*) '  ZonHalf     ',progvar(ivar)%ZonHalf
 write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
 write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
 write(logfileunit,*) '  index1      ',progvar(ivar)%index1
@@ -3551,12 +3431,6 @@ call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
    call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
    if (istatus /= 0) return
 
-   fdata = 0.0_r8
-   do i = 1, n
-      fdata(i) = zGridFace(k_low(i),c(i))*(1.0_r8 - fract(i)) + &
-                 zGridFace(k_up (i),c(i))*fract(i)
-   enddo
-
    ! now have vertically interpolated values at cell centers.
    ! use horizontal weights to compute value at interp point.
    zout = sum(weights * fdata)
@@ -3867,8 +3741,8 @@ if(vert_is_height(loc)) then
    ! Get the lower and upper bounds and fraction for each column
    do i=1, nc
       if (oncenters) then
-         call find_depth_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
-                                 lower(i), upper(i), fract(i), ier)
+         ! call find_depth_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
+         !                         lower(i), upper(i), fract(i), ier)
       else
 
          if (.not. data_on_edges) then
@@ -4369,9 +4243,6 @@ integer :: i
 
 !allocate(cell_locs(nCells))
 
-!do i=1, nCells
-!   cell_locs(i) = xyz_set_location(lonCell(i), latCell(i), 0.0_r8, radius)
-!enddo
 
 ! the width really isn't used anymore, but it's part of the
 ! interface so we have to pass some number in.
