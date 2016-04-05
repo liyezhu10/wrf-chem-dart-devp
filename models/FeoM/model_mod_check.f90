@@ -20,16 +20,8 @@ use     location_mod, only : location_type, set_location, write_location, get_di
                              VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, VERTISPRESSURE, &
                              VERTISHEIGHT, VERTISSCALEHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_POTENTIAL_TEMPERATURE, &
                              KIND_TEMPERATURE,           &
                              KIND_SALINITY,              &
-                             KIND_DRY_LAND,              &
-                             KIND_EDGE_NORMAL_SPEED,     &
-                             KIND_U_CURRENT_COMPONENT,   &
-                             KIND_V_CURRENT_COMPONENT,   &
-                             KIND_SEA_SURFACE_HEIGHT,    &
-                             KIND_SEA_SURFACE_PRESSURE,  &
-                             KIND_TRACER_CONCENTRATION
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -62,13 +54,12 @@ character(len=256) :: string1, string2
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129)  :: destroy_file         = 'temp_analysis_file.nc'
 character (len = 129)  :: dart_input_file      = 'filter_ics'
 character (len = 129)  :: output_file          = 'check_me'
 logical                :: advance_time_present = .FALSE.
 logical                :: verbose              = .FALSE.
-integer                :: test1thru            = 1
-integer                :: x_ind                = 1
+integer                :: test1thru            = -1
+integer                :: x_ind                = -1
 real(r8)               :: interp_test_dlon     = 1.0
 real(r8)               :: interp_test_dlat     = 1.0
 real(r8)               :: interp_test_dvert    = 100.0
@@ -85,20 +76,20 @@ namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         interp_test_dlon, interp_test_lonrange, &
                         interp_test_dlat, interp_test_latrange, &
                         interp_test_dvert, interp_test_vertrange, &
-                        interp_test_vertcoord, destroy_file
+                        interp_test_vertcoord
 
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
 integer :: ios_out, iunit, io, i
-integer :: x_size, skip
+integer :: x_size
 integer :: mykindindex, vertcoord
 
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
 
 character(len=metadatalength) :: state_meta(1)
-character(len=129) :: mpas_input_file  ! set with get_model_analysis_filename() if needed
+character(len=129) :: FeoM_input_file  ! set with get_model_analysis_filename() if needed
 type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
@@ -130,47 +121,47 @@ if (test1thru < 1) goto 999
 ! This harvests all kinds of initialization information
 
 write(*,*)
-write(*,*)'static_init_model test STARTING ...'
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 1 : '
+write(*,*)'calling static_init_model'
+write(*,*)'---------------------------------------'
 call static_init_model()
+
+write(*,*)
+write(*,*)'---------------------------------------'
 write(*,*)'static_init_model test COMPLETE ...'
+write(*,*)'---------------------------------------'
 
 if (test1thru < 2) goto 999
 
 write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 2 : '
 write(*,*)'get_model_size test STARTING ...'
+write(*,*)'---------------------------------------'
+
 x_size = get_model_size()
+
 write(*,*)'get_model_size test : state vector has length',x_size
+
+write(*,*)
+write(*,*)'---------------------------------------'
 write(*,*)'get_model_size test COMPLETE ...'
-
-!----------------------------------------------------------------------
-! Write a supremely simple restart file. Most of the time, I just use
-! this as a starting point for a Matlab function that replaces the 
-! values with something more complicated.
-!----------------------------------------------------------------------
-
-if (test1thru < 3) goto 999
-
-allocate(statevector(x_size))
-
-statevector = 1.0_r8;
-model_time  = set_time(21600, 149446)   ! 06Z 4 March 2010
-
-! write(*,*)
-! write(*,*)'Writing a trivial restart file - "allones.ics".'
-! iunit = open_restart_write('allones.ics')
-! call awrite_state_restart(model_time, statevector, iunit)
-! call close_restart(iunit)
-! write(*,*)'trivial restart file written.'
+write(*,*)'---------------------------------------'
 
 !----------------------------------------------------------------------
 ! Open a test DART initial conditions file.
 ! Reads the valid time, the state, and (possibly) a target time.
 !----------------------------------------------------------------------
 
-if (test1thru < 4) goto 999
+if (test1thru < 3) goto 999
 
 write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 3 : '
 write(*,*)'Reading '//trim(dart_input_file)
+write(*,*)'---------------------------------------'
+
 
 iunit = open_restart_read(dart_input_file)
 if ( advance_time_present ) then
@@ -183,6 +174,11 @@ call close_restart(iunit)
 call print_date( model_time,'model_mod_check:model date')
 call print_time( model_time,'model_mod_check:model time')
 
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Reading test COMPLETE ...'
+write(*,*)'---------------------------------------'
+
 !----------------------------------------------------------------------
 ! Output the state vector to a netCDF file ...
 ! This is the same procedure used by 'perfect_model_obs' & 'filter'
@@ -191,11 +187,14 @@ call print_time( model_time,'model_mod_check:model time')
 ! finalize_diag_output()
 !----------------------------------------------------------------------
 
-if (test1thru < 5) goto 999
+if (test1thru < 4) goto 999
 
 write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 4 : '
 write(*,*)'Exercising the netCDF routines.'
 write(*,*)'Creating '//trim(output_file)//'.nc'
+write(*,*)'---------------------------------------'
 
 state_meta(1) = 'restart test'
 ncFileID = init_diag_output(trim(output_file),'just testing a restart', 1, state_meta)
@@ -204,50 +203,66 @@ call aoutput_diagnostics(ncFileID, model_time, statevector, 1)
 
 call nc_check( finalize_diag_output(ncFileID), 'model_mod_check:main', 'finalize')
 
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Diagnostic test COMPLETE ...'
+write(*,*)'---------------------------------------'
+
 !----------------------------------------------------------------------
 ! Checking get_state_meta_data (and get_state_indices, get_state_kind)
 !----------------------------------------------------------------------
 
-if (test1thru < 6) goto 999
+if (test1thru < 5) goto 999
 
-skip = 1000000
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 5 : '
+write(*,*)'Testing get_state_meta_data for state index', x_ind
+write(*,*)'---------------------------------------'
 
-!do i = 1, x_size, skip
-!   if ( i > 0 .and. i <= x_size ) call check_meta_data( x_ind )
 call check_meta_data( x_ind )
-!enddo
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'get_state_meta_data test COMPLETE ...'
+write(*,*)'---------------------------------------'
 
 !----------------------------------------------------------------------
 ! Trying to find the state vector index closest to a particular ...
 ! Checking for valid input is tricky ... we don't know much. 
 !----------------------------------------------------------------------
 
-if (test1thru < 7) goto 999
+if (test1thru < 6) goto 999
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 6 : '
+write(*,*)'Finding closest gridpoint to : ', &
+           loc_of_interest(1), loc_of_interest(2),   loc_of_interest(3), 
+write(*,*)'---------------------------------------'
 
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Finding closest gridpoint test COMPLETE ...'
+write(*,*)'---------------------------------------'
 
 !----------------------------------------------------------------------
 ! Check the interpolation - print initially to STDOUT
 !----------------------------------------------------------------------
 
-if (test1thru < 8) goto 999
+if (test1thru < 7) goto 999
 
 write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 7 : '
 write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
+write(*,*)'---------------------------------------'
 
 select case(trim(interp_test_vertcoord))
-   case ('VERTISUNDEF')
-      vertcoord = VERTISUNDEF
-   case ('VERTISSURFACE')
-      vertcoord = VERTISSURFACE
-   case ('VERTISLEVEL')
-      vertcoord = VERTISLEVEL
-   case ('VERTISPRESSURE')
-      vertcoord = VERTISPRESSURE
    case ('VERTISHEIGHT')
       vertcoord = VERTISHEIGHT
-   case ('VERTISSCALEHEIGHT')
-      vertcoord = VERTISSCALEHEIGHT
    case default
       write(string1,*) 'unknown vertcoord ', trim(interp_test_vertcoord)
       call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
@@ -264,7 +279,17 @@ else
 endif
 
 write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Single interpolate test COMPLETE ...'
+write(*,*)'---------------------------------------'
+
+if (test1thru < 8) goto 999
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 8 : '
 write(*,*)'Rigorous test of model_interpolate ...'
+write(*,*)'---------------------------------------'
 
 ios_out = test_interpolate()
 
@@ -274,19 +299,29 @@ else
    write(*,*)'Rigorous model_interpolate WARNING: model_interpolate had ', ios_out, ' failures.'
 endif
 
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Rigorous model_interpolate test COMPLETE'
+write(*,*)'---------------------------------------'
+
 !----------------------------------------------------------------------
 ! convert model data into a dart state vector and write it into a
 ! initial conditions file.  writes the valid time and the state.
 !----------------------------------------------------------------------
 
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 9 : '
+write(*,*)'Reading restart files from  '//trim(FeoM_input_file)
+write(*,*)'---------------------------------------'
+
 if (test1thru < 9) goto 999
 
-call get_model_analysis_filename( mpas_input_file )
+call get_model_analysis_filename( FeoM_input_file )
 
 write(*,*)
-write(*,*)'Reading restart files from  '//trim(mpas_input_file)
 
-call analysis_file_to_statevector (mpas_input_file, statevector, model_time)
+call analysis_file_to_statevector (FeoM_input_file, statevector, model_time)
 
 write(*,*)
 write(*,*)'Writing data into '//trim(output_file)
@@ -295,10 +330,21 @@ iunit = open_restart_write(output_file)
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
 
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Write file to state vector test COMPLETE'
+write(*,*)'---------------------------------------'
+
 !----------------------------------------------------------------------
 ! Open a test DART initial conditions file.
 ! Reads the valid time, the state, and (possibly) a target time.
 !----------------------------------------------------------------------
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'TEST 10 : '
+write(*,*)'Reading restart files from  '//trim(FeoM_input_file)
+write(*,*)'---------------------------------------'
 
 if (test1thru < 10) goto 999
 
@@ -315,6 +361,11 @@ call close_restart(iunit)
 
 call print_date( model_time,'model_mod_check:model date')
 call print_time( model_time,'model_mod_check:model time')
+
+write(*,*)
+write(*,*)'---------------------------------------'
+write(*,*)'Reading restart files test COMPLETE'
+write(*,*)'---------------------------------------'
 
 !----------------------------------------------------------------------
 ! This must be the last few lines of the main program.
