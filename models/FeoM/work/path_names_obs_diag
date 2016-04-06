@@ -2,8 +2,7 @@ assim_model/assim_model_mod.f90
 common/types_mod.f90
 cov_cutoff/cov_cutoff_mod.f90
 diagnostics/threed_sphere/obs_diag.f90
-location/threed_cartesian/xyz_location_mod.f90
-location/threed_sphere/location_mod.f90
+location/threed_cartesian/location_mod.f90
 models/mpas_ocn/get_coeff_mod.f90
 models/mpas_ocn/get_geometry_mod.f90
 models/mpas_ocn/get_reconstruct_mod.f90
