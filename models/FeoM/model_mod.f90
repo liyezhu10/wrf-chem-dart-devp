@@ -192,7 +192,7 @@ namelist /model_nml/             &
    model_analysis_filename,      &
    grid_definition_filename,     &
    output_state_vector,          &
-   !#!vert_localization_coord,      &
+   !#! vert_localization_coord,      &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
@@ -248,42 +248,42 @@ type(progvartype), dimension(max_state_variables) :: progvar
 
 integer :: nCells        = -1  ! Total number of cells making up the grid
 integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
-integer :: nEdges        = -1  ! Straight lines between vertices making up cells
-integer :: maxEdges      = -1  ! Largest number of edges a cell can have
+!#! integer :: nEdges        = -1  ! Straight lines between vertices making up cells
+!#! integer :: maxEdges      = -1  ! Largest number of edges a cell can have
 integer :: nVertLevels   = -1  ! Vertical levels; count of vert cell centers
 ! integer :: nVertLevelsP1 = -1  ! Vert levels plus 1; count of vert cell faces
 
 ! scalar grid positions
 
-real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
-real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
-real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
+!#! real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
+!#! real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
+!#! real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
 
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
 
-real(r8), allocatable :: zGridEdge(:,:)   ! geometric depth at edge centers (nVertLevels,  nEdges)
+!$! real(r8), allocatable :: zGridEdge(:,:)   ! geometric depth at edge centers (nVertLevels,  nEdges)
 
-real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be computed instead
+!$! real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be computed instead
                                       !  of requiring it in the input file (save file space). FIXME
 real(r8), allocatable :: hZLevel(:)   ! layer thicknesses - maybe - FIXME
-!real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
+!$! real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
 
-integer,  allocatable :: verticesOnCell(:,:)
+!$! integer,  allocatable :: verticesOnCell(:,:)
 
-integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
-integer,  allocatable :: cellsOnEdge(:,:) ! list of cells that bound each edge
-integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
-real(r8), allocatable :: edgeNormalVectors(:,:)
+!$! integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
+!$! integer,  allocatable :: cellsOnEdge(:,:) ! list of cells that bound each edge
+!$! integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
+!$! real(r8), allocatable :: edgeNormalVectors(:,:)
 
 ! Boundary information might be needed ... regional configuration?
 ! Read if available.
 
-integer,  allocatable :: boundaryCell(:,:) ! logical, cells that are on boundaries
-integer,  allocatable :: maxLevelEdgeTop(:) !
-integer,  allocatable :: boundaryEdge(:,:) ! logical, edges that are boundaries
-integer,  allocatable :: boundaryVertex(:,:) ! logical, vertices that are on boundaries
-integer,  allocatable :: maxLevelCell(:) ! list of maximum (deepest) level for each cell
+!$! integer,  allocatable :: boundaryCell(:,:) ! logical, cells that are on boundaries
+!$! integer,  allocatable :: maxLevelEdgeTop(:) !
+!$! integer,  allocatable :: boundaryEdge(:,:) ! logical, edges that are boundaries
+!$! integer,  allocatable :: boundaryVertex(:,:) ! logical, vertices that are on boundaries
+!$! integer,  allocatable :: maxLevelCell(:) ! list of maximum (deepest) level for each cell
 
 real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
 
@@ -291,10 +291,10 @@ integer         :: model_size          ! the state vector length
 type(time_type) :: model_timestep      ! smallest time to adv model
 
 ! useful flags in making decisions when searching for points, etc
-logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
-logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
-logical :: has_edge_u = .false.        ! true = has original normal u on edges
-logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
+!$! logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
+!$! logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
+!$! logical :: has_edge_u = .false.        ! true = has original normal u on edges
+!$! logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
 
 ! Do we have any state vector items located on the cell edges?
 ! If not, avoid reading in or using the edge arrays to save space.
@@ -313,7 +313,7 @@ logical :: oncenters = .true.
 ! currently unused; for a regional model it is going to be necessary to know
 ! if the grid is continuous around longitudes (wraps in east-west) or not,
 ! and if it covers either of the poles.
-character(len= 64) :: ew_boundary_type, ns_boundary_type
+!#! character(len= 64) :: ew_boundary_type, ns_boundary_type
 
 ! common names that call specific subroutines based on the arg types
 INTERFACE vector_to_prog_var
@@ -582,26 +582,26 @@ model_size = progvar(nfields)%indexN
 if ( debug > 0 .and. do_output()) then
   write(logfileunit,*)
   write(     *     ,*)
-  write(logfileunit,'(" static_init_model: nCells, nEdges, nVertices, nVertLevels =",4(1x,i8))') &
-                                          nCells, nEdges, nVertices, nVertLevels
-  write(     *     ,'(" static_init_model: nCells, nEdges, nVertices, nVertLevels =",4(1x,i8))') &
-                                          nCells, nEdges, nVertices, nVertLevels
+  write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
+                                          nCells, nVertices, nVertLevels
+  write(     *     ,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
+                                          nCells, nVertices, nVertLevels
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
-  if ( global_grid ) then
-     write(logfileunit, *)'static_init_model: grid is a global grid '
-     write(     *     , *)'static_init_model: grid is a global grid '
-  else
-     write(logfileunit, *)'static_init_model: grid has boundaries '
-     write(     *     , *)'static_init_model: grid has boundaries '
-  endif
-  if ( all_levels_exist_everywhere ) then
-     write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
-     write(     *     , *)'static_init_model: all cells have same number of vertical levels '
-  else
-     write(logfileunit, *)'static_init_model: cells have varying number of vertical levels '
-     write(     *     , *)'static_init_model: cells have varying number of vertical levels '
-  endif
+  !#! if ( global_grid ) then
+  !#!    write(logfileunit, *)'static_init_model: grid is a global grid '
+  !#!    write(     *     , *)'static_init_model: grid is a global grid '
+  !#! else
+  !#!    write(logfileunit, *)'static_init_model: grid has boundaries '
+  !#!    write(     *     , *)'static_init_model: grid has boundaries '
+  !#! endif
+  !#! if ( all_levels_exist_everywhere ) then
+  !#!    write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
+  !#!    write(     *     , *)'static_init_model: all cells have same number of vertical levels '
+  !#! else
+  !#!    write(logfileunit, *)'static_init_model: cells have varying number of vertical levels '
+  !#!    write(     *     , *)'static_init_model: cells have varying number of vertical levels '
+  !#! endif
 endif
 string1 = 'WARNING: fix block of required variables - detritus from atmosphere'
 call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
@@ -1385,17 +1385,18 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
-if (allocated(nEdgesOnCell))   deallocate(nEdgesOnCell)
-if (allocated(edgesOnCell))    deallocate(edgesOnCell)
-if (allocated(cellsOnEdge))    deallocate(cellsOnEdge)
-if (allocated(verticesOnCell)) deallocate(verticesOnCell)
-if (allocated(edgeNormalVectors)) deallocate(edgeNormalVectors)
-if (allocated(zGridEdge))      deallocate(zGridEdge)
-if (allocated(xEdge))          deallocate(xEdge)
-if (allocated(yEdge))          deallocate(yEdge)
-if (allocated(zEdge))          deallocate(zEdge)
-if (allocated(latEdge))        deallocate(latEdge)
-if (allocated(lonEdge))        deallocate(lonEdge)
+!#! if (allocated(nEdgesOnCell))   deallocate(nEdgesOnCell)
+!#! if (allocated(edgesOnCell))    deallocate(edgesOnCell)
+!#! if (allocated(cellsOnEdge))    deallocate(cellsOnEdge)
+!#! if (allocated(verticesOnCell)) deallocate(verticesOnCell)
+!#! if (allocated(edgeNormalVectors)) deallocate(edgeNormalVectors)
+!>@todo FIXME I do not think you need edge information
+!#! if (allocated(zGridEdge))      deallocate(zGridEdge)
+!#! if (allocated(xEdge))          deallocate(xEdge)
+!#! if (allocated(yEdge))          deallocate(yEdge)
+!#! if (allocated(zEdge))          deallocate(zEdge)
+!#! if (allocated(latEdge))        deallocate(latEdge)
+!#! if (allocated(lonEdge))        deallocate(lonEdge)
 
 call finalize_closest_center()
 
@@ -2499,7 +2500,7 @@ if ( .not. module_initialized ) call static_init_model
 ! get the ball rolling ...
   nCells=myDim_nod2D
   nVertices=myDim_nod3D
-  nEdges=missing_I
+  !#! nEdges=missing_I
   nVertLevels=max_num_layers
 if (debug > 4) then
    write(*,*)
@@ -3280,46 +3281,46 @@ end function get_index_from_varname
 
 !>@todo FIXME : threed_cartesian/location assumes everything is in height
 
-!$! subroutine vert_convert(x, location, obs_kind, ztypeout, istatus)
-!$! 
-!$! ! This subroutine converts a given ob/state vertical coordinate to
-!$! ! the vertical localization coordinate type requested through the
-!$! ! model_mod namelist.
-!$! !
-!$! ! Notes: (1) obs_kind is only necessary to check whether the ob
-!$! !            is an identity ob.
-!$! !        (2) This subroutine can convert both obs' and state points'
-!$! !            vertical coordinates. Remember that state points get
-!$! !            their DART location information from get_state_meta_data
-!$! !            which is called by filter_assim during the assimilation
-!$! !            process.
-!$! !        (3) x is the relevant DART state vector for carrying out
-!$! !            computations necessary for the vertical coordinate
-!$! !            transformations. As the vertical coordinate is only used
-!$! !            in distance computations, this is actually the "expected"
-!$! !            vertical coordinate, so that computed distance is the
-!$! !            "expected" distance. Thus, under normal circumstances,
-!$! !            x that is supplied to vert_convert should be the
-!$! !            ensemble mean. Nevertheless, the subroutine has the
-!$! !            functionality to operate on any DART state vector that
-!$! !            is supplied to it.
-!$! 
-!$! real(r8), dimension(:), intent(in)    :: x
-!$! type(location_type),    intent(inout) :: location
-!$! integer,                intent(in)    :: obs_kind
-!$! integer,                intent(in)    :: ztypeout
-!$! integer,                intent(out)   :: istatus
-!$! 
-!$! ! zin and zout are the vert values coming in and going out.
-!$! ! ztype{in,out} are the vert types as defined by the 3d sphere
-!$! ! locations mod (location/threed_sphere/location_mod.f90)
-!$! real(r8) :: llv_loc(3)
-!$! real(r8) :: zin, zout, tk, fullp, surfp
-!$! real(r8) :: weights(3), zk_mid(3), values(3), fract(3), fdata(3)
-!$! integer  :: ztypein, i
-!$! integer  :: k_low(3), k_up(3), c(3), n
-!$! integer  :: ivars(3)
-!$! type(location_type) :: surfloc
+subroutine vert_convert(x, location, obs_kind, ztypeout, istatus)
+
+! This subroutine converts a given ob/state vertical coordinate to
+! the vertical localization coordinate type requested through the
+! model_mod namelist.
+!
+! Notes: (1) obs_kind is only necessary to check whether the ob
+!            is an identity ob.
+!        (2) This subroutine can convert both obs' and state points'
+!            vertical coordinates. Remember that state points get
+!            their DART location information from get_state_meta_data
+!            which is called by filter_assim during the assimilation
+!            process.
+!        (3) x is the relevant DART state vector for carrying out
+!            computations necessary for the vertical coordinate
+!            transformations. As the vertical coordinate is only used
+!            in distance computations, this is actually the "expected"
+!            vertical coordinate, so that computed distance is the
+!            "expected" distance. Thus, under normal circumstances,
+!            x that is supplied to vert_convert should be the
+!            ensemble mean. Nevertheless, the subroutine has the
+!            functionality to operate on any DART state vector that
+!            is supplied to it.
+
+real(r8), dimension(:), intent(in)    :: x
+type(location_type),    intent(inout) :: location
+integer,                intent(in)    :: obs_kind
+integer,                intent(in)    :: ztypeout
+integer,                intent(out)   :: istatus
+ 
+ ! zin and zout are the vert values coming in and going out.
+ ! ztype{in,out} are the vert types as defined by the 3d sphere
+ ! locations mod (location/threed_sphere/location_mod.f90)
+ real(r8) :: llv_loc(3)
+ real(r8) :: zin, zout, tk, fullp, surfp
+ real(r8) :: weights(3), zk_mid(3), values(3), fract(3), fdata(3)
+ integer  :: ztypein, i
+ integer  :: k_low(3), k_up(3), c(3), n
+ integer  :: ivars(3)
+ type(location_type) :: surfloc
 !$! 
 !$! ! assume failure.
 !$! istatus = 1
@@ -3437,13 +3438,16 @@ end function get_index_from_varname
 !$! !#!    ! outgoing vertical coordinate should be 'depth' in meters
 !$! !#!    ! ------------------------------------------------------------
 !$! !#!    case (VERTISHEIGHT)
-!$!  
-!$!     call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
-!$!     if (istatus /= 0) return
-!$!  
-!$!     ! now have vertically interpolated values at cell centers.
-!$!     ! use horizontal weights to compute value at interp point.
-!$!     zout = sum(weights * fdata)
+ 
+!>@todo FIXME : might still want something similar to this code 
+
+     call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
+     if (istatus /= 0) return
+  
+     ! now have vertically interpolated values at cell centers.
+     ! use horizontal weights to compute value at interp point.
+     zout = sum(weights * fdata)
+
 !$! !#! 
 !$! !#!    ! ------------------------------------------------------------
 !$! !#!    ! outgoing vertical coordinate should be 'scale height' (a ratio)
@@ -3513,7 +3517,7 @@ end function get_index_from_varname
 !$! if(zout /= missing_r8) istatus = 0
 !$!
 !$!
-!$! end subroutine vert_convert
+end subroutine vert_convert
 
 !==================================================================
 ! The following (private) interfaces are used for triangle interpolation
@@ -3751,6 +3755,7 @@ vert = llv(3)
 !#!if(vert_is_height(loc)) then
 
 !>@todo FIXME : you still will need to find your depth bounds
+
    ! For depth, can do simple vertical search for interpolation for now
    ! Get the lower and upper bounds and fraction for each column
    do i=1, nc
@@ -3764,8 +3769,8 @@ vert = llv(3)
                               'Internal error: oncenters false but data_on_edges false', &
                               source, revision, revdate)
          endif
-         call find_depth_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
-                                 lower(i), upper(i), fract(i), ier)
+         !#! call find_depth_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
+         !#!                         lower(i), upper(i), fract(i), ier)
       endif
       if (ier /= 0) return
    enddo
@@ -3781,153 +3786,153 @@ end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
-subroutine find_pressure_bounds(x, p, cellid, nbounds, &
-   pt_base_offset, density_base_offset, qv_base_offset, &
-   lower, upper, fract, ier)
+!#! subroutine find_pressure_bounds(x, p, cellid, nbounds, &
+!#!    pt_base_offset, density_base_offset, qv_base_offset, &
+!#!    lower, upper, fract, ier)
+!#! 
+!#! ! Finds vertical interpolation indices and fraction for a quantity with
+!#! ! pressure vertical coordinate. Loops through the depth levels and
+!#! ! computes the corresponding pressure at the horizontal point.  nbounds is
+!#! ! the number of vertical levels in the potential temperature, density,
+!#! ! and water vapor grids.
+!#! 
+!#! real(r8),  intent(in)  :: x(:)
+!#! real(r8),  intent(in)  :: p
+!#! integer,   intent(in)  :: cellid
+!#! integer,   intent(in)  :: nbounds
+!#! integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
+!#! integer,   intent(out) :: lower, upper
+!#! real(r8),  intent(out) :: fract
+!#! integer,   intent(out) :: ier
+!#! 
+!#! integer  :: i, j, ier2
+!#! real(r8) :: pressure(nbounds), pr
+!#! 
+!#! ! Initialize to bad values so unset returns will be caught.
+!#! fract = -1.0_r8
+!#! lower = -1
+!#! upper = -1
+!#! 
+!#! ! Find the lowest pressure
+!#! call get_interp_pressure(x, pt_base_offset, density_base_offset, &
+!#!    qv_base_offset, cellid, 1, nbounds, pressure(1), ier)
+!#! !print *, 'find p bounds2, pr(1) = ', pressure(1), ier
+!#! if(ier /= 0) return
+!#! 
+!#! ! Get the highest pressure level
+!#! call get_interp_pressure(x, pt_base_offset, density_base_offset, &
+!#!    qv_base_offset, cellid, nbounds, nbounds, pressure(nbounds), ier)
+!#! !print *, 'find p bounds2, pr(n) = ', pressure(nbounds), ier
+!#! if(ier /= 0) return
+!#! 
+!#! ! Check for out of the column range
+!#! ier = 0
+!#! if(p > pressure(1)) ier = 88
+!#! if(p < pressure(nbounds)) ier = 888
+!#! if (ier /= 0) return
+!#! 
+!#! ! Loop through the rest of the column from the bottom up
+!#! do i = 2, nbounds
+!#!    call get_interp_pressure(x, pt_base_offset, density_base_offset, &
+!#!       qv_base_offset, cellid, i, nbounds, pressure(i), ier)
+!#! !print *, 'find p bounds i, pr(i) = ', i, pressure(i), ier
+!#!    if (ier /= 0) return
+!#! 
+!#!    ! Check if pressure at lower level is higher than at upper level.
+!#!    if(pressure(i) > pressure(i-1)) then
+!#!       if ((debug > 0) .and. do_output()) then
+!#!       write(string1, *) 'lower pressure larger than upper pressure at cellid',  cellid
+!#!       write(string2, *) 'level nums, pressures: ', i-1,i,pressure(i-1),pressure(i)
+!#!       write(*,*) 'find_pressure_bounds: ', trim(string1), trim(string2)
+!#!       endif
+!#!       if ((debug > 5) .and. do_output())  then
+!#!       do j = 1, nbounds
+!#!          call get_interp_pressure(x, pt_base_offset, density_base_offset, &
+!#!             qv_base_offset, cellid, j, nbounds, pr, ier2, .true.)
+!#!       enddo
+!#!       endif
+!#! 
+!#!       ier = 988
+!#!       return
+!#! 
+!#!       !call error_handler(E_ERR, "find_pressure_bounds", string1, &
+!#!       !   source, revision, revdate, text2=string2)
+!#!    endif
+!#! 
+!#!    ! Is pressure between i-1 and i level?
+!#!    if(p > pressure(i)) then
+!#!       lower = i - 1
+!#!       upper = i
+!#!       if (pressure(i) == pressure(i-1)) then
+!#!          fract = 0.0_r8
+!#!       else if (log_p_vert_interp) then
+!#!          fract = exp((log(p) - log(pressure(i-1))) / &
+!#!                     (log(pressure(i)) - log(pressure(i-1))))
+!#!       else
+!#!          fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
+!#!       endif
+!#! 
+!#!       if ((debug > 9) .and. do_output()) print '(A,3F26.18,2I4,F22.18)', &
+!#!          "find_pressure_bounds: p_in, pr(i-1), pr(i), lower, upper, fract = ", &
+!#!          p, pressure(i-1), pressure(i), lower, upper, fract
+!#! 
+!#!       return
+!#!    endif
+!#! 
+!#! end do
+!#! 
+!#! ! should never get here because pressures above and below the column
+!#! ! were tested for at the start of this routine.  if you get here
+!#! ! there is a coding error.
+!#! ier = 3
+!#! 
+!#! end subroutine find_pressure_bounds
 
-! Finds vertical interpolation indices and fraction for a quantity with
-! pressure vertical coordinate. Loops through the depth levels and
-! computes the corresponding pressure at the horizontal point.  nbounds is
-! the number of vertical levels in the potential temperature, density,
-! and water vapor grids.
-
-real(r8),  intent(in)  :: x(:)
-real(r8),  intent(in)  :: p
-integer,   intent(in)  :: cellid
-integer,   intent(in)  :: nbounds
-integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
-integer,   intent(out) :: lower, upper
-real(r8),  intent(out) :: fract
-integer,   intent(out) :: ier
-
-integer  :: i, j, ier2
-real(r8) :: pressure(nbounds), pr
-
-! Initialize to bad values so unset returns will be caught.
-fract = -1.0_r8
-lower = -1
-upper = -1
-
-! Find the lowest pressure
-call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-   qv_base_offset, cellid, 1, nbounds, pressure(1), ier)
-!print *, 'find p bounds2, pr(1) = ', pressure(1), ier
-if(ier /= 0) return
-
-! Get the highest pressure level
-call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-   qv_base_offset, cellid, nbounds, nbounds, pressure(nbounds), ier)
-!print *, 'find p bounds2, pr(n) = ', pressure(nbounds), ier
-if(ier /= 0) return
-
-! Check for out of the column range
-ier = 0
-if(p > pressure(1)) ier = 88
-if(p < pressure(nbounds)) ier = 888
-if (ier /= 0) return
-
-! Loop through the rest of the column from the bottom up
-do i = 2, nbounds
-   call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-      qv_base_offset, cellid, i, nbounds, pressure(i), ier)
-!print *, 'find p bounds i, pr(i) = ', i, pressure(i), ier
-   if (ier /= 0) return
-
-   ! Check if pressure at lower level is higher than at upper level.
-   if(pressure(i) > pressure(i-1)) then
-      if ((debug > 0) .and. do_output()) then
-      write(string1, *) 'lower pressure larger than upper pressure at cellid',  cellid
-      write(string2, *) 'level nums, pressures: ', i-1,i,pressure(i-1),pressure(i)
-      write(*,*) 'find_pressure_bounds: ', trim(string1), trim(string2)
-      endif
-      if ((debug > 5) .and. do_output())  then
-      do j = 1, nbounds
-         call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-            qv_base_offset, cellid, j, nbounds, pr, ier2, .true.)
-      enddo
-      endif
-
-      ier = 988
-      return
-
-      !call error_handler(E_ERR, "find_pressure_bounds", string1, &
-      !   source, revision, revdate, text2=string2)
-   endif
-
-   ! Is pressure between i-1 and i level?
-   if(p > pressure(i)) then
-      lower = i - 1
-      upper = i
-      if (pressure(i) == pressure(i-1)) then
-         fract = 0.0_r8
-      else if (log_p_vert_interp) then
-         fract = exp((log(p) - log(pressure(i-1))) / &
-                    (log(pressure(i)) - log(pressure(i-1))))
-      else
-         fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
-      endif
-
-      if ((debug > 9) .and. do_output()) print '(A,3F26.18,2I4,F22.18)', &
-         "find_pressure_bounds: p_in, pr(i-1), pr(i), lower, upper, fract = ", &
-         p, pressure(i-1), pressure(i), lower, upper, fract
-
-      return
-   endif
-
-end do
-
-! should never get here because pressures above and below the column
-! were tested for at the start of this routine.  if you get here
-! there is a coding error.
-ier = 3
-
-end subroutine find_pressure_bounds
-
-!------------------------------------------------------------------
-
-subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
-   cellid, lev, nlevs, pressure, ier, debug)
-
-! Finds the value of pressure at a given point at model level lev
-
-real(r8), intent(in)  :: x(:)
-integer,  intent(in)  :: pt_offset, density_offset, qv_offset
-integer,  intent(in)  :: cellid
-integer,  intent(in)  :: lev, nlevs
-real(r8), intent(out) :: pressure
-integer,  intent(out) :: ier
-logical,  intent(in), optional :: debug
-
-integer  :: offset
-real(r8) :: pt, density, qv, tk
-
-
-! Get the values of potential temperature, density, and vapor
-offset = (cellid - 1) * nlevs + lev - 1
-pt = x(pt_offset + offset)
-density = x(density_offset + offset)
-qv = x(qv_offset + offset)
-
-! Error if any of the values are missing; probably will be all or nothing
-if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
-   ier = 2
-   return
-endif
-
-! Convert theta, rho, qv into pressure
-call compute_full_pressure(pt, density, qv, pressure, tk)
-
-if (present(debug)) then
-   if (debug) then
-      write(*,*) 'get_interp_pressure: cellid, lev', cellid, lev
-      write(*,*) 'get_interp_pressure: pt,rho,qv,p,tk', pt, density, qv, pressure, tk
-   endif
-endif
-
-! Default is no error
-ier = 0
-
-end subroutine get_interp_pressure
+!#! !------------------------------------------------------------------
+!#! 
+!#! subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
+!#!    cellid, lev, nlevs, pressure, ier, debug)
+!#! 
+!#! ! Finds the value of pressure at a given point at model level lev
+!#! 
+!#! real(r8), intent(in)  :: x(:)
+!#! integer,  intent(in)  :: pt_offset, density_offset, qv_offset
+!#! integer,  intent(in)  :: cellid
+!#! integer,  intent(in)  :: lev, nlevs
+!#! real(r8), intent(out) :: pressure
+!#! integer,  intent(out) :: ier
+!#! logical,  intent(in), optional :: debug
+!#! 
+!#! integer  :: offset
+!#! real(r8) :: pt, density, qv, tk
+!#! 
+!#! 
+!#! ! Get the values of potential temperature, density, and vapor
+!#! offset = (cellid - 1) * nlevs + lev - 1
+!#! pt = x(pt_offset + offset)
+!#! density = x(density_offset + offset)
+!#! qv = x(qv_offset + offset)
+!#! 
+!#! ! Error if any of the values are missing; probably will be all or nothing
+!#! if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
+!#!    ier = 2
+!#!    return
+!#! endif
+!#! 
+!#! ! Convert theta, rho, qv into pressure
+!#! call compute_full_pressure(pt, density, qv, pressure, tk)
+!#! 
+!#! if (present(debug)) then
+!#!    if (debug) then
+!#!       write(*,*) 'get_interp_pressure: cellid, lev', cellid, lev
+!#!       write(*,*) 'get_interp_pressure: pt,rho,qv,p,tk', pt, density, qv, pressure, tk
+!#!    endif
+!#! endif
+!#! 
+!#! ! Default is no error
+!#! ier = 0
+!#! 
+!#! end subroutine get_interp_pressure
 
 !------------------------------------------------------------
 
@@ -4092,7 +4097,7 @@ integer,             intent(out) :: ier
 ! using barycentric weights to get the value at the interpolation point.
 
 integer, parameter :: listsize = 30
-integer  :: nedges, i, neighborcells(maxEdges), edgeid
+integer  :: nedges, i !#!, neighborcells(maxEdges), edgeid
 real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
 real(r8) :: t1(3), t2(3), t3(3), r(3)
 integer  :: cellid, verts(listsize), closest_vert
@@ -4128,20 +4133,23 @@ endif
 
 c(1) = cellid
 
-if (on_boundary(cellid)) then
-   ier = 12
-   return
-endif
+!>@tod FIXME : you may want something similar but not how mpas does it
+!$! if (on_boundary(cellid)) then
+!$!    ier = 12
+!$!    return
+!$! endif
 
-if (.not. inside_cell(cellid, lat, lon)) then
-   ier = 13
-   return
-endif
+!>@tod FIXME : you may want something similar but not how mpas does it
+!$! if (.not. inside_cell(cellid, lat, lon)) then
+!$!    ier = 13
+!$!    return
+!$! endif
 
-!#! ! closest vertex to given point.
-!#! closest_vert = closest_vertex_ll(cellid, lat, lon)
-!#! if ((xyzdebug > 5) .and. do_output()) &
-!#!    print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
+!>@tod FIXME : you may want something similar but not how mpas does it
+!$! ! closest vertex to given point.
+!$! closest_vert = closest_vertex_ll(cellid, lat, lon)
+!$! if ((xyzdebug > 5) .and. do_output()) &
+!$!    print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
 
 ! collect the neighboring cell ids and vertex numbers
 ! this 2-step process avoids us having to read in the
@@ -4152,25 +4160,26 @@ endif
 ! we can start the triangle search there.
 vindex = 1
 nedges = 3 !truenEdgesOnCell(cellid)
-!do i=1, nedges
-!   edgeid = edgesOnCell(i, cellid)
-!   if (cellsOnEdge(1, edgeid) /= cellid) then
-!      neighborcells(i) = cellsOnEdge(1, edgeid)
-!   else
-!      neighborcells(i) = cellsOnEdge(2, edgeid)
-!   endif
-!   verts(i) = verticesOnCell(i, cellid)
-!   if (verts(i) == closest_vert) vindex = i
-!   call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
-!      xdata(i), ydata(i), zdata(i))
-!enddo
 
+!#! do i=1, nedges
+!#!    edgeid = edgesOnCell(i, cellid)
+!#!    if (cellsOnEdge(1, edgeid) /= cellid) then
+!#!       neighborcells(i) = cellsOnEdge(1, edgeid)
+!#!    else
+!#!       neighborcells(i) = cellsOnEdge(2, edgeid)
+!#!    endif
+!#!    verts(i) = verticesOnCell(i, cellid)
+!#!    if (verts(i) == closest_vert) vindex = i
+!#!    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
+!#!       xdata(i), ydata(i), zdata(i))
+!#! enddo
 
-! get the cartesian coordinates in the cell plane for the closest center
-call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
- 
-!and the observation point
-call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+!>@todo FIXME : should not need to convert between latlon and xyz
+!#! ! get the cartesian coordinates in the cell plane for the closest center
+!#! call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
+!#!  
+!#! !and the observation point
+!#! call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
 
 if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
 
@@ -4312,207 +4321,209 @@ subroutine finalize_closest_center()
 
 end subroutine finalize_closest_center
 
-!------------------------------------------------------------
+!$! !------------------------------------------------------------
+!$! 
+!$! function on_boundary(cellid)
+!$! 
+!$! ! use the surface (level 1) to determine if any edges (or vertices?)
+!$! ! are on the boundary, and return true if so.   if the global flag
+!$! ! is set, skip all code and return false immediately.
+!$! 
+!$! integer,  intent(in)  :: cellid
+!$! logical               :: on_boundary
+!$! 
+!$! integer :: vertical
+!$! 
+!$! vertical = 1
+!$! 
+!$! if (global_grid) then
+!$!    on_boundary = .false.
+!$!    return
+!$! endif
+!$! 
+!$! write(*,*) 'boundaryCell ', cellid, boundaryCell(vertical,cellid)
+!$! 
+!$! on_boundary = boundaryCell(vertical,cellid) .eq. 1
+!$! 
+!$! end function on_boundary
+!$!
+!$! !------------------------------------------------------------
+!$! 
+!$! function inside_cell(cellid, lat, lon)
+!$! 
+!$! ! this function no longer really determines if we are inside
+!$! ! the cell or not.  what it does do is determine if the nearest
+!$! ! cell is on the grid boundary in any way and says no if it is
+!$! ! a boundary.  if we have a flag saying this a global grid, we
+!$! ! can avoid doing any work and immediately return true.  for a
+!$! ! global atmosphere this is always so; for a regional atmosphere
+!$! ! and for the ocean (which does not have cells on land) this is
+!$! ! necessary test.
+!$! 
+!$! integer,  intent(in)  :: cellid
+!$! real(r8), intent(in)  :: lat, lon
+!$! logical               :: inside_cell
+!$! 
+!$! ! do this completely with topology of the grid.  if any of
+!$! ! the cell edges are marked as boundary edges, return no.
+!$! ! otherwise return yes.
+!$! 
+!$! integer :: nedges, i, edgeid, vert
+!$! 
+!$! ! if we're on a global grid, skip all this code
+!$! if (global_grid) then
+!$!    inside_cell = .true.
+!$!    return
+!$! endif
+!$! 
+!$! nedges = nEdgesOnCell(cellid)
+!$! 
+!$! ! go around the edges and check the boundary array.
+!$! ! if any are true, return false.  even if we are inside
+!$! ! this cell, we aren't going to be able to interpolate it
+!$! ! so shorten the code path.
+!$! 
+!$! ! FIXME: at some point we can be more selective and try to
+!$! ! interpolate iff the edges of the three cells which are
+!$! ! going to contribute edges to the RBF exist, even if some
+!$! ! of the other cell edges are on the boundary.  so this
+!$! ! decision means we won't be interpolating some obs that in
+!$! ! theory we have enough information to interpolate.  but it
+!$! ! is conservative for now - we certainly won't try to interpolate
+!$! ! outside the existing grid.
+!$! 
+!$! ! FIXME: can this loop over edges be replaced by a single test of the 'boundaryCell' array?
+!$! do i=1, nedges
+!$!    edgeid = edgesOnCell(i, cellid)
+!$! 
+!$!    ! FIXME: this is an int array.  is it 0=false,1=true?
+!$!    ! BOTHER - we need the vert for this and we don't have it
+!$!    ! and in fact can't compute it if the interpolation point
+!$!    ! has pressure or depth as its vertical coordinate.
+!$!    vert = 1
+!$! 
+!$!    if (boundaryEdge(vert, edgeid) > 0) then
+!$!       inside_cell = .false.
+!$!       return
+!$!    endif
+!$! 
+!$! enddo
+!$! 
+!$! inside_cell = .true.
+!$! 
+!$! end function inside_cell
 
-function on_boundary(cellid)
+!$-----------------------------------------------------------
 
-! use the surface (level 1) to determine if any edges (or vertices?)
-! are on the boundary, and return true if so.   if the global flag
-! is set, skip all code and return false immediately.
+!$! function closest_vertex_ll(cellid, lat, lon)
+!$! 
+!$! ! Return the vertex id of the closest one to the given point
+!$! ! this version uses lat/lon.  see closest_vertex_xyz for the
+!$! ! cartesian version.
+!$! 
+!$! integer,  intent(in)  :: cellid
+!$! real(r8), intent(in)  :: lat, lon
+!$! integer               :: closest_vertex_ll
+!$! 
+!$! real(r8) :: px, py, pz
+!$! 
 
-integer,  intent(in)  :: cellid
-logical               :: on_boundary
-
-integer :: vertical
-
-vertical = 1
-
-if (global_grid) then
-   on_boundary = .false.
-   return
-endif
-
-write(*,*) 'boundaryCell ', cellid, boundaryCell(vertical,cellid)
-
-on_boundary = boundaryCell(vertical,cellid) .eq. 1
-
-end function on_boundary
-
-!------------------------------------------------------------
-
-function inside_cell(cellid, lat, lon)
-
-! this function no longer really determines if we are inside
-! the cell or not.  what it does do is determine if the nearest
-! cell is on the grid boundary in any way and says no if it is
-! a boundary.  if we have a flag saying this a global grid, we
-! can avoid doing any work and immediately return true.  for a
-! global atmosphere this is always so; for a regional atmosphere
-! and for the ocean (which does not have cells on land) this is
-! necessary test.
-
-integer,  intent(in)  :: cellid
-real(r8), intent(in)  :: lat, lon
-logical               :: inside_cell
-
-! do this completely with topology of the grid.  if any of
-! the cell edges are marked as boundary edges, return no.
-! otherwise return yes.
-
-integer :: nedges, i, edgeid, vert
-
-! if we're on a global grid, skip all this code
-if (global_grid) then
-   inside_cell = .true.
-   return
-endif
-
-nedges = nEdgesOnCell(cellid)
-
-! go around the edges and check the boundary array.
-! if any are true, return false.  even if we are inside
-! this cell, we aren't going to be able to interpolate it
-! so shorten the code path.
-
-! FIXME: at some point we can be more selective and try to
-! interpolate iff the edges of the three cells which are
-! going to contribute edges to the RBF exist, even if some
-! of the other cell edges are on the boundary.  so this
-! decision means we won't be interpolating some obs that in
-! theory we have enough information to interpolate.  but it
-! is conservative for now - we certainly won't try to interpolate
-! outside the existing grid.
-
-! FIXME: can this loop over edges be replaced by a single test of the 'boundaryCell' array?
-do i=1, nedges
-   edgeid = edgesOnCell(i, cellid)
-
-   ! FIXME: this is an int array.  is it 0=false,1=true?
-   ! BOTHER - we need the vert for this and we don't have it
-   ! and in fact can't compute it if the interpolation point
-   ! has pressure or depth as its vertical coordinate.
-   vert = 1
-
-   if (boundaryEdge(vert, edgeid) > 0) then
-      inside_cell = .false.
-      return
-   endif
-
-enddo
-
-inside_cell = .true.
-
-end function inside_cell
-
-!------------------------------------------------------------
-
-function closest_vertex_ll(cellid, lat, lon)
-
-! Return the vertex id of the closest one to the given point
-! this version uses lat/lon.  see closest_vertex_xyz for the
-! cartesian version.
-
-integer,  intent(in)  :: cellid
-real(r8), intent(in)  :: lat, lon
-integer               :: closest_vertex_ll
-
-real(r8) :: px, py, pz
-
-! use the same radius as MPAS for computing this
-call latlon_to_xyz(lat, lon, px, py, pz)
-
-closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
-if ((closest_vertex_ll < 0)  .and. &
-    (debug > 8) .and. do_output()) &
-   print *, 'cannot find nearest vertex to lon, lat: ', lon, lat, & 
-            'cellid', cellid,'px: ', px,'py: ', py,'pz: ', pz
-
-end function closest_vertex_ll
-
-!------------------------------------------------------------
-
-function closest_vertex_xyz(cellid, px, py, pz)
-
-! Return the vertex id of the closest one to the given point
-! see closest_vertex_ll for the lat/lon version (which calls this)
-
-integer,  intent(in)  :: cellid
-real(r8), intent(in)  :: px, py, pz
-integer               :: closest_vertex_xyz
-
-integer :: nverts, i, vertexid
-real(r8) :: distsq, closest_dist, dx, dy, dz
-
-! nedges and nverts is same in a closed figure
-nverts = nEdgesOnCell(cellid)
-
-closest_dist = 1.0e38_r8   ! something really big; these are meters not radians
-closest_vertex_xyz = -1
-
-do i=1, nverts
-   vertexid = verticesOnCell(i, cellid)
-   distsq = (dx * dx) + (dy * dy) + (dz * dz)
-   if (distsq < closest_dist) then
-      closest_dist = distsq
-      closest_vertex_xyz = vertexid
-   endif
-enddo
-
-end function closest_vertex_xyz
+!>@todo FIXME : should not need to convert between latlon and xyz
+!$! ! use the same radius as MPAS for computing this
+!$! call latlon_to_xyz(lat, lon, px, py, pz)
+!$! 
+!$! closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
+!$! if ((closest_vertex_ll < 0)  .and. &
+!$!     (debug > 8) .and. do_output()) &
+!$!    print *, 'cannot find nearest vertex to lon, lat: ', lon, lat, & 
+!$!             'cellid', cellid,'px: ', px,'py: ', py,'pz: ', pz
+!$! 
+!$! end function closest_vertex_ll
+!$! 
+!$! !------------------------------------------------------------
+!$! 
+!$! function closest_vertex_xyz(cellid, px, py, pz)
+!$! 
+!$! ! Return the vertex id of the closest one to the given point
+!$! ! see closest_vertex_ll for the lat/lon version (which calls this)
+!$! 
+!$! integer,  intent(in)  :: cellid
+!$! real(r8), intent(in)  :: px, py, pz
+!$! integer               :: closest_vertex_xyz
+!$! 
+!$! integer :: nverts, i, vertexid
+!$! real(r8) :: distsq, closest_dist, dx, dy, dz
+!$! 
+!$! ! nedges and nverts is same in a closed figure
+!$! nverts = nEdgesOnCell(cellid)
+!$! 
+!$! closest_dist = 1.0e38_r8   ! something really big; these are meters not radians
+!$! closest_vertex_xyz = -1
+!$! 
+!$! do i=1, nverts
+!$!    vertexid = verticesOnCell(i, cellid)
+!$!    distsq = (dx * dx) + (dy * dy) + (dz * dz)
+!$!    if (distsq < closest_dist) then
+!$!       closest_dist = distsq
+!$!       closest_vertex_xyz = vertexid
+!$!    endif
+!$! enddo
+!$! 
+!$! end function closest_vertex_xyz
 
 !------------------------------------------------------------
 !----DON'T CHANGE THE REST-----------------------------------
 !------------------------------------------------------------
 !------------------------------------------------------------
 
-subroutine latlon_to_xyz(lat, lon, x, y, z)
-
-! Given a lat, lon in degrees, return the cartesian x,y,z coordinate
-! on the surface of a specified radius relative to the origin
-! at the center of the earth.  (this radius matches the one
-! used at MPAS grid generation time and must agree in order
-! to be consistent with the cartisian coordinate arrays in
-! the MPAS data files.)
-
-real(r8), intent(in)  :: lat, lon
-real(r8), intent(out) :: x, y, z
-
-real(r8) :: rlat, rlon
-
-rlat = lat * deg2rad
-rlon = lon * deg2rad
-
-x = radius * cos(rlon) * cos(rlat)
-y = radius * sin(rlon) * cos(rlat)
-z = radius * sin(rlat)
-
-end subroutine latlon_to_xyz
-
-!------------------------------------------------------------
-
-subroutine xyz_to_latlon(x, y, z, lat, lon)
-
-! Given a cartesian x, y, z coordinate relative to the origin
-! at the center of the earth, using a fixed radius specified
-! by MPAS (in the grid generation step), return the corresponding
-! lat, lon location in degrees.
-
-real(r8), intent(in)  :: x, y, z
-real(r8), intent(out) :: lat, lon
-
-real(r8) :: rlat, rlon
-
-! right now this is only needed for debugging messages.
-! the arc versions of routines are expensive.
-
-rlat = PI/2.0_r8 - acos(z/radius)
-rlon = atan2(y,x)
-if (rlon < 0) rlon = rlon + PI*2
-
-lat = rlat * rad2deg
-lon = rlon * rad2deg
-
-end subroutine xyz_to_latlon
+!#! subroutine latlon_to_xyz(lat, lon, x, y, z)
+!#! 
+!#! ! Given a lat, lon in degrees, return the cartesian x,y,z coordinate
+!#! ! on the surface of a specified radius relative to the origin
+!#! ! at the center of the earth.  (this radius matches the one
+!#! ! used at MPAS grid generation time and must agree in order
+!#! ! to be consistent with the cartisian coordinate arrays in
+!#! ! the MPAS data files.)
+!#! 
+!#! real(r8), intent(in)  :: lat, lon
+!#! real(r8), intent(out) :: x, y, z
+!#! 
+!#! real(r8) :: rlat, rlon
+!#! 
+!#! rlat = lat * deg2rad
+!#! rlon = lon * deg2rad
+!#! 
+!#! x = radius * cos(rlon) * cos(rlat)
+!#! y = radius * sin(rlon) * cos(rlat)
+!#! z = radius * sin(rlat)
+!#! 
+!#! end subroutine latlon_to_xyz
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine xyz_to_latlon(x, y, z, lat, lon)
+!#! 
+!#! ! Given a cartesian x, y, z coordinate relative to the origin
+!#! ! at the center of the earth, using a fixed radius specified
+!#! ! by MPAS (in the grid generation step), return the corresponding
+!#! ! lat, lon location in degrees.
+!#! 
+!#! real(r8), intent(in)  :: x, y, z
+!#! real(r8), intent(out) :: lat, lon
+!#! 
+!#! real(r8) :: rlat, rlon
+!#! 
+!#! ! right now this is only needed for debugging messages.
+!#! ! the arc versions of routines are expensive.
+!#! 
+!#! rlat = PI/2.0_r8 - acos(z/radius)
+!#! rlon = atan2(y,x)
+!#! if (rlon < 0) rlon = rlon + PI*2
+!#! 
+!#! lat = rlat * rad2deg
+!#! lon = rlon * rad2deg
+!#! 
+!#! end subroutine xyz_to_latlon
 
 !------------------------------------------------------------
 
@@ -4567,133 +4578,134 @@ return
 
 end subroutine inside_triangle
 
-!------------------------------------------------------------
-
-function vector_magnitude(a)
-
-! Given a cartesian vector, compute the magnitude
-
-real(r8), intent(in)  :: a(3)
-real(r8) :: vector_magnitude
-
-vector_magnitude = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
-
-end function vector_magnitude
-
-!------------------------------------------------------------
-
-subroutine vector_cross_product(a, b, r)
-
-! Given 2 cartesian vectors, compute the cross product of a x b
-
-real(r8), intent(in)  :: a(3), b(3)
-real(r8), intent(out) :: r(3)
-
-r(1) = a(2)*b(3) - a(3)*b(2)
-r(2) = a(3)*b(1) - a(1)*b(3)
-r(3) = a(1)*b(2) - a(2)*b(1)
-
-end subroutine vector_cross_product
-
-!------------------------------------------------------------
-
-function vector_dot_product(a, b)
-
-! Given 2 cartesian vectors, compute the dot product of a . b
-
-real(r8), intent(in)  :: a(3), b(3)
-real(r8) :: vector_dot_product
-
-vector_dot_product = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
-
-end function vector_dot_product
-
-!------------------------------------------------------------
-
-subroutine vector_projection(a, b, r)
-
-! Given 2 cartesian vectors, project a onto b
-
-real(r8), intent(in)  :: a(3), b(3)
-real(r8), intent(out) :: r(3)
-
-real(r8) :: ab_over_bb
-
-ab_over_bb = vector_dot_product(a, b) / vector_dot_product(b, b)
-r = (ab_over_bb) * b
-
-end subroutine vector_projection
-
-!------------------------------------------------------------
-
-subroutine determinant3(a, r)
-
-! Given a 3x3 matrix, compute the determinant
-
-real(r8), intent(in)  :: a(3,3)
-real(r8), intent(out) :: r
-
-r = a(1,1)*(a(2,2)*a(3,3) - (a(3,2)*a(2,3))) + &
-    a(2,1)*(a(3,2)*a(1,3) - (a(3,3)*a(1,2))) + &
-    a(3,1)*(a(1,2)*a(2,3) - (a(2,2)*a(1,3)))
-
-end subroutine determinant3
-
-!------------------------------------------------------------
-
-subroutine invert3(a, r)
-
-! Given a 3x3 matrix, compute the inverse
-
-real(r8), intent(in)  :: a(3,3)
-real(r8), intent(out) :: r(3,3)
-
-real(r8) :: det, b(3,3)
-
-call determinant3(a, det)
-if (det == 0.0_r8) then
-   print *, 'matrix cannot be inverted'
-   r = 0.0_r8
-   return
-endif
-
-b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
-b(2,1) = a(3,1)*a(2,3) - a(2,1)*a(3,3)
-b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
-
-b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
-b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
-b(3,2) = a(3,1)*a(1,2) - a(1,1)*a(3,2)
-
-b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
-b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
-b(3,3) = a(1,1)*a(2,2) - a(2,1)*a(1,2)
-
-r = b / det
-
-end subroutine invert3
-
-!------------------------------------------------------------
-
-!==================================================================
-! The following (private) routines were borrowed from the MPAS code
-!==================================================================
-
-!------------------------------------------------------------------
-
-subroutine r3_normalize(ax, ay, az)
-
-!normalizes the vector (ax, ay, az)
-
-real(r8), intent(inout) :: ax, ay, az
-real(r8) :: mi
-
- mi = 1.0_r8 / sqrt(ax**2 + ay**2 + az**2)
- ax = ax * mi
- ay = ay * mi
- az = az * mi
-
-end subroutine r3_normalize
+!>@todo FIXME : function no used
+!#! !------------------------------------------------------------
+!#! 
+!#! function vector_magnitude(a)
+!#! 
+!#! ! Given a cartesian vector, compute the magnitude
+!#! 
+!#! real(r8), intent(in)  :: a(3)
+!#! real(r8) :: vector_magnitude
+!#! 
+!#! vector_magnitude = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
+!#! 
+!#! end function vector_magnitude
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine vector_cross_product(a, b, r)
+!#! 
+!#! ! Given 2 cartesian vectors, compute the cross product of a x b
+!#! 
+!#! real(r8), intent(in)  :: a(3), b(3)
+!#! real(r8), intent(out) :: r(3)
+!#! 
+!#! r(1) = a(2)*b(3) - a(3)*b(2)
+!#! r(2) = a(3)*b(1) - a(1)*b(3)
+!#! r(3) = a(1)*b(2) - a(2)*b(1)
+!#! 
+!#! end subroutine vector_cross_product
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! function vector_dot_product(a, b)
+!#! 
+!#! ! Given 2 cartesian vectors, compute the dot product of a . b
+!#! 
+!#! real(r8), intent(in)  :: a(3), b(3)
+!#! real(r8) :: vector_dot_product
+!#! 
+!#! vector_dot_product = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
+!#! 
+!#! end function vector_dot_product
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine vector_projection(a, b, r)
+!#! 
+!#! ! Given 2 cartesian vectors, project a onto b
+!#! 
+!#! real(r8), intent(in)  :: a(3), b(3)
+!#! real(r8), intent(out) :: r(3)
+!#! 
+!#! real(r8) :: ab_over_bb
+!#! 
+!#! ab_over_bb = vector_dot_product(a, b) / vector_dot_product(b, b)
+!#! r = (ab_over_bb) * b
+!#! 
+!#! end subroutine vector_projection
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine determinant3(a, r)
+!#! 
+!#! ! Given a 3x3 matrix, compute the determinant
+!#! 
+!#! real(r8), intent(in)  :: a(3,3)
+!#! real(r8), intent(out) :: r
+!#! 
+!#! r = a(1,1)*(a(2,2)*a(3,3) - (a(3,2)*a(2,3))) + &
+!#!     a(2,1)*(a(3,2)*a(1,3) - (a(3,3)*a(1,2))) + &
+!#!     a(3,1)*(a(1,2)*a(2,3) - (a(2,2)*a(1,3)))
+!#! 
+!#! end subroutine determinant3
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine invert3(a, r)
+!#! 
+!#! ! Given a 3x3 matrix, compute the inverse
+!#! 
+!#! real(r8), intent(in)  :: a(3,3)
+!#! real(r8), intent(out) :: r(3,3)
+!#! 
+!#! real(r8) :: det, b(3,3)
+!#! 
+!#! call determinant3(a, det)
+!#! if (det == 0.0_r8) then
+!#!    print *, 'matrix cannot be inverted'
+!#!    r = 0.0_r8
+!#!    return
+!#! endif
+!#! 
+!#! b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
+!#! b(2,1) = a(3,1)*a(2,3) - a(2,1)*a(3,3)
+!#! b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
+!#! 
+!#! b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
+!#! b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
+!#! b(3,2) = a(3,1)*a(1,2) - a(1,1)*a(3,2)
+!#! 
+!#! b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
+!#! b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
+!#! b(3,3) = a(1,1)*a(2,2) - a(2,1)*a(1,2)
+!#! 
+!#! r = b / det
+!#! 
+!#! end subroutine invert3
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! !==================================================================
+!#! ! The following (private) routines were borrowed from the MPAS code
+!#! !==================================================================
+!#! 
+!#! !------------------------------------------------------------------
+!#! 
+!#! subroutine r3_normalize(ax, ay, az)
+!#! 
+!#! !normalizes the vector (ax, ay, az)
+!#! 
+!#! real(r8), intent(inout) :: ax, ay, az
+!#! real(r8) :: mi
+!#! 
+!#!  mi = 1.0_r8 / sqrt(ax**2 + ay**2 + az**2)
+!#!  ax = ax * mi
+!#!  ay = ay * mi
+!#!  az = az * mi
+!#! 
+!#! end subroutine r3_normalize
 
 
 !------------------------------------------------------------------
@@ -4725,33 +4737,33 @@ theta_to_tk = theta * exner
 end function theta_to_tk
 
 
-!------------------------------------------------------------------
-
-subroutine compute_full_pressure(theta, rho, qv, pressure, tk)
-
-! Compute full pressure from the equation of state.
-! since it has to compute sensible temp along the way,
-! make temp one of the return values rather than having
-! to call theta_to_tk() separately.
-! code matches computation done in MPAS model
-
-real(r8), intent(in)  :: theta    ! potential temperature [K]
-real(r8), intent(in)  :: rho      ! dry density
-real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
-real(r8), intent(out) :: pressure ! full pressure [Pa]
-real(r8), intent(out) :: tk       ! return sensible temperature to caller
-
-! Local variables
-real(r8) :: qv_nonzero            ! qv >= 0
-
-qv_nonzero = max(qv,0.0_r8)
-tk = theta_to_tk(theta, rho, qv_nonzero)
-
-!tk = theta_to_tk(theta, rho, max(qv,0.0_r8))
-pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
-!if ((debug > 9) .and. do_output()) print *, 't,r,q,p,tk =', theta, rho, qv, pressure, tk
-
-end subroutine compute_full_pressure
+!#! !------------------------------------------------------------------
+!#! 
+!#! subroutine compute_full_pressure(theta, rho, qv, pressure, tk)
+!#! 
+!#! ! Compute full pressure from the equation of state.
+!#! ! since it has to compute sensible temp along the way,
+!#! ! make temp one of the return values rather than having
+!#! ! to call theta_to_tk() separately.
+!#! ! code matches computation done in MPAS model
+!#! 
+!#! real(r8), intent(in)  :: theta    ! potential temperature [K]
+!#! real(r8), intent(in)  :: rho      ! dry density
+!#! real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
+!#! real(r8), intent(out) :: pressure ! full pressure [Pa]
+!#! real(r8), intent(out) :: tk       ! return sensible temperature to caller
+!#! 
+!#! ! Local variables
+!#! real(r8) :: qv_nonzero            ! qv >= 0
+!#! 
+!#! qv_nonzero = max(qv,0.0_r8)
+!#! tk = theta_to_tk(theta, rho, qv_nonzero)
+!#! 
+!#! !tk = theta_to_tk(theta, rho, max(qv,0.0_r8))
+!#! pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
+!#! !if ((debug > 9) .and. do_output()) print *, 't,r,q,p,tk =', theta, rho, qv, pressure, tk
+!#! 
+!#! end subroutine compute_full_pressure
 
 
 !===================================================================
