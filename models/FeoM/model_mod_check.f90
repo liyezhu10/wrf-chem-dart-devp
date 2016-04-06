@@ -21,7 +21,7 @@ use     location_mod, only : location_type, set_location, write_location, get_di
                              VERTISHEIGHT, VERTISSCALEHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_TEMPERATURE,           &
-                             KIND_SALINITY,              &
+                             KIND_SALINITY
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -68,22 +68,20 @@ real(r8), dimension(2) :: interp_test_lonrange = (/   0.0, 360.0 /)
 real(r8), dimension(2) :: interp_test_vertrange = (/  10.0, 6010.0 /)
 real(r8), dimension(3) :: loc_of_interest     = -1.0_r8
 character(len=metadatalength) :: kind_of_interest = 'ANY'
-character(len=metadatalength) :: interp_test_vertcoord = 'VERTISHEIGHT'
 
 namelist /model_mod_check_nml/ dart_input_file, output_file, &
                         advance_time_present, test1thru, x_ind, &
                         loc_of_interest, kind_of_interest, verbose, &
                         interp_test_dlon, interp_test_lonrange, &
                         interp_test_dlat, interp_test_latrange, &
-                        interp_test_dvert, interp_test_vertrange, &
-                        interp_test_vertcoord
+                        interp_test_dvert, interp_test_vertrange
 
 !----------------------------------------------------------------------
 ! integer :: numlons, numlats, numlevs
 
-integer :: ios_out, iunit, io, i
+integer :: ios_out, iunit, io
 integer :: x_size
-integer :: mykindindex, vertcoord
+integer :: mykindindex
 
 type(time_type)       :: model_time, adv_to_time
 real(r8), allocatable :: statevector(:)
@@ -113,7 +111,7 @@ call check_namelist_read(iunit, io, "model_mod_check_nml")
 if (do_nml_file()) write(nmlfileunit, nml=model_mod_check_nml)
 if (do_nml_term()) write(     *     , nml=model_mod_check_nml)
 
-loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3))
 mykindindex = get_raw_obs_kind_index(kind_of_interest)
 
 if (test1thru < 1) goto 999
@@ -238,7 +236,7 @@ write(*,*)
 write(*,*)'---------------------------------------'
 write(*,*)'TEST 6 : '
 write(*,*)'Finding closest gridpoint to : ', &
-           loc_of_interest(1), loc_of_interest(2),   loc_of_interest(3), 
+           loc_of_interest(1), loc_of_interest(2),   loc_of_interest(3)
 write(*,*)'---------------------------------------'
 
 if ( loc_of_interest(1) > 0.0_r8 ) call find_closest_gridpoint( loc_of_interest )
@@ -260,15 +258,7 @@ write(*,*)'TEST 7 : '
 write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
 write(*,*)'---------------------------------------'
 
-select case(trim(interp_test_vertcoord))
-   case ('VERTISHEIGHT')
-      vertcoord = VERTISHEIGHT
-   case default
-      write(string1,*) 'unknown vertcoord ', trim(interp_test_vertcoord)
-      call error_handler(E_ERR,'test_interpolate',string1,source,revision,revdate)
-end select
-
-loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), vertcoord)
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3))
 call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 
@@ -406,7 +396,7 @@ subroutine find_closest_gridpoint( loc_of_interest )
 real(r8), dimension(:), intent(in) :: loc_of_interest
 
 type(location_type) :: loc0, loc1
-integer  :: i, var_type, which_vert
+integer  :: i, var_type
 real(r8) :: closest, rlon, rlat, rlev, vals(3)
 real(r8), allocatable, dimension(:) :: thisdist
 character(len=32) :: kind_name
@@ -441,16 +431,11 @@ rlev = loc_of_interest(3)
 ! the array and come back to find all the 'identical' values.
 do i = 1,get_model_size()
 
-   ! Really inefficient, but grab the 'which_vert' from the
-   ! grid and set our target location to have the same.
-   ! Then, compute the distance and compare.
-
    call get_state_meta_data(i, loc1, var_type)
 
    if ( (var_type == mykindindex) .or. (mykindindex < 0) ) then
-      which_vert  = nint( query_location(loc1) )
-      loc0        = set_location(rlon, rlat, rlev, which_vert)
-      thisdist(i) = get_dist( loc1, loc0, no_vert= .false. )
+      loc0        = set_location(rlon, rlat, rlev)
+      thisdist(i) = get_dist( loc1, loc0 )
       matched     = .true.
    endif
 
@@ -550,7 +535,7 @@ do ilon = 1, nlon
       do kvert = 1, nvert
          vert(kvert) = interp_test_vertrange(1) + real(kvert-1,r8) * interp_test_dvert
 
-         loc = set_location(lon(ilon), lat(jlat), vert(kvert), vertcoord)
+         loc = set_location(lon(ilon), lat(jlat), vert(kvert))
 
          call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat,kvert), ios_out)
          write(iunit,*) field(ilon,jlat,kvert)
@@ -635,10 +620,6 @@ call nc_check(nf90_put_att(ncid, VarID, '_FillValue', MISSING_R8), &
            'test_interpolate', 'put_att field FillValue '//trim(ncfilename))
 call nc_check(nf90_put_att(ncid, VarID, 'missing_value', MISSING_R8), &
            'test_interpolate', 'put_att field missing_value '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, VarID, 'vertcoord_string', interp_test_vertcoord ), &
-           'test_interpolate', 'put_att field vertcoord_string '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, VarID, 'vertcoord', vertcoord ), &
-           'test_interpolate', 'put_att field vertcoord '//trim(ncfilename))
 
 ! Leave define mode so we can fill the variables.
 call nc_check(nf90_enddef(ncid), &
