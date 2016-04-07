@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
+! $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -73,9 +73,9 @@ logical :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 6774 $"
-character(len=128), parameter :: revdate  = "$Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -595,7 +595,7 @@ end module obs_def_mopitt_mod
 !-----------------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
-! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $
-! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
-! $Revision: 6774 $
-! $Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

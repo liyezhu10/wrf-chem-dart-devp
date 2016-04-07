@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: obs_def_COSMOS_mod.f90 7041 2014-07-03 16:18:40Z mizzi $
+! $Id$
 
 
 ! BEGIN DART PREPROCESS KIND LIST
@@ -72,9 +72,9 @@ logical :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit 
 character(len=256), parameter :: source   = & 
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mizzi/obs_def/obs_def_COSMOS_mod.f90 $" 
-character(len=32 ), parameter :: revision = "$Revision: 7041 $" 
-character(len=128), parameter :: revdate  = "$Date: 2014-07-03 10:18:40 -0600 (Thu, 03 Jul 2014) $" 
+   "$URL$" 
+character(len=32 ), parameter :: revision = "$Revision$" 
+character(len=128), parameter :: revdate  = "$Date$" 
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -520,7 +520,7 @@ end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mizzi/obs_def/obs_def_COSMOS_mod.f90 $
-! $Id: obs_def_COSMOS_mod.f90 7041 2014-07-03 16:18:40Z mizzi $
-! $Revision: 7041 $
-! $Date: 2014-07-03 10:18:40 -0600 (Thu, 03 Jul 2014) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
