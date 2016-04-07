@@ -38,7 +38,7 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
 use     location_mod, only : location_type, get_dist, query_location,          &
                              get_close_maxdist_init, get_close_type,           &
                              set_location, get_location, & !horiz_dist_only,      &
-                             write_location,                                   &
+                             write_location, find_nearest,                      &
 !>@todo FIXME : in the threed_cartesian/location_mod.f90 it is assumed
 !>              everything is in height
                              ! vert_is_undef,        VERTISUNDEF,                &
@@ -244,6 +244,8 @@ end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
 
+type(get_close_type)  :: cc_gc
+type(location_type),allocatable   :: cell_locs(:)
 ! Grid parameters - the values will be read from an mpas analysis file.
 
 integer :: nCells        = -1  ! Total number of cells making up the grid
@@ -4264,13 +4266,15 @@ subroutine init_closest_center()
 
 integer :: i
 
-!allocate(cell_locs(nCells))
-
+allocate(cell_locs(nCells))
+do i=1, nCells
+   cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8)
+enddo
 
 ! the width really isn't used anymore, but it's part of the
 ! interface so we have to pass some number in.
-!call xyz_get_close_maxdist_init(cc_gc, 1.0_r8)
-!call xyz_get_close_obs_init(cc_gc, nCells, cell_locs)
+call get_close_maxdist_init(cc_gc, 1.0_r8)
+call get_close_obs_init(cc_gc, nCells, cell_locs)
 
 end subroutine init_closest_center
 
@@ -4284,7 +4288,7 @@ function find_closest_cell_center(lat, lon)
 real(r8), intent(in)  :: lat, lon
 integer               :: find_closest_cell_center
 
-!type(xyz_location_type) :: pointloc
+type(location_type) :: pointloc
 integer :: closest_cell, rc
 logical, save :: search_initialized = .false.
 
@@ -4294,9 +4298,9 @@ if (.not. search_initialized) then
    search_initialized = .true.
 endif
 
-!pointloc = xyz_set_location(lon, lat, 0.0_r8, radius)
+pointloc = set_location(lon, lat, 0.0_r8)
 
-!call xyz_find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
+call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
 
 ! decide what to do if we don't find anything.
 if (rc /= 0 .or. closest_cell < 0) then
