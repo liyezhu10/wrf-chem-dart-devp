@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MODIS_AOD_RETRIEVAL, KIND_AOD
@@ -61,11 +63,11 @@ integer                          :: num_modis_aod_obs = 0
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_modis_mod.f90,v $", &
-revision = "$Revision: 1.1 $", &
-revdate  = "$Date: 2005/10/05 15:19:28 $"
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 6774 $"
+character(len=128), parameter :: revdate  = "$Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -74,9 +76,7 @@ contains
 
 !----------------------------------------------------------------------
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
@@ -242,3 +242,10 @@ end subroutine set_obs_def_modis_aod
 
 end module obs_def_modis_mod
 ! END DART PREPROCESS MODULE CODE
+!-----------------------------------------------------------------------------
+
+! <next few lines under version control, do not edit>
+! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
+! $Revision: 6774 $
+! $Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $

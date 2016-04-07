@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -43,10 +45,10 @@ module obs_def_mopitt_mod
 
 use        types_mod, only : r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
-use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE
+use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISLEVEL
 
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE
+use    obs_kind_mod, only  : KIND_CO
 
 implicit none
 
@@ -60,20 +62,18 @@ integer                          :: num_mopitt_co_obs = 0
 real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
 real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_prior
 real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
-                              100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
-real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
-                              100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
+                              95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
 real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
 integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_mopitt_mod.f90,v $", &
-revision = "$Revision: 1.1 $", &
-revdate  = "$Date: 2005/10/05 15:19:28 $"
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 6774 $"
+character(len=128), parameter :: revdate  = "$Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -82,9 +82,7 @@ contains
 
 !----------------------------------------------------------------------
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
@@ -235,132 +233,56 @@ integer, intent(in)             :: key
 real(r8), intent(out)           :: val
 integer, intent(out)            :: istatus
 
-integer :: i,kstr
+integer :: i
 type(location_type) :: loc2
 real(r8)            :: mloc(3)
-real(r8)	    :: obs_val,wrf_psf,level,missing
-real(r8)            :: co_min,mopitt_prs_mid,mopitt_psf
+real(r8)	    :: obs_val, level
 
-integer             :: nlevels,nnlevels
-integer             :: iflg
-character(len=129)  :: msgstring
-!
-! Initialize DART
+integer             :: nlevels
+
 if ( .not. module_initialized ) call initialize_module
-!
-! Initialize variables
-val = 0.0_r8
-co_min=1.e-4
-missing=-888888.0_r8
-!
-! Get mopitt data
-nlevels = mopitt_nlevels(key)
-mopitt_psf = mopitt_psurf(key)
-!
-! Get location infomation
+
 mloc = get_location(location)
+! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
+! x = Axm + (I-A)xa , where x is a 10 element vector 
+ 
+val = 0.0_r8
 if (mloc(2)>90.0_r8) then
     mloc(2)=90.0_r8
 elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
 endif
-!
-! Get wrf surface pressure
-wrf_psf = 0.0_r8
-istatus = 0
-loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISSURFACE)
-call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)  
-!write(msgstring, *)'APM ERROR: wrf_psf, mopitt_psf, status ',wrf_psf,mopitt_psf,istatus 
-!call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!
-! Correct mopitt surface pressure
-if(mopitt_psf.gt.wrf_psf) then
-   mopitt_psf=wrf_psf
-endif
-!
-! Find kstr - the surface level index
-kstr=0
-do i=1,mopitt_dim
-   if (i.eq.1 .and. mopitt_psf.gt.mopitt_pressure(2)) then
-      kstr=i
-      exit
-   endif
-   if (i.ne.1 .and. i.ne.mopitt_dim .and. mopitt_pressure(i).ge.mopitt_psf .and. &
-   mopitt_psf.gt.mopitt_pressure(i+1)) then
-      kstr=i
-      exit   
-   endif
-enddo
-if (kstr.eq.0) then
-   write(msgstring, *)'APM: ERROR in MOPITT obs def kstr=0: mopitt_psf=',mopitt_psf
-   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   stop
-elseif (kstr.gt.6) then
-   write(msgstring, *)'APM: ERROR surface pressure is unrealistic: mopitt_psf=',mopitt_psf
-   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   stop
-endif
-!
-! Reject ob when number of MOPITT levels from WRF cannot equal actual number of MOPITT levels
-nnlevels=mopitt_dim-kstr+1
-if(nnlevels.ne.nlevels) then
-   obs_val=missing
-   istatus=2
-   write(msgstring, *)'APM: NOTICE reject ob - # of WRF MOPITT levels .ne. # of MOPITT levels  '
-   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   return
-endif   
-!
-! Find the lowest pressure level midpoint
-mopitt_prs_mid=(mopitt_psf+mopitt_pressure(kstr+1))/2.
-!
-! Migliorini forward operators assimilation A*x_t
-! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
-! x = Axm + (I-A)xa , where x is a 10 element vector 
+mopitt_pressure(1)=mopitt_psurf(key)
+nlevels = mopitt_nlevels(key)
+level   = 1.0_r8
+
 do i=1,nlevels
-!
-! APM: remove the if test to use layer average data
-   if (i .eq.1) then
-      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
-   else
-      mopitt_prs_mid=mopitt_pressure_mid(kstr+i-1)
-      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
+   if (i == 1) then
+   loc2 = set_location(mloc(1),mloc(2),level, VERTISLEVEL)
+   else 
+   loc2 = set_location(mloc(1),mloc(2),mopitt_pressure(i), VERTISPRESSURE)
    endif
-!
-! Interpolate WRF CO data to MOPITT pressure level midpoint
    obs_val = 0.0_r8
    istatus = 0
+
    call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
+
+   !print *, 'AFAJ ',istatus, obs_val
    if (istatus /= 0) then
-!      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
-!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
-!      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
-!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: wrf_psf,mopitt_psurf,mopitt_psf ', &
-!      wrf_psf,mopitt_psf_save,mopitt_psf
-!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
-!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM NOTICE: WRF extrapolation needed reject ob '
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+      val = 0
       return
-!      stop
    endif
-!
-! Check for WRF CO lower bound
-   if (obs_val.lt.co_min) then
-      obs_val=co_min
-      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value '
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   endif
-!
-! apply averaging kernel
-   val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
+!   if (avg_kernel(key,i)<0d0) then
+!      avg_kernel(key,i)=0d0
+!   endif
+   val = val + avg_kernel(key,i) * (obs_val)  
 enddo
-!
+val = val + mopitt_prior(key)
+!print *, val
+!print *,'AFAJ DEBUG ', val
+!stop
+
 end subroutine get_expected_mopitt_co
-!
 !----------------------------------------------------------------------
 
  subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
@@ -387,6 +309,7 @@ avg_kernel(key,:) 	= co_avgker(:)
 mopitt_prior(key)	= co_prior
 mopitt_psurf(key)	= co_psurf
 mopitt_nlevels(key)     = co_nlevels
+
 
 end subroutine set_obs_def_mopitt_co
 
@@ -592,3 +515,10 @@ end subroutine write_mopitt_avg_kernels
 
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
+!-----------------------------------------------------------------------------
+
+! <next few lines under version control, do not edit>
+! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
+! $Revision: 6774 $
+! $Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $

@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! IASI_O3_RETRIEVAL, KIND_O3
@@ -93,11 +95,11 @@ real(r8), dimension(max_iasi_o3_obs,iasi_dim) :: iasi_air_column
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_iasi_mod.f90,v $", &
-revision = "$Revision$", &
-revdate  = "$Date$"
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -106,9 +108,7 @@ contains
 
 !----------------------------------------------------------------------
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
@@ -668,3 +668,10 @@ end subroutine write_iasi_air_column
 
 end module obs_def_iasi_mod
 ! END DART PREPROCESS MODULE CODE
+!-----------------------------------------------------------------------------
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

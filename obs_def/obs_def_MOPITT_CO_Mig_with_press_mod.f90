@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -69,11 +71,11 @@ integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_mopitt_mod.f90,v $", &
-revision = "$Revision: 1.1 $", &
-revdate  = "$Date: 2005/10/05 15:19:28 $"
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 6774 $"
+character(len=128), parameter :: revdate  = "$Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -82,9 +84,7 @@ contains
 
 !----------------------------------------------------------------------
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
@@ -236,9 +236,9 @@ real(r8), intent(out)           :: val
 integer, intent(out)            :: istatus
 
 integer :: i,kstr
-type(location_type) :: loc2, loc2_up,loc2_dwn
+type(location_type) :: loc2
 real(r8)            :: mloc(3)
-real(r8)	    :: obs_val,obs_val_up,obs_val_dwn,wrf_psf,level,missing
+real(r8)	    :: obs_val,wrf_psf,level,missing
 real(r8)            :: co_min,mopitt_prs_mid,mopitt_psf
 
 integer             :: nlevels,nnlevels
@@ -311,93 +311,49 @@ if(nnlevels.ne.nlevels) then
    return
 endif   
 !
+! Find the lowest pressure level midpoint
+mopitt_prs_mid=(mopitt_psf+mopitt_pressure(kstr+1))/2.
+!
 ! Migliorini forward operators assimilation A*x_t
 ! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
 ! x = Axm + (I-A)xa , where x is a 10 element vector 
 do i=1,nlevels
 !
-! Get three pressures levels for computing partial column average
-   if (i.eq.1) then
-      mopitt_prs_mid=(mopitt_psf+mopitt_pressure(kstr+1))/2.
-      mopitt_prs_dwn=(mopitt_psf+mopitt_prs_mid)/2.
-      mopitt_prs_up=(mopitt_prs_mid+mopitt_pressure_mid(kstr+1))/2.
-   else if(i.eq.2) then
-      mopitt_prs_mid=mopitt_pressure_mid(kstr+i-1)
-      mopitt_prs_dwn=(mopitt_prs_mid+(mopitt_psf+mopitt_pressure(2))/2.)/2.
-      mopitt_prs_up=(mopit_prs_mid+mopitt_pressure_mid(kstr+1))/2.
-   else if(i.eq.nlevels) then
-      mopitt_prs_mid=mopitt_pressure_mid(kstr+i-1)
-      mopitt_prs_dwn=(mopitt_prs_mid+mopitt_pressure_mid(kstr+i-2))/2.
-      mopitt_prs_up=(mopitt_prs_mid+5000.)/2.
+! APM: remove the if test to use layer average data
+   if (i .eq.1) then
+      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
    else
       mopitt_prs_mid=mopitt_pressure_mid(kstr+i-1)
-      mopitt_prs_dwn=(mopitt_prs_mid+mopitt_pressure_mid(kstr+i-2))/2.
-      mopitt_prs_up=(mopitt_prs_mid+mopitt_pressure_mid(kstr+i))/2.
+      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
    endif
-   loc2_up = set_location(mloc(1),mloc(2),mopitt_prs_up, VERTISPRESSURE)
-   loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
-   loc2_dwn = set_location(mloc(1),mloc(2),mopitt_prs_dwn, VERTISPRESSURE)
 !
 ! Interpolate WRF CO data to MOPITT pressure level midpoint
    obs_val = 0.0_r8
    istatus = 0
-   call interpolate(state, loc2_up, KIND_CO, obs_val_up, istatus)  
-   if (istatus /= 0) then
-      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val_up ',istatus,kstr,obs_val_up 
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
-      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      return
-      stop
-   endif
    call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
    if (istatus /= 0) then
-      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
+!      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
+!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
+!      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
+!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!      write(msgstring, *)'APM ERROR: wrf_psf,mopitt_psurf,mopitt_psf ', &
+!      wrf_psf,mopitt_psf_save,mopitt_psf
+!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
+!      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+      write(msgstring, *)'APM NOTICE: WRF extrapolation needed reject ob '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
-      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      return
-      stop
-   endif
-   call interpolate(state, loc2_dwn, KIND_CO, obs_val_dwn, istatus)  
-   if (istatus /= 0) then
-      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val_dwn ',istatus,kstr,obs_val_dwn 
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
-      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-!      return
-      stop
+      return
+!      stop
    endif
 !
 ! Check for WRF CO lower bound
-   if (obs_val_up.lt.co_min) then
-      obs_val_up=co_min
-      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value for obs_val_up '
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   endif
    if (obs_val.lt.co_min) then
       obs_val=co_min
-      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value for obs_val '
+      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
    endif
-   if (obs_val_dwn.lt.co_min) then
-      obs_val_dwn=co_min
-      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value for obs_val_dwn '
-      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   endif
-!
-! calculate partial column average
-  obs_val=((mopitt_prs_mid-mopitt_prs_up)/2.*obs_val_up + (mopitt_prs_dwn-mopitt_prs_up)/2.*obs_val + &
-  (mopitt_prs_dwn-mopitt_prs_mid)/2.*obs_val_dwn)/(mopitt_prs_dwn-mopitt_prs_up)
 !
 ! apply averaging kernel
    val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
@@ -636,3 +592,10 @@ end subroutine write_mopitt_avg_kernels
 
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
+!-----------------------------------------------------------------------------
+
+! <next few lines under version control, do not edit>
+! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/obs_def/obs_def_tower_mod.f90 $
+! $Id: obs_def_tower_mod.f90 6774 2014-01-29 22:57:15Z thoar $
+! $Revision: 6774 $
+! $Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $

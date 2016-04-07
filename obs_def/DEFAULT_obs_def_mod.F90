@@ -47,7 +47,7 @@ module obs_def_mod
 
 use        types_mod, only : r8, missing_i, missing_r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, &
-                             ascii_file_format
+                             E_MSG, ascii_file_format
 use     location_mod, only : location_type, read_location, write_location, &
                              interactive_location, set_location_missing
 use time_manager_mod, only : time_type, read_time, write_time, &
@@ -452,14 +452,6 @@ character(len=5)  :: header
 integer           :: o_index
 logical           :: is_ascii
 character(len=32) :: fileformat   ! here for backwards compatibility only
-! APM +++   
-real                :: apm_scale
-integer             :: apm_kind_ind
-character(len=32)   :: apm_kind_name
-character(len=129)  :: msgstring
-logical             :: apm_scale_sw
-namelist /obs_def_apm_nml/ apm_scale,apm_scale_sw
-! APM ---
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -533,22 +525,7 @@ if (is_ascii) then
 else
    read(ifile)    obs_def%error_variance
 endif
-!                                                                                                                  !! APM +++
-! Code to scale the obs error
-! Open and read namelist data
-open(unit=210,file='obs_def_apm.nml',form='formatted', &
-status='old',action='read')
-read(210,obs_def_apm_nml)
-!write(msgstring, *) 'APM: apm_scale=', apm_scale,apm_scale_sw
-!call error_handler(E_MSG,'read_obs_def_', msgstring, source, revision, revdate)
-close(210)
-apm_kind_ind=get_obs_kind(obs_def)
-apm_kind_name=get_obs_kind_name(apm_kind_ind)
-if (apm_scale_sw.eq..TRUE. .and. trim(apm_kind_name).eq.'MOPITT_CO_RETRIEVAL') then
-    obs_def%error_variance = apm_scale*apm_scale*obs_def%error_variance
-endif
-! APM ___
-!
+!                                                                                                                  
 end subroutine read_obs_def
 
 !----------------------------------------------------------------------------

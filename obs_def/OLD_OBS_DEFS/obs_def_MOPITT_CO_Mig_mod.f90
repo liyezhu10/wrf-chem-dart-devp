@@ -45,30 +45,28 @@ module obs_def_mopitt_mod
 
 use        types_mod, only : r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
-use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISLEVEL
+use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE
 
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_CO
+use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE
 
 implicit none
 
-public :: write_mopitt_co, &
-          read_mopitt_co, &
-          interactive_mopitt_co, &
-          get_expected_mopitt_co, &
-          set_obs_def_mopitt_co
+public :: write_mopitt_co, read_mopitt_co, interactive_mopitt_co, &
+          get_expected_mopitt_co, set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
-integer, parameter :: max_mopitt_co_obs = 10000000
-integer, parameter :: mopitt_dim = 10
-integer            :: num_mopitt_co_obs = 0
-
+integer, parameter               :: max_mopitt_co_obs = 10000000
+integer, parameter               :: mopitt_dim = 10
+integer                          :: num_mopitt_co_obs = 0
 real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
-real(r8), dimension(max_mopitt_co_obs)    :: mopitt_prior
-real(r8) :: mopitt_pressure(mopitt_dim) = &
-                 (/ 95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
-real(r8), dimension(max_mopitt_co_obs) :: mopitt_psurf
-integer,  dimension(max_mopitt_co_obs) :: mopitt_nlevels
+real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_prior
+real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
+                              100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
+real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
+                              100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
+real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
+integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -79,7 +77,8 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision: 6774 $"
 character(len=128), parameter :: revdate  = "$Date: 2014-01-29 15:57:15 -0700 (Wed, 29 Jan 2014) $"
 
-character(len=512) :: string1, string2
+logical, save :: module_initialized = .false.
+integer  :: counts1 = 0
 
 contains
 
@@ -96,17 +95,18 @@ end subroutine initialize_module
 
  subroutine read_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
+!subroutine read_mopitt_co(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
 character(len=*), intent(in), optional    :: fform
-character(len=32) :: fileformat
+character(len=32) 		:: fileformat
 
-integer:: mopitt_nlevels_1
-real(r8):: mopitt_prior_1
-real(r8):: mopitt_psurf_1
-real(r8), dimension(mopitt_dim):: avg_kernels_1
-integer :: keyin
+integer			:: mopitt_nlevels_1
+real(r8)			:: mopitt_prior_1
+real(r8)			:: mopitt_psurf_1
+real(r8), dimension(mopitt_dim)	:: avg_kernels_1
+integer 			:: keyin
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -146,12 +146,13 @@ end subroutine read_mopitt_co
 
  subroutine write_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
+!subroutine write_mopitt_co(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional :: fform
+character(len=*), intent(in), optional 	:: fform
 
-character(len=32) :: fileformat
+character(len=32) 		:: fileformat
 real(r8), dimension(mopitt_dim) :: avg_kernels_temp
 
 if ( .not. module_initialized ) call initialize_module
@@ -187,21 +188,24 @@ end subroutine write_mopitt_co
 
  subroutine interactive_mopitt_co(key)
 !----------------------------------------------------------------------
+!subroutine interactive_mopitt_co(key)
 !
 ! Initializes the specialized part of a MOPITT observation
 ! Passes back up the key for this one
 
 integer, intent(out) :: key
 
+character(len=129) :: msgstring
+
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_mopitt_co_obs >= max_mopitt_co_obs) then
    ! PUT IN ERROR HANDLER CALL
-   write(string1, *)'Not enough space for a mopitt CO obs.'
-   call error_handler(E_MSG,'interactive_mopitt_co',string1,source,revision,revdate)
-   write(string1, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
-   call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate)
+   write(msgstring, *)'Not enough space for a mopitt CO obs.'
+   call error_handler(E_MSG,'interactive_mopitt_co',msgstring,source,revision,revdate)
+   write(msgstring, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   call error_handler(E_ERR,'interactive_mopitt_co',msgstring,source,revision,revdate)
 endif
 
 ! Increment the index
@@ -223,6 +227,7 @@ end subroutine interactive_mopitt_co
 
  subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 !----------------------------------------------------------------------
+!subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 
 real(r8), intent(in)            :: state(:)
 type(location_type), intent(in) :: location
@@ -230,97 +235,168 @@ integer, intent(in)             :: key
 real(r8), intent(out)           :: val
 integer, intent(out)            :: istatus
 
-integer :: i
+integer :: i,kstr
 type(location_type) :: loc2
-real(r8) :: mloc(3)
-real(r8) :: obs_val, level
+real(r8)            :: mloc(3)
+real(r8)	    :: obs_val,wrf_psf,level,missing
+real(r8)            :: co_min,mopitt_prs_mid,mopitt_psf
 
-integer  :: nlevels
-
+integer             :: nlevels,nnlevels
+integer             :: iflg
+character(len=129)  :: msgstring
+!
+! Initialize DART
 if ( .not. module_initialized ) call initialize_module
-
-mloc = get_location(location)
-! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
-! x = Axm + (I-A)xa , where x is a 10 element vector 
- 
+!
+! Initialize variables
 val = 0.0_r8
+co_min=1.e-4
+missing=-888888.0_r8
+!
+! Get mopitt data
+nlevels = mopitt_nlevels(key)
+mopitt_psf = mopitt_psurf(key)
+!
+! Get location infomation
+mloc = get_location(location)
 if (mloc(2)>90.0_r8) then
     mloc(2)=90.0_r8
 elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
 endif
-mopitt_pressure(1)=mopitt_psurf(key)
-nlevels = mopitt_nlevels(key)
-level   = 1.0_r8
-
-do i=1,nlevels
-   if (i == 1) then
-   loc2 = set_location(mloc(1),mloc(2),level, VERTISLEVEL)
-   else 
-   loc2 = set_location(mloc(1),mloc(2),mopitt_pressure(i), VERTISPRESSURE)
+!
+! Get wrf surface pressure
+wrf_psf = 0.0_r8
+istatus = 0
+loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISSURFACE)
+call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)  
+!write(msgstring, *)'APM ERROR: wrf_psf, mopitt_psf, status ',wrf_psf,mopitt_psf,istatus 
+!call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!
+! Correct mopitt surface pressure
+if(mopitt_psf.gt.wrf_psf) then
+   mopitt_psf=wrf_psf
+endif
+!
+! Find kstr - the surface level index
+kstr=0
+do i=1,mopitt_dim
+   if (i.eq.1 .and. mopitt_psf.gt.mopitt_pressure(2)) then
+      kstr=i
+      exit
    endif
+   if (i.ne.1 .and. i.ne.mopitt_dim .and. mopitt_pressure(i).ge.mopitt_psf .and. &
+   mopitt_psf.gt.mopitt_pressure(i+1)) then
+      kstr=i
+      exit   
+   endif
+enddo
+if (kstr.eq.0) then
+   write(msgstring, *)'APM: ERROR in MOPITT obs def kstr=0: mopitt_psf=',mopitt_psf
+   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   stop
+elseif (kstr.gt.6) then
+   write(msgstring, *)'APM: ERROR surface pressure is unrealistic: mopitt_psf=',mopitt_psf
+   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   stop
+endif
+!
+! Reject ob when number of MOPITT levels from WRF cannot equal actual number of MOPITT levels
+nnlevels=mopitt_dim-kstr+1
+if(nnlevels.ne.nlevels) then
+   obs_val=missing
+   istatus=2
+   write(msgstring, *)'APM: NOTICE reject ob - # of WRF MOPITT levels .ne. # of MOPITT levels  '
+   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   return
+endif   
+!
+! Find the lowest pressure level midpoint
+mopitt_prs_mid=(mopitt_psf+mopitt_pressure(kstr+1))/2.
+!
+! Migliorini forward operators assimilation A*x_t
+! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
+! x = Axm + (I-A)xa , where x is a 10 element vector 
+do i=1,nlevels
+!
+! APM: remove the if test to use layer average data
+   if (i .eq.1) then
+      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
+   else
+      mopitt_prs_mid=mopitt_pressure_mid(kstr+i-1)
+      loc2 = set_location(mloc(1),mloc(2),mopitt_prs_mid, VERTISPRESSURE)
+   endif
+!
+! Interpolate WRF CO data to MOPITT pressure level midpoint
    obs_val = 0.0_r8
    istatus = 0
-
    call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
-
-   !print *, 'AFAJ ',istatus, obs_val
    if (istatus /= 0) then
-      val = 0
-      return
+      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
+      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+      write(msgstring, *)'APM ERROR: mopitt_prs_mid,wrf_psf,mopitt_psurf,mopitt_psf ', &
+      mopitt_prs_mid,wrf_psf,mopitt_psurf(key),mopitt_psf
+      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
+      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!      return
+      stop
    endif
-!   if (avg_kernel(key,i)<0d0) then
-!      avg_kernel(key,i)=0d0
-!   endif
-   val = val + avg_kernel(key,i) * (obs_val)  
+!
+! Check for WRF CO lower bound
+   if (obs_val.lt.co_min) then
+      obs_val=co_min
+      write(msgstring, *)'APM NOTICE: in obs_def_mopitt resetting minimum co value '
+      call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   endif
+!
+! apply averaging kernel
+   val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
 enddo
-val = val + mopitt_prior(key)
-!print *, val
-!print *,'AFAJ DEBUG ', val
-!stop
-
+!
 end subroutine get_expected_mopitt_co
+!
 !----------------------------------------------------------------------
-
-
-
 
  subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
 !----------------------------------------------------------------------
 ! Allows passing of obs_def special information 
 
-integer,  intent(in):: key, co_nlevels
-real(r8), intent(in):: co_avgker(10)
-real(r8), intent(in):: co_prior
-real(r8), intent(in):: co_psurf
+integer,	 	intent(in)	:: key, co_nlevels
+real*8,dimension(10),	intent(in)	:: co_avgker	
+real*8,			intent(in)	:: co_prior
+real*8,			intent(in)	:: co_psurf
+character(len=129) 			:: msgstring
 
 if ( .not. module_initialized ) call initialize_module
 
 if(num_mopitt_co_obs >= max_mopitt_co_obs) then
-   write(string1,*) 'Not enough space for a mopitt CO obs.'
-   write(string2,*) 'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
-   call error_handler(E_ERR,'set_obs_def_mopitt_co',string1,source,revision,revdate, text2=string2)
+   ! PUT IN ERROR HANDLER CALL
+   write(msgstring, *)'Not enough space for a mopitt CO obs.'
+   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   write(msgstring, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   call error_handler(E_ERR,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
 endif
 
-avg_kernel(key,:)   = co_avgker(:)
-mopitt_prior(key)   = co_prior
-mopitt_psurf(key)   = co_psurf
-mopitt_nlevels(key) = co_nlevels
+avg_kernel(key,:) 	= co_avgker(:)
+mopitt_prior(key)	= co_prior
+mopitt_psurf(key)	= co_psurf
+mopitt_nlevels(key)     = co_nlevels
 
 end subroutine set_obs_def_mopitt_co
-
-
 
 
 function read_mopitt_prior(ifile, fform)
 
 integer,                    intent(in) :: ifile
-character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_prior
+character(len=*), intent(in), optional :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"    ! supply default
 if(present(fform)) fileformat = trim(adjustl(fform))
@@ -334,18 +410,17 @@ END SELECT
 
 end function read_mopitt_prior
 
-
-
-
 function read_mopitt_nlevels(ifile, fform)
 
 integer,                    intent(in) :: ifile
-character(len=*), optional, intent(in) :: fform
-integer                                :: read_mopitt_nlevels
+integer                               :: read_mopitt_nlevels
+character(len=*), intent(in), optional :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"    ! supply default
 if(present(fform)) fileformat = trim(adjustl(fform))
@@ -363,13 +438,15 @@ end function read_mopitt_nlevels
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
-integer,           intent(in) :: ifile
-real(r8),          intent(in) :: mopitt_prior_temp
-character(len=32), intent(in) :: fform
+integer,                    intent(in) :: ifile
+real(r8), 		    intent(in) :: mopitt_prior_temp
+character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = trim(adjustl(fform))
 
@@ -382,18 +459,17 @@ END SELECT
 
 end subroutine write_mopitt_prior
 
-
-
-
 subroutine write_mopitt_nlevels(ifile, mopitt_nlevels_temp, fform)
 
-integer,           intent(in) :: ifile
-integer,           intent(in) :: mopitt_nlevels_temp
-character(len=32), intent(in) :: fform
+integer,                    intent(in) :: ifile
+integer,                    intent(in) :: mopitt_nlevels_temp
+character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = trim(adjustl(fform))
 
@@ -411,12 +487,14 @@ end subroutine write_mopitt_nlevels
 function read_mopitt_psurf(ifile, fform)
 
 integer,                    intent(in) :: ifile
-character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_psurf
+character(len=*), intent(in), optional :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"    ! supply default
 if(present(fform)) fileformat = trim(adjustl(fform))
@@ -430,17 +508,17 @@ END SELECT
 
 end function read_mopitt_psurf
 
-
-
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
-integer,           intent(in) :: ifile
-real(r8),          intent(in) :: mopitt_psurf_temp
-character(len=32), intent(in) :: fform
+integer,                    intent(in) :: ifile
+real(r8),		    intent(in) :: mopitt_psurf_temp
+character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = trim(adjustl(fform))
 
@@ -453,19 +531,19 @@ END SELECT
 
 end subroutine write_mopitt_psurf
 
-
-
 function read_mopitt_avg_kernels(ifile, nlevels, fform)
 
 integer,                    intent(in) :: ifile, nlevels
-character(len=*), optional, intent(in) :: fform
-real(r8), :: read_mopitt_avg_kernels(10)
+real(r8), dimension(10)        :: read_mopitt_avg_kernels
+character(len=*), intent(in), optional :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 read_mopitt_avg_kernels(:) = 0.0_r8
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"    ! supply default
 if(present(fform)) fileformat = trim(adjustl(fform))
@@ -479,17 +557,17 @@ END SELECT
 
 end function read_mopitt_avg_kernels
 
-
-
 subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
-integer,          intent(in) :: ifile, nlevels_temp
-real(r8),         intent(in) :: avg_kernels_temp(10)
-character(len=*), intent(in) :: fform
+integer,                    intent(in) :: ifile, nlevels_temp
+real(r8), dimension(10), intent(in)  :: avg_kernels_temp
+character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
 character(len=129) :: errstring
 character(len=32)  :: fileformat
+
+if ( .not. module_initialized ) call initialize_module
 
 fileformat = trim(adjustl(fform))
 

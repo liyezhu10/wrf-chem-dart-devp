@@ -98,7 +98,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: string1, string2
+character(len=512) :: string1, string2
 logical, save      :: module_initialized = .false.
 
 ! Metadata for COSMOS observations.

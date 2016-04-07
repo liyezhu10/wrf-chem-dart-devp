@@ -47,6 +47,7 @@ use     location_mod, only : location_type, set_location, get_location, VERTISPR
 use  assim_model_mod, only : interpolate
 use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE
 implicit none
+private
 public :: write_iasi_co, read_iasi_co, interactive_iasi_co, &
           get_expected_iasi_co, set_obs_def_iasi_co
 
@@ -216,13 +217,13 @@ real(r8)            :: co_min,iasi_prs_mid,iasi_psf,iasi_psf_save
 integer             :: nlevels,nlevelsp,nnlevels
 integer             :: iflg
 character(len=129)  :: msgstring
+real(r8)            :: vert_mode_filt
 !
 ! Initialize DART
 if ( .not. module_initialized ) call initialize_module
 !
 ! Initialize variables
 co_min=1.e-4
-!co_min=-9.
 missing=-888888.0_r8
 !
 ! Get iasi data
@@ -239,17 +240,42 @@ elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
 endif
 !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Try phase space localization 
+vert_mode_filt=10000.
+if(mloc(3).le.vert_mode_filt) then
+   istatus=2
+   obs_val=missing
+   return
+endif
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 ! Get wrf surface pressure
 wrf_psf = 0.0_r8
 istatus = 0
 loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISSURFACE)
 call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)  
-!write(msgstring, *)'APM ERROR: wrf_psf, iasi_psf, status ',wrf_psf,iasi_psf,istatus 
-!call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
 !
 ! Correct iasi surface pressure
+if(istatus/=0) then
+   write(msgstring, *)'APM NOTICE: IASI CO WRF psf is bad ',wrf_psf,istatus
+   call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
+   obs_val=missing
+   return
+endif
+!
 if(iasi_psf.gt.wrf_psf) then
-   iasi_psf=wrf_psf
+   if((iasi_psf-wrf_psf).gt.10000.) then
+      write(msgstring, *)'APM: NOTICE - reject IASI CO - WRF PSF too large ',iasi_psf,wrf_psf
+      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
+      obs_val=missing
+      istatus=2
+      return
+   else
+!      write(msgstring, *)'APM: NOTICE correct IASI CO psf with WRF psf ',iasi_psf,wrf_psf
+!      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
+      iasi_psf=wrf_psf
+   endif
 endif
 !
 ! Find kstr - the surface level index
@@ -266,11 +292,11 @@ do i=1,iasi_dim
    endif
 enddo
 if (kstr.eq.0) then
-   write(msgstring, *)'APM: ERROR in IASI obs def kstr=0: iasi_psf=',iasi_psf
+   write(msgstring, *)'APM: ERROR in IASI CO obs def kstr=0: iasi_psf=',iasi_psf
    call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    stop
 elseif (kstr.gt.6) then
-   write(msgstring, *)'APM: ERROR surface pressure is unrealistic: iasi_psf=',iasi_psf
+   write(msgstring, *)'APM: ERROR IASI CO surface pressure is unrealistic: iasi_psf, wrf_psf= ',iasi_psf,wrf_psf
    call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    stop
 endif
@@ -278,15 +304,12 @@ endif
 ! Reject ob when number of IASI levels from WRF cannot equal actual number of IASI levels
 nnlevels=iasi_dim-kstr+1
 if(nnlevels.ne.nlevels) then
+   write(msgstring, *)'APM: NOTICE reject IASI CO ob - WRF IASI lvls .ne. IASI levels, nnlvls,nlvls ',nnlevels,nlevels
+   call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    obs_val=missing
    istatus=2
-   write(msgstring, *)'APM: NOTICE reject ob - # of WRF IASI levels .ne. # of IASI levels  '
-   call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    return
 endif   
-!
-! Find the lowest pressure level midpoint
-iasi_prs_mid=(iasi_psf+pressure(key,kstr+1))/2.
 !
 ! Apply IASI Averaging kernel A and IASI Prior (I-A)xa
 ! x = Axm + (I-A)xa , where x is a 10 element vector 
@@ -294,7 +317,8 @@ val = 0.0_r8
 do i=1,nlevels
 !
 ! APM: remove the if test to use layer average data
-   if (i .eq.1) then
+   if (i.eq.1) then
+      iasi_prs_mid=(iasi_psf+pressure(key,kstr+i))/2.
       loc2 = set_location(mloc(1),mloc(2),iasi_prs_mid, VERTISPRESSURE)
    else
       iasi_prs_mid=(pressure(key,kstr+i-1)+pressure(key,kstr+i))/2.
@@ -306,41 +330,23 @@ do i=1,nlevels
    istatus = 0
    call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
    if (istatus /= 0) then
-!      write(msgstring, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
-!      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: iasi_prs_mid ',iasi_prs_mid
-!      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: wrf_psf,iasi_psurf,iasi_psf ', &
-!      wrf_psf,iasi_psf_save,iasi_psf
-!      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-!      write(msgstring, *)'APM ERROR: i, nlevels ',i,nlevels
-!      call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-      write(msgstring, *)'APM NOTICE: WRF extrapolation needed reject ob '
+      write(msgstring, *)'APM NOTICE: WRF extrapolation needed reject IASI CO ob '
       call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
       return
-!      stop
    endif
 !
 ! Check for WRF CO lower bound
    if (obs_val.lt.co_min) then
       obs_val=co_min
-      write(msgstring, *)'APM NOTICE: in obs_def_iasi resetting minimum co value '
+      write(msgstring, *)'APM NOTICE: in obs_def_iasi resetting minimum IASI CO value '
       call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    endif
 !
 ! apply averaging kernel
-!   val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
    val = val + avg_kernel(key,i) * obs_val*1.e3  
 !   val = val + avg_kernel(key,i) * obs_val  
-!   write(msgstring, *)'APM DATA: i,iasi_prs_mid,val ',i,iasi_prs_mid,val
-!   call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-!   write(msgstring, *)'APM DATA: i,obs_val,avg_kernel ',i,obs_val,avg_kernel(key,i)
-!   call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
 enddo
-!write(msgstring, *)'APM DATA: iasi_prior ',i,obs_val,iasi_prior(key)
-!call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
-!
-val = val + iasi_prior(key)
+!val = val + iasi_prior(key)
 end subroutine get_expected_iasi_co
 !
 !----------------------------------------------------------------------
