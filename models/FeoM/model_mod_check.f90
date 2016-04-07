@@ -16,9 +16,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check,
                              check_namelist_read, nmlfileunit, do_nml_file, do_nml_term, &
                              E_MSG, E_ERR, error_handler, get_unit
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
-                             query_location, LocationDims, get_location, &
-                             VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, VERTISPRESSURE, &
-                             VERTISHEIGHT, VERTISSCALEHEIGHT
+                             LocationDims, get_location
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_TEMPERATURE,           &
                              KIND_SALINITY
