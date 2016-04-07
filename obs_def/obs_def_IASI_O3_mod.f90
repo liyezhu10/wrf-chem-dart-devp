@@ -57,6 +57,7 @@ module obs_def_iasi_O3_mod
 ! Storage for the special information required for observations of this type
    integer, parameter          :: max_iasi_o3_obs = 6000000
    integer                     :: num_iasi_o3_obs = 0
+   integer                     :: counts1 = 0
 
 ! nominal number of iasi levels
    integer, parameter          :: iasi_dim = 40
@@ -97,9 +98,8 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-   logical, save               :: module_initialized = .false.
-   integer                     :: counts1 = 0
-!
+logical, save :: module_initialized = .false.
+
    contains
 !----------------------------------------------------------------------
    subroutine initialize_module

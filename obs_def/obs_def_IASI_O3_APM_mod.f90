@@ -40,40 +40,48 @@
 ! END DART PREPROCESS SET_OBS_DEF_IASI_O3
 !
 ! BEGIN DART PREPROCESS MODULE CODE
+
 module obs_def_iasi_O3_mod
-!
-   use types_mod,only          : r8
-   use utilities_mod,only      : register_module, error_handler, E_ERR, E_MSG
-   use location_mod,only       : location_type, set_location, get_location, VERTISHEIGHT,&
-                                 VERTISPRESSURE, VERTISLEVEL
-   use assim_model_mod,only    : interpolate
-   use obs_kind_mod,only       : KIND_O3, KIND_O3_COLUMN
-   use mpi_utilities_mod,only  : my_task_id  
-   implicit none 
-   public                      :: write_iasi_o3, read_iasi_o3, interactive_iasi_o3, &
-                                  get_expected_iasi_o3, set_obs_def_iasi_o3
+
+use types_mod,only          : r8
+use utilities_mod,only      : register_module, error_handler, E_ERR, E_MSG
+use location_mod,only       : location_type, set_location, get_location, VERTISHEIGHT,&
+                              VERTISPRESSURE, VERTISLEVEL
+use assim_model_mod,only    : interpolate
+use obs_kind_mod,only       : KIND_O3, KIND_O3_COLUMN
+use mpi_utilities_mod,only  : my_task_id  
+
+implicit none 
+private
+
+public :: write_iasi_o3, &
+          read_iasi_o3, &
+          interactive_iasi_o3, &
+          get_expected_iasi_o3, &
+          set_obs_def_iasi_o3
 !
 ! Storage for the special information required for observations of this type
-   integer, parameter          :: max_iasi_o3_obs = 6000000
-   integer                     :: num_iasi_o3_obs = 0
+integer, parameter          :: max_iasi_o3_obs = 6000000
+integer                     :: num_iasi_o3_obs = 0
+integer                     :: counts1 = 0
 
 ! nominal number of iasi levels
-   integer, parameter          :: iasi_dim = 40
+integer, parameter          :: iasi_dim = 40
 
 ! number of iasi levels used
-   integer                     :: iasi_nlevels(max_iasi_o3_obs)
+integer                     :: iasi_nlevels(max_iasi_o3_obs)
 !
 ! iasii averaging kernel
-   real(r8)                    :: avg_kernel(max_iasi_o3_obs,iasi_dim)
+real(r8)                    :: avg_kernel(max_iasi_o3_obs,iasi_dim)
 !
 ! iasi air column profile
-   real(r8), dimension(max_iasi_o3_obs,iasi_dim) :: iasi_air_column
+real(r8), dimension(max_iasi_o3_obs,iasi_dim) :: iasi_air_column
 !
 ! prior term of x=Ax + (I-A)xa + Gey
-   real(r8)                    :: iasi_o3_prior(max_iasi_o3_obs)
+real(r8)                    :: iasi_o3_prior(max_iasi_o3_obs)
 !
 ! nominal iasi height levels in m
-   real(r8)                    :: iasi_altitude(iasi_dim) =(/ &
+real(r8)                    :: iasi_altitude(iasi_dim) =(/ &
                                   500.,1500.,2500.,3500.,4500., &
                                   5500.,6500.,7500.,8500.,9500., &
                                   10500.,11500.,12500.,13500.,14500., &
@@ -84,7 +92,7 @@ module obs_def_iasi_O3_mod
                                   35500.,36500.,37500.,38500.,39500. /) 
 !
 ! iasi retrieval heights
-   real(r8)                    :: iasi_heights(max_iasi_o3_obs,iasi_dim)
+real(r8)                    :: iasi_heights(max_iasi_o3_obs,iasi_dim)
 !
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -95,10 +103,10 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-   logical, save               :: module_initialized = .false.
-   integer                     :: counts1 = 0
-!
-   contains
+logical, save :: module_initialized = .false.
+
+contains
+
 !----------------------------------------------------------------------
    subroutine initialize_module
 !----------------------------------------------------------------------------

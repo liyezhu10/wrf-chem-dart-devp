@@ -48,7 +48,7 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISLEVEL
 
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_CO
+use     obs_kind_mod, only : KIND_CO
 
 implicit none
 
@@ -62,6 +62,7 @@ public :: write_mopitt_co, &
 integer, parameter :: max_mopitt_co_obs = 10000000
 integer, parameter :: mopitt_dim = 10
 integer            :: num_mopitt_co_obs = 0
+integer            :: counts1 = 0
 
 real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
 real(r8), dimension(max_mopitt_co_obs)    :: mopitt_prior
@@ -80,10 +81,12 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=512) :: string1, string2
+logical, save      :: module_initialized = .false.
 
 contains
 
 !----------------------------------------------------------------------
+!>
 
 subroutine initialize_module
 
@@ -92,17 +95,18 @@ module_initialized = .true.
 
 end subroutine initialize_module
 
-
-
- subroutine read_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
+!>
 
-integer, intent(out)            :: key
-integer, intent(in)             :: ifile
-character(len=*), intent(in), optional    :: fform
+subroutine read_mopitt_co(key, ifile, fform)
+
+integer,                    intent(out) :: key
+integer,                    intent(in)  :: ifile
+character(len=*), optional, intent(in)  :: fform
+
 character(len=32) :: fileformat
 
-integer:: mopitt_nlevels_1
+integer :: mopitt_nlevels_1
 real(r8):: mopitt_prior_1
 real(r8):: mopitt_psurf_1
 real(r8), dimension(mopitt_dim):: avg_kernels_1
@@ -111,7 +115,7 @@ integer :: keyin
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
@@ -119,7 +123,7 @@ if(present(fform)) fileformat = trim(adjustl(fform))
 
 avg_kernels_1(:) = 0.0_r8
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
 
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    mopitt_nlevels_1 = read_mopitt_nlevels(ifile, fileformat)
@@ -143,21 +147,23 @@ call set_obs_def_mopitt_co(key, avg_kernels_1, mopitt_prior_1, mopitt_psurf_1, &
 
 end subroutine read_mopitt_co
 
-
- subroutine write_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
+!>
 
-integer, intent(in)             :: key
-integer, intent(in)             :: ifile
-character(len=*), intent(in), optional :: fform
+subroutine write_mopitt_co(key, ifile, fform)
+
+integer,                    intent(in) :: key
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 
 character(len=32) :: fileformat
-real(r8), dimension(mopitt_dim) :: avg_kernels_temp
+
+real(r8) :: avg_kernels_temp(mopitt_dim)
 
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
@@ -165,7 +171,7 @@ if(present(fform)) fileformat = trim(adjustl(fform))
    
 avg_kernels_temp=avg_kernel(key,:)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    call write_mopitt_nlevels(ifile, mopitt_nlevels(key), fileformat)
@@ -184,10 +190,11 @@ END SELECT
 
 end subroutine write_mopitt_co
 
-
- subroutine interactive_mopitt_co(key)
 !----------------------------------------------------------------------
-!
+!>
+
+subroutine interactive_mopitt_co(key)
+
 ! Initializes the specialized part of a MOPITT observation
 ! Passes back up the key for this one
 
@@ -197,11 +204,9 @@ if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_mopitt_co_obs >= max_mopitt_co_obs) then
-   ! PUT IN ERROR HANDLER CALL
    write(string1, *)'Not enough space for a mopitt CO obs.'
-   call error_handler(E_MSG,'interactive_mopitt_co',string1,source,revision,revdate)
-   write(string1, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
-   call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate)
+   write(string2, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate,text2=string2)
 endif
 
 ! Increment the index
@@ -219,16 +224,16 @@ read(*, *) avg_kernel(num_mopitt_co_obs,:)
 
 end subroutine interactive_mopitt_co
 
-
-
- subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 !----------------------------------------------------------------------
+!>
 
-real(r8), intent(in)            :: state(:)
-type(location_type), intent(in) :: location
-integer, intent(in)             :: key
-real(r8), intent(out)           :: val
-integer, intent(out)            :: istatus
+subroutine get_expected_mopitt_co(state, location, key, val, istatus)
+
+real(r8),            intent(in)  :: state(:)
+type(location_type), intent(in)  :: location
+integer,             intent(in)  :: key
+real(r8),            intent(out) :: val
+integer,             intent(out) :: istatus
 
 integer :: i
 type(location_type) :: loc2
@@ -249,6 +254,7 @@ if (mloc(2)>90.0_r8) then
 elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
 endif
+
 mopitt_pressure(1)=mopitt_psurf(key)
 nlevels = mopitt_nlevels(key)
 level   = 1.0_r8
@@ -280,13 +286,12 @@ val = val + mopitt_prior(key)
 !stop
 
 end subroutine get_expected_mopitt_co
+
 !----------------------------------------------------------------------
+!>
 
+subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
 
-
-
- subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
-!----------------------------------------------------------------------
 ! Allows passing of obs_def special information 
 
 integer,  intent(in):: key, co_nlevels
@@ -309,8 +314,8 @@ mopitt_nlevels(key) = co_nlevels
 
 end subroutine set_obs_def_mopitt_co
 
-
-
+!----------------------------------------------------------------------
+!>
 
 function read_mopitt_prior(ifile, fform)
 
@@ -318,14 +323,12 @@ integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_prior
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
 fileformat = "ascii"    ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       read(ifile) read_mopitt_prior
    CASE DEFAULT
@@ -334,8 +337,8 @@ END SELECT
 
 end function read_mopitt_prior
 
-
-
+!----------------------------------------------------------------------
+!>
 
 function read_mopitt_nlevels(ifile, fform)
 
@@ -343,14 +346,12 @@ integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 integer                                :: read_mopitt_nlevels
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
 fileformat = "ascii"    ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       read(ifile) read_mopitt_nlevels
    CASE DEFAULT
@@ -359,7 +360,8 @@ END SELECT
 
 end function read_mopitt_nlevels
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
@@ -367,13 +369,11 @@ integer,           intent(in) :: ifile
 real(r8),          intent(in) :: mopitt_prior_temp
 character(len=32), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
-fileformat = trim(adjustl(fform))
+fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       write(ifile) mopitt_prior_temp
    CASE DEFAULT
@@ -382,22 +382,20 @@ END SELECT
 
 end subroutine write_mopitt_prior
 
-
-
+!----------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_nlevels(ifile, mopitt_nlevels_temp, fform)
 
-integer,           intent(in) :: ifile
-integer,           intent(in) :: mopitt_nlevels_temp
-character(len=32), intent(in) :: fform
+integer,          intent(in) :: ifile
+integer,          intent(in) :: mopitt_nlevels_temp
+character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
-fileformat = trim(adjustl(fform))
+fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       write(ifile) mopitt_nlevels_temp
    CASE DEFAULT
@@ -406,7 +404,8 @@ END SELECT
 
 end subroutine write_mopitt_nlevels
 
-
+!----------------------------------------------------------------------
+!>
 
 function read_mopitt_psurf(ifile, fform)
 
@@ -414,14 +413,12 @@ integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_psurf
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
 fileformat = "ascii"    ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       read(ifile) read_mopitt_psurf
    CASE DEFAULT
@@ -430,21 +427,20 @@ END SELECT
 
 end function read_mopitt_psurf
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
-integer,           intent(in) :: ifile
-real(r8),          intent(in) :: mopitt_psurf_temp
-character(len=32), intent(in) :: fform
+integer,          intent(in) :: ifile
+real(r8),         intent(in) :: mopitt_psurf_temp
+character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
-character(len=32)  :: fileformat
+character(len=32) :: fileformat
 
-fileformat = trim(adjustl(fform))
+fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       write(ifile) mopitt_psurf_temp
    CASE DEFAULT
@@ -453,24 +449,23 @@ END SELECT
 
 end subroutine write_mopitt_psurf
 
-
+!----------------------------------------------------------------------
+!>
 
 function read_mopitt_avg_kernels(ifile, nlevels, fform)
 
 integer,                    intent(in) :: ifile, nlevels
 character(len=*), optional, intent(in) :: fform
-real(r8), :: read_mopitt_avg_kernels(10)
+real(r8)                               :: read_mopitt_avg_kernels(10)
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 read_mopitt_avg_kernels(:) = 0.0_r8
 
 fileformat = "ascii"    ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       read(ifile) read_mopitt_avg_kernels(1:nlevels)
    CASE DEFAULT
@@ -479,7 +474,8 @@ END SELECT
 
 end function read_mopitt_avg_kernels
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
@@ -487,13 +483,11 @@ integer,          intent(in) :: ifile, nlevels_temp
 real(r8),         intent(in) :: avg_kernels_temp(10)
 character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
-fileformat = trim(adjustl(fform))
+fileformat = adjustl(fform)
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE("unf", "UNF", "unformatted", "UNFORMATTED")
       write(ifile) avg_kernels_temp(1:nlevels_temp)
    CASE DEFAULT
@@ -502,7 +496,8 @@ END SELECT
 
 end subroutine write_mopitt_avg_kernels
 
-
+!----------------------------------------------------------------------
+!>
 
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE

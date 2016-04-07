@@ -83,7 +83,8 @@ logical, save :: module_initialized = .false.
 
 contains
 
-! ---------------------------------------------------
+!-----------------------------------------------------------------------
+!>
 
 subroutine initialize_module
 
@@ -96,13 +97,15 @@ module_initialized = .true.
 
 end subroutine initialize_module
 
-! ---------------------------------------------------
+!-----------------------------------------------------------------------
+!>
 
 subroutine get_expected_airnow_o3(state_vector, location, o3_val, istatus)  
- real(r8),            intent(in)  :: state_vector(:)
- type(location_type), intent(in)  :: location
- real(r8),            intent(out) :: o3_val
- integer,             intent(out) :: istatus
+
+real(r8),            intent(in)  :: state_vector(:)
+type(location_type), intent(in)  :: location
+real(r8),            intent(out) :: o3_val
+integer,             intent(out) :: istatus
 
 ! Forward operator for airnow ozone.  The argument list to this routine
 ! must match the call in the GET_EXPECTED_OBS_FROM_DEF section above.
@@ -118,7 +121,8 @@ endif
     
 end subroutine get_expected_airnow_o3
 
-! ---------------------------------------------------
+!-----------------------------------------------------------------------
+!>
 
 end module obs_def_airnow_mod
 ! END DART PREPROCESS MODULE CODE

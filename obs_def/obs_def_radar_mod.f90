@@ -863,8 +863,7 @@ integer,             intent(out) :: istatus
 !
 ! Reference: Lin et al., 1983 (J. Climate Appl.Meteor., 1065-1092)
 
-
-real(r8) :: u, v, w, qr, qg, qs, rho, temp, precip_fall_speed
+real(r8) :: u, v, w, precip_fall_speed
 real(r8) :: debug_location(3)
 logical  :: debug = .false.   ! set to .true. to enable debug printout
 

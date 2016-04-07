@@ -125,15 +125,12 @@ logical :: debug = .FALSE.
 integer :: MAXcosmoskey = 24*366  ! one year of hourly data - to start
 integer ::    cosmoskey = 0       ! useful length of metadata arrays
 
-!----------------------------------------------------------------------------
 contains
-!----------------------------------------------------------------------------
 
-
-  subroutine initialize_module
 !----------------------------------------------------------------------------
-! subroutine initialize_module
-!
+!>
+
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 
@@ -154,12 +151,11 @@ observation_metadata(:) = missing_metadata
 
 end subroutine initialize_module
 
-
-
- subroutine set_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
 !----------------------------------------------------------------------
-!subroutine set_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
-!
+!>
+
+subroutine set_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
+
 ! Fill the module storage metadata for a particular observation.
 
 integer,  intent(out) :: key
@@ -185,12 +181,11 @@ observation_metadata(key)%L4      = L4
 
 end subroutine set_cosmos_metadata
 
-
-
- subroutine get_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
 !----------------------------------------------------------------------
-!subroutine get_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
-!
+!>
+
+subroutine get_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
+
 ! Query the metadata in module storage for a particular observation.
 ! This can be useful for post-processing routines, etc.
 
@@ -213,12 +208,11 @@ L4       = observation_metadata(key)%L4
 
 end subroutine get_cosmos_metadata
 
-
-
- subroutine read_cosmos_metadata(key,       obsID, ifile, fform)
 !----------------------------------------------------------------------
-!subroutine read_cosmos_metadata(obs_def%key, key, ifile, fform)
-!
+!>
+
+subroutine read_cosmos_metadata(key,       obsID, ifile, fform)
+
 ! This routine reads the metadata for neutron intensity observations.
 !
 integer,          intent(out)          :: key    ! index into local metadata
@@ -276,12 +270,11 @@ call set_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
 
 end subroutine read_cosmos_metadata
 
-
-
- subroutine write_cosmos_metadata(key, ifile, fform)
 !----------------------------------------------------------------------
-!subroutine write_cosmos_metadata(key, ifile, fform)
-!
+!>
+
+subroutine write_cosmos_metadata(key, ifile, fform)
+
 ! writes the metadata for neutron intensity observations.
 
 integer,           intent(in)           :: key
@@ -314,12 +307,11 @@ endif
 
 end subroutine write_cosmos_metadata
 
-
-
- subroutine interactive_cosmos_metadata(key)
 !----------------------------------------------------------------------
-!subroutine interactive_cosmos_metadata(key)
-!
+!>
+
+subroutine interactive_cosmos_metadata(key)
+
 integer, intent(out) :: key
 
 real(r8) :: bd, lattwat, N, alpha, L1, L2, L3, L4
@@ -341,7 +333,8 @@ call set_cosmos_metadata(key, bd, lattwat, N, alpha, L1, L2, L3, L4)
 
 end subroutine interactive_cosmos_metadata
 
-
+!----------------------------------------------------------------------
+!>
 
 function interactive(str1,minvalue,maxvalue)
 real(r8)                       :: interactive
@@ -389,10 +382,11 @@ endif
 
 end function interactive
 
-
-
- subroutine get_expected_neutron_intensity(state, location, key, val, istatus)
 !----------------------------------------------------------------------
+!>
+
+subroutine get_expected_neutron_intensity(state, location, key, val, istatus)
+
 ! Uses a weighting function calculated by COSMIC (COsmic-ray Soil
 ! Moisture Interaction Code)
 
@@ -686,13 +680,10 @@ istatus = 0        ! assume all is well if we get this far
 return
 end subroutine get_expected_neutron_intensity
 
-
-
-
-
- subroutine check_iostat(istat, routine, varname, msgstring)
 !----------------------------------------------------------------------
-!
+!>
+
+subroutine check_iostat(istat, routine, varname, msgstring)
 
 integer,          intent(in) :: istat
 character(len=*), intent(in) :: routine
@@ -706,10 +697,11 @@ end if
 
 end subroutine check_iostat
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine key_within_range(key, routine)
-!----------------------------------------------------------------------
+
 ! Make sure we are addressing within the metadata arrays
 
 integer,          intent(in) :: key
@@ -724,10 +716,10 @@ call error_handler(E_ERR,routine,string1,source,revision,revdate)
 
 end subroutine key_within_range
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine grow_metadata(key, routine)
-!----------------------------------------------------------------------
 ! If the allocatable metadata arrays are not big enough ... try again
 
 integer,          intent(in) :: key
@@ -771,7 +763,8 @@ deallocate(safe_metadata)
 
 end subroutine grow_metadata
 
-
+!----------------------------------------------------------------------
+!>
 
 end module obs_def_COSMOS_mod
 

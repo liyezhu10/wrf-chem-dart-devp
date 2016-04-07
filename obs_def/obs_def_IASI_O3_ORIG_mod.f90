@@ -102,6 +102,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
+
 integer  :: counts1 = 0
 
 contains

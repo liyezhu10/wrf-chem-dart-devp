@@ -52,21 +52,28 @@ use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE
 
 implicit none
 private
-public :: write_mopitt_co, read_mopitt_co, interactive_mopitt_co, &
-          get_expected_mopitt_co, set_obs_def_mopitt_co
+public :: write_mopitt_co, &
+          read_mopitt_co, &
+          interactive_mopitt_co, &
+          get_expected_mopitt_co, &
+          set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
-integer, parameter               :: max_mopitt_co_obs = 10000000
-integer, parameter               :: mopitt_dim = 10
-integer                          :: num_mopitt_co_obs = 0
+integer, parameter :: max_mopitt_co_obs = 10000000
+integer, parameter :: mopitt_dim = 10
+integer            :: num_mopitt_co_obs = 0
+integer            :: counts1 = 0
+
 real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_prior
-real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
+real(r8), dimension(max_mopitt_co_obs) :: mopitt_prior
+
+real(r8) :: mopitt_pressure(mopitt_dim) =(/ &
                               100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
-real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
+real(r8) :: mopitt_pressure_mid(mopitt_dim) =(/ &
                               100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
-integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
+
+real(r8), dimension(max_mopitt_co_obs) :: mopitt_psurf
+integer,  dimension(max_mopitt_co_obs) :: mopitt_nlevels
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -78,7 +85,6 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
-integer  :: counts1 = 0
 
 contains
 
@@ -100,13 +106,13 @@ end subroutine initialize_module
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
 character(len=*), intent(in), optional    :: fform
-character(len=32) 		:: fileformat
+character(len=32) :: fileformat
 
-integer			:: mopitt_nlevels_1
-real(r8)			:: mopitt_prior_1
-real(r8)			:: mopitt_psurf_1
-real(r8), dimension(mopitt_dim)	:: avg_kernels_1
-integer 			:: keyin
+integer:: mopitt_nlevels_1
+real(r8):: mopitt_prior_1
+real(r8):: mopitt_psurf_1
+real(r8), dimension(mopitt_dim):: avg_kernels_1
+integer :: keyin
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -150,9 +156,9 @@ end subroutine read_mopitt_co
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
-character(len=32) 		:: fileformat
+character(len=32) :: fileformat
 real(r8), dimension(mopitt_dim) :: avg_kernels_temp
 
 if ( .not. module_initialized ) call initialize_module
@@ -237,7 +243,7 @@ end subroutine interactive_mopitt_co
     integer :: i,kstr
     type(location_type) :: loc2
     real(r8)            :: mloc(3)
-    real(r8)	        :: obs_val,wrf_psf,level,missing
+    real(r8)        :: obs_val,wrf_psf,level,missing
     real(r8)            :: co_min,mopitt_prs_mid,mopitt_psf
     real(r8)            :: vert_mode_filt
 !
@@ -380,11 +386,11 @@ end subroutine get_expected_mopitt_co
 !----------------------------------------------------------------------
 ! Allows passing of obs_def special information 
 
-integer,	 	intent(in)	:: key, co_nlevels
-real*8,dimension(10),	intent(in)	:: co_avgker	
-real*8,			intent(in)	:: co_prior
-real*8,			intent(in)	:: co_psurf
-character(len=129) 			:: msgstring
+integer, intent(in):: key, co_nlevels
+real*8,dimension(10),intent(in):: co_avgker
+real*8,intent(in):: co_prior
+real*8,intent(in):: co_psurf
+character(len=129) :: msgstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -396,9 +402,9 @@ if(num_mopitt_co_obs >= max_mopitt_co_obs) then
    call error_handler(E_ERR,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
 endif
 
-avg_kernel(key,:) 	= co_avgker(:)
-mopitt_prior(key)	= co_prior
-mopitt_psurf(key)	= co_psurf
+avg_kernel(key,:) = co_avgker(:)
+mopitt_prior(key)= co_prior
+mopitt_psurf(key)= co_psurf
 mopitt_nlevels(key)     = co_nlevels
 
 end subroutine set_obs_def_mopitt_co
@@ -457,7 +463,7 @@ end function read_mopitt_nlevels
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
 integer,                    intent(in) :: ifile
-real(r8), 		    intent(in) :: mopitt_prior_temp
+real(r8),     intent(in) :: mopitt_prior_temp
 character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
@@ -529,7 +535,7 @@ end function read_mopitt_psurf
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
 integer,                    intent(in) :: ifile
-real(r8),		    intent(in) :: mopitt_psurf_temp
+real(r8),    intent(in) :: mopitt_psurf_temp
 character(len=32),          intent(in) :: fform
 
 character(len=5)   :: header
