@@ -511,30 +511,30 @@ subroutine read_namelist
   if ( do_output() ) print*, "namelist is read"
 end subroutine read_namelist
 subroutine read_elem
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!! READ elem3d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  use utilities_mod, only: do_output
-
-  mype=0
-  fileID=mype+10
-  open(fileID, file=(trim(MeshPath)//'elem3d.out'))
-    read(fileID,*) myDim_elem3D   
-    allocate(elem3D_nodes(4, myDim_elem3D))
-      read(fileID,*) elem3d_nodes
-  close(fileID)
-
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!! READ elem2d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-  fileID=mype+10
-  open(fileID, file=(trim(MeshPath)//'elem2d.out'))
-    read(fileID,*) myDim_elem2D   
-    allocate(elem2D_nodes(3, myDim_elem2D))
-      read(fileID,*) elem2d_nodes
-  close(fileID)
-  if ( do_output() ) print*, 'Element tables are read: '
+!   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   !!!!!! READ elem3d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   use utilities_mod, only: do_output
+! 
+!   mype=0
+!   fileID=mype+10
+!   open(fileID, file=(trim(MeshPath)//'elem3d.out'))
+!     read(fileID,*) myDim_elem3D   
+!     allocate(elem3D_nodes(4, myDim_elem3D))
+!       read(fileID,*) elem3d_nodes
+!   close(fileID)
+! 
+!   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   !!!!!! READ elem2d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! 
+!   fileID=mype+10
+!   open(fileID, file=(trim(MeshPath)//'elem2d.out'))
+!     read(fileID,*) myDim_elem2D   
+!     allocate(elem2D_nodes(3, myDim_elem2D))
+!       read(fileID,*) elem2d_nodes
+!   close(fileID)
+!   if ( do_output() ) print*, 'Element tables are read: '
 
 end subroutine read_elem
 subroutine read_node
@@ -646,13 +646,14 @@ subroutine read_aux3
 end subroutine read_aux3
 
 subroutine read_depth
+  real*8 :: depth
 
   fileID=mype+10
   allocate(layerdepth(max_num_layers)) 
   open(fileID, file=(trim(MeshPath)//'m3d.ini'))
   do n=1,max_num_layers-1
-     read(fileID,*) m
-       layerdepth(n)=m
+     read(fileID,*) depth
+       layerdepth(n)= depth
   end do 
   close(fileID)
 end subroutine read_depth
