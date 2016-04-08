@@ -1,4 +1,4 @@
-
+! DART software - Copyright 2004 - 2015 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
@@ -28,7 +28,7 @@ module model_mod
 ! Routines in other modules that are used here.
 
 use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
-                             rad2deg, deg2rad, PI, MISSING_I
+                             rad2deg, deg2rad, PI, MISSING_I, obstypelength
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
@@ -123,7 +123,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 ! module global storage; maintains values between calls, accessible by
 ! any subroutine
-character(len=256) :: string1, string2, string3
+character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 ! Real (physical) constants as defined exactly in MPAS.
@@ -149,6 +149,10 @@ type(random_seq_type) :: random_seq
 ! Structure for computing distances to cell centers, and assorted arrays
 ! needed for the get_close code.
 
+type(location_type), allocatable :: cell_locations(:)
+integer,             allocatable :: cell_kinds(:)
+type(get_close_type)  :: cc_gc
+
 ! not part of the namelist because in the ocean it's not clear
 ! that we need to worry about log pressure in the vertical.
 ! if this makes a difference, set this to .true.
@@ -161,8 +165,6 @@ integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
 logical            :: output_state_vector = .true.  ! output prognostic variables (if .false.)
 integer            :: debug = 0   ! turn up for more and more debug messages
-!>@todo FIXME : probably do not need xyzdebug statements since not using xyz_location_mod.f90
-!#! integer            :: xyzdebug = 0
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
 !#!character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
@@ -176,9 +178,7 @@ namelist /model_nml/             &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    calendar,                     &
-   debug !#!,                        &
-   !#! xyzdebug,                     &
-   !#! use_increments_for_u_update
+   debug
 
 ! DART state vector contents are specified in the input.nml:&feom_vars_nml namelist.
 integer, parameter :: max_state_variables = 80
@@ -223,8 +223,6 @@ end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
 
-type(get_close_type)  :: cc_gc
-type(location_type),allocatable   :: cell_locs(:)
 ! Grid parameters - the values will be read from an mpas analysis file.
 
 integer :: nCells        = -1  ! Total number of cells making up the grid
@@ -419,7 +417,6 @@ call get_grid()
 !
 ! Record the extent of the data type in the state vector.
 
-
 call nc_check( nf90_open(trim(model_analysis_filename), NF90_NOWRITE, ncid), &
                   'static_init_model', 'open '//trim(model_analysis_filename))
 
@@ -503,8 +500,7 @@ do ivar = 1, nfields
          case ('nodes_2d')
             progvar(ivar)%numcells = myDim_nod2d
          case ('nodes_3d')
-            progvar(ivar)%numcells = myDim_nod3d
-!         case ('nVertL')  ! nVertLevels, nVertLevelsP1, nVertLevelsP2
+            progvar(ivar)%numcells    = myDim_nod3d
             progvar(ivar)%numvertical = max_num_layers
       end select
 
@@ -512,7 +508,6 @@ do ivar = 1, nfields
 
    ! this call sets: clamping, bounds, and out_of_range_fail in the progvar entry
 !   call get_variable_bounds(mpas_state_bounds, ivar)
-
 
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
@@ -537,25 +532,26 @@ if ( debug > 0 .and. do_output()) then
                                           nCells, nVertices, nVertLevels
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
-  !#! if ( global_grid ) then
-  !#!    write(logfileunit, *)'static_init_model: grid is a global grid '
-  !#!    write(     *     , *)'static_init_model: grid is a global grid '
-  !#! else
-  !#!    write(logfileunit, *)'static_init_model: grid has boundaries '
-  !#!    write(     *     , *)'static_init_model: grid has boundaries '
-  !#! endif
-  !#! if ( all_levels_exist_everywhere ) then
-  !#!    write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
-  !#!    write(     *     , *)'static_init_model: all cells have same number of vertical levels '
-  !#! else
-  !#!    write(logfileunit, *)'static_init_model: cells have varying number of vertical levels '
-  !#!    write(     *     , *)'static_init_model: cells have varying number of vertical levels '
-  !#! endif
 endif
 string1 = 'WARNING: fix block of required variables - detritus from atmosphere'
 call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 
 allocate( ens_mean(model_size) )
+
+
+allocate(cell_locations(model_size), cell_kinds(model_size))
+
+!>@ TODO ali
+! This array has to be filled in EXACTLY the same way that the
+! FeoM state gets packed into the DART state vector.
+
+do i=1,model_size
+   cell_locations(i) = set_location(lonCell(i), latCell(i), 0.0_r8, VERTISHEIGHT)
+enddo
+
+do i=1,nfields
+   cell_kinds( progvar(i)%index1 : progvar(i)%indexN ) = progvar(i)%dart_kind
+enddo 
 
 end subroutine static_init_model
 
@@ -601,6 +597,14 @@ if( myindx == -1 ) then
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
 
+location = cell_locations(index_in)
+
+if (present(var_type)) then
+   var_type = progvar(nf)%dart_kind
+endif
+
+! TJH ... as far as I can tell, everythin in the rest of this routine can be deleted.
+
 ! Now that we know the variable, find the cell or edge
 
 if (     progvar(nf)%numcells /= MISSING_I) then
@@ -640,7 +644,7 @@ depth=layerdepth(vloc)
 !      if(istatus == 0) location = new_location
 ! endif
 
-if (debug > 12) then
+if (debug > 12 .and. do_output()) then
 
     write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
     write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, vloc
@@ -648,20 +652,19 @@ if (debug > 12) then
 
 endif
 
-if (present(var_type)) then
-   var_type = progvar(nf)%dart_kind
-endif
 
 end subroutine get_state_meta_data
 
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(x, loc, obs_type, interp_val, istatus)
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
 ! given a state vector, a location, and a KIND_xxx, return the
 ! interpolated value at that location, and an error code.  0 is success,
 ! anything positive is an error.  (negative reserved for system use)
+!
+! This version simply returns the value at the closest node.
 !
 !       ERROR codes:
 !
@@ -681,161 +684,131 @@ subroutine model_interpolate(x, loc, obs_type, interp_val, istatus)
 ! passed variables
 
 real(r8),            intent(in)  :: x(:)
-type(location_type), intent(in)  :: loc
-type(location_type)  :: loc1
+type(location_type), intent(in)  :: location
 integer,             intent(in)  :: obs_type
 real(r8),            intent(out) :: interp_val
 integer,             intent(out) :: istatus
 
 ! local storage
 
-integer  :: ivar, obs_kind
-integer  :: tvars(3)
-logical  :: goodkind
-real(r8) :: values(3), lpres
+integer  :: ivar, obs_kind, closest_index, iclose, indx
+integer  :: num_close, num_wanted
+real(r8) :: llv(3), lon, lat, vert
+real(r8) :: closest
+real(r8), allocatable :: distances(:)
+character(len=obstypelength) :: kind_name
 
-
-!#! integer    :: ztypeout
-
-! zin and zout are the vert values coming in and going out.
-! ztype{in,out} are the vert types as defined by the 3d sphere
-! locations mod (location/threed_sphere/location_mod.f90)
-type(location_type)  :: location
-real(r8) :: llv(3),lat,lon,vert
-real(r8) :: zin, zout, tk, fullp, surfp
-real(r8) :: weights(3), zk_mid(3), fract(3), fdata(3)
-real(r8) :: t1(3), t2(3), t3(3), r(3)
-integer  :: ztypein, i, cellid, nodeid, locinstate
-integer  :: k_low(3), k_up(3), c(3), n
-integer  :: ivars(3) !#!, verttype
-integer  :: upper, lower, lev, vertlev
-type(location_type) :: surfloc
-
+integer  :: close_ind(model_size) ! undesirable to have something this big ... but ...
 
 if ( .not. module_initialized ) call static_init_model
 
 interp_val = MISSING_R8
 istatus    = 99           ! must be positive (and integer)
 
-loc1=loc
 ! rename for sanity - we can't change the argument names
 ! to this subroutine, but this really is a kind.
 obs_kind = obs_type
+
 ! if we can interpolate any other kinds that are not directly in the
 ! state vector, then add those cases here.
 if (debug > 0) then
-   call write_location(0,loc1,charstring=string1)
-   print*, 'stt kind, loc ', my_task_id()
+   call write_location(0,location,charstring=string1)
+   print*, 'stt kind, location ', my_task_id()
    print*,trim(string1), obs_kind
 endif
 
-ivar = get_progvar_index_from_kind(obs_kind)
-if (ivar > 0) then
-   goodkind = .true.
-else
-   goodkind = .false.
-   ! exceptions if the kind isn't directly
-   ! a field in the state vector:
-   select case (obs_kind)
-      case (KIND_TEMPERATURE)  ! potential temperature is in state vector not in-situ temp
-         goodkind = .true.
-      case (KIND_SALINITY)
-         goodkind = .true.
-   end select
-endif
-
-if (.not. goodkind) then
-   if (debug > 4) print *, 'kind rejected', obs_kind
-   istatus = 88
-   goto 100
-endif
-
+!>@ TODO FIXME TJH For 'identity' observations, Tim cannot remember what to do ...
 if (obs_kind < 0) then
-   call get_state_meta_data(obs_kind,loc1)
-   istatus = 0
+   write(string1,*) 'Trying to interpolate a KIND of ',obs_kind
+   write(string2,*) 'Tim cannot remember what to do ... FIXME'
+   call error_handler(E_ERR,'model_interpolate', string1, &
+              source, revision, revdate, text2=string2)
+endif
+
+! Make sure the DART state has the type (T,S,U,etc.) that we are asking for.
+! If we cannot, simply return and 'fail' with an 88
+
+ivar = get_progvar_index_from_kind(obs_kind)
+if (ivar < 1) then
+   istatus = 88
    return
 endif
 
+! Decode the location into bits for error messages ...
+llv  = get_location(location)
+lon  = llv(1)    ! degrees East [0,360)
+lat  = llv(2)    ! degrees North [-90,90]
+vert = llv(3)    ! depth in meters ... even 2D fields have a value of 0.0
 
-llv = get_location(loc1)
-lon  = llv(1)
-lat  = llv(2)
-vert = llv(3)
-!#! verttype = nint(query_location(loc1))
+! Generate the list of indices into the DART vector of the close candidates.
 
-do lev=1,max_num_layers-1
-   if ( vert .ge. layerdepth(lev).and.vert .le. layerdepth(lev+1) ) then
-           lower=lev+1
-           upper=lev
+call loc_get_close_obs(cc_gc, location, obs_kind, cell_locations, cell_kinds, &
+                       num_close, close_ind)
 
-           if ( layerdepth(upper) - vert .lt. layerdepth(lower) - vert) then
-                   vertlev=upper
-           else
-                   vertlev=lower
-           endif
+! Sometimes the location is outside the model domain.
+! In this case, we cannot interpolate.
+
+if (num_close == 0) then
+   istatus = 23
+   return
+endif
+
+! Loop over close candidates. They come in without regard to what DART KIND they are,
+! nor are they sorted by distance. We are only interested in the close locations
+! of the right DART KIND.
+
+closest = 1000000.0_r8 ! not very close
+closest_index = 0
+
+allocate(distances(num_close))
+num_wanted = 0
+CLOSE : do iclose = 1, num_close
+
+   indx = close_ind(iclose)
+
+   if (cell_kinds(indx) /= obs_kind) cycle CLOSE   !> @ TODO ... is this needed
+
+   num_wanted = num_wanted + 1
+   kind_name  = get_raw_obs_kind_name(cell_kinds(indx))
+   distances(num_wanted) = get_dist(location, cell_locations(indx))
+
+   if (distances(num_wanted) < closest) then
+      closest       = distances(num_wanted)
+      closest_index = indx
    endif
-enddo
 
-zin     = llv(3)
-zout    = llv(3)
+   if (debug > 0 .and. do_output()) then
 
-! if the vertical is missing to start with, return it the same way
-! with the requested type as out.
-if (zin == missing_r8) then
-   location = set_location(llv(1),llv(2),missing_r8,VERTISHEIGHT)
-   return
-endif
-locinstate=0
+      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distances(num_wanted)
 
-   cellid = find_closest_cell_center(lat, lon)
-!   cellid = find_closest_cell_center(lat, lon)
-   nodeid = nod3D_below_nod2D(vertlev,cellid)
-   tvars(1) = ivar
-   locinstate=(progvar(ivar)%dimlens(1)*(tvars(1)-1))+nodeid
-    if ( ( debug > 7 ) .and. do_output() ) then
-       print*, "CELLID: ",cellid, "NODEID: ", nodeid, "VERTLEV: ", vertlev
-       print*, "LONRAD: ",lonCell(cellid)*deg2rad,  "LATRAD: ",latCell(cellid)*deg2rad
-       print*, "LONDEG: ",lonCell(cellid),  "LATDEG: ",latCell(cellid)
-       print*, "DEPDEG: ",coord_nod3D(1,nodeid),"DEPDEG: ",coord_nod3D(2,nodeid)
-       print*, "TVARS : ",tvars(1),"LOCINSTATE: ", locinstate
-    endif
-   istatus=0
-   interp_val = x(locinstate)
-!endif
+   endif
 
-100 continue
+enddo CLOSE
 
-! this is for debugging - when we're confident the code is
-! returning consistent values and rc codes, both these tests can
-! be removed for speed.  FIXME.
-if (istatus /= 0 .and. interp_val /= MISSING_R8) then
-   write(string1,*) 'interp routine returned a bad status but not a MISSING_R8 value'
-   write(string2,*) 'value = ', interp_val, ' istatus = ', istatus
-   call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate, &
-                      text2=string2)
-endif
-if (istatus == 0 .and. interp_val == MISSING_R8) then
-   write(string1,*) 'interp routine returned a good status but set value to MISSING_R8'
-   call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
-endif
+! We just want the value of the closest cell/node/whatever
+
+interp_val = x(closest_index)
+istatus    = 0
 
 if (debug > 0) then
-   call write_location(0,loc1,charstring=string1)
+   call write_location(0,location,charstring=string1)
    print *, 'end kind, loc, val, rc:', my_task_id()
    print *, interp_val, istatus, obs_kind 
    print *, trim(string1)
 endif
 
+deallocate(distances)
 
 end subroutine model_interpolate
 
+!-----------------------------------------------------------------------
+!>
 
 function nc_write_model_atts( ncFileID ) result (ierr)
 
 ! TJH -- Writes the model-specific attributes to a netCDF file.
 !     This includes coordinate variables and some metadata, but NOT
 !     the model state vector.
-!
 ! assim_model_mod:init_diag_output uses information from the location_mod
 !     to define the location dimension and variable ID. All we need to do
 !     is query, verify, and fill ...
@@ -1320,7 +1293,7 @@ if ( .not. module_initialized ) call static_init_model
 ens_mean = filter_ens_mean
 
 if ((debug > 3) .and. do_output()) then
-   if (do_output()) print *, 'resetting ensemble mean: '
+   print *, 'resetting ensemble mean: '
    call print_variable_ranges(ens_mean)
 endif
 
@@ -1335,6 +1308,8 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
+if (allocated(cell_locations)) deallocate(cell_locations)
+if (allocated(cell_kinds))     deallocate(cell_kinds)
 
 call finalize_closest_center()
 
@@ -2421,25 +2396,23 @@ end function set_model_time_step
 
 subroutine read_grid_dims()
 
-! Read the grid dimensions from the MPAS netcdf file.
+! Read the grid dimensions from the FeoM metadata files.
 !
-! The file name comes from module storage ... namelist.
+! myDim_nod2D   : FeoM module read_node()
+! myDim_nod3D   : FeoM module read_aux3
 
-integer :: grid_id, dimid
+integer  :: grid_id, dimid
+real(r8) :: t0, t1, t2, t3, t4
 
-real              :: t0, t1, t2, t3, t4
+call read_node()  ! sets myDim_nod2D, myDim_nod3D
+call read_aux3()  ! sets max_num_layers
+call read_depth()
 
-if ( .not. module_initialized ) call static_init_model
+nCells      = myDim_nod2D
+nVertices   = myDim_nod3D
+nVertLevels = max_num_layers
 
-  call read_node
-  ! call read_elem
-  call read_aux3
-  call read_depth
-! get the ball rolling ...
-  nCells=myDim_nod2D
-  nVertices=myDim_nod3D
-  nVertLevels=max_num_layers
-if (debug > 4) then
+if (debug > 4 .and. do_output()) then
    write(*,*)
    write(*,*)'read_grid_dims: nCells        is ', nCells
    write(*,*)'read_grid_dims: nVertices     is ', nVertices
@@ -2453,11 +2426,8 @@ end subroutine read_grid_dims
 
 subroutine get_grid()
 
-! Read the actual grid values in from the MPAS netcdf file.
+! Read the actual grid values in from the FeoM metadata files.
 !
-! The file name comes from module storage ... namelist.
-! This reads in the following arrays:
-!   latCell, lonCell, all in module global storage)
 
 integer  :: ncid, VarID, numdims, dimlen, i
 
@@ -3560,667 +3530,33 @@ if (debug > 7) print *, 'internal code inconsistency: could not find vertical lo
 
 end subroutine find_depth_bounds
 
-!#! !------------------------------------------------------------------
-!#! 
-!#! subroutine find_vert_level(x, loc, nc, ids, oncenters, lower, upper, fract, ier)
-!#! 
-!#! ! given a location and 3 cell ids, return three sets of:
-!#! !  the two level numbers that enclose the given vertical
-!#! !  value plus the fraction between them for each of the 3 cell centers.
-!#! 
-!#! ! FIXME:  this handles data at cell centers, at edges, but not
-!#! ! data on faces.
-!#! 
-!#! real(r8),            intent(in)  :: x(:)
-!#! type(location_type), intent(in)  :: loc
-!#! integer,             intent(in)  :: nc, ids(:)
-!#! logical,             intent(in)  :: oncenters
-!#! integer,             intent(out) :: lower(:), upper(:)
-!#! real(r8),            intent(out) :: fract(:)
-!#! integer,             intent(out) :: ier
-!#! 
-!#! real(r8) :: lat, lon, vert, llv(3)
-!#! integer  :: i !#!verttype, i
-!#! integer  :: pt_base_offset, density_base_offset, qv_base_offset
-!#! 
-!#! ! the plan is to take in: whether this var is on cell centers or edges,
-!#! ! and the location so we can extract the vert value and which vert flag.
-!#! ! compute and return the lower and upper index level numbers that
-!#! ! enclose this vert, along with the fract between them.  ier is set
-!#! ! in case of error (e.g. outside the grid, on dry land, etc).
-!#! 
-!#! !$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!#! !#!  kinds we have to handle:
-!#! !#! vert_is_undef,    VERTISUNDEF
-!#! !#! vert_is_surface,  VERTISSURFACE
-!#! !#! vert_is_level,    VERTISLEVEL
-!#! !#! vert_is_pressure, VERTISPRESSURE
-!#! !#! vert_is_height,   VERTISHEIGHT
-!#! 
-!#! ! unpack the location into local vars
-!#! llv = get_location(loc)
-!#! lon  = llv(1)
-!#! lat  = llv(2)
-!#! vert = llv(3)
-!#! 
-!#! !#! verttype = nint(query_location(loc))
-!#! 
-!#! !#! ! these first 3 types need no cell/edge location information.
-!#! !#! if ((debug > 9) .and. do_output()) then
-!#! !#!    write(string2,'("vert, which_vert:",3F20.12,I5)') lon,lat,vert,verttype
-!#! !#!    call error_handler(E_MSG, 'find_vert_level',string2,source, revision, revdate)
-!#! !#! endif
-!#! 
-!#! !#!! no defined vertical location (e.g. vertically integrated vals)
-!#! !#!if (vert_is_undef(loc)) then
-!#! !#!   ier = 12
-!#! !#!   return
-!#! !#!endif
-!#! !#!
-!#! !#!! vertical is defined to be on the surface (level 1 here)
-!#! !#!if(vert_is_surface(loc)) then
-!#! !#!   lower(1:nc) = 1
-!#! !#!   upper(1:nc) = 2
-!#! !#!   fract(1:nc) = 0.0_r8
-!#! !#!   ier = 0
-!#! !#!   return
-!#! !#!endif
-!#! !#!
-!#! !#!! model level numbers (supports fractional levels)
-!#! !#!if(vert_is_level(loc)) then
-!#! !#!   ! FIXME: if this is W, the top is nVertLevels+1
-!#! !#!   if (vert > nVertLevels) then
-!#! !#!      ier = 12
-!#! !#!      return
-!#! !#!   endif
-!#! !#!
-!#! !#!   ! at the top we have to make the fraction 1.0; all other
-!#! !#!   ! integral levels can be 0.0 from the lower level.
-!#! !#!   if (vert == nVertLevels) then
-!#! !#!      lower(1:nc) = nint(vert) - 1   ! round down
-!#! !#!      upper(1:nc) = nint(vert)
-!#! !#!      fract(1:nc) = 1.0_r8
-!#! !#!      ier = 0
-!#! !#!      return
-!#! !#!   endif
-!#! !#!
-!#! !#!   lower(1:nc) = aint(vert)   ! round down
-!#! !#!   upper(1:nc) = lower+1
-!#! !#!   fract(1:nc) = vert - lower
-!#! !#!   ier = 0
-!#! !#!   return
-!#! !#!
-!#! !#!endif
-!#! !#!
-!#! !#!! ok, now we need to know where we are in the grid for depths or pressures
-!#! !#!! as the vertical coordinate.
-!#! !#!
-!#! !#!
-!#! !#!! Vertical interpolation for pressure coordinates
-!#! !#!if(vert_is_pressure(loc) ) then
-!#! !#!   ! Need to get base offsets for the potential temperature, density, and water
-!#! !#!   ! vapor mixing fields in the state vector
-!#! !#!! TJH   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
-!#! !#!! TJH   call get_index_range(KIND_DENSITY,          density_base_offset)
-!#! !#!! TJH   call get_index_range(KIND_VAPOR_MIXING_RATIO,    qv_base_offset)
-!#! !#!
-!#! !#!string1 = 'fix VERTISPRESSURE vertical interpolation for pressure - detritus from atmosphere'
-!#! !#!call error_handler(E_ERR,'find_vert_level',string1,source,revision,revdate)
-!#! !#!
-!#! !#!   do i=1, nc
-!#! !#!      call find_pressure_bounds(x, vert, ids(i), nVertLevels, &
-!#! !#!            pt_base_offset, density_base_offset, qv_base_offset,  &
-!#! !#!            lower(i), upper(i), fract(i), ier)
-!#! !#!      if ((debug > 9) .and. do_output()) &
-!#! !#!         print '(A,5(1x,I5),1x,F10.4)', &
-!#! !#!         '    after find_pressure_bounds: ier, i, cellid, lower, upper, fract = ', &
-!#! !#!              ier, i, ids(i), lower(i), upper(i), fract(i)
-!#! !#!      if ((debug > 5) .and. (ier /= 0) .and. do_output()) &
-!#! !#!         print '(A,4(1x,I5),1x,F10.4,1x,I3,1x,F10.4)', &
-!#! !#!        'fail in find_pressure_bounds: ier, nc, i, id, vert, lower, fract: ', &
-!#! !#!         ier, nc, i, ids(i), vert, lower(i), fract(i)
-!#! !#!
-!#! !#!      if (ier /= 0) return
-!#! !#!   enddo
-!#! !#!
-!#! !#!   return
-!#! !#!endif
-!#! !#!
-!#! !#!! grid is in depth, so this needs to know which cell to index into
-!#! !#!! for the column of depths and call the bounds routine.
-!#! !#!if(vert_is_height(loc)) then
-!#! 
-!#! !>@todo FIXME : you still will need to find your depth bounds
-!#! 
-!#!    ! For depth, can do simple vertical search for interpolation for now
-!#!    ! Get the lower and upper bounds and fraction for each column
-!#!    do i=1, nc
-!#!       if (oncenters) then
-!#!          ! call find_depth_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
-!#!          !                         lower(i), upper(i), fract(i), ier)
-!#!       else
-!#! 
-!#!          if (.not. data_on_edges) then
-!#!             call error_handler(E_ERR, 'find_vert_level', &
-!#!                               'Internal error: oncenters false but data_on_edges false', &
-!#!                               source, revision, revdate)
-!#!          endif
-!#!          !#! call find_depth_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
-!#!          !#!                         lower(i), upper(i), fract(i), ier)
-!#!       endif
-!#!       if (ier /= 0) return
-!#!    enddo
-!#! 
-!#! !#!   return
-!#! !#!endif
-!#! 
-!#! ! If we get here, the vertical type is not understood.  Should not
-!#! ! happen.
-!#! ier = 3
-!#! 
-!#! end subroutine find_vert_level
-
-!------------------------------------------------------------------
-
-!#! subroutine find_pressure_bounds(x, p, cellid, nbounds, &
-!#!    pt_base_offset, density_base_offset, qv_base_offset, &
-!#!    lower, upper, fract, ier)
-!#! 
-!#! ! Finds vertical interpolation indices and fraction for a quantity with
-!#! ! pressure vertical coordinate. Loops through the depth levels and
-!#! ! computes the corresponding pressure at the horizontal point.  nbounds is
-!#! ! the number of vertical levels in the potential temperature, density,
-!#! ! and water vapor grids.
-!#! 
-!#! real(r8),  intent(in)  :: x(:)
-!#! real(r8),  intent(in)  :: p
-!#! integer,   intent(in)  :: cellid
-!#! integer,   intent(in)  :: nbounds
-!#! integer,   intent(in)  :: pt_base_offset, density_base_offset, qv_base_offset
-!#! integer,   intent(out) :: lower, upper
-!#! real(r8),  intent(out) :: fract
-!#! integer,   intent(out) :: ier
-!#! 
-!#! integer  :: i, j, ier2
-!#! real(r8) :: pressure(nbounds), pr
-!#! 
-!#! ! Initialize to bad values so unset returns will be caught.
-!#! fract = -1.0_r8
-!#! lower = -1
-!#! upper = -1
-!#! 
-!#! ! Find the lowest pressure
-!#! call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-!#!    qv_base_offset, cellid, 1, nbounds, pressure(1), ier)
-!#! !print *, 'find p bounds2, pr(1) = ', pressure(1), ier
-!#! if(ier /= 0) return
-!#! 
-!#! ! Get the highest pressure level
-!#! call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-!#!    qv_base_offset, cellid, nbounds, nbounds, pressure(nbounds), ier)
-!#! !print *, 'find p bounds2, pr(n) = ', pressure(nbounds), ier
-!#! if(ier /= 0) return
-!#! 
-!#! ! Check for out of the column range
-!#! ier = 0
-!#! if(p > pressure(1)) ier = 88
-!#! if(p < pressure(nbounds)) ier = 888
-!#! if (ier /= 0) return
-!#! 
-!#! ! Loop through the rest of the column from the bottom up
-!#! do i = 2, nbounds
-!#!    call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-!#!       qv_base_offset, cellid, i, nbounds, pressure(i), ier)
-!#! !print *, 'find p bounds i, pr(i) = ', i, pressure(i), ier
-!#!    if (ier /= 0) return
-!#! 
-!#!    ! Check if pressure at lower level is higher than at upper level.
-!#!    if(pressure(i) > pressure(i-1)) then
-!#!       if ((debug > 0) .and. do_output()) then
-!#!       write(string1, *) 'lower pressure larger than upper pressure at cellid',  cellid
-!#!       write(string2, *) 'level nums, pressures: ', i-1,i,pressure(i-1),pressure(i)
-!#!       write(*,*) 'find_pressure_bounds: ', trim(string1), trim(string2)
-!#!       endif
-!#!       if ((debug > 5) .and. do_output())  then
-!#!       do j = 1, nbounds
-!#!          call get_interp_pressure(x, pt_base_offset, density_base_offset, &
-!#!             qv_base_offset, cellid, j, nbounds, pr, ier2, .true.)
-!#!       enddo
-!#!       endif
-!#! 
-!#!       ier = 988
-!#!       return
-!#! 
-!#!       !call error_handler(E_ERR, "find_pressure_bounds", string1, &
-!#!       !   source, revision, revdate, text2=string2)
-!#!    endif
-!#! 
-!#!    ! Is pressure between i-1 and i level?
-!#!    if(p > pressure(i)) then
-!#!       lower = i - 1
-!#!       upper = i
-!#!       if (pressure(i) == pressure(i-1)) then
-!#!          fract = 0.0_r8
-!#!       else if (log_p_vert_interp) then
-!#!          fract = exp((log(p) - log(pressure(i-1))) / &
-!#!                     (log(pressure(i)) - log(pressure(i-1))))
-!#!       else
-!#!          fract = (p - pressure(i-1)) / (pressure(i) - pressure(i-1))
-!#!       endif
-!#! 
-!#!       if ((debug > 9) .and. do_output()) print '(A,3F26.18,2I4,F22.18)', &
-!#!          "find_pressure_bounds: p_in, pr(i-1), pr(i), lower, upper, fract = ", &
-!#!          p, pressure(i-1), pressure(i), lower, upper, fract
-!#! 
-!#!       return
-!#!    endif
-!#! 
-!#! end do
-!#! 
-!#! ! should never get here because pressures above and below the column
-!#! ! were tested for at the start of this routine.  if you get here
-!#! ! there is a coding error.
-!#! ier = 3
-!#! 
-!#! end subroutine find_pressure_bounds
-
-!#! !------------------------------------------------------------------
-!#! 
-!#! subroutine get_interp_pressure(x, pt_offset, density_offset, qv_offset, &
-!#!    cellid, lev, nlevs, pressure, ier, debug)
-!#! 
-!#! ! Finds the value of pressure at a given point at model level lev
-!#! 
-!#! real(r8), intent(in)  :: x(:)
-!#! integer,  intent(in)  :: pt_offset, density_offset, qv_offset
-!#! integer,  intent(in)  :: cellid
-!#! integer,  intent(in)  :: lev, nlevs
-!#! real(r8), intent(out) :: pressure
-!#! integer,  intent(out) :: ier
-!#! logical,  intent(in), optional :: debug
-!#! 
-!#! integer  :: offset
-!#! real(r8) :: pt, density, qv, tk
-!#! 
-!#! 
-!#! ! Get the values of potential temperature, density, and vapor
-!#! offset = (cellid - 1) * nlevs + lev - 1
-!#! pt = x(pt_offset + offset)
-!#! density = x(density_offset + offset)
-!#! qv = x(qv_offset + offset)
-!#! 
-!#! ! Error if any of the values are missing; probably will be all or nothing
-!#! if(pt == MISSING_R8 .or. density == MISSING_R8 .or. qv == MISSING_R8) then
-!#!    ier = 2
-!#!    return
-!#! endif
-!#! 
-!#! ! Convert theta, rho, qv into pressure
-!#! call compute_full_pressure(pt, density, qv, pressure, tk)
-!#! 
-!#! if (present(debug)) then
-!#!    if (debug) then
-!#!       write(*,*) 'get_interp_pressure: cellid, lev', cellid, lev
-!#!       write(*,*) 'get_interp_pressure: pt,rho,qv,p,tk', pt, density, qv, pressure, tk
-!#!    endif
-!#! endif
-!#! 
-!#! ! Default is no error
-!#! ier = 0
-!#! 
-!#! end subroutine get_interp_pressure
-
-!#! !------------------------------------------------------------
-!#! 
-!#! subroutine get_3d_weights(p, v1, v2, v3, lat, lon, weights)
-!#! 
-!#! ! Given a point p (x,y,z) inside a triangle, and the (x,y,z)
-!#! ! coordinates of the triangle corner points (v1, v2, v3),
-!#! ! find the weights for a barycentric interpolation.  this
-!#! ! computation only needs two of the three coordinates, so figure
-!#! ! out which quadrant of the sphere the triangle is in and pick
-!#! ! the 2 axes which are the least planar:
-!#! !  (x,y) near the poles,
-!#! !  (y,z) near 0 and 180 longitudes near the equator,
-!#! !  (x,z) near 90 and 270 longitude near the equator.
-!#! ! (lat/lon are the coords of p. we could compute them here
-!#! ! but since in all cases we already have them, pass them
-!#! ! down for efficiency)
-!#! 
-!#! real(r8), intent(in)  :: p(3)
-!#! real(r8), intent(in)  :: v1(3), v2(3), v3(3)
-!#! real(r8), intent(in)  :: lat, lon
-!#! real(r8), intent(out) :: weights(3)
-!#! 
-!#! real(r8) :: cxs(3), cys(3)
-!#! 
-!#! ! above or below 45 in latitude, where -90 < lat < 90:
-!#! if (lat >= 45.0_r8 .or. lat <= -45.0_r8) then
-!#!    cxs(1) = v1(1)
-!#!    cxs(2) = v2(1)
-!#!    cxs(3) = v3(1)
-!#!    cys(1) = v1(2)
-!#!    cys(2) = v2(2)
-!#!    cys(3) = v3(2)
-!#!    call get_barycentric_weights(p(1), p(2), cxs, cys, weights)
-!#!    return
-!#! endif
-!#! 
-!#! ! nearest 0 or 180 in longitude, where 0 < lon < 360:
-!#! if ( lon <= 45.0_r8 .or. lon >= 315.0_r8 .or. &
-!#!     (lon >= 135.0_r8 .and. lon <= 225.0_r8)) then
-!#!    cxs(1) = v1(2)
-!#!    cxs(2) = v2(2)
-!#!    cxs(3) = v3(2)
-!#!    cys(1) = v1(3)
-!#!    cys(2) = v2(3)
-!#!    cys(3) = v3(3)
-!#!    call get_barycentric_weights(p(2), p(3), cxs, cys, weights)
-!#!    return
-!#! endif
-!#! 
-!#! ! last option, nearest 90 or 270 in lon:
-!#! cxs(1) = v1(1)
-!#! cxs(2) = v2(1)
-!#! cxs(3) = v3(1)
-!#! cys(1) = v1(3)
-!#! cys(2) = v2(3)
-!#! cys(3) = v3(3)
-!#! call get_barycentric_weights(p(1), p(3), cxs, cys, weights)
-!#! 
-!#! end subroutine get_3d_weights
-!#! 
-!#! 
-!#! !------------------------------------------------------------
-!#! 
-!#! subroutine get_barycentric_weights(x, y, cxs, cys, weights)
-!#! 
-!#! ! Computes the barycentric weights for a 2d interpolation point
-!#! ! (x,y) in a 2d triangle with the given (cxs,cys) corners.
-!#! 
-!#! real(r8), intent(in)  :: x, y, cxs(3), cys(3)
-!#! real(r8), intent(out) :: weights(3)
-!#! 
-!#! real(r8) :: denom
-!#! 
-!#! ! Get denominator
-!#! denom = (cys(2) - cys(3)) * (cxs(1) - cxs(3)) + &
-!#!    (cxs(3) - cxs(2)) * (cys(1) - cys(3))
-!#! 
-!#! weights(1) = ((cys(2) - cys(3)) * (x - cxs(3)) + &
-!#!    (cxs(3) - cxs(2)) * (y - cys(3))) / denom
-!#! 
-!#! weights(2) = ((cys(3) - cys(1)) * (x - cxs(3)) + &
-!#!    (cxs(1) - cxs(3)) * (y - cys(3))) / denom
-!#! 
-!#! weights(3) = 1.0_r8 - weights(1) - weights(2)
-!#! 
-!#! ! FIXME: i want to remove this code.  does it affect the answers?
-!#! if (any(abs(weights) < roundoff)) then
-!#!    !print *, 'get_barycentric_weights due to roundoff errors: ', weights
-!#!    where (abs(weights) < roundoff) weights = 0.0_r8
-!#!    where (abs(1.0_r8 - abs(weights)) < roundoff) weights = 1.0_r8
-!#! endif
-!#! if(abs(sum(weights)-1.0_r8) > roundoff) &
-!#!    print *, 'fail in get_barycentric_weights: sum(weights) = ',sum(weights)
-!#! !end FIXME section
-!#! 
-!#! end subroutine get_barycentric_weights
-!#! 
-!#! 
-!#! !------------------------------------------------------------
-!#! 
-!#! subroutine compute_scalar_with_barycentric(x, loc, n, ival, dval, ier)
-!#! real(r8),            intent(in)  :: x(:)
-!#! type(location_type), intent(in)  :: loc
-!#! integer,             intent(in)  :: n
-!#! integer,             intent(in)  :: ival(:)
-!#! real(r8),            intent(out) :: dval(:)
-!#! integer,             intent(out) :: ier
-!#! 
-!#! real(r8) :: fract(3), lowval(3), uppval(3), fdata(3), weights(3)
-!#! integer  :: lower(3), upper(3), c(3), nvert, index1, k, i, nc
-!#! 
-!#! dval = MISSING_R8
-!#! 
-!#! call find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
-!#! if(ier /= 0) return
-!#! 
-!#! dval = 0.0_r8
-!#! do k=1, n
-!#!    ! get the starting index in the state vector
-!#!    index1 = progvar(ival(k))%index1
-!#!    nvert = progvar(ival(k))%numvertical
-!#! 
-!#!    ! go around triangle and interpolate in the vertical
-!#!    ! t1, t2, t3 are the xyz of the cell centers
-!#!    ! c(3) are the cell ids
-!#!    do i = 1, nc
-!#!       lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
-!#!       uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
-!#!       fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
-!#!       if((debug > 9) .and. do_output()) &
-!#!       print '(A,I2,A,I2,5f12.5)','compute_scalar_with_barycentric: nv=',k,' ic =',i, &
-!#!                                   lowval(i),uppval(i),fdata(i),fract(i),weights(i)
-!#! 
-!#!    enddo
-!#! 
-!#!    ! now have vertically interpolated values at cell centers.
-!#!    ! use weights to compute value at interp point.
-!#!    dval(k) = sum(weights(1:nc) * fdata(1:nc))
-!#! !print *, 'k, dval(k) = ', k, dval(k)
-!#! enddo
-!#! 
-!#! ier = 0
-!#! 
-!#! end subroutine compute_scalar_with_barycentric
-!#! 
-!#! !------------------------------------------------------------
-!#! 
-!#! subroutine find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
-!#! real(r8),            intent(in)  :: x(:)
-!#! type(location_type), intent(in)  :: loc
-!#! integer,             intent(out) :: nc
-!#! integer,             intent(out) :: c(:)
-!#! integer,             intent(out) :: lower(:), upper(:)
-!#! real(r8),            intent(out) :: fract(:)
-!#! real(r8),            intent(out) :: weights(:)
-!#! integer,             intent(out) :: ier
-!#! 
-!#! ! compute the values at the correct vertical level for each
-!#! ! of the 3 cell centers defining a triangle that encloses the
-!#! ! the interpolation point, then interpolate once in the horizontal
-!#! ! using barycentric weights to get the value at the interpolation point.
-!#! 
-!#! integer, parameter :: listsize = 30
-!#! integer  :: nedges, i !#!, neighborcells(maxEdges), edgeid
-!#! real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-!#! real(r8) :: t1(3), t2(3), t3(3), r(3)
-!#! integer  :: cellid, verts(listsize), closest_vert
-!#! real(r8) :: lat, lon, vert, llv(3)
-!#! integer  :: vindex, v, vp1
-!#! !#! integer  :: verttype, vindex, v, vp1
-!#! logical  :: inside, foundit
-!#! 
-!#! 
-!#! ! initialization
-!#!       c = MISSING_R8
-!#!   lower = MISSING_R8
-!#!   upper = MISSING_R8
-!#!   fract = 0.0_r8
-!#! weights = 0.0_r8
-!#!     ier = 0
-!#!      nc = 1
-!#! 
-!#! ! unpack the location into local vars
-!#! llv = get_location(loc)
-!#! lon  = llv(1)
-!#! lat  = llv(2)
-!#! vert = llv(3)
-!#! !#! verttype = nint(query_location(loc))
-!#! 
-!#! cellid = find_closest_cell_center(lat, lon)
-!#! !#! if ((xyzdebug > 5) .and. do_output()) &
-!#! !#!    print *, 'closest cell center for lon/lat: ', lon, lat, cellid
-!#! if (cellid < 1) then
-!#!    ier = 11  
-!#!    return
-!#! endif
-!#! 
-!#! c(1) = cellid
-!#! 
-!#! !>@tod FIXME : you may want something similar but not how mpas does it
-!#! !$! if (on_boundary(cellid)) then
-!#! !$!    ier = 12
-!#! !$!    return
-!#! !$! endif
-!#! 
-!#! !>@tod FIXME : you may want something similar but not how mpas does it
-!#! !$! if (.not. inside_cell(cellid, lat, lon)) then
-!#! !$!    ier = 13
-!#! !$!    return
-!#! !$! endif
-!#! 
-!#! !>@tod FIXME : you may want something similar but not how mpas does it
-!#! !$! ! closest vertex to given point.
-!#! !$! closest_vert = closest_vertex_ll(cellid, lat, lon)
-!#! !$! if ((xyzdebug > 5) .and. do_output()) &
-!#! !$!    print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
-!#! 
-!#! ! collect the neighboring cell ids and vertex numbers
-!#! ! this 2-step process avoids us having to read in the
-!#! ! cellsOnCells() array which i think we only need here.
-!#! ! if it comes up in more places, we can give up the space
-!#! ! and read it in and then this is a direct lookup.
-!#! ! also note which index is the closest vert and later on
-!#! ! we can start the triangle search there.
-!#! vindex = 1
-!#! nedges = 3 !truenEdgesOnCell(cellid)
-!#! 
-!#! !#! do i=1, nedges
-!#! !#!    edgeid = edgesOnCell(i, cellid)
-!#! !#!    if (cellsOnEdge(1, edgeid) /= cellid) then
-!#! !#!       neighborcells(i) = cellsOnEdge(1, edgeid)
-!#! !#!    else
-!#! !#!       neighborcells(i) = cellsOnEdge(2, edgeid)
-!#! !#!    endif
-!#! !#!    verts(i) = verticesOnCell(i, cellid)
-!#! !#!    if (verts(i) == closest_vert) vindex = i
-!#! !#!    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
-!#! !#!       xdata(i), ydata(i), zdata(i))
-!#! !#! enddo
-!#! 
-!#! !>@todo FIXME : should not need to convert between latlon and xyz
-!#! !#! ! get the cartesian coordinates in the cell plane for the closest center
-!#! !#! call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
-!#! !#!  
-!#! !#! !and the observation point
-!#! !#! call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
-!#! 
-!#! if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
-!#! 
-!#!    ! need vert index for the vertical level
-!#!    nc = 1
-!#! 
-!#!    ! This is a grid point - horiz interpolation NOT needed
-!#!    weights(1) = 1.0_r8
-!#! 
-!#! else                       ! an arbitrary point
-!#! 
-!#! ! find the cell-center-tri that encloses the obs point
-!#! ! figure out which way vertices go around cell?
-!#! foundit = .false.
-!#! findtri: do i=vindex, vindex+nedges
-!#!    v = mod(i-1, nedges) + 1
-!#!    vp1 = mod(i, nedges) + 1
-!#!    t2(1) = xdata(v)
-!#!    t2(2) = ydata(v)
-!#!    t2(3) = zdata(v)
-!#!    t3(1) = xdata(vp1)
-!#!    t3(2) = ydata(vp1)
-!#!    t3(3) = zdata(vp1)
-!#!    call inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
-!#!    if (inside) then
-!#!       ! weights are the barycentric weights for the point r
-!#!       ! in the triangle formed by t1, t2, t3.
-!#!       ! v and vp1 are vert indices which are same indices
-!#!       ! for cell centers
-!#! ! FIXME: i want to remove this code.  does it affect the answers?
-!#!       if(any(weights == 1.0_r8)) then
-!#!          nc = 1
-!#! !      else
-!#! !end FIXME section
-!#! !         nc = 3
-!#! !         c(2) = neighborcells(v)
-!#! !         c(3) = neighborcells(vp1)
-!#! ! FIXME: i want to remove this code.  does it affect the answers?
-!#!       endif
-!#! !end FIXME section
-!#!       foundit = .true.
-!#!       exit findtri
-!#!    endif
-!#! enddo findtri
-!#! if (.not. foundit) then
-!#!    ier = 14     ! 11
-!#!    return
-!#! endif
-!#! 
-!#! endif     ! horizontal index search is done now.
-!#! 
-!#! ! need vert index for the vertical level
-!#! call find_vert_level(x, loc, nc, c, .true., lower, upper, fract, ier)
-!#! if(ier /= 0) return
-!#! 
-!#! if ((debug > 9) .and. do_output()) then
-!#!    write(string3,*) 'ier = ',ier, ' triangle = ',c(1:nc), ' vert_index = ',lower(1:nc)+fract(1:nc)
-!#!    call error_handler(E_MSG, 'find_triangle_vert_indices', string3, source, revision, revdate)
-!#! endif
-!#! 
-!#! if ((debug > 8) .and. do_output()) then
-!#!    print *, 'nc = ', nc
-!#!    print *, 'c = ', c
-!#!    print *, 'lower = ', lower(1:nc)
-!#!    print *, 'upper = ', upper(1:nc)
-!#!    print *, 'fract = ', fract(1:nc)
-!#!    print *, 'weights = ', weights
-!#!    print *, 'ier = ', ier
-!#! endif
-!#! 
-!#! end subroutine find_triangle_vert_indices
-
-
+!------------------------------------------------------------
+! Deleted a lot of routines that came right from MPAS_OCN.
+! If we need them, we know where to look.
 !------------------------------------------------------------
 
 subroutine init_closest_center()
 
-! use nCells, latCell, lonCell to initialize a GC structure
-! to be used later in find_closest_cell_center().
-
-! set up a GC in the locations mod
-
-integer :: i
-
-allocate(cell_locs(nCells))
-do i=1, nCells
-   cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8,VERTISHEIGHT)
-enddo
+! initialize a GC structure that sets up the lookup table
+! to speed up the identification of the grid location closest to
+! any arbitrary location
 
 ! the width really isn't used anymore, but it's part of the
 ! interface so we have to pass some number in.
-call get_close_maxdist_init(cc_gc, 1.0_r8)
-call get_close_obs_init(cc_gc, nCells, cell_locs)
+call get_close_maxdist_init(cc_gc, maxdist=1.0_r8)
+call get_close_obs_init(cc_gc, model_size, cell_locations)
 
 end subroutine init_closest_center
 
 !------------------------------------------------------------
 
-function find_closest_cell_center(lat, lon)
+function find_closest_node(lat, lon)
 
 ! Determine the cell index for the closest center to the given point
 ! 2D calculation only.
 
 real(r8), intent(in)  :: lat, lon
-integer               :: find_closest_cell_center
+integer               :: find_closest_node
 
 type(location_type) :: pointloc
 integer :: closest_cell, rc
@@ -4235,32 +3571,32 @@ endif
 pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
 
 !@>todo FIXME : need to figure out which routine to use to find center.
-find_closest_cell_center = 1
+find_closest_node = 1
 
 !@> tim shoud know.
-!#! call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
+!#! call find_nearest(cc_gc, pointloc, cell_locations, closest_cell, rc)
 !#! 
 !#! ! decide what to do if we don't find anything.
 !#! if (rc /= 0 .or. closest_cell < 0) then
 !#!    if ((debug > 8) .and. do_output()) &
 !#!        print *, 'cannot find nearest cell to lon, lat: ', lon, lat
-!#!    find_closest_cell_center = -1
+!#!    find_closest_node = -1
 !#!    return
 !#! endif
 !#! 
 !#! ! this is the cell index for the closest center
- find_closest_cell_center = 1
-! find_closest_cell_center = closest_cell
+ find_closest_node = 1
+! find_closest_node = closest_cell
 
-end function find_closest_cell_center
+end function find_closest_node
 
 !------------------------------------------------------------
 
 subroutine finalize_closest_center()
 
-! get rid of storage associated with GC for cell centers.
+! get rid of storage associated with get close lookup table
 
-!call xyz_get_close_obs_destroy(cc_gc)
+call get_close_obs_destroy(cc_gc)
 
 end subroutine finalize_closest_center
 

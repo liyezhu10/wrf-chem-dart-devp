@@ -55,7 +55,7 @@ foreach TARGET ( mkmf_* )
 end
 
 # for debug do not remove .o or .mod files
-#\rm -f *.o *.mod input.nml*_default
+\rm -f *.o *.mod
 \rm -f input.nml*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
@@ -83,6 +83,7 @@ endif
 #----------------------------------------------------------------------
 
 \rm -f filter wakeup_filter
+\rm -f *.o *.mod 
 
 @ n = $n + 1
 echo
