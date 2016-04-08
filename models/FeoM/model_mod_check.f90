@@ -16,7 +16,7 @@ use    utilities_mod, only : initialize_utilities, finalize_utilities, nc_check,
                              check_namelist_read, nmlfileunit, do_nml_file, do_nml_term, &
                              E_MSG, E_ERR, error_handler, get_unit
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
-                             LocationDims, get_location
+                             LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
                              KIND_TEMPERATURE,           &
                              KIND_SALINITY
@@ -109,7 +109,7 @@ call check_namelist_read(iunit, io, "model_mod_check_nml")
 if (do_nml_file()) write(nmlfileunit, nml=model_mod_check_nml)
 if (do_nml_term()) write(     *     , nml=model_mod_check_nml)
 
-loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3))
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 mykindindex = get_raw_obs_kind_index(kind_of_interest)
 
 if (test1thru < 1) goto 999
@@ -256,7 +256,7 @@ write(*,*)'TEST 7 : '
 write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
 write(*,*)'---------------------------------------'
 
-loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3))
+loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 
@@ -432,7 +432,7 @@ do i = 1,get_model_size()
    call get_state_meta_data(i, loc1, var_type)
 
    if ( (var_type == mykindindex) .or. (mykindindex < 0) ) then
-      loc0        = set_location(rlon, rlat, rlev)
+      loc0        = set_location(rlon, rlat, rlev, VERTISHEIGHT)
       thisdist(i) = get_dist( loc1, loc0 )
       matched     = .true.
    endif
@@ -533,7 +533,7 @@ do ilon = 1, nlon
       do kvert = 1, nvert
          vert(kvert) = interp_test_vertrange(1) + real(kvert-1,r8) * interp_test_dvert
 
-         loc = set_location(lon(ilon), lat(jlat), vert(kvert))
+         loc = set_location(lon(ilon), lat(jlat), vert(kvert), VERTISHEIGHT)
 
          call model_interpolate(statevector, loc, mykindindex, field(ilon,jlat,kvert), ios_out)
          write(iunit,*) field(ilon,jlat,kvert)
