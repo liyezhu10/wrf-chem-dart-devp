@@ -2496,7 +2496,7 @@ real              :: t0, t1, t2, t3, t4
 if ( .not. module_initialized ) call static_init_model
 
   call read_node
-  call read_elem
+  ! call read_elem
   call read_aux3
   call read_depth
 ! get the ball rolling ...
@@ -4301,6 +4301,8 @@ endif
 pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
 
 !@>todo FIXME : need to figure out which routine to use to find center.
+find_closest_cell_center = 1
+
 !@> tim shoud know.
 !#! call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
 !#! 
