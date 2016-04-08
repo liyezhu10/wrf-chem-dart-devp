@@ -6,7 +6,7 @@
 
 module model_mod
 
-! MPAS ocean model interface to the DART data assimilation system.
+! FEOM ocean model interface to the DART data assimilation system.
 ! code in this module is compiled with the DART executables.  It isolates
 ! all information about the MPAS grids, model variables, and other details.
 ! There are a set of 16 subroutine interfaces that are required by DART;
@@ -81,18 +81,6 @@ use    feom_modules
 ! netcdf modules
 use typesizes
 use netcdf
-
-! RBF (radial basis function) modules, donated by LANL. currently deprecated
-! in this version.  they did the job but not as well as other techniques and
-! at a much greater execution-time code.  they were used to interpolate
-! values at arbitrary locations, not just at cell centers.  with too small
-! a set of basis points, the values were discontinuous at cell boundaries;
-! with too many the values were too smoothed out.  we went back to
-! barycentric interpolation in triangles formed by the three cell centers
-! that enclosed the given point.
-!use get_geometry_mod
-!use get_reconstruct_mod
-
 
 implicit none
 private
@@ -176,21 +164,12 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 !>@todo FIXME : probably do not need xyzdebug statements since not using xyz_location_mod.f90
 !#! integer            :: xyzdebug = 0
 character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_analysis_filename = 'mpas_analysis.nc'
-character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
-
-! if .false. use U/V reconstructed winds tri interp at centers for wind forward ops
-! if .true.  use edge normal winds (u) with RBF functs for wind forward ops
-
-! if using rbf, options 1,2,3 control how many points go into the rbf.
-! larger numbers use more points from further away
-
-! if .false. edge normal winds (u) should be in state vector and are written out directly
-! if .true.  edge normal winds (u) are updated based on U/V reconstructed winds
+character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
+!#!character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
 
 namelist /model_nml/             &
    model_analysis_filename,      &
-   grid_definition_filename,     &
+   !#!grid_definition_filename,     &
    output_state_vector,          &
    !#! vert_localization_coord,      &
    assimilation_period_days,     &
@@ -250,41 +229,13 @@ type(location_type),allocatable   :: cell_locs(:)
 
 integer :: nCells        = -1  ! Total number of cells making up the grid
 integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
-!#! integer :: nEdges        = -1  ! Straight lines between vertices making up cells
-!#! integer :: maxEdges      = -1  ! Largest number of edges a cell can have
 integer :: nVertLevels   = -1  ! Vertical levels; count of vert cell centers
-! integer :: nVertLevelsP1 = -1  ! Vert levels plus 1; count of vert cell faces
 
 ! scalar grid positions
-
-!#! real(r8), allocatable :: xEdge(:), yEdge(:), zEdge(:)
-!#! real(r8), allocatable :: lonEdge(:) ! edge longitudes (degrees, original radians in file)
-!#! real(r8), allocatable :: latEdge(:) ! edge longitudes (degrees, original radians in file)
-
 real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
 real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
 
-!$! real(r8), allocatable :: zGridEdge(:,:)   ! geometric depth at edge centers (nVertLevels,  nEdges)
-
-!$! real(r8), allocatable :: zMid(:,:)    ! depths at midpoints - may be able to be computed instead
-                                      !  of requiring it in the input file (save file space). FIXME
 real(r8), allocatable :: hZLevel(:)   ! layer thicknesses - maybe - FIXME
-!$! real(r8), allocatable :: zEdgeCenter(:,:) ! geometric height at edges faces  (nVertLevels  ,nEdges)
-
-!$! integer,  allocatable :: verticesOnCell(:,:)
-
-!$! integer,  allocatable :: edgesOnCell(:,:) ! list of edges that bound each cell
-!$! integer,  allocatable :: cellsOnEdge(:,:) ! list of cells that bound each edge
-!$! integer,  allocatable :: nedgesOnCell(:) ! list of edges that bound each cell
-!$! real(r8), allocatable :: edgeNormalVectors(:,:)
-
-! Boundary information might be needed ... regional configuration?
-! Read if available.
-
-!$! integer,  allocatable :: boundaryCell(:,:) ! logical, cells that are on boundaries
-!$! integer,  allocatable :: maxLevelEdgeTop(:) !
-!$! integer,  allocatable :: boundaryEdge(:,:) ! logical, edges that are boundaries
-!$! integer,  allocatable :: boundaryVertex(:,:) ! logical, vertices that are on boundaries
 !$! integer,  allocatable :: maxLevelCell(:) ! list of maximum (deepest) level for each cell
 
 real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
@@ -295,8 +246,6 @@ type(time_type) :: model_timestep      ! smallest time to adv model
 ! useful flags in making decisions when searching for points, etc
 !$! logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
 !$! logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
-!$! logical :: has_edge_u = .false.        ! true = has original normal u on edges
-!$! logical :: has_uvreconstruct = .false. ! true = has reconstructed at centers
 
 ! Do we have any state vector items located on the cell edges?
 ! If not, avoid reading in or using the edge arrays to save space.
@@ -446,7 +395,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! 3) read them from the analysis file
 
 ! read_grid_dims() fills in the following module global variables:
-!  nCells, nVertices, nEdges, maxEdges, nVertLevels, , 
+!  nCells, nVertices, nVertLevels, , 
 call read_grid_dims()
 
 allocate(latCell(nCells), lonCell(nCells))
@@ -457,8 +406,6 @@ allocate(hZLevel(nVertLevels))
 data_on_edges = .false.
 call get_grid()
 
-! determine which edges are boundaries
-! (this requires 'maxLevelEdgeTop' to exist in the restart file)
 ! determine which cells are on boundaries
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
@@ -666,7 +613,7 @@ endif
 nzp  = progvar(nf)%numvertical
 iloc = 1 + (myindx-1) / nzp    ! cell index
 vloc = myindx - (iloc-1)*nzp   ! vertical level index
-print*, "nzp,iloc,vloc: ",nzp,iloc,vloc
+!  print*, "nzp,iloc,vloc: ",nzp,iloc,vloc
 
 ! the zGrid array contains the location of the cell top and bottom faces, so it has one
 ! more value than the number of cells in each column.  for locations of cell centers
@@ -678,7 +625,7 @@ depth=layerdepth(vloc)
   location = set_location(lonCell(iloc),latCell(iloc), depth, VERTISHEIGHT)
 ! endif
 
-print*, "lonCell(iloc),latCell(iloc): ",lonCell(iloc),latCell(iloc)
+!print*, "lonCell(iloc),latCell(iloc): ",lonCell(iloc),latCell(iloc)
 
 ! Let us return the vert location with the requested vertical localization coordinate
 ! hoping that the code can run faster when same points are close to many obs
@@ -841,6 +788,7 @@ endif
 locinstate=0
 
    cellid = find_closest_cell_center(lat, lon)
+!   cellid = find_closest_cell_center(lat, lon)
    nodeid = nod3D_below_nod2D(vertlev,cellid)
    tvars(1) = ivar
    locinstate=(progvar(ivar)%dimlens(1)*(tvars(1)-1))+nodeid
@@ -925,7 +873,7 @@ integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 integer :: nodes_3DimID
 integer :: nodes_2DimID
 integer :: nCellsDimID
-integer :: nEdgesDimID, maxEdgesDimID
+!#!integer :: nEdgesDimID, maxEdgesDimID
 integer :: nVerticesDimID
 integer :: VertexDegreeDimID
 integer :: nVertLevelsDimID
@@ -1116,9 +1064,9 @@ else
    ! and parrot them to the DART output file.
    !----------------------------------------------------------------------------
 
-   call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
-                 'nc_write_model_atts','open '//trim(grid_definition_filename))
-   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
+!#!  call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
+!#!              'nc_write_model_atts','open '//trim(grid_definition_filename))
+!#!   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
 endif
 
 !-------------------------------------------------------------------------------
@@ -1387,18 +1335,6 @@ subroutine end_model()
 
 if (allocated(latCell))        deallocate(latCell)
 if (allocated(lonCell))        deallocate(lonCell)
-!#! if (allocated(nEdgesOnCell))   deallocate(nEdgesOnCell)
-!#! if (allocated(edgesOnCell))    deallocate(edgesOnCell)
-!#! if (allocated(cellsOnEdge))    deallocate(cellsOnEdge)
-!#! if (allocated(verticesOnCell)) deallocate(verticesOnCell)
-!#! if (allocated(edgeNormalVectors)) deallocate(edgeNormalVectors)
-!>@todo FIXME I do not think you need edge information
-!#! if (allocated(zGridEdge))      deallocate(zGridEdge)
-!#! if (allocated(xEdge))          deallocate(xEdge)
-!#! if (allocated(yEdge))          deallocate(yEdge)
-!#! if (allocated(zEdge))          deallocate(zEdge)
-!#! if (allocated(latEdge))        deallocate(latEdge)
-!#! if (allocated(lonEdge))        deallocate(lonEdge)
 
 call finalize_closest_center()
 
@@ -2502,13 +2438,11 @@ if ( .not. module_initialized ) call static_init_model
 ! get the ball rolling ...
   nCells=myDim_nod2D
   nVertices=myDim_nod3D
-  !#! nEdges=missing_I
   nVertLevels=max_num_layers
 if (debug > 4) then
    write(*,*)
    write(*,*)'read_grid_dims: nCells        is ', nCells
    write(*,*)'read_grid_dims: nVertices     is ', nVertices
-!   write(*,*)'read_grid_dims: nEdges        is ', nEdges
    write(*,*)'read_grid_dims: nVertLevels   is ', nVertLevels
 endif
 
@@ -4315,7 +4249,8 @@ find_closest_cell_center = 1
 !#! endif
 !#! 
 !#! ! this is the cell index for the closest center
-!#! find_closest_cell_center = closest_cell
+ find_closest_cell_center = 1
+! find_closest_cell_center = closest_cell
 
 end function find_closest_cell_center
 
