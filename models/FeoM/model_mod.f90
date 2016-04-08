@@ -45,7 +45,7 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              ! vert_is_surface,      VERTISSURFACE,              &
                              ! vert_is_level,        VERTISLEVEL,                &
                              ! vert_is_pressure,     VERTISPRESSURE,             &
-                             ! vert_is_height,       VERTISHEIGHT,               &
+                              vert_is_height,       VERTISHEIGHT,               &
                              ! vert_is_scale_height, VERTISSCALEHEIGHT,          &
                              get_close_obs_init, get_close_obs_destroy,        &
                              loc_get_close_obs => get_close_obs
@@ -675,7 +675,7 @@ print*, "nzp,iloc,vloc: ",nzp,iloc,vloc
 depth=layerdepth(vloc)
 
 ! if (nzp <= 1) then
-  location = set_location(lonCell(iloc),latCell(iloc), depth)
+  location = set_location(lonCell(iloc),latCell(iloc), depth, VERTISHEIGHT)
 ! endif
 
 print*, "lonCell(iloc),latCell(iloc): ",lonCell(iloc),latCell(iloc)
@@ -835,7 +835,7 @@ zout    = llv(3)
 ! if the vertical is missing to start with, return it the same way
 ! with the requested type as out.
 if (zin == missing_r8) then
-   location = set_location(llv(1),llv(2),missing_r8)
+   location = set_location(llv(1),llv(2),missing_r8,VERTISHEIGHT)
    return
 endif
 locinstate=0
@@ -4268,7 +4268,7 @@ integer :: i
 
 allocate(cell_locs(nCells))
 do i=1, nCells
-   cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8)
+   cell_locs(i) = set_location(lonCell(i), latCell(i), 0.0_r8,VERTISHEIGHT)
 enddo
 
 ! the width really isn't used anymore, but it's part of the
@@ -4298,7 +4298,7 @@ if (.not. search_initialized) then
    search_initialized = .true.
 endif
 
-pointloc = set_location(lon, lat, 0.0_r8)
+pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
 
 call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
 
