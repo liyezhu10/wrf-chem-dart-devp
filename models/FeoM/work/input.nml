@@ -94,15 +94,15 @@
    print_every_nth_obs             = 1
    /
 
+
+&location_nml
+   nlon                        = 71, 
+   nlat                        = 36,
    horiz_dist_only             = .false.,
    vert_normalization_pressure = 100000.0,
    vert_normalization_height   = 200.0,
    vert_normalization_level    = 10.0,
    approximate_distance        = .false.,
-
-&location_nml
-   nx                        = 71, 
-   ny                        = 36,
    output_box_info             = .false.,
    print_box_level             = 0,
    /
@@ -226,7 +226,7 @@
   /
 
 &dart_to_model_nml
-   dart_to_model_input_file = 'filter_restart.0001',
+   dart_to_model_input_file = 'dart_restart',
    advance_time_present     = .false.,
   / 
 
