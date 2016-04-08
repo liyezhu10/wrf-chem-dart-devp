@@ -1,4 +1,4 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
@@ -38,7 +38,7 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
 use     location_mod, only : location_type, get_dist, query_location,          &
                              get_close_maxdist_init, get_close_type,           &
                              set_location, get_location, & !horiz_dist_only,      &
-                             write_location, find_nearest,                      &
+                             write_location, & !find_nearest,                      &
 !>@todo FIXME : in the threed_cartesian/location_mod.f90 it is assumed
 !>              everything is in height
                              ! vert_is_undef,        VERTISUNDEF,                &
@@ -3281,245 +3281,245 @@ end function get_index_from_varname
 
 !------------------------------------------------------------------
 
-!>@todo FIXME : threed_cartesian/location assumes everything is in height
-
-subroutine vert_convert(x, location, obs_kind, ztypeout, istatus)
-
-! This subroutine converts a given ob/state vertical coordinate to
-! the vertical localization coordinate type requested through the
-! model_mod namelist.
-!
-! Notes: (1) obs_kind is only necessary to check whether the ob
-!            is an identity ob.
-!        (2) This subroutine can convert both obs' and state points'
-!            vertical coordinates. Remember that state points get
-!            their DART location information from get_state_meta_data
-!            which is called by filter_assim during the assimilation
-!            process.
-!        (3) x is the relevant DART state vector for carrying out
-!            computations necessary for the vertical coordinate
-!            transformations. As the vertical coordinate is only used
-!            in distance computations, this is actually the "expected"
-!            vertical coordinate, so that computed distance is the
-!            "expected" distance. Thus, under normal circumstances,
-!            x that is supplied to vert_convert should be the
-!            ensemble mean. Nevertheless, the subroutine has the
-!            functionality to operate on any DART state vector that
-!            is supplied to it.
-
-real(r8), dimension(:), intent(in)    :: x
-type(location_type),    intent(inout) :: location
-integer,                intent(in)    :: obs_kind
-integer,                intent(in)    :: ztypeout
-integer,                intent(out)   :: istatus
- 
- ! zin and zout are the vert values coming in and going out.
- ! ztype{in,out} are the vert types as defined by the 3d sphere
- ! locations mod (location/threed_sphere/location_mod.f90)
- real(r8) :: llv_loc(3)
- real(r8) :: zin, zout, tk, fullp, surfp
- real(r8) :: weights(3), zk_mid(3), values(3), fract(3), fdata(3)
- integer  :: ztypein, i
- integer  :: k_low(3), k_up(3), c(3), n
- integer  :: ivars(3)
- type(location_type) :: surfloc
-!$! 
-!$! ! assume failure.
-!$! istatus = 1
-!$! 
-!$! ! initialization
-!$! k_low   = 0.0_r8
-!$! k_up    = 0.0_r8
-!$! weights = 0.0_r8
-!$! 
-!$! ! first off, check if ob is identity ob.  if so get_state_meta_data() will
-!$! ! have returned location information already in the requested vertical type.
-!$! if (obs_kind < 0) then
-!$!    call get_state_meta_data(obs_kind,location)
-!$!    istatus = 0
-!$!    return
-!$! endif
-!$! 
-!$! !#! ! if the existing coord is already in the requested vertical units
-!$! !#! ! or if the vert is 'undef' which means no specifically defined
-!$! !#! ! vertical coordinate, return now.
-!$! 
-!>@todo FIXME : threed_cartesian/location assumes everything is in height
-!$! 
-!$! !#! ztypein  = nint(query_location(location, 'which_vert'))
-!$! !#! if ((ztypein == ztypeout) .or. (ztypein == VERTISUNDEF)) then
-!$! !#!    istatus = 0
-!$! !#!    return
-!$! !#! else
-!$! !#!    if ((debug > 9) .and. do_output()) then
-!$! !#!       write(string1,'(A,3X,2I3)') 'ztypein, ztypeout:',ztypein,ztypeout
-!$! !#!       call error_handler(E_MSG, 'vert_convert',string1,source, revision, revdate)
-!$! !#!    endif
-!$! !#! endif
-!$! 
-!$! ! we do need to convert the vertical.  start by
-!$! ! extracting the location lon/lat/vert values.
-!$! llv_loc = get_location(location)
-!$! 
-!$! ! the routines below will use zin as the incoming vertical value
-!$! ! and zout as the new outgoing one.  start out assuming failure
-!$! ! (zout = missing) and wait to be pleasantly surprised when it works.
-!$! zin     = llv_loc(3)
-!$! !@>todo FIXME : this probably does not matter since everything is always in
-!$! !> hight, some models have to do vertival conversion for incomming observations
-!$! zout    = missing_r8
-!$! 
-!$! ! if the vertical is missing to start with, return it the same way
-!$! ! with the requested type as out.
-!$! if (zin == missing_r8) then
-!$!    location = set_location(llv_loc(1),llv_loc(2),missing_r8,ztypeout)
-!$!    return
-!$! endif
-!$! 
-!$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!$! 
-!$! !#! ! Convert the incoming vertical type (ztypein) into the vertical
-!$! !#! ! localization coordinate given in the namelist (ztypeout).
-!$! !#! ! Various incoming vertical types (ztypein) are taken care of
-!$! !#! ! inside find_vert_level. So we only check ztypeout here.
-!$! !#! 
-!$! !#! ! convert into:
-!$! !#! select case (ztypeout)
-!$! !#! 
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    ! outgoing vertical coordinate should be 'model level number'
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    case (VERTISLEVEL)
-!$! !#! 
-!$! !#!    ! Identify the three cell ids (c) in the triangle enclosing the obs and
-!$! !#!    ! the vertical indices for the triangle at two adjacent levels (k_low and k_up)
-!$! !#!    ! and the fraction (fract) for vertical interpolation.
-!$! !#!
-!$! !#!   call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
-!$! !#!   if(istatus /= 0) return
-!$! !#!
-!$! !#!   zk_mid = k_low + fract
-!$! !#!   zout = sum(weights * zk_mid)
-!$! !#!
-!$! !#!   if ((debug > 9) .and. do_output()) then
-!$! !#!      write(string2,'("Zk:",3F8.2," => ",F8.2)') zk_mid,zout
-!$! !#!      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-!$! !#!   endif
-!$! !#!
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    ! outgoing vertical coordinate should be 'pressure' in Pa
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    case (VERTISPRESSURE)
-!$! !#! 
-!$! !#!    ! Need to get base offsets for the potential temperature, density, and water
-!$! !#!    ! vapor mixing fields in the state vector
-!$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
-!$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
-!$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
-!$! !#! 
-!$! !#! string1 = 'fix VERTISPRESSURE get base offsets - detritus from atmosphere'
-!$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-!$! !#! 
-!$! !#!    if (any(ivars(1:3) < 0)) then
-!$! !#!       write(string1,*) 'Internal error, cannot find one or more of: theta, rho, qv'
-!$! !#!       call error_handler(E_ERR, 'vert_convert',string1,source, revision, revdate)
-!$! !#!    endif
-!$! !#! 
-!$! !#!    ! Get theta, rho, qv at the interpolated location
-!$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
-!$! !#!    if (istatus /= 0) return
-!$! !#! 
-!$! !#!    ! Convert theta, rho, qv into pressure
-!$! !#!    call compute_full_pressure(values(1), values(2), values(3), zout, tk)
-!$! !#!    if ((debug > 9) .and. do_output()) then
-!$! !#!       write(string2,'("zout_in_pressure, theta, rho, qv:",3F10.2,F15.10)') zout, values
-!$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-!$! !#!    endif
-!$! !#! 
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    ! outgoing vertical coordinate should be 'depth' in meters
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    case (VERTISHEIGHT)
- 
-!>@todo FIXME : might still want something similar to this code 
-
-     call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
-     if (istatus /= 0) return
-  
-     ! now have vertically interpolated values at cell centers.
-     ! use horizontal weights to compute value at interp point.
-     zout = sum(weights * fdata)
-
-!$! !#! 
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    ! outgoing vertical coordinate should be 'scale height' (a ratio)
-!$! !#!    ! ------------------------------------------------------------
-!$! !#!    case (VERTISSCALEHEIGHT)
-!$! !#! 
-!$! !#!    ! Scale Height is defined here as: -log(pressure / surface_pressure)
-!$! !#! 
-!$! !#!    ! Need to get base offsets for the potential temperature, density, and water
-!$! !#!    ! vapor mixing fields in the state vector
-!$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
-!$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
-!$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
-!$! !#! 
-!$! !#! string1 = 'fix vertisscaleheight get base offsets - detritus from atmosphere'
-!$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-!$! !#! 
-!$! !#!    ! Get theta, rho, qv at the interpolated location
-!$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
-!$! !#!    if (istatus /= 0) return
-!$! !#! 
-!$! !#!    ! Convert theta, rho, qv into pressure
-!$! !#!    call compute_full_pressure(values(1), values(2), values(3), fullp, tk)
-!$! !#!    if ((debug > 9) .and. do_output()) then
-!$! !#!       write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F15.10)') fullp, values
-!$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-!$! !#!    endif
-!$! !#! 
-!$! !#!    ! Get theta, rho, qv at the surface corresponding to the interpolated location
-!$! !#!    surfloc = set_location(llv_loc(1), llv_loc(2), 1.0_r8, VERTISLEVEL)
-!$! !#!    call compute_scalar_with_barycentric (x, surfloc, 3, ivars, values, istatus)
-!$! !#!    if (istatus /= 0) return
-!$! !#! 
-!$! !#!    ! Convert surface theta, rho, qv into pressure
-!$! !#!    call compute_full_pressure(values(1), values(2), values(3), surfp, tk)
-!$! !#!    if ((debug > 9) .and. do_output()) then
-!$! !#!       write(string2,'("zout_surf_pressure, theta, rho, qv:",3F10.2,F15.10)') surfp, values
-!$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-!$! !#!    endif
-!$! !#! 
-!$! !#!    ! and finally, convert into scale height
-!$! !#!    if (surfp /= 0.0_r8) then
-!$! !#!       zout = -log(fullp / surfp)
-!$! !#!    else
-!$! !#!       zout = MISSING_R8
-!$! !#!    endif
-!$! !#! 
-!$! !#!    if ((debug > 9) .and. do_output()) then
-!$! !#!       write(string2,'("zout_in_pressure:",F10.2)') zout
-!$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
-!$! !#!    endif
-!$! !#! 
-!$! !#!    ! -------------------------------------------------------
-!$! !#!    ! outgoing vertical coordinate is unrecognized
-!$! !#!    ! -------------------------------------------------------
-!$! !#!    case default
-!$! !#!       write(string1,*) 'Requested vertical coordinate not recognized: ', ztypeout
-!$! !#!       call error_handler(E_ERR,'vert_convert', string1, &
-!$! !#!                          source, revision, revdate)
-!$! !#! 
-!$! !#! end select   ! outgoing vert type
-!$! 
-!$! ! Returned location
-!$! location = set_location(llv_loc(1),llv_loc(2),zout,ztypeout)
-!$! 
-!$! ! Set successful return code only if zout has good value
-!$! if(zout /= missing_r8) istatus = 0
-!$!
-!$!
-end subroutine vert_convert
+!#! !>@todo FIXME : threed_cartesian/location assumes everything is in height
+!#! 
+!#! subroutine vert_convert(x, location, obs_kind, ztypeout, istatus)
+!#! 
+!#! ! This subroutine converts a given ob/state vertical coordinate to
+!#! ! the vertical localization coordinate type requested through the
+!#! ! model_mod namelist.
+!#! !
+!#! ! Notes: (1) obs_kind is only necessary to check whether the ob
+!#! !            is an identity ob.
+!#! !        (2) This subroutine can convert both obs' and state points'
+!#! !            vertical coordinates. Remember that state points get
+!#! !            their DART location information from get_state_meta_data
+!#! !            which is called by filter_assim during the assimilation
+!#! !            process.
+!#! !        (3) x is the relevant DART state vector for carrying out
+!#! !            computations necessary for the vertical coordinate
+!#! !            transformations. As the vertical coordinate is only used
+!#! !            in distance computations, this is actually the "expected"
+!#! !            vertical coordinate, so that computed distance is the
+!#! !            "expected" distance. Thus, under normal circumstances,
+!#! !            x that is supplied to vert_convert should be the
+!#! !            ensemble mean. Nevertheless, the subroutine has the
+!#! !            functionality to operate on any DART state vector that
+!#! !            is supplied to it.
+!#! 
+!#! real(r8), dimension(:), intent(in)    :: x
+!#! type(location_type),    intent(inout) :: location
+!#! integer,                intent(in)    :: obs_kind
+!#! integer,                intent(in)    :: ztypeout
+!#! integer,                intent(out)   :: istatus
+!#!  
+!#!  ! zin and zout are the vert values coming in and going out.
+!#!  ! ztype{in,out} are the vert types as defined by the 3d sphere
+!#!  ! locations mod (location/threed_sphere/location_mod.f90)
+!#!  real(r8) :: llv_loc(3)
+!#!  real(r8) :: zin, zout, tk, fullp, surfp
+!#!  real(r8) :: weights(3), zk_mid(3), values(3), fract(3), fdata(3)
+!#!  integer  :: ztypein, i
+!#!  integer  :: k_low(3), k_up(3), c(3), n
+!#!  integer  :: ivars(3)
+!#!  type(location_type) :: surfloc
+!#! !$! 
+!#! !$! ! assume failure.
+!#! !$! istatus = 1
+!#! !$! 
+!#! !$! ! initialization
+!#! !$! k_low   = 0.0_r8
+!#! !$! k_up    = 0.0_r8
+!#! !$! weights = 0.0_r8
+!#! !$! 
+!#! !$! ! first off, check if ob is identity ob.  if so get_state_meta_data() will
+!#! !$! ! have returned location information already in the requested vertical type.
+!#! !$! if (obs_kind < 0) then
+!#! !$!    call get_state_meta_data(obs_kind,location)
+!#! !$!    istatus = 0
+!#! !$!    return
+!#! !$! endif
+!#! !$! 
+!#! !$! !#! ! if the existing coord is already in the requested vertical units
+!#! !$! !#! ! or if the vert is 'undef' which means no specifically defined
+!#! !$! !#! ! vertical coordinate, return now.
+!#! !$! 
+!#! !>@todo FIXME : threed_cartesian/location assumes everything is in height
+!#! !$! 
+!#! !$! !#! ztypein  = nint(query_location(location, 'which_vert'))
+!#! !$! !#! if ((ztypein == ztypeout) .or. (ztypein == VERTISUNDEF)) then
+!#! !$! !#!    istatus = 0
+!#! !$! !#!    return
+!#! !$! !#! else
+!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!       write(string1,'(A,3X,2I3)') 'ztypein, ztypeout:',ztypein,ztypeout
+!#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string1,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! endif
+!#! !$! 
+!#! !$! ! we do need to convert the vertical.  start by
+!#! !$! ! extracting the location lon/lat/vert values.
+!#! !$! llv_loc = get_location(location)
+!#! !$! 
+!#! !$! ! the routines below will use zin as the incoming vertical value
+!#! !$! ! and zout as the new outgoing one.  start out assuming failure
+!#! !$! ! (zout = missing) and wait to be pleasantly surprised when it works.
+!#! !$! zin     = llv_loc(3)
+!#! !$! !@>todo FIXME : this probably does not matter since everything is always in
+!#! !$! !> hight, some models have to do vertival conversion for incomming observations
+!#! !$! zout    = missing_r8
+!#! !$! 
+!#! !$! ! if the vertical is missing to start with, return it the same way
+!#! !$! ! with the requested type as out.
+!#! !$! if (zin == missing_r8) then
+!#! !$!    location = set_location(llv_loc(1),llv_loc(2),missing_r8,ztypeout)
+!#! !$!    return
+!#! !$! endif
+!#! !$! 
+!#! !$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
+!#! !$! 
+!#! !$! !#! ! Convert the incoming vertical type (ztypein) into the vertical
+!#! !$! !#! ! localization coordinate given in the namelist (ztypeout).
+!#! !$! !#! ! Various incoming vertical types (ztypein) are taken care of
+!#! !$! !#! ! inside find_vert_level. So we only check ztypeout here.
+!#! !$! !#! 
+!#! !$! !#! ! convert into:
+!#! !$! !#! select case (ztypeout)
+!#! !$! !#! 
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    ! outgoing vertical coordinate should be 'model level number'
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    case (VERTISLEVEL)
+!#! !$! !#! 
+!#! !$! !#!    ! Identify the three cell ids (c) in the triangle enclosing the obs and
+!#! !$! !#!    ! the vertical indices for the triangle at two adjacent levels (k_low and k_up)
+!#! !$! !#!    ! and the fraction (fract) for vertical interpolation.
+!#! !$! !#!
+!#! !$! !#!   call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
+!#! !$! !#!   if(istatus /= 0) return
+!#! !$! !#!
+!#! !$! !#!   zk_mid = k_low + fract
+!#! !$! !#!   zout = sum(weights * zk_mid)
+!#! !$! !#!
+!#! !$! !#!   if ((debug > 9) .and. do_output()) then
+!#! !$! !#!      write(string2,'("Zk:",3F8.2," => ",F8.2)') zk_mid,zout
+!#! !$! !#!      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
+!#! !$! !#!   endif
+!#! !$! !#!
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    ! outgoing vertical coordinate should be 'pressure' in Pa
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    case (VERTISPRESSURE)
+!#! !$! !#! 
+!#! !$! !#!    ! Need to get base offsets for the potential temperature, density, and water
+!#! !$! !#!    ! vapor mixing fields in the state vector
+!#! !$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+!#! !$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
+!#! !$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+!#! !$! !#! 
+!#! !$! !#! string1 = 'fix VERTISPRESSURE get base offsets - detritus from atmosphere'
+!#! !$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
+!#! !$! !#! 
+!#! !$! !#!    if (any(ivars(1:3) < 0)) then
+!#! !$! !#!       write(string1,*) 'Internal error, cannot find one or more of: theta, rho, qv'
+!#! !$! !#!       call error_handler(E_ERR, 'vert_convert',string1,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    ! Get theta, rho, qv at the interpolated location
+!#! !$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
+!#! !$! !#!    if (istatus /= 0) return
+!#! !$! !#! 
+!#! !$! !#!    ! Convert theta, rho, qv into pressure
+!#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), zout, tk)
+!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!       write(string2,'("zout_in_pressure, theta, rho, qv:",3F10.2,F15.10)') zout, values
+!#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    ! outgoing vertical coordinate should be 'depth' in meters
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    case (VERTISHEIGHT)
+!#!  
+!#! !>@todo FIXME : might still want something similar to this code 
+!#! 
+!#!      call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
+!#!      if (istatus /= 0) return
+!#!   
+!#!      ! now have vertically interpolated values at cell centers.
+!#!      ! use horizontal weights to compute value at interp point.
+!#!      zout = sum(weights * fdata)
+!#! 
+!#! !$! !#! 
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    ! outgoing vertical coordinate should be 'scale height' (a ratio)
+!#! !$! !#!    ! ------------------------------------------------------------
+!#! !$! !#!    case (VERTISSCALEHEIGHT)
+!#! !$! !#! 
+!#! !$! !#!    ! Scale Height is defined here as: -log(pressure / surface_pressure)
+!#! !$! !#! 
+!#! !$! !#!    ! Need to get base offsets for the potential temperature, density, and water
+!#! !$! !#!    ! vapor mixing fields in the state vector
+!#! !$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
+!#! !$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
+!#! !$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+!#! !$! !#! 
+!#! !$! !#! string1 = 'fix vertisscaleheight get base offsets - detritus from atmosphere'
+!#! !$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
+!#! !$! !#! 
+!#! !$! !#!    ! Get theta, rho, qv at the interpolated location
+!#! !$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
+!#! !$! !#!    if (istatus /= 0) return
+!#! !$! !#! 
+!#! !$! !#!    ! Convert theta, rho, qv into pressure
+!#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), fullp, tk)
+!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!       write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F15.10)') fullp, values
+!#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    ! Get theta, rho, qv at the surface corresponding to the interpolated location
+!#! !$! !#!    surfloc = set_location(llv_loc(1), llv_loc(2), 1.0_r8, VERTISLEVEL)
+!#! !$! !#!    call compute_scalar_with_barycentric (x, surfloc, 3, ivars, values, istatus)
+!#! !$! !#!    if (istatus /= 0) return
+!#! !$! !#! 
+!#! !$! !#!    ! Convert surface theta, rho, qv into pressure
+!#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), surfp, tk)
+!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!       write(string2,'("zout_surf_pressure, theta, rho, qv:",3F10.2,F15.10)') surfp, values
+!#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    ! and finally, convert into scale height
+!#! !$! !#!    if (surfp /= 0.0_r8) then
+!#! !$! !#!       zout = -log(fullp / surfp)
+!#! !$! !#!    else
+!#! !$! !#!       zout = MISSING_R8
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!       write(string2,'("zout_in_pressure:",F10.2)') zout
+!#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
+!#! !$! !#!    endif
+!#! !$! !#! 
+!#! !$! !#!    ! -------------------------------------------------------
+!#! !$! !#!    ! outgoing vertical coordinate is unrecognized
+!#! !$! !#!    ! -------------------------------------------------------
+!#! !$! !#!    case default
+!#! !$! !#!       write(string1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+!#! !$! !#!       call error_handler(E_ERR,'vert_convert', string1, &
+!#! !$! !#!                          source, revision, revdate)
+!#! !$! !#! 
+!#! !$! !#! end select   ! outgoing vert type
+!#! !$! 
+!#! !$! ! Returned location
+!#! !$! location = set_location(llv_loc(1),llv_loc(2),zout,ztypeout)
+!#! !$! 
+!#! !$! ! Set successful return code only if zout has good value
+!#! !$! if(zout /= missing_r8) istatus = 0
+!#! !$!
+!#! !$!
+!#! end subroutine vert_convert
 
 !==================================================================
 ! The following (private) interfaces are used for triangle interpolation
@@ -3626,165 +3626,165 @@ if (debug > 7) print *, 'internal code inconsistency: could not find vertical lo
 
 end subroutine find_depth_bounds
 
-!------------------------------------------------------------------
-
-subroutine find_vert_level(x, loc, nc, ids, oncenters, lower, upper, fract, ier)
-
-! given a location and 3 cell ids, return three sets of:
-!  the two level numbers that enclose the given vertical
-!  value plus the fraction between them for each of the 3 cell centers.
-
-! FIXME:  this handles data at cell centers, at edges, but not
-! data on faces.
-
-real(r8),            intent(in)  :: x(:)
-type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: nc, ids(:)
-logical,             intent(in)  :: oncenters
-integer,             intent(out) :: lower(:), upper(:)
-real(r8),            intent(out) :: fract(:)
-integer,             intent(out) :: ier
-
-real(r8) :: lat, lon, vert, llv(3)
-integer  :: i !#!verttype, i
-integer  :: pt_base_offset, density_base_offset, qv_base_offset
-
-! the plan is to take in: whether this var is on cell centers or edges,
-! and the location so we can extract the vert value and which vert flag.
-! compute and return the lower and upper index level numbers that
-! enclose this vert, along with the fract between them.  ier is set
-! in case of error (e.g. outside the grid, on dry land, etc).
-
-!$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!#!  kinds we have to handle:
-!#! vert_is_undef,    VERTISUNDEF
-!#! vert_is_surface,  VERTISSURFACE
-!#! vert_is_level,    VERTISLEVEL
-!#! vert_is_pressure, VERTISPRESSURE
-!#! vert_is_height,   VERTISHEIGHT
-
-! unpack the location into local vars
-llv = get_location(loc)
-lon  = llv(1)
-lat  = llv(2)
-vert = llv(3)
-
-!#! verttype = nint(query_location(loc))
-
-!#! ! these first 3 types need no cell/edge location information.
-!#! if ((debug > 9) .and. do_output()) then
-!#!    write(string2,'("vert, which_vert:",3F20.12,I5)') lon,lat,vert,verttype
-!#!    call error_handler(E_MSG, 'find_vert_level',string2,source, revision, revdate)
-!#! endif
-
-!#!! no defined vertical location (e.g. vertically integrated vals)
-!#!if (vert_is_undef(loc)) then
-!#!   ier = 12
-!#!   return
-!#!endif
-!#!
-!#!! vertical is defined to be on the surface (level 1 here)
-!#!if(vert_is_surface(loc)) then
-!#!   lower(1:nc) = 1
-!#!   upper(1:nc) = 2
-!#!   fract(1:nc) = 0.0_r8
-!#!   ier = 0
-!#!   return
-!#!endif
-!#!
-!#!! model level numbers (supports fractional levels)
-!#!if(vert_is_level(loc)) then
-!#!   ! FIXME: if this is W, the top is nVertLevels+1
-!#!   if (vert > nVertLevels) then
-!#!      ier = 12
-!#!      return
-!#!   endif
-!#!
-!#!   ! at the top we have to make the fraction 1.0; all other
-!#!   ! integral levels can be 0.0 from the lower level.
-!#!   if (vert == nVertLevels) then
-!#!      lower(1:nc) = nint(vert) - 1   ! round down
-!#!      upper(1:nc) = nint(vert)
-!#!      fract(1:nc) = 1.0_r8
-!#!      ier = 0
-!#!      return
-!#!   endif
-!#!
-!#!   lower(1:nc) = aint(vert)   ! round down
-!#!   upper(1:nc) = lower+1
-!#!   fract(1:nc) = vert - lower
-!#!   ier = 0
-!#!   return
-!#!
-!#!endif
-!#!
-!#!! ok, now we need to know where we are in the grid for depths or pressures
-!#!! as the vertical coordinate.
-!#!
-!#!
-!#!! Vertical interpolation for pressure coordinates
-!#!if(vert_is_pressure(loc) ) then
-!#!   ! Need to get base offsets for the potential temperature, density, and water
-!#!   ! vapor mixing fields in the state vector
-!#!! TJH   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
-!#!! TJH   call get_index_range(KIND_DENSITY,          density_base_offset)
-!#!! TJH   call get_index_range(KIND_VAPOR_MIXING_RATIO,    qv_base_offset)
-!#!
-!#!string1 = 'fix VERTISPRESSURE vertical interpolation for pressure - detritus from atmosphere'
-!#!call error_handler(E_ERR,'find_vert_level',string1,source,revision,revdate)
-!#!
-!#!   do i=1, nc
-!#!      call find_pressure_bounds(x, vert, ids(i), nVertLevels, &
-!#!            pt_base_offset, density_base_offset, qv_base_offset,  &
-!#!            lower(i), upper(i), fract(i), ier)
-!#!      if ((debug > 9) .and. do_output()) &
-!#!         print '(A,5(1x,I5),1x,F10.4)', &
-!#!         '    after find_pressure_bounds: ier, i, cellid, lower, upper, fract = ', &
-!#!              ier, i, ids(i), lower(i), upper(i), fract(i)
-!#!      if ((debug > 5) .and. (ier /= 0) .and. do_output()) &
-!#!         print '(A,4(1x,I5),1x,F10.4,1x,I3,1x,F10.4)', &
-!#!        'fail in find_pressure_bounds: ier, nc, i, id, vert, lower, fract: ', &
-!#!         ier, nc, i, ids(i), vert, lower(i), fract(i)
-!#!
-!#!      if (ier /= 0) return
-!#!   enddo
-!#!
-!#!   return
-!#!endif
-!#!
-!#!! grid is in depth, so this needs to know which cell to index into
-!#!! for the column of depths and call the bounds routine.
-!#!if(vert_is_height(loc)) then
-
-!>@todo FIXME : you still will need to find your depth bounds
-
-   ! For depth, can do simple vertical search for interpolation for now
-   ! Get the lower and upper bounds and fraction for each column
-   do i=1, nc
-      if (oncenters) then
-         ! call find_depth_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
-         !                         lower(i), upper(i), fract(i), ier)
-      else
-
-         if (.not. data_on_edges) then
-            call error_handler(E_ERR, 'find_vert_level', &
-                              'Internal error: oncenters false but data_on_edges false', &
-                              source, revision, revdate)
-         endif
-         !#! call find_depth_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
-         !#!                         lower(i), upper(i), fract(i), ier)
-      endif
-      if (ier /= 0) return
-   enddo
-
-!#!   return
-!#!endif
-
-! If we get here, the vertical type is not understood.  Should not
-! happen.
-ier = 3
-
-end subroutine find_vert_level
+!#! !------------------------------------------------------------------
+!#! 
+!#! subroutine find_vert_level(x, loc, nc, ids, oncenters, lower, upper, fract, ier)
+!#! 
+!#! ! given a location and 3 cell ids, return three sets of:
+!#! !  the two level numbers that enclose the given vertical
+!#! !  value plus the fraction between them for each of the 3 cell centers.
+!#! 
+!#! ! FIXME:  this handles data at cell centers, at edges, but not
+!#! ! data on faces.
+!#! 
+!#! real(r8),            intent(in)  :: x(:)
+!#! type(location_type), intent(in)  :: loc
+!#! integer,             intent(in)  :: nc, ids(:)
+!#! logical,             intent(in)  :: oncenters
+!#! integer,             intent(out) :: lower(:), upper(:)
+!#! real(r8),            intent(out) :: fract(:)
+!#! integer,             intent(out) :: ier
+!#! 
+!#! real(r8) :: lat, lon, vert, llv(3)
+!#! integer  :: i !#!verttype, i
+!#! integer  :: pt_base_offset, density_base_offset, qv_base_offset
+!#! 
+!#! ! the plan is to take in: whether this var is on cell centers or edges,
+!#! ! and the location so we can extract the vert value and which vert flag.
+!#! ! compute and return the lower and upper index level numbers that
+!#! ! enclose this vert, along with the fract between them.  ier is set
+!#! ! in case of error (e.g. outside the grid, on dry land, etc).
+!#! 
+!#! !$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
+!#! !#!  kinds we have to handle:
+!#! !#! vert_is_undef,    VERTISUNDEF
+!#! !#! vert_is_surface,  VERTISSURFACE
+!#! !#! vert_is_level,    VERTISLEVEL
+!#! !#! vert_is_pressure, VERTISPRESSURE
+!#! !#! vert_is_height,   VERTISHEIGHT
+!#! 
+!#! ! unpack the location into local vars
+!#! llv = get_location(loc)
+!#! lon  = llv(1)
+!#! lat  = llv(2)
+!#! vert = llv(3)
+!#! 
+!#! !#! verttype = nint(query_location(loc))
+!#! 
+!#! !#! ! these first 3 types need no cell/edge location information.
+!#! !#! if ((debug > 9) .and. do_output()) then
+!#! !#!    write(string2,'("vert, which_vert:",3F20.12,I5)') lon,lat,vert,verttype
+!#! !#!    call error_handler(E_MSG, 'find_vert_level',string2,source, revision, revdate)
+!#! !#! endif
+!#! 
+!#! !#!! no defined vertical location (e.g. vertically integrated vals)
+!#! !#!if (vert_is_undef(loc)) then
+!#! !#!   ier = 12
+!#! !#!   return
+!#! !#!endif
+!#! !#!
+!#! !#!! vertical is defined to be on the surface (level 1 here)
+!#! !#!if(vert_is_surface(loc)) then
+!#! !#!   lower(1:nc) = 1
+!#! !#!   upper(1:nc) = 2
+!#! !#!   fract(1:nc) = 0.0_r8
+!#! !#!   ier = 0
+!#! !#!   return
+!#! !#!endif
+!#! !#!
+!#! !#!! model level numbers (supports fractional levels)
+!#! !#!if(vert_is_level(loc)) then
+!#! !#!   ! FIXME: if this is W, the top is nVertLevels+1
+!#! !#!   if (vert > nVertLevels) then
+!#! !#!      ier = 12
+!#! !#!      return
+!#! !#!   endif
+!#! !#!
+!#! !#!   ! at the top we have to make the fraction 1.0; all other
+!#! !#!   ! integral levels can be 0.0 from the lower level.
+!#! !#!   if (vert == nVertLevels) then
+!#! !#!      lower(1:nc) = nint(vert) - 1   ! round down
+!#! !#!      upper(1:nc) = nint(vert)
+!#! !#!      fract(1:nc) = 1.0_r8
+!#! !#!      ier = 0
+!#! !#!      return
+!#! !#!   endif
+!#! !#!
+!#! !#!   lower(1:nc) = aint(vert)   ! round down
+!#! !#!   upper(1:nc) = lower+1
+!#! !#!   fract(1:nc) = vert - lower
+!#! !#!   ier = 0
+!#! !#!   return
+!#! !#!
+!#! !#!endif
+!#! !#!
+!#! !#!! ok, now we need to know where we are in the grid for depths or pressures
+!#! !#!! as the vertical coordinate.
+!#! !#!
+!#! !#!
+!#! !#!! Vertical interpolation for pressure coordinates
+!#! !#!if(vert_is_pressure(loc) ) then
+!#! !#!   ! Need to get base offsets for the potential temperature, density, and water
+!#! !#!   ! vapor mixing fields in the state vector
+!#! !#!! TJH   call get_index_range(KIND_POTENTIAL_TEMPERATURE, pt_base_offset)
+!#! !#!! TJH   call get_index_range(KIND_DENSITY,          density_base_offset)
+!#! !#!! TJH   call get_index_range(KIND_VAPOR_MIXING_RATIO,    qv_base_offset)
+!#! !#!
+!#! !#!string1 = 'fix VERTISPRESSURE vertical interpolation for pressure - detritus from atmosphere'
+!#! !#!call error_handler(E_ERR,'find_vert_level',string1,source,revision,revdate)
+!#! !#!
+!#! !#!   do i=1, nc
+!#! !#!      call find_pressure_bounds(x, vert, ids(i), nVertLevels, &
+!#! !#!            pt_base_offset, density_base_offset, qv_base_offset,  &
+!#! !#!            lower(i), upper(i), fract(i), ier)
+!#! !#!      if ((debug > 9) .and. do_output()) &
+!#! !#!         print '(A,5(1x,I5),1x,F10.4)', &
+!#! !#!         '    after find_pressure_bounds: ier, i, cellid, lower, upper, fract = ', &
+!#! !#!              ier, i, ids(i), lower(i), upper(i), fract(i)
+!#! !#!      if ((debug > 5) .and. (ier /= 0) .and. do_output()) &
+!#! !#!         print '(A,4(1x,I5),1x,F10.4,1x,I3,1x,F10.4)', &
+!#! !#!        'fail in find_pressure_bounds: ier, nc, i, id, vert, lower, fract: ', &
+!#! !#!         ier, nc, i, ids(i), vert, lower(i), fract(i)
+!#! !#!
+!#! !#!      if (ier /= 0) return
+!#! !#!   enddo
+!#! !#!
+!#! !#!   return
+!#! !#!endif
+!#! !#!
+!#! !#!! grid is in depth, so this needs to know which cell to index into
+!#! !#!! for the column of depths and call the bounds routine.
+!#! !#!if(vert_is_height(loc)) then
+!#! 
+!#! !>@todo FIXME : you still will need to find your depth bounds
+!#! 
+!#!    ! For depth, can do simple vertical search for interpolation for now
+!#!    ! Get the lower and upper bounds and fraction for each column
+!#!    do i=1, nc
+!#!       if (oncenters) then
+!#!          ! call find_depth_bounds(vert, nVertLevels, zGridCenter(:, ids(i)), &
+!#!          !                         lower(i), upper(i), fract(i), ier)
+!#!       else
+!#! 
+!#!          if (.not. data_on_edges) then
+!#!             call error_handler(E_ERR, 'find_vert_level', &
+!#!                               'Internal error: oncenters false but data_on_edges false', &
+!#!                               source, revision, revdate)
+!#!          endif
+!#!          !#! call find_depth_bounds(vert, nVertLevels, zGridEdge(:, ids(i)), &
+!#!          !#!                         lower(i), upper(i), fract(i), ier)
+!#!       endif
+!#!       if (ier /= 0) return
+!#!    enddo
+!#! 
+!#! !#!   return
+!#! !#!endif
+!#! 
+!#! ! If we get here, the vertical type is not understood.  Should not
+!#! ! happen.
+!#! ier = 3
+!#! 
+!#! end subroutine find_vert_level
 
 !------------------------------------------------------------------
 
@@ -3936,323 +3936,323 @@ end subroutine find_vert_level
 !#! 
 !#! end subroutine get_interp_pressure
 
-!------------------------------------------------------------
-
-subroutine get_3d_weights(p, v1, v2, v3, lat, lon, weights)
-
-! Given a point p (x,y,z) inside a triangle, and the (x,y,z)
-! coordinates of the triangle corner points (v1, v2, v3),
-! find the weights for a barycentric interpolation.  this
-! computation only needs two of the three coordinates, so figure
-! out which quadrant of the sphere the triangle is in and pick
-! the 2 axes which are the least planar:
-!  (x,y) near the poles,
-!  (y,z) near 0 and 180 longitudes near the equator,
-!  (x,z) near 90 and 270 longitude near the equator.
-! (lat/lon are the coords of p. we could compute them here
-! but since in all cases we already have them, pass them
-! down for efficiency)
-
-real(r8), intent(in)  :: p(3)
-real(r8), intent(in)  :: v1(3), v2(3), v3(3)
-real(r8), intent(in)  :: lat, lon
-real(r8), intent(out) :: weights(3)
-
-real(r8) :: cxs(3), cys(3)
-
-! above or below 45 in latitude, where -90 < lat < 90:
-if (lat >= 45.0_r8 .or. lat <= -45.0_r8) then
-   cxs(1) = v1(1)
-   cxs(2) = v2(1)
-   cxs(3) = v3(1)
-   cys(1) = v1(2)
-   cys(2) = v2(2)
-   cys(3) = v3(2)
-   call get_barycentric_weights(p(1), p(2), cxs, cys, weights)
-   return
-endif
-
-! nearest 0 or 180 in longitude, where 0 < lon < 360:
-if ( lon <= 45.0_r8 .or. lon >= 315.0_r8 .or. &
-    (lon >= 135.0_r8 .and. lon <= 225.0_r8)) then
-   cxs(1) = v1(2)
-   cxs(2) = v2(2)
-   cxs(3) = v3(2)
-   cys(1) = v1(3)
-   cys(2) = v2(3)
-   cys(3) = v3(3)
-   call get_barycentric_weights(p(2), p(3), cxs, cys, weights)
-   return
-endif
-
-! last option, nearest 90 or 270 in lon:
-cxs(1) = v1(1)
-cxs(2) = v2(1)
-cxs(3) = v3(1)
-cys(1) = v1(3)
-cys(2) = v2(3)
-cys(3) = v3(3)
-call get_barycentric_weights(p(1), p(3), cxs, cys, weights)
-
-end subroutine get_3d_weights
-
-
-!------------------------------------------------------------
-
-subroutine get_barycentric_weights(x, y, cxs, cys, weights)
-
-! Computes the barycentric weights for a 2d interpolation point
-! (x,y) in a 2d triangle with the given (cxs,cys) corners.
-
-real(r8), intent(in)  :: x, y, cxs(3), cys(3)
-real(r8), intent(out) :: weights(3)
-
-real(r8) :: denom
-
-! Get denominator
-denom = (cys(2) - cys(3)) * (cxs(1) - cxs(3)) + &
-   (cxs(3) - cxs(2)) * (cys(1) - cys(3))
-
-weights(1) = ((cys(2) - cys(3)) * (x - cxs(3)) + &
-   (cxs(3) - cxs(2)) * (y - cys(3))) / denom
-
-weights(2) = ((cys(3) - cys(1)) * (x - cxs(3)) + &
-   (cxs(1) - cxs(3)) * (y - cys(3))) / denom
-
-weights(3) = 1.0_r8 - weights(1) - weights(2)
-
-! FIXME: i want to remove this code.  does it affect the answers?
-if (any(abs(weights) < roundoff)) then
-   !print *, 'get_barycentric_weights due to roundoff errors: ', weights
-   where (abs(weights) < roundoff) weights = 0.0_r8
-   where (abs(1.0_r8 - abs(weights)) < roundoff) weights = 1.0_r8
-endif
-if(abs(sum(weights)-1.0_r8) > roundoff) &
-   print *, 'fail in get_barycentric_weights: sum(weights) = ',sum(weights)
-!end FIXME section
-
-end subroutine get_barycentric_weights
-
-
-!------------------------------------------------------------
-
-subroutine compute_scalar_with_barycentric(x, loc, n, ival, dval, ier)
-real(r8),            intent(in)  :: x(:)
-type(location_type), intent(in)  :: loc
-integer,             intent(in)  :: n
-integer,             intent(in)  :: ival(:)
-real(r8),            intent(out) :: dval(:)
-integer,             intent(out) :: ier
-
-real(r8) :: fract(3), lowval(3), uppval(3), fdata(3), weights(3)
-integer  :: lower(3), upper(3), c(3), nvert, index1, k, i, nc
-
-dval = MISSING_R8
-
-call find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
-if(ier /= 0) return
-
-dval = 0.0_r8
-do k=1, n
-   ! get the starting index in the state vector
-   index1 = progvar(ival(k))%index1
-   nvert = progvar(ival(k))%numvertical
-
-   ! go around triangle and interpolate in the vertical
-   ! t1, t2, t3 are the xyz of the cell centers
-   ! c(3) are the cell ids
-   do i = 1, nc
-      lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
-      uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
-      fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
-      if((debug > 9) .and. do_output()) &
-      print '(A,I2,A,I2,5f12.5)','compute_scalar_with_barycentric: nv=',k,' ic =',i, &
-                                  lowval(i),uppval(i),fdata(i),fract(i),weights(i)
-
-   enddo
-
-   ! now have vertically interpolated values at cell centers.
-   ! use weights to compute value at interp point.
-   dval(k) = sum(weights(1:nc) * fdata(1:nc))
-!print *, 'k, dval(k) = ', k, dval(k)
-enddo
-
-ier = 0
-
-end subroutine compute_scalar_with_barycentric
-
-!------------------------------------------------------------
-
-subroutine find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
-real(r8),            intent(in)  :: x(:)
-type(location_type), intent(in)  :: loc
-integer,             intent(out) :: nc
-integer,             intent(out) :: c(:)
-integer,             intent(out) :: lower(:), upper(:)
-real(r8),            intent(out) :: fract(:)
-real(r8),            intent(out) :: weights(:)
-integer,             intent(out) :: ier
-
-! compute the values at the correct vertical level for each
-! of the 3 cell centers defining a triangle that encloses the
-! the interpolation point, then interpolate once in the horizontal
-! using barycentric weights to get the value at the interpolation point.
-
-integer, parameter :: listsize = 30
-integer  :: nedges, i !#!, neighborcells(maxEdges), edgeid
-real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
-real(r8) :: t1(3), t2(3), t3(3), r(3)
-integer  :: cellid, verts(listsize), closest_vert
-real(r8) :: lat, lon, vert, llv(3)
-integer  :: vindex, v, vp1
-!#! integer  :: verttype, vindex, v, vp1
-logical  :: inside, foundit
-
-
-! initialization
-      c = MISSING_R8
-  lower = MISSING_R8
-  upper = MISSING_R8
-  fract = 0.0_r8
-weights = 0.0_r8
-    ier = 0
-     nc = 1
-
-! unpack the location into local vars
-llv = get_location(loc)
-lon  = llv(1)
-lat  = llv(2)
-vert = llv(3)
-!#! verttype = nint(query_location(loc))
-
-cellid = find_closest_cell_center(lat, lon)
-!#! if ((xyzdebug > 5) .and. do_output()) &
-!#!    print *, 'closest cell center for lon/lat: ', lon, lat, cellid
-if (cellid < 1) then
-   ier = 11  
-   return
-endif
-
-c(1) = cellid
-
-!>@tod FIXME : you may want something similar but not how mpas does it
-!$! if (on_boundary(cellid)) then
-!$!    ier = 12
-!$!    return
-!$! endif
-
-!>@tod FIXME : you may want something similar but not how mpas does it
-!$! if (.not. inside_cell(cellid, lat, lon)) then
-!$!    ier = 13
-!$!    return
-!$! endif
-
-!>@tod FIXME : you may want something similar but not how mpas does it
-!$! ! closest vertex to given point.
-!$! closest_vert = closest_vertex_ll(cellid, lat, lon)
-!$! if ((xyzdebug > 5) .and. do_output()) &
-!$!    print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
-
-! collect the neighboring cell ids and vertex numbers
-! this 2-step process avoids us having to read in the
-! cellsOnCells() array which i think we only need here.
-! if it comes up in more places, we can give up the space
-! and read it in and then this is a direct lookup.
-! also note which index is the closest vert and later on
-! we can start the triangle search there.
-vindex = 1
-nedges = 3 !truenEdgesOnCell(cellid)
-
-!#! do i=1, nedges
-!#!    edgeid = edgesOnCell(i, cellid)
-!#!    if (cellsOnEdge(1, edgeid) /= cellid) then
-!#!       neighborcells(i) = cellsOnEdge(1, edgeid)
-!#!    else
-!#!       neighborcells(i) = cellsOnEdge(2, edgeid)
-!#!    endif
-!#!    verts(i) = verticesOnCell(i, cellid)
-!#!    if (verts(i) == closest_vert) vindex = i
-!#!    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
-!#!       xdata(i), ydata(i), zdata(i))
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine get_3d_weights(p, v1, v2, v3, lat, lon, weights)
+!#! 
+!#! ! Given a point p (x,y,z) inside a triangle, and the (x,y,z)
+!#! ! coordinates of the triangle corner points (v1, v2, v3),
+!#! ! find the weights for a barycentric interpolation.  this
+!#! ! computation only needs two of the three coordinates, so figure
+!#! ! out which quadrant of the sphere the triangle is in and pick
+!#! ! the 2 axes which are the least planar:
+!#! !  (x,y) near the poles,
+!#! !  (y,z) near 0 and 180 longitudes near the equator,
+!#! !  (x,z) near 90 and 270 longitude near the equator.
+!#! ! (lat/lon are the coords of p. we could compute them here
+!#! ! but since in all cases we already have them, pass them
+!#! ! down for efficiency)
+!#! 
+!#! real(r8), intent(in)  :: p(3)
+!#! real(r8), intent(in)  :: v1(3), v2(3), v3(3)
+!#! real(r8), intent(in)  :: lat, lon
+!#! real(r8), intent(out) :: weights(3)
+!#! 
+!#! real(r8) :: cxs(3), cys(3)
+!#! 
+!#! ! above or below 45 in latitude, where -90 < lat < 90:
+!#! if (lat >= 45.0_r8 .or. lat <= -45.0_r8) then
+!#!    cxs(1) = v1(1)
+!#!    cxs(2) = v2(1)
+!#!    cxs(3) = v3(1)
+!#!    cys(1) = v1(2)
+!#!    cys(2) = v2(2)
+!#!    cys(3) = v3(2)
+!#!    call get_barycentric_weights(p(1), p(2), cxs, cys, weights)
+!#!    return
+!#! endif
+!#! 
+!#! ! nearest 0 or 180 in longitude, where 0 < lon < 360:
+!#! if ( lon <= 45.0_r8 .or. lon >= 315.0_r8 .or. &
+!#!     (lon >= 135.0_r8 .and. lon <= 225.0_r8)) then
+!#!    cxs(1) = v1(2)
+!#!    cxs(2) = v2(2)
+!#!    cxs(3) = v3(2)
+!#!    cys(1) = v1(3)
+!#!    cys(2) = v2(3)
+!#!    cys(3) = v3(3)
+!#!    call get_barycentric_weights(p(2), p(3), cxs, cys, weights)
+!#!    return
+!#! endif
+!#! 
+!#! ! last option, nearest 90 or 270 in lon:
+!#! cxs(1) = v1(1)
+!#! cxs(2) = v2(1)
+!#! cxs(3) = v3(1)
+!#! cys(1) = v1(3)
+!#! cys(2) = v2(3)
+!#! cys(3) = v3(3)
+!#! call get_barycentric_weights(p(1), p(3), cxs, cys, weights)
+!#! 
+!#! end subroutine get_3d_weights
+!#! 
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine get_barycentric_weights(x, y, cxs, cys, weights)
+!#! 
+!#! ! Computes the barycentric weights for a 2d interpolation point
+!#! ! (x,y) in a 2d triangle with the given (cxs,cys) corners.
+!#! 
+!#! real(r8), intent(in)  :: x, y, cxs(3), cys(3)
+!#! real(r8), intent(out) :: weights(3)
+!#! 
+!#! real(r8) :: denom
+!#! 
+!#! ! Get denominator
+!#! denom = (cys(2) - cys(3)) * (cxs(1) - cxs(3)) + &
+!#!    (cxs(3) - cxs(2)) * (cys(1) - cys(3))
+!#! 
+!#! weights(1) = ((cys(2) - cys(3)) * (x - cxs(3)) + &
+!#!    (cxs(3) - cxs(2)) * (y - cys(3))) / denom
+!#! 
+!#! weights(2) = ((cys(3) - cys(1)) * (x - cxs(3)) + &
+!#!    (cxs(1) - cxs(3)) * (y - cys(3))) / denom
+!#! 
+!#! weights(3) = 1.0_r8 - weights(1) - weights(2)
+!#! 
+!#! ! FIXME: i want to remove this code.  does it affect the answers?
+!#! if (any(abs(weights) < roundoff)) then
+!#!    !print *, 'get_barycentric_weights due to roundoff errors: ', weights
+!#!    where (abs(weights) < roundoff) weights = 0.0_r8
+!#!    where (abs(1.0_r8 - abs(weights)) < roundoff) weights = 1.0_r8
+!#! endif
+!#! if(abs(sum(weights)-1.0_r8) > roundoff) &
+!#!    print *, 'fail in get_barycentric_weights: sum(weights) = ',sum(weights)
+!#! !end FIXME section
+!#! 
+!#! end subroutine get_barycentric_weights
+!#! 
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine compute_scalar_with_barycentric(x, loc, n, ival, dval, ier)
+!#! real(r8),            intent(in)  :: x(:)
+!#! type(location_type), intent(in)  :: loc
+!#! integer,             intent(in)  :: n
+!#! integer,             intent(in)  :: ival(:)
+!#! real(r8),            intent(out) :: dval(:)
+!#! integer,             intent(out) :: ier
+!#! 
+!#! real(r8) :: fract(3), lowval(3), uppval(3), fdata(3), weights(3)
+!#! integer  :: lower(3), upper(3), c(3), nvert, index1, k, i, nc
+!#! 
+!#! dval = MISSING_R8
+!#! 
+!#! call find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
+!#! if(ier /= 0) return
+!#! 
+!#! dval = 0.0_r8
+!#! do k=1, n
+!#!    ! get the starting index in the state vector
+!#!    index1 = progvar(ival(k))%index1
+!#!    nvert = progvar(ival(k))%numvertical
+!#! 
+!#!    ! go around triangle and interpolate in the vertical
+!#!    ! t1, t2, t3 are the xyz of the cell centers
+!#!    ! c(3) are the cell ids
+!#!    do i = 1, nc
+!#!       lowval(i) = x(index1 + (c(i)-1) * nvert + lower(i)-1)
+!#!       uppval(i) = x(index1 + (c(i)-1) * nvert + upper(i)-1)
+!#!       fdata(i) = lowval(i)*(1.0_r8 - fract(i)) + uppval(i)*fract(i)
+!#!       if((debug > 9) .and. do_output()) &
+!#!       print '(A,I2,A,I2,5f12.5)','compute_scalar_with_barycentric: nv=',k,' ic =',i, &
+!#!                                   lowval(i),uppval(i),fdata(i),fract(i),weights(i)
+!#! 
+!#!    enddo
+!#! 
+!#!    ! now have vertically interpolated values at cell centers.
+!#!    ! use weights to compute value at interp point.
+!#!    dval(k) = sum(weights(1:nc) * fdata(1:nc))
+!#! !print *, 'k, dval(k) = ', k, dval(k)
 !#! enddo
-
-!>@todo FIXME : should not need to convert between latlon and xyz
-!#! ! get the cartesian coordinates in the cell plane for the closest center
-!#! call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
-!#!  
-!#! !and the observation point
-!#! call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
-
-if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
-
-   ! need vert index for the vertical level
-   nc = 1
-
-   ! This is a grid point - horiz interpolation NOT needed
-   weights(1) = 1.0_r8
-
-else                       ! an arbitrary point
-
-! find the cell-center-tri that encloses the obs point
-! figure out which way vertices go around cell?
-foundit = .false.
-findtri: do i=vindex, vindex+nedges
-   v = mod(i-1, nedges) + 1
-   vp1 = mod(i, nedges) + 1
-   t2(1) = xdata(v)
-   t2(2) = ydata(v)
-   t2(3) = zdata(v)
-   t3(1) = xdata(vp1)
-   t3(2) = ydata(vp1)
-   t3(3) = zdata(vp1)
-   call inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
-   if (inside) then
-      ! weights are the barycentric weights for the point r
-      ! in the triangle formed by t1, t2, t3.
-      ! v and vp1 are vert indices which are same indices
-      ! for cell centers
-! FIXME: i want to remove this code.  does it affect the answers?
-      if(any(weights == 1.0_r8)) then
-         nc = 1
-!      else
-!end FIXME section
-!         nc = 3
-!         c(2) = neighborcells(v)
-!         c(3) = neighborcells(vp1)
-! FIXME: i want to remove this code.  does it affect the answers?
-      endif
-!end FIXME section
-      foundit = .true.
-      exit findtri
-   endif
-enddo findtri
-if (.not. foundit) then
-   ier = 14     ! 11
-   return
-endif
-
-endif     ! horizontal index search is done now.
-
-! need vert index for the vertical level
-call find_vert_level(x, loc, nc, c, .true., lower, upper, fract, ier)
-if(ier /= 0) return
-
-if ((debug > 9) .and. do_output()) then
-   write(string3,*) 'ier = ',ier, ' triangle = ',c(1:nc), ' vert_index = ',lower(1:nc)+fract(1:nc)
-   call error_handler(E_MSG, 'find_triangle_vert_indices', string3, source, revision, revdate)
-endif
-
-if ((debug > 8) .and. do_output()) then
-   print *, 'nc = ', nc
-   print *, 'c = ', c
-   print *, 'lower = ', lower(1:nc)
-   print *, 'upper = ', upper(1:nc)
-   print *, 'fract = ', fract(1:nc)
-   print *, 'weights = ', weights
-   print *, 'ier = ', ier
-endif
-
-end subroutine find_triangle_vert_indices
+!#! 
+!#! ier = 0
+!#! 
+!#! end subroutine compute_scalar_with_barycentric
+!#! 
+!#! !------------------------------------------------------------
+!#! 
+!#! subroutine find_triangle_vert_indices (x, loc, nc, c, lower, upper, fract, weights, ier)
+!#! real(r8),            intent(in)  :: x(:)
+!#! type(location_type), intent(in)  :: loc
+!#! integer,             intent(out) :: nc
+!#! integer,             intent(out) :: c(:)
+!#! integer,             intent(out) :: lower(:), upper(:)
+!#! real(r8),            intent(out) :: fract(:)
+!#! real(r8),            intent(out) :: weights(:)
+!#! integer,             intent(out) :: ier
+!#! 
+!#! ! compute the values at the correct vertical level for each
+!#! ! of the 3 cell centers defining a triangle that encloses the
+!#! ! the interpolation point, then interpolate once in the horizontal
+!#! ! using barycentric weights to get the value at the interpolation point.
+!#! 
+!#! integer, parameter :: listsize = 30
+!#! integer  :: nedges, i !#!, neighborcells(maxEdges), edgeid
+!#! real(r8) :: xdata(listsize), ydata(listsize), zdata(listsize)
+!#! real(r8) :: t1(3), t2(3), t3(3), r(3)
+!#! integer  :: cellid, verts(listsize), closest_vert
+!#! real(r8) :: lat, lon, vert, llv(3)
+!#! integer  :: vindex, v, vp1
+!#! !#! integer  :: verttype, vindex, v, vp1
+!#! logical  :: inside, foundit
+!#! 
+!#! 
+!#! ! initialization
+!#!       c = MISSING_R8
+!#!   lower = MISSING_R8
+!#!   upper = MISSING_R8
+!#!   fract = 0.0_r8
+!#! weights = 0.0_r8
+!#!     ier = 0
+!#!      nc = 1
+!#! 
+!#! ! unpack the location into local vars
+!#! llv = get_location(loc)
+!#! lon  = llv(1)
+!#! lat  = llv(2)
+!#! vert = llv(3)
+!#! !#! verttype = nint(query_location(loc))
+!#! 
+!#! cellid = find_closest_cell_center(lat, lon)
+!#! !#! if ((xyzdebug > 5) .and. do_output()) &
+!#! !#!    print *, 'closest cell center for lon/lat: ', lon, lat, cellid
+!#! if (cellid < 1) then
+!#!    ier = 11  
+!#!    return
+!#! endif
+!#! 
+!#! c(1) = cellid
+!#! 
+!#! !>@tod FIXME : you may want something similar but not how mpas does it
+!#! !$! if (on_boundary(cellid)) then
+!#! !$!    ier = 12
+!#! !$!    return
+!#! !$! endif
+!#! 
+!#! !>@tod FIXME : you may want something similar but not how mpas does it
+!#! !$! if (.not. inside_cell(cellid, lat, lon)) then
+!#! !$!    ier = 13
+!#! !$!    return
+!#! !$! endif
+!#! 
+!#! !>@tod FIXME : you may want something similar but not how mpas does it
+!#! !$! ! closest vertex to given point.
+!#! !$! closest_vert = closest_vertex_ll(cellid, lat, lon)
+!#! !$! if ((xyzdebug > 5) .and. do_output()) &
+!#! !$!    print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
+!#! 
+!#! ! collect the neighboring cell ids and vertex numbers
+!#! ! this 2-step process avoids us having to read in the
+!#! ! cellsOnCells() array which i think we only need here.
+!#! ! if it comes up in more places, we can give up the space
+!#! ! and read it in and then this is a direct lookup.
+!#! ! also note which index is the closest vert and later on
+!#! ! we can start the triangle search there.
+!#! vindex = 1
+!#! nedges = 3 !truenEdgesOnCell(cellid)
+!#! 
+!#! !#! do i=1, nedges
+!#! !#!    edgeid = edgesOnCell(i, cellid)
+!#! !#!    if (cellsOnEdge(1, edgeid) /= cellid) then
+!#! !#!       neighborcells(i) = cellsOnEdge(1, edgeid)
+!#! !#!    else
+!#! !#!       neighborcells(i) = cellsOnEdge(2, edgeid)
+!#! !#!    endif
+!#! !#!    verts(i) = verticesOnCell(i, cellid)
+!#! !#!    if (verts(i) == closest_vert) vindex = i
+!#! !#!    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
+!#! !#!       xdata(i), ydata(i), zdata(i))
+!#! !#! enddo
+!#! 
+!#! !>@todo FIXME : should not need to convert between latlon and xyz
+!#! !#! ! get the cartesian coordinates in the cell plane for the closest center
+!#! !#! call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
+!#! !#!  
+!#! !#! !and the observation point
+!#! !#! call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+!#! 
+!#! if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
+!#! 
+!#!    ! need vert index for the vertical level
+!#!    nc = 1
+!#! 
+!#!    ! This is a grid point - horiz interpolation NOT needed
+!#!    weights(1) = 1.0_r8
+!#! 
+!#! else                       ! an arbitrary point
+!#! 
+!#! ! find the cell-center-tri that encloses the obs point
+!#! ! figure out which way vertices go around cell?
+!#! foundit = .false.
+!#! findtri: do i=vindex, vindex+nedges
+!#!    v = mod(i-1, nedges) + 1
+!#!    vp1 = mod(i, nedges) + 1
+!#!    t2(1) = xdata(v)
+!#!    t2(2) = ydata(v)
+!#!    t2(3) = zdata(v)
+!#!    t3(1) = xdata(vp1)
+!#!    t3(2) = ydata(vp1)
+!#!    t3(3) = zdata(vp1)
+!#!    call inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
+!#!    if (inside) then
+!#!       ! weights are the barycentric weights for the point r
+!#!       ! in the triangle formed by t1, t2, t3.
+!#!       ! v and vp1 are vert indices which are same indices
+!#!       ! for cell centers
+!#! ! FIXME: i want to remove this code.  does it affect the answers?
+!#!       if(any(weights == 1.0_r8)) then
+!#!          nc = 1
+!#! !      else
+!#! !end FIXME section
+!#! !         nc = 3
+!#! !         c(2) = neighborcells(v)
+!#! !         c(3) = neighborcells(vp1)
+!#! ! FIXME: i want to remove this code.  does it affect the answers?
+!#!       endif
+!#! !end FIXME section
+!#!       foundit = .true.
+!#!       exit findtri
+!#!    endif
+!#! enddo findtri
+!#! if (.not. foundit) then
+!#!    ier = 14     ! 11
+!#!    return
+!#! endif
+!#! 
+!#! endif     ! horizontal index search is done now.
+!#! 
+!#! ! need vert index for the vertical level
+!#! call find_vert_level(x, loc, nc, c, .true., lower, upper, fract, ier)
+!#! if(ier /= 0) return
+!#! 
+!#! if ((debug > 9) .and. do_output()) then
+!#!    write(string3,*) 'ier = ',ier, ' triangle = ',c(1:nc), ' vert_index = ',lower(1:nc)+fract(1:nc)
+!#!    call error_handler(E_MSG, 'find_triangle_vert_indices', string3, source, revision, revdate)
+!#! endif
+!#! 
+!#! if ((debug > 8) .and. do_output()) then
+!#!    print *, 'nc = ', nc
+!#!    print *, 'c = ', c
+!#!    print *, 'lower = ', lower(1:nc)
+!#!    print *, 'upper = ', upper(1:nc)
+!#!    print *, 'fract = ', fract(1:nc)
+!#!    print *, 'weights = ', weights
+!#!    print *, 'ier = ', ier
+!#! endif
+!#! 
+!#! end subroutine find_triangle_vert_indices
 
 
 !------------------------------------------------------------
@@ -4300,18 +4300,20 @@ endif
 
 pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
 
-call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
-
-! decide what to do if we don't find anything.
-if (rc /= 0 .or. closest_cell < 0) then
-   if ((debug > 8) .and. do_output()) &
-       print *, 'cannot find nearest cell to lon, lat: ', lon, lat
-   find_closest_cell_center = -1
-   return
-endif
-
-! this is the cell index for the closest center
-find_closest_cell_center = closest_cell
+!@>todo FIXME : need to figure out which routine to use to find center.
+!@> tim shoud know.
+!#! call find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
+!#! 
+!#! ! decide what to do if we don't find anything.
+!#! if (rc /= 0 .or. closest_cell < 0) then
+!#!    if ((debug > 8) .and. do_output()) &
+!#!        print *, 'cannot find nearest cell to lon, lat: ', lon, lat
+!#!    find_closest_cell_center = -1
+!#!    return
+!#! endif
+!#! 
+!#! ! this is the cell index for the closest center
+!#! find_closest_cell_center = closest_cell
 
 end function find_closest_cell_center
 
@@ -4531,56 +4533,56 @@ end subroutine finalize_closest_center
 
 !------------------------------------------------------------
 
-subroutine inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
-
-! given 3 corners of a triangle and an xyz point, compute whether
-! the point is inside the triangle.  this assumes r is coplanar
-! with the triangle - the caller must have done the lat/lon to
-! xyz conversion with a constant radius and then this will be
-! true (enough).  sets inside to true/false, and returns the
-! weights if true.  weights are set to 0 if false.
-
-real(r8), intent(in)  :: t1(3), t2(3), t3(3)
-real(r8), intent(in)  :: r(3), lat, lon
-logical,  intent(out) :: inside
-real(r8), intent(out) :: weights(3)
-
-! check for degenerate cases first - is the test point located
-! directly on one of the vertices?  (this case may be common
-! if we're computing on grid point locations.)
-if (all(abs(r - t1) < roundoff)) then
-   inside = .true.
-   weights = (/ 1.0_r8, 0.0_r8, 0.0_r8 /)
-   return
-else if (all(abs(r - t2) < roundoff)) then
-   inside = .true.
-   weights = (/ 0.0_r8, 1.0_r8, 0.0_r8 /)
-   return
-else if (all(abs(r - t3) < roundoff)) then
-   inside = .true.
-   weights = (/ 0.0_r8, 0.0_r8, 1.0_r8 /)
-   return
-endif
-
-! not a vertex. compute the weights.  if any are
-! negative, the point is outside.  since these are
-! real valued computations define a lower bound for
-! numerical roundoff error and be sure that the
-! weights are not just *slightly* negative.
-call get_3d_weights(r, t1, t2, t3, lat, lon, weights)
-
-if (any(weights < -roundoff)) then
-   inside = .false.
-   weights = 0.0_r8
-   return
-endif
-
-! truncate barely negative values to 0
-inside = .true.
-where (weights < 0.0_r8) weights = 0.0_r8
-return
-
-end subroutine inside_triangle
+!#! subroutine inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
+!#! 
+!#! ! given 3 corners of a triangle and an xyz point, compute whether
+!#! ! the point is inside the triangle.  this assumes r is coplanar
+!#! ! with the triangle - the caller must have done the lat/lon to
+!#! ! xyz conversion with a constant radius and then this will be
+!#! ! true (enough).  sets inside to true/false, and returns the
+!#! ! weights if true.  weights are set to 0 if false.
+!#! 
+!#! real(r8), intent(in)  :: t1(3), t2(3), t3(3)
+!#! real(r8), intent(in)  :: r(3), lat, lon
+!#! logical,  intent(out) :: inside
+!#! real(r8), intent(out) :: weights(3)
+!#! 
+!#! ! check for degenerate cases first - is the test point located
+!#! ! directly on one of the vertices?  (this case may be common
+!#! ! if we're computing on grid point locations.)
+!#! if (all(abs(r - t1) < roundoff)) then
+!#!    inside = .true.
+!#!    weights = (/ 1.0_r8, 0.0_r8, 0.0_r8 /)
+!#!    return
+!#! else if (all(abs(r - t2) < roundoff)) then
+!#!    inside = .true.
+!#!    weights = (/ 0.0_r8, 1.0_r8, 0.0_r8 /)
+!#!    return
+!#! else if (all(abs(r - t3) < roundoff)) then
+!#!    inside = .true.
+!#!    weights = (/ 0.0_r8, 0.0_r8, 1.0_r8 /)
+!#!    return
+!#! endif
+!#! 
+!#! ! not a vertex. compute the weights.  if any are
+!#! ! negative, the point is outside.  since these are
+!#! ! real valued computations define a lower bound for
+!#! ! numerical roundoff error and be sure that the
+!#! ! weights are not just *slightly* negative.
+!#! call get_3d_weights(r, t1, t2, t3, lat, lon, weights)
+!#! 
+!#! if (any(weights < -roundoff)) then
+!#!    inside = .false.
+!#!    weights = 0.0_r8
+!#!    return
+!#! endif
+!#! 
+!#! ! truncate barely negative values to 0
+!#! inside = .true.
+!#! where (weights < 0.0_r8) weights = 0.0_r8
+!#! return
+!#! 
+!#! end subroutine inside_triangle
 
 !>@todo FIXME : function no used
 !#! !------------------------------------------------------------
@@ -4714,31 +4716,31 @@ end subroutine inside_triangle
 
 !------------------------------------------------------------------
 
-function theta_to_tk (theta, rho, qv)
-
-! Compute sensible temperature [K] from potential temperature [K].
-! code matches computation done in MPAS model
-
-real(r8), intent(in)  :: theta    ! potential temperature [K]
-real(r8), intent(in)  :: rho      ! dry density
-real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
-real(r8)  :: theta_to_tk          ! sensible temperature [K]
-
-! Local variables
-real(r8) :: theta_m               ! potential temperature modified by qv
-real(r8) :: exner                 ! exner function
-real(r8) :: qv_nonzero            ! qv >= 0
-
-qv_nonzero = max(qv,0.0_r8)
-theta_m = (1.0_r8 + 1.61_r8 * qv_nonzero)*theta
-
-!theta_m = (1.0_r8 + 1.61_r8 * (max(qv, 0.0_r8)))*theta
-exner = ( (rgas/p0) * (rho*theta_m) )**rcv
-
-! Temperature [K]
-theta_to_tk = theta * exner
-
-end function theta_to_tk
+!#! function theta_to_tk (theta, rho, qv)
+!#! 
+!#! ! Compute sensible temperature [K] from potential temperature [K].
+!#! ! code matches computation done in MPAS model
+!#! 
+!#! real(r8), intent(in)  :: theta    ! potential temperature [K]
+!#! real(r8), intent(in)  :: rho      ! dry density
+!#! real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
+!#! real(r8)  :: theta_to_tk          ! sensible temperature [K]
+!#! 
+!#! ! Local variables
+!#! real(r8) :: theta_m               ! potential temperature modified by qv
+!#! real(r8) :: exner                 ! exner function
+!#! real(r8) :: qv_nonzero            ! qv >= 0
+!#! 
+!#! qv_nonzero = max(qv,0.0_r8)
+!#! theta_m = (1.0_r8 + 1.61_r8 * qv_nonzero)*theta
+!#! 
+!#! !theta_m = (1.0_r8 + 1.61_r8 * (max(qv, 0.0_r8)))*theta
+!#! exner = ( (rgas/p0) * (rho*theta_m) )**rcv
+!#! 
+!#! ! Temperature [K]
+!#! theta_to_tk = theta * exner
+!#! 
+!#! end function theta_to_tk
 
 
 !#! !------------------------------------------------------------------
