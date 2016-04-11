@@ -190,17 +190,15 @@
    use_rbf_option               = 2,
 
 &model_nml
-   model_analysis_filename      = '/work/ans051/TSS/ZEN01/ENS30/ENS30.2008.oce.nc'
-   grid_definition_filename     = ''
-   output_state_vector          = .true., 
-   model_analysis_filename      = '/work/ans051/TSS/INI09/ENS01/ENS01.2009.oce.nc',
-   grid_definition_filename     = '',
+   model_analysis_filename      = 'ENS01.2009.oce.nc'
    output_state_vector          = .true., 
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 86400,
    model_perturbation_amplitude = 0.0001,
    calendar                     = 'Gregorian',
    debug                        = 10
+   feom_state_variables = 'salt', 'KIND_SALINITY',
+                          'temp', 'KIND_TEMPERATURE'
    /
 
 # NOTE: h(nVertLevels,nCells,Time) is layer thickness, not SSH
@@ -213,12 +211,6 @@
 #                    'tracer1',      'KIND_TRACER_CONCENTRATION' 
 #                          'u',      'KIND_EDGE_NORMAL_SPEED',
 #                'temperature',      'KIND_POTENTIAL_TEMPERATURE',
-
-&feom_vars_nml
-   feom_state_variables = 'salt', 'KIND_SALINITY',
-                          'temp', 'KIND_TEMPERATURE'
-
-  /
 
 &model_to_dart_nml
    model_to_dart_output_file  = 'filter_ics.0001',

@@ -76,7 +76,16 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-use    feom_modules
+
+use      feom_modules, only: read_node, read_aux3, read_depth, read_namelist, &
+                             nCells => myDim_nod2D, & ! Total number of cells making up the grid
+                             nVertices => myDim_nod3D, & ! wet points in grid
+                             nVertLevels => max_num_layers, & ! number of vertical levels
+                             layerdepth, & ! depth at each level (m)
+                             coord_nod2D, &
+                             num_layers_below_nod2d, &
+                             nod2d_corresp_to_nod3D, &
+                             nod3d_below_nod2d
 
 ! netcdf modules
 use typesizes
@@ -167,27 +176,27 @@ logical            :: output_state_vector = .true.  ! output prognostic variable
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
-!#!character(len=256) :: grid_definition_filename = 'mpas_analysis.nc'
+
+! DART state vector contents 
+integer, parameter :: max_state_variables = 80
+integer, parameter :: num_state_table_columns = 2
+integer, parameter :: num_bounds_table_columns = 4
+character(len=NF90_MAX_NAME) :: feom_state_variables(max_state_variables * num_state_table_columns ) = ' '
+!todo FIXME : use the state bounds to clamp variables out of range
+character(len=NF90_MAX_NAME) :: mpas_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
 
 namelist /model_nml/             &
    model_analysis_filename,      &
-   !#!grid_definition_filename,     &
    output_state_vector,          &
    !#! vert_localization_coord,      &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    calendar,                     &
+   feom_state_variables,         &
+   mpas_state_bounds,            &
    debug
 
-! DART state vector contents are specified in the input.nml:&feom_vars_nml namelist.
-integer, parameter :: max_state_variables = 80
-integer, parameter :: num_state_table_columns = 2
-integer, parameter :: num_bounds_table_columns = 4
-character(len=NF90_MAX_NAME) :: feom_state_variables(max_state_variables * num_state_table_columns ) = ' '
-
-!todo FIXME : use the state bounds to clamp variables out of range
-character(len=NF90_MAX_NAME) :: mpas_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
 character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_table_columns )
 
 namelist /feom_vars_nml/ feom_state_variables, mpas_state_bounds
@@ -225,16 +234,8 @@ type(progvartype), dimension(max_state_variables) :: progvar
 
 ! Grid parameters - the values will be read from an mpas analysis file.
 
-integer :: nCells        = -1  ! Total number of cells making up the grid
-integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
-integer :: nVertLevels   = -1  ! Vertical levels; count of vert cell centers
 
-! scalar grid positions
-real(r8), allocatable :: lonCell(:) ! cell center longitudes (degrees, original radians in file)
-real(r8), allocatable :: latCell(:) ! cell center latitudes  (degrees, original radians in file)
-
-real(r8), allocatable :: hZLevel(:)   ! layer thicknesses - maybe - FIXME
-!$! integer,  allocatable :: maxLevelCell(:) ! list of maximum (deepest) level for each cell
+!$! integer :: FEOM:num_layers_below_2d(:) ! list of maximum (deepest) level index for each cell
 
 real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
 
@@ -365,15 +366,6 @@ call check_namelist_read(iunit, io, 'model_nml')
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
-! Read the MPAS variable list to populate DART state vector
-! Intentionally do not try to dump them to the nml unit because
-! they include large character arrays which output pages of white space.
-! The routine that reads and parses this namelist will output what
-! values it found into the log.
-call find_namelist_in_file('input.nml', 'feom_vars_nml', iunit)
-read(iunit, nml = feom_vars_nml, iostat = io)
-call check_namelist_read(iunit, io, 'feom_vars_nml')
-
 !---------------------------------------------------------------
 ! Set the time step ... causes mpas namelists to be read.
 ! Ensures model_timestep is multiple of 'dynamics_timestep'
@@ -392,12 +384,14 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! 2) allocate space for the grids
 ! 3) read them from the analysis file
 
-! read_grid_dims() fills in the following module global variables:
-!  nCells, nVertices, nVertLevels, , 
+! Get the FeoM run-time configurations from a hardcoded filename
+! must be called 'namelist.config' in the current directory.
+call read_namelist() 
+
+! read_grid_dims() sets nCells, nVertices, nVertLevels
 call read_grid_dims()
 
-allocate(latCell(nCells), lonCell(nCells))
-allocate(hZLevel(nVertLevels))
+allocate( cell_locations(nCells), cell_kinds(nCells) )
 
 ! see if U is in the state vector list.  if not, don't read in or
 ! use any of the Edge arrays to save space.
@@ -498,10 +492,10 @@ do ivar = 1, nfields
 
       select case ( dimname(1:8) )
          case ('nodes_2d')
-            progvar(ivar)%numcells = myDim_nod2d
+            progvar(ivar)%numcells = nCells
          case ('nodes_3d')
-            progvar(ivar)%numcells    = myDim_nod3d
-            progvar(ivar)%numvertical = max_num_layers
+            progvar(ivar)%numcells    = nVertices
+            progvar(ivar)%numvertical = nVertLevels
       end select
 
    enddo DimensionLoop
@@ -533,25 +527,6 @@ if ( debug > 0 .and. do_output()) then
   write(logfileunit, *)'static_init_model: model_size = ', model_size
   write(     *     , *)'static_init_model: model_size = ', model_size
 endif
-string1 = 'WARNING: fix block of required variables - detritus from atmosphere'
-call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
-
-allocate( ens_mean(model_size) )
-
-
-allocate(cell_locations(model_size), cell_kinds(model_size))
-
-!>@ TODO ali
-! This array has to be filled in EXACTLY the same way that the
-! FeoM state gets packed into the DART state vector.
-
-do i=1,model_size
-   cell_locations(i) = set_location(lonCell(i), latCell(i), 0.0_r8, VERTISHEIGHT)
-enddo
-
-do i=1,nfields
-   cell_kinds( progvar(i)%index1 : progvar(i)%indexN ) = progvar(i)%dart_kind
-enddo 
 
 end subroutine static_init_model
 
@@ -597,61 +572,12 @@ if( myindx == -1 ) then
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
 
-location = cell_locations(index_in)
+! This works even if the variable is 2D 
+location = cell_locations(nod2d_corresp_to_nod3D(myindx))
 
 if (present(var_type)) then
    var_type = progvar(nf)%dart_kind
 endif
-
-! TJH ... as far as I can tell, everythin in the rest of this routine can be deleted.
-
-! Now that we know the variable, find the cell or edge
-
-if (     progvar(nf)%numcells /= MISSING_I) then
-   nxp = progvar(nf)%numcells
-else
-     write(string1,*) 'ERROR, ',trim(progvar(nf)%varname),' is not defined on edges or cells'
-     call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
-endif
-
-nzp  = progvar(nf)%numvertical
-iloc = 1 + (myindx-1) / nzp    ! cell index
-vloc = myindx - (iloc-1)*nzp   ! vertical level index
-!  print*, "nzp,iloc,vloc: ",nzp,iloc,vloc
-
-! the zGrid array contains the location of the cell top and bottom faces, so it has one
-! more value than the number of cells in each column.  for locations of cell centers
-! you have to take the midpoint of the top and bottom face of the cell.
-
-depth=layerdepth(vloc)
-
-! if (nzp <= 1) then
-  location = set_location(lonCell(iloc),latCell(iloc), depth, VERTISHEIGHT)
-! endif
-
-!print*, "lonCell(iloc),latCell(iloc): ",lonCell(iloc),latCell(iloc)
-
-! Let us return the vert location with the requested vertical localization coordinate
-! hoping that the code can run faster when same points are close to many obs
-! since vert_convert does not need to be called repeatedly in get_close_obs any more.
-! FIXME: we should test this to see if it's a win (in computation time).  for obs
-! which are not dense relative to the grid, this might be slower than doing the
-! conversions on demand in the localization code (in get_close_obs()).
-
-! if ( .not. horiz_dist_only .and. vert_localization_coord /= VERTISHEIGHT ) then
-!      new_location = location
-!      call vert_convert(ens_mean, new_location, progvar(nf)%dart_kind, vert_localization_coord, istatus)
-!      if(istatus == 0) location = new_location
-! endif
-
-if (debug > 12 .and. do_output()) then
-
-    write(*,'("INDEX_IN / myindx / IVAR / NX, NZ: ",2(i10,2x),3(i5,2x))') index_in, myindx, nf, nxp, nzp
-    write(*,'("                       ILOC, KLOC: ",2(i5,2x))') iloc, vloc
-    write(*,'("                      LON/LAT/HGT: ",3(f12.3,2x))') lonCell(iloc), latCell(iloc), depth
-
-endif
-
 
 end subroutine get_state_meta_data
 
@@ -675,8 +601,8 @@ subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 !       ISTATUS = 13:  Missing value in interpolation.
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values
-!       ISTATUS = 18:  altitude illegal
-!       ISTATUS = 19:  could not compute u using RBF code
+!       ISTATUS = 18:  observation too shallow
+!       ISTATUS = 19:  observation too deep
 !       ISTATUS = 101: Internal error; reached end of subroutine without
 !                      finding an applicable case.
 !
@@ -692,10 +618,10 @@ integer,             intent(out) :: istatus
 ! local storage
 
 integer  :: ivar, obs_kind, closest_index, iclose, indx
-integer  :: num_close, num_wanted
+integer  :: num_close, num_wanted, ilayer, layer_below
 real(r8) :: llv(3), lon, lat, vert
 real(r8) :: closest
-real(r8), allocatable :: distances(:)
+real(r8) :: distance
 character(len=obstypelength) :: kind_name
 
 integer  :: close_ind(model_size) ! undesirable to have something this big ... but ...
@@ -719,14 +645,6 @@ if (debug > 0) then
    print*,trim(string1), obs_kind
 endif
 
-!>@ TODO FIXME TJH For 'identity' observations, Tim cannot remember what to do ...
-if (obs_kind < 0) then
-   write(string1,*) 'Trying to interpolate a KIND of ',obs_kind
-   write(string2,*) 'Tim cannot remember what to do ... FIXME'
-   call error_handler(E_ERR,'model_interpolate', string1, &
-              source, revision, revdate, text2=string2)
-endif
-
 ! Make sure the DART state has the type (T,S,U,etc.) that we are asking for.
 ! If we cannot, simply return and 'fail' with an 88
 
@@ -735,6 +653,8 @@ if (ivar < 1) then
    istatus = 88
    return
 endif
+
+write(*,*)'TJH check dimname(1) is ',progvar(ivar)%dimname(1)
 
 ! Decode the location into bits for error messages ...
 llv  = get_location(location)
@@ -762,34 +682,57 @@ endif
 closest = 1000000.0_r8 ! not very close
 closest_index = 0
 
-allocate(distances(num_close))
-num_wanted = 0
 CLOSE : do iclose = 1, num_close
 
-   indx = close_ind(iclose)
+   indx     = close_ind(iclose)
+   distance = get_dist(location, cell_locations(indx))
 
-   if (cell_kinds(indx) /= obs_kind) cycle CLOSE   !> @ TODO ... is this needed
+   if (debug > 0 .and. do_output()) &
+      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
 
-   num_wanted = num_wanted + 1
-   kind_name  = get_raw_obs_kind_name(cell_kinds(indx))
-   distances(num_wanted) = get_dist(location, cell_locations(indx))
-
-   if (distances(num_wanted) < closest) then
-      closest       = distances(num_wanted)
+   if (distance < closest) then
+      closest       = distance
       closest_index = indx
-   endif
-
-   if (debug > 0 .and. do_output()) then
-
-      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distances(num_wanted)
-
    endif
 
 enddo CLOSE
 
-! We just want the value of the closest cell/node/whatever
+if (debug > 0 .and. do_output()) &
+      write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
 
-interp_val = x(closest_index)
+! Now we know the 2D horizontal gridcell of interest.
+! Find the vertical node that is closest in depth.
+! use the : nod3D_below_nod2D nod2D_corresp_to_nod3D
+! arrays from the FEOM module.
+
+if (progvar(ivar)%dimname(1) == 'nodes_2d') then
+   interp_val = x( progvar(ivar)%index1 + closest_index )
+else
+   ! Which vertical level is closest
+   ! use the nod3D_below_nod2D(nVertLevels,nCells)  array to figure out 
+
+   layer_below = 0
+   LAYER: do ilayer = 1,nVertLevels
+      if (layerdepth(ilayer) > vert ) then
+           layer_below = ilayer
+           exit LAYER
+      endif
+   enddo LAYER
+
+   if (layer_below == 0) then
+       istatus = 19
+       return ! below the deepest level
+   else if (layer_below == 1) then
+       istatus = 18
+      return ! too shallow
+   else
+       !> @ TODO ALI ... your job to figure out the vertical contibs from above and below ..
+   endif
+
+! interp_val = a * x(closest_index) * (1-a) * x(deeper_index)
+
+endif
+
 istatus    = 0
 
 if (debug > 0) then
@@ -798,8 +741,6 @@ if (debug > 0) then
    print *, interp_val, istatus, obs_kind 
    print *, trim(string1)
 endif
-
-deallocate(distances)
 
 end subroutine model_interpolate
 
@@ -975,9 +916,9 @@ else
    !----------------------------------------------------------------------------
 
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nodes_2d', &
-          len = myDim_nod2D, dimid = nodes_2DimID),'nc_write_model_atts', 'nodes_2D def_dim '//trim(filename))
+          len = nCells, dimid = nodes_2DimID),'nc_write_model_atts', 'nodes_2D def_dim '//trim(filename))
    call nc_check(nf90_def_dim(ncid=ncFileID, name='nodes_3d', &
-          len = myDim_nod3D, dimid = nodes_3DimID),'nc_write_model_atts', 'nodes_3D def_dim '//trim(filename))
+          len = nVertices, dimid = nodes_3DimID),'nc_write_model_atts', 'nodes_3D def_dim '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -1020,18 +961,18 @@ else
 
    call nc_check(NF90_inq_varid(ncFileID, 'lonCell', VarID), &
                  'nc_write_model_atts', 'lonCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, lonCell ), &
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2D(1,:) ), &
                 'nc_write_model_atts', 'lonCell put_var '//trim(filename))
 
    call nc_check(NF90_inq_varid(ncFileID, 'latCell', VarID), &
                  'nc_write_model_atts', 'latCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, latCell ), &
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2d(2,:) ), &
                 'nc_write_model_atts', 'latCell put_var '//trim(filename))
 
-   call nc_check(NF90_inq_varid(ncFileID, 'hZLevel', VarID), &
-                 'nc_write_model_atts', 'hZLevel inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, hZLevel ), &
-                'nc_write_model_atts', 'hZLevel put_var '//trim(filename))
+   call nc_check(NF90_inq_varid(ncFileID, 'layerdepth', VarID), &
+                 'nc_write_model_atts', 'layerdepth inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, layerdepth ), &
+                'nc_write_model_atts', 'layerdepth put_var '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Fill the coordinate variables needed for plotting only.
@@ -1039,9 +980,6 @@ else
    ! and parrot them to the DART output file.
    !----------------------------------------------------------------------------
 
-!#!  call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
-!#!              'nc_write_model_atts','open '//trim(grid_definition_filename))
-!#!   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
 endif
 
 !-------------------------------------------------------------------------------
@@ -1292,12 +1230,9 @@ real(r8), intent(in) :: filter_ens_mean(:)
 
 if ( .not. module_initialized ) call static_init_model
 
-ens_mean = filter_ens_mean
+call error_handler(E_ERR,'ens_mean_for_model','not supported for FeoM',source, revision, revdate)
 
-if ((debug > 3) .and. do_output()) then
-   print *, 'resetting ensemble mean: '
-   call print_variable_ranges(ens_mean)
-endif
+! ens_mean = filter_ens_mean
 
 end subroutine ens_mean_for_model
 
@@ -1308,8 +1243,6 @@ subroutine end_model()
 
 ! Does any shutdown and clean-up needed for model.
 
-if (allocated(latCell))        deallocate(latCell)
-if (allocated(lonCell))        deallocate(lonCell)
 if (allocated(cell_locations)) deallocate(cell_locations)
 if (allocated(cell_kinds))     deallocate(cell_kinds)
 
@@ -2282,10 +2215,10 @@ integer, intent(out) :: VertexDeg     ! Max number of edges that touch any verte
 
 if ( .not. module_initialized ) call static_init_model
 
-Cells      = myDim_nod2D
-Vertices   = myDim_nod3D
+Cells      = nCells
+Vertices   = nVertices
 Edges      = missing_I
-VertLevels = max_num_layers
+VertLevels = nVertLevels
 VertexDeg  = 60
 
 end subroutine get_grid_dims
@@ -2407,12 +2340,13 @@ integer  :: grid_id, dimid
 real(r8) :: t0, t1, t2, t3, t4
 
 call read_node()  ! sets myDim_nod2D, myDim_nod3D
-call read_aux3()  ! sets max_num_layers
+call read_aux3()  ! sets nVertLevels and node locating arrays
 call read_depth()
 
-nCells      = myDim_nod2D
-nVertices   = myDim_nod3D
-nVertLevels = max_num_layers
+! referenced by module 'use' 
+! nCells      = myDim_nod2D
+! nVertices   = myDim_nod3D
+! nVertLevels = max_num_layers
 
 if (debug > 4 .and. do_output()) then
    write(*,*)
@@ -2428,30 +2362,35 @@ end subroutine read_grid_dims
 
 subroutine get_grid()
 
-! Read the actual grid values in from the FeoM metadata files.
-!
+! the grid coordinates come from the FeoM module 
 
-integer  :: ncid, VarID, numdims, dimlen, i
+! latCell = coord_nod2D(2,:)
+! lonCell = coord_nod2D(1,:)
+!>@ TODO ... remove magic index numbers
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME) :: dimname
+integer :: i
 
-! Read the netcdf file data
-
-hZLevel = layerdepth(:)
-latCell = coord_nod2D(2,:)
-lonCell = coord_nod2D(1,:)
+where (coord_nod2D(1,:) < 0.0_r8) coord_nod2D(1,:) = coord_nod2D(1,:) + 360.0_r8
 
 ! Read the variables
 
-if ((debug > 9) .and. do_output()) then
+if ((debug > 1) .and. do_output()) then
 
    write(*,*)
-   write(*,*)'latCell           range ',minval(latCell),           maxval(latCell)
-   write(*,*)'lonCell           range ',minval(lonCell),           maxval(lonCell)
-   write(*,*)'hZLevel           range ',minval(hZLevel),           maxval(hZLevel)
+   write(*,*)'latitude    range ',minval(coord_nod2D(2,:)), maxval(coord_nod2D(2,:))
+   write(*,*)'longitude   range ',minval(coord_nod2D(1,:)), maxval(coord_nod2D(1,:))
+   write(*,*)'layerdepth  range ',minval(layerdepth), maxval(layerdepth)
 
 endif
+
+! This array has to be filled in EXACTLY the same way that the
+! FeoM state gets packed into the DART state vector.
+
+do i=1,Ncells
+   cell_locations(i) = set_location(coord_nod2d(1,i), coord_nod2d(2,i), 0.0_r8, VERTISHEIGHT)
+enddo
+
+cell_kinds = 0 ! not used
 
 end subroutine get_grid
 
@@ -3550,8 +3489,10 @@ if (search_initialized) return
 
 ! the width really isn't used anymore, but it's part of the
 ! interface so we have to pass some number in.
-call get_close_maxdist_init(cc_gc, maxdist=1.0_r8)
-call get_close_obs_init(cc_gc, model_size, cell_locations)
+!  40,000km/2pi radians
+
+call get_close_maxdist_init(cc_gc, maxdist = 2.5_r8*PI/20000.0_r8)
+call get_close_obs_init(cc_gc, Ncells, cell_locations)
 
 search_initialized = .true.
 
