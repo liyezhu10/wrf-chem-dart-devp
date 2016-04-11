@@ -19,7 +19,7 @@ program preprocess
 ! NEED TO ADD IN ALL THE ERROR STUFF
 
 use utilities_mod, only : register_module, error_handler, E_ERR, E_MSG,   &
-                          file_exist, open_file, logfileunit,             &
+                          file_exist, open_file, close_file, logfileunit, &
                           initialize_utilities, finalize_utilities,       &
                           find_namelist_in_file, check_namelist_read
 
@@ -37,8 +37,8 @@ integer, parameter   :: max_types = 5000, max_kinds = 5000
 character(len = 256) :: line, test, test2, type_string(max_types), &
                         kind_string(max_kinds), t_string, temp_type, temp_kind
 integer              :: iunit, ierr, io, i, j, k
-integer              :: l_string, l2_string, total_len, linenum
-integer              :: num_types_found, num_kinds_found, kind_index(max_types)
+integer              :: l_string, l2_string, total_len, linenum, temp_comp
+integer              :: num_types_found, num_kinds_found, kind_index(max_types), fo_vals(max_types)
 logical              :: duplicate, usercode(max_types), temp_user
 character(len = 169) :: err_string
 
@@ -99,7 +99,7 @@ integer, parameter :: interactive_item = 7
 integer :: num_input_files = 0
 integer :: num_model_files = 0
 integer :: obs_def_in_unit, obs_def_out_unit
-integer :: obs_kind_in_unit, obs_kind_out_unit, in_unit
+integer :: obs_kind_in_unit, obs_kind_out_unit, in_unit, fo_unit
 
 integer, parameter   :: max_input_files = 1000
 integer, parameter   :: max_model_files = 1000
@@ -119,11 +119,12 @@ character(len = 129) :: output_obs_kind_mod_file = &
                         '../../../obs_kind/obs_kind_mod.f90'
 character(len = 129) :: input_files(max_input_files) = 'null'
 character(len = 129) :: model_files(max_model_files) = 'null'
+character(len = 129) :: forward_op_map_file = 'null'
 logical              :: overwrite_output = .true.
 
 namelist /preprocess_nml/ input_obs_def_mod_file, input_obs_kind_mod_file,   &
                           output_obs_def_mod_file, output_obs_kind_mod_file, &
-                          input_files, model_files, overwrite_output
+                          input_files, model_files, overwrite_output, forward_op_map_file
 
 !---------------------------------------------------------------------------
 ! start of program code
@@ -238,6 +239,18 @@ else
    call error_handler(E_ERR, 'preprocess', err_string, &
       source, revision, revdate)
 endif
+
+! Try to open the forward operator map file.
+! NOT an error if it doesn't exist.
+if(file_exist(trim(forward_op_map_file))) then
+   ! Open the file for reading
+   fo_unit = open_file(forward_op_map_file, action='read')
+   write(logfileunit, *) 'reading forward operator component values from ', trim(forward_op_map_file)
+   write(*, *) 'reading forward operator component values from ', trim(forward_op_map_file)
+else
+   fo_unit = -1
+endif
+fo_vals(:) = 0
 
 !______________________________________________________________________________
 ! Preprocessing for the obs_kind module
@@ -405,8 +418,59 @@ SEARCH_INPUT_FILES: do j = 1, num_input_files
    end do EXTRACT_KINDS
 
    ! Close this obs_kind file
-   close(in_unit)
+   call close_file(in_unit)
 end do SEARCH_INPUT_FILES
+
+! If specified, open and fill in forward operator component table
+! not an error if a string is specified that isn't part of the current
+! specific obs type, so you can have a generic table for all types.
+if (fo_unit >= 0) then
+
+   ! Read until we run out of lines
+   linenum = 0
+   READ_FO_LIST: do
+      read(fo_unit, 222, IOSTAT = ierr) line
+      ! If end of file, done
+      if(ierr /= 0) exit READ_FO_LIST
+      linenum = linenum + 1
+
+      ! Format:  type_string, component_number
+
+      ! get rid of leading whitespace
+      test = adjustl(line(:))
+      total_len = len(test)
+
+      ! Compute the length of the type_string by seeking comma
+      do k = 1, total_len
+         l_string = k - 1
+         if(test(k:k) == ',') exit
+      end do
+
+      ! comma not found? (first one is required)
+      if (l_string == total_len - 1) then
+         err_string = 'strings must be separated by commas'
+         call typekind_error(err_string, line, input_files(j), linenum)
+      endif
+
+      ! save results in temp vars for now, so we can check for
+      ! duplicates (not allowed in types) or duplicates (which are
+      ! expected in kinds)
+      temp_type = adjustl(test(1:l_string))
+      read(test(l_string + 2:), '(I8)', IOSTAT = ierr) temp_comp
+      if (ierr /= 0) then
+         err_string = 'Bad component number after observation specific type'
+         call typekind_error(err_string, line, input_files(j), linenum)
+      endif
+
+      MATCH_TYPES: do i=1, num_types_found
+         if (type_string(i) /= temp_type) cycle MATCH_TYPES
+         fo_vals(i) = temp_comp   
+         exit MATCH_TYPES
+      enddo MATCH_TYPES
+      
+   enddo READ_FO_LIST
+   call close_file(fo_unit)
+endif
 
 ! Copy over lines up to the next insertion point
 do
@@ -493,7 +557,7 @@ do i = 1, num_types_found
       trim(type_string(i)), ", &"
    write(obs_kind_out_unit, 21) trim(line)
    write(line, *) '   ', "'", trim(type_string(i)), "', ", &
-      trim(kind_string(kind_index(i))), ', .false., .false.)'
+      trim(kind_string(kind_index(i))), ', .false., .false.,', fo_vals(i), ')'
    write(obs_kind_out_unit, 21) trim(line)
 end do
 
@@ -508,7 +572,7 @@ do
    write(obs_kind_out_unit, 21) trim(line)
 end do
 
-close(obs_kind_out_unit)
+call close_file(obs_kind_out_unit)
 !______________________________________________________________________________
 
 !______________________________________________________________________________
@@ -674,7 +738,7 @@ ITEMS: do i = 1, 8
       endif
 
       ! Got everything from this file, move along
-      close(in_unit)
+      call close_file(in_unit)
   end do
    
   ! Now check to see if this item has any types which are expecting us
@@ -698,7 +762,7 @@ ITEMS: do i = 1, 8
 
 end do ITEMS
 
-close(obs_def_out_unit)
+call close_file(obs_def_out_unit)
 
 call error_handler(E_MSG,'preprocess','Finished successfully.',source,revision,revdate)
 call finalize_utilities('preprocess')

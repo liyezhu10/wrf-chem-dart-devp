@@ -125,6 +125,7 @@
 
 &preprocess_nml
            overwrite_output = .true.,
+         forward_op_map_file = 'fo_map_file.txt'
     input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
    output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
      input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',

@@ -168,7 +168,7 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    output_localization_diagnostics, localization_diagnostics_file,         &
    special_localization_obs_types, special_localization_cutoffs,           &
    allow_missing_in_clm, adjust_obs_impact, obs_impact_filename,           &
-   close_obs_caching
+   close_obs_caching, allow_any_impact_values
 
 !============================================================================
 

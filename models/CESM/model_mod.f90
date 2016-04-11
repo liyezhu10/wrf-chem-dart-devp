@@ -964,6 +964,7 @@ character(len=32) :: componentname
 integer :: i, this, base_obs_kind
 real(r8) :: horiz_dist, vert_dist_proxy
 integer :: vert1, vert2
+integer :: fo_comp, obs_comp
 integer, save :: n = 1
 
 ! Initialize variables to missing status
@@ -1000,18 +1001,19 @@ if (.not. present(dist)) return
 ! get these once before looping below
 base_obs_kind = get_obs_kind_var_type(base_obs_type)
 vert1 = query_location(base_obs_loc)
-
-
+fo_comp = get_fo_component(base_obs_type)
 
 do i=1, num_close
    ! compute the horizontal here and then if cross component do something
    ! different in the vertical.
    this = close_ind(i)
    vert2 = query_location(locs(this))
+   obs_comp = which_model_state_num(this)
 !if (mod(n, 1000) == 1 .and. vert1 /= vert2) print *, 'vert1, 2: ', vert1, vert2
 n = n + 1
-   if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
-       (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
+   if (fo_comp /= obs_comp) then
+   !if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
+   !    (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
       dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))
 if (dist(i) == 0) then
 print *, '0 distance: ', base_obs_kind, loc_kind(this), vert1, vert2
@@ -1060,7 +1062,7 @@ end subroutine get_close_obs
 !------------------------------------------------------------------
 
 subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
-                          locs, loc_kind, num_close, close_ind, dist)
+                           locs, loc_kind, num_close, close_ind, dist)
 
  type(get_close_type), intent(in)    :: gc
  type(location_type),  intent(in)    :: base_obs_loc
@@ -1079,20 +1081,17 @@ subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
 ! vertical coordinates to a common coordinate. This coordinate type is defined
 ! in the namelist with the variable "vert_localization_coord".
 
-integer :: whole_list, cur_start, cur_end
 character(len=32) :: componentname
-
-integer,  allocatable :: unified_close_ind(:)
-real(r8), allocatable :: unified_dist(:)
+integer :: i, this, base_obs_kind
+real(r8) :: horiz_dist, vert_dist_proxy
+integer :: vert1, vert2
+integer :: fo_comp, state_comp
+integer, save :: n = 1
 
 ! Initialize variables to missing status
-whole_list = size(close_ind)
-allocate(unified_close_ind(whole_list), unified_dist(whole_list))
 num_close = 0
 close_ind(:) = -1
-unified_close_ind = -1
 if (present(dist)) dist = 1.0e9   !something big and positive (far away)
-unified_dist = 1.0e9
 
 ! FIXME: in a real unified model_mod, these would all be called
 ! and any state vector items from any model are potentially close.
@@ -1106,70 +1105,173 @@ unified_dist = 1.0e9
 ! if we go back to generic kinds, then which_model_obs() needs to
 ! take a kind and this is a real specific type
 
-! @TODO - need to sort and uniq the list in case models agree on
-! the same locations.  and what if they give different distances?
- 
+! we have to allow vertical conversions per component - and then
+! what, sum them?  this needs help.
+
 ! @TODO:  for now, bypass the model-specific routines and call
 ! the raw location mod code.   this may mess up land points in pop
 ! and won't allow top-of-model changes in cam, and no vertical conversion
 ! will be done.  but it may run with horizontal only.
 
-call get_close_obs(gc, base_obs_loc, base_obs_type, &
-                   locs, loc_kind, num_close, close_ind, dist)
-
-deallocate(unified_close_ind, unified_dist)
-return
-
-! NOT REACHED NOT REACHED NOT REACHED
-
+! NO DISTANCES YET!
 call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                       locs, loc_kind, num_close, close_ind, dist)
+                       locs, loc_kind, num_close, close_ind)
 
-deallocate(unified_close_ind, unified_dist)
+if (.not. present(dist)) return
+
+! get these once before looping below
+base_obs_kind = get_obs_kind_var_type(base_obs_type)
+vert1 = query_location(base_obs_loc)
+fo_comp = get_fo_component(base_obs_type)
+
+do i=1, num_close
+   ! compute the horizontal here and then if cross component do something
+   ! different in the vertical.
+   this = close_ind(i)
+   vert2 = query_location(locs(this))
+   state_comp = which_model_state_num(this)
+!if (mod(n, 1000) == 1 .and. vert1 /= vert2) print *, 'vert1, 2: ', vert1, vert2
+n = n + 1
+   if (fo_comp /= state_comp) then
+   !if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
+   !    (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
+      dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))
+if (dist(i) == 0) then
+print *, '0 distance: ', base_obs_kind, loc_kind(this), vert1, vert2
+endif
+      ! or
+      !horiz_dist = get_dist(base_obs_loc, locs(this), &
+      !                      base_obs_type, loc_kind(this), no_vert = .true.)
+      !vert_dist_proxy = get_vert_alpha(base_loc_obs, loc(this), base_obs_kind, loc_kind(this))
+      !dist(i) = sqrt(horiz_dist**2 + vert_dist_proxy**2)
+   else
+      vert2 = query_location(locs(this))
+      ! FIXME: we should be converting in the vertical for those we know how to convert
+      ! ( e.g. height obs in the atmosphere -> pressure)
+      if (vert1 /= vert2) then
+         dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this), no_vert=.true.)
+      else
+         dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this))
+      endif
+   endif
+enddo
+
 return
 
+!%! ! NOT REACHED NOT REACHED NOT REACHED
+!%! 
+!%! subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
+!%!                           locs, loc_kind, num_close, close_ind, dist)
+!%! 
+!%!  type(get_close_type), intent(in)    :: gc
+!%!  type(location_type),  intent(in)    :: base_obs_loc
+!%!  integer,              intent(in)    :: base_obs_type
+!%!  type(location_type),  intent(inout) :: locs(:)
+!%!  integer,              intent(in)    :: loc_kind(:)
+!%!  integer,              intent(out)   :: num_close
+!%!  integer,              intent(out)   :: close_ind(:)
+!%!  real(r8),  optional,  intent(out)   :: dist(:)
+!%! 
+!%! ! Given a DART location (referred to as "base") and a set of candidate
+!%! ! locations & kinds (obs, obs_kind), returns the subset close to the
+!%! ! "base", their indices, and their distances to the "base" ...
+!%! 
+!%! ! For vertical distance computations, general philosophy is to convert all
+!%! ! vertical coordinates to a common coordinate. This coordinate type is defined
+!%! ! in the namelist with the variable "vert_localization_coord".
+!%! 
+!%! integer :: whole_list, cur_start, cur_end
+!%! character(len=32) :: componentname
+!%! 
+!%! integer,  allocatable :: unified_close_ind(:)
+!%! real(r8), allocatable :: unified_dist(:)
+!%! 
+!%! ! Initialize variables to missing status
+!%! whole_list = size(close_ind)
+!%! allocate(unified_close_ind(whole_list), unified_dist(whole_list))
+!%! num_close = 0
+!%! close_ind(:) = -1
+!%! unified_close_ind = -1
+!%! if (present(dist)) dist = 1.0e9   !something big and positive (far away)
+!%! unified_dist = 1.0e9
+!%! 
+!%! ! FIXME: in a real unified model_mod, these would all be called
+!%! ! and any state vector items from any model are potentially close.
+!%! ! the vertical conversions are one issue; the other is whether the
+!%! ! distances should be the same or different in different mediums
+!%! ! (e.g air vs water vs soil/snow)
+!%! 
+!%! ! this needs to call all the get close routines for active components
+!%! ! and merge the lists when done.
+!%! 
+!%! ! if we go back to generic kinds, then which_model_obs() needs to
+!%! ! take a kind and this is a real specific type
+!%! 
+!%! ! @TODO - need to sort and uniq the list in case models agree on
+!%! ! the same locations.  and what if they give different distances?
+!%!  
+!%! ! @TODO:  for now, bypass the model-specific routines and call
+!%! ! the raw location mod code.   this may mess up land points in pop
+!%! ! and won't allow top-of-model changes in cam, and no vertical conversion
+!%! ! will be done.  but it may run with horizontal only.
+!%! 
+!%! call get_close_obs(gc, base_obs_loc, base_obs_type, &
+!%!                    locs, loc_kind, num_close, close_ind, dist)
+!%! 
+!%! deallocate(unified_close_ind, unified_dist)
+!%! return
+!%! 
+!%! ! NOT REACHED NOT REACHED NOT REACHED
+!%! 
+!%! call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
+!%!                        locs, loc_kind, num_close, close_ind, dist)
+!%! 
+!%! deallocate(unified_close_ind, unified_dist)
+!%! return
+!%! 
+!%! 
+!%! cur_start = 1
+!%! cur_end = 1
+!%! 
+!%! !  concatinate each list as it is computed
+!%! if (include_CAM) then
+!%!       call cam_get_close_state(gc, base_obs_loc, base_obs_type, &
+!%!                                locs, loc_kind, num_close, close_ind, dist)
+!%!       cur_end = cur_start + num_close - 1
+!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+!%!       if (present(dist)) &
+!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
+!%!       cur_start = cur_start + num_close
+!%! endif
+!%! 
+!%! if (include_POP) then
+!%!       call pop_get_close_state(gc, base_obs_loc, base_obs_type, &
+!%!                                locs, loc_kind, num_close, close_ind, dist)
+!%!       cur_end = cur_start + num_close - 1
+!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+!%!       if (present(dist)) &
+!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
+!%!       cur_start = cur_start + num_close
+!%! endif
+!%! 
+!%! if (include_CLM) then
+!%!       call loc_get_close_state(gc, base_obs_loc, base_obs_type, &
+!%!                                locs, loc_kind, num_close, close_ind, dist)
+!%!       cur_end = cur_start + num_close - 1
+!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
+!%!       if (present(dist)) &
+!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
+!%!       cur_start = cur_start + num_close
+!%! endif
+!%! 
+!%! ! and return combined lists and counts
+!%! num_close = cur_start
+!%! close_ind = unified_close_ind
+!%! if (present(dist)) dist = unified_dist
+!%! 
+!%! deallocate(unified_close_ind, unified_dist)
+  
 
-cur_start = 1
-cur_end = 1
-
-!  concatinate each list as it is computed
-if (include_CAM) then
-      call cam_get_close_state(gc, base_obs_loc, base_obs_type, &
-                               locs, loc_kind, num_close, close_ind, dist)
-      cur_end = cur_start + num_close - 1
-      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-      if (present(dist)) &
-         unified_dist(cur_start:cur_end) = dist(1:num_close)
-      cur_start = cur_start + num_close
-endif
-
-if (include_POP) then
-      call pop_get_close_state(gc, base_obs_loc, base_obs_type, &
-                               locs, loc_kind, num_close, close_ind, dist)
-      cur_end = cur_start + num_close - 1
-      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-      if (present(dist)) &
-         unified_dist(cur_start:cur_end) = dist(1:num_close)
-      cur_start = cur_start + num_close
-endif
-
-if (include_CLM) then
-      call loc_get_close_state(gc, base_obs_loc, base_obs_type, &
-                               locs, loc_kind, num_close, close_ind, dist)
-      cur_end = cur_start + num_close - 1
-      unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-      if (present(dist)) &
-         unified_dist(cur_start:cur_end) = dist(1:num_close)
-      cur_start = cur_start + num_close
-endif
-
-! and return combined lists and counts
-num_close = cur_start
-close_ind = unified_close_ind
-if (present(dist)) dist = unified_dist
-
-deallocate(unified_close_ind, unified_dist)
- 
 end subroutine get_close_state
 
 !------------------------------------------------------------------
@@ -1234,6 +1336,37 @@ endif
 componentname = 'NULL'
 
 end subroutine which_model_state
+
+!------------------------------------------------------------------
+
+function which_model_state_num(x_offset)
+ integer,          intent(in)  :: x_offset
+ integer :: which_model_state_num
+
+integer :: x_start, x_end
+
+call set_start_end('CAM', x_start, x_end)
+if (x_offset >= x_start .and. x_offset <= x_end) then
+   which_model_state_num = 1
+   return
+endif
+ 
+call set_start_end('POP', x_start, x_end)
+if (x_offset >= x_start .and. x_offset <= x_end) then
+   which_model_state_num = 2
+   return
+endif
+ 
+call set_start_end('CLM', x_start, x_end)
+if (x_offset >= x_start .and. x_offset <= x_end) then
+   which_model_state_num = 3
+   return
+endif
+ 
+! unknown
+which_model_state_num = -1
+
+end function which_model_state_num
 
 !------------------------------------------------------------------
 
