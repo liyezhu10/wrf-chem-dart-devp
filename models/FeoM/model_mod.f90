@@ -705,6 +705,8 @@ if ( .not. module_initialized ) call static_init_model
 interp_val = MISSING_R8
 istatus    = 99           ! must be positive (and integer)
 
+call init_closest_center() ! will only do something the first time
+
 ! rename for sanity - we can't change the argument names
 ! to this subroutine, but this really is a kind.
 obs_kind = obs_type
@@ -3541,10 +3543,17 @@ subroutine init_closest_center()
 ! to speed up the identification of the grid location closest to
 ! any arbitrary location
 
+logical, save :: search_initialized = .false.
+
+! do this exactly once.
+if (search_initialized) return
+
 ! the width really isn't used anymore, but it's part of the
 ! interface so we have to pass some number in.
 call get_close_maxdist_init(cc_gc, maxdist=1.0_r8)
 call get_close_obs_init(cc_gc, model_size, cell_locations)
+
+search_initialized = .true.
 
 end subroutine init_closest_center
 
@@ -3560,13 +3569,8 @@ integer               :: find_closest_node
 
 type(location_type) :: pointloc
 integer :: closest_cell, rc
-logical, save :: search_initialized = .false.
 
-! do this exactly once.
-if (.not. search_initialized) then
-   call init_closest_center()
-   search_initialized = .true.
-endif
+call init_closest_center() ! will only do something the first call
 
 pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
 
