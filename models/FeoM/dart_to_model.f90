@@ -19,13 +19,12 @@ program dart_to_model
 !         Typically, only temporary files like 'assim_model_state_ic' have
 !         an 'advance_to_time'.
 !
-! author: Tim Hoar 25 Jun 09, revised 12 July 2010
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
-use    utilities_mod, only : initialize_utilities, finalize_utilities, &
+use    utilities_mod, only : initialize_utilities, finalize_utilities, E_MSG, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit, open_file, close_file
+                             logfileunit, open_file, close_file, error_handler
 use  assim_model_mod, only : open_restart_read, aread_state_restart, close_restart
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
@@ -41,13 +40,17 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-!------------------------------------------------------------------
-! The namelist variables
-!------------------------------------------------------------------
+integer               :: iunit, io, x_size
+type(time_type)       :: model_time, adv_to_time
+real(r8), allocatable :: statevector(:)
+character(len=256)    :: model_analysis_filename
+character(len=512)    :: string1, string2
+
+! namelist parameters with default values.
 
 character(len=256)  :: dart_to_model_input_file = 'dart_restart'
 logical             :: advance_time_present     = .false.
-character(len=256)  :: time_filename            = 'mpas_time'
+character(len=256)  :: time_filename            = 'FeoM_time'
 logical             :: print_data_ranges        = .true.
 
 namelist /dart_to_model_nml/ dart_to_model_input_file, &
@@ -56,12 +59,7 @@ namelist /dart_to_model_nml/ dart_to_model_input_file, &
                              print_data_ranges
 
 !----------------------------------------------------------------------
-
-integer               :: iunit, io, x_size
-type(time_type)       :: model_time, adv_to_time
-real(r8), allocatable :: statevector(:)
-character(len=256)    :: model_analysis_filename
-
+! get started
 !----------------------------------------------------------------------
 
 call initialize_utilities(progname='dart_to_model')
@@ -72,11 +70,8 @@ call find_namelist_in_file("input.nml", "dart_to_model_nml", iunit)
 read(iunit, nml = dart_to_model_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_model_nml")
 
-
-!----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists
 ! to set grid sizes, etc.
-!----------------------------------------------------------------------
 
 call static_init_model()
 
@@ -85,13 +80,11 @@ call get_model_analysis_filename(model_analysis_filename)
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-write(*,*)
-write(*,*) 'dart_to_model: converting DART file ', "'"//trim(dart_to_model_input_file)//"'"
-write(*,*) 'to model analysis file ', "'"//trim(model_analysis_filename)//"'" 
+write(string1,*) "converting DART file ", "'"//trim(dart_to_model_input_file)//"'"
+write(string2,*) "to model analysis file ", "'"//trim(model_analysis_filename)//"'" 
+call error_handler(E_MSG,'dart_to_model',string1,text2=string2)
 
-!----------------------------------------------------------------------
 ! Reads the valid time, the state, and the target time.
-!----------------------------------------------------------------------
 
 iunit = open_restart_read(dart_to_model_input_file)
 
@@ -102,27 +95,22 @@ else
 endif
 call close_restart(iunit)
 
-!----------------------------------------------------------------------
 ! if requested, print out the data ranges variable by variable
 ! (note if we are clamping data values, that happens in the
 ! conversion routine and these values are before the clamping happens.)
-!----------------------------------------------------------------------
-if (print_data_ranges) then
-    call print_variable_ranges(statevector)
-endif
 
+if (print_data_ranges) call print_variable_ranges(statevector)
 
-!----------------------------------------------------------------------
 ! update the current model state vector
 ! Convey the amount of time to integrate the model ...
 ! time_manager_nml: stop_option, stop_count increments
-!----------------------------------------------------------------------
 
 call statevector_to_analysis_file(statevector, model_analysis_filename, model_time)
 
 ! write time into in text format (YYYY-MM-DD_hh:mm:ss) into a file.
 ! if advance time is there, write the current time then advance time.
 ! otherwise just write current time.
+
 if ( advance_time_present ) then
    call write_model_time(time_filename, model_time, adv_to_time)
 else

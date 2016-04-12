@@ -46,14 +46,14 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: string1, string2
+character(len=512) :: string1, string2
 
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129)  :: dart_input_file      = 'filter_ics'
-character (len = 129)  :: output_file          = 'check_me'
+character(len=129)     :: dart_input_file      = 'filter_ics'
+character(len=129)     :: output_file          = 'check_me'
 logical                :: advance_time_present = .FALSE.
 logical                :: verbose              = .FALSE.
 integer                :: test1thru            = -1
@@ -158,6 +158,7 @@ write(*,*)'TEST 3 : '
 write(*,*)'Reading '//trim(dart_input_file)
 write(*,*)'---------------------------------------'
 
+allocate(statevector(x_size))
 
 iunit = open_restart_read(dart_input_file)
 if ( advance_time_present ) then
@@ -257,6 +258,8 @@ write(*,*)'Testing single model_interpolate with ',trim(kind_of_interest),' ...'
 write(*,*)'---------------------------------------'
 
 loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+call write_location(0,loc,charstring=string2)
+call error_handler(E_MSG,'model_mod_check','Test 7: interpolation at',text2=string2)
 call model_interpolate(statevector, loc, mykindindex, interp_val, ios_out)
 
 if ( ios_out == 0 ) then 

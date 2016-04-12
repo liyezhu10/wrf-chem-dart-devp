@@ -9,7 +9,7 @@ program model_to_dart
 !----------------------------------------------------------------------
 ! purpose: interface between model and DART
 !
-! method: Read MPAS "history" files of model state.
+! method: Read FeoM file of model state.
 !         Reform fields into a DART state vector (control vector).
 !         Write out state vector in "proprietary" format for DART.
 !         The output is a "DART restart file" format.
@@ -18,13 +18,12 @@ program model_to_dart
 !         <edit model_to_dart_output_file in input.nml:model_to_dart_nml>
 !         model_to_dart
 !
-! author: Tim Hoar 12 Sep 2011
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit
+                             logfileunit, error_handler, E_MSG
 use        model_mod, only : get_model_size, analysis_file_to_statevector, &
                              get_model_analysis_filename, static_init_model, &
                              print_variable_ranges
@@ -39,42 +38,34 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-!-----------------------------------------------------------------------
+integer               :: iunit, io, x_size
+type(time_type)       :: model_time
+real(r8), allocatable :: statevector(:)
+character(len=256)    :: model_analysis_filename
+character(len=512)    :: string1, string2
+
 ! namelist parameters with default values.
-!-----------------------------------------------------------------------
 
 character(len=128) :: model_to_dart_output_file  = 'dart_ics'
 logical            :: print_data_ranges          = .true.
 
-namelist /model_to_dart_nml/    &
-     model_to_dart_output_file, &
-     print_data_ranges
+namelist /model_to_dart_nml/ model_to_dart_output_file, print_data_ranges
 
 !----------------------------------------------------------------------
-! global storage
-!----------------------------------------------------------------------
-
-integer               :: io, iunit, x_size
-type(time_type)       :: model_time
-real(r8), allocatable :: statevector(:)
-character(len=256)    :: model_analysis_filename
-
-!======================================================================
+! get started
+!-----------------------------------------------------------------------
 
 call initialize_utilities(progname='model_to_dart')
 
-!----------------------------------------------------------------------
-! Read the namelist to get the output filename.
-!----------------------------------------------------------------------
+! Read the namelist to get the input filename. 
 
 call find_namelist_in_file("input.nml", "model_to_dart_nml", iunit)
 read(iunit, nml = model_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_to_dart_nml") ! closes, too.
 
-!----------------------------------------------------------------------
 ! Call model_mod:static_init_model() which reads the model namelists
 ! to set grid sizes, etc.
-!----------------------------------------------------------------------
+
 call static_init_model()
 
 call get_model_analysis_filename(model_analysis_filename)
@@ -82,26 +73,22 @@ call get_model_analysis_filename(model_analysis_filename)
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-write(*,*)
-write(*,*) 'model_to_dart: converting model analysis file ', &
+write(string1,*) "converting model analysis file ", &
            "'"//trim(model_analysis_filename)//"'" 
-write(*,*) ' to DART file ', "'"//trim(model_to_dart_output_file)//"'"
+write(string2,*) "              to DART file ", &
+           "'"//trim(model_to_dart_output_file)//"'"
+call error_handler(E_MSG,'model_to_dart',string1,text2=string2)
 
-!----------------------------------------------------------------------
-! Read the valid time and the state from the MPAS netcdf file
-!----------------------------------------------------------------------
+! Read the valid time and the state from the FeoM netcdf file
+
 call analysis_file_to_statevector(model_analysis_filename, statevector, model_time) 
 
-!----------------------------------------------------------------------
 ! if requested, print out the data ranges variable by variable
-!----------------------------------------------------------------------
-if (print_data_ranges) then
-    call print_variable_ranges(statevector)
-endif
 
-!----------------------------------------------------------------------
+if (print_data_ranges) call print_variable_ranges(statevector)
+
 ! Write the valid time and the state to the dart restart file
-!----------------------------------------------------------------------
+
 iunit = open_restart_write(model_to_dart_output_file)
 
 call awrite_state_restart(model_time, statevector, iunit)

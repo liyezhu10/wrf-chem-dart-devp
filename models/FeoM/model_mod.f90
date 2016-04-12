@@ -8,7 +8,7 @@ module model_mod
 
 ! FEOM ocean model interface to the DART data assimilation system.
 ! code in this module is compiled with the DART executables.  It isolates
-! all information about the MPAS grids, model variables, and other details.
+! all information about the FeoM grids, model variables, and other details.
 ! There are a set of 16 subroutine interfaces that are required by DART;
 ! these cannot be changed.  Additional public routines in this file can
 ! be used by converters and utilities and those interfaces can be anything
@@ -135,7 +135,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
-! Real (physical) constants as defined exactly in MPAS.
+! Real (physical) constants as defined exactly in FeoM.
 ! redefined here for consistency with the model.
 real(r8), parameter :: rgas = 287.0_r8
 real(r8), parameter :: cp = 1003.0_r8
@@ -145,7 +145,7 @@ real(r8), parameter :: rcv = rgas/(cp-rgas)
 
 ! earth radius; needed to convert lat/lon to x,y,z cartesian coords.
 ! FIXME: the example ocean files has a global attr with 6371220.0
-! the actual mpas code may have hardwired values (it did in the atmosphere)
+! the actual FeoM code may have hardwired values (it did in the atmosphere)
 ! need to check what is really going on.
 real(r8), parameter :: radius = 6371229.0 ! meters
 
@@ -160,12 +160,9 @@ type(random_seq_type) :: random_seq
 
 type(location_type), allocatable :: cell_locations(:)
 integer,             allocatable :: cell_kinds(:)
-type(get_close_type)  :: cc_gc
+integer,             allocatable :: close_ind(:)
 
-! not part of the namelist because in the ocean it's not clear
-! that we need to worry about log pressure in the vertical.
-! if this makes a difference, set this to .true.
-logical :: log_p_vert_interp = .false.  ! if true, interpolate vertical pressure in log space
+type(get_close_type)  :: cc_gc
 
 ! variables which are in the module namelist
 !integer            :: vert_localization_coord = VERTISHEIGHT
@@ -183,7 +180,7 @@ integer, parameter :: num_state_table_columns = 2
 integer, parameter :: num_bounds_table_columns = 4
 character(len=NF90_MAX_NAME) :: feom_state_variables(max_state_variables * num_state_table_columns ) = ' '
 !todo FIXME : use the state bounds to clamp variables out of range
-character(len=NF90_MAX_NAME) :: mpas_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
+character(len=NF90_MAX_NAME) :: feom_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
 
 namelist /model_nml/             &
    model_analysis_filename,      &
@@ -194,12 +191,12 @@ namelist /model_nml/             &
    model_perturbation_amplitude, &
    calendar,                     &
    feom_state_variables,         &
-   mpas_state_bounds,            &
+   feom_state_bounds,            &
    debug
 
 character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_table_columns )
 
-namelist /feom_vars_nml/ feom_state_variables, mpas_state_bounds
+namelist /feom_vars_nml/ feom_state_variables, feom_state_bounds
 
 ! FIXME: this shouldn't be a global.  the progvar array
 ! should be allocated at run time and nfields should be part
@@ -226,18 +223,15 @@ type progvartype
    integer :: dart_kind
    character(len=paramname_length) :: kind_string
    logical  :: clamping     ! does variable need to be range-restricted before
-   real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
+   real(r8) :: range(2)     ! being stuffed back into FeoM analysis file.
    logical  :: out_of_range_fail  ! is out of range fatal if range-checking?
 end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
 
-! Grid parameters - the values will be read from an mpas analysis file.
-
+! Grid parameters - the values will be read from an FeoM analysis file.
 
 !$! integer :: FEOM:num_layers_below_2d(:) ! list of maximum (deepest) level index for each cell
-
-real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
 
 integer         :: model_size          ! the state vector length
 type(time_type) :: model_timestep      ! smallest time to adv model
@@ -245,20 +239,6 @@ type(time_type) :: model_timestep      ! smallest time to adv model
 ! useful flags in making decisions when searching for points, etc
 !$! logical :: global_grid = .true.        ! true = the grid covers the sphere with no holes
 !$! logical :: all_levels_exist_everywhere = .true. ! true = cells defined at all levels
-
-! Do we have any state vector items located on the cell edges?
-! If not, avoid reading in or using the edge arrays to save space.
-! FIXME: this should be set after looking at the fields listed in the
-! namelist which are to be read into the state vector - if any of them
-! are located on the edges then this flag should be changed to .true.
-! however, the way the code is structured these arrays are allocated
-! before the details of field list is examined.  since right now the
-! only possible field array that is on the edges is the 'u' edge normal
-! winds, search specifically for that in the state field list and set
-! this based on that.  if any other data might be on edges, this routine
-! will need to be updated: is_edgedata_in_state_vector()
-logical :: data_on_edges = .false.
-logical :: oncenters = .true.
 
 ! currently unused; for a regional model it is going to be necessary to know
 ! if the grid is continuous around longitudes (wraps in east-west) or not,
@@ -325,29 +305,21 @@ contains
 
 
 !------------------------------------------------------------------
+!> Called to do one time initialization of the model.
 
 subroutine static_init_model()
 
-! Called to do one time initialization of the model.
-!
-! All the grid information comes from the initialization of
-! the dart_model_mod module.
-
 ! Local variables - all the important ones have module scope
-
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname,dimname
 character(len=paramname_length)       :: kind_string
 integer :: ncid, VarID, numdims, varsize, dimlen
-integer :: iunit, io, ivar, i, index1, indexN, iloc, kloc
-integer :: ss, dd, z1, m1
+integer :: iunit, io, ivar, i, index1, indexN
+integer :: ss, dd
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
-integer :: cel1, cel2
-logical :: both
 
 if ( module_initialized ) return ! only need to do this once.
-
 
 ! Print module information to log file and stdout.
 call register_module(source, revision, revdate)
@@ -356,28 +328,15 @@ call register_module(source, revision, revdate)
 ! we'll say we've been initialized pretty dang early.
 module_initialized = .true.
 
-! Read the DART namelist for this model
+! Read the DART namelist for this model and
+! record the namelist values used for the run
+
 call find_namelist_in_file('input.nml', 'model_nml', iunit)
 read(iunit, nml = model_nml, iostat = io)
-print*, model_analysis_filename
 call check_namelist_read(iunit, io, 'model_nml')
 
-! Record the namelist values used for the run
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
-
-!---------------------------------------------------------------
-! Set the time step ... causes mpas namelists to be read.
-! Ensures model_timestep is multiple of 'dynamics_timestep'
-
-call set_calendar_type( calendar )   ! comes from model_mod_nml
-
-model_timestep = set_model_time_step()
-
-call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
-
-write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 
 !---------------------------------------------------------------
 ! 1) get grid dimensions
@@ -386,19 +345,28 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 
 ! Get the FeoM run-time configurations from a hardcoded filename
 ! must be called 'namelist.config' in the current directory.
-!call read_namelist() 
+call read_namelist() 
 
 ! read_grid_dims() sets nCells, nVertices, nVertLevels
 call read_grid_dims()
 
-allocate( cell_locations(nCells), cell_kinds(nCells) )
+allocate( cell_locations(nCells), cell_kinds(nCells), close_ind(nCells) )
 
-! see if U is in the state vector list.  if not, don't read in or
-! use any of the Edge arrays to save space.
-data_on_edges = .false.
 call get_grid()
 
-! determine which cells are on boundaries
+!---------------------------------------------------------------
+!>@todo Ensure model_timestep is multiple of "dynamics timestep"
+!> FeoM must be able to be stopped at the requested time
+
+call set_calendar_type( calendar )
+
+model_timestep = set_model_time_step()
+
+call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
+
+write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
+call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
+
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
 ! of the DART state vector. Required to determine model_size.
@@ -501,7 +469,7 @@ do ivar = 1, nfields
    enddo DimensionLoop
 
    ! this call sets: clamping, bounds, and out_of_range_fail in the progvar entry
-!   call get_variable_bounds(mpas_state_bounds, ivar)
+!   call get_variable_bounds(feom_state_bounds, ivar)
 
    progvar(ivar)%varsize     = varsize
    progvar(ivar)%index1      = index1
@@ -517,7 +485,7 @@ call nc_check( nf90_close(ncid), &
 
 model_size = progvar(nfields)%indexN
 
-if ( debug > 0 .and. do_output()) then
+if ( debug > 99 .and. do_output()) then
   write(logfileunit,*)
   write(     *     ,*)
   write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
@@ -528,9 +496,7 @@ if ( debug > 0 .and. do_output()) then
   write(     *     , *)'static_init_model: model_size = ', model_size
 endif
 
-allocate( ens_mean(model_size) )
 end subroutine static_init_model
-
 
 !------------------------------------------------------------------
 
@@ -548,11 +514,8 @@ integer, optional,   intent(out) :: var_type
 
 ! Local variables
 
-integer  :: nxp, nzp, iloc, vloc, nf, n
+integer  :: nf, n
 integer  :: myindx
-integer  :: istatus
-real(r8) :: depth
-type(location_type) :: new_location
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -561,7 +524,7 @@ nf     = -1
 
 ! Determine the right variable
 FindIndex : do n = 1,nfields
-    if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) THEN
+    if( (progvar(n)%index1 <= index_in) .and. (index_in <= progvar(n)%indexN) ) then
       nf = n
       myindx = index_in - progvar(n)%index1 + 1
       exit FindIndex
@@ -618,14 +581,9 @@ integer,             intent(out) :: istatus
 
 ! local storage
 
-integer  :: ivar, obs_kind, closest_index, iclose, indx
-integer  :: num_close, num_wanted, ilayer, layer_below
+integer  :: ivar, obs_kind, closest_index
+integer  :: ilayer, layer_below
 real(r8) :: llv(3), lon, lat, vert
-real(r8) :: closest
-real(r8) :: distance
-character(len=obstypelength) :: kind_name
-
-integer  :: close_ind(model_size) ! undesirable to have something this big ... but ...
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -638,14 +596,6 @@ call init_closest_center() ! will only do something the first time
 ! to this subroutine, but this really is a kind.
 obs_kind = obs_type
 
-! if we can interpolate any other kinds that are not directly in the
-! state vector, then add those cases here.
-if (debug > 0) then
-   call write_location(0,location,charstring=string1)
-   print*, 'stt kind, location ', my_task_id()
-   print*,trim(string1), obs_kind
-endif
-
 ! Make sure the DART state has the type (T,S,U,etc.) that we are asking for.
 ! If we cannot, simply return and 'fail' with an 88
 
@@ -655,51 +605,18 @@ if (ivar < 1) then
    return
 endif
 
-write(*,*)'TJH check dimname(1) is ',progvar(ivar)%dimname(1)
-
 ! Decode the location into bits for error messages ...
 llv  = get_location(location)
 lon  = llv(1)    ! degrees East [0,360)
 lat  = llv(2)    ! degrees North [-90,90]
 vert = llv(3)    ! depth in meters ... even 2D fields have a value of 0.0
 
-! Generate the list of indices into the DART vector of the close candidates.
+closest_index = find_closest_surface_location(location, obs_kind)
 
-call loc_get_close_obs(cc_gc, location, obs_kind, cell_locations, cell_kinds, &
-                       num_close, close_ind)
-
-! Sometimes the location is outside the model domain.
-! In this case, we cannot interpolate.
-
-if (num_close == 0) then
-   istatus = 23
+if (closest_index < 1) then ! nothing close 
+   istatus = 11
    return
 endif
-
-! Loop over close candidates. They come in without regard to what DART KIND they are,
-! nor are they sorted by distance. We are only interested in the close locations
-! of the right DART KIND.
-
-closest = 1000000.0_r8 ! not very close
-closest_index = 0
-
-CLOSE : do iclose = 1, num_close
-
-   indx     = close_ind(iclose)
-   distance = get_dist(location, cell_locations(indx))
-
-   if (debug > 12 .and. do_output()) &
-      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
-
-   if (distance < closest) then
-      closest       = distance
-      closest_index = indx
-   endif
-
-enddo CLOSE
-
-if (debug > 0 .and. do_output()) &
-      write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
 
 ! Now we know the 2D horizontal gridcell of interest.
 ! Find the vertical node that is closest in depth.
@@ -727,20 +644,23 @@ else
        istatus = 18
       return ! too shallow
    else
-       closest_index=nod3d_below_nod2d(layer_below,closest_index)
-       !> @ TODO ALI ... your job to figure out the vertical contibs from above and below ..
+       !> @ TODO ... figure out the vertical contibs from above and below
+       !> and do some vertical interpolation
+       closest_index = nod3d_below_nod2d(layer_below,closest_index)
    endif
 
-   interp_val = x( progvar(ivar)%index1 + closest_index )
-! interp_val = a * x(closest_index) * (1-a) * x(deeper_index)
+   interp_val = x(progvar(ivar)%index1 + closest_index)
 
 endif
 
-istatus    = 0
+istatus = 0
+
+!>@TODO FIXME ... why does calling my_task_id() cause this to hang?
+!> simply running model_mod_check (null_mpi_...) hangs indefinitely.
 
 if (debug > 0) then
    call write_location(0,location,charstring=string1)
-   print *, 'end kind, loc, val, rc:', my_task_id()
+!   print *, 'end kind, loc, val, rc:', my_task_id()
    print *, interp_val, istatus, obs_kind 
    print *, trim(string1)
 endif
@@ -782,8 +702,6 @@ integer :: StateVarDimID   ! netCDF pointer to state variable dimension (model s
 integer :: MemberDimID     ! netCDF pointer to dimension of ensemble    (ens_size)
 integer :: TimeDimID       ! netCDF pointer to time dimension           (unlimited)
 
-integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
-
 !----------------------------------------------------------------------
 ! variables if we parse the state vector into prognostic variables.
 !----------------------------------------------------------------------
@@ -791,36 +709,28 @@ integer :: StateVarID      ! netCDF pointer to 3D [state,copy,time] array
 ! for the dimensions and coordinate variables
 integer :: nodes_3DimID
 integer :: nodes_2DimID
-integer :: nCellsDimID
-!#!integer :: nEdgesDimID, maxEdgesDimID
-integer :: nVerticesDimID
-integer :: VertexDegreeDimID
 integer :: nVertLevelsDimID
-integer :: nVertLevelsP1DimID
-
 
 ! for the prognostic variables
-integer :: ivar, VarID, mpasFileID
+integer :: ivar, VarID
 
 !----------------------------------------------------------------------
 ! local variables
 !----------------------------------------------------------------------
 
 ! we are going to need these to record the creation date in the netCDF file.
-! This is entirely optional, but nice.
 
 character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
 integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
+
 character(len=NF90_MAX_NAME) :: str1
 character(len=NF90_MAX_NAME) :: varname
 integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
-integer :: myndims
+integer :: io, myndims
 
-character(len=128) :: filename
-
-real(r8), allocatable, dimension(:)   :: data1d
+character(len=256) :: filename
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -862,13 +772,6 @@ if ( TimeDimID /= unlimitedDimId ) then
 endif
 
 !-------------------------------------------------------------------------------
-! Define the model size / state variable dimension / whatever ...
-!-------------------------------------------------------------------------------
-
-call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
-        dimid = StateVarDimID),'nc_write_model_atts', 'state def_dim '//trim(filename))
-
-!-------------------------------------------------------------------------------
 ! Write Global Attributes
 !-------------------------------------------------------------------------------
 
@@ -884,7 +787,7 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revision',revision), &
            'nc_write_model_atts', 'revision put '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate ), &
            'nc_write_model_atts', 'revdate put '//trim(filename))
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'MPAS_OCN' ), &
+call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'FEOM' ), &
            'nc_write_model_atts', 'model put '//trim(filename))
 
 !-------------------------------------------------------------------------------
@@ -897,14 +800,18 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'MPAS_OCN' ), &
 if ( output_state_vector ) then
 
    !----------------------------------------------------------------------------
-   ! Create a variable for the state vector
+   ! Define the DART model size and 
+   ! create a variable for the state vector.
    !----------------------------------------------------------------------------
+
+   call nc_check(nf90_def_dim(ncid=ncFileID, name='StateVariable', len=model_size, &
+        dimid = StateVarDimID),'nc_write_model_atts', 'state def_dim '//trim(filename))
 
    ! Define the actual (3D) state vector, which gets filled as time goes on ...
    call nc_check(nf90_def_var(ncid=ncFileID, name='state', xtype=nf90_real, &
-                 dimids=(/StateVarDimID,MemberDimID,unlimitedDimID/),varid=StateVarID),&
+                 dimids=(/StateVarDimID,MemberDimID,unlimitedDimID/),varid=VarID),&
                  'nc_write_model_atts','state def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,StateVarID,'long_name','model state or fcopy'),&
+   call nc_check(nf90_put_att(ncFileID,VarID,'long_name','model state or fcopy'),&
                  'nc_write_model_atts', 'state long_name '//trim(filename))
 
    ! Leave define mode.
@@ -918,10 +825,36 @@ else
    ! Define the new dimensions IDs
    !----------------------------------------------------------------------------
 
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='nodes_2d', &
-          len = nCells, dimid = nodes_2DimID),'nc_write_model_atts', 'nodes_2D def_dim '//trim(filename))
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='nodes_3d', &
-          len = nVertices, dimid = nodes_3DimID),'nc_write_model_atts', 'nodes_3D def_dim '//trim(filename))
+   io = nf90_def_dim(ncid=ncFileID, name='nodes_2d',len=nCells, dimid=nodes_2DimID)
+   call nc_check(io, 'nc_write_model_atts', 'nodes_2D def_dim '//trim(filename))
+
+   io = nf90_def_dim(ncid=ncFileID, name='nodes_3d', len=nVertices, dimid=nodes_3DimID)
+   call nc_check(io,'nc_write_model_atts', 'nodes_3D def_dim '//trim(filename))
+
+   io = nf90_def_dim(ncid=ncFileID, name='levels', len=nVertLevels, dimid=nVertLevelsDimID)
+   call nc_check(io,'nc_write_model_atts', 'levels def_dim '//trim(filename))
+
+   !----------------------------------------------------------------------------
+   ! Define useful geometry variables.
+   !----------------------------------------------------------------------------
+
+   io = nf90_def_var(ncid=ncFileID, name='surface_longitudes', &
+                    xtype=NF90_DOUBLE, dimids = (/ nodes_2DimID /), varid=VarID)
+   call nc_check(io,'nc_write_model_atts', 'longitudes def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees East'),&
+                 'nc_write_model_atts', 'surface_longitude units  '//trim(filename))
+
+   io = nf90_def_var(ncid=ncFileID, name='surface_latitudes', &
+                    xtype=NF90_DOUBLE, dimids = (/ nodes_2DimID /), varid=VarID)
+   call nc_check(io,'nc_write_model_atts', 'latitudes def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees North'),&
+                 'nc_write_model_atts', 'surface_latitudes units  '//trim(filename))
+
+   io = nf90_def_var(ncid=ncFileID, name='layerdepth', &
+                    xtype=NF90_REAL, dimids = (/ nVertLevelsDimID /), varid=VarID)
+   call nc_check(io,'nc_write_model_atts', 'layerdepth def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
+                 'nc_write_model_atts', 'layerdepth units  '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -962,26 +895,20 @@ else
    ! Fill the coordinate variables that DART needs and has locally
    !----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncFileID, 'lonCell', VarID), &
-                 'nc_write_model_atts', 'lonCell inq_varid '//trim(filename))
+   call nc_check(NF90_inq_varid(ncFileID, 'surface_longitudes', VarID), &
+                 'nc_write_model_atts', 'surface_longitudes inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2D(1,:) ), &
-                'nc_write_model_atts', 'lonCell put_var '//trim(filename))
+                'nc_write_model_atts', 'surface_longitudes put_var '//trim(filename))
 
-   call nc_check(NF90_inq_varid(ncFileID, 'latCell', VarID), &
-                 'nc_write_model_atts', 'latCell inq_varid '//trim(filename))
+   call nc_check(NF90_inq_varid(ncFileID, 'surface_latitudes', VarID), &
+                 'nc_write_model_atts', 'surface_latitudes inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2d(2,:) ), &
-                'nc_write_model_atts', 'latCell put_var '//trim(filename))
+                'nc_write_model_atts', 'surface_latitudes put_var '//trim(filename))
 
    call nc_check(NF90_inq_varid(ncFileID, 'layerdepth', VarID), &
                  'nc_write_model_atts', 'layerdepth inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, layerdepth ), &
                 'nc_write_model_atts', 'layerdepth put_var '//trim(filename))
-
-   !----------------------------------------------------------------------------
-   ! Fill the coordinate variables needed for plotting only.
-   ! DART has not read these in, so we have to read them from the input file
-   ! and parrot them to the DART output file.
-   !----------------------------------------------------------------------------
 
 endif
 
@@ -1233,14 +1160,10 @@ real(r8), intent(in) :: filter_ens_mean(:)
 
 if ( .not. module_initialized ) call static_init_model
 
-!call error_handler(E_ERR,'ens_mean_for_model','not supported for FeoM',source, revision, revdate)
+call error_handler(E_MSG, 'ens_mean_for_model', 'not needed by FeoM', &
+           source, revision, revdate)
 
-ens_mean = filter_ens_mean
-
-if ((debug > 3) .and. do_output()) then
-   if (do_output()) print *, 'resetting ensemble mean: '
-   call print_variable_ranges(ens_mean)
-endif
+! ens_mean = filter_ens_mean
 
 end subroutine ens_mean_for_model
 
@@ -1253,6 +1176,7 @@ subroutine end_model()
 
 if (allocated(cell_locations)) deallocate(cell_locations)
 if (allocated(cell_kinds))     deallocate(cell_kinds)
+if (allocated(close_ind))      deallocate(close_ind)
 
 call finalize_closest_center()
 
@@ -1357,14 +1281,6 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
 ! locations & kinds (obs, obs_kind), returns the subset close to the
 ! "base", their indices, and their distances to the "base" ...
 
-! For vertical distance computations, general philosophy is to convert all
-! vertical coordinates to a common coordinate. This coordinate type can be
-! defined in the namelist with the variable "vert_localization_coord".
-! But we first try a single coordinate type as the model level here.
-! FIXME: We need to add more options later.
-
-! Vertical conversion is carried out by the subroutine vert_convert.
-
 ! Note that both base_obs_loc and obs_loc are intent(inout), meaning that these
 ! locations are possibly modified here and returned as such to the calling routine.
 ! The calling routine is always filter_assim and these arrays are local arrays
@@ -1378,109 +1294,14 @@ type(location_type), dimension(:), intent(inout) :: obs_loc
 integer,             dimension(:), intent(in)    :: obs_kind
 integer,                           intent(out)   :: num_close
 integer,             dimension(:), intent(out)   :: close_ind
-real(r8),            dimension(:), intent(out)   :: dist
+real(r8), optional,  dimension(:), intent(out)   :: dist
 
-!#! integer                :: ztypeout
-integer                :: t_ind, istatus1, istatus2, k
-integer                :: base_which, local_obs_which
-real(r8), dimension(3) :: base_llv, local_obs_llv   ! lon/lat/vert
-type(location_type)    :: local_obs_loc
+! If you want to impose some sort of special localization, you can key
+! off things like the obs_kind and make things 'infinitely' far away.
+! Otherwise, this does nothing. Take a look at the POP model_mod.f90 for an example.
 
-real(r8) ::  hor_dist
-hor_dist = 1.0e9_r8
-
-! Initialize variables to missing status
-
-num_close = 0
-close_ind = -99
-dist      = 1.0e9_r8   !something big and positive (far away) in radians
-istatus1  = 0
-istatus2  = 0
-
-! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
-
-base_llv = get_location(base_obs_loc)
-base_which = nint(query_location(base_obs_loc))
-
-!>@todo FIXME : no need for vertical conversion
-!#! ztypeout = vert_localization_coord
-!#
-!#! if (.not. horiz_dist_only) then
-!#!   if (base_llv(3) == MISSING_R8) then
-!#!      istatus1 = 1
-!#!   else if (base_which /= vert_localization_coord) then
-!#!       call vert_convert(ens_mean, base_obs_loc, base_obs_kind, ztypeout, istatus1)
-!#!       if(debug > 5) then
-!#!       call write_location(0,base_obs_loc,charstring=string1)
-!#!       call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string1,source, revision, revdate)
-!#!       endif
-!#!    endif
-!#! endif
-
-if (istatus1 == 0) then
-
-   ! Loop over potentially close subset of obs priors or state variables
-   ! This way, we are decreasing the number of distance computations that will follow.
-   ! This is a horizontal-distance operation and we don't need to have the relevant vertical
-   ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
-                          num_close, close_ind)
-
-   do k = 1, num_close
-
-      t_ind = close_ind(k)
-      local_obs_loc   = obs_loc(t_ind)
-      local_obs_which = nint(query_location(local_obs_loc))
-
-!#!       if ((debug > 4) .and. (k > 6270000 ) .and. do_output()) then
-!#!               print *, "t_ind: ", t_ind
-!#!       end if
-      
-
-!>@todo FIXME : no need for vertical conversion
-!#!       ! Convert local_obs vertical coordinate to requested vertical coordinate if necessary.
-!#!       ! This should only be necessary for obs priors, as state location information already
-!#!       ! contains the correct vertical coordinate (filter_assim's call to get_state_meta_data).
-!#!       ! if (.not. horiz_dist_only) then
-!#!       !     if (local_obs_which /= vert_localization_coord) then
-!#!       !         call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), ztypeout, istatus2)
-!#!       !     else
-!#!       !         istatus2 = 0
-!#!       !     endif
-!#!       ! endif
-
-      ! Compute distance - set distance to a very large value if vert coordinate is missing
-      ! or vert_interpolate returned error (istatus2=1)
-      local_obs_llv = get_location(local_obs_loc)
-
-!@todo FIXME : threed_cartesian does not support horiz_dis_only
-!#!      ! if (( (.not. horiz_dist_only)           .and. &
-!#!      !       (local_obs_llv(3) == MISSING_R8)) .or.  &
-!#!      !       (istatus2 /= 0)                   ) then
-!#!      !       dist(k) = 1.0e9_r8
-!#!      ! else
-            dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
-
-!>@todo FIXME : I think this is irrelevant for FoeM
-!#!       if ((debug > 12) .and. (dist(k) < 0.0017) .and. do_output()) then
-!#!           print *, 'calling get_dist'
-!#!           call write_location(0,base_obs_loc,charstring=string2)
-!#!           call error_handler(E_MSG, 'get_close_obs: base_obs_loc',string2,source, revision, revdate)
-!#!           call write_location(0,local_obs_loc,charstring=string2)
-!#!           call error_handler(E_MSG, 'get_close_obs: local_obs_loc',string2,source, revision, revdate)
-!#!           hor_dist = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind), no_vert=.true.)
-!#!           print *, 'hor/3d_dist for k =', k, ' is ', hor_dist,dist(k), t_ind
-!#!       endif
-!#!      endif
-
-   enddo
-   print *, "last k: " , k
-endif
-
-if ((debug > 2) .and. do_output()) then
-   call write_location(0,base_obs_loc,charstring=string2)
-   print *, 'get_close_obs: nclose, base_obs_loc ', num_close, trim(string2)
-endif
+call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+                          num_close, close_ind, dist)
 
 end subroutine get_close_obs
 
@@ -1501,8 +1322,10 @@ if ( .not. module_initialized ) call static_init_model
 ! this shuts up the compiler warnings about unused variables
 time = set_time(0, 0)
 
-write(string1,*) 'Cannot initialize MPAS time via subroutine call; start_from_restart cannot be F'
-call error_handler(E_ERR,'init_time',string1,source,revision,revdate)
+write(string1,*) 'Cannot initialize FeoM time via subroutine call.'
+write(string2,*) 'input.nml:start_from_restart cannot be FALSE'
+call error_handler(E_ERR, 'init_time', string1, &
+           source, revision, revdate, text2=string2)
 
 end subroutine init_time
 
@@ -1520,11 +1343,13 @@ real(r8), intent(out) :: x(:)
 
 if ( .not. module_initialized ) call static_init_model
 
+write(string1,*) 'Cannot initialize FeoM time via subroutine call.'
+write(string2,*) 'input.nml:start_from_restart cannot be FALSE'
+call error_handler(E_ERR, 'init_conditions', string1, &
+           source, revision, revdate, text2=string2)
+
 ! this shuts up the compiler warnings about unused variables
 x = 0.0_r8
-
-write(string1,*) 'Cannot initialize MPAS state via subroutine call; start_from_restart cannot be F'
-call error_handler(E_ERR,'init_conditions',string1,source,revision,revdate)
 
 end subroutine init_conditions
 
@@ -1555,11 +1380,10 @@ if (do_output()) then
    call print_time(time,'NULL interface adv_1step (no advance) DART time is',logfileunit)
 endif
 
-write(string1,*) 'Cannot advance MPAS with a subroutine call; async cannot equal 0'
+write(string1,*) 'Cannot advance FeoM with a subroutine call; async cannot equal 0'
 call error_handler(E_ERR,'adv_1step',string1,source,revision,revdate)
 
 end subroutine adv_1step
-
 
 
 !==================================================================
@@ -1586,7 +1410,7 @@ end subroutine get_model_analysis_filename
 
 subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 
-! Reads the current time and state variables from a mpas analysis
+! Reads the current time and state variables from a FeoM analysis
 ! file and packs them into a dart state vector.
 
 character(len=*), intent(in)    :: filename
@@ -1604,7 +1428,6 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: ncid, TimeDimID, TimeDimLength
-character(len=256) :: myerrorstring
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1649,15 +1472,15 @@ endif
 do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
-   myerrorstring = trim(filename)//' '//trim(varname)
+   string2 = trim(filename)//' '//trim(varname)
 
    ! determine the shape of the netCDF variable
 
    call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'analysis_file_to_statevector', 'inq_varid '//trim(myerrorstring))
+            'analysis_file_to_statevector', 'inq_varid '//trim(string2))
 
    call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'analysis_file_to_statevector', 'inquire '//trim(myerrorstring))
+            'analysis_file_to_statevector', 'inquire '//trim(string2))
 
    mystart = 1   ! These are arrays, actually.
    mycount = 1
@@ -1665,12 +1488,12 @@ do ivar=1, nfields
    ! Only checking the shape of the variable - sans TIME
    DimCheck : do i = 1,progvar(ivar)%numdims
 
-      write(string1,'(''inquire dimension'',i2,A)') i,trim(myerrorstring)
+      write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'analysis_file_to_statevector', string1)
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(myerrorstring),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
+         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
          call error_handler(E_ERR,'analysis_file_to_statevector',string1,source,revision,revdate)
       endif
 
@@ -1681,9 +1504,10 @@ do ivar=1, nfields
    where(dimIDs == TimeDimID) mystart = TimeDimLength  ! pick the latest time
    where(dimIDs == TimeDimID) mycount = 1              ! only use one time
 
-   if ((debug > 10) .and. do_output()) then
-      write(*,*)'analysis_file_to_statevector '//trim(varname)//' start = ',mystart(1:ncNdims)
-      write(*,*)'analysis_file_to_statevector '//trim(varname)//' count = ',mycount(1:ncNdims)
+   if (debug > 0) then
+      write(string1,*)'..  '//trim(varname)//' start = ',mystart(1:ncNdims)
+      write(string3,*)        trim(varname)//' count = ',mycount(1:ncNdims)
+      call error_handler(E_MSG,'analysis_file_to_statevector',string1,text2=string3)
    endif
 
    if (ncNdims == 1) then
@@ -1742,8 +1566,8 @@ end subroutine analysis_file_to_statevector
 
 subroutine statevector_to_analysis_file(state_vector, filename, statetime)
 
-! Writes the current time and state variables from a dart state
-! vector (1d array) into a mpas netcdf analysis file.
+! Writes the posterior state from a dart state
+! vector (1d array) into a FeoM file.
 
 real(r8),         intent(in) :: state_vector(:)
 character(len=*), intent(in) :: filename
@@ -1776,25 +1600,22 @@ call nc_check(nf90_open(trim(filename), NF90_WRITE, ncFileID), &
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
-! of the mpas analysis file, and state vector contents from a different
+! of the FeoM analysis file, and state vector contents from a different
 ! time won't be consistent with the rest of the file.
 
 model_time = get_analysis_time(ncFileID, filename)
 
 if ( model_time /= statetime ) then
    call print_time( statetime,'DART current time',logfileunit)
-   call print_time(model_time,'mpas current time',logfileunit)
+   call print_time(model_time,'FeoM current time',logfileunit)
    call print_time( statetime,'DART current time')
-   call print_time(model_time,'mpas current time')
+   call print_time(model_time,'FeoM current time')
    write(string1,*)trim(filename),' current time must equal model time'
    call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
 endif
 
-! let the calling program print out the time information it wants.
-!if (do_output()) &
-!    call print_time(statetime,'time of DART file '//trim(filename))
-!if (do_output()) &
-!    call print_date(statetime,'date of DART file '//trim(filename))
+if (do_output()) call print_time(statetime,'time in DART file '//trim(filename))
+if (do_output()) call print_date(statetime,'date in DART file '//trim(filename))
 
 ! The DART prognostic variables are only defined for a single time.
 ! We already checked the assumption that variables are xy2d or xyz3d ...
@@ -1846,15 +1667,14 @@ PROGVARLOOP : do ivar=1, nfields
 
    enddo DimCheck
 
-
    where(dimIDs == TimeDimID) mystart = TimeDimLength
    where(dimIDs == TimeDimID) mycount = 1   ! only the latest one
 
-   if ((debug > 9) .and. do_output()) then
-      write(*,*)'statevector_to_analysis_file '//trim(varname)//' start is ',mystart(1:ncNdims)
-      write(*,*)'statevector_to_analysis_file '//trim(varname)//' count is ',mycount(1:ncNdims)
+   if (debug > 0) then
+      write(string1,*)'..  '//trim(varname)//' start is ',mystart(1:ncNdims)
+      write(string3,*)        trim(varname)//' count is ',mycount(1:ncNdims)
+      call error_handler(E_MSG,'statevector_to_analysis_file',string1,text2=string3)
    endif
-
 
    if (progvar(ivar)%numdims == 1) then
       allocate(data_1d_array(mycount(1)))
@@ -2293,15 +2113,15 @@ function string_to_time(s)
 ! parse a string to extract time.  the expected format of
 ! the string is YYYY-MM-DD_hh:mm:ss  (although the exact
 ! non-numeric separator chars are skipped and not validated.)
-!
-! TJH Seems like the MPAS OCN developers start their runs from year 1.
-! This just doesn't work for DA - but I need to exercise the code,
-! so I am modifying it. FIXME ... should be a hard error.
 
-type(time_type) :: string_to_time
 character(len=*), intent(in) :: s
+type(time_type)              :: string_to_time
 
 integer :: iyear, imonth, iday, ihour, imin, isec
+
+call error_handler(E_ERR,'string_to_time','not written for FeoM')
+
+! The following is baggage from MPAS
 
 read( s ,'(i4,5(1x,i2))') iyear, imonth, iday, ihour, imin, isec
 
@@ -2340,12 +2160,6 @@ end function set_model_time_step
 subroutine read_grid_dims()
 
 ! Read the grid dimensions from the FeoM metadata files.
-!
-! myDim_nod2D   : FeoM module read_node()
-! myDim_nod3D   : FeoM module read_aux3
-
-integer  :: grid_id, dimid
-real(r8) :: t0, t1, t2, t3, t4
 
 call read_node()  ! sets myDim_nod2D, myDim_nod3D
 call read_aux3()  ! sets nVertLevels and node locating arrays
@@ -2356,11 +2170,11 @@ call read_depth()
 ! nVertices   = myDim_nod3D
 ! nVertLevels = max_num_layers
 
-if (debug > 4 .and. do_output()) then
-   write(*,*)
-   write(*,*)'read_grid_dims: nCells        is ', nCells
-   write(*,*)'read_grid_dims: nVertices     is ', nVertices
-   write(*,*)'read_grid_dims: nVertLevels   is ', nVertLevels
+if (debug > 1) then
+   write(string1,*)'..  nCells      is ', nCells
+   write(string2,*)    'nVertices   is ', nVertices
+   write(string3,*)    'nVertLevels is ', nVertLevels
+   call error_handler(E_MSG,'read_grid_dims',string1,text2=string2,text3=string3)
 endif
 
 end subroutine read_grid_dims
@@ -2382,19 +2196,17 @@ where (coord_nod2D(1,:) < 0.0_r8) coord_nod2D(1,:) = coord_nod2D(1,:) + 360.0_r8
 
 ! Read the variables
 
-if ((debug > 1) .and. do_output()) then
-
-   write(*,*)
-   write(*,*)'latitude    range ',minval(coord_nod2D(2,:)), maxval(coord_nod2D(2,:))
-   write(*,*)'longitude   range ',minval(coord_nod2D(1,:)), maxval(coord_nod2D(1,:))
-   write(*,*)'layerdepth  range ',minval(layerdepth), maxval(layerdepth)
-
+if (debug > 1) then
+   write(string1,*)'..  latitude   range ',minval(coord_nod2D(2,:)), maxval(coord_nod2D(2,:))
+   write(string2,*)    'longitude  range ',minval(coord_nod2D(1,:)), maxval(coord_nod2D(1,:))
+   write(string3,*)    'layerdepth range ',minval(layerdepth), maxval(layerdepth)
+   call error_handler(E_MSG,'get_grid',string1,text2=string2,text3=string3)
 endif
 
 ! This array has to be filled in EXACTLY the same way that the
 ! FeoM state gets packed into the DART state vector.
 
-do i=1,Ncells
+do i=1,nCells
    cell_locations(i) = set_location(coord_nod2d(1,i), coord_nod2d(2,i), 0.0_r8, VERTISHEIGHT)
 enddo
 
@@ -2743,9 +2555,9 @@ MyLoop : do i = 1, nrows
 
    ! Record the contents of the DART state vector
 
-   if ((debug > 0) .and. do_output()) then
-      write(logfileunit,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
-      write(     *     ,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
+   if (debug > 0) then
+      write(string1,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
+      call error_handler(E_MSG,'verify_state_variables',string1)
    endif
 
    ngood = ngood + 1
@@ -2754,13 +2566,8 @@ enddo MyLoop
 if (ngood == nrows) then
    string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'verify_state_variables',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_MSG,'verify_state_variables',string1,text2=string2)
 endif
-
-! TJH FIXME need to add check so they cannot have both normal winds and reconstructed winds in
-! DART state vector.   nsc - not sure that should be illegal.  which one is
-! updated in the restart file is controlled by namelist and both could be in
-! state vector for testing.
 
 end subroutine verify_state_variables
 
@@ -2790,7 +2597,7 @@ integer,  intent(in)           :: ivar
 !%!    integer :: dart_kind
 !%!    character(len=paramname_length) :: kind_string
 !%!    logical  :: clamping     ! does variable need to be range-restricted before
-!%!    real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
+!%!    real(r8) :: range(2)     ! being stuffed back into FeoM analysis file.
 !%! end type progvartype
 
 integer :: i
@@ -2837,6 +2644,8 @@ do i = 1,progvar(ivar)%numdims
    write(logfileunit,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
    write(     *     ,*) '  dimension/length/name ',i,progvar(ivar)%dimlens(i),trim(progvar(ivar)%dimname(i))
 enddo
+write(logfileunit,*)
+write(     *     ,*)
 
 end subroutine dump_progvar
 
@@ -2897,12 +2706,12 @@ end function FindTimeDimension
 !------------------------------------------------------------
 subroutine get_variable_bounds(bounds_table, ivar)
 
-! matches MPAS variable name in bounds table to assign
+! matches FeoM variable name in bounds table to assign
 ! the bounds if they exist.  otherwise sets the bounds
 ! to missing_r8
 !
 ! SYHA (May-30-2013)
-! Adopted from wrf/model_mod.f90 after adding mpas_state_bounds in mpas_vars_nml.
+! Adopted from wrf/model_mod.f90 after adding feom_state_bounds in feom_vars_nml.
 
 character(len=*), intent(in)  :: bounds_table(num_bounds_table_columns, max_state_variables)
 integer,          intent(in)  :: ivar
@@ -3002,7 +2811,7 @@ dimids = 0
 
 do i = 1,progvar(ivar)%numdims
 
-   ! Each of these dimension names (originally from the MPAS analysis file)
+   ! Each of these dimension names (originally from the FeoM analysis file)
    ! must exist in the DART diagnostic netcdf files.
 
    call nc_check(nf90_inq_dimid(ncid, trim(progvar(ivar)%dimname(i)), mydimid), &
@@ -3480,9 +3289,7 @@ if (debug > 7) print *, 'internal code inconsistency: could not find vertical lo
 end subroutine find_depth_bounds
 
 !------------------------------------------------------------
-! Deleted a lot of routines that came right from MPAS_OCN.
-! If we need them, we know where to look.
-!------------------------------------------------------------
+!>
 
 subroutine init_closest_center()
 
@@ -3500,48 +3307,72 @@ if (search_initialized) return
 !  40,000km/2pi radians
 
 call get_close_maxdist_init(cc_gc, maxdist = 2.5_r8*PI/20000.0_r8)
-call get_close_obs_init(cc_gc, Ncells, cell_locations)
+call get_close_obs_init(cc_gc, nCells, cell_locations)
 
 search_initialized = .true.
+
+if (debug > 0) &
+   call error_handler(E_MSG,'init_closest_center','get close lookup table initialized')
 
 end subroutine init_closest_center
 
 !------------------------------------------------------------
+!> Determine the cell index closest to the given point
+!> 2D calculation only.
 
-function find_closest_node(lat, lon)
+function find_closest_surface_location(location, obs_kind)
 
-! Determine the cell index for the closest center to the given point
-! 2D calculation only.
+type(location_type), intent(in) :: location
+integer,             intent(in) :: obs_kind
+integer                         :: find_closest_surface_location
 
-real(r8), intent(in)  :: lat, lon
-integer               :: find_closest_node
 
-type(location_type) :: pointloc
-integer :: closest_cell, rc
+integer :: num_close, closest_index, rc, iclose, indx
+real(r8) :: closest
+real(r8) :: distance
 
 call init_closest_center() ! will only do something the first call
 
-pointloc = set_location(lon, lat, 0.0_r8,VERTISHEIGHT)
+find_closest_surface_location = -1
 
-!@>todo FIXME : need to figure out which routine to use to find center.
-find_closest_node = 1
+! Generate the list of indices into the DART vector of the close candidates.
 
-!@> tim shoud know.
-!#! call find_nearest(cc_gc, pointloc, cell_locations, closest_cell, rc)
-!#! 
-!#! ! decide what to do if we don't find anything.
-!#! if (rc /= 0 .or. closest_cell < 0) then
-!#!    if ((debug > 8) .and. do_output()) &
-!#!        print *, 'cannot find nearest cell to lon, lat: ', lon, lat
-!#!    find_closest_node = -1
-!#!    return
-!#! endif
-!#! 
-!#! ! this is the cell index for the closest center
- find_closest_node = 1
-! find_closest_node = closest_cell
+call loc_get_close_obs(cc_gc, location, obs_kind, cell_locations, cell_kinds, &
+                       num_close, close_ind)
 
-end function find_closest_node
+! Sometimes the location is outside the model domain.
+! In this case, we cannot interpolate.
+
+if (num_close == 0) return
+
+! Loop over close candidates. They come in without regard to what DART KIND they are,
+! nor are they sorted by distance. We are only interested in the close locations
+! of the right DART KIND.
+
+closest = 1000000.0_r8 ! not very close
+closest_index = 0
+
+CLOSE : do iclose = 1, num_close
+
+   indx     = close_ind(iclose)
+   distance = get_dist(location, cell_locations(indx))
+
+   if (debug > 0 .and. do_output()) &
+      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
+
+   if (distance < closest) then
+      closest       = distance
+      closest_index = indx
+   endif
+
+enddo CLOSE
+
+if (debug > 0 .and. do_output()) &
+      write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
+
+find_closest_surface_location = closest_index
+
+end function find_closest_surface_location
 
 !------------------------------------------------------------
 
@@ -3661,7 +3492,7 @@ end subroutine finalize_closest_center
 !$! 
 
 !>@todo FIXME : should not need to convert between latlon and xyz
-!$! ! use the same radius as MPAS for computing this
+!$! ! use the same radius as FeoM for computing this
 !$! call latlon_to_xyz(lat, lon, px, py, pz)
 !$! 
 !$! closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
@@ -3713,9 +3544,9 @@ end subroutine finalize_closest_center
 !#! ! Given a lat, lon in degrees, return the cartesian x,y,z coordinate
 !#! ! on the surface of a specified radius relative to the origin
 !#! ! at the center of the earth.  (this radius matches the one
-!#! ! used at MPAS grid generation time and must agree in order
+!#! ! used at FeoM grid generation time and must agree in order
 !#! ! to be consistent with the cartisian coordinate arrays in
-!#! ! the MPAS data files.)
+!#! ! the FeoM data files.)
 !#! 
 !#! real(r8), intent(in)  :: lat, lon
 !#! real(r8), intent(out) :: x, y, z
@@ -3737,7 +3568,7 @@ end subroutine finalize_closest_center
 !#! 
 !#! ! Given a cartesian x, y, z coordinate relative to the origin
 !#! ! at the center of the earth, using a fixed radius specified
-!#! ! by MPAS (in the grid generation step), return the corresponding
+!#! ! by FeoM (in the grid generation step), return the corresponding
 !#! ! lat, lon location in degrees.
 !#! 
 !#! real(r8), intent(in)  :: x, y, z
@@ -3920,7 +3751,7 @@ end subroutine finalize_closest_center
 !#! !------------------------------------------------------------
 !#! 
 !#! !==================================================================
-!#! ! The following (private) routines were borrowed from the MPAS code
+!#! ! The following (private) routines were borrowed from the FeoM code
 !#! !==================================================================
 !#! 
 !#! !------------------------------------------------------------------
@@ -3945,7 +3776,7 @@ end subroutine finalize_closest_center
 !#! function theta_to_tk (theta, rho, qv)
 !#! 
 !#! ! Compute sensible temperature [K] from potential temperature [K].
-!#! ! code matches computation done in MPAS model
+!#! ! code matches computation done in FeoM model
 !#! 
 !#! real(r8), intent(in)  :: theta    ! potential temperature [K]
 !#! real(r8), intent(in)  :: rho      ! dry density
@@ -3977,7 +3808,7 @@ end subroutine finalize_closest_center
 !#! ! since it has to compute sensible temp along the way,
 !#! ! make temp one of the return values rather than having
 !#! ! to call theta_to_tk() separately.
-!#! ! code matches computation done in MPAS model
+!#! ! code matches computation done in FeoM model
 !#! 
 !#! real(r8), intent(in)  :: theta    ! potential temperature [K]
 !#! real(r8), intent(in)  :: rho      ! dry density

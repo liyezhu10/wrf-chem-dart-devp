@@ -1,4 +1,8 @@
 module feom_modules
+
+  ! Bits from DART
+  use utilities_mod, only: get_unit, do_output
+
   implicit none
   save
 
@@ -488,33 +492,35 @@ module feom_modules
   real(kind=8), allocatable, dimension(:,:)  	  :: neutral_slope_elem
 
   contains
+
 subroutine read_namelist
-  use utilities_mod, only: do_output
+
   ! Routine reads namelist files to overwrite default parameters.
 
   character(len=100)   :: nmlfile
   namelist /clockinit/ timenew, daynew, yearnew
 
   nmlfile ='namelist.config'    ! name of general configuration namelist file
-  open (20,file=nmlfile)
-  read (20,NML=modelname)
-  read (20,NML=timestep)
-  read (20,NML=timeseries)
-  read (20,NML=clockinit) 
-  read (20,NML=paths)
-  read (20,NML=initialization)  
-  read (20,NML=inout)
-  read (20,NML=mesh_def)
-  read (20,NML=geometry)
-!  read (20,NML=calendar)
-  close (20)
+
+  fileID=get_unit()
+  open (fileID,file=nmlfile)
+  read (fileID,NML=modelname)
+  read (fileID,NML=timestep)
+  read (fileID,NML=timeseries)
+  read (fileID,NML=clockinit) 
+  read (fileID,NML=paths)
+  read (fileID,NML=initialization)  
+  read (fileID,NML=inout)
+  read (fileID,NML=mesh_def)
+  read (fileID,NML=geometry)
+!  read (fileID,NML=calendar)
+  close (fileID)
   if ( do_output() ) print*, "namelist is read"
 end subroutine read_namelist
 subroutine read_elem
 !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !   !!!!!! READ elem3d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!   use utilities_mod, only: do_output
 ! 
 !   mype=0
 !   fileID=mype+10
@@ -541,11 +547,10 @@ subroutine read_node
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!! READ nod3d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  use utilities_mod, only: do_output
   real*8     :: x,y,z
 
   mype=0
-  fileID=mype+10
+  fileID=get_unit()
   open(fileID, file=(trim(MeshPath)//'nod3d.out'))
     read(fileID,*) myDim_nod3D
     allocate(coord_nod3D(3,myDim_nod3D))
@@ -565,7 +570,7 @@ subroutine read_node
   !!!!!! READ nod2d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  fileID=mype+10
+  fileID=get_unit()
   open(fileID, file=(trim(MeshPath)//'nod2d.out'))
     read(fileID,*) myDim_nod2D
     allocate(coord_nod2D(2,myDim_nod2D))
@@ -588,10 +593,8 @@ subroutine read_aux3
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!! READ aux3d.out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  use utilities_mod, only: do_output
 
-  mype=0
-  fileID=mype+10
+  fileID=get_unit()
   open(fileID, file=trim(meshpath)//'aux3d.out')
   read(fileID, *) max_num_layers
 
@@ -605,6 +608,7 @@ subroutine read_aux3
         nod3D_below_nod2D(:,n)=vert_nodes(1:max_num_layers)
   end do
 
+  ! TJH question for Ali ... what is this doing ... seems like nothing to me
   do n=1, myDim_nod2D
      do m=1, max_num_layers
         n1=nod3D_below_nod2D(m,n)
@@ -648,7 +652,7 @@ end subroutine read_aux3
 subroutine read_depth
   real*8 :: depth
 
-  fileID=mype+10
+  fileID=get_unit()
   allocate(layerdepth(max_num_layers)) 
   open(fileID, file=(trim(MeshPath)//'m3d.ini'))
   do n=1,max_num_layers-1
@@ -658,7 +662,6 @@ subroutine read_depth
   close(fileID)
 end subroutine read_depth
 subroutine oce_input
-  use utilities_mod, only: do_output
   implicit none
 
 #include "netcdf.inc" 
