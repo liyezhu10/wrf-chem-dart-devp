@@ -1160,10 +1160,7 @@ real(r8), intent(in) :: filter_ens_mean(:)
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_MSG, 'ens_mean_for_model', 'not needed by FeoM', &
-           source, revision, revdate)
-
-! ens_mean = filter_ens_mean
+! Not needed by FeoM ... just a stub.
 
 end subroutine ens_mean_for_model
 
