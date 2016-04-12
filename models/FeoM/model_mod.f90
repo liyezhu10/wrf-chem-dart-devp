@@ -386,7 +386,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 
 ! Get the FeoM run-time configurations from a hardcoded filename
 ! must be called 'namelist.config' in the current directory.
-call read_namelist() 
+!call read_namelist() 
 
 ! read_grid_dims() sets nCells, nVertices, nVertLevels
 call read_grid_dims()
@@ -528,6 +528,7 @@ if ( debug > 0 .and. do_output()) then
   write(     *     , *)'static_init_model: model_size = ', model_size
 endif
 
+allocate( ens_mean(model_size) )
 end subroutine static_init_model
 
 
@@ -687,7 +688,7 @@ CLOSE : do iclose = 1, num_close
    indx     = close_ind(iclose)
    distance = get_dist(location, cell_locations(indx))
 
-   if (debug > 0 .and. do_output()) &
+   if (debug > 12 .and. do_output()) &
       write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
 
    if (distance < closest) then
@@ -726,9 +727,11 @@ else
        istatus = 18
       return ! too shallow
    else
+       closest_index=nod3d_below_nod2d(layer_below,closest_index)
        !> @ TODO ALI ... your job to figure out the vertical contibs from above and below ..
    endif
 
+   interp_val = x( progvar(ivar)%index1 + closest_index )
 ! interp_val = a * x(closest_index) * (1-a) * x(deeper_index)
 
 endif
@@ -1230,9 +1233,14 @@ real(r8), intent(in) :: filter_ens_mean(:)
 
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_ERR,'ens_mean_for_model','not supported for FeoM',source, revision, revdate)
+!call error_handler(E_ERR,'ens_mean_for_model','not supported for FeoM',source, revision, revdate)
 
-! ens_mean = filter_ens_mean
+ens_mean = filter_ens_mean
+
+if ((debug > 3) .and. do_output()) then
+   if (do_output()) print *, 'resetting ensemble mean: '
+   call print_variable_ranges(ens_mean)
+endif
 
 end subroutine ens_mean_for_model
 
