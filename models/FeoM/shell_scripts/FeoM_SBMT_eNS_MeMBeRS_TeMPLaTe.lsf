@@ -1,0 +1,114 @@
+#!/bin/bash
+#BSUB -J TSSENSRUN               # Name of the job.
+#BSUB -o LOG/TSSENSRUN_%J.out        # Appends std output to file %J.out.
+#BSUB -e LOG/TSSENSRUN_%J.out        # Appends std error  to file %J.out.
+#BSUB -q serial_30min            # queue
+
+function jobid {
+  output=$($*)
+  echo $output | head -n1 | cut -d'<' -f2 | cut -d'>' -f1
+    }
+TEMPLATE=TeMPLaTe; COPY='cp -f'; REMOVE='rm -f'; 
+LINK='ln -sf'; MOVE='mv -f'
+ID=0; DAYSTEP=1; RUNYEAR=2009
+############################ LSF ###################################
+NPROC=512; POENAME=poe_short
+####################################################################
+############### DEFINE RELEVANT DIRECTORIES ########################
+####################################################################
+USRHOM=/users/home/ans051; RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
+####################################################################
+############### SET EXPERIMENT INFORMATION #########################
+####################################################################
+EXPCODE=EXPERIMENTNAME; EXPNO=EXPERIMENTNUMBER; ENSCODE=ENS; MEM=30
+EXPYR=EXPERIMENTYEAR;
+EXPINFO=${EXPCODE}${EXPNO};
+WRKDIR=/work/ans051/TSS/${EXPINFO}
+DIADIR=/work/ans051/TSS/PLTTSS/MESH_READ
+LOGDIR=${WRKDIR}/LOG
+FILDIR=${WRKDIR}/FILTER
+CHECKFILE=${WRKDIR}/submitcheck.lst; 
+  #-----------------------------------------------------------------------
+  # INITIALIZE ENSEMBLE IF NOT DONE YET
+  #-----------------------------------------------------------------------
+if [ ! -d ${WRKDIR} ]; then
+  mkdir ${WRKDIR}; mkdir ${LOGDIR}; mkdir ${FILDIR}
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_iNiTiaLiZe_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_iNiTiaLiZe_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;MEMBER;${MEM};g" -e "s;ENSCODE;${ENSCODE};g" -e \
+         "s;NCORES;${NPROC};g"  -e "s;^EXPYR=.*$;EXPYR=${EXPYR};g" \
+	 ${TMPLFILE} > ${SBMTFILE}
+	 cd ${WRKDIR}; ID=$( jobid bsub < ${SBMTFILE} ); echo ${ID}
+else
+	cd ${WRKDIR}
+	DAYSTEP=$(cat ENS01/ENS01.clock | sed -n 2,2p | awk '{print $2}')
+	RUNYEAR=$(cat ENS01/ENS01.clock | sed -n 2,2p | awk '{print $3}') 
+	${MOVE} ${CHECKFILE} ${CHECKFILE}.prev
+fi
+  #-----------------------------------------------------------------------
+  # RUN THE MODEL 2 DART HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_MoDeL_To_DaRT_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_MoDeL_To_DaRT_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;MEMBER;${MEM};g" -e "s;ENSCODE;${ENSCODE};g" -e \
+         "s;ASSIMILATIONCYCLE;${DAYSTEP};g" -e "s;^EXPYR=.*$;EXPYR=${EXPYR};g" \
+	 ${TMPLFILE} > ${SBMTFILE}
+ if [ ${ID} = 0 ]; then
+	 cd ${WRKDIR}; ID=$( jobid bsub < ${SBMTFILE} ); echo ${ID}
+ else
+	 cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+ fi
+  #-----------------------------------------------------------------------
+  # RUN THE FILTER HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_FiLTeR_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_FiLTeR_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;MEMBER;${MEM};g" -e "s;ENSCODE;${ENSCODE};g" -e \
+         "s;ASSIMILATIONCYCLE;${DAYSTEP};g" -e "s;^EXPYR=.*$;EXPYR=${EXPYR};g" \
+	${TMPLFILE} > ${SBMTFILE}
+	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+  #-----------------------------------------------------------------------
+  # RUN THE DART 2 MODEL HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_DaRT_To_MoDeL_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_DaRT_To_MoDeL_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;MEMBER;${MEM};g" -e "s;ENSCODE;${ENSCODE};g" -e \
+         "s;ASSIMILATIONCYCLE;${DAYSTEP};g" -e "s;^EXPYR=.*$;EXPYR=${EXPYR};g"  \
+	${TMPLFILE} > ${SBMTFILE}
+	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+  #-----------------------------------------------------------------------
+  # RUN THE DART DIAGNOSTICS HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${DIADIR}/FeoM_SBMT_DaRTDiaG_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_DaRTDiaG_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;^EXPYR=.*$;EXPYR=${EXPYR};g"  \
+	${TMPLFILE} > ${SBMTFILE}
+	cd ${DIADIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+
+exit
+  #-----------------------------------------------------------------------
+  # FORWARD THE MODEL HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_FoRWaRD_MoDeL_TeMPLaTe.sh 
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_FoRWaRD_MoDeL_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};" -e "s;EXPCODE;${EXPCODE};" -e \
+         "s;MEMBER;${MEM};" -e "s;ENSCODE;${ENSCODE};" -e \
+	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g"  -e \
+         "s;NPROC;${NPROC};" -e "s;POEQUEUENAME;${POENAME};" \
+	${TMPLFILE} > ${SBMTFILE}
+	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+  #-----------------------------------------------------------------------
+  # FINALIZE OR RESUBMIT THE JOB HERE
+  #-----------------------------------------------------------------------
+        TMPLFILE=${RUNDIR}/FeoM_SBMT_FiNaLiZe_TeMPLaTe.sh
+  	SBMTFILE=${WRKDIR}/FeoM_SBMT_FiNaLiZe_${EXPINFO}.sh
+  sed -e "s;EXPNO;${EXPNO};g" -e "s;EXPCODE;${EXPCODE};g" -e \
+         "s;MEMBER;${MEM};g" \
+	 ${TMPLFILE} > ${SBMTFILE}
+	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
+exit 0
