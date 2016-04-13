@@ -15,8 +15,8 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!         case(MOPITT_CO_RETRIEVAL)                                                           
-!            call get_expected_mopitt_co(state, location, obs_def%key, obs_val, istatus)  
+!         case(MOPITT_CO_RETRIEVAL)
+!            call get_expected_mopitt_co(state, location, obs_def%key, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -39,11 +39,11 @@
 !         call set_obs_def_mopitt_co(obs_def%key)
 ! END DART PREPROCESS SET_OBS_DEF_MOPITT_CO
 
-
 ! BEGIN DART PREPROCESS MODULE CODE
+
 module obs_def_mopitt_mod
 
-use        types_mod, only : r8
+use        types_mod, only : r8, MISSING_R8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISLEVEL
 
@@ -51,6 +51,7 @@ use  assim_model_mod, only : interpolate
 use     obs_kind_mod, only : KIND_CO
 
 implicit none
+private
 
 public :: write_mopitt_co, &
           read_mopitt_co, &
@@ -59,17 +60,18 @@ public :: write_mopitt_co, &
           set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
-integer, parameter :: max_mopitt_co_obs = 10000000
-integer, parameter :: mopitt_dim = 10
+integer, parameter :: MAX_MOPITT_CO_OBS = 10000000
+integer, parameter :: MOPITT_DIM = 10
 integer            :: num_mopitt_co_obs = 0
 integer            :: counts1 = 0
 
-real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
-real(r8), dimension(max_mopitt_co_obs)    :: mopitt_prior
-real(r8) :: mopitt_pressure(mopitt_dim) = &
-                 (/ 95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
-real(r8), dimension(max_mopitt_co_obs) :: mopitt_psurf
-integer,  dimension(max_mopitt_co_obs) :: mopitt_nlevels
+real(r8) :: mopitt_prior(  MAX_MOPITT_CO_OBS)
+real(r8) :: mopitt_psurf(  MAX_MOPITT_CO_OBS)
+integer  :: mopitt_nlevels(MAX_MOPITT_CO_OBS)
+real(r8) :: avg_kernel(    MAX_MOPITT_CO_OBS,MOPITT_DIM)
+
+real(r8) :: mopitt_pressure(MOPITT_DIM) = (/ &
+                  95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -109,7 +111,7 @@ character(len=32) :: fileformat
 integer :: mopitt_nlevels_1
 real(r8):: mopitt_prior_1
 real(r8):: mopitt_psurf_1
-real(r8), dimension(mopitt_dim):: avg_kernels_1
+real(r8), dimension(MOPITT_DIM):: avg_kernels_1
 integer :: keyin
 
 if ( .not. module_initialized ) call initialize_module
@@ -158,7 +160,7 @@ character(len=*), optional, intent(in) :: fform
 
 character(len=32) :: fileformat
 
-real(r8) :: avg_kernels_temp(mopitt_dim)
+real(r8) :: avg_kernels_temp(MOPITT_DIM)
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -168,11 +170,11 @@ if(present(fform)) fileformat = adjustl(fform)
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
-   
+
 avg_kernels_temp=avg_kernel(key,:)
 
 SELECT CASE (trim(fileformat))
-   
+
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    call write_mopitt_nlevels(ifile, mopitt_nlevels(key), fileformat)
    call write_mopitt_prior(ifile, mopitt_prior(key), fileformat)
@@ -186,7 +188,7 @@ SELECT CASE (trim(fileformat))
    call write_mopitt_psurf(ifile, mopitt_psurf(key), fileformat)
    call write_mopitt_avg_kernels(ifile, avg_kernels_temp, mopitt_nlevels(key), fileformat)
    write(ifile, *) key
-END SELECT 
+END SELECT
 
 end subroutine write_mopitt_co
 
@@ -203,9 +205,9 @@ integer, intent(out) :: key
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
-if(num_mopitt_co_obs >= max_mopitt_co_obs) then
+if(num_mopitt_co_obs >= MAX_MOPITT_CO_OBS) then
    write(string1, *)'Not enough space for a mopitt CO obs.'
-   write(string2, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   write(string2, *)'Can only have MAX_MOPITT_CO_OBS (currently ',MAX_MOPITT_CO_OBS,')'
    call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate,text2=string2)
 endif
 
@@ -246,8 +248,8 @@ if ( .not. module_initialized ) call initialize_module
 
 mloc = get_location(location)
 ! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
-! x = Axm + (I-A)xa , where x is a 10 element vector 
- 
+! x = Axm + (I-A)xa , where x is a 10 element vector
+
 val = 0.0_r8
 if (mloc(2)>90.0_r8) then
     mloc(2)=90.0_r8
@@ -262,13 +264,13 @@ level   = 1.0_r8
 do i=1,nlevels
    if (i == 1) then
    loc2 = set_location(mloc(1),mloc(2),level, VERTISLEVEL)
-   else 
+   else
    loc2 = set_location(mloc(1),mloc(2),mopitt_pressure(i), VERTISPRESSURE)
    endif
    obs_val = 0.0_r8
    istatus = 0
 
-   call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
+   call interpolate(state, loc2, KIND_CO, obs_val, istatus)
 
    !print *, 'AFAJ ',istatus, obs_val
    if (istatus /= 0) then
@@ -278,7 +280,7 @@ do i=1,nlevels
 !   if (avg_kernel(key,i)<0d0) then
 !      avg_kernel(key,i)=0d0
 !   endif
-   val = val + avg_kernel(key,i) * (obs_val)  
+   val = val + avg_kernel(key,i) * (obs_val)
 enddo
 val = val + mopitt_prior(key)
 !print *, val
@@ -292,18 +294,18 @@ end subroutine get_expected_mopitt_co
 
 subroutine set_obs_def_mopitt_co(key, co_avgker, co_prior, co_psurf, co_nlevels)
 
-! Allows passing of obs_def special information 
+! Allows passing of obs_def special information
 
 integer,  intent(in):: key, co_nlevels
-real(r8), intent(in):: co_avgker(10)
+real(r8), intent(in):: co_avgker(MOPITT_DIM)
 real(r8), intent(in):: co_prior
 real(r8), intent(in):: co_psurf
 
 if ( .not. module_initialized ) call initialize_module
 
-if(num_mopitt_co_obs >= max_mopitt_co_obs) then
+if(num_mopitt_co_obs >= MAX_MOPITT_CO_OBS) then
    write(string1,*) 'Not enough space for a mopitt CO obs.'
-   write(string2,*) 'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   write(string2,*) 'Can only have MAX_MOPITT_CO_OBS (currently ',MAX_MOPITT_CO_OBS,')'
    call error_handler(E_ERR,'set_obs_def_mopitt_co',string1,source,revision,revdate, text2=string2)
 endif
 
@@ -456,7 +458,7 @@ function read_mopitt_avg_kernels(ifile, nlevels, fform)
 
 integer,                    intent(in) :: ifile, nlevels
 character(len=*), optional, intent(in) :: fform
-real(r8)                               :: read_mopitt_avg_kernels(10)
+real(r8)                               :: read_mopitt_avg_kernels(MOPITT_DIM)
 
 character(len=32)  :: fileformat
 
@@ -480,7 +482,7 @@ end function read_mopitt_avg_kernels
 subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
 integer,          intent(in) :: ifile, nlevels_temp
-real(r8),         intent(in) :: avg_kernels_temp(10)
+real(r8),         intent(in) :: avg_kernels_temp(MOPITT_DIM)
 character(len=*), intent(in) :: fform
 
 character(len=32)  :: fileformat
