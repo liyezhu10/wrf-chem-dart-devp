@@ -4,8 +4,8 @@
 !
 ! $Id$
 
-! Oct 16, 2014 LXL: 
-! This is the version fixing the "wrf has no level higher than 6000Pa" error by 
+! Oct 16, 2014 LXL:
+! This is the version fixing the "wrf has no level higher than 6000Pa" error by
 ! only sum the subcolumn under 60000Pa level/starting at 120000Pa.
 ! Due to get_model_pressure_profile returns top press(>120000) somehow, decide
 ! to sum starting 200000 Pa by changing "nlevels-9" to "nlevels-10"
@@ -21,8 +21,8 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!         case(OMI_NO2_COLUMN)                                                           
-!            call get_expected_omi_no2(state, location, obs_def%key, obs_val, istatus)  
+!         case(OMI_NO2_COLUMN)
+!            call get_expected_omi_no2(state, location, obs_def%key, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -47,6 +47,7 @@
 
 
 ! BEGIN DART PREPROCESS MODULE CODE
+
 module obs_def_omi_mod
 
 use        types_mod, only : r8
@@ -54,9 +55,10 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE, VERTISLEVEL
 
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_NO2, KIND_SURFACE_PRESSURE
+use     obs_kind_mod, only : KIND_NO2, KIND_SURFACE_PRESSURE
 
 implicit none
+private
 
 public :: write_omi_no2, &
           read_omi_no2, &
@@ -65,22 +67,23 @@ public :: write_omi_no2, &
           set_obs_def_omi_no2
 
 ! Storage for the special information required for observations of this type
-integer, parameter :: max_omi_no2_obs = 10000000
-integer, parameter :: omi_dim = 35
+integer, parameter :: MAX_OMI_NO2_OBS = 10000000
+integer, parameter :: OMI_DIM = 35
 integer            :: num_omi_no2_obs = 0
+integer            :: counts1 = 0
 
-real(r8), dimension(max_omi_no2_obs,35) :: avg_kernel
-! lxl:real(r8), dimension(max_omi_no2_obs) :: mopitt_prior
-real(r8)   :: omi_pressure(omi_dim) =(/ &
+real(r8) :: avg_kernel( MAX_OMI_NO2_OBS,OMI_DIM)
+real(r8) :: omi_psurf(  MAX_OMI_NO2_OBS)
+real(r8) :: omi_ptrop(  MAX_OMI_NO2_OBS)
+integer  :: omi_nlevels(MAX_OMI_NO2_OBS)
+
+! lxl:real(r8), dimension(MAX_OMI_NO2_OBS) :: mopitt_prior
+real(r8)   :: omi_pressure(OMI_DIM) =(/ &
         102000., 101000., 100000., 99000., 97500., 96000., 94500., &
          92500.,  90000.,  87500., 85000., 82500., 80000., 77000., &
          74000.,  70000.,  66000., 61000., 56000., 50000., 45000., &
          40000.,  35000.,  28000., 20000., 12000.,  6000.,  3500., &
-          2000.,   1200.,    800.,   500.,   300.,   150.,     80. /)    
-
-real(r8), dimension(max_omi_no2_obs) :: omi_psurf
-real(r8), dimension(max_omi_no2_obs) :: omi_ptrop
-integer,  dimension(max_omi_no2_obs) :: omi_nlevels
+          2000.,   1200.,    800.,   500.,   300.,   150.,     80. /)
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -91,10 +94,8 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-logical, save :: module_initialized = .false.
-integer  :: counts1 = 0
-
 character(len=512) :: string1, string2, string3
+logical, save :: module_initialized = .false.
 
 contains
 
@@ -119,12 +120,12 @@ character(len=*), optional, intent(in)  :: fform
 
 character(len=32) :: fileformat
 
-integer        :: omi_nlevels_1
 ! lxl:real(r8):: mopitt_prior_1
-real(r8):: omi_psurf_1
-real(r8):: omi_ptrop_1
-real(r8), dimension(omi_dim):: avg_kernels_1
-integer :: keyin
+integer  :: omi_nlevels_1
+real(r8) :: omi_psurf_1
+real(r8) :: omi_ptrop_1
+real(r8) :: avg_kernels_1(OMI_DIM)
+integer  :: keyin
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -140,19 +141,19 @@ avg_kernels_1(:) = 0.0_r8
 SELECT CASE (trim(fileformat))
 
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
-   omi_nlevels_1 = read_omi_nlevels(ifile, fileformat)
-!lxl   omi_prior_1 = read_mopitt_prior(ifile, fileformat)
-   omi_psurf_1 = read_omi_psurf(ifile, fileformat)
-   omi_ptrop_1 = read_omi_ptrop(ifile, fileformat)
-   avg_kernels_1(1:omi_nlevels_1)  = read_omi_avg_kernels(ifile, omi_nlevels_1, fileformat)
+   omi_nlevels_1                  = read_omi_nlevels(    ifile, fileformat)
+!lxl   omi_prior_1                = read_mopitt_prior(   ifile, fileformat)
+   omi_psurf_1                    = read_omi_psurf(      ifile, fileformat)
+   omi_ptrop_1                    = read_omi_ptrop(      ifile, fileformat)
+   avg_kernels_1(1:omi_nlevels_1) = read_omi_avg_kernels(ifile, omi_nlevels_1, fileformat)
    read(ifile) keyin
 
    CASE DEFAULT
-   omi_nlevels_1 = read_omi_nlevels(ifile, fileformat)
-!lxl   mopitt_prior_1 = read_mopitt_prior(ifile, fileformat)
-   omi_psurf_1 = read_omi_psurf(ifile, fileformat)
-   omi_ptrop_1 = read_omi_ptrop(ifile, fileformat)
-   avg_kernels_1(1:omi_nlevels_1)  = read_omi_avg_kernels(ifile, omi_nlevels_1, fileformat)
+   omi_nlevels_1                  = read_omi_nlevels(    ifile, fileformat)
+!lxl   mopitt_prior_1             = read_mopitt_prior(   ifile, fileformat)
+   omi_psurf_1                    = read_omi_psurf(      ifile, fileformat)
+   omi_ptrop_1                    = read_omi_ptrop(      ifile, fileformat)
+   avg_kernels_1(1:omi_nlevels_1) = read_omi_avg_kernels(ifile, omi_nlevels_1, fileformat)
    read(ifile, *) keyin
 END SELECT
 
@@ -172,7 +173,7 @@ integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 
 character(len=32) :: fileformat
-real(r8), dimension(omi_dim) :: avg_kernels_temp
+real(r8), dimension(OMI_DIM) :: avg_kernels_temp
 
 fileformat = "ascii"   ! supply default
 if(present(fform)) fileformat = adjustl(fform)
@@ -180,11 +181,11 @@ if(present(fform)) fileformat = adjustl(fform)
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
-   
+
 avg_kernels_temp=avg_kernel(key,:)
 
 SELECT CASE (trim(fileformat))
-   
+
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    call write_omi_nlevels(ifile, omi_nlevels(key), fileformat)
 !lxl   call write_mopitt_prior(ifile, mopitt_prior(key), fileformat)
@@ -200,7 +201,7 @@ SELECT CASE (trim(fileformat))
    call write_omi_ptrop(ifile, omi_ptrop(key), fileformat)
    call write_omi_avg_kernels(ifile, avg_kernels_temp, omi_nlevels(key), fileformat)
    write(ifile, *) key
-END SELECT 
+END SELECT
 
 end subroutine write_omi_no2
 
@@ -214,9 +215,9 @@ subroutine interactive_omi_no2(key)
 integer, intent(out) :: key
 
 ! Make sure there's enough space, if not die for now (clean later)
-if(num_omi_no2_obs >= max_omi_no2_obs) then
+if(num_omi_no2_obs >= MAX_OMI_NO2_OBS) then
    write(string1,*)'Not enough space for a omi NO2 obs.'
-   write(string2,*)'Can only have max_omi_no2_obs (currently ',max_omi_no2_obs,')'
+   write(string2,*)'Can only have MAX_OMI_NO2_OBS (currently ',MAX_OMI_NO2_OBS,')'
    call error_handler(E_ERR,'interactive_omi_no2',string1,source,revision,revdate,text2=string2)
 endif
 
@@ -252,15 +253,15 @@ type(location_type) :: loc2
 real(r8) :: mloc(3)
 real(r8) :: obs_val,wrf_psf,level,missing
 real(r8) :: no2_min,omi_psf,omi_ptrp,omi_psf_save,mg !,mopitt_prs_mid
-real(r8) :: no2_vmr(omi_dim)
+real(r8) :: no2_vmr(OMI_DIM)
 
 integer  :: nlevels,nnlevels
 
 ! 1ppt unit:mixing ratio !1.e-4 LXL: i THINK UNIT IS ppmv
-! (mg  = (28.97/6.02E23)*1E-3    *   9.8      *     1E4;  
+! (mg  = (28.97/6.02E23)*1E-3    *   9.8      *     1E4;
    no2_min=1.e-6
    missing=-1.2676506e30
-   mg=4.716046511627907e-21  
+   mg=4.716046511627907e-21
    level   = 1.0_r8
 
 ! Get omi data
@@ -280,7 +281,7 @@ integer  :: nlevels,nnlevels
    wrf_psf = 0.0_r8
    istatus = 0
    loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISSURFACE)
-   call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)  
+   call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)
 
 ! Correct omi surface pressure
    print *, 'APM: istatus ',istatus
@@ -293,27 +294,27 @@ integer  :: nlevels,nnlevels
 
 ! Find kstr - the surface level index
    kstr=0
-   do i=1,omi_dim
+   do i=1,OMI_DIM
       if (i .eq. 1 .and. omi_psf .gt. omi_pressure(2)) then
          kstr=i
          exit
       endif
-      if (i .ne. 1 .and. i .ne. omi_dim .and. omi_psf .le. omi_pressure(i) .and. &
+      if (i .ne. 1 .and. i .ne. OMI_DIM .and. omi_psf .le. omi_pressure(i) .and. &
       omi_psf .gt. omi_pressure(i+1)) then
          kstr=i
-         exit   
+         exit
       endif
    enddo
-!
+
 ! Find kend - index for the first OMI level above omi_ptrop
    kend=0
-   do i=1,omi_dim-1
+   do i=1,OMI_DIM-1
       if (omi_ptrp .lt. omi_pressure(i) .and. omi_ptrp .ge. omi_pressure(i+1)) then
          kend=i+1
-         exit   
+         exit
       endif
    enddo
-!
+
    if (kstr .eq. 0) then
       write(string1,*)'APM: ERROR in OMI obs def kstr=0: omi_psf=',omi_psf
       write(string2,*)'APM: omi_psf=',omi_psf,' wrf_psf = ',wrf_psf,' omi_pressure=',omi_pressure
@@ -328,27 +329,27 @@ integer  :: nlevels,nnlevels
       write(string1, *)'APM: ERROR in OMI obs def kend=0: omi_ptrp=',omi_ptrp
       call error_handler(E_ERR,'set_obs_def_omi_no2',string1,source,revision,revdate)
    endif
-!
+
 ! Reject ob when number of OMI levels from WRF cannot equal actual number of OMI levels
-   nnlevels=omi_dim-kstr+1-(omi_dim-kend)
+   nnlevels=OMI_DIM-kstr+1-(OMI_DIM-kend)
    if (nnlevels .ne. nlevels) then
       istatus=2
       obs_val=missing
       write(string1, *)'APM: NOTICE reject ob - # of WRF OMI levels .ne. # of OMI levels  '
       call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
       return
-   endif   
-!
+   endif
+
 ! Find the lowest pressure level midpoint
 ! lxl: omi_prs=(mopitt_psf+omi_pressure(kstr+1))/2.
-!
+
 ! Migliorini forward operators assimilation A*x_t
 ! Apply MOPITT Averaging kernel A and MOPITT Prior (I-A)xa
-! x = Axm + (I-A)xa , where x is a 10 element vector 
-!
+! x = Axm + (I-A)xa , where x is a 10 element vector
+
    no2_vmr(:)=0.
    do i=1,nlevels
-!
+
 ! APM: remove the if test to use layer average data
       if (i .eq. 1) then
          loc2 = set_location(mloc(1),mloc(2),level, VERTISLEVEL)
@@ -365,20 +366,20 @@ integer  :: nlevels,nnlevels
 !         write(string1, *)'APM NOTICE: Location for free atm '
 !         call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
       endif
-!
+
 ! APM: check whether OMI pressure is less than omi_ptrop
 ! APM: Note = omi_pressure(nlevels) is first OMI pressure level above omi_ptrp
       if (i .ne. nlevels .and. omi_pressure(kstr+i-1) .lt. omi_ptrp) then
-         write(string1, *)'APM ERROR: OMI pressure is less than ptrop ',omi_pressure(kstr+i-1),omi_ptrp 
+         write(string1, *)'APM ERROR: OMI pressure is less than ptrop ',omi_pressure(kstr+i-1),omi_ptrp
          call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
       endif
-!
+
 ! Interpolate WRF NO2 data to OMI pressure level midpoint
       obs_val = 0.0_r8
       istatus = 0
-      call interpolate(state, loc2, KIND_NO2, obs_val, istatus)  
+      call interpolate(state, loc2, KIND_NO2, obs_val, istatus)
       if (istatus .ne. 0 .and. istatus .ne. 2) then
-         write(string1, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val 
+         write(string1, *)'APM ERROR: istatus,kstr,obs_val ',istatus,kstr,obs_val
          write(string2, *)'APM ERROR: wrf_psf,omi_psurf,omi_psf ', wrf_psf,omi_psurf(key),omi_psf
          write(string3, *)'APM ERROR: i, nlevels ',i,nlevels
          call error_handler(E_ERR, 'set_obs_def_omi_no2', string1, &
@@ -389,53 +390,53 @@ integer  :: nlevels,nnlevels
          obs_val=no2_min
 !         write(string1, *)'APM NOTICE: obs_def_omi - NEED NO2 ABOVE MODEL TOP lev_idx ',kstr+i-1
 !         call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
-      endif           
+      endif
       if (istatus .eq. 2 .and. i .lt. 3) then
          write(string1, *)'APM NOTICE: NO2 MODEL SURF - reject ob ',kstr,kstr+i-1,omi_psf_save,omi_pressure(kstr+i-1)
          call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
          istatus=2
          obs_val=missing
          return
-      endif           
-!
+      endif
+
 ! Check for WRF CO lower bound
       if (obs_val .lt. no2_min) then
          write(string1, *)'APM NOTICE: RESETTING NO2 ',istatus,kstr+i-1,omi_pressure(kstr+i-1),obs_val
          call error_handler(E_MSG,'set_obs_def_omi_no2',string1,source,revision,revdate)
          obs_val=no2_min
       endif
-!
+
 ! Convert from ppmv to no unit
       no2_vmr(i)=obs_val*1.e-6
    enddo
    val = 0.0_r8
    do i=1,nlevels-1
-!
+
 ! apply averaging kernel onto vmr to calculate subcol
-      if (i .eq. 1) then 
+      if (i .eq. 1) then
          val = val + 0.5*(avg_kernel(key,i)*no2_vmr(i)+avg_kernel(key,i+1)*no2_vmr(i+1))*(omi_psf_save-omi_pressure(kstr+i))/mg
       else
          val = val + 0.5*(avg_kernel(key,i)*no2_vmr(i)+avg_kernel(key,i+1)*no2_vmr(i+1))*(omi_pressure(kstr+i-1)-omi_pressure(kstr+i))/mg
       endif
    enddo
-!
+
 end subroutine get_expected_omi_no2
 
 !----------------------------------------------------------------------
 !>
 
  subroutine set_obs_def_omi_no2(key, no2_avgker, no2_psurf, no2_ptrop, no2_nlevels)
-! Allows passing of obs_def special information 
+! Allows passing of obs_def special information
 
 integer, intent(in) :: key, no2_nlevels
-real(r8),intent(in) :: no2_avgker(35)
+real(r8),intent(in) :: no2_avgker(OMI_DIM)
 !real(r8),intent(in):: co_prior
 real(r8),intent(in) :: no2_psurf
 real(r8),intent(in) :: no2_ptrop
 
-if(num_omi_no2_obs >= max_omi_no2_obs) then
+if(num_omi_no2_obs >= MAX_OMI_NO2_OBS) then
    write(string1, *)'Not enough space for a omi NO2 obs.'
-   write(string2, *)'Can only have max_omi_no2_obs (currently ',max_omi_no2_obs,')'
+   write(string2, *)'Can only have MAX_OMI_NO2_OBS (currently ',MAX_OMI_NO2_OBS,')'
    call error_handler(E_ERR,'set_obs_def_omi_no2',string1,source,revision,revdate, text2=string2)
 endif
 
@@ -622,7 +623,7 @@ function read_omi_avg_kernels(ifile, nlevels, fform)
 
 integer,                    intent(in) :: ifile, nlevels
 character(len=*), optional, intent(in) :: fform
-real(r8)                               :: read_omi_avg_kernels(35)
+real(r8)                               :: read_omi_avg_kernels(OMI_DIM)
 
 character(len=32) :: fileformat
 
@@ -646,7 +647,7 @@ end function read_omi_avg_kernels
 subroutine write_omi_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
 integer,          intent(in) :: ifile, nlevels_temp
-real(r8),         intent(in) :: avg_kernels_temp(35)
+real(r8),         intent(in) :: avg_kernels_temp(OMI_DIM)
 character(len=*), intent(in) :: fform
 
 SELECT CASE (adjustl(fform))

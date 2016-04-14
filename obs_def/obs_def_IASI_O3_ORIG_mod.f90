@@ -142,9 +142,9 @@ if(present(fform)) fileformat = trim(adjustl(fform))
 
 nlevel_1     = read_iasi_num_levels(  ifile, fileformat)
 prior_1      = read_iasi_prior_column(ifile, fileformat)
+aircol_1     = read_iasi_air_column(  ifile, nlevel_1, fileformat)
 altitude_1   = read_iasi_heights(     ifile, nlevel_1, fileformat)
 avg_kernel_1 = read_iasi_avg_kernels( ifile, nlevel_1, fileformat)
-aircol_1     = read_iasi_air_column(  ifile, nlevel_1, fileformat)
 prior_prof_1 = read_iasi_prior_prof(  ifile, nlevel_1, fileformat)
 
 SELECT CASE (fileformat)
@@ -198,9 +198,9 @@ prior_prof_1(     1:nlevel_1) = iasi_prior_prof(key,:)
 
 call write_iasi_num_levels(  ifile, nlevel_1, fileformat)
 call write_iasi_prior_column(ifile, iasi_o3_prior(key), fileformat)
+call write_iasi_air_column(  ifile, iasi_air_column_1(1:nlevel_1), nlevel_1, fileformat)
 call write_iasi_heights(     ifile, altitude_1(       1:nlevel_1), nlevel_1, fileformat)
 call write_iasi_avg_kernels( ifile, avg_kernel_1(     1:nlevel_1), nlevel_1, fileformat)
-call write_iasi_air_column(  ifile, iasi_air_column_1(1:nlevel_1), nlevel_1, fileformat)
 call write_iasi_prior_prof(  ifile, prior_prof_1(     1:nlevel_1), nlevel_1, fileformat)
 
 SELECT CASE (fileformat)
