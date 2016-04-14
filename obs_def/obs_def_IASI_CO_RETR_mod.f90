@@ -7,43 +7,43 @@
 ! BEGIN DART PREPROCESS KIND LIST
 ! IASI_CO_RETRIEVAL, KIND_CO
 ! END DART PREPROCESS KIND LIST
-!
+
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !   use obs_def_iasi_co_mod, only : write_iasi_co, read_iasi_co, &
 !                                  interactive_iasi_co, get_expected_iasi_co, &
 !                                  set_obs_def_iasi_co
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!
+
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!         case(IASI_CO_RETRIEVAL)                                                           
-!            call get_expected_iasi_co(state, location, obs_def%key, obs_val, istatus)  
+!         case(IASI_CO_RETRIEVAL)
+!            call get_expected_iasi_co(state, location, obs_def%key, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!
+
 ! BEGIN DART PREPROCESS READ_OBS_DEF
 !      case(IASI_CO_RETRIEVAL)
 !         call read_iasi_co(obs_def%key, ifile, fileformat)
 ! END DART PREPROCESS READ_OBS_DEF
-!
+
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
 !      case(IASI_CO_RETRIEVAL)
 !         call write_iasi_co(obs_def%key, ifile, fileformat)
 ! END DART PREPROCESS WRITE_OBS_DEF
-!
+
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
 !      case(IASI_CO_RETRIEVAL)
 !         call interactive_iasi_co(obs_def%key)
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
-!
+
 ! BEGIN DART PREPROCESS SET_OBS_DEF_IASI_CO
 !      case(IASI_CO_RETRIEVAL)
 !         call set_obs_def_iasi_co(obs_def%key)
 ! END DART PREPROCESS SET_OBS_DEF_IASI_CO
-!
+
 ! BEGIN DART PREPROCESS MODULE CODE
 
 module obs_def_iasi_CO_mod
 
-use        types_mod, only : r8, missing_r8
+use        types_mod, only : r8, MISSING_R8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE
 use  assim_model_mod, only : interpolate
@@ -71,7 +71,7 @@ real(r8), dimension(MAX_IASI_CO_OBS)           :: iasi_prior
 real(r8), dimension(MAX_IASI_CO_OBS)           :: iasi_psurf
 integer,  dimension(MAX_IASI_CO_OBS)           :: iasi_nlevels
 integer,  dimension(MAX_IASI_CO_OBS)           :: iasi_nlevelsp
-!
+
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
@@ -188,7 +188,7 @@ SELECT CASE (fileformat)
    call write_iasi_avg_kernels(ifile, avg_kernels_temp, iasi_nlevels(key), fileformat)
    call write_iasi_pressure(ifile, pressure_temp, iasi_nlevelsp(key), fileformat)
    write(ifile, *) key
-END SELECT 
+END SELECT
 
 end subroutine write_iasi_co
 
@@ -202,19 +202,18 @@ subroutine interactive_iasi_co(key)
 integer, intent(out) :: key
 
 if ( .not. module_initialized ) call initialize_module
-!
+
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
-   ! PUT IN ERROR HANDLER CALL
    write(string1, *)'Not enough space for a iasi CO obs.'
    write(string2, *)'Can only have max_iasi_co obs (currently ',MAX_IASI_CO_OBS,')'
    call error_handler(E_ERR,'interactive_iasi_co',string1,source,revision,revdate,text2=string2)
 endif
-!
+
 ! Increment the index
 num_iasi_co_obs = num_iasi_co_obs + 1
 key = num_iasi_co_obs
-!
+
 ! Otherwise, prompt for input for the three required beasts
 write(*, *) 'Creating an interactive_iasi_co observation'
 write(*, *) 'Input the IASI Prior '
@@ -239,15 +238,14 @@ integer,             intent(in)  :: key
 real(r8),            intent(out) :: val
 integer,             intent(out) :: istatus
 
-integer :: i,kstr
 type(location_type) :: loc2
-real(r8)            :: mloc(3)
-real(r8)            :: obs_val,wrf_psf,level
-real(r8)            :: co_min,obs_val_min,iasi_prs_mid,iasi_psf,iasi_psf_save,iasi_prs
-integer             :: nlevels,nlevelsp,nnlevels
-integer             :: iflg
-
-real(r8)            :: vert_mode_filt
+real(r8) :: mloc(3)
+real(r8) :: obs_val, wrf_psf, level
+real(r8) :: co_min, iasi_prs_mid, iasi_psf, iasi_psf_save
+real(r8) :: obs_val_min, iasi_prs
+integer  :: nlevels, nlevelsp, nnlevels
+integer  :: i, kstr, iflg
+real(r8) :: vert_mode_filt
 
 ! Initialize DART
 if ( .not. module_initialized ) call initialize_module
@@ -261,7 +259,7 @@ nlevels       = iasi_nlevels(key)
 nlevelsp      = iasi_nlevelsp(key)
 iasi_psf      = iasi_psurf(key)
 iasi_psf_save = iasi_psurf(key)
-!
+
 ! Get location information
 mloc = get_location(location)
 if (mloc(2)>90.0_r8) then
@@ -274,13 +272,13 @@ endif
 wrf_psf = 0.0_r8
 istatus = 0
 loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISSURFACE)
-call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)  
+call interpolate(state, loc2, KIND_SURFACE_PRESSURE, wrf_psf, istatus)
 
 ! Correct iasi surface pressure
 if(istatus/=0) then
    write(string1, *)'APM NOTICE: IASI CO WRF psf is bad ',wrf_psf,istatus
    call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
-   obs_val=missing_r8
+   obs_val=MISSING_R8
    return
 endif
 
@@ -289,7 +287,7 @@ if(iasi_psf.gt.wrf_psf) then
       write(string1, *)'APM: NOTICE - reject IASI CO - WRF PSF too large ', &
       iasi_psf,wrf_psf
       call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
-      obs_val=missing_r8
+      obs_val=MISSING_R8
       istatus=2
       return
    else
@@ -309,7 +307,7 @@ do i=1,iasi_dim
    if (i.ne.1 .and. i.ne.iasi_dim .and. pressure(key,i).ge.iasi_psf.and. &
       iasi_psf.gt.pressure(key,i+1)) then
       kstr=i
-      exit   
+      exit
    endif
 enddo
 if (kstr.eq.0) then
@@ -326,13 +324,13 @@ if(nnlevels.ne.nlevels) then
    write(string1, *)'APM: NOTICE reject IASI CO ob - WRF IASI lvls .ne. IASI levels, nnlvls,nlvls ', &
    nnlevels,nlevels
    call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
-   obs_val=missing_r8
+   obs_val=MISSING_R8
    istatus=2
    return
-endif   
+endif
 
 ! Apply IASI Averaging kernel A and IASI Prior (I-A)xa
-! x = Axm + (I-A)xa , where x is a 10 element vector 
+! x = Axm + (I-A)xa , where x is a 10 element vector
 val = 0.0_r8
 do i=1,nlevels
 
@@ -348,11 +346,11 @@ do i=1,nlevels
    ! Interpolate WRF CO data to IASI pressure level midpoint
    obs_val = 0.0_r8
    istatus = 0
-   call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
+   call interpolate(state, loc2, KIND_CO, obs_val, istatus)
    if (istatus /= 0) then
       write(string1, *)'APM NOTICE: WRF extrapolation needed reject IASI CO ob '
       call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
-      obs_val = missing_r8
+      obs_val = MISSING_R8
       return
    endif
 
@@ -365,7 +363,7 @@ do i=1,nlevels
    endif
 
    ! apply averaging kernel
-   val = val + avg_kernel(key,i) * obs_val*1.e3  
+   val = val + avg_kernel(key,i) * obs_val*1.e3
 
 enddo
 
@@ -378,7 +376,7 @@ end subroutine get_expected_iasi_co
 
 subroutine set_obs_def_iasi_co(key, co_avgker, co_press, co_prior, co_psurf, co_nlevels, co_nlevelsp)
 
-! Allows passing of obs_def special information 
+! Allows passing of obs_def special information
 integer,  intent(in) :: key, co_nlevels, co_nlevelsp
 real(r8), intent(in) :: co_avgker(IASI_DIM)
 real(r8), intent(in) :: co_press(IASI_DIMP)
