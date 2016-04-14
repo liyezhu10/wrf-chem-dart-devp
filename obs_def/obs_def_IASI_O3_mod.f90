@@ -66,12 +66,12 @@ integer, parameter          :: IASI_DIM = 40
 integer                     :: num_iasi_o3_obs = 0
 integer                     :: counts1 = 0
 
+real(r8) :: iasi_o3_prior(  MAX_IASI_O3_OBS)          ! prior term of x=Ax + (I-A)xa + Gey
 integer  :: iasi_nlevels(   MAX_IASI_O3_OBS)          ! number of iasi levels used
 real(r8) :: avg_kernel(     MAX_IASI_O3_OBS,IASI_DIM) ! iasii averaging kernel
 real(r8) :: iasi_air_column(MAX_IASI_O3_OBS,IASI_DIM) ! iasi air column profile
-
-! prior term of x=Ax + (I-A)xa + Gey
-real(r8) :: iasi_o3_prior(MAX_IASI_O3_OBS)
+real(r8) :: iasi_heights(   MAX_IASI_O3_OBS,IASI_DIM) ! iasi retrieval heights
+real(r8) :: iasi_pressure(  MAX_IASI_O3_OBS,IASI_DIM)
 
 ! nominal iasi height levels in m
 real(r8)                    :: iasi_altitude(IASI_DIM) =(/ &
@@ -83,10 +83,6 @@ real(r8)                    :: iasi_altitude(IASI_DIM) =(/ &
                                25500.,26500.,27500.,28500.,29500., &
                                30500.,31500.,32500.,33500.,34500., &
                                35500.,36500.,37500.,38500.,39500. /)
-
-! iasi retrieval heights
-real(r8) :: iasi_heights( MAX_IASI_O3_OBS,IASI_DIM)
-real(r8) :: iasi_pressure(MAX_IASI_O3_OBS,IASI_DIM)
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -120,9 +116,9 @@ integer,                    intent(out) :: key
 integer,                    intent(in)  :: ifile
 character(len=*), optional, intent(in)  :: fform
 
-character(len=32) :: fileformat
-
 ! temp variables
+
+character(len=32) :: fileformat
 
 integer  :: nlevel_1
 real(r8) :: prior_1
@@ -158,7 +154,8 @@ SELECT CASE (fileformat)
 END SELECT
 
 counts1 = counts1 + 1
-key = counts1
+key     = counts1
+
 call set_obs_def_iasi_o3(key,prior_1,altitude_1(1:nlevel_1),pressure_1(1:nlevel_1), &
               avg_kernel_1(1:nlevel_1),aircol_1(1:nlevel_1),nlevel_1)
 
@@ -173,9 +170,9 @@ integer,                    intent(in) :: key
 integer,                    intent(in) :: ifile
 character(len=*), optional, intent(in) :: fform
 
-character(len=32) :: fileformat
+! temp variables
 
-! dummy variables
+character(len=32) :: fileformat
 integer  :: nlevel_1
 real(r8) :: iasi_o3_prior_1
 real(r8) :: altitude_1(       IASI_DIM)
@@ -201,9 +198,9 @@ iasi_air_column_1(1:nlevel_1) = iasi_air_column(key,:)
 
 call write_iasi_num_levels(  ifile, nlevel_1, fileformat)
 call write_iasi_prior_column(ifile, iasi_o3_prior_1, fileformat)
-call write_iasi_heights(     ifile, altitude_1(1:nlevel_1), nlevel_1, fileformat)
-call write_iasi_pressure(    ifile, pressure_1(1:nlevel_1), nlevel_1, fileformat)
-call write_iasi_avg_kernels( ifile, avg_kernel_1(1:nlevel_1), nlevel_1, fileformat)
+call write_iasi_heights(     ifile, altitude_1(       1:nlevel_1), nlevel_1, fileformat)
+call write_iasi_avg_kernels( ifile, avg_kernel_1(     1:nlevel_1), nlevel_1, fileformat)
+call write_iasi_pressure(    ifile, pressure_1(       1:nlevel_1), nlevel_1, fileformat)
 call write_iasi_air_column(  ifile, iasi_air_column_1(1:nlevel_1), nlevel_1, fileformat)
 
 SELECT CASE (fileformat)
@@ -1155,9 +1152,9 @@ integer,  intent(in) :: key
 integer,  intent(in) :: nlev_use
 real(r8), intent(in) :: apcol_val
 real(r8), intent(in) :: altretlev( IASI_DIM)
-real(r8), intent(in) :: pressure(  IASI_DIM)
 real(r8), intent(in) :: akcol(     IASI_DIM)
 real(r8), intent(in) :: aircol_val(IASI_DIM)
+real(r8), intent(in) :: pressure(  IASI_DIM)
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -1169,12 +1166,12 @@ if(num_iasi_o3_obs >= MAX_IASI_O3_OBS) then
               source, revision, revdate, text2=string2)
 endif
 
-iasi_nlevels(   key) = nlev_use
-iasi_o3_prior(  key) = apcol_val
-iasi_heights(   key,1:nlev_use) = altretlev( 1:nlev_use)
-iasi_pressure(  key,1:nlev_use) = pressure(  1:nlev_use)
-avg_kernel(     key,1:nlev_use) = akcol(     1:nlev_use)
-iasi_air_column(key,1:nlev_use) = aircol_val(1:nlev_use)
+iasi_nlevels(   key)             = nlev_use
+iasi_o3_prior(  key)             = apcol_val
+iasi_heights(   key, 1:nlev_use) = altretlev( 1:nlev_use)
+avg_kernel(     key, 1:nlev_use) = akcol(     1:nlev_use)
+iasi_air_column(key, 1:nlev_use) = aircol_val(1:nlev_use)
+iasi_pressure(  key, 1:nlev_use) = pressure(  1:nlev_use)
 
 end subroutine set_obs_def_iasi_o3
 
