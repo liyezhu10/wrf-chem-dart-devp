@@ -1,14 +1,10 @@
-! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program iasi_ascii_to_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -20,9 +16,6 @@ program iasi_ascii_to_obs
 !     have HDF libraries for now, so Gabi Pfister reads the hdf file in IDL and
 !     did some processing before she dumped the data in ascii. what you are
 !     reading here is a 'processed' dataset of IASI O3
-!
-!     created 29 Mar 2010   nancy collins NCAR/IMAGe
-!     modified 16 Mar 2012  ave arellano UArizona
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -40,6 +33,12 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 use      obs_kind_mod, only : IASI_O3_RETRIEVAL
 
 implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=64), parameter :: iasi_ascii_input_file = 'iasi_asciidata.input'
 character(len=64), parameter :: obs_out_file    = 'iasi_obs_seq.out'
@@ -435,3 +434,10 @@ prev_time = obs_time
 end subroutine add_obs_to_seq
 
 end program iasi_ascii_to_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+

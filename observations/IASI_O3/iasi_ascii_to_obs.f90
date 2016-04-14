@@ -69,11 +69,15 @@ character(len=128), parameter :: revdate  = "$Date$"
    real(r8) :: Ca(nlevels,nlevels) = 0.0_r8
    real(r8) :: Cm(nlevels,nlevels) = 0.0_r8
    real(r8) :: Cr(nlevels,nlevels) = 0.0_r8
+   real(r8) :: Cr_col(nlevels,nlevels) = 0.0_r8
+   real(r8) :: Cr_vmr(nlevels,nlevels) = 0.0_r8
 !
    real(r8) :: qc, trm, rnlev_use, vert, retlev2
    real(r8) :: ImAya_col(nlevels) = 0.0_r8
+   real(r8) :: ImAya_vmr(nlevels) = 0.0_r8
    real(r8) :: aircol(nlevels) = 0.0_r8
    real(r8) :: yqr_col(nlevels) = 0.0_r8
+   real(r8) :: yqr_vmr(nlevels) = 0.0_r8
 !
    double precision,dimension(nlevels,nlevels)    :: Z
    double precision,dimension(lwrk)               :: wrk
@@ -83,7 +87,11 @@ character(len=128), parameter :: revdate  = "$Date$"
    real,dimension(nlevels,nlevels)                :: AK_T,ImAk,AKmI,AKmI_T,IpAKmI_T
    real,dimension(nlevels,nlevels)                :: AK_p,Ca_p,Cm_p,Cr_p 
    real(r8),dimension(nlevels,nlevels)            :: r_AK,r_Cr,r_Cm,r_Ca
+   real(r8),dimension(nlevels,nlevels)            :: rr_AK,rr_Cr,rr_Cm,rr_Ca
    real(r8),dimension(nlevels)                    :: r_yr_col,r_ya_col,r_yqr_col,r_ImAya_col
+   real(r8),dimension(nlevels)                    :: r_yr_vmr,r_ya_vmr,r_yqr_vmr,r_ImAya_vmr
+   real(r8),dimension(nlevels)                    :: rr_yr_col,rr_ya_col,rr_yqr_col,rr_ImAya_col
+   real(r8),dimension(nlevels)                    :: rr_yr_vmr,rr_ya_vmr,rr_yqr_vmr,rr_ImAya_vmr
    real                                           :: eps
 !
    type(obs_type)          :: obs, prev_obs
@@ -252,107 +260,26 @@ character(len=128), parameter :: revdate  = "$Date$"
 !
 ! READ RECORD TWELVE
 ! APM: Correct for IDL (column,row) convention
-      read(iunit,*, iostat=rcio) ((Cr(i,j),j=1,nlev_use),i=1,nlev_use)
+      read(iunit,*, iostat=rcio) ((Cr_col(i,j),j=1,nlev_use),i=1,nlev_use)
       if (rcio /= 0) then 
          if (debug) print *, 'APM: Exit obs read loop, rcio = ', rcio
          exit obsloop
       endif
 !      if (debug) then
 !         do i=1,nlev_use
-!            print *, "APM(12): Cr = ",i,(Cr(i,j),j=1,nlev_use)
+!            print *, "APM(12): Cr_col = ",i,(Cr_col(i,j),j=1,nlev_use)
 !         enddo
 !      endif
 !
-! Check Ca, Cm, and Cr.  The following relationshipship should hold:
-!    Cm=(I-AK) Ca (I+(AK-I)^T)
-!    Cx=(I-AK) Ca
-!    Ca, Cm, and Cr should have non-negative values along the diagonal
-!    Ca, Cm, and Cr should be symmetric
-!
-!
-! Make sure Ca is symmetric
-!     do i=1,nlev_use
-!        do j=1,nlev_use
-!           Ca_p(i,j)=(Ca(i,j)+Ca(j,i))/2.
-!        enddo
-!     enddo
-!     Ca(:,:)=Ca_p(:,:)
-!
-! Truncate AK
-!     eps=1.e-6 
-!     call dgesvd('A','A',nlev_use,nlev_use,dble(AK),nlev_use,SV,U,nlev_use,V_T,nlev_use,wrk,lwrk,info)
-!     do j=1,nlev_use
-!        if(SV(j).gt.eps) then
-!           nlev_trc=i
-!        else
-!           SV(j)=0.
-!           U(:,j)=0.
-!           V_T(j,:)=0.
-!        endif
-!     enddo
-!     call vec_to_mat(SV,SV_m,nlev_use)
-!     call mat_tri_prd(U,SV_m,V_T,Z,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
-!     AK_p(:,:)=real(Z(:,:))
-!     AK(:,:)=AK_p(:,:)
-!
-! Truncate Ca
-!     call dgesvd('A','A',nlev_use,nlev_use,dble(Ca),nlev_use,SV,U,nlev_use,V_T,nlev_use,wrk,lwrk,info)
-!     do j=1,nlev_use
-!        if(SV(j).gt.eps) then
-!           nlev_trc=i
-!        else
-!           SV(j)=0.
-!           U(:,j)=0.
-!           V_T(j,:)=0.
-!        endif
-!     enddo
-!     call vec_to_mat(SV,SV_m,nlev_use)
-!     call mat_tri_prd(U,SV_m,V_T,Z,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
-!     Ca_p(:,:)=real(Z(:,:))
-!     Ca(:,:)=Ca_p(:,:)
-! 
-! Convert covariance from % to error
-!     do i = 1, nlev_use
-!        do j = 1, nlev_use
-!           Ca(i,j) = Ca(i,j)*ya_col(j)*ya_col(i)
-!        enddo
-!     enddo
-!
-! Get (I-AK) and (AK-I)
-!     do i=1,nlev_use
-!        do j=1,nlev_use
-!           ImAK(i,j)=-1.*AK(i,j)
-!           AKmI(i,j)=AK(i,j)
-!        enddo
-!        ImAK(i,i)=1.0+ImAK(i,i)
-!        AKmI(i,i)=AKmI(i,i)-1.0
-!     enddo     
-!     call mat_transpose(dble(AKmI),Z,nlev_use,nlev_use)
-!     AKmI_T(:,:)=real(Z(:,:))
-!     IpAKmI_T(:,:)=AKmI_T(:,:)
-!     do i=1,nlev_use
-!        IpAKmI_T(i,i)=IpAKmI_T(i,i)+1.0
-!     enddo
-!
-! Calcuate Cm_p and Cr_p to confirm they match Cm and Cr 
-!     call mat_tri_prd(dble(ImAK),dble(Ca),dble(IpAKmI_T),Z, &
-!     nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
-!     Cm_p(:,:)=real(Z(:,:))
-!     call mat_prd(dble(ImAK),dble(Ca),Z,nlev_use,nlev_use,nlev_use,nlev_use)
-!     Cr_p(:,:)=real(Z(:,:))
-!
-! Calculate (I-A)xa
-      ImAya_col(:) = 0.0_r8
-      do i = 1, nlev_use
-         do j = 1, nlev_use
-            if(i.eq.j) then
-               trm = (1. - AK(i,j)) * ya_col(j)
-            else
-               trm = -1. * AK(i,j) * ya_col(i)
-            endif
-            ImAya_col(i) = ImAya_col(i) + trm
-         enddo
-      enddo
+! Convert covariance from % to error  
+! NOT NECESSARY IT TAKE PLACE IN THE INITAL READ PROGRAM
+!   Cm=(I-AK) Ca (I+(AK-I)^T)
+!   Cr=(I-AK) Ca
+!      do i = 1, nlev_use
+!         do j = 1, nlev_use
+!            Ca(i,j) = Ca(i,j)*ya_col(j)*ya_col(i)
+!         enddo
+!      enddo
 !
 ! Calculate air column
       do i = 1, nlev_use
@@ -363,20 +290,96 @@ character(len=128), parameter :: revdate  = "$Date$"
          endif
       enddo
 !
+! Calculate Cr_vmr
+      do i = 1, nlev_use
+         do j = 1, nlev_use
+            Cr_vmr(i,j)=Cr_col(i,j)/aircol(i)/aircol(j)
+         enddo
+      enddo
+!
+! Truncate AK
+      eps=1.e-5 
+      call dgesvd('A','A',nlev_use,nlev_use,dble(AK),nlev_use,SV,U,nlev_use,V_T,nlev_use,wrk,lwrk,info)
+      do j=1,nlev_use
+         if(SV(j).gt.eps) then
+            nlev_trc=j
+         else
+            SV(j)=0.
+            U(:,j)=0.
+         endif
+      enddo
+!
+! Get transpose
+     call mat_transpose(U,U_T,nlev_use,nlev_use)
+     call vec_to_mat(SV,SV_m,nlev_use)
+!
+! Calculate (I-A)xa
+      ImAya_col(:) = 0.0_r8
+      do i = 1, nlev_use
+         do j = 1, nlev_use
+            if(i.eq.j) then
+               trm = (1. - AK(i,j)) * ya_col(j)
+            else
+               trm = -1. * AK(i,j) * ya_col(j)
+         ImAya_col(i) = ImAya_col(i) + trm
+            endif
+         enddo
+      enddo
+      ImAya_vmr(:) = 0.0_r8
+      do i = 1, nlev_use
+         do j = 1, nlev_use
+            if(i.eq.j) then
+               trm = (1. - AK(i,j)) * ya_vmr(j)
+            else
+               trm = -1. * AK(i,j) * ya_vmr(j)
+            endif
+            ImAya_vmr(i) = ImAya_vmr(i) + trm
+         enddo
+      enddo
+!
 ! Calculate "quasi-optimal" retriaval
       yqr_col(:) = yr_col(:) - ImAya_col(:)
+      yqr_vmr(:) = yr_vmr(:) - ImAya_vmr(:)
 !
-! Do SVD rotation based on Cr
-     call dgesvd('A','A',nlev_use,nlev_use,dble(Cr),nlev_use,SV,U,nlev_use,V_T,nlev_use,wrk,lwrk,info)
-     do j=1,nlev_use
-        if(SV(j).gt.eps) then
-           nlev_trc=i
-        else
-           SV(j)=0.
-           U(:,j)=0.
-           V_T(j,:)=0.
-        endif
-     enddo
+! Do 1st SVD rotation/truncation based on Ak
+     call mat_prd(dble(U_T),dble(AK),Z,nlev_use,nlev_use,nlev_use,nlev_use)
+     r_AK(:,:)=real(Z(:,:))
+!     do i=1,nlev_trc
+!        print *, 'r_AK(i,j) ',(r_AK(i,j),j=1,nlev_use)
+!     enddo
+     Cr(:,:)=Cr_vmr(:,:)
+     call mat_tri_prd(dble(U_T),dble(Cr),dble(U),Z,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
+     r_Cr(:,:)=real(Z(:,:))
+!     do i=1,nlev_trc
+!        print *, 'r_Cr(i,j) ',(r_Cr(i,j),j=1,nlev_trc)
+!     enddo
+!     call lh_mat_vec_prd(U_T,dble(yr_col),ZC,nlev_use)
+!     r_yr_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(yr_vmr),ZC,nlev_use)
+     r_yr_vmr(:)=real(ZC(:))
+!     print *, 'r_yr_vmr(:) ',r_yr_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(ya_col),ZC,nlev_use)
+!     r_ya_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(ya_vmr),ZC,nlev_use)
+     r_ya_vmr(:)=real(ZC(:))
+!    print *, 'r_ya_vmr(:) ',r_ya_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(yqr_col),ZC,nlev_use)
+!     r_yqr_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(yqr_vmr),ZC,nlev_use)
+     r_yqr_vmr(:)=real(ZC(:))
+!    print *, 'r_yqr_vmr(:) ',r_yqr_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(ImAya_col),ZC,nlev_use)
+!     r_ImAya_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(ImAya_vmr),ZC,nlev_use)
+     r_ImAya_vmr(:)=real(ZC(:))
+!     print *, 'r_ImAya_vmr(:) ',r_ImAya_vmr(:)
+!
+! Do 2d SVD rotation based on r_Cr
+     call dgesvd('A','A',nlev_use,nlev_use,dble(r_Cr),nlev_use,SV,U,nlev_use,V_T,nlev_use,wrk,lwrk,info)
+!     do i=1,nlev_trc
+!        print *, 'U(i,j) ',(U(i,j),j=1,nlev_use)
+!     enddo
+!     print *, 'SV(j) ',(SV(j),j=1,nlev_use)
 !
 ! Scale the singular vectors
      do j=1,nlev_trc
@@ -387,18 +390,36 @@ character(len=128), parameter :: revdate  = "$Date$"
      call vec_to_mat(SV,SV_m,nlev_use)
 !
 ! Do the rotation
-     call mat_prd(dble(U_T),dble(AK),Z,nlev_use,nlev_use,nlev_use,nlev_use)
-     r_AK(:,:)=real(Z(:,:))
-     call mat_tri_prd(dble(U_T),dble(Cr),dble(U),Z,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
-     r_Cr(:,:)=real(Z(:,:))
-     call lh_mat_vec_prd(U_T,dble(yr_col),ZC,nlev_use)
-     r_yr_col(:)=real(ZC(:))
-     call lh_mat_vec_prd(U_T,dble(ya_col),ZC,nlev_use)
-     r_ya_col(:)=real(ZC(:))
-     call lh_mat_vec_prd(U_T,dble(yqr_col),ZC,nlev_use)
-     r_yqr_col(:)=real(ZC(:))
-     call lh_mat_vec_prd(U_T,dble(ImAya_col),ZC,nlev_use)
-     r_ImAya_col(:)=real(ZC(:))
+     call mat_prd(dble(U_T),dble(r_AK),Z,nlev_use,nlev_use,nlev_use,nlev_use)
+     rr_AK(:,:)=real(Z(:,:))
+!     do i=1,nlev_trc
+!        print *, 'rr_AK(i,j) ',(rr_AK(i,j),j=1,nlev_use)
+!     enddo
+     call mat_tri_prd(dble(U_T),dble(r_Cr),dble(U),Z,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use,nlev_use)
+     rr_Cr(:,:)=real(Z(:,:))
+!     do i=1,nlev_trc
+!        print *, 'rr_Cr(i,j) ',(rr_Cr(i,j),j=1,nlev_trc)
+!     enddo
+!     call lh_mat_vec_prd(U_T,dble(r_yr_col),ZC,nlev_use)
+!     rr_yr_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(r_yr_vmr),ZC,nlev_use)
+     rr_yr_vmr(:)=real(ZC(:))
+!     print *, 'rr_yr_vmr(:) ',rr_yr_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(r_ya_col),ZC,nlev_use)
+!     rr_ya_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(r_ya_vmr),ZC,nlev_use)
+     rr_ya_vmr(:)=real(ZC(:))
+!    print *, 'rr_ya_vmr(:) ',rr_ya_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(r_yqr_col),ZC,nlev_use)
+!     rr_yqr_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(r_yqr_vmr),ZC,nlev_use)
+     rr_yqr_vmr(:)=real(ZC(:))
+!    print *, 'rr_yqr_vmr(:) ',rr_yqr_vmr(:)
+!     call lh_mat_vec_prd(U_T,dble(r_ImAya_col),ZC,nlev_use)
+!     rr_ImAya_col(:)=real(ZC(:))
+     call lh_mat_vec_prd(U_T,dble(r_ImAya_vmr),ZC,nlev_use)
+     rr_ImAya_vmr(:)=real(ZC(:))
+!     print *, 'rr_ImAya_vmr(:) ',rr_ImAya_vmr(:)
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -407,7 +428,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! 
 ! Loop over all IASI vertical levels
-      nlev_out=nlev_use
+      nlev_out=nlev_trc
       do i = 1, nlev_out
          qc_count = qc_count + 1
 !
@@ -420,10 +441,10 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! No height since it is a column integrated quantity
 !
 ! Make an obs derived type, and then add it to the sequence
-         call create_3d_obs(lat, lon, alt_ag(i), VERTISHEIGHT, r_yqr_col(i), &
-                            IASI_O3_RETRIEVAL, r_Cr(i,i), oday, osec, qc, obs, &
-                            r_AK(i,1:nlev_use), r_ImAya_col(i), alt_ag(1:nlev_use), &
-                            aircol(1:nlev_use), qc_count, nlev_use)
+         call create_3d_obs(lat, lon, press(i), VERTISPRESSURE, rr_yqr_vmr(i), &
+                            IASI_O3_RETRIEVAL, rr_Cr(i,i), oday, osec, qc, obs, &
+                            rr_AK(i,1:nlev_use), rr_ImAya_vmr(i), alt_ag(1:nlev_use), &
+                            press(1:nlev_use),aircol(1:nlev_use), qc_count, nlev_use)
          call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
          if (debug) print *, 'added iasi obs to output seq'
       enddo 
@@ -476,7 +497,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
    subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, &
-                            obs, akcol, apcol_val, altretlev, aircol_val, qc_count, nlev_use)
+                            obs, akcol, apcol_val, altretlev, press, aircol_val, qc_count, nlev_use)
       use        types_mod, only : r8
       use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
                              set_obs_def_error_variance, set_obs_def_location, set_obs_def_key
@@ -492,6 +513,7 @@ character(len=128), parameter :: revdate  = "$Date$"
       real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
       real(r8),       intent(in)    :: akcol(nlevels)
       real(r8),       intent(in)    :: altretlev(nlevels)
+      real(r8),       intent(in)    :: press(nlevels)
       real(r8),       intent(in)    :: aircol_val(nlevels)
       real(r8),       intent(in)    :: apcol_val
       type(obs_type), intent(inout) :: obs
@@ -503,8 +525,8 @@ character(len=128), parameter :: revdate  = "$Date$"
       call set_obs_def_kind(obs_def, okind)
       call set_obs_def_time(obs_def, set_time(sec, day))
       call set_obs_def_error_variance(obs_def, oerr * oerr)
-      call set_obs_def_iasi_o3(qc_count, apcol_val, altretlev(1:nlev_use), akcol(1:nlev_use), &
-      aircol_val(1:nlev_use), nlev_use)
+      call set_obs_def_iasi_o3(qc_count, apcol_val, altretlev(1:nlev_use), press(1:nlev_use), &
+      akcol(1:nlev_use), aircol_val(1:nlev_use), nlev_use)
       call set_obs_def_key(obs_def, qc_count)
 !
       obs_val(1) = obsv
