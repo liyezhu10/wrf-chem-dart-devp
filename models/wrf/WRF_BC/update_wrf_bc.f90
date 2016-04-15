@@ -37,7 +37,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 integer, parameter :: max_3d_variables = 20, &
                       max_2d_variables = 20, &
-                      max_times        = 100
+                      max_times        = 200
 
 character(len=80) :: wrf_output_file, wrf_mean_output_file, &
                      wrf_bdy_file, time_name

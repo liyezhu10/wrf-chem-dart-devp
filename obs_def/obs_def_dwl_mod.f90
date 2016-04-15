@@ -9,6 +9,11 @@
 !DWL_V_WIND_COMPONENT,   KIND_V_WIND_COMPONENT,    COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
+! if you want you can define more types - like for DWL_CLEAR vs not -
+! just duplicate the lines above and change the first column to anything
+! you want.   then you can use that new type in the obs converter and
+! in your assimilation.
+
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$

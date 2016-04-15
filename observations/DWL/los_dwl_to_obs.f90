@@ -63,7 +63,7 @@ integer :: num_copies, num_qc, lcount, typecode, darttype
            
 logical  :: file_exist, first_obs
 
-real(r8) :: qc, lat, lon, vert, wnd, los, werr
+real(r8) :: qc, lat, lon, vert, wnd, truth_wnd, los, werr
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
@@ -97,7 +97,7 @@ if (add_obs_data) then
 
    ! each observation in this series will have a single observation value 
    ! and a quality control flag. 
-   num_copies = 1
+   num_copies = 2
    num_qc     = 1
 else
    print *, 'creating no-data observations at the requested locations'
@@ -119,7 +119,8 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 if (add_obs_data) then
    ! the first one needs to contain the string 'observation' and the
    ! second needs the string 'QC'.
-   call set_copy_meta_data(obs_seq, 1, 'observation')
+   call set_copy_meta_data(obs_seq, 1, 'truth')
+   call set_copy_meta_data(obs_seq, 2, 'observation')
    call set_qc_meta_data(obs_seq, 1, 'Data QC')
 endif
 
@@ -147,9 +148,23 @@ obsloop: do    ! no end limit - have the loop break when input ends
    !  latitude (degrees)
    !  height (meters)
    !  date  dd-mm-ccyy_hh:mm:ss
-   !  wind velocity (NOTE: CM/SEC!)
+   !  wind velocity (m/s) (truth)
+   !  wind velocity (m/s) (observation value)
    !  line of sight angle (degrees, 0=N, increasing clockwise)
    !  expected error (in meters/sec)
+
+   ! Few additional modifications:
+   !   It is also possible to use pressure as vertical coordinate using
+   !   different typecode:
+   !     1 -> DWL_RAY_CLEAR_LOS_VELOCITY on height [m]
+   !     2 -> DWL_RAY_CLOUD_LOS_VELOCITY on height [m]
+   !     3 -> DWL_MIE_CLEAR_LOS_VELOCITY on height [m]
+   !     4 -> DWL_MIE_CLOUD_LOS_VELOCITY on height [m]
+   !     5 -> DWL_RAY_CLEAR_LOS_VELOCITY on pressure [Pa]
+   !     6 -> DWL_RAY_CLOUD_LOS_VELOCITY on pressure [Pa]
+   !     7 -> DWL_MIE_CLEAR_LOS_VELOCITY on pressure [Pa]
+   !     8 -> DWL_MIE_CLOUD_LOS_VELOCITY on pressure [Pa]
+
 
    ! read in entire text line into a buffer.  exit when no more lines.
    read(iunit, "(A)", iostat=rcio) input_line
@@ -162,7 +177,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
 
    ! extract the different values from the input line
    read(input_line, *, iostat=rcio) typecode, lon, lat, vert, date_string, &
-                                    wnd, los, werr
+                                    truth_wnd, wnd, los, werr
    if (rcio /= 0) then 
       if (debug) print *, 'got bad read code getting next wind obs, rcio = ', rcio
       if (debug) print *, 'line number ', lcount, ' input line was:'
@@ -182,10 +197,10 @@ obsloop: do    ! no end limit - have the loop break when input ends
    endif
    
    if (debug) print *, 'next observation is at time ', year, month, day, hour, minute, second
-   if (debug) print *, 'next observation values/err ', wnd, los, werr
+   if (debug) print *, 'next observation values/err ', truth_wnd, wnd, los, werr
 
    ! change the observation value from cm/s to m/s
-   wnd = wnd / 100.0_r8 
+   !wnd = wnd / 100.0_r8 
 
    ! check the lat/lon values to see if they are ok
    ! if lon comes in between -180 and 180, change this test and add 360 if < 0
@@ -206,9 +221,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    ! extract time of observation into gregorian day, sec.
    call get_time(time_obs, osec, oday)
 
-   ! vertical in height in meters
-
-   ! convert codes 1,2,3,4 into DART specific obs types
+   ! convert codes 1,2,3,4,5,6,7,8 into DART specific obs types
    select case (typecode)
       case (1)
          darttype = DWL_RAY_CLEAR_LOS_VELOCITY
@@ -218,16 +231,33 @@ obsloop: do    ! no end limit - have the loop break when input ends
          darttype = DWL_MIE_CLEAR_LOS_VELOCITY
       case (4)
          darttype = DWL_MIE_CLOUD_LOS_VELOCITY
+      case (5)
+         darttype = DWL_RAY_CLEAR_LOS_VELOCITY
+      case (6)
+         darttype = DWL_RAY_CLOUD_LOS_VELOCITY
+      case (7)
+         darttype = DWL_MIE_CLEAR_LOS_VELOCITY
+      case (8)
+         darttype = DWL_MIE_CLOUD_LOS_VELOCITY
       case default
-        print *, 'unrecognized observation type code.  must be 1-4, was ', typecode
+        print *, 'unrecognized observation type code.  must be 1-8, was ', typecode
         exit obsloop
     end select
 
-   call create_3d_obs(add_obs_data, lat, lon, vert, VERTISHEIGHT, wnd, los, &
-                         darttype, werr, oday, osec, qc, obs)
-   call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+    ! vertical is  height or pressure!
+    if ( typecode == 1 .or. typecode == 2 .or. typecode == 3 .or. typecode == 4 ) then !vertical is height in meters
+       call create_3d_obs(add_obs_data, lat, lon, vert, VERTISHEIGHT, truth_wnd, wnd, los, &
+            darttype, werr, oday, osec, qc, obs)
+    elseif ( typecode == 5 .or. typecode == 6 .or. typecode == 7 .or. typecode == 8 ) then !vertical is pressure in Pa
+       call create_3d_obs(add_obs_data, lat, lon, vert, VERTISPRESSURE, truth_wnd, wnd, los, &
+            darttype, werr, oday, osec, qc, obs)
+    else !a bit unnecessary
+        print *, 'unrecognized observation type code.  must be 1-8, was ', typecode
+        exit obsloop
+    end if
+    call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
-   if (debug) print *, 'added velocity obs to output seq'
+    if (debug) print *, 'added velocity obs to output seq'
 
 end do obsloop
 
@@ -271,7 +301,7 @@ contains
 !     adapted for more generic use 11 Mar 2010, nancy collins, ncar/image
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine create_3d_obs(add_data, lat, lon, vval, vkind, obsv, angle, okind, oerr, day, sec, qc, obs)
+subroutine create_3d_obs(add_data, lat, lon, vval, vkind, truthv, obsv, angle, okind, oerr, day, sec, qc, obs)
 use        types_mod, only : r8
 use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
                              set_obs_def_error_variance, set_obs_def_location, &
@@ -283,10 +313,10 @@ use     location_mod, only : set_location
 
  logical,        intent(in)    :: add_data
  integer,        intent(in)    :: okind, vkind, day, sec
- real(r8),       intent(in)    :: lat, lon, vval, obsv, angle, oerr, qc
+ real(r8),       intent(in)    :: lat, lon, vval, truthv, obsv, angle, oerr, qc
  type(obs_type), intent(inout) :: obs
 
-real(r8)           :: obs_val(1), qc_val(1)
+real(r8)           :: obs_val(2), qc_val(1)
 type(obs_def_type) :: obs_def
 integer            :: key
 
@@ -299,7 +329,8 @@ call set_obs_def_key(obs_def, key)
 call set_obs_def(obs, obs_def)
 
 if (add_data) then
-   obs_val(1) = obsv
+   obs_val(1) = truthv
+   obs_val(2) = obsv
    call set_obs_values(obs, obs_val)
    qc_val(1)  = qc
    call set_qc(obs, qc_val)

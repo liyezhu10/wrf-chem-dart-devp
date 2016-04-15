@@ -39,7 +39,7 @@ day = 1;
 hour = 0;
 
 % Number of roughly evenly distributed points in horizontal
-n = 600;
+n = 800;
 x(1:n) = 0;
 y(1:n) = 0;
 z(1:n) = 0;

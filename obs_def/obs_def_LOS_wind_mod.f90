@@ -448,7 +448,12 @@ endif
 ! and remember angle is 0=N, increasing clockwise.  it is NOT 0=x axis like the
 ! mathematical definition of polar coordinate angle.
 
-los_vel = u
+!REAL FO
+los_vel = u*sin(los_vel_data(loskey)%azimuth*PI/180.0_r8)+ &
+	v*cos(los_vel_data(loskey)%azimuth*PI/180.0_r8)
+
+!SIMPLE ONE
+!los_vel=u
 
 ! Good return code.
 istatus = 0
@@ -507,3 +512,4 @@ end module obs_def_los_vel_mod
 ! $Id$
 ! $Revision$
 ! $Date$
+¸

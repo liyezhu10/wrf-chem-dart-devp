@@ -8,14 +8,11 @@ program text_to_obs
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-!   text_to_obs - an example program to create DART format observations
-!      from a text-based input data file.  see below for where to adapt
-!      the read routine to match your white-space separated values or 
+!   text_to_obs - a program that only needs minor customization to read
+!      in a text-based dataset - either white-space separated values or
 !      fixed-width column data.
 !
 !     created 29 Mar 2010   nancy collins NCAR/IMAGe
-!     updated  8 Feb 2016   minor changes to wind conversion, and updated
-!                           comments to try to be more helpful.
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -25,14 +22,14 @@ use     utilities_mod, only : initialize_utilities, finalize_utilities, &
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, &
                               operator(>=), increment_time, get_time, &
                               operator(-), GREGORIAN, operator(+), print_date
-use      location_mod, only : VERTISHEIGHT, VERTISPRESSURE
+use      location_mod, only : VERTISHEIGHT, VERTISPRESSURE, VERTISSURFACE
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                               static_init_obs_sequence, init_obs, write_obs_seq, & 
                               init_obs_sequence, get_num_obs, & 
                               set_copy_meta_data, set_qc_meta_data
-use      obs_kind_mod, only : EVAL_U_WIND_COMPONENT, EVAL_V_WIND_COMPONENT, &
-                              EVAL_TEMPERATURE
-
+use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COMPONENT, &
+                              RADIOSONDE_TEMPERATURE, RADIOSONDE_SPECIFIC_HUMIDITY, &
+                              RADIOSONDE_SURFACE_PRESSURE
 implicit none
 
 character(len=64), parameter :: text_input_file = 'textdata.input'
@@ -48,12 +45,16 @@ integer :: num_copies, num_qc, max_obs
            
 logical  :: file_exist, first_obs
 
-real(r8) :: temp, terr, qc, wdir, wspeed, werr
-real(r8) :: lat, lon, vert, uwnd, uerr, vwnd, verr
+real(r8) :: temp, terr, qc, wdir, wspeed, werr, wspeed_u, wspeed_v, &
+     werr_u, werr_v, spec_hum, spec_hum_err, surf_press, surf_press_err, &
+     truth_temp, truth_wspeed, truth_wspeed_u, truth_wspeed_v, &
+     truth_spec_hum, truth_surf_press
+real(r8) :: lat, lon, vert, uwnd, uerr, vwnd, verr, truth_uwnd, &
+     truth_vwnd
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: ref_day0, time_obs, prev_time
+type(time_type)         :: comp_day0, time_obs, prev_time
 
 ! start of executable code
 
@@ -62,13 +63,10 @@ call initialize_utilities('text_to_obs')
 ! time setup
 call set_calendar_type(GREGORIAN)
 
-!! Some times are supplied as number of seconds since some reference
-!! date.  To support that, set a base/reference time and then add
-!! the number of seconds to it.  (time_types support adding two time
-!! types together, or adding a scalar to a time_type.)
-!! Here is an example of setting a reference date, giving the
-!! call: year, month, day, hours, mins, secs
-!ref_day0 = set_date(1970, 1, 1, 0, 0, 0)
+!! some times are supplied as number of seconds since some reference
+!! date.  This is an example of how to support that.
+!! put the reference date into DART format
+!comp_day0 = set_date(1970, 1, 1, 0, 0, 0)
 
 ! open input text file
 
@@ -79,8 +77,8 @@ if (debug) print *, 'opened input file ' // trim(text_input_file)
 ! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
 ! be specified but it will only write out the actual number created.
-max_obs    = 100000
-num_copies = 1
+max_obs    = 1000000
+num_copies = 2
 num_qc     = 1
 
 ! call the initialization code, and initialize two empty observation types
@@ -95,7 +93,8 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 
 ! the first one needs to contain the string 'observation' and the
 ! second needs the string 'QC'.
-call set_copy_meta_data(obs_seq, 1, 'observation')
+call set_copy_meta_data(obs_seq, 1, 'truth')
+call set_copy_meta_data(obs_seq, 2, 'observation')
 call set_qc_meta_data(obs_seq, 1, 'Data QC')
 
 ! if you want to append to existing files (e.g. you have a lot of
@@ -122,8 +121,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    !  error: very important - the instrument error plus representativeness error
    !        (see html file for more info)
 
-   ! the code here assumes an input line has: a type (1/2), location, time, value, obs error
-   ! **this is probably where you will need to adapt this code for your input data values**
+   ! assume here a line is a type (1/2), location, time, value, obs error
 
    ! read in entire text line into a buffer
    read(iunit, "(A)", iostat=rcio) input_line
@@ -141,33 +139,66 @@ obsloop: do    ! no end limit - have the loop break when input ends
    
    if (debug) print *, 'next observation type = ', otype
 
-   ! for this example, assume there is an obs type, where otype=1 is 
-   ! temperature measured at a location and a vertical height, 
-   ! and if otype=2, a wind speed and direction in degrees (0-360)
-   ! measured at a location and a vertical pressure.
+   ! for this example, assume there is an obs type:
+   !   otype=1 -> temperature and vertical is height
+   !   otype=2 -> temperature and vertical is pressure
+   !   otype=3 -> (u,v) and vertical is height
+   !   otype=4 -> (u,v) and vertical is pressure
+   !   otype=5 -> wind vector + direction and vertical is height
+   !   otype=6 -> wind vector + direction and vertical is pressure     
+   !   otype=7 -> specific humidity and vertical is height
+   !   otype=8 -> specific humidity and vertical is pressure
+   !   otype=9 -> surface pressure and vertical in height
 
-   if (otype == 1) then
+   if (otype == 1 .or. otype==2) then !temperature
       read(input_line(3:129), *, iostat=rcio) lat, lon, vert, &
                                  year, month, day, hour, minute, second, &
-                                 temp, terr
+                                 truth_temp, temp, terr
       if (rcio /= 0) then 
-         if (debug) print *, 'got bad read code getting rest of temp obs, rcio = ', rcio
+         if (debug) print *, 'got bad read code getting rest of (temperature) obs, rcio = ', rcio
          exit obsloop
       endif
-   else
+   elseif (otype == 7 .or. otype==8) then !specific humidity
+      read(input_line(3:129), *, iostat=rcio) lat, lon, vert, &
+                                 year, month, day, hour, minute, second, &
+                                 truth_spec_hum, spec_hum, spec_hum_err
+      if (rcio /= 0) then 
+         if (debug) print *, 'got bad read code getting rest of (specific humidity) obs, rcio = ', rcio
+         exit obsloop
+      endif
+   elseif (otype == 9) then !surface pressure
+      read(input_line(3:129), *, iostat=rcio) lat, lon, vert, &
+                                 year, month, day, hour, minute, second, &
+                                 truth_surf_press, surf_press, surf_press_err
+      if (rcio /= 0) then 
+         if (debug) print *, 'got bad read code getting rest of (surface pressure) obs, rcio = ', rcio
+         exit obsloop
+      endif
+   elseif (otype == 5 .or. otype==6) then !windspeed and direction
       read(input_line(3:129), *, iostat=rcio) lat, lon, vert, &
                                   year, month, day, hour, minute, second, &
-                                  wspeed, wdir, werr
+                                  truth_wspeed, wspeed, wdir, werr
+      if (rcio /= 0) then 
+         if (debug) print *, 'got bad read code getting rest of (wind speed + direction) obs, rcio = ', rcio
+         exit obsloop
+      endif
+  elseif (otype == 3 .or. otype==4) then !wind is in u,v format (separate error for u and v), pressure or height
+      read(input_line(3:129), *, iostat=rcio) lat, lon, vert, &
+                                  year, month, day, hour, minute, second, &
+                                  truth_wspeed_u, wspeed_u, truth_wspeed_v, wspeed_v, &
+                                  werr_u, werr_v
       if (rcio /= 0) then 
          if (debug) print *, 'got bad read code getting rest of wind obs, rcio = ', rcio
          exit obsloop
       endif
+   else
+		if (debug) print *, 'got bad otype, rcio = ', rcio
+        exit obsloop			
    endif
    
    if (debug) print *, 'next observation located at lat, lon = ', lat, lon
 
-   ! check the lat/lon values to see if they are ok.  we require
-   ! longitudes to be 0 to 360.
+   ! check the lat/lon values to see if they are ok
    if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
    if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
 
@@ -181,58 +212,156 @@ obsloop: do    ! no end limit - have the loop break when input ends
 
    if (debug) call print_date(time_obs, 'next obs time is')
 
-   !! if time is given in seconds since some date, here's how to add it.
-   !time_obs = ref_day0 + time_obs
+   !! if time is given in seconds since 1/1/1970, here's how to add it.
+   !time_obs = comp_day0 + time_obs
 
    ! extract time of observation into gregorian day, sec.
    call get_time(time_obs, osec, oday)
 
    ! this example assumes there is an obs type, where otype=1 is
-   ! a temperature measured in height, and if otype=2, a wind speed
-   ! and direction with a vertical value in pressure.  any observation
+   ! a temperature measured in height, and if otype=2, there's a wind
+   ! speed and direction and height is pressure.  any kind of observation
    ! can use any of the vertical types; this is just an example.
 
-   if (otype == 1) then
+   if (otype == 1) then !temperature and vertical is height
 
       ! height is in meters (gph)
 
       ! make an obs derived type, and then add it to the sequence
-      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, temp, &
-                         EVAL_TEMPERATURE, terr, oday, osec, qc, obs)
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_temp, temp, &
+                         RADIOSONDE_TEMPERATURE, terr, oday, osec, qc, obs)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
-      if (debug) print *, 'added temperature obs to output seq'
-   else
+      if (debug) print *, 'added temperature (vertical in height) obs to output seq'
+      
+   elseif (otype == 2) then !temperature and vertical is pressure
 
-      ! DART assimilates wind as 2 separate U and V components.  assimilating
-      ! "direction and speed" is difficult because direction is measured in 
-      ! cyclic coordinates so you can't do simple statistics to get a mean value.
-
-      ! convert a wind speed & direction into the U and V components
-      ! and create 2 obs for it.  assume vert is in mb or hectopascals,
-      ! convert to pascals.  DART assumes all pressures are in pascals.
-      ! check your data source; usually wind direction is specified as the 
-      ! direction the wind is coming from, increasing degrees going in a 
-      ! clockwise circle.  U and V wind components have the opposite sign.
-      uwnd = sin(wdir * DEG2RAD) * wspeed * -1.0_r8
-      vwnd = cos(wdir * DEG2RAD) * wspeed * -1.0_r8
-      uerr = werr
-      verr = werr
-
+      ! height is in hPa (pressure)
       ! convert hectopascals to pascals.
-      vert = vert * 100.0_r8
+      !vert = vert * 100.0_r8
+      
+      ! make an obs derived type, and then add it to the sequence
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_temp, temp, &
+                         RADIOSONDE_TEMPERATURE, terr, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
-      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, uwnd, &
-                         EVAL_U_WIND_COMPONENT, uerr, oday, osec, qc, obs)
+      if (debug) print *, 'added temperature (vertical is pressure) obs to output seq' 
+   elseif (otype == 3) then !in case (u,v) are defined separately and vertical in meters
+		
+      !height is in meters!
+
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_wspeed_u, wspeed_u, &
+                         RADIOSONDE_U_WIND_COMPONENT, werr_u, oday, osec, qc, obs)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
    
-      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, vwnd, &
-                         EVAL_V_WIND_COMPONENT, verr, oday, osec, qc, obs)
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_wspeed_v, wspeed_v, &
+                         RADIOSONDE_V_WIND_COMPONENT, werr_v, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)	
+      	
+      if (debug) print *, 'added (u,v) wind (vertical in height) obs to output seq'       
+   elseif (otype == 4) then !in case (u,v) are defined separately and vertical in hPa (pressure)
+		
+      ! height is in hPa (pressure)
+      ! convert hectopascals to pascals.
+      !vert = vert * 100.0_r8
+
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_wspeed_u, wspeed_u, &
+                         RADIOSONDE_U_WIND_COMPONENT, werr_u, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+   
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_wspeed_v, wspeed_v, &
+                         RADIOSONDE_V_WIND_COMPONENT, werr_v, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)	
+      	
+      if (debug) print *, 'added (u,v) wind (vertical in pressure) obs to output seq'       
+   elseif (otype == 5) then !wind vector + direction and vertical is height
+
+      ! DART usually assimilates wind as 2 separate U and V components
+      ! instead of trying to assimilate a vector of speed and direction.
+      ! so convert a wind speed & direction into the U and V components
+      ! and create 2 obs for it.  
+      uwnd = sin(wdir * DEG2RAD) * wspeed
+      vwnd = cos(wdir * DEG2RAD) * wspeed
+      truth_uwnd = sin(wdir * DEG2RAD) * truth_wspeed
+      truth_vwnd = cos(wdir * DEG2RAD) * truth_wspeed
+      uerr = sin(wdir * DEG2RAD) * werr
+      verr = cos(wdir * DEG2RAD) * werr
+
+      !height is in meters!
+
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_uwnd, uwnd, &
+                         RADIOSONDE_U_WIND_COMPONENT, uerr, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+   
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_vwnd, vwnd, &
+                         RADIOSONDE_V_WIND_COMPONENT, verr, oday, osec, qc, obs)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
-      if (debug) print *, 'added 2 wind obs to output seq'
-    endif
+      if (debug) print *, 'added (u,v) wind (vertical in height) obs to output seq'          
+   elseif (otype == 6) then !wind vector + direction and vertical is pressure
 
+      ! DART usually assimilates wind as 2 separate U and V components
+      ! instead of trying to assimilate a vector of speed and direction.
+      ! so convert a wind speed & direction into the U and V components
+      ! and create 2 obs for it. 
+      uwnd = sin(wdir * DEG2RAD) * wspeed
+      vwnd = cos(wdir * DEG2RAD) * wspeed
+      truth_uwnd = sin(wdir * DEG2RAD) * truth_wspeed
+      truth_vwnd = cos(wdir * DEG2RAD) * truth_wspeed
+      uerr = sin(wdir * DEG2RAD) * werr
+      verr = cos(wdir * DEG2RAD) * werr
+
+      ! convert hectopascals to pascals.
+      !vert = vert * 100.0_r8
+
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_uwnd, uwnd, &
+                         RADIOSONDE_U_WIND_COMPONENT, uerr, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+   
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_vwnd, vwnd, &
+                         RADIOSONDE_V_WIND_COMPONENT, verr, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+
+      if (debug) print *, 'added (u,v) wind (vertical in pressure) obs to output seq'
+   elseif (otype == 7) then !specific humidity and vertical is height
+
+      ! height is in meters (gph)
+
+      ! make an obs derived type, and then add it to the sequence
+      call create_3d_obs(lat, lon, vert, VERTISHEIGHT, truth_spec_hum, spec_hum, &
+                         RADIOSONDE_SPECIFIC_HUMIDITY, spec_hum_err, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+
+      if (debug) print *, 'added specific humidity (vertical in height) obs to output seq'      
+   elseif (otype == 8) then !specific humidity and vertical is pressure
+
+      ! height is in hPa (pressure)
+      ! convert hectopascals to pascals.
+      !vert = vert * 100.0_r8
+      
+      ! make an obs derived type, and then add it to the sequence
+      call create_3d_obs(lat, lon, vert, VERTISPRESSURE, truth_spec_hum, spec_hum, &
+                         RADIOSONDE_SPECIFIC_HUMIDITY, spec_hum_err, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+
+      if (debug) print *, 'added specific humidity (vertical is pressure) obs to output seq' 
+   elseif (otype == 9) then !surface pressure and vertical is height
+
+      ! height is in meters (gph)
+
+      ! the value of surface pressure is expected in hPa
+      ! convert hectopascals to pascals.
+      !surf_press = surf_press * 100.0_r8
+
+      ! make an obs derived type, and then add it to the sequence
+      ! This is a surface parameter (vert is not taken into account if sfc_elev_max_diff in input.nml is -1
+      ! TODO in case that > 0 then vert must be in meters (height above 0)
+      call create_3d_obs(lat, lon, vert, VERTISSURFACE, truth_surf_press, surf_press, &
+                         RADIOSONDE_SURFACE_PRESSURE, surf_press_err, oday, osec, qc, obs)
+      call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+
+      if (debug) print *, 'added surface pressure (vertical in height) obs to output seq'     
+    endif
 end do obsloop
 
 ! if we added any obs to the sequence, write it out to a file now.
@@ -273,7 +402,7 @@ contains
 !     adapted for more generic use 11 Mar 2010, nancy collins, ncar/image
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, obs)
+subroutine create_3d_obs(lat, lon, vval, vkind, truthv, obsv, okind, oerr, day, sec, qc, obs)
 use        types_mod, only : r8
 use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
                              set_obs_def_error_variance, set_obs_def_location
@@ -282,10 +411,10 @@ use time_manager_mod, only : time_type, set_time
 use     location_mod, only : set_location
 
  integer,        intent(in)    :: okind, vkind, day, sec
- real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
+ real(r8),       intent(in)    :: lat, lon, vval, truthv, obsv, oerr, qc
  type(obs_type), intent(inout) :: obs
 
-real(r8)           :: obs_val(1), qc_val(1)
+real(r8)           :: obs_val(2), qc_val(1)
 type(obs_def_type) :: obs_def
 
 call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
@@ -294,7 +423,8 @@ call set_obs_def_time(obs_def, set_time(sec, day))
 call set_obs_def_error_variance(obs_def, oerr * oerr)
 call set_obs_def(obs, obs_def)
 
-obs_val(1) = obsv
+obs_val(1) = truthv !truth
+obs_val(2) = obsv !observations
 call set_obs_values(obs, obs_val)
 qc_val(1)  = qc
 call set_qc(obs, qc_val)

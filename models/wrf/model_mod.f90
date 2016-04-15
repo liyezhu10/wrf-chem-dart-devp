@@ -6142,7 +6142,8 @@ real(r8), intent(in)  :: state(:)
 real(r8), intent(out) :: pert_state(:)
 logical,  intent(out) :: interf_provided
 
-real(r8)              :: pert_amount = 0.005   ! 0.5%
+!real(r8)              :: pert_amount = 0.005   ! 0.5%
+real(r8)              :: pert_amount = 0.05   ! 5%
 
 real(r8)              :: pert_ampl, range
 real(r8)              :: minv, maxv, temp
@@ -6161,10 +6162,10 @@ integer, save         :: counter = 0
 ! it won't make a new value outside the original min/max of that
 ! variable in the state vector.
 
-call error_handler(E_ERR,'pert_model_state', &
-                  'WRF model cannot be started from a single vector', &
-                  source, revision, revdate, &
-                  text2='see comments in wrf/model_mod.f90::pert_model_state()')
+!call error_handler(E_ERR,'pert_model_state', &
+!                  'WRF model cannot be started from a single vector', &
+!                  source, revision, revdate, &
+!                  text2='see comments in wrf/model_mod.f90::pert_model_state()')
 
 ! NOT REACHED unless preceeding 4 lines commented out
 

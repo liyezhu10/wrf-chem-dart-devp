@@ -38,7 +38,8 @@ for ivar = 1:length(finfo.Variables)
    if (strcmp(finfo.Variables(ivar).Name, deblank(varname)))
       % TJH DEBUG  fprintf('Matched Variable "%s" \n', vinfo.Variables(ivar).Name )
       variable_present = 1;
-      ncid  = netcdf.open(fname);
+      %ncid  = netcdf.open(fname);
+      ncid  = netcdf.open(fname,'NOWRITE');
       varid = netcdf.inqVarID(ncid,varname);
       netcdf.close(ncid);
       return
