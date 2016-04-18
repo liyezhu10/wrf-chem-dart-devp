@@ -582,8 +582,10 @@ integer,             intent(out) :: istatus
 ! local storage
 
 integer  :: ivar, obs_kind, closest_index
-integer  :: ilayer, layer_below
+integer  :: ilayer, layer_below, layer_above
 real(r8) :: llv(3), lon, lat, vert
+integer  :: depth_below, depth_above, layer_thick
+integer  :: closest_index_above, closest_index_below
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -646,10 +648,18 @@ else
    else
        !> @ TODO ... figure out the vertical contibs from above and below
        !> and do some vertical interpolation
-       closest_index = nod3d_below_nod2d(layer_below,closest_index)
+       layer_above=layer_below - 1
+       depth_below=abs(layerdepth(layer_below)-vert)
+       depth_above=abs(layerdepth(layer_above)-vert)
+       layer_thick=depth_below-depth_above
+
+       closest_index_above = nod3d_below_nod2d(layer_above,closest_index)
+       closest_index_below = nod3d_below_nod2d(layer_below,closest_index)
    endif
 
-   interp_val = x(progvar(ivar)%index1 + closest_index)
+   interp_val = ( depth_below * x(progvar(ivar)%index1 + closest_index_above) & 
+                + depth_above * x(progvar(ivar)%index1 + closest_index_below) &
+                )  / layer_thick
 
 endif
 
@@ -3354,7 +3364,7 @@ CLOSE : do iclose = 1, num_close
    indx     = close_ind(iclose)
    distance = get_dist(location, cell_locations(indx))
 
-   if (debug > 0 .and. do_output()) &
+   if (debug > 10 .and. do_output()) &
       write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
 
    if (distance < closest) then
