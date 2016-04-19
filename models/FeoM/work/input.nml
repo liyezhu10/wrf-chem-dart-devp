@@ -91,7 +91,8 @@
    adaptive_localization_threshold = 5
    output_localization_diagnostics = .true.
    localization_diagnostics_file   = 'localization_diagnostics'
-   print_every_nth_obs             = 1
+   print_every_nth_obs             = 1,
+   has_special_cutoffs = .false.
    /
 
 
@@ -294,8 +295,8 @@
    obs_sequence_list      = 'file_list.txt'
    first_bin_center      =  2009,  1,  1, 0, 0, 0 
    last_bin_center       =  2009,  2,  1, 0, 0, 0 
-   bin_separation        =     0,  0,  0, 6, 0, 0 
-   bin_width             =     0,  0,  0, 6, 0, 0 
+   bin_separation        =     0,  0,  1, 0, 0, 0 
+   bin_width             =     0,  0,  1, 0, 0, 0 
    time_to_skip          =     0,  0,  0, 0, 0, 0 
    max_num_bins          = 1000
    trusted_obs           = 'null'
@@ -304,7 +305,7 @@
    lonlim2               = 30.000, 120.0, 270.0
    latlim1               = 40.250, -90.0, -90.0
    latlim2               = 41.125,  25.0,  90.0
-   reg_names             = 'Marmarra',
+   reg_names             = 'Marmara',
    create_rank_histogram = .true.
    outliers_in_histogram = .true.
    use_zero_error_obs    = .false.
