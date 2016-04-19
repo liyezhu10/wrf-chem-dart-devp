@@ -20,7 +20,7 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              set_location, get_location, get_close_type,       &
                              loc_get_close_obs => get_close_obs,               &
                              loc_get_close_state => get_close_state,           &
-                             query_location
+                             query_location, VERTISHEIGHT, VERTISPRESSURE
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, to_upper, file_to_text, do_output,      &
@@ -705,8 +705,10 @@ if (include_CAM) then
          endif
       enddo
  
-      call cam_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, vertical_localization_coordinate)
+      ! FIXME: hard code (for now) pressure as vert coord
+      call cam_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, VERTISPRESSURE)
 
+      sublist_count = 0
       do i=1, item_count
          if (type_list(i) == RADIOSONDE_TEMPERATURE) then
              sublist_count = sublist_count + 1
@@ -734,8 +736,10 @@ if (include_POP) then
          endif
       enddo
  
-      call pop_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, vertical_localization_coordinate)
+      ! FIXME: hard code (for now) height as vert coord
+      call pop_model_convert_vert_obs(sublist_count, loc_sublist, type_sublist, VERTISHEIGHT)
 
+      sublist_count = 0
       do i=1, item_count
          if (type_list(i) == XBT_TEMPERATURE) then
              sublist_count = sublist_count + 1
@@ -789,8 +793,10 @@ if (include_CAM) then
          endif
       enddo
  
-      call cam_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, vertical_localization_coordinate)
+      ! FIXME: hard code (for now) pressure as vert coord
+      call cam_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, VERTISPRESSURE)
  
+      sublist_count = 0
       do i=1, item_count
          if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
              sublist_count = sublist_count + 1
@@ -821,8 +827,10 @@ if (include_POP) then
          endif
       enddo
  
-      call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, vertical_localization_coordinate)
+      ! FIXME: hard code (for now) height as vert coord
+      call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, indx_sublist, VERTISHEIGHT)
 
+      sublist_count = 0
       do i=1, item_count
          if (indx_list(i) >= x_start .and. indx_list(i) <= x_end) then
              sublist_count = sublist_count + 1
