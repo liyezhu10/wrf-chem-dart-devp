@@ -19,8 +19,6 @@
 
 program closest_member_tool
 
-! Program
-
 use types_mod,         only : r8
 use time_manager_mod,  only : time_type, set_time_missing,               &
                               operator(/=), print_time
