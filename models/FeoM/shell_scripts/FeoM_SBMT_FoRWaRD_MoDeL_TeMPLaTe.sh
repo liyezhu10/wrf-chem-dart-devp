@@ -1,12 +1,12 @@
 #!/bin/bash
 #BSUB -a poe                     #
-#BSUB -J TSSEXPCODEEXPNO[1-MEMBER]%3     # Name of the job.
-#BSUB -o LOG/TSSEXPCODEEXPNO_FEOM_%I_%J.out  # Appends stdout to file %J.out.
-#BSUB -e LOG/TSSEXPCODEEXPNO_FEOM_%I_%J.out  # Appends stderr to file %J.err.
+#BSUB -J TSSFWDFEOM[1-ENSEMBLEMEMBERNO]%3     # Name of the job.
+#BSUB -o LOG/TSSFWDFEOM_%I_%J.out  # Appends stdout to file %J.out.
+#BSUB -e LOG/TSSFWDFEOM_%I_%J.out  # Appends stderr to file %J.err.
 #BSUB -P fesom                   # Project ID.
 #BSUB -q POEQUEUENAME            # queue
 #BSUB -R "span[ptile=16]"        #
-#BSUB -n NPROC                   #
+#BSUB -n NUMBEROFCORES           #
 #BSUB -N                         #
 ####BSUB -x                      #
 #--  BEGIN ATHENA CONFIG ---------------------
@@ -35,24 +35,32 @@ TEMPLATE=TeMPLaTe; COPY='cp -f'; REMOVE='rm -f'; LINK='ln -sf'
 JOBDIR=${LS_SUBCWD}                   # directory of this script
 JOBIDN=$( echo ${LSB_JOBID} | awk '{ printf("%08d\n", $1) }' ) # job-id
 JOBNAM=${LSB_JOBNAME}                 # name of this script
-ENSNUM=$( echo ${LSB_JOBINDEX} | awk '{ printf("%02d\n", $1) }' )
-ENSID=$( echo ${LSB_JOBINDEX} | awk '{ printf("%04d\n", $1) }' )
+ENSNO=$( echo ${LSB_JOBINDEX} | awk '{ printf("%02d\n", $1) }' )
+ENSN4=$( echo ${LSB_JOBINDEX} | awk '{ printf("%04d\n", $1) }' )
 ####################################################################
 ############### SET EXPERIMENT INFORMATION #########################
 ####################################################################
-EXPNUM=EXPNO; EXPDEF=EXPCODE; EXPINFO=${EXPDEF}${EXPNUM};
-EXPYR=EXPERIMENTYR; 
-ENSDEF=ENSCODE; ENSINFO=${ENSDEF}${ENSNUM}; TOTENS=MEMBER;
+EXPID=EXPERIMENTNAME
+EXPNO=EXPNUMBER
+EXPYR=EXPERIMENTYR
+ENSID=ENSNAME
+MEMNO=ENSEMBLEMEMBERS
+ENSINFO=${ENSID}${ENSNO}; 
+EXPINFO=${EXPID}${EXPNO};
 ####################################################################
 ############### DEFINE RELEVANT DIRECTORIES ########################
 ####################################################################
-USRHOM=/users/home/ans051; RUNDIR=${USRHOM}/DART/lanai/models/feom_ocn/work
-FSMHOM=${USRHOM}/FEOM/; FSMPRE=${USRHOM}/FEOM_PREPROC/
-MODELHOM=${FSMHOM}/FEOMENS; FSMINI=${FSMPRE}/HINDCAST_IC; 
-DRTDIR=${USRHOM}/DART/lanai/models/feom_ocn/work
-WRKDIR=/work/ans051/TSS/${EXPINFO}; FILDIR=${WRKDIR}/FILTER
+USRHOM=/users/home/ans051
+RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
+FSMHOM=${USRHOM}/FEOM
+FSMPRE=${USRHOM}/FEOM_PREPROC
+MODELHOM=${FSMHOM}/FEOMENS
+FSMINI=${FSMPRE}/HINDCAST_IC
+DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
+WRKDIR=/work/ans051/TSS/${EXPINFO}
+FILDIR=${WRKDIR}/FILTER
 ENSDIR=${WRKDIR}/${ENSINFO}; cd ${ENSDIR}
-CHECKFILE=${WRKDIR}/submitcheck.lst; 
+CHECKFILE=${WRKDIR}/submitcheck.lst
 ###################################################################
 ####################################################################
 ####################################################################
@@ -60,7 +68,7 @@ CHECKFILE=${WRKDIR}/submitcheck.lst;
 ####################################################################
 ####################################################################
 ####################################################################
-CHECKRETURN=$(bpeek -J TSS${EXPINFO}[${LSB_JOBINDEX}] | grep -ir "The model blows up")
+CHECKRETURN=$(bpeek -J TSSFWDFEOM[${LSB_JOBINDEX}] | grep -ir "The model blows up")
 CHECKRESULT=$(echo $?); echo ${CHECKRESULT}
 if [ ${CHECKRESULT} -ne "0" ];  then
 	echo "${ENSINFO} EXIT 0 :is ready to be resubmitted" >> ${CHECKFILE}
