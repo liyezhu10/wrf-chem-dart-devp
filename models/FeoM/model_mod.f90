@@ -119,7 +119,6 @@ public :: get_model_size,         &
 public :: get_model_analysis_filename,  &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
-          get_analysis_time,            &
           write_model_time,             &
           get_grid_dims,                &
           print_variable_ranges        
@@ -256,11 +255,6 @@ INTERFACE prog_var_to_vector
       MODULE PROCEDURE prog_var_1d_to_vector
       MODULE PROCEDURE prog_var_2d_to_vector
       MODULE PROCEDURE prog_var_3d_to_vector
-END INTERFACE
-
-INTERFACE get_analysis_time
-      MODULE PROCEDURE get_analysis_time_ncid
-      MODULE PROCEDURE get_analysis_time_fname
 END INTERFACE
 
 INTERFACE get_index_range
@@ -1453,10 +1447,10 @@ call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
 model_time = get_analysis_time(ncid, filename)
 
 ! let the calling program print out the time information it wants.
-!if (do_output()) &
-!    call print_time(model_time,'time in restart file '//trim(filename))
-!if (do_output()) &
-!    call print_date(model_time,'date in restart file '//trim(filename))
+if (do_output()) &
+    call print_time(model_time,'time in restart file '//trim(filename))
+if (do_output()) &
+    call print_date(model_time,'date in restart file '//trim(filename))
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -1915,7 +1909,7 @@ end subroutine do_clamping
 
 !------------------------------------------------------------------
 
-function get_analysis_time_ncid( ncid, filename )
+function get_analysis_time( ncid, filename )
 
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
@@ -1923,7 +1917,9 @@ function get_analysis_time_ncid( ncid, filename )
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: filename
-type(time_type) :: get_analysis_time_ncid
+type(time_type)              :: get_analysis_time
+type(time_type)              :: model_advance_forecast, model_start_time
+integer                      :: model_year
 
 ! local variables
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
@@ -1931,7 +1927,7 @@ integer           :: VarID, numdims
 integer           :: secs
 
 !#character(len=64) :: timestring
-real(r8)          :: timestring
+real(r8),allocatable          :: timearray(:)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1949,38 +1945,43 @@ endif
 call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=idims(1)), &
                  'get_analysis_time', 'inquire time dimension length '//trim(filename))
 
-              secs=idims(1)*86400
 if (idims(1) /= 1) then
    write(string1,*) 'multiple timesteps (',idims(1),') in file ', trim(filename)
    write(string2,*) 'We are using the LAST one, presumably, the LATEST timestep.'
    call error_handler(E_MSG,'get_analysis_time',string1,source,revision,revdate,text2=string2)
 endif
 
+allocate(timearray(idims(1)))
 ! Get the highest ranking time ... the last one, basically.
 
-call nc_check( nf90_get_var(ncid, VarID, timestring, start = (/ 1, idims(1) /)), &
+call nc_check( nf90_get_var(ncid, VarID, timearray), &
               'get_analysis_time', 'get_var time '//trim(filename))
 
-get_analysis_time_ncid = set_time(assimilation_period_seconds, assimilation_period_days)
-!get_analysis_time_ncid = string_to_time(timestring)
+model_year = year_from_filename(filename)
 
+model_advance_forecast = set_time(int(sum(timearray)), 0)
+
+model_start_time = set_date(model_year,1,1)
+
+get_analysis_time = model_start_time + model_advance_forecast
 if ((debug > 6) .and. do_output()) then
-   call print_date(get_analysis_time_ncid, 'get_analysis_time:model date')
-   call print_time(get_analysis_time_ncid, 'get_analysis_time:model time')
+   call print_date(get_analysis_time, 'get_analysis_time:model date')
+   call print_time(get_analysis_time, 'get_analysis_time:model time')
 endif
 
-end function get_analysis_time_ncid
+deallocate(timearray)
+end function get_analysis_time
 
 
 !------------------------------------------------------------------
 
-function get_analysis_time_fname(filename)
+function year_from_filename(filename)
 
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
 
-type(time_type) :: get_analysis_time_fname
+integer :: year_from_filename
 
 character(len=*), intent(in) :: filename
 
@@ -1994,15 +1995,19 @@ if ( .not. file_exist(filename) ) then
 endif
 
 ! find the first number and use that as the start of the string conversion
-i = scan(filename, "0123456789")
+i = scan(filename, ".")
+print*, "scan i: ", i, "filename is: ", trim(filename)
 if (i <= 0) then
    write(string1,*) 'cannot find time string in name ', trim(filename)
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
 endif
 
-get_analysis_time_fname = string_to_time(filename(i:i+19))
+! We try to get the year from the filename
+year_from_filename = string_to_time(filename(i+1:i+4))
 
-end function get_analysis_time_fname
+print*, 'Year is: ', filename(i+1:i+4)
+
+end function year_from_filename
 
 
 !------------------------------------------------------------------
@@ -2117,20 +2122,15 @@ end function time_to_string
 
 function string_to_time(s)
 
-! parse a string to extract time.  the expected format of
-! the string is YYYY-MM-DD_hh:mm:ss  (although the exact
-! non-numeric separator chars are skipped and not validated.)
 
 character(len=*), intent(in) :: s
-type(time_type)              :: string_to_time
+integer                      :: string_to_time
 
-integer :: iyear, imonth, iday, ihour, imin, isec
+integer :: iyear
 
-call error_handler(E_ERR,'string_to_time','not written for FeoM')
 
-! The following is baggage from MPAS
-
-read( s ,'(i4,5(1x,i2))') iyear, imonth, iday, ihour, imin, isec
+print*, 'the year string is: ', s
+read( s ,'(i4)') iyear
 
 if (iyear < 1601) then
    write(string1,*)'WARNING: Converting YEAR ',iyear,' to ',iyear+1601
@@ -2140,7 +2140,7 @@ if (iyear < 1601) then
    iyear = iyear + 1601
 endif
 
-string_to_time = set_date(iyear, imonth, iday, ihour, imin, isec)
+string_to_time = iyear
 
 end function string_to_time
 
