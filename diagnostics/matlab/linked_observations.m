@@ -278,6 +278,8 @@ nlat = length(lats);
 % If we didn't explicitly tell it, make a guess.
 %---------------------------------------------------------------------------
 
+if (obs.region(5) == obs.region(6))
+    obs.region(5:6) = obs.region(5:6) + [-1.0 1.0];
 axis(obs.region);
 ax = obs.region;
 
