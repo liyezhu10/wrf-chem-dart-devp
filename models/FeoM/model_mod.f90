@@ -31,6 +31,7 @@ use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
                              rad2deg, deg2rad, PI, MISSING_I, obstypelength
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
+                             increment_time,                                   &
                              operator(*),  operator(+), operator(-),           &
                              operator(>),  operator(<), operator(/),           &
                              operator(/=), operator(<=)
@@ -662,7 +663,7 @@ istatus = 0
 !>@TODO FIXME ... why does calling my_task_id() cause this to hang?
 !> simply running model_mod_check (null_mpi_...) hangs indefinitely.
 
-if (debug > 0) then
+if (debug > 5) then
    call write_location(0,location,charstring=string1)
 !   print *, 'end kind, loc, val, rc:', my_task_id()
    print *, interp_val, istatus, obs_kind 
@@ -1611,7 +1612,7 @@ if ( model_time /= statetime ) then
    call print_time(model_time,'FeoM current time',logfileunit)
    call print_time( statetime,'DART current time')
    call print_time(model_time,'FeoM current time')
-   write(string1,*)trim(filename),' current time must equal model time'
+   write(string1,*)trim(filename),' current time must be equal to model time'
    call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
 endif
 
@@ -1959,12 +1960,12 @@ call nc_check( nf90_get_var(ncid, VarID, timearray), &
 
 model_year = year_from_filename(filename)
 
-model_advance_forecast = set_time(int(sum(timearray)), 0)
+model_advance_forecast = set_time(int(sum(timearray)-timearray(idims(1))), 0)
 
 model_start_time = set_date(model_year,1,1)
 
 get_analysis_time = model_start_time + model_advance_forecast
-if ((debug > 6) .and. do_output()) then
+if ((debug > 0) .and. do_output()) then
    call print_date(get_analysis_time, 'get_analysis_time:model date')
    call print_time(get_analysis_time, 'get_analysis_time:model time')
 endif
@@ -2015,6 +2016,7 @@ end function year_from_filename
 subroutine write_model_time(time_filename, model_time, adv_to_time)
  character(len=*), intent(in)           :: time_filename
  type(time_type),  intent(in)           :: model_time
+ type(time_type)                        :: new_model_time
  type(time_type),  intent(in), optional :: adv_to_time
 
 integer :: iunit
@@ -2023,8 +2025,11 @@ type(time_type)   :: deltatime
 
 iunit = open_file(time_filename, action='write')
 
-timestring = time_to_string(model_time)
+new_model_time=increment_time(model_time, 0, 1)
+timestring = time_to_string(new_model_time)
+print*, "overwriting new model time : ", timestring
 write(iunit, '(A)') timestring
+call print_time(new_model_time,'Model time in FeoM_time :',  iunit)
 
 if (present(adv_to_time)) then
    timestring = time_to_string(adv_to_time)
@@ -2096,23 +2101,26 @@ endif
 ! for interval output, output the number of days, then hours, mins, secs
 ! for date output, use the calendar routine to get the year/month/day hour:min:sec
 if (dointerval) then
-   call get_time(t, nsecs, ndays)
+  call get_time(t, nsecs, ndays)
    if (ndays > 99) then
       write(string1, *) 'interval number of days is ', ndays
       call error_handler(E_ERR,'time_to_string', 'interval days cannot be > 99', &
                          source, revision, revdate, text2=string1)
    endif
+   write(time_to_string, '(I2.2,A1,I2.2)') &
+                        ndays, ' ', nsecs
    ihour = nsecs / 3600
    nsecs = nsecs - (ihour * 3600)
    imin  = nsecs / 60
    nsecs = nsecs - (imin * 60)
    isec  = nsecs
    write(time_to_string, '(I2.2,3(A1,I2.2))') &
-                        ndays, '_', ihour, ':', imin, ':', isec
+                        ndays, ' ', ihour, ' ', imin, ' ', isec
 else
    call get_date(t, iyear, imonth, iday, ihour, imin, isec)
    write(time_to_string, '(I4.4,5(A1,I2.2))') &
-                        iyear, '-', imonth, '-', iday, '_', ihour, ':', imin, ':', isec
+                        iyear, ' ', imonth, ' ', iday, ' ', ihour, ' ', imin, ' ', isec
+
 endif
 
 end function time_to_string
@@ -3318,7 +3326,7 @@ call get_close_obs_init(cc_gc, nCells, cell_locations)
 
 search_initialized = .true.
 
-if (debug > 0) &
+if (debug > 5) &
    call error_handler(E_MSG,'init_closest_center','get close lookup table initialized')
 
 end subroutine init_closest_center
@@ -3374,7 +3382,7 @@ CLOSE : do iclose = 1, num_close
 
 enddo CLOSE
 
-if (debug > 0 .and. do_output()) &
+if (debug > 10 .and. do_output()) &
       write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
 
 find_closest_surface_location = closest_index
