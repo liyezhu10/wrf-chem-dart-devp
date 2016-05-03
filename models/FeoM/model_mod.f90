@@ -27,28 +27,21 @@ module model_mod
 
 ! Routines in other modules that are used here.
 
-use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
+use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,       &
                              rad2deg, deg2rad, PI, MISSING_I, obstypelength
-use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
-                             print_time, print_date, set_calendar_type,        &
-                             increment_time,                                   &
-                             operator(*),  operator(+), operator(-),           &
-                             operator(>),  operator(<), operator(/),           &
+
+use time_manager_mod, only : time_type, set_time, set_date, get_date, &
+                             get_time, print_time, print_date,        &
+                             set_calendar_type, increment_time,       &
+                             operator(*),  operator(+), operator(-),  &
+                             operator(>),  operator(<), operator(/),  &
                              operator(/=), operator(<=)
 
-use     location_mod, only : location_type, get_dist, query_location,          &
-                             get_close_maxdist_init, get_close_type,           &
-                             set_location, get_location, & !horiz_dist_only,      &
-                             write_location, & !find_nearest,                      &
-!>@todo FIXME : in the threed_cartesian/location_mod.f90 it is assumed
-!>              everything is in height
-                             ! vert_is_undef,        VERTISUNDEF,                &
-                             ! vert_is_surface,      VERTISSURFACE,              &
-                             ! vert_is_level,        VERTISLEVEL,                &
-                             ! vert_is_pressure,     VERTISPRESSURE,             &
-                              vert_is_height,       VERTISHEIGHT,               &
-                             ! vert_is_scale_height, VERTISSCALEHEIGHT,          &
-                             get_close_obs_init, get_close_obs_destroy,        &
+use     location_mod, only : location_type, get_dist, query_location,    &
+                             get_close_maxdist_init, get_close_type,     &
+                             set_location, get_location, write_location, &
+                             vert_is_height, VERTISHEIGHT,               &
+                             get_close_obs_init, get_close_obs_destroy,  &
                              loc_get_close_obs => get_close_obs
 
 use    utilities_mod, only : register_module, error_handler,                   &
@@ -58,12 +51,12 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              open_file, file_exist, find_textfile_dims,        &
                              file_to_text, close_file, do_nml_file, do_nml_term
 
-use     obs_kind_mod, only : paramname_length,        &
-                             get_raw_obs_kind_index,  &
-                             get_raw_obs_kind_name,   &
-                             KIND_VERTICAL_VELOCITY,  &
+use     obs_kind_mod, only : paramname_length,           &
+                             get_raw_obs_kind_index,     &
+                             get_raw_obs_kind_name,      &
+                             KIND_VERTICAL_VELOCITY,     &
                              KIND_POTENTIAL_TEMPERATURE, &
-                             KIND_TEMPERATURE,        &
+                             KIND_TEMPERATURE,           &
                              KIND_SALINITY,              &
                              KIND_DRY_LAND,              &
                              KIND_EDGE_NORMAL_SPEED,     &
@@ -77,13 +70,13 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-
 use      feom_modules, only: read_node, read_aux3, read_depth, read_namelist, &
                              nCells => myDim_nod2D, & ! Total number of cells making up the grid
                              nVertices => myDim_nod3D, & ! wet points in grid
                              nVertLevels => max_num_layers, & ! number of vertical levels
                              layerdepth, & ! depth at each level (m)
                              coord_nod2D, &
+                             coord_nod3D, &
                              num_layers_below_nod2d, &
                              nod2d_corresp_to_nod3D, &
                              nod3d_below_nod2d
@@ -161,6 +154,7 @@ type(random_seq_type) :: random_seq
 type(location_type), allocatable :: cell_locations(:)
 integer,             allocatable :: cell_kinds(:)
 integer,             allocatable :: close_ind(:)
+real(r8),            allocatable :: depths(:)
 
 type(get_close_type)  :: cc_gc
 
@@ -471,7 +465,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ( debug > 4 ) call dump_progvar(ivar)
+   if ( debug > 0 ) call dump_progvar(ivar)
 
 enddo
 
@@ -509,8 +503,8 @@ integer, optional,   intent(out) :: var_type
 
 ! Local variables
 
-integer  :: nf, n
-integer  :: myindx
+integer  :: nf, n, myindx
+real(r8) :: lon, lat, depth
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -531,8 +525,28 @@ if( myindx == -1 ) then
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
 
-! This works even if the variable is 2D 
-location = cell_locations(nod2d_corresp_to_nod3D(myindx))
+! This correctly sets the horizontal location, but the 'cell_locations' array
+! only has a vertical location of 0.0 as it is only supposed to represent the
+! surface locations.
+
+! nod2d_corresp_to_nod3D() returns a 2D index [1,nCells] of the vertex [1,nVertices]
+
+!>@ TODO hardcoded '1' is not good.
+
+if (progvar(nf)%dimlens(1) == nVertices) then
+   lon   = coord_nod3D(1,myindx)
+   lat   = coord_nod3D(2,myindx)
+   depth = coord_nod3D(3,myindx) * -1.0_r8
+   if (lon < 0.0_r8) lon = lon + 360.0_r8
+   location = set_location(lon,lat,depth,VERTISHEIGHT)
+else
+   location = cell_locations(nod2d_corresp_to_nod3D(myindx))
+endif
+
+! if (do_output()) then  ! TJH DEBUG
+!    call write_location(0,location,charstring=string1)
+!    print *, 'gsmd:index', index_in, trim(string1)
+! endif
 
 if (present(var_type)) then
    var_type = progvar(nf)%dart_kind
@@ -579,7 +593,7 @@ integer,             intent(out) :: istatus
 integer  :: ivar, obs_kind, closest_index
 integer  :: ilayer, layer_below, layer_above
 real(r8) :: llv(3), lon, lat, vert
-integer  :: depth_below, depth_above, layer_thick
+real(r8) :: depth_below, depth_above, layer_thick
 integer  :: closest_index_above, closest_index_below
 
 if ( .not. module_initialized ) call static_init_model
@@ -628,46 +642,64 @@ else
 
    layer_below = 0
    LAYER: do ilayer = 1,nVertLevels
-      if (layerdepth(ilayer) > vert ) then
+      if (do_output()) write(*,*)'TJH ilayer/layerdepth/obsdepth ', &
+                                      ilayer,depths(ilayer), vert
+      if (depths(ilayer) > vert ) then
            layer_below = ilayer
            exit LAYER
       endif
    enddo LAYER
 
+
    if (layer_below == 0) then
-       istatus = 19
-       return ! below the deepest level
+      istatus = 19
+      return ! below the deepest level
    else if (layer_below == 1) then
-       istatus = 18
+      istatus = 18
       return ! too shallow
    else
-       !> @ TODO ... figure out the vertical contibs from above and below
-       !> and do some vertical interpolation
-       layer_above=layer_below - 1
-       depth_below=abs(layerdepth(layer_below)-vert)
-       depth_above=abs(layerdepth(layer_above)-vert)
-       layer_thick=depth_below-depth_above
 
-       closest_index_above = nod3d_below_nod2d(layer_above,closest_index)
-       closest_index_below = nod3d_below_nod2d(layer_below,closest_index)
+      !> @ TODO ... figure out the vertical contibs from above and below
+      !> and do some vertical interpolation
+      layer_above =  layer_below - 1
+      depth_below = depths(layer_below) - vert
+      depth_above = vert - depths(layer_above)
+      layer_thick = depths(layer_below) - depths(layer_above)
+
+      ! If there is no water, the return value is a negative number
+      closest_index_above = nod3d_below_nod2d(layer_above,closest_index)
+      closest_index_below = nod3d_below_nod2d(layer_below,closest_index)
+
+      write(*,*)'TJH closest indices below/above ', &
+                         closest_index_below, closest_index_above
+
+      if ((closest_index_below < 1) .or.  (closest_index_above < 1)) then
+         istatus = 17
+         return
+      endif
+
+      interp_val = (depth_below * x(progvar(ivar)%index1 + closest_index_above) + & 
+                    depth_above * x(progvar(ivar)%index1 + closest_index_below)) &
+                    / layer_thick
+
+      if (do_output()) then 
+      write(*,*)'TJH layer_above/depth ',layer_above,depths(layer_above)
+      write(*,*)'TJH layer_below/depth ',layer_below,depths(layer_below)
+      print *, 'value below  ',depth_below, x(progvar(ivar)%index1 + closest_index_below)
+      print *, 'value wanted ',vert, interp_val
+      print *, 'value above  ',depth_above, x(progvar(ivar)%index1 + closest_index_above)
+      endif
+
    endif
-
-   interp_val = ( depth_below * x(progvar(ivar)%index1 + closest_index_above) & 
-                + depth_above * x(progvar(ivar)%index1 + closest_index_below) &
-                )  / layer_thick
 
 endif
 
 istatus = 0
 
-!>@TODO FIXME ... why does calling my_task_id() cause this to hang?
-!> simply running model_mod_check (null_mpi_...) hangs indefinitely.
-
-if (debug > 5) then
-   call write_location(0,location,charstring=string1)
-!   print *, 'end kind, loc, val, rc:', my_task_id()
-   print *, interp_val, istatus, obs_kind 
-   print *, trim(string1)
+if (do_output() .and. debug > 0) then
+!  call write_location(0,location,charstring=string1)
+   print *, 'TASK', my_task_id(), closest_index, lon, lat, vert, &
+            interp_val, istatus, obs_kind, depth_below, depth_above
 endif
 
 end subroutine model_interpolate
@@ -861,6 +893,12 @@ else
    call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
                  'nc_write_model_atts', 'layerdepth units  '//trim(filename))
 
+   io = nf90_def_var(ncid=ncFileID, name='coord_nod3D_lons', &
+                    xtype=NF90_REAL, dimids = (/ nodes_3DimID /), varid=VarID)
+   call nc_check(io,'nc_write_model_atts', 'coord_nod3D_lons def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
+                 'nc_write_model_atts', 'coord_nod3D_lons units  '//trim(filename))
+
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
    !----------------------------------------------------------------------------
@@ -914,6 +952,11 @@ else
                  'nc_write_model_atts', 'layerdepth inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, layerdepth ), &
                 'nc_write_model_atts', 'layerdepth put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'coord_nod3D_lons', VarID), &
+                 'nc_write_model_atts', 'coord_nod3D_lons inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
+                'nc_write_model_atts', 'coord_nod3D_lons put_var '//trim(filename))
 
 endif
 
@@ -1304,6 +1347,10 @@ real(r8), optional,  dimension(:), intent(out)   :: dist
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                           num_close, close_ind, dist)
+
+if (do_output()) then
+   write(*,*)'get_close_obs:num_close is ',num_close
+endif
 
 end subroutine get_close_obs
 
@@ -2066,6 +2113,8 @@ Edges      = missing_I
 VertLevels = nVertLevels
 VertexDeg  = 60
 
+write(*,*)'TJH DEBUG min/max of coord_nod3D lons',minval(coord_nod3D(1,:)),maxval(coord_nod3D(2,:))
+
 end subroutine get_grid_dims
 
 
@@ -2180,6 +2229,9 @@ call read_node()  ! sets myDim_nod2D, myDim_nod3D
 call read_aux3()  ! sets nVertLevels and node locating arrays
 call read_depth()
 
+!>@ TODO push the read_() routines to get_state_meta_data() so it is not
+! done by dart_to_model and model_to_dart ...
+
 ! referenced by module 'use' 
 ! nCells      = myDim_nod2D
 ! nVertices   = myDim_nod3D
@@ -2207,6 +2259,9 @@ subroutine get_grid()
 
 integer :: i
 
+allocate(depths(nVertLevels))
+depths = real(layerdepth,r8)
+
 where (coord_nod2D(1,:) < 0.0_r8) coord_nod2D(1,:) = coord_nod2D(1,:) + 360.0_r8
 
 ! Read the variables
@@ -2226,6 +2281,7 @@ do i=1,nCells
 enddo
 
 cell_kinds = 0 ! not used
+
 
 end subroutine get_grid
 
@@ -3317,9 +3373,7 @@ logical, save :: search_initialized = .false.
 ! do this exactly once.
 if (search_initialized) return
 
-! the width really isn't used anymore, but it's part of the
-! interface so we have to pass some number in.
-!  40,000km/2pi radians
+! there are 40,000km in 2PI radians
 
 call get_close_maxdist_init(cc_gc, maxdist = 2.5_r8*PI/20000.0_r8)
 call get_close_obs_init(cc_gc, nCells, cell_locations)
@@ -3340,7 +3394,6 @@ function find_closest_surface_location(location, obs_kind)
 type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_kind
 integer                         :: find_closest_surface_location
-
 
 integer :: num_close, closest_index, rc, iclose, indx
 real(r8) :: closest
@@ -3382,7 +3435,7 @@ CLOSE : do iclose = 1, num_close
 
 enddo CLOSE
 
-if (debug > 10 .and. do_output()) &
+if (debug > 0 .and. do_output()) &
       write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
 
 find_closest_surface_location = closest_index
@@ -3394,6 +3447,8 @@ end function find_closest_surface_location
 subroutine finalize_closest_center()
 
 ! get rid of storage associated with get close lookup table
+
+!>@ TODO make this initialization a global T/F variable and only call if ...
 
 call get_close_obs_destroy(cc_gc)
 
