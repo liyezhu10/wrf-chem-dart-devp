@@ -64,7 +64,7 @@ use     obs_kind_mod, only : paramname_length,           &
                              KIND_V_CURRENT_COMPONENT,   &
                              KIND_SEA_SURFACE_HEIGHT,    &
                              KIND_SEA_SURFACE_PRESSURE,  &
-                             KIND_TRACER_CONCENTRATION  
+                             KIND_TRACER_CONCENTRATION
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -115,7 +115,7 @@ public :: get_model_analysis_filename,  &
           statevector_to_analysis_file, &
           write_model_time,             &
           get_grid_dims,                &
-          print_variable_ranges        
+          print_variable_ranges
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -168,7 +168,7 @@ integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
 
-! DART state vector contents 
+! DART state vector contents
 integer, parameter :: max_state_variables = 80
 integer, parameter :: num_state_table_columns = 2
 integer, parameter :: num_bounds_table_columns = 4
@@ -336,7 +336,7 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 
 ! Get the FeoM run-time configurations from a hardcoded filename
 ! must be called 'namelist.config' in the current directory.
-call read_namelist() 
+call read_namelist()
 
 ! read_grid_dims() sets nCells, nVertices, nVertLevels
 call read_grid_dims()
@@ -467,7 +467,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   if ( debug > 0 ) call dump_progvar(ivar)
+   if ( debug > 1 ) call dump_progvar(ivar)
 
 enddo
 
@@ -476,7 +476,7 @@ call nc_check( nf90_close(ncid), &
 
 model_size = progvar(nfields)%indexN
 
-if ( debug > 99 .and. do_output()) then
+if (do_output() .and.  debug > 99) then
   write(logfileunit,*)
   write(     *     ,*)
   write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
@@ -582,11 +582,14 @@ integer,             intent(out) :: istatus
 
 ! local storage
 
-integer  :: ivar, obs_kind, closest_index
+integer  :: ivar, obs_kind, surface_index
 integer  :: ilayer, layer_below, layer_above
 real(r8) :: llv(3), lon, lat, vert
 real(r8) :: depth_below, depth_above, layer_thick
 integer  :: closest_index_above, closest_index_below
+integer  :: index_above, index_below
+
+type(location_type) :: location_above, location_below
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -614,84 +617,82 @@ lon  = llv(1)    ! degrees East [0,360)
 lat  = llv(2)    ! degrees North [-90,90]
 vert = llv(3)    ! depth in meters ... even 2D fields have a value of 0.0
 
-closest_index = find_closest_surface_location(location, obs_kind)
+surface_index = find_closest_surface_location(location, obs_kind)
 
-if (closest_index < 1) then ! nothing close 
+if (surface_index < 1) then ! nothing close
    istatus = 11
    return
 endif
 
-! Now we know the 2D horizontal gridcell of interest.
-! Find the vertical node that is closest in depth.
-! use the : nod3D_below_nod2D nod2D_corresp_to_nod3D
-! arrays from the FEOM module.
+! If it is a surface variable, we're done.
 
-if (progvar(ivar)%dimname(1) == 'nodes_2d') then
-   interp_val = x( progvar(ivar)%index1 + closest_index )
-else
-   ! Which vertical level is closest
-   ! use the nod3D_below_nod2D(nVertLevels,nCells)  array to figure out 
-
-   layer_below = 0
-   LAYER: do ilayer = 1,nVertLevels
-      if (do_output()) write(*,*)'TJH ilayer/layerdepth/obsdepth ', &
-                                      ilayer,depths(ilayer), vert
-      if (depths(ilayer) > vert ) then
-           layer_below = ilayer
-           exit LAYER
-      endif
-   enddo LAYER
-
-
-   if (layer_below == 0) then
-      istatus = 19
-      return ! below the deepest level
-   else if (layer_below == 1) then
-      istatus = 18
-      return ! too shallow
-   else
-
-      !> @ TODO ... figure out the vertical contibs from above and below
-      !> and do some vertical interpolation
-      layer_above =  layer_below - 1
-      depth_below = depths(layer_below) - vert
-      depth_above = vert - depths(layer_above)
-      layer_thick = depths(layer_below) - depths(layer_above)
-
-      ! If there is no water, the return value is a negative number
-      closest_index_above = nod3d_below_nod2d(layer_above,closest_index)
-      closest_index_below = nod3d_below_nod2d(layer_below,closest_index)
-
-      write(*,*)'TJH closest indices below/above ', &
-                         closest_index_below, closest_index_above
-
-      if ((closest_index_below < 1) .or.  (closest_index_above < 1)) then
-         istatus = 17
-         return
-      endif
-
-      interp_val = (depth_below * x(progvar(ivar)%index1 + closest_index_above) + & 
-                    depth_above * x(progvar(ivar)%index1 + closest_index_below)) &
-                    / layer_thick
-
-      if (do_output()) then 
-      write(*,*)'TJH layer_above/depth ',layer_above,depths(layer_above)
-      write(*,*)'TJH layer_below/depth ',layer_below,depths(layer_below)
-      print *, 'value below  ',depth_below, x(progvar(ivar)%index1 + closest_index_below)
-      print *, 'value wanted ',vert, interp_val
-      print *, 'value above  ',depth_above, x(progvar(ivar)%index1 + closest_index_above)
-      endif
-
-   endif
-
+if (progvar(ivar)%varsize == nCells) then
+   index_above = progvar(ivar)%index1 + surface_index - 1
+   interp_val  = x( index_above )
+   istatus     = 0
+   return
 endif
 
-istatus = 0
+! Which vertical level is closest
+! Find the first nominal layer deeper than than the observation.
+! 2 <= layer_below <= nVertLevels
+! use the nod3D_below_nod2D(nVertLevels,nCells)  array to figure out
+! 1 <= surface_index <= nCells
 
-if (do_output() .and. debug > 0) then
-!  call write_location(0,location,charstring=string1)
-   print *, 'TASK', my_task_id(), closest_index, lon, lat, vert, &
-            interp_val, istatus, obs_kind, depth_below, depth_above
+layer_below = 0
+LAYER: do ilayer = 1,nVertLevels
+   if (depths(ilayer) > vert ) then
+        layer_below = ilayer
+        exit LAYER
+   endif
+enddo LAYER
+
+if     (layer_below == 0) then ! below the deepest level
+   istatus = 19
+elseif (layer_below == 1) then ! too shallow
+   istatus = 18
+else                           ! somewhere in the water column
+
+   layer_above = layer_below - 1
+
+   ! If there is no water, the return value is a negative number
+
+   closest_index_above = nod3d_below_nod2d(layer_above,surface_index)
+   closest_index_below = nod3d_below_nod2d(layer_below,surface_index)
+
+   if ((closest_index_below < 1) .or.  (closest_index_above < 1)) then
+      istatus = 17
+      return
+   endif
+
+   ! observation must be 'wet' as far as the model resolution is concerned
+
+   index_above = progvar(ivar)%index1 + closest_index_above - 1
+   index_below = progvar(ivar)%index1 + closest_index_below - 1
+
+   depth_below = depths(layer_below) - vert
+   depth_above = vert - depths(layer_above)
+   layer_thick = depths(layer_below) - depths(layer_above)
+
+   interp_val  = (depth_below*x(index_above) + depth_above*x(index_below)) &
+                 / layer_thick
+   istatus     = 0
+
+   ! DEBUG block to confirm that the interpolation is using the state
+   ! at the correct location.
+
+   if (do_output() .and. debug > 0) then
+      call get_state_meta_data(index_above, location_above)
+      call get_state_meta_data(index_below, location_below)
+
+      call write_location(0,location_above,charstring=string1)
+      call write_location(0,location      ,charstring=string2)
+      call write_location(0,location_below,charstring=string3)
+
+      call error_handler(E_MSG,'model_interpolate', '... '//string1, &
+                 text2=string2, text3=string3)
+   endif
+
 endif
 
 end subroutine model_interpolate
@@ -829,7 +830,7 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'model',  'FEOM' ), &
 if ( output_state_vector ) then
 
    !----------------------------------------------------------------------------
-   ! Define the DART model size and 
+   ! Define the DART model size and
    ! create a variable for the state vector.
    !----------------------------------------------------------------------------
 
@@ -1067,7 +1068,7 @@ else
       where(dimIDs == TimeDimID) mystart = timeindex
       where(dimIDs == TimeDimID) mycount = 1
 
-      if ((debug > 9) .and. do_output()) then
+      if (do_output() .and. debug > 9) then
          write(*,*)'nc_write_model_vars '//trim(varname)//' start is ',mystart(1:ncNdims)
          write(*,*)'nc_write_model_vars '//trim(varname)//' count is ',mycount(1:ncNdims)
       endif
@@ -1329,10 +1330,6 @@ real(r8), optional,  dimension(:), intent(out)   :: dist
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                           num_close, close_ind, dist)
-
-if (do_output()) then
-   write(*,*)'get_close_obs:num_close is ',num_close
-endif
 
 end subroutine get_close_obs
 
@@ -1994,7 +1991,7 @@ model_advance_forecast = set_time(int(sum(timearray)-timearray(idims(1))), 0)
 model_start_time = set_date(model_year,1,1)
 
 get_analysis_time = model_start_time + model_advance_forecast
-if ((debug > 0) .and. do_output()) then
+if (do_output() .and. debug > 0) then
    call print_date(get_analysis_time, 'get_analysis_time:model date')
    call print_time(get_analysis_time, 'get_analysis_time:model time')
 endif
@@ -2221,7 +2218,7 @@ coord_nod3D(3,:) = coord_nod3D(3,:) * -1.0_r8
 !>@ TODO push the read_() routines to get_state_meta_data() so it is not
 ! done by dart_to_model and model_to_dart ...
 
-! referenced by module 'use' 
+! referenced by module 'use'
 ! nCells      = myDim_nod2D
 ! nVertices   = myDim_nod3D
 ! nVertLevels = max_num_layers
@@ -2244,7 +2241,7 @@ end subroutine read_grid_dims
 
 subroutine get_grid()
 
-! the grid coordinates (coord_nod3D) come from the FeoM module 
+! the grid coordinates (coord_nod3D) come from the FeoM module
 ! lon   = coord_nod3D(1,:)
 ! lat   = coord_nod3D(2,:)
 ! depth = coord_nod3D(3,:)
@@ -2259,9 +2256,9 @@ depths = real(layerdepth,r8)
 ! Read the variables
 
 if (debug > 1) then
-   write(string1,*)'..  latitude   range ',minval(coord_nod3D(2,:)), maxval(coord_nod3D(2,:))
-   write(string2,*)    'longitude  range ',minval(coord_nod3D(1,:)), maxval(coord_nod3D(1,:))
-   write(string3,*)    'layerdepth range ',minval(layerdepth), maxval(layerdepth)
+   write(string1,*)'.. latitude  range ',minval(coord_nod3D(2,:)),maxval(coord_nod3D(2,:))
+   write(string2,*)   'longitude range ',minval(coord_nod3D(1,:)),maxval(coord_nod3D(1,:))
+   write(string3,*)   'depths    range ',minval(depths),          maxval(depths)
    call error_handler(E_MSG,'get_grid',string1,text2=string2,text3=string3)
 endif
 
@@ -2275,7 +2272,6 @@ do i=1,nCells
 enddo
 
 cell_kinds = 0 ! not used
-
 
 end subroutine get_grid
 
@@ -2831,7 +2827,7 @@ do while ( trim(bounds_table(1,n)) /= 'NULL' .and. trim(bounds_table(1,n)) /= ''
         progvar(ivar)%clamping = .true.
         progvar(ivar)%range    = (/ lower_bound, upper_bound /)
 
-        if ((debug > 0) .and. do_output()) then
+        if (do_output() .and. debug > 0) then
            write(*,*) 'In get_variable_bounds assigned ', trim(progvar(ivar)%varname)
            write(*,*) ' clamping range  ',progvar(ivar)%range
         endif
@@ -3009,9 +3005,9 @@ end function get_index_from_varname
 !------------------------------------------------------------------
 
 !#! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!#! 
+!#!
 !#! subroutine vert_convert(x, location, obs_kind, ztypeout, istatus)
-!#! 
+!#!
 !#! ! This subroutine converts a given ob/state vertical coordinate to
 !#! ! the vertical localization coordinate type requested through the
 !#! ! model_mod namelist.
@@ -3033,13 +3029,13 @@ end function get_index_from_varname
 !#! !            ensemble mean. Nevertheless, the subroutine has the
 !#! !            functionality to operate on any DART state vector that
 !#! !            is supplied to it.
-!#! 
+!#!
 !#! real(r8), dimension(:), intent(in)    :: x
 !#! type(location_type),    intent(inout) :: location
 !#! integer,                intent(in)    :: obs_kind
 !#! integer,                intent(in)    :: ztypeout
 !#! integer,                intent(out)   :: istatus
-!#!  
+!#!
 !#!  ! zin and zout are the vert values coming in and going out.
 !#!  ! ztype{in,out} are the vert types as defined by the 3d sphere
 !#!  ! locations mod (location/threed_sphere/location_mod.f90)
@@ -3050,15 +3046,15 @@ end function get_index_from_varname
 !#!  integer  :: k_low(3), k_up(3), c(3), n
 !#!  integer  :: ivars(3)
 !#!  type(location_type) :: surfloc
-!#! !$! 
+!#! !$!
 !#! !$! ! assume failure.
 !#! !$! istatus = 1
-!#! !$! 
+!#! !$!
 !#! !$! ! initialization
 !#! !$! k_low   = 0.0_r8
 !#! !$! k_up    = 0.0_r8
 !#! !$! weights = 0.0_r8
-!#! !$! 
+!#! !$!
 !#! !$! ! first off, check if ob is identity ob.  if so get_state_meta_data() will
 !#! !$! ! have returned location information already in the requested vertical type.
 !#! !$! if (obs_kind < 0) then
@@ -3066,28 +3062,28 @@ end function get_index_from_varname
 !#! !$!    istatus = 0
 !#! !$!    return
 !#! !$! endif
-!#! !$! 
+!#! !$!
 !#! !$! !#! ! if the existing coord is already in the requested vertical units
 !#! !$! !#! ! or if the vert is 'undef' which means no specifically defined
 !#! !$! !#! ! vertical coordinate, return now.
-!#! !$! 
+!#! !$!
 !#! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!#! !$! 
+!#! !$!
 !#! !$! !#! ztypein  = nint(query_location(location, 'which_vert'))
 !#! !$! !#! if ((ztypein == ztypeout) .or. (ztypein == VERTISUNDEF)) then
 !#! !$! !#!    istatus = 0
 !#! !$! !#!    return
 !#! !$! !#! else
-!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!    if (do_output() .and. debug > 9) then
 !#! !$! !#!       write(string1,'(A,3X,2I3)') 'ztypein, ztypeout:',ztypein,ztypeout
 !#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string1,source, revision, revdate)
 !#! !$! !#!    endif
 !#! !$! !#! endif
-!#! !$! 
+!#! !$!
 !#! !$! ! we do need to convert the vertical.  start by
 !#! !$! ! extracting the location lon/lat/vert values.
 !#! !$! llv_loc = get_location(location)
-!#! !$! 
+!#! !$!
 !#! !$! ! the routines below will use zin as the incoming vertical value
 !#! !$! ! and zout as the new outgoing one.  start out assuming failure
 !#! !$! ! (zout = missing) and wait to be pleasantly surprised when it works.
@@ -3095,29 +3091,29 @@ end function get_index_from_varname
 !#! !$! !@>todo FIXME : this probably does not matter since everything is always in
 !#! !$! !> hight, some models have to do vertival conversion for incomming observations
 !#! !$! zout    = missing_r8
-!#! !$! 
+!#! !$!
 !#! !$! ! if the vertical is missing to start with, return it the same way
 !#! !$! ! with the requested type as out.
 !#! !$! if (zin == missing_r8) then
 !#! !$!    location = set_location(llv_loc(1),llv_loc(2),missing_r8,ztypeout)
 !#! !$!    return
 !#! !$! endif
-!#! !$! 
+!#! !$!
 !#! !$! !>@todo FIXME : threed_cartesian/location assumes everything is in height
-!#! !$! 
+!#! !$!
 !#! !$! !#! ! Convert the incoming vertical type (ztypein) into the vertical
 !#! !$! !#! ! localization coordinate given in the namelist (ztypeout).
 !#! !$! !#! ! Various incoming vertical types (ztypein) are taken care of
 !#! !$! !#! ! inside find_vert_level. So we only check ztypeout here.
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#! ! convert into:
 !#! !$! !#! select case (ztypeout)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    ! outgoing vertical coordinate should be 'model level number'
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    case (VERTISLEVEL)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Identify the three cell ids (c) in the triangle enclosing the obs and
 !#! !$! !#!    ! the vertical indices for the triangle at two adjacent levels (k_low and k_up)
 !#! !$! !#!    ! and the fraction (fract) for vertical interpolation.
@@ -3128,7 +3124,7 @@ end function get_index_from_varname
 !#! !$! !#!   zk_mid = k_low + fract
 !#! !$! !#!   zout = sum(weights * zk_mid)
 !#! !$! !#!
-!#! !$! !#!   if ((debug > 9) .and. do_output()) then
+!#! !$! !#!   if (do_output() .and. debug > 9) then
 !#! !$! !#!      write(string2,'("Zk:",3F8.2," => ",F8.2)') zk_mid,zout
 !#! !$! !#!      call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
 !#! !$! !#!   endif
@@ -3137,98 +3133,98 @@ end function get_index_from_varname
 !#! !$! !#!    ! outgoing vertical coordinate should be 'pressure' in Pa
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    case (VERTISPRESSURE)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Need to get base offsets for the potential temperature, density, and water
 !#! !$! !#!    ! vapor mixing fields in the state vector
 !#! !$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
 !#! !$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
 !#! !$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#! string1 = 'fix VERTISPRESSURE get base offsets - detritus from atmosphere'
 !#! !$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    if (any(ivars(1:3) < 0)) then
 !#! !$! !#!       write(string1,*) 'Internal error, cannot find one or more of: theta, rho, qv'
 !#! !$! !#!       call error_handler(E_ERR, 'vert_convert',string1,source, revision, revdate)
 !#! !$! !#!    endif
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Get theta, rho, qv at the interpolated location
 !#! !$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
 !#! !$! !#!    if (istatus /= 0) return
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Convert theta, rho, qv into pressure
 !#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), zout, tk)
-!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!    if (do_output() .and. debug > 9) then
 !#! !$! !#!       write(string2,'("zout_in_pressure, theta, rho, qv:",3F10.2,F15.10)') zout, values
 !#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
 !#! !$! !#!    endif
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    ! outgoing vertical coordinate should be 'depth' in meters
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    case (VERTISHEIGHT)
-!#!  
-!#! !>@todo FIXME : might still want something similar to this code 
-!#! 
+!#!
+!#! !>@todo FIXME : might still want something similar to this code
+!#!
 !#!      call find_triangle_vert_indices (x, location, n, c, k_low, k_up, fract, weights, istatus)
 !#!      if (istatus /= 0) return
-!#!   
+!#!
 !#!      ! now have vertically interpolated values at cell centers.
 !#!      ! use horizontal weights to compute value at interp point.
 !#!      zout = sum(weights * fdata)
-!#! 
-!#! !$! !#! 
+!#!
+!#! !$! !#!
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    ! outgoing vertical coordinate should be 'scale height' (a ratio)
 !#! !$! !#!    ! ------------------------------------------------------------
 !#! !$! !#!    case (VERTISSCALEHEIGHT)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Scale Height is defined here as: -log(pressure / surface_pressure)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Need to get base offsets for the potential temperature, density, and water
 !#! !$! !#!    ! vapor mixing fields in the state vector
 !#! !$! !#! ! TJH   ivars(1) = get_progvar_index_from_kind(KIND_POTENTIAL_TEMPERATURE)
 !#! !$! !#! ! TJH   ivars(2) = get_progvar_index_from_kind(KIND_DENSITY)
 !#! !$! !#! ! TJH   ivars(3) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#! string1 = 'fix vertisscaleheight get base offsets - detritus from atmosphere'
 !#! !$! !#! call error_handler(E_ERR,'vert_convert',string1,source,revision,revdate)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Get theta, rho, qv at the interpolated location
 !#! !$! !#!    call compute_scalar_with_barycentric (x, location, 3, ivars, values, istatus)
 !#! !$! !#!    if (istatus /= 0) return
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Convert theta, rho, qv into pressure
 !#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), fullp, tk)
-!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!    if (do_output() .and. debug > 9) then
 !#! !$! !#!       write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F15.10)') fullp, values
 !#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
 !#! !$! !#!    endif
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Get theta, rho, qv at the surface corresponding to the interpolated location
 !#! !$! !#!    surfloc = set_location(llv_loc(1), llv_loc(2), 1.0_r8, VERTISLEVEL)
 !#! !$! !#!    call compute_scalar_with_barycentric (x, surfloc, 3, ivars, values, istatus)
 !#! !$! !#!    if (istatus /= 0) return
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! Convert surface theta, rho, qv into pressure
 !#! !$! !#!    call compute_full_pressure(values(1), values(2), values(3), surfp, tk)
-!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!    if (do_output() .and. debug > 9) then
 !#! !$! !#!       write(string2,'("zout_surf_pressure, theta, rho, qv:",3F10.2,F15.10)') surfp, values
 !#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
 !#! !$! !#!    endif
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! and finally, convert into scale height
 !#! !$! !#!    if (surfp /= 0.0_r8) then
 !#! !$! !#!       zout = -log(fullp / surfp)
 !#! !$! !#!    else
 !#! !$! !#!       zout = MISSING_R8
 !#! !$! !#!    endif
-!#! !$! !#! 
-!#! !$! !#!    if ((debug > 9) .and. do_output()) then
+!#! !$! !#!
+!#! !$! !#!    if (do_output() .and. debug > 9) then
 !#! !$! !#!       write(string2,'("zout_in_pressure:",F10.2)') zout
 !#! !$! !#!       call error_handler(E_MSG, 'vert_convert',string2,source, revision, revdate)
 !#! !$! !#!    endif
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#!    ! -------------------------------------------------------
 !#! !$! !#!    ! outgoing vertical coordinate is unrecognized
 !#! !$! !#!    ! -------------------------------------------------------
@@ -3236,12 +3232,12 @@ end function get_index_from_varname
 !#! !$! !#!       write(string1,*) 'Requested vertical coordinate not recognized: ', ztypeout
 !#! !$! !#!       call error_handler(E_ERR,'vert_convert', string1, &
 !#! !$! !#!                          source, revision, revdate)
-!#! !$! !#! 
+!#! !$! !#!
 !#! !$! !#! end select   ! outgoing vert type
-!#! !$! 
+!#! !$!
 !#! !$! ! Returned location
 !#! !$! location = set_location(llv_loc(1),llv_loc(2),zout,ztypeout)
-!#! !$! 
+!#! !$!
 !#! !$! ! Set successful return code only if zout has good value
 !#! !$! if(zout /= missing_r8) istatus = 0
 !#! !$!
@@ -3389,7 +3385,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_kind
 integer                         :: find_closest_surface_location
 
-integer :: num_close, closest_index, rc, iclose, indx
+integer :: num_close, surface_index, rc, iclose, indx
 real(r8) :: closest
 real(r8) :: distance
 
@@ -3412,27 +3408,24 @@ if (num_close == 0) return
 ! of the right DART KIND.
 
 closest = 1000000.0_r8 ! not very close
-closest_index = 0
+surface_index = 0
 
 CLOSE : do iclose = 1, num_close
 
    indx     = close_ind(iclose)
    distance = get_dist(location, cell_locations(indx))
 
-   if (debug > 10 .and. do_output()) &
-      write(*,*)'closest ',iclose,' is state index ',indx, 'at distance ',distance
-
    if (distance < closest) then
       closest       = distance
-      closest_index = indx
+      surface_index = indx
    endif
 
 enddo CLOSE
 
-if (debug > 0 .and. do_output()) &
-      write(*,*)'HORIZONTALLY closest is state index ',closest_index, 'at distance ',closest
+if (do_output() .and. debug > 2) &
+   write(*,*)'HORIZONTALLY closest is state index ',surface_index, ' is at distance ',closest
 
-find_closest_surface_location = closest_index
+find_closest_surface_location = surface_index
 
 end function find_closest_surface_location
 
@@ -3449,35 +3442,35 @@ call get_close_obs_destroy(cc_gc)
 end subroutine finalize_closest_center
 
 !$! !------------------------------------------------------------
-!$! 
+!$!
 !$! function on_boundary(cellid)
-!$! 
+!$!
 !$! ! use the surface (level 1) to determine if any edges (or vertices?)
 !$! ! are on the boundary, and return true if so.   if the global flag
 !$! ! is set, skip all code and return false immediately.
-!$! 
+!$!
 !$! integer,  intent(in)  :: cellid
 !$! logical               :: on_boundary
-!$! 
+!$!
 !$! integer :: vertical
-!$! 
+!$!
 !$! vertical = 1
-!$! 
+!$!
 !$! if (global_grid) then
 !$!    on_boundary = .false.
 !$!    return
 !$! endif
-!$! 
+!$!
 !$! write(*,*) 'boundaryCell ', cellid, boundaryCell(vertical,cellid)
-!$! 
+!$!
 !$! on_boundary = boundaryCell(vertical,cellid) .eq. 1
-!$! 
+!$!
 !$! end function on_boundary
 !$!
 !$! !------------------------------------------------------------
-!$! 
+!$!
 !$! function inside_cell(cellid, lat, lon)
-!$! 
+!$!
 !$! ! this function no longer really determines if we are inside
 !$! ! the cell or not.  what it does do is determine if the nearest
 !$! ! cell is on the grid boundary in any way and says no if it is
@@ -3486,30 +3479,30 @@ end subroutine finalize_closest_center
 !$! ! global atmosphere this is always so; for a regional atmosphere
 !$! ! and for the ocean (which does not have cells on land) this is
 !$! ! necessary test.
-!$! 
+!$!
 !$! integer,  intent(in)  :: cellid
 !$! real(r8), intent(in)  :: lat, lon
 !$! logical               :: inside_cell
-!$! 
+!$!
 !$! ! do this completely with topology of the grid.  if any of
 !$! ! the cell edges are marked as boundary edges, return no.
 !$! ! otherwise return yes.
-!$! 
+!$!
 !$! integer :: nedges, i, edgeid, vert
-!$! 
+!$!
 !$! ! if we're on a global grid, skip all this code
 !$! if (global_grid) then
 !$!    inside_cell = .true.
 !$!    return
 !$! endif
-!$! 
+!$!
 !$! nedges = nEdgesOnCell(cellid)
-!$! 
+!$!
 !$! ! go around the edges and check the boundary array.
 !$! ! if any are true, return false.  even if we are inside
 !$! ! this cell, we aren't going to be able to interpolate it
 !$! ! so shorten the code path.
-!$! 
+!$!
 !$! ! FIXME: at some point we can be more selective and try to
 !$! ! interpolate iff the edges of the three cells which are
 !$! ! going to contribute edges to the RBF exist, even if some
@@ -3518,75 +3511,75 @@ end subroutine finalize_closest_center
 !$! ! theory we have enough information to interpolate.  but it
 !$! ! is conservative for now - we certainly won't try to interpolate
 !$! ! outside the existing grid.
-!$! 
+!$!
 !$! ! FIXME: can this loop over edges be replaced by a single test of the 'boundaryCell' array?
 !$! do i=1, nedges
 !$!    edgeid = edgesOnCell(i, cellid)
-!$! 
+!$!
 !$!    ! FIXME: this is an int array.  is it 0=false,1=true?
 !$!    ! BOTHER - we need the vert for this and we don't have it
 !$!    ! and in fact can't compute it if the interpolation point
 !$!    ! has pressure or depth as its vertical coordinate.
 !$!    vert = 1
-!$! 
+!$!
 !$!    if (boundaryEdge(vert, edgeid) > 0) then
 !$!       inside_cell = .false.
 !$!       return
 !$!    endif
-!$! 
+!$!
 !$! enddo
-!$! 
+!$!
 !$! inside_cell = .true.
-!$! 
+!$!
 !$! end function inside_cell
 
 !$-----------------------------------------------------------
 
 !$! function closest_vertex_ll(cellid, lat, lon)
-!$! 
+!$!
 !$! ! Return the vertex id of the closest one to the given point
 !$! ! this version uses lat/lon.  see closest_vertex_xyz for the
 !$! ! cartesian version.
-!$! 
+!$!
 !$! integer,  intent(in)  :: cellid
 !$! real(r8), intent(in)  :: lat, lon
 !$! integer               :: closest_vertex_ll
-!$! 
+!$!
 !$! real(r8) :: px, py, pz
-!$! 
+!$!
 
 !>@todo FIXME : should not need to convert between latlon and xyz
 !$! ! use the same radius as FeoM for computing this
 !$! call latlon_to_xyz(lat, lon, px, py, pz)
-!$! 
+!$!
 !$! closest_vertex_ll = closest_vertex_xyz(cellid, px, py, pz)
 !$! if ((closest_vertex_ll < 0)  .and. &
 !$!     (debug > 8) .and. do_output()) &
-!$!    print *, 'cannot find nearest vertex to lon, lat: ', lon, lat, & 
+!$!    print *, 'cannot find nearest vertex to lon, lat: ', lon, lat, &
 !$!             'cellid', cellid,'px: ', px,'py: ', py,'pz: ', pz
-!$! 
+!$!
 !$! end function closest_vertex_ll
-!$! 
+!$!
 !$! !------------------------------------------------------------
-!$! 
+!$!
 !$! function closest_vertex_xyz(cellid, px, py, pz)
-!$! 
+!$!
 !$! ! Return the vertex id of the closest one to the given point
 !$! ! see closest_vertex_ll for the lat/lon version (which calls this)
-!$! 
+!$!
 !$! integer,  intent(in)  :: cellid
 !$! real(r8), intent(in)  :: px, py, pz
 !$! integer               :: closest_vertex_xyz
-!$! 
+!$!
 !$! integer :: nverts, i, vertexid
 !$! real(r8) :: distsq, closest_dist, dx, dy, dz
-!$! 
+!$!
 !$! ! nedges and nverts is same in a closed figure
 !$! nverts = nEdgesOnCell(cellid)
-!$! 
+!$!
 !$! closest_dist = 1.0e38_r8   ! something really big; these are meters not radians
 !$! closest_vertex_xyz = -1
-!$! 
+!$!
 !$! do i=1, nverts
 !$!    vertexid = verticesOnCell(i, cellid)
 !$!    distsq = (dx * dx) + (dy * dy) + (dz * dz)
@@ -3595,7 +3588,7 @@ end subroutine finalize_closest_center
 !$!       closest_vertex_xyz = vertexid
 !$!    endif
 !$! enddo
-!$! 
+!$!
 !$! end function closest_vertex_xyz
 
 !------------------------------------------------------------
@@ -3604,70 +3597,70 @@ end subroutine finalize_closest_center
 !------------------------------------------------------------
 
 !#! subroutine latlon_to_xyz(lat, lon, x, y, z)
-!#! 
+!#!
 !#! ! Given a lat, lon in degrees, return the cartesian x,y,z coordinate
 !#! ! on the surface of a specified radius relative to the origin
 !#! ! at the center of the earth.  (this radius matches the one
 !#! ! used at FeoM grid generation time and must agree in order
 !#! ! to be consistent with the cartisian coordinate arrays in
 !#! ! the FeoM data files.)
-!#! 
+!#!
 !#! real(r8), intent(in)  :: lat, lon
 !#! real(r8), intent(out) :: x, y, z
-!#! 
+!#!
 !#! real(r8) :: rlat, rlon
-!#! 
+!#!
 !#! rlat = lat * deg2rad
 !#! rlon = lon * deg2rad
-!#! 
+!#!
 !#! x = radius * cos(rlon) * cos(rlat)
 !#! y = radius * sin(rlon) * cos(rlat)
 !#! z = radius * sin(rlat)
-!#! 
+!#!
 !#! end subroutine latlon_to_xyz
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine xyz_to_latlon(x, y, z, lat, lon)
-!#! 
+!#!
 !#! ! Given a cartesian x, y, z coordinate relative to the origin
 !#! ! at the center of the earth, using a fixed radius specified
 !#! ! by FeoM (in the grid generation step), return the corresponding
 !#! ! lat, lon location in degrees.
-!#! 
+!#!
 !#! real(r8), intent(in)  :: x, y, z
 !#! real(r8), intent(out) :: lat, lon
-!#! 
+!#!
 !#! real(r8) :: rlat, rlon
-!#! 
+!#!
 !#! ! right now this is only needed for debugging messages.
 !#! ! the arc versions of routines are expensive.
-!#! 
+!#!
 !#! rlat = PI/2.0_r8 - acos(z/radius)
 !#! rlon = atan2(y,x)
 !#! if (rlon < 0) rlon = rlon + PI*2
-!#! 
+!#!
 !#! lat = rlat * rad2deg
 !#! lon = rlon * rad2deg
-!#! 
+!#!
 !#! end subroutine xyz_to_latlon
 
 !------------------------------------------------------------
 
 !#! subroutine inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
-!#! 
+!#!
 !#! ! given 3 corners of a triangle and an xyz point, compute whether
 !#! ! the point is inside the triangle.  this assumes r is coplanar
 !#! ! with the triangle - the caller must have done the lat/lon to
 !#! ! xyz conversion with a constant radius and then this will be
 !#! ! true (enough).  sets inside to true/false, and returns the
 !#! ! weights if true.  weights are set to 0 if false.
-!#! 
+!#!
 !#! real(r8), intent(in)  :: t1(3), t2(3), t3(3)
 !#! real(r8), intent(in)  :: r(3), lat, lon
 !#! logical,  intent(out) :: inside
 !#! real(r8), intent(out) :: weights(3)
-!#! 
+!#!
 !#! ! check for degenerate cases first - is the test point located
 !#! ! directly on one of the vertices?  (this case may be common
 !#! ! if we're computing on grid point locations.)
@@ -3684,212 +3677,212 @@ end subroutine finalize_closest_center
 !#!    weights = (/ 0.0_r8, 0.0_r8, 1.0_r8 /)
 !#!    return
 !#! endif
-!#! 
+!#!
 !#! ! not a vertex. compute the weights.  if any are
 !#! ! negative, the point is outside.  since these are
 !#! ! real valued computations define a lower bound for
 !#! ! numerical roundoff error and be sure that the
 !#! ! weights are not just *slightly* negative.
 !#! call get_3d_weights(r, t1, t2, t3, lat, lon, weights)
-!#! 
+!#!
 !#! if (any(weights < -roundoff)) then
 !#!    inside = .false.
 !#!    weights = 0.0_r8
 !#!    return
 !#! endif
-!#! 
+!#!
 !#! ! truncate barely negative values to 0
 !#! inside = .true.
 !#! where (weights < 0.0_r8) weights = 0.0_r8
 !#! return
-!#! 
+!#!
 !#! end subroutine inside_triangle
 
 !>@todo FIXME : function no used
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! function vector_magnitude(a)
-!#! 
+!#!
 !#! ! Given a cartesian vector, compute the magnitude
-!#! 
+!#
 !#! real(r8), intent(in)  :: a(3)
 !#! real(r8) :: vector_magnitude
-!#! 
+!#!
 !#! vector_magnitude = sqrt(a(1)*a(1) + a(2)*a(2) + a(3)*a(3))
-!#! 
+!#!
 !#! end function vector_magnitude
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine vector_cross_product(a, b, r)
-!#! 
+!#!
 !#! ! Given 2 cartesian vectors, compute the cross product of a x b
-!#! 
+!#!
 !#! real(r8), intent(in)  :: a(3), b(3)
 !#! real(r8), intent(out) :: r(3)
-!#! 
+!#!
 !#! r(1) = a(2)*b(3) - a(3)*b(2)
 !#! r(2) = a(3)*b(1) - a(1)*b(3)
 !#! r(3) = a(1)*b(2) - a(2)*b(1)
-!#! 
+!#!
 !#! end subroutine vector_cross_product
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! function vector_dot_product(a, b)
-!#! 
+!#!
 !#! ! Given 2 cartesian vectors, compute the dot product of a . b
-!#! 
+!#!
 !#! real(r8), intent(in)  :: a(3), b(3)
 !#! real(r8) :: vector_dot_product
-!#! 
+!#!
 !#! vector_dot_product = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
-!#! 
+!#!
 !#! end function vector_dot_product
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine vector_projection(a, b, r)
-!#! 
+!#!
 !#! ! Given 2 cartesian vectors, project a onto b
-!#! 
+!#!
 !#! real(r8), intent(in)  :: a(3), b(3)
 !#! real(r8), intent(out) :: r(3)
-!#! 
+!#!
 !#! real(r8) :: ab_over_bb
-!#! 
+!#!
 !#! ab_over_bb = vector_dot_product(a, b) / vector_dot_product(b, b)
 !#! r = (ab_over_bb) * b
-!#! 
+!#!
 !#! end subroutine vector_projection
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine determinant3(a, r)
-!#! 
+!#!
 !#! ! Given a 3x3 matrix, compute the determinant
-!#! 
+!#!
 !#! real(r8), intent(in)  :: a(3,3)
 !#! real(r8), intent(out) :: r
-!#! 
+!#!
 !#! r = a(1,1)*(a(2,2)*a(3,3) - (a(3,2)*a(2,3))) + &
 !#!     a(2,1)*(a(3,2)*a(1,3) - (a(3,3)*a(1,2))) + &
 !#!     a(3,1)*(a(1,2)*a(2,3) - (a(2,2)*a(1,3)))
-!#! 
+!#!
 !#! end subroutine determinant3
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine invert3(a, r)
-!#! 
+!#!
 !#! ! Given a 3x3 matrix, compute the inverse
-!#! 
+!#!
 !#! real(r8), intent(in)  :: a(3,3)
 !#! real(r8), intent(out) :: r(3,3)
-!#! 
+!#!
 !#! real(r8) :: det, b(3,3)
-!#! 
+!#!
 !#! call determinant3(a, det)
 !#! if (det == 0.0_r8) then
 !#!    print *, 'matrix cannot be inverted'
 !#!    r = 0.0_r8
 !#!    return
 !#! endif
-!#! 
+!#!
 !#! b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
 !#! b(2,1) = a(3,1)*a(2,3) - a(2,1)*a(3,3)
 !#! b(3,1) = a(2,1)*a(3,2) - a(3,1)*a(2,2)
-!#! 
+!#!
 !#! b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
 !#! b(2,2) = a(1,1)*a(3,3) - a(3,1)*a(1,3)
 !#! b(3,2) = a(3,1)*a(1,2) - a(1,1)*a(3,2)
-!#! 
+!#!
 !#! b(1,3) = a(1,2)*a(2,3) - a(2,2)*a(1,3)
 !#! b(2,3) = a(1,3)*a(2,1) - a(1,1)*a(2,3)
 !#! b(3,3) = a(1,1)*a(2,2) - a(2,1)*a(1,2)
-!#! 
+!#!
 !#! r = b / det
-!#! 
+!#!
 !#! end subroutine invert3
-!#! 
+!#!
 !#! !------------------------------------------------------------
-!#! 
+!#!
 !#! !==================================================================
 !#! ! The following (private) routines were borrowed from the FeoM code
 !#! !==================================================================
-!#! 
+!#!
 !#! !------------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine r3_normalize(ax, ay, az)
-!#! 
+!#!
 !#! !normalizes the vector (ax, ay, az)
-!#! 
+!#!
 !#! real(r8), intent(inout) :: ax, ay, az
 !#! real(r8) :: mi
-!#! 
+!#!
 !#!  mi = 1.0_r8 / sqrt(ax**2 + ay**2 + az**2)
 !#!  ax = ax * mi
 !#!  ay = ay * mi
 !#!  az = az * mi
-!#! 
+!#!
 !#! end subroutine r3_normalize
 
 
 !------------------------------------------------------------------
 
 !#! function theta_to_tk (theta, rho, qv)
-!#! 
+!#!
 !#! ! Compute sensible temperature [K] from potential temperature [K].
 !#! ! code matches computation done in FeoM model
-!#! 
+!#!
 !#! real(r8), intent(in)  :: theta    ! potential temperature [K]
 !#! real(r8), intent(in)  :: rho      ! dry density
 !#! real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
 !#! real(r8)  :: theta_to_tk          ! sensible temperature [K]
-!#! 
+!#!
 !#! ! Local variables
 !#! real(r8) :: theta_m               ! potential temperature modified by qv
 !#! real(r8) :: exner                 ! exner function
 !#! real(r8) :: qv_nonzero            ! qv >= 0
-!#! 
+!#!
 !#! qv_nonzero = max(qv,0.0_r8)
 !#! theta_m = (1.0_r8 + 1.61_r8 * qv_nonzero)*theta
-!#! 
+!#!
 !#! !theta_m = (1.0_r8 + 1.61_r8 * (max(qv, 0.0_r8)))*theta
 !#! exner = ( (rgas/p0) * (rho*theta_m) )**rcv
-!#! 
+!#!
 !#! ! Temperature [K]
 !#! theta_to_tk = theta * exner
-!#! 
+!#!
 !#! end function theta_to_tk
 
 
 !#! !------------------------------------------------------------------
-!#! 
+!#!
 !#! subroutine compute_full_pressure(theta, rho, qv, pressure, tk)
-!#! 
+!#!
 !#! ! Compute full pressure from the equation of state.
 !#! ! since it has to compute sensible temp along the way,
 !#! ! make temp one of the return values rather than having
 !#! ! to call theta_to_tk() separately.
 !#! ! code matches computation done in FeoM model
-!#! 
+!#!
 !#! real(r8), intent(in)  :: theta    ! potential temperature [K]
 !#! real(r8), intent(in)  :: rho      ! dry density
 !#! real(r8), intent(in)  :: qv       ! water vapor mixing ratio [kg/kg]
 !#! real(r8), intent(out) :: pressure ! full pressure [Pa]
 !#! real(r8), intent(out) :: tk       ! return sensible temperature to caller
-!#! 
+!#!
 !#! ! Local variables
 !#! real(r8) :: qv_nonzero            ! qv >= 0
-!#! 
+!#!
 !#! qv_nonzero = max(qv,0.0_r8)
 !#! tk = theta_to_tk(theta, rho, qv_nonzero)
-!#! 
+!#!
 !#! !tk = theta_to_tk(theta, rho, max(qv,0.0_r8))
 !#! pressure = rho * rgas * tk * (1.0_r8 + 1.61_r8 * qv)
-!#! !if ((debug > 9) .and. do_output()) print *, 't,r,q,p,tk =', theta, rho, qv, pressure, tk
-!#! 
+!#! !if (do_output() .and. debug > 9) print *, 't,r,q,p,tk =', theta, rho, qv, pressure, tk
+!#!
 !#! end subroutine compute_full_pressure
 
 
