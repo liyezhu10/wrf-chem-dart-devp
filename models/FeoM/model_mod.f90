@@ -924,7 +924,7 @@ else
 
    call nc_check(NF90_inq_varid(ncFileID, 'depths', VarID), &
                  'nc_write_model_atts', 'depths inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(3,:) ), &
                 'nc_write_model_atts', 'depths put_var '//trim(filename))
 
 endif
