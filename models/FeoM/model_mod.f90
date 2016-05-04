@@ -24,7 +24,6 @@ module model_mod
 !
 ! Note:  the 'temperature' variable is *potential* temperature.
 
-
 ! Routines in other modules that are used here.
 
 use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,       &
@@ -71,7 +70,7 @@ use mpi_utilities_mod, only: my_task_id
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
 use      feom_modules, only: read_node, read_aux3, read_depth, read_namelist, &
-                             nCells => myDim_nod2D, & ! Total number of cells making up the grid
+                             nCells => myDim_nod2D, & ! number of surface locations
                              nVertices => myDim_nod3D, & ! wet points in grid
                              nVertLevels => max_num_layers, & ! number of vertical levels
                              layerdepth, & ! depth at each level (m)
@@ -153,7 +152,7 @@ type(random_seq_type) :: random_seq
 
 type(location_type), allocatable :: cell_locations(:)
 integer,             allocatable :: cell_kinds(:)
-integer,             allocatable :: close_ind(:)
+integer,             allocatable :: close_cell_inds(:)
 real(r8),            allocatable :: depths(:)
 
 type(get_close_type)  :: cc_gc
@@ -287,6 +286,7 @@ integer :: triangle_num  (num_reg_x, num_reg_y) = 0
 integer, allocatable :: triangle_list(:)
 
 logical :: state_table_needed = .false.
+logical :: close_structure_allocated = .false.
 
 contains
 
@@ -337,13 +337,6 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 ! Get the FeoM run-time configurations from a hardcoded filename
 ! must be called 'namelist.config' in the current directory.
 call read_namelist()
-
-! read_grid_dims() sets nCells, nVertices, nVertLevels
-call read_grid_dims()
-
-allocate( cell_locations(nCells), cell_kinds(nCells), close_ind(nCells) )
-
-call get_grid()
 
 !---------------------------------------------------------------
 !>@todo Ensure model_timestep is multiple of "dynamics timestep"
@@ -476,16 +469,10 @@ call nc_check( nf90_close(ncid), &
 
 model_size = progvar(nfields)%indexN
 
-if (do_output() .and.  debug > 99) then
-  write(logfileunit,*)
-  write(     *     ,*)
-  write(logfileunit,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
-                                          nCells, nVertices, nVertLevels
-  write(     *     ,'(" static_init_model: nCells, nVertices, nVertLevels =",4(1x,i8))') &
-                                          nCells, nVertices, nVertLevels
-  write(logfileunit, *)'static_init_model: model_size = ', model_size
-  write(     *     , *)'static_init_model: model_size = ', model_size
-endif
+!>@ TODO try to move read_grid to some other routine that gets called very
+!   early by all the tasks.
+
+call read_grid() ! sets nCells, nVertices, nVertLevels
 
 ! dump_tables() is VERY expensive and should only be called
 ! once to generate sanity checks.
@@ -596,8 +583,6 @@ if ( .not. module_initialized ) call static_init_model
 interp_val = MISSING_R8
 istatus    = 99           ! must be positive (and integer)
 
-call init_closest_center() ! will only do something the first time
-
 ! rename for sanity - we can't change the argument names
 ! to this subroutine, but this really is a kind.
 obs_kind = obs_type
@@ -689,6 +674,8 @@ else                           ! somewhere in the water column
       call write_location(0,location      ,charstring=string2)
       call write_location(0,location_below,charstring=string3)
 
+      write(logfileunit,*) 
+      write(     *     ,*) 
       call error_handler(E_MSG,'model_interpolate', '... '//string1, &
                  text2=string2, text3=string3)
    endif
@@ -1201,12 +1188,12 @@ subroutine end_model()
 
 ! Does any shutdown and clean-up needed for model.
 
-if (allocated(cell_locations)) deallocate(cell_locations)
-if (allocated(cell_kinds))     deallocate(cell_kinds)
-if (allocated(close_ind))      deallocate(close_ind)
-if (allocated(depths))         deallocate(depths)
+if (allocated(cell_locations))  deallocate(cell_locations)
+if (allocated(cell_kinds))      deallocate(cell_kinds)
+if (allocated(close_cell_inds)) deallocate(close_cell_inds)
+if (allocated(depths))          deallocate(depths)
 
-call finalize_closest_center()
+if (close_structure_allocated) call finalize_closest_center()
 
 end subroutine end_model
 
@@ -2197,10 +2184,32 @@ end function set_model_time_step
 
 
 !------------------------------------------------------------------
+!> Read the grid from the FeoM metadata files.
+!>@ TODO If this can be moved to some routine that gets called by
+!   every task - but not when called by the converter routines, 
+!   it would be faster.
 
-subroutine read_grid_dims()
+subroutine read_grid()
 
-! Read the grid dimensions from the FeoM metadata files.
+! This routine does not need to be called by the model_to_dart and
+! dart_to_model routines, but DOES need to be called very early by
+! filter and perfect_model_obs.
+
+logical, save :: grid_read = .false.
+integer :: i
+real(r8) :: maxdist_km
+
+if (grid_read) return ! only read the grid once.
+
+! referenced by module 'use'
+! nCells      = myDim_nod2D
+! nVertices   = myDim_nod3D
+! nVertLevels = max_num_layers
+
+! the grid coordinates (coord_nod3D) come from the FeoM module
+! lon   = coord_nod3D(1,:)
+! lat   = coord_nod3D(2,:)
+! depth = coord_nod3D(3,:)
 
 call read_node()  ! sets myDim_nod2D, myDim_nod3D
 call read_aux3()  ! sets nVertLevels and node locating arrays
@@ -2215,52 +2224,15 @@ where(coord_nod3D(1,:) < 0.0_r8) &
 ! the observations in the WOD have positive depths.
 coord_nod3D(3,:) = coord_nod3D(3,:) * -1.0_r8
 
-!>@ TODO push the read_() routines to get_state_meta_data() so it is not
-! done by dart_to_model and model_to_dart ...
-
-! referenced by module 'use'
-! nCells      = myDim_nod2D
-! nVertices   = myDim_nod3D
-! nVertLevels = max_num_layers
-
-if (debug > 1) then
-   write(string1,*)'..  nCells      is ', nCells
-   write(string2,*)    'nVertices   is ', nVertices
-   write(string3,*)    'nVertLevels is ', nVertLevels
-   call error_handler(E_MSG,'read_grid_dims',string1,text2=string2,text3=string3)
-endif
-
 !>@ TODO there are a lot of variables allocated in the feom_modules.f90
 !        that are not needed. For memory-efficiency, we should deallocate
 !        all those (large) variables. coord_nod2D, index_nod2D, myList_nod2D, ...
 
-end subroutine read_grid_dims
-
-
-!------------------------------------------------------------------
-
-subroutine get_grid()
-
-! the grid coordinates (coord_nod3D) come from the FeoM module
-! lon   = coord_nod3D(1,:)
-! lat   = coord_nod3D(2,:)
-! depth = coord_nod3D(3,:)
-
-!>@ TODO ... remove magic index numbers
-
-integer :: i
-
+allocate( cell_locations(nCells), cell_kinds(nCells), close_cell_inds(nCells) )
 allocate(depths(nVertLevels))
+
 depths = real(layerdepth,r8)
-
-! Read the variables
-
-if (debug > 1) then
-   write(string1,*)'.. latitude  range ',minval(coord_nod3D(2,:)),maxval(coord_nod3D(2,:))
-   write(string2,*)   'longitude range ',minval(coord_nod3D(1,:)),maxval(coord_nod3D(1,:))
-   write(string3,*)   'depths    range ',minval(depths),          maxval(depths)
-   call error_handler(E_MSG,'get_grid',string1,text2=string2,text3=string3)
-endif
+cell_kinds = 0 ! not used
 
 ! The first nCells locations in coord_nod3D are the same as those in coord_nod2D
 ! and define the first layer.
@@ -2271,9 +2243,35 @@ do i=1,nCells
                                     coord_nod3D(3,i), VERTISHEIGHT)
 enddo
 
-cell_kinds = 0 ! not used
+! Initialize a 'get_close' structure that sets up the lookup table
+! to speed up the identification of the grid location closest to
+! any arbitrary location.  Note: there are 40,000km in 2PI radians.
 
-end subroutine get_grid
+maxdist_km = 2.5_r8 ! more than the largest separation between vertices
+
+call get_close_maxdist_init(cc_gc, maxdist = maxdist_km*PI/20000.0_r8)
+call get_close_obs_init(cc_gc, nCells, cell_locations)
+
+close_structure_allocated = .true.
+
+if (debug > 5) &
+   call error_handler(E_MSG,'init_closest_center','get close lookup table initialized')
+
+if (debug > 1) then
+   write(string1,*)'nCells      is ', nCells
+   write(string2,*)'nVertices   is ', nVertices
+   write(string3,*)'nVertLevels is ', nVertLevels
+   call error_handler(E_MSG,'read_grid','... '//string1,text2=string2,text3=string3)
+
+   write(string1,*)'latitude  range ',minval(coord_nod3D(2,:)),maxval(coord_nod3D(2,:))
+   write(string2,*)'longitude range ',minval(coord_nod3D(1,:)),maxval(coord_nod3D(1,:))
+   write(string3,*)'depths    range ',minval(depths),          maxval(depths)
+   call error_handler(E_MSG,'read_grid','... '//string1,text2=string2,text3=string3)
+endif
+
+grid_read = .true.
+
+end subroutine read_grid
 
 !------------------------------------------------------------------
 
@@ -3350,32 +3348,6 @@ if (debug > 7) print *, 'internal code inconsistency: could not find vertical lo
 end subroutine find_depth_bounds
 
 !------------------------------------------------------------
-!>
-
-subroutine init_closest_center()
-
-! initialize a GC structure that sets up the lookup table
-! to speed up the identification of the grid location closest to
-! any arbitrary location
-
-logical, save :: search_initialized = .false.
-
-! do this exactly once.
-if (search_initialized) return
-
-! there are 40,000km in 2PI radians
-
-call get_close_maxdist_init(cc_gc, maxdist = 2.5_r8*PI/20000.0_r8)
-call get_close_obs_init(cc_gc, nCells, cell_locations)
-
-search_initialized = .true.
-
-if (debug > 5) &
-   call error_handler(E_MSG,'init_closest_center','get close lookup table initialized')
-
-end subroutine init_closest_center
-
-!------------------------------------------------------------
 !> Determine the cell index closest to the given point
 !> 2D calculation only.
 
@@ -3389,14 +3361,12 @@ integer :: num_close, surface_index, rc, iclose, indx
 real(r8) :: closest
 real(r8) :: distance
 
-call init_closest_center() ! will only do something the first call
-
 find_closest_surface_location = -1
 
 ! Generate the list of indices into the DART vector of the close candidates.
 
 call loc_get_close_obs(cc_gc, location, obs_kind, cell_locations, cell_kinds, &
-                       num_close, close_ind)
+                       num_close, close_ind=close_cell_inds)
 
 ! Sometimes the location is outside the model domain.
 ! In this case, we cannot interpolate.
@@ -3412,7 +3382,7 @@ surface_index = 0
 
 CLOSE : do iclose = 1, num_close
 
-   indx     = close_ind(iclose)
+   indx     = close_cell_inds(iclose)
    distance = get_dist(location, cell_locations(indx))
 
    if (distance < closest) then

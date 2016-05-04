@@ -287,6 +287,39 @@
    verbose               = .true.
    /
 
+# obs_seq_to_netcdf also requires the schedule_nml.
+# In this context, schedule_nml defines how many netcdf files get created.
+# Each 'bin' results in an obs_epoch_xxxx.nc file.
+# default is to put everything into one 'bin'.
+
+&obs_seq_to_netcdf_nml
+   obs_sequence_name = '/glade/scratch/thoar/FILTER/obs_seq.final'
+   obs_sequence_list = ''
+   append_to_netcdf  = .false.
+   lonlim1           = 22.50
+   lonlim2           = 33.10
+   latlim1           = 38.60
+   latlim2           = 43.00
+   verbose           = .true.
+   /
+
+# This is wide open ... all times get put in the netCDF file
+#  first_bin_start =  1601,  1,  1,  0,  0,  0
+#  first_bin_end   =  2999,  1,  1,  0,  0,  0
+#  last_bin_end    =  2999,  1,  1,  0,  0,  0
+
+&schedule_nml
+   calendar        = 'Gregorian'
+   first_bin_start =  2009,  1,  1, 12,  0,  0
+   first_bin_end   =  2009,  1,  2, 12,  0,  0
+   last_bin_end    =  2009,  1,  2, 12,  0,  0
+   bin_interval_days    = 1000000
+   bin_interval_seconds = 0
+   max_num_bins         = 1000
+   print_table          = .true.
+   /
+
+
 # possible vertical coordinate systems are:
 # VERTISUNDEF VERTISSURFACE VERTISLEVEL VERTISPRESSURE VERTISHEIGHT VERTISSCALEHEIGHT
    kind_of_interest = 'KIND_TEMPERATURE'
