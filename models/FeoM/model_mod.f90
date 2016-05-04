@@ -286,6 +286,8 @@ integer :: triangle_start(num_reg_x, num_reg_y)
 integer :: triangle_num  (num_reg_x, num_reg_y) = 0
 integer, allocatable :: triangle_list(:)
 
+logical :: state_table_needed = .false.
+
 contains
 
 !==================================================================
@@ -485,6 +487,10 @@ if ( debug > 99 .and. do_output()) then
   write(     *     , *)'static_init_model: model_size = ', model_size
 endif
 
+! dump_tables() is VERY expensive and should only be called
+! once to generate sanity checks.
+if (state_table_needed .and. debug > 99) call dump_tables()
+
 end subroutine static_init_model
 
 !------------------------------------------------------------------
@@ -525,28 +531,14 @@ if( myindx == -1 ) then
      call error_handler(E_ERR,'get_state_meta_data',string1,source,revision,revdate)
 endif
 
-! This correctly sets the horizontal location, but the 'cell_locations' array
-! only has a vertical location of 0.0 as it is only supposed to represent the
-! surface locations.
+! so by now, 'myindx' can range from 1-to-nVertices or 1-to-nCells,
+! depending on the variable. Since the first nCells parts of coord_nod3D are
+! identical to coord_nod2D, we can just index everything with coord_nod3D
 
-! nod2d_corresp_to_nod3D() returns a 2D index [1,nCells] of the vertex [1,nVertices]
-
-!>@ TODO hardcoded '1' is not good.
-
-if (progvar(nf)%dimlens(1) == nVertices) then
-   lon   = coord_nod3D(1,myindx)
-   lat   = coord_nod3D(2,myindx)
-   depth = coord_nod3D(3,myindx) * -1.0_r8
-   if (lon < 0.0_r8) lon = lon + 360.0_r8
-   location = set_location(lon,lat,depth,VERTISHEIGHT)
-else
-   location = cell_locations(nod2d_corresp_to_nod3D(myindx))
-endif
-
-! if (do_output()) then  ! TJH DEBUG
-!    call write_location(0,location,charstring=string1)
-!    print *, 'gsmd:index', index_in, trim(string1)
-! endif
+lon   = coord_nod3D(1,myindx)
+lat   = coord_nod3D(2,myindx)
+depth = coord_nod3D(3,myindx)
+location = set_location(lon,lat,depth,VERTISHEIGHT)
 
 if (present(var_type)) then
    var_type = progvar(nf)%dart_kind
@@ -875,29 +867,23 @@ else
    ! Define useful geometry variables.
    !----------------------------------------------------------------------------
 
-   io = nf90_def_var(ncid=ncFileID, name='surface_longitudes', &
-                    xtype=NF90_DOUBLE, dimids = (/ nodes_2DimID /), varid=VarID)
+   io = nf90_def_var(ncid=ncFileID, name='longitudes', &
+                    xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
    call nc_check(io,'nc_write_model_atts', 'longitudes def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees East'),&
-                 'nc_write_model_atts', 'surface_longitude units  '//trim(filename))
+                 'nc_write_model_atts', 'longitude units  '//trim(filename))
 
-   io = nf90_def_var(ncid=ncFileID, name='surface_latitudes', &
-                    xtype=NF90_DOUBLE, dimids = (/ nodes_2DimID /), varid=VarID)
+   io = nf90_def_var(ncid=ncFileID, name='latitudes', &
+                    xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
    call nc_check(io,'nc_write_model_atts', 'latitudes def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees North'),&
-                 'nc_write_model_atts', 'surface_latitudes units  '//trim(filename))
+                 'nc_write_model_atts', 'latitudes units  '//trim(filename))
 
-   io = nf90_def_var(ncid=ncFileID, name='layerdepth', &
-                    xtype=NF90_REAL, dimids = (/ nVertLevelsDimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'layerdepth def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
-                 'nc_write_model_atts', 'layerdepth units  '//trim(filename))
-
-   io = nf90_def_var(ncid=ncFileID, name='coord_nod3D_lons', &
+   io = nf90_def_var(ncid=ncFileID, name='depths', &
                     xtype=NF90_REAL, dimids = (/ nodes_3DimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'coord_nod3D_lons def_var '//trim(filename))
+   call nc_check(io,'nc_write_model_atts', 'depths def_var '//trim(filename))
    call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
-                 'nc_write_model_atts', 'coord_nod3D_lons units  '//trim(filename))
+                 'nc_write_model_atts', 'depths units  '//trim(filename))
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -938,25 +924,20 @@ else
    ! Fill the coordinate variables that DART needs and has locally
    !----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncFileID, 'surface_longitudes', VarID), &
-                 'nc_write_model_atts', 'surface_longitudes inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2D(1,:) ), &
-                'nc_write_model_atts', 'surface_longitudes put_var '//trim(filename))
-
-   call nc_check(NF90_inq_varid(ncFileID, 'surface_latitudes', VarID), &
-                 'nc_write_model_atts', 'surface_latitudes inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod2d(2,:) ), &
-                'nc_write_model_atts', 'surface_latitudes put_var '//trim(filename))
-
-   call nc_check(NF90_inq_varid(ncFileID, 'layerdepth', VarID), &
-                 'nc_write_model_atts', 'layerdepth inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, layerdepth ), &
-                'nc_write_model_atts', 'layerdepth put_var '//trim(filename))
-
-   call nc_check(NF90_inq_varid(ncFileID, 'coord_nod3D_lons', VarID), &
-                 'nc_write_model_atts', 'coord_nod3D_lons inq_varid '//trim(filename))
+   call nc_check(NF90_inq_varid(ncFileID, 'longitudes', VarID), &
+                 'nc_write_model_atts', 'longitudes inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
-                'nc_write_model_atts', 'coord_nod3D_lons put_var '//trim(filename))
+                'nc_write_model_atts', 'longitudes put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'latitudes', VarID), &
+                 'nc_write_model_atts', 'latitudes inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(2,:) ), &
+                'nc_write_model_atts', 'latitudes put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'depths', VarID), &
+                 'nc_write_model_atts', 'depths inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
+                'nc_write_model_atts', 'depths put_var '//trim(filename))
 
 endif
 
@@ -1222,6 +1203,7 @@ subroutine end_model()
 if (allocated(cell_locations)) deallocate(cell_locations)
 if (allocated(cell_kinds))     deallocate(cell_kinds)
 if (allocated(close_ind))      deallocate(close_ind)
+if (allocated(depths))         deallocate(depths)
 
 call finalize_closest_center()
 
@@ -2113,8 +2095,6 @@ Edges      = missing_I
 VertLevels = nVertLevels
 VertexDeg  = 60
 
-write(*,*)'TJH DEBUG min/max of coord_nod3D lons',minval(coord_nod3D(1,:)),maxval(coord_nod3D(2,:))
-
 end subroutine get_grid_dims
 
 
@@ -2229,6 +2209,15 @@ call read_node()  ! sets myDim_nod2D, myDim_nod3D
 call read_aux3()  ! sets nVertLevels and node locating arrays
 call read_depth()
 
+! convert to [0, 360.0) longitude base
+where(coord_nod3D(1,:) < 0.0_r8) &
+      coord_nod3D(1,:) = coord_nod3D(1,:) + 360.0_r8
+
+! convert depths from negative to positive.
+! the 1D depths array has positive depths.
+! the observations in the WOD have positive depths.
+coord_nod3D(3,:) = coord_nod3D(3,:) * -1.0_r8
+
 !>@ TODO push the read_() routines to get_state_meta_data() so it is not
 ! done by dart_to_model and model_to_dart ...
 
@@ -2244,6 +2233,10 @@ if (debug > 1) then
    call error_handler(E_MSG,'read_grid_dims',string1,text2=string2,text3=string3)
 endif
 
+!>@ TODO there are a lot of variables allocated in the feom_modules.f90
+!        that are not needed. For memory-efficiency, we should deallocate
+!        all those (large) variables. coord_nod2D, index_nod2D, myList_nod2D, ...
+
 end subroutine read_grid_dims
 
 
@@ -2251,10 +2244,11 @@ end subroutine read_grid_dims
 
 subroutine get_grid()
 
-! the grid coordinates come from the FeoM module 
+! the grid coordinates (coord_nod3D) come from the FeoM module 
+! lon   = coord_nod3D(1,:)
+! lat   = coord_nod3D(2,:)
+! depth = coord_nod3D(3,:)
 
-! latCell = coord_nod2D(2,:)
-! lonCell = coord_nod2D(1,:)
 !>@ TODO ... remove magic index numbers
 
 integer :: i
@@ -2262,22 +2256,22 @@ integer :: i
 allocate(depths(nVertLevels))
 depths = real(layerdepth,r8)
 
-where (coord_nod2D(1,:) < 0.0_r8) coord_nod2D(1,:) = coord_nod2D(1,:) + 360.0_r8
-
 ! Read the variables
 
 if (debug > 1) then
-   write(string1,*)'..  latitude   range ',minval(coord_nod2D(2,:)), maxval(coord_nod2D(2,:))
-   write(string2,*)    'longitude  range ',minval(coord_nod2D(1,:)), maxval(coord_nod2D(1,:))
+   write(string1,*)'..  latitude   range ',minval(coord_nod3D(2,:)), maxval(coord_nod3D(2,:))
+   write(string2,*)    'longitude  range ',minval(coord_nod3D(1,:)), maxval(coord_nod3D(1,:))
    write(string3,*)    'layerdepth range ',minval(layerdepth), maxval(layerdepth)
    call error_handler(E_MSG,'get_grid',string1,text2=string2,text3=string3)
 endif
 
-! This array has to be filled in EXACTLY the same way that the
-! FeoM state gets packed into the DART state vector.
+! The first nCells locations in coord_nod3D are the same as those in coord_nod2D
+! and define the first layer.
 
 do i=1,nCells
-   cell_locations(i) = set_location(coord_nod2d(1,i), coord_nod2d(2,i), 0.0_r8, VERTISHEIGHT)
+   cell_locations(i) = set_location(coord_nod3D(1,i), &
+                                    coord_nod3D(2,i), &
+                                    coord_nod3D(3,i), VERTISHEIGHT)
 enddo
 
 cell_kinds = 0 ! not used
@@ -3898,6 +3892,104 @@ end subroutine finalize_closest_center
 !#! 
 !#! end subroutine compute_full_pressure
 
+
+!------------------------------------------------------------------
+!>
+
+subroutine dump_tables
+
+! TJH DEBUG create the rosetta stone for locations
+! separate file for temp, salinity, coord_nod3D, all dart state_vector.
+! should be able to cat temp & salinity to recreate all dart_state-vector
+! temp == salt == coord_nod3D, that sort of thing.
+
+integer :: iunit, i, var_type
+real(r8) :: llv(3), lon, lat, vert
+type(location_type) :: location
+
+if (do_output() .and. state_table_needed ) then
+   state_table_needed = .false. ! only do this once, it is expensive as hell
+
+   write(*,*)'writing dart_state_locations.txt'
+
+   iunit = open_file('dart_state_locations.txt',action='write')
+   do i = 1,model_size
+      call get_state_meta_data(i,location,var_type)
+      llv  = get_location(location)
+      lon  = llv(1) * deg2rad
+      lat  = llv(2) * deg2rad
+      vert = llv(3)
+      call write_location(0,location,charstring=string1)
+      write(iunit,100) i, var_type, trim(string1), lon, lat, vert
+   enddo
+   call close_file(iunit)
+
+   write(*,*)'writing salinity_locations.txt'
+
+   iunit = open_file('salinity_locations.txt',action='write')
+   do i = progvar(1)%index1,progvar(1)%indexN
+      call get_state_meta_data(i,location,var_type)
+      llv  = get_location(location)
+      lon  = llv(1) * deg2rad
+      lat  = llv(2) * deg2rad
+      vert = llv(3)
+      call write_location(0,location,charstring=string1)
+      write(iunit,100) i, var_type, trim(string1), lon, lat, vert
+   enddo
+   call close_file(iunit)
+
+   write(*,*)'writing temperature_locations.txt'
+
+   iunit = open_file('temperature_locations.txt',action='write')
+   do i = progvar(2)%index1,progvar(2)%indexN
+      call get_state_meta_data(i,location,var_type)
+      llv  = get_location(location)
+      lon  = llv(1) * deg2rad
+      lat  = llv(2) * deg2rad
+      vert = llv(3)
+   var_type = 50  ! to match to salinity
+      call write_location(0,location,charstring=string1)
+      write(iunit,100) i-progvar(2)%index1+1, var_type, trim(string1), lon, lat, vert
+   enddo
+   call close_file(iunit)
+
+   write(*,*)'writing feom_state_locations.txt'
+
+   iunit = open_file('feom_state_locations.txt',action='write')
+   do i = 1,nVertices
+      var_type = 50  ! to match to salinity
+      lon  = coord_nod3D(1,i) * deg2rad
+      lat  = coord_nod3D(2,i) * deg2rad
+      vert = coord_nod3D(3,i)
+      location = set_location(coord_nod3D(1,i), &
+                              coord_nod3D(2,i), &
+                              coord_nod3D(3,i), VERTISHEIGHT)
+      call write_location(0,location,charstring=string1)
+      write(iunit,100) i, var_type, trim(string1), lon, lat, vert
+   enddo
+   call close_file(iunit)
+
+   write(*,*)'writing feom_surface_locations.txt'
+
+   iunit = open_file('feom_surface_locations.txt',action='write')
+   do i = 1,nCells
+      var_type = 50  ! to match to salinity
+      lon  = coord_nod2D(1,i) * deg2rad
+      lat  = coord_nod2D(2,i) * deg2rad
+      vert = coord_nod3D(3,i)  ! deliberately using 3D
+      location = set_location(coord_nod2D(1,i), &
+                              coord_nod2D(2,i), &
+                              coord_nod3D(3,i), VERTISHEIGHT)
+      call write_location(0,location,charstring=string1)
+      write(iunit,100) i, var_type, trim(string1), lon, lat, vert
+   enddo
+   call close_file(iunit)
+
+ 100  format('index ',i7,1x,i3,1x,A,2(f24.12,1x),f13.7)
+
+endif
+
+end subroutine dump_tables
 
 !===================================================================
 ! End of model_mod
