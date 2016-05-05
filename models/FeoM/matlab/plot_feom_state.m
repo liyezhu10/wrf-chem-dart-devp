@@ -3,7 +3,7 @@ function h = plot_feom_state(fname, varargin)
 % Simple Example:
 %
 % fname = '/glade/scratch/thoar/FILTER/Prior_Diag.nc';
-% h = plot_feom_state(fname);
+% h = plot_feom_state(fname,'markersize',10);
 %
 % More complicated Example:
 %
@@ -19,24 +19,31 @@ default_varname    = 'salt';
 default_range      = [];
 default_timestep   = 1;
 default_level      = -1;
+default_markersize =  8;
 default_copystring = 'ensemble mean';
+default_verbosity  = 0;  % 0 is silent
 p = inputParser;
 
 addRequired(  p, 'fname'     , @ischar);
-addParamValue(p, 'varname'   , default_varname   , @ischar);
-addParamValue(p, 'range'     , default_range     , @isnumeric);
-addParamValue(p, 'time'      , default_timestep  , @isnumeric);
-addParamValue(p, 'level'     , default_level     , @isnumeric);
-addParamValue(p, 'copystring', default_copystring, @ischar);
+addParameter(p, 'varname'   , default_varname   , @ischar);
+addParameter(p, 'range'     , default_range     , @isnumeric);
+addParameter(p, 'time'      , default_timestep  , @isnumeric);
+addParameter(p, 'level'     , default_level     , @isnumeric);
+addParameter(p, 'markersize', default_markersize, @isnumeric);
+addParameter(p, 'copystring', default_copystring, @ischar);
+addParameter(p, 'verbosity' , default_verbosity , @isnumeric);
 parse(p, fname, varargin{:});
 
 % if you want to echo the input
-fprintf('fname      : %s\n',     p.Results.fname)
-fprintf('varname    : %s\n',     p.Results.varname)
-fprintf('range      : %f %f \n', p.Results.range)
-fprintf('timestep   : %d\n',     p.Results.time)
-fprintf('level      : %d\n',     p.Results.level)
-fprintf('copystring : %s\n',     p.Results.copystring)
+if (p.Results.verbosity ~= 0)
+   fprintf('fname      : %s\n',     p.Results.fname)
+   fprintf('varname    : %s\n',     p.Results.varname)
+   fprintf('range      : %f %f \n', p.Results.range)
+   fprintf('timestep   : %d\n',     p.Results.time)
+   fprintf('level      : %d\n',     p.Results.level)
+   fprintf('markersize : %d\n',     p.Results.markersize)
+   fprintf('copystring : %s\n',     p.Results.copystring)
+end
 
 % do some error-checking on the input
 
@@ -79,7 +86,7 @@ end
 x = lons(inds);
 y = lats(inds);
 z = depths(inds);
-s = zeros(size(x)) + 8;   % markersize
+s = zeros(size(x)) + p.Results.markersize;
 c = slab(inds);
 h = scatter(x,y,s,c,'filled');
 
