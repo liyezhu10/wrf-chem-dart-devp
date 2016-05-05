@@ -687,6 +687,15 @@ obs_kind_names(308) = obs_kind_type(KIND_FPAR_SHADED_DIFFUSE   ,'KIND_FPAR_SHADE
 obs_kind_names(309) = obs_kind_type(KIND_FPSN                  ,'KIND_FPSN')
 obs_kind_names(310) = obs_kind_type(KIND_FSIF                  ,'KIND_FSIF')
 
+obs_kind_names(311) = obs_kind_type(KIND_OBS_ERR_TEMPERATURE   ,'KIND_OBS_ERR_TEMPERATURE')
+obs_kind_names(312) = obs_kind_type(KIND_OBS_ERR_SURF_PRESSURE ,'KIND_OBS_ERR_SURF_PRESSURE')
+obs_kind_names(313) = obs_kind_type(KIND_OBS_ERR_PRESSURE      ,'KIND_OBS_ERR_PRESSURE')
+obs_kind_names(314) = obs_kind_type(KIND_OBS_ERR_U_COMP_WIND   ,'KIND_OBS_ERR_U_COMP_WIND')
+obs_kind_names(315) = obs_kind_type(KIND_OBS_ERR_V_COMP_WIND   ,'KIND_OBS_ERR_V_COMP_WIND')
+obs_kind_names(316) = obs_kind_type(KIND_OBS_ERR_WIND_DIR      ,'KIND_OBS_ERR_WIND_DIR')
+obs_kind_names(317) = obs_kind_type(KIND_OBS_ERR_WIND_SPEED    ,'KIND_OBS_ERR_WIND_SPEED')
+obs_kind_names(318) = obs_kind_type(KIND_OBS_ERR_SPEC_HUMIDITY ,'KIND_OBS_ERR_SPEC_HUMIDITY')
+
 ! count here, then output below
 
 num_kind_assimilate = 0
