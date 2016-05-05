@@ -84,7 +84,6 @@ xlabel(p.Results.varname)
 ylabel('depth (m)')
 string1 = sprintf('lat/lon %f, %f',y(1),x(1));
 title({string1,fname},'Interpreter','none')
-colorbar;
 grid('on')
 fprintf('%s\n',string1)
 
