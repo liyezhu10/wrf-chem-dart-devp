@@ -666,7 +666,7 @@ else                           ! somewhere in the water column
    ! DEBUG block to confirm that the interpolation is using the state
    ! at the correct location.
 
-   if (do_output() .and. debug > 0) then
+   if (do_output() .and. debug > 2) then
       call get_state_meta_data(index_above, location_above)
       call get_state_meta_data(index_below, location_below)
 
@@ -674,8 +674,8 @@ else                           ! somewhere in the water column
       call write_location(0,location      ,charstring=string2)
       call write_location(0,location_below,charstring=string3)
 
-      write(logfileunit,*) 
-      write(     *     ,*) 
+      write(logfileunit,*)
+      write(     *     ,*)
       call error_handler(E_MSG,'model_interpolate', '... '//string1, &
                  text2=string2, text3=string3)
    endif
@@ -873,6 +873,19 @@ else
    call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
                  'nc_write_model_atts', 'depths units  '//trim(filename))
 
+   io = nf90_def_var(ncid=ncFileID, name='node_table', &
+             xtype=NF90_INT, dimids = (/ nVertLevelsDimID, nodes_2DimID /), varid=VarID)
+   call nc_check(io,'nc_write_model_atts', 'node_table def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'long_name','nod3D_below_nod2D'),&
+                 'nc_write_model_atts', 'node_table long_name  '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'valid_range',(/ 1, nVertices /)),&
+                 'nc_write_model_atts', 'node_table long_name  '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,VarID,'description', &
+                'table defining packing order. Given a level and a &
+           &horizontal cell, return the vertex index (between 1 and nodes_3d). &
+           &A value outside the valid_range means there is no wet location.'),&
+                 'nc_write_model_atts', 'node_table description  '//trim(filename))
+
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
    !----------------------------------------------------------------------------
@@ -926,6 +939,11 @@ else
                  'nc_write_model_atts', 'depths inq_varid '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(3,:) ), &
                 'nc_write_model_atts', 'depths put_var '//trim(filename))
+
+   call nc_check(NF90_inq_varid(ncFileID, 'node_table', VarID), &
+                 'nc_write_model_atts', 'node_table inq_varid '//trim(filename))
+   call nc_check(nf90_put_var(ncFileID, VarID, nod3D_below_nod2D ), &
+                'nc_write_model_atts', 'node_table put_var '//trim(filename))
 
 endif
 
@@ -2186,7 +2204,7 @@ end function set_model_time_step
 !------------------------------------------------------------------
 !> Read the grid from the FeoM metadata files.
 !>@ TODO If this can be moved to some routine that gets called by
-!   every task - but not when called by the converter routines, 
+!   every task - but not when called by the converter routines,
 !   it would be faster.
 
 subroutine read_grid()
