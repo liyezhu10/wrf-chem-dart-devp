@@ -1,10 +1,12 @@
 function h = plot_feom_state(fname, varargin) 
 
-% fname = '/glade/scratch/thoar/FILTER/Prior_Diag.nc';
 % Simple Example:
+%
+% fname = '/glade/scratch/thoar/FILTER/Prior_Diag.nc';
 % h = plot_feom_state(fname);
 %
-% Example:
+% More complicated Example:
+%
 % h = plot_feom_state(fname,'varname','temp','timestep', 1, 'copystring','ensemble spread') 
 
 %% DART software - Copyright 2004 - 2013 UCAR. This open source software is
@@ -14,8 +16,9 @@ function h = plot_feom_state(fname, varargin)
 % DART $Id$
 
 default_varname    = 'salt';
-default_range      = [-Inf Inf];
-default_timestep   =  1;
+default_range      = [];
+default_timestep   = 1;
+default_level      = -1;
 default_copystring = 'ensemble mean';
 p = inputParser;
 
@@ -23,6 +26,7 @@ addRequired(  p, 'fname'     , @ischar);
 addParamValue(p, 'varname'   , default_varname   , @ischar);
 addParamValue(p, 'range'     , default_range     , @isnumeric);
 addParamValue(p, 'time'      , default_timestep  , @isnumeric);
+addParamValue(p, 'level'     , default_level     , @isnumeric);
 addParamValue(p, 'copystring', default_copystring, @ischar);
 parse(p, fname, varargin{:});
 
@@ -31,27 +35,69 @@ fprintf('fname      : %s\n',     p.Results.fname)
 fprintf('varname    : %s\n',     p.Results.varname)
 fprintf('range      : %f %f \n', p.Results.range)
 fprintf('timestep   : %d\n',     p.Results.time)
+fprintf('level      : %d\n',     p.Results.level)
 fprintf('copystring : %s\n',     p.Results.copystring)
+
+% do some error-checking on the input
 
 if (exist(fname,'file') ~= 2)
    error('%s does not exist.',fname)
 end
 
-lons   = ncread(fname,'longitudes');
-lats   = ncread(fname,'latitudes');
-depths = ncread(fname,'depths');
-s = zeros(size(lons)) + 3;   % markersize
+if ( ~ isempty(p.Results.range) && numel(p.Results.range) ~= 2)
+   error('If specified, range must have exactly two elements.')
+else
+   default_range = sort(p.Results.range);
+end
+
+% gather the data for plotting
+
+lons       = ncread(fname,'longitudes');
+lats       = ncread(fname,'latitudes');
+depths     = ncread(fname,'depths');
+node_table = ncread(fname,'node_table'); % necessary to subset by level
 
 copyindex = get_copy_index(fname, p.Results.copystring);
 
-x = get_hyperslab('fname',fname, ...
+slab = get_hyperslab('fname',fname, ...
                   'varname',p.Results.varname, ...
                   'copyindex',copyindex, ...
                   'tindex',p.Results.time);
 
-h = scatter3(lons,lats,depths,s,x,'filled');
+% subset the data to a plottable amount, 
+% 3M points seems to be more than Matlab can handle.
+% If the node_table returns a negative value, that is not a 'wet' vertex.
+% only 'wet' vertices are in the FeoM state.
 
+if (p.Results.level > 0) 
+   vertices = node_table(p.Results.level,:);
+   inds     = vertices(vertices > 0);
+else
+   error('cannot plot entire state ... must implement geographic subsetting.')
+end
+
+x = lons(inds);
+y = lats(inds);
+z = depths(inds);
+s = zeros(size(x)) + 8;   % markersize
+c = slab(inds);
+h = scatter(x,y,s,c,'filled');
+
+set(gca,'FontSize',20)
+
+if ( ~ isempty(default_range))
+   set(gca,'Clim',default_range)
+end
+
+% h = scatter3(x,y,z,s,c,'filled');
+% zlabel('depth (meters)')
+
+xlabel('longitude (degrees East)')
+ylabel('latitude (degrees North)')
+string1 = sprintf('%s at level %d (%.1f m)',p.Results.varname,p.Results.level,z(1));
+title({string1,fname},'Interpreter','none')
 colorbar;
+grid('on')
 
 % <next few lines under version control, do not edit>
 % $URL$
