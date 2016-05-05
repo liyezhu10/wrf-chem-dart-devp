@@ -42,7 +42,7 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           broadcast_copy,             prepare_to_write_to_vars, prepare_to_write_to_copies, &
           prepare_to_read_from_vars,  prepare_to_read_from_copies, prepare_to_update_vars,  &
           prepare_to_update_copies,   print_ens_handle,              &
-          map_task_to_pe,             map_pe_to_task,           is_single_restart_file_in,  &
+          map_task_to_pe,             map_pe_to_task,            &
           allocate_single_copy,       put_single_copy,          get_single_copy,            &
           deallocate_single_copy
 
@@ -114,17 +114,6 @@ logical  :: use_var2copy_rec_loop  = .true.
 !
 ! namelist with default values
 
-!PAR: Might want this to come from above now so multiple ensembles could have
-! different restart types.
-! If true a single restart file containing all ensemble vars is read/written
-! If false, one restart file is used for each ensemble member
-!> @todo where should this go?
-logical  :: single_restart_file_in  = .true.
-
-!-----------------------------------------------------------------
-!
-! namelist with default values
-
 ! Complain if unneeded transposes are done
 logical  :: flag_unneeded_transposes = .false.
 ! Communication configuration:
@@ -137,8 +126,7 @@ logical  :: debug = .false.
 
 namelist / ensemble_manager_nml / communication_configuration, &
                                   layout, tasks_per_node,  &
-                                  debug, flag_unneeded_transposes, &
-                                  single_restart_file_in
+                                  debug, flag_unneeded_transposes
                                   
 !-----------------------------------------------------------------
 
@@ -263,6 +251,8 @@ endif
 
 ! Figure out how the ensemble copies are partitioned
 call set_up_ens_distribution(ens_handle)
+
+ens_handle%num_extras = 0 ! This can be changed by calling set_num_extra_copies
 
 if (debug) call print_ens_handle(ens_handle)
 
@@ -802,27 +792,28 @@ owners_index = div + 1
 
 end subroutine get_copy_owner_index
 
-!!-----------------------------------------------------------------
-!
-!subroutine get_var_owner_index(var_number, owner, owners_index)
-!
-!! Given the var number, returns which PE stores it when copy complete
-!! and its index in that pes local storage. Depends on distribution_type
-!! with only option 1 currently implemented.
-!
-!! Assumes that all tasks are used in the ensemble
-!
-!integer, intent(in)  :: var_number
-!integer, intent(out) :: owner, owners_index
-!
-!integer :: div
-!
-!! Asummes distribution type 1
-!div = (var_number - 1) / num_pes
-!owner = var_number - div * num_pes - 1
-!owners_index = div + 1
-!
-!end subroutine get_var_owner_index
+!-----------------------------------------------------------------
+
+subroutine get_var_owner_index(var_number, owner, owners_index)
+
+! Given the var number, returns which PE stores it when copy complete
+! and its index in that pes local storage. Depends on distribution_type
+! with only option 1 currently implemented.
+
+! Assumes that all tasks are used in the ensemble
+
+integer(i8), intent(in)  :: var_number
+integer,     intent(out) :: owner
+integer,     intent(out) :: owners_index
+
+integer :: div
+
+! Asummes distribution type 1
+div = (var_number - 1) / num_pes
+owner = var_number - div * num_pes - 1
+owners_index = div + 1
+
+end subroutine get_var_owner_index
 
 !-----------------------------------------------------------------
 
@@ -939,29 +930,6 @@ endif
 
 end function get_allow_transpose
 
-!-----------------------------------------------------------------
-!> Given the var number, returns which PE stores it when copy complete
-!> and its index in that pes local storage. Depends on distribution_type
-!> with only option 1 currently implemented.
-!> Assumes that all tasks are used in the ensemble
-subroutine get_var_owner_index(var_number, owner, owners_index)
-
-integer(i8), intent(in)  :: var_number !> index into state vector
-integer,     intent(out) :: owner !> pe who owns the state element
-integer,     intent(out) :: owners_index !> local index on the owner
-
-integer :: div
-integer :: num_pes
-
-num_pes = task_count() !> @todo Fudge task_count()
-
-! Asummes distribution type 1: rount robin
-div = (var_number - 1) / num_pes
-owner = var_number - div * num_pes - 1
-owners_index = div + 1
-
-end subroutine get_var_owner_index
-
 !--------------------------------------------------------------------------------
 !> Return the physical task for my_pe
 function map_pe_to_task(ens_handle, p)
@@ -992,11 +960,11 @@ if (ens_handle%transpose_type == 1) then ! distibuted (all tasks have all copies
 elseif (ens_handle%transpose_type == 2) then ! var complete (only some tasks have data)
    copies_in_window = 0
    do i = 1, ens_handle%my_num_copies
-      if (ens_handle%my_copies(i) <= ens_size) then ! mean copy on each process
+      if (ens_handle%my_copies(i) <= ens_size) then
          copies_in_window = copies_in_window + 1
       endif
    enddo
-elseif(ens_handle%transpose_type == 3)then
+elseif(ens_handle%transpose_type == 3)then ! mean copy on each process
    copies_in_window = 1
 endif
 
@@ -1836,18 +1804,6 @@ real(r8), allocatable, intent(inout) :: x(:)
 if (allocated(x)) deallocate(x)
 
 end subroutine deallocate_single_copy
-
-
-!---------------------------------------------------------------------------------
-! HK this is so filter can see if it is a single file in for netcdf read. 
-! I don't think this IO stuff should be in the ensemble manager.
-function is_single_restart_file_in()
-
-logical :: is_single_restart_file_in
-
-is_single_restart_file_in = single_restart_file_in
-
-end function is_single_restart_file_in
 
 !---------------------------------------------------------------------------------
 

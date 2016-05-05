@@ -61,7 +61,7 @@ use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 find_textfile_dims, file_to_text, &
                                 do_nml_file, do_nml_term, scalar
 
-use  mpi_utilities_mod,  only : my_task_id
+use  mpi_utilities_mod,  only : my_task_id, task_count
 
 use     random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
 
@@ -88,14 +88,20 @@ use      obs_kind_mod,   only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                                 get_raw_obs_kind_index, get_num_raw_obs_kinds, &
                                 get_raw_obs_kind_name
 
-use ensemble_manager_mod,  only : ensemble_type
+!HK should model_mod know about the number of copies?
+use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_var_owner_index, &
+                                  get_my_vars, get_copy_owner_index
 
 use sort_mod,              only : sort
 
 use distributed_state_mod, only : get_state
 
 use state_structure_mod, only : add_domain, get_model_variable_indices, &
-                                set_clamping, state_structure_info
+                                state_structure_info, &
+                                get_index_start, get_index_end, &
+                                get_dart_vector_index
+
+use mpi_utilities_mod,   only : all_reduce_min_max
 
 ! FIXME:
 ! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
@@ -129,7 +135,6 @@ public ::  get_model_size,                &
            get_state_meta_data,           &
            get_model_time_step,           &
            static_init_model,             &
-           pert_model_state,              &
            pert_model_copies,             &
            nc_write_model_atts,           &
            nc_write_model_vars,           &
@@ -268,6 +273,7 @@ character(len = 20) :: wrf_nml_file = 'namelist.input'
 logical :: have_wrf_nml_file = .false.
 integer :: num_obs_kinds = 0
 logical, allocatable :: in_state_vector(:)
+integer, allocatable  :: domain_id(:) ! Global storage to interface with state_structure_mod.
 
 !-----------------------------------------------------------------------
 
@@ -377,9 +383,8 @@ integer               :: my_index
 integer               :: var_element_list(max_state_variables)
 logical               :: var_update_list(max_state_variables)
 real(r8)              :: var_bounds_table(max_state_variables,2)
-! not doing anything with this. If we do it should 
-! be an array in module global storage
-integer               :: domain_id
+! holds the variable names for a domain when calling add_domain
+character(len=129)    :: netcdf_variable_names(max_state_variables)
 
 !----------------------------------------------------------------------
 
@@ -404,6 +409,7 @@ if (adv_mod_command /= '') then
 endif
 
 allocate(wrf%dom(num_domains))
+allocate(domain_id(num_domains))
 
 ! get default state variable table if asked
 if ( default_state_variables ) then
@@ -731,13 +737,20 @@ WRFDomains : do id=1,num_domains
    var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,1) = wrf%dom(id)%lower_bound
    var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,2) = wrf%dom(id)%upper_bound
 
+   ! List of netcdf variable names in the domain
+   do i = 1, wrf%dom(id)%number_of_wrf_variables
+      my_index =  wrf%dom(id)%var_index_list(i) ! index in wrf_state_variables
+      netcdf_variable_names(i) = wrf_state_variables(1, my_index)
+   enddo
+
+
    ! add domain - not doing anything with domain_id yet so just overwriting it
-   domain_id = add_domain( 'wrfinput_d0'//idom, &
+   domain_id(id) = add_domain( 'wrfinput_d0'//idom, &
                            wrf%dom(id)%number_of_wrf_variables, &
-                           wrf_state_variables(1,1:wrf%dom(id)%number_of_wrf_variables), &
-                           var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,:) )
+                           var_names  = netcdf_variable_names(1:wrf%dom(id)%number_of_wrf_variables), &
+                           clamp_vals = var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,:) )
                           
-   if (debug) call state_structure_info(domain_id)
+   if (debug) call state_structure_info(domain_id(id))
 
 enddo WRFDomains 
 
@@ -747,6 +760,28 @@ call error_handler(E_MSG, 'static_init_model', errstring)
 
 end subroutine static_init_model
 
+!#######################################################################
+!> Convert from the state structure id to the wrf domain number.
+!> These are the same if there is only WRF involved in the assimilation
+!> The state structure id may be different if WRF is coupled with another
+!> model.
+function get_wrf_domain(state_id)
+
+integer, intent(in) :: state_id
+integer :: get_wrf_domain
+
+integer :: i
+
+do i = 1, num_domains
+   if (domain_id(i) == state_id) then
+      get_wrf_domain = i
+      return
+   endif
+enddo
+
+call error_handler(E_ERR, 'get_wrf_domain', 'not a valid domain')
+
+end function get_wrf_domain
 
 !#######################################################################
 
@@ -846,11 +881,14 @@ logical     :: var_found
 real(r8)    :: lon, lat, lev
 character(len=129) :: string1
 
-integer :: i, id, var_id
+integer :: i, id, var_id, state_id
 logical, parameter :: debug = .false.
 
 ! from the dart index get the local variables indices
-call get_model_variable_indices(index_in, ip, jp, kp, var_id=var_id, dom_id=id)
+call get_model_variable_indices(index_in, ip, jp, kp, var_id=var_id, dom_id=state_id)
+
+! convert from state_structure domain number to wrf.
+id = get_wrf_domain(state_id)
 
 ! at this point, (ip,jp,kp) refer to indices in the variable's own grid
 
@@ -1473,10 +1511,10 @@ else
                   do k2 = 1, 2
 
                      ! Interpolation for the U field
-                     ill = new_dart_ind(ll(1), ll(2), uniquek(uk)+k2-1, wrf%dom(id)%type_u, id)
-                     iul = new_dart_ind(ul(1), ul(2), uniquek(uk)+k2-1, wrf%dom(id)%type_u, id)
-                     ilr = new_dart_ind(lr(1), lr(2), uniquek(uk)+k2-1, wrf%dom(id)%type_u, id)
-                     iur = new_dart_ind(ur(1), ur(2), uniquek(uk)+k2-1, wrf%dom(id)%type_u, id)
+                     ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
 
                      x_ill = get_state(ill, state_handle)
                      x_iul = get_state(iul, state_handle)
@@ -1486,10 +1524,10 @@ else
                      ugrid = dym*( dxm_u*x_ill + dx_u*x_ilr ) + dy*( dxm_u*x_iul + dx_u*x_iur )
 
                      ! Interpolation for the V field
-                     ill = new_dart_ind(ll_v(1), ll_v(2), uniquek(uk)+k2-1, wrf%dom(id)%type_v, id)
-                     iul = new_dart_ind(ul_v(1), ul_v(2), uniquek(uk)+k2-1, wrf%dom(id)%type_v, id)
-                     ilr = new_dart_ind(lr_v(1), lr_v(2), uniquek(uk)+k2-1, wrf%dom(id)%type_v, id)
-                     iur = new_dart_ind(ur_v(1), ur_v(2), uniquek(uk)+k2-1, wrf%dom(id)%type_v, id)
+                     ill = get_dart_vector_index(ll_v(1), ll_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     iul = get_dart_vector_index(ul_v(1), ul_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     ilr = get_dart_vector_index(lr_v(1), lr_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     iur = get_dart_vector_index(ur_v(1), ur_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
 
                      x_ill = get_state(ill, state_handle)
                      x_iul = get_state(iul, state_handle)
@@ -1544,10 +1582,10 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners U10, V10 rc = ', rc
    
                ! Interpolation for the U10 field
-               ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_u10, id)
-               iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_u10, id)
-               ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_u10, id)
-               iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_u10, id)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_u10)
 
                x_ill = get_state(ill, state_handle)
                x_iul = get_state(iul, state_handle)
@@ -1557,10 +1595,10 @@ else
                ugrid = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
    
                ! Interpolation for the V10 field
-               ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_v10, id)
-               iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_v10, id)
-               ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_v10, id)
-               iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_v10, id)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_v10)
 
                x_ill = get_state(ill, state_handle)
                x_iul = get_state(iul, state_handle)
@@ -1611,10 +1649,10 @@ else
                        print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
                
                   ! Interpolation for T field at level k
-                  ill = new_dart_ind(ll(1), ll(2), uniquek(uk), wrf%dom(id)%type_t, id)
-                  iul = new_dart_ind(ul(1), ul(2), uniquek(uk), wrf%dom(id)%type_t, id)
-                  ilr = new_dart_ind(lr(1), lr(2), uniquek(uk), wrf%dom(id)%type_t, id)
-                  iur = new_dart_ind(ur(1), ur(2), uniquek(uk), wrf%dom(id)%type_t, id)
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
 
                   x_iul = get_state(iul, state_handle)
                   x_ill = get_state(ill, state_handle)
@@ -1640,10 +1678,10 @@ else
                   enddo
 
                   ! Interpolation for T field at level k+1
-                  ill = new_dart_ind(ll(1), ll(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-                  iul = new_dart_ind(ul(1), ul(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-                  ilr = new_dart_ind(lr(1), lr(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-                  iur = new_dart_ind(ur(1), ur(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
 
                   x_ill = get_state(ill, state_handle)
                   x_iul = get_state(iul, state_handle)
@@ -1705,10 +1743,10 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners Theta rc = ', rc
                
                ! Interpolation for Theta field at level k
-               ill = new_dart_ind(ll(1), ll(2), uniquek(uk), wrf%dom(id)%type_t, id)
-               iul = new_dart_ind(ul(1), ul(2), uniquek(uk), wrf%dom(id)%type_t, id)
-               ilr = new_dart_ind(lr(1), lr(2), uniquek(uk), wrf%dom(id)%type_t, id)
-               iur = new_dart_ind(ur(1), ur(2), uniquek(uk), wrf%dom(id)%type_t, id)
+               ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
 
                x_ill = get_state(ill, state_handle)
                x_iul = get_state(iul, state_handle)
@@ -1722,10 +1760,10 @@ else
                enddo
    
                ! Interpolation for Theta field at level k+1
-               ill = new_dart_ind(ll(1), ll(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-               iul = new_dart_ind(ul(1), ul(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-               ilr = new_dart_ind(lr(1), lr(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
-               iur = new_dart_ind(ur(1), ur(2), uniquek(uk)+1, wrf%dom(id)%type_t, id)
+               ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
 
                x_ill = get_state(ill, state_handle)
                x_ill = get_state(ill, state_handle)
@@ -1838,10 +1876,10 @@ else
                        print*, 'model_mod.f90 :: model_interpolate :: getCorners SH rc = ', rc
 
                   ! Interpolation for SH field at level k
-                  ill = new_dart_ind(ll(1), ll(2), uniquek(uk), wrf%dom(id)%type_qv, id)
-                  iul = new_dart_ind(ul(1), ul(2), uniquek(uk), wrf%dom(id)%type_qv, id)
-                  ilr = new_dart_ind(lr(1), lr(2), uniquek(uk), wrf%dom(id)%type_qv, id)
-                  iur = new_dart_ind(ur(1), ur(2), uniquek(uk), wrf%dom(id)%type_qv, id)
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
 
                   x_ill = get_state(ill, state_handle)
                   x_iul = get_state(iul, state_handle)
@@ -1856,10 +1894,10 @@ else
                   enddo
 
                   ! Interpolation for SH field at level k+1
-                  ill = new_dart_ind(ll(1), ll(2), uniquek(uk)+1, wrf%dom(id)%type_qv, id)
-                  iul = new_dart_ind(ul(1), ul(2), uniquek(uk)+1, wrf%dom(id)%type_qv, id)
-                  ilr = new_dart_ind(lr(1), lr(2), uniquek(uk)+1, wrf%dom(id)%type_qv, id)
-                  iur = new_dart_ind(ur(1), ur(2), uniquek(uk)+1, wrf%dom(id)%type_qv, id)
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
 
                   x_ill = get_state(ill, state_handle)
                   x_ilr = get_state(ilr, state_handle)
@@ -1892,10 +1930,10 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners SH2 rc = ', rc
 
                ! Interpolation for the SH2 field
-               ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_q2, id)
-               iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_q2, id)
-               ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_q2, id)
-               iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_q2, id)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_q2)
 
                x_ill = get_state(ill, state_handle)
                x_iul = get_state(iul, state_handle)
@@ -1994,10 +2032,10 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners PS rc = ', rc
       
                ! Interpolation for the PS field
-               ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps, id)
-               iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps, id)
-               ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps, id)
-               iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps, id)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_ps)
 
                x_ill = get_state(ill, state_handle)
                x_iul = get_state(iul, state_handle)
@@ -2171,10 +2209,10 @@ else
 !                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_u))  + &
 !                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2+1,wrf%dom(id)%type_u)))) * 0.5_r8
 
-                        ugrid_1 = new_dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_u, id)
-                        ugrid_2 = new_dart_ind(ii1+1,ii2,  k2,  wrf%dom(id)%type_u, id)
-                        ugrid_3 = new_dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_u, id)
-                        ugrid_4 = new_dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_u, id)
+                        ugrid_1 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_2 = get_dart_vector_index(ii1+1,ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_3 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_4 = get_dart_vector_index(ii1,  ii2,  k2+1, domain_id(id), wrf%dom(id)%type_u )
 
                         x_ugrid_1 = get_state(ugrid_1, state_handle)
                         x_ugrid_2 = get_state(ugrid_2, state_handle)
@@ -2183,10 +2221,10 @@ else
 
                         ugrid = (dx  * (x_ugrid_1  + x_ugrid_2) + dxm * (x_ugrid_3 + x_ugrid_4)) * 0.5_r8
 
-                        vgrid_1 = new_dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_v, id)
-                        vgrid_2 = new_dart_ind(ii1,  ii2+1,k2,  wrf%dom(id)%type_v, id)
-                        vgrid_3 = new_dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_v, id)
-                        vgrid_4 = new_dart_ind(ii1,  ii2+1,k2+1,wrf%dom(id)%type_v, id)
+                        vgrid_1 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_2 = get_dart_vector_index(ii1,  ii2+1,k2,   domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_3 = get_dart_vector_index(ii1,  ii2,  k2+1, domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_4 = get_dart_vector_index(ii1,  ii2+1,k2+1, domain_id(id),wrf%dom(id)%type_v)
 
                         x_vgrid_1 = get_state(vgrid_1, state_handle)
                         x_vgrid_2 = get_state(vgrid_2, state_handle)
@@ -2205,8 +2243,8 @@ else
 !                     ugrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u)) + &
 !                              x(wrf%dom(id)%dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u))) * 0.5_r8
 
-                        ugrid_1 = new_dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u, id)
-                        ugrid_2 = new_dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u, id)
+                        ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+                        ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
 
                         x_ugrid_1 = get_state(ugrid_1, state_handle)
                         x_ugrid_2 = get_state(ugrid_2, state_handle)
@@ -2216,8 +2254,8 @@ else
 !                     vgrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v)) + &
 !                              x(wrf%dom(id)%dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v))) * 0.5_r8
 
-                        vgrid_1 = new_dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v, id)
-                        vgrid_2 = new_dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v, id)
+                        vgrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_2 = get_dart_vector_index(ii1,  ii2+1,1, domain_id(id),wrf%dom(id)%type_v)
 
                         x_vgrid_1 = get_state(vgrid_1, state_handle)
                         x_vgrid_2 = get_state(vgrid_2, state_handle)
@@ -2388,21 +2426,21 @@ else
                       !print*, 'p1d(k2, 1)', p1d(k2, 1)
 
 !                     t1d(k2) = x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_t)) + ts0
-                     t1d_ind = new_dart_ind(ii1,ii2,k2,wrf%dom(id)%type_t, id)
+                     t1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_t)
                      t1d(k2, :) = get_state( t1d_ind, state_handle)
                      t1d(k2, :) = t1d(k2, :) + ts0
                      !print*, 't1d(k2, 1)', t1d(k2, 1)
 
 !                     qv1d(k2)= x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_qv))
-                     qv1d_ind = new_dart_ind(ii1,ii2,k2,wrf%dom(id)%type_qv, id)
+                     qv1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_qv)
                      qv1d(k2, :) = get_state(qv1d_ind, state_handle)
                      !print*, 'qv1d(k2, 1)', qv1d(k2, 1)
 
 !                     z1d(k2) = (x(wrf%dom(id)%dart_ind(ii1,ii2,k2,  wrf%dom(id)%type_gz))+ &
 !                                x(wrf%dom(id)%dart_ind(ii1,ii2,k2+1,wrf%dom(id)%type_gz))+ &
 !                                wrf%dom(id)%phb(ii1,ii2,k2)+wrf%dom(id)%phb(ii1,ii2,k2+1))*0.5_r8/gravity
-                     z1d_ind1 = new_dart_ind(ii1,ii2,k2,  wrf%dom(id)%type_gz, id)
-                     z1d_ind2 = new_dart_ind(ii1,ii2,k2+1,wrf%dom(id)%type_gz, id)
+                     z1d_ind1 = get_dart_vector_index(ii1,ii2,k2,   domain_id(id),wrf%dom(id)%type_gz)
+                     z1d_ind2 = get_dart_vector_index(ii1,ii2,k2+1, domain_id(id),wrf%dom(id)%type_gz)
 
                      z1d_1(k2, :) = get_state(z1d_ind1, state_handle)
                      z1d_2(k2, :) = get_state(z1d_ind2, state_handle)
@@ -2501,10 +2539,10 @@ else
                      !ugrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_u10))
                      !vgrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_v10))
 
-                     ugrid_1 = new_dart_ind(ii1,ii2,1,wrf%dom(id)%type_u10, id)
+                     ugrid_1 = get_dart_vector_index(ii1,ii2,1, domain_id(id),wrf%dom(id)%type_u10)
                      ugrid = get_state(ugrid_1, state_handle)
  
-                     vgrid_1 = new_dart_ind(ii1,ii2,1,wrf%dom(id)%type_v10, id)
+                     vgrid_1 = get_dart_vector_index(ii1,ii2,1, domain_id(id),wrf%dom(id)%type_v10)
                      vgrid = get_state(vgrid_1, state_handle)
 
                   else
@@ -2514,16 +2552,16 @@ else
 !                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,1,wrf%dom(id)%type_u)))
 !                     vgrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,ii2,  1,wrf%dom(id)%type_v)) + &
 !                                     x(wrf%dom(id)%dart_ind(ii1,ii2+1,1,wrf%dom(id)%type_v)))
-                     ugrid_1 = new_dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u, id)
-                     ugrid_2 = new_dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u, id)
+                     ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+                     ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
 
                      x_ugrid_1 = get_state(ugrid_1, state_handle)
                      x_ugrid_2 = get_state(ugrid_2, state_handle)
  
                      ugrid = (x_ugrid_1 + x_ugrid_2) * 0.5_r8
 
-                     vgrid_1 = new_dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v, id)
-                     vgrid_2 = new_dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v, id)
+                     vgrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_v)
+                     vgrid_2 = get_dart_vector_index(ii1,  ii2+1,1, domain_id(id),wrf%dom(id)%type_v)
 
                      x_vgrid_1 = get_state(vgrid_1, state_handle)
                      x_vgrid_2 = get_state(vgrid_2, state_handle)
@@ -2604,10 +2642,10 @@ else
                  print*, 'model_mod.f90 :: model_interpolate :: getCorners GZ rc = ', rc
             
             ! Interpolation for GZ field at level k
-            ill = new_dart_ind(ll(1), ll(2), k(1), wrf%dom(id)%type_gz, id)
-            iul = new_dart_ind(ul(1), ul(2), k(1), wrf%dom(id)%type_gz, id)
-            ilr = new_dart_ind(lr(1), lr(2), k(1), wrf%dom(id)%type_gz, id)
-            iur = new_dart_ind(ur(1), ur(2), k(1), wrf%dom(id)%type_gz, id)
+            ill = get_dart_vector_index(ll(1), ll(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            iul = get_dart_vector_index(ul(1), ul(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            ilr = get_dart_vector_index(lr(1), lr(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            iur = get_dart_vector_index(ur(1), ur(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
 
             x_ill = get_state(ill, state_handle)
             x_iul = get_state(iul, state_handle)
@@ -2621,10 +2659,10 @@ else
                              dx *wrf%dom(id)%phb(ur(1), ur(2), k) ) )  / gravity
             
             ! Interpolation for GZ field at level k+1
-            ill = new_dart_ind(ll(1), ll(2), k(1)+1, wrf%dom(id)%type_gz, id)
-            iul = new_dart_ind(ul(1), ul(2), k(1)+1, wrf%dom(id)%type_gz, id)
-            ilr = new_dart_ind(lr(1), lr(2), k(1)+1, wrf%dom(id)%type_gz, id)
-            iur = new_dart_ind(ur(1), ur(2), k(1)+1, wrf%dom(id)%type_gz, id)
+            ill = get_dart_vector_index(ll(1), ll(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            iul = get_dart_vector_index(ul(1), ul(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            ilr = get_dart_vector_index(lr(1), lr(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            iur = get_dart_vector_index(ur(1), ur(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
 
             x_ill = get_state(ill, state_handle)
             x_iul = get_state(iul, state_handle)
@@ -3575,7 +3613,7 @@ end subroutine get_wrf_horizontal_location
 !***********************************************************************
 
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
 !-----------------------------------------------------------------
 ! Writes the model-specific attributes to a netCDF file
 ! A. Caya May 7 2003
@@ -3584,6 +3622,7 @@ function nc_write_model_atts( ncFileID ) result (ierr)
 logical, parameter :: write_precip = .false.
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
+logical, intent(out) :: model_mod_writes_state_variables
 integer              :: ierr          ! return value of function
 
 !-----------------------------------------------------------------
@@ -3635,6 +3674,7 @@ logical               :: debug = .false.
 !-----------------------------------------------------------------
 
 ierr = 0     ! assume normal termination
+model_mod_writes_state_variables = .true. 
 
 !-----------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file, 
@@ -4329,7 +4369,7 @@ do id=1,num_domains
 
       if ( debug ) write(*,*) 'Defining variable ',varname
 
-      if ( wrf%dom(id)%var_size(3,my_index) > 1 ) then ! 3D variable
+      if ( wrf%dom(id)%var_size(3,ind) > 1 ) then ! 3D variable
 
          dimids_3D(4:5) = (/MemberDimID,unlimitedDimID/)
 
@@ -4349,11 +4389,11 @@ do id=1,num_domains
          ! vertical dimension can be stag, unstag, or staggered soil
          ! need to use if/then/else instead of select because testing
          ! is against variables
-         if ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%bts ) then
+         if ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%bts ) then
            dimids_3D(3)=btStagDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%bt ) then
+         elseif ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%bt ) then
            dimids_3D(3)=btDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%sls ) then
+         elseif ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%sls ) then
            dimids_3D(3)=slSDimID(id)
          else
            write(errstring,*)'Could not determine dim_id for vertical dimension to output variable '//varname
@@ -4389,22 +4429,22 @@ do id=1,num_domains
 
       endif ! 3D or 2D
 
-      unitsval = trim(wrf%dom(id)%units(my_index))
+      unitsval = trim(wrf%dom(id)%units(ind))
 
       call nc_check(nf90_put_att(ncFileID, var_id, "units", trim(unitsval)), &
                  'nc_write_model_atts','put_att '//varname//' units')
 
-      descriptionval = trim(wrf%dom(id)%description(my_index))
+      descriptionval = trim(wrf%dom(id)%description(ind))
 
       call nc_check(nf90_put_att(ncFileID, var_id, "description", trim(descriptionval)), &
                  'nc_write_model_atts','put_att '//varname//' description')
 
-      long_nameval = trim(wrf%dom(id)%description(my_index))
+      long_nameval = trim(wrf%dom(id)%description(ind))
 
       call nc_check(nf90_put_att(ncFileID, var_id, "long_name", trim(long_nameval)), &
                  'nc_write_model_atts','put_att '//varname//' long_name')
 
-      coordinatesval = trim(wrf%dom(id)%coordinates(my_index))
+      coordinatesval = trim(wrf%dom(id)%coordinates(ind))
       if (coordinatesval(1:7) .eq. 'XLONG_U') then
         coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
       else if (coordinatesval(1:7) .eq. 'XLONG_V') then
@@ -4680,7 +4720,8 @@ end subroutine adv_1step
 !**********************************************
 
 subroutine end_model()
-! nothing to do, which is fine.
+
+deallocate(domain_id)
 
 end subroutine end_model
 
@@ -4947,10 +4988,10 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t 
 
    if ( wrf%dom(id)%type_ps >= 0 ) then
 
-      ill = new_dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps, id)
-      ilr = new_dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps, id)
-      iul = new_dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps, id)
-      iur = new_dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps, id)
+      ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_ps)
 
       x_ill = get_state(ill, state_handle)
       x_ilr = get_state(ilr, state_handle)
@@ -5338,8 +5379,8 @@ if (wrf%dom(id)%type_qv < 0 .or. wrf%dom(id)%type_t < 0) then
        source, revision, revdate)
 endif
 
-iqv = new_dart_ind(i,j,k,wrf%dom(id)%type_qv, id)
-it  = new_dart_ind(i,j,k,wrf%dom(id)%type_t, id)
+iqv = get_dart_vector_index(i,j,k, domain_id(id), wrf%dom(id)%type_qv)
+it  = get_dart_vector_index(i,j,k, domain_id(id), wrf%dom(id)%type_t)
 
 x_iqv = get_state(iqv, state_handle)
 x_it  = get_state(it, state_handle)
@@ -5379,12 +5420,12 @@ if ( wrf%dom(id)%type_mu < 0 .and. wrf%dom(id)%type_ps < 0 ) then
 endif
 
 if ( wrf%dom(id)%type_ps >= 0 ) then
-   ips = new_dart_ind(i,j,1,wrf%dom(id)%type_ps, id)
+   ips = get_dart_vector_index(i,j,1, domain_id(id), wrf%dom(id)%type_ps)
    x_ips = scalar(get_state(ips, state_handle))
    model_pressure_s_distrib = x_ips
 
 else
-   imu = new_dart_ind(i,j,1,wrf%dom(id)%type_mu, id)
+   imu = get_dart_vector_index(i,j,1, domain_id(id), wrf%dom(id)%type_mu)
    x_imu = minval(get_state(imu, state_handle))
    model_pressure_s_distrib = wrf%dom(id)%p_top + wrf%dom(id)%mub(i,j) + x_imu
 
@@ -5616,9 +5657,9 @@ if (wrf%dom(id)%type_mu < 0 .or. wrf%dom(id)%type_gz < 0) then
        source, revision, revdate)
 endif
 
-imu   = new_dart_ind(i,j,1,  wrf%dom(id)%type_mu, id)
-iph   = new_dart_ind(i,j,k,  wrf%dom(id)%type_gz, id)
-iphp1 = new_dart_ind(i,j,k+1,wrf%dom(id)%type_gz, id)
+imu   = get_dart_vector_index(i,j,1,   domain_id(id), wrf%dom(id)%type_mu)
+iph   = get_dart_vector_index(i,j,k,   domain_id(id), wrf%dom(id)%type_gz)
+iphp1 = get_dart_vector_index(i,j,k+1, domain_id(id), wrf%dom(id)%type_gz)
 
 x_imu = get_state(imu, state_handle)
 x_iph = get_state(iph, state_handle)
@@ -5674,10 +5715,10 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz
 
    do k = 1, wrf%dom(id)%var_size(3,wrf%dom(id)%type_gz)
 
-      ill = new_dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_gz, id)
-      iul = new_dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_gz, id)
-      ilr = new_dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_gz, id)
-      iur = new_dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_gz, id)
+      ill = get_dart_vector_index(ll(1), ll(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      iul = get_dart_vector_index(ul(1), ul(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      ilr = get_dart_vector_index(lr(1), lr(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      iur = get_dart_vector_index(ur(1), ur(2), k, domain_id(id), wrf%dom(id)%type_gz)
 
       x_ill = get_state(ill, state_handle)
       x_ilr = get_state(ilr, state_handle)
@@ -5756,7 +5797,7 @@ endif
 ! If W-grid (on ZNW levels), then we are fine because it is native to GZ
 if( (var_type == wrf%dom(id)%type_w) .or. (var_type == wrf%dom(id)%type_gz) ) then
 
-   i1 = new_dart_ind(i,j,k,wrf%dom(id)%type_gz, id)
+   i1 = get_dart_vector_index(i,j,k, domain_id(id),wrf%dom(id)%type_gz)
    x_i1 = get_state(i1, state_handle)
 
    geop = minval((wrf%dom(id)%phb(i,j,k)+x_i1)/gravity)
@@ -5772,10 +5813,10 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at the seam in longitude, so take first and last mass points
-         i1 = new_dart_ind(i-1,j,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i-1,j,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(1,  j,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(1,  j,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i-1,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i-1,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(1,  j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(1,  j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5798,8 +5839,8 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       else
 
          ! If not periodic, then try extrapolating
-         i1 = new_dart_ind(i-1,j,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i-1,j,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i-1,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i-1,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5828,10 +5869,10 @@ elseif( var_type == wrf%dom(id)%type_u ) then
 
          ! We are at the seam in longitude, so take first and last mass points
          off = wrf%dom(id)%we
-         i1 = new_dart_ind(i  ,j,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i  ,j,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(off,j,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(off,j,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i  ,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i  ,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(off,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(off,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5853,8 +5894,8 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       else
 
          ! If not periodic, then try extrapolating
-         i1 = new_dart_ind(i,j,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i,j,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5878,8 +5919,8 @@ elseif( var_type == wrf%dom(id)%type_u ) then
 
    else
 
-      i1 = new_dart_ind(i,j,k  ,wrf%dom(id)%type_gz, id)
-      i2 = new_dart_ind(i,j,k+1,wrf%dom(id)%type_gz, id)
+      i1 = get_dart_vector_index(i,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+      i2 = get_dart_vector_index(i,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
 
       x_i1 = get_state(i1, state_handle)
       x_i2 = get_state(i2, state_handle)
@@ -5914,10 +5955,10 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         i1 = new_dart_ind(off,j-1,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(off,j-1,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(i  ,j-1,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(i  ,j-1,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(off,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(off,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i  ,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i  ,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5939,10 +5980,10 @@ elseif( var_type == wrf%dom(id)%type_v ) then
       else
 
          ! If not periodic, then try extrapolating
-         i1 = new_dart_ind(i,j-1,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i,j-1,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(i,j-2,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(i,j-2,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i,j-1,k ,  domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i,j-2,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i,j-2,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5972,10 +6013,10 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         i1 = new_dart_ind(off,j,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(off,j,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(i  ,j,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(i  ,j,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(off,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(off,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i  ,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i  ,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -5997,10 +6038,10 @@ elseif( var_type == wrf%dom(id)%type_v ) then
       else
 
          ! If not periodic, then try extrapolating
-         i1 = new_dart_ind(i,j  ,k  ,wrf%dom(id)%type_gz, id)
-         i2 = new_dart_ind(i,j  ,k+1,wrf%dom(id)%type_gz, id)
-         i3 = new_dart_ind(i,j+1,k  ,wrf%dom(id)%type_gz, id)
-         i4 = new_dart_ind(i,j+1,k+1,wrf%dom(id)%type_gz, id)
+         i1 = get_dart_vector_index(i,j  ,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j  ,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i,j+1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i,j+1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
          x_i1 = get_state(i1, state_handle)
          x_i2 = get_state(i2, state_handle)
@@ -6023,10 +6064,10 @@ elseif( var_type == wrf%dom(id)%type_v ) then
 
    else
 
-      i1 = new_dart_ind(i,j  ,k  ,wrf%dom(id)%type_gz, id)
-      i2 = new_dart_ind(i,j  ,k+1,wrf%dom(id)%type_gz, id)
-      i3 = new_dart_ind(i,j-1,k  ,wrf%dom(id)%type_gz, id)
-      i4 = new_dart_ind(i,j-1,k+1,wrf%dom(id)%type_gz, id)
+      i1 = get_dart_vector_index(i,j  ,k  , domain_id(id),wrf%dom(id)%type_gz)
+      i2 = get_dart_vector_index(i,j  ,k+1, domain_id(id),wrf%dom(id)%type_gz)
+      i3 = get_dart_vector_index(i,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+      i4 = get_dart_vector_index(i,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
       x_i1 = get_state(i1, state_handle)
       x_i2 = get_state(i2, state_handle)
@@ -6072,8 +6113,8 @@ elseif( var_type == wrf%dom(id)%type_t2  .or. &
 
 else
 
-   i1 = new_dart_ind(i,j,k  ,wrf%dom(id)%type_gz, id)
-   i2 = new_dart_ind(i,j,k+1,wrf%dom(id)%type_gz, id)
+   i1 = get_dart_vector_index(i,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+   i2 = get_dart_vector_index(i,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
    x_i1 = get_state(i1, state_handle)
    x_i2 = get_state(i2, state_handle)
@@ -6113,7 +6154,7 @@ if (wrf%dom(id)%type_gz < 0) then
        source, revision, revdate)
 endif
 
-i1 = new_dart_ind(i,j,k,wrf%dom(id)%type_gz, id)
+i1 = get_dart_vector_index(i,j,k, domain_id(id),wrf%dom(id)%type_gz)
 
 x_i1 = minval(get_state(i1, state_handle))
 
@@ -6122,12 +6163,17 @@ model_height_w_distrib = compute_geometric_height(geop, wrf%dom(id)%latitude(i, 
 
 end function model_height_w_distrib
 
+
 !#######################################################
 
+subroutine pert_model_copies(ens_handle, ens_size,  dummy_pert_amp, interf_provided)
 
-subroutine pert_model_state(state, pert_state, interf_provided)
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+real(r8),            intent(in)    :: dummy_pert_amp ! not used
+logical,             intent(out)   :: interf_provided
 
-! Perturbs a single model state for generating initial ensembles.
+! Perturbs model states for generating initial ensembles.
 ! Because this requires some care when using - see the comments in the
 ! code below - you must set a namelist variable to enable this functionality.
 
@@ -6139,19 +6185,22 @@ subroutine pert_model_state(state, pert_state, interf_provided)
 ! to evolve the ensemble members differently, which is the goal.
 !
 
-real(r8), intent(in)  :: state(:)
-real(r8), intent(out) :: pert_state(:)
-logical,  intent(out) :: interf_provided
-
 real(r8)              :: pert_amount = 0.005   ! 0.5%
 
 real(r8)              :: pert_ampl, range
 real(r8)              :: minv, maxv, temp
 type(random_seq_type) :: random_seq
 integer               :: id, i, j, s, e
-integer, save         :: counter = 0
+logical, allocatable  :: within_range(:)
+integer(i8), allocatable :: var_list(:)
+integer               :: num_variables
+real(r8), allocatable :: min_var(:), max_var(:)
+integer               :: start_ind, end_ind
+integer :: copy
+integer :: count
+logical :: bitwise_lanai
 
-! generally you do not want to just perturb a single state to begin an 
+! generally you do not want to just perturb a single state to begin an
 ! experiment, especially for a regional weather model, because the 
 ! resulting fields will have spread but they won't have organized features.
 ! we have had good luck with some global atmosphere models where there is
@@ -6177,16 +6226,123 @@ integer, save         :: counter = 0
 ! the code below to enable that functionality.
 
 if (.not. allow_perturbed_ics) then
-call error_handler(E_ERR,'pert_model_state', &
+call error_handler(E_ERR,'pert_model_copies', &
                      'starting WRF model from a single vector requires additional steps', &
                   source, revision, revdate, &
-                  text2='see comments in wrf/model_mod.f90::pert_model_state()')
+                  text2='see comments in wrf/model_mod.f90::pert_model_copies()')
 endif
 
 ! NOT REACHED unless allow_perturbed_ics is true in the namelist
 
 ! start of pert code
 interf_provided = .true.
+
+! Get min and max of each variable in each domain
+allocate(var_list(ens_handle%my_num_vars))
+
+num_variables = 0
+do id = 1, num_domains
+  num_variables = num_variables + wrf%dom(id)%number_of_wrf_variables
+enddo
+
+allocate(min_var(num_variables), max_var(num_variables))
+allocate(within_range(ens_handle%my_num_vars))
+
+do id = 1, num_domains
+   do i = 1, wrf%dom(id)%number_of_wrf_variables
+
+      start_ind = get_index_start(domain_id(id), i)
+      end_ind = get_index_end(domain_id(id), i)
+
+      call get_my_vars(ens_handle, var_list)
+      within_range =      var_list >= start_ind .and. var_list <= end_ind  ! &
+                    !.and. var_list >= start_domain .and. var_list <= end_domain
+      min_var(i) = minval(ens_handle%copies(1,:), MASK=within_range)
+      max_var(i) = maxval(ens_handle%copies(1,:), MASK=within_range)
+
+   enddo
+enddo
+
+call all_reduce_min_max(min_var, max_var, num_variables)
+
+bitwise_lanai = .true.
+if (bitwise_lanai) then
+
+   call pert_copies_lanai_bitwise(ens_handle, ens_size, pert_amount, min_var, max_var)
+
+else
+
+   call init_random_seq(random_seq, my_task_id())
+
+   count = 1 ! min and max are numbered 1 to n, where n is the total number of variables (all domains)
+   do id = 1, num_domains
+      do i = 1, num_variables
+
+         start_ind = get_index_start(domain_id(id), i)
+         end_ind = get_index_end(domain_id(id), i)
+
+         !! Option 1:
+         !! make the perturbation amplitude N% of the total
+         !! range of this variable.  values could vary a lot
+         !! over some of the types, like pressure
+         !range = max_var(count) - min_var(count)
+         !pert_ampl = pert_amount * range
+
+         do j=1, ens_handle%my_num_vars
+            if (ens_handle%my_vars(j) >= start_ind .and. ens_handle%my_vars(j) <= end_ind) then
+               do copy = 1, ens_size
+                  ! once you change pert_state, state is changed as well
+                  ! since they are the same storage as called from filter.
+                  ! you have to save it if you want to use it again.
+                  ! Option 2: perturb each value individually
+                  !! make the perturbation amplitude N% of this value
+                  pert_ampl = pert_amount * ens_handle%copies(copy, j)
+                  ens_handle%copies(copy, j) = random_gaussian(random_seq, ens_handle%copies(copy, j), pert_ampl)
+               enddo
+
+               ! keep variable from exceeding the original range
+               ens_handle%copies(1:ens_size,j) = max(min_var(count), ens_handle%copies(1:ens_size,j))
+               ens_handle%copies(1:ens_size,j) = min(max_var(count), ens_handle%copies(1:ens_size,j))
+
+            endif
+         enddo
+
+         count = count + 1
+
+      enddo
+   enddo
+
+endif
+
+end subroutine pert_model_copies
+
+!#######################################################
+!> Perturb copies such that the result is bitwise
+!> with Lanai
+!> Note that (like Lanai) this is not bitwise with itself across tasks
+!> for task_count < ens_size
+subroutine pert_copies_lanai_bitwise(ens_handle, ens_size, pert_amount, min_var, max_var)
+
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+real(r8),            intent(in)    :: pert_amount
+real(r8),             intent(in)    :: min_var(:)
+real(r8),             intent(in)    :: max_var(:)
+
+
+integer :: start_ind ! start index variable in state
+integer :: end_ind ! end index variable in state
+integer :: owner ! pe that owns the state element
+integer :: owner_index ! local index on pe
+integer :: copy_owner
+integer :: copy, id, i ! loop index
+integer(i8) :: j ! loop index
+integer :: count ! keep track of which variable you are perturbing
+real(r8) :: pert_ampl
+type(random_seq_type) :: random_seq(ens_size)
+integer :: sequence_to_use
+integer, allocatable :: counter(:)
+real(r8) :: random_number
 
 ! the first time through get the task id (0:N-1) and set a unique seed 
 ! per task.  this should reproduce from run to run if you keep the number
@@ -6201,66 +6357,73 @@ interf_provided = .true.
 ! members/task).  it is assuming there are no more than 1000 ensembles/task,
 ! which seems safe given the current sizes of state vecs and hardware memory.
 
-if (counter == 0) counter = ((my_task_id()+1) * 1000)
+!if (counter == 0) counter = ((my_task_id()+1) * 1000) ! this is the code in Lanai
+allocate(counter(task_count()))
 
-call init_random_seq(random_seq, counter)
-counter = counter + 1
+! initialize ens_size random number sequences
+counter(:) = 0
 
-! do the perturbation per domain, per variable type
-do id=1, num_domains
-   do i=1, wrf%dom(id)%number_of_wrf_variables
-      ! starting and ending indices in the linear state vect
-      s = wrf%dom(id)%var_index(1, i)
-      e = wrf%dom(id)%var_index(2, i)
-      ! original min/max data values of each type
-      minv = minval(state(s:e))
-      maxv = maxval(state(s:e))
-      !! Option 1:
-      !! make the perturbation amplitude N% of the total
-      !! range of this variable.  values could vary a lot
-      !! over some of the types, like pressure
-      !range = maxv - minv
-      !pert_ampl = pert_amount * range
-      do j=s, e
-         ! once you change pert_state, state is changed as well
-         ! since they are the same storage as called from filter.
-         ! you have to save it if you want to use it again.
-         temp = state(j)  ! original value
-         ! Option 2: perturb each value individually
-         !! make the perturbation amplitude N% of this value
-         pert_ampl = pert_amount * temp
-         pert_state(j) = random_gaussian(random_seq, state(j), pert_ampl)
-         ! keep it from exceeding the original range
-         pert_state(j) = max(minv, pert_state(j))
-         pert_state(j) = min(maxv, pert_state(j))
+
+do copy = 1, ens_size
+
+   call get_copy_owner_index(copy, owner, owner_index)
+   if (counter(owner+1)==0) counter(owner+1) = ((map_pe_to_task(ens_handle, owner)+1) * 1000)
+   call init_random_seq(random_seq(copy), counter(owner+1))
+   counter(owner+1) = counter(owner+1) + 1
+
+
+   count = 1 ! min_var and max_var are numbered 1 to n, where n is the total number of variables (all domains)
+
+   do id = 1, num_domains
+      do i = 1, wrf%dom(id)%number_of_wrf_variables
+
+         start_ind = get_index_start(domain_id(id), i)
+         end_ind = get_index_end(domain_id(id), i)
+
+         !! Option 1:
+         !! make the perturbation amplitude N% of the total
+         !! range of this variable.  values could vary a lot
+         !! over some of the types, like pressure
+         !range = max_var(count) - min_var(count)
+         !pert_ampl = pert_amount * range
+
+         do j = start_ind, end_ind
+
+            call get_var_owner_index(j, owner, owner_index)
+
+               ! once you change pert_state, state is changed as well
+               ! since they are the same storage as called from filter.
+               ! you have to save it if you want to use it again.
+               ! Option 2: perturb each value individually
+               !! make the perturbation amplitude N% of this value
+
+            ! pert_ampl is only important on the task that uses it, but need to keep
+            ! the random number sequence in the same order on each task (call the same amount of times)
+            pert_ampl = pert_amount * ens_handle%copies(copy, min(owner_index, ens_handle%my_num_vars))
+            random_number = random_gaussian(random_seq(copy), 0.0_r8, pert_ampl)
+
+            if (ens_handle%my_pe == owner) then
+
+               ens_handle%copies(copy, owner_index) = ens_handle%copies(copy, owner_index) + random_number
+
+               ! keep variable from exceeding the original range
+               ens_handle%copies(copy,owner_index) = max(min_var(count), ens_handle%copies(copy,owner_index))
+               ens_handle%copies(copy,owner_index) = min(max_var(count), ens_handle%copies(copy,owner_index))
+
+            endif
+         enddo
+
+
+         count = count + 1
+
       enddo
    enddo
+
 enddo
 
+deallocate(counter)
 
-end subroutine pert_model_state
-
-!#######################################################
-
-subroutine pert_model_copies(state_handle, pert_amp, interf_provided)
-
- type(ensemble_type), intent(inout) :: state_handle
- real(r8),  intent(in) :: pert_amp
- logical,  intent(out) :: interf_provided
-
-! Perturbs a model state copies for generating initial ensembles.
-! The perturbed state is returned in pert_state.
-! A model may choose to provide a NULL INTERFACE by returning
-! .false. for the interf_provided argument. This indicates to
-! the filter that if it needs to generate perturbed states, it
-! may do so by adding a perturbation to each model state 
-! variable independently. The interf_provided argument
-! should be returned as .true. if the model wants to do its own
-! perturbing of states.
-
-interf_provided = .false.
-
-end subroutine pert_model_copies
+end subroutine pert_copies_lanai_bitwise
 
 !#######################################################
 ! !WARNING:: at the moment, this code is *not* called
@@ -8206,7 +8369,7 @@ end subroutine get_variable_metadata_from_file
 
 !--------------------------------------------
 !--------------------------------------------
-
+! Note get_dart_vector_index depends on this function
 integer function get_type_ind_from_type_string(id, wrf_varname)
 
 ! simply loop through the state variable table to get the index of the
@@ -8565,10 +8728,10 @@ if ( in_state ) then
          print*, 'model_mod.f90 :: model_interpolate :: getCorners QNSNOW rc = ', rc
                
          ! Interpolation for QNSNOW field at level k
-         ill = new_dart_ind(ll(1), ll(2), uniquek(uk), wrf_type, id)
-         iul = new_dart_ind(ul(1), ul(2), uniquek(uk), wrf_type, id)
-         ilr = new_dart_ind(lr(1), lr(2), uniquek(uk), wrf_type, id)
-         iur = new_dart_ind(ur(1), ur(2), uniquek(uk), wrf_type, id)
+         ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf_type)
+         iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf_type)
+         ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf_type)
+         iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf_type)
 
          x_ill = get_state(ill, state_handle)
          x_iul = get_state(iul, state_handle)
@@ -8582,10 +8745,10 @@ if ( in_state ) then
          enddo
 
          ! Interpolation for QNSNOW field at level k+1
-         ill = new_dart_ind(ll(1), ll(2), uniquek(uk)+1, wrf_type, id)
-         iul = new_dart_ind(ul(1), ul(2), uniquek(uk)+1, wrf_type, id)
-         ilr = new_dart_ind(lr(1), lr(2), uniquek(uk)+1, wrf_type, id)
-         iur = new_dart_ind(ur(1), ur(2), uniquek(uk)+1, wrf_type, id)
+         ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf_type)
 
          x_ill = get_state(ill, state_handle)
          x_iul = get_state(iul, state_handle)
@@ -8654,10 +8817,10 @@ if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf_type ) .and. 
      print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
    
      ! Interpolation for the T2 field
-     ill = new_dart_ind(ll(1), ll(2), 1, wrf_surf_type, id)
-     iul = new_dart_ind(ul(1), ul(2), 1, wrf_surf_type, id)
-     ilr = new_dart_ind(lr(1), lr(2), 1, wrf_surf_type, id)
-     iur = new_dart_ind(ur(1), ur(2), 1, wrf_surf_type, id)
+     ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf_surf_type)
+     iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf_surf_type)
+     ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf_surf_type)
+     iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf_surf_type)
 
      x_ill = get_state(ill, state_handle)
      x_iul = get_state(iul, state_handle)
@@ -8760,50 +8923,6 @@ endif
 end subroutine obs_kind_in_state_vector
 
 !--------------------------------------------------------------------
-!> Aim: to replace the dart_ind array (which can be larger than the state vector)
-!> with a function. 
-function new_dart_ind(i, j, k, ind, domain)
-
-integer(i8) :: new_dart_ind
-integer     :: i, j, k, ind, domain ! info for the state element: x,y,z,type, domain
-integer     :: Ni, Nj, Nk, extra, types_below 
-integer(i8) :: sum_below
-integer     :: id ! domain loop type
-integer     :: ivar ! variable loop index
-
-! Find sum of all variable types below this one 
-sum_below = 0
-
-! I think you could do these two loops once at the start of the module and store 
-! the results in a look up table
-
-! sum up domains below
-do id = 1, domain -1
-   do ivar = 1, wrf%dom(id)%number_of_wrf_variables
-      sum_below = sum_below + wrf%dom(id)%var_size(1, ivar) * &
-                              wrf%dom(id)%var_size(2, ivar) * &
-                              wrf%dom(id)%var_size(3, ivar)
-      enddo
-enddo
-
-! sum up variables below
-do types_below = 1, ind - 1
-   sum_below = sum_below + wrf%dom(domain)%var_size(1, types_below) * &
-                           wrf%dom(domain)%var_size(2, types_below) * &
-                           wrf%dom(domain)%var_size(3, types_below)
-enddo
-
-Ni = wrf%dom(domain)%var_size(1, ind)
-Nj = wrf%dom(domain)%var_size(2, ind)
-Nk = wrf%dom(domain)%var_size(3, ind)
-
-extra = Ni * Nj * (k - 1) + Ni * (j - 1) + i
-
-new_dart_ind = sum_below + extra 
-
-end function new_dart_ind
-
-!--------------------------------------------------------------------
 !> pass the vertical localization coordinate to assim_tools_mod
 function query_vert_localization_coord()
 
@@ -8818,10 +8937,10 @@ end function query_vert_localization_coord
 !> model time for CESM format?
 function construct_file_name_in(stub, domain, copy)
 
-character(len=512), intent(in) :: stub
+character(len=256), intent(in) :: stub
 integer,            intent(in) :: domain
 integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
+character(len=256) :: construct_file_name_in
 
 !write(construct_file_name, '(A, i2.2, A, i2.2, A)') TRIM(stub), domain, '.', copy, '.nc'
 
@@ -8843,7 +8962,7 @@ end function construct_file_name_in
 !> read the time from the input file
 function read_model_time(filename)
 
-character(len=1024), intent(in) :: filename
+character(len=256),  intent(in) :: filename
 integer                         :: year, month, day, hour, minute, second
 integer                         :: ret !< netcdf return code
 integer                         :: ndims, dimids(2), ivtype, ncid, var_id

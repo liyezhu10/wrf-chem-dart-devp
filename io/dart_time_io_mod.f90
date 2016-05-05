@@ -1,8 +1,15 @@
-! Netcdf reading and writing dart model time
-! Temporary module for dart time.
-!> @todo should this go in state_vector_io_mod or io_filename_mod?
-module dart_time_io_mod
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
+module dart_time_io_mod
+!> \defgroup dart_time_io_mod dart_time_io_mod
+!> Netcdf reading and writing dart model time.
+!> Temporary module for dart time.
+!> @todo should this go in state_vector_io_mod or io_filename_mod?
+!> @{
 use types_mod,        only : r8, i8
 use time_manager_mod, only : time_type, set_time, get_time
 use utilities_mod,    only : nc_check
@@ -24,7 +31,6 @@ function read_model_time(filename)
 character(len=1024), intent(in) :: filename
 type(time_type) :: read_model_time
 
-integer :: ret !< netcdf return code
 integer :: ncid, dart_secsVarID, dart_daysVarID
 integer :: seconds, days
 
@@ -55,6 +61,7 @@ call nc_check( nf90_close(ncid) , 'read_model_time closing : ', filename)
 end function read_model_time
 
 !--------------------------------------------------------------------
+!> Write dart time to a netcdf file
 subroutine write_model_time(ncid, dart_time)
 
 integer,             intent(in) :: ncid
@@ -118,6 +125,6 @@ call nc_check( nf90_put_var(ncid, dart_secondsVarID, dart_seconds ), &
 end subroutine write_model_time
 
 !--------------------------------------------------------------------
-
+!> @}
 end module dart_time_io_mod
 

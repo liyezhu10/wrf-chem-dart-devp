@@ -1,4 +1,5 @@
 assim_model/assim_model_mod.f90
+adaptive_inflate/adaptive_inflate_mod.f90
 common/types_mod.f90
 location/threed_cartesian/xyz_location_mod.f90
 location/threed_sphere/location_mod.f90
@@ -23,5 +24,4 @@ sort/sort_mod.f90
 io/dart_time_io_mod.f90
 io/io_filenames_mod.f90
 io/copies_on_off_mod.f90
-io/direct_netcdf_no_mpi_mod.f90
-io/direct_netcdf_common_mod.f90
+io/direct_netcdf_mod.f90

@@ -40,9 +40,6 @@ module utilities_mod
 !      dump_unit_attributes    A debug routine that dumps out a long list of
 !                              attributes that can be queried from an open file unit.
 !
-!      print_version_number    Prints out a routine name and
-!                              version number to a specified unit
-!
 !      set_output       Set the status of printing.  Can be set on a per-task
 !                       basis if you are running with multiple tasks.
 !                       By default all warnings and errors print no matter
@@ -145,7 +142,7 @@ private
 
 ! module local data
 
-integer, parameter :: E_DBG = -1,   E_MSG = 0,  E_WARN = 1, E_ERR = 2
+integer, parameter :: E_DBG = -2,   E_MSG = -1,  E_ALLMSG = 0, E_WARN = 1, E_ERR = 2
 integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
 integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
@@ -165,7 +162,7 @@ public :: file_exist, get_unit, open_file, close_file, timestamp,           &
           initialize_utilities, finalize_utilities, dump_unit_attributes,   &
           find_namelist_in_file, check_namelist_read, do_nml_term,          &
           set_tasknum, set_output, do_output, set_nml_output, do_nml_file,  &
-          E_DBG, E_MSG, E_WARN, E_ERR, DEBUG, MESSAGE, WARNING, FATAL,      &
+          E_DBG, E_MSG, E_ALLMSG, E_WARN, E_ERR, DEBUG, MESSAGE, WARNING, FATAL,      &
           is_longitude_between, get_next_filename, ascii_file_format,       &
           set_filename_list, scalar
 
@@ -402,6 +399,8 @@ contains
          select case (TERMLEVEL)
              case (E_MSG)
                 ! do nothing
+             case (E_ALLMSG)
+                ! do nothing
              case (E_WARN)
                 ! do nothing
              case (E_ERR)
@@ -409,7 +408,7 @@ contains
              case default
                 print *, ' MESSAGE from initialize_utilities'
                 print *, ' namelist input of TERMLEVEL is ',TERMLEVEL
-                print *, ' possible values are ',E_MSG, E_WARN, E_ERR
+                print *, ' possible values are ',E_MSG, E_ALLMSG, E_WARN, E_ERR
                 if (TERMLEVEL < E_WARN ) TERMLEVEL = E_WARN
                 if (TERMLEVEL > E_ERR  ) TERMLEVEL = E_ERR
                 print *, ' using ',TERMLEVEL
@@ -793,6 +792,33 @@ select case(level)
         endif
       endif
 
+   case (E_ALLMSG)
+
+      if ( single_task ) then
+        write(     *     , *) trim(routine),' ', trim(text)
+        write(logfileunit, *) trim(routine),' ', trim(text)
+        if ( present(text2)) then
+           write(     *     , *) trim(routine),' ... ', trim(text2)
+           write(logfileunit, *) trim(routine),' ... ', trim(text2)
+        endif
+        if ( present(text3)) then
+           write(     *     , *) trim(routine),' ... ', trim(text3)
+           write(logfileunit, *) trim(routine),' ... ', trim(text3)
+        endif
+      else
+        write(taskstr, '(a,i5)' ) "PE ", task_number
+        write(     *     , *) trim(taskstr),': ',trim(routine),' ', trim(text)
+        write(logfileunit, *) trim(taskstr),': ',trim(routine),' ', trim(text)
+        if ( present(text2)) then
+           write(     *     , *) trim(taskstr),': ',trim(routine),' ... ', trim(text2)
+           write(logfileunit, *) trim(taskstr),': ',trim(routine),' ... ', trim(text2)
+        endif
+        if ( present(text3)) then
+           write(     *     , *) trim(taskstr),': ',trim(routine),' ... ', trim(text3)
+           write(logfileunit, *) trim(taskstr),': ',trim(routine),' ... ', trim(text3)
+        endif
+      endif
+
    case (E_DBG)
       if (print_debug) then
 
@@ -1012,46 +1038,6 @@ end subroutine error_handler
    endif
 
    end function open_file
-
-
-!#######################################################################
-
-
-   subroutine print_version_number (iunit, routine, version)
-
-! *** prints routine name and version number to a log file ***
-!
-!    in:  iunit    = unit number to direct output
-!         routine = routine name (character, max len=20)
-!         version = version name or number (character, max len=8)
-
-   integer,          intent(in) :: iunit
-   character(len=*), intent(in) :: routine, version
-
-   integer           :: n
-   character(len=20) :: myname
-   character(len=8)  :: vers
-
-   if ( .not. module_initialized ) call initialize_utilities
-   if ( .not. do_output_flag) return
-
-     n = min(len(routine),20); myname = adjustl(routine(1:n))
-     n = min(len(version), 8); vers   = adjustl(version(1:n))
-
-     if (iunit > 0) then
-         write (iunit,10) myname, vers
-     else
-         write (*,10) myname, vers
-     endif
-
-  10 format (/,60('-'),  &
-             /,10x, 'ROUTINE = ',a20, '  VERSION = ', a8, &
-             /,60('-'))
-
-! 10 format (/,1x, 12('>'), 1x, 'ROUTINE = ',a20, '  VERSION = ', a8, &
-!              1x, 12('<'),/)
-
-   end subroutine print_version_number
 
 
 !#######################################################################

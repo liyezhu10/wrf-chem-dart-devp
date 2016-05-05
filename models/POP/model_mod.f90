@@ -30,19 +30,20 @@ use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SALINITY, KIND_DRY_LAND,   &
                              KIND_SEA_SURFACE_HEIGHT, KIND_SEA_SURFACE_PRESSURE,&
                              KIND_POTENTIAL_TEMPERATURE, get_raw_obs_kind_index,&
                              get_raw_obs_kind_name, paramname_length 
-use mpi_utilities_mod, only: my_task_id
+use mpi_utilities_mod, only: my_task_id, task_count
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 use      dart_pop_mod, only: set_model_time_step,                              &
                              get_horiz_grid_dims, get_vert_grid_dim,           &
                              read_horiz_grid, read_topography, read_vert_grid, &
                              get_pop_restart_filename
 
-use ensemble_manager_mod,  only : ensemble_type
+use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_copy_owner_index, &
+                                  get_var_owner_index
 
 use distributed_state_mod, only : get_state
 
 use state_structure_mod,   only : add_domain, get_model_variable_indices, &
-                                  get_num_variables, get_ind1, get_indN,  &
+                                  get_num_variables, get_index_start, &
                                   get_num_dims, get_domain_size
 
 use dart_time_io_mod,      only : write_model_time
@@ -66,7 +67,6 @@ public :: get_model_size,                &
           init_conditions,               &
           nc_write_model_atts,           &
           nc_write_model_vars,           &
-          pert_model_state,              &
           pert_model_copies,             &
           get_close_maxdist_init,        &
           get_close_obs_init,            &
@@ -106,7 +106,7 @@ integer, parameter :: num_state_table_columns = 3
 ! larger than paramname_length = 32.
 character(len=paramname_length) :: variable_table( max_state_variables, num_state_table_columns )
 integer :: state_kinds_list( max_state_variables )
-logical :: update_list( max_state_variables )
+logical :: update_var_list( max_state_variables )
 
 ! identifiers for variable_table
 integer, parameter :: VAR_NAME_INDEX = 1
@@ -327,7 +327,7 @@ if (debug > 2) call write_grid_interptest() ! DEBUG only
 
 ! verify that the model_state_variables namelist was filled in correctly.  
 ! returns variable_table which has variable names, kinds and update strings.
-call verify_state_variables(model_state_variables, nfields, variable_table, state_kinds_list, update_list)
+call verify_state_variables(model_state_variables, nfields, variable_table, state_kinds_list, update_var_list)
 
 ! in spite of the staggering, all grids are the same size
 ! and offset by half a grid cell.  4 are 3D and 1 is 2D.
@@ -346,7 +346,9 @@ call dpth2pres(Nz, ZC, pressure)
 call init_interp()
 
 !> @todo 'pop.r.nc' is hardcoded in dart_pop_mod.f90
-domain_id = add_domain('pop.r.nc', nfields, variable_table(1:nfields, VAR_NAME_INDEX))
+domain_id = add_domain('pop.r.nc', nfields, &
+                       var_names = variable_table(1:nfields, VAR_NAME_INDEX), &
+                       update_list = update_var_list(1:nfields))
 
 model_size = get_domain_size(domain_id)
 if (do_output()) write(*,*) 'model_size = ', model_size
@@ -877,10 +879,10 @@ SELECT CASE (obs_type)
          KIND_U_CURRENT_COMPONENT,   &
          KIND_V_CURRENT_COMPONENT,   &
          KIND_SEA_SURFACE_PRESSURE)
-      base_offset = get_ind1(domain_id, get_varid_from_kind(obs_type))
+      base_offset = get_index_start(domain_id, get_varid_from_kind(obs_type))
 
    CASE (KIND_SEA_SURFACE_HEIGHT)
-      base_offset = get_ind1(domain_id, get_varid_from_kind(KIND_SEA_SURFACE_PRESSURE))
+      base_offset = get_index_start(domain_id, get_varid_from_kind(KIND_SEA_SURFACE_PRESSURE))
       convert_to_ssh = .TRUE. ! simple linear transform of PSURF
 
    CASE DEFAULT
@@ -1847,8 +1849,9 @@ end subroutine end_model
 
 !------------------------------------------------------------------
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
  integer, intent(in)  :: ncFileID      ! netCDF file identifier
+ logical, intent(out) :: model_mod_writes_state_variables
  integer              :: ierr          ! return value of function
 
 ! TJH -- Writes the model-specific attributes to a netCDF file.
@@ -1924,6 +1927,7 @@ integer  :: model_size_i4 ! this is for checking model_size
 if ( .not. module_initialized ) call static_init_model
 
 ierr = -1 ! assume things go poorly
+model_mod_writes_state_variables = .true. 
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
@@ -2474,61 +2478,14 @@ end function nc_write_model_vars
 
 !------------------------------------------------------------------
 
-subroutine pert_model_state(state, pert_state, interf_provided)
- real(r8), intent(in)  :: state(:)
- real(r8), intent(out) :: pert_state(:)
- logical,  intent(out) :: interf_provided
+subroutine pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provided)
 
-! Perturbs a model state for generating initial ensembles.
-! The perturbed state is returned in pert_state.
-! A model may choose to provide a NULL INTERFACE by returning
-! .false. for the interf_provided argument. This indicates to
-! the filter that if it needs to generate perturbed states, it
-! may do so by adding a perturbation to each model state 
-! variable independently. The interf_provided argument
-! should be returned as .true. if the model wants to do its own
-! perturbing of states.
+ type(ensemble_type), intent(inout) :: state_ens_handle
+ integer,             intent(in)    :: ens_size
+ real(r8),            intent(in)    :: pert_amp
+ logical,             intent(out)   :: interf_provided
 
-integer     :: var_type
-integer(i8) :: i 
-
-logical, save :: random_seq_init = .false.
-
-if ( .not. module_initialized ) call static_init_model
-
-interf_provided = .true.
-
-! Initialize my random number sequence
-if(.not. random_seq_init) then
-   call init_random_seq(random_seq, my_task_id())
-   random_seq_init = .true.
-endif
-
-! only perturb the actual ocean cells; leave the land and
-! ocean floor values alone.
-do i=1,size(state)
-   call get_state_kind_inc_dry(i, var_type)
-   if (var_type /= KIND_DRY_LAND) then
-      pert_state(i) = random_gaussian(random_seq, state(i), &
-                                      model_perturbation_amplitude)
-   else
-      pert_state(i) = state(i)
-   endif
-enddo
-
-
-end subroutine pert_model_state
-
-!------------------------------------------------------------------
-
-subroutine pert_model_copies(state_handle, pert_amp, interf_provided)
-
- type(ensemble_type), intent(inout) :: state_handle
- real(r8),  intent(in) :: pert_amp
- logical,  intent(out) :: interf_provided
-
-! Perturbs a model state copies for generating initial ensembles.
-! The perturbed state is returned in pert_state.
+! Perturbs state copies for generating initial ensembles.
 ! A model may choose to provide a NULL INTERFACE by returning
 ! .false. for the interf_provided argument. This indicates to
 ! the filter that if it needs to generate perturbed states, it
@@ -2540,35 +2497,94 @@ subroutine pert_model_copies(state_handle, pert_amp, interf_provided)
 integer     :: var_type
 integer     :: j,i 
 integer(i8) :: dart_index
+real(r8)    :: random_number
 
-logical, save :: random_seq_init = .false.
+! Storage for a random sequence for perturbing a single initial state
+type(random_seq_type) :: random_seq
+logical :: lanai_bitwise
 
 if ( .not. module_initialized ) call static_init_model
 
 interf_provided = .true.
+lanai_bitwise = .true.
 
-! Initialize my random number sequence
-if(.not. random_seq_init) then
+if (lanai_bitwise) then
+   call pert_model_copies_bitwise_lanai(state_ens_handle, ens_size)
+else
+
+   ! Initialize random number sequence
    call init_random_seq(random_seq, my_task_id())
-   random_seq_init = .true.
+
+   ! only perturb the actual ocean cells; leave the land and
+   ! ocean floor values alone.
+   do i=1,state_ens_handle%my_num_vars
+      dart_index = state_ens_handle%my_vars(i)
+      call get_state_kind_inc_dry(dart_index, var_type)
+      do j=1, ens_size
+         if (var_type /= KIND_DRY_LAND) then
+            state_ens_handle%copies(j,i) = random_gaussian(random_seq, &
+               state_ens_handle%copies(j,i), &
+               model_perturbation_amplitude)
+   
+         endif
+      enddo
+   enddo
+
 endif
 
-! only perturb the actual ocean cells; leave the land and
-! ocean floor values alone.
-do i=1,state_handle%my_num_vars
-   dart_index = state_handle%my_vars(i)
-   call get_state_kind_inc_dry(dart_index, var_type)
-   do j=1,state_handle%num_copies
-      if (var_type /= KIND_DRY_LAND) then
-         state_handle%copies(j,i) = random_gaussian(random_seq, & 
-            state_handle%copies(j,i), &
-            pert_amp)
-   
-      endif
-   enddo
-enddo
 
 end subroutine pert_model_copies
+
+!------------------------------------------------------------------
+!> Perturb the state such that the perturbation is bitwise with
+!> a perturbed Lanai.
+!> Note:
+!> * This is not bitwise with itself (like Lanai) if task_count < ens_size
+!> * This is very slow because you have a loop around the length of the
+!> state inside a loop around the ensemble.
+!> If a task has more than one copy then the random number
+!> sequence continues from the end of one copy to the start of the other.
+subroutine pert_model_copies_bitwise_lanai(ens_handle, ens_size)
+
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+
+type(random_seq_type) :: r(ens_size)
+integer     :: i ! loop variable
+integer(i8) :: j ! loop variable
+real(r8)    :: random_number
+integer     :: var_type
+integer     :: sequence_to_use
+integer     :: owner, owners_index
+integer     :: copy_owner
+
+do i = 1, min(ens_size, task_count())
+   call init_random_seq(r(i), map_pe_to_task(ens_handle,i-1)) ! my_task_id in Lanai
+   sequence_to_use = i 
+enddo
+
+
+do i = 1, ens_size
+
+   call get_copy_owner_index(i, copy_owner, owners_index) ! owners index not used. Distribution type 1
+   sequence_to_use = copy_owner + 1
+   do j = 1, ens_handle%num_vars
+
+      call get_state_kind_inc_dry(j, var_type)
+
+      if(var_type /= KIND_DRY_LAND) then
+         random_number = random_gaussian(r(sequence_to_use), 0.0_r8, model_perturbation_amplitude)
+         call get_var_owner_index(j, owner, owners_index)
+         if (ens_handle%my_pe==owner) then
+            ens_handle%copies(i, owners_index) = ens_handle%copies(i, owners_index) + random_number
+         endif
+      endif
+
+   enddo
+
+enddo
+
+end subroutine pert_model_copies_bitwise_lanai
 
 !------------------------------------------------------------------
 
@@ -2884,7 +2900,7 @@ if (dim2 /= Ny) then
    call error_handler(E_ERR,'vector_to_2d_prog_var',msgstring,source,revision,revdate) 
 endif
 
-ii = get_ind1(domain_id, varindex)
+ii = get_index_start(domain_id, varindex)
 
 do j = 1,Ny   ! latitudes
 do i = 1,Nx   ! longitudes
@@ -2931,7 +2947,7 @@ if (dim3 /= Nz) then
    call error_handler(E_ERR,'vector_to_3d_prog_var',msgstring,source,revision,revdate) 
 endif
 
-ii = get_ind1(domain_id, varindex)
+ii = get_index_start(domain_id, varindex)
 
 do k = 1,Nz   ! vertical
 do j = 1,Ny   ! latitudes
@@ -3285,8 +3301,8 @@ if(hstatus /= 0) then
    return
 endif
 
-offset_salt = get_ind1(domain_id, get_varid_from_kind(KIND_SALINITY))
-offset_temp = get_ind1(domain_id, get_varid_from_kind(KIND_POTENTIAL_TEMPERATURE))
+offset_salt = get_index_start(domain_id, get_varid_from_kind(KIND_SALINITY))
+offset_temp = get_index_start(domain_id, get_varid_from_kind(KIND_POTENTIAL_TEMPERATURE))
 
 ! salinity - in msu (kg/kg).  converter will want psu (g/kg).
 call do_interp(state_handle, ens_size, offset_salt, hgt_bot, hgt_top, hgt_fract, llon, llat, &
@@ -3557,10 +3573,10 @@ end subroutine dpth2pres
 !> construct restart file name for reading
 function construct_file_name_in(stub, domain, copy)
 
-character(len=512), intent(in) :: stub
+character(len=256), intent(in) :: stub
 integer,            intent(in) :: domain
 integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
+character(len=256) :: construct_file_name_in
 
 ! stub is found in input.nml io_filename_nml
 ! restart files typically are of the form
@@ -3575,7 +3591,7 @@ end function construct_file_name_in
 !> Stolen from pop model_mod.f90 restart_to_sv
 function read_model_time(filename)
 
-character(len=1024) :: filename
+character(len=256) :: filename
 type(time_type) :: read_model_time
 
 
@@ -3649,13 +3665,13 @@ end subroutine vert_convert
 !>
 !>    netcdf_variable_name ; dart_kind_string ; update_string
 !>
-subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_list )
+subroutine verify_state_variables( state_variables, ngood, table, kind_list, update_var )
 
 character(len=*),  intent(inout) :: state_variables(:)
 integer,           intent(out) :: ngood
 character(len=*),  intent(out) :: table(:,:)
 integer,           intent(out) :: kind_list(:)   ! kind number
-logical, optional, intent(out) :: update_list(:) ! logical update
+logical, optional, intent(out) :: update_var(:) ! logical update
 
 integer :: nrows, i
 character(len=NF90_MAX_NAME) :: varname, dartstr, update
@@ -3701,12 +3717,12 @@ MyLoop : do i = 1, nrows
    
    ! Make sure the update variable has a valid name
 
-   if ( present(update_list) )then
+   if ( present(update_var) )then
       SELECT CASE (update)
          CASE ('UPDATE')
-            update_list(i) = .true.
+            update_var(i) = .true.
          CASE ('NO_COPY_BACK')
-            update_list(i) = .false.
+            update_var(i) = .false.
          CASE DEFAULT
             write(string1,'(A)')  'only UPDATE or NO_COPY_BACK supported in model_state_variable namelist'
             write(string2,'(6A)') 'you provided : ', trim(varname), ', ', trim(dartstr), ', ', trim(update)
