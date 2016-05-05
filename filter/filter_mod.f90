@@ -24,6 +24,8 @@ use obs_def_mod,           only : obs_def_type, get_obs_def_error_variance, get_
 use obs_def_utilities_mod, only : set_debug_fwd_op
 use time_manager_mod,      only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                   operator(-), print_time
+use location_mod,          only : location_type
+use obs_kind_mod,          only : KIND_OBS_ERR_TEMPERATURE
 use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
                                   logfileunit, nmlfileunit, timestamp,  &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
@@ -244,6 +246,13 @@ logical                 :: ds, all_gone, allow_missing
 
 ! real(r8), allocatable   :: temp_ens(:) ! for smoother
 real(r8), allocatable   :: prior_qc_copy(:)
+! JPH needed to mess with certain parts of the ensemble state vector
+integer(i8), allocatable    :: my_var_indices(:)
+integer                 :: my_num_vars
+integer                 :: my_var_kind
+integer                 :: ivar
+real(r8), allocatable   :: parameter_ens(:)
+type(location_type)     :: parameter_loc
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -460,6 +469,14 @@ time_step_number = -1
 curr_ens_time = set_time(0, 0)
 next_ens_time = set_time(0, 0)
 call filter_set_window_time(window_time)
+
+! JPH figure out my variables and allocate
+my_num_vars = get_my_num_vars(state_ens_handle)
+allocate(my_var_indices(my_num_vars))
+call get_my_vars(state_ens_handle,my_var_indices)
+
+! JPH allocate space for a single parameter ensemble
+allocate(parameter_ens(ens_size))
 
 AdvanceTime : do
    call trace_message('Top of main advance time loop')
@@ -722,6 +739,22 @@ AdvanceTime : do
 
 !-------- End of posterior  inflate ----------------
 
+!RLP via JPH reset parameter distributions
+   call trace_message('Before adjusting parameter distributions')
+   call create_state_window(state_ens_handle)
+      do ivar = 1, my_num_vars
+          call get_state_meta_data(state_ens_handle,my_var_indices(ivar),parameter_loc,my_var_kind)
+
+          if ( my_var_kind == KIND_OBS_ERR_TEMPERATURE ) then 
+            parameter_ens = state_ens_handle%copies(1:ens_size,ivar)
+            call rescale_parameter_variance(parameter_ens,       &    
+                                            my_var_indices(ivar),ens_size)
+            state_ens_handle%copies(1:ens_size,ivar) = parameter_ens
+          endif ! parameter we want?
+     
+      enddo  ! my variables
+
+   call free_state_window(state_ens_handle, obs_fwd_op_ens_handle, qc_ens_handle)
 
    call     trace_message('Before computing posterior observation values')
    call timestamp_message('Before computing posterior observation values')

@@ -547,7 +547,7 @@ if (close_obs_caching) then
    num_close_obs_calls_made    = 0
    num_close_states_calls_made = 0
 endif
-
+open(800,file='check-asstool.txt')
 ! Loop through all the (global) observations sequentially
 SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
@@ -589,8 +589,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if(ens_handle%my_pe == owner) then
       ! need to convert global to local obs number
       vert_obs_loc_in_localization_coord = get_vert(my_obs_loc(owners_index))
-
       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
+!RLP 
       ! Only value of 0 for DART QC field should be assimilated
       IF_QC_IS_OKAY: if(nint(obs_qc) ==0) then
          obs_prior = obs_ens_handle%copies(1:ens_size, owners_index)
@@ -842,6 +842,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
        call get_close_obs(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
          num_close_states, close_state_ind, close_state_dist, ens_handle)
+         if(base_obs_loc%vloc == 1362 .and. base_obs_type == 89) then 
+           print*,'RLPasstool1'     
+         endif
    else
       if (base_obs_loc == last_base_states_loc) then
          num_close_states    = last_num_close_states
@@ -853,6 +856,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          call get_close_obs(gc_state, base_obs_loc, base_obs_type, my_state_loc, &
                   my_state_kind, num_close_states, close_state_ind,&
                   close_state_dist, ens_handle)
+         !if(base_obs_loc%vloc == 1362 .and. base_obs_type == 89) then
+         !  print*,'RLPasstool2'     
+         !endif
          !finish = MPI_WTIME()
 
          last_base_states_loc     = base_obs_loc
@@ -870,7 +876,12 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    ! Loop through to update each of my state variables that is potentially close
    STATE_UPDATE: do j = 1, num_close_states
       state_index = close_state_ind(j)
-
+!RLP
+      if(my_state_kind(state_index) == 43 .and. my_state_loc(state_index)%vloc == base_obs_loc%vloc) then
+        write(800,*)j,state_index,my_state_kind(state_index),base_obs_type
+        write(800,*)my_state_loc(state_index)%vloc, base_obs_loc%vloc 
+      !write(800,*)'j',j,my_state_kind(j),my_state_loc(j)%vloc,close_state_dist(state_index)
+      endif
       if ( allow_missing_in_clm ) then
          ! Some models can take evasive action if one or more of the ensembles have
          ! a missing value. Generally means 'do nothing' (as opposed to DIE)
