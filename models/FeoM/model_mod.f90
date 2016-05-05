@@ -2047,28 +2047,56 @@ end function year_from_filename
 subroutine write_model_time(time_filename, model_time, adv_to_time)
  character(len=*), intent(in)           :: time_filename
  type(time_type),  intent(in)           :: model_time
- type(time_type)                        :: new_model_time
  type(time_type),  intent(in), optional :: adv_to_time
 
 integer :: iunit
-character(len=19) :: timestring
-type(time_type)   :: deltatime
+type(time_type) :: deltatime
+type(time_type) :: new_model_time, assim_start, assim_end
+integer :: seconds, days
 
 iunit = open_file(time_filename, action='write')
 
-new_model_time=increment_time(model_time, 0, 1)
-timestring = time_to_string(new_model_time)
-print*, "overwriting new model time : ", timestring
-write(iunit, '(A)') timestring
-call print_time(new_model_time,'Model time in FeoM_time :',  iunit)
+deltatime = set_time(assimilation_period_seconds, assimilation_period_days)
+
+new_model_time = model_time + deltatime
+assim_start    = new_model_time - deltatime/2 + set_time(1,0)
+assim_end      = new_model_time + deltatime/2
+
+call get_time(new_model_time, seconds, days)
+string1='init_time_days    = '
+write(iunit,'(A, I)')trim(string1), days
+string1='init_time_seconds    = '
+write(iunit,'(A, I)')trim(string1), seconds
+
+call get_time(assim_start, seconds, days)
+string1='first_obs_days    = '
+write(iunit,'(A, I)')trim(string1), days
+string1='first_obs_seconds    = '
+write(iunit,'(A, I)')trim(string1), seconds
+
+call get_time(assim_end, seconds, days)
+string1='last_obs_days    = '
+write(iunit,'(A, I)')trim(string1), days
+string1='last_obs_seconds    = '
+write(iunit,'(A, I)')trim(string1), seconds
+
+string2 = time_to_string(new_model_time)
+
+print*, "overwriting new model time : ", trim(string2)
+write(iunit, '(A)') trim(string2)
+
+call print_time(new_model_time,'FeoM    stop at :',  iunit)
+call print_time(    model_time,'FeoM current at :',  iunit)
+call print_date(new_model_time,'stop date is :',  iunit)
+call print_date(    model_time,'current date :',  iunit)
 
 if (present(adv_to_time)) then
-   timestring = time_to_string(adv_to_time)
-   write(iunit, '(A)') timestring
+   string1 = time_to_string(adv_to_time)
+   write(iunit, '(A)') trim(string1)
 
    deltatime = adv_to_time - model_time
-   timestring = time_to_string(deltatime, interval=.true.)
-   write(iunit, '(A)') timestring
+   string1 = time_to_string(deltatime, interval=.true.)
+   write(iunit, '(A)') trim(string1)
 endif
 
 call close_file(iunit)
