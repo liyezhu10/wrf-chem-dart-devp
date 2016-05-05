@@ -48,7 +48,8 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
                                   copies_in_window, set_num_extra_copies, get_allow_transpose, &
                                   all_copies_to_all_vars, allocate_single_copy,               &
-                                  get_single_copy, put_single_copy, deallocate_single_copy
+                                  get_single_copy, put_single_copy, deallocate_single_copy,   &
+                                  get_my_num_vars, get_my_vars
 use adaptive_inflate_mod,  only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                   do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                   do_obs_inflate, adaptive_inflate_type,                      &
@@ -65,6 +66,7 @@ use smoother_mod,          only : smoother_read_restart, advance_smoother,      
 
 use random_seq_mod,        only : random_seq_type, init_random_seq, random_gaussian
 
+use distributed_state_mod, only : create_state_window, free_state_window
 use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state
 
 use io_filenames_mod,      only : io_filenames_init, file_info_type
@@ -74,6 +76,8 @@ use state_structure_mod,   only : static_init_state_type
 use forward_operator_mod,  only : get_obs_ens_distrib_state
 use quality_control_mod,   only : initialize_qc
 
+!RLP
+use model_mod,             only : rescale_parameter_variance, get_state_meta_data
 use state_space_diag_mod,  only : filter_state_space_diagnostics, netcdf_file_type, &
                                   init_diag_output, finalize_diag_output,           &
                                   skip_diag_files
