@@ -163,6 +163,7 @@ type(random_seq_type) :: random_seq
 ! needed for the get_close code.
 type(xyz_get_close_type)             :: cc_gc
 type(xyz_location_type), allocatable :: cell_locs(:)
+logical :: search_initialized = .false.
 
 
 ! compile-time control over whether grid information is written to the
@@ -5648,7 +5649,6 @@ integer               :: find_closest_cell_center
 
 type(xyz_location_type) :: pointloc
 integer :: closest_cell, rc
-logical, save :: search_initialized = .false.
 
 ! do this exactly once.
 if (.not. search_initialized) then
@@ -5678,8 +5678,9 @@ end function find_closest_cell_center
 subroutine finalize_closest_center()
 
 ! get rid of storage associated with GC for cell centers.
+! assuming we actually did initialize it in the first place.
 
-call xyz_get_close_obs_destroy(cc_gc)
+if (search_initialized) call xyz_get_close_obs_destroy(cc_gc)
 
 end subroutine finalize_closest_center
 
