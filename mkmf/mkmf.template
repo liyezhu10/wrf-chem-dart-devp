@@ -130,14 +130,15 @@ LD = ifort
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -L/opt/local/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhdf5 -lz -lm
 #FFLAGS  = -O $(INCS) -prof-gen=srcpos
-#FFLAGS  = -O $(INCS) 
+#FFLAGS  = -O $(INCS) -convert big_endian
+#FFLAGS  = -O $(INCS) -assume buffered_io -convert big_endian
 #FFLAGS  = -O $(INCS) -warn argument_checking,declarations,uncalled,unused 
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
 FFLAGS = -g -C -check noarg_temp_created -fpe0 -vec-report0 \
          -fp-model precise  -ftrapuv -traceback -convert big_endian $(INCS)
-
+#
 #          -warn argument_checking,declarations,uncalled,unused $(INCS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise

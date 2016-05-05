@@ -4705,7 +4705,6 @@ elseif (vert_is_level(obs_loc)) then
    ! Pobs end
 
 elseif (vert_is_pressure(obs_loc)) then
-print *, 'in vert_is_pressure'
       call get_val_pressure(st_vec,lon_ind_below,lat_ind_below,lon_lat_lev(3),obs_kind,vals(1,1),vstatus)
    if (vstatus /= 1) &
       call get_val_pressure(st_vec,lon_ind_below,lat_ind_above,lon_lat_lev(3),obs_kind,vals(1,2),vstatus)
@@ -4713,7 +4712,6 @@ print *, 'in vert_is_pressure'
       call get_val_pressure(st_vec,lon_ind_above,lat_ind_below,lon_lat_lev(3),obs_kind,vals(2,1),vstatus)
    if (vstatus /= 1) &
       call get_val_pressure(st_vec,lon_ind_above,lat_ind_above,lon_lat_lev(3),obs_kind,vals(2,2),vstatus)
-print *, 'vstatus: ', vstatus
 
 elseif (vert_is_height(obs_loc)) then
       call get_val_height(st_vec, lon_ind_below, lat_ind_below, lon_lat_lev(3), obs_loc, obs_kind, vals(1,1), vstatus)
@@ -4931,7 +4929,7 @@ call plevs_cam(p_surf, num_levs, p_col)
 if (pressure <= p_col(1) .or. pressure >= p_col(num_levs)) then
    ! Exclude obs below the model's lowest level and above the highest level
    ! We *could* possibly use ps and p(num_levs) to interpolate for points below the lowest level.
-print *, 'excluded because not between ', p_col(1), pressure, p_col(num_levs)
+!print *, 'excluded because not between ', p_col(1), pressure, p_col(num_levs)
    return
 endif
 
@@ -5677,20 +5675,16 @@ end subroutine model_convert_vert_obs
 !> @param[in]    kind_list(:)
 !> The generic DART KINDs of the locations
 !> 
-!> @param[in]    indx_list(:)
-!> The integer offsets into the state vector for each location
-!> 
 !> @param[in]   vertical_localization_coordinate
 !> The suggested vertical to return.  The model_mod can ignore this if there
 !> is a good reason, otherwise this is the vertical that should be returned.
 
 
-subroutine model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+subroutine model_convert_vert_state(item_count, loc_list, kind_list, vertical_localization_coordinate)
 
 integer,             intent(in)    :: item_count
 type(location_type), intent(inout) :: loc_list(item_count)
 integer,             intent(in)    :: kind_list(item_count)
-integer,             intent(in)    :: indx_list(item_count)
 integer,             intent(in)    :: vertical_localization_coordinate
 
 integer  :: i, base_which, local_base_which

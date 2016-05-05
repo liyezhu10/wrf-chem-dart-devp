@@ -504,9 +504,10 @@ end do
 ! this if they have a good reason.  this is called on every task, even
 ! those without a copy of the state, and only one task has a copy of
 ! the ensemble mean, so the model is going to have to have saved a copy
-! of the ens_mean to do the convert.
-call convert_vert_obs(obs_ens_handle%my_num_vars, my_obs_loc(:), my_obs_kind(:), vertical_localization_coordinate)
-call convert_vert_state(ens_handle%my_num_vars, my_state_loc(:), my_state_kind(:), my_state_indx(:), vertical_localization_coordinate)
+! of the ens_mean to do the convert.  obs is getting specific types;
+! states are getting generic kinds
+call convert_vert_obs(obs_ens_handle%my_num_vars, my_obs_loc(:), my_obs_type(:), vertical_localization_coordinate)
+call convert_vert_state(ens_handle%my_num_vars, my_state_loc(:), my_state_kind(:), vertical_localization_coordinate)
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
 ! INCREMENTS. OWNING PE WOULD SHIP IT'S PRIOR TO THIS ONE

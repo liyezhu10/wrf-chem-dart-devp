@@ -1255,15 +1255,14 @@ end subroutine convert_vert_obs
 
 !--------------------------------------------------------------------
 
-subroutine convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+subroutine convert_vert_state(item_count, loc_list, kind_list, vertical_localization_coordinate)
 
 integer,             intent(in)    :: item_count
 type(location_type), intent(inout) :: loc_list(item_count)
 integer,             intent(in)    :: kind_list(item_count)
-integer,             intent(in)    :: indx_list(item_count)
 integer,             intent(in)    :: vertical_localization_coordinate
 
-call model_convert_vert_state(item_count, loc_list, kind_list, indx_list, vertical_localization_coordinate)
+call model_convert_vert_state(item_count, loc_list, kind_list, vertical_localization_coordinate)
 
 end subroutine convert_vert_state
 
