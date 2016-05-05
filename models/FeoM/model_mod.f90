@@ -191,13 +191,9 @@ character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_ta
 
 namelist /feom_vars_nml/ feom_state_variables, feom_state_bounds
 
-! FIXME: this shouldn't be a global.  the progvar array
-! should be allocated at run time and nfields should be part
-! of a larger derived type that includes nfields and an array
-! of progvartypes.
-integer :: nfields
-
 ! Everything needed to describe a variable
+
+integer :: nfields
 
 type progvartype
    private
@@ -1703,7 +1699,7 @@ PROGVARLOOP : do ivar=1, nfields
    where(dimIDs == TimeDimID) mystart = TimeDimLength
    where(dimIDs == TimeDimID) mycount = 1   ! only the latest one
 
-   if (debug > 0) then
+   if (debug > 2) then
       write(string1,*)'..  '//trim(varname)//' start is ',mystart(1:ncNdims)
       write(string3,*)        trim(varname)//' count is ',mycount(1:ncNdims)
       call error_handler(E_MSG,'statevector_to_analysis_file',string1,text2=string3)
@@ -1812,7 +1808,7 @@ if (dimsize == 1) then
          if ( minval(array_1d) < range(1) ) then
             write(string1, *) 'min data val = ', minval(array_1d), &
                               'min data bounds = ', range(1)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
@@ -1829,7 +1825,7 @@ if (dimsize == 1) then
          if ( maxval(array_1d) > range(2) ) then
             write(string1, *) 'max data val = ', maxval(array_1d), &
                               'max data bounds = ', range(2)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
@@ -1841,7 +1837,7 @@ if (dimsize == 1) then
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
                       minval(array_1d), maxval(array_1d)
-   call error_handler(E_MSG, '', string1, source,revision,revdate)
+   call error_handler(E_MSG,'do_clamping',string1,source,revision,revdate)
 
 else if (dimsize == 2) then
    if (.not. present(array_2d)) then
@@ -1856,7 +1852,7 @@ else if (dimsize == 2) then
          if ( minval(array_2d) < range(1) ) then
             write(string1, *) 'min data val = ', minval(array_2d), &
                               'min data bounds = ', range(1)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
@@ -1873,7 +1869,7 @@ else if (dimsize == 2) then
          if ( maxval(array_2d) > range(2) ) then
             write(string1, *) 'max data val = ', maxval(array_2d), &
                               'max data bounds = ', range(2)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
@@ -1885,7 +1881,7 @@ else if (dimsize == 2) then
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
                       minval(array_2d), maxval(array_2d)
-   call error_handler(E_MSG, '', string1, source,revision,revdate)
+   call error_handler(E_MSG,'do_clamping',string1,source,revision,revdate)
 
 else if (dimsize == 3) then
    if (.not. present(array_3d)) then
@@ -1900,7 +1896,7 @@ else if (dimsize == 3) then
          if ( minval(array_3d) < range(1) ) then
             write(string1, *) 'min data val = ', minval(array_3d), &
                               'min data bounds = ', range(1)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed lower bounds check.', &
                          source,revision,revdate)
          endif
@@ -1917,7 +1913,7 @@ else if (dimsize == 3) then
          if ( maxval(array_3d) > range(2) ) then
             write(string1, *) 'max data val = ', maxval(array_3d), &
                               'max data bounds = ', range(2)
-            call error_handler(E_ERR, 'statevector_to_analysis_file', &
+            call error_handler(E_ERR, 'do_clamping', &
                         'Variable '//trim(varname)//' failed upper bounds check.', &
                          source,revision,revdate, text2=string1)
          endif
@@ -1929,11 +1925,11 @@ else if (dimsize == 3) then
 
    write(string1, '(A,A32,2F16.7)') 'BOUND min/max ', trim(varname), &
                       minval(array_3d), maxval(array_3d)
-   call error_handler(E_MSG, '', string1, source,revision,revdate)
+   call error_handler(E_MSG,'do_clamping',string1,source,revision,revdate)
 
 else
    write(string1, *) 'dimsize of ', dimsize, ' found where only 1-3 expected'
-   call error_handler(E_MSG, 'do_clamping', 'Internal error, should not happen', &
+   call error_handler(E_MSG,'do_clamping','Internal error, should not happen', &
                       source,revision,revdate, text2=string1)
 endif   ! dimsize
 
@@ -1950,16 +1946,14 @@ function get_analysis_time( ncid, filename )
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: filename
 type(time_type)              :: get_analysis_time
-type(time_type)              :: model_advance_forecast, model_start_time
-integer                      :: model_year
 
 ! local variables
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, idims
 integer           :: VarID, numdims
-integer           :: secs
+integer           :: model_year
+type(time_type)   :: model_advance_forecast, model_start_time
 
-!#character(len=64) :: timestring
-real(r8),allocatable          :: timearray(:)
+real(r8), allocatable :: timearray(:)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2023,21 +2017,17 @@ if ( .not. module_initialized ) call static_init_model
 
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
-   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
+   call error_handler(E_ERR,'year_from_filename',string1,source,revision,revdate)
 endif
 
-! find the first number and use that as the start of the string conversion
+! find the first "period" and use that as the start of the string conversion
 i = scan(filename, ".")
-print*, "scan i: ", i, "filename is: ", trim(filename)
 if (i <= 0) then
    write(string1,*) 'cannot find time string in name ', trim(filename)
-   call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
+   call error_handler(E_ERR,'year_from_filename',string1,source,revision,revdate)
 endif
 
-! We try to get the year from the filename
 year_from_filename = string_to_time(filename(i+1:i+4))
-
-print*, 'Year is: ', filename(i+1:i+4)
 
 end function year_from_filename
 
@@ -2054,7 +2044,7 @@ type(time_type) :: deltatime
 type(time_type) :: new_model_time, assim_start, assim_end
 integer :: seconds, days
 
-iunit = open_file(time_filename, action='write')
+iunit = open_file(time_filename, form='formatted', action='write')
 
 deltatime = set_time(assimilation_period_seconds, assimilation_period_days)
 
@@ -2062,32 +2052,37 @@ new_model_time = model_time + deltatime
 assim_start    = new_model_time - deltatime/2 + set_time(1,0)
 assim_end      = new_model_time + deltatime/2
 
+! By writing the days,seconds to strings with a free-format write,
+! you can avoid any decision about formatting precision.
+! The '(A)' syntax avoids printing the quotes delimiting the string
+
 call get_time(new_model_time, seconds, days)
-string1='init_time_days    = '
-write(iunit,'(A, I)')trim(string1), days
-string1='init_time_seconds    = '
-write(iunit,'(A, I)')trim(string1), seconds
+write(string1,*) days
+write(string2,*) seconds
+write(iunit,'(A,A)') ' init_time_days     = ',trim(string1)
+write(iunit,'(A,A)') ' init_time_seconds  = ',trim(string2)
 
 call get_time(assim_start, seconds, days)
-string1='first_obs_days    = '
-write(iunit,'(A, I)')trim(string1), days
-string1='first_obs_seconds    = '
-write(iunit,'(A, I)')trim(string1), seconds
+write(string1,*) days
+write(string2,*) seconds
+write(iunit,'(A,A)') ' first_obs_days     = ',trim(string1)
+write(iunit,'(A,A)') ' first_obs_seconds  = ',trim(string2)
 
 call get_time(assim_end, seconds, days)
-string1='last_obs_days    = '
-write(iunit,'(A, I)')trim(string1), days
-string1='last_obs_seconds    = '
-write(iunit,'(A, I)')trim(string1), seconds
+write(string1,*) days
+write(string2,*) seconds
+write(iunit,'(A,A)') ' last_obs_days      = ',trim(string1)
+write(iunit,'(A,A)') ' last_obs_seconds   = ',trim(string2)
 
 string2 = time_to_string(new_model_time)
 
-print*, "overwriting new model time : ", trim(string2)
+call error_handler(E_MSG,'write_model_time:','next model time should be '//trim(string2))
+
 write(iunit, '(A)') trim(string2)
 
 call print_time(new_model_time,'FeoM    stop at :',  iunit)
 call print_time(    model_time,'FeoM current at :',  iunit)
-call print_date(new_model_time,'stop date is :',  iunit)
+call print_date(new_model_time,'stop    date :',  iunit)
 call print_date(    model_time,'current date :',  iunit)
 
 if (present(adv_to_time)) then
@@ -2189,15 +2184,12 @@ end function time_to_string
 
 function string_to_time(s)
 
-
 character(len=*), intent(in) :: s
 integer                      :: string_to_time
 
 integer :: iyear
 
-
-print*, 'the year string is: ', s
-read( s ,'(i4)') iyear
+read(s,'(i4)') iyear
 
 if (iyear < 1601) then
    write(string1,*)'WARNING: Converting YEAR ',iyear,' to ',iyear+1601
@@ -2268,7 +2260,7 @@ where(coord_nod3D(1,:) < 0.0_r8) &
 ! convert depths from negative to positive.
 ! the 1D depths array has positive depths.
 ! the observations in the WOD have positive depths.
-coord_nod3D(3,:) = coord_nod3D(3,:) * -1.0_r8
+coord_nod3D(3,:) = -1.0_r8 * coord_nod3D(3,:)
 
 !>@ TODO there are a lot of variables allocated in the feom_modules.f90
 !        that are not needed. For memory-efficiency, we should deallocate
@@ -2301,7 +2293,7 @@ call get_close_obs_init(cc_gc, nCells, cell_locations)
 close_structure_allocated = .true.
 
 if (debug > 5) &
-   call error_handler(E_MSG,'init_closest_center','get close lookup table initialized')
+   call error_handler(E_MSG,'read_grid','get close lookup table initialized')
 
 if (debug > 1) then
    write(string1,*)'nCells      is ', nCells
@@ -2336,11 +2328,11 @@ character(len=NF90_MAX_NAME) :: dimname
 integer :: VarID, numdims, dimlen, i
 
 call nc_check(nf90_inq_varid(ncid, varname, VarID), &
-              'read_from_nc_file', &
+              'read_2d_from_nc_file', &
               'inq_varid '//trim(varname)//' '//trim(model_analysis_filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'read_from_nc_file', &
+              'read_2d_from_nc_file', &
               'inquire '//trim(varname)//' '//trim(model_analysis_filename))
 
 do i=1, numdims
@@ -2360,7 +2352,7 @@ enddo
 call nc_check( nf90_get_var(ncid, VarID, data, &
                start=mystart(1:numdims), count=mycount(1:numdims)), &
               'read_2d_from_nc_file', &
-              'get_var u '//trim(model_analysis_filename))
+              'get_var '//trim(varname)//' '//trim(model_analysis_filename))
 
 end subroutine read_2d_from_nc_file
 
@@ -2785,7 +2777,7 @@ write(string1, '(A,A32,2F16.7)') 'data  min/max ', trim(progvar(ivar)%varname), 
            minval(x(progvar(ivar)%index1:progvar(ivar)%indexN)), &
            maxval(x(progvar(ivar)%index1:progvar(ivar)%indexN))
 
-call error_handler(E_MSG, '', string1, source,revision,revdate)
+call error_handler(E_MSG,'print_minmax', string1, source,revision,revdate)
 
 end subroutine print_minmax
 

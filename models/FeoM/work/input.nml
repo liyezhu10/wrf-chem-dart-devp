@@ -183,7 +183,7 @@
    /
 
 &model_nml
-   model_analysis_filename = '/glade/p/work/thoar/DART/feom/models/FeoM/FEOMMESH/ENS01.2009.oce.nc'
+   model_analysis_filename = 'ENS01.2009.oce.nc'
    output_state_vector          = .true., 
    assimilation_period_days     = 0
    assimilation_period_seconds  = 86400
@@ -206,14 +206,13 @@
 #                'temperature',      'KIND_POTENTIAL_TEMPERATURE'
 
 &model_to_dart_nml
-   model_to_dart_output_file = filter_ics.0001
-   print_data_ranges=.false.
+   model_to_dart_output_file = 'filter_ics.0001'
+   print_data_ranges         = .false.
   /
 
 &dart_to_model_nml
-   dart_to_model_input_file = filter_restart.0001
-   advance_time_present     = .false.
-  / 
+   dart_to_model_input_file = 'filter_restart.0001'
+  /
 
 &utilities_nml
    TERMLEVEL = 1
