@@ -144,9 +144,6 @@ real(r8), parameter :: radius = 6371229.0 ! meters
 ! roundoff error
 real(r8), parameter :: roundoff = 1.0e-12_r8
 
-! Storage for a random sequence for perturbing a single initial state
-type(random_seq_type) :: random_seq
-
 ! Structure for computing distances to cell centers, and assorted arrays
 ! needed for the get_close code.
 
@@ -157,8 +154,15 @@ real(r8),            allocatable :: depths(:)
 
 type(get_close_type)  :: cc_gc
 
+integer, parameter :: MAX_STATE_VARIABLES = 80
+integer, parameter :: NUM_STATE_TABLE_COLUMNS = 5
+integer, parameter :: VARNAME_INDEX = 1
+integer, parameter ::    KIND_INDEX = 2
+integer, parameter ::  MINVAL_INDEX = 3
+integer, parameter ::  MAXVAL_INDEX = 4
+integer, parameter :: REPLACE_INDEX = 5
+
 ! variables which are in the module namelist
-!integer            :: vert_localization_coord = VERTISHEIGHT
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
@@ -166,30 +170,19 @@ logical            :: output_state_vector = .true.  ! output prognostic variable
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
-
-! DART state vector contents
-integer, parameter :: max_state_variables = 80
-integer, parameter :: num_state_table_columns = 2
-integer, parameter :: num_bounds_table_columns = 4
-character(len=NF90_MAX_NAME) :: feom_state_variables(max_state_variables * num_state_table_columns ) = ' '
-!todo FIXME : use the state bounds to clamp variables out of range
-character(len=NF90_MAX_NAME) :: feom_state_bounds(num_bounds_table_columns, max_state_variables ) = ' '
+character(len=NF90_MAX_NAME) :: variables(MAX_STATE_VARIABLES * NUM_STATE_TABLE_COLUMNS ) = ' '
 
 namelist /model_nml/             &
    model_analysis_filename,      &
    output_state_vector,          &
-   !#! vert_localization_coord,      &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
    calendar,                     &
-   feom_state_variables,         &
-   feom_state_bounds,            &
+   variables,                    &
    debug
 
-character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_table_columns )
-
-namelist /feom_vars_nml/ feom_state_variables, feom_state_bounds
+character(len=NF90_MAX_NAME) :: variable_table(MAX_STATE_VARIABLES, NUM_STATE_TABLE_COLUMNS )
 
 ! Everything needed to describe a variable
 
@@ -214,9 +207,10 @@ type progvartype
    logical  :: clamping     ! does variable need to be range-restricted before
    real(r8) :: range(2)     ! being stuffed back into FeoM analysis file.
    logical  :: out_of_range_fail  ! is out of range fatal if range-checking?
+   logical  :: replace      ! does variable need to be stuffed back info FeoM
 end type progvartype
 
-type(progvartype), dimension(max_state_variables) :: progvar
+type(progvartype), dimension(MAX_STATE_VARIABLES) :: progvar
 
 ! Grid parameters - the values will be read from an FeoM analysis file.
 
@@ -245,11 +239,6 @@ INTERFACE prog_var_to_vector
       MODULE PROCEDURE prog_var_1d_to_vector
       MODULE PROCEDURE prog_var_2d_to_vector
       MODULE PROCEDURE prog_var_3d_to_vector
-END INTERFACE
-
-INTERFACE get_index_range
-      MODULE PROCEDURE get_index_range_int
-      MODULE PROCEDURE get_index_range_string
 END INTERFACE
 
 !------------------------------------------------
@@ -305,6 +294,7 @@ integer :: ncid, VarID, numdims, varsize, dimlen
 integer :: iunit, io, ivar, i, index1, indexN
 integer :: ss, dd
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
+real(r8) :: lower_bound, upper_bound
 
 if ( module_initialized ) return ! only need to do this once.
 
@@ -351,7 +341,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 ! Compile the list of model variables to use in the creation
 ! of the DART state vector. Required to determine model_size.
 !
-! Verify all variables are in the model analysis file
+! parse and verify all variables are in the model analysis file
 !
 ! Compute the offsets into the state vector for the start of each
 ! different variable type. Requires reading shapes from the model
@@ -362,7 +352,7 @@ call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
 call nc_check( nf90_open(trim(model_analysis_filename), NF90_NOWRITE, ncid), &
                   'static_init_model', 'open '//trim(model_analysis_filename))
 
-call verify_state_variables( feom_state_variables, ncid, model_analysis_filename, &
+call parse_variable_input( variables, ncid, model_analysis_filename, &
                              nfields, variable_table )
 
 TimeDimID = FindTimeDimension( ncid )
@@ -384,8 +374,8 @@ index1  = 1;
 indexN  = 0;
 do ivar = 1, nfields
 
-   varname                   = trim(variable_table(ivar,1))
-   kind_string               = trim(variable_table(ivar,2))
+   varname                   = trim(variable_table(ivar,VARNAME_INDEX))
+   kind_string               = trim(variable_table(ivar,   KIND_INDEX))
    progvar(ivar)%varname     = varname
    progvar(ivar)%kind_string = kind_string
    progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
@@ -393,6 +383,8 @@ do ivar = 1, nfields
    progvar(ivar)%numvertical = 1
    progvar(ivar)%dimlens     = MISSING_I
    progvar(ivar)%numcells    = MISSING_I
+   progvar(ivar)%replace     = .true.
+   progvar(ivar)%out_of_range_fail = .false.  ! FIXME ... not used
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
 
@@ -448,13 +440,35 @@ do ivar = 1, nfields
 
    enddo DimensionLoop
 
-   ! this call sets: clamping, bounds, and out_of_range_fail in the progvar entry
-!   call get_variable_bounds(feom_state_bounds, ivar)
+   progvar(ivar)%varsize = varsize
+   progvar(ivar)%index1  = index1
+   progvar(ivar)%indexN  = index1 + varsize - 1
+   index1                = index1 + varsize      ! sets up for next variable
 
-   progvar(ivar)%varsize     = varsize
-   progvar(ivar)%index1      = index1
-   progvar(ivar)%indexN      = index1 + varsize - 1
-   index1                    = index1 + varsize      ! sets up for next variable
+   ! resolve issues with bounded variables.
+
+   read(variable_table(ivar,MINVAL_INDEX),*,iostat=io)lower_bound
+   if (io /= 0) lower_bound = MISSING_R8
+
+   read(variable_table(ivar,MAXVAL_INDEX),*,iostat=io)upper_bound
+   if (io /= 0) upper_bound = MISSING_R8
+
+   progvar(ivar)%range = (/ lower_bound, upper_bound /)
+
+   if (lower_bound /= MISSING_R8 .or. upper_bound /= MISSING_R8) then
+      progvar(ivar)%clamping = .true.
+   endif
+
+   ! resolve issues with variables that may not need to be reinserted into FeoM
+
+   string1 = adjustl(variable_table(ivar,REPLACE_INDEX))
+   call to_upper(string1)
+
+   if (string1(1:2) /= 'UP') then
+      progvar(ivar)%replace = .false.
+   endif
+
+   ! print summary if desired.
 
    if ( debug > 1 ) call dump_progvar(ivar)
 
@@ -476,7 +490,9 @@ if (state_table_needed .and. debug > 99) call dump_tables()
 
 end subroutine static_init_model
 
+
 !------------------------------------------------------------------
+!>
 
 subroutine get_state_meta_data(index_in, location, var_type)
 
@@ -531,6 +547,7 @@ end subroutine get_state_meta_data
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
@@ -679,6 +696,7 @@ else                           ! somewhere in the water column
 endif
 
 end subroutine model_interpolate
+
 
 !-----------------------------------------------------------------------
 !>
@@ -954,6 +972,7 @@ end function nc_write_model_atts
 
 
 !------------------------------------------------------------------
+!>
 
 function nc_write_model_vars( ncFileID, state_vec, copyindex, timeindex ) result (ierr)
 
@@ -1149,6 +1168,10 @@ ierr = 0 ! If we got here, things went well.
 
 end function nc_write_model_vars
 
+
+!------------------------------------------------------------------
+!>
+
 function get_model_size()
 
 ! Returns the size of the model as an integer.
@@ -1164,6 +1187,7 @@ end function get_model_size
 
 
 !------------------------------------------------------------------
+!>
 
 function get_model_time_step()
 
@@ -1181,6 +1205,7 @@ end function get_model_time_step
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine ens_mean_for_model(filter_ens_mean)
 
@@ -1197,6 +1222,7 @@ end subroutine ens_mean_for_model
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine end_model()
 
@@ -1213,6 +1239,7 @@ end subroutine end_model
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine pert_model_state(state, pert_state, interf_provided)
 
@@ -1235,7 +1262,6 @@ real(r8)              :: minv, maxv, temp
 type(random_seq_type) :: random_seq
 integer               :: i, j, s, e
 integer, save         :: counter = 1
-
 
 ! generally you do not want to perturb a single state
 ! to begin an experiment - unless you make minor perturbations
@@ -1302,6 +1328,7 @@ end subroutine pert_model_state
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs_loc, obs_kind, num_close, close_ind, dist)
@@ -1336,6 +1363,7 @@ end subroutine get_close_obs
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine init_time(time)
 
@@ -1360,6 +1388,7 @@ end subroutine init_time
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine init_conditions(x)
 
@@ -1384,6 +1413,7 @@ end subroutine init_conditions
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine adv_1step(x, time)
 
@@ -1436,6 +1466,7 @@ end subroutine get_model_analysis_filename
 
 
 !-------------------------------------------------------------------
+!>
 
 subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 
@@ -1592,6 +1623,7 @@ end subroutine analysis_file_to_statevector
 
 
 !-------------------------------------------------------------------
+!>
 
 subroutine statevector_to_analysis_file(state_vector, filename, statetime)
 
@@ -1663,6 +1695,8 @@ endif
 
 done_winds = .false.
 PROGVARLOOP : do ivar=1, nfields
+
+   if ( .not. progvar(ivar)%replace ) cycle PROGVARLOOP
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
@@ -1773,13 +1807,15 @@ end subroutine statevector_to_analysis_file
 
 
 !------------------------------------------------------------------
+!>
 
-subroutine do_clamping(out_of_range_fail, range, dimsize, varname, array_1d, array_2d, array_3d)
- logical,          intent(in)    :: out_of_range_fail
- real(r8),         intent(in)    :: range(2)
- integer,          intent(in)    :: dimsize
- character(len=*), intent(in)    :: varname
- real(r8),optional,intent(inout) :: array_1d(:), array_2d(:,:), array_3d(:,:,:)
+subroutine do_clamping(out_of_range_fail, range, dimsize, varname, &
+                       array_1d, array_2d, array_3d)
+logical,          intent(in)    :: out_of_range_fail
+real(r8),         intent(in)    :: range(2)
+integer,          intent(in)    :: dimsize
+character(len=*), intent(in)    :: varname
+real(r8),optional,intent(inout) :: array_1d(:), array_2d(:,:), array_3d(:,:,:)
 
 ! for a given directive and range, do the data clamping for the given
 ! input array.  only one of the optional array args should be specified - the
@@ -1802,7 +1838,7 @@ if (dimsize == 1) then
    endif
 
    ! is lower bound set
-   if ( range(1) /= missing_r8 ) then
+   if ( range(1) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( minval(array_1d) < range(1) ) then
@@ -1819,7 +1855,7 @@ if (dimsize == 1) then
    endif ! min range set
 
    ! is upper bound set
-   if ( range(2) /= missing_r8 ) then
+   if ( range(2) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( maxval(array_1d) > range(2) ) then
@@ -1846,7 +1882,7 @@ else if (dimsize == 2) then
    endif
 
    ! is lower bound set
-   if ( range(1) /= missing_r8 ) then
+   if ( range(1) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( minval(array_2d) < range(1) ) then
@@ -1863,7 +1899,7 @@ else if (dimsize == 2) then
    endif ! min range set
 
    ! is upper bound set
-   if ( range(2) /= missing_r8 ) then
+   if ( range(2) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( maxval(array_2d) > range(2) ) then
@@ -1890,7 +1926,7 @@ else if (dimsize == 3) then
    endif
 
    ! is lower bound set
-   if ( range(1) /= missing_r8 ) then
+   if ( range(1) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( minval(array_3d) < range(1) ) then
@@ -1907,7 +1943,7 @@ else if (dimsize == 3) then
    endif ! min range set
 
    ! is upper bound set
-   if ( range(2) /= missing_r8 ) then
+   if ( range(2) /= MISSING_R8 ) then
 
       if ( out_of_range_fail ) then
          if ( maxval(array_3d) > range(2) ) then
@@ -1935,7 +1971,9 @@ endif   ! dimsize
 
 end subroutine do_clamping
 
+
 !------------------------------------------------------------------
+!>
 
 function get_analysis_time( ncid, filename )
 
@@ -1996,10 +2034,12 @@ if (do_output() .and. debug > 0) then
 endif
 
 deallocate(timearray)
+
 end function get_analysis_time
 
 
 !------------------------------------------------------------------
+!>
 
 function year_from_filename(filename)
 
@@ -2033,6 +2073,7 @@ end function year_from_filename
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine write_model_time(time_filename, model_time, adv_to_time)
  character(len=*), intent(in)           :: time_filename
@@ -2100,6 +2141,7 @@ end subroutine write_model_time
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine get_grid_dims(Cells, Vertices, Edges, VertLevels, VertexDeg)
 
@@ -2181,6 +2223,7 @@ end function time_to_string
 
 
 !------------------------------------------------------------------
+!>
 
 function string_to_time(s)
 
@@ -2205,6 +2248,7 @@ end function string_to_time
 
 
 !------------------------------------------------------------------
+!>
 
 function set_model_time_step()
 
@@ -2311,7 +2355,9 @@ grid_read = .true.
 
 end subroutine read_grid
 
+
 !------------------------------------------------------------------
+!>
 
 subroutine read_2d_from_nc_file(ncid, varname, data)
  integer,          intent(in)  :: ncid
@@ -2356,7 +2402,9 @@ call nc_check( nf90_get_var(ncid, VarID, data, &
 
 end subroutine read_2d_from_nc_file
 
+
 !------------------------------------------------------------------
+!>
 
 subroutine vector_to_1d_prog_var(x, ivar, data_1d_array)
 
@@ -2390,6 +2438,7 @@ end subroutine vector_to_1d_prog_var
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine vector_to_2d_prog_var(x, ivar, data_2d_array)
 
@@ -2425,6 +2474,7 @@ end subroutine vector_to_2d_prog_var
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine vector_to_3d_prog_var(x, ivar, data_3d_array)
 
@@ -2462,6 +2512,7 @@ end subroutine vector_to_3d_prog_var
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine prog_var_1d_to_vector(data_1d_array, x, ivar)
 
@@ -2495,6 +2546,7 @@ end subroutine prog_var_1d_to_vector
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine prog_var_2d_to_vector(data_2d_array, x, ivar)
 
@@ -2530,6 +2582,7 @@ end subroutine prog_var_2d_to_vector
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine prog_var_3d_to_vector(data_3d_array, x, ivar)
 
@@ -2567,21 +2620,26 @@ end subroutine prog_var_3d_to_vector
 
 
 !------------------------------------------------------------------
+!>
 
-subroutine verify_state_variables( state_variables, ncid, filename, ngood, table )
+subroutine parse_variable_input( state_variables, ncid, filename, ngood, table )
 
-character(len=*), dimension(:),   intent(in)  :: state_variables
-integer,                          intent(in)  :: ncid
-character(len=*),                 intent(in)  :: filename
-integer,                          intent(out) :: ngood
-character(len=*), dimension(:,:), intent(out) :: table
+character(len=*), intent(in)  :: state_variables(:)
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: filename
+integer,          intent(out) :: ngood
+character(len=*), intent(out) :: table(:,:)
 
-integer :: nrows, ncols, i, j, VarID
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME) :: varname, dimname
-character(len=NF90_MAX_NAME) :: dartstr
-integer :: dimlen, numdims
+character(len=NF90_MAX_NAME) :: dimname
+integer :: nrows, ncols, i, j, VarID, dimlen, numdims
 logical :: failure
+
+character(len=NF90_MAX_NAME) :: varname       ! column 1
+character(len=NF90_MAX_NAME) :: dartstr       ! column 2
+character(len=NF90_MAX_NAME) :: minvalstring  ! column 3
+character(len=NF90_MAX_NAME) :: maxvalstring  ! column 4
+character(len=NF90_MAX_NAME) :: state_or_aux  ! column 5
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2593,16 +2651,25 @@ ncols = size(table,2)
 ngood = 0
 MyLoop : do i = 1, nrows
 
-   varname    = trim(state_variables(2*i -1))
-   dartstr    = trim(state_variables(2*i   ))
-   table(i,1) = trim(varname)
-   table(i,2) = trim(dartstr)
+   varname      = trim(state_variables(NUM_STATE_TABLE_COLUMNS*i-4))
+   dartstr      = trim(state_variables(NUM_STATE_TABLE_COLUMNS*i-3))
+   minvalstring = trim(state_variables(NUM_STATE_TABLE_COLUMNS*i-2))
+   maxvalstring = trim(state_variables(NUM_STATE_TABLE_COLUMNS*i-1))
+   state_or_aux = trim(state_variables(NUM_STATE_TABLE_COLUMNS*i  ))
+
+   table(i,VARNAME_INDEX) = trim(varname)
+   table(i,   KIND_INDEX) = trim(dartstr)
+   table(i, MINVAL_INDEX) = trim(minvalstring)
+   table(i, MAXVAL_INDEX) = trim(maxvalstring)
+   table(i,REPLACE_INDEX) = trim(state_or_aux)
 
    if ( table(i,1) == ' ' .and. table(i,2) == ' ' ) exit MyLoop ! Found end of list.
 
-   if ( table(i,1) == ' ' .or. table(i,2) == ' ' ) then
-      string1 = 'feom_vars_nml:model state_variables not fully specified'
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+   if ( any(table(i,:) == ' ') ) then
+      string1 = '...  model_nml:"variables" not fully specified'
+      write(string2,*)'failing on line ',i
+      call error_handler(E_ERR, 'parse_variable_input', string1, &
+                 source, revision, revdate, text2=string2)
    endif
 
    ! Make sure variable exists in model analysis variable list
@@ -2610,19 +2677,19 @@ MyLoop : do i = 1, nrows
    write(string1,'(''variable '',a,'' in '',a)') trim(varname), trim(filename)
    write(string2,'(''there is no '',a)') trim(string1)
    call nc_check(NF90_inq_varid(ncid, trim(varname), VarID), &
-                 'verify_state_variables', trim(string2))
+                 'parse_variable_input', trim(string2))
 
    ! Make sure variable is defined by (Time,nCells) or (Time,nCells,vertical)
    ! unable to support Edges or Vertices at this time.
 
    call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-                 'verify_state_variables', 'inquire '//trim(string1))
+                 'parse_variable_input', 'inquire '//trim(string1))
 
    DimensionLoop : do j = 1,numdims
 
       write(string2,'(''inquire dimension'',i2,'' of '',a)') j,trim(string1)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(j), len=dimlen, name=dimname), &
-                                          'verify_state_variables', trim(string2))
+                                          'parse_variable_input', trim(string2))
       select case ( trim(dimname) )
          case ('T')
             ! supported - do nothing
@@ -2632,7 +2699,7 @@ MyLoop : do i = 1, nrows
             ! supported - do nothing
          case default
             write(string2,'(''unsupported dimension '',a,'' in '',a)') trim(dimname),trim(string1)
-            call error_handler(E_MSG,'verify_state_variables',string2,source,revision,revdate)
+            call error_handler(E_MSG,'parse_variable_input',string2,source,revision,revdate)
             failure = .TRUE.
       end select
 
@@ -2640,36 +2707,37 @@ MyLoop : do i = 1, nrows
 
    if (failure) then
        string2 = 'unsupported dimension(s) are fatal'
-       call error_handler(E_ERR,'verify_state_variables',string2,source,revision,revdate)
+       call error_handler(E_ERR,'parse_variable_input',string2,source,revision,revdate)
    endif
 
    ! Make sure DART kind is valid
 
    if( get_raw_obs_kind_index(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
+      call error_handler(E_ERR,'parse_variable_input',string1,source,revision,revdate)
    endif
 
    ! Record the contents of the DART state vector
 
    if (debug > 0) then
       write(string1,*)'variable ',i,' is ',trim(table(i,1)), ' ', trim(table(i,2))
-      call error_handler(E_MSG,'verify_state_variables',string1)
+      call error_handler(E_MSG,'parse_variable_input',string1)
    endif
 
    ngood = ngood + 1
 enddo MyLoop
 
 if (ngood == nrows) then
-   string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
+   string1 = 'WARNING: There is a possibility you need to increase ''MAX_STATE_VARIABLES'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'verify_state_variables',string1,text2=string2)
+   call error_handler(E_MSG,'parse_variable_input',string1,text2=string2)
 endif
 
-end subroutine verify_state_variables
+end subroutine parse_variable_input
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine dump_progvar(ivar)
 
@@ -2695,6 +2763,7 @@ integer,  intent(in)           :: ivar
 !%!    character(len=paramname_length) :: kind_string
 !%!    logical  :: clamping     ! does variable need to be range-restricted before
 !%!    real(r8) :: range(2)     ! being stuffed back into FeoM analysis file.
+!%!    logical  :: replace      ! does it need to be stuffed back into FeoM file.
 !%! end type progvartype
 
 integer :: i
@@ -2707,6 +2776,8 @@ write(logfileunit,*)
 write(     *     ,*)
 write(logfileunit,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
 write(     *     ,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
+write(logfileunit,*) '  replace     ',progvar(ivar)%replace
+write(     *     ,*) '  replace     ',progvar(ivar)%replace
 write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
 write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
 write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
@@ -2746,7 +2817,9 @@ write(     *     ,*)
 
 end subroutine dump_progvar
 
+
 !------------------------------------------------------------------
+!>
 
 subroutine print_variable_ranges(x)
 
@@ -2763,7 +2836,9 @@ enddo
 
 end subroutine print_variable_ranges
 
+
 !------------------------------------------------------------------
+!>
 
 subroutine print_minmax(ivar, x)
 
@@ -2783,6 +2858,7 @@ end subroutine print_minmax
 
 
 !------------------------------------------------------------------
+!>
 
 function FindTimeDimension(ncid) result(timedimid)
 
@@ -2800,96 +2876,9 @@ nc_rc = nf90_inq_dimid(ncid,'T',dimid=TimeDimID)
 
 end function FindTimeDimension
 
-!------------------------------------------------------------
-subroutine get_variable_bounds(bounds_table, ivar)
-
-! matches FeoM variable name in bounds table to assign
-! the bounds if they exist.  otherwise sets the bounds
-! to missing_r8
-!
-! SYHA (May-30-2013)
-! Adopted from wrf/model_mod.f90 after adding feom_state_bounds in feom_vars_nml.
-
-character(len=*), intent(in)  :: bounds_table(num_bounds_table_columns, max_state_variables)
-integer,          intent(in)  :: ivar
-
-! local variables
-character(len=50)             :: bounds_varname, bound
-character(len=10)             :: clamp_or_fail
-real(r8)                      :: lower_bound, upper_bound
-integer                       :: n
-
-n = 1
-do while ( trim(bounds_table(1,n)) /= 'NULL' .and. trim(bounds_table(1,n)) /= '' )
-
-   bounds_varname = trim(bounds_table(1,n))
-
-   if ( bounds_varname == trim(progvar(ivar)%varname) ) then
-
-        bound = trim(bounds_table(2,n))
-        if ( bound /= 'NULL' .and. bound /= '' ) then
-             read(bound,'(d16.8)') lower_bound
-        else
-             lower_bound = missing_r8
-        endif
-
-        bound = trim(bounds_table(3,n))
-        if ( bound /= 'NULL' .and. bound /= '' ) then
-             read(bound,'(d16.8)') upper_bound
-        else
-             upper_bound = missing_r8
-        endif
-
-        ! How do we want to handle out of range values?
-        ! Set them to predefined limits (clamp) or simply fail (fail).
-        clamp_or_fail = trim(bounds_table(4,n))
-        if ( clamp_or_fail == 'NULL' .or. clamp_or_fail == '') then
-             write(string1, *) 'instructions for CLAMP_or_FAIL on ', &
-                                trim(bounds_varname), ' are required'
-             call error_handler(E_ERR,'get_variable_bounds',string1, &
-                                source,revision,revdate)
-        else if ( clamp_or_fail == 'CLAMP' ) then
-             progvar(ivar)%out_of_range_fail = .FALSE.
-        else if ( clamp_or_fail == 'FAIL' ) then
-             progvar(ivar)%out_of_range_fail = .TRUE.
-        else
-             write(string1, *) 'last column must be "CLAMP" or "FAIL" for ', &
-                  trim(bounds_varname)
-             call error_handler(E_ERR,'get_variable_bounds',string1, &
-                  source,revision,revdate, text2='found '//trim(clamp_or_fail))
-        endif
-
-        ! Assign the clamping information into the variable
-        progvar(ivar)%clamping = .true.
-        progvar(ivar)%range    = (/ lower_bound, upper_bound /)
-
-        if (do_output() .and. debug > 0) then
-           write(*,*) 'In get_variable_bounds assigned ', trim(progvar(ivar)%varname)
-           write(*,*) ' clamping range  ',progvar(ivar)%range
-        endif
-
-        ! we found the progvar entry and set the values.  return here.
-        return
-   endif
-
-   n = n + 1
-
-enddo !n
-
-! we got through all the entries in the bounds table and did not
-! find any instructions for this variable.  set the values to indicate
-! we are not doing any processing when we write the updated state values
-! back to the model restart file.
-
-progvar(ivar)%clamping = .false.
-progvar(ivar)%range = missing_r8
-progvar(ivar)%out_of_range_fail = .false.  ! should be unused so setting shouldn't matter
-
-return
-
-end subroutine get_variable_bounds
 
 !------------------------------------------------------------
+!>
 
 subroutine define_var_dims(ncid,ivar, memberdimid, unlimiteddimid, ndims, dimids)
 
@@ -2929,70 +2918,7 @@ end subroutine define_var_dims
 
 
 !------------------------------------------------------------
-
-subroutine get_index_range_string(string,index1,indexN)
-
-! Determine where a particular DART kind (string) exists in the
-! DART state vector.
-
-character(len=*),  intent(in)  :: string
-integer,           intent(out) :: index1
-integer, optional, intent(out) :: indexN
-
-integer :: i
-
-index1 = 0
-if (present(indexN)) indexN = 0
-
-FieldLoop : do i=1,nfields
-   if (progvar(i)%kind_string /= trim(string)) cycle FieldLoop
-   index1 = progvar(i)%index1
-   if (present(indexN)) indexN = progvar(i)%indexN
-   exit FieldLoop
-enddo FieldLoop
-
-if (index1 == 0) then
-   write(string1,*) 'Problem, cannot find indices for '//trim(string)
-   call error_handler(E_ERR,'get_index_range_string',string1,source,revision,revdate)
-endif
-end subroutine get_index_range_string
-
-
-!------------------------------------------------------------------
-
-subroutine get_index_range_int(dartkind,index1,indexN)
-
-! Determine where a particular DART kind (integer) exists in the
-! DART state vector.
-
-integer,           intent(in)  :: dartkind
-integer,           intent(out) :: index1
-integer, optional, intent(out) :: indexN
-
-integer :: i
-character(len=paramname_length) :: string
-
-index1 = 0
-if (present(indexN)) indexN = 0
-
-FieldLoop : do i=1,nfields
-   if (progvar(i)%dart_kind /= dartkind) cycle FieldLoop
-   index1 = progvar(i)%index1
-   if (present(indexN)) indexN = progvar(i)%indexN
-   exit FieldLoop
-enddo FieldLoop
-
-string = get_raw_obs_kind_name(dartkind)
-
-if (index1 == 0) then
-   write(string1,*) 'Problem, cannot find indices for kind ',dartkind,trim(string)
-   call error_handler(E_ERR,'get_index_range_int',string1,source,revision,revdate)
-endif
-
-end subroutine get_index_range_int
-
-
-!------------------------------------------------------------------
+!>
 
 function get_progvar_index_from_kind(dartkind)
 
@@ -3015,6 +2941,7 @@ end function get_progvar_index_from_kind
 
 
 !------------------------------------------------------------------
+!>
 
 function get_index_from_varname(varname)
 
@@ -3038,7 +2965,9 @@ return
 
 end function get_index_from_varname
 
+
 !------------------------------------------------------------------
+!>
 
 !#! !>@todo FIXME : threed_cartesian/location assumes everything is in height
 !#!
@@ -3126,12 +3055,12 @@ end function get_index_from_varname
 !#! !$! zin     = llv_loc(3)
 !#! !$! !@>todo FIXME : this probably does not matter since everything is always in
 !#! !$! !> hight, some models have to do vertival conversion for incomming observations
-!#! !$! zout    = missing_r8
+!#! !$! zout    = MISSING_R8
 !#! !$!
 !#! !$! ! if the vertical is missing to start with, return it the same way
 !#! !$! ! with the requested type as out.
-!#! !$! if (zin == missing_r8) then
-!#! !$!    location = set_location(llv_loc(1),llv_loc(2),missing_r8,ztypeout)
+!#! !$! if (zin == MISSING_R8) then
+!#! !$!    location = set_location(llv_loc(1),llv_loc(2),MISSING_R8,ztypeout)
 !#! !$!    return
 !#! !$! endif
 !#! !$!
@@ -3275,7 +3204,7 @@ end function get_index_from_varname
 !#! !$! location = set_location(llv_loc(1),llv_loc(2),zout,ztypeout)
 !#! !$!
 !#! !$! ! Set successful return code only if zout has good value
-!#! !$! if(zout /= missing_r8) istatus = 0
+!#! !$! if(zout /= MISSING_R8) istatus = 0
 !#! !$!
 !#! !$!
 !#! end subroutine vert_convert
@@ -3286,6 +3215,7 @@ end function get_index_from_varname
 
 
 !------------------------------------------------------------------
+!>
 
 subroutine vert_interp(x, base_offset, cellid, nlevs, lower, fract, val, ier)
 
@@ -3323,6 +3253,10 @@ endif
 val = (1.0_r8 - fract)*lx + fract*ux
 
 end subroutine vert_interp
+
+
+!------------------------------------------------------------------
+!>
 
 subroutine find_depth_bounds(depth, nbounds, bounds, lower, upper, fract, ier)
 
@@ -3385,6 +3319,7 @@ if (debug > 7) print *, 'internal code inconsistency: could not find vertical lo
 
 end subroutine find_depth_bounds
 
+
 !------------------------------------------------------------
 !> Determine the cell index closest to the given point
 !> 2D calculation only.
@@ -3395,7 +3330,7 @@ type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_kind
 integer                         :: find_closest_surface_location
 
-integer :: num_close, surface_index, rc, iclose, indx
+integer :: num_close, surface_index, iclose, indx
 real(r8) :: closest
 real(r8) :: distance
 
@@ -3437,7 +3372,9 @@ find_closest_surface_location = surface_index
 
 end function find_closest_surface_location
 
+
 !------------------------------------------------------------
+!>
 
 subroutine finalize_closest_center()
 
@@ -3448,6 +3385,7 @@ subroutine finalize_closest_center()
 call get_close_obs_destroy(cc_gc)
 
 end subroutine finalize_closest_center
+
 
 !$! !------------------------------------------------------------
 !$!
