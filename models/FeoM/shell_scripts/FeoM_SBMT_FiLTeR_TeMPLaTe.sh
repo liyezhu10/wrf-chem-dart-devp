@@ -1,8 +1,11 @@
 #!/bin/bash
+#BSUB -a poe
 #BSUB -J ENSFILTER                             # Name of the job.
 #BSUB -o LOG/TSSFILTER_%J.out  # Appends std output to file %J.out.
 #BSUB -e LOG/TSSFILTER_%J.out  # Appends std error to file %J.err.
-#BSUB -q serial_30min            # queue
+#BSUB -q poe_short               # queue
+#BSUB -R "span[ptile=16]"        #
+#BSUB -n 16            #
 ############################ LSF ###################################
 TEMPLATE=TeMPLaTe; COPY='cp -f'; REMOVE='rm -f'; LINK='ln -sf'
 JOBDIR=${LS_SUBCWD}                   # directory of this script
@@ -29,7 +32,7 @@ USRHOM=/users/home/ans051
 RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
 FSMHOM=${USRHOM}/FEOM
 FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FEOMENS
+MODELHOM=${FSMHOM}/FETSSOM.ENS01
 FSMINI=${FSMPRE}/HINDCAST_IC
 DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
 WRKDIR=/work/ans051/TSS/${EXPINFO}
@@ -44,24 +47,16 @@ FILTER=${DRTDIR}/${EXE}; ${COPY} ${FILTER} .
 ######## DART INPUT/OUTPUT FILES ##################################
 ###################################################################
 TMPNML=${DRTDIR}/input.nml.${TEMPLATE}
-OBSSEQ=${DRTDIR}/obs_seq.profile; ${COPY} ${OBSSEQ} obs_seq.out
+OBSSEQ=${DRTDIR}/obs_seq.ferrybox; ${COPY} ${OBSSEQ} obs_seq.out
 M2DOUT=filter_ics.${ENSN4}
 D2MINP=filter_restart.${ENSN4}
 ###################################################################
 ###################################################################
 ###################################################################
-${COPY} ../ENS01/namelist.config .
-ZCYCLE=$( echo "${CYCLE} - 1" | bc )
-	sed -e 's;FEOMRSTFILENAME;'${ENSDIR}'/'${ENSINFO}'.'${EXPYR}'.oce.nc;g' -e \
-               's;FEOMGRDFILENAME;;g' -e \
-               's;INITIALTIME;'${CYCLE}';g' -e \
-               's;BEFOREINIT;'${ZCYCLE}';g' -e \
-               's;MODEL2DARTOUTPUT;'${M2DOUT}';g' -e \
-               's;DART2MODELINPUT;'${D2MINP}';g' -e \
-               's;ENSEMBLENUMBER;'${MEMNO}';g' \
-        ${TMPNML} > input.nml
-        ./${EXE} 
-	${COPY} obs_seq.final obs_seq.final.$(echo ${CYCLE} | awk '{ printf("%03d\n", $1) }')
-	${COPY} Posterior_Diag.nc Posterior_Diag_$(echo ${CYCLE} | awk '{ printf("%03d\n", $1) }').nc
-	${COPY} Prior_Diag.nc Prior_Diag_$(echo ${CYCLE} | awk '{ printf("%03d\n", $1) }').nc
-exit
+ANALYSISFILE=${ENSDIR}/${ENSINFO}.${EXPYR}.oce.nc
+${COPY} ../ENS01/{input.nml,namelist.config} .
+DARTIME=($(grep 'FeoM    stop at :' ${WRKDIR}/ENS01/FeoM_time|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+/users/home/opt/lsf/8.0/linux2.6-glibc2.3-x86_64/bin/mpirun.lsf  ./${EXE} 
+	${COPY} obs_seq.final obs_seq.final.${DARTIME[0]}_${DARTIME[1]}
+	${COPY} Posterior_Diag.nc Posterior_Diag_${DARTIME[0]}_${DARTIME[1]}
+	${COPY} Prior_Diag.nc Prior_Diag_${DARTIME[0]}_${DARTIME[1]}

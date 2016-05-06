@@ -17,18 +17,20 @@ EXPYR=EXPERIMENTYEAR
 MEMNO=ENSEMBLEMEMBERS
 NPROC=NCORES
 ENSID=ENSEMBLEID
+RNLEN=ASSIMILATIONCYCLE
 EXPINFO=${EXPID}${EXPNO};
-RUNLENGTH=1; ENSINFO=${ENSID}${ENSNO};
+ENSINFO=${ENSID}${ENSNO};
 JOBID=$(bjobs | grep -ir TSS${EXPINFO} | awk '{print $1}')
 ####################################################################
 ############### DEFINE RELEVANT DIRECTORIES ########################
 ####################################################################
 USRHOM=/users/home/ans051 
 RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
+DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
 FSMHOM=${USRHOM}/FEOM
 FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FEOMENS
-FSMINI=${FSMPRE}/HINDCAST_IC 
+MODELHOM=${FSMHOM}/FETSSOM.ENS01
+FSMINI=${FSMPRE}/ENSEMBLE_IC 
 WRKDIR=/work/ans051/TSS/${EXPINFO}
 ENSDIR=${WRKDIR}/${ENSINFO}
 SUBMITFILE=${WRKDIR}/FeoM_SBMT_iNiTiaLiZe_${EXPINFO}
@@ -54,26 +56,28 @@ if [ ! -d ${ENSDIR} ]; then
 fi
 cd ${ENSDIR}
 if [ ! -f  ${ENSINFO}.clock ]; then 
-	cp ${FSMINI}/EXPHC.${EXPYR}.clock ${ENSINFO}.clock
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.forcing.diag.nc .
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.oce.diag.nc .
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.ice.diag.nc .
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.oce.mean.nc .
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.ice.mean.nc .
-	ln -sf ${FSMINI}/EXPHC.${EXPYR}.ice.nc .
 	if [ ${EXPYR} -eq 2008 ]; then
 	ncks -F -d T,7,7 /work/ans051/TSS/ZEN01/${ENSINFO}/${ENSINFO}.${EXPYR}.oce.nc ${ENSINFO}.${EXPYR}.oce.nc
 	elif [ ${EXPYR} -eq 2009 ]; then
-	ln -sf ${FSMINI}/${ENSINFO}.${EXPYR}.oce.nc ${ENSINFO}.2008.oce.nc
+		INIYR=2008
+	cp ${FSMINI}/ENSHC.${INIYR}.clock ${ENSINFO}.clock
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.forcing.diag.nc .
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.oce.diag.nc .
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.ice.diag.nc .
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.oce.mean.nc .
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.ice.mean.nc .
+	ln -sf ${FSMINI}/ENSHC.${INIYR}.ice.nc .
+
+	ln -sf ${FSMINI}/${ENSINFO}.${INIYR}.oce.nc .
 	fi
-	for any in EXPHC.${EXPYR}.*.nc; do
-		newfile=$( echo ${any} | sed -e 's/EXPHC/'${ENSINFO}'/' -e 's/'${EXPYR}'/2008/' );
-		mv ${any} ${newfile};
+	for File in ENSHC.${INIYR}.*.nc; do
+		NFile=$( echo ${File} | sed 's/ENSHC/'${ENSINFO}'/' );
+		mv ${File} ${NFile};
 	done
 	sed -e  "s/EXPNUM/${EXPNO}/" -e "s/EXPDEF/${EXPID}/" -e \
 	        "s/ENSNUM/${ENSNO}/" -e "s/ENSDEF/${ENSID}/" -e \
 	        "s/TIMESTEP/7200/" -e  "s/MESHDIR/${MESHDIR}/" -e \
-	        "s/RUNLENGTH/${RUNLENGTH}/" \
+	        "s/RUNLENGTH/${RNLEN}/" \
 		${MODELHOM}/namelist.config.template > ${ENSDIR}/namelist.config
 	sed -e  "s/WNDFORCING/MFS/" -e "s/RADFORCING/MFS/" -e \
 		"s/PRCFORCING/NCEP/" -e "s/ROFFORCING/KARA/" -e \
@@ -82,6 +86,7 @@ if [ ! -f  ${ENSINFO}.clock ]; then
 	cp ${MODELHOM}/namelist.diag namelist.diag
 	cp ${MODELHOM}/namelist.ice namelist.ice
 	cp ${MODELHOM}/namelist.oce namelist.oce
+	cp ${DRTDIR}/FeoM_time ${ENSDIR}/.
 	sed -e  "s/ENSNUM/${ENSNO}/" -e "s/ENSDEF/${ENSID}/"  \
 	        ${MODELHOM}/namelist.ensemble > ${ENSDIR}/namelist.ensemble
         cp ${MODELHOM}/fesom.x fesom.x

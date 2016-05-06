@@ -29,7 +29,7 @@ USRHOM=/users/home/ans051
 RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
 FSMHOM=${USRHOM}/FEOM
 FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FEOMENS
+MODELHOM=${FSMHOM}/FETSSOM.ENS01
 FSMINI=${FSMPRE}/HINDCAST_IC
 DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
 WRKDIR=/work/ans051/TSS/${EXPINFO}
@@ -50,15 +50,8 @@ D2MINP=filter_restart.${ENSN4}
 ###################################################################
 ###################################################################
 ###################################################################
+ANALYSISFILE=${ENSDIR}/${ENSINFO}.${EXPYR}.oce.nc
 ZCYCLE=$( echo "${CYCLE} - 1" | bc )
 ${LINK} ${FILDIR}/${D2MINP} .
-	sed -e 's;FEOMRSTFILENAME;'${ENSDIR}'/'${ENSINFO}'.'${EXPYR}'.oce.nc;g' -e \
-               's;FEOMGRDFILENAME;;g' -e \
-               's;INITIALTIME;'${CYCLE}';g' -e \
-               's;BEFOREINIT;'${ZCYCLE}';g' -e \
-               's;MODEL2DARTOUTPUT;'${M2DOUT}';g' -e \
-               's;DART2MODELINPUT;'${D2MINP}';g' -e \
-               's;ENSEMBLENUMBER;'${MEMNO}';g' \
-        ${TMPNML} > input.nml
         ./${EXE} 
 exit

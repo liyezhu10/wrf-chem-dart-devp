@@ -20,14 +20,14 @@ USRHOM=/users/home/ans051
 RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
 FSMHOM=${USRHOM}/FEOM
 FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FEOMENS
+MODELHOM=${FSMHOM}/FETSSOM.ENS01
 WRKDIR=/work/ans051/TSS/${EXPINFO}; cd ${WRKDIR}
 
 SBMTFILE=${RUNDIR}/FeoM_SBMT_eNS_MeMBeRS_${EXPINFO}.lsf 
 
 DAYST=$(cat ENS01/ENS01.clock | sed -n 2,2p | awk '{print $2}')
 RUNYR=$(cat ENS01/ENS01.clock | sed -n 2,2p | awk '{print $3}') 
-if [ "${RUNYR}" -le "2009" ] && [ "${DAYST}" -lt "2" ]; then
+if [ "${RUNYR}" -le "2009" ] && [ "${DAYST}" -lt "3" ]; then
 		bsub < ${SBMTFILE}; echo "EXPERIMENT CONTINUES..."
 else
 	echo "EXPERIMENT FINISHED..."; exit

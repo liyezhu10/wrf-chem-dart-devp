@@ -24,6 +24,12 @@ EXPID=EXPERIMENTNAME
 EXPNO=EXPERIMENTNUMBER
 EXPYR=EXPERIMENTYEAR
 ENSID=ENS; MEMNO=30
+# RNLEN here is number of time step; use for FEOM
+RNLEN=1800
+# TSTEP here is seconds in time step 
+TSTEP=12
+# RNSEC here is number of time step; use for DART
+RNSEC=$( echo "${RNLEN} * ${TSTEP}" | bc )
 EXPINFO=${EXPID}${EXPNO};
 WRKDIR=/work/ans051/TSS/${EXPINFO}
 DIADIR=/work/ans051/TSS/PLTTSS/MESH_READ
@@ -43,6 +49,7 @@ if [ ! -d ${WRKDIR} ]; then
 	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g" -e \
          "s;^MEMNO=.*$;MEMNO=${MEMNO};g" -e \
 	 "s;^ENSID=.*$;ENSID=${ENSID};g" -e \
+	 "s;^RNLEN=.*$;RNLEN=${RNLEN};g" -e \
          "s;^NPROC=.*$;NPROC=${NPROC};g" \
 	 ${TMPLFILE} > ${SBMTFILE}
 	 cd ${WRKDIR}; ID=$( jobid bsub < ${SBMTFILE} ); echo ${ID}
@@ -84,6 +91,7 @@ fi
 	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g" -e \
          "s;^MEMNO=.*$;MEMNO=${MEMNO};g" -e \
 	 "s;^ENSID=.*$;ENSID=${ENSID};g" -e \
+	 "s;^RNLEN=.*$;RNLEN=${RNSEC};g" -e \
          "s;^NPROC=.*$;NPROC=${NPROC};g" \
 	 ${TMPLFILE} > ${SBMTFILE}
 	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}

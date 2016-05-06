@@ -29,7 +29,7 @@ USRHOM=/users/home/ans051
 RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
 FSMHOM=${USRHOM}/FEOM
 FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FEOMENS
+MODELHOM=${FSMHOM}/FETSSOM.ENS01
 FSMINI=${FSMPRE}/HINDCAST_IC
 DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
 WRKDIR=/work/ans051/TSS/${EXPINFO}
@@ -50,14 +50,28 @@ D2MINP=filter_restart.${ENSN4}
 ###################################################################
 ###################################################################
 ###################################################################
-ZCYCLE=$( echo "${CYCLE} - 1" | bc )
-	sed -e 's;FEOMRSTFILENAME;'${ENSDIR}'/'${ENSINFO}'.'${EXPYR}'.oce.nc;g' -e \
-               's;FEOMGRDFILENAME;;g' -e \
-               's;INITIALTIME;'${CYCLE}';g' -e \
-               's;BEFOREINIT;'${ZCYCLE}';g' -e \
-               's;MODEL2DARTOUTPUT;'${M2DOUT}';g' -e \
-               's;DART2MODELINPUT;'${D2MINP}';g' -e \
-               's;ENSEMBLENUMBER;'${MEMNO}';g' \
+DART_INIT_TIME_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 1,1p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+DART_INIT_TIME_SECS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 2,2p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+DART_FIRST_OBS_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 3,3p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+DART_FIRST_OBS_SECS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 4,4p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+DART_LAST_OBS_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 5,5p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+DART_LAST_OBS_SECS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 6,6p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
+ANALYSISFILE=${ENSDIR}/${ENSINFO}.${EXPYR}.oce.nc
+echo "ANALYSIS FILE NAME: ${ANALYSISFILE}"
+sed -e "s;^   model_analysis_filename.*$;   model_analysis_filename = '${ANALYSISFILE}';g" -e \
+       "s/^   assimilation_period_days.*$/   assimilation_period_days = 0/g"  -e \
+       "s/^   assimilation_period_seconds.*$/   assimilation_period_seconds = ${CYCLE}/g"  -e \
+       "s/^   init_time_days.*$/   init_time_days = ${DART_INIT_TIME_DAYS}/g"              -e \
+       "s/^   init_time_seconds.*$/   init_time_seconds = ${DART_INIT_TIME_SECS}/g"        -e \
+       "s/^   first_obs_days.*$/   first_obs_days = ${DART_FIRST_OBS_DAYS}/g"              -e \
+       "s/^   first_obs_seconds.*$/   first_obs_seconds = ${DART_FIRST_OBS_SECS}/g"        -e \
+       "s/^   last_obs_days.*$/   last_obs_days = ${DART_LAST_OBS_DAYS}/g"                 -e \
+       "s/^   last_obs_seconds.*$/   last_obs_seconds = ${DART_LAST_OBS_SECS}/g"           -e \
+       "s/^   model_to_dart_output_file.*$/   model_to_dart_output_file = ${M2DOUT}/g"     -e \
+       "s/^   dart_to_model_input_file.*$/   dart_to_model_input_file = ${D2MINP}/g"       -e \
+       "s/^   num_output_state_members.*$/   num_output_state_members = ${MEMNO}/g"        -e \
+       "s/^   num_output_obs_members.*$/   num_output_obs_members     = ${MEMNO}/g"        -e \
+       "s/^   ens_size.*$/   ens_size      = ${MEMNO}/g"  \
         ${TMPNML} > input.nml
         ./${EXE} && ${LINK} ${ENSDIR}/${M2DOUT} ${FILDIR}/.
 exit

@@ -1,5 +1,5 @@
 #!/bin/bash
-EXPID=SEN; EXPNO=02; EXPYR=2009
+EXPID=FB0; EXPNO=01; EXPYR=2009
 EXPINFO=${EXPID}${EXPNO};
 WRKDIR=/work/ans051/TSS/${EXPINFO}
 USRHOM=/users/home/ans051; 
@@ -17,8 +17,17 @@ echo "\
 #    SOME DISTINGUISHING INFORMATION ABOUT THE EXPERIMENT:   \\
 #                                                            \\
 # ${EXPINFO}                                                 \\
-#      FIRST TRIAL FOR PERFORMING FULL ASSIMILATION LOOP     \\
-#      Model started from 2009, January 01                   \\
+#  FIRST TRIAL FOR PERFORMING FULL ASSIMILATION LOOP         \\
+#  using the Ferrybox synthetic temperature and salinity     \\
+#  data. The observations are genereted from NR001 nature    \\
+#  run. Temperature values are perturbed by std=0.1 degC     \\
+#  around mean=0. Similarlar, salinity values are            \\
+#  perturbed by std=0.04 psu around mean=0.                  \\
+#                                                            \\
+#  Assimilation cycle is set to 6 hours and observations     \\
+#  with +- 3hr will be assimilated in each cycles.           \\
+#                                                            \\
+#  Model started from 2009, January 01  00:00                \\
 #                                                            \\
 #                                                            \\
 #                                                            \\
