@@ -704,20 +704,20 @@ integer,             intent(in)    :: vertical_localization_coordinate
 
 integer :: i, sublist_count, fo_comp
 type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: type_sublist(:), index_sublist(:)
+integer, allocatable :: type_sublist(:), sublist_index(:)
 
 if ( .not. module_initialized ) call static_init_model
 
 if (include_CAM) then
    !> extract the obs types for atm only
-   sublist_count = count_my_fo_component(isCAM, item_count, type_list)
+   sublist_count = count_my_type_component(isCAM, item_count, type_list)
    if (sublist_count > 0) then
-      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), index_sublist(sublist_count))
-      call fill_my_fo_component(isCAM, item_count, type_list, sublist_count, index_sublist)
+      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_type_component(isCAM, item_count, type_list, sublist_count, sublist_index)
 
       do i=1, sublist_count
-         loc_sublist(i)  = loc_list(index_sublist(i))
-         type_sublist(i) = type_list(index_sublist(i))
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         type_sublist(i) = type_list(sublist_index(i))
       enddo
  
       ! FIXME: hard code (for now) pressure as vert coord
@@ -725,23 +725,23 @@ if (include_CAM) then
 
       ! possibly update any converted locations
       do i=1, sublist_count
-         loc_list(index_sublist(i)) = loc_sublist(i) 
+         loc_list(sublist_index(i)) = loc_sublist(i) 
       enddo
  
-      deallocate(loc_sublist, type_sublist, index_sublist)
+      deallocate(loc_sublist, type_sublist, sublist_index)
    endif
 endif
 
 if (include_POP) then
    !> extract the obs types for ocn only
-   sublist_count = count_my_fo_component(isPOP, item_count, type_list)
+   sublist_count = count_my_type_component(isPOP, item_count, type_list)
    if (sublist_count > 0) then
-      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), index_sublist(sublist_count))
-      call fill_my_fo_component(isPOP, item_count, type_list, sublist_count, index_sublist)
+      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_type_component(isPOP, item_count, type_list, sublist_count, sublist_index)
 
       do i=1, sublist_count
-         loc_sublist(i)  = loc_list(index_sublist(i))
-         type_sublist(i) = type_list(index_sublist(i))
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         type_sublist(i) = type_list(sublist_index(i))
       enddo
  
       ! FIXME: hard code (for now) height as vert coord
@@ -749,23 +749,23 @@ if (include_POP) then
 
       ! possibly update any converted locations
       do i=1, sublist_count
-         loc_list(index_sublist(i)) = loc_sublist(i) 
+         loc_list(sublist_index(i)) = loc_sublist(i) 
       enddo
  
-      deallocate(loc_sublist, type_sublist, index_sublist)
+      deallocate(loc_sublist, type_sublist, sublist_index)
    endif
 endif
 
 if (include_CLM) then
    !> extract the obs types for land only
-   sublist_count = count_my_fo_component(isCLM, item_count, type_list)
+   sublist_count = count_my_type_component(isCLM, item_count, type_list)
    if (sublist_count > 0) then
-      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), index_sublist(sublist_count))
-      call fill_my_fo_component(isCLM, item_count, type_list, sublist_count, index_sublist)
+      allocate(loc_sublist(sublist_count), type_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_type_component(isCLM, item_count, type_list, sublist_count, sublist_index)
 
       do i=1, sublist_count
-         loc_sublist(i)  = loc_list(index_sublist(i))
-         type_sublist(i) = type_list(index_sublist(i))
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         type_sublist(i) = type_list(sublist_index(i))
       enddo
  
       ! FIXME: hard code (for now) height as vert coord
@@ -773,10 +773,10 @@ if (include_CLM) then
 
       ! possibly update any converted locations
       do i=1, sublist_count
-         loc_list(index_sublist(i)) = loc_sublist(i) 
+         loc_list(sublist_index(i)) = loc_sublist(i) 
       enddo
  
-      deallocate(loc_sublist, type_sublist, index_sublist)
+      deallocate(loc_sublist, type_sublist, sublist_index)
    endif
 endif
 
@@ -794,109 +794,83 @@ integer,             intent(in)    :: vertical_localization_coordinate
 integer :: x_start, x_end
 integer :: i, sublist_count
 type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: kind_sublist(:), index_sublist(:)
+integer, allocatable :: kind_sublist(:), sublist_index(:)
 
 if ( .not. module_initialized ) call static_init_model
 
 !print *, 'convert vert state', my_task_id(), ' total item count: ', item_count
 if (include_CAM) then
    !> extract the state indices for atm only
-   sublist_count = count_my_state_component(isCAM, item_count, kind_list)
+   sublist_count = count_my_kind_component(isCAM, item_count, kind_list)
    if (sublist_count > 0) then
-      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), index_sublist(sublist_count))
-      call fill_my_state_component(isCAM, item_count, kind_list, sublist_count, index_sublist)
-
-!print *, 'convert vert state', my_task_id(), ' count: ', sublist_count
-!print *, 'convert vert state', my_task_id(), ' first: ', index_sublist(1:10)
-
-print *, 'convert vert state', my_task_id(), ' (start) count, min/max, locs: ', sublist_count, minval(index_sublist), maxval(index_sublist), &
-                                                                                               minloc(index_sublist), maxloc(index_sublist)
-    
+      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_kind_component(isCAM, item_count, kind_list, sublist_count, sublist_index)
 
       do i=1, sublist_count
-
-if (index_sublist(i) < 1 .or. index_sublist(i) > item_count) then
-  print *, 'convert vert state', my_task_id(), ' (before) bad sublist index, item/value: ', i, index_sublist(i), 1, item_count, &
-                                                                                         minloc(index_sublist), maxloc(index_sublist)
-  stop
-endif
-         loc_sublist(i)  = loc_list(index_sublist(i))
-         kind_sublist(i) = kind_list(index_sublist(i))
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         kind_sublist(i) = kind_list(sublist_index(i))
       enddo
  
-print *, 'convert vert state', my_task_id(), ' (before) count, min/max, locs: ', sublist_count, minval(index_sublist), maxval(index_sublist), &
-                                                                                                minloc(index_sublist), maxloc(index_sublist)
-
       ! FIXME: hard code (for now) pressure as vert coord
       call cam_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, VERTISPRESSURE)
 
-print *, 'convert vert state', my_task_id(), ' (after)  count, min/max, locs: ', sublist_count, minval(index_sublist), maxval(index_sublist), &
-                                                                                                minloc(index_sublist), maxloc(index_sublist)
-
       ! possibly update any converted locations
       do i=1, sublist_count
-if (index_sublist(i) < 1 .or. index_sublist(i) > item_count) then
-  print *, 'convert vert state', my_task_id(), ' (after) bad sublist index, item/value: ', i, index_sublist(i), 1, item_count, &
-                                                                                         minloc(index_sublist), maxloc(index_sublist)
-  stop
-endif
-         loc_list(index_sublist(i)) = loc_sublist(i) 
+         loc_list(sublist_index(i)) = loc_sublist(i) 
       enddo
  
-print *, 'convert vert state', my_task_id(), ' (end)   count, min/max, locs: ', sublist_count, minval(index_sublist), maxval(index_sublist), &
-                                                                                               minloc(index_sublist), maxloc(index_sublist)
-
-      deallocate(loc_sublist, kind_sublist, index_sublist)
+      deallocate(loc_sublist, kind_sublist, sublist_index)
    endif
 endif
+
 !#! 
 !#! if (include_POP) then
 !#!    !> extract the state indices for ocn only
-!#!    sublist_count = count_my_state_component(isPOP, item_count, kind_list)
+!#!    sublist_count = count_my_kind_component(isPOP, item_count, kind_list)
 !#!    if (sublist_count > 0) then
-!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), index_sublist(sublist_count))
-!#!       call fill_my_state_component(isPOP, item_count, kind_list, index_list, sublist_count, index_sublist)
+!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
+!#!       call fill_my_kind_component(isPOP, item_count, kind_list, index_list, sublist_count, sublist_index)
 !#! 
 !#!       do i=1, sublist_count
-!#!          loc_sublist(i)  = loc_list(index_sublist(i))
-!#!          kind_sublist(i) = kind_list(index_sublist(i))
-!#!          index_sublist(i) = index_list(index_sublist(i))
+!#!          loc_sublist(i)  = loc_list(sublist_index(i))
+!#!          kind_sublist(i) = kind_list(sublist_index(i))
+!#!          sublist_index(i) = index_list(sublist_index(i))
 !#!       enddo
 !#!  
 !#!       ! FIXME: hard code (for now) height as vert coord
-!#!       call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, index_sublist, VERTISHEIGHT)
+!#!       call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, sublist_index, VERTISHEIGHT)
 !#! 
 !#!       ! possibly update any converted locations
 !#!       do i=1, sublist_count
-!#!          loc_list(index_sublist(i)) = loc_sublist(i) 
+!#!          loc_list(sublist_index(i)) = loc_sublist(i) 
 !#!       enddo
 !#!  
-!#!       deallocate(loc_sublist, kind_sublist, index_sublist)
+!#!       deallocate(loc_sublist, kind_sublist, sublist_index)
 !#!    endif
 !#! endif
 !#! 
 !#! if (include_CLM) then
 !#!    !> extract the state indices for ocn only
-!#!    sublist_count = count_my_state_component(isCLM, item_count, kind_list)
+!#!    sublist_count = count_my_kind_component(isCLM, item_count, kind_list)
 !#!    if (sublist_count > 0) then
-!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), index_sublist(sublist_count))
-!#!       call fill_my_state_component(isCLM, item_count, kind_list, index_list, sublist_count, index_sublist)
+!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
+!#!       call fill_my_kind_component(isCLM, item_count, kind_list, index_list, sublist_count, sublist_index)
 !#! 
 !#!       do i=1, sublist_count
-!#!          loc_sublist(i)  = loc_list(index_sublist(i))
-!#!          kind_sublist(i) = kind_list(index_sublist(i))
-!#!          index_sublist(i) = index_list(index_sublist(i))
+!#!          loc_sublist(i)  = loc_list(sublist_index(i))
+!#!          kind_sublist(i) = kind_list(sublist_index(i))
+!#!          sublist_index(i) = index_list(sublist_index(i))
 !#!       enddo
 !#!  
 !#!       ! FIXME: hard code (for now) height as vert coord
-!#!       call clm_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, index_sublist, VERTISHEIGHT)
+!#!       call clm_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, sublist_index, VERTISHEIGHT)
 !#! 
 !#!       ! possibly update any converted locations
 !#!       do i=1, sublist_count
-!#!          loc_list(index_sublist(i)) = loc_sublist(i) 
+!#!          loc_list(sublist_index(i)) = loc_sublist(i) 
 !#!       enddo
 !#!  
-!#!       deallocate(loc_sublist, kind_sublist, index_sublist)
+!#!       deallocate(loc_sublist, kind_sublist, sublist_index)
 !#!    endif
 !#! endif
 !#! 
@@ -1025,12 +999,12 @@ character(len=32) :: componentname
 integer :: this, base_obs_kind
 real(r8) :: horiz_dist, vert_dist_proxy
 integer :: vert1, vert2
-integer :: fo_comp, obs_comp, item_count
+integer :: fo_comp, obs_comp, item_count, sub_indx, orig_indx
 integer, save :: n = 1
 
 integer :: i, sublist_count
 type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: index_sublist(:)
+integer, allocatable :: sublist_index(:)
       
 if ( .not. module_initialized ) call static_init_model
    
@@ -1068,13 +1042,15 @@ fo_comp = get_fo_component(base_obs_type)
 !> extract the obs types for this comp only
 
 item_count = size(loc_kind)
-sublist_count = count_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
+sublist_count = count_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
 if (sublist_count > 0) then
-   allocate(index_sublist(sublist_count))
-   call fill_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, index_sublist)
+   allocate(sublist_index(sublist_count))
+   call fill_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
           
    do i=1, sublist_count
-      dist(index_sublist(i)) = get_dist(base_obs_loc, locs(index_sublist(i)), base_obs_type, loc_kind(index_sublist(i)))
+      sub_indx = sublist_index(i)      ! index into the "close_ind" list
+      orig_indx = close_ind(sub_indx)  ! the original index into the full list
+      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
    enddo
 
    ! compute distances == but this can't do what cam would do with close obs
@@ -1082,20 +1058,23 @@ if (sublist_count > 0) then
    ! does its own search and doesn't look at the existing index list.
    !call cam_get_close_obs()
    
-   deallocate(index_sublist)
+   deallocate(sublist_index)
 endif
 
-sublist_count = count_not_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
+sublist_count = count_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
 if (sublist_count > 0) then
-   allocate(index_sublist(sublist_count))
-   call fill_not_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, index_sublist)
+   allocate(sublist_index(sublist_count))
+   call fill_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
           
    ! here is where it's cross component
    do i=1, sublist_count
-      dist(index_sublist(i)) = get_xcomp_dist(base_obs_loc, locs(index_sublist(i)), base_obs_kind, loc_kind(index_sublist(i)))
+      sub_indx = sublist_index(i)      ! index into the "close_ind" list
+      orig_indx = close_ind(sub_indx)  ! the original index into the full list
+      !dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
    enddo
 
-   deallocate(index_sublist)
+   deallocate(sublist_index)
 endif
 
 !%! do i=1, num_close
@@ -1179,12 +1158,12 @@ character(len=32) :: componentname
 integer :: i, this, base_obs_kind
 real(r8) :: horiz_dist, vert_dist_proxy
 integer :: vert1, vert2
-integer :: fo_comp, state_comp
+integer :: fo_comp, state_comp, sub_indx, orig_indx
 integer, save :: n = 1
 
 integer :: sublist_count, item_count
 type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: kind_sublist(:), index_sublist(:)
+integer, allocatable :: kind_sublist(:), sublist_index(:)
 
 ! FIXME: in a real unified model_mod, these would all be called
 ! and any state vector items from any model are potentially close.
@@ -1220,13 +1199,15 @@ fo_comp = get_fo_component(base_obs_type)
 !> extract the obs types for this comp only
 
 item_count = size(loc_kind)
-sublist_count = count_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
+sublist_count = count_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
 if (sublist_count > 0) then
-   allocate(index_sublist(sublist_count))
-   call fill_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, index_sublist)
+   allocate(sublist_index(sublist_count))
+   call fill_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
           
    do i=1, sublist_count
-      dist(index_sublist(i)) = get_dist(base_obs_loc, locs(index_sublist(i)), base_obs_type, loc_kind(index_sublist(i)))
+      sub_indx = sublist_index(i)      ! index into the "close_ind" list
+      orig_indx = close_ind(sub_indx)  ! the original index into the full list
+      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
    enddo
 
    ! compute distances == but this can't do what cam would do with close obs
@@ -1234,20 +1215,23 @@ if (sublist_count > 0) then
    ! does its own search and doesn't look at the existing index list.
    !call cam_get_close_obs()
    
-   deallocate(index_sublist)
+   deallocate(sublist_index)
 endif
 
-sublist_count = count_not_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
+sublist_count = count_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
 if (sublist_count > 0) then
-   allocate(index_sublist(sublist_count))
-   call fill_not_my_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, index_sublist)
+   allocate(sublist_index(sublist_count))
+   call fill_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
           
    ! here is where it's cross component
    do i=1, sublist_count
-      dist(index_sublist(i)) = get_xcomp_dist(base_obs_loc, locs(index_sublist(i)), base_obs_kind, loc_kind(index_sublist(i)))
+      sub_indx = sublist_index(i)      ! index into the "close_ind" list
+      orig_indx = close_ind(sub_indx)  ! the original index into the full list
+      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      !dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
    enddo
 
-   deallocate(index_sublist)
+   deallocate(sublist_index)
 endif
 
 !%! do i=1, num_close
@@ -1497,6 +1481,8 @@ subroutine which_model_kind(obs_kind, componentname, componentid)
 
 ! FIXME: this needs to be beefed up with all possible obs kinds
 ! and which model would have the best forward operator for it.
+! when mapping fo at obs_kind init, translate to kind and set
+! component then??  
 
 select case (obs_kind)
    case (KIND_AIR_TEMPERATURE, &
@@ -1573,280 +1559,240 @@ end select
 end function valid_component
 
 !------------------------------------------------------------------
+!------------------------------------------------------------------
 
-!> tell me how many of these items have an id that matches
-!> the forward operator for the given component number
+!> count how many of these items have an obs type that matches
+!> the given component number (based on selected fo for that obs)
 !> the list is TYPES
 
-function count_my_fo_component(my_component_id, item_count, type_list)
+function count_my_type_component(my_component_id, item_count, type_list)
 
 integer, intent(in) :: my_component_id
 integer, intent(in) :: item_count
-integer, intent(in) :: type_list(item_count)
-integer :: count_my_fo_component
+integer, intent(in) :: type_list(:)  ! (item_count)
+integer :: count_my_type_component
 
-integer :: i, sublist_count
+integer :: i, oc
 
-sublist_count = 0
+oc = 0
 do i=1, item_count
-   if (get_fo_component(type_list(i)) == my_component_id) sublist_count = sublist_count + 1
+   if (get_fo_component(type_list(i)) == my_component_id) oc = oc + 1
 enddo
 
-count_my_fo_component = sublist_count
+count_my_type_component = oc
 
-end function count_my_fo_component
-
-!------------------------------------------------------------------
-
-!> tell me how many of these items have an id that matches
-!> the forward operator for the given component number
-!> this differs from the one above in that there's already
-!> an index subset list, also the list is kinds, not types.
-
-function count_my_component_indirect(my_component_id, item_count, full_kind_list, index_count, index_list)
-
-integer, intent(in) :: my_component_id
-integer, intent(in) :: item_count
-integer, intent(in) :: full_kind_list(item_count)
-integer, intent(in) :: index_count
-integer, intent(in) :: index_list(index_count)
-integer :: count_my_component_indirect
-
-integer :: i, sublist_count, compid
-
-sublist_count = 0
-do i=1, index_count
-   if (which_model_id(full_kind_list(index_list(i))) == my_component_id) sublist_count = sublist_count + 1
-enddo
-
-count_my_component_indirect = sublist_count
-
-end function count_my_component_indirect
-
-!------------------------------------------------------------------
-
-!> tell me how many of these items have an id that doesn't match
-!> the forward operator for the given component number
-!> this differs from the one above in that there's already
-!> an index subset list, also the list is kinds, not types.
-
-function count_not_my_component_indirect(my_component_id, item_count, full_kind_list, index_count, index_list)
-
-integer, intent(in) :: my_component_id
-integer, intent(in) :: item_count
-integer, intent(in) :: full_kind_list(item_count)
-integer, intent(in) :: index_count
-integer, intent(in) :: index_list(index_count)
-integer :: count_not_my_component_indirect
-
-integer :: i, sublist_count, compid
-
-sublist_count = 0
-do i=1, index_count
-   if (which_model_id(full_kind_list(index_list(i))) /= my_component_id) sublist_count = sublist_count + 1
-enddo
-
-count_not_my_component_indirect = sublist_count
-
-end function count_not_my_component_indirect
-
-!------------------------------------------------------------------
-
-!> tell me how many of these items have an id that matches
-!> the state vector index for given component number
-
-function count_my_state_component(my_component_id, item_count, kind_list)
-
-integer, intent(in) :: my_component_id
-integer, intent(in) :: item_count
-integer, intent(in) :: kind_list(item_count)
-integer :: count_my_state_component
-
-integer :: i, sublist_count, compid
-
-sublist_count = 0
-do i=1, item_count
-   if (which_model_id(kind_list(i)) == my_component_id) sublist_count = sublist_count + 1
-   !if ((which_model_id(kind_list(i)) == my_component_id) .and. (my_task_id() == 15)) then
-   !   print *, 'count_my_state_comp: ', i, kind_list(i), which_model_id(kind_list(i))
-   !endif
-enddo
-
-count_my_state_component = sublist_count
-!print *, 'count_my_state_comp: ', my_task_id(), my_component_id, item_count, sublist_count
-
-end function count_my_state_component
+end function count_my_type_component
 
 !------------------------------------------------------------------
 
 !> fill the previously allocated list with the matching index numbers
 
-subroutine fill_my_fo_component(my_component_id, item_count, type_list, sublist_count, index_sublist)
+subroutine fill_my_type_component(my_component_id, item_count, type_list, out_count, out_list)
 
 integer, intent(in)  :: my_component_id
 integer, intent(in)  :: item_count
-integer, intent(in)  :: type_list(item_count)
-integer, intent(in)  :: sublist_count
-integer, intent(out) :: index_sublist(sublist_count)
+integer, intent(in)  :: type_list(:)  ! (item_count)
+integer, intent(in)  :: out_count
+integer, intent(out) :: out_list(:) ! (out_count)
 
-integer :: i, sc
+integer :: i, oc
 
-sc = 0
+oc = 0
 do i=1, item_count
    if (get_fo_component(type_list(i)) == my_component_id) then
-      sc = sc + 1
-      index_sublist(sc) = i
-   endif
-enddo
-
-if (sc /= sublist_count) then
-   write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
-   write(msgstring1, *)'sublist count = ', sublist_count, ' while sc = ', sc
-   call error_handler(E_ERR,'fill_my_fo_component',msgstring,source,revision,revdate,text2=msgstring1)
-endif
-
-end subroutine fill_my_fo_component
-
-!------------------------------------------------------------------
-
-!> tell me how many of these items have an id that matches
-!> the forward operator for the given component number
-!> this differs from the one above in that there's already
-!> an index subset list, also the list is kinds, not types.
-
-subroutine fill_my_component_indirect(my_component_id, item_count, full_kind_list, sublist_count, index_sublist, &
-                                      out_count, out_sublist)
-
-integer, intent(in)  :: my_component_id
-integer, intent(in)  :: item_count
-integer, intent(in)  :: full_kind_list(item_count)
-integer, intent(in)  :: sublist_count
-integer, intent(in)  :: index_sublist(sublist_count)
-integer, intent(in)  :: out_count
-integer, intent(out) :: out_sublist(out_count)
-
-integer :: i, compid, oc
-
-oc = 0
-do i=1, sublist_count
-if (index_sublist(i) > item_count) then
-  print *, 'fill_my_component_indirect: i, index_sublist, item_count: ', i, index_sublist(i), item_count
-  stop
-endif
-   if (which_model_id(full_kind_list(index_sublist(i))) == my_component_id) then
       oc = oc + 1
-      out_sublist(oc) = index_sublist(i)
+      out_list(oc) = i
    endif
 enddo
 
 if (oc /= out_count) then
    write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
-   write(msgstring1, *)'out count = ', out_count, ' while oc = ', oc
-   call error_handler(E_ERR,'fill_my_component_indirect',msgstring,source,revision,revdate,text2=msgstring1)
+   write(msgstring1, *)'expected count = ', out_count, ' while found count = ', oc
+   call error_handler(E_ERR,'fill_my_type_component',msgstring,source,revision,revdate,text2=msgstring1)
 endif
 
-end subroutine fill_my_component_indirect
+end subroutine fill_my_type_component
 
 !------------------------------------------------------------------
 
-!> tell me how many of these items have an id that doesn't match
-!> the forward operator for the given component number
-!> this differs from the one above in that there's already
-!> an index subset list, also the list is kinds, not types.
+!> count how many of these items have an generic kind that matches
+!> the given component number
+!> the list is KINDS
 
-subroutine fill_not_my_component_indirect(my_component_id, item_count, full_kind_list, sublist_count, index_sublist, &
-                                          out_count, out_sublist)
+function count_my_kind_component(my_component_id, item_count, kind_list)
 
-integer, intent(in)  :: my_component_id
-integer, intent(in)  :: item_count
-integer, intent(in)  :: full_kind_list(item_count)
-integer, intent(in)  :: sublist_count
-integer, intent(in)  :: index_sublist(sublist_count)
-integer, intent(in)  :: out_count
-integer, intent(out) :: out_sublist(out_count)
+integer, intent(in) :: my_component_id
+integer, intent(in) :: item_count
+integer, intent(in) :: kind_list(:) ! (item_count)
+integer :: count_my_kind_component
 
-integer :: i, compid, oc
+integer :: i, oc
 
 oc = 0
-do i=1, sublist_count
-   if (which_model_id(full_kind_list(index_sublist(i))) /= my_component_id) then
-      oc = oc + 1
-      out_sublist(oc) = index_sublist(i)
-   endif
+do i=1, item_count
+   if (which_model_id(kind_list(i)) == my_component_id) oc = oc + 1
 enddo
 
-if (oc /= out_count) then
-   write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
-   write(msgstring1, *)'out count = ', out_count, ' while oc = ', oc
-   call error_handler(E_ERR,'fill_not_my_component_indirect',msgstring,source,revision,revdate,text2=msgstring1)
-endif
+count_my_kind_component = oc
 
-end subroutine fill_not_my_component_indirect
+end function count_my_kind_component
 
 !------------------------------------------------------------------
 
 !> fill the previously allocated list with the matching index numbers
 
-subroutine fill_my_state_component(my_component_id, item_count, kind_list, sublist_count, index_sublist)
+subroutine fill_my_kind_component(my_component_id, item_count, kind_list, out_count, out_list)
 
 integer, intent(in)  :: my_component_id
 integer, intent(in)  :: item_count
-integer, intent(in)  :: kind_list(item_count)
-integer, intent(in)  :: sublist_count
-integer, intent(out) :: index_sublist(sublist_count)
-
-integer :: i, sc
-
-sc = 0
-do i=1, item_count
-   if (which_model_id(kind_list(i)) == my_component_id) then
-      sc = sc + 1
-      index_sublist(sc) = i
-   !if (my_task_id() == 15) print *, 'fill_my_state_comp: ', i, kind_list(i), sc
-   endif
-enddo
-
-if (sc /= sublist_count) then
-   write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
-   write(msgstring1, *)'sublist count = ', sublist_count, ' while sc = ', sc
-   call error_handler(E_ERR,'fill_my_state_component',msgstring,source,revision,revdate,text2=msgstring1)
-endif
-
-end subroutine fill_my_state_component
-
-!------------------------------------------------------------------
-
-!> fill the output arrays with the indices of those kinds in the
-!> sublist that match my component id
-
-subroutine fill_my_state_component_indirect(my_component_id, item_count, full_kind_list, sublist_count, index_sublist, &
-                                            out_count, out_sublist)
-
-integer, intent(in)  :: my_component_id
-integer, intent(in)  :: item_count
-integer, intent(in)  :: full_kind_list(item_count)
-integer, intent(in)  :: sublist_count
-integer, intent(in)  :: index_sublist(sublist_count)
+integer, intent(in)  :: kind_list(:) ! (item_count)
 integer, intent(in)  :: out_count
-integer, intent(out) :: out_sublist(out_count)
+integer, intent(out) :: out_list(:) ! (out_count)
 
-integer :: i, compid, oc
+integer :: i, oc
 
 oc = 0
 do i=1, item_count
-   if (which_model_id(full_kind_list(index_sublist(i))) == my_component_id) then
+   if (which_model_id(kind_list(i)) == my_component_id) then
       oc = oc + 1
-      out_sublist(oc) = index_sublist(i)
+      out_list(oc) = i
    endif
 enddo
 
-if (oc /= sublist_count) then
+if (oc /= out_count) then
    write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
-   write(msgstring1, *)'sublist count = ', sublist_count, ' while oc = ', oc
-   call error_handler(E_ERR,'fill_my_state_component_indirect',msgstring,source,revision,revdate,text2=msgstring1)
+   write(msgstring1, *)'expected count = ', out_count, ' while found count = ', oc
+   call error_handler(E_ERR,'fill_my_kind_component',msgstring,source,revision,revdate,text2=msgstring1)
 endif
 
-end subroutine fill_my_state_component_indirect
+end subroutine fill_my_kind_component
+
+!------------------------------------------------------------------
+
+!> count how many of these items have an generic kind that matches
+!> the given component number
+!> the list is KINDS
+!> this differs from the plain 'count_my_kind_component' in that
+!> we already have a subset list of indices and we only iterate
+!> that subset and select an even smaller subset of that.
+
+function count_my_kind_component_indirect(my_component_id, item_count, full_kind_list, subset_count, subset_list)
+
+integer, intent(in) :: my_component_id
+integer, intent(in) :: item_count
+integer, intent(in) :: full_kind_list(:) ! (item_count)
+integer, intent(in) :: subset_count
+integer, intent(in) :: subset_list(:) ! (subset_count)
+integer :: count_my_kind_component_indirect
+
+integer :: i, out_count
+
+out_count = 0
+do i=1, subset_count
+   if (which_model_id(full_kind_list(subset_list(i))) == my_component_id) out_count = out_count + 1
+enddo
+
+count_my_kind_component_indirect = out_count
+
+end function count_my_kind_component_indirect
+
+!------------------------------------------------------------------
+
+!> fill the previously allocated list with the matching index numbers
+
+subroutine fill_my_kind_component_indirect(my_component_id, item_count, full_kind_list, subset_count, subset_list, &
+                                           out_count, out_list)
+
+integer, intent(in)  :: my_component_id
+integer, intent(in)  :: item_count
+integer, intent(in)  :: full_kind_list(:) ! (item_count)
+integer, intent(in)  :: subset_count
+integer, intent(in)  :: subset_list(:) ! (subset_count)
+integer, intent(in)  :: out_count
+integer, intent(out) :: out_list(:) ! (out_count)
+
+integer :: i, oc
+
+oc = 0
+do i=1, subset_count
+   if (which_model_id(full_kind_list(subset_list(i))) == my_component_id) then
+      oc = oc + 1
+      out_list(oc) = i
+   endif
+enddo
+
+if (oc /= out_count) then
+   write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
+   write(msgstring1, *)'expected count = ', out_count, ' while found count = ', oc
+   call error_handler(E_ERR,'fill_my_kind_component_indirect',msgstring,source,revision,revdate,text2=msgstring1)
+endif
+
+end subroutine fill_my_kind_component_indirect
+
+!------------------------------------------------------------------
+
+!> count how many of these items have an generic kind that does NOT
+!> match the given component number
+!> the list is KINDS
+!> this differs from the plain 'count_my_kind_component' in that
+!> we already have a subset list of indices and we only iterate
+!> that subset and select an even smaller subset of that.
+
+function count_not_my_kind_component_indirect(my_component_id, item_count, full_kind_list, subset_count, subset_list)
+
+integer, intent(in) :: my_component_id
+integer, intent(in) :: item_count
+integer, intent(in) :: full_kind_list(:) ! (item_count)
+integer, intent(in) :: subset_count
+integer, intent(in) :: subset_list(:) ! (subset_count)
+integer :: count_not_my_kind_component_indirect
+
+integer :: i, out_count
+
+out_count = 0
+do i=1, subset_count
+   if (which_model_id(full_kind_list(subset_list(i))) /= my_component_id) out_count = out_count + 1
+enddo
+
+count_not_my_kind_component_indirect = out_count
+
+end function count_not_my_kind_component_indirect
+
+!------------------------------------------------------------------
+
+!> fill the previously allocated list with the matching index numbers
+
+subroutine fill_not_my_kind_component_indirect(my_component_id, item_count, full_kind_list, subset_count, subset_list, &
+                                               out_count, out_list)
+
+integer, intent(in)  :: my_component_id
+integer, intent(in)  :: item_count
+integer, intent(in)  :: full_kind_list(:) ! (item_count)
+integer, intent(in)  :: subset_count
+integer, intent(in)  :: subset_list(:) ! (subset_count)
+integer, intent(in)  :: out_count
+integer, intent(out) :: out_list(:) ! (out_count)
+
+integer :: i, oc
+
+oc = 0
+do i=1, subset_count
+   if (which_model_id(full_kind_list(subset_list(i))) /= my_component_id) then
+      oc = oc + 1
+      out_list(oc) = i
+   endif
+enddo
+
+if (oc /= out_count) then
+   write(msgstring,*)'did not find the same number of items when filling sublist as when counting them'
+   write(msgstring1, *)'expected count = ', out_count, ' while found count = ', oc
+   call error_handler(E_ERR,'fill_not_my_kind_component_indirect',msgstring,source,revision,revdate,text2=msgstring1)
+endif
+
+end subroutine fill_not_my_kind_component_indirect
+
+!------------------------------------------------------------------
+!------------------------------------------------------------------
 
 
 !------------------------------------------------------------------
