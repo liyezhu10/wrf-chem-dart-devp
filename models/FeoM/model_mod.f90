@@ -384,6 +384,7 @@ do ivar = 1, nfields
    progvar(ivar)%dimlens     = MISSING_I
    progvar(ivar)%numcells    = MISSING_I
    progvar(ivar)%replace     = .true.
+   progvar(ivar)%clamping    = .false.
    progvar(ivar)%out_of_range_fail = .false.  ! FIXME ... not used
 
    string2 = trim(model_analysis_filename)//' '//trim(varname)
