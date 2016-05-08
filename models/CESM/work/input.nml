@@ -86,7 +86,7 @@
    adaptive_localization_threshold = -1,
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 100
+   print_every_nth_obs             = 10000
    adjust_obs_impact  = .false.
    obs_impact_filename = ''
    allow_any_impact_values = .false.
@@ -118,10 +118,30 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
-                                'XBT_TEMPERATURE'
+                                'GPSRO_REFRACTIVITY',
+                                'FLOAT_SALINITY',
+                                'FLOAT_TEMPERATURE',
+                                'MOORING_SALINITY',
+                                'MOORING_TEMPERATURE',
+                                'CTD_SALINITY',
+                                'CTD_TEMPERATURE',
+                                'XCTD_SALINITY',
+                                'XCTD_TEMPERATURE',
+                                'XBT_TEMPERATURE',
+                                'RADIOSONDE_U_WIND_COMPONENT',
+                                'RADIOSONDE_V_WIND_COMPONENT',
+                                'RADIOSONDE_TEMPERATURE',
+                                'RADIOSONDE_SPECIFIC_HUMIDITY',
+                                'AIRCRAFT_U_WIND_COMPONENT',
+                                'AIRCRAFT_V_WIND_COMPONENT',
+                                'AIRCRAFT_TEMPERATURE',
+                                'ACARS_U_WIND_COMPONENT',
+                                'ACARS_V_WIND_COMPONENT',
+                                'ACARS_TEMPERATURE',
+                                'SAT_U_WIND_COMPONENT',
+                                'SAT_V_WIND_COMPONENT',
+   evaluate_these_obs_types = ''
   /
-  !   evaluate_these_obs_types = 'RADIOSONDE_TEMPERATURE'
-  !                              'XBT_TEMPERATURE'
 
 &preprocess_nml
            overwrite_output = .true.,
@@ -155,6 +175,7 @@
    include_CAM = .true.
    include_POP = .true.
    include_CLM = .false.
+   use_cross_component = .true.
    debug       = 0
   /
 

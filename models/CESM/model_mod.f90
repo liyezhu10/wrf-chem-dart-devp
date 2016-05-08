@@ -174,13 +174,20 @@ logical :: include_CAM = .true.
 logical :: include_POP = .true.
 logical :: include_CLM = .false.
 
-integer  :: debug = 0   ! turn up for more and more debug messages
+! if true, use alicia's cross component code.
+! if false, use the default get_dist, which if the vert
+! coords differ computes only horizontal distance.
+logical :: use_cross_component = .true. 
+
+! turn up for more and more debug messages
+integer :: debug = 0   
 
 
 namelist /model_nml/  &
    include_CAM, &
    include_POP, &
    include_CLM, &
+   use_cross_component, &
    debug
 
 ! FIXME: add the input and output filenames here for the
@@ -823,57 +830,54 @@ if (include_CAM) then
    endif
 endif
 
-!#! 
-!#! if (include_POP) then
-!#!    !> extract the state indices for ocn only
-!#!    sublist_count = count_my_kind_component(isPOP, item_count, kind_list)
-!#!    if (sublist_count > 0) then
-!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
-!#!       call fill_my_kind_component(isPOP, item_count, kind_list, index_list, sublist_count, sublist_index)
-!#! 
-!#!       do i=1, sublist_count
-!#!          loc_sublist(i)  = loc_list(sublist_index(i))
-!#!          kind_sublist(i) = kind_list(sublist_index(i))
-!#!          sublist_index(i) = index_list(sublist_index(i))
-!#!       enddo
-!#!  
-!#!       ! FIXME: hard code (for now) height as vert coord
-!#!       call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, sublist_index, VERTISHEIGHT)
-!#! 
-!#!       ! possibly update any converted locations
-!#!       do i=1, sublist_count
-!#!          loc_list(sublist_index(i)) = loc_sublist(i) 
-!#!       enddo
-!#!  
-!#!       deallocate(loc_sublist, kind_sublist, sublist_index)
-!#!    endif
-!#! endif
-!#! 
-!#! if (include_CLM) then
-!#!    !> extract the state indices for ocn only
-!#!    sublist_count = count_my_kind_component(isCLM, item_count, kind_list)
-!#!    if (sublist_count > 0) then
-!#!       allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
-!#!       call fill_my_kind_component(isCLM, item_count, kind_list, index_list, sublist_count, sublist_index)
-!#! 
-!#!       do i=1, sublist_count
-!#!          loc_sublist(i)  = loc_list(sublist_index(i))
-!#!          kind_sublist(i) = kind_list(sublist_index(i))
-!#!          sublist_index(i) = index_list(sublist_index(i))
-!#!       enddo
-!#!  
-!#!       ! FIXME: hard code (for now) height as vert coord
-!#!       call clm_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, sublist_index, VERTISHEIGHT)
-!#! 
-!#!       ! possibly update any converted locations
-!#!       do i=1, sublist_count
-!#!          loc_list(sublist_index(i)) = loc_sublist(i) 
-!#!       enddo
-!#!  
-!#!       deallocate(loc_sublist, kind_sublist, sublist_index)
-!#!    endif
-!#! endif
-!#! 
+if (include_POP) then
+   !> extract the state indices for ocn only
+   sublist_count = count_my_kind_component(isPOP, item_count, kind_list)
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_kind_component(isPOP, item_count, kind_list, sublist_count, sublist_index)
+
+      do i=1, sublist_count
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         kind_sublist(i) = kind_list(sublist_index(i))
+      enddo
+ 
+      ! FIXME: hard code (for now) vertical as height 
+      call pop_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, VERTISHEIGHT)
+
+      ! possibly update any converted locations
+      do i=1, sublist_count
+         loc_list(sublist_index(i)) = loc_sublist(i) 
+      enddo
+ 
+      deallocate(loc_sublist, kind_sublist, sublist_index)
+   endif
+endif
+
+if (include_CLM) then
+   !> extract the state indices for clm only
+   sublist_count = count_my_kind_component(isCLM, item_count, kind_list)
+   if (sublist_count > 0) then
+      allocate(loc_sublist(sublist_count), kind_sublist(sublist_count), sublist_index(sublist_count))
+      call fill_my_kind_component(isCLM, item_count, kind_list, sublist_count, sublist_index)
+
+      do i=1, sublist_count
+         loc_sublist(i)  = loc_list(sublist_index(i))
+         kind_sublist(i) = kind_list(sublist_index(i))
+      enddo
+ 
+      ! FIXME: hard code (for now) vertical as height coord
+      call clm_model_convert_vert_state(sublist_count, loc_sublist, kind_sublist, VERTISHEIGHT)
+
+      ! possibly update any converted locations
+      do i=1, sublist_count
+         loc_list(sublist_index(i)) = loc_sublist(i) 
+      enddo
+ 
+      deallocate(loc_sublist, kind_sublist, sublist_index)
+   endif
+endif
+ 
 end subroutine model_convert_vert_state
 
 !------------------------------------------------------------------
@@ -1053,11 +1057,18 @@ if (sublist_count > 0) then
       dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
    enddo
 
-   ! compute distances == but this can't do what cam would do with close obs
-   ! FIXME: this doesn't match the existing interfaces because it
-   ! does its own search and doesn't look at the existing index list.
-   !call cam_get_close_obs()
-   
+   ! compute distances 
+   ! FIXME: this can't do what modules would do with close obs
+   !  this doesn't match the existing interfaces because it
+   ! the code does its own search and doesn't look at the existing index list.
+   !if (fo_comp == isCAM) then
+   !   call cam_get_close_obs()
+   !else if (fo_comp == isPOP) then
+   !   call pop_get_close_obs()
+   !else if (fo_comp == isCLM) then
+   !   call clm_get_close_obs()
+   !endif
+      
    deallocate(sublist_index)
 endif
 
@@ -1070,46 +1081,16 @@ if (sublist_count > 0) then
    do i=1, sublist_count
       sub_indx = sublist_index(i)      ! index into the "close_ind" list
       orig_indx = close_ind(sub_indx)  ! the original index into the full list
-      !dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
-      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      if (use_cross_component) then
+         dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      else  
+         dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      endif
    enddo
 
    deallocate(sublist_index)
 endif
 
-!%! do i=1, num_close
-!%!    ! compute the horizontal here and then if cross component do something
-!%!    ! different in the vertical.
-!%!    this = close_ind(i)
-!%!    vert2 = query_location(locs(this))
-!%!    obs_comp = which_model_state_num(this)
-!%! !if (mod(n, 1000) == 1 .and. vert1 /= vert2) print *, 'vert1, 2: ', vert1, vert2
-!%! n = n + 1
-!%!    if (fo_comp /= obs_comp) then
-!%!    !if ((base_obs_kind == KIND_AIR_TEMPERATURE   .and. loc_kind(this) == KIND_WATER_TEMPERATURE) .or. &
-!%!    !    (base_obs_kind == KIND_WATER_TEMPERATURE .and. loc_kind(this) == KIND_AIR_TEMPERATURE)) then
-!%! if (dist(i) == 0) then
-!%! print *, '0 distance: ', base_obs_kind, loc_kind(this), vert1, vert2
-!%! endif
-!%!       ! or
-!%!       !horiz_dist = get_dist(base_obs_loc, locs(this), &
-!%!       !                      base_obs_type, loc_kind(this), no_vert = .true.)
-!%!       !vert_dist_proxy = get_vert_alpha(base_loc_obs, loc(this), base_obs_kind, loc_kind(this))
-!%!       !dist(i) = sqrt(horiz_dist**2 + vert_dist_proxy**2)
-!%!    else
-!%!       vert2 = query_location(locs(this))
-!%!       ! FIXME: we should be converting in the vertical for those we know how to convert
-!%!       ! ( e.g. height obs in the atmosphere -> pressure)
-!%!       if (vert1 /= vert2) then
-!%!          dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this), no_vert=.true.)
-!%!       else
-!%!          dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this))
-!%!       endif
-!%!    endif
-!%! enddo
-!%! 
-!%! return
-!%! 
 !%! ! NOT REACHED NOT REACHED NOT REACHED
 !%! 
 !%! !  FIXME:  @TODO
@@ -1210,10 +1191,8 @@ if (sublist_count > 0) then
       dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
    enddo
 
-   ! compute distances == but this can't do what cam would do with close obs
-   ! FIXME: this doesn't match the existing interfaces because it
-   ! does its own search and doesn't look at the existing index list.
-   !call cam_get_close_obs()
+   ! see comment in get_close_obs() about not being able to use
+   ! the module's real get_close_xxx() routine.
    
    deallocate(sublist_index)
 endif
@@ -1227,154 +1206,15 @@ if (sublist_count > 0) then
    do i=1, sublist_count
       sub_indx = sublist_index(i)      ! index into the "close_ind" list
       orig_indx = close_ind(sub_indx)  ! the original index into the full list
-      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
-      !dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      if (use_cross_component) then
+         dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      else  
+         dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
+      endif
    enddo
 
    deallocate(sublist_index)
 endif
-
-!%! do i=1, num_close
-!%!    ! compute the horizontal here and then if cross component do something
-!%!    ! different in the vertical.
-!%!    this = close_ind(i)
-!%!    vert2 = query_location(locs(this))
-!%!    state_comp = which_model_state_num(this)
-!%!    !> @TODO: fix use of magic numbers.
-!%!    if (fo_comp /= state_comp) then
-!%!       dist(i) = get_xcomp_dist(base_obs_loc, locs(this), base_obs_kind, loc_kind(this))
-!%!       ! or
-!%!       !horiz_dist = get_dist(base_obs_loc, locs(this), &
-!%!       !                      base_obs_type, loc_kind(this), no_vert = .true.)
-!%!       !vert_dist_proxy = get_vert_alpha(base_loc_obs, loc(this), base_obs_kind, loc_kind(this))
-!%!       !dist(i) = sqrt(horiz_dist**2 + vert_dist_proxy**2)
-!%!    else
-!%!       vert2 = query_location(locs(this))
-!%!       ! FIXME: we should be converting in the vertical for those we know how to convert
-!%!       ! ( e.g. height obs in the atmosphere -> pressure)
-!%!       if (vert1 /= vert2) then
-!%!          dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this), no_vert=.true.)
-!%!       else
-!%!          dist(i) = get_dist(base_obs_loc, locs(this), base_obs_type, loc_kind(this))
-!%!       endif
-!%!    endif
-!%! enddo
-!%! 
-!%! return
-
-!%! ! NOT REACHED NOT REACHED NOT REACHED
-!%! 
-!%! subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
-!%!                           locs, loc_kind, num_close, close_ind, dist)
-!%! 
-!%!  type(get_close_type), intent(in)    :: gc
-!%!  type(location_type),  intent(in)    :: base_obs_loc
-!%!  integer,              intent(in)    :: base_obs_type
-!%!  type(location_type),  intent(inout) :: locs(:)
-!%!  integer,              intent(in)    :: loc_kind(:)
-!%!  integer,              intent(out)   :: num_close
-!%!  integer,              intent(out)   :: close_ind(:)
-!%!  real(r8),  optional,  intent(out)   :: dist(:)
-!%! 
-!%! ! Given a DART location (referred to as "base") and a set of candidate
-!%! ! locations & kinds (obs, obs_kind), returns the subset close to the
-!%! ! "base", their indices, and their distances to the "base" ...
-!%! 
-!%! ! For vertical distance computations, general philosophy is to convert all
-!%! ! vertical coordinates to a common coordinate. This coordinate type is defined
-!%! ! in the namelist with the variable "vert_localization_coord".
-!%! 
-!%! integer :: whole_list, cur_start, cur_end
-!%! character(len=32) :: componentname
-!%! 
-!%! integer,  allocatable :: unified_close_ind(:)
-!%! real(r8), allocatable :: unified_dist(:)
-!%! 
-!%! ! Initialize variables to missing status
-!%! whole_list = size(close_ind)
-!%! allocate(unified_close_ind(whole_list), unified_dist(whole_list))
-!%! num_close = 0
-!%! close_ind(:) = -1
-!%! unified_close_ind = -1
-!%! if (present(dist)) dist = 1.0e9   !something big and positive (far away)
-!%! unified_dist = 1.0e9
-!%! 
-!%! ! FIXME: in a real unified model_mod, these would all be called
-!%! ! and any state vector items from any model are potentially close.
-!%! ! the vertical conversions are one issue; the other is whether the
-!%! ! distances should be the same or different in different mediums
-!%! ! (e.g air vs water vs soil/snow)
-!%! 
-!%! ! this needs to call all the get close routines for active components
-!%! ! and merge the lists when done.
-!%! 
-!%! ! if we go back to generic kinds, then which_model_kind() needs to
-!%! ! take a kind and this is a real specific type
-!%! 
-!%! ! @TODO - need to sort and uniq the list in case models agree on
-!%! ! the same locations.  and what if they give different distances?
-!%!  
-!%! ! @TODO:  for now, bypass the model-specific routines and call
-!%! ! the raw location mod code.   this may mess up land points in pop
-!%! ! and won't allow top-of-model changes in cam, and no vertical conversion
-!%! ! will be done.  but it may run with horizontal only.
-!%! 
-!%! call get_close_obs(gc, base_obs_loc, base_obs_type, &
-!%!                    locs, loc_kind, num_close, close_ind, dist)
-!%! 
-!%! deallocate(unified_close_ind, unified_dist)
-!%! return
-!%! 
-!%! ! NOT REACHED NOT REACHED NOT REACHED
-!%! 
-!%! call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-!%!                        locs, loc_kind, num_close, close_ind, dist)
-!%! 
-!%! deallocate(unified_close_ind, unified_dist)
-!%! return
-!%! 
-!%! 
-!%! cur_start = 1
-!%! cur_end = 1
-!%! 
-!%! !  concatinate each list as it is computed
-!%! if (include_CAM) then
-!%!       call cam_get_close_state(gc, base_obs_loc, base_obs_type, &
-!%!                                locs, loc_kind, num_close, close_ind, dist)
-!%!       cur_end = cur_start + num_close - 1
-!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-!%!       if (present(dist)) &
-!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
-!%!       cur_start = cur_start + num_close
-!%! endif
-!%! 
-!%! if (include_POP) then
-!%!       call pop_get_close_state(gc, base_obs_loc, base_obs_type, &
-!%!                                locs, loc_kind, num_close, close_ind, dist)
-!%!       cur_end = cur_start + num_close - 1
-!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-!%!       if (present(dist)) &
-!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
-!%!       cur_start = cur_start + num_close
-!%! endif
-!%! 
-!%! if (include_CLM) then
-!%!       call loc_get_close_state(gc, base_obs_loc, base_obs_type, &
-!%!                                locs, loc_kind, num_close, close_ind, dist)
-!%!       cur_end = cur_start + num_close - 1
-!%!       unified_close_ind(cur_start:cur_end) = close_ind(1:num_close)       
-!%!       if (present(dist)) &
-!%!          unified_dist(cur_start:cur_end) = dist(1:num_close)
-!%!       cur_start = cur_start + num_close
-!%! endif
-!%! 
-!%! ! and return combined lists and counts
-!%! num_close = cur_start
-!%! close_ind = unified_close_ind
-!%! if (present(dist)) dist = unified_dist
-!%! 
-!%! deallocate(unified_close_ind, unified_dist)
-  
 
 end subroutine get_close_state
 
