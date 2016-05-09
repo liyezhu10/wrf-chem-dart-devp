@@ -164,9 +164,10 @@ integer, parameter :: REPLACE_INDEX = 5
 
 ! variables which are in the module namelist
 integer            :: assimilation_period_days = 0
-integer            :: assimilation_period_seconds = 60
+integer            :: assimilation_period_seconds = 21600     ! 86400 | 43200 | 21600
 real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
-logical            :: output_state_vector = .true.  ! output prognostic variables (if .false.)
+logical            :: output_state_vector = .false.  ! output prognostic variables (if .false.)
+logical            :: diagnostic_metadata = .true.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: model_analysis_filename = 'expno.year.oce.nc'
@@ -175,6 +176,7 @@ character(len=NF90_MAX_NAME) :: variables(MAX_STATE_VARIABLES * NUM_STATE_TABLE_
 namelist /model_nml/             &
    model_analysis_filename,      &
    output_state_vector,          &
+   diagnostic_metadata,          &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
    model_perturbation_amplitude, &
@@ -870,36 +872,40 @@ else
    ! Define useful geometry variables.
    !----------------------------------------------------------------------------
 
-   io = nf90_def_var(ncid=ncFileID, name='longitudes', &
-                    xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'longitudes def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees East'),&
-                 'nc_write_model_atts', 'longitude units  '//trim(filename))
+   if (diagnostic_metadata) then
 
-   io = nf90_def_var(ncid=ncFileID, name='latitudes', &
-                    xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'latitudes def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees North'),&
-                 'nc_write_model_atts', 'latitudes units  '//trim(filename))
+      io = nf90_def_var(ncid=ncFileID, name='longitudes', &
+                       xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
+      call nc_check(io,'nc_write_model_atts', 'longitudes def_var '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees East'),&
+                    'nc_write_model_atts', 'longitude units  '//trim(filename))
 
-   io = nf90_def_var(ncid=ncFileID, name='depths', &
-                    xtype=NF90_REAL, dimids = (/ nodes_3DimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'depths def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
-                 'nc_write_model_atts', 'depths units  '//trim(filename))
+      io = nf90_def_var(ncid=ncFileID, name='latitudes', &
+                       xtype=NF90_DOUBLE, dimids = (/ nodes_3DimID /), varid=VarID)
+      call nc_check(io,'nc_write_model_atts', 'latitudes def_var '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'units','degrees North'),&
+                    'nc_write_model_atts', 'latitudes units  '//trim(filename))
 
-   io = nf90_def_var(ncid=ncFileID, name='node_table', &
-             xtype=NF90_INT, dimids = (/ nVertLevelsDimID, nodes_2DimID /), varid=VarID)
-   call nc_check(io,'nc_write_model_atts', 'node_table def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'long_name','nod3D_below_nod2D'),&
-                 'nc_write_model_atts', 'node_table long_name  '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'valid_range',(/ 1, nVertices /)),&
-                 'nc_write_model_atts', 'node_table long_name  '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,VarID,'description', &
-                'table defining packing order. Given a level and a &
-           &horizontal cell, return the vertex index (between 1 and nodes_3d). &
-           &A value outside the valid_range means there is no wet location.'),&
-                 'nc_write_model_atts', 'node_table description  '//trim(filename))
+      io = nf90_def_var(ncid=ncFileID, name='depths', &
+                       xtype=NF90_REAL, dimids = (/ nodes_3DimID /), varid=VarID)
+      call nc_check(io,'nc_write_model_atts', 'depths def_var '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'units','meters'),&
+                    'nc_write_model_atts', 'depths units  '//trim(filename))
+
+      io = nf90_def_var(ncid=ncFileID, name='node_table', &
+                xtype=NF90_INT, dimids = (/ nVertLevelsDimID, nodes_2DimID /), varid=VarID)
+      call nc_check(io,'nc_write_model_atts', 'node_table def_var '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'long_name','nod3D_below_nod2D'),&
+                    'nc_write_model_atts', 'node_table long_name  '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'valid_range',(/ 1, nVertices /)),&
+                    'nc_write_model_atts', 'node_table long_name  '//trim(filename))
+      call nc_check(nf90_put_att(ncFileID,VarID,'description', &
+                   'table defining packing order. Given a level and a &
+              &horizontal cell, return the vertex index (between 1 and nodes_3d). &
+              &A value outside the valid_range means there is no wet location.'),&
+                    'nc_write_model_atts', 'node_table description  '//trim(filename))
+
+   endif
 
    !----------------------------------------------------------------------------
    ! Create the (empty) Prognostic Variables and the Attributes
@@ -940,25 +946,29 @@ else
    ! Fill the coordinate variables that DART needs and has locally
    !----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncFileID, 'longitudes', VarID), &
-                 'nc_write_model_atts', 'longitudes inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
-                'nc_write_model_atts', 'longitudes put_var '//trim(filename))
+   if (diagnostic_metadata) then
 
-   call nc_check(NF90_inq_varid(ncFileID, 'latitudes', VarID), &
-                 'nc_write_model_atts', 'latitudes inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(2,:) ), &
-                'nc_write_model_atts', 'latitudes put_var '//trim(filename))
+      call nc_check(NF90_inq_varid(ncFileID, 'longitudes', VarID), &
+                    'nc_write_model_atts', 'longitudes inq_varid '//trim(filename))
+      call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(1,:) ), &
+                   'nc_write_model_atts', 'longitudes put_var '//trim(filename))
 
-   call nc_check(NF90_inq_varid(ncFileID, 'depths', VarID), &
-                 'nc_write_model_atts', 'depths inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(3,:) ), &
-                'nc_write_model_atts', 'depths put_var '//trim(filename))
+      call nc_check(NF90_inq_varid(ncFileID, 'latitudes', VarID), &
+                    'nc_write_model_atts', 'latitudes inq_varid '//trim(filename))
+      call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(2,:) ), &
+                   'nc_write_model_atts', 'latitudes put_var '//trim(filename))
 
-   call nc_check(NF90_inq_varid(ncFileID, 'node_table', VarID), &
-                 'nc_write_model_atts', 'node_table inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, nod3D_below_nod2D ), &
-                'nc_write_model_atts', 'node_table put_var '//trim(filename))
+      call nc_check(NF90_inq_varid(ncFileID, 'depths', VarID), &
+                    'nc_write_model_atts', 'depths inq_varid '//trim(filename))
+      call nc_check(nf90_put_var(ncFileID, VarID, coord_nod3D(3,:) ), &
+                   'nc_write_model_atts', 'depths put_var '//trim(filename))
+
+      call nc_check(NF90_inq_varid(ncFileID, 'node_table', VarID), &
+                    'nc_write_model_atts', 'node_table inq_varid '//trim(filename))
+      call nc_check(nf90_put_var(ncFileID, VarID, nod3D_below_nod2D ), &
+                   'nc_write_model_atts', 'node_table put_var '//trim(filename))
+
+   endif
 
 endif
 

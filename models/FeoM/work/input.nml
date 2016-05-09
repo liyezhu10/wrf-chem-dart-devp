@@ -198,6 +198,7 @@
 &model_nml
    model_analysis_filename = 'ENS01.2009.oce.nc'
    output_state_vector          = .false.
+   diagnostic_metadata          = .true.
    assimilation_period_days     = 0
    assimilation_period_seconds  = 86400
    model_perturbation_amplitude = 0.0001
