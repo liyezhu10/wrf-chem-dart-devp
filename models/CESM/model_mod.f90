@@ -575,9 +575,11 @@ if (present(model)) then
    else if (model == 'pop' .and. include_POP) then
       call set_start_end('POP', x_start, x_end)
       nc_write_model_vars = pop_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
+      return
    else if (model == 'clm' .and. include_CLM) then
       call set_start_end('clm', x_start, x_end)
       nc_write_model_vars = clm_nc_write_model_vars(ncFileID, statevec(x_start:x_end), copyindex, timeindex) 
+      return
    endif
 
 endif
