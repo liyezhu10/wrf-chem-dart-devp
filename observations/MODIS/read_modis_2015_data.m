@@ -8,20 +8,21 @@
 % DART $Id$
 
    clear all;
-   iday_start=29;
-   iday_end=30;
+   iday_start=16;
+   iday_end=25;
    ifile_start=1;
 %
 % where's the data?
-   rootdir='/glade/p/work/mizzi/TRUNK/DART_CHEM/observations/MODIS';
+   rootdir='/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH/observations/MODIS';
    rundir='/glade/scratch/mizzi/MODIS_ASCII';
-   date_dir=2008060100:100:2008063000;
-   indx=1;
+   date_dir=2015081500:100:2015082500;
+%   indx=1;
 %   for indx=1:30
    for indx=iday_start:iday_end
+      indxx=indx-iday_start+1
       cd(rundir);
-      date_str=int2str(date_dir(indx));
-      datadir=strcat('/glade/p/acd/mizzi/AVE_TEST_DATA/MODIS/',date_str);
+      date_str=int2str(date_dir(indxx));
+      datadir=strcat('/glade/p/acd/mizzi/AVE_TEST_DATA/MODIS_2015/',date_str);
 %
 % directory listing
       list=dir(datadir);
@@ -42,13 +43,14 @@
       scale_factor=0.001;
 %
 % time conversion (MODIS time is at TAI time seconds since 1993-1-1 00:00)
-      time_factor = 12*365+3*366; %? how many days up to current year(2008) since 1993
+%      time_factor = 12*365+3*366; %? how many days up to current year(2008) since 1993
+      time_factor = 18*365+4*366; %? how many days up to current year(2015) since 1993
       sec2day     = 1/(24*60*60);
-      month_array = [31,29,31,30,31,30,31,31,30,31,30,31]; % 2008 is a leap year
+      month_array = [31,28,31,30,31,30,31,31,30,31,30,31]; % 2015 is not a leap year
 %
 % returns the cumulative sum along different dimensions of an array.
       cumdays = cumsum(month_array);
-      year = 2008;
+      year = 2015;
       otype = 1;
       vert  = 0;
       file_output=strcat('/glade/scratch/mizzi/MODIS_ASCII/modis_ascii_',date_str,'.input')
@@ -63,7 +65,7 @@
 %    
 % Convert cell array of matrices to single matrix
          filename=cell2mat(filelist(ifile));
-         fprintf(fif,'Day %d, File %d, NFiles %d, Filename %s\n',indx,ifile,nfiles,filename);
+         fprintf(fif,'Day %d, File %d, NFiles %d, Filename %s\n',indxx,ifile,nfiles,filename);
 %    
 % filelist(1) is  'MYD04_L2.A2010235.0000.051.2010240042123.hdf'    
 % after  filename=cell2mat(filelist(1)) 
