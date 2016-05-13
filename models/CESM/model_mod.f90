@@ -1321,20 +1321,23 @@ subroutine which_model_kind(obs_kind, componentname, componentid)
  character(len=*), intent(out), optional :: componentname
  integer,          intent(out), optional :: componentid
 
-! FIXME: this needs to be beefed up with all possible obs kinds
-! and which model would have the best forward operator for it.
-! when mapping fo at obs_kind init, translate to kind and set
-! component then??  
+! FIXME: this can be set in obs_kind_mod automatically based
+! on the FO of the specific obs types - they should map to
+! the underlying kind directly.   this table is a temp hack
+! until i write that code.  fri, 13 may 2016   nsc
 
 select case (obs_kind)
-   case (KIND_AIR_TEMPERATURE, &
+   case (KIND_AIR_TEMPERATURE, KIND_GPSRO, &
+         KIND_SPECIFIC_HUMIDITY, KIND_RELATIVE_HUMIDITY, &
+         KIND_SURFACE_PRESSURE, KIND_PRESSURE, &
          KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
       if (present(componentname)) componentname = 'CAM'
       if (present(componentid))   componentid   = isCAM
       componentname = 'CAM'
  
-   case (KIND_WATER_TEMPERATURE, &
-         KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT)
+   case (KIND_WATER_TEMPERATURE, KIND_SALINITY, &
+         KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT, &
+         KIND_SEA_SURFACE_PRESSURE, KIND_SEA_SURFACE_HEIGHT)
       if (present(componentname)) componentname = 'POP'
       if (present(componentid))   componentid   = isPOP
 
@@ -1357,16 +1360,21 @@ function which_model_id(dart_kind)
  integer, intent(in) :: dart_kind
  integer :: which_model_id
 
-! FIXME: this needs to be beefed up with all possible kinds
-! and probably be a field in the kinds derived type
+! FIXME: this can be set in obs_kind_mod automatically based
+! on the FO of the specific obs types - they should map to
+! the underlying kind directly.   this table is a temp hack
+! until i write that code.  fri, 13 may 2016   nsc
 
 select case (dart_kind)
-   case (KIND_AIR_TEMPERATURE, &
+   case (KIND_AIR_TEMPERATURE, KIND_GPSRO, &
+         KIND_SPECIFIC_HUMIDITY, KIND_RELATIVE_HUMIDITY, &
+         KIND_SURFACE_PRESSURE, KIND_PRESSURE, &
          KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
       which_model_id = isCAM
  
-   case (KIND_WATER_TEMPERATURE, &
-         KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT)
+   case (KIND_WATER_TEMPERATURE, KIND_SALINITY, &
+         KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT, &
+         KIND_SEA_SURFACE_PRESSURE, KIND_SEA_SURFACE_HEIGHT)
       which_model_id = isPOP
 
    case (KIND_CARBON)
