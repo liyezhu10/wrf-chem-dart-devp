@@ -1335,7 +1335,7 @@ select case (obs_kind)
       if (present(componentid))   componentid   = isCAM
       componentname = 'CAM'
  
-   case (KIND_WATER_TEMPERATURE, KIND_SALINITY, &
+   case (KIND_WATER_TEMPERATURE, KIND_POTENTIAL_TEMPERATURE, KIND_SALINITY, &
          KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT, &
          KIND_SEA_SURFACE_PRESSURE, KIND_SEA_SURFACE_HEIGHT)
       if (present(componentname)) componentname = 'POP'
@@ -1372,7 +1372,7 @@ select case (dart_kind)
          KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
       which_model_id = isCAM
  
-   case (KIND_WATER_TEMPERATURE, KIND_SALINITY, &
+   case (KIND_WATER_TEMPERATURE, KIND_POTENTIAL_TEMPERATURE, KIND_SALINITY, &
          KIND_U_CURRENT_COMPONENT, KIND_V_CURRENT_COMPONENT, &
          KIND_SEA_SURFACE_PRESSURE, KIND_SEA_SURFACE_HEIGHT)
       which_model_id = isPOP
