@@ -92,6 +92,13 @@
    allow_any_impact_values = .false.
   /
 
+# to change the localization cutoff on a per-obs-type basis,
+# add the following items to the assim_tools_nml.
+#   special_localization_obs_types  = "RADIOSONDE_TEMPERATURE",                 
+#                                     "MOORING_TEMPERATURE",                 
+#   special_localization_cutoffs    = 0.2,
+#                                     0.1
+
 &ensemble_manager_nml
    single_restart_file_in  = .true.
    single_restart_file_out = .false.
@@ -263,6 +270,22 @@
    nlat                        = 36,
    output_box_info             = .true.
   /
+ 
+ # you can also change the vertical localization
+ # on a per-obs-type basis.  to use this, add these
+ # items to the location_nml:
+ #
+ #  special_vert_normalization_obs_types     = 'RADIOSONDE_TEMPERATURE',
+ #                                             'MOORING_TEMPERATURE',
+ #  special_vert_normalization_pressures     = 500000.0,
+ #                                             100000.0
+ #  special_vert_normalization_heights       = 10000.0,
+ #                                             50000.0,
+ #  special_vert_normalization_levels        = 20.0,
+ #                                             20.0
+ #  special_vert_normalization_scale_heights = 5.0,
+ #                                             5.0
+
 
 &utilities_nml
    TERMLEVEL = 1,
