@@ -12,6 +12,10 @@ set dart_to_model = "dart_to_wrf"
 set model_restart = "wrfinput_d01"
 set dart_restart  = "dart_wrf_vector"
 
+set trunk_restarts = "filter_ic_new"
+set obsfile        = "obs_seq.final"
+set out_stub       = "wrf_out"
+
 echo " "
 
 set basecase = `basename $testcase`
@@ -57,6 +61,11 @@ ln -sf $source_trunk/models/$model/work/filter         $rundir/$basecase/test_tr
 echo "linking dart_to_model to test_trunk"
 ln -sf $source_trunk/models/$model/work/$dart_to_model $rundir/$basecase/test_trunk/$dart_to_model
 
+echo "copying template restarts"
+cp $rundir/$basecase/test_rma/advance_temp1/wrfinput_d01 $rundir/$basecase/test_rma/wrf_out.0001.nc
+cp $rundir/$basecase/test_rma/advance_temp2/wrfinput_d01 $rundir/$basecase/test_rma/wrf_out.0002.nc
+cp $rundir/$basecase/test_rma/advance_temp3/wrfinput_d01 $rundir/$basecase/test_rma/wrf_out.0003.nc
+
 echo "submitting filter for test_rma"
 cd $rundir/$basecase/test_rma
 # bsub < run_filter.csh
@@ -64,9 +73,7 @@ echo "submitting filter for test_rma"
 cd $rundir/$basecase/test_trunk
 # bsub < run_filter.csh
 
-set trunk_restarts = "filter_ic_new"
-set obsfile        = "obs_seq.final"
-set out_stub       = "wrf_restart"
+# TODO FIXME : need to wait until both jobs finish to continue
 
 echo " "
 echo "TESTING DIFFERENCES BETWEEN 'test_rma' AND 'test_trunk' "
@@ -97,14 +104,14 @@ printf "|%33s|%8s|%13s|%13s|\n" "---------------------------------" \
 
 cd $rundir/$basecase
  
-set restarts = `ls test_trunk/$out_stub.*     | xargs -n 1 basename`
+set restarts = `ls test_trunk/$out_stub.* | xargs -n 1 basename`
 set priors   = "" #`ls test_trunk/prior_member.* | xargs -n 1 basename`
 
 set testday  = `ls -l test_trunk/$out_stub.0001.nc | awk '{print $7}'`
 set testhour = `ls -l test_trunk/$out_stub.0001.nc | awk '{print $8}' | head -c 2`
 
 if ( ! -e compare_states ) then
-   ln -s /glade/u/home/hendric/programs/compare_states compare_states
+   ln -sf $source_rma/utilities/test/work/compare_states compare_states
 endif
 
 if ( ! -e input.nml ) then
@@ -120,13 +127,13 @@ foreach ASCI_FILE ( \
   if ( -e test_trunk/$ASCI_FILE ) then
      if ( -e test_rma/$ASCI_FILE ) then
         set RESULT = "FAILED"
-        set TIME1FILE = `ls -l test_trunk/$ASCI_FILE | awk '{print $6 $7","$8}'`
-        set TIME2FILE = `ls -l test_rma/$ASCI_FILE   | awk '{print $6 $7","$8}'`
+        set trunk_time = `ls -l test_trunk/$ASCI_FILE | awk '{print $6 $7","$8}'`
+        set rma_time = `ls -l test_rma/$ASCI_FILE   | awk '{print $6 $7","$8}'`
         printf "|%-33s|" " $ASCI_FILE"
         diff -q test_trunk/$ASCI_FILE test_rma/$ASCI_FILE > out.txt && set RESULT = "PASSED"
-        printf "%8s|%13s|%13s|\n" "$RESULT " "$TIME1FILE " "$TIME2FILE "
+        printf "%8s|%13s|%13s|\n" "$RESULT " "$trunk_time " "$rma_time "
      else
-        printf "|%-33s|%-8s|%-13s|%-13s|\n" " $ASCI_FILE" " DNE" " $TIME1FILE" " NO FILE"
+        printf "|%-33s|%-8s|%-13s|%-13s|\n" " $ASCI_FILE" " DNE" " $trunk_time" " NO FILE"
      endif
   else
      printf "|%-33s|%-8s|%-13s|%-13s|\n" " $ASCI_FILE" " DNE" " NO FILE" ""
@@ -134,57 +141,52 @@ foreach ASCI_FILE ( \
   
 end 
 
+# compare .nc files
+foreach NC_FILE ( \
+  $restarts \
+  Prior_Diag.nc \
+  Posterior_Diag.nc )
+  # $priors \
+  # PriorDiag_inf_mean.nc \
+  # PriorDiag_inf_sd.nc \
+  # PriorDiag_mean.nc \
+  # PriorDiag_sd.nc \
+  # prior_inflate_restart )
+  
+  set newfile = "TRUE"
+  if (`echo $NC_FILE | grep "$out_stub"` != "") then
+    set DAY  = `ls -l test_trunk/$NC_FILE | awk '{print $7}'`
+    set HOUR = `ls -l test_trunk/$NC_FILE | awk '{print $8}' | head -c 2`
 
-# # compare .nc files
-# foreach NC_FILE ( \
-#   $restarts \
-#   Prior_Diag.nc \
-#   Posterior_Diag.nc )
-#   # $priors \
-#   # PriorDiag_inf_mean.nc \
-#   # PriorDiag_inf_sd.nc \
-#   # PriorDiag_mean.nc \
-#   # PriorDiag_sd.nc \
-#   # prior_inflate_restart )
-#   
-#   set NEWFILE = "TRUE"
-#   if (`echo $NC_FILE | grep "$out_stub"` != "") then
-#     set DAY  = `ls -l test_trunk/$NC_FILE | awk '{print $7}'`
-#     set HOUR = `ls -l test_trunk/$NC_FILE | awk '{print $8}' | head -c 2`
-# 
-#     if ("$testday" > "$DAY") set NEWFILE = "FALSE"
-#     if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) set NEWFILE = "FALSE"
-#   endif 
-# 
-#   if ($NEWFILE == "TRUE") then 
-# 
-#      if ( -e test_trunk/$NC_FILE ) then
-#         if ( -e test_rma/$NC_FILE ) then
-#            set RESULT = "FAILED"
-#            set TIME1FILE = `ls -l test_trunk/$NC_FILE | awk '{print $6 $7","$8}'`
-#            set TIME2FILE = `ls -l test_rma/$NC_FILE | awk '{print $6 $7","$8}'`
-#            printf "|%-33s|" " $NC_FILE"
-#            # echo test_trunk/$NC_FILE test_rma/$NC_FILE | ./compare_states > out.txt && set RESULT = "PASSED"
-#            echo test_trunk/$NC_FILE test_rma/$NC_FILE | ./compare_states && set RESULT = "PASSED"
-# 
-#            # diff -q test_trunk/$NC_FILE $test_rma/$NC_FILE > out.txt && set RESULT = "PASSED"
-#            printf "%8s|%13s|%13s|\n" "$RESULT " "$TIME1FILE " "$TIME2FILE "
-#         else
-#            printf "|%-33s|%-8s|%-13s|%-13s|\n" " $NC_FILE" " DNE" " $TIME1FILE" " NO FILE"
-#         endif
-#      else
-#         printf "|%-33s|%-8s|%-13s|%-13s|\n" " $NC_FILE" " DNE" " NO FILE" ""
-#      endif
-# 
-#   endif
-# end
-# 
-# if ( ! -e compare_states ) then
-#    ln -s /glade/u/home/hendric/programs/compare_states compare_states
-# endif
-# printf "|%13s%13s|\n" "-----------------------------------" \
-#                       "-----------------------------------"
-# 
+    if ("$testday" > "$DAY") set newfile = "FALSE"
+    if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) set newfile = "FALSE"
+  endif 
+
+  if ($newfile == "TRUE") then 
+
+     if ( -e test_trunk/$NC_FILE ) then
+        if ( -e test_rma/$NC_FILE ) then
+           set RESULT = "FAILED"
+           set trunk_time = `ls -l test_trunk/$NC_FILE | awk '{print $6 $7","$8}'`
+           set rma_time = `ls -l test_rma/$NC_FILE | awk '{print $6 $7","$8}'`
+           printf "|%-33s|" " $NC_FILE"
+           echo test_trunk/$NC_FILE test_rma/$NC_FILE | ./compare_states > out.txt && set RESULT = "PASSED"
+           # echo test_trunk/$NC_FILE test_rma/$NC_FILE | ./compare_states && set RESULT = "PASSED"
+
+           # diff -q test_trunk/$NC_FILE $test_rma/$NC_FILE > out.txt && set RESULT = "PASSED"
+           printf "%8s|%13s|%13s|\n" "$RESULT " "$trunk_time " "$rma_time "
+        else
+           printf "|%-33s|%-8s|%-13s|%-13s|\n" " $NC_FILE" " DNE" " $trunk_time" " NO FILE"
+        endif
+     else
+        printf "|%-33s|%-8s|%-13s|%-13s|\n" " $NC_FILE" " DNE" " NO FILE" ""
+     endif
+
+  endif
+end
+printf "|%13s%13s|\n" "-----------------------------------" \
+                      "-----------------------------------"
+
 # if ( -e out.txt ) then
 #    rm out.txt
 # endif
