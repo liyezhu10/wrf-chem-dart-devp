@@ -258,13 +258,13 @@ fieldloop : do i=1, 100000
       call nc_check( nf90_inquire_dimension(ncinid1,  dimid(j),  dimname(j),  dimlen(j)), &
                    'nf90_inquire_dimension', 'infile1/'//trim( dimname(j)) )
       if (debug) then
-         write(msgstring, '(2A,I5,A,I8,2A)') trim(infile1), ' dim: ', j, ' len: ', dimlen(j), ' name: ', trim(dimname(j))
+         write(msgstring, '(2A,I6,A,I8,2A)') trim(infile1), ' dim: ', j, ' len: ', dimlen(j), ' name: ', trim(dimname(j))
          call error_handler(E_MSG, 'compare_states', msgstring)
       endif
       call nc_check( nf90_inquire_dimension(ncinid2, odimid(j), odimname(j), odimlen(j)), &
                    'nf90_inquire_dimension', 'infile2/'//trim(odimname(j)) )
       if (debug) then
-         write(msgstring, '(2A,I5,A,I8,2A)') trim(infile2), ' dim: ', j, ' len: ', odimlen(j), ' name: ', trim(odimname(j))
+         write(msgstring, '(2A,I6,A,I8,2A)') trim(infile2), ' dim: ', j, ' len: ', odimlen(j), ' name: ', trim(odimname(j))
          call error_handler(E_MSG, 'compare_states', msgstring)
       endif
       
@@ -289,19 +289,19 @@ fieldloop : do i=1, 100000
       case (0)
          write(tmpstring, '(2A)')       trim(nextfield), ' [scalar value]'
       case (1)
-         write(tmpstring, '(2A,1I5,A)') trim(nextfield), '(', dimlen(1),   ')'
+         write(tmpstring, '(2A,1I6,A)') trim(nextfield), '(', dimlen(1),   ')'
       case (2)
-         write(tmpstring, '(2A,2I5,A)') trim(nextfield), '(', dimlen(1:2), ')'
+         write(tmpstring, '(2A,2I6,A)') trim(nextfield), '(', dimlen(1:2), ')'
       case (3)
-         write(tmpstring, '(2A,3I5,A)') trim(nextfield), '(', dimlen(1:3), ')'
+         write(tmpstring, '(2A,3I6,A)') trim(nextfield), '(', dimlen(1:3), ')'
       case (4)
-         write(tmpstring, '(2A,4I5,A)') trim(nextfield), '(', dimlen(1:4), ')'
+         write(tmpstring, '(2A,4I6,A)') trim(nextfield), '(', dimlen(1:4), ')'
       case (5)
-         write(tmpstring, '(2A,5I5,A)') trim(nextfield), '(', dimlen(1:5), ')'
+         write(tmpstring, '(2A,5I6,A)') trim(nextfield), '(', dimlen(1:5), ')'
       case (6)
-         write(tmpstring, '(2A,6I5,A)') trim(nextfield), '(', dimlen(1:6), ')'
+         write(tmpstring, '(2A,6I6,A)') trim(nextfield), '(', dimlen(1:6), ')'
       case (7)
-         write(tmpstring, '(2A,7I5,A)') trim(nextfield), '(', dimlen(1:7), ')'
+         write(tmpstring, '(2A,7I6,A)') trim(nextfield), '(', dimlen(1:7), ')'
       case default
          ! "can't happen"
          write(msgstring, *) 'array dimension is illegal value: ', ndims
