@@ -139,7 +139,7 @@ LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
 FFLAGS = -g -C -check noarg_temp_created -fpe0 -vec-report0 \
-         -fp-model precise  -ftrapuv -traceback \
+         -convert big_endian -fp-model precise  -ftrapuv -traceback \
          -warn argument_checking,declarations,uncalled,unused $(INCS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
