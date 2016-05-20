@@ -106,32 +106,24 @@ while ( 1 )
 ### end of check the error for the input argument
   switch ( $i )
     case "-source_rma"
-      echo "source_rma"
       set source_rma = "$argv[1]"
       breaksw
     case "-source_trunk"
-      echo "source_trunk"
       set source_trunk = "$argv[1]"
-      echo "source_trunk after"
       breaksw
     case "-model"
-      echo "model"
       set model = $argv[1]
       breaksw
     case "-rundir"
-      echo "rundir"
       set rundir = "$argv[1]"
       breaksw
     case "-testcase"
-      echo "testcase"
       set testcase = "$argv[1]"
       breaksw
     case "-model_to_dart"
-      echo "model_to_dart $argv[1]"
       set model_to_dart = $argv[1]
       breaksw
     case "-dart_to_model"
-      echo "dart_to_model $argv[1]"
       set dart_to_model = $argv[1]
       breaksw
     case "-model_restart"
@@ -168,9 +160,9 @@ echo "basecase  : "$basecase
 echo " "
 echo "source_rma     : "$source_rma  
 echo "source_trunk   : "$source_trunk
-echo "model          : "$model       
 echo "testcase       : "$testcase    
 echo "endian         : "$endian      
+echo "model          : "$model       
 echo "model_to_dart  : "$model_to_dart
 echo "dart_to_model  : "$dart_to_model
 echo "model_restart  : "$model_restart
@@ -186,14 +178,15 @@ if (! -e $rundir) then
 endif
 
 if (! -e "$rundir/$basecase" ) then
-   echo "$basecase does not exists"
-   echo "copying $testcase to "
-   echo " rundir $rundir "
+   echo "$rundir/$basecase does not exists"
+   echo "copying $testcase to :"
+   echo " -> rundir $rundir "
    cp -r $testcase $rundir
 endif
 
 # copy development mkmfs over with fp-model_precise and debug flags
-if ( $endian == "big" ) then
+if ( "$endian" == "big" ) then
+   echo "compiling with big endian"
    cp $source_rma/bitwise/mkmf.template.intel.linux.be.dev $source_rma/mkmf/mkmf.template
    cp $source_rma/bitwise/mkmf.template.intel.linux.be.dev $source_trunk/mkmf/mkmf.template
 else
@@ -206,33 +199,38 @@ cd $source_rma/assim_tools
 sed -i 's/lanai_bitwise = .false./lanai_bitwise = .true./' assim_tools_mod.f90
 
 # TODO FIXME : need to check that quickbuild compiled successfully
-echo "quickbuild : $source_rma/models/$model/work"
+echo "rma $model quickbuild   : $source_rma/models/$model/work"
 cd $source_rma/models/$model/work
-# csh quickbuild.csh >& build.txt
+csh quickbuild.csh >& build.txt
 
-echo "linking filter to test_rma"
+echo "test_rma $model         : linking filter"
 ln -sf $source_rma/models/$model/work/filter $rundir/$basecase/test_rma/filter
 
-echo "quickbuild : $source_trunk/models/$model/work"
+echo "trunk $model quickbuild : $source_trunk/models/$model/work"
 cd $source_trunk/models/$model/work
-# csh quickbuild.csh >& build.txt
+csh quickbuild.csh >& build.txt
 
-echo "linking filter to test_trunk"
+echo "test_rma $model         : linking filter"
 ln -sf $source_trunk/models/$model/work/filter         $rundir/$basecase/test_trunk/filter
 
-echo "linking dart_to_model to test_trunk"
+echo "test_rma $model         : linking $dart_to_model"
 ln -sf $source_trunk/models/$model/work/$dart_to_model $rundir/$basecase/test_trunk/$dart_to_model
 
-echo "linking model_to_dart to test_trunk"
+echo "test_rma $model         : linking $model_to_dart"
 ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_trunk/$model_to_dart
+
+cd $rundir/$basecase/test_rma/
+
+echo "test_rma $model         : staging template restarts"
+csh stage_restarts.csh
 
 cd $rundir/$basecase/test_trunk/
 
-echo "converting cam restart files to filter restarts"
-csh convert_restarts_to_dart.csh
-
-echo "copying template restarts"
+echo "test_trunk $model       : staging template restarts"
 csh stage_restarts.csh
+
+echo "test_trunk $model       : converting $model restart files to filter restarts"
+csh convert_restarts_to_dart.csh
 
 echo "submitting filter for test_rma"
 cd $rundir/$basecase/test_rma
@@ -241,7 +239,9 @@ echo "submitting filter for test_trunk"
 cd $rundir/$basecase/test_trunk
 bsub -K < run_filter.csh
 
-# TODO FIXME : need to wait until both jobs finish to continue
+# TODO FIXME : would like to submit both jobs in parallel and have
+# a better way of checking both jobs have finished before testing 
+# differences
 
 echo " "
 echo "TESTING DIFFERENCES BETWEEN 'test_rma' AND 'test_trunk' "
@@ -254,9 +254,9 @@ if (-f "$trunk_restart.0001") then
    echo " " 
    echo " CONVERTING DART RESTART FILES TO MODEL FILES "
    echo " " 
-   ln -sf $source_rma/bitwise/convert_restarts.csh .
-   csh convert_restarts.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_restart
-   unlink convert_restarts.csh
+   ln -sf $source_rma/bitwise/convert_dart_restarts_to_model.csh .
+   csh convert_dart_restarts_to_model.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_restart
+   unlink convert_dart_restarts_to_model.csh
    echo " " 
 else
   echo " no restarts "
