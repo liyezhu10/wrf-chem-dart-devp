@@ -2,7 +2,7 @@
 
 set source_trunk = "/glade/p/work/hendric/DART/trunk"
 set source_rma   = "/glade/p/work/hendric/DART/rma_bitwise"
-set rundir       = "/glade/scratch/hendric/bitwise4"
+set rundir       = "/glade/scratch/hendric/bitwise5"
 
 # wrf_small
 if ("$1" == "wrf") then
@@ -19,6 +19,22 @@ if ("$1" == "wrf") then
                         -out_stub       wrf_out
 endif
 
+# wrf_regular
+if ("$1" == "wrf_reg") then
+   csh bitwise_test.csh -source_rma     $source_rma \
+                        -source_trunk   $source_trunk \
+                        -model          wrf \
+                        -rundir         $rundir \
+                        -testcase       "/glade/p/image/DART_test_cases/wrf/wrf_regular" \
+                        -model_to_dart  wrf_to_dart \
+                        -dart_to_model  dart_to_wrf \
+                        -model_restart  wrfinput_d01 \
+                        -dart_restart   dart_wrf_vector \
+                        -trunk_restart  filter_ics_new \
+                        -out_stub       wrf_out \
+                        -type           r4
+endif
+
 # pop_gx1v6
 if ("$1" == "pop") then
    csh bitwise_test.csh -source_rma     $source_rma \
@@ -32,7 +48,7 @@ if ("$1" == "pop") then
                         -model_restart  pop.r.nc \
                         -dart_restart   dart_restart \
                         -trunk_restart  filter_restart \
-                        -out_stub       pop_out.r
+                        -out_stub       pop_out
 endif
 
 ## mpas_small
