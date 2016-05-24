@@ -216,14 +216,14 @@ endif
 # TODO FIXME : need to check that quickbuild compiled successfully
 echo "rma $model quickbuild   : $source_rma/models/$model/work"
 cd $source_rma/models/$model/work
-csh quickbuild.csh >& build.txt
+csh quickbuild.csh -mpi >& build.txt
 
 echo "test_rma $model         : linking filter"
 ln -sf $source_rma/models/$model/work/filter $rundir/$basecase/test_rma/filter
 
 echo "trunk $model quickbuild : $source_trunk/models/$model/work"
 cd $source_trunk/models/$model/work
-csh quickbuild.csh >& build.txt
+csh quickbuild.csh -mpi >& build.txt
 
 # link files to test directories
 echo "test_rma $model         : linking filter"
@@ -255,9 +255,29 @@ echo "submitting filter for test_rma"
 cd $rundir/$basecase/test_rma
 bsub -K < run_filter.csh
 
+# check that job completed
+set last_log = `ls -rt *.log | tail -n 1`
+set filter_finish = `grep "Filter done TIME"  $last_log | awk '{print $5}'`
+if ("$filter_finish" == "") then
+   echo "filter DID NOT FINISH exiting text"
+   exit(0)
+else
+   echo "filter FINISHED"
+endif
+ 
 echo "submitting filter for test_trunk"
 cd $rundir/$basecase/test_trunk
 bsub -K < run_filter.csh
+
+# check that job completed
+set last_log = `ls -rt *.log | tail -n 1`
+set filter_finish = `grep "Filter done TIME"  $last_log | awk '{print $5}'`
+if ("$filter_finish" == "") then
+   echo "filter DID NOT FINISH exiting text"
+   exit(0)
+else
+   echo "filter FINISHED"
+endif
 
 # TODO FIXME : would like to submit both jobs in parallel and have
 # a better way of checking both jobs have finished before testing 
@@ -375,6 +395,10 @@ foreach NC_FILE ( \
 end
 printf "|%13s%13s|\n" "-----------------------------------" \
                       "-----------------------------------"
+
+if ( -e post_forward_ope_errors000001 ) then
+   rm *_forward_*
+endif
 
 # if ( -e out.txt ) then
 #    rm out.txt
