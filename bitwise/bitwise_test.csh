@@ -77,6 +77,7 @@ set rundir       = "/glade/scratch/hendric/bitwise"
 set testcase     = "/glade/p/image/DART_test_cases/wrf/wrf_small"
 set endian       = 'little'
 set type         = 'r8'
+set quickbuild   = 'true'
 
 
 # for CAM
@@ -89,7 +90,6 @@ set trunk_restart = "filter_restart"
 set obsfile        = "obs_seq.final"
 set out_stub       = "cam_out"
 
-echo "arguments $argv"
 while ( 1 )
   if ( $#argv < 1 ) break;
   set i = $argv[1];
@@ -143,7 +143,10 @@ while ( 1 )
       set endian = $argv[1]
       breaksw
     case "-type"
-      set type= $argv[1]
+      set type = $argv[1]
+      breaksw
+    case "-quickbuild"
+      set quickbuild = $argv[1]
       breaksw
     default:
       echo "unknown input, invoked create_test with no arguments for usage"
@@ -203,6 +206,9 @@ endif
 cd $source_rma/assim_tools
 sed -i 's/lanai_bitwise = .false./lanai_bitwise = .true./' assim_tools_mod.f90
 
+svn revert $source_rma/common/types_mod.f90
+svn revert $source_trunk/common/types_mod.f90
+
 # run with r4. currently this is only for wrf_reg testcase
 if ("$type" == "r4") then
   cd $source_rma/common
@@ -214,40 +220,44 @@ if ("$type" == "r4") then
 endif
 
 # TODO FIXME : need to check that quickbuild compiled successfully
-echo "rma $model quickbuild   : $source_rma/models/$model/work"
-cd $source_rma/models/$model/work
-csh quickbuild.csh -mpi >& build.txt
+if ("$quickbuild" == "true") then
+  echo "rma      $model quickbuild : $source_rma/models/$model/work"
+  cd $source_rma/models/$model/work
+  csh quickbuild.csh -mpi >& build.txt
+endif
 
-echo "test_rma $model         : linking filter"
+echo "test_rma $model : linking filter"
 ln -sf $source_rma/models/$model/work/filter $rundir/$basecase/test_rma/filter
 
-echo "trunk $model quickbuild : $source_trunk/models/$model/work"
-cd $source_trunk/models/$model/work
-csh quickbuild.csh -mpi >& build.txt
+if ("$quickbuild" == "true") then
+  echo "trunk    $model quickbuild : $source_trunk/models/$model/work"
+  cd $source_trunk/models/$model/work
+  csh quickbuild.csh -mpi >& build.txt
+endif
 
 # link files to test directories
-echo "test_rma $model         : linking filter"
+echo "test_rma $model : linking filter"
 ln -sf $source_trunk/models/$model/work/filter         $rundir/$basecase/test_trunk/filter
 
-echo "test_rma $model         : linking $dart_to_model"
+echo "test_rma $model : linking $dart_to_model"
 ln -sf $source_trunk/models/$model/work/$dart_to_model $rundir/$basecase/test_trunk/$dart_to_model
 
-echo "test_rma $model         : linking $model_to_dart"
+echo "test_rma $model : linking $model_to_dart"
 ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_trunk/$model_to_dart
 
 # stage template restarts
 cd $rundir/$basecase/test_rma/
 
-echo "test_rma $model         : staging template restarts"
+echo "test_rma $model : staging template restarts"
 csh stage_restarts.csh
 
 cd $rundir/$basecase/test_trunk/
 
-echo "test_trunk $model       : staging template restarts"
+echo "test_trunk $model : staging template restarts"
 csh stage_restarts.csh
 
 # convert model restarts to dart restarts
-echo "test_trunk $model       : converting $model restart files to filter restarts"
+echo "test_trunk $model : converting $model restart files to filter restarts"
 csh convert_restarts_to_dart.csh
 
 # submit the jobs and wait for it to finish
