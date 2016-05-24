@@ -27,46 +27,66 @@ if ( $helpheader ) then
 cat << EOF1
 NAME   
 
-      test_case - bitwise test
+      bitwise_test - tests bitwise between rma_trunk and DART trunk
 
 SYNOPSIS 
 
       create_test -testname full-test-name 
-         [-compare baseline_name] 
-         [-generate baseline_name] 
-         [-testroot test-root-directory] 
-         [-pes_file PES_file] 
-         [-compset_file COMPSET_file] 
-         [-testid id] 
-         [-inputdataroot input-data-root-directory]
-         [-baselineroot baseline_root_directory] 
-         [-clean clean_option] 
+         [-source_trunk trunk_source_directory] 
+         [-source_rma rma_source_directory] 
+         [-model model_to_build] 
+         [-rundir run-root-directory] 
+         [-testcase test-case-directory] 
+         [-endian which_endian_to_compile_with] 
+         [-type run_r4_or_r8] 
+         [-quickbuild true_or_false] 
+         [-model_to_dart model_to_dart]
+         [-dart_to_model dart_to_model]
+         [-model_restart template_restart_for_model]
+         [-dart_restart dart_restart_name_for_model_to_dart]
+         [-trunk_restart output_dart_restart]
+         [-obsfile obs_seq.final_file]
+         [-out_stub output_netcdf_restart]
          [-help]
 
 OPTIONS 
-
-     -baselineroot baseline_root_directory
-            Specifies an alternate root directory for baseline datasets
-            used for bfb generate/compare testing.  This option is 
-            ignored unless baseline generation or comparison is being 
-            done.  this will overwrite any env CCSM_BASELINE setting.
-
-            Set full test name including test case, resolution, component set,
-            and machines.  Example is ERS.f19_g15.B.bluefire.  USE shortnames
-            for best success.  Each testcase can have options appended.  The
-            current supported options are
-              _D  = debug
-              _E  = esmf interfaces
-              _P* = pe count setting where * is the pecount (S,M,L,XL,1,etc)
-              _R* = regional/single point mode (pts mode) where * is the pt setting (01,02,etc)
-
-     -testroot test-root-directory
-            Set the directory where you want the test case created
+     -source_trunk trunk_source_directory
+          root directory for the DART trunk
+     -source_rma rma_source_directory
+          root directory for the rma trunk
+     -model model_to_build 
+          which model you would like to compile (i.e. wrf, POP, cam, ...)
+     -rundir run-root-directory 
+          where you would like to run your test case
+     -testcase test-case-directory
+          test case to copy over
+     -model_to_dart model_to_dart
+          model to dart program
+     -dart_to_model dart_to_model
+          dart to model program
+     -model_restart template_restart_for_model
+          template restart for model
+     -dart_restart dart_restart_name_for_model_to_dart
+          dart restart name for model_to_dart
+     -trunk_restart output_dart_restart
+          output restarts from DART trunk
+     -obsfile obs_seq.final_file
+          observation sequence final file to test
+     -out_stub output_netcdf_restart
+          output restart stubs for netcdf
+     -endian which_endian_to_compile_with 
+          optional either big or little. default is little
+     -type run_r4_or_r8 
+          optional either r4 or r8. default is r8
+     -quickbuild true_or_false 
+          optional either true or false. default is true
+     -help
 
 EOF1
 
 exit;
 endif
+
 #===================================================================
 # DEFUALTS
 #===================================================================
@@ -236,13 +256,13 @@ if ("$quickbuild" == "true") then
 endif
 
 # link files to test directories
-echo "test_rma $model : linking filter"
+echo "test_trunk $model : linking filter"
 ln -sf $source_trunk/models/$model/work/filter         $rundir/$basecase/test_trunk/filter
 
-echo "test_rma $model : linking $dart_to_model"
+echo "test_trunk $model : linking $dart_to_model"
 ln -sf $source_trunk/models/$model/work/$dart_to_model $rundir/$basecase/test_trunk/$dart_to_model
 
-echo "test_rma $model : linking $model_to_dart"
+echo "test_trunk $model : linking $model_to_dart"
 ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_trunk/$model_to_dart
 
 # stage template restarts
@@ -406,8 +426,8 @@ end
 printf "|%13s%13s|\n" "-----------------------------------" \
                       "-----------------------------------"
 
-if ( -e post_forward_ope_errors000001 ) then
-   rm *_forward_*
+if ( -e test_rma/*_forward_ope_errors* ) then
+   rm *_forward_ope_errors*
 endif
 
 # if ( -e out.txt ) then

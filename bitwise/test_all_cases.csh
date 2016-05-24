@@ -2,7 +2,7 @@
 
 set source_trunk = "/glade/p/work/hendric/DART/trunk"
 set source_rma   = "/glade/p/work/hendric/DART/rma_bitwise"
-set rundir       = "/glade/scratch/hendric/bitwise6"
+set rundir       = "/glade/scratch/hendric/bitwise7"
 set quickbuild   = "true"
 
 echo "$argv"
@@ -79,7 +79,7 @@ while ( 1 )
                            -source_trunk   $source_trunk \
                            -model          POP \
                            -rundir         $rundir \
-                           -testcase       "/glade/p/image/DART_test_cases/pop/pop_gx1v6__2" \
+                           -testcase       "/glade/p/image/DART_test_cases/pop/pop_gx1v6" \
                            -endian         big \
                            -model_to_dart  pop_to_dart \
                            -dart_to_model  dart_to_pop \
