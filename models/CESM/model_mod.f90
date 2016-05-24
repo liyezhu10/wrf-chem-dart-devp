@@ -1330,7 +1330,8 @@ select case (obs_kind)
    case (KIND_AIR_TEMPERATURE, KIND_GPSRO, &
          KIND_SPECIFIC_HUMIDITY, KIND_RELATIVE_HUMIDITY, &
          KIND_SURFACE_PRESSURE, KIND_PRESSURE, &
-         KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
+         KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
+         KIND_SURFACE_ELEVATION)
       if (present(componentname)) componentname = 'CAM'
       if (present(componentid))   componentid   = isCAM
       componentname = 'CAM'
