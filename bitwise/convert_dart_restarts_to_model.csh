@@ -7,7 +7,7 @@ if ($#argv == 5) then
    set out_stub       = "$4"
    set filter_restart = "$5"
 else
-   echo " expecting -dart_to_model -dart_restart -model_restart -out_stub "
+   echo " expecting -dart_to_model -dart_restart -model_restart -out_stub -filter_restart"
    exit(1)
 endif
 
