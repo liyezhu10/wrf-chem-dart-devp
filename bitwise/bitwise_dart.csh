@@ -273,15 +273,15 @@ ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_tr
 cd $rundir/$basecase/test_rma/
 
 echo "test_rma $model : staging template restarts"
-ln -sf $source_rma/bitwise/stage_restarts_rma.csh .
-csh stage_restarts_rma.csh $model_restart $out_stub "test_rma" 3
+ln -sf $source_rma/bitwise/stage_restarts.csh .
+csh stage_restarts.csh $model_restart $out_stub "test_rma" 3
 # csh stage_restarts.csh
 
 cd $rundir/$basecase/test_trunk/
 
 echo "test_trunk $model : staging template restarts"
-ln -sf $source_rma/bitwise/stage_restarts_rma.csh .
-csh stage_restarts_rma.csh $model_restart $out_stub "test_trunk" 3
+ln -sf $source_rma/bitwise/stage_restarts.csh .
+csh stage_restarts.csh $model_restart $out_stub "test_trunk" 3
 # csh stage_restarts.csh
 
 # convert model restarts to dart restarts

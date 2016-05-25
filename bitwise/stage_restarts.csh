@@ -35,8 +35,7 @@ foreach file (../restarts/*)
       cp $file $fileout 
    endif 
  
-   if ($n == stop ) exit(0)
-   endif
+   if ($n == $stop) exit(0)
 
    @ n = $n + 1
 

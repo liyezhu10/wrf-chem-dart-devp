@@ -266,8 +266,8 @@ foreach BRANCH ($source_rma1 $source_rma2)
    cd $rundir/$basecase/$test_case/
    
    echo "$test_case $model : staging template restarts"
-   ln -sf $BRANCH/bitwise/stage_restarts_rma.csh .
-   csh stage_restarts_rma.csh $model_restart $out_stub $test_case 3
+   ln -sf $BRANCH/bitwise/stage_restarts.csh .
+   csh stage_restarts.csh $model_restart $out_stub $test_case 3
 
    # submit the jobs and wait for it to finish
    echo "submitting filter for $test_case"

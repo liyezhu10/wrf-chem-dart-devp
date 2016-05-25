@@ -22,6 +22,7 @@ foreach file (`ls $filter_restart.*`)
    ./$dart_to_model > out.txt
 
    cp $model_restart $outfile
+
    
 end
 
