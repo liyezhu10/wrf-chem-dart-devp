@@ -32,6 +32,23 @@ while ( 1 )
                            -trunk_out_restart filter_ic_new \
                            -out_stub          wrf_out
       breaksw
+    case "wrf2dom"
+      csh bitwise_dart.csh -source_rma        $source_rma \
+                           -source_trunk      $source_trunk \
+                           -model             wrf \
+                           -quickbuild        $quickbuild \
+                           -rundir            $rundir \
+                           -testcase          "/glade/p/image/DART_test_cases/wrf/wrf_small_2dom" \
+                           -wrf2dom           true \
+                           -model_to_dart     wrf_to_dart \
+                           -dart_to_model     dart_to_wrf \
+                           -model_restart     wrfinput \
+                           -dart_restart      dart_wrf_vector \
+                           -dart_out_restart  dart_wrf_vector \
+                           -trunk_restart     filter_ics\
+                           -trunk_out_restart filter_ic_new \
+                           -out_stub          wrf_out
+      breaksw
     case "wrf_reg"
       csh bitwise_dart.csh -source_rma        $source_rma \
                            -source_trunk      $source_trunk \

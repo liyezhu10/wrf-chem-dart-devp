@@ -26,7 +26,11 @@ foreach file (../restarts/*)
    if (-d $file) then
       echo "converting $file/$model_restart to $fileout"
 
-      cp $file/$model_restart $model_restart
+      foreach restart ($file/$model_restart*)
+         # touch $restart
+         # chmod a+w $restart
+         cp -f $restart . 
+      end
       ./$model_to_dart >& model_to_dart.out
 
       cp $dart_restart $fileout

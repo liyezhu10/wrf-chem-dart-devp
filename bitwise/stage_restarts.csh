@@ -5,7 +5,7 @@ if ($#argv >= 3) then
    set out_stub     = $2
    set test_dir     = $3
 else
-   echo "expecting stage_restarts.csh -restart_stub -out_stub -test_dir"
+   echo "expecting stage_restarts.csh -restart_stub -out_stub -test_dir -stop -wrf_2_dom"
 endif
 
 # optional argument
@@ -15,30 +15,59 @@ if ($#argv == 4) then
    set stop = $4
 endif
 
+if ($#argv == 5) then
+   set wrf_2_dom = $5
+endif
+
 set n = 1
 foreach file (../restarts/*)
 
-   set fileout = `printf "%s%4.4d%s" $out_stub. $n .nc`
-   
+   if ("$wrf_2_dom" == "true") then
+     set d01 = "_d01"
+     set d02 = "_d02"
+     set fileout1 = `printf "%s%4.4d%s" $out_stub$d01. $n .nc`
+     set fileout2 = `printf "%s%4.4d%s" $out_stub$d02. $n .nc`
+     set restart_stub1 = "$restart_stub$d01"
+     set restart_stub2 = "$restart_stub$d02"
+   else 
+     set fileout1 = `printf "%s%4.4d%s" $out_stub. $n .nc`
+   endif
+
    if (-d $file) then
       echo "restarts are contained in directory $file"
       echo "linking $file/$restart_stub to $test_dir run directory"
       ln -sf $file . 
 
-      touch $fileout
-      chmod u+w $fileout
+      touch $fileout1
+      chmod u+w $fileout1
 
-      echo "copying $file/$restart_stub to $fileout in $test_dir directory"
-      cp $file/$restart_stub $fileout 
+      if ("$wrf_2_dom" == "true") then
+         echo "copying $file/$restart_stub1 to $fileout1 in $test_dir directory"
+         echo "copying $file/$restart_stub2 to $fileout2 in $test_dir directory"
+         touch     $fileout2
+         chmod u+w $fileout2
+         cp $file/$restart_stub1 $fileout1
+         cp $file/$restart_stub2 $fileout2
+      else
+         echo "copying $file/$restart_stub to $fileout1 in $test_dir directory"
+         cp $file/$restart_stub $fileout1 
+      endif
    else
       echo "linking $file to $test_dir run directory"
       ln -sf $file .
 
-      touch $fileout
-      chmod u+w $fileout
+      touch     $fileout1
+      chmod u+w $fileout1
 
-      echo "copying $file to $fileout in $test_dir directory"
-      cp $file $fileout 
+      if ("$wrf_2_dom" == "true") then
+         echo "copying $file/$restart_stub1 to $fileout1 in $test_dir directory"
+         echo "copying $file/$restart_stub2 to $fileout2 in $test_dir directory"
+         cp $file/$restart_stub1 $fileout1
+         cp $file/$restart_stub2 $fileout2
+      else
+         echo "copying $file/$restart_stub to $fileout1 in $test_dir directory"
+         cp $file/$restart_stub $fileout1 
+      endif
    endif 
  
    if ($n == $stop) exit(0)

@@ -98,6 +98,7 @@ set testcase     = "/glade/p/image/DART_test_cases/wrf/wrf_small"
 set endian       = 'little'
 set type         = 'r8'
 set quickbuild   = 'true'
+set wrf2dom      = 'false'
 
 
 # for CAM
@@ -173,6 +174,9 @@ while ( 1 )
       breaksw
     case "-quickbuild"
       set quickbuild = $argv[1]
+      breaksw
+    case "-wrf2dom"
+      set wrf2dom = $argv[1]
       breaksw
     default:
       echo "unknown input, invoked create_test with no arguments for usage"
@@ -256,7 +260,8 @@ if ("$quickbuild" == "true") then
 endif
 
 echo "test_rma $model : linking filter"
-ln -sf $source_rma/models/$model/work/filter $rundir/$basecase/test_rma/filter
+ln -sf $source_rma/models/$model/work/filter \
+           $rundir/$basecase/test_rma/filter
 
 if ("$quickbuild" == "true") then
   echo "trunk    $model quickbuild : $source_trunk/models/$model/work"
@@ -266,33 +271,39 @@ endif
 
 # link files to test directories
 echo "test_trunk $model : linking filter"
-ln -sf $source_trunk/models/$model/work/filter         $rundir/$basecase/test_trunk/filter
+ln -sf $source_trunk/models/$model/work/filter         \
+           $rundir/$basecase/test_trunk/filter
 
 echo "test_trunk $model : linking $dart_to_model"
-ln -sf $source_trunk/models/$model/work/$dart_to_model $rundir/$basecase/test_trunk/$dart_to_model
+ln -sf $source_trunk/models/$model/work/$dart_to_model \
+           $rundir/$basecase/test_trunk/$dart_to_model
 
 echo "test_trunk $model : linking $model_to_dart"
-ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_trunk/$model_to_dart
+ln -sf $source_trunk/models/$model/work/$model_to_dart \
+           $rundir/$basecase/test_trunk/$model_to_dart
 
 # stage template restarts
 cd $rundir/$basecase/test_rma/
 
 echo "test_rma $model : staging template restarts"
 ln -sf $source_rma/bitwise/stage_restarts.csh .
-csh stage_restarts.csh $model_restart $out_stub "test_rma" 3
-# csh stage_restarts.csh
+csh stage_restarts.csh $model_restart $out_stub "test_rma" 3 $wrf2dom
 
 cd $rundir/$basecase/test_trunk/
 
 echo "test_trunk $model : staging template restarts"
 ln -sf $source_rma/bitwise/stage_restarts.csh .
-csh stage_restarts.csh $model_restart $out_stub "test_trunk" 3
+csh stage_restarts.csh $model_restart $out_stub "test_trunk" 3 $wrf2dom
 # csh stage_restarts.csh
 
 # convert model restarts to dart restarts
 echo "test_trunk $model : converting $model restart files to filter restarts"
 ln -sf $source_rma/bitwise/convert_model_restarts_to_dart.csh .
-csh convert_model_restarts_to_dart.csh $model_to_dart $dart_out_restart $model_restart $out_stub $trunk_restart 3
+csh convert_model_restarts_to_dart.csh $model_to_dart \
+                                       $dart_out_restart \
+                                       $model_restart \
+                                       $out_stub \
+                                       $trunk_restart 3
 
 # submit the jobs and wait for it to finish
 echo "submitting filter for test_rma"
@@ -339,8 +350,11 @@ if (-f "$trunk_out_restart.0001") then
    echo " CONVERTING DART RESTART FILES TO MODEL FILES "
    echo " " 
    ln -sf $source_rma/bitwise/convert_dart_restarts_to_model.csh .
-   csh convert_dart_restarts_to_model.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_out_restart 3
-   unlink convert_dart_restarts_to_model.csh
+   csh convert_dart_restarts_to_model.csh $dart_to_model \
+                                          $dart_restart \
+                                          $model_restart \
+                                          $out_stub \
+                                          $trunk_out_restart 3 $wrf2dom
    echo " " 
 else
   echo " no restarts "
@@ -357,11 +371,11 @@ printf "|%-33s|%-8s|%-13s|%-13s|\n" "---------------------------------" \
 
 cd $rundir/$basecase
  
-set restarts = `ls test_trunk/$out_stub.* | xargs -n 1 basename`
+set restarts = `ls test_trunk/$out_stub* | xargs -n 1 basename`
 set priors   = "" #`ls test_trunk/prior_member.* | xargs -n 1 basename`
 
-set testday  = `ls -l test_trunk/$out_stub.0001.nc | awk '{print $7}'`
-set testhour = `ls -l test_trunk/$out_stub.0001.nc | awk '{print $8}' | head -c 2`
+set testday  = `ls -l test_trunk/$out_stub*.0001.nc | awk '{print $7}'`
+set testhour = `ls -l test_trunk/$out_stub*.0001.nc | awk '{print $8}' | head -c 2`
 
 if ( ! -e compare_states ) then
    ln -sf $source_rma/utilities/test/work/compare_states compare_states
