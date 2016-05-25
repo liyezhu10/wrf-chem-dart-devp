@@ -153,6 +153,9 @@ while ( 1 )
     case "-dart_restart"
       set dart_restart = $argv[1]
       breaksw
+    case "-dart_out_restart"
+      set dart_out_restart = $argv[1]
+      breaksw
     case "-trunk_restart"
       set trunk_restart = $argv[1]
       breaksw
@@ -185,19 +188,20 @@ echo "rundir    : "$rundir
 echo "testcase  : "$testcase
 echo "basecase  : "$basecase
 echo " "
-echo "source_rma     : "$source_rma  
-echo "source_trunk   : "$source_trunk
-echo "testcase       : "$testcase    
-echo "endian         : "$endian      
-echo "type           : "$type      
-echo "model          : "$model       
-echo "model_to_dart  : "$model_to_dart
-echo "dart_to_model  : "$dart_to_model
-echo "model_restart  : "$model_restart
-echo "dart_restart   : "$dart_restart
-echo "trunk_restart  : "$trunk_restart
-echo "obsfile        : "$obsfile
-echo "out_stub       : "$out_stub
+echo "source_rma        : "$source_rma  
+echo "source_trunk      : "$source_trunk
+echo "testcase          : "$testcase    
+echo "endian            : "$endian      
+echo "type              : "$type      
+echo "model             : "$model       
+echo "model_to_dart     : "$model_to_dart
+echo "dart_to_model     : "$dart_to_model
+echo "model_restart     : "$model_restart
+echo "dart_restart      : "$dart_restart
+echo "dart_out_restart  : "$dart_out_restart
+echo "trunk_restart     : "$trunk_restart
+echo "obsfile           : "$obsfile
+echo "out_stub          : "$out_stub
 echo " " 
 
 if (! -e $rundir) then
@@ -269,16 +273,21 @@ ln -sf $source_trunk/models/$model/work/$model_to_dart $rundir/$basecase/test_tr
 cd $rundir/$basecase/test_rma/
 
 echo "test_rma $model : staging template restarts"
-csh stage_restarts.csh
+ln -sf $source_rma/bitwise/stage_restarts_rma.csh .
+csh stage_restarts_rma.csh $model_restart $out_stub "test_rma" 3
+# csh stage_restarts.csh
 
 cd $rundir/$basecase/test_trunk/
 
 echo "test_trunk $model : staging template restarts"
-csh stage_restarts.csh
+ln -sf $source_rma/bitwise/stage_restarts_rma.csh .
+csh stage_restarts_rma.csh $model_restart $out_stub "test_trunk" 3
+# csh stage_restarts.csh
 
 # convert model restarts to dart restarts
 echo "test_trunk $model : converting $model restart files to filter restarts"
-csh convert_restarts_to_dart.csh
+ln -sf $source_rma/bitwise/convert_model_restarts_to_dart.csh .
+csh convert_model_restarts_to_dart.csh $model_to_dart $dart_out_restart $model_restart $out_stub $trunk_restart 
 
 # submit the jobs and wait for it to finish
 echo "submitting filter for test_rma"
@@ -426,10 +435,10 @@ end
 printf "|%13s%13s|\n" "-----------------------------------" \
                       "-----------------------------------"
 
-if ( -e test_rma/*_forward_ope_errors* ) then
-   rm *_forward_ope_errors*
-endif
-
+# if ( -e test_rma/*_forward_ope_errors* ) then
+#    rm *_forward_ope_errors*
+# endif
+# 
 # if ( -e out.txt ) then
 #    rm out.txt
 # endif
