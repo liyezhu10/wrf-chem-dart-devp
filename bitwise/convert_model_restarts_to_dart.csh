@@ -32,6 +32,8 @@ foreach file (../restarts/*)
 
       cp $dart_restart $fileout
    else
+      echo "converting $file to $fileout"
+
       cp $file $model_restart
       ./$model_to_dart >& model_to_dart.out
 
