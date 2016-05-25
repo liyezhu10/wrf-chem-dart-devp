@@ -189,6 +189,7 @@ echo "branch1       : "$branch1
 echo "source_rma2   : "$source_rma2  
 echo "branch2       : "$branch2
 echo "testcase      : "$testcase    
+echo "quickbuild    : "$quickbuild      
 echo "endian        : "$endian      
 echo "type          : "$type      
 echo "model         : "$model       
@@ -202,6 +203,7 @@ echo "out_stub      : "$out_stub
 echo " " 
 echo "test_rma1 : "$test_rma1
 echo "test_rma2 : "$test_rma2
+echo " " 
 
 if (! -e $rundir) then
   echo "rundir does not exist. making new directory $rundir"
@@ -218,8 +220,9 @@ if (! -e "$rundir/$basecase" ) then
    cp -r $testcase/restarts $rundir/$basecase/
 endif
 
+# build compare_states for bitwise testing restarts
 cd $source_rma1/utilities/test/work
-csh mkmf_compare_states
+csh mkmf_compare_states >& make.out
 make >& make_compare_states.out
 
 foreach BRANCH ($source_rma1 $source_rma2)
@@ -263,9 +266,9 @@ foreach BRANCH ($source_rma1 $source_rma2)
    cd $rundir/$basecase/$test_case/
    
    echo "$test_case $model : staging template restarts"
-   ln -sf $BRANCH/bitwise stage_restarts.csh .
-   csh stage_restarts.csh 
-   
+   ln -sf $BRANCH/bitwise/stage_restarts_rma.csh .
+   csh stage_restarts_rma.csh $model_restart $out_stub $test_case 3
+
    # submit the jobs and wait for it to finish
    echo "submitting filter for $test_case"
    cd $rundir/$basecase/$test_case
