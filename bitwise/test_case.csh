@@ -17,7 +17,7 @@ while ( 1 )
       set quickbuild = "false"
       breaksw
     case "wrf"
-      csh bitwise_test.csh -source_rma     $source_rma \
+      csh bitwise_dart.csh -source_rma     $source_rma \
                            -source_trunk   $source_trunk \
                            -model          wrf \
                            -quickbuild     $quickbuild \
@@ -32,7 +32,7 @@ while ( 1 )
                            -out_stub       wrf_out
       breaksw
     case "wrf_reg"
-      csh bitwise_test.csh -source_rma     $source_rma \
+      csh bitwise_dart.csh -source_rma     $source_rma \
                            -source_trunk   $source_trunk \
                            -model          wrf \
                            -quickbuild     $quickbuild \
@@ -47,7 +47,7 @@ while ( 1 )
                            -type           r4
       breaksw
     case "mpas"
-      csh bitwise_test.csh -source_rma     $source_rma \
+      csh bitwise_dart.csh -source_rma     $source_rma \
                            -source_trunk   $source_trunk \
                            -model          mpas_atm \
                            -quickbuild     $quickbuild \
@@ -61,7 +61,7 @@ while ( 1 )
                            -out_stub       mpas_out
       breaksw
     case "cam"
-      csh bitwise_test.csh -source_rma     $source_rma \
+      csh bitwise_dart.csh -source_rma     $source_rma \
                            -source_trunk   $source_trunk \
                            -model          cam \
                            -quickbuild     $quickbuild \
@@ -75,7 +75,7 @@ while ( 1 )
                            -out_stub       cam_out
       breaksw
     case "pop"
-      csh bitwise_test.csh -source_rma     $source_rma \
+      csh bitwise_dart.csh -source_rma     $source_rma \
                            -source_trunk   $source_trunk \
                            -model          POP \
                            -rundir         $rundir \
