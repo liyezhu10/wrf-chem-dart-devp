@@ -297,19 +297,6 @@ echo " and obs sequence file : $obsfile                       "
  
 cd $rundir/$basecase/$test_rma1
 
-# if (-f "$trunk_restart.0001") then
-#    echo " " 
-#    echo " CONVERTING DART RESTART FILES TO MODEL FILES "
-#    echo " " 
-#    ln -sf $source_rma2/bitwise/convert_dart_restarts_to_model.csh .
-#    csh convert_dart_restarts_to_model.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_restart
-#    unlink convert_dart_restarts_to_model.csh
-#    echo " " 
-# else
-#   echo " no restarts "
-#   exit(0)
-# endif
-
 printf "|%13s%13s|\n" "-----------------------------------" \
                       "-----------------------------------"
 printf "|%-33s|%-8s|%-13s|%-13s|\n" " TESTING $basecase" " P/F" " $branch1" " $branch2" 

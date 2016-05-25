@@ -1,6 +1,6 @@
 #!/bin/tcsh
 
-if ($#argv == 5) then 
+if ($#argv >= 5) then 
    set dart_to_model  = "$1"
    set dart_restart   = "$2"
    set model_restart  = "$3"
@@ -11,6 +11,12 @@ else
    exit(1)
 endif
 
+set stop = 1000
+if ($#argv == 6) then 
+   set stop = "$6"
+endif
+
+set n = 1
 foreach file (`ls $filter_restart.*`)
 
    set num     = `echo $file | tail -c 5`
@@ -23,6 +29,9 @@ foreach file (`ls $filter_restart.*`)
 
    cp $model_restart $outfile
 
+   if ($n == $stop) exit(0)
+
+   @ n = $n + 1
    
 end
 

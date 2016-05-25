@@ -2,7 +2,7 @@
 
 set source_trunk = "/glade/p/work/hendric/DART/trunk"
 set source_rma   = "/glade/p/work/hendric/DART/rma_bitwise"
-set rundir       = "/glade/scratch/hendric/bitwise7"
+set rundir       = "/glade/scratch/hendric/bitwiseDartRMA"
 set quickbuild   = "true"
 
 echo "$argv"
@@ -28,8 +28,8 @@ while ( 1 )
                            -model_restart     wrfinput_d01 \
                            -dart_restart      dart_wrf_vector \
                            -dart_out_restart  dart_wrf_vector \
-                           -trunk_restart     filter_ic_new \
-                           -quickbuild        filter_ic_new \
+                           -trunk_restart     filter_ics\
+                           -trunk_out_restart filter_ic_new \
                            -out_stub          wrf_out
       breaksw
     case "wrf_reg"
@@ -44,7 +44,8 @@ while ( 1 )
                            -model_restart     wrfinput_d01 \
                            -dart_restart      dart_wrf_vector \
                            -dart_out_restart  dart_wrf_vector \
-                           -trunk_restart     filter_ics_new \
+                           -trunk_restart     filter_ics\
+                           -trunk_out_restart filter_ics_new \
                            -out_stub          wrf_out \
                            -type              r4
       breaksw
@@ -60,7 +61,8 @@ while ( 1 )
                            -model_restart     x1.40962.restart.nc \
                            -dart_restart      dart.ic \
                            -dart_out_restart  dart.ud \
-                           -trunk_restart     filter_restart \
+                           -trunk_restart     filter_ics\
+                           -trunk_out_restart filter_restart \
                            -out_stub          mpas_out
       breaksw
     case "cam"
@@ -75,7 +77,8 @@ while ( 1 )
                            -model_restart     caminput.nc \
                            -dart_restart      dart_restart \
                            -dart_out_restart  dart_ics \
-                           -trunk_restart     filter_restart \
+                           -trunk_restart     filter_ics \
+                           -trunk_out_restart filter_restart \
                            -out_stub          cam_out
       breaksw
     case "pop"
@@ -90,7 +93,8 @@ while ( 1 )
                            -model_restart     pop.r.nc \
                            -dart_restart      dart_restart \
                            -dart_out_restart  dart_ics \
-                           -trunk_restart     filter_restart \
+                           -trunk_restart     filter_ics \
+                           -trunk_out_restart filter_restart \
                            -out_stub          pop_out
       breaksw
     default:

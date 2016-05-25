@@ -24,7 +24,6 @@ foreach file (../restarts/*)
    set fileout = `printf "%s%4.4d" $filter_restart. $n`
 
    if (-d $file) then
-      echo "restarts directory contains directory of restarts"
       echo "converting $file/$model_restart to $fileout"
 
       cp $file/$model_restart $model_restart
@@ -40,7 +39,7 @@ foreach file (../restarts/*)
       cp $dart_restart $fileout
    endif
 
-   if ($n == stop) exit(0)
+   if ($n == $stop) exit(0)
  
    @ n = $n + 1
 

@@ -159,6 +159,9 @@ while ( 1 )
     case "-trunk_restart"
       set trunk_restart = $argv[1]
       breaksw
+    case "-trunk_out_restart"
+      set trunk_out_restart = $argv[1]
+      breaksw
     case "-out_stub"
       set out_stub = $argv[1]
       breaksw
@@ -192,6 +195,7 @@ echo "source_rma        : "$source_rma
 echo "source_trunk      : "$source_trunk
 echo "testcase          : "$testcase    
 echo "endian            : "$endian      
+echo "quickbuild        : "$quickbuild      
 echo "type              : "$type      
 echo "model             : "$model       
 echo "model_to_dart     : "$model_to_dart
@@ -200,6 +204,7 @@ echo "model_restart     : "$model_restart
 echo "dart_restart      : "$dart_restart
 echo "dart_out_restart  : "$dart_out_restart
 echo "trunk_restart     : "$trunk_restart
+echo "trunk_out_restart : "$trunk_out_restart
 echo "obsfile           : "$obsfile
 echo "out_stub          : "$out_stub
 echo " " 
@@ -287,7 +292,7 @@ csh stage_restarts.csh $model_restart $out_stub "test_trunk" 3
 # convert model restarts to dart restarts
 echo "test_trunk $model : converting $model restart files to filter restarts"
 ln -sf $source_rma/bitwise/convert_model_restarts_to_dart.csh .
-csh convert_model_restarts_to_dart.csh $model_to_dart $dart_out_restart $model_restart $out_stub $trunk_restart 
+csh convert_model_restarts_to_dart.csh $model_to_dart $dart_out_restart $model_restart $out_stub $trunk_restart 3
 
 # submit the jobs and wait for it to finish
 echo "submitting filter for test_rma"
@@ -324,17 +329,17 @@ endif
 
 echo " "
 echo "TESTING DIFFERENCES BETWEEN 'test_rma' AND 'test_trunk' "
-echo " with trunk restarts   : $trunk_restart.xxxx           "
+echo " with trunk restarts   : $trunk_out_restart.xxxx           "
 echo " and obs sequence file : $obsfile                       "
  
 cd $rundir/$basecase/test_trunk
 
-if (-f "$trunk_restart.0001") then
+if (-f "$trunk_out_restart.0001") then
    echo " " 
    echo " CONVERTING DART RESTART FILES TO MODEL FILES "
    echo " " 
    ln -sf $source_rma/bitwise/convert_dart_restarts_to_model.csh .
-   csh convert_dart_restarts_to_model.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_restart
+   csh convert_dart_restarts_to_model.csh $dart_to_model $dart_restart $model_restart $out_stub $trunk_out_restart 3
    unlink convert_dart_restarts_to_model.csh
    echo " " 
 else

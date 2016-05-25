@@ -25,11 +25,17 @@ foreach file (../restarts/*)
       echo "linking $file/$restart_stub to $test_dir run directory"
       ln -sf $file . 
 
+      touch $fileout
+      chmod u+w $fileout
+
       echo "copying $file/$restart_stub to $fileout in $test_dir directory"
       cp $file/$restart_stub $fileout 
    else
       echo "linking $file to $test_dir run directory"
       ln -sf $file .
+
+      touch $fileout
+      chmod u+w $fileout
 
       echo "copying $file to $fileout in $test_dir directory"
       cp $file $fileout 
