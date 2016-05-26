@@ -240,7 +240,7 @@ foreach BRANCH ($source_rma1 $source_rma2)
    # submit the jobs and wait for it to finish
    echo "submitting filter for $test_case"
    cd $rundir/$basecase/$test_case
-   bsub -K < run_filter.csh
+   # bsub -K < run_filter.csh
 
    # check that job completed
    set last_log      = `ls -rt *.log | tail -n 1`
@@ -323,21 +323,20 @@ foreach NC_FILE ( \
   # PriorDiag_mean.nc \
   # PriorDiag_sd.nc \
   # prior_inflate_restart )
-  echo "here1" 
+
   set newfile = "TRUE"
   if (`echo $NC_FILE | grep "$out_stub"` != "") then
     set DAY  = `ls -l $test_rma1/$NC_FILE | awk '{print $7}'`
     set HOUR = `ls -l $test_rma1/$NC_FILE | awk '{print $8}' | head -c 2`
 
-  echo "here2" 
-    if ("$testday" > "$DAY") 
+    if ("$testday" > "$DAY") then
        set newfile = "FALSE"
     endif
-  echo "here3" 
+
     if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) then
        set newfile = "FALSE"
     endif
-  echo "here4" 
+
   endif 
 
   if ($newfile == "TRUE") then 
