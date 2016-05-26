@@ -11,7 +11,7 @@ while ( 1 )
   if ( $#argv < 1 ) break;
   set i = $argv[1];
   echo "argument = $i"
-### end of check the error for the input argument
+  ### end of check the error for the input argument
   switch ( $i )
     case "-quickbuild=false"
       set quickbuild = "false"
@@ -23,11 +23,7 @@ while ( 1 )
                            -quickbuild     $quickbuild \
                            -rundir         $rundir \
                            -testcase       "/glade/p/image/DART_test_cases/wrf/wrf_small" \
-                           -model_to_dart  wrf_to_dart \
-                           -dart_to_model  dart_to_wrf \
                            -model_restart  wrfinput_d01 \
-                           -dart_restart   dart_wrf_vector \
-                           -trunk_restart  filter_ic_new \
                            -quickbuild     filter_ic_new \
                            -out_stub       wrf_out
       breaksw
@@ -38,11 +34,7 @@ while ( 1 )
                            -quickbuild     $quickbuild \
                            -rundir         $rundir \
                            -testcase       "/glade/p/image/DART_test_cases/wrf/wrf_regular" \
-                           -model_to_dart  wrf_to_dart \
-                           -dart_to_model  dart_to_wrf \
                            -model_restart  wrfinput_d01 \
-                           -dart_restart   dart_wrf_vector \
-                           -trunk_restart  filter_ics_new \
                            -out_stub       wrf_out \
                            -type           r4
       breaksw
@@ -53,11 +45,7 @@ while ( 1 )
                            -quickbuild     $quickbuild \
                            -rundir         $rundir \
                            -testcase       "/glade/p/image/DART_test_cases/mpas/mpas_small" \
-                           -model_to_dart  model_to_dart \
-                           -dart_to_model  dart_to_model \
                            -model_restart  x1.40962.restart.nc \
-                           -dart_restart   dart.ic \
-                           -trunk_restart  filter_restart \
                            -out_stub       mpas_out
       breaksw
     case "cam"
@@ -67,11 +55,7 @@ while ( 1 )
                            -quickbuild     $quickbuild \
                            -rundir         $rundir \
                            -testcase       "/glade/p/image/DART_test_cases/cam/cam_fv" \
-                           -model_to_dart  cam_to_dart \
-                           -dart_to_model  dart_to_cam \
                            -model_restart  caminput.nc \
-                           -dart_restart   dart_restart \
-                           -trunk_restart  filter_restart \
                            -out_stub       cam_out
       breaksw
     case "pop"
@@ -81,15 +65,21 @@ while ( 1 )
                            -rundir         $rundir \
                            -testcase       "/glade/p/image/DART_test_cases/pop/pop_gx1v6" \
                            -endian         big \
-                           -model_to_dart  pop_to_dart \
-                           -dart_to_model  dart_to_pop \
                            -model_restart  pop.r.nc \
-                           -dart_restart   dart_restart \
-                           -trunk_restart  filter_restart \
+                           -out_stub       pop_out
+      breaksw
+    case "cm1"
+      csh bitwise_rma.csh  -source_rma1    $source_rma1 \
+                           -source_rma2    $source_rma2 \
+                           -model          CM1 \
+                           -rundir         $rundir \
+                           -testcase       "/glade/p/image/DART_test_cases/pop/pop_gx1v6" \
+                           -endian         big \
+                           -model_restart  pop.r.nc \
                            -out_stub       pop_out
       breaksw
     default:
-      echo "unknown input, invoked create_test with no arguments for usage"
+      echo "unknown input $i, invoked create_test with no arguments for usage"
       exit -1
       breaksw
   endsw

@@ -38,11 +38,7 @@ SYNOPSIS
          [-endian which_endian_to_compile_with] 
          [-type run_r4_or_r8] 
          [-quickbuild true_or_false] 
-         [-model_to_dart model_to_dart]
-         [-dart_to_model dart_to_model]
          [-model_restart template_restart_for_model]
-         [-dart_restart dart_restart_name_for_model_to_dart]
-         [-trunk_restart output_dart_restart]
          [-obsfile obs_seq.final_file]
          [-out_stub output_netcdf_restart]
          [-help]
@@ -58,16 +54,8 @@ OPTIONS
           where you would like to run your test case
      -testcase test-case-directory
           test case to copy over
-     -model_to_dart model_to_dart
-          model to dart program
-     -dart_to_model dart_to_model
-          dart to model program
      -model_restart template_restart_for_model
           template restart for model
-     -dart_restart dart_restart_name_for_model_to_dart
-          dart restart name for model_to_dart
-     -trunk_restart output_dart_restart
-          output restarts from DART trunk
      -obsfile obs_seq.final_file
           observation sequence final file to test
      -out_stub output_netcdf_restart
@@ -97,12 +85,8 @@ set endian        = 'little'
 set type          = 'r8'
 set quickbuild    = 'true'
 
-set model_to_dart = "model_to_dart"
-set dart_to_model = "dart_to_model"
 set model_restart = "model_restart.nc"
-set dart_restart  = "dart_restart"
 
-set trunk_restart = "filter_restart"
 set obsfile       = "obs_seq.final"
 set out_stub      = "cam_out"
 
@@ -137,20 +121,8 @@ while ( 1 )
     case "-testcase"
       set testcase = "$argv[1]"
       breaksw
-    case "-model_to_dart"
-      set model_to_dart = $argv[1]
-      breaksw
-    case "-dart_to_model"
-      set dart_to_model = $argv[1]
-      breaksw
     case "-model_restart"
       set model_restart = $argv[1]
-      breaksw
-    case "-dart_restart"
-      set dart_restart = $argv[1]
-      breaksw
-    case "-trunk_restart"
-      set trunk_restart = $argv[1]
       breaksw
     case "-out_stub"
       set out_stub = $argv[1]
@@ -193,11 +165,7 @@ echo "quickbuild    : "$quickbuild
 echo "endian        : "$endian      
 echo "type          : "$type      
 echo "model         : "$model       
-echo "model_to_dart : "$model_to_dart
-echo "dart_to_model : "$dart_to_model
 echo "model_restart : "$model_restart
-echo "dart_restart  : "$dart_restart
-echo "trunk_restart : "$trunk_restart
 echo "obsfile       : "$obsfile
 echo "out_stub      : "$out_stub
 echo " " 
@@ -355,14 +323,21 @@ foreach NC_FILE ( \
   # PriorDiag_mean.nc \
   # PriorDiag_sd.nc \
   # prior_inflate_restart )
-  
+  echo "here1" 
   set newfile = "TRUE"
   if (`echo $NC_FILE | grep "$out_stub"` != "") then
     set DAY  = `ls -l $test_rma1/$NC_FILE | awk '{print $7}'`
     set HOUR = `ls -l $test_rma1/$NC_FILE | awk '{print $8}' | head -c 2`
 
-    if ("$testday" > "$DAY") set newfile = "FALSE"
-    if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) set newfile = "FALSE"
+  echo "here2" 
+    if ("$testday" > "$DAY") 
+       set newfile = "FALSE"
+    endif
+  echo "here3" 
+    if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) then
+       set newfile = "FALSE"
+    endif
+  echo "here4" 
   endif 
 
   if ($newfile == "TRUE") then 
