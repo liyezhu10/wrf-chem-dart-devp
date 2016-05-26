@@ -240,7 +240,7 @@ foreach BRANCH ($source_rma1 $source_rma2)
    # submit the jobs and wait for it to finish
    echo "submitting filter for $test_case"
    cd $rundir/$basecase/$test_case
-   # bsub -K < run_filter.csh
+   bsub -K < run_filter.csh
 
    # check that job completed
    set last_log      = `ls -rt *.log | tail -n 1`

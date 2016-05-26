@@ -5,7 +5,7 @@ if ($#argv >= 3) then
    set out_stub     = $2
    set test_dir     = $3
 else
-   echo "expecting stage_restarts.csh -restart_stub -out_stub -test_dir -stop -wrf_2_dom"
+   echo "expecting stage_restarts.csh -restart_stub -out_stub -test_dir -stop -wrf2dom"
 endif
 
 # optional argument
@@ -16,13 +16,15 @@ if ($#argv == 4) then
 endif
 
 if ($#argv == 5) then
-   set wrf_2_dom = $5
+   set wrf2dom = $5
+else
+   set wrf2dom = "false" 
 endif
 
 set n = 1
 foreach file (../restarts/*)
 
-   if ("$wrf_2_dom" == "true") then
+   if ("$wrf2dom" == "true") then
      set d01 = "_d01"
      set d02 = "_d02"
      set fileout1 = `printf "%s%4.4d%s" $out_stub$d01. $n .nc`
@@ -41,7 +43,7 @@ foreach file (../restarts/*)
       touch $fileout1
       chmod u+w $fileout1
 
-      if ("$wrf_2_dom" == "true") then
+      if ("$wrf2dom" == "true") then
          echo "copying $file/$restart_stub1 to $fileout1 in $test_dir directory"
          echo "copying $file/$restart_stub2 to $fileout2 in $test_dir directory"
          touch     $fileout2
@@ -59,14 +61,14 @@ foreach file (../restarts/*)
       touch     $fileout1
       chmod u+w $fileout1
 
-      if ("$wrf_2_dom" == "true") then
+      if ("$wrf2dom" == "true") then
          echo "copying $file/$restart_stub1 to $fileout1 in $test_dir directory"
          echo "copying $file/$restart_stub2 to $fileout2 in $test_dir directory"
          cp $file/$restart_stub1 $fileout1
          cp $file/$restart_stub2 $fileout2
       else
-         echo "copying $file/$restart_stub to $fileout1 in $test_dir directory"
-         cp $file/$restart_stub $fileout1 
+         echo "copying $file to $fileout1 in $test_dir directory"
+         cp $file $fileout1 
       endif
    endif 
  
