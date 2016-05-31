@@ -7,58 +7,26 @@
 JOBDIR=${LS_SUBCWD}                   # directory of this script
 JOBIDN=$( echo ${LSB_JOBID} | awk '{ printf("%08d\n", $1) }' ) # job-id
 JOBNAM=${LSB_JOBNAME}                 # name of this script
+#-- Load Experiment Environment Variables -----------------     
+. FeoM_SBMT_ENV_VARS.sh
+#-- Ensemble required variables ---------------------------
 ENSNO=$( echo ${LSB_JOBINDEX} | awk '{ printf("%02d\n", $1) }' )
-####################################################################
-############### DEFINE RELEVANT PARAMETERS #########################
-####################################################################
-EXPID=EXPCODE
-EXPNO=EXPNO 
-EXPYR=EXPERIMENTYEAR
-MEMNO=ENSEMBLEMEMBERS
-NPROC=NCORES
-ENSID=ENSEMBLEID
-RNLEN=ASSIMILATIONCYCLE
-EXPINFO=${EXPID}${EXPNO};
 ENSINFO=${ENSID}${ENSNO};
 JOBID=$(bjobs | grep -ir TSS${EXPINFO} | awk '{print $1}')
-####################################################################
-############### DEFINE RELEVANT DIRECTORIES ########################
-####################################################################
-USRHOM=/users/home/ans051 
-RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
-DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
-FSMHOM=${USRHOM}/FEOM
-FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FETSSOM.ENS01
-FSMINI=${FSMPRE}/ENSEMBLE_IC 
-WRKDIR=/work/ans051/TSS/${EXPINFO}
 ENSDIR=${WRKDIR}/${ENSINFO}
 SUBMITFILE=${WRKDIR}/FeoM_SBMT_iNiTiaLiZe_${EXPINFO}
-####################################################################
-######### MESH DIRECTORIES DEPENDING ON THE PARTITIONING ###########
-####################################################################
-if   [ ${NPROC} -eq 256 ]; then 
-	MESHDIR=mesh-T2G1.5L110b
-elif [ ${NPROC} -eq 1024 ]; then 
-	MESHDIR=mesh-T2G1.5L110b.V2
-elif [ ${NPROC} -eq 512 ]; then 
-	MESHDIR=mesh-T2G1.5L110b.V3
-elif [ ${NPROC} -eq 128 ]; then 
-	MESHDIR=mesh-T2G1.5L110b.V4
-fi
-####################################################################
-######### CREATE ENSEMBLE MEMBER DIRECTORY #########################
-######### COPY INITIAL CONDITIONS ##################################
-######### SET FEOM NAMELIST PARAMETERS #############################
-####################################################################
+#----------------------------------------------------------
+#-------- CREATE ENSEMBLE MEMBER DIRECTORY ----------------
+#----------------------------------------------------------
 if [ ! -d ${ENSDIR} ]; then
 	mkdir ${ENSDIR}
 fi
 cd ${ENSDIR}
+#----------------------------------------------------------
+#-------- LINK INITIAL CONDITIONS -------------------------
+#----------------------------------------------------------
 if [ ! -f  ${ENSINFO}.clock ]; then 
-	if [ ${EXPYR} -eq 2008 ]; then
-	ncks -F -d T,7,7 /work/ans051/TSS/ZEN01/${ENSINFO}/${ENSINFO}.${EXPYR}.oce.nc ${ENSINFO}.${EXPYR}.oce.nc
-	elif [ ${EXPYR} -eq 2009 ]; then
+	if [ ${EXPYR} -eq 2009 ]; then
 		INIYR=2008
 	cp ${FSMINI}/ENSHC.${INIYR}.clock ${ENSINFO}.clock
 	ln -sf ${FSMINI}/ENSHC.${INIYR}.forcing.diag.nc .
@@ -70,6 +38,9 @@ if [ ! -f  ${ENSINFO}.clock ]; then
 
 	ln -sf ${FSMINI}/${ENSINFO}.${INIYR}.oce.nc .
 	fi
+#----------------------------------------------------------
+#-------- SET FEOM NAMELIST PARAMETERS --------------------
+#----------------------------------------------------------
 	for File in ENSHC.${INIYR}.*.nc; do
 		NFile=$( echo ${File} | sed 's/ENSHC/'${ENSINFO}'/' );
 		mv ${File} ${NFile};

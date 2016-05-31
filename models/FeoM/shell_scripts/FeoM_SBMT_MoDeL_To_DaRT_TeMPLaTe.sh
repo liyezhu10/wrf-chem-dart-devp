@@ -3,53 +3,23 @@
 #BSUB -o LOG/TSSM2D_%J_%I.out  # Appends std output to file %J.out.
 #BSUB -e LOG/TSSM2D_%J_%I.out  # Appends std error to file %J.err.
 #BSUB -q serial_30min            # queue
-############################ LSF ###################################
-TEMPLATE=TeMPLaTe; COPY='cp -f'; REMOVE='rm -f'; LINK='ln -sf'
+#-- LSF provided variable ---------------------------------
+. FeoM_SBMT_ENV_VARS.sh
 JOBDIR=${LS_SUBCWD}                   # directory of this script
 JOBIDN=$( echo ${LSB_JOBID} | awk '{ printf("%08d\n", $1) }' ) # job-id
 JOBNAM=${LSB_JOBNAME}                 # name of this script
 ENSNO=$( echo ${LSB_JOBINDEX} | awk '{ printf("%02d\n", $1) }' )
 ENSN4=$( echo ${LSB_JOBINDEX} | awk '{ printf("%04d\n", $1) }' )
-####################################################################
-############### SET EXPERIMENT INFORMATION #########################
-####################################################################
-EXPID=EXPERIMENTNAME
-EXPNO=EXPNUMBER
-EXPYR=EXPERIMENTYR
-MEMNO=ENSEMBLEMEMBERS
-ENSID=ENSNAME
-NPROC=NUMBEROFCORES
-EXPINFO=${EXPID}${EXPNO}
 ENSINFO=${ENSID}${ENSNO}
-CYCLE=ASSIMILATIONCYCLE
-####################################################################
-############### DEFINE RELEVANT DIRECTORIES ########################
-####################################################################
-USRHOM=/users/home/ans051
-RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
-FSMHOM=${USRHOM}/FEOM
-FSMPRE=${USRHOM}/FEOM_PREPROC
-MODELHOM=${FSMHOM}/FETSSOM.ENS01
-FSMINI=${FSMPRE}/HINDCAST_IC
-DRTDIR=${USRHOM}/DART/FEOM/models/FeoM/work
-WRKDIR=/work/ans051/TSS/${EXPINFO}
-FILDIR=${WRKDIR}/FILTER
 ENSDIR=${WRKDIR}/${ENSINFO}; cd ${ENSDIR}
-###################################################################
-######## SET AND COPY THE EXECUTABLES #############################
-###################################################################
+#-- Set and Copy The Executables --------------------------
 EXE=model_to_dart
 M2DART=${DRTDIR}/${EXE}; ${COPY} ${M2DART} .
-###################################################################
-######## DART INPUT/OUTPUT FILES ##################################
-###################################################################
+#-- DART I/O files ----------------------------------------
 TMPNML=${DRTDIR}/input.nml.${TEMPLATE}
-OBSSEQ=${DRTDIR}/obs_seq.out
 M2DOUT=filter_ics.${ENSN4}
 D2MINP=filter_restart.${ENSN4}
-###################################################################
-###################################################################
-###################################################################
+#-- DART FEOM time handshaking ----------------------------
 DART_INIT_TIME_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 1,1p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
 DART_INIT_TIME_SECS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 2,2p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
 DART_FIRST_OBS_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 3,3p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
@@ -58,6 +28,7 @@ DART_LAST_OBS_DAYS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 5,5p|sed 's;_\|:\|=\|
 DART_LAST_OBS_SECS=($(cat ${WRKDIR}/ENS01/FeoM_time|sed -n 6,6p|sed 's;_\|:\|=\|,; ;g'| sed 's/[A-Za-z]*//g'))
 ANALYSISFILE=${ENSDIR}/${ENSINFO}.${EXPYR}.oce.nc
 echo "ANALYSIS FILE NAME: ${ANALYSISFILE}"
+#-- Modify DART namelist template -------------------------
 sed -e "s;^   model_analysis_filename.*$;   model_analysis_filename = '${ANALYSISFILE}';g" -e \
        "s/^   assimilation_period_days.*$/   assimilation_period_days = 0/g"  -e \
        "s/^   assimilation_period_seconds.*$/   assimilation_period_seconds = ${CYCLE}/g"  -e \
@@ -74,4 +45,3 @@ sed -e "s;^   model_analysis_filename.*$;   model_analysis_filename = '${ANALYSI
        "s/^   ens_size.*$/   ens_size      = ${MEMNO}/g"  \
         ${TMPNML} > input.nml
         ./${EXE} && ${LINK} ${ENSDIR}/${M2DOUT} ${FILDIR}/.
-exit

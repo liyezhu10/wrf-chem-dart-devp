@@ -4,54 +4,25 @@
 #BSUB -e LOG/TSSENSRUN_%J.out        # Appends std error  to file %J.out.
 #BSUB -q serial_30min            # queue
 
+
+  #-- Load Experiment Environment Variables -----------------     
+. FeoM_SBMT_ENV_VARS.sh
 function jobid {
   output=$($*)
   echo $output | head -n1 | cut -d'<' -f2 | cut -d'>' -f1
     }
-TEMPLATE=TeMPLaTe; COPY='cp -f'; REMOVE='rm -f'; 
-LINK='ln -sf'; MOVE='mv -f'
 ID=0; DAYSTEP=1; RUNYEAR=2009
-############################ LSF ###################################
-NPROC=512; POENAME=poe_short
-####################################################################
-############### DEFINE RELEVANT DIRECTORIES ########################
-####################################################################
-USRHOM=/users/home/ans051; RUNDIR=${USRHOM}/DART/FEOM/models/FeoM/shell_scripts
-####################################################################
-############### SET EXPERIMENT INFORMATION #########################
-####################################################################
-EXPID=EXPERIMENTNAME
-EXPNO=EXPERIMENTNUMBER
-EXPYR=EXPERIMENTYEAR
-ENSID=ENS; MEMNO=30
-# RNLEN here is number of time step; use for FEOM
-RNLEN=1800
-# TSTEP here is seconds in time step 
-TSTEP=12
-# RNSEC here is number of time step; use for DART
-RNSEC=$( echo "${RNLEN} * ${TSTEP}" | bc )
-EXPINFO=${EXPID}${EXPNO};
-WRKDIR=/work/ans051/TSS/${EXPINFO}
-DIADIR=/work/ans051/TSS/PLTTSS/MESH_READ
-LOGDIR=${WRKDIR}/LOG
-FILDIR=${WRKDIR}/FILTER
-CHECKFILE=${WRKDIR}/submitcheck.lst; 
+
+
   #-----------------------------------------------------------------------
   # INITIALIZE ENSEMBLE IF NOT DONE YET
   #-----------------------------------------------------------------------
 if [ ! -d ${WRKDIR} ]; then
   mkdir ${WRKDIR}; mkdir ${LOGDIR}; mkdir ${FILDIR}
+  cp ${RUNDIR}/FeoM_SBMT_ENV_VARS.sh ${WRKDIR}/.
         TMPLFILE=${RUNDIR}/FeoM_SBMT_iNiTiaLiZe_TeMPLaTe.sh
   	SBMTFILE=${WRKDIR}/FeoM_SBMT_iNiTiaLiZe_${EXPINFO}.sh
-  sed -e "s;ENSEMBLEMEMBERNO;${MEMNO};g" -e \
-         "s;^EXPID=.*$;EXPID=${EXPID};g" -e \
-         "s;^EXPNO=.*$;EXPNO=${EXPNO};g" -e \
-	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g" -e \
-         "s;^MEMNO=.*$;MEMNO=${MEMNO};g" -e \
-	 "s;^ENSID=.*$;ENSID=${ENSID};g" -e \
-	 "s;^RNLEN=.*$;RNLEN=${RNLEN};g" -e \
-         "s;^NPROC=.*$;NPROC=${NPROC};g" \
-	 ${TMPLFILE} > ${SBMTFILE}
+  sed -e "s;ENSEMBLEMEMBERNO;${MEMNO};g" ${TMPLFILE} > ${SBMTFILE}
 	 cd ${WRKDIR}; ID=$( jobid bsub < ${SBMTFILE} ); echo ${ID}
 else
 	cd ${WRKDIR}
@@ -59,6 +30,7 @@ else
 	RUNYEAR=$(cat ENS01/ENS01.clock | sed -n 2,2p | awk '{print $3}') 
 	${MOVE} ${CHECKFILE} ${CHECKFILE}.prev
 fi
+
   #-----------------------------------------------------------------------
   # FORWARD THE MODEL HERE
   #-----------------------------------------------------------------------
@@ -66,19 +38,13 @@ fi
   	SBMTFILE=${WRKDIR}/FeoM_SBMT_FoRWaRD_MoDeL_${EXPINFO}.sh
   sed -e "s;ENSEMBLEMEMBERNO;${MEMNO};g" -e \
          "s;NUMBEROFCORES;${NPROC};"     -e \
-	 "s;POEQUEUENAME;${POENAME};"    -e \
-         "s;^EXPID=.*$;EXPID=${EXPID};g" -e \
-         "s;^EXPNO=.*$;EXPNO=${EXPNO};g" -e \
-	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g" -e \
-         "s;^MEMNO=.*$;MEMNO=${MEMNO};g" -e \
-	 "s;^ENSID=.*$;ENSID=${ENSID};g" -e \
-         "s;^NPROC=.*$;NPROC=${NPROC};g" \
-	 ${TMPLFILE} > ${SBMTFILE}
+	 "s;POEQUEUENAME;${POENAME};" ${TMPLFILE} > ${SBMTFILE}
         if [ ${ID} = 0 ]; then
        	 cd ${WRKDIR}; ID=$( jobid bsub < ${SBMTFILE} ); echo ${ID}
         else
        	 cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
         fi
+
   #-----------------------------------------------------------------------
   # CHECK THE ENSEMBLE and RUN DART if no collapse. Resubmit the experiment
   # if continues                                                           
@@ -86,14 +52,7 @@ fi
         TMPLFILE=${RUNDIR}/FeoM_SBMT_CHeCK_eNSeMBLe_TeMPLaTe.sh
   	SBMTFILE=${WRKDIR}/FeoM_SBMT_CHeCK_eNSeMBLe_${EXPINFO}.sh
 
-  sed -e "s;^EXPID=.*$;EXPID=${EXPID};g" -e \
-         "s;^EXPNO=.*$;EXPNO=${EXPNO};g" -e \
-	 "s;^EXPYR=.*$;EXPYR=${EXPYR};g" -e \
-         "s;^MEMNO=.*$;MEMNO=${MEMNO};g" -e \
-	 "s;^ENSID=.*$;ENSID=${ENSID};g" -e \
-	 "s;^RNLEN=.*$;RNLEN=${RNSEC};g" -e \
-         "s;^NPROC=.*$;NPROC=${NPROC};g" \
-	 ${TMPLFILE} > ${SBMTFILE}
+	cat ${TMPLFILE} > ${SBMTFILE}
 	cd ${WRKDIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
 exit
   #-----------------------------------------------------------------------
@@ -105,5 +64,3 @@ exit
          "s;^EXPYR=.*$;EXPYR=${EXPYR};g"  \
 	${TMPLFILE} > ${SBMTFILE}
 	cd ${DIADIR}; ID=$( jobid bsub -w "done(${ID})" < ${SBMTFILE} ); echo ${ID}
-
-exit 0
