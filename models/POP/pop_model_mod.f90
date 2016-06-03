@@ -279,7 +279,11 @@ if (do_output()) write(     *     , nml=pop_model_nml)
 ! Set the time step ... causes POP namelists to be read.
 ! Ensures model_timestep is multiple of 'ocean_dynamics_timestep'
 
-model_timestep = set_model_time_step()
+if (assimilation_period_days < 0  .and. assimilation_period_seconds < 0) then
+   model_timestep = set_model_time_step()
+else
+   model_timestep = set_time(assimilation_period_seconds, assimilation_period_days)
+endif
 
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 
