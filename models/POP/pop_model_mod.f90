@@ -90,6 +90,9 @@ real(r8) :: model_perturbation_amplitude = 0.2
 logical  :: update_dry_cell_walls = .false.
 integer  :: debug = 0   ! turn up for more and more debug messages
 
+! set this to true for cross component
+logical  :: precomputed_close = .false.
+
 ! FIXME: currently the update_dry_cell_walls namelist value DOES
 ! NOTHING.  it needs additional code to detect the cells which are
 ! wet, but within 1 cell of the bottom/sides/etc.  
@@ -100,6 +103,7 @@ namelist /pop_model_nml/  &
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
    update_dry_cell_walls,       &
+   precomputed_close,           &
    debug
 
 !------------------------------------------------------------------
@@ -3108,9 +3112,9 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
  integer,                           intent(in) :: base_obs_kind
  type(location_type), dimension(:), intent(in) :: obs
  integer,             dimension(:), intent(in) :: obs_kind
- integer,                           intent(out):: num_close
- integer,             dimension(:), intent(out):: close_ind
- real(r8),  optional, dimension(:), intent(out):: dist
+ integer,                           intent(inout):: num_close
+ integer,             dimension(:), intent(inout):: close_ind
+ real(r8),  optional, dimension(:), intent(inout):: dist
 
 ! Given a DART location (referred to as "base") and a set of candidate
 ! locations & kinds (obs, obs_kind), returns the subset close to the
@@ -3124,18 +3128,20 @@ integer :: t_ind, k
 
 ! Initialize variables to missing status
 
-num_close = 0
-close_ind = -99
-if (present(dist)) dist = 1.0e9   !something big and positive (far away)
-
-! Get all the potentially close obs but no dist (optional argument dist(:)
-! is not present) This way, we are decreasing the number of distance
-! computations that will follow.  This is a horizontal-distance operation and
-! we don't need to have the relevant vertical coordinate information yet 
-! (for obs).
-
-call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
-                       num_close, close_ind)
+if (.not. precomputed_close) then
+   num_close = 0
+   close_ind = -99
+   if (present(dist)) dist = 1.0e9   !something big and positive (far away)
+   
+   ! Get all the potentially close obs but no dist (optional argument dist(:)
+   ! is not present) This way, we are decreasing the number of distance
+   ! computations that will follow.  This is a horizontal-distance operation and
+   ! we don't need to have the relevant vertical coordinate information yet 
+   ! (for obs).
+   
+   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
+                          num_close, close_ind)
+endif
 
 ! Loop over potentially close subset of obs priors or state variables
 if (present(dist)) then

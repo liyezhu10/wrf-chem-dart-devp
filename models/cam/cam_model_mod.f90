@@ -438,6 +438,9 @@ character(len=obstypelength) :: impact_only_same_kind = ' '
 ! by numerical stability concerns for repeated restarting in leapfrog.
 integer :: Time_step_seconds = 21600, Time_step_days = 0
 
+! set to true if running cross component
+logical :: precomputed_close = .false.
+
 ! set to .true. to get more details about the state vector and the
 ! CAM fields and sizes in the init code.
 logical :: print_details = .false.
@@ -451,7 +454,7 @@ namelist /cam_model_nml/ vert_coord, output_state_vector, model_version, cam_phi
                      highest_obs_pressure_Pa, highest_state_pressure_Pa,              &
                      max_obs_lat_degree, Time_step_seconds, Time_step_days,           &
                      impact_only_same_kind, print_details,                            &
-                     model_config_file, cs_grid_file, homme_map_file
+                     model_config_file, cs_grid_file, homme_map_file, precomputed_close
 
 
 !---- end of namelist (found in file input.nml) ----
@@ -5473,9 +5476,9 @@ type(location_type),  intent(in)    :: base_obs_loc
 integer,              intent(in)    :: base_obs_type
 type(location_type),  intent(inout) :: locs(:)
 integer,              intent(in)    :: kinds(:)
-integer,              intent(out)   :: num_close
-integer,              intent(out)   :: close_indices(:)
-real(r8),             intent(out)   :: distances(:)
+integer,              intent(inout) :: num_close
+integer,              intent(inout) :: close_indices(:)
+real(r8),             intent(inout) :: distances(:)
 
 ! FIXME remove some (unused) variables?
 integer  :: k, t_ind
@@ -5510,9 +5513,11 @@ else
                                      local_base_which)
 endif
 
-! Get all the potentially close obs but no distances. 
-call loc_get_close_obs(filt_gc, local_base_obs_loc, base_obs_type, locs, kinds, &
-                       num_close, close_indices)
+if (.not. precomputed_close) then
+   ! Get all the potentially close obs but no distances. 
+   call loc_get_close_obs(filt_gc, local_base_obs_loc, base_obs_type, locs, kinds, &
+                          num_close, close_indices)
+endif
 
 do k = 1, num_close
 
