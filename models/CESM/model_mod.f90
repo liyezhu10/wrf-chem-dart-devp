@@ -104,6 +104,8 @@ use clm_model_mod, only :                             &
   clm_sv_to_restart_file   => sv_to_restart_file,     &
   clm_model_convert_vert_obs     => model_convert_vert_obs,   &
   clm_model_convert_vert_state   => model_convert_vert_state, &
+  clm_get_close_obs        => get_close_obs,          &
+  clm_get_close_state      => get_close_state,        &
   clm_to_dart_state_vector,  &
    get_gridsize,             &
    get_clm_restart_filename, &
@@ -989,9 +991,9 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_type, &
  integer,              intent(in)    :: base_obs_type
  type(location_type),  intent(inout) :: locs(:)
  integer,              intent(in)    :: loc_kind(:)
- integer,              intent(out)   :: num_close
- integer,              intent(out)   :: close_ind(:)
- real(r8),  optional,  intent(out)   :: dist(:)
+ integer,              intent(inout) :: num_close
+ integer,              intent(inout) :: close_ind(:)
+ real(r8),  optional,  intent(inout) :: dist(:)
 
 ! Given a DART location (referred to as "base") and a set of candidate
 ! locations & kinds (obs, obs_kind), returns the subset close to the
@@ -1009,8 +1011,8 @@ integer :: fo_comp, obs_comp, item_count, sub_indx, orig_indx
 integer, save :: n = 1
 
 integer :: i, sublist_count
-type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: sublist_index(:)
+integer, allocatable :: sublist_index(:), sublist_close_ind(:)
+real(r8), allocatable :: sublist_dist(:)
       
 if ( .not. module_initialized ) call static_init_model
    
@@ -1050,28 +1052,35 @@ fo_comp = get_fo_component(base_obs_type)
 item_count = size(loc_kind)
 sublist_count = count_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
 if (sublist_count > 0) then
-   allocate(sublist_index(sublist_count))
+   allocate(sublist_index(sublist_count), sublist_close_ind(sublist_count), sublist_dist(sublist_count))
    call fill_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
           
    do i=1, sublist_count
       sub_indx = sublist_index(i)      ! index into the "close_ind" list
-      orig_indx = close_ind(sub_indx)  ! the original index into the full list
-      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
+      sublist_close_ind(i) = close_ind(sub_indx)   ! the original index into the full list
+      !orig_indx = close_ind(sub_indx)  ! the original index into the full list
+      !dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
    enddo
 
-   ! compute distances 
-   ! FIXME: this can't do what modules would do with close obs
-   !  this doesn't match the existing interfaces because it
-   ! the code does its own search and doesn't look at the existing index list.
-   !if (fo_comp == isCAM) then
-   !   call cam_get_close_obs()
-   !else if (fo_comp == isPOP) then
-   !   call pop_get_close_obs()
-   !else if (fo_comp == isCLM) then
-   !   call clm_get_close_obs()
-   !endif
+   ! compute distances  - this requires 'precomputed_close' to be .true. in all
+   ! the model_mod namelists.
+   if (fo_comp == isCAM) then
+      call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                                 locs, loc_kind, sublist_count, sublist_close_ind, sublist_dist)
+   else if (fo_comp == isPOP) then
+      call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                                 locs, loc_kind, sublist_count, sublist_close_ind, sublist_dist)
+   else if (fo_comp == isCLM) then
+      call clm_get_close_obs(gc, base_obs_loc, base_obs_type, &
+                                 locs, loc_kind, sublist_count, sublist_close_ind, sublist_dist)
+   endif
       
-   deallocate(sublist_index)
+   do i=1, sublist_count
+      sub_indx = sublist_index(i)      ! index into the "close_ind" list
+      dist(sub_indx) = sublist_dist(i)
+   enddo
+
+   deallocate(sublist_index, sublist_close_ind, sublist_dist)
 endif
 
 sublist_count = count_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
@@ -1093,26 +1102,6 @@ if (sublist_count > 0) then
    deallocate(sublist_index)
 endif
 
-!%! ! NOT REACHED NOT REACHED NOT REACHED
-!%! 
-!%! !  FIXME:  @TODO
-!%! if (include_CAM) then
-!%!       call cam_get_close_obs(gc, base_obs_loc, base_obs_type, &
-!%!                              locs, loc_kind, num_close, close_ind, dist)
-!%! endif
-!%! ! save original close_ind list?
-!%! if (include_POP) then
-!%!       call pop_get_close_obs(gc, base_obs_loc, base_obs_type, &
-!%!                              locs, loc_kind, num_close, close_ind, dist)
-!%! endif
-!%! ! merge lists & dists together
-!%! if (include_CLM) then
-!%!       call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-!%!                              locs, loc_kind, num_close, close_ind, dist)
-!%! endif
-!%! ! merge lists & dists together
-!%! 
- 
 end subroutine get_close_obs
 
 !------------------------------------------------------------------
@@ -1125,98 +1114,12 @@ subroutine get_close_state(gc, base_obs_loc, base_obs_type, &
  integer,              intent(in)    :: base_obs_type
  type(location_type),  intent(inout) :: locs(:)
  integer,              intent(in)    :: loc_kind(:)
- integer,              intent(out)   :: num_close
- integer,              intent(out)   :: close_ind(:)
- real(r8),  optional,  intent(out)   :: dist(:)
+ integer,              intent(inout) :: num_close
+ integer,              intent(inout) :: close_ind(:)
+ real(r8),  optional,  intent(inout) :: dist(:)
 
-! Given a DART location (referred to as "base") and a set of candidate
-! locations & kinds (obs, obs_kind), returns the subset close to the
-! "base", their indices, and their distances to the "base" ...
-
-! For vertical distance computations, general philosophy is to convert all
-! vertical coordinates to a common coordinate. This coordinate type is defined
-! in the namelist with the variable "vert_localization_coord".
-
-character(len=32) :: componentname
-integer :: i, this, base_obs_kind
-real(r8) :: horiz_dist, vert_dist_proxy
-integer :: vert1, vert2
-integer :: fo_comp, state_comp, sub_indx, orig_indx
-integer, save :: n = 1
-
-integer :: sublist_count, item_count
-type(location_type), allocatable :: loc_sublist(:)
-integer, allocatable :: kind_sublist(:), sublist_index(:)
-
-! FIXME: in a real unified model_mod, these would all be called
-! and any state vector items from any model are potentially close.
-! the vertical conversions are one issue; the other is whether the
-! distances should be the same or different in different mediums
-! (e.g air vs water vs soil/snow)
-
-! this needs to call all the get close routines for active components
-! and merge the lists when done.
-
-! if we go back to generic kinds, then which_model_kind() needs to
-! take a kind and this is a real specific type
-
-! we have to allow vertical conversions per component - and then
-! what, sum them?  this needs help.
-
-! @TODO:  for now, bypass the model-specific routines and call
-! the raw location mod code.   this may mess up land points in pop
-! and won't allow top-of-model changes in cam, and no vertical conversion
-! will be done.  but it may run with horizontal only.
-
-! NO DISTANCES YET!
-call loc_get_close_obs(gc, base_obs_loc, base_obs_type, &
-                       locs, loc_kind, num_close, close_ind)
-
-if (.not. present(dist)) return
-
-! get these once before looping below
-base_obs_kind = get_obs_kind_var_type(base_obs_type)
-vert1 = query_location(base_obs_loc)
-fo_comp = get_fo_component(base_obs_type)
-
-!> extract the obs types for this comp only
-
-item_count = size(loc_kind)
-sublist_count = count_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
-if (sublist_count > 0) then
-   allocate(sublist_index(sublist_count))
-   call fill_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
-          
-   do i=1, sublist_count
-      sub_indx = sublist_index(i)      ! index into the "close_ind" list
-      orig_indx = close_ind(sub_indx)  ! the original index into the full list
-      dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_type, loc_kind(orig_indx))
-   enddo
-
-   ! see comment in get_close_obs() about not being able to use
-   ! the module's real get_close_xxx() routine.
-   
-   deallocate(sublist_index)
-endif
-
-sublist_count = count_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind)
-if (sublist_count > 0) then
-   allocate(sublist_index(sublist_count))
-   call fill_not_my_kind_component_indirect(fo_comp, item_count, loc_kind, num_close, close_ind, sublist_count, sublist_index)
-          
-   ! here is where it's cross component
-   do i=1, sublist_count
-      sub_indx = sublist_index(i)      ! index into the "close_ind" list
-      orig_indx = close_ind(sub_indx)  ! the original index into the full list
-      if (use_cross_component) then
-         dist(sub_indx) = get_xcomp_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
-      else  
-         dist(sub_indx) = get_dist(base_obs_loc, locs(orig_indx), base_obs_kind, loc_kind(orig_indx))
-      endif
-   enddo
-
-   deallocate(sublist_index)
-endif
+call get_close_obs(gc, base_obs_loc, base_obs_type, &
+                   locs, loc_kind, num_close, close_ind, dist)
 
 end subroutine get_close_state
 

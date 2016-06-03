@@ -147,8 +147,7 @@ use location_mod,      only : location_type, get_location, set_location, query_l
                               VERTISUNDEF, VERTISSURFACE, VERTISLEVEL,                           &
                               VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT, write_location,   &
                               get_close_type, get_close_maxdist_init, get_close_obs_init,        &
-                              get_close_obs_destroy,get_dist,loc_get_close_obs => get_close_obs, &
-                              get_close_state
+                              get_close_obs_destroy,get_dist,loc_get_close_obs => get_close_obs
 
 use xyz_location_mod, only : xyz_location_type, xyz_get_close_maxdist_init,          &
                              xyz_get_close_type, xyz_set_location, xyz_get_location, &
@@ -5452,9 +5451,27 @@ end subroutine vector_to_prog_var
 !> @param[out]   distances(:)
 !> The distances of the close state variables from the observation.
 
+subroutine get_close_state(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
+                           num_close, close_indices, distances)
+
+type(get_close_type), intent(in)    :: filt_gc
+type(location_type),  intent(in)    :: base_obs_loc
+integer,              intent(in)    :: base_obs_type
+type(location_type),  intent(inout) :: locs(:)
+integer,              intent(in)    :: kinds(:)
+integer,              intent(inout) :: num_close
+integer,              intent(inout) :: close_indices(:)
+real(r8),             intent(inout) :: distances(:)
+
+call get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
+                         num_close, close_indices, distances)
+
+end subroutine get_close_state
+
+
 
 subroutine get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
-                            num_close, close_indices, distances)
+                         num_close, close_indices, distances)
 
 ! get_close_obs takes as input an "observation" location, a DART TYPE (not KIND),
 ! and a list of all potentially close locations and KINDS on this task.

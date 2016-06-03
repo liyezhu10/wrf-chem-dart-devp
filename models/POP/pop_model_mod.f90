@@ -19,8 +19,7 @@ use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
                              get_close_obs_init, set_location,                 &
                              VERTISHEIGHT, get_location, vert_is_height,       &
                              vert_is_level, vert_is_surface,                   &
-                             loc_get_close_obs => get_close_obs, get_close_type, &
-                             get_close_state
+                             loc_get_close_obs => get_close_obs, get_close_type
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              nc_check, do_output,                              &
@@ -3104,6 +3103,23 @@ end subroutine write_grid_netcdf
 
 !------------------------------------------------------------------
 
+subroutine get_close_state(gc, base_obs_loc, base_obs_kind, &
+                           obs, obs_kind, num_close, close_ind, dist)
+
+ type(get_close_type),              intent(in) :: gc
+ type(location_type),               intent(in) :: base_obs_loc
+ integer,                           intent(in) :: base_obs_kind
+ type(location_type), dimension(:), intent(in) :: obs
+ integer,             dimension(:), intent(in) :: obs_kind
+ integer,                           intent(inout):: num_close
+ integer,             dimension(:), intent(inout):: close_ind
+ real(r8),  optional, dimension(:), intent(inout):: dist
+
+call get_close_obs(gc, base_obs_loc, base_obs_kind, &
+                   obs, obs_kind, num_close, close_ind, dist)
+
+end subroutine get_close_state
+
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs, obs_kind, num_close, close_ind, dist)
 
@@ -3145,17 +3161,19 @@ endif
 
 ! Loop over potentially close subset of obs priors or state variables
 if (present(dist)) then
-do k = 1, num_close
+   do k = 1, num_close
 
-   t_ind = close_ind(k)
+      t_ind = close_ind(k)
 
-   ! if dry land, leave original 1e9 value.  otherwise, compute real dist.
-   if (obs_kind(t_ind) /= KIND_DRY_LAND) then
-      dist(k) = get_dist(base_obs_loc,       obs(t_ind), &
-                         base_obs_kind, obs_kind(t_ind))
-   endif
+      ! if dry land, set 1e9 value.  otherwise, compute real dist.
+      if (obs_kind(t_ind) /= KIND_DRY_LAND) then
+         dist(k) = get_dist(base_obs_loc,       obs(t_ind), &
+                            base_obs_kind, obs_kind(t_ind))
+      else
+         dist(k) = 1.0e9
+      endif
 
-enddo
+   enddo
 endif
 
 end subroutine get_close_obs
