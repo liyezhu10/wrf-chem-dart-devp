@@ -1,8 +1,8 @@
 #!/bin/csh
 
-set source_rma1  = "/glade/p/work/hendric/DART/merge_cm1/rma_trunk"
-set source_rma2  = "/glade/p/work/hendric/DART/clean_CM1"
-set rundir       = "/glade/scratch/hendric/bitwiseCM1"
+set source_rma1  = "/glade/p/work/hendric/DART/rma_trunk"
+set source_rma2  = "/glade/p/work/hendric/DART/clean_rma_trunk"
+set rundir       = "/glade/scratch/hendric/bitwiseWRF"
 set quickbuild   = "true"
 
 echo "$argv"

@@ -183,15 +183,17 @@ if (! -e "$rundir/$basecase" ) then
    echo "copying $testcase to :"
    echo " -> rundir $rundir "
    mkdir $rundir/$basecase
-   cp -r $testcase/test_rma $rundir/$basecase/$test_rma1
-   cp -r $testcase/test_rma $rundir/$basecase/$test_rma2
-   cp -r $testcase/restarts $rundir/$basecase/
+   cp -r $testcase/test_rma $rundir/$basecase/$test_rma1 || exit(1)
+   cp -r $testcase/test_rma $rundir/$basecase/$test_rma2 || exit(1)
+   cp -r $testcase/restarts $rundir/$basecase/ || exit(1)
 endif
 
 # build compare_states for bitwise testing restarts
 cd $source_rma1/utilities/test/work
-csh mkmf_compare_states >& make.out
+csh mkmf_compare_states >& make.out || exit(2)
 make >& make_compare_states.out
+ln -sf $source_rma1/utilities/test/work/compare_states $rundir/$basecase/compare_states
+
 
 foreach BRANCH ($source_rma1 $source_rma2)
    set branch_name = `basename $BRANCH`
@@ -280,10 +282,6 @@ set priors   = "" #`ls $test_rma1/prior_member.* | xargs -n 1 basename`
 
 set testday  = `ls -l $test_rma1/$out_stub.0001.nc | awk '{print $7}'`
 set testhour = `ls -l $test_rma1/$out_stub.0001.nc | awk '{print $8}' | head -c 2`
-
-if ( ! -e compare_states ) then
-   ln -sf $source_rma1/utilities/test/work/compare_states compare_states
-endif
 
 if ( ! -e input.nml ) then
    cp $test_rma1/input.nml input.nml

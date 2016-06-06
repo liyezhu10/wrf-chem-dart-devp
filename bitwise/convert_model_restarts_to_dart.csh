@@ -18,30 +18,17 @@ if ($#argv == 6) then
 endif
 
 set n = 1
-foreach file (../restarts/*)
+foreach file (../restarts/*.r.*)
 
    #set num     = `echo $file | tail -c 5`
    set fileout = `printf "%s%4.4d" $filter_restart. $n`
 
-   if (-d $file) then
-      echo "converting $file/$model_restart to $fileout"
+   echo "converting $file to $fileout"
 
-      foreach restart ($file/$model_restart*)
-         # touch $restart
-         # chmod a+w $restart
-         cp -f $restart . 
-      end
-      ./$model_to_dart >& model_to_dart.out
+   cp $file $model_restart
+   ./$model_to_dart >& model_to_dart.out
 
-      cp $dart_restart $fileout
-   else
-      echo "converting $file to $fileout"
-
-      cp $file $model_restart
-      ./$model_to_dart >& model_to_dart.out
-
-      cp $dart_restart $fileout
-   endif
+   cp $dart_restart $fileout
 
    if ($n == $stop) exit(0)
  

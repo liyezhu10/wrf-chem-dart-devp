@@ -98,7 +98,7 @@ set testcase     = "/glade/p/image/DART_test_cases/wrf/wrf_small"
 set endian       = 'little'
 set type         = 'r8'
 set quickbuild   = 'true'
-set wrf2dom      = 'false'
+set multi_dom    = 'false'
 
 
 # for CAM
@@ -175,8 +175,8 @@ while ( 1 )
     case "-quickbuild"
       set quickbuild = $argv[1]
       breaksw
-    case "-wrf2dom"
-      set wrf2dom = $argv[1]
+    case "-multi_dom"
+      set multi_dom = $argv[1]
       breaksw
     default:
       echo "unknown input, invoked create_test with no arguments for usage"
@@ -198,6 +198,7 @@ echo " "
 echo "source_rma        : "$source_rma  
 echo "source_trunk      : "$source_trunk
 echo "testcase          : "$testcase    
+echo "multi_dom         : "$multi_dom    
 echo "endian            : "$endian      
 echo "quickbuild        : "$quickbuild      
 echo "type              : "$type      
@@ -286,24 +287,52 @@ ln -sf $source_trunk/models/$model/work/$model_to_dart \
 cd $rundir/$basecase/test_rma/
 
 echo "test_rma $model : staging template restarts"
-ln -sf $source_rma/bitwise/stage_restarts.csh .
-csh stage_restarts.csh $model_restart $out_stub "test_rma" 3 $wrf2dom
+if ("$multi_dom" == "true") then
+   if (-e stage_restarts.csh) then
+      csh stage_restarts.csh $model_restart $out_stub "test_rma" 3
+   else
+      echo " multiple domains is true must provide stage_restarts.csh"
+      exit(0)
+   endif
+else
+   ln -sf $source_rma/bitwise/stage_restarts.csh .
+   csh stage_restarts.csh $model_restart $out_stub "test_rma" 3 $multi_dom
+endif
 
 cd $rundir/$basecase/test_trunk/
 
 echo "test_trunk $model : staging template restarts"
-ln -sf $source_rma/bitwise/stage_restarts.csh .
-csh stage_restarts.csh $model_restart $out_stub "test_trunk" 3 $wrf2dom
-# csh stage_restarts.csh
+if ("$multi_dom" == "true") then
+   if (-e stage_restarts.csh) then
+      csh stage_restarts.csh $model_restart $out_stub "test_rma" 3
+   else
+      echo " multiple domains is true must provide stage_restarts.csh"
+      exit(0)
+   endif
 
-# convert model restarts to dart restarts
-echo "test_trunk $model : converting $model restart files to filter restarts"
-ln -sf $source_rma/bitwise/convert_model_restarts_to_dart.csh .
-csh convert_model_restarts_to_dart.csh $model_to_dart \
-                                       $dart_out_restart \
-                                       $model_restart \
-                                       $out_stub \
-                                       $trunk_restart 3
+   if (-e convert_model_restarts_to_dart.csh) then
+      csh convert_model_restarts_to_dart.csh $model_to_dart \
+                                             $dart_out_restart \
+                                             $model_restart \
+                                             $out_stub \
+                                             $trunk_restart 3
+   else
+      echo " multiple domains is true must provide stage_restarts.csh"
+      exit(0)
+   endif
+else
+   ln -sf $source_rma/bitwise/stage_restarts.csh .
+   csh stage_restarts.csh $model_restart $out_stub "test_rma" 3 $multi_dom
+
+   # convert model restarts to dart restarts
+   echo "test_trunk $model : converting $model restart files to filter restarts"
+   ln -sf $source_rma/bitwise/convert_model_restarts_to_dart.csh .
+   csh convert_model_restarts_to_dart.csh $model_to_dart \
+                                          $dart_out_restart \
+                                          $model_restart \
+                                          $out_stub \
+                                          $trunk_restart 3
+endif
 
 # submit the jobs and wait for it to finish
 echo "submitting filter for test_rma"
@@ -354,7 +383,7 @@ if (-f "$trunk_out_restart.0001") then
                                           $dart_restart \
                                           $model_restart \
                                           $out_stub \
-                                          $trunk_out_restart 3 $wrf2dom
+                                          $trunk_out_restart 3 $multi_dom
    echo " " 
 else
   echo " no restarts "
@@ -365,15 +394,15 @@ printf "|%13s%13s|\n" "-----------------------------------" \
                       "-----------------------------------"
 printf "|%-33s|%-8s|%-13s|%-13s|\n" " TESTING $basecase" " P/F  " " test_trunk " " test_rma " 
 printf "|%-33s|%-8s|%-13s|%-13s|\n" "---------------------------------" \
-                                    "--------" \
-                                    "-------------" \
-                                    "-------------"
-
-cd $rundir/$basecase
+                                     "--------" \
+                                     "-------------" \
+                                     "-------------"
  
+cd $rundir/$basecase
+##  
 set restarts = `ls test_trunk/$out_stub* | xargs -n 1 basename`
-set priors   = "" #`ls test_trunk/prior_member.* | xargs -n 1 basename`
-
+## set priors   = "" #`ls test_trunk/prior_member.* | xargs -n 1 basename`
+## 
 set testday  = `ls -l test_trunk/$out_stub*.0001.nc | awk '{print $7}'`
 set testhour = `ls -l test_trunk/$out_stub*.0001.nc | awk '{print $8}' | head -c 2`
 
@@ -421,13 +450,13 @@ foreach NC_FILE ( \
   # prior_inflate_restart )
   
   set newfile = "TRUE"
-  if (`echo $NC_FILE | grep "$out_stub"` != "") then
-    set DAY  = `ls -l test_trunk/$NC_FILE | awk '{print $7}'`
-    set HOUR = `ls -l test_trunk/$NC_FILE | awk '{print $8}' | head -c 2`
+  ## if (`echo $NC_FILE | grep "$out_stub"` != "") then
+  ##   set DAY  = `ls -l test_trunk/$NC_FILE | awk '{print $7}'`
+  ##   set HOUR = `ls -l test_trunk/$NC_FILE | awk '{print $8}' | head -c 2`
 
-    if ("$testday" > "$DAY") set newfile = "FALSE"
-    if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) set newfile = "FALSE"
-  endif 
+  ##   if ("$testday" > "$DAY") set newfile = "FALSE"
+  ##   if (("$testday" == "$DAY") && ("$testhour" > "$HOUR")) set newfile = "FALSE"
+  ## endif 
 
   if ($newfile == "TRUE") then 
 
