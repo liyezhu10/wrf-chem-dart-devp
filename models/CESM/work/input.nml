@@ -190,10 +190,11 @@
   /   
 
 &pop_model_nml
-   assimilation_period_days     = 0,
-   assimilation_period_seconds  = 21600,
+   assimilation_period_days     = 1,
+   assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
    output_state_vector          = .false.,
+   precomputed_close            = .true.
    debug                        = 0,
   /
 
@@ -215,9 +216,10 @@
    pert_base_vals      = -888888.0d0,
    highest_obs_pressure_Pa   = 100.0,
    highest_state_pressure_Pa = 150.0,
-   max_obs_lat_degree        = 89.9,
-   Time_step_seconds   = 21600,
-   Time_step_days      = 0,
+   max_obs_lat_degree  = 89.9,
+   precomputed_close   = .true.
+   Time_step_seconds   = 0,
+   Time_step_days      = 1,
    print_details       = .false.,
    /
 
