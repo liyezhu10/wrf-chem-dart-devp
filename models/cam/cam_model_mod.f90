@@ -444,6 +444,10 @@ logical :: precomputed_close = .false.
 ! CAM fields and sizes in the init code.
 logical :: print_details = .false.
 
+! set to true (default) to use the improved top level increment damping
+! set to false to use the damping used in lanai and previous releases
+logical :: new_damping_algorithm = .true.
+
 
 namelist /cam_model_nml/ vert_coord, output_state_vector, model_version, cam_phis,        &
                        state_num_0d,   state_num_1d,   state_num_2d,   state_num_3d,  &
@@ -453,7 +457,8 @@ namelist /cam_model_nml/ vert_coord, output_state_vector, model_version, cam_phi
                      highest_obs_pressure_Pa, highest_state_pressure_Pa,              &
                      max_obs_lat_degree, Time_step_seconds, Time_step_days,           &
                      impact_only_same_kind, print_details,                            &
-                     model_config_file, cs_grid_file, homme_map_file, precomputed_close
+                     model_config_file, cs_grid_file, homme_map_file,                 &
+                     precomputed_close, new_damping_algorithm
 
 
 !---- end of namelist (found in file input.nml) ----
@@ -750,15 +755,21 @@ if (vert_coord == 'pressure') then
    highest_state_loc = set_location(1.0_r8,1.0_r8,highest_state_pressure_Pa,VERTISPRESSURE)
    model_top_loc     = set_location(1.0_r8,1.0_r8,model_top,                VERTISPRESSURE)
    ! damp_wght must be in the same units (dist = radians) as the distances in get_close_obs.
-   if (highest_state_pressure_Pa /= model_top) then
-      damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)
+   if (highest_state_pressure_Pa > 0 .and. highest_state_pressure_Pa /= model_top) then
+      if (new_damping_algorithm) then
+         ! new in post-lanai versions
+         damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)
+      else
+         ! algorithm in lanai and earlier versions
+         damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)**2
+      endif
    endif
 else if (vert_coord == 'log_invP') then
    highest_state_scale_h = scale_height(p_surface=P0%vals(1), p_above=highest_state_pressure_Pa)
    model_top             = scale_height(p_surface=P0%vals(1), p_above=(hyai%vals(1)*P0%vals(1)) )
    highest_state_loc = set_location(1.0_r8,1.0_r8,highest_state_scale_h,VERTISSCALEHEIGHT)
    model_top_loc     = set_location(1.0_r8,1.0_r8,model_top,            VERTISSCALEHEIGHT)
-   if (highest_state_scale_h /= model_top) then
+   if (highest_state_scale_h > 0 .and. highest_state_scale_h /= model_top) then
       damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)
    endif
 else
@@ -5200,6 +5211,9 @@ High: do highest_obs_level=1,num_levs
        highest_obs_level == num_levs) exit High
 enddo High
 
+write(string1, '(A,F9.3,A,I4,A)') 'obs above pressure ', highest_obs_pressure_Pa/100.0, ' millibars, which is model level ', highest_obs_level, ' will be ignored'
+call error_handler(E_MSG, 'set_highest_obs_limit', string1, source, revision, revdate)
+
 ! Test to be sure user hasn't set level so low that contributions from
 ! terrain are going to be an issue.  If they do, tell them in the error
 ! message what the valid limit is.
@@ -5213,7 +5227,7 @@ if (hybm%vals(highest_obs_level) > 0.0_r8) then
       endif
    enddo findzero
    write(string1, '(A)') 'invalid value for namelist "highest_obs_pressure_Pa"'
-   write(string2, '(A)') 'value is too large (and so located too low in atmosphere)'
+   write(string2, '(A)') 'value is too large (located out of the pure pressure levels of the atmosphere)'
    write(string3, '(A,F9.3,A)') 'must specify a value located above pressure ', p_col(lowest_ok), ' Pascals'
    call error_handler(E_ERR, 'set_highest_obs_limit', string1, source, revision, revdate, &
                       text2=string2, text3=string3)
@@ -5764,7 +5778,7 @@ integer  :: num_levs, top_lev, bot_lev
 integer  :: istatus, closest
 integer  :: cell_corners(4)
 integer  :: lon_ind, lat_ind, cam_type
-real(r8)              :: p_surf, frac, l, m, old_pressure
+real(r8)              :: p_surf, frac, l, m, new_pressure
 type(location_type)   :: temp_loc
 
 character(len=8) :: cam_varname
@@ -5973,12 +5987,13 @@ elseif (old_which == VERTISHEIGHT) then
       call error_handler(E_MSG, 'cam_convert_vert', string1,source,revision,revdate)
    endif
 
-   old_pressure = (1.0_r8 - frac) * p_col(bot_lev) + frac * p_col(top_lev)
+   new_pressure = (1.0_r8 - frac) * p_col(bot_lev) + frac * p_col(top_lev)
 
    if (vert_coord == 'pressure') then
+      new_array(3) = new_pressure
       new_which = VERTISPRESSURE
    else if (vert_coord == 'log_invP') then
-      new_array(3) = scale_height(p_surface=p_surf, p_above=old_pressure)
+      new_array(3) = scale_height(p_surface=p_surf, p_above=new_pressure)
       new_which = VERTISSCALEHEIGHT
    endif
 
