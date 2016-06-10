@@ -5218,7 +5218,7 @@ call error_handler(E_MSG, 'set_highest_obs_limit', string1, source, revision, re
 ! terrain are going to be an issue.  If they do, tell them in the error
 ! message what the valid limit is.
 
-if (hybm%vals(highest_obs_level) > 0.0_r8) then
+if (hybm%vals(highest_obs_level) > 0.0_r8 .and. new_damping_algorithm) then
    lowest_ok = 1
    findzero: do i=2, num_levs
       if (hybm%vals(i) > 0.0_r8) then

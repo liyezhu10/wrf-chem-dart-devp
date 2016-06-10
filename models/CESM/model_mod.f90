@@ -147,7 +147,8 @@ public :: get_model_size,         &
           model_convert_vert_state, &
   restart_file_to_sv, &
   sv_to_restart_file, &
-  get_cesm_restart_filename
+  get_cesm_restart_filename, &
+  set_start_end
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
