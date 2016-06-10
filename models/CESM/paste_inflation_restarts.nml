@@ -1,0 +1,7 @@
+&paste_inflation_restarts_nml
+   cam_inflation_restart     = ''
+   pop_inflation_restart     = ''
+   cam_damping               = 1.0
+   pop_damping               = 1.0
+   combined_inflation_output = ''
+/

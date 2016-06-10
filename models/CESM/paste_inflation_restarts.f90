@@ -4,23 +4,15 @@
 !
 ! $Id$
 
-program paste_inflation_restarts
 
-!----------------------------------------------------------------------
-! purpose: interface between DART and the CESM model
-!
-! method: Read DART state vector and overwrite values in a CESM restart file.
-!         If the DART state vector has an 'advance_to_time' present, a
-!         file called cesm_in.DART is created with a time_manager_nml namelist
-!         appropriate to advance CESM to the requested time.
-!
-!         The paste_inflation_restarts_nml namelist setting for advance_time_present
-!         determines whether or not the input file has an 'advance_to_time'.
-!         Typically, only temporary files like 'assim_model_state_ic' have
-!         an 'advance_to_time'.
-!
-! author: Tim Hoar 25 Jun 09, revised 12 July 2010
-!----------------------------------------------------------------------
+!> special purpose program to read inflation restart files for multiple
+!> models and write out a single concatinated restart file.  must read
+!> both the inflation mean and standard deviation for each model.
+!> uses the assim_model interfaces for reading and writing state restarts.
+!> uses 'set_start_end' from the CESM combined model_mod to find the 
+!> starting and ending indices into the combined state vector.
+
+program paste_inflation_restarts
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
