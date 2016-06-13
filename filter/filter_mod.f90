@@ -1309,8 +1309,8 @@ call prepare_to_update_copies(ens_handle)
 ! Inflate each group separately;  Divide ensemble into num_groups groups
 grp_size = ens_size / num_groups
 
-print *, 'inflate ens, min/max bef: ', minval(ens_handle%copies(inflate_copy, :)), &
-                                       maxval(ens_handle%copies(inflate_copy, :))
+!print *, 'inflate ens, min/max bef: ', minval(ens_handle%copies(inflate_copy, :)), &
+!                                       maxval(ens_handle%copies(inflate_copy, :))
 do group = 1, num_groups
    grp_bot = (group - 1) * grp_size + 1
    grp_top = grp_bot + grp_size - 1
@@ -1323,8 +1323,8 @@ do group = 1, num_groups
    end do
 end do
 
-print *, 'inflate ens, min/max aft: ', minval(ens_handle%copies(inflate_copy, :)), &
-                                       maxval(ens_handle%copies(inflate_copy, :))
+!print *, 'inflate ens, min/max aft: ', minval(ens_handle%copies(inflate_copy, :)), &
+!                                       maxval(ens_handle%copies(inflate_copy, :))
 
 end subroutine filter_ensemble_inflate
 
