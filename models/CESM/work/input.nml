@@ -456,5 +456,7 @@
 &paste_inflation_restarts_nml
  cam_inflation_restart = "/glade/scratch/karol/INCR/INFLATION/cam_prior_inflate_restart.1976-06-15-00000"
  pop_inflation_restart = "/glade/scratch/karol/INCR/INFLATION/pop_prior_inflate_restart.1976-06-15-00000"
+ cam_damping = 1.0
+ pop_damping = 1.0
  combined_inflation_output = "cesm_prior_inflation_ics.1976-06-15-00000"
 /
