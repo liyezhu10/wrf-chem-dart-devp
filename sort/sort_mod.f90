@@ -4,12 +4,14 @@
 !
 ! $Id$
 
-!> A selection of sorting routines, some intended for short lists and
-!> not too worried about efficiency, some doing a more efficient sort.
-!> Some do not move the data but return an index list which can be used
-!> to traverse the original array in sorted order.  Finally, a sort
-!> routine in which the user supplies the compare routine and can be
-!> based on any characteristic of the data.
+!> A selection of sorting routines. The simplest version sorts a given array
+!> of values and returns a copy of the array with the items in ascending sorted
+!> order.  This works on integer and real(r8) arrays.
+!> Another version returns an integer index array.  Accessing the original
+!> list using these indices will traverse the array in sorted order.
+!> The final version of the sort routine is similar to the index sort
+!> but a compare routine is supplied by the user, allowing this code
+!> to sort a list of any kinds of items.
 !>
 
 module sort_mod
@@ -20,8 +22,7 @@ use utilities_mod, only : register_module
 implicit none
 private
 
-public :: sort, index_sort, &
-          slow_sort, slow_index_sort
+public :: sort, index_sort
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -62,84 +63,6 @@ module_initialized = .true.
 end subroutine initialize_module
 
 !-----------------------------------------------------------------------
-
-!> A simple but poorly-scaling sort for real(r8) array data.   
-!> returns a sorted array.  x() must be allocated or declared 
-!> to be exactly the intended size; all items in x() are sorted.
-!>
-!> @param x the (real) array to sort
-!>
-
-function slow_sort(x)
-
-real(r8), intent(in) :: x(:)
-real(r8)             :: slow_sort(size(x))
-
-real(r8) :: tmp
-integer  :: j, k
-
-if ( .not. module_initialized ) call initialize_module
-
-! what will be returned
-slow_sort = x
-
-! Do a O(N^2) sort
-do j = 1, size(x) - 1
-   do k = j + 1, size(x)
-      ! Exchange two elements if they are in the wrong order
-      if(slow_sort(j) .gt. slow_sort(k)) then
-         tmp = slow_sort(k)
-         slow_sort(k) = slow_sort(j)
-         slow_sort(j) = tmp
-      endif
-   enddo
-enddo
-
-end function slow_sort
-
-!-----------------------------------------------------------------------
-
-!> A simple real(r8) indexed sort. Compares the values of the items in the x()
-!> array (length 'num') and returns an integer index array with the order
-!> to traverse the x() array in sorted order.  x() is unchanged. 
-!> indx() does not have to be initialized before calling this routine.
-!> usage: do i=1,num;  x(indx(i)) is next item in sorted order; enddo
-!>
-!> @param x the (real) array to sort
-!> @param indx the sorted indices 
-!> @param num the length of x
-!>
-
-subroutine slow_index_sort(x, indx, num)
-
-integer,  intent(in)  :: num
-real(r8), intent(in)  :: x(num)
-integer,  intent(out) :: indx(num)
-
-integer :: i, j, k, itmp
-
-if ( .not. module_initialized ) call initialize_module
-
-! Initialize the index array to input order
-do i = 1, num
-   indx(i) = i
-enddo
-
-! Do a O(N^2) sort
-do j = 1, num
-   do k = 1, num - 1
-      ! Exchange two elements if they are in the wrong order
-      if(x(indx(k)) > x(indx(k+1))) then
-         itmp = indx(k)
-         indx(k) = indx(k+1)
-         indx(k+1) = itmp
-      endif
-   enddo
-enddo
-
-end subroutine slow_index_sort
-
-!-------------------------------------------------------------------------
 
 !> Uses a heap sort algorithm on real(r8) array x(), returns sorted array.
 !> x() must be allocated or declared to be exactly the intended size; 
@@ -282,7 +205,7 @@ end function isort
 !> This differs from index_sort_int only in the data type of the x() array.
 !>
 !> @param x the (real) array to sort
-!> @param indx the array of integers
+!> @param indx the array of integer indices to be used to traverse the input array in sorted order
 !> @param num the length of x
 !>
 subroutine index_sort_real(x, indx, num)
@@ -358,7 +281,7 @@ end subroutine index_sort_real
 !> This differs from index_sort_real only in the data type of the x() array.
 !>
 !> @param x the (integer) array to sort
-!> @param indx the array of integers
+!> @param indx the array of integer indices to be used to traverse the input array in sorted order
 !> @param num the length of x
 !>
 
@@ -431,18 +354,23 @@ end subroutine index_sort_int
 !> actual items being sorted are opaque to this routine; the user supplies
 !> a sorting function which must have access to the original items.  This
 !> routine only manipulates the integer index values which are then returned.
+!>
 !> The third argument is a user-supplied function which takes 2 integers (a,b) 
-!> as arguments and return an integer: -1 if a < b, 0 if a == b, 1 if a > b
-!> The function only gets the index numbers, the user code should use them 
+!> as arguments and return an integer code: 
+!>     -1 if mything(a) <  mything(b)
+!>      0 if mything(a) == mything(b)
+!>      1 if mything(a) >  mything(b)
+!> The function only gets the index numbers; the user code should use them 
 !> to compare the items corresponding to those index numbers and return the 
 !> ordering between them.  
 !> This seems to work best when the comparefunc() is a public routine inside
 !> a module so the interface specification is known to the compiler.
+!>
 !> usage: do i=1,num; mything(indx(i)) is next item in sorted order; enddo
 !>
 !> @param indx the array of integers
 !> @param num the length of x
-!> @param comparefunc the name of the comparator function
+!> @param comparefunc the name of the comparison function
 !>
 
 subroutine index_sort_user(indx, num, comparefunc)
