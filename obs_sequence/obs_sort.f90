@@ -4,55 +4,41 @@
 !
 ! $Id$
 
-!> Utility to try to sort observations at the same time into a
-!> consistent order.  Obs sequence files are guarenteed to be
-!> traversed in time order, so running them through the standard
-!> obs_sequence_tool will physically order them in the file in
-!> the same way a linked-list traversal would.  But for multiple
-!> obs at the same time, there is no way to indicate how to order
+!> Utility to sort observations at the same time into a consistent order.  
+!> Obs sequence files are guarenteed to be traversed in time order, so 
+!> running them through the standard obs_sequence_tool will physically 
+!> order them in the file in the same way a linked-list traversal would.  
+!> But for multiple obs at the same time there is no way to indicate how to order
 !> them relative to each other.  This tool tries to sort same-time
 !> obs based on location, then kind, then variance.  If there are
-!> duplicate obs in the same file, this might be a way to get them
-!> together, and possibly add code to remove them.
+!> duplicate obs in the same file this might be a way to get them
+!> together and possibly add code to remove them.  Users have in the past
+!> also requested the option to order different kinds of obs at the same
+!> time in a particular order (e.g. all the radar obs before the others)
+!> and this might allow us to support that.
+
+!> This file contains a module and a program. The module exists only to enclose
+!> a comparison routine that's needed by the sort module.  The actual program
+!> follows.
 
 module special_sort
 
-use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
-use    utilities_mod, only : register_module, initialize_utilities,            &
-                             find_namelist_in_file, check_namelist_read,       &
-                             error_handler, E_ERR, E_MSG, nmlfileunit,         &
-                             do_nml_file, do_nml_term, get_next_filename,      &
-                             open_file, close_file, finalize_utilities
-use         sort_mod, only : index_sort
-use     location_mod, only : location_type, get_location, set_location,        &
-                             LocationName, read_location, operator(/=),        &
-                             write_location, LocationDims
+use        types_mod, only : r8
+use     location_mod, only : location_type, get_location, LocationDims,        &
+                             write_location 
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind,     &
-                             get_obs_def_location, read_obs_def,               &
-                             set_obs_def_time, get_obs_def_error_variance
-use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name,                 &
-                             get_obs_kind_index, read_obs_kind
-use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
-                             print_date, set_calendar_type, operator(==),      &
-                             operator(/=), get_calendar_type, NO_CALENDAR,     &
-                             operator(-), set_time_missing
-use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
-                             init_obs, assignment(=), get_obs_def,             &
-                             init_obs_sequence, static_init_obs_sequence,      &
-                             read_obs_seq_header, read_obs_seq, get_num_obs,   &
-                             get_first_obs, get_last_obs, get_next_obs,        &
-                             insert_obs_in_seq, get_num_copies, get_num_qc,    &
-                             get_copy_meta_data, get_qc_meta_data,             &
-                             set_copy_meta_data, set_qc_meta_data,             &
-                             destroy_obs, destroy_obs_sequence,                &
-                             delete_seq_head, delete_seq_tail,                 &
-                             get_num_key_range, get_obs_key, get_qc,           &
-                             copy_partial_obs, get_next_obs_from_key,          &
-                             get_obs_def, set_obs_def
+                             get_obs_def_location, get_obs_def_error_variance
+use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name, get_obs_kind_index
+use time_manager_mod, only : time_type, operator(>), operator(==),             &
+                             operator(<), operator(/=), print_time
+use obs_sequence_mod, only : obs_type, get_obs_def
 
 implicit none
 private
 
+! obssort function needed by the sort module.  will be called to do
+! a comparison of 2 observations.  returns -1 for a<b, 0 for a==b, 1 for a>b
+! obs_this_bin needed for accessing from the program below
 public :: obssort, obs_this_bin
 
 type(obs_type), allocatable :: obs_this_bin(:)
@@ -62,23 +48,34 @@ contains
 
 !---------------------------------------------------------------------
 
-function obssort(i, j)
- integer, intent(in) :: i, j
- integer :: obssort
+!> The sort module code will call this function with i, j, which is a
+!> request to compare obs_this_bin(i) and obs_this_bin(j).
+!> They should have identical times so the compare needs to be by 
+!> location, type, value, etc.   
+!> Must return -1 if i < j ; 0 if i == j ; 1 if i > j
+!>
+!> If you want to change what values are used to order the obs do it here.
+!> This order was picked to try to minimize the number of comparisons
+!> needed, and to keep obs at the same location together.  In filter
+!> at assimilation time there is an advantage to having obs at the same 
+!> location be together in the input file - distances can be cached and 
+!> reused for better performance.
 
-! this is requesting a compare of obs_this_bin(i) and obs_this_bin(j)
-! they should have identical times, so the compare needs to be by 
-! location, type, value, etc.   return -1 if i < j ; 0 if == ; 1 if i > j
+function obssort(i, j)
+
+integer, intent(in) :: i, j
+integer :: obssort
 
 type(obs_def_type)  :: this_obs_def1, this_obs_def2
 integer             :: this_kind1, this_kind2
 type(location_type) :: this_loc1, this_loc2
 type(time_type)     :: this_time1, this_time2
 real(r8)            :: this_var1, this_var2
-real(r8)            :: loc1(LocationDims), loc2(LocationDims)   ! try for general?
+real(r8)            :: loc1(LocationDims), loc2(LocationDims)   ! try for general
 integer             :: ndim
 character(len=129)  :: locstring1, locstring2
-logical             :: local_debug
+
+logical             :: local_debug = .false.
 
 call get_obs_def(obs_this_bin(i), this_obs_def1)
 call get_obs_def(obs_this_bin(j), this_obs_def2)
@@ -153,6 +150,8 @@ endif
 
 ! ok, i give up.  they're the same.
 ! or enough for us to not try to resort them.
+! (they could have different metadata and we
+! have no way to know about that.)
 obssort = 0
 
 if (local_debug) then
@@ -174,44 +173,37 @@ end module special_sort
 
 !---------------------------------------------------------------------
 
+
+!> Open an obs sequence file and reorder observations that have the same
+!> timestamp so they have a reproducible order.  Could be used to make
+!> two obs_sequence files which have had different processing have their
+!> observations in the same order, or look for duplicate observations.
+
 program obs_sort
 
-! simple program that opens an obs_seq file and loops over the obs
-! and copies them to a new output file.   this is intended to be a
-! template for programs that want to alter existing obs in some simple way.
-
-use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
+use        types_mod, only : r8, metadatalength
 use    utilities_mod, only : register_module, initialize_utilities,            &
                              find_namelist_in_file, check_namelist_read,       &
                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
                              do_nml_file, do_nml_term, get_next_filename,      &
                              open_file, close_file, finalize_utilities
 use         sort_mod, only : index_sort
-use     location_mod, only : location_type, get_location, set_location,        &
-                             LocationName, read_location, operator(/=),        &
-                             write_location
-use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind,     &
-                             get_obs_def_location, read_obs_def,               &
-                             set_obs_def_time, get_obs_def_error_variance
-use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name,                 &
-                             get_obs_kind_index, read_obs_kind
+use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind
+use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name
 use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
                              print_date, set_calendar_type, operator(==),      &
                              operator(/=), get_calendar_type, NO_CALENDAR,     &
-                             operator(-), set_time_missing
+                             operator(-)
 use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
                              init_obs, assignment(=), get_obs_def,             &
                              init_obs_sequence, static_init_obs_sequence,      &
                              read_obs_seq_header, read_obs_seq, get_num_obs,   &
-                             get_first_obs, get_last_obs, get_next_obs,        &
+                             get_first_obs, get_next_obs, get_obs_def,         &
                              insert_obs_in_seq, get_num_copies, get_num_qc,    &
                              get_copy_meta_data, get_qc_meta_data,             &
                              set_copy_meta_data, set_qc_meta_data,             &
                              destroy_obs, destroy_obs_sequence,                &
-                             delete_seq_head, delete_seq_tail,                 &
-                             get_num_key_range, get_obs_key, get_qc,           &
-                             copy_partial_obs, get_next_obs_from_key,          &
-                             get_obs_def, set_obs_def
+                             get_num_key_range, get_obs_key, get_qc
 
 use special_sort
 
