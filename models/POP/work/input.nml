@@ -1,3 +1,7 @@
+&test_distributed_static_data_nml
+  group_size = 4
+/
+
 &state_space_diag_nml
 /
 
