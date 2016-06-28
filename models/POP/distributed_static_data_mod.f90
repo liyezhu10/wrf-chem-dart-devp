@@ -236,15 +236,21 @@ integer :: iy, g_istart, g_iend, l_istart, l_iend
 
 ! block data
 static_id = array_number + 1
-g_istart = (static_id-1)*my_num_x_vals*y_length+1
-g_iend   = g_istart+my_num_x_vals*y_length
-l_istart = (static_id-1)*x_start+1
-l_iend   = l_istart+my_num_x_vals
+g_istart = (static_id-1)*x_length*y_length + 1
+g_iend   = g_istart+my_num_x_vals-1
+l_istart = x_start+1
+l_iend   = l_istart+my_num_x_vals-1
 
 do iy=1,y_length
+   print*, "task_id - ", my_task_id(), ": g_istart ", g_istart
+   print*, "task_id - ", my_task_id(), ": g_iend   ", g_iend
+   print*, "task_id - ", my_task_id(), ": l_istart ", l_istart
+   print*, "task_id - ", my_task_id(), ": l_iend   ", l_iend
+   print*, "task_id - ", my_task_id(), ": iy       ", iy
+   print*, "task_id - ", my_task_id(), ": size     ", size(global_static_data)
    global_static_data(g_istart:g_iend) = local_static_data(l_istart:l_iend,iy) 
    g_istart = g_iend + 1
-   g_iend   = g_istart+my_num_x_vals*y_length
+   g_iend   = g_istart+my_num_x_vals-1
 enddo
 
 end function distribute_static_data
