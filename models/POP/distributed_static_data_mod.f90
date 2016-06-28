@@ -21,7 +21,7 @@ public :: create_window, free_window
 
 !!! only public at the moment for testing
 public :: create_groups, build_my_group, initialize_static_data_space, &
-          distribute_static_data
+          distribute_static_data, get_static_data
 
 ! grid window
 real(r8), allocatable :: global_static_data(:) !< local static data 
@@ -116,7 +116,7 @@ end subroutine build_my_group
 !> change the subroutine who_has_grid_info
 subroutine create_window
 
-integer ii, jj, kk, ierr, sizedouble, count
+integer ierr, sizedouble 
 integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
@@ -151,7 +151,7 @@ integer(KIND=MPI_ADDRESS_KIND)   :: target_disp !< displacement
 integer                          :: ierr
 
 ! caluclate who has the info
-! call who_has_grid_info(Static_ID, i, j, owner, target_disp)
+call who_has_grid_info(Static_ID, i, j, owner, target_disp)
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, sd_window, ierr)
@@ -162,38 +162,27 @@ end function get_static_data
 
 !---------------------------------------------------------
 !> get the owner and location in memory of the grid point
-! subroutine who_has_grid_info(Static_ID, i, j, owner, target_disp)
-! 
-! integer,                        intent(in)  :: Static_ID
-! integer,                        intent(in)  :: i
-! integer,                        intent(in)  :: j
-! integer,                        intent(out) :: owner
-! integer(KIND=MPI_ADDRESS_KIND), intent(out) :: target_disp !< displacement
-! 
-! integer :: temp
-! integer :: local_we      !< local index of my slice of we
-! integer :: owner_num_we  !< length of we slab on the owner
-! integer :: we
-! 
-! temp = x_length / group_size ! phb is split only in we (west-east)
-! 
-! we = i-1
-! owner  = we / temp ! we is i
-! 
-! ! last task in the group has the most grid points
-! if (owner > group_size - 1) owner = group_size - 1
-! 
-! if (owner < group_size - 1) then
-!    owner_num_we = temp
-! else
-!    owner_num_we = x_length - temp*(group_size - 1)
-! endif
-! 
-! ! phb is a 3d array. (z,x,y) window
-! local_we = i - temp*owner  
-! target_disp = (j - 1)*y_length*owner_num_we + (local_we- 1)*y_length
-! 
-! end subroutine who_has_grid_info
+subroutine who_has_grid_info(Static_ID, i, j, owner, target_disp)
+
+integer,                        intent(in)  :: Static_ID
+integer,                        intent(in)  :: i
+integer,                        intent(in)  :: j
+integer,                        intent(out) :: owner
+integer(KIND=MPI_ADDRESS_KIND), intent(out) :: target_disp !< displacement
+
+integer ::x_stride, x_local
+
+x_stride = x_length/group_size
+owner = (i-1)/x_stride
+
+if(owner == group_size - 1) then
+   x_stride = x_length - x_stride*(group_size-1)
+endif
+
+x_local = i - x_stride*owner
+target_disp = (static_id-1)*x_stride*y_length + (j-1)*x_stride + x_local
+
+end subroutine who_has_grid_info
 
 !---------------------------------------------------------
 !> Initalize local static data for each processor
@@ -205,7 +194,7 @@ integer, intent(in) :: num_arrays
 integer, intent(in) :: NX
 integer, intent(in) :: NY
 
-integer :: bin_size
+integer :: x_mod
 
 ! set global variables
 num_static_arrays = num_arrays
@@ -215,8 +204,9 @@ y_length          = NY
 ! split up in x dimension, could also split in y?
 my_num_x_vals = x_length / group_size
 x_start       = local_rank*my_num_x_vals
-if (local_rank == group_size - 1) then
-   my_num_x_vals = my_num_x_vals + mod(x_length,group_size)
+x_mod         = mod(x_length,group_size)
+if (x_mod /= 0 .and. local_rank == group_size - 1) then
+   my_num_x_vals = my_num_x_vals + x_mod
    !write(*,'(''last  rank['',I2,''] my_num_x_vals * y_length = '',I4,'' * '',I4,'' = '',I7)') &
    !       my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
 endif
@@ -236,22 +226,30 @@ integer :: iy, g_istart, g_iend, l_istart, l_iend
 
 ! block data
 static_id = array_number + 1
-g_istart = (static_id-1)*x_length*y_length + 1
+g_istart = (static_id-1)*my_num_x_vals*y_length + 1
 g_iend   = g_istart+my_num_x_vals-1
 l_istart = x_start+1
 l_iend   = l_istart+my_num_x_vals-1
 
 do iy=1,y_length
-   print*, "task_id - ", my_task_id(), ": g_istart ", g_istart
-   print*, "task_id - ", my_task_id(), ": g_iend   ", g_iend
-   print*, "task_id - ", my_task_id(), ": l_istart ", l_istart
-   print*, "task_id - ", my_task_id(), ": l_iend   ", l_iend
-   print*, "task_id - ", my_task_id(), ": iy       ", iy
-   print*, "task_id - ", my_task_id(), ": size     ", size(global_static_data)
+   !print*, "task_id - ", my_task_id(), ": g_istart ", g_istart
+   !print*, "task_id - ", my_task_id(), ": g_iend   ", g_iend
+   !print*, "task_id - ", my_task_id(), ": l_istart ", l_istart
+   !print*, "task_id - ", my_task_id(), ": l_iend   ", l_iend
+   !print*, "task_id - ", my_task_id(), ": iy       ", iy
+   !print*, "task_id - ", my_task_id(), ": size     ", size(global_static_data)
    global_static_data(g_istart:g_iend) = local_static_data(l_istart:l_iend,iy) 
    g_istart = g_iend + 1
    g_iend   = g_istart+my_num_x_vals-1
 enddo
+
+!print*, "task_id - ", my_task_id(), ": flat-array  ", global_static_data
+!do iy=1,my_num_x_vals*y_length
+!   write(*,'(A,I3,I3)',advance="no") "task_id - ", my_task_id(), int(global_static_data(iy))
+!   write(*,*) ""
+!enddo
+
+
 
 end function distribute_static_data
 

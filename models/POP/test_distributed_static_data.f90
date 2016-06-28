@@ -15,7 +15,10 @@ use dart_pop_mod,                only : get_horiz_grid_dims,      &
 use distributed_static_data_mod, only : build_my_group,           &
                                         create_groups,            &
                                         distribute_static_data,   &
-                                        initialize_static_data_space
+                                        initialize_static_data_space, &
+                                        get_static_data,          &
+                                        create_window
+
 use utilities_mod,               only : register_module,          &
                                         error_handler,            &
                                         E_ERR, E_MSG, E_ALLMSG,   &
@@ -93,27 +96,39 @@ call create_groups(group_size)
 
 !call initialize_static_data_space(6,NX,NY)
 call initialize_static_data_space(1,10,10)
+call create_window()
 
-if(my_task_id() == 0) then
+!if(my_task_id() == 0) then
   do i = 1,nxA
     do j = 1,nyA
        A(i,j) = i + (j-1)*10
     enddo
   enddo
-  call print_array('A0', A, nxA, nyA)
-endif
+  if(my_task_id()==0) call print_array('A0', A, nxA, nyA)
+!endif
 
 call task_sync()
 print*, ''
 
-if(my_task_id() == 1) then
-  call print_array('A1', A, nxA, nyA)
-endif
+!if(my_task_id() == 1) then
+!   call print_array('A1', A, nxA, nyA)
+!endif
  
 ID = distribute_static_data(A)
 
+if(my_task_id() == 0) then
+  do i = 1,nxA
+    do j = 1,nyA
+      write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(ID,i,j))
+    enddo
+    write(*,*) ""
+  enddo
+endif
+print*, "done with distributing"
+
 allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))
 allocate( KMT(NX,NY),  KMU(NX,NY))
+
 
 ! Fill in the grid information 
 ! horiz grid initializes ULAT/LON, TLAT/LON as well.
