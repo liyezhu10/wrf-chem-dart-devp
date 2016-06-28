@@ -9,6 +9,7 @@ module distributed_static_data_mod
 
 use mpi_utilities_mod,     only : datasize, my_task_id, task_count, send_to, &
                                   receive_from , task_sync
+
 use types_mod,             only : r8
 
 use mpi
@@ -21,10 +22,8 @@ public :: create_window, free_window
 !!! only public at the moment for testing
 public :: create_groups, build_my_group, initialize_static_data_space, &
           distribute_static_data
-! grid groups global to module
 
 ! grid window
-real(r8), allocatable :: phb_array(:,:,:) !< local phb info
 real(r8), allocatable :: static_data(:) !< local static data 
 
 integer  :: sd_window
@@ -32,26 +31,20 @@ real(r8) :: duplicate_static_data(*)
 pointer(aa, duplicate_static_data)
 
 integer :: group_size = 4 !< should be namelist option
-integer :: group_handle !< mpi_comm_world group
-integer :: subgroup !< subgroup for the grid
+integer :: group_handle   !< mpi_comm_world group
+integer :: subgroup       !< subgroup for the grid
 integer :: mpi_comm_grid
+integer :: local_rank     !< rank within group
 integer, allocatable :: group_members(:)
-integer :: local_rank !< rank within group
 
 ! pntecdf variables
-character*50                  :: phb_filename !< netcdf file containing grid info
-integer                       :: ret !< return code for pnetcdf
-integer                       :: ncfile !< ncfile
-integer                       :: varId !< variable Id
-integer(KIND=MPI_OFFSET_KIND) :: we_length, sn_length, bts_length !< lengths of dimensions
+integer(KIND=MPI_OFFSET_KIND) :: x_length, y_length, num_static_arrays
 integer(KIND=MPI_OFFSET_KIND) :: start(4)
 integer(KIND=MPI_OFFSET_KIND) :: count(4)
 integer(KIND=MPI_OFFSET_KIND) :: stride(4)
-integer(KIND=MPI_OFFSET_KIND) :: my_num_we !< splitting up by we
+integer(KIND=MPI_OFFSET_KIND) :: my_num_vals !< splitting up by we
 
 integer :: array_number = 0 ! starting index for array
-
-integer :: we_dimId, sn_dimId, bts_dimId !< dimension ids
 
 contains
 
@@ -129,16 +122,17 @@ integer ii, jj, kk, ierr, sizedouble, count
 integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
-window_size = my_num_we*sn_length*bts_length*sizedouble
-aa = malloc(my_num_we*sn_length*bts_length)
+window_size = num_static_arrays*my_num_vals*y_length*sizedouble
+aa = malloc(num_static_arrays*my_num_vals*y_length)
 call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
 
 ! can't do array assignment with a cray pointer, so you need to loop
 count = 1
+
 ! which order should these be in? (z, x, y) so you can grab a column at a time?
-do jj = 1, sn_length
-   do kk = 1, my_num_we
-      do ii = 1, bts_length
+do jj = 1, num_static_arrays
+   do kk = 1, my_num_vals
+      do ii = 1, y_length
          duplicate_static_data(count) = static_data(kk)!, jj, ii)
          !print*, 'count ', count
          count = count + 1
@@ -164,45 +158,43 @@ deallocate(group_members)
 end subroutine free_window
 
 !---------------------------------------------------------
-!> Function to get phb
-function phb(dom, i, j, k)
+!> Function to get static data
+function get_static_data(Static_ID, i, j) result(val)
 
-real(r8) :: phb !< geopotential height
-integer, intent(in) :: i, j, k !< 3D location
-integer, intent(in) :: dom !< domain number
+real(r8)            :: val       !< static data
+integer, intent(in) :: i, j      !< 2D location
+integer, intent(in) :: Static_ID
 
-integer                          :: owner !< which task has the part of phb we need
+integer                          :: owner       !< which task has the part of static data we need
 integer(KIND=MPI_ADDRESS_KIND)   :: target_disp !< displacement
 integer                          :: ierr
 
 ! caluclate who has the info
-call who_has_grid_info(dom, i, j, k, owner, target_disp)
+call who_has_grid_info(Static_ID, i, j, owner, target_disp)
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, sd_window, ierr)
-call mpi_get(phb, 1, datasize, owner, target_disp, 1, datasize, sd_window, ierr)
+call mpi_get(val, 1, datasize, owner, target_disp, 1, datasize, sd_window, ierr)
 call mpi_win_unlock(owner, sd_window, ierr)
 
-end function
+end function get_static_data
 
 !---------------------------------------------------------
 !> get the owner and location in memory of the grid point
-!> @todo How do we split up domains across the window?
-subroutine who_has_grid_info(dom, i, j, k, owner, target_disp)
+subroutine who_has_grid_info(Static_ID, i, j, owner, target_disp)
 
-integer,                        intent(in)  :: dom
+integer,                        intent(in)  :: Static_ID
 integer,                        intent(in)  :: i
 integer,                        intent(in)  :: j
-integer,                        intent(in)  :: k
 integer,                        intent(out) :: owner
 integer(KIND=MPI_ADDRESS_KIND), intent(out) :: target_disp !< displacement
 
 integer :: temp
-integer :: local_we !< local index of my slice of we
+integer :: local_we      !< local index of my slice of we
 integer :: owner_num_we  !< length of we slab on the owner
 integer :: we
 
-temp = we_length / group_size ! phb is split only in we (west-east)
+temp = x_length / group_size ! phb is split only in we (west-east)
 
 we = i-1
 owner  = we / temp ! we is i
@@ -213,12 +205,12 @@ if (owner > group_size - 1) owner = group_size - 1
 if (owner < group_size - 1) then
    owner_num_we = temp
 else
-   owner_num_we = we_length - temp*(group_size - 1)
+   owner_num_we = x_length - temp*(group_size - 1)
 endif
 
 ! phb is a 3d array. (z,x,y) window
 local_we = i - temp*owner  
-target_disp = (j - 1)*bts_length*owner_num_we + (local_we- 1)*bts_length + k -1 ! target disp starts at 0
+target_disp = (j - 1)*y_length*owner_num_we + (local_we- 1)*y_length
 
 end subroutine who_has_grid_info
 
@@ -232,21 +224,26 @@ integer, intent(in) :: num_arrays
 integer, intent(in) :: NX
 integer, intent(in) :: NY
 
-integer :: bin_size, my_num_vals
+integer :: bin_size
+
+! set global variables
+num_static_arrays = num_arrays
+x_length          = NX
+y_length          = NY
 
 ! split up in x dimension, could also split in y?
-bin_size = NX / group_size
+bin_size = x_length / group_size
 if (local_rank < group_size - 1) then
    my_num_vals = bin_size
    !write(*,'(''first rank['',I2,''] my_num_vals * NY = '',I4,'' * '',I4,'' = '',I7)') &
    !       my_task_id(), my_num_vals, NY, my_num_vals*NY
 else ! last processor in group
-   my_num_vals = NX - bin_size*(group_size - 1)
+   my_num_vals = x_length - bin_size*(group_size - 1)
    !write(*,'(''last  rank['',I2,''] my_num_vals * NY = '',I4,'' * '',I4,'' = '',I7)') &
    !       my_task_id(), my_num_vals, NY, my_num_vals*NY
 endif
 
-allocate(static_data(num_arrays*my_num_vals*NY)) ! local static data
+allocate(static_data(num_static_arrays*my_num_vals*y_length)) ! local static data
 
 end subroutine initialize_static_data_space
 
@@ -284,7 +281,7 @@ do my_rank = 0,group_size-1
 enddo
 
 
-!if(my_task_id() == source) then
+if(my_task_id() == source) then
 
    do my_rank = 0, group_size-1
 
@@ -324,7 +321,7 @@ enddo
          !write(*,*) 'array number   : ', array_number
          !write(*,*) 'lin_array(1:10): ', linear_array(1:5)
    enddo
-!endif
+endif
 
 write(*,*) 'my_rank, ',my_task_id(),  static_data
 write(*,*) ' '
@@ -341,78 +338,3 @@ end function distribute_static_data
 
 end module distributed_static_data_mod
 
-!!! !-----------------------------------------------------------
-!!! !> read in phb in parallel
-!!! !> using pnetcdf. 
-!!! !> How does the synchronization cost change with increasing task number?
-!!! !> I think it should only vary with group size, and that total task number is
-!!! !> irrelevant, but we'll see.
-!!! subroutine read_phb
-!!! ! use pnetcdf
-!!! ! 
-!!! ! integer :: temp
-!!! ! integer(KIND=MPI_OFFSET_KIND) :: dummy_count
-!!! ! integer :: my_start !< start for we
-!!! ! 
-!!! ! ret = nfmpi_open(mpi_comm_grid, phb_filename, NF_NOWRITE, mpi_info_null, ncfile)
-!!! ! call pnet_check(ret, 'read_phb', 'opening file')
-!!! ! 
-!!! ! ! get dimensions
-!!! ! ret = nfmpi_inq_dimid(ncfile, 'west_east', we_dimId)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension id')
-!!! ! 
-!!! ! ret = nfmpi_inq_dimid(ncfile, 'south_north', sn_dimId)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension id')
-!!! ! 
-!!! ! ret = nfmpi_inq_dimid(ncfile, 'bottom_top_stag', bts_dimId)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension id')
-!!! ! 
-!!! ! ! get dimension lengths
-!!! ! ret = nfmpi_inq_dimlen(ncfile, we_dimId, we_length)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension length')
-!!! ! 
-!!! ! ret = nfmpi_inq_dimlen(ncfile, sn_dimId, sn_length)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension length')
-!!! ! 
-!!! ! ret = nfmpi_inq_dimlen(ncfile, bts_dimId, bts_length)
-!!! ! call pnet_check(ret, 'read_phb', 'getting dimension length')
-!!! ! 
-!!! ! ! allocate space to read the grid
-!!! ! ! Q.how do you split a three d variable? Is this the place to use global arrays?
-!!! ! ! split up in x dimension only? (or y or z)
-!!! ! temp = we_length / group_size
-!!! ! if (local_rank < group_size - 1) then
-!!! !    my_num_we = temp
-!!! ! else
-!!! !    my_num_we = we_length - temp*(group_size - 1)
-!!! ! endif
-!!! ! 
-!!! ! allocate(phb_array(my_num_we, sn_length, bts_length)) ! local phb array
-!!! ! 
-!!! ! !print*, 'lengths ', my_num_we, sn_length, bts_length
-!!! ! !print*, 'rank', my_task_id(), 'total num vars ', my_num_we*sn_length*bts_length
-!!! ! 
-!!! ! my_start = local_rank*temp + 1
-!!! ! 
-!!! ! dummy_count = 1
-!!! ! 
-!!! ! ! Why do you need the fouth dimension for pnetcdf, it seems like netcdf will just read the first three
-!!! ! start = (/my_start, 1, 1, 1/)
-!!! ! count = (/my_num_we, sn_length, bts_length, dummy_count/)
-!!! ! stride = (/1, 1, 1, 1/)
-!!! ! 
-!!! ! ! read in the grid
-!!! ! ret = nfmpi_inq_varid(ncfile, 'PHB', varId) ! get status of variable
-!!! ! call pnet_check(ret, 'read_phb', 'phb id')
-!!! ! 
-!!! ! ret = nfmpi_get_vars_double_all(ncfile, varId, start, count, stride, phb_array)
-!!! ! call pnet_check(ret, 'read_phb', 'reading phb')
-!!! ! 
-!!! ! ! check against matlab read
-!!! ! !print*, phb_array(1,1, 1:5)
-!!! ! 
-!!! ! ! close netcdf file
-!!! ! ret = nfmpi_close(ncfile) ! close netcdf file
-!!! ! call pnet_check(ret, 'read_phb', 'closing file')
-!!! 
-!!! end subroutine read_phb
