@@ -110,7 +110,7 @@ if(my_task_id() == 1) then
   call print_array('A1', A, nxA, nyA)
 endif
  
-ID = distribute_static_data(0,A,nxA,nyA)
+ID = distribute_static_data(A)
 
 allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))
 allocate( KMT(NX,NY),  KMU(NX,NY))

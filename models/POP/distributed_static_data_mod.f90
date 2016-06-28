@@ -231,15 +231,21 @@ function distribute_static_data(local_static_data) result(static_id)
 
 real(r8), intent(inout) :: local_static_data(x_length,y_length)
 integer :: static_id
-integer :: istart, iend
+
+integer :: iy, g_istart, g_iend, l_istart, l_iend
 
 ! block data
 static_id = array_number + 1
-istart = (static_id-1)*x_start*y_length+1
-iend   = istart+my_num_x_vals*y_length
+g_istart = (static_id-1)*my_num_x_vals*y_length+1
+g_iend   = g_istart+my_num_x_vals*y_length
+l_istart = (static_id-1)*x_start+1
+l_iend   = l_istart+my_num_x_vals
 
-global_static_data(:) = local_static_data(istart:iend) 
-
+do iy=1,y_length
+   global_static_data(g_istart:g_iend) = local_static_data(l_istart:l_iend,iy) 
+   g_istart = g_iend + 1
+   g_iend   = g_istart+my_num_x_vals*y_length
+enddo
 
 end function distribute_static_data
 
