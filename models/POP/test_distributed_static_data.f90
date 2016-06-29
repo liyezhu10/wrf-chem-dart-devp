@@ -60,8 +60,8 @@ integer :: NX, NY
 ! integer, allocatable  :: KMT(:, :), KMU(:, :)
 
 integer  :: ID
-integer, parameter :: nxA = 10
-integer, parameter :: nyA = 10
+integer, parameter :: nxA = 17
+integer, parameter :: nyA = 19
 real(r8) :: A(nxA,nyA) = -1
 
 ! ! group variables
@@ -89,12 +89,12 @@ call get_horiz_grid_dims(NX,NY)
 
 
 !call initialize_static_data_space(6,NX,NY)
-call initialize_static_data_space(1,10,10)
+call initialize_static_data_space(1,nxA,nyA)
 
 !if(my_task_id() == 0) then
   do i = 1,nxA
     do j = 1,nyA
-       A(i,j) = i + (j-1)*10
+       A(i,j) = i + (j-1)*nxA
     enddo
   enddo
   if(my_task_id()==0) call print_array('A0', A, nxA, nyA)
@@ -188,7 +188,7 @@ integer :: i
    write(*,'(A,I2,A,I2,A)') trim(name_array)//'(1:',nx, ',1:',ny,') = '
    do i = 1,nx
      do j = 1,ny
-        write(*,'(I3)',advance="no") int(A(i,j))
+        write(*,'(I4)',advance="no") int(A(i,j))
      enddo
      write(*,*) ''
    enddo

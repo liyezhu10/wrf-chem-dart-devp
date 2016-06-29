@@ -196,7 +196,7 @@ integer ::x_stride, x_local, x_mod
 x_stride = x_length/group_size
 owner = (i-1)/x_stride
 
-if(owner == group_size) owner = owner-1
+if(owner >= group_size) owner = group_size-1
    
 x_local = i - x_stride*owner
 
