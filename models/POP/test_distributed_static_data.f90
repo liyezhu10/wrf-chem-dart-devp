@@ -29,7 +29,8 @@ use utilities_mod,               only : register_module,          &
 
 use mpi_utilities_mod,           only : initialize_mpi_utilities, &
                                         finalize_mpi_utilities,   &
-                                        task_sync, my_task_id
+                                        task_sync, my_task_id,    &
+                                        task_count
 
 implicit none
 
@@ -46,7 +47,7 @@ character(len=128), parameter :: revdate  = "$Date: 2013-06-12 10:19:10 -0600 (W
 integer io, iunit
 
 ! indexing variables
-integer i, j
+integer i, j, t, numt
 
 ! grid dimensions
 integer :: NX, NY
@@ -65,6 +66,9 @@ real(r8) :: A(nxA,nyA) = -1
 
 ! group variables
 integer, allocatable :: group_members(:)
+
+real(r8) :: my_val_test
+
 
 !------------------------------------------------------------------
 ! namelist variables
@@ -115,15 +119,33 @@ print*, ''
 !endif
  
 ID = distribute_static_data(A)
+call task_sync()
 
-if(my_task_id() == 0) then
-  do i = 1,nxA
-    do j = 1,nyA
-      write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(ID,i,j))
-    enddo
-    write(*,*) ""
-  enddo
-endif
+numt = task_count()-1
+do t=0,numt
+   if(my_task_id() == t) then
+     write(*,'(A,I2)') "my_task_id = ", my_task_id()
+     write(*,*) ""
+     do i = 1,nxA
+       do j = 1,nyA
+         !my_val_test = get_static_data(ID,i,j)
+         !write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(ID,i,j))
+         !print*, "my_task_id =", my_task_id()
+         write(*,'(I4)',advance="no") int(get_static_data(ID,i,j))
+       enddo
+       write(*,*) ""
+     enddo
+   endif
+   call task_sync()
+enddo
+
+print*, ''
+
+!if(my_task_id() == 1) then
+!   call print_array('A1', A, nxA, nyA)
+!endif
+ 
+ID = distribute_static_data(A)
 print*, "done with distributing"
 
 allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))

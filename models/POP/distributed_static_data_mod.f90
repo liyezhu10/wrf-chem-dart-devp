@@ -151,6 +151,7 @@ integer(KIND=MPI_ADDRESS_KIND)   :: target_disp !< displacement
 integer                          :: ierr
 
 ! caluclate who has the info
+!print*, "id =", my_task_id()
 call who_has_grid_info(Static_ID, i, j, owner, target_disp)
 
 ! grab the info
@@ -175,12 +176,14 @@ integer ::x_stride, x_local
 x_stride = x_length/group_size
 owner = (i-1)/x_stride
 
+x_local = i - x_stride*owner
+
 if(owner == group_size - 1) then
    x_stride = x_length - x_stride*(group_size-1)
 endif
 
-x_local = i - x_stride*owner
-target_disp = (static_id-1)*x_stride*y_length + (j-1)*x_stride + x_local
+target_disp = (static_id-1)*x_stride*y_length + (j-1)*x_stride + x_local - 1
+
 
 end subroutine who_has_grid_info
 
