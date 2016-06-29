@@ -52,22 +52,22 @@ integer i, j, t, numt
 ! grid dimensions
 integer :: NX, NY
 
-! These arrays store the longitude and latitude of the lower left corner of
-! each of the dipole u quadrilaterals and t quadrilaterals.
-real(r8), allocatable :: ULAT(:,:), ULON(:,:), TLAT(:,:), TLON(:,:)
-
-! integer, lowest valid cell number in the vertical
-integer, allocatable  :: KMT(:, :), KMU(:, :)
+! ! These arrays store the longitude and latitude of the lower left corner of
+! ! each of the dipole u quadrilaterals and t quadrilaterals.
+! real(r8), allocatable :: ULAT(:,:), ULON(:,:), TLAT(:,:), TLON(:,:)
+! 
+! ! integer, lowest valid cell number in the vertical
+! integer, allocatable  :: KMT(:, :), KMU(:, :)
 
 integer  :: ID
 integer, parameter :: nxA = 10
 integer, parameter :: nyA = 10
 real(r8) :: A(nxA,nyA) = -1
 
-! group variables
-integer, allocatable :: group_members(:)
+! ! group variables
+! integer, allocatable :: group_members(:)
 
-real(r8) :: my_val_test
+! real(r8) :: my_val_test
 
 
 !------------------------------------------------------------------
@@ -82,25 +82,14 @@ namelist /test_distributed_static_data_nml/  group_size
 ! initialize the dart libs
 call initialize_module()
 
-! Read the namelist entry
-call find_namelist_in_file("input.nml", "test_distributed_static_data_nml", iunit)
-read(iunit, nml = test_distributed_static_data_nml, iostat = io)
-call check_namelist_read(iunit, io, "test_distributed_static_data_nml")
-
-! Record the namelist values used for the run ...
-if (do_nml_file()) write(nmlfileunit, nml=test_distributed_static_data_nml)
-if (do_nml_term()) write(     *     , nml=test_distributed_static_data_nml)
-
 ! write(*,*) ''
 ! write(*,'(''my_task_id()''I3)') my_task_id()
 
 call get_horiz_grid_dims(NX,NY)
 
-call create_groups(group_size)
 
 !call initialize_static_data_space(6,NX,NY)
 call initialize_static_data_space(1,10,10)
-call create_window()
 
 !if(my_task_id() == 0) then
   do i = 1,nxA

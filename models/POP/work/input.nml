@@ -1,4 +1,4 @@
-&test_distributed_static_data_nml
+&distributed_static_data_nml
   group_size = 4
 /
 

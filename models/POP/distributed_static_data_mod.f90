@@ -7,7 +7,16 @@
 
 module distributed_static_data_mod
 
-use mpi_utilities_mod,     only : datasize, my_task_id, task_count, send_to, &
+use utilities_mod,         only : register_module,          &
+                                  error_handler,            &
+                                  E_ERR, E_MSG, E_ALLMSG,   &
+                                  find_namelist_in_file,    &
+                                  check_namelist_read,      &
+                                  do_nml_file, do_nml_term, &
+                                  nmlfileunit, do_output
+
+use mpi_utilities_mod,     only : datasize, my_task_id,     &
+                                  task_count, send_to,      &
                                   receive_from , task_sync
 
 use types_mod,             only : r8
@@ -28,7 +37,6 @@ real(r8), allocatable :: global_static_data(:) !< local static data
 
 integer  :: sd_window
 
-integer :: group_size = 4 !< should be namelist option
 integer :: group_handle   !< mpi_comm_world group
 integer :: subgroup       !< subgroup for the grid
 integer :: mpi_comm_grid
@@ -44,18 +52,21 @@ integer(KIND=MPI_OFFSET_KIND) :: my_num_x_vals !< splitting up by we
 
 integer :: array_number = 0 ! starting index for array
 
+!------------------------------------------------------------------
+! namelist variables
+!------------------------------------------------------------------
+integer              :: group_size = 1
+
+namelist /distributed_static_data_nml/  group_size
+
 contains
 
 !-------------------------------------------------------------
 !> create groups for grid
 !> make a communicator for the distributed grid
-subroutine create_groups(grp_size)
-
-integer, intent(in) :: grp_size
+subroutine create_groups()
 
 integer ierr ! all MPI errors are fatal anyway
-
-group_size = grp_size
 
 allocate(group_members(group_size)) ! this is module global
 
@@ -208,7 +219,17 @@ integer, intent(in) :: num_arrays
 integer, intent(in) :: NX
 integer, intent(in) :: NY
 
+! io file variables
+integer io, iunit
+
 integer :: x_mod
+
+! Read the namelist entry
+call find_namelist_in_file("input.nml", "distributed_static_data_nml", iunit)
+read(iunit, nml = distributed_static_data_nml, iostat = io)
+call check_namelist_read(iunit, io, "distributed_static_data_nml")
+
+call create_groups()
 
 ! set global variables
 num_static_arrays = num_arrays
@@ -258,6 +279,8 @@ do iy=1,y_length
    g_istart = g_iend + 1
    g_iend   = g_istart+my_num_x_vals-1
 enddo
+
+call create_window()
 
 !print*, "task_id - ", my_task_id(), ": flat-array  ", global_static_data
 !do iy=1,my_num_x_vals*y_length
