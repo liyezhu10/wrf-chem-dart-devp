@@ -263,6 +263,7 @@ integer :: iy, g_istart, g_iend, l_istart, l_iend
 
 ! block data
 static_id = array_number + 1
+array_number = array_number +1
 g_istart = (static_id-1)*my_num_x_vals*y_length + 1
 g_iend   = g_istart+my_num_x_vals-1
 l_istart = x_start+1

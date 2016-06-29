@@ -59,10 +59,12 @@ integer :: NX, NY
 ! ! integer, lowest valid cell number in the vertical
 ! integer, allocatable  :: KMT(:, :), KMU(:, :)
 
-integer  :: ID
+integer  :: IDA, IDB, IDC
 integer, parameter :: nxA = 17
 integer, parameter :: nyA = 19
 real(r8) :: A(nxA,nyA) = -1
+real(r8) :: B(nxA,nyA) = -1
+real(r8) :: C(nxA,nyA) = -1
 
 ! ! group variables
 ! integer, allocatable :: group_members(:)
@@ -89,7 +91,7 @@ call get_horiz_grid_dims(NX,NY)
 
 
 !call initialize_static_data_space(6,NX,NY)
-call initialize_static_data_space(1,nxA,nyA)
+call initialize_static_data_space(3,nxA,nyA)
 
 !if(my_task_id() == 0) then
   do i = 1,nxA
@@ -100,6 +102,24 @@ call initialize_static_data_space(1,nxA,nyA)
   if(my_task_id()==0) call print_array('A0', A, nxA, nyA)
 !endif
 
+!if(my_task_id() == 0) then
+  do i = 1,nxA
+    do j = 1,nyA
+       B(i,j) = j + (i-1)*nyA
+    enddo
+  enddo
+  if(my_task_id()==0) call print_array('B0', B, nxA, nyA)
+!endif
+
+!if(my_task_id() == 0) then
+  do i = 1,nxA
+    do j = 1,nyA
+       C(i,j) = (j + (i-1)*nyA)/2
+    enddo
+  enddo
+  if(my_task_id()==0) call print_array('C0', C, nxA, nyA)
+!endif
+
 call task_sync()
 print*, ''
 
@@ -107,19 +127,58 @@ print*, ''
 !!   call print_array('A1', A, nxA, nyA)
 !!endif
 ! 
-ID = distribute_static_data(A)
+IDA = distribute_static_data(A)
+IDB = distribute_static_data(B)
+IDC = distribute_static_data(C)
+write(*,'(A,I2,A,I2)') "my_task_id = ", my_task_id(), " IDA = ", IDA
+write(*,'(A,I2,A,I2)') "my_task_id = ", my_task_id(), " IDB = ", IDB
+write(*,'(A,I2,A,I2)') "my_task_id = ", my_task_id(), " IDC = ", IDC
 call task_sync()
 
 numt = task_count()-1
 do t=0,numt
    if(my_task_id() == t) then
-     write(*,'(A,I2)') "my_task_id = ", my_task_id()
+     write(*,'(A,I2,A)') "my_task_id = ", my_task_id(), "   Matrix-A"
      do i = 1,nxA
        do j = 1,nyA
-         !my_val_test = get_static_data(ID,i,j)
-         !write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(ID,i,j))
+         !my_val_test = get_static_data(IDA,i,j)
+         !write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(IDA,i,j))
          !print*, "my_task_id =", my_task_id()
-         write(*,'(I4)',advance="no") int(get_static_data(ID,i,j))
+         write(*,'(I4)',advance="no") int(get_static_data(IDA,i,j))
+       enddo
+       write(*,*) ""
+     enddo
+   endif
+   call task_sync()
+enddo
+
+numt = task_count()-1
+do t=0,numt
+   if(my_task_id() == t) then
+     write(*,'(A,I2,A)') "my_task_id = ", my_task_id(), "   Matrix-B"
+     do i = 1,nxA
+       do j = 1,nyA
+         !my_val_test = get_static_data(IDB,i,j)
+         !write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(IDB,i,j))
+         !print*, "my_task_id =", my_task_id()
+         write(*,'(I4)',advance="no") int(get_static_data(IDB,i,j))
+       enddo
+       write(*,*) ""
+     enddo
+   endif
+   call task_sync()
+enddo
+
+numt = task_count()-1
+do t=0,numt
+   if(my_task_id() == t) then
+     write(*,'(A,I2,A)') "my_task_id = ", my_task_id(), "   Matrix-C"
+     do i = 1,nxA
+       do j = 1,nyA
+         !my_val_test = get_static_data(IDC,i,j)
+         !write(*,'(''(''i2,'','',i2,'')'',I3)',advance="no") i,j,int(get_static_data(IDC,i,j))
+         !print*, "my_task_id =", my_task_id()
+         write(*,'(I4)',advance="no") int(get_static_data(IDC,i,j))
        enddo
        write(*,*) ""
      enddo
