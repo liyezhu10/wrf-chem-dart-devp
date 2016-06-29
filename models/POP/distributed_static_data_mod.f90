@@ -44,11 +44,11 @@ integer :: local_rank     !< rank within group
 integer, allocatable :: group_members(:)
 
 ! pntecdf variables
-integer(KIND=MPI_OFFSET_KIND) :: x_start, x_length, y_length, num_static_arrays
+integer(KIND=MPI_OFFSET_KIND) :: y_start, x_length, y_length, num_static_arrays
 integer(KIND=MPI_OFFSET_KIND) :: start(4)
 integer(KIND=MPI_OFFSET_KIND) :: count(4)
 integer(KIND=MPI_OFFSET_KIND) :: stride(4)
-integer(KIND=MPI_OFFSET_KIND) :: my_num_x_vals !< splitting up by we
+integer(KIND=MPI_OFFSET_KIND) :: my_num_y_vals !< splitting up by we
 
 integer :: array_number = 0 ! starting index for array
 
@@ -138,7 +138,7 @@ integer ierr, sizedouble
 integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
-window_size = num_static_arrays*my_num_x_vals*y_length*sizedouble
+window_size = num_static_arrays*my_num_y_vals*y_length*sizedouble
 
 call mpi_win_create(global_static_data,  window_size, sizedouble, MPI_INFO_NULL, mpi_comm_grid, sd_window, ierr)
 
@@ -191,20 +191,22 @@ integer,                        intent(in)  :: j
 integer,                        intent(out) :: owner
 integer(KIND=MPI_ADDRESS_KIND), intent(out) :: target_disp !< displacement
 
-integer ::x_stride, x_local, x_mod
+integer ::y_stride, y_local
 
-x_stride = x_length/group_size
-owner = (i-1)/x_stride
+y_stride = y_length/group_size
+owner = (j-1)/y_stride
 
 if(owner >= group_size) owner = group_size-1
    
-x_local = i - x_stride*owner
+! The line below must come before the next if statement.
+! We need the possibly smaller stride as starting point
+y_local = j - y_stride*owner - 1
 
 if(owner == group_size - 1) then
-   x_stride = x_length - x_stride*(group_size-1)
+   y_stride = y_length - y_stride*(group_size-1)
 endif
 
-target_disp = (static_id-1)*x_stride*y_length + (j-1)*x_stride + x_local - 1
+target_disp = (static_id-1)*x_length*y_stride + x_length*y_local + i - 1
 
 
 end subroutine who_has_grid_info
@@ -222,7 +224,7 @@ integer, intent(in) :: NY
 ! io file variables
 integer io, iunit
 
-integer :: x_mod
+integer :: y_mod
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "distributed_static_data_nml", iunit)
@@ -237,18 +239,20 @@ x_length          = NX
 y_length          = NY
 
 ! split up in x dimension, could also split in y?
-my_num_x_vals = x_length / group_size
-x_start       = local_rank*my_num_x_vals
-x_mod         = mod(x_length,group_size)
-if (x_mod /= 0 .and. local_rank == group_size - 1) then
-   my_num_x_vals = my_num_x_vals + x_mod
-   !write(*,'(''last  rank['',I2,''] my_num_x_vals * y_length = '',I4,'' * '',I4,'' = '',I7)') &
-          !my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
+my_num_y_vals = y_length / group_size
+y_start       = local_rank*my_num_y_vals 
+y_mod         = mod(y_length,group_size)
+!write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
+      !my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
+if (y_mod /= 0 .and. local_rank == group_size - 1) then
+   my_num_y_vals = my_num_y_vals + y_mod
+   !write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
+          !my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
 endif
-!write(*,'(''last  rank['',I2,''] my_num_x_vals * y_length = '',I4,'' * '',I4,'' = '',I7)') &
-!      my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
+!write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
+!      my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
 
-allocate(global_static_data(num_static_arrays*my_num_x_vals*y_length)) ! local static data
+allocate(global_static_data(num_static_arrays*x_length*my_num_y_vals)) ! local static data
 
 end subroutine initialize_static_data_space
 
@@ -259,32 +263,27 @@ function distribute_static_data(local_static_data) result(static_id)
 real(r8), intent(inout) :: local_static_data(x_length,y_length)
 integer :: static_id
 
-integer :: iy, g_istart, g_iend, l_istart, l_iend
+integer :: iy, istart, iend, y_end
 
 ! block data
 static_id = array_number + 1
 array_number = array_number +1
-g_istart = (static_id-1)*my_num_x_vals*y_length + 1
-g_iend   = g_istart+my_num_x_vals-1
-l_istart = x_start+1
-l_iend   = l_istart+my_num_x_vals-1
 
-do iy=1,y_length
-   !print*, "task_id - ", my_task_id(), ": g_istart ", g_istart
-   !print*, "task_id - ", my_task_id(), ": g_iend   ", g_iend
-   !print*, "task_id - ", my_task_id(), ": l_istart ", l_istart
-   !print*, "task_id - ", my_task_id(), ": l_iend   ", l_iend
-   !print*, "task_id - ", my_task_id(), ": iy       ", iy
-   !print*, "task_id - ", my_task_id(), ": size     ", size(global_static_data)
-   global_static_data(g_istart:g_iend) = local_static_data(l_istart:l_iend,iy) 
-   g_istart = g_iend + 1
-   g_iend   = g_istart+my_num_x_vals-1
+istart = (static_id-1)*x_length*my_num_y_vals + 1
+iend   = istart + x_length - 1
+
+do iy=y_start+1,y_start+my_num_y_vals
+   !write(*,'(''last  rank['',I2,''] istart , iend = '',I4,'' , '',I4,''iy  = '',I7)') &
+   !      my_task_id(), istart, iend, iy
+   global_static_data(istart:iend) = local_static_data(:,iy) 
+   istart = iend + 1
+   iend   = istart + x_length - 1
 enddo
 
 call create_window()
 
 !print*, "task_id - ", my_task_id(), ": flat-array  ", global_static_data
-!do iy=1,my_num_x_vals*y_length
+!do iy=1,my_num_y_vals*y_length
 !   write(*,'(A,I3,I3)',advance="no") "task_id - ", my_task_id(), int(global_static_data(iy))
 !   write(*,*) ""
 !enddo
