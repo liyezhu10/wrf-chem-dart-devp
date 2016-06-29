@@ -87,16 +87,23 @@ top = bottom + group_size - 1
 if (top >= task_count()) then
    top = task_count() - 1
    group_size = top - bottom + 1
-   ! print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
+   !print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
 endif
+!print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
+!write(*,*) ""
 
+!call task_sync()
 
 ! fill up group members
 group_members(1) = bottom
+!print*, 'group_members(i) ', myrank, 1, group_members(1) 
+!call task_sync()
 do i = 2, group_size
    group_members(i) = group_members(i-1) + 1
    !print*, 'group_members(i) ', myrank, i, group_members(i) 
+   !call task_sync()
 enddo
+
 
 if (mod(myrank,group_size) == 0) then
   do i = 1, group_size
@@ -152,7 +159,9 @@ integer                          :: ierr
 
 ! caluclate who has the info
 !print*, "id =", my_task_id()
+!print*, "id =", my_task_id(), "calling who_has_grid"
 call who_has_grid_info(Static_ID, i, j, owner, target_disp)
+!print*, "rank =", my_task_id(), "owner =", owner, "i =", i, "j =", j
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, sd_window, ierr)
@@ -171,11 +180,13 @@ integer,                        intent(in)  :: j
 integer,                        intent(out) :: owner
 integer(KIND=MPI_ADDRESS_KIND), intent(out) :: target_disp !< displacement
 
-integer ::x_stride, x_local
+integer ::x_stride, x_local, x_mod
 
 x_stride = x_length/group_size
 owner = (i-1)/x_stride
 
+if(owner == group_size) owner = owner-1
+   
 x_local = i - x_stride*owner
 
 if(owner == group_size - 1) then
@@ -211,8 +222,10 @@ x_mod         = mod(x_length,group_size)
 if (x_mod /= 0 .and. local_rank == group_size - 1) then
    my_num_x_vals = my_num_x_vals + x_mod
    !write(*,'(''last  rank['',I2,''] my_num_x_vals * y_length = '',I4,'' * '',I4,'' = '',I7)') &
-   !       my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
+          !my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
 endif
+!write(*,'(''last  rank['',I2,''] my_num_x_vals * y_length = '',I4,'' * '',I4,'' = '',I7)') &
+!      my_task_id(), my_num_x_vals, y_length, my_num_x_vals*y_length
 
 allocate(global_static_data(num_static_arrays*my_num_x_vals*y_length)) ! local static data
 

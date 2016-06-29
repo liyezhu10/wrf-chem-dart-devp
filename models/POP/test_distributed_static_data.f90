@@ -114,10 +114,10 @@ call create_window()
 call task_sync()
 print*, ''
 
-!if(my_task_id() == 1) then
-!   call print_array('A1', A, nxA, nyA)
-!endif
- 
+!!if(my_task_id() == 1) then
+!!   call print_array('A1', A, nxA, nyA)
+!!endif
+! 
 ID = distribute_static_data(A)
 call task_sync()
 
@@ -125,7 +125,6 @@ numt = task_count()-1
 do t=0,numt
    if(my_task_id() == t) then
      write(*,'(A,I2)') "my_task_id = ", my_task_id()
-     write(*,*) ""
      do i = 1,nxA
        do j = 1,nyA
          !my_val_test = get_static_data(ID,i,j)
@@ -139,36 +138,36 @@ do t=0,numt
    call task_sync()
 enddo
 
-print*, ''
-
-!if(my_task_id() == 1) then
-!   call print_array('A1', A, nxA, nyA)
+!print*, ''
+!
+!!if(my_task_id() == 1) then
+!!   call print_array('A1', A, nxA, nyA)
+!!endif
+! 
+!ID = distribute_static_data(A)
+!print*, "done with distributing"
+!
+!allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))
+!allocate( KMT(NX,NY),  KMU(NX,NY))
+!
+!
+!! Fill in the grid information 
+!! horiz grid initializes ULAT/LON, TLAT/LON as well.
+!call read_horiz_grid(NX, NY, ULAT, ULON, TLAT, TLON)
+!call read_topography(NX, NY,  KMT,  KMU)
+!
+!
+!if (do_output()) then
+!   write(*,*) ''
+!   write(*,'(''Grid Dimensions NX = '',I4,'', NY = '',I4)') NX, NY
+!   write(*,*) ''
 !endif
- 
-ID = distribute_static_data(A)
-print*, "done with distributing"
-
-allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))
-allocate( KMT(NX,NY),  KMU(NX,NY))
-
-
-! Fill in the grid information 
-! horiz grid initializes ULAT/LON, TLAT/LON as well.
-call read_horiz_grid(NX, NY, ULAT, ULON, TLAT, TLON)
-call read_topography(NX, NY,  KMT,  KMU)
-
-
-if (do_output()) then
-   write(*,*) ''
-   write(*,'(''Grid Dimensions NX = '',I4,'', NY = '',I4)') NX, NY
-   write(*,*) ''
-endif
-
-allocate(group_members(group_size)) ! this is module global
-
-call build_my_group(group_size, group_members)
-
-deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU)
+!
+!allocate(group_members(group_size)) ! this is module global
+!
+!!call build_my_group(group_size, group_members)
+!
+!deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU)
 
 ! finalize test_distributed_static_data
 call error_handler(E_MSG,'test_distributed_static_data','Finished successfully.',source,revision,revdate)
