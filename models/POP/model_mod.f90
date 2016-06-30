@@ -48,6 +48,10 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices, &
 
 use dart_time_io_mod,      only : write_model_time
 
+use distributed_static_data_mod, only : initialize_static_data_space, get_static_data, &
+                                       distribute_static_data, free_window
+
+
 use typesizes
 use netcdf 
 
@@ -112,6 +116,11 @@ logical :: update_var_list( max_state_variables )
 integer, parameter :: VAR_NAME_INDEX = 1
 integer, parameter :: VAR_KIND_INDEX = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
+
+integer :: ID_ULAT
+integer :: ID_ULON
+integer :: ID_TLAT
+integer :: ID_TLON
 
 ! things which can/should be in the model_nml
 logical  :: output_state_vector = .true.
@@ -257,7 +266,8 @@ subroutine static_init_model()
 
 integer :: iunit, io
 integer :: ss, dd
-
+integer :: i,j
+real(r8) :: val
 ! The Plan:
 !
 !   read in the grid sizes from the horiz grid file and the vert grid file
@@ -321,6 +331,29 @@ allocate(     ZC(Nz),      ZG(Nz))
 call read_horiz_grid(Nx, Ny, ULAT, ULON, TLAT, TLON)
 call read_topography(Nx, Ny,  KMT,  KMU)
 call read_vert_grid( Nz, ZC, ZG)
+
+! distributing grid information
+call initialize_static_data_space(4,Nx,Ny)
+
+ID_ULAT = distribute_static_data(ULAT)
+ID_ULON = distribute_static_data(ULON)
+ID_TLAT = distribute_static_data(TLAT)
+ID_TLON = distribute_static_data(TLON)
+
+   do i=1,NX
+      do j=1,NY
+         !write(*,'(''get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(get_static_data(ID_ULON,i,j)), int(ULON(i,j)), my_task_id()
+         !write(*,'(''get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(ULON(i,j)),int(ULON(i,j)), my_task_id()
+         ! write(*,*) ''
+      enddo
+   enddo
+
+if (my_task_id() ==1) then
+   val = get_static_data(ID_ULON,1,1)
+endif
+call exit(0)
+
+! deallocate(ULAT, ULON, TLAT, TLON)
 
 if (debug > 2) call write_grid_netcdf() ! DEBUG only
 if (debug > 2) call write_grid_interptest() ! DEBUG only
@@ -3112,7 +3145,7 @@ call nc_check(nf90_put_var(ncid,  KMUvarid,  KMU),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid, TLATvarid, TLAT),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'write_grid_netcdf')
+call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'rite_grid_netcdf')
 call nc_check(nf90_put_var(ncid,   ZGvarid,   ZG),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid,   ZCvarid,   ZC),'write_grid_netcdf')
 
