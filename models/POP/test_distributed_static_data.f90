@@ -172,8 +172,6 @@ if (.false.) then
 
 else
 
-   call initialize_static_data_space(4,NX,NY) 
-
    call get_horiz_grid_dims(NX, NY)
 
    if (do_output()) then
@@ -181,6 +179,9 @@ else
       write(*,'(''Grid Dimensions NX = '',I4,'', NY = '',I4)') NX, NY
       write(*,*) ''
    endif
+
+   call initialize_static_data_space(4,NX,NY) 
+
 
    allocate(ULAT(NX,NY), ULON(NX,NY), TLAT(NX,NY), TLON(NX,NY))
    allocate( KMT(NX,NY),  KMU(NX,NY))
@@ -197,8 +198,8 @@ else
    
    deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU)
    
-   write(*,'(I4)',advance="no") int(get_static_data(ID_ULON,160,1))
-   
+   ! write(*,'(I4)',advance="no") int(get_static_data(ID_ULON,160,1))
+   my_val_test = get_static_data(ID_ULON,160,1)
    
 endif
 
