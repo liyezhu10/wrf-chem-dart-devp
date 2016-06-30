@@ -17,7 +17,8 @@ use utilities_mod,         only : register_module,          &
 
 use mpi_utilities_mod,     only : datasize, my_task_id,     &
                                   task_count, send_to,      &
-                                  receive_from , task_sync
+                                  receive_from , task_sync, &
+                                  get_dart_mpi_comm
 
 use types_mod,             only : r8
 
@@ -70,11 +71,11 @@ integer ierr ! all MPI errors are fatal anyway
 
 allocate(group_members(group_size)) ! this is module global
 
-call mpi_comm_group(mpi_comm_world, group_handle, ierr)  ! get group handle from mpi_comm_world
+call mpi_comm_group(get_dart_mpi_comm(), group_handle, ierr)  
 call build_my_group(group_size, group_members) ! create a list of processors in the grid group
 call mpi_group_incl(group_handle, group_size, group_members, subgroup, ierr)
-call mpi_comm_create(mpi_comm_world, subgroup, mpi_comm_grid, ierr)
-call mpi_comm_rank(mpi_comm_grid, local_rank, ierr) ! rank within group
+call mpi_comm_create(get_dart_mpi_comm(), subgroup, mpi_comm_grid, ierr)
+call mpi_comm_rank(get_dart_mpi_comm(), local_rank, ierr) ! rank within group
 
 end subroutine create_groups
 
@@ -172,12 +173,13 @@ integer                          :: ierr
 !print*, "id =", my_task_id()
 !print*, "id =", my_task_id(), "calling who_has_grid"
 call who_has_grid_info(Static_ID, i, j, owner, target_disp)
-!print*, "rank =", my_task_id(), "owner =", owner, "i =", i, "j =", j
+print*, "rank =", my_task_id(), "owner =", owner, "i =", i, "j =", j
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, sd_window, ierr)
 call mpi_get(val, 1, datasize, owner, target_disp, 1, datasize, sd_window, ierr)
 call mpi_win_unlock(owner, sd_window, ierr)
+print*, "val =", val
 
 end function get_static_data
 
@@ -249,8 +251,8 @@ if (y_mod /= 0 .and. local_rank == group_size - 1) then
    !write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
           !my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
 endif
-!write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
-!      my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
+write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
+      my_task_id(), my_num_y_vals, x_length, my_num_y_vals*x_length
 
 allocate(global_static_data(num_static_arrays*x_length*my_num_y_vals)) ! local static data
 
@@ -280,7 +282,6 @@ do iy=y_start+1,y_start+my_num_y_vals
    iend   = istart + x_length - 1
 enddo
 
-call create_window()
 
 !print*, "task_id - ", my_task_id(), ": flat-array  ", global_static_data
 !do iy=1,my_num_y_vals*y_length
