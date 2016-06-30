@@ -424,7 +424,7 @@ integer :: i
 
 dipole_grid = .false.
 do i = 1, nx
-   if(ulon(i, 1) /= ulon(i, ny)) then
+   if(get_static_data(ID_ULON, i, 1) /= get_static_data(ID_ULON, i, ny)) then
       dipole_grid = .true.
       call init_dipole_interp()
       return
@@ -472,10 +472,10 @@ surf_index = 1
 ! the row that is opposite the shifted pole and exactly follows a lon circle.
 pole_x = nx / 2;
 ! Search for the row at which the longitude flips over the pole
-pole_row_lon = ulon(pole_x, 1);
+pole_row_lon = get_static_data(ID_ULON, pole_x, 1);
 do i = 1, ny
    pindex = i
-   if(ulon(pole_x, i) /= pole_row_lon) exit
+   if(get_static_data(ID_ULON, pole_x, i) /= pole_row_lon) exit
 enddo
 
 ! Pole boxes for u have indices pole_x or pole_x-1 and index - 1;
@@ -500,8 +500,10 @@ do i = 1, nx
       ! Only update regular boxes that contain all wet corners
       if( all_corners_wet(KIND_U_CURRENT_COMPONENT,i,j,surf_index) ) then
          ! Set up array of lons and lats for the corners of these u quads
-         call get_quad_corners(ulon, i, j, u_c_lons)
-         call get_quad_corners(ulat, i, j, u_c_lats)
+         !call get_quad_corners(ulon, i, j, u_c_lons)
+         !call get_quad_corners(ulat, i, j, u_c_lats)
+         call get_quad_corners(ID_ULON, i, j, u_c_lons)
+         call get_quad_corners(ID_ULAT, i, j, u_c_lats)
 
          ! Get list of regular boxes that cover this u dipole quad
          ! false indicates that for the u grid there's nothing special about pole
@@ -515,8 +517,10 @@ do i = 1, nx
       ! Only update regular boxes that contain all wet corners
       if( all_corners_wet(KIND_TEMPERATURE,i,j,surf_index) ) then
          ! Set up array of lons and lats for the corners of these t quads
-         call get_quad_corners(tlon, i, j, t_c_lons)
-         call get_quad_corners(tlat, i, j, t_c_lats)
+         !call get_quad_corners(tlon, i, j, t_c_lons)
+         !call get_quad_corners(tlat, i, j, t_c_lats)
+         call get_quad_corners(ID_TLON, i, j, t_c_lons)
+         call get_quad_corners(ID_TLAT, i, j, t_c_lats)
 
          ! Is this the pole quad for the T grid?
          is_pole = (i == pole_x .and. j == t_pole_y)
@@ -701,9 +705,11 @@ end subroutine reg_box_overlap
 
 !------------------------------------------------------------
 
-subroutine get_quad_corners(x, i, j, corners)
- real(r8), intent(in)  :: x(:, :)
- integer,  intent(in)  :: i, j
+!subroutine get_quad_corners(x, i, j, corners)
+ !real(r8), intent(in)  :: x(:, :)
+ !integer,  intent(in)  :: i, j 
+subroutine get_quad_corners(Static_ID, i, j, corners)
+ integer,  intent(in)  :: i, j, Static_ID
  real(r8), intent(out) :: corners(4)
 
 ! Grabs the corners for a given quadrilateral from the global array of lower
@@ -715,10 +721,14 @@ integer :: ip1
 ip1 = i + 1
 if(ip1 > nx) ip1 = 1
 
-corners(1) = x(i,   j  ) 
-corners(2) = x(ip1, j  )
-corners(3) = x(ip1, j+1)
-corners(4) = x(i,   j+1)
+!corners(1) = x(i,   j  ) 
+!corners(2) = x(ip1, j  )
+!corners(3) = x(ip1, j+1)
+!corners(4) = x(i,   j+1)
+corners(1) = get_static_data(Static_ID,i,   j  ) 
+corners(2) = get_static_data(Static_ID,ip1, j  )
+corners(3) = get_static_data(Static_ID,ip1, j+1)
+corners(4) = get_static_data(Static_ID,i,   j+1)
 
 end subroutine get_quad_corners
 
@@ -1046,7 +1056,8 @@ if(dipole_grid) then
       endif
 
       ! Search the list of quads to see if (lon, lat) is in one
-      call get_dipole_quad(lon, lat, ulon, ulat, num_inds, start_ind, &
+      !call get_dipole_quad(lon, lat, ulon, ulat, num_inds, start_ind, &
+      call get_dipole_quad(lon, lat, ID_ULON, ID_ULAT, num_inds, start_ind, &
          u_dipole_lon_list, u_dipole_lat_list, lon_bot, lat_bot, quad_status)
       ! Fail on bad istatus return
       if(quad_status /= 0) then
@@ -1055,8 +1066,10 @@ if(dipole_grid) then
       endif
 
       ! Getting corners for accurate interpolation
-      call get_quad_corners(ulon, lon_bot, lat_bot, x_corners)
-      call get_quad_corners(ulat, lon_bot, lat_bot, y_corners)
+      !call get_quad_corners(ulon, lon_bot, lat_bot, x_corners)
+      !call get_quad_corners(ulat, lon_bot, lat_bot, y_corners)
+      call get_quad_corners(ID_ULON, lon_bot, lat_bot, x_corners)
+      call get_quad_corners(ID_ULAT, lon_bot, lat_bot, y_corners)
 
       ! Fail if point is in one of the U boxes that go through the
       ! pole (this could be fixed up if necessary)
@@ -1077,7 +1090,8 @@ if(dipole_grid) then
          return
       endif
 
-      call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
+      !call get_dipole_quad(lon, lat, tlon, tlat, num_inds, start_ind, &
+      call get_dipole_quad(lon, lat, ID_TLON, ID_TLAT, num_inds, start_ind, &
          t_dipole_lon_list, t_dipole_lat_list, lon_bot, lat_bot, quad_status)
 
       ! Fail on bad istatus return
@@ -1093,8 +1107,10 @@ if(dipole_grid) then
       endif
 
       ! Getting corners for accurate interpolation
-      call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
-      call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
+      !call get_quad_corners(tlon, lon_bot, lat_bot, x_corners)
+      !call get_quad_corners(tlat, lon_bot, lat_bot, y_corners)
+      call get_quad_corners(ID_TLON, lon_bot, lat_bot, x_corners)
+      call get_quad_corners(ID_TLAT, lon_bot, lat_bot, y_corners)
 
    endif
 
@@ -1103,12 +1119,14 @@ else
    ! U and V are on velocity grid
    if (is_on_ugrid(var_type)) then
       ! Get the corner indices and the fraction of the distance between
-      call get_irreg_box(lon, lat, ulon, ulat, &
+      !call get_irreg_box(lon, lat, ulon, ulat, &
+      call get_irreg_box(lon, lat, ID_ULON, ID_ULAT, &
          lon_bot, lat_bot, lon_fract, lat_fract, quad_status)
    else
       ! Eta, T and S are on the T grid
       ! Get the corner indices
-      call get_irreg_box(lon, lat, tlon, tlat, &
+      !call get_irreg_box(lon, lat, tlon, tlat, &
+      call get_irreg_box(lon, lat, ID_TLON, ID_TLAT, &
          lon_bot, lat_bot, lon_fract, lat_fract, quad_status)
    endif
 
@@ -1215,11 +1233,13 @@ end function get_val
 
 !------------------------------------------------------------
 
-subroutine get_irreg_box(lon, lat, lon_array, lat_array, &
+!subroutine get_irreg_box(lon, lat, lon_array, lat_array, &
+subroutine get_irreg_box(lon, lat, lon_id, lat_id, &
                          found_x, found_y, lon_fract, lat_fract, istatus)
 
  real(r8),   intent(in) :: lon, lat
- real(r8),   intent(in) :: lon_array(nx, ny), lat_array(nx, ny)
+ !real(r8),   intent(in) :: lon_array(nx, ny), lat_array(nx, ny)
+ integer,   intent(in)  :: lon_id, lat_id
  real(r8),  intent(out) :: lon_fract, lat_fract
  integer,   intent(out) :: found_x, found_y, istatus
 
@@ -1235,7 +1255,8 @@ integer  :: lat_status, lon_top, lat_top
 istatus = 0
 
 ! Get latitude box boundaries
-call lat_bounds(lat, ny, lat_array, found_y, lat_top, lat_fract, lat_status)
+!call lat_bounds(lat, ny, lat_array, found_y, lat_top, lat_fract, lat_status)
+call lat_bounds(lat, ny, lat_id, found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1244,16 +1265,19 @@ if(lat_status /= 0) then
 endif
 
 ! Find out what longitude box and fraction
-call lon_bounds(lon, nx, lon_array, found_x, lon_top, lon_fract)
+!call lon_bounds(lon, nx, lon_array, found_x, lon_top, lon_fract)
+call lon_bounds(lon, nx, lon_id, found_x, lon_top, lon_fract)
 
 end subroutine get_irreg_box
 
 !------------------------------------------------------------
 
-subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
+!subroutine lon_bounds(lon, nlons, lon_array, bot, top, fract)
+subroutine lon_bounds(lon, nlons, lon_id, bot, top, fract)
  real(r8),    intent(in) :: lon
  integer,     intent(in) :: nlons
- real(r8),    intent(in) :: lon_array(:, :)
+ !real(r8),    intent(in) :: lon_array(:, :)
+ integer,    intent(in)  :: lon_id
  integer,    intent(out) :: bot, top
  real(r8),   intent(out) :: fract
 
@@ -1273,8 +1297,8 @@ if ( .not. module_initialized ) call static_init_model
 ! This is inefficient, someone could clean it up since longitudes are regularly spaced
 ! But note that they don't have to start at 0
 do i = 2, nlons
-   dist_bot = lon_dist(lon, lon_array(i - 1, 1))
-   dist_top = lon_dist(lon, lon_array(i, 1))
+   dist_bot = lon_dist(lon, get_static_data(lon_id, i - 1, 1))
+   dist_top = lon_dist(lon, get_static_data(lon_id, i, 1))
    if(dist_bot <= 0 .and. dist_top > 0) then
       bot = i - 1
       top = i
@@ -1286,18 +1310,20 @@ enddo
 ! Falling off the end means it's in between; wraparound
 bot = nlons
 top = 1
-dist_bot = lon_dist(lon, lon_array(bot, 1))
-dist_top = lon_dist(lon, lon_array(top, 1)) 
+dist_bot = lon_dist(lon, get_static_data(lon_id, bot, 1))
+dist_top = lon_dist(lon, get_static_data(lon_id, top, 1)) 
 fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
 
 end subroutine lon_bounds
 
 !-------------------------------------------------------------
 
-subroutine lat_bounds(lat, nlats, lat_array, bot, top, fract, istatus)
+!subroutine lat_bounds(lat, nlats, lat_array, bot, top, fract, istatus)
+subroutine lat_bounds(lat, nlats, lat_id, bot, top, fract, istatus)
  real(r8),   intent(in) :: lat
  integer,    intent(in) :: nlats
- real(r8),   intent(in) :: lat_array(:, :)
+ !real(r8),   intent(in) :: lat_array(:, :)
+ integer,   intent(in)  :: lat_id
  integer,   intent(out) :: bot, top
  real(r8),  intent(out) :: fract
  integer,   intent(out) :: istatus
@@ -1319,20 +1345,20 @@ if ( .not. module_initialized ) call static_init_model
 istatus = 0
 
 ! Check for too far south or north
-if(lat < lat_array(1, 1)) then
+if(lat < get_static_data(lat_id, 1, 1)) then
    istatus = 1
    return
-else if(lat > lat_array(1, nlats)) then
+else if(lat > get_static_data(lat_id, 1, nlats)) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
 do i = 2, nlats
-   if(lat <= lat_array(1, i)) then
+   if(lat <= get_static_data(lat_id, 1, i)) then
       bot = i - 1
       top = i
-      fract = (lat - lat_array(1, bot)) / (lat_array(1, top) - lat_array(1, bot))
+      fract = (lat - get_static_data(lat_id, 1, bot)) / (get_static_data(lat_id, 1, top) - get_static_data(lat_id, 1, bot))
       return
    endif
 enddo
@@ -1367,10 +1393,13 @@ end function lon_dist
 
 !------------------------------------------------------------
 
-subroutine get_dipole_quad(lon, lat, qlons, qlats, num_inds, start_ind, &
+!subroutine get_dipole_quad(lon, lat, qlons, qlats, num_inds, start_ind, &
+subroutine get_dipole_quad(lon, lat, ID_LON, ID_LAT, num_inds, start_ind, &
                            x_inds, y_inds, found_x, found_y, istatus)
 
- real(r8), intent(in)  :: lon, lat, qlons(:, :), qlats(:, :)
+ !real(r8), intent(in)  :: lon, lat, qlons(:, :), qlats(:, :)
+ real(r8), intent(in)  :: lon, lat
+ integer,  intent(in)  :: ID_LON, ID_LAT
  integer,  intent(in)  :: num_inds, start_ind, x_inds(:), y_inds(:)
  integer,  intent(out) :: found_x, found_y, istatus
 
@@ -1387,8 +1416,10 @@ istatus = 0
 ! Loop through all the quads and see if the point is inside
 do i = 1, num_inds
    my_index = start_ind + i - 1
-   call get_quad_corners(qlons, x_inds(my_index), y_inds(my_index), x_corners)
-   call get_quad_corners(qlats, x_inds(my_index), y_inds(my_index), y_corners)
+   !call get_quad_corners(qlons, x_inds(my_index), y_inds(my_index), x_corners)
+   !call get_quad_corners(qlats, x_inds(my_index), y_inds(my_index), y_corners)
+   call get_quad_corners(ID_LON, x_inds(my_index), y_inds(my_index), x_corners)
+   call get_quad_corners(ID_LAT, x_inds(my_index), y_inds(my_index), y_corners)
 
    ! Ssearch in this individual quad
    if(in_quad(lon, lat, x_corners, y_corners)) then
@@ -1791,11 +1822,11 @@ call get_model_variable_indices(index_in, lon_index, lat_index, depth_index, var
 call get_state_kind(var_id, local_var)
 
 if (is_on_ugrid(local_var)) then
-   lon = ULON(lon_index, lat_index)
-   lat = ULAT(lon_index, lat_index)
+   lon = get_static_data(ID_ULON, lon_index, lat_index)
+   lat = get_static_data(ID_ULAT, lon_index, lat_index)
 else
-   lon = TLON(lon_index, lat_index)
-   lat = TLAT(lon_index, lat_index)
+   lon = get_static_data(ID_TLON, lon_index, lat_index)
+   lat = get_static_data(ID_TLAT, lon_index, lat_index)
 endif
 
 if (local_var == KIND_SEA_SURFACE_HEIGHT) then
@@ -2142,57 +2173,57 @@ else
 
 
    ! U,V Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='ULON', xtype=nf90_real, &
-                 dimids=(/ NlonDimID, NlatDimID /), varid=ulonVarID),&
-                 'nc_write_model_atts', 'ULON def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'long_name', 'longitudes of U,V grid'), &
-                 'nc_write_model_atts', 'ULON long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'cartesian_axis', 'X'),  &
-                 'nc_write_model_atts', 'ULON cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'ULON units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'ULON valid_range '//trim(filename))
+   !call nc_check(nf90_def_var(ncFileID,name='ULON', xtype=nf90_real, &
+   !              dimids=(/ NlonDimID, NlatDimID /), varid=ulonVarID),&
+   !              'nc_write_model_atts', 'ULON def_var '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'long_name', 'longitudes of U,V grid'), &
+   !              'nc_write_model_atts', 'ULON long_name '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'cartesian_axis', 'X'),  &
+   !              'nc_write_model_atts', 'ULON cartesian_axis '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'units', 'degrees_east'), &
+   !              'nc_write_model_atts', 'ULON units '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+   !              'nc_write_model_atts', 'ULON valid_range '//trim(filename))
 
-   ! U,V Grid Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='ULAT', xtype=nf90_real, &
-                 dimids=(/ NlonDimID, NlatDimID /), varid=ulatVarID),&
-                 'nc_write_model_atts', 'ULAT def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'long_name', 'latitudes of U,V grid'), &
-                 'nc_write_model_atts', 'ULAT long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'cartesian_axis', 'Y'),   &
-                 'nc_write_model_atts', 'ULAT cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'ULAT units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
+   !! U,V Grid Latitudes
+   !call nc_check(nf90_def_var(ncFileID,name='ULAT', xtype=nf90_real, &
+   !              dimids=(/ NlonDimID, NlatDimID /), varid=ulatVarID),&
+   !              'nc_write_model_atts', 'ULAT def_var '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'long_name', 'latitudes of U,V grid'), &
+   !              'nc_write_model_atts', 'ULAT long_name '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'cartesian_axis', 'Y'),   &
+   !              'nc_write_model_atts', 'ULAT cartesian_axis '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'units', 'degrees_north'),  &
+   !              'nc_write_model_atts', 'ULAT units '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
+   !              'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
 
-   ! S,T,PSURF Grid Longitudes
-   call nc_check(nf90_def_var(ncFileID,name='TLON', xtype=nf90_real, &
-                 dimids=(/ NlonDimID, NlatDimID /), varid=tlonVarID),&
-                 'nc_write_model_atts', 'TLON def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'long_name', 'longitudes of S,T,... grid'), &
-                 'nc_write_model_atts', 'TLON long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'cartesian_axis', 'X'),   &
-                 'nc_write_model_atts', 'TLON cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'units', 'degrees_east'),  &
-                 'nc_write_model_atts', 'TLON units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'TLON valid_range '//trim(filename))
+   !! S,T,PSURF Grid Longitudes
+   !call nc_check(nf90_def_var(ncFileID,name='TLON', xtype=nf90_real, &
+   !              dimids=(/ NlonDimID, NlatDimID /), varid=tlonVarID),&
+   !              'nc_write_model_atts', 'TLON def_var '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'long_name', 'longitudes of S,T,... grid'), &
+   !              'nc_write_model_atts', 'TLON long_name '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'cartesian_axis', 'X'),   &
+   !              'nc_write_model_atts', 'TLON cartesian_axis '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'units', 'degrees_east'),  &
+   !              'nc_write_model_atts', 'TLON units '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+   !              'nc_write_model_atts', 'TLON valid_range '//trim(filename))
 
 
-   ! S,T,PSURF Grid (center) Latitudes
-   call nc_check(nf90_def_var(ncFileID,name='TLAT', xtype=nf90_real, &
-                 dimids= (/ NlonDimID, NlatDimID /), varid=tlatVarID), &
-                 'nc_write_model_atts', 'TLAT def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'long_name', 'latitudes of S,T, ... grid'), &
-                 'nc_write_model_atts', 'TLAT long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'cartesian_axis', 'Y'),   &
-                 'nc_write_model_atts', 'TLAT cartesian_axis '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'TLAT units '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'valid_range', (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'TLAT valid_range '//trim(filename))
+   !! S,T,PSURF Grid (center) Latitudes
+   !call nc_check(nf90_def_var(ncFileID,name='TLAT', xtype=nf90_real, &
+   !              dimids= (/ NlonDimID, NlatDimID /), varid=tlatVarID), &
+   !              'nc_write_model_atts', 'TLAT def_var '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'long_name', 'latitudes of S,T, ... grid'), &
+   !              'nc_write_model_atts', 'TLAT long_name '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'cartesian_axis', 'Y'),   &
+   !              'nc_write_model_atts', 'TLAT cartesian_axis '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'units', 'degrees_north'),  &
+   !              'nc_write_model_atts', 'TLAT units '//trim(filename))
+   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'valid_range', (/ -90.0_r8, 90.0_r8 /)), &
+   !              'nc_write_model_atts', 'TLAT valid_range '//trim(filename))
 
    ! Depths
    call nc_check(nf90_def_var(ncFileID,name='ZG', xtype=nf90_real, &
@@ -2346,14 +2377,14 @@ else
    ! Fill the coordinate variables
    !----------------------------------------------------------------------------
 
-   call nc_check(nf90_put_var(ncFileID, ulonVarID, ULON ), &
-                'nc_write_model_atts', 'ULON put_var '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, ulatVarID, ULAT ), &
-                'nc_write_model_atts', 'ULAT put_var '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, tlonVarID, TLON ), &
-                'nc_write_model_atts', 'TLON put_var '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, tlatVarID, TLAT ), &
-                'nc_write_model_atts', 'TLAT put_var '//trim(filename))
+   !call nc_check(nf90_put_var(ncFileID, ulonVarID, ULON ), &
+   !             'nc_write_model_atts', 'ULON put_var '//trim(filename))
+   !call nc_check(nf90_put_var(ncFileID, ulatVarID, ULAT ), &
+   !             'nc_write_model_atts', 'ULAT put_var '//trim(filename))
+   !call nc_check(nf90_put_var(ncFileID, tlonVarID, TLON ), &
+   !             'nc_write_model_atts', 'TLON put_var '//trim(filename))
+   !call nc_check(nf90_put_var(ncFileID, tlatVarID, TLAT ), &
+   !             'nc_write_model_atts', 'TLAT put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, ZGVarID, ZG ), &
                 'nc_write_model_atts', 'ZG put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, ZCVarID, ZC ), &
@@ -3110,8 +3141,8 @@ integer :: dimids(2);
 
 if ( .not. module_initialized ) call static_init_model
 
-nlon = size(ULAT,1)
-nlat = size(ULAT,2)
+!nlon = size(ULAT,1)
+!nlat = size(ULAT,2)
 nz   = size(ZG)
 
 call nc_check(nf90_create('dart_grid.nc', NF90_CLOBBER, ncid),'write_grid_netcdf')
@@ -3130,10 +3161,10 @@ dimids(2) = NlatDimID
 ! FIXME: we should add attributes to say what units the grids are in (degrees).
 call nc_check(nf90_def_var(ncid,  'KMT', nf90_int,     dimids,  KMTvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,  'KMU', nf90_int,     dimids,  KMUvarid),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'ULON', nf90_double,  dimids, ulonVarID),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'ULAT', nf90_double,  dimids, ulatVarID),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'TLON', nf90_double,  dimids, TLONvarid),'write_grid_netcdf')
-call nc_check(nf90_def_var(ncid, 'TLAT', nf90_double,  dimids, TLATvarid),'write_grid_netcdf')
+!call nc_check(nf90_def_var(ncid, 'ULON', nf90_double,  dimids, ulonVarID),'write_grid_netcdf')
+!call nc_check(nf90_def_var(ncid, 'ULAT', nf90_double,  dimids, ulatVarID),'write_grid_netcdf')
+!call nc_check(nf90_def_var(ncid, 'TLON', nf90_double,  dimids, TLONvarid),'write_grid_netcdf')
+!call nc_check(nf90_def_var(ncid, 'TLAT', nf90_double,  dimids, TLATvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,   'ZG', nf90_double, NzDimID,   ZGvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,   'ZC', nf90_double, NzDimID,   ZCvarid),'write_grid_netcdf')
 
@@ -3160,10 +3191,10 @@ call nc_check(nf90_enddef(ncid),'write_grid_netcdf')
 
 call nc_check(nf90_put_var(ncid,  KMTvarid,  KMT),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid,  KMUvarid,  KMU),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, TLATvarid, TLAT),'write_grid_netcdf')
-call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'rite_grid_netcdf')
+!call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
+!call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
+!call nc_check(nf90_put_var(ncid, TLATvarid, TLAT),'write_grid_netcdf')
+!call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'rite_grid_netcdf')
 call nc_check(nf90_put_var(ncid,   ZGvarid,   ZG),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid,   ZCvarid,   ZC),'write_grid_netcdf')
 
