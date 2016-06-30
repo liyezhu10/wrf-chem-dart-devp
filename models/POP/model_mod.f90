@@ -30,7 +30,8 @@ use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SALINITY, KIND_DRY_LAND,   &
                              KIND_SEA_SURFACE_HEIGHT, KIND_SEA_SURFACE_PRESSURE,&
                              KIND_POTENTIAL_TEMPERATURE, get_raw_obs_kind_index,&
                              get_raw_obs_kind_name, paramname_length 
-use mpi_utilities_mod, only: my_task_id, task_count
+use mpi_utilities_mod, only: my_task_id, task_count,    &
+                             finalize_mpi_utilities
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 use      dart_pop_mod, only: set_model_time_step,                              &
                              get_horiz_grid_dims, get_vert_grid_dim,           &
@@ -49,7 +50,7 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices, &
 use dart_time_io_mod,      only : write_model_time
 
 use distributed_static_data_mod, only : initialize_static_data_space, get_static_data, &
-                                       distribute_static_data, free_window
+                                       distribute_static_data, free_window, create_window
 
 
 use typesizes
@@ -334,26 +335,43 @@ call read_vert_grid( Nz, ZC, ZG)
 
 ! distributing grid information
 call initialize_static_data_space(4,Nx,Ny)
+call create_window()
 
 ID_ULAT = distribute_static_data(ULAT)
 ID_ULON = distribute_static_data(ULON)
 ID_TLAT = distribute_static_data(TLAT)
 ID_TLON = distribute_static_data(TLON)
 
-   do i=1,NX
-      do j=1,NY
-         !write(*,'(''get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(get_static_data(ID_ULON,i,j)), int(ULON(i,j)), my_task_id()
-         !write(*,'(''get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(ULON(i,j)),int(ULON(i,j)), my_task_id()
-         ! write(*,*) ''
-      enddo
-   enddo
+!   do j=1,NY
+!      do i=1,NX
+!         write(*,'(''turkey_get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(get_static_data(ID_ULON,i,j)), int(ULON(i,j)), my_task_id()
+!         !write(*,'(''get_static_data('',i3,'','',i3,'') = '',i5,'' ULON(i,j) = '',i5'' rank = '',i5)') i,j, int(ULON(i,j)),int(ULON(i,j)), my_task_id()
+!         write(*,*) ''
+!      enddo
+!   enddo
 
-if (my_task_id() ==1) then
-   val = get_static_data(ID_ULON,1,1)
-endif
-call exit(0)
+!if (my_task_id() == 0) then
+!   val = get_static_data(ID_ULON,1,1)
+!   do j=1,NY
+!      do i=1,NX
+!         !val = get_static_data(ID_ULON,i,j)
+!         val = get_static_data(ID_ULAT,i,j)
+!         val = get_static_data(ID_ULON,i,j)
+!         val = get_static_data(ID_TLAT,i,j)
+!         val = get_static_data(ID_TLON,i,j)
+!      enddo
+!   enddo
+!endif
 
-! deallocate(ULAT, ULON, TLAT, TLON)
+!call free_window()
+
+! finalize test_distributed_static_data
+!call error_handler(E_MSG,'model_mod','Finished successfully.',source,revision,revdate)
+!call finalize_mpi_utilities()
+
+!call exit(0)
+
+deallocate(ULAT, ULON, TLAT, TLON)
 
 if (debug > 2) call write_grid_netcdf() ! DEBUG only
 if (debug > 2) call write_grid_interptest() ! DEBUG only
@@ -468,7 +486,7 @@ u_pole_y = pindex - 1;
 ! We know it is in either the same lat quad as the u pole edge or one higher.
 ! Figure out if the pole is more or less than halfway along
 ! the u quad edge to find the right one.
-if(ulat(pole_x, u_pole_y) > ulat(pole_x, u_pole_y + 1)) then
+if(get_static_data(ID_ULAT,pole_x, u_pole_y) > get_static_data(ID_ULAT, pole_x, u_pole_y + 1)) then
    t_pole_y = u_pole_y;
 else
    t_pole_y = u_pole_y + 1;

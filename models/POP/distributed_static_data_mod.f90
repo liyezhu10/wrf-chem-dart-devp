@@ -35,6 +35,8 @@ public :: create_groups, build_my_group, initialize_static_data_space, &
 
 ! grid window
 real(r8), allocatable :: global_static_data(:) !< local static data 
+!real(r8) :: global_static_data(*)
+!pointer(aa, global_static_data)
 
 integer  :: sd_window
 
@@ -75,7 +77,7 @@ call mpi_comm_group(get_dart_mpi_comm(), group_handle, ierr)
 call build_my_group(group_size, group_members) ! create a list of processors in the grid group
 call mpi_group_incl(group_handle, group_size, group_members, subgroup, ierr)
 call mpi_comm_create(get_dart_mpi_comm(), subgroup, mpi_comm_grid, ierr)
-call mpi_comm_rank(get_dart_mpi_comm(), local_rank, ierr) ! rank within group
+call mpi_comm_rank(mpi_comm_grid, local_rank, ierr) ! rank within group
 
 end subroutine create_groups
 
@@ -173,13 +175,19 @@ integer                          :: ierr
 !print*, "id =", my_task_id()
 !print*, "id =", my_task_id(), "calling who_has_grid"
 call who_has_grid_info(Static_ID, i, j, owner, target_disp)
-print*, "rank =", my_task_id(), "owner =", owner, "i =", i, "j =", j
+!print*, "rank =", my_task_id(), "owner =", owner, "i =", i, "j =", j
 
 ! grab the info
+ierr = 0
+!print*, "ierr =", ierr
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, sd_window, ierr)
+!print*, " ******* after mip_win_lock: ierr =", ierr
 call mpi_get(val, 1, datasize, owner, target_disp, 1, datasize, sd_window, ierr)
+!print*, " ******* after mpi_get: ierr =", ierr
+!print*, "val =", val
 call mpi_win_unlock(owner, sd_window, ierr)
-print*, "val =", val
+!print*, " ******* after mip_win_unlock "
+!print*, "val =", val
 
 end function get_static_data
 
@@ -224,7 +232,9 @@ integer, intent(in) :: NX
 integer, intent(in) :: NY
 
 ! io file variables
-integer io, iunit
+integer io, iunit, ierr, sizedouble
+
+!integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 integer :: y_mod
 
@@ -244,6 +254,10 @@ y_length          = NY
 my_num_y_vals = y_length / group_size
 y_start       = local_rank*my_num_y_vals 
 y_mod         = mod(y_length,group_size)
+!write(*,'(''last  rank['',I2,'']: x_length , my_num_y_vals = '',I9,'' , '',I9,'': local_rank  = '',I4)') &
+!     my_task_id(), x_length, my_num_y_vals, local_rank
+!write(*,'(''last  rank['',I2,'']: x_length , my_num_y_vals = '',I9,'' , '',I9,'': y_start  = '',I4)') &
+!     my_task_id(), x_length, my_num_y_vals, y_start
 !write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
       !my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
 if (y_mod /= 0 .and. local_rank == group_size - 1) then
@@ -251,10 +265,14 @@ if (y_mod /= 0 .and. local_rank == group_size - 1) then
    !write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
           !my_task_id(), my_num_y_vals, y_length, my_num_y_vals*x_length
 endif
-write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
-      my_task_id(), my_num_y_vals, x_length, my_num_y_vals*x_length
+!write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
+!      my_task_id(), my_num_y_vals, x_length, my_num_y_vals*x_length
 
 allocate(global_static_data(num_static_arrays*x_length*my_num_y_vals)) ! local static data
+!call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
+!window_size = num_static_arrays*x_length*my_num_y_vals*sizedouble
+!aa = malloc(num_static_arrays*x_length*my_num_y_vals)
+!call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
 
 end subroutine initialize_static_data_space
 
@@ -273,15 +291,16 @@ array_number = array_number +1
 
 istart = (static_id-1)*x_length*my_num_y_vals + 1
 iend   = istart + x_length - 1
+!write(*,'(''last  rank['',I2,'']: x_length , my_num_y_vals = '',I9,'' , '',I9,'': y_start  = '',I4)') &
+!     my_task_id(), x_length, my_num_y_vals, y_start
 
 do iy=y_start+1,y_start+my_num_y_vals
-   !write(*,'(''last  rank['',I2,''] istart , iend = '',I4,'' , '',I4,''iy  = '',I7)') &
+   !write(*,'(''last  rank['',I2,''] istart , iend = '',I9,'' , '',I9,''iy  = '',I7)') &
    !      my_task_id(), istart, iend, iy
    global_static_data(istart:iend) = local_static_data(:,iy) 
    istart = iend + 1
    iend   = istart + x_length - 1
 enddo
-
 
 !print*, "task_id - ", my_task_id(), ": flat-array  ", global_static_data
 !do iy=1,my_num_y_vals*y_length

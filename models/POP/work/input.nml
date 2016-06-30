@@ -1,5 +1,5 @@
 &distributed_static_data_nml
-  group_size = 4
+  group_size = 3
 /
 
 &state_space_diag_nml
