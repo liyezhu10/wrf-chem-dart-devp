@@ -27,16 +27,16 @@ use mpi
 implicit none
 private
 
-public :: create_window, free_window
+public :: create_window, free_window, collect_static_data_to_array
 
 !!! only public at the moment for testing
 public :: create_groups, build_my_group, initialize_static_data_space, &
           distribute_static_data, get_static_data
 
 ! grid window
-real(r8), allocatable :: global_static_data(:) !< local static data 
-!real(r8) :: global_static_data(*)
-!pointer(aa, global_static_data)
+!real(r8), allocatable :: global_static_data(:) !< local static data 
+real(r8) :: global_static_data(*)
+pointer(aa, global_static_data)
 
 integer  :: sd_window
 
@@ -234,7 +234,7 @@ integer, intent(in) :: NY
 ! io file variables
 integer io, iunit, ierr, sizedouble
 
-!integer(KIND=MPI_ADDRESS_KIND) :: window_size
+integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 integer :: y_mod
 
@@ -268,11 +268,11 @@ endif
 !write(*,'(''last  rank['',I2,''] my_num_y_vals * x_length = '',I4,'' * '',I4,'' = '',I7)') &
 !      my_task_id(), my_num_y_vals, x_length, my_num_y_vals*x_length
 
-allocate(global_static_data(num_static_arrays*x_length*my_num_y_vals)) ! local static data
-!call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
-!window_size = num_static_arrays*x_length*my_num_y_vals*sizedouble
-!aa = malloc(num_static_arrays*x_length*my_num_y_vals)
-!call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
+!allocate(global_static_data(num_static_arrays*x_length*my_num_y_vals)) ! local static data
+call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
+window_size = num_static_arrays*x_length*my_num_y_vals*sizedouble
+aa = malloc(num_static_arrays*x_length*my_num_y_vals)
+call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
 
 end subroutine initialize_static_data_space
 
@@ -283,7 +283,7 @@ function distribute_static_data(local_static_data) result(static_id)
 real(r8), intent(inout) :: local_static_data(x_length,y_length)
 integer :: static_id
 
-integer :: iy, istart, iend, y_end
+integer :: iy, istart, iend
 
 ! block data
 static_id = array_number + 1
@@ -311,6 +311,24 @@ enddo
 
 
 end function distribute_static_data
+
+!---------------------------------------------------------
+!> collect all the data back into an array -- just a simple hack for now
+subroutine collect_static_data_to_array(Static_ID, collected_array)
+
+integer,  intent(in)  :: Static_ID
+real(r8), intent(inout) :: collected_array(x_length,y_length)
+
+integer :: i, j
+
+do j=1,y_length
+   do i=1,x_length
+      collected_array(i,j) = get_static_data(Static_ID, i, j)
+   enddo
+enddo
+
+
+end subroutine collect_static_data_to_array
 
 end module distributed_static_data_mod
 

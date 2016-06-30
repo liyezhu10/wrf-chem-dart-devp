@@ -49,8 +49,9 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices, &
 
 use dart_time_io_mod,      only : write_model_time
 
-use distributed_static_data_mod, only : initialize_static_data_space, get_static_data, &
-                                       distribute_static_data, free_window, create_window
+use distributed_static_data_mod, only : initialize_static_data_space, get_static_data,   &
+                                        distribute_static_data, free_window,             &
+                                        create_window, collect_static_data_to_array
 
 
 use typesizes
@@ -1924,7 +1925,12 @@ subroutine end_model()
 ! assume if one is allocated, they all were.  if no one ever
 ! called the init routine, don't try to dealloc something that
 ! was never alloc'd.
-if (allocated(ULAT)) deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU, HT, HU)
+!if (allocated(ULAT)) deallocate(ULAT, ULON, TLAT, TLON, KMT, KMU, HT, HU)
+if (allocated(ULAT)) deallocate(ULAT)
+if (allocated(ULON)) deallocate(ULON)
+if (allocated(TLAT)) deallocate(TLAT)
+if (allocated(TLON)) deallocate(TLON)
+if (allocated(KMT))  deallocate(KMT, KMU, HT, HU)
 if (allocated(ZC))   deallocate(ZC, ZG, pressure)
 
 end subroutine end_model
@@ -2173,57 +2179,57 @@ else
 
 
    ! U,V Grid Longitudes
-   !call nc_check(nf90_def_var(ncFileID,name='ULON', xtype=nf90_real, &
-   !              dimids=(/ NlonDimID, NlatDimID /), varid=ulonVarID),&
-   !              'nc_write_model_atts', 'ULON def_var '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'long_name', 'longitudes of U,V grid'), &
-   !              'nc_write_model_atts', 'ULON long_name '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'cartesian_axis', 'X'),  &
-   !              'nc_write_model_atts', 'ULON cartesian_axis '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'units', 'degrees_east'), &
-   !              'nc_write_model_atts', 'ULON units '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-   !              'nc_write_model_atts', 'ULON valid_range '//trim(filename))
+   call nc_check(nf90_def_var(ncFileID,name='ULON', xtype=nf90_real, &
+                 dimids=(/ NlonDimID, NlatDimID /), varid=ulonVarID),&
+                 'nc_write_model_atts', 'ULON def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'long_name', 'longitudes of U,V grid'), &
+                 'nc_write_model_atts', 'ULON long_name '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'cartesian_axis', 'X'),  &
+                 'nc_write_model_atts', 'ULON cartesian_axis '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'units', 'degrees_east'), &
+                 'nc_write_model_atts', 'ULON units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+                 'nc_write_model_atts', 'ULON valid_range '//trim(filename))
 
-   !! U,V Grid Latitudes
-   !call nc_check(nf90_def_var(ncFileID,name='ULAT', xtype=nf90_real, &
-   !              dimids=(/ NlonDimID, NlatDimID /), varid=ulatVarID),&
-   !              'nc_write_model_atts', 'ULAT def_var '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'long_name', 'latitudes of U,V grid'), &
-   !              'nc_write_model_atts', 'ULAT long_name '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'cartesian_axis', 'Y'),   &
-   !              'nc_write_model_atts', 'ULAT cartesian_axis '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'units', 'degrees_north'),  &
-   !              'nc_write_model_atts', 'ULAT units '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-   !              'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
+   ! U,V Grid Latitudes
+   call nc_check(nf90_def_var(ncFileID,name='ULAT', xtype=nf90_real, &
+                 dimids=(/ NlonDimID, NlatDimID /), varid=ulatVarID),&
+                 'nc_write_model_atts', 'ULAT def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'long_name', 'latitudes of U,V grid'), &
+                 'nc_write_model_atts', 'ULAT long_name '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'cartesian_axis', 'Y'),   &
+                 'nc_write_model_atts', 'ULAT cartesian_axis '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulatVarID, 'units', 'degrees_north'),  &
+                 'nc_write_model_atts', 'ULAT units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
+                 'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
 
-   !! S,T,PSURF Grid Longitudes
-   !call nc_check(nf90_def_var(ncFileID,name='TLON', xtype=nf90_real, &
-   !              dimids=(/ NlonDimID, NlatDimID /), varid=tlonVarID),&
-   !              'nc_write_model_atts', 'TLON def_var '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'long_name', 'longitudes of S,T,... grid'), &
-   !              'nc_write_model_atts', 'TLON long_name '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'cartesian_axis', 'X'),   &
-   !              'nc_write_model_atts', 'TLON cartesian_axis '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'units', 'degrees_east'),  &
-   !              'nc_write_model_atts', 'TLON units '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-   !              'nc_write_model_atts', 'TLON valid_range '//trim(filename))
+   ! S,T,PSURF Grid Longitudes
+   call nc_check(nf90_def_var(ncFileID,name='TLON', xtype=nf90_real, &
+                 dimids=(/ NlonDimID, NlatDimID /), varid=tlonVarID),&
+                 'nc_write_model_atts', 'TLON def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'long_name', 'longitudes of S,T,... grid'), &
+                 'nc_write_model_atts', 'TLON long_name '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'cartesian_axis', 'X'),   &
+                 'nc_write_model_atts', 'TLON cartesian_axis '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'units', 'degrees_east'),  &
+                 'nc_write_model_atts', 'TLON units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
+                 'nc_write_model_atts', 'TLON valid_range '//trim(filename))
 
 
-   !! S,T,PSURF Grid (center) Latitudes
-   !call nc_check(nf90_def_var(ncFileID,name='TLAT', xtype=nf90_real, &
-   !              dimids= (/ NlonDimID, NlatDimID /), varid=tlatVarID), &
-   !              'nc_write_model_atts', 'TLAT def_var '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'long_name', 'latitudes of S,T, ... grid'), &
-   !              'nc_write_model_atts', 'TLAT long_name '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'cartesian_axis', 'Y'),   &
-   !              'nc_write_model_atts', 'TLAT cartesian_axis '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'units', 'degrees_north'),  &
-   !              'nc_write_model_atts', 'TLAT units '//trim(filename))
-   !call nc_check(nf90_put_att(ncFileID, tlatVarID, 'valid_range', (/ -90.0_r8, 90.0_r8 /)), &
-   !              'nc_write_model_atts', 'TLAT valid_range '//trim(filename))
+   ! S,T,PSURF Grid (center) Latitudes
+   call nc_check(nf90_def_var(ncFileID,name='TLAT', xtype=nf90_real, &
+                 dimids= (/ NlonDimID, NlatDimID /), varid=tlatVarID), &
+                 'nc_write_model_atts', 'TLAT def_var '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'long_name', 'latitudes of S,T, ... grid'), &
+                 'nc_write_model_atts', 'TLAT long_name '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'cartesian_axis', 'Y'),   &
+                 'nc_write_model_atts', 'TLAT cartesian_axis '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'units', 'degrees_north'),  &
+                 'nc_write_model_atts', 'TLAT units '//trim(filename))
+   call nc_check(nf90_put_att(ncFileID, tlatVarID, 'valid_range', (/ -90.0_r8, 90.0_r8 /)), &
+                 'nc_write_model_atts', 'TLAT valid_range '//trim(filename))
 
    ! Depths
    call nc_check(nf90_def_var(ncFileID,name='ZG', xtype=nf90_real, &
@@ -2377,14 +2383,26 @@ else
    ! Fill the coordinate variables
    !----------------------------------------------------------------------------
 
-   !call nc_check(nf90_put_var(ncFileID, ulonVarID, ULON ), &
-   !             'nc_write_model_atts', 'ULON put_var '//trim(filename))
-   !call nc_check(nf90_put_var(ncFileID, ulatVarID, ULAT ), &
-   !             'nc_write_model_atts', 'ULAT put_var '//trim(filename))
-   !call nc_check(nf90_put_var(ncFileID, tlonVarID, TLON ), &
-   !             'nc_write_model_atts', 'TLON put_var '//trim(filename))
-   !call nc_check(nf90_put_var(ncFileID, tlatVarID, TLAT ), &
-   !             'nc_write_model_atts', 'TLAT put_var '//trim(filename))
+   allocate(ULON(Nx,Ny))
+   call collect_static_data_to_array(ID_ULON,ULON)
+   call nc_check(nf90_put_var(ncFileID, ulonVarID, ULON ), &
+                'nc_write_model_atts', 'ULON put_var '//trim(filename))
+   deallocate(ULON)
+   allocate(ULAT(Nx,Ny))
+   call collect_static_data_to_array(ID_ULAT,ULAT)
+   call nc_check(nf90_put_var(ncFileID, ulatVarID, ULAT ), &
+                'nc_write_model_atts', 'ULAT put_var '//trim(filename))
+   deallocate(ULAT)
+   allocate(TLON(Nx,Ny))
+   call collect_static_data_to_array(ID_TLON,TLON)
+   call nc_check(nf90_put_var(ncFileID, tlonVarID, TLON ), &
+                'nc_write_model_atts', 'TLON put_var '//trim(filename))
+   deallocate(TLON)
+   allocate(TLAT(Nx,Ny))
+   call collect_static_data_to_array(ID_TLAT,TLAT)
+   call nc_check(nf90_put_var(ncFileID, tlatVarID, TLAT ), &
+                'nc_write_model_atts', 'TLAT put_var '//trim(filename))
+   deallocate(TLAT)
    call nc_check(nf90_put_var(ncFileID, ZGVarID, ZG ), &
                 'nc_write_model_atts', 'ZG put_var '//trim(filename))
    call nc_check(nf90_put_var(ncFileID, ZCVarID, ZC ), &
@@ -3161,10 +3179,10 @@ dimids(2) = NlatDimID
 ! FIXME: we should add attributes to say what units the grids are in (degrees).
 call nc_check(nf90_def_var(ncid,  'KMT', nf90_int,     dimids,  KMTvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,  'KMU', nf90_int,     dimids,  KMUvarid),'write_grid_netcdf')
-!call nc_check(nf90_def_var(ncid, 'ULON', nf90_double,  dimids, ulonVarID),'write_grid_netcdf')
-!call nc_check(nf90_def_var(ncid, 'ULAT', nf90_double,  dimids, ulatVarID),'write_grid_netcdf')
-!call nc_check(nf90_def_var(ncid, 'TLON', nf90_double,  dimids, TLONvarid),'write_grid_netcdf')
-!call nc_check(nf90_def_var(ncid, 'TLAT', nf90_double,  dimids, TLATvarid),'write_grid_netcdf')
+call nc_check(nf90_def_var(ncid, 'ULON', nf90_double,  dimids, ulonVarID),'write_grid_netcdf')
+call nc_check(nf90_def_var(ncid, 'ULAT', nf90_double,  dimids, ulatVarID),'write_grid_netcdf')
+call nc_check(nf90_def_var(ncid, 'TLON', nf90_double,  dimids, TLONvarid),'write_grid_netcdf')
+call nc_check(nf90_def_var(ncid, 'TLAT', nf90_double,  dimids, TLATvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,   'ZG', nf90_double, NzDimID,   ZGvarid),'write_grid_netcdf')
 call nc_check(nf90_def_var(ncid,   'ZC', nf90_double, NzDimID,   ZCvarid),'write_grid_netcdf')
 
@@ -3191,10 +3209,22 @@ call nc_check(nf90_enddef(ncid),'write_grid_netcdf')
 
 call nc_check(nf90_put_var(ncid,  KMTvarid,  KMT),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid,  KMUvarid,  KMU),'write_grid_netcdf')
-!call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
-!call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
-!call nc_check(nf90_put_var(ncid, TLATvarid, TLAT),'write_grid_netcdf')
-!call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'rite_grid_netcdf')
+allocate(ULAT(Nx,Ny))
+call collect_static_data_to_array(ID_ULAT,ULAT)
+call nc_check(nf90_put_var(ncid, ulatVarID, ULAT),'write_grid_netcdf')
+deallocate(ULON)
+allocate(ULON(Nx,Ny))
+call collect_static_data_to_array(ID_ULON,ULON)
+call nc_check(nf90_put_var(ncid, ulonVarID, ULON),'write_grid_netcdf')
+deallocate(ULON)
+allocate(TLAT(Nx,Ny))
+call collect_static_data_to_array(ID_TLAT,TLAT)
+call nc_check(nf90_put_var(ncid, TLATvarid, TLAT),'write_grid_netcdf')
+deallocate(TLAT)
+allocate(TLON(Nx,Ny))
+call collect_static_data_to_array(ID_TLON,TLON)
+call nc_check(nf90_put_var(ncid, TLONvarid, TLON),'rite_grid_netcdf')
+deallocate(TLON)
 call nc_check(nf90_put_var(ncid,   ZGvarid,   ZG),'write_grid_netcdf')
 call nc_check(nf90_put_var(ncid,   ZCvarid,   ZC),'write_grid_netcdf')
 
@@ -3328,10 +3358,10 @@ dmat        = matmul(rowmat,colmat)
 
 do i = 1, Nx
    do j = 1, Ny
-      write(12, *) i, j, ULON(i,j), ULAT(i,j)
-      write(13, *) i, j, TLON(i,j), TLAT(i,j)
-      write(14, *)       ULON(i,j), ULAT(i,j), dmat(i, j)
-      write(15, *)       TLON(i,j), TLAT(i,j), dmat(i, j)
+      write(12, *) i, j, get_static_data(ID_ULON,i,j), get_static_data(ID_ULAT,i,j)
+      write(13, *) i, j, get_static_data(ID_TLON,i,j), get_static_data(ID_TLAT,i,j)
+      write(14, *)       get_static_data(ID_ULON,i,j), get_static_data(ID_ULAT,i,j), dmat(i, j)
+      write(15, *)       get_static_data(ID_TLON,i,j), get_static_data(ID_TLAT,i,j), dmat(i, j)
    enddo
 enddo
 
