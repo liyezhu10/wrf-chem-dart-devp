@@ -272,8 +272,6 @@ integer,             intent(out) :: istatus(ens_size)
 
 integer(i8)  :: lower_index, upper_index
 real(r8) :: lctn, lctnfrac
-real(r8) :: x_lower(ens_size) !< the lower piece of state vector
-real(r8) :: x_upper(ens_size) !< the upper piece of state vector
 
 ! All obs okay for now
 istatus = 0
