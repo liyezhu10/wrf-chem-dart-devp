@@ -97,7 +97,7 @@ subroutine static_init_model()
 !
 
 real(r8) :: x_loc
-integer  :: i, iunit, io
+integer  :: i, iunit, io, dom_id
 
 ! Print module information to log file and stdout.
 call register_module(source, revision, revdate)
@@ -121,6 +121,9 @@ end do
 ! to determine appropriate non-dimensionalization conversion for L93
 time_step = set_time(time_step_seconds, time_step_days)
 
+! Tell the DART I/O routines how large the model data is so they
+! can read/write it.
+dom_id = add_domain(model_size)
 
 end subroutine static_init_model
 
