@@ -140,7 +140,7 @@ module mpi_utilities_mod
 !
 !-----------------------------------------------------------------------------
 
-use types_mod, only : r8, digits12
+use types_mod, only :  i8, r8, digits12
 use utilities_mod, only : register_module, error_handler, & 
                           E_ERR, E_WARN, E_MSG, E_DBG, get_unit, close_file, &
                           set_output, set_tasknum, initialize_utilities,     &
@@ -186,6 +186,12 @@ private
 ! ! end block
 ! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
+! allow global sum to be computed for integers, r4, and r8s
+interface sum_across_tasks
+   module procedure sum_across_tasks_int4
+   module procedure sum_across_tasks_int8
+   module procedure sum_across_tasks_real
+end interface
 
 !   ---- private data for mpi_utilities ----
 
@@ -193,6 +199,8 @@ integer :: myrank        = -1  ! my mpi number
 integer :: total_tasks   = -1  ! total mpi tasks/procs
 integer :: my_local_comm =  0  ! duplicate communicator private to this file
 integer :: datasize      =  0  ! which MPI type corresponds to our r8 definition
+integer :: longinttype   = 0   ! create an MPI type corresponding to our i8 definition
+
 
 
 public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
@@ -418,6 +426,16 @@ else
       call error_handler(E_MSG,'initialize_mpi_utilities: ',errstring,source,revision,revdate)
    endif
 endif
+
+! create a type we can use for integer(i8) calls
+longinttype = MPI_INTEGER8
+! or:
+!call MPI_Type_Create_F90_Integer(15, longinttype, errcode)
+!if (errcode /= MPI_SUCCESS) then
+!   write(errstring, '(a,i8)') 'MPI_Type_Create_F90_Integer returned error code ', errcode
+!   call error_handler(E_ERR,'initialize_mpi_utilities', errstring, source, revision, revdate)
+!endif
+
 
 ! in async 4 mode, where the controlling job (usually filter) and the 
 ! model are both mpi tasks and they handshake via named pipes, the tasks
@@ -1447,7 +1465,9 @@ if (present(scalar5)) scalar5 = local(5)
 end subroutine unpackscalar
    
 !-----------------------------------------------------------------------------
-subroutine sum_across_tasks(addend, sum)
+! overloaded global reduce routines
+!-----------------------------------------------------------------------------
+subroutine sum_across_tasks_int4(addend, sum)
  integer, intent(in) :: addend
  integer, intent(out) :: sum
 
@@ -1474,7 +1494,66 @@ endif
 
 sum = localsum(1)
 
-end subroutine sum_across_tasks
+end subroutine sum_across_tasks_int4
+
+!-----------------------------------------------------------------------------
+subroutine sum_across_tasks_int8(addend, sum)
+ integer(i8), intent(in)  :: addend
+ integer(i8), intent(out) :: sum
+
+ integer :: errcode
+ integer(i8) :: localaddend(1), localsum(1)
+
+! cover routine for MPI all-reduce
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'sum_across_tasks', errstring, source, revision, revdate)
+endif
+
+localaddend(1) = addend
+
+if (verbose) write(*,*) "PE", myrank, ": Allreduce called"
+
+call MPI_Allreduce(localaddend, localsum, 1, longinttype, MPI_SUM, &
+                   my_local_comm, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(errstring, '(a,i8)') 'MPI_Allreduce returned error code ', errcode
+   call error_handler(E_ERR,'sum_across_tasks', errstring, source, revision, revdate)
+endif
+
+sum = localsum(1)
+
+end subroutine sum_across_tasks_int8
+!-----------------------------------------------------------------------------
+subroutine sum_across_tasks_real(addend, sum)
+ real(r8), intent(in) :: addend
+ real(r8), intent(out) :: sum
+
+ integer :: errcode
+ real(r8) :: localaddend(1), localsum(1)
+
+! cover routine for MPI all-reduce
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'sum_across_tasks', errstring, source, revision, revdate)
+endif
+
+localaddend(1) = addend
+
+if (verbose) write(*,*) "PE", myrank, ": Allreduce called"
+
+call MPI_Allreduce(localaddend, localsum, 1, datasize, MPI_SUM, &
+                   my_local_comm, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(errstring, '(a,i8)') 'MPI_Allreduce returned error code ', errcode
+   call error_handler(E_ERR,'sum_across_tasks', errstring, source, revision, revdate)
+endif
+
+sum = localsum(1)
+
+end subroutine sum_across_tasks_real
 
 
 !-----------------------------------------------------------------------------
