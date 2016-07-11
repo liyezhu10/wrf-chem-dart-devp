@@ -28,6 +28,12 @@ set mean_file = 'mean.nc'
 
 foreach OBS_FILE (obs_seq.*.out)
 
+   if ("$n" == "1") then
+      ln -sf input.first_step.nml  input.nml 
+   else
+      ln -sf input.from_netcdf.nml input.nml
+   endif
+
    set TIME = `printf %04d ${n}`   
 
    # create directory to copy restart and inflation files
@@ -49,7 +55,7 @@ foreach OBS_FILE (obs_seq.*.out)
    cp $mean_file        $ADV_DIR
    cp obs_seq.final     $ADV_DIR
    
-   @ n++
+   ls -1 $restart_file*.nc > restart_file_list.txt
 
 end
 
