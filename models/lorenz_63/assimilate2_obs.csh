@@ -13,7 +13,7 @@
 echo "`date` -- BEGIN LORENZ_63 ASSIMILATION"
 
 # directory that contains the filter
-set RUNDIR = "/Users/hendric/DART/pda/models/lorenz_63/work"
+set RUNDIR = "/Users/hailiangdu/HDU/DART/pda/models/lorenz_63/work/"
 
 #-------------------------------------------------------------------------
 # Get the case-specific variables
@@ -28,7 +28,7 @@ set mean_file      = 'mean.nc'
 set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
 set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
-foreach OBS_FILE (obs_seq.*.out)
+foreach OBS_FILE (./obs/obs_seq.*.out)
 
    if ("$n" == "1") then
       ln -sf input.first_step.nml  input.nml 
@@ -53,11 +53,11 @@ foreach OBS_FILE (obs_seq.*.out)
    
    ./filter
    
-   cp $restart_file*.nc $ADV_DIR
-   cp $mean_file        $ADV_DIR
-   cp obs_seq.final     $ADV_DIR
-   cp $prior_inf_sd     $ADV_DIR
-   cp $prior_inf_mean   $ADV_DIR
+   mv $restart_file*.nc $ADV_DIR
+   mv $mean_file        $ADV_DIR
+   mv obs_seq.final     $ADV_DIR
+   mv $prior_inf_sd     $ADV_DIR
+   mv $prior_inf_mean   $ADV_DIR
    
    # copy ouput inflation from filter to inital inflation file
    # for next run.
