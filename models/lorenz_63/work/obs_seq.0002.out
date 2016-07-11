@@ -1,0 +1,21 @@
+ obs_sequence
+obs_kind_definitions
+           0
+  num_copies:            2  num_qc:            1
+  num_obs:          1  max_num_obs:          1
+observations                                                    
+truth                                                           
+Quality Control                                                 
+  first:            1  last:          1
+ OBS            1
+  0.17246827547169657     
+  0.35659085208071700     
+   0.0000000000000000     
+           1           -1          -1
+obdef
+loc1d
+   0.3333333432674408
+kind
+          -2
+     0          0
+   8.0000000000000000     

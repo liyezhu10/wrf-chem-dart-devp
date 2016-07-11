@@ -23,8 +23,10 @@ cd ${RUNDIR}
 
 set n = 1
 
-set restart_file = 'filter_restart'
-set mean_file = 'mean.nc'
+set restart_file   = 'filter_restart'
+set mean_file      = 'mean.nc'
+set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
+set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
 foreach OBS_FILE (obs_seq.*.out)
 
@@ -54,10 +56,23 @@ foreach OBS_FILE (obs_seq.*.out)
    cp $restart_file*.nc $ADV_DIR
    cp $mean_file        $ADV_DIR
    cp obs_seq.final     $ADV_DIR
+   cp $prior_inf_sd     $ADV_DIR
+   cp $prior_inf_mean   $ADV_DIR
    
-   ls -1 $restart_file*.nc > restart_file_list.txt
+   # copy ouput inflation from filter to inital inflation file
+   # for next run.
+   cp $prior_inf_sd   prior_inflate_ics_sd
+   cp $prior_inf_mean prior_inflate_ics_mean
+
+   ls -1 $ADV_DIR/$restart_file*.nc > restart_file_list.txt
+  
+   @ n++
 
 end
+
+# todo FIXME : do we need to keep these around or save them to the ADV_DIR?
+rm prior_member*
+
 
 exit(0)
 
