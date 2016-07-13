@@ -549,17 +549,21 @@ type(time_type),      intent(inout) :: time
 
 integer :: dart_index !< where to start in state_ens_handle%copies
 integer :: domain !< loop index
+integer :: ens_size, imem
 
 ! check whether file_info handle is initialized
 call assert_file_info_initialized(file_info, 'filter_read_restart_direct')
 
-! read time from input file if time not set in namelist
-!> @todo Check time constistency across files? This is assuming they are consistent.
+!> @todo FIXME reading from all ensemble members is not optimal
+!> @todo       there could be another function to check time consistency among all the files.
 if(use_time_from_file) then
-   time = read_model_time(get_input_file(file_info%restart_files_in, 1,1)) ! Any of the restarts?
+   ens_size = state_ens_handle%num_copies - state_ens_handle%num_extras
+   do imem = 1,ens_size
+      state_ens_handle%time(imem) = read_model_time(get_input_file(file_info%restart_files_in, imem,1))
+   enddo
+else
+   state_ens_handle%time = time
 endif
-
-state_ens_handle%time = time
 
 ! read in the data and transpose
 dart_index = 1 ! where to start in state_ens_handle%copies - this is modified by read_transpose
