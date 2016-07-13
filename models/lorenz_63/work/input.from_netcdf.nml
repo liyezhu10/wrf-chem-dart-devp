@@ -32,7 +32,7 @@
    restart_in_file_name         = "filter_ics",
    restart_out_file_name        = "filter_restart",
    init_time_days               = -1,
-   init_time_seconds            = -10,
+   init_time_seconds            = -1,
    first_obs_days               = -1,
    first_obs_seconds            = -1,
    last_obs_days                = -1,

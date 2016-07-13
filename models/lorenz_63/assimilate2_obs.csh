@@ -10,7 +10,11 @@
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
 
-set end_n = 2
+if ( $#argv > 0 ) then
+   set end_n = $1
+else
+   set end_n = 3
+endif
 
 echo "`date` -- BEGIN LORENZ_63 ASSIMILATION"
 
@@ -29,6 +33,8 @@ set restart_file   = 'filter_restart'
 set mean_file      = 'mean.nc'
 set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
 set prior_inf_mean = 'prior_inflate_restart_mean.nc'
+
+cp filter_ics_zero filter_ics
 
 foreach OBS_FILE (../obs/obs_seq.*.out)
 
@@ -54,7 +60,7 @@ foreach OBS_FILE (../obs/obs_seq.*.out)
    
    ./filter
    
-   cp $restart_file*    $ADV_DIR
+   mv $restart_file*    $ADV_DIR
    mv $mean_file        $ADV_DIR
    mv obs_seq.final     $ADV_DIR
    # mv $prior_inf_sd     $ADV_DIR
