@@ -10,10 +10,12 @@
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
 
+set end_n = 2
+
 echo "`date` -- BEGIN LORENZ_63 ASSIMILATION"
 
 # directory that contains the filter
-set RUNDIR = "/Users/hailiangdu/HDU/DART/pda/models/lorenz_63/work/"
+set RUNDIR = "/Users/hendric/DART/pda/models/lorenz_63/work/"
 
 #-------------------------------------------------------------------------
 # Get the case-specific variables
@@ -28,12 +30,12 @@ set mean_file      = 'mean.nc'
 set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
 set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
-foreach OBS_FILE (./obs/obs_seq.*.out)
+foreach OBS_FILE (../obs/obs_seq.*.out)
 
    if ("$n" == "1") then
-      ln -sf input.first_step.nml  input.nml 
+      cp input.first_step.nml  input.nml 
    else
-      ln -sf input.from_netcdf.nml input.nml
+      cp input.from_netcdf.nml input.nml
    endif
 
    set TIME = `printf %04d ${n}`   
@@ -47,25 +49,28 @@ foreach OBS_FILE (./obs/obs_seq.*.out)
       ln -sf ${OBS_FILE} obs_seq.out
    else
       echo "ERROR ... no observation file ${OBS_FILE}"
-      echo "ERROR ... no observation file ${OBS_FILE}"
       exit -1
    endif
    
    ./filter
    
-   mv $restart_file*.nc $ADV_DIR
+   cp $restart_file*    $ADV_DIR
    mv $mean_file        $ADV_DIR
    mv obs_seq.final     $ADV_DIR
-   mv $prior_inf_sd     $ADV_DIR
-   mv $prior_inf_mean   $ADV_DIR
+   # mv $prior_inf_sd     $ADV_DIR
+   # mv $prior_inf_mean   $ADV_DIR
    
    # copy ouput inflation from filter to inital inflation file
    # for next run.
-   cp $prior_inf_sd   prior_inflate_ics_sd
-   cp $prior_inf_mean prior_inflate_ics_mean
+   # cp $prior_inf_sd   prior_inflate_ics_sd
+   # cp $prior_inf_mean prior_inflate_ics_mean
 
    ls -1 $ADV_DIR/$restart_file*.nc > restart_file_list.txt
-  
+
+   if ("$n" == "$end_n") then
+      break
+   endif
+
    @ n++
 
 end
