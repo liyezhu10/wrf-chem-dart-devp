@@ -1,0 +1,18 @@
+#!/bin/csh
+#
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: mkmf_obs_sequence_tool 10483 2016-07-11 17:53:26Z nancy $
+
+../../../mkmf/mkmf -p obs_sequence_tool -t ../../../mkmf/mkmf.template   \
+ -a "../../.." path_names_obs_sequence_tool
+
+exit $status
+
+# <next few lines under version control, do not edit>
+# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/models/lorenz_63/shell_scripts/mkmf_obs_sequence_tool $
+# $Revision: 10483 $
+# $Date: 2016-07-11 11:53:26 -0600 (Mon, 11 Jul 2016) $
+
