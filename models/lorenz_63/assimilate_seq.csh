@@ -34,7 +34,7 @@ set mean_file      = 'mean.nc'
 set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
 set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
-cp filter_ics_zero filter_ics
+cp filter_ics_t0 filter_ics
 
 foreach OBS_FILE (../obs/obs_seq.*.out)
 
