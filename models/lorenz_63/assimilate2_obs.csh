@@ -68,8 +68,8 @@ foreach OBS_FILE (../obs/obs_seq.*.out)
    
    # copy ouput inflation from filter to inital inflation file
    # for next run.
-   # cp $prior_inf_sd   prior_inflate_ics_sd
-   # cp $prior_inf_mean prior_inflate_ics_mean
+   cp $prior_inf_sd   prior_inflate_ics_sd
+   cp $prior_inf_mean prior_inflate_ics_mean
 
    ls -1 $ADV_DIR/$restart_file*.nc > restart_file_list.txt
 
