@@ -741,7 +741,7 @@ endif
 
 !Allocate the storage for copies and vars all at once
 allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
-         ens_handle%time     (ens_handle%my_num_copies),                 &
+         ens_handle%time     (ens_handle%num_copies),                 &
          ens_handle%my_vars  (ens_handle%my_num_vars),                &
          ens_handle%copies   (ens_handle%num_copies, ens_handle%my_num_vars))
 
