@@ -24,7 +24,7 @@
 &filter_nml
    async                    = 0,
    adv_ens_command          = "../shell_scripts/advance_model.csh",
-   ens_size                 = 40,
+   ens_size                 = 20,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
@@ -36,8 +36,8 @@
    first_obs_seconds        = -1,
    last_obs_days            = -1,
    last_obs_seconds         = -1,
-   num_output_state_members = 40,
-   num_output_obs_members   = 40,
+   num_output_state_members = 20,
+   num_output_obs_members   = 20,
    output_interval          = 1,
    num_groups               = 1,
    output_forward_op_errors = .false.,
@@ -58,7 +58,7 @@
    inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-   inf_initial                 = 1.0,                     1.0,
+   inf_initial                 = 1.08,                     1.0,
    inf_sd_initial              = 0.6,                     0.0,
    inf_damping                 = 0.9,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
@@ -82,7 +82,7 @@
 # doing a successful assimilation, change cutoff to 0.02 and rerun.
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 0.02,
+   cutoff                          = 1000000.0,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
