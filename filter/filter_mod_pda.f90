@@ -268,7 +268,7 @@ real(r8)		:: rtemp
 n_GD=4000
 
 !Du define assimilation window size
-window_size=200;
+window_size=984;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -323,7 +323,7 @@ call read_state(pda_ens_handle, file_info, read_time_from_file, time1)
 !end do
 
 ! use free_descent to decide whether use model adjoint or free adjoint (Identity adjoint)
-free_descent=.false.
+free_descent=.true.
 
 if (.not. free_descent) allocate(adjoint (model_size, model_size))
 
@@ -332,7 +332,7 @@ allocate(state_vector(model_size))
 allocate(mismatch_err(model_size))
 allocate(forward_vector(model_size))
 
-seq_len=200
+!seq_len=200
 
 
 
