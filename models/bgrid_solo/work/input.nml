@@ -2,7 +2,7 @@
 /
 
 &perfect_model_obs_nml
-   start_from_restart       = .false.,
+   start_from_restart       = .true.,
    output_restart           = .true.,
    async                    = 0,
    init_time_days           = 0,
@@ -33,7 +33,7 @@
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "perfect_restart.",
+   restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
    init_time_days           = 0,
    init_time_seconds        = 0,
@@ -50,9 +50,11 @@
    output_inflation         = .true.,
    trace_execution          = .false.,
    silence                  = .false.,
-   direct_netcdf_read       = .true.,
-   direct_netcdf_write      = .true.,
-   perturb_from_single_instance = .true.
+   direct_netcdf_read       = .false.,
+   direct_netcdf_write      = .false.,
+   single_restart_file_in       = .true.,
+   single_restart_file_out      = .true.,
+   perturb_from_single_instance = .false.
 
    inf_flavor                  = 0,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
@@ -68,8 +70,6 @@
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 1000000.0,               1000000.0,
    inf_sd_lower_bound          = 0.0,                     0.0,
-   direct_netcdf_read = .true.,
-   direct_netcdf_write = .true.,
 /
 
 &state_vector_io_nml
