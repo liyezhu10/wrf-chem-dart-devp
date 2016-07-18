@@ -253,7 +253,7 @@ real(r8), allocatable   :: prior_qc_copy(:)
 
 
 !!DuDu adds....
-type(ensemble_type)         :: pda_ens_handle, ens_handle, ens_update, ens_update_copy
+type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy
 logical                 :: duplicate_time, free_descent
 integer                 :: j, seq_len, n_GD, window_size, n_DA, i_row, i_col
 real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size
@@ -265,10 +265,10 @@ real(r8),       pointer :: adjoint(:, :)
 real(r8)		:: rtemp
 
 !Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=4000
+n_GD=4
 
 !Du define assimilation window size
-window_size=984;
+window_size=8;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -280,33 +280,19 @@ read(iunit, nml = filter_nml, iostat = io)
 call check_namelist_read(iunit, io, "filter_nml")
 
 
-!DuDu....
-
 model_size = get_model_size()
 
 call init_ensemble_manager(pda_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 
 !shall set pda_ens_handle%num_extras=0
 
+!!!!below shall use namelist instead
 single_restart_file_in=.false.
 single_restart_file_out=.false.
 restart_in_file_name='Null'
 use_restart_list=.true.
 restart_list_file(1)='pda_ic_name_list'
 direct_netcdf_read=.true.
-
-!write(*,*) restart_in_file_name
-!write(*,*) restart_out_file_name
-!write(*,*) output_restart
-!write(*,*) direct_netcdf_read
-!write(*,*) direct_netcdf_write
-!write(*,*) output_restart_mean
-!write(*,*) add_domain_extension
-!write(*,*) use_restart_list
-!write(*,*) restart_list_file
-!write(*,*) overwrite_state_input
-!write(*,*) inf_in_file_name
-!write(*,*) inf_out_file_name
 
 file_info = io_filenames_init(pda_ens_handle, single_restart_file_in, single_restart_file_out, &
 restart_in_file_name, restart_out_file_name, output_restart, direct_netcdf_read, &
@@ -318,23 +304,18 @@ read_time_from_file=.true.
 
 call read_state(pda_ens_handle, file_info, read_time_from_file, time1)
 
-!do i=1, window_size
-!    write(*,*) pda_ens_handle%copies(i,1:3)
-!end do
+!! use free_descent to decide whether use model adjoint or free adjoint (Identity adjoint)
+!free_descent=.true.
 
-! use free_descent to decide whether use model adjoint or free adjoint (Identity adjoint)
-free_descent=.true.
-
-if (.not. free_descent) allocate(adjoint (model_size, model_size))
 
 time_step = get_model_time_step()
-allocate(state_vector(model_size))
 allocate(mismatch_err(model_size))
-allocate(forward_vector(model_size))
+call init_ensemble_manager(forward_ens_handle, window_size, model_size, 1, transpose_type_in=2)
+call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
+
+
 
 !seq_len=200
-
-
 
 ! do PDA "sequentially"
 Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
@@ -346,21 +327,38 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     gd_max_step_size=0.0100000000000000
 
 
-
-
-    !!!!!output observations for diagnostic if needed
-    !do i=1, window_size
-    !    write(*,*) pda_ens_handle%copies(i,1:3)
-    !end do
-
-
-
     !calculate mismatch cost function---------------------------------------------------
 
-    call cal_mismatch_cost_function(pda_ens_handle,window_size,mis_cost)
+    call get_ensemble_time(pda_ens_handle, 1, ens_time)
+    call get_ensemble_time(pda_ens_handle, 2, target_time)
+
+    if(.not. allocated(pda_ens_handle%vars)) allocate(pda_ens_handle%vars(pda_ens_handle%num_vars, pda_ens_handle%my_num_copies))
+    call all_copies_to_all_vars(pda_ens_handle)
+
+    if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
+    call all_copies_to_all_vars(forward_ens_handle)
+
+    duplicate_time=.True.
+    call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
+
+    !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
+    do i=1, window_size
+        forward_ens_handle%time(i)=ens_time
+    end do
+
+    call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
+
+    !when shall I use: 
+    !call all_vars_to_all_copies(pda_ens_handle)
+
+    
+
+
+    call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
     mis_cost_previous=mis_cost
 
     write(*,*) mis_cost
+
 
 
     !------------------------------------------------------------------------------------
@@ -370,16 +368,10 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     !!GD minimisation update-------------------------------------------------------------
 
 
-    call init_ensemble_manager(ens_update, window_size, model_size, 1)!, transpose_type_in=2)
-    call init_ensemble_manager(ens_update_copy, window_size, model_size, 1)!, transpose_type_in=2)
 
-    !duplicate_time=.True.
-    !call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
-    !call duplicate_ens(pda_ens_handle, ens_update, duplicate_time)
-    ens_update%copies = pda_ens_handle%copies
-    ens_update%time = pda_ens_handle%time
-    ens_update_copy%copies = pda_ens_handle%copies
-    ens_update_copy%time = pda_ens_handle%time
+
+    duplicate_time=.True.
+    call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
 
 
     !The criteria of stoping the minimisation could be based on the mismatch cost function
@@ -388,75 +380,25 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
         Gradient_descent: do i=1, window_size
 
             if (i==1) then
-                forward_vector=ens_update_copy%copies(1,:)
-                call get_ensemble_time(ens_update_copy, 1, ens_time)
-                call get_ensemble_time(ens_update_copy, 2, target_time)
 
-                if (.not. free_descent) then
-                    call cal_adjoint(forward_vector,ens_time,target_time,time_step,model_size,adjoint)
-                endif
+                mismatch_err=ens_update_copy%vars(:,2)-forward_ens_handle%vars(:,1)
+                pda_ens_handle%vars(:,1)=ens_update_copy%vars(:,1)+mismatch_err*gd_step_size
 
-
-                call cal_model_forward(forward_vector,ens_time,target_time,time_step)
-
-                mismatch_err=ens_update_copy%copies(2,:)-forward_vector
-                
-
-
-                if (free_descent) then
-                    ens_update%copies(1,:)=ens_update_copy%copies(1,:)+mismatch_err*gd_step_size
-                else
-                    do i_row=1, model_size
-                        rtemp=0.00_r8
-                        do i_col=1, model_size
-                            rtemp=rtemp+mismatch_err(i_col)*adjoint(i_col,i_row)
-                        end do
-                        ens_update%copies(1,i_row)=ens_update_copy%copies(1,i_row)+rtemp*gd_step_size
-                    end do
-                endif
             else if (i<window_size) then
-                call get_ensemble_time(ens_update_copy, i-1, ens_time)
-                call get_ensemble_time(ens_update_copy, i, target_time)
-                forward_vector=ens_update_copy%copies(i-1,:)
 
-                call cal_model_forward(forward_vector,ens_time,target_time,time_step)
+                !may write this more efficiently without using mismatch_err
 
-                mismatch_err=ens_update_copy%copies(i,:)-forward_vector
-                ens_update%copies(i,:)=ens_update_copy%copies(i,:)-mismatch_err*gd_step_size
+                mismatch_err=ens_update_copy%vars(:,i)-forward_ens_handle%vars(:,i-1)
+                pda_ens_handle%vars(:,i)=ens_update_copy%vars(:,i)-mismatch_err*gd_step_size
 
-                forward_vector=ens_update_copy%copies(i,:)
-                call get_ensemble_time(ens_update_copy, i, ens_time)
-                call get_ensemble_time(ens_update_copy, i+1, target_time)
+                mismatch_err=ens_update_copy%vars(:,i+1)-forward_ens_handle%vars(:,i)
 
-                if (.not. free_descent) then
-                    call cal_adjoint(forward_vector,ens_time,target_time,time_step,model_size,adjoint)
-                endif
-
-                call cal_model_forward(forward_vector,ens_time,target_time,time_step)
-
-                mismatch_err=ens_update_copy%copies(i+1,:)-forward_vector
-
-                if (free_descent) then
-                    ens_update%copies(i,:)=ens_update%copies(i,:)+mismatch_err*gd_step_size
-                else
-                    do i_row=1, model_size
-                        rtemp=0.00_r8
-                        do i_col=1, model_size
-                            rtemp=rtemp+mismatch_err(i_col)*adjoint(i_col,i_row)
-                        end do
-                            ens_update%copies(i,i_row)=ens_update%copies(i,i_row)+rtemp*gd_step_size
-                    end do
-                endif
+                pda_ens_handle%vars(:,i)=pda_ens_handle%vars(:,i)+mismatch_err*gd_step_size
 
             else
-                forward_vector=ens_update_copy%copies(window_size-1,:)
-                call get_ensemble_time(ens_update_copy, window_size-1, ens_time)
-                call get_ensemble_time(ens_update_copy, window_size, target_time)
 
-                call cal_model_forward(forward_vector,ens_time,target_time,time_step)
-
-                mismatch_err=ens_update_copy%copies(window_size,:)-forward_vector
-                ens_update%copies(window_size,:)=ens_update_copy%copies(window_size,:)-mismatch_err*gd_step_size
+                mismatch_err=ens_update_copy%vars(:,window_size)-forward_ens_handle%vars(:,window_size-1)
+                pda_ens_handle%vars(:,window_size)=ens_update_copy%vars(:,window_size)-mismatch_err*gd_step_size
 
             endif
 
@@ -465,13 +407,26 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-        call cal_mismatch_cost_function(ens_update,window_size,mis_cost)
+        call get_ensemble_time(pda_ens_handle, 1, ens_time)
+        call get_ensemble_time(pda_ens_handle, 2, target_time)
+        call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
 
-        if (mis_cost<=mis_cost_previous) then
+        do i=1, window_size
+            forward_ens_handle%time(i)=ens_time
+        end do
+
+        call advance_state(forward_ens_handle, window_size, target_time, async, &
+        adv_ens_command, tasks_per_model_advance)
+
+        call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
+
+
+        if (mis_cost<mis_cost_previous) then
             !increase the GD minimisation time step by a factor of 2,
             !should have some upper bound for the GD minimisation time step
 
-            ens_update_copy%copies=ens_update%copies
+            !call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
+            ens_update_copy%vars=pda_ens_handle%vars
 
             if (gd_step_size<gd_max_step_size) then
                 gd_step_size=gd_step_size*2
@@ -482,9 +437,19 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
             !decrease the GD minimisation time step by a factor of 2
             !should have some lower bound for the GD minimisation time step
-            ens_update%copies=ens_update_copy%copies
+            pda_ens_handle%vars=ens_update_copy%vars
             gd_step_size=gd_step_size/2
             gd_max_step_size=gd_step_size
+
+            !may use a vector to store previous forward ensemble copies
+            call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
+
+            do i=1, window_size
+                forward_ens_handle%time(i)=ens_time
+            end do
+
+            call advance_state(forward_ens_handle, window_size, target_time, async, &
+            adv_ens_command, tasks_per_model_advance)
 
         endif
         write(*,*) mis_cost
@@ -498,13 +463,13 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
     do i=1, window_size
-        write(*,*) ens_update%copies(i,1:3)
+        write(*,*) pda_ens_handle%vars(1:3,i)
     end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
 
     call end_ensemble_manager(pda_ens_handle)
-    call end_ensemble_manager(ens_update)
+    call end_ensemble_manager(forward_ens_handle)
     call end_ensemble_manager(ens_update_copy)
 
 end do Sequential_PDA
@@ -515,171 +480,40 @@ end subroutine pda_main
 !-----------------------------------------------------------------------
 
 
-subroutine cal_mismatch_cost_function(ens_handle,window_size,mis_cost)
-type(ensemble_type), intent(in)   :: ens_handle
+subroutine cal_mismatch_cost_function(ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
+type(ensemble_type), intent(in)   :: ens_handle, forward_ens_handle
 integer, intent(in)   :: window_size
-type(time_type)  :: ens_time, target_time, time_step
+integer(i8), intent(in)   :: model_size
 real(r8), intent(out)  :: mis_cost
 real(r8), allocatable   :: state_vector(:), mismatch_err(:), forward_vector(:)
 integer :: i
 
-allocate(state_vector(ens_handle%num_vars))
-allocate(mismatch_err(ens_handle%num_vars))
-allocate(forward_vector(ens_handle%num_vars))
 
-time_step = get_model_time_step()
+allocate(mismatch_err(model_size))
+
 mismatch_err=0.0_r8
 mis_cost=0.0_r8
 
 Mismatch_error: do i=1, window_size-1
 
-call get_ensemble_time(ens_handle, i, ens_time)
-call get_ensemble_time(ens_handle, i+1, target_time)
+mismatch_err=ens_handle%vars(:,i+1)-forward_ens_handle%vars(:,i)
 
-!call print_time(ens_time, ' ens_time: ')
-!call print_time(time_step, ' time_step: ')
+    mismatch_err=mismatch_err*mismatch_err   !here should have some sort of scalar matrix
 
-
-state_vector=ens_handle%copies(i,:)
-forward_vector=state_vector
-
-call cal_model_forward(forward_vector,ens_time,target_time,time_step)
-
-mismatch_err=ens_handle%copies(i+1,:)-forward_vector
-
-mismatch_err=mismatch_err*mismatch_err   !here should have some sort of scalar matrix
-
-mis_cost=sum(mismatch_err)+mis_cost
+    mis_cost=sum(mismatch_err)+mis_cost
 
 
 end do Mismatch_error
+
 
 mis_cost=mis_cost/((window_size-1)*1.0_r8)
 
 end subroutine cal_mismatch_cost_function
 
+
 !--------------------------------------------------
 
-subroutine cal_model_forward(model_state,ens_time,target_time,time_step)
-real(r8), intent(inout)   :: model_state(:)
-type(time_type), intent(inout)         :: ens_time, target_time, time_step
 
-do while(ens_time < target_time)
-call adv_1step(model_state, ens_time)
-ens_time = ens_time + time_step
-end do
-
-end subroutine cal_model_forward
-
-subroutine cal_adjoint(model_state,ens_time,target_time,time_step,model_size,adjoint)
-
-!! this adjoint is only for 2nd order RK-------------------
-
-real(r8), intent(in)   :: model_state(:)
-type(time_type), intent(in)         :: ens_time, target_time, time_step
-integer(i8), 	 intent(in) 	    :: model_size
-real(r8),        intent(inout)      :: adjoint(:,:)
-
-integer :: i,j,nstep,i_row,i_col
-real(r8) :: deltat = 0.01_r8
-real(r8),        pointer :: jacob(:, :)
-real(r8), 	 pointer :: adjoint_1step(:,:), adjoint_temp(:,:)
-real(r8) :: x1(3), dx(3) , x(3)
-type(time_type)	:: t_start
-
-allocate(jacob (model_size, model_size))
-allocate(adjoint_1step (model_size, model_size))
-allocate(adjoint_temp (model_size, model_size))
-
-
-nstep=1
-t_start=ens_time
-x=model_state
-
-
-do while(t_start < target_time)
-
-if (nstep>1) call adv_1step(x, ens_time)
-
-do i=1,model_size
-do j=1,model_size
-adjoint_1step(i,j)=0.000000000
-end do
-end do
-
-do i=1,model_size
-adjoint_1step(i,i)=1.00_r8
-end do
-
-call cal_jacob(x,jacob)
-
-do i=1,model_size
-do j=1,model_size
-adjoint_1step(i,j)=adjoint_1step(i,j)+deltat*jacob(i,j)/2
-end do
-end do
-
-call comp_dt(x, dx)
-x1 = x + deltat * dx
-
-call cal_jacob(x1,jacob)
-
-
-do i=1,model_size
-do j=1,model_size
-adjoint_1step(i,j)=adjoint_1step(i,j)+deltat*jacob(i,j)/2
-end do
-end do
-
-
-!linear propagate multiplication
-
-if (nstep==1) then
-adjoint=adjoint_1step
-adjoint_temp=adjoint_1step
-else
-
-do i_row=1,model_size
-do i_col=1,model_size
-adjoint(i_row,i_col)=0.00_r8
-do i=1,model_size
-adjoint(i_row,i_col)=adjoint(i_row,i_col)+adjoint_temp(i_row,i)*adjoint_1step(i,i_col)
-end do
-end do
-end do
-adjoint_temp=adjoint
-
-endif
-
-nstep=nstep+1
-t_start = t_start + time_step
-
-end do
-
-
-end subroutine cal_adjoint
-
-
-subroutine cal_jacob(model_state,jacob)
-
-real(r8), intent(in)   :: model_state(:)
-real(r8),        intent(inout)      :: jacob(:,:)
-
-real(r8) ::  sigma = 10.0_r8
-real(r8) ::      r = 28.0_r8
-real(r8) ::      b = 8.0_r8 / 3.0_r8
-
-jacob(1,1) = -sigma
-jacob(1,2) = sigma
-jacob(1,3) = 0.00_r8
-jacob(2,1) = r-model_state(3)
-jacob(2,2) = -1
-jacob(2,3) = -model_state(1)
-jacob(3,1) = model_state(2)
-jacob(3,2) = model_state(1)
-jacob(3,3) = -b
-
-end subroutine cal_jacob
 
 
 !-----------------------------------------------------------
