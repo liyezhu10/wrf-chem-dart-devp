@@ -2137,69 +2137,70 @@ do i = 1, numrows
    endif
       end do
 
-dom_id = add_domain(numrows, state_variables(1,1:numrows), state_kinds_list(:))
+! dom_id = add_domain(numrows, state_variables(1,1:numrows), state_kinds_list(:))
+dom_id = add_domain('bgrid.nc', numrows, state_variables(1,1:numrows), state_kinds_list(:))
 
 kub = Var_dt%kub
 klb = Var_dt%klb
 
-do i = 1, numrows
-
-   ! add each variable to the domain structure, with fixed
-   ! dimension names because we know what they should be.
-
-   thiskind = state_kinds_list(i)
-  
-   if (thiskind == KIND_U_WIND_COMPONENT .or. thiskind == KIND_V_WIND_COMPONENT) then
-      ! the velocity grid is staggered compared to the temperature grid
-      vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
-      vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-      nVelI   = vie - vis + 1
-      nVelJ   = vje - vjs + 1
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "slon", nVelI)
-      call add_dimension_to_variable(dom_id, i, "slat", nVelJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   else if (thiskind == KIND_TEMPERATURE .or. thiskind == KIND_PRESSURE) then
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   else if (thiskind == KIND_SURFACE_PRESSURE) then
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      nlev    = 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-
-   else ! is tracer, Q, CO, etc
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      !ntracer = Var_dt%ntrace 
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   endif
-    
-   end do
-
-
-call finished_adding_domain(dom_id)
+! do i = 1, numrows
+! 
+!    ! add each variable to the domain structure, with fixed
+!    ! dimension names because we know what they should be.
+! 
+!    thiskind = state_kinds_list(i)
+!   
+!    if (thiskind == KIND_U_WIND_COMPONENT .or. thiskind == KIND_V_WIND_COMPONENT) then
+!       ! the velocity grid is staggered compared to the temperature grid
+!       vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
+!       vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
+!       nVelI   = vie - vis + 1
+!       nVelJ   = vje - vjs + 1
+!       nlev    = Var_dt%kub - Var_dt%klb + 1
+! 
+!       call add_dimension_to_variable(dom_id, i, "slon", nVelI)
+!       call add_dimension_to_variable(dom_id, i, "slat", nVelJ)
+!       call add_dimension_to_variable(dom_id, i, "lev", nlev)
+! 
+!    else if (thiskind == KIND_TEMPERATURE .or. thiskind == KIND_PRESSURE) then
+!       tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+!       tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+!       nTmpI   = tie - tis + 1
+!       nTmpJ   = tje - tjs + 1
+!       nlev    = Var_dt%kub - Var_dt%klb + 1
+! 
+!       call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
+!       call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
+!       call add_dimension_to_variable(dom_id, i, "lev", nlev)
+! 
+!    else if (thiskind == KIND_SURFACE_PRESSURE) then
+!       tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+!       tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+!       nTmpI   = tie - tis + 1
+!       nTmpJ   = tje - tjs + 1
+!       nlev    = 1
+! 
+!       call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
+!       call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
+! 
+!    else ! is tracer, Q, CO, etc
+!       tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+!       tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+!       nTmpI   = tie - tis + 1
+!       nTmpJ   = tje - tjs + 1
+!       !ntracer = Var_dt%ntrace 
+!       nlev    = Var_dt%kub - Var_dt%klb + 1
+! 
+!       call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
+!       call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
+!       call add_dimension_to_variable(dom_id, i, "lev", nlev)
+! 
+!    endif
+!     
+!    end do
+! 
+! 
+! call finished_adding_domain(dom_id)
 
 !> @TODO we will have to fill in the lon, lat, and lev arrays
 !> with actual grid values somewhere so they get written to
