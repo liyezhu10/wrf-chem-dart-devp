@@ -26,7 +26,7 @@ use obs_def_utilities_mod, only : set_debug_fwd_op
 use time_manager_mod,      only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                   operator(-), operator(+), operator(<), print_time
 use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
-                                  logfileunit, nmlfileunit, timestamp,  &
+                                  logfileunit, nmlfileunit, timestamp,  E_ALLMSG, &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term
 !Du add get_model_time_step
@@ -55,7 +55,7 @@ use adaptive_inflate_mod,  only : adaptive_inflate_end, do_varying_ss_inflate,  
                                   get_minmax_task_zero
 use mpi_utilities_mod,     only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                   my_task_id, task_sync, broadcast_send, broadcast_recv,      &
-                                  task_count
+                                  task_count, sum_across_tasks
 use smoother_mod,          only : smoother_read_restart, advance_smoother,                    &
                                   smoother_gen_copy_meta_data, smoother_write_restart,        &
                                   init_smoother, do_smoothing, smoother_mean_spread,          &
@@ -209,22 +209,14 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
 contains
 
 !----------------------------------------------------------------
-!> The code does not use %vars arrays except:
-!> * Task 0 still writes the obs_sequence file, so there is a transpose (copies to vars) and 
-!> sending the obs_fwd_op_ens_handle%vars to task 0. Keys is also size obs%vars.
-!> * If you read dart restarts state_ens_handle%vars is allocated.
-!> * If you write dart diagnostics state_ens_handle%vars is allocated.
-!> * If you are not doing distributed forward operators state_ens_handle%vars is allocated
+!> The code does pda data assimilation with free adjoint.
+
+
 subroutine pda_main()
 
-
-
-type(ensemble_type)         :: state_ens_handle, obs_fwd_op_ens_handle, qc_ens_handle
 type(obs_sequence_type)     :: seq
 type(netcdf_file_type)      :: PriorStateUnit, PosteriorStateUnit
-type(time_type)             :: time1, first_obs_time, last_obs_time
-type(time_type)             :: curr_ens_time, next_ens_time, window_time
-type(adaptive_inflate_type) :: prior_inflate, post_inflate
+type(time_type)             :: time1
 
 integer,    allocatable :: keys(:)
 integer(i8)             :: model_size
@@ -255,8 +247,8 @@ real(r8), allocatable   :: prior_qc_copy(:)
 !!DuDu adds....
 type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy
 logical                 :: duplicate_time, free_descent
-integer                 :: j, seq_len, n_GD, window_size, n_DA, i_row, i_col
-real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size
+integer                 :: j, k, seq_len, n_GD, window_size, n_DA, i_row, i_col
+real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size,sum_variable,result_sum
 real(r8), allocatable   :: state_vector(:), mismatch_err(:), forward_vector(:)
 type(time_type) 	    :: mtime
 type(obs_def_type)	    :: obs_def
@@ -332,14 +324,17 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     call get_ensemble_time(pda_ens_handle, 1, ens_time)
     call get_ensemble_time(pda_ens_handle, 2, target_time)
 
-    if(.not. allocated(pda_ens_handle%vars)) allocate(pda_ens_handle%vars(pda_ens_handle%num_vars, pda_ens_handle%my_num_copies))
-    call all_copies_to_all_vars(pda_ens_handle)
+    forward_ens_handle%copies=pda_ens_handle%copies
+    forward_ens_handle%time=pda_ens_handle%time
+
+    ens_update_copy%copies=pda_ens_handle%copies
+    ens_update_copy%time=pda_ens_handle%time
 
     if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
+
+
     call all_copies_to_all_vars(forward_ens_handle)
 
-    duplicate_time=.True.
-    call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
 
     !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
     do i=1, window_size
@@ -348,16 +343,30 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
 
-    !when shall I use: 
-    !call all_vars_to_all_copies(pda_ens_handle)
+    call all_vars_to_all_copies(forward_ens_handle)
 
-    
+    !calculate mismatches
+    do i=1, window_size-1
+        forward_ens_handle%copies(i,:)=ens_update_copy%copies(i+1,:)-forward_ens_handle%copies(i,:)
+    end do
 
+    !calculate mismatch cost function
+    result_sum=0
+    sum_variable=0
+    do i=1,window_size-1
 
-    call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
+        do j=1,forward_ens_handle%my_num_vars
+            sum_variable=forward_ens_handle%copies(i,j)*forward_ens_handle%copies(i,j)+sum_variable
+        end do
+
+        call sum_across_tasks(sum_variable,result_sum)
+
+    end do
+    mis_cost=result_sum/((window_size-1)*1.0_r8)
     mis_cost_previous=mis_cost
 
-    write(*,*) mis_cost
+
+    !write(*,*) mis_cost
 
 
 
@@ -369,36 +378,28 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
 
-
-    duplicate_time=.True.
-    call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
-
-
     !The criteria of stoping the minimisation could be based on the mismatch cost function
     GD_runs: do j=1,n_GD
 
         Gradient_descent: do i=1, window_size
 
             if (i==1) then
-
-                mismatch_err=ens_update_copy%vars(:,2)-forward_ens_handle%vars(:,1)
-                pda_ens_handle%vars(:,1)=ens_update_copy%vars(:,1)+mismatch_err*gd_step_size
+                pda_ens_handle%copies(1,:)=ens_update_copy%copies(1,:)+gd_step_size*forward_ens_handle%copies(1,:)
 
             else if (i<window_size) then
 
-                !may write this more efficiently without using mismatch_err
-
-                mismatch_err=ens_update_copy%vars(:,i)-forward_ens_handle%vars(:,i-1)
-                pda_ens_handle%vars(:,i)=ens_update_copy%vars(:,i)-mismatch_err*gd_step_size
-
-                mismatch_err=ens_update_copy%vars(:,i+1)-forward_ens_handle%vars(:,i)
-
-                pda_ens_handle%vars(:,i)=pda_ens_handle%vars(:,i)+mismatch_err*gd_step_size
+                pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
+                                         -gd_step_size*forward_ens_handle%copies(i-1,:) &
+                                         +gd_step_size*forward_ens_handle%copies(i,:)
 
             else
 
-                mismatch_err=ens_update_copy%vars(:,window_size)-forward_ens_handle%vars(:,window_size-1)
-                pda_ens_handle%vars(:,window_size)=ens_update_copy%vars(:,window_size)-mismatch_err*gd_step_size
+                pda_ens_handle%copies(window_size,:)=ens_update_copy%copies(window_size,:) &
+                            -gd_step_size*forward_ens_handle%copies(window_size-1,:)
+
+                write(msgstring, *) 'vars=', pda_ens_handle%copies(window_size,:)
+                call error_handler(E_ALLMSG,'filter_main', msgstring, source, revision, revdate)
+
 
             endif
 
@@ -409,7 +410,11 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         call get_ensemble_time(pda_ens_handle, 1, ens_time)
         call get_ensemble_time(pda_ens_handle, 2, target_time)
-        call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
+        forward_ens_handle%copies=pda_ens_handle%copies
+        forward_ens_handle%time=pda_ens_handle%time
+
+        if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
+        call all_copies_to_all_vars(forward_ens_handle)
 
         do i=1, window_size
             forward_ens_handle%time(i)=ens_time
@@ -417,8 +422,28 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         call advance_state(forward_ens_handle, window_size, target_time, async, &
         adv_ens_command, tasks_per_model_advance)
+        call all_vars_to_all_copies(forward_ens_handle)
 
-        call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
+        do i=1, window_size-1
+            forward_ens_handle%copies(i,:)=pda_ens_handle%copies(i+1,:)-forward_ens_handle%copies(i,:)
+        end do
+
+
+        sum_variable=0
+        do i=1,window_size-1
+
+            do k=1,forward_ens_handle%my_num_vars
+                sum_variable=forward_ens_handle%copies(i,k)*forward_ens_handle%copies(i,k)+sum_variable
+            end do
+
+            call sum_across_tasks(sum_variable,result_sum)
+
+
+        end do
+        mis_cost=result_sum/((window_size-1)*1.0_r8)
+
+        write(*,*) mis_cost
+
 
 
         if (mis_cost<mis_cost_previous) then
@@ -426,7 +451,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             !should have some upper bound for the GD minimisation time step
 
             !call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
-            ens_update_copy%vars=pda_ens_handle%vars
+            ens_update_copy%copies=pda_ens_handle%copies
 
             if (gd_step_size<gd_max_step_size) then
                 gd_step_size=gd_step_size*2
@@ -452,19 +477,20 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             adv_ens_command, tasks_per_model_advance)
 
         endif
-        write(*,*) mis_cost
+        !write(*,*) mis_cost
 
     end do GD_runs
 
 
     !--------------------------------------------------------------------------------------------------
 
+
     !!!output pda final update
 
 
-    do i=1, window_size
-        write(*,*) pda_ens_handle%vars(1:3,i)
-    end do
+    !do i=1, window_size
+    !    write(*,*) pda_ens_handle%vars(1:3,i)
+    !end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
 
@@ -478,7 +504,6 @@ end do Sequential_PDA
 end subroutine pda_main
 
 !-----------------------------------------------------------------------
-
 
 subroutine cal_mismatch_cost_function(ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
 type(ensemble_type), intent(in)   :: ens_handle, forward_ens_handle
@@ -498,9 +523,9 @@ Mismatch_error: do i=1, window_size-1
 
 mismatch_err=ens_handle%vars(:,i+1)-forward_ens_handle%vars(:,i)
 
-    mismatch_err=mismatch_err*mismatch_err   !here should have some sort of scalar matrix
+mismatch_err=mismatch_err*mismatch_err   !here should have some sort of scalar matrix
 
-    mis_cost=sum(mismatch_err)+mis_cost
+mis_cost=sum(mismatch_err)+mis_cost
 
 
 end do Mismatch_error
@@ -509,10 +534,6 @@ end do Mismatch_error
 mis_cost=mis_cost/((window_size-1)*1.0_r8)
 
 end subroutine cal_mismatch_cost_function
-
-
-!--------------------------------------------------
-
 
 
 
