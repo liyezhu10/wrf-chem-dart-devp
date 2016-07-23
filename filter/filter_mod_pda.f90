@@ -84,7 +84,9 @@ use copies_on_off_mod, only : ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, &
 
 
 !DuDu adds.....
-use model_mod, 		  only  : adv_1step, comp_dt
+use model_mod, 		  only  : adv_1step, get_state_meta_data
+use location_mod,     only  : location_type
+use obs_kind_mod,     only  : get_raw_obs_kind_name
 
 
 !------------------------------------------------------------------------------
@@ -219,7 +221,7 @@ type(netcdf_file_type)      :: PriorStateUnit, PosteriorStateUnit
 type(time_type)             :: time1
 
 integer,    allocatable :: keys(:)
-integer(i8)             :: model_size
+integer(i8)             :: model_size, var_ind
 integer                 :: i, iunit, io, time_step_number, num_obs_in_set
 integer                 :: ierr, last_key_used, key_bounds(2)
 integer                 :: in_obs_copy, obs_val_index
@@ -245,9 +247,9 @@ real(r8), allocatable   :: prior_qc_copy(:)
 
 
 !!DuDu adds....
-type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy
+type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy,ens_normalization
 logical                 :: duplicate_time, free_descent
-integer                 :: j, k, seq_len, n_GD, window_size, n_DA, i_row, i_col
+integer                 :: j, k, seq_len, n_GD, window_size, n_DA, i_row, i_col, var_type
 real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size,sum_variable,result_sum
 real(r8), allocatable   :: state_vector(:), mismatch_err(:), forward_vector(:)
 type(time_type) 	    :: mtime
@@ -255,12 +257,13 @@ type(obs_def_type)	    :: obs_def
 type(time_type)         :: time_step, target_time, ens_time
 real(r8),       pointer :: adjoint(:, :)
 real(r8)		:: rtemp
+type(location_type)     :: location
 
 !Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=4
+n_GD=40
 
 !Du define assimilation window size
-window_size=8;
+window_size=24;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -304,6 +307,53 @@ time_step = get_model_time_step()
 allocate(mismatch_err(model_size))
 call init_ensemble_manager(forward_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
+call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_in=2)
+
+!generate normalization vector--------------------------------------
+
+
+!ens_normalization%copies=pda_ens_handle%copies
+!ens_normalization%time=pda_ens_handle%time
+
+
+if(.not. allocated(ens_normalization%vars)) allocate(ens_normalization%vars(ens_normalization%num_vars, ens_normalization%my_num_copies))
+call all_copies_to_all_vars(ens_normalization)
+
+
+do var_ind=1,model_size
+    call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
+
+
+    if (var_type==1) then
+        ens_normalization%vars(var_ind,1)=2
+        elseif (var_type==2) then
+            ens_normalization%vars(var_ind,1)=1
+        elseif (var_type==3) then
+            ens_normalization%vars(var_ind,1)=60
+        else
+            ens_normalization%vars(var_ind,1)=2
+
+    endif
+!
+!    elseif (var_type==2) then
+!        ens_normalization%vars(var_ind,1)=1
+!    elseif (var_type==3) then
+!        ens_normalization%vars(var_ind,1)=60
+!    else
+!        ens_normalization%vars(var_ind,1)=2
+!    end
+
+end do
+
+call all_vars_to_all_copies(ens_normalization)
+
+!write(*,*) ens_normalization%copies(1,:)
+
+
+!------------------------------------------------------------------
+
+
+
 
 
 
@@ -315,8 +365,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
     gd_initial_step_size=0.0010000000000000    !this may use to calculate the number of minimizations, not used now
-    gd_step_size= 0.0010000000000000
-    gd_max_step_size=0.0100000000000000
+    gd_step_size= 0.00040000000000000
+    gd_max_step_size=0.000400000000000000
 
 
     !calculate mismatch cost function---------------------------------------------------
@@ -384,21 +434,21 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
         Gradient_descent: do i=1, window_size
 
             if (i==1) then
-                pda_ens_handle%copies(1,:)=ens_update_copy%copies(1,:)+gd_step_size*forward_ens_handle%copies(1,:)
+                pda_ens_handle%copies(1,:)=ens_update_copy%copies(1,:)+gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(1,:)
 
             else if (i<window_size) then
 
                 pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
-                                         -gd_step_size*forward_ens_handle%copies(i-1,:) &
-                                         +gd_step_size*forward_ens_handle%copies(i,:)
+                                         -gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(i-1,:) &
+                                         +gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(i,:)
 
             else
 
                 pda_ens_handle%copies(window_size,:)=ens_update_copy%copies(window_size,:) &
-                            -gd_step_size*forward_ens_handle%copies(window_size-1,:)
+                            -gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(window_size-1,:)
 
-                write(msgstring, *) 'vars=', pda_ens_handle%copies(window_size,:)
-                call error_handler(E_ALLMSG,'filter_main', msgstring, source, revision, revdate)
+                !write(msgstring, *) 'vars=', pda_ens_handle%copies(window_size,:)
+                !call error_handler(E_ALLMSG,'filter_main', msgstring, source, revision, revdate)
 
 
             endif
@@ -484,6 +534,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !--------------------------------------------------------------------------------------------------
 
+    call write_state(pda_ens_handle, file_info)
 
     !!!output pda final update
 
