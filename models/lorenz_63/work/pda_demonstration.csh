@@ -3,6 +3,7 @@
 
 ./mkmf_preprocess
 make
+./preprocess
 ./mkmf_create_obs_sequence 
 make
 
@@ -74,4 +75,30 @@ cd ../shell_scripts
 
 csh split_obs_seq.csh 
 
+cd ../work
+rm -rf obs
+mkdir obs
+mv ../shell_scripts/obs_seq.* ./obs/
+
+cp path_names_filter_enkf path_names_filter
+
+./mkmf_preprocess
+make
+./preprocess
+
+make clean
+rm *.mod
+./mkmf_filter
+make
+
+rm -rf advance_time_*
+
+csh ../assimilate2_obs.csh 500
+
+cp path_names_filter_pda path_names_filter
+
+make clean
+./mkmf_filter
+make
+./filter
 
