@@ -260,10 +260,10 @@ real(r8)		:: rtemp
 type(location_type)     :: location
 
 !Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=40
+n_GD=20
 
 !Du define assimilation window size
-window_size=24;
+window_size=100;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -322,27 +322,17 @@ call all_copies_to_all_vars(ens_normalization)
 
 do var_ind=1,model_size
     call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
-
-
+    
     if (var_type==1) then
-        ens_normalization%vars(var_ind,1)=2
+        ens_normalization%vars(var_ind,1)=1
         elseif (var_type==2) then
             ens_normalization%vars(var_ind,1)=1
         elseif (var_type==3) then
-            ens_normalization%vars(var_ind,1)=60
+            ens_normalization%vars(var_ind,1)=1
         else
-            ens_normalization%vars(var_ind,1)=2
+            ens_normalization%vars(var_ind,1)=1
 
     endif
-!
-!    elseif (var_type==2) then
-!        ens_normalization%vars(var_ind,1)=1
-!    elseif (var_type==3) then
-!        ens_normalization%vars(var_ind,1)=60
-!    else
-!        ens_normalization%vars(var_ind,1)=2
-!    end
-
 end do
 
 call all_vars_to_all_copies(ens_normalization)
@@ -365,8 +355,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
     gd_initial_step_size=0.0010000000000000    !this may use to calculate the number of minimizations, not used now
-    gd_step_size= 0.00040000000000000
-    gd_max_step_size=0.000400000000000000
+    gd_step_size= 0.0010000000000000
+    gd_max_step_size=0.0100000000000000
 
 
     !calculate mismatch cost function---------------------------------------------------
@@ -527,21 +517,21 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             adv_ens_command, tasks_per_model_advance)
 
         endif
-        !write(*,*) mis_cost
+        write(*,*) mis_cost
 
     end do GD_runs
 
 
     !--------------------------------------------------------------------------------------------------
 
-    call write_state(pda_ens_handle, file_info)
+    !call write_state(pda_ens_handle, file_info)
 
     !!!output pda final update
 
 
-    !do i=1, window_size
-    !    write(*,*) pda_ens_handle%vars(1:3,i)
-    !end do
+    do i=1, window_size
+        write(*,*) pda_ens_handle%copies(i,:)
+    end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
 
