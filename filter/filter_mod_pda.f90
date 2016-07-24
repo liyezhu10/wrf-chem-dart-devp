@@ -18,17 +18,14 @@ use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG,
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term
 !Du add get_model_time_step
-use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
-                                  end_assim_model,  pert_model_copies, get_model_time_step
-use assim_tools_mod,       only : filter_assim, set_assim_tools_trace, get_missing_ok_status, &
-                                  test_state_copies
-use obs_model_mod,         only : move_ahead, advance_state, set_obs_model_trace
+use assim_model_mod,       only : static_init_assim_model, get_model_size, get_model_time_step
+
+use obs_model_mod,         only : advance_state
 use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
                                   ensemble_type, get_copy, get_my_num_copies, put_copy,       &
                                   all_vars_to_all_copies, all_copies_to_all_vars,             &
-                                  compute_copy_mean, compute_copy_mean_sd,                    &
-                                  compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
-                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
+                                  duplicate_ens, get_copy_owner_index, &
+                                  get_ensemble_time, set_ensemble_time, &
                                   prepare_to_read_from_vars, prepare_to_write_to_vars,        &
                                   prepare_to_read_from_copies,  get_my_num_vars,              &
                                   prepare_to_write_to_copies, get_ensemble_time,              &
@@ -36,11 +33,7 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   copies_in_window, set_num_extra_copies, get_allow_transpose, &
                                   all_copies_to_all_vars, allocate_single_copy,               &
                                   get_single_copy, put_single_copy, deallocate_single_copy
-use adaptive_inflate_mod,  only : adaptive_inflate_end, do_varying_ss_inflate,                &
-                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
-                                  do_obs_inflate, adaptive_inflate_type,                      &
-                                  output_inflate_diagnostics, log_inflation_info, &
-                                  get_minmax_task_zero
+
 use mpi_utilities_mod,     only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                   my_task_id, task_sync, broadcast_send, broadcast_recv,      &
                                   task_count, sum_across_tasks
@@ -686,57 +679,6 @@ enddo
 end subroutine  set_time_on_extra_copies
 
 !------------------------------------------------------------------
-!> Calculate how many spare copies are needed for given input options
-!> and give a number to the name.
-!> The indicies are initailzed to COPY_NOT_PRESENT before they
-!> are set here.
-!> The copies could be shuffled around depending on inflation options.
-!> For now, always have the first 6 extra copies.
-!> Note if you remove inflation copies, check read_state() and write_state()
-!> for assumptions about which copies are present.
-subroutine set_state_copies(ens_size, num_output_state_members, num_extras)
-
-integer, intent(in)  :: num_output_state_members
-integer, intent(in)  :: ens_size
-integer, intent(out) :: num_extras
-
-! State
-ENS_MEAN_COPY        = ens_size + 1
-ENS_SD_COPY          = ens_size + 2
-PRIOR_INF_COPY       = ens_size + 3
-PRIOR_INF_SD_COPY    = ens_size + 4
-POST_INF_COPY        = ens_size + 5
-POST_INF_SD_COPY     = ens_size + 6
-
-num_extras = 6
-
-! If there are no diagnostic files, we will need to store the
-! copies that would have gone in Prior_Diag.nc and Posterior_Diag.nc
-! in spare copies in the ensemble.
-if (skip_diag_files() .and. num_output_state_members <= 0) then
-
-   ! Not stopping to write prior_members so keep these Prior copies
-   ! as extra copies and write them and the end.
-   SPARE_PRIOR_MEAN       = ens_size + 7
-   SPARE_PRIOR_SPREAD     = ens_size + 8
-   SPARE_PRIOR_INF_MEAN   = ens_size + 9
-   SPARE_PRIOR_INF_SPREAD = ens_size + 10
-   ! need to store posterior inflation mean and inflation spread since
-   ! these are overwritten in filter_assim(inflate_only=.true.)
-   SPARE_POST_INF_MEAN    = ens_size + 11
-   SPARE_POST_INF_SPREAD  = ens_size + 12
-   num_extras = num_extras + 6
-
-elseif (skip_diag_files() .and. num_output_state_members > 0) then
-   ! Prior members and extra copies are written out prior to filter_assim.
-   ! Need to store posterior inflation mean and inflation spread since
-   ! these are overwritten in filter_assim(inflate_only=.true.)
-   SPARE_POST_INF_MEAN    = ens_size + 7
-   SPARE_POST_INF_SPREAD  = ens_size + 8
-   num_extras = num_extras + 2
-endif
-
-end subroutine set_state_copies
 
 !==================================================================
 ! TEST FUNCTIONS BELOW THIS POINT
