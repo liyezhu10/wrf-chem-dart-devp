@@ -56,7 +56,7 @@ echo "0 3600"      >> $fout2 # time step days seconds
 echo "obs_seq.in"  >> $fout2 
 echo ""            >> $fout2
 
-cat $fout2 | ./create_fixed_network_sequence
+cat $fout2 | ./create_fixed_network_seq
 
 # run perfect model obs to generate obs_seq.out
 
