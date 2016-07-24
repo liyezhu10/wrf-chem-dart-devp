@@ -37,34 +37,17 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
 use mpi_utilities_mod,     only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                   my_task_id, task_sync, broadcast_send, broadcast_recv,      &
                                   task_count, sum_across_tasks
-use smoother_mod,          only : smoother_read_restart, advance_smoother,                    &
-                                  smoother_gen_copy_meta_data, smoother_write_restart,        &
-                                  init_smoother, do_smoothing, smoother_mean_spread,          &
-                                  smoother_assim,            &
-                                  smoother_ss_diagnostics, smoother_end, set_smoother_trace
-
-use random_seq_mod,        only : random_seq_type, init_random_seq, random_gaussian
 
 use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state
 
 use io_filenames_mod,      only : io_filenames_init, file_info_type
 
-use forward_operator_mod,  only : get_obs_ens_distrib_state
 use quality_control_mod,   only : initialize_qc
 
 use state_space_diag_mod,  only : filter_state_space_diagnostics, netcdf_file_type, &
                                   init_diag_output, finalize_diag_output,           &
                                   skip_diag_files
 
-! state copy meta data
-use copies_on_off_mod, only : ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, &
-                              PRIOR_INF_SD_COPY,POST_INF_COPY, POST_INF_SD_COPY, &
-                              SPARE_PRIOR_MEAN, SPARE_PRIOR_SPREAD, SPARE_PRIOR_INF_MEAN, &
-                              SPARE_PRIOR_INF_SPREAD, SPARE_POST_INF_MEAN, &
-                              SPARE_POST_INF_SPREAD, query_copy_present
-
-
-!DuDu adds.....
 use model_mod, 		  only  : adv_1step, get_state_meta_data
 use location_mod,     only  : location_type
 use obs_kind_mod,     only  : get_raw_obs_kind_name
