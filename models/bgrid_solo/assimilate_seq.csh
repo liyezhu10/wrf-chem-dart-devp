@@ -19,7 +19,7 @@ endif
 echo "`date` -- BEGIN B-GRID ASSIMILATION"
 
 # directory that contains the filter
-set RUNDIR = "/glade/p/work/hendric/DART/pda/models/bgrid_solo/work/"
+set RUNDIR = "/Users/hendric/DART/pda/models/bgrid_solo/work/"
 
 #-------------------------------------------------------------------------
 # Get the case-specific variables
@@ -58,7 +58,10 @@ foreach OBS_FILE (../obs/obs_seq.*.out)
    
    mv $restart_file*    $ADV_DIR
    mv $mean_file        $ADV_DIR
+   mv sd.nc             $ADV_DIR
    mv obs_seq.final     $ADV_DIR
+   mv Prior_Diag.nc     $ADV_DIR
+   mv Posterior_Diag.nc $ADV_DIR
    # mv $prior_inf_sd     $ADV_DIR
    # mv $prior_inf_mean   $ADV_DIR
    
