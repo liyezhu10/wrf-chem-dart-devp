@@ -195,7 +195,6 @@ type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_c
 logical                 :: duplicate_time, free_descent
 integer                 :: j, k, seq_len, n_GD, window_size, n_DA, i_row, i_col, var_type
 real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size,sum_variable,result_sum
-real(r8), allocatable   :: state_vector(:), mismatch_err(:), forward_vector(:)
 type(time_type) 	    :: mtime
 type(time_type)         :: time_step, target_time, ens_time
 real(r8),       pointer :: adjoint(:, :)
@@ -203,10 +202,10 @@ real(r8)		:: rtemp
 type(location_type)     :: location
 
 !Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=100
+n_GD=4
 
 !Du define assimilation window size
-window_size=120;
+window_size=8;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -247,7 +246,6 @@ call read_state(pda_ens_handle, file_info, read_time_from_file, time1)
 
 
 time_step = get_model_time_step()
-allocate(mismatch_err(model_size))
 call init_ensemble_manager(forward_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_in=2)
@@ -295,8 +293,6 @@ call all_vars_to_all_copies(ens_normalization)
 
 
 
-
-
 !seq_len=200
 
 ! do PDA "sequentially"
@@ -311,58 +307,22 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !calculate mismatch cost function---------------------------------------------------
 
-    call get_ensemble_time(pda_ens_handle, 1, ens_time)
-    call get_ensemble_time(pda_ens_handle, 2, target_time)
-
-    forward_ens_handle%copies=pda_ens_handle%copies
-    forward_ens_handle%time=pda_ens_handle%time
-
-    ens_update_copy%copies=pda_ens_handle%copies
-    ens_update_copy%time=pda_ens_handle%time
-
-    if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
 
 
-    call all_copies_to_all_vars(forward_ens_handle)
 
-
-    !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
-    do i=1, window_size
-        forward_ens_handle%time(i)=ens_time
-    end do
-
-    !call print_time(ens_time, ' ens_time: ')
-
-    call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
-
-    call all_vars_to_all_copies(forward_ens_handle)
-
-    !calculate mismatches
-    do i=1, window_size-1
-        forward_ens_handle%copies(i,:)=ens_update_copy%copies(i+1,:)-forward_ens_handle%copies(i,:)
-    end do
-
-    !calculate mismatch cost function
-    result_sum=0
-    sum_variable=0
-    do i=1,window_size-1
-
-        do j=1,forward_ens_handle%my_num_vars
-            sum_variable=forward_ens_handle%copies(i,j)*forward_ens_handle%copies(i,j)+sum_variable
-        end do
-
-        call sum_across_tasks(sum_variable,result_sum)
-
-    end do
-    mis_cost=result_sum/((window_size-1)*1.0_r8)
+    call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
     mis_cost_previous=mis_cost
 
 
-    !write(*,*) mis_cost
+    write(*,*) mis_cost
+
 
 
 
     !------------------------------------------------------------------------------------
+
+    ens_update_copy%copies=pda_ens_handle%copies
+    ens_update_copy%time=pda_ens_handle%time
 
 
 
@@ -400,39 +360,10 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-        call get_ensemble_time(pda_ens_handle, 1, ens_time)
-        call get_ensemble_time(pda_ens_handle, 2, target_time)
-        forward_ens_handle%copies=pda_ens_handle%copies
-        forward_ens_handle%time=pda_ens_handle%time
-
-        if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
-        call all_copies_to_all_vars(forward_ens_handle)
-
-        do i=1, window_size
-            forward_ens_handle%time(i)=ens_time
-        end do
-
-        call advance_state(forward_ens_handle, window_size, target_time, async, &
-        adv_ens_command, tasks_per_model_advance)
-        call all_vars_to_all_copies(forward_ens_handle)
-
-        do i=1, window_size-1
-            forward_ens_handle%copies(i,:)=pda_ens_handle%copies(i+1,:)-forward_ens_handle%copies(i,:)
-        end do
 
 
-        sum_variable=0
-        do i=1,window_size-1
+        call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
-            do k=1,forward_ens_handle%my_num_vars
-                sum_variable=forward_ens_handle%copies(i,k)*forward_ens_handle%copies(i,k)+sum_variable
-            end do
-
-            call sum_across_tasks(sum_variable,result_sum)
-
-
-        end do
-        mis_cost=result_sum/((window_size-1)*1.0_r8)
 
         write(*,*) mis_cost
 
@@ -472,7 +403,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
         endif
-        write(*,*) mis_cost
+        !write(*,*) mis_cost
 
     end do GD_runs
 
@@ -485,7 +416,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
     do i=1, window_size
-        write(*,*) pda_ens_handle%copies(i,1:4)
+        write(*,*) pda_ens_handle%copies(i,1:3)
     end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
@@ -501,33 +432,60 @@ end subroutine pda_main
 
 !-----------------------------------------------------------------------
 
-subroutine cal_mismatch_cost_function(ens_handle,forward_ens_handle,window_size,model_size,mis_cost)
-type(ensemble_type), intent(in)   :: ens_handle, forward_ens_handle
-integer, intent(in)   :: window_size
-integer(i8), intent(in)   :: model_size
-real(r8), intent(out)  :: mis_cost
-real(r8), allocatable   :: state_vector(:), mismatch_err(:), forward_vector(:)
-integer :: i
+subroutine cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+type(ensemble_type), intent(in)      :: pda_ens_handle
+type(ensemble_type), intent(inout)   :: forward_ens_handle
+integer, intent(in)                  :: window_size, async, tasks_per_model_advance
+character(len = 129), intent(in)     :: adv_ens_command
+real(r8), intent(out)   :: mis_cost
+integer                 :: i,j
+type(time_type)         :: target_time, ens_time
+real(r8)                :: result_sum, sum_variable
 
 
-allocate(mismatch_err(model_size))
-
-mismatch_err=0.0_r8
-mis_cost=0.0_r8
-
-Mismatch_error: do i=1, window_size-1
-
-mismatch_err=ens_handle%vars(:,i+1)-forward_ens_handle%vars(:,i)
-
-mismatch_err=mismatch_err*mismatch_err   !here should have some sort of scalar matrix
-
-mis_cost=sum(mismatch_err)+mis_cost
 
 
-end do Mismatch_error
+call get_ensemble_time(pda_ens_handle, 1, ens_time)
+call get_ensemble_time(pda_ens_handle, 2, target_time)
+
+forward_ens_handle%copies=pda_ens_handle%copies
+forward_ens_handle%time=pda_ens_handle%time
+
+if(.not. allocated(forward_ens_handle%vars)) allocate(forward_ens_handle%vars(forward_ens_handle%num_vars, forward_ens_handle%my_num_copies))
 
 
-mis_cost=mis_cost/((window_size-1)*1.0_r8)
+call all_copies_to_all_vars(forward_ens_handle)
+
+
+!!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
+do i=1, window_size
+    forward_ens_handle%time(i)=ens_time
+end do
+
+call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
+
+call all_vars_to_all_copies(forward_ens_handle)
+
+!calculate mismatches
+do i=1, window_size-1
+    forward_ens_handle%copies(i,:)=pda_ens_handle%copies(i+1,:)-forward_ens_handle%copies(i,:)
+end do
+
+!calculate mismatch cost function
+result_sum=0
+sum_variable=0
+do i=1,window_size-1
+
+    do j=1,forward_ens_handle%my_num_vars
+        sum_variable=forward_ens_handle%copies(i,j)*forward_ens_handle%copies(i,j)+sum_variable
+    end do
+
+    call sum_across_tasks(sum_variable,result_sum)
+
+end do
+mis_cost=result_sum/((window_size-1)*1.0_r8)
+
+
 
 end subroutine cal_mismatch_cost_function
 
