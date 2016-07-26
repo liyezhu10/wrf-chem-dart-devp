@@ -62,7 +62,7 @@ public :: pda_main
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/filter/filter_mod.f90 $"
+   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/filter/filter_mod_pda.f90 $"
 character(len=32 ), parameter :: revision = "$Revision: 10343 $"
 character(len=128), parameter :: revdate  = "$Date: 2016-06-07 15:51:48 -0600 (Tue, 07 Jun 2016) $"
 
@@ -70,9 +70,6 @@ character(len=128), parameter :: revdate  = "$Date: 2016-06-07 15:51:48 -0600 (T
 character(len=129)      :: msgstring
 
 integer                 :: trace_level, timestamp_level
-
-! Defining whether diagnostics are for prior or posterior
-integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
 
 !----------------------------------------------------------------
 ! Namelist input with default values
@@ -177,22 +174,11 @@ contains
 
 subroutine pda_main()
 
-type(netcdf_file_type)      :: PriorStateUnit, PosteriorStateUnit
 type(time_type)             :: time1
 
-integer,    allocatable :: keys(:)
 integer(i8)             :: model_size, var_ind
-integer                 :: i, iunit, io, time_step_number, num_obs_in_set
-integer                 :: ierr, last_key_used, key_bounds(2)
-integer                 :: in_obs_copy, obs_val_index
-integer                 :: output_state_mean_index, output_state_spread_index
-integer                 :: prior_obs_mean_index, posterior_obs_mean_index
-integer                 :: prior_obs_spread_index, posterior_obs_spread_index
+integer                 :: i, iunit, io
 ! Global indices into ensemble storage - observations
-integer                 :: OBS_VAL_COPY, OBS_ERR_VAR_COPY, OBS_KEY_COPY
-integer                 :: OBS_GLOBAL_QC_COPY,OBS_EXTRA_QC_COPY
-integer                 :: OBS_MEAN_START, OBS_MEAN_END
-integer                 :: OBS_VAR_START, OBS_VAR_END, TOTAL_OBS_COPIES
 integer                 :: input_qc_index, DART_qc_index
 logical                 :: read_time_from_file
 
@@ -200,10 +186,8 @@ integer :: num_extras ! the extra ensemble copies
 
 type(file_info_type) :: file_info
 
-logical                 :: ds, all_gone, allow_missing
+logical                 :: all_gone, allow_missing
 
-! real(r8), allocatable   :: temp_ens(:) ! for smoother
-real(r8), allocatable   :: prior_qc_copy(:)
 
 
 !!DuDu adds....
@@ -219,10 +203,10 @@ real(r8)		:: rtemp
 type(location_type)     :: location
 
 !Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=20
+n_GD=100
 
 !Du define assimilation window size
-window_size=100;
+window_size=120;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -279,22 +263,28 @@ if(.not. allocated(ens_normalization%vars)) allocate(ens_normalization%vars(ens_
 
 call all_copies_to_all_vars(ens_normalization)
 
-
+if (my_task_id()==0) then
 do var_ind=1,model_size
+
+
+
+
     call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
 
+    !write(*,*) 'norm_size', shape(ens_normalization%vars(:,:))
+
     if (var_type==1) then
-        ens_normalization%vars(var_ind,1)=1
+        ens_normalization%vars(var_ind,1)=2
         elseif (var_type==2) then
             ens_normalization%vars(var_ind,1)=1
         elseif (var_type==3) then
-            ens_normalization%vars(var_ind,1)=1
+            ens_normalization%vars(var_ind,1)=60
         else
-            ens_normalization%vars(var_ind,1)=1
+            ens_normalization%vars(var_ind,1)=2
 
     endif
 end do
-
+endif
 call all_vars_to_all_copies(ens_normalization)
 
 !write(*,*) ens_normalization%copies(1,:)
@@ -315,8 +305,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
     gd_initial_step_size=0.0010000000000000    !this may use to calculate the number of minimizations, not used now
-    gd_step_size= 0.0010000000000000
-    gd_max_step_size=0.0100000000000000
+    gd_step_size= 0.00050000000000000
+    gd_max_step_size=0.00100000000000000
 
 
     !calculate mismatch cost function---------------------------------------------------
@@ -340,6 +330,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     do i=1, window_size
         forward_ens_handle%time(i)=ens_time
     end do
+
+    !call print_time(ens_time, ' ens_time: ')
 
     call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
 
@@ -476,6 +468,9 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             call advance_state(forward_ens_handle, window_size, target_time, async, &
             adv_ens_command, tasks_per_model_advance)
 
+            write(*,*) 'larger_mis cost', mis_cost
+
+
         endif
         write(*,*) mis_cost
 
@@ -490,7 +485,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
     do i=1, window_size
-        write(*,*) pda_ens_handle%copies(i,:)
+        write(*,*) pda_ens_handle%copies(i,1:4)
     end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
