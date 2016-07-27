@@ -24,6 +24,22 @@ num_lons   = length(lons);
 weights     = weights/sum(weights(:));
 wts         = weights(:);
 
+% lili, interpolate from gw on unstaggered point to gw on staggered point (US)
+[n1 n2] = size(gw);
+if ( n1 == 1 )
+    ngw = n2;
+    gw_stag = zeros(1,ngw-1);
+else
+    ngw = n1;
+    gw_stag = zeros(ngw-1,1);
+end
+for i = 1:ngw-1
+    gw_stag(i) = (gw(i)+gw(i+1))/2.0;
+end   
+[~,weights_stag] = meshgrid(ones(1,num_lons),gw_stag);
+weights_stag     = weights_stag/sum(weights_stag(:));
+wts_stag         = weights_stag(:);
+
 % Get the indices for the true state, ensemble mean and spread
 % The metadata is queried to determine which "copy" is appropriate.
 truth_index      = get_copy_index(pinfo.truth_file, 'true state');
@@ -69,9 +85,17 @@ for ivar=1:pinfo.num_state_vars,
       for ilevel=1:nlev,
 
          slabS2E   = (truth(:,:,ilevel) - ens(:,:,ilevel)).^2;  % OK even if 2D iff ilevel = 1
-         XY_err    = sum(slabS2E(:) .* wts);
+         if ( strcmpi(varname,'US') )
+            XY_err    = sum(slabS2E(:) .* wts_stag);
+         else
+            XY_err    = sum(slabS2E(:) .* wts);
+         end
          slabS2E   = spread(:,:,ilevel).^2;
-         XY_spread = sum(slabS2E(:) .* wts);
+         if ( strcmpi(varname,'US') )
+            XY_spread = sum(slabS2E(:) .* wts_stag);
+         else
+            XY_spread = sum(slabS2E(:) .* wts);
+         end
 
          msqe_Z(ilevel) = XY_err;
          sprd_Z(ilevel) = XY_spread;

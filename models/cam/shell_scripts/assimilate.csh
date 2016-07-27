@@ -36,8 +36,10 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /glade/p/image/Observations/ACARS
-      set DARTDIR    = ${HOME}/svn/DART/dev
+#      set BASEOBSDIR = /glade/p/image/Observations/ACARS
+#      set BASEOBSDIR = /glade/scratch/lililei/CAM5/FV2deg_5.0-cesm/Exp1/obs_seq
+      set BASEOBSDIR = /glade/scratch/lililei/archive/CAM_PS_PMO7200S6H/dart/hist
+      set DARTDIR    = ${HOME}/DART/dev
       set LAUNCHCMD  = mpirun.lsf
    breaksw
 
@@ -90,9 +92,12 @@ echo "valid time of model is $ATM_YEAR $ATM_MONTH $ATM_DAY $ATM_HOUR (hours)"
 # The observation file names have a time that matches the stopping time of CAM.
 #-----------------------------------------------------------------------------
 
-set YYYYMM   = `printf %04d%02d ${ATM_YEAR} ${ATM_MONTH}`
-set OBSFNAME = `printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_SECONDS}`
-set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}_6H/${OBSFNAME}
+#set YYYYMM   = `printf %04d%02d ${ATM_YEAR} ${ATM_MONTH}`
+#set OBSFNAME = `printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_SECONDS}`
+#set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}_6H/${OBSFNAME}
+set YYYYMMDDSS = `printf %04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY} ${ATM_SECONDS}`
+set OBSFNAME = obs_seq.${YYYYMMDDSS}.out
+set OBS_FILE = ${BASEOBSDIR}/${OBSFNAME}
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.out

@@ -5,10 +5,10 @@
 module cov_cutoff_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://subversion.ucar.edu/DAReS/DART/branches/development/cov_cutoff/cov_cutoff_mod.f90 $
+! $Id: cov_cutoff_mod.f90 5074 2011-07-15 17:06:58Z thoar $
+! $Revision: 5074 $
+! $Date: 2011-07-15 11:06:58 -0600 (Fri, 15 Jul 2011) $
 
 use     types_mod, only : r8
 use utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
@@ -27,9 +27,9 @@ public :: comp_cov_factor
 
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/cov_cutoff/cov_cutoff_mod.f90 $", &
+   revision = "$Revision: 5074 $", &
+   revdate  = "$Date: 2011-07-15 11:06:58 -0600 (Fri, 15 Jul 2011) $"
 
 
 !============================================================================
@@ -209,34 +209,34 @@ enddo
 if ( obs_with_precip == .true. ) then
     if ( obs_kind == KIND_TEMPERATURE ) then
        c = 0.07_r8
-       c_vert  = 0.10_r8
+       c_vert  = 0.09_r8
        z_joint = 3000.0_r8
        height_norm = 80000.0_r8
        k1 = 3500.0
        k2 = 7000.0
        k3 = 10500.0
        k4 = 14000.0
-       b1 = 0.0941e-11
-       b2 = 0.5622e-11
-       b3 = -0.6231e-11
-       b4 = 0.2198e-11
+       b1 = -0.0986e-10
+       b2 = 0.1167e-10
+       b3 = -0.0918e-10
+       b4 = 0.0285e-10
        if ( first_print_T_OP ) then
           print *, 'T_OP, c = ', c, 'betas = ', b1, b2, b3, b4
           first_print_T_OP = .false.
        endif
     else
        c = 0.06_r8
-       c_vert  = 0.08_r8
+       c_vert  = 0.09_r8
        z_joint = 3000.0_r8
        height_norm = 80000.0_r8
        k1 = 3500.0
        k2 = 7000.0
        k3 = 10500.0
        k4 = 14000.0
-       b1 = -0.0140e-10
-       b2 = 0.1038e-10
-       b3 = -0.0930e-10
-       b4 = 0.0291e-10
+       b1 = -0.0353e-10
+       b2 = 0.1282e-10
+       b3 = -0.1123e-10
+       b4 = 0.0347e-10
        if ( first_print_W_OP ) then
           print *, 'W_OP, c = ', c, 'betas = ', b1, b2, b3, b4
           first_print_W_OP = .false.
@@ -245,34 +245,34 @@ if ( obs_with_precip == .true. ) then
 else
     if ( obs_kind == KIND_TEMPERATURE ) then
        c = 0.1_r8
-       c_vert  = 0.06_r8
-       z_joint = 2000.0_r8
+       c_vert  = 0.05_r8
+       z_joint = 1000.0_r8
        height_norm = 80000.0_r8
        k1 = 3500.0
        k2 = 7000.0
        k3 = 10500.0
        k4 = 14000.0
-       b1 = -0.7995e-11
-       b2 = 0.9136e-11
-       b3 = -0.7145e-11
-       b4 = 0.2277e-11
+       b1 = -0.0120e-11
+       b2 = 0.9427e-11
+       b3 = -0.8337e-11
+       b4 = 0.2667e-11
        if ( first_print_T_ON ) then
           print *, 'T_ON, c = ', c, 'betas = ', b1, b2, b3, b4
           first_print_T_ON = .false.
        endif
     else
-       c = 0.09_r8
-       c_vert  = 0.06_r8
-       z_joint = 2000.0_r8
+       c = 0.11_r8
+       c_vert  = 0.08_r8
+       z_joint = 1000.0_r8
        height_norm = 80000.0_r8
        k1 = 3500.0
        k2 = 7000.0
        k3 = 10500.0
        k4 = 14000.0
-       b1 = -0.6003e-11
-       b2 = 0.7613e-11
-       b3 = -0.5701e-11
-       b4 = 0.1827e-11
+       b1 = -0.1746e-11
+       b2 = 0.7270e-11
+       b3 = -0.5822e-11
+       b4 = 0.1925e-11
        if ( first_print_W_ON ) then
           print *, 'W_ON, c = ', c, 'betas = ', b1, b2, b3, b4
           first_print_W_ON = .false.
@@ -410,8 +410,6 @@ else if(localization_type == 5) then ! vertical cubic spline fitted function
                + 4.0_r8 - 2.0_r8 / (3.0_r8 * r)
        endif
     endif
-
-    comp_cov_factor = min(comp_cov_factor,1.0_r8)
 
 else ! Otherwise namelist parameter is illegal; this is an error
 

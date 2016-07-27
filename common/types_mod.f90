@@ -56,8 +56,8 @@ integer, parameter :: obstypelength  = 32 ! set by compiler/param limits
   integer, parameter :: r4 = SELECTED_REAL_KIND(6,30)
   integer, parameter :: c4 = SELECTED_REAL_KIND(6,30)
 ! comment in only one of the following lines, not both.   the first is the default.
-  integer, parameter :: r8 = SELECTED_REAL_KIND(12)   ! real r8
-!!integer, parameter :: r8 = r4                       ! alias r8 to r4
+!  integer, parameter :: r8 = SELECTED_REAL_KIND(12)   ! real r8
+  integer, parameter :: r8 = r4                       ! alias r8 to r4
   integer, parameter :: c8 = SELECTED_REAL_KIND(12)
 
 ! 'digits12' is reserved for real variables that MUST retain 64 bits of

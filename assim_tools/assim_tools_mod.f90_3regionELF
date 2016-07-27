@@ -5,14 +5,14 @@
 module assim_tools_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $
+! $Id: assim_tools_mod.f90 5707 2012-04-18 20:56:45Z thoar $
+! $Revision: 5707 $
+! $Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $
  
 ! A variety of operations required by assimilation.
 
-use      types_mod,       only : r8, digits12, PI, missing_r8
+use      types_mod,       only : r8, digits12, PI, missing_r8, DEG2RAD
 use  utilities_mod,       only : file_exist, get_unit, check_namelist_read, do_output,    &
                                  find_namelist_in_file, register_module, error_handler,   &
                                  E_ERR, E_MSG, nmlfileunit, do_nml_file, do_nml_term,     &
@@ -37,7 +37,8 @@ use       reg_factor_mod, only : comp_reg_factor
 
 use         location_mod, only : location_type, get_close_type, get_close_obs_destroy,    &
                                  operator(==), set_location_missing, write_location,      &
-                                 LocationDims, vert_is_surface, has_vertical_localization
+                                 LocationDims, vert_is_surface, has_vertical_localization,&
+                                 get_location
 
 use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars,             & 
                                  compute_copy_mean_var, get_var_owner_index
@@ -84,9 +85,9 @@ logical                :: first_get_correction = .true.
 real(r8)               :: exp_true_correl(200), alpha(200)                                                                      
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $", &
+   revision = "$Revision: 5707 $", &
+   revdate  = "$Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $"
 
 !============================================================================
 
@@ -296,7 +297,8 @@ real(r8) :: close_obs_vert_dist(obs_ens_handle%my_num_vars)
 real(r8) :: close_state_vert_dist(ens_handle%my_num_vars)
 real(r8) :: last_close_obs_vert_dist(obs_ens_handle%my_num_vars)
 real(r8) :: last_close_state_vert_dist(ens_handle%my_num_vars)
-real(r8) :: elf_at_dist0
+real(r8), dimension(3) :: local_obs_array
+integer  :: ilatindex
 
 integer  :: my_num_obs, i, j, ispc, owner, owners_index, my_num_state
 integer  :: my_obs(obs_ens_handle%my_num_vars), my_state(ens_handle%my_num_vars)
@@ -733,13 +735,18 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       endif
    endif
 
-!   elf_at_dist0 = comp_cov_factor(0.0_r8, cutoff_rev, base_obs_loc, base_obs_kind, &
-!                     base_obs_loc, base_obs_kind, 1)
-!print *, 'y0 horiz = ', elf_at_dist0
-
-!   elf_at_dist0 = comp_cov_factor(0.0_r8, cutoff_rev, base_obs_loc, base_obs_kind, &
-!                     base_obs_loc, base_obs_kind, 5)
-!print *, 'y0 vert = ', elf_at_dist0
+! Lili (2013-04-25): get observation location, and find the latitude of the
+! observtion and then feed to comp_cov_factor
+   local_obs_array = get_location(base_obs_loc)
+   ilatindex = -1
+   if ( local_obs_array(2) < -20.0_r8 ) then
+       ilatindex = 1
+   elseif ( local_obs_array(2) >= -20.0_r8 .and. local_obs_array(2) <= 20.0_r8 ) then
+       ilatindex = 2
+   elseif ( local_obs_array(2) > 20.0_r8 ) then
+       ilatindex = 3
+   endif
+!print *, 'ilatindex = ', ilatindex, local_obs_array(:)
 
    ! Loop through to update each of my state variables that is potentially close
    STATE_UPDATE: do j = 1, num_close_states
@@ -758,14 +765,11 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 !PAR URGENT: MAKE SURE THIS INDEXING IS CORRECT; SAME FOR OTHER COMP_COV_FACTOR
 ! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
       cov_factor1 = comp_cov_factor(close_state_dist(j), cutoff_rev, &
-         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),1)
+         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),4,ilatindex)
       cov_factor2 = comp_cov_factor(close_state_vert_dist(j), cutoff_rev, &
-         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),5)
+         base_obs_loc, base_obs_kind, my_state_loc(state_index),my_state_kind(state_index),5,ilatindex)
       cov_factor = cov_factor1 * cov_factor2
-!      cov_factor = cov_factor1 * cov_factor2 / elf_at_dist0
-!if ( cov_factor1 > 1.0_r8 .or. cov_factor2 > 1.0_r8 ) then
-!write(*,'(A,5f15.4)') 'state',close_state_dist(j),cov_factor1,close_state_vert_dist(j),cov_factor2,cov_factor
-!endif
+!write(*,'(A,4f15.4)') 'state',close_state_dist(j),cov_factor1,close_state_vert_dist(j),cov_factor2
 
       ! If no weight is indicated, no more to do with this state variable
       if(cov_factor <= 0.0_r8) cycle STATE_UPDATE
@@ -865,14 +869,12 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          ! Compute the distance and the covar_factor
          ! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
          cov_factor1 = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),1)
+            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),4,ilatindex)
          cov_factor2 = comp_cov_factor(close_obs_vert_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),5)
+            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),5,ilatindex)
          cov_factor = cov_factor1 * cov_factor2
-!         cov_factor = cov_factor1 * cov_factor2 / elf_at_dist0
-!if ( cov_factor1 > 1.0_r8 .or. cov_factor2 > 1.0_r8 ) then
-!write(*,'(A,5f15.4)') 'obs',close_obs_dist(j),cov_factor1,close_obs_vert_dist(j),cov_factor2, cov_factor
-!endif
+!write(*,'(A,4f15.4)') 'obs',close_obs_dist(j),cov_factor1,close_obs_vert_dist(j),cov_factor2
+
          if(cov_factor <= 0.0_r8) cycle OBS_UPDATE
 
          ! Loop through and update ensemble members in each group

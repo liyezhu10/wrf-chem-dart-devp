@@ -80,11 +80,11 @@
 #    script names; so consider it's length and information content.
 # num_instances:  Number of ensemble members
 
-setenv case                 cam_test
+setenv case                 CAM_FAMIP2deg_GC040Inf1_vert
 setenv compset              F_AMIP_CAM5
 setenv cesmtag              cesm1_1_1
-setenv resolution           f09_f09
-setenv num_instances        4
+setenv resolution           f19_f19
+setenv num_instances        80
 
 # ==============================================================================
 # define machines and directories
@@ -113,14 +113,16 @@ setenv exeroot      /glade/scratch/${USER}/${case}/bld
 setenv rundir       /glade/scratch/${USER}/${case}/run
 setenv archdir      /glade/scratch/${USER}/archive/${case}
 
-setenv DARTroot     /glade/u/home/${USER}/svn/DART/dev
+setenv DARTroot     /glade/u/home/${USER}/DART/dev
 
 # ==============================================================================
 # configure settings ... run_startdate format is yyyy-mm-dd
 # ==============================================================================
 #
-setenv run_startdate 2008-10-31
-setenv sst_dataset ${cesm_datadir}/atm/cam/sst/sst_HadOIBl_bc_0.9x1.25_1850_2011_c110307.nc
+setenv run_startdate 2008-08-31
+# Lili: change SST to 2degree inputfile
+#setenv sst_dataset ${cesm_datadir}/atm/cam/sst/sst_HadOIBl_bc_0.9x1.25_1850_2011_c110307.nc
+setenv sst_dataset ${cesm_datadir}/atm/cam/sst/sst_HadOIBl_bc_1.9x2.5_1850_2010_c110526.nc
 setenv year_start  1850
 setenv year_end    2010
 
@@ -134,7 +136,7 @@ setenv year_end    2010
 
 setenv resubmit      0
 setenv stop_option   nhours
-setenv stop_n        6
+setenv stop_n        12
 
 # ==============================================================================
 # job settings
@@ -151,9 +153,9 @@ setenv stop_n        6
 # ==============================================================================
 
 setenv ACCOUNT      P86850054
-setenv timewall     0:30
-setenv queue        regular
-setenv ptile        15
+setenv timewall     0:45
+setenv queue        economy
+setenv ptile        16
 
 # ==============================================================================
 # set these standard commands based on the machine you are running on.
@@ -218,7 +220,7 @@ end
 #           #instances_node = 1-degree: 4 on lrg_ nodes, 2 on standard.
 #                             2-degree: 16 on lrg_ nodes, 8 on standard
 #           CAM5; to be determined, but no more than listed for CAM4
-set num_tasks_per_node = 15
+set num_tasks_per_node = 16
 set num_tasks_per_instance = 8
 set num_threads = 1
 
@@ -250,10 +252,10 @@ set num_threads = 1
    @ cpl_pes = 8
    @ glc_pes = 8
    @ ocn_pes = 8
-   @ ice_pes = 32
-   @ rof_pes = 32
-   @ lnd_pes = 32
-   @ atm_pes = 32
+   @ ice_pes = 640
+   @ rof_pes = 640
+   @ lnd_pes = 640
+   @ atm_pes = 640
 #endif
 
 echo "task layout"
@@ -281,7 +283,7 @@ echo ""
 ./xmlchange EXEROOT=${exeroot}
 
 ./xmlchange DOUT_S_ROOT=${archdir}
-./xmlchange DOUT_S=FALSE
+./xmlchange DOUT_S=TRUE
 ./xmlchange DOUT_S_SAVE_INT_REST_FILES=TRUE
 ./xmlchange DOUT_L_MS=FALSE
 ./xmlchange DOUT_L_MSROOT="csm/${case}"
@@ -401,7 +403,9 @@ while ($inst <= $num_instances)
 
    echo "hist_empty_htapes = .true. "                       >> ${fname}
    echo "finidat           = 'clm_restart_${instance}.nc' " >> ${fname}
-   echo "fpftdyn = '${cesm_datadir}/lnd/clm2/surfdata/surfdata.pftdyn_0.9x1.25_rcp4.5_simyr1850-2100_c100406.nc' " >> ${fname}
+# Lili:
+#   echo "fpftdyn = '${cesm_datadir}/lnd/clm2/surfdata/surfdata.pftdyn_0.9x1.25_rcp4.5_simyr1850-2100_c100406.nc' " >> ${fname}
+   echo "fpftdyn = '${cesm_datadir}/lnd/clm2/surfdata/surfdata.pftdyn_1.9x2.5_rcp4.5_simyr1850-2100_c100322.nc' " >> ${fname}
 
    # ===========================================================================
    set fname = "user_nl_cice_$instance"
@@ -470,7 +474,9 @@ endif
 
 # CAM5 ... /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
 
-set stagedir = /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
+# Lili: Kevin has ICs of different component in different directories
+#set stagedir = /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
+set stagedir = /glade/scratch/lililei/CAM5/FV2deg_5.0-cesm/Exp1
 
 echo ''
 echo "Copying the restart files from ${stagedir}"
@@ -481,15 +487,16 @@ echo ''
 while ($n <= $num_instances)
    set instance  = `printf %04d $n`
    echo "Staging restarts for instance $n of $num_instances"
-   ${COPY} ${stagedir}/cam_initial_${n}.nc ${rundir}/cam_initial_${instance}.nc
-   ${COPY} ${stagedir}/clm_restart_${n}.nc ${rundir}/clm_restart_${instance}.nc
-   ${COPY} ${stagedir}/ice_restart_${n}.nc ${rundir}/ice_restart_${instance}.nc
+   ${COPY} ${stagedir}/CAM/caminput_${n}.nc ${rundir}/cam_initial_${instance}.nc
+   ${COPY} ${stagedir}/CLM/clminput_${n}.nc ${rundir}/clm_restart_${instance}.nc
+   ${COPY} ${stagedir}/ICE/iceinput_${n}.nc ${rundir}/ice_restart_${instance}.nc
    @ n++
 end
 
-if (  -e   ${stagedir}/prior_inflate_restart* ) then
-   ${COPY} ${stagedir}/prior_inflate_restart* ${rundir}/.
-endif
+# Lili: no inflation for Kevin's experiment
+#if (  -e   ${stagedir}/DART/prior_inflate_restart* ) then
+#   ${COPY} ${stagedir}/DART/prior_inflate_restart* ${rundir}/.
+#endif
 
 # ==============================================================================
 # IMPORTANT: All resubmits must be type 'startup'.
@@ -632,7 +639,7 @@ if ( ~ -e  Tools/st_archive.sh.original ) then
    ${COPY} Tools/st_archive.sh Tools/st_archive.sh.original
 endif
 
-# ${COPY} ${DARTroot}/models/cam/shell_scripts/st_archive.sh  Tools/
+ ${COPY} ${DARTroot}/models/cam/shell_scripts/st_archive.sh  Tools/
 
 ${COPY} ${DARTroot}/models/cam/shell_scripts/assimilate.csh  .
 ${COPY} ${DARTroot}/models/cam/work/input.nml                .

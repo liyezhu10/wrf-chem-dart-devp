@@ -24,7 +24,8 @@ close all; clear;
 diagnostic_test = false;
 
 % Input is in hectopascals
-levels = [1000 850 700 500 400 300 200 150 100 50 30 20 10 7 5];
+%levels = [1000 850 700 500 400 300 200 150 100 50 30 20 10 7 5];
+levels = [1000];
 
 % Date information is overwritten by create_fixed_network_sequence
 year = 2008;
@@ -33,13 +34,13 @@ day = 1;
 hour = 0;
 
 % Number of roughly evenly distributed points in horizontal
-n = 600;
+n = 1800;
 x(1:n) = 0;
 y(1:n) = 0;
 z(1:n) = 0;
 
 % Total number of observations at single time is levels*n*3
-num_obs = size(levels, 2) * n * 3;
+num_obs = size(levels, 2) * n * 1;
  
 inc = pi * (3 - sqrt(5));
 off = 2 / n;
@@ -92,19 +93,21 @@ end
 % Loop to create each observation
 for hloc = 1:n
    for vloc = 1:size(levels, 2)
-      for field = 1:3
+      for field = 1:1
          % 0 indicates that there is another observation; 
          fprintf(fid, '%2i\n', 0);
          % Specify obs kind by string
          if(field == 1)
-            fprintf(fid, 'RADIOSONDE_TEMPERATURE\n');
+%            fprintf(fid, 'RADIOSONDE_TEMPERATURE\n');
+            fprintf(fid, 'RADIOSONDE_SURFACE_PRESSURE\n');
          elseif(field == 2)
             fprintf(fid, 'RADIOSONDE_U_WIND_COMPONENT\n');
          elseif(field == 3)
             fprintf(fid, 'RADIOSONDE_V_WIND_COMPONENT\n');
          end
          % Select pressure as the vertical coordinate
-         fprintf(fid, '%2i\n', 2);
+%         fprintf(fid, '%2i\n', 2);
+         fprintf(fid, '%2i\n', -1);
          % The vertical pressure level
          fprintf(fid, '%5i\n', levels(vloc));
          % Lon and lat in degrees next
@@ -114,7 +117,8 @@ for hloc = 1:n
          fprintf(fid, '%5i %3i %3i %3i %2i %2i \n', year, month, day, hour, 0, 0);
          % Finally, the error variance, 1 for temperature, 4 for winds
          if(field == 1)
-            fprintf(fid, '%2i\n', 1);
+%            fprintf(fid, '%2i\n', 1);
+            fprintf(fid, '%2i\n', 10000);
          else
             fprintf(fid, '%2i\n', 4);
          end
@@ -158,4 +162,6 @@ for i = 1:256
    b = [-pi/2,  pi/2];
    plot(a, b, 'k');
 end
+
+print -depsc obs_sites.eps
 

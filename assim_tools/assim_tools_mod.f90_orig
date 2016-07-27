@@ -5,10 +5,10 @@
 module assim_tools_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $
+! $Id: assim_tools_mod.f90 5707 2012-04-18 20:56:45Z thoar $
+! $Revision: 5707 $
+! $Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $
  
 ! A variety of operations required by assimilation.
 
@@ -84,9 +84,9 @@ logical                :: first_get_correction = .true.
 real(r8)               :: exp_true_correl(200), alpha(200)                                                                      
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $", &
+   revision = "$Revision: 5707 $", &
+   revdate  = "$Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $"
 
 !============================================================================
 
@@ -280,7 +280,6 @@ real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
 real(r8) :: reg_factor
 real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
 real(r8) :: cov_factor, obs(1), obs_err_var, my_inflate, my_inflate_sd
-real(r8) :: cov_factor1, cov_factor2   ! Lili - 2013/04/02
 real(r8) :: varying_ss_inflate, varying_ss_inflate_sd
 real(r8) :: ss_inflate_base, obs_qc, cutoff_rev, cutoff_orig
 real(r8) :: gamma, ens_obs_mean, ens_obs_var, ens_var_deflate
@@ -291,12 +290,6 @@ real(r8) :: close_obs_dist(obs_ens_handle%my_num_vars)
 real(r8) :: close_state_dist(ens_handle%my_num_vars)
 real(r8) :: last_close_obs_dist(obs_ens_handle%my_num_vars)
 real(r8) :: last_close_state_dist(ens_handle%my_num_vars)
-! Lili - 2013/04/02
-real(r8) :: close_obs_vert_dist(obs_ens_handle%my_num_vars)
-real(r8) :: close_state_vert_dist(ens_handle%my_num_vars)
-real(r8) :: last_close_obs_vert_dist(obs_ens_handle%my_num_vars)
-real(r8) :: last_close_state_vert_dist(ens_handle%my_num_vars)
-real(r8) :: elf_at_dist0
 
 integer  :: my_num_obs, i, j, ispc, owner, owners_index, my_num_state
 integer  :: my_obs(obs_ens_handle%my_num_vars), my_state(ens_handle%my_num_vars)
@@ -461,9 +454,6 @@ if (get_close_buffering) then
    num_close_states_buffered   = 0
    num_close_obs_calls_made    = 0
    num_close_states_calls_made = 0
-! Lili - 2013/04/02
-   last_close_obs_vert_dist(:)      = 888888.0_r8   ! something big, not small
-   last_close_state_vert_dist(:)    = 888888.0_r8   ! ditto
 endif
 
 ! Loop through all the (global) observations sequentially
@@ -602,27 +592,22 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    end do
 
    ! Need to get obs density first in case of adaptive localization
-   ! Lili - 2013/04/02; add one entry to get_close_obs
    if (.not. get_close_buffering) then
       call get_close_obs(gc_obs, base_obs_loc, base_obs_kind, my_obs_loc, my_obs_kind, &
-         num_close_obs, close_obs_ind, close_obs_dist,close_obs_vert_dist)
+         num_close_obs, close_obs_ind, close_obs_dist)
    else
       if (base_obs_loc == last_base_obs_loc) then
          num_close_obs     = last_num_close_obs
          close_obs_ind(:)  = last_close_obs_ind(:)
          close_obs_dist(:) = last_close_obs_dist(:)
-         ! Lili
-         close_obs_vert_dist(:) = last_close_obs_vert_dist(:)
          num_close_obs_buffered = num_close_obs_buffered + 1
       else
          call get_close_obs(gc_obs, base_obs_loc, base_obs_kind, my_obs_loc, my_obs_kind, &
-            num_close_obs, close_obs_ind, close_obs_dist,close_obs_vert_dist)
+            num_close_obs, close_obs_ind, close_obs_dist)
          last_base_obs_loc      = base_obs_loc
          last_num_close_obs     = num_close_obs
          last_close_obs_ind(:)  = close_obs_ind(:)
          last_close_obs_dist(:) = close_obs_dist(:)
-         ! Lili
-         last_close_obs_vert_dist(:) = close_obs_vert_dist(:)
          num_close_obs_calls_made = num_close_obs_calls_made +1
       endif
    endif
@@ -708,38 +693,25 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
    ! Now everybody updates their close states
    ! Find state variables on my process that are close to observation being assimilated
-   ! Lili - 2013/04/02, add one entry to get_close_obs
    if (.not. get_close_buffering) then
       call get_close_obs(gc_state, base_obs_loc, base_obs_kind, my_state_loc, my_state_kind, &
-         num_close_states, close_state_ind, close_state_dist, close_state_vert_dist)
+         num_close_states, close_state_ind, close_state_dist)
    else
       if (base_obs_loc == last_base_states_loc) then
          num_close_states    = last_num_close_states
          close_state_ind(:)  = last_close_state_ind(:)
          close_state_dist(:) = last_close_state_dist(:)
-         ! Lili
-         close_state_vert_dist(:) = last_close_state_vert_dist(:)
          num_close_states_buffered = num_close_states_buffered + 1
       else
          call get_close_obs(gc_state, base_obs_loc, base_obs_kind, my_state_loc, my_state_kind, &
-            num_close_states, close_state_ind, close_state_dist, close_state_vert_dist)
+            num_close_states, close_state_ind, close_state_dist)
          last_base_states_loc     = base_obs_loc
          last_num_close_states    = num_close_states
          last_close_state_ind(:)  = close_state_ind(:)
          last_close_state_dist(:) = close_state_dist(:)
-         ! Lili
-         last_close_state_vert_dist(:) = close_state_vert_dist(:)
          num_close_states_calls_made = num_close_states_calls_made + 1 
       endif
    endif
-
-!   elf_at_dist0 = comp_cov_factor(0.0_r8, cutoff_rev, base_obs_loc, base_obs_kind, &
-!                     base_obs_loc, base_obs_kind, 1)
-!print *, 'y0 horiz = ', elf_at_dist0
-
-!   elf_at_dist0 = comp_cov_factor(0.0_r8, cutoff_rev, base_obs_loc, base_obs_kind, &
-!                     base_obs_loc, base_obs_kind, 5)
-!print *, 'y0 vert = ', elf_at_dist0
 
    ! Loop through to update each of my state variables that is potentially close
    STATE_UPDATE: do j = 1, num_close_states
@@ -756,16 +728,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
      
       ! Compute the distance and covariance factor 
 !PAR URGENT: MAKE SURE THIS INDEXING IS CORRECT; SAME FOR OTHER COMP_COV_FACTOR
-! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
-      cov_factor1 = comp_cov_factor(close_state_dist(j), cutoff_rev, &
-         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),1)
-      cov_factor2 = comp_cov_factor(close_state_vert_dist(j), cutoff_rev, &
-         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),5)
-      cov_factor = cov_factor1 * cov_factor2
-!      cov_factor = cov_factor1 * cov_factor2 / elf_at_dist0
-!if ( cov_factor1 > 1.0_r8 .or. cov_factor2 > 1.0_r8 ) then
-!write(*,'(A,5f15.4)') 'state',close_state_dist(j),cov_factor1,close_state_vert_dist(j),cov_factor2,cov_factor
-!endif
+      cov_factor = comp_cov_factor(close_state_dist(j), cutoff_rev, &
+         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index))
 
       ! If no weight is indicated, no more to do with this state variable
       if(cov_factor <= 0.0_r8) cycle STATE_UPDATE
@@ -863,16 +827,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       if(my_obs(obs_index) > i) then
 
          ! Compute the distance and the covar_factor
-         ! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
-         cov_factor1 = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),1)
-         cov_factor2 = comp_cov_factor(close_obs_vert_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),5)
-         cov_factor = cov_factor1 * cov_factor2
-!         cov_factor = cov_factor1 * cov_factor2 / elf_at_dist0
-!if ( cov_factor1 > 1.0_r8 .or. cov_factor2 > 1.0_r8 ) then
-!write(*,'(A,5f15.4)') 'obs',close_obs_dist(j),cov_factor1,close_obs_vert_dist(j),cov_factor2, cov_factor
-!endif
+         cov_factor = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
+            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index))
          if(cov_factor <= 0.0_r8) cycle OBS_UPDATE
 
          ! Loop through and update ensemble members in each group

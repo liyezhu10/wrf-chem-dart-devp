@@ -5,10 +5,10 @@
 module cov_cutoff_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://subversion.ucar.edu/DAReS/DART/branches/development/cov_cutoff/cov_cutoff_mod.f90 $
+! $Id: cov_cutoff_mod.f90 5074 2011-07-15 17:06:58Z thoar $
+! $Revision: 5074 $
+! $Date: 2011-07-15 11:06:58 -0600 (Fri, 15 Jul 2011) $
 
 use     types_mod, only : r8
 use utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
@@ -27,9 +27,9 @@ public :: comp_cov_factor
 
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/cov_cutoff/cov_cutoff_mod.f90 $", &
+   revision = "$Revision: 5074 $", &
+   revdate  = "$Date: 2011-07-15 11:06:58 -0600 (Fri, 15 Jul 2011) $"
 
 
 !============================================================================
@@ -208,7 +208,7 @@ enddo
 
 if ( obs_with_precip == .true. ) then
     if ( obs_kind == KIND_TEMPERATURE ) then
-       c = 0.07_r8
+       c = 0.067_r8
        c_vert  = 0.10_r8
        z_joint = 3000.0_r8
        height_norm = 80000.0_r8
@@ -225,7 +225,7 @@ if ( obs_with_precip == .true. ) then
           first_print_T_OP = .false.
        endif
     else
-       c = 0.06_r8
+       c = 0.059_r8
        c_vert  = 0.08_r8
        z_joint = 3000.0_r8
        height_norm = 80000.0_r8
@@ -244,7 +244,7 @@ if ( obs_with_precip == .true. ) then
     endif
 else
     if ( obs_kind == KIND_TEMPERATURE ) then
-       c = 0.1_r8
+       c = 0.104_r8
        c_vert  = 0.06_r8
        z_joint = 2000.0_r8
        height_norm = 80000.0_r8
@@ -261,7 +261,7 @@ else
           first_print_T_ON = .false.
        endif
     else
-       c = 0.09_r8
+       c = 0.095_r8
        c_vert  = 0.06_r8
        z_joint = 2000.0_r8
        height_norm = 80000.0_r8

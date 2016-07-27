@@ -6658,7 +6658,7 @@ end subroutine get_domain_info
 !#######################################################################
 
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
-                            num_close, close_ind, dist)
+                            num_close, close_ind, dist, vert_dist)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
 ! (obs_loc, obs_kind), returns the subset of close ones to the "base" ob, their
@@ -6681,29 +6681,35 @@ type(location_type),  intent(inout)  :: base_obs_loc, obs_loc(:)
 integer,              intent(in)     :: base_obs_kind, obs_kind(:)
 integer,              intent(out)    :: num_close, close_ind(:)
 real(r8),             intent(out)    :: dist(:)
+real(r8),             intent(out)    :: vert_dist(:)
 
 integer                :: t_ind, istatus1, istatus2, k
 integer                :: base_which, local_obs_which
 real(r8), dimension(3) :: base_array, local_obs_array
-type(location_type)    :: local_obs_loc
+type(location_type)    :: local_base_obs_loc, local_obs_loc
 
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
 dist      = 1.0e9
+vert_dist = 1.0e9
 
 istatus1 = 0
 istatus2 = 0
 
 ! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
 
-base_array = get_location(base_obs_loc) 
-base_which = nint(query_location(base_obs_loc))
+! Lili: the original code converts the vertical coordinate and save it,
+!       here only do the conversion locally, and do not update the input base_obs_loc
+local_base_obs_loc = base_obs_loc
+base_array = get_location(local_base_obs_loc) 
+base_which = nint(query_location(local_base_obs_loc))
 
 if (.not. horiz_dist_only) then
    if (base_which /= wrf%dom(1)%localization_coord) then
-      call vert_convert(ens_mean, base_obs_loc, base_obs_kind, istatus1)
+      call vert_convert(ens_mean, local_base_obs_loc, base_obs_kind, istatus1)
+      base_array = get_location(local_base_obs_loc)
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
    endif
@@ -6715,7 +6721,7 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+   call loc_get_close_obs(gc, local_base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                           num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
@@ -6732,19 +6738,35 @@ if (istatus1 == 0) then
          if (local_obs_which /= wrf%dom(1)%localization_coord) then
             call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), istatus2)
             ! Store the "new" location into the original full local array
-            obs_loc(t_ind) = local_obs_loc
+! Lili: does not save the "new" obs_loc, because this will update the observation
+!            obs_loc(t_ind) = local_obs_loc
          else
             istatus2 = 0
          endif
       endif
 
+!if ( k <= 10 ) then
+!   print *, 'k = ', k, local_obs_which
+!   local_obs_array=get_location(local_obs_loc)
+!   print *, local_obs_array(3)
+!   local_obs_array=get_location(obs_loc(t_ind))
+!   print *, local_obs_array(3)   
+!endif
+
       ! Compute distance - set distance to a very large value if vert coordinate is missing
       ! or vert_convert returned error (istatus2=1)
+! Lili: use obs_loc after vert_convert
       local_obs_array = get_location(local_obs_loc)
+      base_array = get_location(local_base_obs_loc)
       if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
          dist(k) = 1.0e9        
+         vert_dist(k) = 1.0e9
       else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
+         dist(k) = get_dist(local_base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind),.true.)
+         vert_dist(k) = abs(base_array(3)-local_obs_array(3))
+!write(*,'(A,4f15.4)') 'vert loc ', base_array(3), local_obs_array(3)
+!write(*,'(A,4f15.4)') 'obs loc', base_array(1), base_array(2), base_array(3), log(base_array(3))
+!write(*,'(A,4f15.4)') 'var loc', local_obs_array(1), local_obs_array(2), local_obs_array(3), log(local_obs_array(3))
       endif
 
    end do

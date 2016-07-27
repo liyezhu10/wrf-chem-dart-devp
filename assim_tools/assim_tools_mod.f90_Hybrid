@@ -5,10 +5,10 @@
 module assim_tools_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $
+! $Id: assim_tools_mod.f90 5707 2012-04-18 20:56:45Z thoar $
+! $Revision: 5707 $
+! $Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $
  
 ! A variety of operations required by assimilation.
 
@@ -84,9 +84,9 @@ logical                :: first_get_correction = .true.
 real(r8)               :: exp_true_correl(200), alpha(200)                                                                      
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://subversion.ucar.edu/DAReS/DART/branches/development/assim_tools/assim_tools_mod.f90 $", &
+   revision = "$Revision: 5707 $", &
+   revdate  = "$Date: 2012-04-18 14:56:45 -0600 (Wed, 18 Apr 2012) $"
 
 !============================================================================
 
@@ -758,7 +758,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 !PAR URGENT: MAKE SURE THIS INDEXING IS CORRECT; SAME FOR OTHER COMP_COV_FACTOR
 ! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
       cov_factor1 = comp_cov_factor(close_state_dist(j), cutoff_rev, &
-         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),1)
+         base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),4)
       cov_factor2 = comp_cov_factor(close_state_vert_dist(j), cutoff_rev, &
          base_obs_loc, base_obs_kind, my_state_loc(state_index), my_state_kind(state_index),5)
       cov_factor = cov_factor1 * cov_factor2
@@ -865,7 +865,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          ! Compute the distance and the covar_factor
          ! Lili - 2013/04/02, add localization_override ( 4-horizontal, 5-vertical)
          cov_factor1 = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),1)
+            base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),4)
          cov_factor2 = comp_cov_factor(close_obs_vert_dist(j), cutoff_rev, &
             base_obs_loc, base_obs_kind, my_obs_loc(obs_index), my_obs_kind(obs_index),5)
          cov_factor = cov_factor1 * cov_factor2
