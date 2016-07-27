@@ -1,0 +1,18 @@
+#!/bin/csh
+#
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id: mkmf_wrf_dart_obs_preprocess 4945 2011-06-02 22:29:30Z thoar $
+
+../../../mkmf/mkmf -p cam_emp_localization -t ../../../mkmf/mkmf.template -c"-Duse_netCDF" \
+ -a "../../.." path_names_wrf_emp_localization
+
+exit $status
+
+# <next few lines under version control, do not edit>
+# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/releases/Kodiak/models/wrf/work/mkmf_wrf_dart_obs_preprocess $
+# $Revision: 4945 $
+# $Date: 2011-06-02 16:29:30 -0600 (Thu, 02 Jun 2011) $
+
