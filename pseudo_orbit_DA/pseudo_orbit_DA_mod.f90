@@ -8,47 +8,35 @@ module pseudo_orbit_DA_mod
 
 !------------------------------------------------------------------------------
 use types_mod,             only : r8, i8, missing_r8, metadatalength
-use obs_sequence_mod,      only : static_init_obs_sequence
 
 !Du adds operator(+) operator(<)
 use time_manager_mod,      only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                   operator(-), operator(+), operator(<), print_time
+
 use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
                                   logfileunit, nmlfileunit, timestamp,  E_ALLMSG, &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term
-!Du add get_model_time_step
-use assim_model_mod,       only : static_init_assim_model, get_model_size, get_model_time_step, get_state_meta_data
+
+use assim_model_mod,       only : static_init_assim_model, get_model_size, &
+                                  get_state_meta_data
 
 use obs_model_mod,         only : advance_state
-use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
-                                  ensemble_type, get_copy, get_my_num_copies, put_copy,       &
-                                  all_vars_to_all_copies, all_copies_to_all_vars,             &
-                                  duplicate_ens, get_copy_owner_index, &
-                                  get_ensemble_time, set_ensemble_time, &
-                                  prepare_to_read_from_vars, prepare_to_write_to_vars,        &
-                                  prepare_to_read_from_copies,  get_my_num_vars,              &
-                                  prepare_to_write_to_copies, get_ensemble_time,              &
-                                  map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
-                                  copies_in_window, set_num_extra_copies, get_allow_transpose, &
-                                  all_copies_to_all_vars, allocate_single_copy,               &
-                                  get_single_copy, put_single_copy, deallocate_single_copy
+
+use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,     &
+                                  ensemble_type, get_my_num_copies,                &
+                                  all_vars_to_all_copies, all_copies_to_all_vars,  &
+                                  get_copy_owner_index, get_ensemble_time,         &
+                                  set_ensemble_time, get_my_num_vars
 
 use mpi_utilities_mod,     only : initialize_mpi_utilities, finalize_mpi_utilities,           &
-                                  my_task_id, task_sync, broadcast_send, broadcast_recv,      &
-                                  task_count, sum_across_tasks
+                                  my_task_id, task_sync, sum_across_tasks
 
 use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state
 
 use io_filenames_mod,      only : io_filenames_init, file_info_type
 
-use quality_control_mod,   only : initialize_qc
-
-use state_space_diag_mod,  only : filter_state_space_diagnostics, netcdf_file_type, &
-                                  init_diag_output, finalize_diag_output,           &
-                                  skip_diag_files
-
-use location_mod,     only  : location_type
+use location_mod,          only : location_type
 
 
 !------------------------------------------------------------------------------
@@ -384,17 +372,12 @@ call initialize_mpi_utilities('Filter')
 
 call register_module(source,revision,revdate)
 
-! Initialize the obs sequence module
-call static_init_obs_sequence()
-
 ! Initialize the model class data now that obs_sequence is all set up
 call trace_message('Before init_model call')
 call static_init_assim_model()
 call trace_message('After  init_model call')
 call state_vector_io_init()
 call trace_message('After  init_state_vector_io call')
-call initialize_qc()
-call trace_message('After  initialize_qc call')
 
 end subroutine filter_initialize_modules_used
 
