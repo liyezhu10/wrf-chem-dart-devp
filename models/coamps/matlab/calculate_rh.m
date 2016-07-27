@@ -1,11 +1,15 @@
 function rh = calculate_rh(th, p, exbm, qv)
 %% rh = calculate_rh(th, p, exbm, qv)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
   R  = 287;        % Gas constant for dry air
   Rv = 462;        % Gas constant for water vapor
@@ -35,9 +39,3 @@ function rh = calculate_rh(th, p, exbm, qv)
   
   % Relative humidity (by definition)
   rh = qv ./ qvsat;
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

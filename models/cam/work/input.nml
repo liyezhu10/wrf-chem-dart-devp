@@ -35,36 +35,15 @@
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
    inf_initial                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.6,                     0.6,
-   inf_damping                 = 0.9,                     0.9,
+   inf_sd_initial              = 0.1,                     0.1,
+   inf_damping                 = 1.0,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 1000.0,               1000.0,
-   inf_sd_lower_bound          = 0.6,                     0.6
+   inf_upper_bound             = 1000000.0,               1000000.0,
+   inf_sd_lower_bound          = 0.0,                     0.0
    /
 ! ! inf_flavor is 0:none, 1:obs space, 2: varying state space, 3: fixed state_space
 
 &perfect_model_obs_nml
-   start_from_restart    = .true.,
-   output_restart        = .false.,
-   async                 = 0,
-   init_time_days        = -1,
-   init_time_seconds     = -1,
-   first_obs_days        = -1,
-   first_obs_seconds     = -1,
-   last_obs_days         = -1,
-   last_obs_seconds      = -1,
-   output_interval       = 1,
-   trace_execution       = .false.,
-   restart_in_file_name  = "perfect_ics",
-   restart_out_file_name = "perfect_restart",
-   obs_seq_in_file_name  = "obs_seq.in",
-   obs_seq_out_file_name = "obs_seq.perfect",
-   adv_ens_command       = "no_advance_script"
-   output_timestamps     = .false.,
-   trace_execution       = .false.,
-   output_forward_op_errors = .false.,
-   print_every_nth_obs   = -1,
-   silence               = .false.,
    /
 
 &smoother_nml
@@ -167,7 +146,7 @@
 !   will be reset to the values in pert_base_vals.  
 
 &location_nml
-   horiz_dist_only             = .false.,
+   horiz_dist_only             = .true.,
    vert_normalization_pressure = 100000.0, 
    vert_normalization_height   = 10000.0,
    vert_normalization_level    = 20.0,
@@ -298,7 +277,8 @@
    bin_width        =     0, 0, 0, 6, 0, 0 ,
    time_to_skip     =     0, 0, 1, 0, 0, 0 ,
    max_num_bins     = 1000,
-   trusted_obs      = 'null',
+   rat_cri            = 3.0,
+   input_qc_threshold = 3.0,
    Nregions   = 4,
    lonlim1    =   0.0,   0.0,   0.0, 235.0,
    lonlim2    = 360.0, 360.0, 360.0, 295.0,
@@ -306,10 +286,8 @@
    latlim2    =  80.0, -20.0,  20.0,  55.0,
    reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics', 'North America',
    print_mismatched_locs = .false.,
-   create_rank_histogram = .true.,
-   outliers_in_histogram = .true.,
-   use_zero_error_obs    = .false.,
-   verbose               = .false.
+   print_obs_locations = .false.,
+   verbose = .false.
    /
 
 &schedule_nml

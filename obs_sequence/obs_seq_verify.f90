@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program obs_seq_verify
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !-----------------------------------------------------------------------
 !
@@ -84,7 +88,7 @@ use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time
                              operator(<=), operator(-), operator(+), operator(/=)
 use    utilities_mod, only : get_unit, close_file, register_module, &
                              file_exist, error_handler, E_ERR, E_WARN, E_MSG, &
-                             initialize_utilities, finalize_utilities, nmlfileunit, &
+                             initialize_utilities, nmlfileunit, timestamp, &
                              find_namelist_in_file, check_namelist_read, nc_check, &
                              next_file, get_next_filename, find_textfile_dims, &
                              file_to_text, do_nml_file, do_nml_term
@@ -96,10 +100,10 @@ use netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = '$URL$', &
+   revision = '$Revision$', &
+   revdate  = '$Date$'
 
 !---------------------------------------------------------------------
 ! An array of these structures will be filled for each obs sequence file.
@@ -523,8 +527,8 @@ if (allocated(obs_copy_names))        deallocate(obs_copy_names)
 if (allocated(obs_seq_filenames))     deallocate(obs_seq_filenames)
 if (allocated(DesiredStations))       deallocate(DesiredStations)
 
-call error_handler(E_MSG,'obs_seq_verify','Finished successfully.',source,revision,revdate)
-call finalize_utilities()
+call timestamp(source,revision,revdate,'end') ! That closes the log file, too.
+
 
 
 !======================================================================
@@ -1758,8 +1762,3 @@ end subroutine find_our_copies
 
 end program obs_seq_verify
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

@@ -10,11 +10,15 @@
 %
 % All the heavy lifting is done by PlotEnsMeanTimeSeries.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (exist('diagn_file','var') ~=1)
    disp(' ')
@@ -69,33 +73,29 @@ switch lower(pinfo.model)
       disp(['Using State Variable IDs ', num2str(pinfo.var_inds)])
       clear varid
 
-   case {'fms_bgrid'}
+   case 'fms_bgrid'
 
       pinfo = GetBgridInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
-   case {'cam'}
+   case 'cam'
 
       pinfo = GetCamInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
-   case {'wrf'}
+   case 'wrf'
 
       pinfo = GetWRFInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
-   case {'pe2lyr'}
+   case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
-
-   case {'sqg'}
-
-      pinfo = GetSqgInfo(pinfo, diagn_file, 'PlotEnsMeanTimeSeries');
 
    otherwise
 
@@ -106,10 +106,4 @@ end
 pinfo
 
 PlotEnsMeanTimeSeries( pinfo )
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

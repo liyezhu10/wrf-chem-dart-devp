@@ -5,17 +5,14 @@
 <HEAD>
 <TITLE>module model_mod (MPAS ATM)</TITLE>
 <link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
 
-<H1>MODULE model_mod (MPAS ATM)</H1>
-
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P><a href="../../index.html">DART Documentation Main Index</a><br />
@@ -35,19 +32,17 @@
 <A HREF="#PrivateComponents">PRIVATE COMPONENTS</A> /
 <A HREF="#Legalese">TERMS OF USE</A>
 
-<H2>Overview</H2>
+<H1>MODULE model_mod (MPAS ATM)</H1>
 
 <P>The <strong>MPAS ATM </strong> interface for 
    <strong>Data Assimilation Research Testbed (DART)</strong> is under development.
-</P>
    <br />
    <br />
-<P>
    Since MPAS ATM uses netcdf files for their restart mechanism, 
    a namelist-controlled set of variables is used to build the DART state vector.
    Each variable must also correspond to a DART "KIND"; required for the DART
    interpolate routines. For example:
-</P>
+<P>
 <pre>&amp;mpas_vars_nml
    mpas_state_variables = 'uReconstructZonal',      'KIND_U_WIND_COMPONENT',
                           'uReconstructMeridional', 'KIND_V_WIND_COMPONENT',
@@ -158,7 +153,7 @@ type(progvartype), dimension(max_state_variables) :: progvar
 <a name="conversions"></a>
 <div class=indent1>
    <h3>Converting between DART files and MPAS analysis files</h3>
-   <P>is relatively straightforward. Given the namelist mechanism for
+   <P>is relatively straighforward. Given the namelist mechanism for
       determining the state variables and the MPAS history netCDF
       files exist, - everything that is needed is readily determined.
       <br />
@@ -174,7 +169,7 @@ type(progvartype), dimension(max_state_variables) :: progvar
    <table width="100%" cellpadding="10">
    <tr><td valign="top"><a href="model_to_dart.html">model_to_dart.f90</a></td>
        <td>converts an MPAS analysis file (nominally named <em class=file>mpas_analysis.nc</em>) into a 
-       DART-compatible file normally called <em class=file>dart_ics</em>&nbsp;.
+       DART-compatible file normally called <em class=file>dart.ud</em>&nbsp;.
        We usually wind up linking the actual analysis file to a static name that is used by DART.
        </td>
    </tr>
@@ -1562,7 +1557,7 @@ N/A
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
+DART software - Copyright 2004 - 2011 UCAR.<br />
 This open source software is provided by UCAR, "as is",<br />
 without charge, subject to all terms of use at<br />
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

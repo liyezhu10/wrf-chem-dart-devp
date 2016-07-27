@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module utilities_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !-----------------------------------------------------------------------
 !
@@ -137,7 +141,7 @@ module utilities_mod
 !
 !-----------------------------------------------------------------------
 
-use types_mod, only : r4, r8, digits12, i4, i8, PI
+use types_mod, only : r8, PI
 use netcdf
 
 implicit none
@@ -181,10 +185,10 @@ interface
 end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 character(len = 169) :: msgstring
 
@@ -223,7 +227,7 @@ contains
    integer :: iunit, io
 
    character(len=129) :: lname
-   character(len=169) :: string1,string2,string3
+
 
       if ( module_initialized ) then ! nothing to do
 
@@ -343,25 +347,6 @@ contains
             endif
             if (do_nml_file()) write(nmlfileunit, nml=utilities_nml)
             if (do_nml_term()) write(     *     , nml=utilities_nml)
-         endif
-
-         ! Record the values used for variable types:
-         if (do_output_flag .and. print_debug) then
-        
-            write(     *     ,*)  ! a little whitespace is nice
-            write(logfileunit,*)  ! a little whitespace is nice
-
-            write(string1,*)'..  digits12 is ',digits12
-            write(string2,*)'r8       is ',r8
-            write(string3,*)'r4       is ',r4
-            call error_handler(E_DBG, 'initialize_utilities', string1, &
-                               source, revision, revdate, text2=string2, text3=string3)
-
-            write(string1,*)'..  integer  is ',kind(iunit) ! any integer variable will do
-            write(string2,*)'i8       is ',i8
-            write(string3,*)'i4       is ',i4
-            call error_handler(E_DBG, 'initialize_utilities', string1, &
-                               source, revision, revdate, text2=string2, text3=string3)
          endif
 
       endif
@@ -1632,22 +1617,17 @@ end function get_next_filename
 
 !#######################################################################
 
-function is_longitude_between (lon, minlon, maxlon, doradians, newlon)
+function is_longitude_between (lon, minlon, maxlon, doradians)
 
 !  uniform way to treat longitude ranges, in degrees, on a globe.
 !  returns true if lon is between min and max, starting at min
 !  and going EAST until reaching max.  wraps across 0 longitude.
 !  if min == max, all points are inside.  includes edges.
 !  if optional arg doradians is true, do computation in radians 
-!  between 0 and 2*PI instead of 360.   if given, return the
-!  'lon' value possibly + 360 (or 2PI) which can be used for averaging
-!  or computing on a consistent set of longitude values.  after the
-!  computation is done if the answer is > 360 (or 2PI), subtract that
-!  value to get back into the 0 to 360 (or 2PI) range.
+!  between 0 and 2*PI instead of 360.
 
-real(r8), intent(in)            :: lon, minlon, maxlon
-logical,  intent(in),  optional :: doradians
-real(r8), intent(out), optional :: newlon
+real(r8), intent(in)           :: lon, minlon, maxlon
+logical,  intent(in), optional :: doradians
 logical :: is_longitude_between
 
 real(r8) :: minl, maxl, lon2, circumf
@@ -1657,34 +1637,15 @@ if (present(doradians)) then
   if (doradians) circumf = TWOPI
 endif
 
-! ensure the valid region boundaries are between 0 and one circumference
-! (must use modulo() and not mod() so negative vals are handled ok)
 minl = modulo(minlon, circumf)
 maxl = modulo(maxlon, circumf)
 
-! boundary points are included in the valid region so if min=max 
-! the 'region' is the entire globe and you can return early.
 if (minl == maxl) then
-   is_longitude_between = .true. 
-   if (present(newlon)) newlon = lon
+   is_longitude_between = .true.  ! entire globe
    return
 endif
 
-! ensure the test point is between 0 and one circumference
 lon2  = modulo(lon, circumf)
-
-! here's where the magic happens:
-! minl will be bigger than maxl if the region of interest crosses the prime 
-! meridian (longitude = 0).  in this case add one circumference to the 
-! eastern boundary so maxl is guarenteed to be larger than minl (and valid 
-! values are now between 0 and 2 circumferences).  
-!
-! if the test point longitude is west of the minl boundary add one circumference
-! to it as well before testing against the bounds.  values that were east of 
-! longitude 0 but west of maxl will now be shifted so they are again correctly 
-! within the new range; values that were west of the prime meridian but east 
-! of minl will stay in range; values west of minl and east of maxl will be 
-! correctly shifted out of range.
 
 if (minl > maxl) then
    maxl = maxl + circumf
@@ -1693,18 +1654,6 @@ endif
 
 is_longitude_between = ((lon2 >= minl) .and. (lon2 <= maxl))
 
-! if requested, return the value that was tested against the bounds, which 
-! will always be between 0 and 2 circumferences and monotonically increasing
-! from minl to maxl.  if the region of interest doesn't cross longitude 0
-! this value will be the same as the input value.  if the region does
-! cross longitude 0 this value will be between 0 and 2 circumferences.
-! it's appropriate for averaging values together or comparing them against
-! other values returned from this routine with a simple greater than or less
-! than without further computation for longitude 0.  to convert the values
-! back into the range from 0 to one circumference, compare it to the
-! circumference and if larger, subtract one circumference from the value.
-
-if (present(newlon)) newlon = lon2
 
 end function is_longitude_between 
 
@@ -1738,7 +1687,7 @@ character(len=129), SAVE :: dir_base
 character(len=129), SAVE :: filename
 character(len=129), SAVE :: dir_ext
 
-integer :: slashindex, splitindex, i, strlen, ios
+integer :: slashindex, splitindex, i, strlen
 
 if (len(fname) > len(dir_base) ) then
    write(msgstring,*)'input filename not guaranteed to fit in local variables'
@@ -1794,13 +1743,8 @@ if (ifile == 1) then ! First time through ... find things.
          dir_base   = dir_name(1:splitindex-1)
          dir_ext    = dir_name(splitindex+1:slashindex-1)
          dir_prec   = slashindex - splitindex - 1
-    
-         read(dir_ext,*,iostat=ios) filenum
-         if(ios /= 0) then
-            ! Directory has an '_' separating two alphabetic parts
-            ! Nothing to increment.
-            filenum = -1
-         endif
+
+         read(dir_ext,*) filenum
       endif
 
    else ! we have one single file - on the first trip through
@@ -1884,8 +1828,3 @@ end function ascii_file_format
 
 end module utilities_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

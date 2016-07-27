@@ -1,10 +1,14 @@
 %% ratio_test
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Plot the ratio of the new linear variance
 % update factor for filter to the old linear in sd case.
@@ -36,8 +40,5 @@ xlabel('regressed square root ratio, a');
 ylabel('distance factor, gamma');
 title('ratio of linear sd to linear variance updates');
 
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 
+   

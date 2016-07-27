@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 
 set SNAME = $0
 set clobber
@@ -152,37 +152,9 @@ echo "Running DART test on $host"
 @ modelnum = 10
 
 if ( 1 == 1 ) then
-foreach MODEL ( \
-  9var \
-  am2 \
-  bgrid_solo \
-  cam \
-  #cosmo \
-  forced_lorenz_96 \
-  #gitm \
-  ikeda \
-  lorenz_04 \
-  lorenz_63 \
-  lorenz_84 \
-  lorenz_96 \
-  lorenz_96_2scale \
-  MITgcm_annulus \
-  MITgcm_ocean \
-  mpas_atm \
-  mpas_ocn \
-  NAAPS \
-  NCOMMAS \
-  null_model \
-  #PBL_1d \
-  pe2lyr \
-  POP \
-  #rose \
-  simple_advection \
-  template \
-  tiegcm \
-  wrf )
-  # intentionally omitted:
-  #  forced_barot MITgcm_annulus PBL_1d rose
+foreach MODEL ( 9var lorenz_63 lorenz_84 lorenz_96 lorenz_96_2scale \
+    lorenz_04 forced_lorenz_96 null_model ikeda bgrid_solo pe2lyr cam wrf ) 
+    # PBL_1d MITgcm_annulus )
     
     echo "=================================================================="
     echo "Compiling $MODEL at "`date`
@@ -217,32 +189,11 @@ echo "not have all the necessary supporting libraries.  So errors here"
 echo "are not fatal."
 
 cd ${DARTHOME}/observations
-if ( 1 == 1 ) then
-  ./buildall.csh
-endif
+./buildall.csh
 
 echo
 echo "=================================================================="
 echo "Observation converter testing complete at "`date`
-echo "=================================================================="
-echo
-
-echo
-echo
-echo
-echo "=================================================================="
-echo "Testing location modules at "`date`
-echo "=================================================================="
-echo
-
-cd ${DARTHOME}/location
-if ( 1 == 1 ) then
-  ./testall.csh
-endif
-
-echo
-echo "=================================================================="
-echo "Location module testing complete at "`date`
 echo "=================================================================="
 echo
 
@@ -429,7 +380,6 @@ echo '/num_groups'                    >> vi_script
 echo ':s/1/4/'                        >> vi_script
 echo '/save_reg_diagnostics'          >> vi_script
 echo ':s/false/true/'                 >> vi_script
-echo ':g/silence/s/false/true/'       >> vi_script
 echo ':wq'                            >> vi_script
 
 (${VI} input.nml < vi_script)
@@ -875,7 +825,7 @@ echo ':s/80/20/'                              >> vi_script
 echo '/num_groups'                            >> vi_script
 echo ':s/4/1/'                                >> vi_script
 echo '/inf_flavor'                            >> vi_script
-echo ':s/2/1/'                                >> vi_script
+echo ':s/0/1/'                                >> vi_script
 echo '/inf_initial'                           >> vi_script
 echo ':s/1\.0/1\.05/'                         >> vi_script
 echo ':wq'                                    >> vi_script

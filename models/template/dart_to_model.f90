@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program dart_to_model
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: interface between DART and the model model
@@ -35,16 +39,16 @@ use        model_mod, only : static_init_model, dart_vector_to_model_file, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_model_input_file = 'dart_restart'
+character (len = 128) :: dart_to_model_input_file = 'dart.ic'
 logical               :: advance_time_present     = .false.
 character(len=256)    :: model_restart_filename   = 'model_restartfile'
 
@@ -185,10 +189,5 @@ call close_file(iunit)
 end subroutine write_model_time_control
 
 
-end program dart_to_model
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+end program dart_to_model

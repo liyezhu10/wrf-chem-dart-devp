@@ -22,11 +22,15 @@ function PlotCorrel( pinfo )
 % pinfo.base_time      = 238;        % ditto
 % PlotCorrel(pinfo)                  % generates a plot
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
@@ -51,12 +55,12 @@ switch(lower(pinfo.model))
 
       % Get 'standard' ensemble series
       base = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-                  'copy1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
+                  'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
                   'stateindex',pinfo.base_var_index);
 
       % Get (potentially large) state.
       state_var = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-                  'copy1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
+                  'copyindex1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
                   'state1',pinfo.min_state_var,'statecount',pinfo.num_state_vars);
 
       % It is efficient to preallocate correl storage ...
@@ -71,7 +75,7 @@ switch(lower(pinfo.model))
       disp('Please be patient ... this usually takes a bit ...')
       clf;
 
-      [~,h] = contour(pinfo.time, 1:pinfo.num_state_vars, correl, contourlevels);
+      [cs,h] = contour(pinfo.time, 1:pinfo.num_state_vars, correl, contourlevels);
  %    clabel(cs,h,'FontSize',12,'Color','k','Rotation',0);
       set(gca,'Clim',[-1 1])
       hold on; % highlight the reference state variable and time
@@ -88,7 +92,7 @@ switch(lower(pinfo.model))
       colorbar
 
 
-   case {'fms_bgrid'}
+   case 'fms_bgrid'
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -111,12 +115,12 @@ switch(lower(pinfo.model))
       nxny = nx*ny;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
       bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
@@ -148,7 +152,7 @@ switch(lower(pinfo.model))
       axis image
       colorbar;
 
-   case {'wrf'}
+   case 'wrf'
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -184,7 +188,7 @@ switch(lower(pinfo.model))
       % Get the actual goods ... and perform the correlation
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
@@ -195,7 +199,7 @@ switch(lower(pinfo.model))
       end
 
       bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       if (std(bob(:)) == 0.0)
@@ -239,7 +243,7 @@ switch(lower(pinfo.model))
       axis image
       colorbar;
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -267,12 +271,12 @@ switch(lower(pinfo.model))
       nxny = nx*ny;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
       bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
@@ -304,7 +308,7 @@ switch(lower(pinfo.model))
       axis image
       colorbar;
 
-   case {'pe2lyr','cam','sqg'}
+   case {'pe2lyr','cam'}
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -318,12 +322,12 @@ switch(lower(pinfo.model))
       nxny     = nx*ny;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
       bob      = get_hyperslab( 'fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
@@ -355,7 +359,7 @@ switch(lower(pinfo.model))
       axis image
       colorbar;
 
-   case {'tiegcm'}
+   case 'tiegcm'
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -373,12 +377,12 @@ switch(lower(pinfo.model))
       nxny     = nx*ny;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
 
       bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
@@ -411,7 +415,7 @@ switch(lower(pinfo.model))
       axis image
       colorbar;
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       %% We are going to correlate one var/time/lvl/location  with
       %  all other locations for a var/time/lvl
@@ -419,12 +423,12 @@ switch(lower(pinfo.model))
       clf;
 
       base_mem = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
                     'cellindex', pinfo.base_cellindex );
 
       comp_ens = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.comp_var, ...
-                    'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                    'copyindex1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                     'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
 
       [~, nxny] = size(comp_ens);
@@ -458,7 +462,7 @@ switch(lower(pinfo.model))
       axis([-10 370 -Inf Inf])
       colorbar;
 
-   case {'clm'}
+   case 'clm'
 
       % We are going to correlate one var/time/lvl/lat/lon  with
       % all other lats/lons for a var/time/lvl
@@ -585,10 +589,4 @@ end
 
 h = patch(xpoly,ypoly,x');
 set(h,'LineStyle','none');
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

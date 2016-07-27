@@ -20,11 +20,15 @@ function a = ReadBinaryObsSeq(fname,machineformat)
 %    'ieee-be.l64' or 's' - IEEE floating point with big-endian byte
 %                           ordering and 64 bit long data type.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (nargin <= 1 )
    fname = 'obs_seq.final';
@@ -389,10 +393,3 @@ string         = fread(fid,6,'char');
 recend  = fread(fid,1,'int32');
 
 gpsro_ref_form = char(string');  % convert binary to ascii string
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

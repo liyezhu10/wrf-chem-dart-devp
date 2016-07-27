@@ -1,11 +1,15 @@
 function x_new = advance_oned(x, alpha, model_bias)
 %% advance_oned(x, alpha, model_bias)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 x_new = x + comp_dt(x, alpha, model_bias);
 end
@@ -20,9 +24,3 @@ function dx = comp_dt(x, alpha, model_bias)
 dx = (x + model_bias) + alpha .* x .* abs(x);
 
 end
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

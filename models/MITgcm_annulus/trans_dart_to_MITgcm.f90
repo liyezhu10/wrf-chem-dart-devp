@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program trans_dart_to_MITgcm
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 use        types_mod, only : r8
 use time_manager_mod, only : time_type, write_time, read_time, get_date,  &
@@ -19,10 +23,10 @@ use    utilities_mod, only : get_unit, error_handler,  &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Model namelist parameters with default values
@@ -90,9 +94,9 @@ write(nmlfileunit, nml=model_nml)
 write(     *     , nml=model_nml)
 
 
-call error_handler(E_MSG,'trans_dart_to_MITgcm',               &
-   'Converting a dart state vector to an MITgcm restart file', &
-   source, revision, revdate)
+call error_handler(E_MSG,'trans_dart_to_MITgcm',                     &
+                  'Converting a dart state vector to an MITgcm &
+                   restart file', source, revision, revdate)
 
 ! allocate space for dart vector
 allocate(dart(model_size))
@@ -296,8 +300,6 @@ end subroutine dart_io
 
 end program trans_dart_to_MITgcm
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+
+
+

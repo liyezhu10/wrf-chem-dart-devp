@@ -1,7 +1,12 @@
 #!/usr/bin/env python
-#
-# This code is not protected by the DART copyright agreement.
-# DART $Id$
+
+#############################################################
+# <next few lines under version control, D O  N O T  E D I T>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$
+#############################################################
 
 __author__    = "Rahul Mahajan"
 __email__     = "rahul.mahajan@nasa.gov"
@@ -195,11 +200,3 @@ if ( clean ):
 
 if (verbose): print 'all done ...'
 sys.exit(0)
-
-#############################################################
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
-#############################################################
-

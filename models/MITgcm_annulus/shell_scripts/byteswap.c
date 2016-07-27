@@ -1,8 +1,3 @@
-/* This code is not protected by the DART copyright agreement.
- * DART $Id$
- */
-
-
 /*
   byteswap.c - byteswaps all the words of a data file.
 
@@ -10,6 +5,8 @@
   Geophysical Fluid Dynamics Laboratory/NOAA
   Princeton University Forrestal Campus
   Last updated: 7/1/99
+
+  DART $Id$
 */
 
 #include <stdio.h>
@@ -144,11 +141,3 @@ int main(int argc, char **argv)
    /* Done */
    fclose(infid); fclose(outfid); return(errornum);
   }
-
-/*
- * <next few lines under version control, do not edit>
- * $URL$
- * $Id$
- * $Revision$
- * $Date$
- */

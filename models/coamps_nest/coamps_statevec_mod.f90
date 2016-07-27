@@ -1,8 +1,3 @@
-! This code may (or may not) be part of the COAMPS distribution,
-! So it is not protected by the DART copyright agreement.
-!
-! DART $Id$
-
 !------------------------------
 ! MODULE:       coamps_statevec_mod
 ! AUTHOR:       T. R. Whitcomb
@@ -12,7 +7,6 @@
 ! Module containing the data structure and routines for dealing with
 ! a COAMPS state vector (a collection of COAMPS state variables)
 !------------------------------ 
-
 module coamps_statevec_mod
 
     use coamps_statevar_mod, only : state_variable, new_state_variable,    &
@@ -128,11 +122,11 @@ module coamps_statevec_mod
     ! BEGIN MODULE VARIABLES
     !------------------------------
   
-! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+    ! Modified automatically by Subversion
+    character(len=128) :: &
+        source   = "$URL$", &
+        revision = "$Revision$", &
+        revdate  = "$Date$"
   
     !------------------------------
     ! END MODULE VARIABLES
@@ -586,8 +580,3 @@ contains
     !------------------------------
 end module coamps_statevec_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

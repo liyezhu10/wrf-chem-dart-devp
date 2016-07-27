@@ -1,6 +1,3 @@
-! This code is not protected by the DART copyright agreement.
-! DART $Id$
-
 MODULE map_utils
 
 ! Module that defines constants, data structures, and
@@ -2153,9 +2150,3 @@ MODULE map_utils
    END SUBROUTINE llij_gauss 
   
 END MODULE map_utils
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

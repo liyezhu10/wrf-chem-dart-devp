@@ -2,18 +2,22 @@ function [dart pop] = Check_pop_to_dart(popfile,dartfile)
 %% Check_pop_to_dart : check pop_to_dart.f90 ... the conversion of a POP restart to a DART state vector file.
 %
 %  popfile = 'pop.r.nc';
-% dartfile = 'dart_ics';
+% dartfile = 'dart.ics';
 % x        = Check_pop_to_dart(popfile, dartfile);
 %
 %  popfile = '~DART/models/POP/work/cx3.dart.001.pop.r.0002-01-01-00000.nc';
 % dartfile = '~DART/models/POP/work/perfect_ics';
 % [dart pop] = Check_pop_to_dart(popfile, dartfile);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Read the original POP file values.
 if (exist(popfile,'file') ~= 2)
@@ -153,9 +157,3 @@ fclose(fid);
 function B = get_data(fid, shape, typestr)
 A = fread(fid, prod(shape), typestr);
 B = reshape(A, shape);
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

@@ -1,11 +1,15 @@
 function err = total_err(pred, verif, w)
 %% TOTAL_ERR: Computes Total error for time series of set of state variables
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Pred and verif are time_series_length x number of variables
 num_times = size(pred, 1);
@@ -37,10 +41,3 @@ elseif ( nargin == 3 )
 else
    error('Wrong number of arguments.')
 end
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

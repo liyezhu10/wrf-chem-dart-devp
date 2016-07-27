@@ -25,11 +25,15 @@ function hop_test_check(file0, file1, file2, varname)
 % file5 = '/glade/scratch/thoar/archive/hop_12/rest/2008-11-01-00000/hop_12.clm2_0001.r.2008-11-01-00000.nc';
 % hop_test_check(file3, file4, file5)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if ( (exist(file0,'file') ~= 2) || ...
      (exist(file1,'file') ~= 2) || ...
@@ -55,9 +59,9 @@ bob = jet128; colormap(bob);
 
 if (nargin > 3)
     vars = {varname};
-    pausecmd = 'fprintf(''pausing at level %d ... hit a key to continue\n'',ilevel); pause';
+    pausecmd = 'fprintf(''pausing at level %d ... hit a key to continue\n'',ilevel), pause';
 else
-    pausecmd = 'fprintf(''           level %d ... \n'',ilevel); pause(1.0)';
+    pausecmd = 'fprintf(''           level %d ... \n'',ilevel); pause(0.1)';
 end
 
 for i = 1:length(vars)
@@ -129,7 +133,6 @@ if orgmin == orgmax
 else
     clim = [-datmax datmax];
 end
-histedges = FindHistogramEdges(clim,101);
 
 sbpos = [0.10 0.06 0.80 0.28; 
          0.10 0.43 0.80 0.28;
@@ -140,7 +143,7 @@ sbpos = [0.10 0.06 0.80 0.28;
 figure(1); clf; orient tall; 
 
 subplot('position',sbpos(3,:))
-   histc(hopobj.change(:),histedges)
+   hist(hopobj.change(:),50)
    str1 = sprintf('(min %0.5g %s) hopping difference histogram (max %0.5g %s)', ...
                    slabmin, hopobj.units, slabmax, hopobj.units);
    title(str1,'Interpreter','none')
@@ -183,7 +186,6 @@ orgmin  = min(orgslab(:));
 orgmax  = max(orgslab(:));
 datmax  = max(abs([orgmin orgmax]));
 clim    = [-datmax datmax];
-histedges = FindHistogramEdges(clim,101);
 
 sbpos = [0.10 0.06 0.80 0.28; 
          0.10 0.43 0.80 0.28;
@@ -191,7 +193,7 @@ sbpos = [0.10 0.06 0.80 0.28;
 
 figure(1); clf; orient tall; 
 subplot('position',sbpos(3,:))
-   histc(slab(:),histedges)
+   hist(slab(:),50)
    str1 = sprintf('(min %0.5g %s) hopping difference histogram (max %0.5g %s)', ...
                     slabmin, hopobj.units, slabmax, hopobj.units);
    title(str1,'Interpreter','none')
@@ -274,14 +276,3 @@ for i = 1:length(varinfo.Attribute)
       break
    end
 end
-
-
-function x = FindHistogramEdges(minmax,nedges)
-
-x = minmax(1) + [1:nedges]*(minmax(2)-minmax(1))/(nedges-1);
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 
 # ---------------------
 # Purpose
@@ -13,8 +13,7 @@
 # This script is designed to configure and build a multi-instance CESM model
 # that has CAM, CLM, and CICE as active components over a single data ocean,
 # and will use DART to assimilate observations at regular intervals.
-# This script does not build DART. It works best if the appropriate DART
-# executables have been built, however.
+# This script does not build DART.
 #
 # This script relies heavily on the information in:
 # http://www.cesm.ucar.edu/models/cesm1.1/cesm/doc/usersguide/book1.html
@@ -48,6 +47,29 @@
 # For the brave, read
 #
 # http://www.cesm.ucar.edu/models/cesm1.1/cesm/doc/usersguide/x1142.html
+#
+# ==============================================================================
+# === IMPORTANT modifications to the distribution code before ANYTHING
+# ==============================================================================
+
+# Had to edit the following to remove the LSB_PJL_... word too long error
+# cesm1_1_beta04/scripts/ccsm_utils/Machines/mkbatch.bluefire .
+# On bluefire for cesm1_1_beta04 it's not enough to use the hard-wired
+# SourceMods below; mkbatch.bluefire cannot be modified via SourceMods.
+# So the cesm1_1_beta04 version in Tim's directory must be used.
+# As long as OMP_NUM_THREADS == 1 ... the default is fine.
+# This may also be a problem if the number of nodes is increased, e.g.
+# if the regular memory nodes are used, or if the resolution is increased,
+# because the number of entries in BIND_THRD_GEOMETRY will increase.
+#
+# The cesm1_1_beta04 lt_archive script did not create parent dirs
+# if they did not already exist.  To fix the script, edit:
+#   ${cesmroot}/scripts/ccsm_utils/Tools/lt_archive.csh
+# and change 'mkdir' to 'mkdir -p'.  This is fixed in more recent
+# versions of the code.
+#
+# For these reasons, it is required that you use ~thoar/cesm1_1_beta04
+# as the source of the CESM code.
 
 # ==============================================================================
 # ====  Set case options
@@ -60,8 +82,8 @@
 
 setenv case                 cam_test
 setenv compset              F_AMIP_CAM5
-setenv resolution           f09_f09
 setenv cesmtag              cesm1_1_1
+setenv resolution           f09_f09
 setenv num_instances        4
 
 # ==============================================================================
@@ -70,7 +92,7 @@ setenv num_instances        4
 # mach            Computer name
 # cesm_datadir    Root path of the public CESM data files
 # cesmroot        Location of the cesm code base
-#                    i.e. cesm1_1_1 on yellowstone
+#                 For cesm1_1 on yellowstone
 # DARTroot        Location of DART code tree.
 #                    Executables, scripts and input in $DARTroot/models/cam/...
 # caseroot        Your (future) cesm case directory, where this CESM+DART will be built.
@@ -91,13 +113,13 @@ setenv exeroot      /glade/scratch/${USER}/${case}/bld
 setenv rundir       /glade/scratch/${USER}/${case}/run
 setenv archdir      /glade/scratch/${USER}/archive/${case}
 
-setenv DARTroot     /glade/u/home/${USER}/svn/DART/trunk
+setenv DARTroot     /glade/u/home/${USER}/svn/DART/dev
 
 # ==============================================================================
 # configure settings ... run_startdate format is yyyy-mm-dd
 # ==============================================================================
-
-setenv run_startdate 2008-11-01
+#
+setenv run_startdate 2008-10-31
 setenv sst_dataset ${cesm_datadir}/atm/cam/sst/sst_HadOIBl_bc_0.9x1.25_1850_2011_c110307.nc
 setenv year_start  1850
 setenv year_end    2010
@@ -106,6 +128,7 @@ setenv year_end    2010
 # runtime settings --  How many assimilation steps will be done after this one
 #
 # stop_option   Units for determining the forecast length between assimilations
+#               Changing stop_option requires changes to user_nl_cam below.
 # stop_n        Number of time units in the forecast
 # ==============================================================================
 
@@ -127,8 +150,8 @@ setenv stop_n        6
 #         from running for long periods.
 # ==============================================================================
 
-setenv ACCOUNT      P8685nnnn
-setenv timewall     0:40
+setenv ACCOUNT      P86850054
+setenv timewall     0:30
 setenv queue        regular
 setenv ptile        15
 
@@ -136,14 +159,11 @@ setenv ptile        15
 # set these standard commands based on the machine you are running on.
 # ==============================================================================
 
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
-
-# The FORCE options are not optional.
-# The VERBOSE options are useful for debugging though
-# some systems don't like the -v option to any of the following 
 switch ("`hostname`")
    case be*:
       # NCAR "bluefire"
+      # The FORCE options are not optional.
+      # the VERBOSE options are useful for debugging.
       set   MOVE = '/usr/local/bin/mv -fv'
       set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -fvs'
@@ -190,9 +210,7 @@ cd ${caseroot}
 
 # Save a copy for debug purposes
 foreach FILE ( *xml )
-   if ( ~ -e        ${FILE}.original ) then
-      ${COPY} $FILE ${FILE}.original
-   endif
+   ${COPY} $FILE ${FILE}.original
 end
 
 # num_tasks_per_instance = #tasks_node / #instances_node
@@ -261,13 +279,9 @@ echo ""
 ./xmlchange RUN_TYPE=startup
 ./xmlchange RUN_STARTDATE=$run_startdate
 ./xmlchange EXEROOT=${exeroot}
-./xmlchange PIO_TYPENAME=pnetcdf
-
-# DOUT_S     is to turn on/off the short-term archiving
-# DOUT_L_MS  is to store to the HPSS (formerly "MSS")
 
 ./xmlchange DOUT_S_ROOT=${archdir}
-./xmlchange DOUT_S=TRUE
+./xmlchange DOUT_S=FALSE
 ./xmlchange DOUT_S_SAVE_INT_REST_FILES=TRUE
 ./xmlchange DOUT_L_MS=FALSE
 ./xmlchange DOUT_L_MSROOT="csm/${case}"
@@ -279,12 +293,15 @@ echo ""
 ./xmlchange SSTICE_YEAR_END=$year_end
 
 # Do not change the CALENDAR or the CONTINUE_RUN
+# DOUT_S     is to turn on/off the short-term archiving
+# DOUT_L_MS  is to store to the HPSS (formerly "MSS")
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange CONTINUE_RUN=FALSE
 ./xmlchange RESUBMIT=$resubmit
+./xmlchange PIO_TYPENAME=pnetcdf
 
 # The river transport model ON is useful only when using an active ocean or
 # land surface diagnostics. Setting ROF_GRID to 'null' turns off the RTM.
@@ -381,10 +398,8 @@ while ($inst <= $num_instances)
    # ===========================================================================
    set fname = "user_nl_clm_$instance"
    # ===========================================================================
-   # hist_empty_htapes must be false at the moment. Otherwise the CLM restart file
-   # gets created with ntapes=0 which prevents CLM from restarting. Crazy.
 
-   echo "hist_empty_htapes = .false. "                      >> ${fname}
+   echo "hist_empty_htapes = .true. "                       >> ${fname}
    echo "finidat           = 'clm_restart_${instance}.nc' " >> ${fname}
    echo "fpftdyn = '${cesm_datadir}/lnd/clm2/surfdata/surfdata.pftdyn_0.9x1.25_rcp4.5_simyr1850-2100_c100406.nc' " >> ${fname}
 
@@ -393,7 +408,7 @@ while ($inst <= $num_instances)
    # ===========================================================================
 
    echo  " ice_ic = 'ice_restart_${instance}.nc' " >> ${fname}
-
+  
    @ inst ++
 end
 
@@ -411,8 +426,6 @@ end
 # ==============================================================================
 
 # none needed for CAM
-
-./preview_namelists
 
 # ==============================================================================
 # Update source files if need be
@@ -433,7 +446,7 @@ else
    echo "http://www.image.ucar.edu/pub/DART/CESM/DART_SourceMods_cesm1_1_1.tar"
    echo "untar these into your HOME directory - they will create a"
    echo "~/cesm_1_1_1  directory with the appropriate SourceMods structure."
-   exit -4
+   exit -3
 endif
 
 # ==============================================================================
@@ -448,14 +461,14 @@ echo ''
 
 if ( $status != 0 ) then
    echo "ERROR: Case could not be built."
-   exit -5
+   exit -4
 endif
 
 # ==============================================================================
 # Stage the restarts now that the run directory exists
-#
-# CAM5 ... /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
 # ==============================================================================
+
+# CAM5 ... /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
 
 set stagedir = /glade/p/work/raeder/Exp/Pincus_Cam5/archive/Exp3/rest/2008-11-01-00000
 
@@ -464,23 +477,40 @@ echo "Copying the restart files from ${stagedir}"
 echo 'into the CESM run directory.'
 echo ''
 
-@ inst = 1
-while ($inst <= $num_instances)
-   set instance  = `printf %04d $inst`
-
-   echo ''
-   echo "Staging restarts for instance $inst of $num_instances"
-
-   ${COPY} ${stagedir}/cam_initial_${inst}.nc ${rundir}/cam_initial_${instance}.nc
-   ${COPY} ${stagedir}/clm_restart_${inst}.nc ${rundir}/clm_restart_${instance}.nc
-   ${COPY} ${stagedir}/ice_restart_${inst}.nc ${rundir}/ice_restart_${instance}.nc
-
-   @ inst ++
+@ n = 1
+while ($n <= $num_instances)
+   set instance  = `printf %04d $n`
+   echo "Staging restarts for instance $n of $num_instances"
+   ${COPY} ${stagedir}/cam_initial_${n}.nc ${rundir}/cam_initial_${instance}.nc
+   ${COPY} ${stagedir}/clm_restart_${n}.nc ${rundir}/clm_restart_${instance}.nc
+   ${COPY} ${stagedir}/ice_restart_${n}.nc ${rundir}/ice_restart_${instance}.nc
+   @ n++
 end
 
 if (  -e   ${stagedir}/prior_inflate_restart* ) then
    ${COPY} ${stagedir}/prior_inflate_restart* ${rundir}/.
 endif
+
+# ==============================================================================
+# IMPORTANT: All resubmits must be type 'startup'.
+# Change Tools/ccsm_postrun.csh line 83 to CONTINUE_RUN -val FALSE'
+# ==============================================================================
+
+echo ''
+echo 'Changing Tools/ccsm_postrun_setup	such that all the resubmits are "startup",'
+echo 'which means CONTINUE_RUN should be FALSE in ccsm_postrun_setup'
+echo ''
+
+if ( ~ -e  Tools/cesm_postrun_setup.original ) then
+   ${COPY} Tools/cesm_postrun_setup Tools/cesm_postrun_setup.original
+endif
+
+ex Tools/cesm_postrun_setup <<ex_end
+/use COMP_RUN_BARRIERS as surrogate for timing run logical/
+/CONTINUE_RUN/
+s;TRUE;FALSE;
+wq
+ex_end
 
 # ==============================================================================
 # Edit the run script to reflect project, queue, and wallclock
@@ -501,7 +531,7 @@ switch ( $BATCH )
       # NCAR "bluefire", "yellowstone"
       set TIMEWALL=`grep BSUB ${case}.run | grep -e '-W' `
       set    QUEUE=`grep BSUB ${case}.run | grep -e '-q' `
-      sed -e "s/ptile=[0-9][0-9]*/ptile=$ptile/" \
+      sed -e "s/ptile=32/ptile=$ptile/" \
           -e "s/$TIMEWALL[3]/$timewall/" \
           -e "s/$QUEUE[3]/$queue/" < ${case}.run >! temp.$$
       ${MOVE} temp.$$  ${case}.run
@@ -512,23 +542,7 @@ switch ( $BATCH )
    breaksw
 endsw
 
-# ==============================================================================
-# IMPORTANT: All resubmits must be type 'startup'.
-# ==============================================================================
-
-echo ''
-echo 'Changing the run script such that all the resubmits are "startup",'
-echo 'which means CONTINUE_RUN should be FALSE'
-echo ''
-
-ex ${case}.run <<ex_end
-/use COMP_RUN_BARRIERS as surrogate for timing run logical/
-/CONTINUE_RUN/
-s;TRUE;FALSE;
-/CONTINUE_RUN/
-s;TRUE;FALSE;
-wq
-ex_end
+chmod 0755 ${case}.run
 
 # ==============================================================================
 # The *.run script must be modified to call the DART assimilate script.
@@ -603,43 +617,25 @@ else if ( ${STATUSCHECK} == 1 ) then
 else
    echo "ERROR in grep of ${case}.run: aborting"
    echo "status was ${STATUSCHECK}"
-   exit -6
+   exit -5
 endif
-
-chmod 0755 ${case}.run
 
 # ==============================================================================
 # Stage the required parts of DART in the CASEROOT directory.
 # ==============================================================================
 
-# The standard CESM short-term archiving script may need to be altered
-# to archive addtional or subsets of things, or to reduce the amount of
-# data that is sent to the long-term archive.
+# The cesm1_1_beta04 release had an error in that it did not
+# provide the lt_archive.sh script, and the one in the repos
+# did not have the -p flag, which is a good idea. So, for now ...
 
 if ( ~ -e  Tools/st_archive.sh.original ) then
    ${COPY} Tools/st_archive.sh Tools/st_archive.sh.original
 endif
 
-# NOTE: the assimilate.csh script and input.nml must be modified for your
-#       situation. The script has variables that point to the location of
-#       the observations sequence files and the DART working directory
-#       and may be customized for a more efficient PE layout for DART.
-#       If you are running this, you know what to do with input.nml.
-#       If you don't, you should give up now. Really.
+# ${COPY} ${DARTroot}/models/cam/shell_scripts/st_archive.sh  Tools/
 
-${COPY} ${DARTroot}/models/cam/shell_scripts/st_archive.sh   Tools/
-${COPY} ${DARTroot}/models/cam/shell_scripts/assimilate.csh  assimilate.csh
-${COPY} ${DARTroot}/models/cam/work/input.nml                input.nml
-
-# Ensure that the input.nml ensemble size matches the number of instances.
-# WARNING: the output files contain ALL ensemble members ==> BIG
-
-ex input.nml <<ex_end
-g;ens_size ;s;= .*;= $num_instances;
-g;num_output_state_members ;s;= .*;= $num_instances;
-g;num_output_obs_members ;s;= .*;= $num_instances;
-wq
-ex_end
+${COPY} ${DARTroot}/models/cam/shell_scripts/assimilate.csh  .
+${COPY} ${DARTroot}/models/cam/work/input.nml                .
 
 # ==============================================================================
 # Stage the DART executables in the CESM execution root directory: EXEROOT
@@ -650,7 +646,7 @@ foreach FILE ( filter cam_to_dart dart_to_cam )
    if ( $status != 0 ) then
       echo "ERROR: ${DARTroot}/models/cam/work/${FILE} not copied to ${exeroot}"
       echo "ERROR: ${DARTroot}/models/cam/work/${FILE} not copied to ${exeroot}"
-      exit -7
+      exit -6
    endif
 end
 
@@ -671,8 +667,8 @@ end
 #    echo "You can make one with ${DARTroot}/models/cam/work/fill_inflation_restart"
 #    echo ''
 # endif
-#
-#
+# 
+# 
 # only warn people if a precomputed final_full for this number of instances
 # does not already exist.
 # if (! -f ${DARTroot}/system_simulation/final_full_precomputed_tables/final_full.${num_instances}) then
@@ -694,16 +690,9 @@ echo ''
 echo "Time to check the case."
 echo ''
 echo "cd into ${caseroot}"
-echo "Modify what you like in input.nml, make sure the observation directory"
-echo "names set in assimilate.csh match those on your system, and submit"
-echo "the CESM job by running:"
-echo "./${case}.submit"
+echo 'Modify what you like in input.nml, make sure the observation directory'
+echo 'names set in assimilate.csh match those on your system, and submit'
+echo 'the CESM job by running:'
+echo "./$case.submit"
 echo ''
-
-exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

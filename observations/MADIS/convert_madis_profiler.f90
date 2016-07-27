@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program convert_madis_profiler
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -56,7 +60,7 @@ integer, parameter :: num_copies = 1,   &   ! number of copies in sequence
                       num_qc     = 1        ! number of QC entries
 
 
-integer  :: ncid, nsta, nlev, n, i, oday, osec, nused, k, index
+integer  :: ncid, nsta, nlev, n, i, oday, osec, nused, j, k, index
 logical  :: file_exist, first_obs
 real(r8) :: uwnd_miss, vwnd_miss
 
@@ -247,9 +251,3 @@ call finalize_utilities()
 
 
 end program
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

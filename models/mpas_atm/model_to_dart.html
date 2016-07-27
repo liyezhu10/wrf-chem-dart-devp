@@ -4,7 +4,6 @@
 <HEAD>
 <TITLE>program model_to_dart (MPAS ATM)</TITLE>
 <link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +13,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
@@ -38,7 +37,7 @@
 <P>
    <em class=program>model_to_dart</em> is the program that reads an MPAS ATM
    analysis file (nominally named <em class=file>mpas_restart.nc</em>) and 
-   creates a DART state vector file 
+   creates a DART output/restart file 
    (e.g. <em class=file>perfect_ics, filter_ics, ... </em>). The MPAS analysis
    files have a <strong>Time</strong> UNLIMITED Dimension, which indicates
    there may (at some point) be more than one timestep in the file. The DART
@@ -82,77 +81,55 @@
 Since this program is called repeatedly for every ensemble member,
 we have found it convenient to link the MPAS ATM analysis files
 to a static input filename (e.g. <em class=file>mpas_analysis.nc</em>).
-The default DART filename is <em class=file>dart_ics</em> -
-this may be moved or linked as necessary. 
+The default DART output filename is <em class=file>dart.ud</em> -
+this may be moved or linked as necessary. The 'ud' extension is preferred
+as this represents a model state that has been 'updated' by MPAS. The vast
+majority of the time this routine is being called to convert a model state
+that has been updated by MPAS for use by DART in a 'cycling' context.
+There is no difference between these files and ones used to start a DART
+experiment - an 'ics' file.
 </P>
 
+<!--==================================================================-->
 <!--=================== DESCRIPTION OF A NAMELIST ====================-->
+<!--==================================================================-->
 
 <A NAME="Namelist"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>NAMELIST</H2>
-<P>
-This namelist is read from the file <em class=file>input.nml</em>.
-Namelists start with an ampersand
-'&amp;' and terminate with a slash '/'.
+<P>We adhere to the F90 standard of starting a namelist with an ampersand
+'&amp;' and terminating with a slash '/' for all our namelist input.
 Character strings that contain a '/' must be
-enclosed in quotes to prevent them from 
-prematurely terminating the namelist.
+enclosed in quotes to prevent them from prematurely terminating the namelist.
+The namelist declaration is:
+</P>
+<div class=namelist>
+<pre>
+<em class=call>namelist / model_to_dart_nml / </em> model_to_dart_output_file = 'dart.ud'
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+This namelist is always read from a file called <em class=file>input.nml</em>.
 </P>
 
-<div class=namelist>
-<pre>
-&amp;model_to_dart_nml
-   model_to_dart_output_file = 'dart_ics'
-   /
-</pre>
-</div>
+<TABLE border=0 cellpadding=3 width=100%>
+<TR><TH align=left>Contents    </TH>
+    <TH align=left>Type        </TH>
+    <TH align=left>Description </TH></TR>
 
-<br />
+<TR><!--contents--><TD valign=top>model_to_dart_output_file&nbsp;&nbsp;&nbsp;</TD>
+    <!--  type  --><TD valign=top>character(len=128)&nbsp;&nbsp;&nbsp;</TD>
+    <!--descript--><TD>The name of the DART file containing the model state
+                       derived from the MPAS analysis file.
+                       <em class=units>[default: 'dart.ud']</em></TD></TR>
 
-<div class=namelist>
-<pre>
-&amp;model_nml
-   model_analysis_filename  = 'mpas_analysis.nc'
-   /
-
-(partial namelist)
-</pre>
-</div>
-
-<br />
-
-<div class=namelist>
-<pre>
-&amp;mpas_vars_nml
-   mpas_state_variables = '',
-   mpas_state_bounds = '',
-   /
-</pre>
-</div>
-
-<br />
-<br />
-
-<P>The model_to_dart namelist includes:</P>
-
-<div>
-<TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
-<THEAD align=left>
-<TR><TH> Item </TH>
-    <TH> Type </TH>
-    <TH> Description </TH> </TR>
-</THEAD>
-
-<TBODY valign=top>
-<TR><TD> model_to_dart_output_file </TD>
-    <TD> character(len=128) </TD>
-    <TD>The name of the DART file containing the model state
-derived from the MPAS analysis file.
-</TD></TR>
 </TABLE>
-</div>
 
+</div>
 <br />
 
 <P>Two more namelists need to be mentioned.
@@ -162,29 +139,10 @@ derived from the MPAS analysis file.
    MPAS variables that will comprise the DART state vector. 
 </P>
 
-<P>For example:</P>
-<pre>
-&amp;mpas_vars_nml
-   mpas_state_variables = 'theta',                 'KIND_POTENTIAL_TEMPERATURE',
-                          'uReconstructZonal',     'KIND_U_WIND_COMPONENT',
-                          'uReconstructMeridional','KIND_V_WIND_COMPONENT',
-                          'w',                     'KIND_VERTICAL_VELOCITY',
-                          'qv',                    'KIND_VAPOR_MIXING_RATIO',
-                          'qc',                    'KIND_CLOUDWATER_MIXING_RATIO',
-                          'qr',                    'KIND_RAINWATER_MIXING_RATIO',
-                          'qi',                    'KIND_ICE_MIXING_RATIO',
-                          'qs',                    'KIND_SNOW_MIXING_RATIO',
-                          'qg',                    'KIND_GRAUPEL_MIXING_RATIO'
-                          'surface_pressure',      'KIND_SURFACE_PRESSURE'
-   /                      
-</pre>                    
-                          
-<br />            
-
 <!--==================================================================-->
 
 <A NAME="Modules"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>MODULES USED</H2>
 <PRE>
 assim_model_mod.f90
@@ -205,14 +163,14 @@ utilities_mod.f90
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>FILES Read</H2>
 <UL><LI>MPAS analysis file; <em class=file>mpas_analysis.nc</em></LI>
     <LI>DART namelist file; <a href="work/input.nml">input.nml</a></LI>
 </UL>
 
 <H2>FILES Written</H2>
-<UL><LI>DART state vector file; e.g. <em class=file>dart_ics</em></LI>
+<UL><LI>DART initial conditions/restart file; e.g. <em class=file>dart.ud</em></LI>
 </UL>
 
 <!--==================================================================-->
@@ -220,7 +178,7 @@ utilities_mod.f90
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>REFERENCES</H2>
 <P>
 none
@@ -231,7 +189,7 @@ none
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>ERROR CODES and CONDITIONS</H2>
 <P>
 none - all error messages come from modules that have their own documentation.
@@ -247,7 +205,7 @@ none
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>FUTURE PLANS</H2>
 <P>
 None.
@@ -258,11 +216,11 @@ None.
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
+DART software - Copyright 2004 - 2011 UCAR.<br />
 This open source software is provided by UCAR, "as is",<br />
 without charge, subject to all terms of use at<br />
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

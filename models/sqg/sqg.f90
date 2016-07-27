@@ -1,5 +1,10 @@
-! This code is not protected by the DART copyright agreement.
-! DART $Id$
+!============================================================
+! <next few lines under version control, D O  N O T  E D I T>
+! $Date$
+! $Author$
+! $Revision$
+! $Id$
+!============================================================
 
 !========================================================================
 PROGRAM sqg
@@ -14,9 +19,3 @@ PROGRAM sqg
 
 END PROGRAM sqg
 !========================================================================
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

@@ -5,7 +5,7 @@
       <!-- $Id$ -->
       <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
       <title>Data Assimilation Research Testbed -- DART</title>
-      <link href="../images/dart.ico" rel="shortcut icon" />
+      <link href="dart.ico" rel="shortcut icon" />
       <link href="doc.css"  rel="stylesheet" type="text/css" />
       <style type="text/css">
                 <!--
@@ -32,7 +32,7 @@
    <td valign="middle">
    <h1 align="center">The Data Assimilation Research Testbed -- DART</h1>
 
-   <center><img src="../images/DARTspaghettiSquare.gif" 
+   <center><img src="DARTspaghettiSquare.gif" 
    alt="cool spaghetti plot of North America demonstrating the uncertainty among the
         ensemble members"><br />
    The 500hPa geopotential height from 20 ensemble members of an 80 member experiment
@@ -510,7 +510,7 @@
 <h2>Terms of Use</h2>
 
 <p>
-DART software - Copyright 2004 - 2013 UCAR.<br />
+DART software - Copyright 2004 - 2011 UCAR.<br />
 This open source software is provided by UCAR, "as is",<br />
 without charge, subject to all terms of use at<br />
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

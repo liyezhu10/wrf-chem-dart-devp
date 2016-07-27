@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program closest_member_tool
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 ! Program to overwrite the time on each ensemble in a restart file.
 
@@ -14,10 +18,10 @@ use time_manager_mod,  only : time_type, set_time_missing,               &
  
 use utilities_mod,     only : register_module, do_output,                &
                               error_handler, nmlfileunit, E_MSG, E_ERR,  &
-                              find_namelist_in_file,          &
+                              timestamp, find_namelist_in_file,          &
                               check_namelist_read, logfileunit,          &
                               do_nml_file, do_nml_term, open_file, close_file
-
+                                
 use  location_mod,     only : location_type
 
 use  obs_kind_mod,     only : get_num_raw_obs_kinds, get_raw_obs_kind_index, &
@@ -37,10 +41,10 @@ use mpi_utilities_mod, only : initialize_mpi_utilities, task_count,     &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 integer               :: iunit, model_size, io, ens, i, j, kindindex
 integer, allocatable  :: index_list(:)
@@ -415,9 +419,3 @@ end function compute_diff
 
 
 end program closest_member_tool
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

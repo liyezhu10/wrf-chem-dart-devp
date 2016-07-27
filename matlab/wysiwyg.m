@@ -7,6 +7,12 @@ function wysiwyg
 %       printed.
 %       Dan(K) Braithwaite, Dept. of Hydrology U.of.A  11/93
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
+
   unis = get(gcf,'units');
   ppos = get(gcf,'paperposition');
   set(gcf,'units',get(gcf,'paperunits'));
@@ -14,9 +20,3 @@ function wysiwyg
   pos(3:4) = ppos(3:4);
   set(gcf,'position',pos);
   set(gcf,'units',unis);
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

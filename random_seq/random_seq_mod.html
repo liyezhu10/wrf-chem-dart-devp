@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module random_seq_mod</TITLE>
-<link rel="stylesheet" type="text/css" href="../doc/html/doc.css" />
-<link href="../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../doc/html/doc.css">
+<link href="../doc/html/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +14,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../index.html">DART Documentation Main Index</a><br />
@@ -41,19 +41,11 @@ Provides access to any number of reproducible random sequences and allows
 uniform, gaussian, and two-dimensional gaussian distributions to be
 sampled.
 </P>
-<P>
-The current random sequence generator is a Fortran version
-of the <a href="http://www.gnu.org/software/gsl/">GNU Library</a>
-implementation of the 
-<a href="http://en.wikipedia.org/wiki/Mersenne_twister">Mersenne Twister</a> 
-algorithm. The original code is in the C language, and the conversion
-to Fortran was done by the DART team.
-</P>
 
 <!--==================================================================-->
 
 <A NAME="OtherModulesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>OTHER MODULES USED</H2>
 <PRE>
 types_mod
@@ -69,7 +61,7 @@ utilities_mod
 <!--==================================================================-->
 
 <A NAME="Interface"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>PUBLIC INTERFACES</H2>
 
 <TABLE>
@@ -81,6 +73,12 @@ utilities_mod
 <TR><TD>&nbsp;</TD><TD><A HREF="#random_uniform">random_uniform</A></TD></TR>
 <TR><TD>&nbsp;</TD><TD><A HREF="#twod_gaussians">twod_gaussians</A></TD></TR>
 </TABLE>
+
+<P>
+Optional namelist interface
+<a href="#Namelist"><em class=code>&amp;model_nml</em></a>
+may be read from file <em class=file>input.nml</em>.
+</P>
 
 <P>
    A note about documentation style. 
@@ -297,7 +295,7 @@ The algorithm used is from Knuth, exercise 13, section 3.4.1.
 <!--==================================================================-->
 
 <A NAME="Namelist"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>NAMELIST</H2>
 <P>
 This module has no namelist input.
@@ -308,7 +306,7 @@ This module has no namelist input.
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FILES</H2>
 <UL><LI>NONE
 </UL>
@@ -318,12 +316,13 @@ This module has no namelist input.
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>REFERENCES</H2>
 <ol>
 <li> Knuth, Vol 2. </li>
 <li> <a href="http://www.gnu.org/software/gsl/manual/html_node/Random-Number-Generation.html">
 GNU Scientific Library Reference Manual</a> </li>
+</li>
 </ol>
 
 
@@ -332,7 +331,7 @@ GNU Scientific Library Reference Manual</a> </li>
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>ERROR CODES and CONDITIONS</H2>
 <div class=errors>
 <TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
@@ -355,7 +354,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FUTURE PLANS</H2>
 <P>
 none at this time
@@ -366,7 +365,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="PrivateComponents"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>PRIVATE COMPONENTS</H2>
 
 <TABLE>
@@ -470,11 +469,11 @@ Generates a random draw from a standard gaussian.
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
+DART software - Copyright 2004 - 2011 UCAR.<br>
 This open source software is provided by UCAR, "as is",<br>
 without charge, subject to all terms of use at<br>
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

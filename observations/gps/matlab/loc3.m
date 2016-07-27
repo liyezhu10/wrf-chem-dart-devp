@@ -1,10 +1,14 @@
 %% loc3
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 load gpsloc.20030108;
 
@@ -36,9 +40,3 @@ title('GPS RO profile locations in CONUS domain, Jan 1, 2003', 'fontsize', 14)
  subplot('position', [0.0,0.0,0.06,0.06])
  text(0.15, 0.15, 'Fig. 1b')
 print -dpsc gpsloc.ps
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 ! Forward operator to compute total precipitable water in a column,
 ! in centimeters, over the ocean.   Can be used as an example of a
@@ -16,17 +14,18 @@
 ! lat/lon location, and the specific humidity for a given location
 ! where the vertical is either pressure or model levels.
 
+! change 'INSTRUMENT' below to a more specific string that identifies
+! the source for this data type (e.g. name of the satellite, agency
+! which supplies the data, etc).  if you have more than one, make a
+! line for each in the kind section, each with a different first string
+! and all using the same KIND_TOTAL_PRECIPITABLE_WATER as the second
+! string.  in the case statements below that either replicate the lines
+! or make the case line:  case(string1|string2|string3) etc.
 ! keep in mind that fortran allows only 31 characters in parameter
-! definitions (which is what this string is going to be used for).
-! if the platform name gets longer than 5 chars, consider going
-! to something like xxx_TOTAL_PRECIP_WATER to give you room to
-! put in more descriptive platform names.
+! definitions, which is what this string is going to be used for.
 
 ! BEGIN DART PREPROCESS KIND LIST
-!  AQUA_TOTAL_PRECIPITABLE_WATER, KIND_TOTAL_PRECIPITABLE_WATER
-! TERRA_TOTAL_PRECIPITABLE_WATER, KIND_TOTAL_PRECIPITABLE_WATER
-!  AMSR_TOTAL_PRECIPITABLE_WATER, KIND_TOTAL_PRECIPITABLE_WATER
-! MODIS_TOTAL_PRECIPITABLE_WATER, KIND_TOTAL_PRECIPITABLE_WATER
+! INSTRUMENT_TOTAL_PRECIP_WATER,  KIND_TOTAL_PRECIPITABLE_WATER
 ! END DART PREPROCESS KIND LIST
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
@@ -34,35 +33,33 @@
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!         case(AQUA_TOTAL_PRECIPITABLE_WATER,TERRA_TOTAL_PRECIPITABLE_WATER)
-!            call get_expected_tpw(state, location, obs_val, istatus)
-!         case(AMSR_TOTAL_PRECIPITABLE_WATER,MODIS_TOTAL_PRECIPITABLE_WATER)
+!         case(INSTRUMENT_TOTAL_PRECIP_WATER)
 !            call get_expected_tpw(state, location, obs_val, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!         case(AQUA_TOTAL_PRECIPITABLE_WATER,TERRA_TOTAL_PRECIPITABLE_WATER)
-!           continue
-!         case(AMSR_TOTAL_PRECIPITABLE_WATER,MODIS_TOTAL_PRECIPITABLE_WATER)
+!         case(INSTRUMENT_TOTAL_PRECIP_WATER)
 !           continue
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!         case(AQUA_TOTAL_PRECIPITABLE_WATER,TERRA_TOTAL_PRECIPITABLE_WATER)
-!           continue
-!         case(AMSR_TOTAL_PRECIPITABLE_WATER,MODIS_TOTAL_PRECIPITABLE_WATER)
+!         case(INSTRUMENT_TOTAL_PRECIP_WATER)
 !           continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!         case(AQUA_TOTAL_PRECIPITABLE_WATER,TERRA_TOTAL_PRECIPITABLE_WATER)
-!           continue
-!         case(AMSR_TOTAL_PRECIPITABLE_WATER,MODIS_TOTAL_PRECIPITABLE_WATER)
+!         case(INSTRUMENT_TOTAL_PRECIP_WATER)
 !           continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
 ! BEGIN DART PREPROCESS MODULE CODE
 module obs_def_tpw_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 use        types_mod, only : r8, missing_r8, RAD2DEG, DEG2RAD, PI
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
@@ -83,10 +80,10 @@ private
 public ::  get_expected_tpw
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 
@@ -326,9 +323,3 @@ end subroutine get_expected_tpw
 end module obs_def_tpw_mod
 
 ! END DART PREPROCESS MODULE CODE
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

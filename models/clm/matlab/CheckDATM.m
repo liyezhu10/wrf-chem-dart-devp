@@ -1,12 +1,6 @@
-%%
 %
 %
-
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
-% http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
 
 dirname = '/glade/proj3/DART/CAM_DATM';
 
@@ -42,9 +36,3 @@ for imem = 1:80
 
 end
 end
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

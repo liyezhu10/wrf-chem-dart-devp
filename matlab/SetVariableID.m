@@ -12,11 +12,15 @@ function varid = SetVariableID(vars)
 % vars.def_state_vars = [2 4 5];
 % varid = SetVariableID(vars)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 varid = vars;
 
@@ -127,10 +131,3 @@ switch lower(vars.model)
 
       error('%s is not configured for use with SetVariableID',vars.model)
 end
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

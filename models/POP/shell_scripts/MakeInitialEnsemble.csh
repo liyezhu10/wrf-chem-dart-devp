@@ -1,10 +1,10 @@
 #!/bin/tcsh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 #
 #=============================================================================
 # So the background is that I want 40 restart files to create an initial
@@ -109,8 +109,8 @@ cp ${POPDIR}/vert_grid.gx3v5             .
 # Need to modify rest of input.nml for test run
 # Essentially, we want the namelist block to look like:
 #&restart_file_tool_nml
-#   input_file_name              = "dart_input",
-#   output_file_name             = "dart_output",
+#   input_file_name              = "dart.ics",
+#   output_file_name             = "filter_updated_restart",
 #   ens_size                     =  1,
 #   single_restart_file_in       = .true.,
 #   single_restart_file_out      = .true.,
@@ -126,6 +126,8 @@ cp ${POPDIR}/vert_grid.gx3v5             .
 
 echo ':0'                               >! ex_commands
 echo '/restart_file_tool_nml'           >> ex_commands
+echo '/input_file_name'                 >> ex_commands
+echo ':s/filter_restart/dart.ics/'      >> ex_commands
 echo '/write_binary_restart_files'      >> ex_commands
 echo ':s/.false./.true./'               >> ex_commands
 echo '/overwrite_data_time'             >> ex_commands
@@ -168,10 +170,9 @@ foreach FILE ( ${RESTARTDIR}/*/cx3.dart.001.pop.r.*.nc )
 
    #----------------------------------------------------------------------
    # Use the input.nml:restart_file_tool_nml value for the 'valid time'
-   # The expected input filename is : dart_input
-   # The         output filename is : dart_output
+   # The expected input filename is : assim_model_state_ud
+   # The         output filename is : filter_updated_restart
    #----------------------------------------------------------------------
-   mv dart_ics dart_input
 
    ${DARTEXE}/restart_file_tool || exit 2
 
@@ -188,7 +189,7 @@ foreach FILE ( ${RESTARTDIR}/*/cx3.dart.001.pop.r.*.nc )
    @ member = $member + 1
    set OFNAME = `printf ens_mem.%03d $member`
 
-   mv dart_output $OFNAME
+   mv filter_updated_restart $OFNAME
    echo $FILE:t          >! rpointer.ocn.${member}.restart
    echo "RESTART_FMT=nc" >> rpointer.ocn.${member}.restart
    ln -sf $FILE $FILE:t
@@ -197,7 +198,7 @@ foreach FILE ( ${RESTARTDIR}/*/cx3.dart.001.pop.r.*.nc )
    # remove input files to prep for next iteration
    #----------------------------------------------------------------------
 
-   \rm -f pop.r.nc dart_input
+   \rm -f pop.r.nc dart.ics
 
 end
 

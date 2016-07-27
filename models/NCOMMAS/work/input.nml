@@ -81,7 +81,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 0.20,
-   sort_obs_inc                    = .false.,
+   sort_obs_inc                    = .true.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
@@ -158,12 +158,12 @@
 # called "ncommas_vars_nml".
 
 &ncommas_to_dart_nml
-   ncommas_to_dart_output_file  = 'dart_ics'
+   ncommas_to_dart_output_file  = 'dart.ud'
   /
 
 
 &dart_to_ncommas_nml
-   dart_to_ncommas_input_file   = 'dart_restart',
+   dart_to_ncommas_input_file   = 'dart.ic',
    advance_time_present         = .false.
   /
 
@@ -233,7 +233,8 @@
    bin_width        =     0, 0, 1, 0, 0, 0 ,
    time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
-   trusted_obs      = 'null',
+   rat_cri            = 3.0,
+   input_qc_threshold = 1,
    Nregions   = 4,
    lonlim1    = 30.0,  130.0, 290.0, 290,
    lonlim2    = 130.0, 270.0, 380.0, 380,
@@ -241,9 +242,7 @@
    latlim2    =  20.0,  50.0,  50.0,  50,
    reg_names  = 'Indian Ocean', 'Pacific', 'Atlantic', 'North Atlantic',
    print_mismatched_locs = .false.,
-   create_rank_histogram = .true.,
-   outliers_in_histogram = .true.,
-   use_zero_error_obs    = .false.,
+   print_obs_locations   = .false.,
    verbose               = .true.,
    hlevel =  10.0,  20.0,   30.0,   40.0,  100.0,  
             200.0, 500.0, 1000.0, 2000.0, 

@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program dart_to_cam
 
@@ -32,10 +30,10 @@ use time_manager_mod, only : time_type, print_time, print_date
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! The namelist variables
@@ -55,6 +53,8 @@ type(model_type)       :: var
 type(time_type)        :: model_time, adv_to_time
 real(r8), allocatable  :: statevector(:)
 integer                :: file_unit, vecsize, iunit, io
+
+! NSC needs namelist to say if model advance or not
 
 !-----------------------------------------------------------------------------
 ! start of program
@@ -115,7 +115,7 @@ call print_date(adv_to_time,'dart_to_cam:advance_to date',logfileunit)
 endif
 
 
-call finalize_utilities('dart_to_cam')
+call finalize_utilities()
 
 end program dart_to_cam
 
@@ -124,3 +124,4 @@ end program dart_to_cam
 ! $Id$
 ! $Revision$
 ! $Date$
+

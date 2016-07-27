@@ -1,20 +1,23 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program model_mod_check
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: test routines
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8, digits12, metadatalength
-use    utilities_mod, only : initialize_utilities, nc_check, &
+use    utilities_mod, only : initialize_utilities, timestamp, nc_check, &
                              open_file, close_file, find_namelist_in_file, &
-                             check_namelist_read, finalize_utilities, &
-                             error_handler, E_MSG
+                             check_namelist_read
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
@@ -35,16 +38,16 @@ use        model_mod, only : static_init_model, get_model_size, get_state_meta_d
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 129) :: input_file  = 'dart_ics'
+character (len = 129) :: input_file  = 'dart.ics'
 character (len = 129) :: output_file = 'check_me'
 logical               :: advance_time_present = .FALSE.
 logical               :: verbose              = .FALSE.
@@ -271,7 +274,11 @@ if (test1thru > 9) then
 
 endif
 
-call finalize_utilities('model_mod_check')
+!----------------------------------------------------------------------
+! When called with 'end', timestamp will call finalize_utilities()
+! This must be the last few lines of the main program.
+!----------------------------------------------------------------------
+call timestamp(string1=source, pos='end')
 
 contains
 
@@ -391,9 +398,3 @@ end subroutine find_closest_gridpoint
 
 
 end program model_mod_check
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

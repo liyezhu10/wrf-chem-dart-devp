@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program MIDAS_to_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -15,7 +19,7 @@ program MIDAS_to_obs
 use          types_mod, only : r8, MISSING_R8, metadatalength
 
 use      utilities_mod, only : initialize_utilities, finalize_utilities, &
-                               register_module, error_handler, E_ERR, E_MSG, &
+                               register_module, error_handler, E_ERR, &
                                do_nml_file, do_nml_term, &
                                check_namelist_read, find_namelist_in_file, &
                                nmlfileunit, file_exist, nc_check
@@ -41,17 +45,20 @@ use netcdf
 
 implicit none
 
+!-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+!-----------------------------------------------------------------------
+
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
 !-----------------------------------------------------------------------
 
-character(len=256) :: input_file    = 'infile.nc'
+character(len=256) :: input_file    = '../data/Test.nc'
 character(len=256) :: obs_out_file  = 'obs_seq.out'
 logical            :: verbose       = .false.
 
@@ -166,8 +173,7 @@ if ( get_num_obs(obs_seq) > 0 ) then
    if (verbose) print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
    call write_obs_seq(obs_seq, obs_out_file)
 else
-   write(string1,*)'There are no observations to write.'
-   call error_handler(E_MSG,'MIDAS_to_obs',string1,source,revision,revdate)
+   call error_handler(E_MSG,'lkljlkjkj'
 endif
 
 ! end of main program
@@ -317,8 +323,3 @@ end subroutine get_slab
 
 end program MIDAS_to_obs
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

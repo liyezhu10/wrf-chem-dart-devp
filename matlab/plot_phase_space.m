@@ -26,11 +26,15 @@
 % plot_phase_space
 %
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (exist('fname','var') ~=1)
    fname = input('Input name of netCDF file:\n<cr> for True_State.nc\n','s');
@@ -142,14 +146,14 @@ switch lower(pinfo.model)
                      'ens_mem' , ens_mem  , ...
                      'ltype'   , ltype   );
 
-   case {'simple_advection'}
+  case {'simple_advection'}
 
       if (ishold), clear var1 var2 var3 ens_mem ltype; end
 
       disp('Your choice of variables are:')
       disp(pinfo.vars)
       fprintf('the indices (locations) can range from %d to %d\n', ...
-              pinfo.min_state_var, pinfo.max_state_var)
+           pinfo.min_state_var, pinfo.max_state_var)
 
       str1 = sprintf('Input variable and index for axis 1 <cr> for %s %d\n', ...
                       pinfo.def_var,pinfo.def_state_vars(1));
@@ -209,33 +213,29 @@ switch lower(pinfo.model)
                      'ens_mem' , ens_mem  , ...
                      'ltype'   , ltype   );
 
-   case {'fms_bgrid'}
+   case 'fms_bgrid'
 
       pinfo = GetBgridInfo(pinfo, fname, 'PlotPhaseSpace');
 
-   case {'wrf'}
+   case 'wrf'
 
       pinfo = GetWRFInfo(pinfo, fname, 'PlotPhaseSpace');
 
-   case {'cam'}
+   case 'cam'
 
       pinfo = GetCamInfo(pinfo, fname, 'PlotPhaseSpace');
 
-   case {'pe2lyr'}
+   case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, fname, 'PlotPhaseSpace');
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, fname, 'PlotPhaseSpace');
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       pinfo = GetMPAS_ATMInfo(pinfo, fname, 'PlotPhaseSpace');
-
-   case {'sqg'}
-
-      pinfo = GetSqgInfo(pinfo, fname, 'PlotPhaseSpace');
 
    case {'ikeda'}
 
@@ -290,10 +290,3 @@ pinfo
 PlotPhaseSpace( pinfo );
 
 clear s1
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

@@ -1,5 +1,10 @@
-! This code is not protected by the DART copyright agreement.
-! DART $Id$
+! ===========================================================
+! <next few lines under version control, D O  N O T  E D I T>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+! ===========================================================
 
 ! ======================================================================
 ! NIST Guide to Available Math Software.
@@ -556,9 +561,3 @@
 
       stop
       end
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

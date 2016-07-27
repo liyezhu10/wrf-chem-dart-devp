@@ -38,7 +38,7 @@
    last_obs_days            = -1,
    last_obs_seconds         = -1,
    num_output_state_members = 20,
-   num_output_obs_members   = 20,
+   num_output_obs_members   = 0,
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       =  3.0,
@@ -75,7 +75,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 0.20,
-   sort_obs_inc                    = .false.,
+   sort_obs_inc                    = .true.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
@@ -208,7 +208,7 @@
    output_box_info             = .false.  /
 
 &utilities_nml
-   TERMLEVEL = 2,
+   TERMLEVEL = 1,
    module_details = .false.,
    logfilename = 'dart_log.out',
    nmlfilename = 'dart_log.nml',
@@ -289,7 +289,8 @@
    bin_width        =     0, 0, 0, 0, 3, 0 ,
    time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
-   trusted_obs      = 'null',
+   rat_cri            = 3.0,
+   input_qc_threshold = 3.0,
    Nregions   = 4,
    lonlim1    =   0.0,   0.0,   0.0, 235.0,
    lonlim2    = 360.0, 360.0, 360.0, 295.0,
@@ -297,9 +298,6 @@
    latlim2    =  80.0, -20.0,  20.0,  55.0,
    reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics', 'North America',
    print_mismatched_locs = .false.,
-   create_rank_histogram = .true.,
-   outliers_in_histogram = .true.,
-   use_zero_error_obs    = .false.,
-   verbose               = .false.
-   /
+   print_obs_locations   = .true.,
+   verbose               = .false.  /
 

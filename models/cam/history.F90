@@ -1,12 +1,17 @@
-! This code may (or may not) be part of the CESM distribution,
-! So it is not protected by the DART copyright agreement.
-!
-! DART $Id$
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
 
 #include <misc.h>
 #include <params.h>
 
 module history
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 ! kdr; history.orig has original CAM code
 !      history.initwrite has modified code that output initial file
@@ -27,6 +32,8 @@ module history
 ! 
 ! Author: CCM Core Group
 ! 
+!-----------------------------------------------------------------------
+! $Id$
 !-----------------------------------------------------------------------
    use utilities_mod, only : error_handler, E_ERR
    use shr_kind_mod, only: r8 => shr_kind_r8, r4 => shr_kind_r4
@@ -70,10 +77,10 @@ PRIVATE
 
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 ! master_entry: elements of an entry in the master field list
 !
@@ -5591,9 +5598,3 @@ end function sec2hms
    end subroutine scatter_field_to_chunk_hbuf
 
 end module history
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

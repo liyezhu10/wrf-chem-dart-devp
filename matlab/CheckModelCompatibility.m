@@ -8,11 +8,15 @@ function pinfo_out = CheckModelCompatibility(arg1, arg2)
 % [start,count] indices for each array (indexing starts at 1,N).
 % It is an error situation if there is no overlap ([-1,-1] for both).
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (nargin == 1)      % better be a pinfo struct with at least these fields
   file1 = arg1.truth_file;  % string
@@ -248,48 +252,55 @@ function [x,y] = ModelDimension(fname,modelname)
 
 switch lower(modelname)
 
-   case {'wrf'}
+   case 'wrf'
       dnum_lons = dim_length(fname,  'west_east_d01');
       dnum_lats = dim_length(fname,'south_north_d01');
       dnum_lvls = dim_length(fname, 'bottom_top_d01');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 
-   case {'pe2lyr','cam','sqg'}
+   case 'cam'
       dnum_lons = dim_length(fname,'lon');
       dnum_lats = dim_length(fname,'lat');
       dnum_lvls = dim_length(fname,'lev');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 
-   case {'fms_bgrid'}
+   case 'pe2lyr'
+      dnum_lons = dim_length(fname,'lon');
+      dnum_lats = dim_length(fname,'lat');
+      dnum_lvls = dim_length(fname,'lev');
+         x = 3;
+         y = [dnum_lons dnum_lats dnum_lvls];
+
+   case 'fms_bgrid'
       dnum_lons = dim_length(fname,'TmpI');
       dnum_lats = dim_length(fname,'TmpJ');
       dnum_lvls = dim_length(fname,'lev');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
       dnum_lons = dim_length(fname,'XG');
       dnum_lats = dim_length(fname,'YG');
       dnum_lvls = dim_length(fname,'ZG');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       dnum_cells = dim_length(fname,'nCells');
       dnum_lvls  = dim_length(fname,'nVertLevels');
          x = 2;
          y = [dnum_cells dnum_lvls];
 
-   case {'lorenz_96_2scale'}
+   case 'lorenz_96_2scale'
       dnum_X = dim_length(fname,'Xdim');
       dnum_Y = dim_length(fname,'Ydim');
 	 x = 2;
          y = [dnum_X dnum_Y];
 
-   case {'simple_advection'}
+   case 'simple_advection'
       y = dim_length(fname,'loc1d');
 	 x = 1;
 
@@ -298,10 +309,4 @@ switch lower(modelname)
 	 x = 1;
 
 end
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

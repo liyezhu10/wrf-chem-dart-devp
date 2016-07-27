@@ -1,6 +1,3 @@
-! This code is not protected by the DART copyright agreement.
-! DART $Id$
-
 ! F2KCLI : Fortran 200x Command Line Interface
 ! copyright Interactive Software Services Ltd. 2002
 ! For conditions of use see manual.txt
@@ -10,6 +7,8 @@
 ! To compile  : f95 -c f2kcli.f90
 ! Implementer : Lawson B. Wakefield, I.S.S. Ltd.
 ! Date        : June 2002
+!
+! DART $Id$
 !
       MODULE F2KCLI
 !
@@ -188,10 +187,3 @@
       END SUBROUTINE GET_COMMAND_ARGUMENT
 !
       END MODULE F2KCLI
-
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

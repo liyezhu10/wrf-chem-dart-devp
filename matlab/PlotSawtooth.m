@@ -40,11 +40,15 @@ function PlotSawtooth( pinfo )
 % pinfo.longitude  = 45.67;
 % PlotSawtooth( pinfo )
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Get some information from the truth_file, if it exists.
 if ( exist(pinfo.truth_file,'file') == 2 )
@@ -280,9 +284,4 @@ else
    monstr = datestr(dates(1),31);
    xlabel(sprintf('month.day.HH - %s start',monstr))
 end
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

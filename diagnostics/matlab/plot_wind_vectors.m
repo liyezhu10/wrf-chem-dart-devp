@@ -37,11 +37,15 @@ function data = plot_wind_vectors( fname, platform, CopyString, QCString, vararg
 % obs = plot_wind_vectors('obs_epoch_001.nc', 'SAT', ...
 %       'NCEP BUFR observation', 'DART quality control','region',region);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Set sensible defaults
 
@@ -327,10 +331,4 @@ elseif (length(region) ~= 6)
    warning('DART:region input','region must be length 4 or 6') 
    error('Unable to interpret region - %s',num2str(region))
 end
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

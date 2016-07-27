@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program convert_madis_satwnd
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -62,17 +66,21 @@ integer, parameter :: num_copies = 1,   &   ! number of copies in sequence
                       num_qc     = 1        ! number of QC entries
 
 
-logical :: iruse, visuse, wvuse, allbands
+logical :: iruse, visuse, wvuse, swiruse, allbands
 
+character (len=5)   :: rtype
 integer  :: ncid, nobs, n, i, oday, osec, nused
 logical  :: file_exist, first_obs
 real(r8) :: wdir_miss, wspd_miss
 integer  :: band_miss
 
 ! FIXME:from ssec version
-!logical :: iruse, visuse, wvuse, file_exist, qifile, eefile
+!logical :: iruse, visuse, wvuse, swiruse, file_exist, qifile, eefile, &
+!           userfqc, useqiqc, useeeqc
 
-real(r8) :: uwnd, vwnd, oerr, qc
+integer :: iyear, imonth, iday, ihour, imin, isec, qctype
+real(r8) :: uwnd, vwnd, oerr, &
+            qc, qcthresh, rfqc, qiqc, eeqc
 ! end FIXME
 
 
@@ -244,9 +252,3 @@ if ( get_num_obs(obs_seq) > 0 )  call write_obs_seq(obs_seq, satwnd_out_file)
 call finalize_utilities()
 
 end program
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

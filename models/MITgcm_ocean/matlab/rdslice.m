@@ -67,9 +67,3 @@ if count ~= nnn
 end
 st=fclose(fid);
 arr=reshape(arr,N);
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

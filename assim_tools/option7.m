@@ -1,11 +1,15 @@
 %% option7 Tutorial basics for the rank histogram filter (need better name)
 % all input is prompted for ... no functional form of this script.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Begin by generating a sample draw from a gaussian
 close all; clear;
@@ -339,9 +343,4 @@ g =text(-3.2, -0.25, 'EAKF Posterior', 'fontsize', 20);
 set(g, 'color', 'b');
 
 print -depsc -tiff option7_15.eps
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

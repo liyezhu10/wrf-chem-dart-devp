@@ -1,4 +1,5 @@
 
+
 &preprocess_nml
     input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
    output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
@@ -27,6 +28,7 @@
 &obs_def_gps_nml
  max_gpsro_obs = 100000,
  / 
+
 
 &obs_sequence_nml
    write_binary_obs_sequence = .false.  /

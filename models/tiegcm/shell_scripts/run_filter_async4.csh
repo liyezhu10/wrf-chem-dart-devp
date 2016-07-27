@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 #
 #=============================================================================
 # This block of directives constitutes the preamble for the LSF queuing system
@@ -25,10 +25,13 @@
 ##=============================================================================
 #BSUB -J filter
 #BSUB -o filter.%J.log
-#BSUB -P P3507xxxx
+#BSUB -P 35071364
 #BSUB -q debug
 #BSUB -n 4
 #BSUB -W 0:30
+##BSUB -q regular
+##BSUB -n 20
+##BSUB -W 2:00
 #BSUB -N -u ${USER}@ucar.edu
 #
 ##=============================================================================

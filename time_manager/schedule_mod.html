@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module schedule_mod</TITLE>
-<link rel="stylesheet" type="text/css" href="../doc/html/doc.css" />
-<link href="../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../doc/html/doc.css">
+<link href="../doc/html/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +14,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../index.html">DART Documentation Main Index</a><br />
@@ -49,108 +49,96 @@ the observation sequence file. Wouldn't that be nice ...
 <!--==================================================================-->
 
 <A NAME="Namelist"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>NAMELIST</H2>
-<P>
-This namelist is read from the file <em class=file>input.nml</em>.
-Namelists start with an ampersand
-'&amp;' and terminate with a slash '/'.
-Character strings that contain a '/' must be
-enclosed in quotes to prevent them from 
-prematurely terminating the namelist.
+<P>We adhere to the F90 standard of starting a namelist with an ampersand
+'&amp;' and terminating with a slash '/' for all our namelist input.
 </P>
-
 <div class=namelist>
 <pre>
-&amp;schedule_nml
-   calendar       = 'Gregorian',
-   first_bin_start =  1601,  1,  1,  0,  0,  0,
-   first_bin_end   =  2999,  1,  1,  0,  0,  0,
-   last_bin_end    =  2999,  1,  1,  0,  0,  0,
-   bin_interval_days    = 1000000,   
-   bin_interval_seconds = 0, 
-   max_num_bins         = 1000,
-   print_table          = .true.
-  /
+<em class=call>namelist / schedule_nml / </em>
+   first_bin_start, first_bin_end, last_bin_end, &amp;
+   bin_interval_days, bin_interval_seconds, &amp;
+   max_num_bins, calendar, print_table
 </pre>
 </div>
 
-<br />
-<br />
+<div class=indent1>
+<!-- Description -->
 
 <P>
 Controls various aspects of filter. The inflation control variables are all
 dimensioned 2, the first value being for the prior inflation and the second
 being for the posterior inflation.
-</P><P>
+<br>
+<br>
+This namelist is read in a file called <em class=file>input.nml</em>.
 The default values will cause (pretty much) all possible observations to
 be put into one output file.
 </P>
 
-<div>
-<TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
-<THEAD align=left>
-<TR><TH> Item </TH>
-    <TH> Type </TH>
-    <TH> Description </TH> </TR>
-</THEAD>
+<TABLE border=0 cellpadding=3 width=100%>
+<TR><TH align=left>Contents    </TH>
+    <TH align=left>Type        </TH>
+    <TH align=left>Description </TH></TR>
 
-<TBODY valign=top>
+<TR><!--contents--><TD valign=top>first_bin_start</TD>
+    <!--  type  --><TD valign=top>integer, dimension(6)</TD>
+    <!--descript--><TD>Date/time specification for starting time
+                       of first bin.
+                       Default: 1601, 1, 1, 0, 0, 0</TD></TR>
 
-<TR><TD>first_bin_start</TD>
-    <TD>integer, dimension(6)</TD>
-    <TD>Date/time specification for starting time of first bin.
-</TD></TR>
+<TR><!--contents--><TD valign=top>first_bin_end</TD>
+    <!--  type  --><TD valign=top>integer, dimension(6)</TD>
+    <!--descript--><TD>Date/time specification for ending time
+                       of first bin.  Sets the bin width.
+                       Default: 2999, 1, 1, 0, 0, 0</TD></TR>
 
-<TR><TD>first_bin_end</TD>
-    <TD>integer, dimension(6)</TD>
-    <TD>Date/time specification for ending time of first bin.  Sets the bin width.  
-</TD></TR>
+<TR><!--contents--><TD valign=top>last_bin_end</TD>
+    <!--  type  --><TD valign=top>integer, dimension(6)</TD>
+    <!--descript--><TD>Date/time specification for ending time
+                       of last bin.  Sets the length of the overall
+                       time of the schedule.
+                       Default: 2999, 1, 1, 0, 0, 0</TD></TR>
 
-<TR><TD>last_bin_end</TD>
-    <TD>integer, dimension(6)</TD>
-    <TD>Date/time specification for ending time of last bin.  Sets the length of
-the overall time of the schedule.
-</TD></TR>
+<TR><!--contents--><TD valign=top>bin_interval_days</TD>
+    <!--  type  --><TD valign=top>integer</TD>
+    <!--descript--><TD>Sets the time between bins.  Must be larger or
+                       equal to the bin width.
+                       Default: 1000000</TD></TR>
 
-<TR><TD>bin_interval_days</TD>
-    <TD>integer</TD>
-    <TD>Sets the time between bins.  Must be larger or equal to the bin width.
-</TD></TR>
+<TR><!--contents--><TD valign=top>bin_interval_seconds</TD>
+    <!--  type  --><TD valign=top>integer</TD>
+    <!--descript--><TD>Sets the time between bins.  Must be larger or
+                       equal to the bin width.
+                       Default: 0</TD></TR>
 
-<TR><TD>bin_interval_seconds</TD>
-    <TD>integer</TD>
-    <TD>Sets the time between bins.  Must be larger or equal to the bin width.
-</TD></TR>
+<TR><!--contents--><TD valign=top>max_num_bins</TD>
+    <!--  type  --><TD valign=top>integer</TD>
+    <!--descript--><TD>Upper limit on the number of bins.
+                       Default: 1000</TD></TR>
 
-<TR><TD>max_num_bins</TD>
-    <TD>integer</TD>
-    <TD>Upper limit on the number of bins.
-</TD></TR>
-
-<TR><TD>calendar</TD>
-    <TD>character(len=32)</TD>
-    <TD>String calendar type.  Valid types are listed in the 
+<TR><!--contents--><TD valign=top>calendar</TD>
+    <!--  type  --><TD valign=top>character(len=32)</TD>
+    <!--descript--><TD>String calendar type.  Valid types are listed
+                       in the 
 <a href="time_manager_mod.html#cal_type">time_manager_mod</a> file.
-</TD></TR>
+                       Default: "Gregorian"</TD></TR>
 
-<TR><TD>print_table</TD>
-    <TD>logical</TD>
-    <TD>If .TRUE., print out information about the schedule each time 
-set_regular_schedule() is called.
-</TD></TR>
-
-</TBODY> 
+<TR><!--contents--><TD valign=top>print_table</TD>
+    <!--  type  --><TD valign=top>logical</TD>
+    <!--descript--><TD>If .TRUE., print out information about the schedule
+                       each time set_regular_schedule() is called.
+                       Default: .FALSE.</TD></TR>
 </TABLE>
-</div>
 
-<br />
-<br />
+</div>
+<br>
 
 <!--==================================================================-->
 
 <A NAME="OtherModulesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>OTHER MODULES USED</H2>
 <PRE>
 types_mod
@@ -167,7 +155,7 @@ time_manager_mod
 <!--==================================================================-->
 
 <A NAME="Interface"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>PUBLIC INTERFACES</H2>
 
 <TABLE>
@@ -325,7 +313,7 @@ This type is used to define a schedule.
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FILES</H2>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
@@ -340,7 +328,7 @@ This type is used to define a schedule.
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>REFERENCES</H2>
 <ul>
 <li> none </li>
@@ -351,7 +339,7 @@ This type is used to define a schedule.
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>ERROR CODES and CONDITIONS</H2>
 <div class=errors>
 <TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
@@ -375,7 +363,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FUTURE PLANS</H2>
 <P>
 Setting the schedule from the namelist values means you can
@@ -389,7 +377,7 @@ giving explicit arguments.
 <!--==================================================================-->
 
 <A NAME="PrivateComponents"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>PRIVATE COMPONENTS</H2>
 <P>
 N/A
@@ -400,11 +388,11 @@ N/A
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
+DART software - Copyright 2004 - 2011 UCAR.<br>
 This open source software is provided by UCAR, "as is",<br>
 without charge, subject to all terms of use at<br>
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

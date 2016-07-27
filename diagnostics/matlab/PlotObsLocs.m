@@ -2,11 +2,9 @@ function phandle = PlotObsLocs(in_dartqc, in_box, in_typelist, in_epochlist, ...
                     in_subset, in_plotd, in_world, in_invertz, in_writeplot, ...
                     in_legend2dloc, in_legend3dloc, in_viewlist, ...
                     in_ncfname, in_orientation, in_plotname)
-%% PlotObsLocs - Plot an observation_locations.NNN.dat file as output from the latest obs_diag program in DART.
-%
-% WARNING: obs_diag no longer creates the observation_locations.NNN.dat file.
-% WARNING: Convert your observation sequence files to netCDF using 'obs_seq_to_netcdf'
-% WARNING: and then use 'plot_obs_netcdf.m'
+%% PLOTOBSLOCS - Plot an observation_locations.NNN.dat file as output from the latest obs_diag program in DART.
+% (You must enable an obs_diag_nml namelist entry to get the output files; 
+% they are not created by default.)
 %
 % warning: this has a very long argument list, because it is intended that 
 % it be called from another program or function.   all the arguments can be 
@@ -97,17 +95,16 @@ function phandle = PlotObsLocs(in_dartqc, in_box, in_typelist, in_epochlist, ...
 %               filename is generated as 'Nd_locations_epochNNN.ps', but
 %               subsequent plots will overwrite earlier ones, so this input
 %               can be used to customize the name.
-%
-% WARNING: obs_diag no longer creates the observation_locations.NNN.dat file.
-% WARNING: Convert your observation sequence files to netCDF using 'obs_seq_to_netcdf'
-% WARNING: and then use 'plot_obs_netcdf.m'
-%
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % data subset selections:
 %  dart QC values - whether assimilated or not
@@ -133,12 +130,6 @@ function phandle = PlotObsLocs(in_dartqc, in_box, in_typelist, in_epochlist, ...
 %  tight (take min/max of data)
 %  user_specified (prompt user for 4 or 6 corners)
 %
-
-disp(' ')
-disp('WARNING: obs_diag no longer creates the observation_locations.NNN.dat file.')
-disp('WARNING: Convert your observation sequence files to netCDF using ''obs_seq_to_netcdf''')
-disp('WARNING: and then use ''plot_obs_netcdf.m''')
-disp(' ')
 
 arg_ncfname = 'obs_diag_output.nc';  % default file to use for obs info
 arg_dartqc = 0;         % dart QC values to use ... see in_dartqc table above
@@ -612,10 +603,4 @@ end
 list = selections;
 
 end % function list = pickme(R, N)
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

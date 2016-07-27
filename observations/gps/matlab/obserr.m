@@ -1,10 +1,14 @@
 %% obserr   ... uses output called obserr.dat from somewhere ... 
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 %% obsfit.m plot of the error of analysis and guess
 clf
@@ -31,9 +35,3 @@ xlabel('COSMIC RO excess obs RMS error (%)', 'fontsize', 14);
 %
 print -dpsc obserr.ps
 print -dpng obserr.png
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

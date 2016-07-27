@@ -4,7 +4,6 @@
 <HEAD>
 <TITLE>program pop_to_dart</TITLE>
 <link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +13,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
@@ -65,7 +64,7 @@
 Since this program is called repeatedly for every ensemble member,
 we have found it convenient to link the POP restart files
 to the default input filename (<em class=file>pop.r.nc</em>).
-The default DART output filename is <em class=file>dart_ics</em> -
+The default DART output filename is <em class=file>dart.ud</em> -
 this may be moved or linked as necessary.
 </P>
 
@@ -74,55 +73,47 @@ this may be moved or linked as necessary.
 <!--==================================================================-->
 
 <A NAME="Namelist"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>NAMELIST</H2>
-<P>
-This namelist is read from the file <em class=file>input.nml</em>.
-Namelists start with an ampersand
-'&amp;' and terminate with a slash '/'.
+<P>We adhere to the F90 standard of starting a namelist with an ampersand
+'&amp;' and terminating with a slash '/' for all our namelist input.
 Character strings that contain a '/' must be
-enclosed in quotes to prevent them from 
-prematurely terminating the namelist.
+enclosed in quotes to prevent them from prematurely terminating the namelist.
+The namelist declaration is:
 </P>
-
 <div class=namelist>
 <pre>
-&amp;pop_to_dart_nml
-   pop_to_dart_output_file = 'dart_ics'  
-/
+<em class=call>namelist / pop_to_dart_nml / </em> pop_to_dart_output_file
 </pre>
 </div>
 
-<br />
-<br />
+<div class=indent1>
+<!-- Description -->
 
-<div>
-<TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
-<THEAD align=left>
-<TR><TH> Item </TH>
-    <TH> Type </TH>
-    <TH> Description </TH> </TR>
-</THEAD>
+<P>
+This namelist is always read from a file called <em class=file>input.nml</em>.
+</P>
 
-<TBODY valign=top>
+<TABLE border=0 cellpadding=3 width=100%>
+<TR><TH align=left>Contents    </TH>
+    <TH align=left>Type        </TH>
+    <TH align=left>Description </TH></TR>
 
-<TR><TD>pop_to_dart_output_file   </TD>
-    <TD>character(len=128)   </TD>
-    <TD>The name of the DART file containing the model state
-derived from the POP restart file.
-</TD></TR>
+<TR><!--contents--><TD valign=top>pop_to_dart_output_file&nbsp;&nbsp;&nbsp;</TD>
+    <!--  type  --><TD valign=top>character(len=128)&nbsp;&nbsp;&nbsp;</TD>
+    <!--descript--><TD>The name of the DART file containing the model state
+                       derived from the POP restart file.
+                       <em class=units>[default: 'dart.ud']</em></TD></TR>
 
-</TBODY> 
 </TABLE>
-</div>
 
-<br />
+</div>
 <br />
 
 <!--==================================================================-->
 
 <A NAME="Modules"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>MODULES USED</H2>
 <PRE>
 assim_model_mod
@@ -143,7 +134,7 @@ utilities_mod
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>FILES Read</H2>
 <UL><LI>POP restart file; <em class=file>pop.r.nc</em></LI>
     <LI>POP namelist file; <em class=file>pop_in</em></LI>
@@ -160,7 +151,7 @@ utilities_mod
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>REFERENCES</H2>
 <P>
 none
@@ -171,7 +162,7 @@ none
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>ERROR CODES and CONDITIONS</H2>
 <P>
 none - all error messages come from modules that have their own documentation.
@@ -187,7 +178,7 @@ none
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>FUTURE PLANS</H2>
 <P>
 None.
@@ -198,11 +189,11 @@ None.
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<hr />
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
+DART software - Copyright 2004 - 2011 UCAR.<br />
 This open source software is provided by UCAR, "as is",<br />
 without charge, subject to all terms of use at<br />
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

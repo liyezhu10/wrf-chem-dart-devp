@@ -1,15 +1,19 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
+
  
 PROGRAM select
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
+
 use        types_mod, only : r8, metadatalength
-use    utilities_mod, only : initialize_utilities, finalize_utilities, &
-                             register_module, logfileunit, &
-                             error_handler, E_MSG
+use    utilities_mod, only : initialize_utilities, timestamp, &
+                             register_module, logfileunit
 use obs_sequence_mod, only : obs_type, obs_sequence_type, init_obs_sequence, &
                              insert_obs_in_seq, get_first_obs, get_next_obs, &
                              write_obs_seq, &
@@ -33,10 +37,10 @@ use time_manager_mod, only : time_type, operator(/=), get_time, print_time, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 type(obs_sequence_type) :: seq, real_seq
 type(obs_type)          :: obs, prev_obs, real_obs
@@ -153,16 +157,12 @@ enddo
 write(unit=*, fmt='(5x,a,i6,a)') &
      'Total number of observations:  ', num_obs
 
+! Write out the sequence
 call write_obs_seq(seq, out_file_name)
 
-call error_handler(E_MSG,'select','FINISHED select.')
-call error_handler(E_MSG,'select','Finished successfully.',source,revision,revdate)
-call finalize_utilities()
+write(logfileunit,*)'FINISHED select.'
+write(logfileunit,*)
+
+call timestamp(source,revision,revdate,'end') ! That closes the log file, too.
  
 END PROGRAM select
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

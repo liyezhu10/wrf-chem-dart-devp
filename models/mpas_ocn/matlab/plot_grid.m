@@ -3,12 +3,17 @@ function plot_grid(fname)
 % 
 % fname = 'mpas_analysis.nc';
 % plot_grid(fname)
+%
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 lat = nc_varget(fname,'latCell') * 180/pi;;
 lon = nc_varget(fname,'lonCell') * 180/pi;;
@@ -30,9 +35,4 @@ figure(2); clf; orient landscape
    title('MPAS cell centers and Voronoi diagram.')
    worldmap;
    axis image
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

@@ -1,8 +1,7 @@
 &perfect_model_obs_nml
    start_from_restart    = .true.,
    output_restart        = .true.,
-   async                 = 0,
-   adv_ens_command       = "model called as a subroutine",
+   async                 = 1,
    init_time_days        = 145731,
    init_time_seconds     = 0,
    first_obs_days        = -1,
@@ -14,6 +13,7 @@
    restart_out_file_name = "perfect_restart",
    obs_seq_in_file_name  = "obs_seq.in",
    obs_seq_out_file_name = "obs_seq.out",
+   adv_ens_command       = "./advance_model.csh",
    output_timestamps     = .false.,
    trace_execution       = .false.,
    output_forward_op_errors = .false.,
@@ -22,17 +22,15 @@
   /
 
 &model_nml
-   output_state_vector         = .false.,
-   channel_center              = 45.0,
-   channel_width               = 40.0,
-   assimilation_period_days    = 0,
-   assimilation_period_seconds = 21600,
-   debug                       = .false.
+   output_state_vector = .false.,
+   channel_center      = 45.0,
+   channel_width       = 40.0,
+   debug               = .false.,
   /
 
 &filter_nml
-   async                    = 0,
-   adv_ens_command          = "model called as a subroutine",
+   async                    = 1,
+   adv_ens_command          = "./advance_model.csh",
    ens_size                 = 25,
    start_from_restart       = .false.,
    output_restart           = .true.,
@@ -91,7 +89,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 100000.0,
-   sort_obs_inc                    = .false.,
+   sort_obs_inc                    = .true.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
@@ -228,7 +226,8 @@
    bin_width        =     0, 0, 0, 6, 0, 0 ,
    time_to_skip     =     0, 0, 1, 0, 0, 0 ,
    max_num_bins     = 1000,
-   trusted_obs      = 'null',
+   rat_cri            = 3.0,
+   input_qc_threshold = 3.0,
    Nregions   = 1,
    lonlim1    =   0.0,   0.0,   0.0, 235.0,
    lonlim2    = 360.0, 360.0, 360.0, 295.0,
@@ -236,9 +235,7 @@
    latlim2    =  80.0, -20.0,  20.0,  55.0,
    reg_names  = 'Mid-latitudes', 'Southern Hemisphere', 'Tropics', 'North America',
    print_mismatched_locs = .false.,
-   create_rank_histogram = .true.,
-   outliers_in_histogram = .true.,
-   use_zero_error_obs    = .false.,
+   print_obs_locations   = .false.,
    verbose               = .true.
   /
 

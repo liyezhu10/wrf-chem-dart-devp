@@ -4,7 +4,6 @@
 <HEAD>
 <TITLE>QuikSCAT SeaWinds Data</TITLE>
 <link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +13,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
@@ -194,91 +193,89 @@ plotted with
 <A NAME="Namelist"></A>
 <HR />
 <H2>NAMELIST</H2>
-<P>This namelist is read from the file <em class=file>input.nml</em>.
-We adhere to the F90 standard of starting a namelist with an ampersand
+<P>We adhere to the F90 standard of starting a namelist with an ampersand
 '&amp;' and terminating with a slash '/' for all our namelist input.
-Character strings that contain a '/' must be
+Consider yourself forewarned that character strings that contain a '/' must be
 enclosed in quotes to prevent them from prematurely terminating the namelist.
-The following values are the defaults for these namelist items.
+The namelist declaration (i.e. what follows) has a different syntax, naturally.
 </P>
 <div class=namelist>
 <pre>
-&amp;convert_L2b_nml
-   l2b_file = '',
-   datadir = '.',
-   outputdir = '.',
-   lon1 = 0.0, 
-   lon2 = 360.0, 
-   lat1 = -90.0, 
-   lat2 = 90.0,
-   along_track_thin = 0,
-   cross_track_thin = 0
- /
+<em class=call>namelist / convert_L2b_nml / </em> &amp;
+    l2b_file, datadir, outputdir, lon1, lon2, lat1, lat2, &amp;
+    along_track_thin, cross_track_thin 
 </pre>
 </div>
 
-<br />
+<div class=indent1><!-- Description -->
 
-<div>
-
+<P>
+This namelist is read in a file called <em class=file>input.nml</em>.
+</P>
 <P>
 It is possible to restrict the output observation sequence to contain
 data from a region of interest throught the use of the namelist
-parameters. If you need a region that spans the Prime Meridian
-lon1 can be a larger number than lon2,
+parameters. If you need a region that spans the Prime Meridian,
 for example, a region from 300 E to 40 E and 60 S to 30 S (some of 
-the South Atlantic), would be <em class="input">lon1 = 300, lon2 =
+the South Atlantic), simply specify <em class="input">lon1 = 300, lon2 =
 40, lat1 = -60, lat2 = -30</em>.
 </P>
 
-<TABLE border=0 cellpadding=3 width=100% summary='QuikSCAT namelist description'>
-<THEAD align=left>
-<TR><TH>Contents    </TH>
-    <TH>Type        </TH>
-    <TH>Description </TH></TR>
-</THEAD>
+<TABLE border=0 cellpadding=3 width=100%>
 
-<TBODY valign=top>
-<TR><TD>l2b_file             </TD>
-    <TD>character(len=128)   </TD>
-    <TD>name of the HDF file to read - NOT including 
-        the directory, e.g. QS_S2B44444.20080021548</TD></TR>
+<TR><TH align=left>Contents    </TH>
+    <TH align=left>Type        </TH>
+    <TH align=left>Description </TH></TR>
 
-<TR><TD>datadir              </TD>
-    <TD>character(len=128)   </TD>
-    <TD>the directory containing the HDF files</TD></TR>
+<TR><!--contents--><TD valign=top>l2b_file             </TD>
+    <!--  type  --><TD valign=top>character(len=128)   </TD>
+    <!--descript--><TD>name of the HDF file to read - NOT including 
+                       the directory, e.g. QS_S2B44444.20080021548
+                     <em class="unit">[default:'']</em></TD></TR>
 
-<TR><TD>outputdir            </TD>
-    <TD>character(len=128)   </TD>
-    <TD>the directory for the output observation sequence files.</TD></TR>
+<TR><!--contents--><TD valign=top>datadir              </TD>
+    <!--  type  --><TD valign=top>character(len=128)   </TD>
+    <!--descript--><TD>the directory containing the HDF files
+                     <em class="unit">[default:'.']</em></TD></TR>
 
-<TR><TD>lon1                 </TD>
-    <TD>real(r4)             </TD>
-    <TD>the West-most longitude of interest in degrees. [0.0, 360]</TD></TR>
+<TR><!--contents--><TD valign=top>outputdir            </TD>
+    <!--  type  --><TD valign=top>character(len=128)   </TD>
+    <!--descript--><TD>the directory for the output observation
+                       sequence files.
+                     <em class="unit">[default:'.']</em></TD></TR>
 
-<TR><TD>lon2                 </TD>
-    <TD>real(r4)             </TD>
-    <TD>the East-most longitude of interest in degrees. [0.0, 360]</TD></TR>
+<TR><!--contents--><TD valign=top>lon1                 </TD>
+    <!--  type  --><TD valign=top>real(r4)             </TD>
+    <!--descript--><TD>the West-most longitude of interest. [0.0, 360]
+                     <em class="unit">[default:0.0]</em></TD></TR>
 
-<TR><TD>lat1                 </TD>
-    <TD>real(r4)             </TD>
-    <TD>the South-most latitude of interest in degrees. [-90.0, 90.0]</TD></TR>
+<TR><!--contents--><TD valign=top>lon2                 </TD>
+    <!--  type  --><TD valign=top>real(r4)             </TD>
+    <!--descript--><TD>the East-most longitude of interest. [0.0, 360]
+                     <em class="unit">[default:360.0]</em></TD></TR>
 
-<TR><TD>lat2                 </TD>
-    <TD>real(r8)             </TD>
-    <TD>the North-most latitude of interest in degrees. [-90.0, 90.0]</TD></TR>
+<TR><!--contents--><TD valign=top>lat1                 </TD>
+    <!--  type  --><TD valign=top>real(r4)             </TD>
+    <!--descript--><TD>the South-most latitude of interest. [-90.0, 90.0]
+                     <em class="unit">[default:-90.0]</em></TD></TR>
 
-<TR><TD>along_track_thin     </TD>
-    <TD>integer              </TD>
-    <TD>provides ability to thin the data by keeping only
-        every Nth row.  e.g. 3 == keep every 3rd row.</TD></TR>
+<TR><!--contents--><TD valign=top>lat2                 </TD>
+    <!--  type  --><TD valign=top>real(r8)             </TD>
+    <!--descript--><TD>the North-most latitude of interest. [-90.0, 90.0]
+                     <em class="unit">[default:90.0</em></TD></TR>
 
-<TR><TD>cross_track_thin     </TD>
-    <TD>integer              </TD>
-    <TD>provides ability to thin the data by keeping only every Nth 
-        wind vector cell in a particular row. 
-        e.g. 5 == keep every 5th cell.</TD></TR>
-</TBODY>
+<TR><!--contents--><TD valign=top>along_track_thin     </TD>
+    <!--  type  --><TD valign=top>integer              </TD>
+    <!--descript--><TD>provides ability to thin the data by ignoring 
+                       entire WVC rows. 2 == ignore every other row.
+                     <em class="unit">[default:0</em></TD></TR>
+
+<TR><!--contents--><TD valign=top>cross_track_thin     </TD>
+    <!--  type  --><TD valign=top>integer              </TD>
+    <!--descript--><TD>provides ability to thin the data by ignoring 
+                       wind vector cells in a particular row. 
+                       2 == ignore every other cell.
+                     <em class="unit">[default:0</em></TD></TR>
 </TABLE>
 
 </div>
@@ -303,7 +300,7 @@ There are no known bugs at this time.
 <HR />
 <H2>FUTURE PLANS</H2>
 <ol>
-   <li>There is one bit of error-checking that did not survive the
+   <li>There is one bit of error-checking that I did not survive the
        conversion from F77 to F90. I need to restore the check that the
        HDF file being read is a 'Level 2B' product.</li>
    <li>There is a lot of error-checking that is not being done. I need
@@ -312,14 +309,10 @@ There are no known bugs at this time.
        highest-ranked ambiguity.</li>
    <li>We need namelist options to select more QC flags - not 
        just the ones with the 'perfect' QC value of 0</li>
-   <li>Add an option to leave the observations as speed and direction
+   <li>The ability to leave the observations as speed and direction
        instead of converting them to U,V components. This is a 
        natural implementation of the instrument error 
-       characteristics. However, it would require writing a specialized 
-       forward operator in order to assimilate obs of this type (speed,
-       direction), and there is still a numerical problem with trying to 
-       do the statistics required during the assimilation of a 
-       cyclic direction value.</li>
+       characteristics.</li>
 </ol>
 
 <!--==================================================================-->
@@ -331,7 +324,7 @@ There are no known bugs at this time.
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
+DART software - Copyright 2004 - 2011 UCAR.<br />
 This open source software is provided by UCAR, "as is",<br />
 without charge, subject to all terms of use at<br />
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

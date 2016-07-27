@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 #
 # This script may be used to insert the DART restart conditions into
 # a set of CLM history and restart files. All it takes is a single
@@ -35,7 +35,7 @@ foreach FILE ( filter_restart.* )
 
    sed -e "s/clm_restart.nc/clm_restart_${memid}.nc/" input.nml.org >! input.nml
 
-   ln -sf $FILE dart_restart
+   ln -sf $FILE dart.ic
 
    ./dart_to_clm
 
@@ -45,11 +45,4 @@ mv input.nml.org input.nml
 
 echo ""
 echo "Finished at "`date`
-
-exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

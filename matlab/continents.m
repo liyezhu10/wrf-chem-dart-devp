@@ -31,12 +31,17 @@ function h = continents(ifill,lonorg,level)
 % continents;				% COASTLINES ONLY -- OR --
 %
 % continents('solid');			% SOLID LANDMASSES
+%
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/mpas/matlab/continents.m $
+% $Id: continents.m 5608 2012-03-16 23:11:46Z thoar $
+% $Revision: 5608 $
+% $Date: 2012-03-16 17:11:46 -0600 (Fri, 16 Mar 2012) $
 
 filltype  = 'hollow';
 lonorigin = 'greenwich';
@@ -208,10 +213,4 @@ end
 if (orgholdstate == 0) hold off; end;
 
 axis(ax);				% MAINTAIN ORIGINAL LIMITS
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

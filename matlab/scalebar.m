@@ -13,11 +13,15 @@
 %  As of May 2009, scalebar now uses all the colors in the colormap;
 %  previously only the first 64 colors were used.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
    if nargin <= 4,
       zmin = get(gca,'UserData');
@@ -52,10 +56,3 @@
       set(ax,'XTickLabel',[]);
       set(ax,'YAxisLocation','right')
    end
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program trans_perfect_ics
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 ! As the name suggests, this program translates MITgcm restart files
 ! to an initial condition file that dart can use.
@@ -22,10 +26,10 @@ use    utilities_mod, only : get_unit, error_handler,  &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! Model namelist parameters with default values
@@ -94,9 +98,9 @@ write(nmlfileunit, nml=model_nml)
 write(     *     , nml=model_nml)
 
 
-call error_handler(E_MSG,'trans_perfect_ics',                              &
-   'Converting an MITgcm restart file into a dart initial condition file', &
-   source, revision, revdate)
+call error_handler(E_MSG,'trans_perfect_ics',               &
+                  'Converting an MITgcm restart file into a &
+                   dart initial condition file', source, revision, revdate)
 
 ! allocate space for dart vector
 allocate(dart(model_size))
@@ -276,8 +280,3 @@ end subroutine dart_io
 
 end program trans_perfect_ics
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

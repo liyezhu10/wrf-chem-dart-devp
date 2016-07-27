@@ -1,10 +1,10 @@
-#!/bin/csh
+#!/bin/csh 
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 #
 # madis data window program -- reads hourly or daily obs_seq files
 # by type, and outputs a single obs_seq file with all obs for that
@@ -71,6 +71,7 @@ endif
 # on the analysis time computed from this increment.
 # valid strings look like +1h30m, +2h, +20m, +1d, etc. 
 set time_window = +1h
+#set time_window = +2h
 
 # set this to true if the input files are daily.
 # set it to false if the input files are hourly.
@@ -99,8 +100,12 @@ set type_list=(metar mesonet acars marine rawin)
 # the order of these MUST match the type_list array above.
 set win_before=( -7m  -7m -15m -30m+1s -30m+1s)
 set win_after =( +7m  +7m +15m +30m    +30m)
+#set win_before=(-30m+1s -30m+1s -30m+1s -30m+1s -30m+1s)
+#set win_after =(+30m    +30m    +30m    +30m    +30m)
 
 # locations for input madis netcdf files, output dart obs_seq files
+#set src_base_dir = /Volumes/joshua3/romine/data/STEP2009/MADIS/
+#set out_dir      = /users/romine/step09/MADIS/obs_sequence/conus
 set src_base_dir = ../data
 set out_dir      = ../data
 
@@ -248,6 +253,8 @@ while ( 1 )
     if ($daily != 'true') then
       echo $src_base_dir/obs_seq_${this_type}_${fbef}  >>! obstemp
       echo $src_base_dir/obs_seq_${this_type}_${faft}  >>! obstemp
+      #echo $src_base_dir/${this_type}/obs_seq.${fbef}  >>! obstemp
+      #echo $src_base_dir/${this_type}/obs_seq.${faft}  >>! obstemp
     else
       echo $src_base_dir/obs_seq_${this_type}_${fbefdy}  >>! obstemp
       echo $src_base_dir/obs_seq_${this_type}_${faftdy}  >>! obstemp
@@ -266,6 +273,7 @@ while ( 1 )
       # NAMES:
       if ($daily != 'true') then
         echo $src_base_dir/obs_seq_${this_type}_${fbef}  >>! obstemp
+        #echo $src_base_dir/${this_type}/obs_seq.${fbef}  >>! obstemp
       else
         echo $src_base_dir/obs_seq_${this_type}_${fbefdy}  >>! obstemp
       endif
@@ -286,6 +294,7 @@ while ( 1 )
       # NAMES:
       if ($daily != 'true') then
         echo $src_base_dir/obs_seq_${this_type}_${faft}  >>! obstemp
+        #echo $src_base_dir/${this_type}/obs_seq.${faft}  >>! obstemp
       else
         echo $src_base_dir/obs_seq_${this_type}_${faftdy}  >>! obstemp
       endif

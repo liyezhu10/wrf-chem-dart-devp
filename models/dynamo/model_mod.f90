@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 ! Revised assim_model version of Lorenz-63 3-variable model
 
@@ -17,7 +21,7 @@ use     location_mod, only : location_type, set_location, get_location, &
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, nmlfileunit, &
                              do_output, find_namelist_in_file, check_namelist_read,     &
                              do_nml_file, do_nml_term
-use random_seq_mod, only :    random_seq_type, init_random_seq, random_uniform, random_gaussian
+use random_nr_mod, only :    random_seq_type, init_ran1, ran1, gasdev
 use    mpi_utilities_mod, only : my_task_id
 
 implicit none
@@ -39,10 +43,10 @@ public :: get_model_size, &
 
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 !  define model parameters
 
@@ -166,7 +170,7 @@ integer :: getpid, tempr, i,err
 real(r8), intent(out) :: x(:)
 
 tempr = mod(getpid(),54000)
-call init_random_seq(sr, tempr)
+call init_ran1(sr, tempr)
 open(99,file='perfect_ics',status='old',iostat=err)
 if(err.eq.0)read(99,*)
 do i = 1, model_size
@@ -197,7 +201,7 @@ integer :: sec, days
 real(r8) :: fract
 
 fract = 1.0_r8
-x(1) = x(1) + 0.01 * random_gaussian(sr, 0.0_r8, 1.0_r8)
+x(1) = x(1) + 0.01 * gasdev(sr)
 call get_time(time,sec,days)
 our_time = float(days)*deltat
 counter = counter + 1
@@ -770,9 +774,3 @@ end subroutine ens_mean_for_model
 ! End of model_mod
 !===================================================================
 end module model_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

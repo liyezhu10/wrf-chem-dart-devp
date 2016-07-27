@@ -1,67 +1,84 @@
-#!/bin/csh
+#!/bin/tcsh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 
 # This block is an attempt to localize all the machine-specific
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
 
-echo "`date` -- BEGIN POP_ASSIMILATE"
+echo "`date` -- BEGIN ASSIMILATE"
 
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
-
-# The FORCE options are not optional.
-# The VERBOSE options are useful for debugging though
-# some systems don't like the -v option to any of the following
 switch ("`hostname`")
    case be*:
       # NCAR "bluefire"
+      # The FORCE options are not optional.
+      # the VERBOSE options are useful for debugging.
       set   MOVE = '/usr/local/bin/mv -fv'
       set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
+      set  FLINK = '/usr/local/bin/ln -fvs'
+      set   LINK = '/usr/local/bin/ln -vs'
       set REMOVE = '/usr/local/bin/rm -fr'
 
       set BASEOBSDIR = /glade/proj3/image/Observations/WOD09
-      set  LAUNCHCMD = mpirun.lsf
+      set DARTDIR    = ${HOME}/svn/DART/dev
+      set LAUNCHCMD  = mpirun.lsf
    breaksw
 
    case ys*:
       # NCAR "yellowstone"
+      # The FORCE options are not optional.
+      # the VERBOSE options are useful for debugging.
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
+      set  FLINK = 'ln -fvs'
+      set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
 
       set BASEOBSDIR = /glade/p/image/Observations/WOD09
-      set  LAUNCHCMD = mpirun.lsf
+      set DARTDIR    = ${HOME}/svn/DART/dev
+      set LAUNCHCMD  = mpirun.lsf
    breaksw
 
    default:
       # NERSC "hopper"
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
+      set  FLINK = 'ln -fvs'
+      set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
 
       set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
-      set  LAUNCHCMD = "aprun -n $NTASKS"
+      set DARTDIR    = ${HOME}/devel
+      set LAUNCHCMD  = "aprun -n $NTASKS"
    breaksw
 endsw
 
 set ensemble_size = ${NINST_OCN}
 
+# Create temporary working directory for the assimilation
+set temp_dir = assimilate_dir
+echo "temp_dir is $temp_dir"
+
+# Create a clean temporary directory and go there
+if ( -d $temp_dir ) then
+   ${REMOVE} $temp_dir/*
+else
+   mkdir -p $temp_dir
+endif
+cd $temp_dir
+
 #-------------------------------------------------------------------------
 # Determine time of model state ... from file name of first member
-# of the form "./${CASE}.pop_${ensemble_member}.r.2000-01-06-00000.nc"
+# of the form "./${CASE}.pop.$ensemble_member.r.2000-01-06-00000.nc"
 #
 # Piping stuff through 'bc' strips off any preceeding zeros.
 #-------------------------------------------------------------------------
 
-set FILE = `head -n 1 rpointer.ocn_0001.restart`
+set FILE = `head -1 ../rpointer.ocn_0001.restart`
 set FILE = $FILE:t
 set FILE = $FILE:r
 set MYCASE = `echo $FILE | sed -e "s#\..*##"`
@@ -76,35 +93,24 @@ set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
 echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
 echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
 
-#-------------------------------------------------------------------------
-# Create temporary working directory for the assimilation and go there
-#-------------------------------------------------------------------------
-
-set temp_dir = assimilate_pop
-echo "temp_dir is $temp_dir"
-
-if ( -d $temp_dir ) then
-   ${REMOVE} $temp_dir/*
-else
-   mkdir -p $temp_dir
-endif
-cd $temp_dir
-
 #-----------------------------------------------------------------------------
 # Get observation sequence file ... or die right away.
+# Cannot specify -f on the link command and still check status.
 # The observation file names have a time that matches the stopping time of POP.
 #-----------------------------------------------------------------------------
 
-set YYYYMMDD = `printf %04d%02d%02d ${OCN_YEAR} ${OCN_MONTH} ${OCN_DAY}`
-set YYYYMM   = `printf %04d%02d     ${OCN_YEAR} ${OCN_MONTH}`
-set OBSFNAME = obs_seq.0Z.${YYYYMMDD}
+set YYYYMM   = `printf %04d%02d ${OCN_YEAR} ${OCN_MONTH}`
+set OBSFNAME = `printf obs_seq.0Z.%04d%02d%02d ${OCN_YEAR} ${OCN_MONTH} ${OCN_DAY}`
 set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}/${OBSFNAME}
 
-if (  -e   ${OBS_FILE} ) then
-   ${LINK} ${OBS_FILE} obs_seq.out
-else
+${REMOVE}           obs_seq.out
+${LINK} ${OBS_FILE} obs_seq.out
+
+set lnstat = $status
+if ($lnstat != 0) then
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
+   echo "ERROR ... ln died with status $lnstat"
    exit -1
 endif
 
@@ -119,17 +125,30 @@ if (  -e   ${CASEROOT}/input.nml ) then
 else
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
+   exit -1
 endif
 
+# Since the obs sequence files are small, modify the DART input.nml such
+# that the num_output_obs_members matches the ensemble size.
+#
+# g;num_output_state_members ;s;= .*;= $ensemble_size;
+
+ex input.nml <<ex_end
+g;ens_size ;s;= .*;= $ensemble_size;
+g;num_output_obs_members ;s;= .*;= $ensemble_size;
+wq
+ex_end
+
+# COULD also  ERROR OUT if the important setting is not the same.
+# problem is ... there are multiple instances of 'ens_size' in input.nml
+#
 echo "`date` -- END COPY BLOCK"
 
 #=========================================================================
 # Block 2: Stage the files needed for SAMPLING ERROR CORRECTION
 #
 # The sampling error correction is a lookup table.
-# The tables were originally in the DART distribution, but should
-# have been staged to $CASEROOT at setup time.
+# The tables are stored in the DART distribution.
 # Each ensemble size has its own (static) file.
 # It is only needed if
 # input.nml:&assim_tools_nml:sampling_error_correction = .true.,
@@ -141,13 +160,13 @@ set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set SECSTRING = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
 
 if ( $SECSTRING == true ) then
-   set SAMP_ERR_FILE = ${CASEROOT}/final_full.${ensemble_size}
+   set SAMP_ERR_FILE = ${DARTDIR}/system_simulation/final_full_precomputed_tables/final_full.${ensemble_size}
    if (  -e   ${SAMP_ERR_FILE} ) then
       ${COPY} ${SAMP_ERR_FILE} .
    else
       echo "ERROR: no sampling error correction file for this ensemble size."
       echo "ERROR: looking for ${SAMP_ERR_FILE}"
-      exit -3
+      exit -2
    endif
 else
    echo "Sampling Error Correction not requested for this assimilation."
@@ -172,24 +191,14 @@ endif
 # files to be as listed above. When being archived, the filenames get a
 # unique extension (describing the assimilation time) appended to them.
 #
-# The inflation file is essentially a duplicate of the DART model state ...
-# For the purpose of this script, they are the output of a previous assimilation,
-# so they should be named something like prior_inflate_restart.YYYY-MM-DD-SSSSS
+# The inflation file is essentially a duplicate of the model state ...
+# it is slaved to a specific geometry. The initial files are created
+# offline with values of unity. For the purpose of this script, they are
+# thought to be the output of a previous assimilation, so they should be
+# named something like prior_inflate_restart.YYYY-MM-DD-SSSSS
 #
-# NOTICE: inf_initial_from_restart and inf_sd_initial_from_restart are somewhat
-# problematic. During the bulk of an experiment, these should be FALSE, since
-# we want to read existing inflation files. However, the first assimilation
-# might need these to be TRUE and then subsequently be set to FALSE.
-# There are two ways to handle this.
-# 1) Create the initial files offline with values of unity by using
-#    'fill_inflation_restart' and stage them with the appropriate names
-#    in the RUNDIR.
-# 2) create a cookie file called RUNDIR/pop_inflation_cookie
-#    The existence of this file will cause this script to set the
-#    namelist appropriately. This script will 'eat' the cookie file
-#    to prevent this from happening for subsequent executions. If the
-#    inflation file does not exist for them, and it needs to, this script
-#    should die.
+# The first inflation file can be created with 'fill_inflation_restart'
+# which can be built in the usual DART manner.
 #
 # The strategy is to use the LATEST inflation file from the CESM 'rundir'.
 # After an assimilation, the new inflation values/files will be moved to
@@ -233,37 +242,20 @@ set  POSTE_INF_DIAG = $MYSTRING[3]
 if ( $PRIOR_INF > 0 ) then
 
    if ($PRIOR_TF == false) then
-      # we are not using an existing inflation file.
       echo "inf_flavor(1) = $PRIOR_INF, using namelist values."
-
-   else if ( -e ../pop_inflation_cookie ) then
-      # We want to use an existing inflation file, but this is
-      # the first assimilation so there is no existing inflation
-      # file. This is the signal we need to to coerce the namelist
-      # to have different values for this execution ONLY.
-      # Since the local namelist comes from CASEROOT each time, we're golden.
-
-      set PRIOR_TF = FALSE
-
-ex input.nml <<ex_end
-g;inf_initial_from_restart ;s;= .*;= .${PRIOR_TF}., .${POSTE_TF}.,;
-g;inf_sd_initial_from_restart ;s;= .*;= .${PRIOR_TF}., .${POSTE_TF}.,;
-wq
-ex_end
-
    else
       # Look for the output from the previous assimilation
-      (ls -rt1 ../pop_${PRIOR_INF_OFNAME}.* | tail -n 1 >! latestfile) > & /dev/null
+      (ls -rt1 ../${PRIOR_INF_OFNAME}.* | tail -1 >! latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
 
       # If one exists, use it as input for this assimilation
       if ( $nfiles > 0 ) then
          set latest = `cat latestfile`
-         ${LINK} $latest ${PRIOR_INF_IFNAME}
+         ${FLINK} $latest ${PRIOR_INF_IFNAME}
       else
          echo "ERROR: Requested PRIOR inflation but specified no incoming inflation file."
-         echo "ERROR: expected something like ../pop_${PRIOR_INF_OFNAME}.YYYY-MM-DD-SSSSS"
-         exit -4
+         echo "ERROR: expected something like ../${PRIOR_INF_OFNAME}.YYYY-MM-DD-SSSSS"
+         exit 4
       endif
 
    endif
@@ -276,64 +268,47 @@ endif
 if ( $POSTE_INF > 0 ) then
 
    if ($POSTE_TF == false) then
-      # we are not using an existing inflation file.
       echo "inf_flavor(2) = $POSTE_INF, using namelist values."
-
-   else if ( -e ../pop_inflation_cookie ) then
-      # We want to use an existing inflation file, but this is
-      # the first assimilation so there is no existing inflation
-      # file. This is the signal we need to to coerce the namelist
-      # to have different values for this execution ONLY.
-      # Since the local namelist comes from CASEROOT each time, we're golden.
-
-      set POSTE_TF = FALSE
-
-ex input.nml <<ex_end
-g;inf_initial_from_restart ;s;= .*;= .${PRIOR_TF}., .${POSTE_TF}.,;
-g;inf_sd_initial_from_restart ;s;= .*;= .${PRIOR_TF}., .${POSTE_TF}.,;
-wq
-ex_end
-
    else
+
       # Look for the output from the previous assimilation
-      (ls -rt1 ../pop_${POSTE_INF_OFNAME}.* | tail -n 1 >! latestfile) > & /dev/null
+      (ls -rt1 ../${POSTE_INF_OFNAME}.* | tail -1 >! latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
 
       # If one exists, use it as input for this assimilation
       if ( $nfiles > 0 ) then
          set latest = `cat latestfile`
-         ${LINK} $latest ${POSTE_INF_IFNAME}
+         ${FLINK} $latest ${POSTE_INF_IFNAME}
       else
          echo "ERROR: Requested POSTERIOR inflation but specified no incoming inflation file."
-         echo "ERROR: expected something like ../pop_${POSTE_INF_OFNAME}.YYYY-MM-DD-SSSSS"
-         exit -5
+         echo "ERROR: expected something like ../${POSTE_INF_OFNAME}.YYYY-MM-DD-SSSSS"
+         exit 6
       endif
    endif
 else
    echo "Posterior Inflation       not requested for this assimilation."
 endif
 
-# Eat the cookie regardless
-${REMOVE} ../pop_inflation_cookie
-
 #=========================================================================
-# Block 4: Convert N POP restart files to DART initial condition files.
+# Block 4: convert N POP restart files to DART initial conditions file(s)
 # pop_to_dart is serial code, we can do all of these at the same time
-# as long as we can have unique namelists for each of them.
+# and just wait for them to finish IFF it were not for the fact we'd have
+# to have unique namelists for all of them.
 #
-# At the end of the block, we have DART initial condition files  filter_ics.[1-N]
-# that came from pointer files ../rpointer.ocn_[1-N].restart
+# At the end of the block, we have DART restart files  filter_ics.[1-N]
+# that came from pointer files ../rpointer.ocn.[1-N].restart
 #
-# REQUIRED DART namelist settings:
+# DART namelist settings appropriate/required:
 # &filter_nml:           restart_in_file_name    = 'filter_ics'
 #                        restart_out_file_name   = 'filter_restart'
 # &ensemble_manager_nml: single_restart_file_in  = '.false.'
 # &pop_to_dart_nml:      pop_to_dart_output_file = 'dart_ics',
 # &dart_to_pop_nml:      dart_to_pop_input_file  = 'dart_restart',
-#                        advance_time_present    = .false.
+# &dart_to_pop_nml:      advance_time_present    = .false.
+#
 #=========================================================================
 
-echo "`date` -- BEGIN POP-TO-DART"
+echo "`date` -- BEGIN POP TO DART"
 
 set member = 1
 while ( ${member} <= ${ensemble_size} )
@@ -345,19 +320,16 @@ while ( ${member} <= ${ensemble_size} )
    mkdir -p $MYTEMPDIR
    cd $MYTEMPDIR
 
-   # make sure there are no old output logs hanging around
-   $REMOVE output.${member}.pop_to_dart
-
-   set OCN_RESTART_FILENAME = `printf ${MYCASE}.pop_%04d.r.${OCN_DATE_EXT}.nc  ${member}`
-   set     OCN_NML_FILENAME = `printf pop2_in_%04d        ${member}`
+   set OCN_RESTART_FILENAME = `printf ../../${MYCASE}.pop_%04d.r.${OCN_DATE_EXT}.nc  ${member}`
+   set     OCN_NML_FILENAME = `printf ../../pop2_in_%04d  ${member}`
    set     DART_IC_FILENAME = `printf filter_ics.%04d     ${member}`
    set    DART_RESTART_FILE = `printf filter_restart.%04d ${member}`
 
-   sed -e "s#dart_ics#../${DART_IC_FILENAME}#" \
-       -e "s#dart_restart#../${DART_RESTART_FILE}#" < ../input.nml >! input.nml
+   sed -e "s/dart_ics/..\/${DART_IC_FILENAME}/" \
+       -e "s/dart_restart/..\/${DART_RESTART_FILE}/" < ../input.nml >! input.nml
 
-   ${LINK} ../../$OCN_RESTART_FILENAME pop.r.nc
-   ${LINK} ../../$OCN_NML_FILENAME     pop_in
+   ${FLINK} $OCN_RESTART_FILENAME pop.r.nc
+   ${FLINK}     $OCN_NML_FILENAME pop_in
 
    echo "starting pop_to_dart for member ${member} at "`date`
    ${EXEROOT}/pop_to_dart >! output.${member}.pop_to_dart &
@@ -369,11 +341,10 @@ end
 
 wait
 
-set nsuccess = `fgrep 'Finished ... at YYYY' member*/output.[0-9]*.pop_to_dart | wc -l`
-if (${nsuccess} != ${ensemble_size}) then
+if ($status != 0) then
    echo "ERROR ... DART died in 'pop_to_dart' ... ERROR"
    echo "ERROR ... DART died in 'pop_to_dart' ... ERROR"
-   exit -6
+   exit -7
 endif
 
 echo "`date` -- END POP-TO-DART for all ${ensemble_size} members."
@@ -395,39 +366,25 @@ echo "`date` -- END POP-TO-DART for all ${ensemble_size} members."
 # &filter_nml:           first_obs_seconds      = -1,
 # &filter_nml:           last_obs_days          = -1,
 # &filter_nml:           last_obs_seconds       = -1,
-# &ensemble_manager_nml: single_restart_file_in = .false.
+# &ensemble_manager_nml: single_restart_file_in = '.false.'
 #
 #=========================================================================
 
 # POP always needs a pop_in and a pop.r.nc to start.
 # Lots of ways to get the filename
 
-set OCN_RESTART_FILENAME = `head -n 1 ../rpointer.ocn_0001.restart`
-
+set OCN_RESTART_FILENAME = `head -1 ../rpointer.ocn_0001.restart`
 ${LINK} ../$OCN_RESTART_FILENAME pop.r.nc
 ${LINK} ../pop2_in_0001          pop_in
 
-# On yellowstone, you can explore task layouts with the following:
-if ( $?LSB_PJL_TASK_GEOMETRY ) then
-   setenv ORIGINAL_LAYOUT "${LSB_PJL_TASK_GEOMETRY}"
-
-   # setenv GEOMETRY_32_1NODE \
-   #    "{(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31)}";
-   # setenv LSB_PJL_TASK_GEOMETRY "${GEOMETRY_32_1NODE}"
-endif
-
 echo "`date` -- BEGIN FILTER"
-${LAUNCHCMD} ${EXEROOT}/filter || exit -7
+${LAUNCHCMD} ${EXEROOT}/filter || exit -2
 echo "`date` -- END FILTER"
 
-if ( $?LSB_PJL_TASK_GEOMETRY ) then
-   setenv LSB_PJL_TASK_GEOMETRY "${ORIGINAL_LAYOUT}"
-endif
-
-${MOVE} Prior_Diag.nc      ../pop_Prior_Diag.${OCN_DATE_EXT}.nc
-${MOVE} Posterior_Diag.nc  ../pop_Posterior_Diag.${OCN_DATE_EXT}.nc
-${MOVE} obs_seq.final      ../pop_obs_seq.${OCN_DATE_EXT}.final
-${MOVE} dart_log.out       ../pop_dart_log.${OCN_DATE_EXT}.out
+${MOVE} Prior_Diag.nc      ../Prior_Diag.${OCN_DATE_EXT}.nc
+${MOVE} Posterior_Diag.nc  ../Posterior_Diag.${OCN_DATE_EXT}.nc
+${MOVE} obs_seq.final      ../obs_seq.${OCN_DATE_EXT}.final
+${MOVE} dart_log.out       ../dart_log.${OCN_DATE_EXT}.out
 
 # Accomodate any possible inflation files
 # 1) rename file to reflect current date
@@ -436,7 +393,7 @@ ${MOVE} dart_log.out       ../pop_dart_log.${OCN_DATE_EXT}.out
 
 foreach FILE ( ${PRIOR_INF_OFNAME} ${POSTE_INF_OFNAME} ${PRIOR_INF_DIAG} ${POSTE_INF_DIAG} )
    if ( -e ${FILE} ) then
-      ${MOVE} ${FILE} ../pop_${FILE}.${OCN_DATE_EXT}
+      ${MOVE} ${FILE} ../${FILE}.${OCN_DATE_EXT}
    else
       echo "No ${FILE} for ${OCN_DATE_EXT}"
    endif
@@ -445,17 +402,18 @@ end
 #=========================================================================
 # Block 6: Update the POP restart files ... simultaneously ...
 #
-# Each member will do its job in its own directory, which already exists
-# and has the required input files remaining from 'Block 4'
+# Each member will do its job in its own directory.
+# That way, we can do N of them simultaneously.
+# The namelist already reflects the right filenames.
+# The right filenames are already linked from the pop_to_dart conversion.
 #=========================================================================
 
-echo "`date` -- BEGIN DART-TO-POP"
+echo "`date` -- BEGIN DART TO POP"
 set member = 1
 while ( $member <= $ensemble_size )
 
+   set m4 = `printf %04d $member`
    cd member_${member}
-
-   ${REMOVE} output.${member}.dart_to_pop
 
    echo "starting dart_to_pop for member ${member} at "`date`
    ${EXEROOT}/dart_to_pop >! output.${member}.dart_to_pop &
@@ -467,20 +425,20 @@ end
 
 wait
 
-set nsuccess = `fgrep 'Finished ... at YYYY' member*/output.[0-9]*.dart_to_pop | wc -l`
-if (${nsuccess} != ${ensemble_size}) then
+if ($status != 0) then
    echo "ERROR ... DART died in 'dart_to_pop' ... ERROR"
    echo "ERROR ... DART died in 'dart_to_pop' ... ERROR"
    exit -8
 endif
 
-echo "`date` -- END DART-TO-POP for all ${ensemble_size} members."
+echo "`date` -- END DART TO POP for all ${ensemble_size} members."
+echo "`date` -- END ASSIMILATE"
 
 #-------------------------------------------------------------------------
 # Cleanup
 #-------------------------------------------------------------------------
 
-echo "`date` -- END POP_ASSIMILATE"
+ls -lrt
 
 exit 0
 

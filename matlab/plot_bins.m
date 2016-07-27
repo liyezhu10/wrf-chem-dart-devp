@@ -14,11 +14,15 @@
 % diagn_file = 'Prior_Diag.nc';
 % plot_bins
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % error_checking ...
 % exist('bob') == 1   means the variable exists.
@@ -59,37 +63,33 @@ switch lower(pinfo.model)
       pinfo.var_inds   = varid.var_inds;
       clear varid
 
-   case {'fms_bgrid'}
+   case 'fms_bgrid'
 
       pinfo = GetBgridInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'cam'}
+   case 'cam'
 
       pinfo = GetCamInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'clm'}
+   case 'clm'
 
       pinfo = GetClmInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'wrf'}
+   case 'wrf'
 
       pinfo = GetWRFInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'pe2lyr'}
+   case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, diagn_file, 'PlotBins');
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       pinfo = GetMPAS_ATMInfo(pinfo, diagn_file, 'PlotBins');
-
-   case {'sqg'}
-
-      pinfo = GetSqgInfo(pinfo, diagn_file, 'PlotBins');
 
    otherwise
 
@@ -98,10 +98,4 @@ switch lower(pinfo.model)
 end
 
 PlotBins(pinfo);
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

@@ -1,6 +1,3 @@
-c    This code is not protected by the DART copyright agreement.
-c    DART $Id$
-
       PROGRAM wodFOR
       
 c    This program prints out to the screen data from WOD native format
@@ -21,6 +18,8 @@ c    Comments and suggestions for improving this program would be appreciated.
 c    Updates to the World Ocean Data 2005 data and to this program will be posted
 c    in the NODC/WOD web site at http://www.nodc.noaa.gov
 c
+c    DART $Id$
+
 c***********************************************************
 c    
 c    Missing values used in this dataset = bmiss = -999.99
@@ -2028,9 +2027,3 @@ c****************************************************
 
       return
       end
-
-c <next few lines under version control, do not edit>
-c $URL$
-c $Id$
-c $Revision$
-c $Date$

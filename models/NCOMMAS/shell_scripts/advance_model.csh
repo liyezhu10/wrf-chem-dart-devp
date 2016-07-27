@@ -1,10 +1,10 @@
 #!/bin/tcsh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# $Id$
 #
 # This script has 4 logical 'blocks':
 # 1) creates a clean, temporary directory in which to run a model instance 
@@ -93,11 +93,11 @@ while($state_copy <= $num_states)
    # time - which must be communicated to the model ...
    #----------------------------------------------------------------------
 
-   # The EXPECTED input DART 'initial conditions' file name is 'dart_restart'
+   # The EXPECTED input DART 'initial conditions' file name is 'dart.ic'
    # The dart_to_ncommas_nml:advance_time_present = .TRUE. must be set
 
    # why is this a link and not a move?
-   ln -sfv ../$input_file dart_restart || exit 2
+   ln -sfv ../$input_file dart.ic || exit 2
 
    # CENTRALDIR should contain the restart files for all the ensemble members.
 
@@ -167,9 +167,9 @@ while($state_copy <= $num_states)
    ../ncommas_to_dart || exit 4
 
 
-   # The (new,updated) DART restart file name is called 'dart_ics'
+   # The (new,updated) DART restart file name is called 'dart.ud'
    # Move the updated files back to 'centraldir'
-   mv -v dart_ics ../$output_file || exit 4
+   mv -v dart.ud ../$output_file || exit 4
    rm restart.nc
 
    # the restart name was a link, so the central version should

@@ -1,8 +1,8 @@
 #!/bin/sh 
 #
-# This file is not protected by the DART copyright agreement.
 # DART $Id$
 #
+
 #  ------------------------------------------------------------------------
 #  This script will make executables which extract data
 #  from ADP BUFR input files, and place the data into a basic text file.
@@ -44,8 +44,8 @@ then
 elif [ $CPLAT = linux ]
 then
 # possible different compiler choices
-#   cc='cc -O'; ff='pgf90 -O'
-#   cc='icc -O'; ff='ifort -O'
+#   cc=cc; ff=pgf90
+#   cc=icc; ff=ifort
     cc='gcc -DUNDERSCORE -O'; ff='ifort -O'
 elif [ $CPLAT = aix ]
 then
@@ -112,4 +112,5 @@ exit 0
 # $URL$
 # $Revision$
 # $Date$
+
 

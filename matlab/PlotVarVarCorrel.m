@@ -23,11 +23,15 @@ function PlotVarVarCorrel( pinfo )
 % pinfo.state_var_index   = 1;
 % PlotVarVarCorrel( pinfo )
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
@@ -35,17 +39,17 @@ if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), en
 
 switch lower(pinfo.model)
 
-   case {'fms_bgrid','pe2lyr','wrf','cam','sqg'}
+   case {'fms_bgrid','pe2lyr','wrf','cam'}
 
       clf;
 
       base_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname',pinfo.base_var, 'levelindex',pinfo.base_lvlind, ...
-                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'latindex',pinfo.base_latind, 'lonindex',pinfo.base_lonind );
       comp_mem = get_hyperslab('fname', pinfo.fname, ...
                      'varname',pinfo.comp_var, 'levelindex',pinfo.comp_lvlind, ...
-                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'latindex',pinfo.comp_latind, 'lonindex',pinfo.comp_lonind );
 
       nmembers = size(comp_mem,2);
@@ -80,10 +84,10 @@ switch lower(pinfo.model)
       clf;
 
       base_mem = get_hyperslab('fname', pinfo.fname, 'varname',pinfo.base_var, ...
-                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'levelindex',pinfo.base_lvlind, 'cellindex',pinfo.base_cellindex);
       comp_mem = get_hyperslab('fname', pinfo.fname, 'varname',pinfo.comp_var, ...
-                     'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
+                     'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
                      'levelindex',pinfo.comp_lvlind, 'cellindex',pinfo.comp_cellindex);
       nmembers = size(comp_mem,2);
 
@@ -140,10 +144,10 @@ switch lower(pinfo.model)
       % Get 'standard' ensemble series
       base_var  = get_hyperslab('fname',pinfo.fname, ...
                       'varname',pinfo.base_var,  'stateindex',pinfo.base_var_index, ...
-                      'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
       state_var = get_hyperslab('fname',pinfo.fname, ...
                       'varname',pinfo.state_var, 'stateindex',pinfo.state_var_index, ...
-                      'copy1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
+                      'copyindex1',pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members);
 
       nmembers  = size(state_var,2);
 
@@ -233,10 +237,3 @@ else
    xlabelstring = sprintf('%s start',monstr);
 end
 xlabel(xlabelstring)
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

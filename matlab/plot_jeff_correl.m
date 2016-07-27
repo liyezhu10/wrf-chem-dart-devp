@@ -2,11 +2,15 @@
 % Plots time series of correlation between a given variable at a given
 % time and another variable at all times in an ensemble time sequence.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 if (exist('fname','var') ~=1)
    disp('Input name of file:')
@@ -90,33 +94,29 @@ switch lower(pinfo.model)
       inputstring = input('Input variable and index for correlation \n','s');
       [pinfo.state_var, pinfo.state_var_index] = ParseAlphaNumerics(inputstring);
 
-   case {'fms_bgrid'}
+   case 'fms_bgrid'
 
       pinfo = GetBgridInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'wrf'}
+   case 'wrf'
 
       pinfo = GetWRFInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'cam'}
+   case 'cam'
 
       pinfo = GetCamInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'pe2lyr'}
+   case 'pe2lyr'
 
       pinfo = GetPe2lyrInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'mitgcm_ocean'}
+   case 'mitgcm_ocean'
 
       pinfo = GetMITgcm_oceanInfo(pinfo, fname, 'PlotVarVarCorrel');
 
-   case {'mpas_atm'}
+   case 'mpas_atm'
 
       pinfo = GetMPAS_ATMInfo(pinfo, fname, 'PlotVarVarCorrel');
-
-   case {'sqg'}
-
-      pinfo = GetSqgInfo(pinfo, fname, 'PlotVarVarCorrel');
 
    otherwise
 
@@ -129,10 +129,3 @@ pinfo
 PlotJeffCorrel( pinfo )
 
 clear inputstring diminfo num_copies
-
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
-

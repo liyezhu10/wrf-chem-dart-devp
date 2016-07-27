@@ -1,11 +1,15 @@
 function [obs_increments, err] =  obs_increment_enkf(ensemble, observation, obs_error_var)
 %% obs_increment_enkf Computes increments for an ensemble Kalman filter with perturbed obs mean correction.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
+%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id$
+% <next few lines under version control, do not edit>
+% $URL$
+% $Id$
+% $Revision$
+% $Date$
 
 % Set error return to default successful
 err = 0;
@@ -66,9 +70,4 @@ obs_increments = updated_ens - ensemble;
 
 % Compute the increments
 %%%obs_increments = updated_ensemble - ensemble;
-
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$
 

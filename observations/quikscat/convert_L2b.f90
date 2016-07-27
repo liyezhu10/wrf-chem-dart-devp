@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program convert_L2b
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 ! Initial program to read the raw ocean observations and insert them
 ! into an observation sequence. To make things easy ... we will mandate
@@ -18,7 +22,7 @@ use quikscat_JPL_mod, only : real_obs_sequence, read_qscat2b, orbit_type, &
                              create_output_filename
 use    utilities_mod, only : initialize_utilities, register_module, &
                              do_output, logfileunit, nmlfileunit, &
-                             error_handler, finalize_utilities, E_ERR, E_MSG, &
+                             error_handler, timestamp, E_ERR, E_MSG, &
                              find_namelist_in_file, check_namelist_read
 
 implicit none
@@ -34,10 +38,10 @@ type(obs_sequence_type) :: seq
 integer :: io, iunit
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 ! ----------------------------------------------------------------------
 ! Declare namelist parameters
@@ -91,14 +95,7 @@ seq = real_obs_sequence(orbit, lon1, lon2, lat1, lat2, &
            along_track_thin, cross_track_thin ) ! convert structure to a sequence
 call write_obs_seq(seq, dartfile)
 call destroy_obs_sequence(seq)       ! release the memory of the seq
-
-call error_handler(E_MSG,'convert_L2b','Finished successfully.',source,revision,revdate)
-call finalize_utilities()
+call timestamp(source,revision,revdate,'end') ! close the log file
 
 end program convert_L2b
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

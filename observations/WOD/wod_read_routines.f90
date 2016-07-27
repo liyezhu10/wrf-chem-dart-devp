@@ -1,7 +1,10 @@
-! This code is not protected by the DART copyright agreement.
-! DART $Id$
-
      module WOD_read_routines_mod      
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !    calls the subroutine WODread (WODread200X if the data file are in WOD05
 !    or WOD01 format or the subroutine WODread1998 if the data are in WOD98
@@ -283,7 +286,7 @@ private
       !dimension jtottax(maxtcode,maxtax),itaxerr(maxtcode,maxtax)
       !dimension itaxorigerr(maxtcode,maxtax)
 
-      integer :: n, nn, n0, n2, i, castid
+      integer :: n, nn, n0, n1, n2, i, j, k, ij, castid
       integer :: nbio, inc, nchar, nlines, istartc, icruise, npinf
       integer :: npi, inchad, ica, icn, ns, insec, inbio, nbothtot, itaxtot
 
@@ -931,9 +934,3 @@ private
       end subroutine
 
       end module WOD_read_routines_mod      
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

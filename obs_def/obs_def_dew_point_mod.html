@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module obs_def_dew_point_mod</TITLE>
-<link rel="stylesheet" type="text/css" href="../doc/html/doc.css" />
-<link href="../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../doc/html/doc.css">
+<link href="../doc/html/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,7 +14,7 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../doc/html/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
        <P>Jump to <a href="../index.html">DART Documentation Main Index</a><br />
@@ -26,10 +26,12 @@
 </table>
 
 <A HREF="#Interface">INTERFACES</A> /
+<A HREF="#Namelist">NAMELIST</A> /
 <A HREF="#FilesUsed">FILES</A> /
 <A HREF="#References">REFERENCES</A> /
 <A HREF="#Errors">ERRORS</A> /
 <A HREF="#FuturePlans">PLANS</A> /
+<A HREF="#PrivateComponents">PRIVATE COMPONENTS</A> /
 <A HREF="#Legalese">TERMS OF USE</A>
 
 <H2>Overview</H2>
@@ -46,7 +48,7 @@ Revision 2801 implements a more robust method
 <!--==================================================================-->
 
 <A NAME="OtherModulesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>OTHER MODULES USED</H2>
 <PRE>
 types_mod
@@ -65,13 +67,19 @@ obs_kind_mod
 <!--==================================================================-->
 
 <A NAME="Interface"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>PUBLIC INTERFACES</H2>
 
 <TABLE>
 <TR><TD><em class=call>use obs_def_dew_point_mod, only : </em></TD>
                    <TD><A HREF="#get_expected_dew_point">get_expected_dew_point</A></TD></TR>
 </TABLE>
+
+<P>
+Optional namelist interface
+<a href="#Namelist"><em class=code>&amp;model_nml</em></a>
+may be read from file <em class=file>input.nml</em>.
+</P>
 
 <P>
    A note about documentation style. 
@@ -124,7 +132,7 @@ Calculates the dew point temperature (Kelvin).
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FILES</H2>
 <UL><LI>NONE</LI>
 </UL>
@@ -134,7 +142,7 @@ Calculates the dew point temperature (Kelvin).
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>REFERENCES</H2>
 <ol>
 <li> none </li>
@@ -145,7 +153,7 @@ Calculates the dew point temperature (Kelvin).
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>ERROR CODES and CONDITIONS</H2>
 <div class=errors>
 <TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
@@ -168,7 +176,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>FUTURE PLANS</H2>
 <P>
 none at this time
@@ -184,11 +192,11 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<div class="top">[<a href="#">top</a>]</div><hr />
+<HR>
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
+DART software - Copyright 2004 - 2011 UCAR.<br>
 This open source software is provided by UCAR, "as is",<br>
 without charge, subject to all terms of use at<br>
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">

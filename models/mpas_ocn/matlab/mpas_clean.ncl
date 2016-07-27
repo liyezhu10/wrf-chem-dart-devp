@@ -1,6 +1,3 @@
-; This code is not protected by the DART copyright agreement.
-; DART $Id$
-
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
@@ -148,9 +145,3 @@ begin
 
 end
 
- 
-; <next few lines under version control, do not edit>
-; $URL$
-; $Revision$
-; $Date$
- 
