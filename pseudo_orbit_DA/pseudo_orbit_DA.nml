@@ -1,0 +1,9 @@
+&pseudo_orbit_DA_nml
+   async                        = 0,
+   restart_list_file            ='pda_ic_name_list',
+   n_GD     			=20,
+   window_size			=8,
+   gd_step_size			=0.0005,
+   gd_max_step_size             =0.001
+/
+
