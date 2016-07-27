@@ -58,22 +58,26 @@ character(len=129)      :: msgstring
 integer                 :: trace_level, timestamp_level
 
 !Some parameters require to be defined
-logical  :: output_restart      = .true.
-logical  :: output_restart_mean = .false.
-logical  :: single_restart_file_in       = .false. ! all copies read from 1 file
-logical  :: single_restart_file_out      = .false. ! all copies written to 1 file
-logical            :: direct_netcdf_read = .true.  ! default to read from netcdf file
-logical            :: direct_netcdf_write = .true. ! default to write to netcdf file
-logical            :: use_restart_list             = .true. ! read the list restart file names from a file
+logical  :: output_restart           = .true.
+logical  :: output_restart_mean      = .false.
+logical  :: single_restart_file_in   = .false. ! all copies read from 1 file
+logical  :: single_restart_file_out  = .false. ! all copies written to 1 file
+logical  :: direct_netcdf_read       = .true.  ! default to read from netcdf file
+logical  :: direct_netcdf_write      = .true. ! default to write to netcdf file
+logical  :: use_restart_list         = .true. ! read the list restart file names from a file
+
 character(len = 129) :: restart_in_file_name  = 'NULL',     &
                         restart_out_file_name = 'pda_output', &
                         adv_ens_command       = './advance_model.csh'
-integer  :: tasks_per_model_advance = 1
+
+integer :: tasks_per_model_advance = 1
+
 ! IO options
-logical            :: add_domain_extension         = .false. ! add _d0X to output filenames. Note this is always done for X>1
-logical            :: overwrite_state_input        = .false. ! overwrites model netcdf files with output from filter
+logical :: add_domain_extension  = .false. ! add _d0X to output filenames. Note this is always done for X>1
+logical :: overwrite_state_input = .false. ! overwrites model netcdf files with output from filter
+
 character(len = 129) :: inf_in_file_name(2)       = 'not_initialized',    &
-inf_out_file_name(2)      = 'not_initialized'
+                        inf_out_file_name(2)      = 'not_initialized'
 
 
 
@@ -87,21 +91,29 @@ inf_out_file_name(2)      = 'not_initialized'
 integer  :: async = 0
 
 !restart_list_file(1)='pda_ic_name_list'   !only this one should in the namelist
-character(len=512) :: restart_list_file(10)        = 'null' ! name of files containing a list of restart files (only used if use_restart_list = .true. 1 file per domain
-!Number of minimisation should be setup more standardised, or use other criteria to stop the minimazation, should be in the namelist
+character(len=512) :: restart_list_file(10)        = 'null' ! name of files containing a list of restart files 
+
+! Number of minimisation should be setup more standardised, or use other criteria 
+! to stop the minimazation, should be in the namelist
 integer   ::  n_GD=20
-!Define assimilation window size
+
+! Define assimilation window size
 integer   ::  window_size=8
 
-
-!gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
-!gd_initial_step_size=0.001_r8    !this may use to calculate the number of minimizations, not used now
+! gd_step_size is the minimisation step size for Gradient Descent, adjusted during 
+! the minimisation, double the step size when lower cost function is achieved as 
+! long as it is smaller than the gd_max_step_size, shrink step size when it fails.
+! gd_initial_step_size=0.001_r8    
+! this may use to calculate the number of minimizations, not used now
 real(r8)  ::  gd_step_size= 0.0005_r8 !0.05_r8!0.0005_r8
 real(r8)  ::  gd_max_step_size= 0.001_r8!0.05_r8!0.001_r8
 
-
-
-namelist /pseudo_orbit_DA_nml/ async, restart_list_file, n_GD, window_size, gd_step_size, gd_max_step_size
+namelist /pseudo_orbit_DA_nml/ async,             &
+                               restart_list_file, &
+                               n_GD,              &
+                               window_size,       &
+                               gd_step_size,      &
+                               gd_max_step_size
 
 
 !----------------------------------------------------------------
@@ -111,28 +123,20 @@ contains
 !----------------------------------------------------------------
 !> The code does pda data assimilation without an adjoint.
 
-
 subroutine pda_main()
 
-type(time_type)             :: time1
-
+type(time_type)          :: time1
 integer(i8)              :: model_size, var_ind
-integer                  :: i, iunit, io
+integer                  :: i, j, iunit, io
 logical                  :: read_time_from_file
 type(file_info_type)     :: file_info
-type(ensemble_type)      :: pda_ens_handle,  mismatch_ens_handle, ens_update_copy,ens_normalization
-integer                  :: j, k, seq_len, n_DA, var_type
-real(r8)                 :: value(1), mis_cost, mis_cost_previous, sum_variable,result_sum
+type(ensemble_type)      :: pda_ens_handle, mismatch_ens_handle, ens_update_copy, ens_normalization
+integer                  :: n_DA, var_type, my_num_vars, ivar!, seq_len
+real(r8)                 :: mis_cost, mis_cost_previous
 type(location_type)      :: location
 integer(i8), allocatable :: my_vars(:)
-integer                  :: my_num_vars, ivar
 
-call filter_initialize_modules_used() ! static_init_model called in here
-
-!!!Should create filterpda namelist in input.nml!!!!!
-
-
-
+call pda_initialize_modules_used() ! static_init_model called in here
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "pseudo_orbit_DA_nml", iunit)
@@ -145,19 +149,18 @@ model_size = get_model_size()
 
 call init_ensemble_manager(pda_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 
-file_info = io_filenames_init(pda_ens_handle, single_restart_file_in, single_restart_file_out, &
-restart_in_file_name, restart_out_file_name, output_restart, direct_netcdf_read, &
-direct_netcdf_write, output_restart_mean, add_domain_extension, use_restart_list, &
-restart_list_file, overwrite_state_input, inf_in_file_name, inf_out_file_name)
+file_info = io_filenames_init(pda_ens_handle, single_restart_file_in, single_restart_file_out,  &
+              restart_in_file_name, restart_out_file_name, output_restart, direct_netcdf_read,  &
+              direct_netcdf_write, output_restart_mean, add_domain_extension, use_restart_list, &
+              restart_list_file, overwrite_state_input, inf_in_file_name, inf_out_file_name)
 
 
 !read sequence of enkf states
 call read_state(pda_ens_handle, file_info, read_time_from_file, time1)
 
-
 call init_ensemble_manager(mismatch_ens_handle, window_size, model_size, 1, transpose_type_in=2)
-call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
-call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_in=2)
+call init_ensemble_manager(ens_update_copy,    window_size, model_size, 1, transpose_type_in=2)
+call init_ensemble_manager(ens_normalization,            1, model_size, 1, transpose_type_in=2)
 
 
 !generate scaling vector--------------------------------------
@@ -193,16 +196,16 @@ end do
 Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !calculate mismatch cost function---------------------------------------------------
-    call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+    call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, async, &
+                                    adv_ens_command, tasks_per_model_advance, mis_cost)
     mis_cost_previous=mis_cost
-
 
     write(*,*) mis_cost
 
     !------------------------------------------------------------------------------------
 
-    ens_update_copy%copies=pda_ens_handle%copies
-    ens_update_copy%time=pda_ens_handle%time
+    ens_update_copy%copies = pda_ens_handle%copies
+    ens_update_copy%time   = pda_ens_handle%time
 
 
 
@@ -215,21 +218,20 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
         Gradient_descent: do i=1, window_size
 
             if (i==1) then
-                pda_ens_handle%copies(1,:)=ens_update_copy%copies(1,:)+gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(1,:)
-
-
+                pda_ens_handle%copies(1,:) = ens_update_copy%copies(1,:) &
+                        +gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(1,:)
 
             else if (i<window_size) then
 
                 pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
-                                         -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i-1,:) &
-                                         +gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i,:)
+                        -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i-1,:) &
+                        +gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i,:)
 
             else
 
 
                 pda_ens_handle%copies(window_size,:)=ens_update_copy%copies(window_size,:) &
-                            -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(window_size-1,:)
+                        -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(window_size-1,:)
 
             endif
 
@@ -238,16 +240,16 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-        call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+        call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, &
+                                        async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
-
-        if (mis_cost<mis_cost_previous) then
+        if ( mis_cost < mis_cost_previous ) then
             !increase the GD minimisation time step by a factor of 2,
             !should have some upper bound for the GD minimisation time step
 
             ens_update_copy%copies=pda_ens_handle%copies
 
-            if (gd_step_size<gd_max_step_size) then
+            if ( gd_step_size < gd_max_step_size ) then
                 gd_step_size=gd_step_size*2
             endif
             mis_cost_previous=mis_cost
@@ -257,11 +259,12 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             !decrease the GD minimisation time step by a factor of 2
             !should have some lower bound for the GD minimisation time step
             pda_ens_handle%copies=ens_update_copy%copies
-            gd_step_size=gd_step_size/2
-            gd_max_step_size=gd_step_size
+            gd_step_size     = gd_step_size/2
+            gd_max_step_size = gd_step_size
 
             !may use a vector to store previous forward ensemble copies
-            call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+            call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, &
+                                            async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
             write(*,*) 'larger_mis cost', mis_cost
 
@@ -284,7 +287,6 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     !    write(*,*) pda_ens_handle%copies(i,1:3)
     !end do
 
-
     call end_ensemble_manager(pda_ens_handle)
     call end_ensemble_manager(mismatch_ens_handle)
     call end_ensemble_manager(ens_update_copy)
@@ -297,19 +299,20 @@ end subroutine pda_main
 !-----------------------------------------------------------------------
 !calculate mismatch cost function
 
-subroutine cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
-type(ensemble_type), intent(in)      :: pda_ens_handle
-type(ensemble_type), intent(inout)   :: mismatch_ens_handle
-integer, intent(in)                  :: async, tasks_per_model_advance
-character(len = 129), intent(in)     :: adv_ens_command
-real(r8), intent(out)   :: mis_cost
-integer                 :: i,j,window_size
-type(time_type)         :: target_time, ens_time
-real(r8)                :: result_sum, sum_variable
+subroutine cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
+type(ensemble_type),  intent(in)    :: pda_ens_handle
+type(ensemble_type),  intent(inout) :: mismatch_ens_handle
+integer,              intent(in)    :: async
+integer,              intent(in)    :: tasks_per_model_advance
+character(len = 129), intent(in)    :: adv_ens_command
+real(r8),             intent(out)   :: mis_cost
+
+integer         :: i,j
+type(time_type) :: target_time, ens_time
+real(r8)        :: result_sum, sum_variable
 
 window_size=pda_ens_handle%num_copies
-
 
 call get_ensemble_time(pda_ens_handle, 1, ens_time)
 call get_ensemble_time(pda_ens_handle, 2, target_time)
@@ -317,23 +320,19 @@ call get_ensemble_time(pda_ens_handle, 2, target_time)
 mismatch_ens_handle%copies=pda_ens_handle%copies
 mismatch_ens_handle%time=pda_ens_handle%time
 
-if(.not. allocated(mismatch_ens_handle%vars)) allocate(mismatch_ens_handle%vars(mismatch_ens_handle%num_vars, mismatch_ens_handle%my_num_copies))
-
+if(.not. allocated(mismatch_ens_handle%vars)) &
+    allocate(mismatch_ens_handle%vars(mismatch_ens_handle%num_vars, mismatch_ens_handle%my_num_copies))
 
 call all_copies_to_all_vars(mismatch_ens_handle)
-
 
 !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
 do i=1, window_size
     mismatch_ens_handle%time(i)=ens_time
 end do
 
-
-
 call advance_state(mismatch_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
 
 write(*,*) window_size
-
 
 call all_vars_to_all_copies(mismatch_ens_handle)
 
@@ -343,8 +342,8 @@ do i=1, window_size-1
 end do
 
 !calculate mismatch cost function
-result_sum=0
-sum_variable=0
+result_sum   = 0
+sum_variable = 0
 do i=1,window_size-1
 
     do j=1,mismatch_ens_handle%my_num_vars
@@ -354,23 +353,17 @@ do i=1,window_size-1
     call sum_across_tasks(sum_variable,result_sum)
 
 end do
+
 mis_cost=result_sum/((window_size-1)*1.0_r8)
-
-
 
 end subroutine cal_mismatch_cost_function
 
-
-
-!-----------------------------------------------------------
-
-
 !-------------------------------------------------------------------------
 
-subroutine filter_initialize_modules_used()
+subroutine pda_initialize_modules_used()
 
 ! Initialize modules used that require it
-call initialize_mpi_utilities('Filter')
+call initialize_mpi_utilities('pseudo_orbit_DA')
 
 call register_module(source,revision,revdate)
 
@@ -381,12 +374,7 @@ call trace_message('After  init_model call')
 call state_vector_io_init()
 call trace_message('After  init_state_vector_io call')
 
-end subroutine filter_initialize_modules_used
-
-!-------------------------------------------------------------------------
-
-
-
+end subroutine pda_initialize_modules_used
 
 !-------------------------------------------------------------------------
 
@@ -416,26 +404,6 @@ end subroutine trace_message
 
 !-------------------------------------------------------------------------
 
-subroutine timestamp_message(msg, sync)
-
-character(len=*), intent(in) :: msg
-logical, intent(in), optional :: sync
-
-! Write current time and message to stdout and log file. 
-! if sync is present and true, sync mpi jobs before printing time.
-
-if (timestamp_level <= 0) return
-
-if (present(sync)) then
-  if (sync) call task_sync()
-endif
-
-if (do_output()) call timestamp(' '//trim(msg), pos='brief')  ! was debug
-
-end subroutine timestamp_message
-
-!-------------------------------------------------------------------------
-
 subroutine print_ens_time(ens_handle, msg)
 
 type(ensemble_type), intent(in) :: ens_handle
@@ -455,59 +423,8 @@ endif
 
 end subroutine print_ens_time
 
-!-------------------------------------------------------------------------
-
-
-!------------------------------------------------------------------
-!> Set the time on any extra copies that a pe owns
-!> Could we just set the time on all copies?
-subroutine set_time_on_extra_copies(ens_handle)
-
-type(ensemble_type), intent(inout) :: ens_handle
-
-integer :: copy_num, owner, owners_index
-integer :: ens_size
-
-ens_size = ens_handle%num_copies - ens_handle%num_extras
-
-do copy_num = ens_size + 1, ens_handle%num_copies
-   ! Set time for a given copy of an ensemble
-   call get_copy_owner_index(copy_num, owner, owners_index)
-   if(ens_handle%my_pe == owner) then
-      call set_ensemble_time(ens_handle, owners_index, ens_handle%current_time)
-   endif
-enddo
-
-end subroutine  set_time_on_extra_copies
-
-!------------------------------------------------------------------
-
-!==================================================================
-! TEST FUNCTIONS BELOW THIS POINT
-!------------------------------------------------------------------
-!> dump out obs_copies to file
-subroutine test_obs_copies(obs_fwd_op_ens_handle, information)
-
-type(ensemble_type), intent(in) :: obs_fwd_op_ens_handle
-character(len=*),    intent(in) :: information
-
-character*20  :: task_str !< string to hold the task number
-character*129 :: file_obscopies !< output file name
-integer :: i
-
-write(task_str, '(i10)') obs_fwd_op_ens_handle%my_pe
-file_obscopies = TRIM('obscopies_' // TRIM(ADJUSTL(information)) // TRIM(ADJUSTL(task_str)))
-open(15, file=file_obscopies, status ='unknown')
-
-do i = 1, obs_fwd_op_ens_handle%num_copies - 4
-   write(15, *) obs_fwd_op_ens_handle%copies(i,:)
-enddo
-
-close(15)
-
-end subroutine test_obs_copies
-
 !-------------------------------------------------------------------
+
 end module pseudo_orbit_DA_mod
 
 ! <next few lines under version control, do not edit>
