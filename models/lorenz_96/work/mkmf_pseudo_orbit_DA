@@ -1,0 +1,76 @@
+#!/bin/csh
+#
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: mkmf_pseudo_orbit_DA 10468 2016-07-06 22:01:19Z hendric $
+#
+# usage: mkmf_pseudo_orbit_DA [ -mpi | -nompi ]
+#
+# without any args, builds pseudo_orbit_DA without mpi libraries, and it will run
+# as a normal executable. if -mpi is given, it will be compiled with the mpi
+# libraries and can run with multiple cooperating processes.
+
+if ( $#argv > 0 ) then
+  if ("$argv[1]" == "-mpi") then
+    setenv usingmpi 1
+  else if ("$argv[1]" == "-nompi") then
+    setenv usingmpi 0
+  else
+    echo "Unrecognized argument to mkmf_pseudo_orbit_DA: $argv[1]"
+    echo "Usage: mkmf_pseudo_orbit_DA [ -mpi | -nompi ]"
+    echo " default is to generate a Makefile without MPI support."
+    exit -1
+  endif
+else
+  setenv usingmpi 0
+endif
+
+
+# make a backup copy of the path_names file, and then use
+# sed to make sure it includes either the non-mpi subroutines,
+# or the subroutines which really call mpi.
+cp -f path_names_pseudo_orbit_DA path_names_pseudo_orbit_DA.back
+
+if ( $usingmpi ) then
+
+  echo "Making Makefile with MPI"
+  touch using_mpi_for_pseudo_orbit_DA
+  sed -e 's;/null_mpi_util;/mpi_util;' path_names_pseudo_orbit_DA.back >! path_names_pseudo_orbit_DA
+  cp -f path_names_pseudo_orbit_DA path_names_pseudo_orbit_DA.temp
+  sed -e 's;/null_win_mod;/no_cray_win_mod;' path_names_pseudo_orbit_DA.temp >! path_names_pseudo_orbit_DA
+
+  setenv wrapper_arg -w
+
+else
+
+  echo "Making Makefile without MPI"
+  rm -f using_mpi_for_pseudo_orbit_DA
+  sed -e 's;/mpi_util;/null_mpi_util;' path_names_pseudo_orbit_DA.back >! path_names_pseudo_orbit_DA
+  setenv wrapper_arg ""
+  cp -f path_names_pseudo_orbit_DA path_names_pseudo_orbit_DA.temp
+  sed '\,distributed/no_cray_win_mod,d' path_names_pseudo_orbit_DA.temp >! path_names_pseudo_orbit_DA
+  cp -f path_names_pseudo_orbit_DA path_names_pseudo_orbit_DA.temp
+  sed '\,distributed/cray_win_mod,d' path_names_pseudo_orbit_DA.temp >! path_names_pseudo_orbit_DA
+  set p=`grep distributed/null_win_mod.f90 path_names_pseudo_orbit_DA | wc -w`
+  if ( $p == 0) then
+  #  echo distributed/null_win_mod.f90 >> path_names_pseudo_orbit_DA
+     echo 'distributed/null_win_mod.f90' | cat - path_names_pseudo_orbit_DA > temp && mv temp path_names_pseudo_orbit_DA
+  endif
+
+endif
+
+# remove temp file and now really call mkmf to generate makefile
+rm -f path_names_pseudo_orbit_DA.back
+
+../../../mkmf/mkmf -p pseudo_orbit_DA -t ../../../mkmf/mkmf.template   \
+        -a "../../.." ${wrapper_arg} path_names_pseudo_orbit_DA
+
+exit $status
+
+# <next few lines under version control, do not edit>
+# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/models/lorenz_63/work/mkmf_pseudo_orbit_DA $
+# $Revision: 10468 $
+# $Date: 2016-07-06 16:01:19 -0600 (Wed, 06 Jul 2016) $
+
