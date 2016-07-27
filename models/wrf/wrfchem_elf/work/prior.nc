@@ -1,0 +1,1 @@
+/glade/scratch/mizzi/PERFECT_MODEL/2008061018/dart_filter/Prior_Diag.nc

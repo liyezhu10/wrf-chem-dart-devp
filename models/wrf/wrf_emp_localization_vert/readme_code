@@ -1,0 +1,38 @@
+
+wrf_emp_localization.f90_horiz_vert
+   original code for real obs locations, with both horiz and vert localization options
+
+wrf_emp_localization.f90_rad
+   original code for real obs locations, distance is computed by radiance
+
+wrf_emp_lcoalization.f90_meter
+   original code for real obs locations, distance is computed by meter
+
+wrf_emp_localization.f90_integralobs
+   for real obs locations, but use truth of observation instead of observation values.
+   this is the integral of obs, in order to reduce noise
+
+wrf_emp_localization.f90_integralobs_conf
+   for real obs locations, use truth of observations, 
+   also compute the confidece value (group filter paper) of the alpha (localization)
+
+wrf_emp_lcoalization.f90_allobs_U10U
+   for SFC obs at each grid point, for U10 obs to U variable
+
+wrf_emp_localization.f90_allobs
+   for SFC obs at each grid points, for all SFC obs types and all 3D state variables
+
+wrf_emp_localization.f90_allobs_q
+   the same as 'wrf_emp_localization.f90_allobs', but adding obs type of 'specific humidity',
+   to check how different from assimilating 'dewpoint' to 'specific humidity'
+
+   Glen's comments: LH error method assigns larger error for drier air,
+                    for a winter case, dewpoint maybe not a good choice...
+
+wrf_emp_localization.f90_allobs_d01
+   the same as 'wrf_emp_localization.f90_allobs_q',
+   but fix the bug of spread when interpolating variables from non-mass grid points to mass grid points,
+   also add the computation of abs(corrlation) and output it.
+
+
+

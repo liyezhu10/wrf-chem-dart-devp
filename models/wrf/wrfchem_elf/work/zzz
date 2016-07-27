@@ -1,0 +1,261 @@
+ empirical localization kind: horizontal
+ Now processing MOPITT observations 
+ State variable is co
+ Initializing the utilities module.
+ Trying to log to unit           10
+ Trying to open file dart_log.out
+ 
+ --------------------------------------
+ Starting ... at YYYY MM DD HH MM SS = 
+                 2013 11 28  0 18 39
+ --------------------------------------
+ 
+ set_nml_output Echo NML values to log file only
+ Trying to open namelist log dart_log.nml
+ ------------------------------------------------------
+ 
+ 
+ -------------- ASSIMILATE_THESE_OBS_TYPES --------------
+ SAT_U_WIND_COMPONENT
+ SAT_V_WIND_COMPONENT
+ RADIOSONDE_U_WIND_COMPONENT
+ RADIOSONDE_V_WIND_COMPONENT
+ RADIOSONDE_TEMPERATURE
+ RADIOSONDE_DEWPOINT
+ RADIOSONDE_SURFACE_ALTIMETER
+ ACARS_U_WIND_COMPONENT
+ ACARS_V_WIND_COMPONENT
+ ACARS_TEMPERATURE
+ ACARS_DEWPOINT
+ MARINE_SFC_U_WIND_COMPONENT
+ MARINE_SFC_V_WIND_COMPONENT
+ MARINE_SFC_TEMPERATURE
+ MARINE_SFC_DEWPOINT
+ MARINE_SFC_ALTIMETER
+ METAR_U_10_METER_WIND
+ METAR_V_10_METER_WIND
+ METAR_TEMPERATURE_2_METER
+ METAR_DEWPOINT_2_METER
+ METAR_ALTIMETER
+ LAND_SFC_U_WIND_COMPONENT
+ LAND_SFC_V_WIND_COMPONENT
+ LAND_SFC_TEMPERATURE
+ LAND_SFC_DEWPOINT
+ LAND_SFC_ALTIMETER
+ -------------- EVALUATE_THESE_OBS_TYPES --------------
+ ------------------------------------------------------
+ 
+ location_mod: Including vertical separation when computing distances:
+ location_mod:        # pascals ~ 1 horiz radian:      187500.00000
+ location_mod:         # meters ~ 1 horiz radian:       76238.90000
+ location_mod:   # model levels ~ 1 horiz radian:        2666.70000
+ location_mod:  # scale heights ~ 1 horiz radian:           5.00000
+ First observation "kind" is           17 ACARS_TEMPERATURE               
+ observation values are:
+           1   229.051905790607     
+           2   231.166702927649     
+           3   231.498536658442     
+           4   231.498536658442     
+           5  0.141337648494868     
+           6  0.141337648494868     
+           7   231.713794863596     
+           8   231.713794863596     
+           9   231.500847565961     
+          10   231.500847565961     
+          11   231.532186589813     
+          12   231.532186589813     
+          13   231.393856379385     
+          14   231.393856379385     
+          15   231.351997893456     
+          16   231.351997893456     
+ observation QC values are:
+           1   1.00000000000000     
+           2   1.00000000000000     
+ observation error variance is:    1.00000000000000     
+loc3d
+     4.313232180453586        0.8141960960553547         23840.00000000000      2
+ Lon/Lat(deg): 247.13000000  46.65000000  Vert:  238.4000000  hPa
+ NGOOD =          858
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   19.0996954243564     
+           2   19.1142895264954     
+           3   19.1240350685010     
+           4   19.1253823902015     
+           5  4.210958955664654E-003
+           6  2.628555256906910E-003
+           7   19.1256263554454     
+           8   19.1261618381242     
+           9   19.1254150539190     
+          10   19.1262516617692     
+          11   19.1254270736420     
+          12   19.1273484697212     
+          13   19.1270991600995     
+          14   19.1263923639601     
+          15   19.1166076993991     
+          16   19.1207576174329     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   7.769944495521486E-004
+loc3d
+     5.102546341139043        0.6510507411506570         90000.00000000000     -2
+ Lon/Lat(deg): 292.35437012  37.30245972  Vert:               Undefined
+ NGOOD =         1758
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   18.0257532025799     
+           2   18.0726307497627     
+           3   18.0891638599432     
+           4   18.0809511260161     
+           5  5.106206039227242E-003
+           6  3.742445643272533E-003
+           7   18.0902485534036     
+           8   18.0815129384275     
+           9   18.0907620037986     
+          10   18.0823631942096     
+          11   18.0908169488502     
+          12   18.0825282102011     
+          13   18.0936453293540     
+          14   18.0839149556919     
+          15   18.0803464643096     
+          16   18.0744363315505     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   3.580258227884769E-003
+loc3d
+     5.149820646281257        0.5383991601983598         90000.00000000000     -2
+ Lon/Lat(deg): 295.06298828  30.84799957  Vert:               Undefined
+ NGOOD =         2598
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   20.5605182861547     
+           2   20.5296341131132     
+           3   20.5478020303756     
+           4   20.5420918089880     
+           5  1.920747613733511E-003
+           6  1.351591922406391E-003
+           7   20.5493789912024     
+           8   20.5432716521911     
+           9   20.5479574115832     
+          10   20.5423162813686     
+          11   20.5453067413863     
+          12   20.5403225465830     
+          13   20.5498759319381     
+          14   20.5434292504754     
+          15   20.5464910757681     
+          16   20.5411193143220     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   6.065754569135606E-004
+loc3d
+     5.078254050939775        0.4331772660551655         90000.00000000000     -2
+ Lon/Lat(deg): 290.96252441  24.81922913  Vert:               Undefined
+ NGOOD =         3301
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   20.4495729784333     
+           2   20.4359035883135     
+           3   20.4785172064555     
+           4   20.4764919322655     
+           5  1.503776286740682E-003
+           6  1.449367670784922E-003
+           7   20.4796381627859     
+           8   20.4774883983304     
+           9   20.4773292464412     
+          10   20.4752790434557     
+          11   20.4802175434691     
+          12   20.4782017050221     
+          13   20.4787379754632     
+          14   20.4767200015051     
+          15   20.4766631041182     
+          16   20.4747705130139     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   5.363485543057323E-004
+loc3d
+     5.081913766909762        0.3531244413211194         90000.00000000000     -2
+ Lon/Lat(deg): 291.17221069  20.23254013  Vert:               Undefined
+ NGOOD =         3965
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   16.7330391298497     
+           2   16.8346091573239     
+           3   16.8504877815724     
+           4   16.8500466863621     
+           5  9.791953329308053E-004
+           6  9.596172528495063E-004
+           7   16.8498121724635     
+           8   16.8493840286090     
+           9   16.8500761108714     
+          10   16.8496459893442     
+          11   16.8510359660551     
+          12   16.8505766630954     
+          13   16.8495818388165     
+          14   16.8491599746946     
+          15   16.8519328196556     
+          16   16.8514667760673     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   1.118144020438194E-002
+loc3d
+     4.749398397421303        0.7413413563262130         80000.00000000000     -2
+ Lon/Lat(deg): 272.12048340  42.47573090  Vert:               Undefined
+ NGOOD =         5682
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   7.60038285063020     
+           2   7.77583428280350     
+           3   7.78017086496468     
+           4   7.78016138501899     
+           5  7.514528308117051E-005
+           6  7.489191695616116E-005
+           7   7.78021340276067     
+           8   7.78020406403299     
+           9   7.78008754842607     
+          10   7.78007741288306     
+          11   7.78009701181951     
+          12   7.78008880426433     
+          13   7.78019808420874     
+          14   7.78018823223127     
+          15   7.78025827760841     
+          16   7.78024841168328     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   4.302093759179115E-002
+loc3d
+     4.598682654482666        0.4558641028807917         101499.3000000000     -2
+ Lon/Lat(deg): 263.48510742  26.11908913  Vert:               Undefined
+ NGOOD =        11419
+ Observation "kind" is          115 MOPITT_CO_RETRIEVAL             
+ observation values are:
+           1   6.78905695729881     
+           2   7.08054265604492     
+           3   7.07655427353533     
+           4   7.07453695512993     
+           5  6.967206067569752E-003
+           6  4.244011345932729E-003
+           7   7.07900042596279     
+           8   7.07554256686027     
+           9   7.07752874906721     
+          10   7.07653647353985     
+          11   7.06758749149446     
+          12   7.06712078421137     
+          13   7.08608943178586     
+          14   7.07781694490595     
+          15   7.07256526936634     
+          16   7.07566800613220     
+ observation QC values are:
+           1  0.000000000000000E+000
+           2  0.000000000000000E+000
+ observation error variance is:   4.100252687931061E-002
+loc3d
+     3.793549934775513        0.2805784351992478         101333.9000000000     -2
+ Lon/Lat(deg): 217.35440063  16.07596016  Vert:               Undefined
+ obs_ngood =        11682
+ computation completed
