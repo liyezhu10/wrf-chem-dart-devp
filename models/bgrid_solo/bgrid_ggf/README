@@ -1,0 +1,18 @@
+
+1. explain the executables
+
+   (1) ./exe_obsvarband_groupsize2: observation and state variable are in the same latitude band
+       bgrid_ggf_ps_ps_south_pole: obs ps with var ps, in latitude band of 1 <= j <= 4
+       bgrid_ggf_ps_ps_south_midlat: obs ps with var ps, in latitude band of 5 <= j <= 11
+       bgrid_ggf_ps_ps_tropics: obs ps with var ps, in latitude band of 12 <= j <= 19
+       bgrid_ggf_ps_ps_north_midlat: obs ps with var ps, in latitude band of 20 <= j <= 26
+       bgrid_ggf_ps_ps_north_pole: obs ps with var ps, in latitude band of 27 <= j <= 30
+
+   (2) bgrid_ggf_ps_ps_south_pole, ...: observation in the latitude band while state variable in whole domain
+       no specify group size --- group size 2
+
+       _ groupsize4 --- group size 4
+
+
+
+
