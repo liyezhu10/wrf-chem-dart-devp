@@ -51,13 +51,18 @@ for ivar=1:pinfo.num_state_vars,
    weights = SphereWeights(latitudes, longitudes);
 
    for itime=1:pinfo.time_series_length,
-
-      truth  = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.vars{ivar}, ...
-                   'copyindex',truth_index, 'timeindex',pinfo.truth_time(1)+itime-1);
-      ens    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
-                   'copyindex',ens_mean_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
-      spread = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
-                   'copyindex',ens_spread_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
+       
+       truth  = get_hyperslab('fname',pinfo.truth_file, 'varname',pinfo.vars{ivar}, ...
+           'copyindex',truth_index, 'timeindex',pinfo.truth_time(1)+itime-1);
+       ens    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
+           'copyindex',ens_mean_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
+       if (ens_spread_index > 0)
+           
+           spread = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
+               'copyindex',ens_spread_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
+       else
+           spread = zeros(size(ens));
+       end
 
       %% Calculate the weighted mean squared error for each level.
       %  tensors come back [nlev,nlat,nlon] - or - [nlat,nlon]
@@ -85,17 +90,16 @@ for ivar=1:pinfo.num_state_vars,
    % Each variable in its own figure window
    %-------------------------------------------------------------------
    figure(ivar); clf;
-      plot(pinfo.time,rmse,'-', pinfo.time,sprd,'--')
-
+      h = plot(pinfo.time,rmse,'-', pinfo.time,sprd,'--');
       s{1} = sprintf('time-mean Ensemble Mean error  = %f', mean(rmse));
       s{2} = sprintf('time-mean Ensemble Spread = %f',      mean(sprd));
-
-      h = legend(s); legend(h,'boxoff')
+      legend(s);
       grid on;
       xdates(pinfo.time)
       ylabel(sprintf('global-area-weighted rmse (%s)',varunits))
       s1 = sprintf('%s %s Ensemble Mean', pinfo.model,pinfo.vars{ivar});
       title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
+      pause(0.01);   % forces the graphic to be displayed immediately
 
 end % loop around variables
 
