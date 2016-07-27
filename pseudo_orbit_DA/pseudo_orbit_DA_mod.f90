@@ -193,7 +193,7 @@ end do
 Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !calculate mismatch cost function---------------------------------------------------
-    call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+    call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
     mis_cost_previous=mis_cost
 
 
@@ -238,7 +238,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-        call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+        call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
 
         if (mis_cost<mis_cost_previous) then
@@ -261,7 +261,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             gd_max_step_size=gd_step_size
 
             !may use a vector to store previous forward ensemble copies
-            call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+            call cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
             write(*,*) 'larger_mis cost', mis_cost
 
@@ -297,17 +297,18 @@ end subroutine pda_main
 !-----------------------------------------------------------------------
 !calculate mismatch cost function
 
-subroutine cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
+subroutine cal_mismatch_cost_function(pda_ens_handle,mismatch_ens_handle,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 type(ensemble_type), intent(in)      :: pda_ens_handle
 type(ensemble_type), intent(inout)   :: mismatch_ens_handle
-integer, intent(in)                  :: window_size, async, tasks_per_model_advance
+integer, intent(in)                  :: async, tasks_per_model_advance
 character(len = 129), intent(in)     :: adv_ens_command
 real(r8), intent(out)   :: mis_cost
-integer                 :: i,j
+integer                 :: i,j,window_size
 type(time_type)         :: target_time, ens_time
 real(r8)                :: result_sum, sum_variable
 
 
+window_size=pda_ens_handle%num_copies
 
 
 call get_ensemble_time(pda_ens_handle, 1, ens_time)
