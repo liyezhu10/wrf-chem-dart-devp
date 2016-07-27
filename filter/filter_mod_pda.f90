@@ -72,7 +72,7 @@ character(len=129)      :: msgstring
 integer                 :: trace_level, timestamp_level
 
 !----------------------------------------------------------------
-! Namelist input with default values
+! Namelist input with default values, should make a namelist for pda seperately
 !
 integer  :: async = 0, ens_size = 20
 logical  :: output_restart      = .false.
@@ -178,38 +178,29 @@ type(time_type)             :: time1
 
 integer(i8)             :: model_size, var_ind
 integer                 :: i, iunit, io
-! Global indices into ensemble storage - observations
-integer                 :: input_qc_index, DART_qc_index
 logical                 :: read_time_from_file
-
-integer :: num_extras ! the extra ensemble copies
-
 type(file_info_type) :: file_info
-
-logical                 :: all_gone, allow_missing
-
-
-
-!!DuDu adds....
 type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy,ens_normalization
-logical                 :: duplicate_time, free_descent
-integer                 :: j, k, seq_len, n_GD, window_size, n_DA, i_row, i_col, var_type
+integer                 :: j, k, seq_len, n_GD, window_size, n_DA, var_type
 real(r8)                :: value(1), mis_cost, mis_cost_previous, gd_step_size, gd_max_step_size,gd_initial_step_size,sum_variable,result_sum
-type(time_type) 	    :: mtime
-type(time_type)         :: time_step, target_time, ens_time
-real(r8),       pointer :: adjoint(:, :)
-real(r8)		:: rtemp
 type(location_type)     :: location
 
-!Du number of minimisation should be setup more standardised, or use other criteria to stop the minimazation
-n_GD=4
-
-!Du define assimilation window size
-window_size=8;
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
-!!!Du  should create filterpda namelist in input.nml
+!!!Should create filterpda namelist in input.nml!!!!!
+
+!Number of minimisation should be setup more standardised, or use other criteria to stop the minimazation, should be in the namelist
+n_GD=200
+
+!Define assimilation window size, should be in the namelist
+window_size=120;
+
+!gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
+gd_initial_step_size=0.0010000000000000    !this may use to calculate the number of minimizations, not used now
+gd_step_size= 0.05000000!0.00050000000000000
+gd_max_step_size=0.0500000!0.00100000000000000
+
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "filter_nml", iunit)
@@ -230,94 +221,63 @@ restart_in_file_name='Null'
 use_restart_list=.true.
 restart_list_file(1)='pda_ic_name_list'
 direct_netcdf_read=.true.
+read_time_from_file=.true.
+
 
 file_info = io_filenames_init(pda_ens_handle, single_restart_file_in, single_restart_file_out, &
 restart_in_file_name, restart_out_file_name, output_restart, direct_netcdf_read, &
 direct_netcdf_write, output_restart_mean, add_domain_extension, use_restart_list, &
 restart_list_file, overwrite_state_input, inf_in_file_name, inf_out_file_name)
 
-read_time_from_file=.true.
 
-
+!read sequence of enkf states
 call read_state(pda_ens_handle, file_info, read_time_from_file, time1)
 
-!! use free_descent to decide whether use model adjoint or free adjoint (Identity adjoint)
-!free_descent=.true.
 
-
-time_step = get_model_time_step()
 call init_ensemble_manager(forward_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_in=2)
 
-!generate normalization vector--------------------------------------
-
-
-!ens_normalization%copies=pda_ens_handle%copies
-!ens_normalization%time=pda_ens_handle%time
-
+!generate scaling vector--------------------------------------
+!this is not standardized, should read a scaling vector from a file
 
 if(.not. allocated(ens_normalization%vars)) allocate(ens_normalization%vars(ens_normalization%num_vars, ens_normalization%my_num_copies))
 
 call all_copies_to_all_vars(ens_normalization)
 
 if (my_task_id()==0) then
-do var_ind=1,model_size
+    do var_ind=1,model_size
 
+        call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
 
-
-
-    call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
-
-    !write(*,*) 'norm_size', shape(ens_normalization%vars(:,:))
-
-    if (var_type==1) then
-        ens_normalization%vars(var_ind,1)=2
+        if (var_type==1) then
+            ens_normalization%vars(var_ind,1)=1!2
         elseif (var_type==2) then
-            ens_normalization%vars(var_ind,1)=1
+            ens_normalization%vars(var_ind,1)=1!1
         elseif (var_type==3) then
-            ens_normalization%vars(var_ind,1)=60
+            ens_normalization%vars(var_ind,1)=1!60
         else
-            ens_normalization%vars(var_ind,1)=2
+            ens_normalization%vars(var_ind,1)=1!2
 
-    endif
-end do
+        endif
+    end do
 endif
 call all_vars_to_all_copies(ens_normalization)
-
-!write(*,*) ens_normalization%copies(1,:)
 
 
 !------------------------------------------------------------------
 
 
 
-
-!seq_len=200
-
-! do PDA "sequentially"
+!We might want to do the PDA sequentially in the future, maybe using shell script to do it instead
 Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
-
-    !gd_step_size is the minimisation step size for Gradient Descent, adjusted during the minimisation, double the step size when lower cost function is achieved as long as it is smaller than the gd_max_step_size, shrink step size when it fails.
-    gd_initial_step_size=0.0010000000000000    !this may use to calculate the number of minimizations, not used now
-    gd_step_size= 0.00050000000000000
-    gd_max_step_size=0.00100000000000000
-
-
     !calculate mismatch cost function---------------------------------------------------
-
-
-
-
     call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
     mis_cost_previous=mis_cost
 
 
     write(*,*) mis_cost
-
-
-
 
     !------------------------------------------------------------------------------------
 
@@ -326,9 +286,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
 
 
+
     !!GD minimisation update-------------------------------------------------------------
-
-
 
     !The criteria of stoping the minimisation could be based on the mismatch cost function
     GD_runs: do j=1,n_GD
@@ -338,6 +297,8 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             if (i==1) then
                 pda_ens_handle%copies(1,:)=ens_update_copy%copies(1,:)+gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(1,:)
 
+
+
             else if (i<window_size) then
 
                 pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
@@ -346,12 +307,9 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
             else
 
+
                 pda_ens_handle%copies(window_size,:)=ens_update_copy%copies(window_size,:) &
                             -gd_step_size*ens_normalization%copies(1,:)*forward_ens_handle%copies(window_size-1,:)
-
-                !write(msgstring, *) 'vars=', pda_ens_handle%copies(window_size,:)
-                !call error_handler(E_ALLMSG,'filter_main', msgstring, source, revision, revdate)
-
 
             endif
 
@@ -360,20 +318,13 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-
-
         call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
-
-
-        write(*,*) mis_cost
-
 
 
         if (mis_cost<mis_cost_previous) then
             !increase the GD minimisation time step by a factor of 2,
             !should have some upper bound for the GD minimisation time step
 
-            !call duplicate_ens(pda_ens_handle, ens_update_copy, duplicate_time)
             ens_update_copy%copies=pda_ens_handle%copies
 
             if (gd_step_size<gd_max_step_size) then
@@ -385,39 +336,32 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
             !decrease the GD minimisation time step by a factor of 2
             !should have some lower bound for the GD minimisation time step
-            pda_ens_handle%vars=ens_update_copy%vars
+            pda_ens_handle%copies=ens_update_copy%copies
             gd_step_size=gd_step_size/2
             gd_max_step_size=gd_step_size
 
             !may use a vector to store previous forward ensemble copies
-            call duplicate_ens(pda_ens_handle, forward_ens_handle, duplicate_time)
-
-            do i=1, window_size
-                forward_ens_handle%time(i)=ens_time
-            end do
-
-            call advance_state(forward_ens_handle, window_size, target_time, async, &
-            adv_ens_command, tasks_per_model_advance)
+            call cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 
             write(*,*) 'larger_mis cost', mis_cost
 
 
         endif
-        !write(*,*) mis_cost
+        write(*,*) mis_cost
 
     end do GD_runs
 
 
     !--------------------------------------------------------------------------------------------------
 
-    !call write_state(pda_ens_handle, file_info)
+    call write_state(pda_ens_handle, file_info)
 
     !!!output pda final update
 
 
-    do i=1, window_size
-        write(*,*) pda_ens_handle%copies(i,1:3)
-    end do
+    !do i=1, window_size
+    !    write(*,*) pda_ens_handle%copies(i,1:3)
+    !end do
 
     !write(*,*) ens_update%vars(1:3,window_size)
 
@@ -431,6 +375,7 @@ end do Sequential_PDA
 end subroutine pda_main
 
 !-----------------------------------------------------------------------
+!calculate mismatch cost function
 
 subroutine cal_mismatch_cost_function(pda_ens_handle,forward_ens_handle,window_size,async, adv_ens_command, tasks_per_model_advance, mis_cost)
 type(ensemble_type), intent(in)      :: pda_ens_handle
@@ -462,7 +407,12 @@ do i=1, window_size
     forward_ens_handle%time(i)=ens_time
 end do
 
+
+
 call advance_state(forward_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
+
+write(*,*) window_size
+
 
 call all_vars_to_all_copies(forward_ens_handle)
 
