@@ -26,12 +26,13 @@
    adv_ens_command              = "./advance_model.csh",
    ens_size                     = 20,
    output_restart               = .true.,
+   output_restart_mean          = .true.
    obs_sequence_in_name         = "obs_seq.out",
    obs_sequence_out_name        = "obs_seq.final",
    restart_in_file_name         = "filter_ics",
    restart_out_file_name        = "filter_restart",
-   init_time_days               = 0,
-   init_time_seconds            = 0,
+   init_time_days               = -1,
+   init_time_seconds            = -1,
    first_obs_days               = -1,
    first_obs_seconds            = -1,
    last_obs_days                = -1,
@@ -45,13 +46,13 @@
    output_inflation             = .true.,
    trace_execution              = .false.,
    silence                      = .false.,
-   direct_netcdf_read           = .false.,
-   direct_netcdf_write          = .false.,
+   direct_netcdf_read           = .true.,
+   direct_netcdf_write          = .true.,
+   use_restart_list             = .true.,
+   restart_list_file            = 'restart_file_list.txt',
    distributed_state            = .true.,
    single_restart_file_in       = .true.,
    single_restart_file_out      = .true.,
-   perturb_from_single_instance = .false.,
-   perturbation_amplitude       = 0.2,
 
    inf_flavor                  = 2,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
@@ -82,7 +83,7 @@
 
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 0.001,
+   cutoff                          = 100000
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
@@ -210,28 +211,6 @@
    verbose               = .false.
    /
 
-
-&schedule_nml
-   calendar        = 'Gregorian',
-   first_bin_start =  1601,  1,  1,  0,  0,  0,
-   first_bin_end   =  2999,  1,  1,  0,  0,  0,
-   last_bin_end    =  2999,  1,  1,  0,  0,  0,
-   bin_interval_days    = 1000000,
-   bin_interval_seconds = 0,
-   max_num_bins         = 1000,
-   print_table          = .true.
-   /
-
-&obs_seq_to_netcdf_nml
-   obs_sequence_name = 'obs_seq.out.xyz'
-   obs_sequence_list = ''
-   append_to_netcdf  = .false.
-   lonlim1    =  0.0
-   lonlim2    =  1.0
-   verbose    = .false.
-   /
-
-
 &state_vector_io_nml
    write_binary_restart_files = .false.,
    /
@@ -250,9 +229,21 @@
    /
  
 &state_space_diag_nml
+  single_file = .false. 
+  make_diagnostic_files = .false. 
 /
 
 &quality_control_nml
    input_qc_threshold       =  3.0,
    outlier_threshold        = -1.0,
 /
+
+&pseudo_orbit_DA_nml
+   async                        = 0,
+   restart_list_file            ='pda_ic_name_list',
+   n_GD     			=20,
+   window_size			=8,
+   gd_step_size			=0.0005,
+   gd_max_step_size             =0.001
+/
+
