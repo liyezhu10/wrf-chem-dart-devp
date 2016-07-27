@@ -176,29 +176,25 @@ call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_i
 !generate scaling vector--------------------------------------
 !this is not standardized, should read a scaling vector from a file
 
-if(.not. allocated(ens_normalization%vars)) allocate(ens_normalization%vars(ens_normalization%num_vars, ens_normalization%my_num_copies))
+my_num_vars = get_my_num_vars(pda_ens_handle)
+allocate(my_vars(my_num_vars))
+call get_my_vars(pda_ens_handle,my_vars)
 
-call all_copies_to_all_vars(ens_normalization)
+do ivar=1,my_num_vars
+    var_ind = my_vars(ivar)
+    call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
 
-if (my_task_id()==0) then
-    do var_ind=1,model_size
+    if (var_type==1) then
+        ens_normalization%copies(1, var_ind)=1!2
+    elseif (var_type==2) then
+        ens_normalization%copies(1, var_ind)=1!1
+    elseif (var_type==3) then
+        ens_normalization%copies(1, var_ind)=1!60
+    else
+        ens_normalization%copies(1, var_ind)=1!2
 
-        call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
-
-        if (var_type==1) then
-            ens_normalization%vars(var_ind,1)=1!2
-        elseif (var_type==2) then
-            ens_normalization%vars(var_ind,1)=1!1
-        elseif (var_type==3) then
-            ens_normalization%vars(var_ind,1)=1!60
-        else
-            ens_normalization%vars(var_ind,1)=1!2
-
-        endif
-    end do
-endif
-call all_vars_to_all_copies(ens_normalization)
-
+    endif
+end do
 
 !------------------------------------------------------------------
 
