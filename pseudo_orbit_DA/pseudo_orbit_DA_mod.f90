@@ -27,7 +27,7 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   ensemble_type, get_my_num_copies,                &
                                   all_vars_to_all_copies, all_copies_to_all_vars,  &
                                   get_copy_owner_index, get_ensemble_time,         &
-                                  set_ensemble_time, get_my_num_vars
+                                  set_ensemble_time, get_my_num_vars, get_my_vars
 
 use mpi_utilities_mod,     only : initialize_mpi_utilities, finalize_mpi_utilities,           &
                                   my_task_id, task_sync, sum_across_tasks
@@ -125,7 +125,7 @@ integer                  :: j, k, seq_len, n_DA, var_type
 real(r8)                 :: value(1), mis_cost, mis_cost_previous, sum_variable,result_sum
 type(location_type)      :: location
 integer(i8), allocatable :: my_vars(:)
-integer                  :: my_num_vars
+integer                  :: my_num_vars, ivar
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
@@ -162,6 +162,7 @@ call init_ensemble_manager(forward_ens_handle, window_size, model_size, 1, trans
 call init_ensemble_manager(ens_update_copy, window_size, model_size, 1, transpose_type_in=2)
 call init_ensemble_manager(ens_normalization, 1, model_size, 1, transpose_type_in=2)
 
+
 !generate scaling vector--------------------------------------
 !this is not standardized, should read a scaling vector from a file
 
@@ -171,6 +172,7 @@ call get_my_vars(pda_ens_handle,my_vars)
 
 do ivar=1,my_num_vars
     var_ind = my_vars(ivar)
+
     call get_state_meta_data(pda_ens_handle, var_ind, location, var_type)
 
     if (var_type==1) then
@@ -184,6 +186,7 @@ do ivar=1,my_num_vars
 
     endif
 end do
+
 
 !------------------------------------------------------------------
 
