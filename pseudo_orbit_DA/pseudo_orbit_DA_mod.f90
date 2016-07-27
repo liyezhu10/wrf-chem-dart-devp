@@ -116,15 +116,16 @@ subroutine pda_main()
 
 type(time_type)             :: time1
 
-integer(i8)             :: model_size, var_ind
-integer                 :: i, iunit, io
-logical                 :: read_time_from_file
-type(file_info_type) :: file_info
-type(ensemble_type)         :: pda_ens_handle,  forward_ens_handle, ens_update_copy,ens_normalization
-integer                 :: j, k, seq_len, n_DA, var_type
-real(r8)                :: value(1), mis_cost, mis_cost_previous, sum_variable,result_sum
-type(location_type)     :: location
-
+integer(i8)              :: model_size, var_ind
+integer                  :: i, iunit, io
+logical                  :: read_time_from_file
+type(file_info_type)     :: file_info
+type(ensemble_type)      :: pda_ens_handle,  forward_ens_handle, ens_update_copy,ens_normalization
+integer                  :: j, k, seq_len, n_DA, var_type
+real(r8)                 :: value(1), mis_cost, mis_cost_previous, sum_variable,result_sum
+type(location_type)      :: location
+integer(i8), allocatable :: my_vars(:)
+integer                  :: my_num_vars
 
 call filter_initialize_modules_used() ! static_init_model called in here
 
