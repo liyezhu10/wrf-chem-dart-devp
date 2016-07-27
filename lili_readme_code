@@ -1,0 +1,18 @@
+
+before compile, check following codes:
+1. ./common/types_mod.f90
+   for WRF, use r4 = r8, but not for other models
+
+2. ./models/***/model_mod.f90
+
+3. ./assim_tools/assim_tools_mod.f90
+   ./assim_models/assim_models_mod.f90
+
+4. ./cov_cutoff/cov_cutoff_mod.f90
+
+5. ./location/three_sphere/location_mod.f90
+   log(P) instead of p
+
+
+
+
