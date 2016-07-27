@@ -33,6 +33,7 @@
    adv_ens_command          = "../shell_scripts/advance_model.csh",
    ens_size                 = 80,
    output_restart           = .true.,
+   output_restart_mean      = .true.,
    obs_sequence_in_name     = "obs_seq.out",
    obs_sequence_out_name    = "obs_seq.final",
    restart_in_file_name     = "filter_ics",
