@@ -46,7 +46,7 @@ foreach FILE ( True_State.nc )
 
 end
 
-foreach FILE ( perfect_restart.*.nc )
+foreach FILE ( perfect_ics*.nc )
 
    echo "Working on $FILE"
 
