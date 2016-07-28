@@ -28,7 +28,7 @@ echo $cycle_interval, $last_half, $first_half
 # set once and should be able to leave as-is
 set output_dir   = .
 set input_file   = "obs_seq.out"
-set nml_template = ./input.nml.template
+set nml_template = ../work/input.nml.template
 
 
 # loop from start to end time.
@@ -80,7 +80,7 @@ echo start, end = $start_day, $start_sec, $end_day, $end_sec
         $nml_template >! input.nml 
   
     # do the splitting here
-    ./obs_sequence_tool
+    ../work/obs_sequence_tool
   
     # advance to next time on this day
     @ dts = $dts + $cycle_interval

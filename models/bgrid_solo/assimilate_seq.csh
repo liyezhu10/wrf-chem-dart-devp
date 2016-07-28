@@ -19,13 +19,16 @@ endif
 echo "`date` -- BEGIN B-GRID ASSIMILATION"
 
 # directory that contains the filter
-set RUNDIR = "/Users/hendric/DART/pda/models/bgrid_solo/work/"
+set DARTDIR = /Users/thoar/svn/DART/pda/models/bgrid_solo/work/
+set EXPERIMENT = ${DARTDIR}/test_1
 
 #-------------------------------------------------------------------------
 # Get the case-specific variables
 #-------------------------------------------------------------------------
 
-cd ${RUNDIR}
+mkdir -p ${EXPERIMENT}
+
+cd ${EXPERIMENT}
 
 set n = 1
 
@@ -34,11 +37,13 @@ set mean_file      = 'mean.nc'
 set prior_inf_sd   = 'prior_inflate_restart_sd.nc'
 set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
-ls -1 filter_ics.00* > restart_file_list.txt
+ls -1 ${DARTDIR}/filter_ics.00* > restart_file_list.txt
 
-cp input.nml.cycle input.nml
+cp ${DARTDIR}/input.nml.cycle input.nml
+cp ${DARTDIR}/bgrid.nc        .
+cp ${DARTDIR}/filter          .
 
-foreach OBS_FILE (../obs/obs_seq.*.out)
+foreach OBS_FILE ( ${DARTDIR}/obs/obs_seq.*.out )
 
    set TIME = `printf %04d ${n}`   
 
@@ -47,28 +52,35 @@ foreach OBS_FILE (../obs/obs_seq.*.out)
    set ADV_DIR = "advance_time_$TIME"
    mkdir $ADV_DIR
 
-   if (  -e   ${OBS_FILE} ) then
+   if (  -e  ${OBS_FILE} ) then
       ln -sf ${OBS_FILE} obs_seq.out
    else
       echo "ERROR ... no observation file ${OBS_FILE}"
       exit -1
    endif
    
-   ./filter
+   ./filter || exit 1
    
    mv $restart_file*    $ADV_DIR
    mv $mean_file        $ADV_DIR
-   mv sd.nc             $ADV_DIR
    mv obs_seq.final     $ADV_DIR
    mv Prior_Diag.nc     $ADV_DIR
    mv Posterior_Diag.nc $ADV_DIR
-   # mv $prior_inf_sd     $ADV_DIR
-   # mv $prior_inf_mean   $ADV_DIR
-   
+   if ( -e sd.nc ) then
+      mv   sd.nc        $ADV_DIR
+   endif
+
    # copy ouput inflation from filter to inital inflation file
    # for next run.
-   cp $prior_inf_sd   prior_inflate_ics_sd
-   cp $prior_inf_mean prior_inflate_ics_mean
+   if ( -e $prior_inf_sd ) then
+      cp   $prior_inf_sd   prior_inflate_ics_sd
+      mv   $prior_inf_sd  $ADV_DIR
+   endif
+
+   if ( -e $prior_inf_mean ) then
+      cp   $prior_inf_mean prior_inflate_ics_mean
+      mv   $prior_inf_mean $ADV_DIR
+   endif
 
    ls -1 $ADV_DIR/$restart_file*.nc > restart_file_list.txt
 
@@ -85,4 +97,9 @@ rm prior_member*
 
 
 exit(0)
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 
