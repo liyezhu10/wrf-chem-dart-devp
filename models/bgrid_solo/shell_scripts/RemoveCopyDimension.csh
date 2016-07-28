@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: $
+# DART $Id$
 
 # From Charlie Zender, NCO grand-meister:
 # use ncwa to average-over, and thus remove the dimensions you do not want.
@@ -81,7 +81,7 @@ end
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: $
-# $Revision: $
-# $Date: $
+# $URL$
+# $Revision$
+# $Date$
 
