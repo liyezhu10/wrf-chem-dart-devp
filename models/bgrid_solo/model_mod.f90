@@ -903,16 +903,16 @@ do varnum = 1, get_num_variables(dom_id)
    vsize = get_variable_size(dom_id, varnum) 
    eindx = sindx + vsize - 1
 
-   if (state_variables(1, varnum) == 'T') then
+   if (state_variables(1, varnum) == 't') then
       x(sindx:eindx) = reshape(vars%t(tis:tie, tjs:tje,vars%klb:vars%kub), (/vsize/) )
    
-   else if (state_variables(1, varnum) == 'U') then
+   else if (state_variables(1, varnum) == 'u') then
       x(sindx:eindx) = reshape(vars%u(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
 
-   else if (state_variables(1, varnum) == 'V') then
+   else if (state_variables(1, varnum) == 'v') then
       x(sindx:eindx) = reshape(vars%v(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
 
-   else if (state_variables(1, varnum) == 'PS') then
+   else if (state_variables(1, varnum) == 'ps') then
       x(sindx:eindx) = reshape(vars%ps(tis:tie, tjs:tje), (/ vsize /) )
 
    else ! must be tracer
@@ -955,13 +955,13 @@ ntracer = 1
 do varnum = 1, get_num_variables(dom_id)
    vsize = get_variable_size(dom_id, varnum) 
    eindx = sindx + vsize - 1
-   if (state_variables(1, varnum) == 'T') then
+   if (state_variables(1, varnum) == 't') then
       vars%t(tis:tie, tjs:tje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'U') then
+   else if (state_variables(1, varnum) == 'u') then
       vars%u(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'V') then
+   else if (state_variables(1, varnum) == 'v') then
       vars%v(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'PS') then
+   else if (state_variables(1, varnum) == 'ps') then
       vars%ps(tis:tie, tjs:tje) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1 /) )
       vars%pssl = vars%ps   !> @TODO why is this here?  original comment was:
    ! For non-eta models, pssl is same as ps??? Need to change?
@@ -1544,16 +1544,16 @@ call check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","FMS_Bgrid"      ),"model
 ! Define the new dimensions IDs
 !-------------------------------------------------------------------------------
 
-call check(nf90_def_dim(ncid=ncFileID, name="TmpI", &
-                                      len = nTmpI, dimid = TmpIDimID),"TmpI def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="TmpJ", &
-                                      len = nTmpJ, dimid = TmpJDimID),"TmpJ def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="lev",  &
-                                      len = nlev,  dimid = levDimID), "lev  def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="VelI", &
-                                      len = nVelI, dimid = VelIDimID),"VelI def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="VelJ", &
-                                      len = nVelJ, dimid = VelJDimID),"VelJ def_dim") 
+call check(nf90_def_dim(ncid=ncFileID, name="t_ps_lon", &
+                                      len = nTmpI, dimid = TmpIDimID),"t_ps_lon def_dim") 
+call check(nf90_def_dim(ncid=ncFileID, name="t_ps_lat", &
+                                      len = nTmpJ, dimid = TmpJDimID),"t_ps_lat def_dim") 
+call check(nf90_def_dim(ncid=ncFileID, name="level",  &
+                                      len = nlev,  dimid = levDimID), "level  def_dim") 
+call check(nf90_def_dim(ncid=ncFileID, name="u_v_lon", &
+                                      len = nVelI, dimid = VelIDimID),"u_v_lon def_dim") 
+call check(nf90_def_dim(ncid=ncFileID, name="u_v_lat", &
+                                      len = nVelJ, dimid = VelJDimID),"u_v_lat def_dim") 
 if ( ntracer > 0 ) then
    call check(nf90_def_dim(ncid=ncFileID, name="tracers", &
                                          len = ntracer, dimid = tracerDimID),"tracer def_dim") 
@@ -1568,48 +1568,48 @@ endif
 !-------------------------------------------------------------------------------
 
 ! Temperature Grid Longitudes
-call check(nf90_def_var(ncFileID, name="TmpI", &
-              xtype=nf90_double, dimids=TmpIDimID, varid=TmpIVarID),   "TmpI def_var")
-call check(nf90_put_att(ncFileID, TmpIVarID, "long_name", "longitude"),"TmpI long_name")
-call check(nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X"),   "TmpI cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east"), "TmpI units")
+call check(nf90_def_var(ncFileID, name="t_ps_lon", &
+              xtype=nf90_double, dimids=TmpIDimID, varid=TmpIVarID),   "t_ps_lon def_var")
+call check(nf90_put_att(ncFileID, TmpIVarID, "long_name", "longitude"),"t_ps_lon long_name")
+call check(nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X"),   "t_ps_lon cartesian_axis")
+call check(nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east"), "t_ps_lon units")
 call check(nf90_put_att(ncFileID, TmpIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
                                  "TmpI valid_range")
 
 ! Temperature Grid Latitudes
-call check(nf90_def_var(ncFileID, name="TmpJ", &
-              xtype=nf90_double, dimids=TmpJDimID, varid=TmpJVarID),   "TmpJ def_var" )
-call check(nf90_put_att(ncFileID, TmpJVarID, "long_name", "latitude"), "TmpJ long_name")
-call check(nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y"),   "TmpJ cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north"),"TmpJ units")
+call check(nf90_def_var(ncFileID, name="t_ps_lat", &
+              xtype=nf90_double, dimids=TmpJDimID, varid=TmpJVarID),   "t_ps_lat def_var" )
+call check(nf90_put_att(ncFileID, TmpJVarID, "long_name", "latitude"), "t_ps_lat long_name")
+call check(nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y"),   "t_ps_lat cartesian_axis")
+call check(nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north"),"t_ps_lat units")
 call check(nf90_put_att(ncFileID, TmpJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
-                                 "TmpJ valid_range")
+                                 "t_ps_lat valid_range")
 
 ! (Common) grid levels
-call check(nf90_def_var(ncFileID, name="lev", &
-              xtype=nf90_int, dimids=levDimID, varid=levVarID) ,    "lev def_var")
-call check(nf90_put_att(ncFileID, levVarID, "long_name", "level"),  "lev long_name")
-call check(nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z"), "lev cartesian_axis")
-call check(nf90_put_att(ncFileID, levVarID, "units", "hPa"),        "lev units")
-call check(nf90_put_att(ncFileID, levVarID, "positive", "down"),    "lev positive")
+call check(nf90_def_var(ncFileID, name="level", &
+              xtype=nf90_int, dimids=levDimID, varid=levVarID) ,    "level def_var")
+call check(nf90_put_att(ncFileID, levVarID, "long_name", "level"),  "level long_name")
+call check(nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z"), "level cartesian_axis")
+call check(nf90_put_att(ncFileID, levVarID, "units", "hPa"),        "level units")
+call check(nf90_put_att(ncFileID, levVarID, "positive", "down"),    "level positive")
 
 ! Velocity Grid Longitudes
-call check(nf90_def_var(ncFileID, name="VelI", &
-              xtype=nf90_double, dimids=VelIDimID, varid=VelIVarID) ,  "VelI def_var")
-call check(nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude"),"VelI long_name")
-call check(nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X"),   "VelI cartesian_axis")
-call check(nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east"), "VelI units")
-call check(nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.1_r8 /)), &
-                                 "VelI valid_range")
+call check(nf90_def_var(ncFileID, name="u_v_lon", &
+              xtype=nf90_double, dimids=VelIDimID, varid=VelIVarID) ,  "u_v_lon def_var")
+call check(nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude"),"u_v_lon long_name")
+call check(nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X"),   "u_v_lon cartesian_axis")
+call check(nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east"), "u_v_lon units")
+call check(nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
+                                 "u_v_lon valid_range")
 
 ! Velocity Grid Latitudes
-call check(nf90_def_var(ncFileID, name="VelJ", &
-              xtype=nf90_double, dimids=VelJDimID, varid=VelJVarID) ,   "VelJ def_var")
-call check(nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude"),  "VelJ long_name")
-call check(nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y"),    "VelJ cartesian_axis")
-call check(nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north"), "VelJ units")
+call check(nf90_def_var(ncFileID, name="u_v_lat", &
+              xtype=nf90_double, dimids=VelJDimID, varid=VelJVarID) ,   "u_v_lat def_var")
+call check(nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude"),  "u_v_lat long_name")
+call check(nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y"),    "u_v_lat cartesian_axis")
+call check(nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north"), "u_v_lat units")
 call check(nf90_put_att(ncFileID, VelJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
-                                 "VelJ valid_range")
+                                 "u_v_lat valid_range")
 
 ! Number of Tracers
 if ( ntracer > 0 ) then
@@ -1719,11 +1719,11 @@ endif
 ! Fill the variables
 !-------------------------------------------------------------------------------
 
-call check(nf90_put_var(ncFileID,   TmpIVarID, t_lons(tis:tie) ), "TmpI put_var")
-call check(nf90_put_var(ncFileID,   TmpJVarID, t_lats(tjs:tje) ), "TmpJ put_var")
-call check(nf90_put_var(ncFileID,   VelIVarID, v_lons(vis:vie) ), "VelI put_var")
-call check(nf90_put_var(ncFileID,   VelJVarID, v_lats(vjs:vje) ), "VelJ put_var")
-call check(nf90_put_var(ncFileID,    levVarID, (/ (i,i=1,   nlev) /) ), "lev put_var")
+call check(nf90_put_var(ncFileID,   TmpIVarID, t_lons(tis:tie) ), "t_ps_lon put_var")
+call check(nf90_put_var(ncFileID,   TmpJVarID, t_lats(tjs:tje) ), "t_ps_lat put_var")
+call check(nf90_put_var(ncFileID,   VelIVarID, v_lons(vis:vie) ), "u_v_lon put_var")
+call check(nf90_put_var(ncFileID,   VelJVarID, v_lats(vjs:vje) ), "u_v_lat put_var")
+call check(nf90_put_var(ncFileID,    levVarID, (/ (i,i=1,   nlev) /) ), "level put_var")
 if ( ntracer > 0 ) then
    call check(nf90_put_var(ncFileID, tracerVarID, (/ (i,i=1,ntracer) /) ), "tracer put_var")
 endif

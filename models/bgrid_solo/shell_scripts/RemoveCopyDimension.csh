@@ -1,4 +1,10 @@
 #!/bin/csh
+#
+# DART software - Copyright 2004 - 2016 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: $
 
 # From Charlie Zender, NCO grand-meister:
 # use ncwa to average-over, and thus remove the dimensions you do not want.
@@ -71,3 +77,11 @@ while ( $trip < 82 )
   @ trip ++
 
 end
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL: $
+# $Revision: $
+# $Date: $
+
