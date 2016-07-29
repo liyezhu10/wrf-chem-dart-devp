@@ -23,11 +23,11 @@ if strcmpi(model,'fms_bgrid') ~= 1
    error('Not so fast, this is not a bgrid model.')
 end
 
-levels = nc_varget(fname,'lev');
-TmpI   = nc_varget(fname,'TmpI');    % temperature/pressure grid longitude
-TmpJ   = nc_varget(fname,'TmpJ');    % temperature/pressure grid latitude
-VelI   = nc_varget(fname,'VelI');    % velocity grid longitude
-VelJ   = nc_varget(fname,'VelJ');    % velocity grid latitude
+levels   = nc_varget(fname,'level');
+t_ps_lon = nc_varget(fname,'t_ps_lon');    % temperature/pressure grid longitude
+t_ps_lat = nc_varget(fname,'t_ps_lat');    % temperature/pressure grid latitude
+u_v_lon  = nc_varget(fname,'u_v_lon');    % velocity grid longitude
+u_v_lat  = nc_varget(fname,'u_v_lat');    % velocity grid latitude
 
 switch lower(deblank(routine))
 
@@ -35,8 +35,8 @@ switch lower(deblank(routine))
 
       pgvar           = GetVar(pinfo.vars);            % Determine prognostic variable
       [level, lvlind] = GetLevel(    pgvar, levels);   % Determine level and index
-      [lat  , latind] = GetLatitude( pgvar, TmpJ, VelJ);
-      [lon  , lonind] = GetLongitude(pgvar, TmpI, VelI);
+      [lat  , latind] = GetLatitude( pgvar, t_ps_lat, u_v_lat);
+      [lon  , lonind] = GetLongitude(pgvar, t_ps_lon, u_v_lon);
 
       pinfo.fname      = fname;
       pinfo.var        = pgvar;
@@ -53,8 +53,8 @@ switch lower(deblank(routine))
        base_var                = GetVar(pinfo.vars);
       [base_time, base_tmeind] = GetTime(pinfo.time);
       [base_lvl,  base_lvlind] = GetLevel(    base_var, levels);
-      [base_lat,  base_latind] = GetLatitude( base_var, TmpJ, VelJ);
-      [base_lon,  base_lonind] = GetLongitude(base_var, TmpI, VelI);
+      [base_lat,  base_latind] = GetLatitude( base_var, t_ps_lat, u_v_lat);
+      [base_lon,  base_lonind] = GetLongitude(base_var, t_ps_lon, u_v_lon);
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVar(pinfo.vars,          base_var);
@@ -80,14 +80,14 @@ switch lower(deblank(routine))
        base_var                = GetVar(pinfo.vars);
       [base_time, base_tmeind] = GetTime(pinfo.time);
       [base_lvl , base_lvlind] = GetLevel(    base_var,levels);
-      [base_lat , base_latind] = GetLatitude( base_var,TmpJ,VelJ);
-      [base_lon , base_lonind] = GetLongitude(base_var,TmpI,VelI);
+      [base_lat , base_latind] = GetLatitude( base_var,t_ps_lat,u_v_lat);
+      [base_lon , base_lonind] = GetLongitude(base_var,t_ps_lon,u_v_lon);
 
       disp('Getting information for the ''comparison'' variable.')
        comp_var               = GetVar(pinfo.vars,                 base_var);
       [comp_lvl, comp_lvlind] = GetLevel(    comp_var, levels,     base_lvl);
-      [comp_lat, comp_latind] = GetLatitude( comp_var, TmpJ, VelJ, base_lat);
-      [comp_lon, comp_lonind] = GetLongitude(comp_var, TmpI, VelI, base_lon);
+      [comp_lat, comp_latind] = GetLatitude( comp_var, t_ps_lat, u_v_lat, base_lat);
+      [comp_lon, comp_lonind] = GetLongitude(comp_var, t_ps_lon, u_v_lon, base_lon);
 
       pinfo.fname       = fname;
       pinfo.base_var    = base_var;
@@ -111,8 +111,8 @@ switch lower(deblank(routine))
 
        pgvar          = GetVar(pinfo.vars);
       [level, lvlind] = GetLevel(    pgvar,levels);
-      [lat  , latind] = GetLatitude( pgvar,TmpJ,VelJ);
-      [lon  , lonind] = GetLongitude(pgvar,TmpI,VelI);
+      [lat  , latind] = GetLatitude( pgvar,t_ps_lat,u_v_lat);
+      [lon  , lonind] = GetLongitude(pgvar,t_ps_lon,u_v_lon);
       copyindices     = SetCopyID(fname);
       copy            = length(copyindices);
 
@@ -131,20 +131,20 @@ switch lower(deblank(routine))
       disp('Getting information for the ''X'' variable.')
        var1                   = GetVar(pinfo.vars);
       [var1_lvl, var1_lvlind] = GetLevel(    var1, levels);
-      [var1_lat, var1_latind] = GetLatitude( var1, TmpJ, VelJ);
-      [var1_lon, var1_lonind] = GetLongitude(var1, TmpI, VelI);
+      [var1_lat, var1_latind] = GetLatitude( var1, t_ps_lat, u_v_lat);
+      [var1_lon, var1_lonind] = GetLongitude(var1, t_ps_lon, u_v_lon);
 
       disp('Getting information for the ''Y'' variable.')
        var2                   = GetVar(pinfo.vars,        var1    );
       [var2_lvl, var2_lvlind] = GetLevel(    var2, levels,     var1_lvl);
-      [var2_lat, var2_latind] = GetLatitude( var2, TmpJ, VelJ, var1_lat);
-      [var2_lon, var2_lonind] = GetLongitude(var2, TmpI, VelI, var1_lon);
+      [var2_lat, var2_latind] = GetLatitude( var2, t_ps_lat, u_v_lat, var1_lat);
+      [var2_lon, var2_lonind] = GetLongitude(var2, t_ps_lon, u_v_lon, var1_lon);
 
       disp('Getting information for the ''Z'' variable.')
        var3                   = GetVar(pinfo.vars,        var1    );
       [var3_lvl, var3_lvlind] = GetLevel(    var3, levels,     var1_lvl);
-      [var3_lat, var3_latind] = GetLatitude( var3, TmpJ, VelJ, var1_lat);
-      [var3_lon, var3_lonind] = GetLongitude(var3, TmpI, VelI, var1_lon);
+      [var3_lat, var3_latind] = GetLatitude( var3, t_ps_lat, u_v_lat, var1_lat);
+      [var3_lon, var3_lonind] = GetLongitude(var3, t_ps_lon, u_v_lon, var1_lon);
 
       % query for ensemble member string
       % If there is only one copy, the string needs to be transposed.
@@ -252,15 +252,15 @@ end
 
 
 
-function [lon, lonind] = GetLongitude(pgvar, TmpI, VelI, deflon)
+function [lon, lonind] = GetLongitude(pgvar, t_ps_lon, u_v_lon, deflon)
 %----------------------------------------------------------------------
 if (nargin == 4), lon = deflon; else lon = 255.0; end
 
 switch lower(pgvar)
    case {'ps','t'}
-     lons = TmpI;
+     lons = t_ps_lon;
    otherwise
-     lons = VelI;
+     lons = u_v_lon;
 end
 
 fprintf('Default longitude is %f, if this is OK, <cr>;\n',lon)
@@ -277,15 +277,15 @@ lon    = lons(lonind);
 
 
 
-function [lat, latind] = GetLatitude(pgvar, TmpJ, VelJ, deflat)
+function [lat, latind] = GetLatitude(pgvar, t_ps_lat, u_v_lat, deflat)
 %----------------------------------------------------------------------
 if (nargin == 4), lat = deflat; else lat = 40.0; end
 
 switch lower(pgvar)
    case {'ps','t'}
-     lats = TmpJ;
+     lats = t_ps_lat;
    otherwise
-     lats = VelJ;
+     lats = u_v_lat;
 end
 
 fprintf('Default latitude is %f, if this is OK, <cr>;\n',lat)

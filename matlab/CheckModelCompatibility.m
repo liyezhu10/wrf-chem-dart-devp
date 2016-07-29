@@ -263,9 +263,9 @@ switch lower(modelname)
          y = [dnum_lons dnum_lats dnum_lvls];
 
    case {'fms_bgrid'}
-      dnum_lons = dim_length(fname,'TmpI');
-      dnum_lats = dim_length(fname,'TmpJ');
-      dnum_lvls = dim_length(fname,'lev');
+      dnum_lons = dim_length(fname,'t_ps_lon');
+      dnum_lats = dim_length(fname,'t_ps_lat');
+      dnum_lvls = dim_length(fname,'level');
          x = 3;
          y = [dnum_lons dnum_lats dnum_lvls];
 

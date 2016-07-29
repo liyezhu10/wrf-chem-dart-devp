@@ -38,11 +38,11 @@ for ivar=1:pinfo.num_state_vars,
       dimname   = varinfo.Dimension{idim};
       dimlength = varinfo.Size(idim);
       switch lower(dimname)
-         case {'tmpj', 'velj'}
+         case {'t_ps_lat', 'u_v_lat'}
             latitudes   = nc_varget(pinfo.diagn_file, dimname);
-         case {'tmpi', 'veli'}
+         case {'t_ps_lon', 'u_v_lon'}
             longitudes  = nc_varget(pinfo.diagn_file, dimname);
-         case {'lev'}
+         case {'level'}
             nlevels     = dimlength;
       end
    end
@@ -56,8 +56,8 @@ for ivar=1:pinfo.num_state_vars,
            'copyindex',truth_index, 'timeindex',pinfo.truth_time(1)+itime-1);
        ens    = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
            'copyindex',ens_mean_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
+
        if (ens_spread_index > 0)
-           
            spread = get_hyperslab('fname',pinfo.diagn_file, 'varname',pinfo.vars{ivar}, ...
                'copyindex',ens_spread_index, 'timeindex',pinfo.diagn_time(1)+itime-1);
        else

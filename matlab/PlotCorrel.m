@@ -97,15 +97,15 @@ switch(lower(pinfo.model))
 
         switch lower(pinfo.comp_var)
             case {'ps','t'}
-                lats     = nc_varget(pinfo.fname,'TmpJ'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'TmpI'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'TmpJ','units');
-                lonunits = nc_attget(pinfo.fname,'TmpI','units');
+                lats     = nc_varget(pinfo.fname,'t_ps_lat'); ny = length(lats);
+                lons     = nc_varget(pinfo.fname,'t_ps_lon'); nx = length(lons);
+                latunits = nc_attget(pinfo.fname,'t_ps_lat','units');
+                lonunits = nc_attget(pinfo.fname,'t_ps_lon','units');
             otherwise
-                lats     = nc_varget(pinfo.fname,'VelJ'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'VelI'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'VelJ','units');
-                lonunits = nc_attget(pinfo.fname,'VelI','units');
+                lats     = nc_varget(pinfo.fname,'u_v_lat'); ny = length(lats);
+                lons     = nc_varget(pinfo.fname,'u_v_lon'); nx = length(lons);
+                latunits = nc_attget(pinfo.fname,'u_v_lat','units');
+                lonunits = nc_attget(pinfo.fname,'u_v_lon','units');
         end
 
         nxny = nx*ny;
