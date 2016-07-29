@@ -19,7 +19,7 @@ use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG,
                                   open_file, close_file, do_nml_file, do_nml_term
 
 use assim_model_mod,       only : static_init_assim_model, get_model_size, &
-                                  get_state_meta_data
+                                  get_state_meta_data, end_assim_model
 
 use obs_model_mod,         only : advance_state
 
@@ -98,15 +98,15 @@ character(len=512) :: restart_list_file(10)        = 'null' ! name of files cont
 integer   ::  n_GD=20
 
 ! Define assimilation window size
-integer   ::  window_size=8
+integer   ::  window_size=120
 
 ! gd_step_size is the minimisation step size for Gradient Descent, adjusted during 
 ! the minimisation, double the step size when lower cost function is achieved as 
 ! long as it is smaller than the gd_max_step_size, shrink step size when it fails.
 ! gd_initial_step_size=0.001_r8    
 ! this may use to calculate the number of minimizations, not used now
-real(r8)  ::  gd_step_size= 0.0005_r8 !0.05_r8!0.0005_r8
-real(r8)  ::  gd_max_step_size= 0.001_r8!0.05_r8!0.001_r8
+real(r8)  ::  gd_step_size= 0.05_r8 !0.05_r8!0.0005_r8
+real(r8)  ::  gd_max_step_size= 0.05_r8!0.05_r8!0.001_r8
 
 namelist /pseudo_orbit_DA_nml/ async,             &
                                restart_list_file, &
@@ -180,7 +180,7 @@ do ivar=1,my_num_vars
     elseif (var_type==2) then
         ens_normalization%copies(1, var_ind)=1!1
     elseif (var_type==3) then
-        ens_normalization%copies(1, var_ind)=1!60
+        ens_normalization%copies(1, var_ind)=1/10000!60
     else
         ens_normalization%copies(1, var_ind)=1!2
 
@@ -196,8 +196,7 @@ end do
 Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
     !calculate mismatch cost function---------------------------------------------------
-    call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, async, &
-                                    adv_ens_command, tasks_per_model_advance, mis_cost)
+    call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, ens_normalization, mis_cost)
     mis_cost_previous=mis_cost
 
     write(*,*) mis_cost
@@ -215,23 +214,25 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     !The criteria of stoping the minimisation could be based on the mismatch cost function
     GD_runs: do j=1,n_GD
 
+        !write(*,*) j
+
         Gradient_descent: do i=1, window_size
 
             if (i==1) then
                 pda_ens_handle%copies(1,:) = ens_update_copy%copies(1,:) &
-                        +gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(1,:)
+                        +gd_step_size*mismatch_ens_handle%copies(1,:)
 
             else if (i<window_size) then
 
                 pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
-                        -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i-1,:) &
-                        +gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(i,:)
+                        -gd_step_size*mismatch_ens_handle%copies(i-1,:) &
+                        +gd_step_size*mismatch_ens_handle%copies(i,:)
 
             else
 
 
                 pda_ens_handle%copies(window_size,:)=ens_update_copy%copies(window_size,:) &
-                        -gd_step_size*ens_normalization%copies(1,:)*mismatch_ens_handle%copies(window_size-1,:)
+                        -gd_step_size*mismatch_ens_handle%copies(window_size-1,:)
 
             endif
 
@@ -240,11 +241,10 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !!calculate mismatch cost function for updated sequence state vectors
 
-        call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, &
-                                        async, adv_ens_command, tasks_per_model_advance, mis_cost)
+        call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, ens_normalization, mis_cost)
 
         if ( mis_cost < mis_cost_previous ) then
-            !increase the GD minimisation time step by a factor of 2,
+            !increase the GD minimisation step by a factor of 2,
             !should have some upper bound for the GD minimisation time step
 
             ens_update_copy%copies=pda_ens_handle%copies
@@ -256,15 +256,14 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         else
 
-            !decrease the GD minimisation time step by a factor of 2
+            !decrease the GD minimisation step by a factor of 2
             !should have some lower bound for the GD minimisation time step
             pda_ens_handle%copies=ens_update_copy%copies
             gd_step_size     = gd_step_size/2
             gd_max_step_size = gd_step_size
 
             !may use a vector to store previous forward ensemble copies
-            call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, &
-                                            async, adv_ens_command, tasks_per_model_advance, mis_cost)
+            call cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, ens_normalization,  mis_cost)
 
             write(*,*) 'larger_mis cost', mis_cost
 
@@ -287,11 +286,17 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     !    write(*,*) pda_ens_handle%copies(i,1:3)
     !end do
 
-    call end_ensemble_manager(pda_ens_handle)
-    call end_ensemble_manager(mismatch_ens_handle)
-    call end_ensemble_manager(ens_update_copy)
+
 
 end do Sequential_PDA
+
+call end_ensemble_manager(pda_ens_handle)
+call end_ensemble_manager(mismatch_ens_handle)
+call end_ensemble_manager(ens_update_copy)
+call end_ensemble_manager(ens_normalization)
+
+call pda_finalize()
+
 
 
 end subroutine pda_main
@@ -299,13 +304,10 @@ end subroutine pda_main
 !-----------------------------------------------------------------------
 !calculate mismatch cost function
 
-subroutine cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, async, adv_ens_command, tasks_per_model_advance, mis_cost)
+subroutine cal_mismatch_cost_function(pda_ens_handle, mismatch_ens_handle, ens_normalization, mis_cost)
 
-type(ensemble_type),  intent(in)    :: pda_ens_handle
+type(ensemble_type),  intent(in)    :: pda_ens_handle, ens_normalization
 type(ensemble_type),  intent(inout) :: mismatch_ens_handle
-integer,              intent(in)    :: async
-integer,              intent(in)    :: tasks_per_model_advance
-character(len = 129), intent(in)    :: adv_ens_command
 real(r8),             intent(out)   :: mis_cost
 
 integer         :: i,j
@@ -320,19 +322,15 @@ call get_ensemble_time(pda_ens_handle, 2, target_time)
 mismatch_ens_handle%copies=pda_ens_handle%copies
 mismatch_ens_handle%time=pda_ens_handle%time
 
-if(.not. allocated(mismatch_ens_handle%vars)) &
-    allocate(mismatch_ens_handle%vars(mismatch_ens_handle%num_vars, mismatch_ens_handle%my_num_copies))
-
 call all_copies_to_all_vars(mismatch_ens_handle)
 
 !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
 do i=1, window_size
-    mismatch_ens_handle%time(i)=ens_time
+    call set_ensemble_time(mismatch_ens_handle, i, ens_time)
+
 end do
 
 call advance_state(mismatch_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
-
-write(*,*) window_size
 
 call all_vars_to_all_copies(mismatch_ens_handle)
 
@@ -347,12 +345,12 @@ sum_variable = 0
 do i=1,window_size-1
 
     do j=1,mismatch_ens_handle%my_num_vars
-        sum_variable=mismatch_ens_handle%copies(i,j)*mismatch_ens_handle%copies(i,j)+sum_variable
+        sum_variable=(mismatch_ens_handle%copies(i,j))**2*ens_normalization%copies(1,j)+sum_variable
     end do
 
-    call sum_across_tasks(sum_variable,result_sum)
-
 end do
+
+call sum_across_tasks(sum_variable,result_sum)
 
 mis_cost=result_sum/((window_size-1)*1.0_r8)
 
@@ -366,8 +364,6 @@ subroutine pda_initialize_modules_used()
 call initialize_mpi_utilities('pseudo_orbit_DA')
 
 call register_module(source,revision,revdate)
-
-! Initialize the model class data now that obs_sequence is all set up
 call trace_message('Before init_model call')
 call static_init_assim_model()
 call trace_message('After  init_model call')
@@ -377,6 +373,21 @@ call trace_message('After  init_state_vector_io call')
 end subroutine pda_initialize_modules_used
 
 !-------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------
+
+subroutine pda_finalize()
+
+call trace_message('Before end_model call')
+call end_assim_model()
+call trace_message('After  end_model call')
+
+call finalize_mpi_utilities(async=async)
+
+end subroutine pda_finalize
+
+!-------------------------------------------------------------------------
+
 
 subroutine trace_message(msg, label, threshold)
 
