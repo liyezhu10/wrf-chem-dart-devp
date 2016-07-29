@@ -82,7 +82,7 @@ endif
 # with MPI all the time, remove or comment out the entire section above.
 #----------------------------------------------------------------------
 
-\rm -f filter wakeup_filter
+\rm -f filter wakeup_filter pseudo_orbit_DA
 
 @ n = $n + 1
 echo
@@ -106,14 +106,17 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
+@ n = $n + 1
+echo
+echo "---------------------------------------------------"
+echo "build number $n is mkmf_pseudo_orbit_DA"
+csh  mkmf_pseudo_orbit_DA -mpi
+make || exit $n
+
 \rm -f *.o *.mod input.nml*_default
 
 echo
-echo 'time to run filter here:'
-echo ' for lsf run "bsub < ../shell_scripts/run_filter.csh"'
-echo ' for pbs run "qsub   ../shell_scripts/run_filter.csh"'
-echo ' for lam-mpi run "lamboot" once, then "run_filter.csh"'
-echo ' for mpich run "mpd" once, then "run_filter.csh"'
+echo ' All DART programs built. Enjoy.'
 
 exit 0
 

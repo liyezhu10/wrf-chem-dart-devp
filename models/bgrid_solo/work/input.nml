@@ -14,7 +14,7 @@
    last_obs_days            = -1
    last_obs_seconds         = -1
    output_interval          = 1
-   restart_in_file_name     = "perfect_ics"
+   restart_in_file_name     = "perfect_ics."
    restart_out_file_name    = "perfect_restart"
    obs_seq_in_file_name     = "obs_seq.in"
    obs_seq_out_file_name    = "obs_seq.out"
@@ -24,7 +24,7 @@
    output_forward_op_errors = .false.
    print_every_nth_obs      = -1
    silence                  = .false.
-   direct_netcdf_read       = .false.
+   direct_netcdf_read       = .true.
    direct_netcdf_write      = .true.
   /
 
@@ -74,8 +74,6 @@
    inf_upper_bound             = 1000000.0,               1000000.0
    inf_sd_lower_bound          = 0.0,                     0.0
  /
-   use_restart_list         = .true.
-   restart_list_file        = 'restart_file_list.txt'
 
 &state_vector_io_nml
    single_precision_output    = .false.
