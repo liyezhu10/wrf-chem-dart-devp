@@ -6,12 +6,14 @@
 #
 # DART $Id$
 #
-# This script will concatenate a series of filter_restart.xxxx.nc files
-# into a single file. That file will then be coerced to be compatible
-# with the True_State.nc that has xxxx timesteps.
-# At present, the DART matlab scripts historically use dimension and variable names
-# consistent with the 'dart diagnostic' files. The filter_restart files
-# have different dimension and variable names.
+# This script is/was used to rename the dimensions and variables in the
+# existing netCDF files to be consistent between the DART diagnostic files
+# and the model restart files. This should not be needed going forward,
+# as the input files and the model_mod.f90 are now consistent.
+#
+# This will allow us to use use Restart_to_Diagnostic.csh
+# to recreate a 'Posterior_Diag.nc' from the existing filter_restart.nnnn.nc files
+# so we can use the DART diagnostic matlab scripts. 
 
 foreach FILE ( True_State.nc )
 

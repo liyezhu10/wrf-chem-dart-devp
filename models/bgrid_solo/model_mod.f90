@@ -224,7 +224,7 @@ logical :: first_call = .true.
 ! domain id for the state structure
 integer :: dom_id
 
-character(len=256) :: errstring
+character(len=512) :: msgstring
 
 contains
 
@@ -1457,7 +1457,7 @@ integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
 
 integer(i4)        :: model_size_i4 ! this is for checking model_size
-character(len=256) :: msgstring
+integer :: io
 !-----------------------------------------------------------------------------------------
 
 if ( .not. module_initialized ) call static_init_model
@@ -1501,9 +1501,9 @@ call check(nf90_inq_dimid(ncid=ncFileID, name="copy", dimid=MemberDimID),"copy d
 call check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid=  TimeDimID),"time dimid")
 
 if ( TimeDimID /= unlimitedDimId ) then
-   write(errstring,*)"Time Dimension ID ",TimeDimID, &
+   write(msgstring,*)"Time Dimension ID ",TimeDimID, &
                      " should equal Unlimited Dimension ID",unlimitedDimID
-   call error_handler(E_ERR,"nc_write_model_atts", errstring, source, revision, revdate)
+   call error_handler(E_ERR,"nc_write_model_atts", msgstring, source, revision, revdate)
 endif
 
 !-------------------------------------------------------------------------------
@@ -1568,48 +1568,92 @@ endif
 !-------------------------------------------------------------------------------
 
 ! Temperature Grid Longitudes
-call check(nf90_def_var(ncFileID, name="t_ps_lon", &
-              xtype=nf90_double, dimids=TmpIDimID, varid=TmpIVarID),   "t_ps_lon def_var")
-call check(nf90_put_att(ncFileID, TmpIVarID, "long_name", "longitude"),"t_ps_lon long_name")
-call check(nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X"),   "t_ps_lon cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east"), "t_ps_lon units")
-call check(nf90_put_att(ncFileID, TmpIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
-                                 "TmpI valid_range")
+io = nf90_def_var(ncFileID, name="t_ps_lon", xtype=nf90_double, dimids=TmpIDimID, &
+                  varid=TmpIVarID)
+call check(io, "t_ps_lon def_var")
+
+io = nf90_put_att(ncFileID, TmpIVarID, "long_name", &
+           "longitude of temperature and surface pressure")
+call check(io, "t_ps_lon long_name")
+
+io = nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X")
+call check(io, "t_ps_lon cartesian_axis")
+
+io = nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east")
+call check(io, "t_ps_lon units")
+
+io = nf90_put_att(ncFileID, TmpIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /))
+call check(io , "TmpI valid_range")
 
 ! Temperature Grid Latitudes
-call check(nf90_def_var(ncFileID, name="t_ps_lat", &
-              xtype=nf90_double, dimids=TmpJDimID, varid=TmpJVarID),   "t_ps_lat def_var" )
-call check(nf90_put_att(ncFileID, TmpJVarID, "long_name", "latitude"), "t_ps_lat long_name")
-call check(nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y"),   "t_ps_lat cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north"),"t_ps_lat units")
-call check(nf90_put_att(ncFileID, TmpJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
-                                 "t_ps_lat valid_range")
+io = nf90_def_var(ncFileID, name="t_ps_lat", xtype=nf90_double, dimids=TmpJDimID, &
+                  varid=TmpJVarID)
+call check(io, "t_ps_lat def_var" )
+
+io = nf90_put_att(ncFileID, TmpJVarID, "long_name", &
+           "latitude of temperature and surface pressure")
+call check(io, "t_ps_lat long_name")
+
+io = nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y")
+call check(io, "t_ps_lat cartesian_axis")
+
+io = nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north")
+call check(io, "t_ps_lat units")
+
+io = nf90_put_att(ncFileID, TmpJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /))
+call check(io, "t_ps_lat valid_range")
 
 ! (Common) grid levels
-call check(nf90_def_var(ncFileID, name="level", &
-              xtype=nf90_int, dimids=levDimID, varid=levVarID) ,    "level def_var")
-call check(nf90_put_att(ncFileID, levVarID, "long_name", "level"),  "level long_name")
-call check(nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z"), "level cartesian_axis")
-call check(nf90_put_att(ncFileID, levVarID, "units", "hPa"),        "level units")
-call check(nf90_put_att(ncFileID, levVarID, "positive", "down"),    "level positive")
+io = nf90_def_var(ncFileID, name="level", xtype=nf90_int, dimids=levDimID, &
+                  varid=levVarID)
+call check(io, "level def_var")
+
+io = nf90_put_att(ncFileID, levVarID, "long_name", "level")
+call check(io, "level long_name")
+
+io = nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z")
+call check(io, "level cartesian_axis")
+
+io = nf90_put_att(ncFileID, levVarID, "units", "hPa")
+call check(io, "level units")
+
+io = nf90_put_att(ncFileID, levVarID, "positive", "down")
+call check(io, "level positive")
+
 
 ! Velocity Grid Longitudes
-call check(nf90_def_var(ncFileID, name="u_v_lon", &
-              xtype=nf90_double, dimids=VelIDimID, varid=VelIVarID) ,  "u_v_lon def_var")
-call check(nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude"),"u_v_lon long_name")
-call check(nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X"),   "u_v_lon cartesian_axis")
-call check(nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east"), "u_v_lon units")
-call check(nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
-                                 "u_v_lon valid_range")
+io = nf90_def_var(ncFileID, name="u_v_lon", xtype=nf90_double, dimids=VelIDimID, &
+                  varid=VelIVarID)
+call check(io, "u_v_lon def_var")
+
+io = nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude of u and v winds")
+call check(io, "u_v_lon long_name")
+
+io = nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X")
+call check(io, "u_v_lon cartesian_axis")
+
+io = nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east")
+call check(io, "u_v_lon units")
+
+io = nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /))
+call check(io, "u_v_lon valid_range")
 
 ! Velocity Grid Latitudes
-call check(nf90_def_var(ncFileID, name="u_v_lat", &
-              xtype=nf90_double, dimids=VelJDimID, varid=VelJVarID) ,   "u_v_lat def_var")
-call check(nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude"),  "u_v_lat long_name")
-call check(nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y"),    "u_v_lat cartesian_axis")
-call check(nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north"), "u_v_lat units")
-call check(nf90_put_att(ncFileID, VelJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
-                                 "u_v_lat valid_range")
+io = nf90_def_var(ncFileID, name="u_v_lat", xtype=nf90_double, dimids=VelJDimID, &
+                  varid=VelJVarID)
+call check(io, "u_v_lat def_var")
+
+io = nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude of u and v winds")
+call check(io, "u_v_lat long_name")
+
+io = nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y")
+call check(io, "u_v_lat cartesian_axis")
+
+io = nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north")
+call check(io, "u_v_lat units")
+
+io = nf90_put_att(ncFileID, VelJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /))
+call check(io, "u_v_lat valid_range")
 
 ! Number of Tracers
 if ( ntracer > 0 ) then
@@ -2226,8 +2270,8 @@ do i = 1, get_num_variables(dom_id)
    endif
 end do
 
-write(errstring, *) 'Kind ', dart_kind, ' not found in state vector'
-call error_handler(E_ERR,'get_varid_from_kind', errstring, &
+write(msgstring, *) 'Kind ', dart_kind, ' not found in state vector'
+call error_handler(E_ERR,'get_varid_from_kind', msgstring, &
                    source, revision, revdate)
 
 end function get_varid_from_kind
