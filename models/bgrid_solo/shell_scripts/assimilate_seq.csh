@@ -19,7 +19,7 @@ endif
 echo "`date` -- BEGIN B-GRID ASSIMILATION"
 
 # directory that contains the filter
-set DARTDIR = /Users/thoar/svn/DART/pda/models/bgrid_solo/work/
+set DARTDIR = /glade/p/work/thoar/DART/pda/models/bgrid_solo/work
 set EXPERIMENT = ${DARTDIR}/test_1
 
 #-------------------------------------------------------------------------
@@ -39,7 +39,7 @@ set prior_inf_mean = 'prior_inflate_restart_mean.nc'
 
 ls -1 ${DARTDIR}/filter_ics.00* > restart_file_list.txt
 
-cp ${DARTDIR}/input.nml.cycle input.nml
+cp ${DARTDIR}/input.nml       .
 cp ${DARTDIR}/bgrid.nc        .
 cp ${DARTDIR}/filter          .
 
@@ -50,10 +50,12 @@ foreach OBS_FILE ( ${DARTDIR}/obs/obs_seq.*.out )
    # create directory to copy restart and inflation files
    # for each time step
    set ADV_DIR = "advance_time_$TIME"
-   mkdir $ADV_DIR
+   if ( ! -e $ADV_DIR ) then
+      mkdir $ADV_DIR
+   endif
 
    if (  -e  ${OBS_FILE} ) then
-      ln -sf ${OBS_FILE} obs_seq.out
+      ln -svf ${OBS_FILE} obs_seq.out
    else
       echo "ERROR ... no observation file ${OBS_FILE}"
       exit -1
@@ -91,6 +93,16 @@ foreach OBS_FILE ( ${DARTDIR}/obs/obs_seq.*.out )
    @ n++
 
 end
+
+# Consolidate all the short DART diagnostic files into time-complete ones.
+# These might match the timeframe of the True_State.nc
+
+ncrcat -O advance_time_000*/Posterior_Diag.nc Posterior_Diag.nc
+ncrcat -O advance_time_000*/Prior_Diag.nc     Prior_Diag.nc
+
+# create the input file list for the pda filter.
+
+ls -1 advance_time_000*/mean.nc >! pda_ic_name_list
 
 # todo FIXME : do we need to keep these around or save them to the ADV_DIR?
 rm prior_member*

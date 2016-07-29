@@ -13,7 +13,13 @@
 # consistent with the 'dart diagnostic' files. The filter_restart files
 # have different dimension and variable names.
 
-foreach FILE ( filter_restart*nc )
+if ( ! -e Posterior_Diag.nc ) then
+   echo "ERROR: a 'Posterior_Diag.nc' file must exist in the current directory."
+   echo "ERROR: Make sure it has the correct number of timesteps."
+   exit 1
+endif
+
+foreach FILE ( pda_output*nc )
 
   echo "Adding the record dimension 'copy' to $FILE"
 
@@ -29,16 +35,16 @@ foreach FILE ( filter_restart*nc )
 
 end
 
-ncrcat filter_restart*nc temp.nc
+ncrcat pda_output*nc pda_diag.nc
 
 # we have to add the required variables and global attributes
 
-ncks -A -v time,level,t_ps_lon,t_ps_lat,u_v_lon,u_v_lat,copy,CopyMetaData True_State.nc temp.nc
+ncatted -a model,global,a,c,'FMS_Bgrid' pda_diag.nc
+ncks -A -v time,level,t_ps_lon,t_ps_lat,u_v_lon,u_v_lat Posterior_Diag.nc pda_diag.nc
 
 # lastly, change the CopyMetaData to something that works with the DART diagnostics.
-# We are going to lie to it and say this is the ensemble mean
-#                                  0123456789012345
-ncap2 -O -s 'CopyMetaData(0,0:15)="ensemble mean   "' temp.nc Posterior_Diag.nc
+# The ensemble mean is copy 0
+ncks -A -d copy,0 Posterior_Diag.nc pda_diag.nc
 
 # <next few lines under version control, do not edit>
 # $URL$
