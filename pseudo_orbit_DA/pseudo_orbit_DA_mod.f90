@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: filter_mod.f90 10343 2016-06-07 21:51:48Z hendric $
+! $Id: pseudo_orbit_DA_mod.f90 10343 2016-08-08 21:51:48Z hendric $
 
 module pseudo_orbit_DA_mod
 
@@ -48,7 +48,7 @@ public :: pda_main
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/filter/filter_mod_pda.f90 $"
+   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/pseudo_orbit_DA/pseudo_orbit_mod_pda.f90 $"
 character(len=32 ), parameter :: revision = "$Revision: 10343 $"
 character(len=128), parameter :: revdate  = "$Date: 2016-06-07 15:51:48 -0600 (Tue, 07 Jun 2016) $"
 
@@ -74,7 +74,7 @@ integer :: tasks_per_model_advance = 1
 
 ! IO options
 logical :: add_domain_extension  = .false. ! add _d0X to output filenames. Note this is always done for X>1
-logical :: overwrite_state_input = .false. ! overwrites model netcdf files with output from filter
+logical :: overwrite_state_input = .false. ! overwrites model netcdf files with output from pseudo-orbit DA
 
 character(len = 129) :: inf_in_file_name(2)       = 'not_initialized',    &
                         inf_out_file_name(2)      = 'not_initialized'
@@ -252,7 +252,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
             if ( gd_step_size < gd_max_step_size ) then
                 gd_step_size=gd_step_size*2
             endif
-            mis_cost_previous=mis_cost
+            !mis_cost_previous=mis_cost
 
         else
 
@@ -408,7 +408,7 @@ if (.not. do_output()) return
 if (present(label)) then
    call error_handler(E_MSG,trim(label),trim(msg))
 else
-   call error_handler(E_MSG,'filter trace:',trim(msg))
+   call error_handler(E_MSG,'pseudo-orbit DA trace:',trim(msg))
 endif
 
 end subroutine trace_message
@@ -428,8 +428,8 @@ if (trace_level <= 0) return
 if (do_output()) then
    if (get_my_num_copies(ens_handle) < 1) return
    call get_ensemble_time(ens_handle, 1, mtime)
-   call print_time(mtime, ' filter trace: '//msg, logfileunit)
-   call print_time(mtime, ' filter trace: '//msg)
+   call print_time(mtime, ' pseudo-orbit DA trace: '//msg, logfileunit)
+   call print_time(mtime, ' pseudo-orbit DA trace: '//msg)
 endif
 
 end subroutine print_ens_time
@@ -439,7 +439,7 @@ end subroutine print_ens_time
 end module pseudo_orbit_DA_mod
 
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/filter/filter_mod.f90 $
-! $Id: filter_mod.f90 10343 2016-06-07 21:51:48Z hendric $
+! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/pda/pseudo_orbit_DA/pseudo_orbit_DA_mod.f90 $
+! $Id: pseudo_orbit_DA_mod.f90 10343 2016-08-08 21:51:48Z hendric $
 ! $Revision: 10343 $
 ! $Date: 2016-06-07 15:51:48 -0600 (Tue, 07 Jun 2016) $
