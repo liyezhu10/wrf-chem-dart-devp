@@ -127,7 +127,7 @@ subroutine pda_main()
 
 type(time_type)          :: time1
 integer(i8)              :: model_size, var_ind
-integer                  :: i, j, iunit, io
+integer                  :: igd, iunit, io
 logical                  :: read_time_from_file
 type(file_info_type)     :: file_info
 type(ensemble_type)      :: pda_ens_handle, mismatch_ens_handle, ens_update_copy, ens_normalization
@@ -213,21 +213,21 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
     !!GD minimisation update-------------------------------------------------------------
 
     !The criteria of stoping the minimisation could be based on the mismatch cost function
-    GD_runs: do j=1,n_GD
+    GD_runs: do igd=1,n_GD
 
-        !write(*,*) j
+        !write(*,*) igd
 
-        Gradient_descent: do i=1, window_size
+        Gradient_descent: do ivar=1, window_size
 
-            if (i==1) then
+            if (ivar==1) then
                 pda_ens_handle%copies(1,:) = ens_update_copy%copies(1,:) &
                         +gd_step_size*mismatch_ens_handle%copies(1,:)
 
-            else if (i<window_size) then
+            else if (ivar<window_size) then
 
-                pda_ens_handle%copies(i,:)=ens_update_copy%copies(i,:) &
-                        -gd_step_size*mismatch_ens_handle%copies(i-1,:) &
-                        +gd_step_size*mismatch_ens_handle%copies(i,:)
+                pda_ens_handle%copies(ivar,:)=ens_update_copy%copies(ivar,:) &
+                        -gd_step_size*mismatch_ens_handle%copies(ivar-1,:) &
+                        +gd_step_size*mismatch_ens_handle%copies(ivar,:)
 
             else
 
@@ -311,7 +311,7 @@ type(ensemble_type),  intent(in)    :: pda_ens_handle, ens_normalization
 type(ensemble_type),  intent(inout) :: mismatch_ens_handle
 real(r8),             intent(out)   :: mis_cost
 
-integer         :: i,j
+integer         :: icopies,ivar
 type(time_type) :: target_time, ens_time
 real(r8)        :: result_sum, sum_variable
 
@@ -326,8 +326,8 @@ mismatch_ens_handle%time=pda_ens_handle%time
 call all_copies_to_all_vars(mismatch_ens_handle)
 
 !!!this is not ideal, shall be able to pass an arrary of target time to advance_state, things needs to be changed in advance_state to adapt this
-do i=1, window_size
-    call set_ensemble_time(mismatch_ens_handle, i, ens_time)
+do icopies=1, window_size
+    call set_ensemble_time(mismatch_ens_handle, icopies, ens_time)
 
 end do
 
@@ -338,17 +338,17 @@ call all_vars_to_all_copies(mismatch_ens_handle)
 
 !calculate mismatches
 !!!!Note that the calculate the mismatch only contains window_size-1 terms, as the mismatch for the end state of the pseudo-orbit would require the (future) state to obtain.
-do i=1, window_size-1
-    mismatch_ens_handle%copies(i,:)=pda_ens_handle%copies(i+1,:)-mismatch_ens_handle%copies(i,:)
+do icopies=1, window_size-1
+    mismatch_ens_handle%copies(icopies,:)=pda_ens_handle%copies(icopies+1,:)-mismatch_ens_handle%copies(icopies,:)
 end do
 
 !calculate mismatch cost function, which is the squared sum of the mismatch error
 result_sum   = 0
 sum_variable = 0
-do i=1,window_size-1
+do icopies=1,window_size-1
 
-    do j=1,mismatch_ens_handle%my_num_vars
-        sum_variable=(mismatch_ens_handle%copies(i,j))**2*ens_normalization%copies(1,j)+sum_variable
+    do ivar=1,mismatch_ens_handle%my_num_vars
+        sum_variable=(mismatch_ens_handle%copies(icopies,ivar))**2*ens_normalization%copies(1,ivar)+sum_variable
     end do
 
 end do
