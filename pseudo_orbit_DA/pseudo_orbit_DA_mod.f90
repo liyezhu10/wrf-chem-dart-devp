@@ -146,7 +146,7 @@ call check_namelist_read(iunit, io, "pseudo_orbit_DA_nml")
 
 model_size = get_model_size()
 
-
+! not necessarily using transpose_type_in=2, might change this in the future
 call init_ensemble_manager(pda_ens_handle, window_size, model_size, 1, transpose_type_in=2)
 
 file_info = io_filenames_init(pda_ens_handle, single_restart_file_in, single_restart_file_out,  &
@@ -164,6 +164,7 @@ call init_ensemble_manager(ens_normalization,            1, model_size, 1, trans
 
 
 !generate scaling vector--------------------------------------
+!at the moment ens_normalization is only affecting the calculation of mismatch error cost function, nothing to do with the updates of pseudo_orbit.
 !this is not standardized, should read a scaling vector from a file
 
 my_num_vars = get_my_num_vars(pda_ens_handle)
@@ -330,16 +331,18 @@ do i=1, window_size
 
 end do
 
+!! the mismatch_ens_handle is firstly used to store the forward states of each states in the pseudo-orbit, it is then used to calculate the mistmach error (i.e. u_{i+1}-F(u_{i})
 call advance_state(mismatch_ens_handle, window_size, target_time, async, adv_ens_command, tasks_per_model_advance)
 
 call all_vars_to_all_copies(mismatch_ens_handle)
 
 !calculate mismatches
+!!!!Note that the calculate the mismatch only contains window_size-1 terms, as the mismatch for the end state of the pseudo-orbit would require the (future) state to obtain.
 do i=1, window_size-1
     mismatch_ens_handle%copies(i,:)=pda_ens_handle%copies(i+1,:)-mismatch_ens_handle%copies(i,:)
 end do
 
-!calculate mismatch cost function
+!calculate mismatch cost function, which is the squared sum of the mismatch error
 result_sum   = 0
 sum_variable = 0
 do i=1,window_size-1
