@@ -217,6 +217,7 @@ Sequential_PDA: do n_DA=1,1 !seq_len-window_size+1
 
         !write(*,*) igd
 
+        ! Apply Gradient Descent to update pseudo-orbit. Note that updating the first(starting end) state in the pseudo-orbit only require the mistmatch error between u_2 and F(u_1); updating the last (end) state in the pseudo-orbit only require the mismatch error between u_{window_size} and F(u_{window_size-1}); and updating all the rest (middle) states in the pseudo-orbit requires the mismatch error from both sides.
         Gradient_descent: do ivar=1, window_size
 
             if (ivar==1) then
