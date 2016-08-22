@@ -7,16 +7,31 @@
 ! README ...
 ! To test this routine I needed to make a routine called 'death()' to match
 ! what is being used in openggcm. NETCDF_UTILITIES:DEATH() SHOULD NOT BE
-! USED WHEN THIS MODULE IS USED WITH OPENGGCM. 
+! USED WHEN THIS MODULE IS USED WITH OPENGGCM.
 
 module netcdf_utilities
 
 implicit none
 private
 
+!----------------------------------------------------------------------------
+! Attributes for variable kinds -- compiler flags are not portable
+! 'digits12' is reserved for real variables that MUST retain 64 bits of
+! precision. DO NOT CHANGE '12' to a smaller number. BAD BAD BAD things happen.
+!----------------------------------------------------------------------------
+
+integer, parameter :: i4 = SELECTED_INT_KIND(8)
+integer, parameter :: i8 = SELECTED_INT_KIND(17)
+integer, parameter :: r4 = SELECTED_REAL_KIND(6,30)
+integer, parameter :: c4 = SELECTED_REAL_KIND(6,30)
+integer, parameter :: r8 = SELECTED_REAL_KIND(12,100)
+integer, parameter :: c8 = SELECTED_REAL_KIND(12,100)
+integer, parameter :: digits12 = SELECTED_REAL_KIND(12)
+
 public :: wr_netcdf_model_time,      &
           wr_netcdf_ctim_grid,       &
           wr_netcdf_interface_grid,  &
+          wr_netcdf_oplus_grid,      &
           wr_netcdf,                 &
           rd_netcdf
 
@@ -47,8 +62,8 @@ subroutine wr_netcdf_model_time(ncid, model_time)
 use netcdf
 implicit none
 
-integer, intent(in) :: ncid
-real*8,  intent(in) :: model_time
+integer,  intent(in) :: ncid
+real(r8), intent(in) :: model_time
 
 integer :: VarID
 integer :: io1, io2
@@ -76,22 +91,22 @@ subroutine wr_netcdf_ctim_grid(ncid, nlon, nlonname, nlonunits, nlonshort, &
 use netcdf
 implicit none
 
-integer, intent(in) :: ncid
-integer, intent(in) :: nlon
+integer,          intent(in) :: ncid
+integer,          intent(in) :: nlon
 character(len=*), intent(in) :: nlonname, nlonunits, nlonshort
-integer, intent(in) :: nlat
+integer,          intent(in) :: nlat
 character(len=*), intent(in) :: nlatname, nlatunits, nlatshort
-integer, intent(in) :: nheight
-real*8,  intent(in) :: height(nheight)
+integer,          intent(in) :: nheight
+real(r8),         intent(in) :: height(nheight)
 character(len=*), intent(in) :: nheightname, nheightunits, nheightshort
 
 !-----------------------------------------------------------------------
 ! local storage
 !-----------------------------------------------------------------------
 
-real*4, allocatable :: longitude(:)
-real*4, allocatable :: latitude(:)
-real*4  :: dlat, dlon
+real(r4), allocatable :: longitude(:)
+real(r4), allocatable :: latitude(:)
+real(r4)  :: dlat, dlon
 
 integer :: LonDimID, LatDimID, HeightDimID
 integer :: LonVarID, LatVarID, HeightVarID
@@ -103,14 +118,14 @@ integer :: ilat, ilon
 
 allocate(longitude(nlon), latitude(nlat))
 
-dlon = 360.0/real(nlon-1)
+dlon = 360.0_r4/real(nlon-1,r4)
 do ilon = 1,nlon
-   longitude(ilon) = dlon*real(ilon-1)
+   longitude(ilon) = dlon*real(ilon-1,r4)
 enddo
 
-dlat = 180.0/real(nlat-1)
+dlat = 180.0_r4/real(nlat-1,r4)
 do ilat = 1,nlat           ! from south-to-north for the geographic grid
-   latitude(ilat) = dlat*real(ilat-1) - 90.0
+   latitude(ilat) = dlat*real(ilat-1,r4) - 90.0_r4
 enddo
 
 !-----------------------------------------------------------------------
@@ -177,10 +192,10 @@ integer, intent(in) :: nheight
 ! local storage
 !-----------------------------------------------------------------------
 
-real*4, allocatable :: longitude(:)
-real*4, allocatable :: latitude(:)
-real*4, allocatable :: height(:)
-real*4  :: dlat, dlon, dheight
+real(r4), allocatable :: longitude(:)
+real(r4), allocatable :: latitude(:)
+real(r4), allocatable :: height(:)
+real(r4)  :: dlat, dlon, dheight
 
 integer :: LonDimID, LatDimID, HeightDimID
 integer :: LonVarID, LatVarID, HeightVarID
@@ -194,19 +209,19 @@ integer :: ilat, ilon, iheight
 
 allocate(longitude(nlon), latitude(nlat), height(nheight))
 
-dlon = 360.0/real(nlon-1)
+dlon = 360.0_r4/real(nlon-1,r4)
 do ilon = 1,nlon
-   longitude(ilon) = dlon*real(ilon-1)
+   longitude(ilon) = dlon*real(ilon-1,r4)
 enddo
 
-dlat = 180.0/real(nlat-1)
+dlat = 180.0_r4/real(nlat-1,r4)
 do ilat = 1,nlat  ! NORTH-to-SOUTH, NORTH is magnetic latitude 0.0
-   latitude(ilat) = dlat*real(ilat-1)
+   latitude(ilat) = dlat*real(ilat-1,r4)
 enddo
 
-dheight = 500.0/real(nheight)   ! TJH FIXME ... bogus height array
+dheight = 500.0_r4/real(nheight,r4)   ! TJH FIXME ... bogus height array
 do iheight = 1,nheight
-   height(iheight) = dheight*real(iheight-1)
+   height(iheight) = dheight*real(iheight-1,r4)
 enddo
 
 !-----------------------------------------------------------------------
@@ -260,6 +275,88 @@ call nc_check(io3, 'wr_netcdf_interface_grid', 'put_var ig_height')
 end subroutine wr_netcdf_interface_grid
 
 !=======================================================================
+!> Since the lon,lat,height variables are all 3-dimensional, all the
+!> dimensions must be declared before any of the variables can be declared.
+
+subroutine wr_netcdf_oplus_grid(ncid, nlon, nlonname, nlonunits, nlonshort, &
+                                      nlat, nlatname, nlatunits, nlatshort, &
+                                   nheight, nheightname, nheightunits, nheightshort, &
+                                 oplus_lon, oplus_lat, oplus_height)
+
+use netcdf
+implicit none
+
+integer,          intent(in) :: ncid
+integer,          intent(in) :: nlon
+character(len=*), intent(in) :: nlonname, nlonunits, nlonshort
+integer,          intent(in) :: nlat
+character(len=*), intent(in) :: nlatname, nlatunits, nlatshort
+integer,          intent(in) :: nheight
+character(len=*), intent(in) :: nheightname, nheightunits, nheightshort
+real(r8),         intent(in) :: oplus_lon(   nlon,nlat,nheight)
+real(r8),         intent(in) :: oplus_lat(   nlon,nlat,nheight)
+real(r8),         intent(in) :: oplus_height(nlon,nlat,nheight)
+
+!-----------------------------------------------------------------------
+! local storage
+!-----------------------------------------------------------------------
+
+integer :: LonDimID, LatDimID, HeightDimID
+integer :: LonVarID, LatVarID, HeightVarID
+integer :: io, io1, io2, io3
+
+!-----------------------------------------------------------------------
+
+io = nf90_redef(ncid)
+call nc_check(io, 'wr_netcdf_oplus_grid', 'redef')
+
+io1 = nf90_def_dim(ncid, trim(nlonname),    nlon,    LonDimID)
+io2 = nf90_def_dim(ncid, trim(nlatname),    nlat,    LatDimID)
+io3 = nf90_def_dim(ncid, trim(nheightname), nheight, HeightDimID)
+call nc_check(io1, 'wr_netcdf_oplus_grid', 'def_dim oplus_lon')
+call nc_check(io2, 'wr_netcdf_oplus_grid', 'def_dim oplus_lat')
+call nc_check(io3, 'wr_netcdf_oplus_grid', 'def_dim oplus_height')
+
+! The dimensions must be specified in C-like order, i.e. reversed from their Fortran order.
+
+io1 = nf90_def_var(ncid, trim(nlonname), nf90_real, (/ HeightDimID, LatDimID, LonDimID /), LonVarID)
+io2 = nf90_put_att(ncid, LonVarID, 'short_name', trim(nlonshort) )
+io3 = nf90_put_att(ncid, LonVarID, 'units', trim(nlonunits))
+
+call nc_check(io1, 'wr_netcdf_oplus_grid', 'def_var oplus_lon')
+call nc_check(io2, 'wr_netcdf_oplus_grid', 'put_att oplus_lon short_name')
+call nc_check(io3, 'wr_netcdf_oplus_grid', 'put_att oplus_lon units')
+
+io1 = nf90_def_var(ncid, trim(nlatname), nf90_real, (/ HeightDimID, LatDimID, LonDimID /), LatVarID)
+io2 = nf90_put_att(ncid, LatVarID, 'short_name', trim(nlatshort))
+io3 = nf90_put_att(ncid, LatVarID, 'units', trim(nlatunits))
+
+call nc_check(io1, 'wr_netcdf_oplus_grid', 'def_var oplus_lat')
+call nc_check(io2, 'wr_netcdf_oplus_grid', 'put_att oplus_lat short_name')
+call nc_check(io3, 'wr_netcdf_oplus_grid', 'put_att oplus_lat units')
+
+io1 = nf90_def_var(ncid, trim(nheightname), nf90_real, (/ HeightDimID, LatDimID, LonDimID /), HeightVarID)
+io2 = nf90_put_att(ncid, HeightVarID, 'short_name', trim(nheightshort))
+io3 = nf90_put_att(ncid, HeightVarID, 'units', trim(nheightunits))
+
+call nc_check(io1, 'wr_netcdf_oplus_grid', 'def_var oplus_height')
+call nc_check(io2, 'wr_netcdf_oplus_grid', 'put_att oplus_height short_name')
+call nc_check(io3, 'wr_netcdf_oplus_grid', 'put_att oplus_height units')
+
+io = nf90_enddef(ncid) ! leave define mode so we can fill
+call nc_check(io, 'wr_netcdf_oplus_grid', 'enddef')
+
+io1 = nf90_put_var(ncid,    LonVarID, oplus_lon)
+io2 = nf90_put_var(ncid,    LatVarID, oplus_lat)
+io3 = nf90_put_var(ncid, HeightVarID, oplus_height)
+
+call nc_check(io1, 'wr_netcdf_oplus_grid', 'put_var oplus_lon')
+call nc_check(io2, 'wr_netcdf_oplus_grid', 'put_var oplus_lat')
+call nc_check(io3, 'wr_netcdf_oplus_grid', 'put_var oplus_height')
+
+end subroutine wr_netcdf_oplus_grid
+
+!=======================================================================
 
 subroutine wr_netcdf_r4_1D(ncid, dim1, dim1name, tensor, tensorname, tensorunits, tensorshort)
 
@@ -269,7 +366,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1
 character(len=*), intent(in) :: dim1name
-real*4,           intent(in) :: tensor(dim1)
+real(r4),         intent(in) :: tensor(dim1)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -325,7 +422,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1
 character(len=*), intent(in) :: dim1name
-real*8,           intent(in) :: tensor(dim1)
+real(r8),         intent(in) :: tensor(dim1)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -382,7 +479,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1, dim2
 character(len=*), intent(in) :: dim1name, dim2name
-real*4,           intent(in) :: tensor(dim1,dim2)
+real(r4),         intent(in) :: tensor(dim1,dim2)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -448,7 +545,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1, dim2
 character(len=*), intent(in) :: dim1name, dim2name
-real*8,           intent(in) :: tensor(dim1,dim2)
+real(r8),         intent(in) :: tensor(dim1,dim2)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -514,7 +611,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1, dim2, dim3
 character(len=*), intent(in) :: dim1name, dim2name, dim3name
-real*4,           intent(in) :: tensor(dim1,dim2,dim3)
+real(r4),         intent(in) :: tensor(dim1,dim2,dim3)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -594,7 +691,7 @@ implicit none
 integer,          intent(in) :: ncid
 integer,          intent(in) :: dim1, dim2, dim3
 character(len=*), intent(in) :: dim1name, dim2name, dim3name
-real*8,           intent(in) :: tensor(dim1,dim2,dim3)
+real(r8),         intent(in) :: tensor(dim1,dim2,dim3)
 character(len=*), intent(in) :: tensorname, tensorunits, tensorshort
 
 !-----------------------------------------------------------------------
@@ -676,7 +773,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1
-real*4,           intent(out) :: tensor(dim1)
+real(r4),         intent(out) :: tensor(dim1)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
@@ -708,7 +805,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1
-real*8,           intent(out) :: tensor(dim1)
+real(r8),         intent(out) :: tensor(dim1)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
@@ -740,7 +837,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1, dim2
-real*4,           intent(out) :: tensor(dim1,dim2)
+real(r4),         intent(out) :: tensor(dim1,dim2)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
@@ -772,7 +869,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1, dim2
-real*8,           intent(out) :: tensor(dim1,dim2)
+real(r8),         intent(out) :: tensor(dim1,dim2)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
@@ -804,7 +901,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1, dim2, dim3
-real*4,           intent(out) :: tensor(dim1,dim2,dim3)
+real(r4),         intent(out) :: tensor(dim1,dim2,dim3)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
@@ -836,7 +933,7 @@ implicit none
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: tensorname
 integer,          intent(in)  :: dim1, dim2, dim3
-real*8,           intent(out) :: tensor(dim1,dim2,dim3)
+real(r8),         intent(out) :: tensor(dim1,dim2,dim3)
 
 integer :: dim1ID, dim2ID, dim3ID, VarID
 integer :: ndim1, ndim2, ndim3
