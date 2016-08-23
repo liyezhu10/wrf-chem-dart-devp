@@ -9,8 +9,8 @@
 module model_mod
 
 ! Modules that are absolutely required for use are listed
-use        types_mod,    only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
-                                earth_radius
+use        types_mod, only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
+                             earth_radius
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
@@ -41,21 +41,21 @@ use     mpi_utilities_mod, only : my_task_id, task_count
 
 use        random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
-use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_copy_owner_index, &
+use  ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_copy_owner_index, &
                                   get_var_owner_index
 
 use distributed_state_mod, only : get_state
 
-use state_structure_mod,   only : add_domain, get_model_variable_indices,        &
+use   state_structure_mod, only : add_domain, get_model_variable_indices,        &
                                   get_num_variables, get_index_start,            &
                                   get_num_dims, get_domain_size, get_kind_index, &
                                   get_varid_from_kind, get_dart_vector_index,    &
                                   get_dim_name, get_variable_name,               &
                                   state_structure_info
 
-use dart_time_io_mod,      only : write_model_time
+use      dart_time_io_mod, only : write_model_time
 
-use cotr_mod,              only : transform, cotr_set, cotr, xyzdeg, degxyz
+use              cotr_mod, only : transform, cotr_set, cotr, xyzdeg, degxyz
 
 use typesizes
 use netcdf 
@@ -163,6 +163,20 @@ namelist /model_nml/  &
    model_perturbation_amplitude,&
    model_state_variables,       &
    debug
+
+! Mon Jul 18 17:00:01 MDT 2016 Jimmy Raeder : 
+! I had at the CEDAR meeting some longish discussions with Naomi.
+! I learned that the O+ grid is actually different than I thought.
+! It is based on dipole flux tubes, such that the footprints of the 
+! flux tubes are a regular lat-lon grid (call these dimensions ph and th 
+! for longitude and latitude) with indices iph and ith.  Then, in the 
+! 3rd dimension (call it z, with index iz) the points are irregularly 
+! spaced along flux tubes.  Thus, the grid is topologically a cube 
+! (1..nph, 1..nth, 1..nz), but each location depends on all 3 indices, 
+! i.e., we have ph(iph,ith,iz), th(iph,ith,iz), and z(iph,ith,iz), 
+! and each holds a value, say v(iph,with,iz), O+ for example.  
+! Although the grid is static, I suggest that we compute and write 
+! out all for DART.
 
 ! Generic grid type to hold CTIM and Magnetic grid information
 type grid_type
@@ -749,11 +763,12 @@ end function get_model_time_step
 
 subroutine get_state_meta_data(state_handle, index_in, location, var_type)
 
-type(ensemble_type),           intent(in)  :: state_handle  !< state ensemble handle
-integer(i8),                   intent(in)  :: index_in !< dart state index of interest
-type(location_type),           intent(out) :: location !< locartion of interest
-integer,             optional, intent(out) :: var_type !< optional dart kind return
+type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
+integer(i8),         intent(in)  :: index_in     !< dart state index of interest
+type(location_type), intent(out) :: location     !< location of interest
+integer, OPTIONAL,   intent(out) :: var_type     !< optional dart kind return
 
+!>@TODO FIXME TJH check for correct application of the new oplus grid.
 
 ! Local variables
 real(r8) :: lat, lon, height
@@ -832,7 +847,7 @@ integer,                    intent(in)    :: ncFileID !< netcdf file id
 type(grid_type),            intent(inout) :: grid_handle !< geo or mag grid
 character(len=*),           intent(in)    :: lon_name !< longitude name
 character(len=*),           intent(in)    :: lat_name !< latitude name
-character(len=*), optional, intent(in)    :: height_name !< height name
+character(len=*), OPTIONAL, intent(in)    :: height_name !< height name
 
 
 grid_handle%nlon = get_dim(ncFileID,lon_name, 'get_grid_sizes')
@@ -891,7 +906,7 @@ else
       grid_handle%uses_colatitude = .false.
    endif
 
-   where(grid_handle%longitude < 0) grid_handle%longitude = grid_handle%longitude + 360.0_r8
+   where(grid_handle%longitude < 0.0_r8) grid_handle%longitude = grid_handle%longitude + 360.0_r8
 
 endif
 
@@ -1140,12 +1155,11 @@ end function nc_write_model_atts
 !>   model_mod_writes_state_variables = .false. in nc_write_model_atts
 
 function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
-integer,                intent(in) :: ncFileID !< netCDF file identifier
-real(r8), dimension(:), intent(in) :: statevec !< dart state vector
-integer,                intent(in) :: copyindex !< copy number index
-integer,                intent(in) :: timeindex !< time index from model
-integer                            :: ierr !< return value of function
-
+integer,  intent(in) :: ncFileID    !< netCDF file identifier
+real(r8), intent(in) :: statevec(:) !< dart state vector
+integer,  intent(in) :: copyindex   !< copy number index
+integer,  intent(in) :: timeindex   !< time index from model
+integer              :: ierr        !< return value of function
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1210,16 +1224,15 @@ end subroutine pert_model_copies
 subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
                          obs, obs_kind, num_close, close_ind, dist, state_handle)
 
-type(ensemble_type),               intent(in) :: state_handle !< state ensemble handle
-type(get_close_type),              intent(in) :: gc !< get_close_type handle
-type(location_type),               intent(in) :: base_obs_loc !< base observation location
-integer,                           intent(in) :: base_obs_kind !< base dart observation kind
-type(location_type), dimension(:), intent(in) :: obs !< observation sequence
-integer,             dimension(:), intent(in) :: obs_kind !< dart kind
-integer,                           intent(out):: num_close !< number of close found
-integer,             dimension(:), intent(out):: close_ind !< list of close indicies
-real(r8), optional,  dimension(:), intent(out):: dist !< list of distances of close observations
-
+type(ensemble_type),  intent(in)  :: state_handle  !< state ensemble handle
+type(get_close_type), intent(in)  :: gc            !< get_close_type handle
+type(location_type),  intent(in)  :: base_obs_loc  !< base observation location
+integer,              intent(in)  :: base_obs_kind !< base dart observation kind
+type(location_type),  intent(in)  :: obs(:)        !< observation sequence
+integer,              intent(in)  :: obs_kind(:)   !< dart kind
+integer,              intent(out) :: num_close     !< number of close found
+integer,              intent(out) :: close_ind(:)  !< list of close indicies
+real(r8), OPTIONAL,   intent(out) :: dist(:)       !< list of distances of close observations
 
 call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
                        num_close, close_ind, dist)
