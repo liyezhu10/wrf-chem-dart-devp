@@ -293,9 +293,9 @@ integer,          intent(in) :: nlat
 character(len=*), intent(in) :: nlatname, nlatunits, nlatshort
 integer,          intent(in) :: nheight
 character(len=*), intent(in) :: nheightname, nheightunits, nheightshort
-real(r8),         intent(in) :: oplus_lon(   nlon,nlat,nheight)
-real(r8),         intent(in) :: oplus_lat(   nlon,nlat,nheight)
-real(r8),         intent(in) :: oplus_height(nlon,nlat,nheight)
+real(r8),         intent(in) :: oplus_lon(   nheight,nlat,nlon)
+real(r8),         intent(in) :: oplus_lat(   nheight,nlat,nlon)
+real(r8),         intent(in) :: oplus_height(nheight,nlat,nlon)
 
 !-----------------------------------------------------------------------
 ! local storage

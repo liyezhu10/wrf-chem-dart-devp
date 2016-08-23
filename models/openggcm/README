@@ -17,3 +17,69 @@ WWW: http://mhd.sr.unh.edu/~jraeder/tmp.homepage
 on machine:
 http://trillian-use.sr.unh.edu/index.php/Main_Page
 
+
+17 June 2016 (from Jimmy) :
+... by now I got the compile issues resolved, such that netcdf_utilities.f90 is 
+automagically compiled and loaded with OpenGGCM.  I had to fix a few things, and 
+at least one (making nc_check public) in netcdf_utilities.f90 (no svn ci yet).
+
+The current test run is tst-jr-003.
+cd ~/4/tst-jr-003 ;  ./clean ; ./runme.
+
+It will create 
+~/tst-jr-003 where the compilation is done, and 
+~/pp/tst-jr-003 where the output files end up, including 
+~/pp/tst-jr-003/tst-jr-003.log which shows progress and where all STDOUT/STDERR
+output goes.
+
+At present the code runs fine up to the point where it writes out a `.nc' 
+file for DART, and then waits for something to come back.  The next step 
+will be to implement the readback from DART.
+(marked  'SECTIONDART RECEIVE IN CTIM_INTERFACE' in openggcm-2016-04-18/src/ctim-core.for.)
+Since that requires both some netcdf_utilities.f90 and OpenGGCM knowledge 
+I suggest we do that together, maybe via a Skype session, in a couple of 
+weeks or so.
+
+
+8 August 2016 (from Jimmy):
+Great, Tuesday 8/23 it is.
+I'll show at 9am and will have time through lunch at least.
+
+I've now figured out the logic and the O+ grid.
+
+See: ./openggcm-2016-04-18/src/readme-dart-flow.txt for a flow schematic.
+
+There are write statements in the code now that all start with 'DART', 
+so it's easier to see what happens to the DART related calls when you 
+grep DART from the log file.  Right now the semaphore is not deleted,
+so it runs through and does not wait for DART.
+
+The O+ grid is computed (opl_grid_geo_hgt/la/lon) but not written out.  
+I figured I'd leave that for you so you can do it your preferred way.
+
+CU in a couple weeks - Jimmy
+
+Mon Aug 22 17:06:09 MDT 2016 : TJH : Notes to discuss with Jimmy on Tues Aug 23rd AM
+* Need to read in the oplus grids now.
+* The grid_type does not support full 3D lon/lat/height so we might 
+  need a new type.
+* I believe the oplus grid (which I called oplus_lon(:,:,:), 
+  oplus_lat(:,:,:), oplus_height(:,:,:))
+  replaces the 'mag_grid' variable. 'ig_lon' and 'ig_lat' are the dimensions ...
+* Do we have to convert these grids to geographic latitudes and longitudes ...
+
+* netcdf_utilities.f90:wr_netcdf_interface_grid  has bogus values for heights ... FIX
+* netcdf_utilities.f90:wr_netcdf_ctim_grid  calculates longitudes and 
+  latitudes - they are not passed in. Will this always be OK?
+* remove the openggcm_to_netcdf and netcdf_to_openggcm baggage after a hop 
+  test is performed which verifies the integrity of the netCDF read/writes.
+
+Tue Aug 23 15:55:01 MDT 2016 : TJH : There has to be a way to describe these grids.
+Some of them are 'magnetic grid in geographic [lon,lat,height]', for example.
+Some of them are 'xxx grid in geographic colatitude' or somesuch ...
+Right now we scaled back to simply writing out the the bare-bones information about oplus and edensity since they are the prognostic variable and diagnostic variable of interest. Jimmy has to ensure that the conversion/interpolation of edensity is happening correctly (to the same grid as oplus, for which we have geographic coordinates).
+
+The oplus grid is actually a regular lat/lon grid. The vertical coordinates can be envisioned as straight (i.e. radially-emanating) with a different set of heights for each lat,lon point. Hence, the most parsimonious representation is a 2D lat/lon grid and a 3D height grid. The future is for a full 3D grid (when they upgrade some model component.)
+
+
+
