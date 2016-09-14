@@ -36,6 +36,7 @@ character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: id  = "$Id$"
 
 !PAR other storage option control can be implemented here. In particular, want to find
 !PAR some way, either allocating or multiple addressing, to use same chunk of storage
@@ -155,7 +156,7 @@ endif
 ! First call to init_ensemble_manager must initialize module and read namelist
 if ( .not. module_initialized ) then
    ! Initialize the module with utilities 
-   call register_module(source, revision, revdate)
+   call register_module(id)
    module_initialized = .true.
 
    ! Read the namelist entry
