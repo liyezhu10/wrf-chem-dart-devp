@@ -99,6 +99,10 @@ integer  :: obs_window_seconds  = -1
 ! Turn on quad filter 
 logical  :: quad_filter            = .false.
 logical  :: quad_filter_eval_only  = .false.  ! if true, eval only all pseudo obs
+! Threshold for skewness, revert to regular filter if abs(skewness) < this
+! A negative value means there is no threshold
+real(r8) :: quad_skewness_threshold = 1.0
+
 ! Control diagnostic output for state variables
 integer  :: num_output_state_members = 0
 integer  :: num_output_obs_members   = 0
@@ -143,6 +147,7 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    restart_in_file_name, restart_out_file_name, init_time_days, init_time_seconds,  &
    first_obs_days, first_obs_seconds, last_obs_days, last_obs_seconds,              &
    obs_window_days, obs_window_seconds, quad_filter, quad_filter_eval_only,         &
+   quad_skewness_threshold,                                                         &
    num_output_state_members, num_output_obs_members, output_restart_mean,           &
    output_interval, num_groups, outlier_threshold, enable_special_outlier_code,     &
    input_qc_threshold, output_forward_op_errors, output_timestamps, trace_execution, &
@@ -1552,12 +1557,10 @@ call compute_copy_mean_var(obs_ens_handle, &
 if (quad_filter) then
    call update_squared_obs_entries(obs_ens_handle, ens_size, OBS_MEAN_START, OBS_VAR_START)
    call update_squared_qc_entries(forward_op_ens_handle, ens_size)
-endif
 
 ! Give the observation code a chance to alter the actual observation
 ! values if there are ambiguous values that need to be changed.
 ! e.g. quad filter pseudo obs computations
-if (quad_filter) then
   call update_observations_quad_filter(obs_ens_handle, ens_size, seq, keys, prior_post, &
     obs_val_index, OBS_KEY_COPY, ens_mean_index, ens_spread_index, num_obs_in_set, &
     OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, OBS_VAL_COPY, &
@@ -2049,7 +2052,7 @@ integer,                 intent(in)    :: OBS_ERR_VAR_COPY, DART_qc_index, PRIOR
 
 integer               :: j, k, ens_offset, forward_min, forward_max, forward_unit, ivalue
 real(r8)              :: error, diff_sd, ratio, obs_temp(1)
-real(r8)              :: obs_prior_mean, obs_prior_var, obs_val, obs_err_var
+real(r8)              :: obs_prior_mean, obs_prior_var, obs_prior_skewness, obs_val, obs_err_var
 real(r8)              :: forward_temp(num_obs_in_set), rvalue(1)
 
 
@@ -2128,9 +2131,27 @@ do j = 1, npairs
       call error_handler(E_MSG, 'update_observation_quad_filter: ', msgstring)
    endif
 
-   ! here is the computation for the pseudo observation value and error variance for the quad filter
    pseudo_obs_val = ((obs_val - obs_prior_mean)**2) - obs_err_var
    pseudo_obs_err_var = (2 * (obs_err_var**2)) + 4*obs_err_var*obs_prior_var
+
+   !------------------------ Block to use skewness of observation prior to adjust the pseudo_obs error variance
+   ! here is the computation for the pseudo observation value and error variance for the quad filter
+   if(quad_skewness_threshold >= 0.0_r8) then
+
+      ! Compute the skewness of the observation prior
+      obs_prior_skewness = 0.0_r8
+      do k = 1, ens_size
+         obs_prior_skewness = obs_prior_skewness + (obs_ens_handle%copies(k, original) - obs_prior_mean)**3
+      end do
+      obs_prior_skewness = (obs_prior_skewness / ens_size) / (sqrt(obs_prior_var) ** 3)
+      write(*, *) 'skewness ', obs_prior_skewness
+ 
+      ! One can put in an arbitrary function of skewness and the original pseudo_obs_err_var 
+      ! Example: make pseudo_obs_err_var very big if skewness is small so that this just becomes a regular filter 
+      if(abs(obs_prior_skewness) < quad_skewness_threshold) pseudo_obs_err_var = 1e10_r8
+   endif
+   !--------------------------------------------------------------------------------------------
+   
 
    ! at this point we have the updated value.  only replace
    ! the local copy in the ens handle.  we are out of sync
