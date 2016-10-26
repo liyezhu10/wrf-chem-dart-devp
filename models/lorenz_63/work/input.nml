@@ -24,8 +24,8 @@
 &filter_nml
    async                    = 0,
    adv_ens_command          = "./advance_model.csh",
-   ens_size                 = 20,
-   start_from_restart       = .true.,
+   ens_size                 = 200,
+   start_from_restart       = .false.,
    output_restart           = .true.,
    obs_sequence_in_name     = "obs_pseudo.three.out",
    obs_sequence_out_name    = "obs_pseudo.three.final",
@@ -39,6 +39,7 @@
    last_obs_seconds         = -1,
    quad_filter              = .true.,
    quad_filter_eval_only    = .false.,
+   quad_skewness_threshold  = 0.0,
    num_output_state_members = 20,
    num_output_obs_members   = 20,
    output_interval          = 1,
