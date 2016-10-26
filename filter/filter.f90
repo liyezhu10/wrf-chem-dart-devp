@@ -1485,7 +1485,7 @@ integer               :: forward_unit, ivalue
 real(r8)              :: error, diff_sd, ratio
 real(r8), allocatable :: obs_temp(:), forward_temp(:)
 real(r8)              :: obs_prior_mean, obs_prior_var, obs_val, obs_err_var
-real(r8)              :: rvalue(1)
+real(r8)              :: obs_prior_skewness, rvalue(1)
 logical               :: do_outlier, good_forward_op, failed
 
 
@@ -1637,6 +1637,31 @@ do j = 1, obs_ens_handle%my_num_vars
 
          if (failed) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7 
       endif
+
+      !------------------------------------ Block for quad filter outliers -----------------
+      ! Have to do some special stuff for the pseudo-ob of a quad filter.
+      ! The pseudo-obs are even indices in a quad filter
+      if(quad_filter .and. j / 2 * 2 == j) then
+         ! If the corresponding regular ob was rejected by outlier threshold, so should the pseudo-ob
+         if(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j-1) == 7) then
+            obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7
+         else if(quad_skewness_threshold >= 0.0) then
+            ! See if we need to reject due to quad_skewness_threshold
+            ! Compute the skewness of the observation prior (index j -1)
+            obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, j-1)
+            obs_prior_var = obs_ens_handle%copies(OBS_VAR_START, j-1)
+
+            obs_prior_skewness = 0.0_r8
+            do k = 1, ens_size
+               obs_prior_skewness = obs_prior_skewness + (obs_ens_handle%copies(k, j-1) - obs_prior_mean)**3
+            end do
+            obs_prior_skewness = (obs_prior_skewness / ens_size) / (sqrt(obs_prior_var) ** 3)
+ 
+            if(abs(obs_prior_skewness) < quad_skewness_threshold) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7
+
+         endif
+      endif
+      !-------------------------------------------------------------------------------------
 
    else
       ! For failed posterior, only update qc if prior successful
@@ -2136,20 +2161,21 @@ do j = 1, npairs
 
    !------------------------ Block to use skewness of observation prior to adjust the pseudo_obs error variance
    ! here is the computation for the pseudo observation value and error variance for the quad filter
-   if(quad_skewness_threshold >= 0.0_r8) then
+   ! This block has been tested for one process. It could be used to ramp down the error variance
+   ! for the quad filter part as a function of the skewness of the prior for the observed variable
+   !TESTED  if(quad_skewness_threshold >= 0.0_r8) then
 
       ! Compute the skewness of the observation prior
-      obs_prior_skewness = 0.0_r8
-      do k = 1, ens_size
-         obs_prior_skewness = obs_prior_skewness + (obs_ens_handle%copies(k, original) - obs_prior_mean)**3
-      end do
-      obs_prior_skewness = (obs_prior_skewness / ens_size) / (sqrt(obs_prior_var) ** 3)
-      write(*, *) 'skewness ', obs_prior_skewness
+      !TESTED obs_prior_skewness = 0.0_r8
+      !TESTED do k = 1, ens_size
+         !TESTED obs_prior_skewness = obs_prior_skewness + (obs_ens_handle%copies(k, original) - obs_prior_mean)**3
+      !TESTED end do
+      !TESTED obs_prior_skewness = (obs_prior_skewness / ens_size) / (sqrt(obs_prior_var) ** 3)
  
       ! One can put in an arbitrary function of skewness and the original pseudo_obs_err_var 
       ! Example: make pseudo_obs_err_var very big if skewness is small so that this just becomes a regular filter 
-      if(abs(obs_prior_skewness) < quad_skewness_threshold) pseudo_obs_err_var = 1e10_r8
-   endif
+      !TESTED if(abs(obs_prior_skewness) < quad_skewness_threshold) pseudo_obs_err_var = 1e10_r8
+   !TESTED endif
    !--------------------------------------------------------------------------------------------
    
 
