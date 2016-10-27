@@ -1641,11 +1641,11 @@ do j = 1, obs_ens_handle%my_num_vars
       !------------------------------------ Block for quad filter outliers -----------------
       ! Have to do some special stuff for the pseudo-ob of a quad filter.
       ! The pseudo-obs are even indices in a quad filter
-      if(quad_filter .and. j / 2 * 2 == j) then
+      if(quad_filter .and. (j / 2) * 2 == j) then
          ! If the corresponding regular ob was rejected by outlier threshold, so should the pseudo-ob
          if(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j-1) == 7) then
             obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) = 7
-         else if(quad_skewness_threshold >= 0.0) then
+         else if(quad_skewness_threshold >= 0.0 .and. obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, j) < 2) then
             ! See if we need to reject due to quad_skewness_threshold
             ! Compute the skewness of the observation prior (index j -1)
             obs_prior_mean = obs_ens_handle%copies(OBS_MEAN_START, j-1)
