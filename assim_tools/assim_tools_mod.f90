@@ -589,9 +589,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             call pf_calc_obs_inf(orig_obs_prior, ens_size, obs(1), obs_err_var, &
                                   frac_neff, obs_err_infl)
 
-            write(msgstring, '(A,I7,A,F12.5)') &
-                            '   ob number: ',i,',   obs inflate: ',obs_err_infl
-            write(*,'(A)') trim(msgstring)
+!            write(msgstring, '(A,I7,A,F12.5)') &
+!                            '   ob number: ',i,',   obs inflate: ',obs_err_infl
+!            write(*,'(A)') trim(msgstring)
 
             ! Get scalar weights for resampling particles based on most recently updated ensemble
             w = 1.0_r8
