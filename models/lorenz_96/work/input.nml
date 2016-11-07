@@ -94,10 +94,19 @@
    print_every_nth_obs             = 0,
    rectangular_quadrature          = .true.,
    gaussian_likelihood_tails       = .false.,
-   pf_inf                          = 0.05
+   frac_neff                       = 0.3 
    pf_kddm                         = 1
-   max_alpha                       = 0.99
+   kddm_bins                       = 5
    /
+
+# original pf implementation:
+#   pf_inf                          = 0.05
+#   pf_kddm                         = 1
+#   max_alpha                       = 0.99
+# current pf implementation:
+#   frac_neff                       = 0.3 
+#   pf_kddm                         = 1
+#   kddm_bins                       = 5
 
 &cov_cutoff_nml
    select_localization = 1,
