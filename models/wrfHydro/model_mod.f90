@@ -358,7 +358,8 @@ real(R8), dimension(:,:),   allocatable ::              smcMax1, smcWlt1
 real(R8), dimension(:,:,:), allocatable :: sh2oDisag
 real(R8), dimension(:,:),   allocatable :: sfcHeadDisag
 real(r8) :: fineGridArea, coarseGridArea
-integer  :: hydroSmcPresent, hydroSfcHeadPresent
+logical :: hydroSmcPresent
+logical :: hydroSfcHeadPresent
 
 interface vector_to_prog_var
    module procedure vector_to_1d_prog_var
@@ -649,18 +650,19 @@ keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)   ! TJH do you mean 1, i=1,n_lsm_fiel
 lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_W') .or. &
      (lsm_state_variables(1,:) .eq. 'SH2O') )
 
-hydroSmcPresent = 0
-hydroSfcHeadPresent = 0
+hydroSmcPresent     = .false.
+hydroSfcHeadPresent = .false.
 if (hydro_model_active) then
    hydroSmcPresent     = any( hydro_state_variables(1,:) .eq. 'sh2ox' )
    hydroSfcHeadPresent = any( hydro_state_variables(1,:) .eq. 'sfcheadrt' )
-   if (hydroSmcPresent)     allocate(sh2oDisag(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
+
+   if (hydroSmcPresent    ) allocate(sh2oDisag(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
    if (hydroSfcHeadPresent) allocate(sfcHeadDisag(fine2dShape(1),fine2dShape(2)))
    if (hydroSmcPresent .OR. hydroSfcHeadPresent) call disagHydro()
 endif
 
 
-if (lsmSmcPresent > 0 .and. hydroSmcPresent > 0) then
+if (lsmSmcPresent > 0 .and. hydroSmcPresent) then
    if (rst_typ /= 1) then
       write(string1,*) 'Seems BAD: Using hydro SMC but rst_type != 1!'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
@@ -2900,7 +2902,7 @@ do J=1,JX  !! also know as y
 end do !JX
 
 !! this is not vegas? (what happens here stays here or not).
-if (hydroSmcPresent)     sh2oDisag    = sh2oRt
+if (hydroSmcPresent    ) sh2oDisag    = sh2oRt
 if (hydroSfcHeadPresent) sfcHeadDisag = sfcHeadSubRt
 
 if (hydroSfcHeadPresent) then 
