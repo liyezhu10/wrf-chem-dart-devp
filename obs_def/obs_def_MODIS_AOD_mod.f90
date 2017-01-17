@@ -208,6 +208,7 @@ if (mloc(2)>90.0_r8) then
 elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
 endif
+!print *, 'APM in obs_def call interpolate '
 loc2 = set_location(mloc(1),mloc(2),mloc(3), VERTISUNDEF)
 call interpolate(state, loc2, KIND_AOD, obs_val, istatus)  
 if (istatus /= 0) then

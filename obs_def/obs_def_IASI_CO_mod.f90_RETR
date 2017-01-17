@@ -68,8 +68,8 @@ logical :: already_read = .false., already_written = .false.
 ! CVS Generated file description for error handling, do not edit
 character(len=128) :: &
 source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_iasi_CO_mod.f90,v $", &
-revision = "$Revision$", &
-revdate  = "$Date$"
+revision = "$Revision: 7387 $", &
+revdate  = "$Date: 2015-01-16 15:44:50 -0700 (Fri, 16 Jan 2015) $"
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
 contains
