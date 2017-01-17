@@ -6,30 +6,27 @@ set echo
 #
 # SET TIME INFORMATION
   export START_DATE=2008060106
-#  export START_DATE=2008060112
+  export START_DATE=2008061806
   export END_DATE=2008063018
-#  export END_DATE=2008060112
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
 # SYSTEM SPECIFIC SETTINGS
   export PROCS=8
-  export NL_APM_SCALE=1.
-  export NL_APM_SCALE_SW=.FALSE.
 #
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
   export WRF_VER=WRFv3.4_dmpar
-  export DART_VER=DART_CHEM
+  export DART_VER=DART_CHEM_MY_BRANCH
 #
 # INDEPENDENT DIRECTORIES
   export ROOT_DIR=/glade/p/work/mizzi
   export CODE_DIR=/glade/p/work/mizzi/TRUNK
   export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
   export ASIM_DIR=/glade/scratch/mizzi/MET_MOP_IAS_COMB
-  export RET_MOPITT_OBS_DIR=${DATA_DIR}/obs_MOPITT_CO_DnN_Mig_DA_DBL_bloc
-  export RET_IASI_OBS_DIR=${DATA_DIR}/obs_IASI_CO_DnN_Mig_DA_DBL_bloc
-  export WRITE_OUT_NAME=obs_MOPnIAS_CO_Mig_DA_DBL_bloc
+  export RET_MOPITT_OBS_DIR=${DATA_DIR}/obs_MOPITT_CO_DnN_QOR_norot
+  export RET_IASI_OBS_DIR=${DATA_DIR}/obs_IASI_CO_DnN_QOR_norot
+  export WRITE_OUT_NAME=obs_MOPnIAS_CO_QOR_norot
 #
 # DEPENDENT DIRECTORIES
   export HYBRID_DIR=${ROOT_DIR}/HYBRID_TRUNK
@@ -155,14 +152,6 @@ set echo
         rm input.nml
         ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
 #
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-         rm -rf obs_def_apm.nml
-         cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
         ./obs_sequence_tool
 #        if [[ ! -d ${DATA_DIR}/obs_MOPITT/${L_DATE} ]]; then mkdir -p ${DATA_DIR}/obs_MOPITT/${L_DATE}; fi
         mkdir -p ${DATA_DIR}/${WRITE_OUT_NAME}/${L_DATE}

@@ -28,7 +28,8 @@ export LBC_FREQ=3
 # Define special directory names
 export EMISSIONS_DIR=chem_static_100km_p30
 export WPB_RC_DIR=wpb_rc_chem_100km_p10
-export OBS_SEQ_DIR=obs_MOPnIAS_CO_Mig_DA_DBL_bloc_filt
+#export OBS_SEQ_DIR=obs_MOPnIAS_CO_Mig_DA_DBL_bloc_filt
+export OBS_SEQ_DIR=obs_MOPnIAS_CO_Mig_DA_bloc_filt
 export OBS_SEQ_FLNAME=obs_seq_comb_filtered_
 #
 # Special skips
@@ -73,7 +74,7 @@ export USE_WRFDA=false
 export USE_DART_INFL=true
 #
 # Define code versions
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
@@ -96,8 +97,8 @@ export HSI_DIR=/MIZZI
 export TRUNK_DIR=${PROJECT_DIR}/TRUNK
 export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
 export HSI_DATA_DIR=${HSI_DIR}/AVE_TEST_DATA
-export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_DBL_bloc_p10p30
-export HSI_SAVE_DIR=${HSI_DIR}/DART_TEST_AVE/MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_DBL_bloc_p10p30
+export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_bloc_p10p30
+export HSI_SAVE_DIR=${HSI_DIR}/DART_TEST_AVE/MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_bloc_p10p30
 mkdir -p ${RUN_DIR}
 hsi "mkdir -p ${HSI_SAVE_DIR}"
 #

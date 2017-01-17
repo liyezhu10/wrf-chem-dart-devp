@@ -14,17 +14,18 @@
 # SET TIME INFORMATION
   export START_DATE=2008060106
   export END_DATE=2008063018
+  export START_DATE=2015081506
+  export END_DATE=2015082418
   export TIME_INC=6
   export ASIM_WINDOW=3
   export START_DATE_DATA=2008060100
   export END_DATE_DATA=2008063000
+  export START_DATE_DATA=2015081500
+  export END_DATE_DATA=2015082500
 #
 # SYSTEM SPECIFIC SETTINGS
   export PROCS=8
-#  export OB_TYPE=ob_reanal
   export OB_TYPE=obs
-  export NL_APM_SCALE=1.
-  export NL_APM_SCALE_SW=.FALSE.
 #
 # INITIAL CONDITION FILES
 # Set to '1' if you want a single IC file, any other # if you want separate files (the 
@@ -34,7 +35,7 @@
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
   export WRF_VER=WRFv3.4_dmpar
-  export DART_VER=DART_CHEM
+  export DART_VER=DART_CHEM_MY_BRANCH
 #
 # INDEPENDENT DIRECTORIES
   export CODE_DIR=/glade/p/work/mizzi
@@ -247,15 +248,14 @@ EOF
 #
         ./obs_sequence_tool
         if [[ -e obs_seq_${L_DATE}.out ]]; then
-           cp obs_seq_${L_DATE}.out ${DATA_DIR}/obs_MODIS_AOD/obs_seq_modis_aod_${D_DATE}
+           cp obs_seq_${L_DATE}.out ${DATA_DIR}/obs_MODIS_AOD_RAWR/obs_seq_modis_aod_${D_DATE}
         else
-           touch ${DATA_DIR}/obs_MODIS_AOD/NO_OBS_SEQ.OUT_DATA_${D_DATE}
+           touch ${DATA_DIR}/obs_MODIS_AOD_RAWR/NO_OBS_SEQ.OUT_DATA_${D_DATE}
         fi
         cd ${ASIM_DIR}
      fi 
 #
 # LOOP TO NEXT DAY AND TIME 
-     export P_DATE=${L_DATE}
-     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${TIME_INC} 2>/dev/null)  
+     export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${TIME_INC} 2>/dev/null)  
   done 
 exit

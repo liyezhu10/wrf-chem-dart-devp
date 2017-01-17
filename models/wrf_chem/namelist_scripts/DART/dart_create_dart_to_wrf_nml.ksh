@@ -15,6 +15,7 @@ cat > input.nml_temp << EOF
    dart_restart_name            = ${NL_DART_RESTART_NAME:-'dart_wrf_vector'},
    print_data_ranges            = ${NL_PRINT_DATA_RANGES:-.false.},
    debug                        = ${NL_DEBUG:-.false.},
+   add_emiss                    = ${NL_ADD_EMISS:-.false.},
 /
 EOF
 #

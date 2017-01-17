@@ -10,8 +10,12 @@ rm -f input.nml_temp
 touch input.nml_temp
 cat > input.nml_temp << EOF
  &model_nml
+   add_emiss                   = ${NL_ADD_EMISS:-.false.},
    default_state_variables     = ${NL_DEFAULT_STATE_VARIABLES:-.false.},
    wrf_state_variables         = ${NL_WRF_STATE_VARIABLES:-"null"}
+   conc_state_variables        = ${NL_CONC_STATE_VARIABLES:-"null"}
+   emiss_chemi_variables       = ${NL_EMISS_CHEMI_VARIABLES:-"null"}
+   emiss_firechemi_variables   = ${NL_EMISS_FIRECHEMI_VARIABLES:-"null"}
    wrf_state_bounds            = ${NL_WRF_STATE_BOUNDS:-"null"}
    output_state_vector         = ${NL_OUTPUT_STATE_VECTOR:-.false.},
    num_domains                 = ${NL_NUM_DOMAINS:-1},

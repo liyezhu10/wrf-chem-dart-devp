@@ -41,7 +41,11 @@ real(r8)           :: minl, maxl
 type(time_type)    :: dart_time(2)
 integer            :: number_dart_values, num_domains, &
                       year, month, day, hour, minute, second
-integer            :: ndims, idims(2), dimids(2)
+!
+! LXL/APM +++
+integer            :: ndims, idims(5), dimids(5)
+! LXL/APM ---
+!
 ! APM: +++
 integer            :: ii,jj,kk
 ! APM: ---
@@ -50,8 +54,12 @@ character(len=80)  :: varname
 character(len=19)  :: timestring
 character(len=2)   :: idom
 integer, parameter :: max_dom = 10    ! max nested wrf domains
-integer            :: ncid(max_dom), var_id, id, iunit, dart_unit
-
+!
+! LXL/APM +++
+integer            :: ncid(max_dom), var_id, id, iunit, dart_unit, ncid_f(max_dom), &
+                      ncid_emiss_chemi(max_dom), ncid_emiss_firechemi(max_dom)
+! LXL/APM ---
+!
 
 ! namelist section:
 
@@ -66,10 +74,14 @@ logical :: print_data_ranges = .true.
 ! the dart vector data
 character(len=129) :: dart_restart_name = "dart_wrf_vector"
 
+!
+! LXL/APM +++
+logical :: add_emiss = .true.
 
 namelist /wrf_to_dart_nml/  &
-    dart_restart_name, print_data_ranges, debug
-
+    dart_restart_name, print_data_ranges, debug, add_emiss
+! LXL/APM ---
+!
 
 ! program start
 
@@ -136,10 +148,19 @@ WRFDomains2 : do id = 1,num_domains
                             minl * DEG2RAD, maxl * DEG2RAD
       write(*,*) 'model top: ', wrf%p_top / 100.0_r8, ' hPa'
    endif
-
+!
+! LXL/APM +++
    call nc_check( nf90_open('wrfinput_d' // idom, NF90_NOWRITE, ncid(id)), &
                   'wrf_to_dart', 'open wrfinput_d' // idom )
 
+   if(add_emiss) then
+      call nc_check( nf90_open('wrfchemi_d' // idom, NF90_NOWRITE, ncid_emiss_chemi(id)), &
+                     'wrf_to_dart', 'open wrfchemi_d' // idom )
+      call nc_check( nf90_open('wrffirechemi_d' // idom, NF90_NOWRITE, ncid_emiss_firechemi(id)), &
+                     'wrf_to_dart', 'open wrffirechemi_d' // idom )
+   endif
+! LXL/APM ---
+!
    do ind = 1,wrf%number_of_wrf_variables
 
       if (debug) print*, ' '
@@ -149,11 +170,30 @@ WRFDomains2 : do id = 1,num_domains
 
       my_field = wrf_state_variables(1, my_index) 
       if (debug) print*, 'field: ', trim(my_field)
-
+!
+! LXL/APM +++
+      ! read wrfinput or wrfchemi
+      if ( ind .le. wrf%number_of_conc_variables ) then 
+         ncid_f = ncid
+         if (debug) print*, ' read from wrfinput: ncid_f = ncid'
+      else if (add_emiss .and. ind .gt. wrf%number_of_conc_variables .and. &
+      ind .le. wrf%number_of_conc_variables + wrf%number_of_emiss_chemi_variables ) then
+         ncid_f = ncid_emiss_chemi
+         if (debug) print*, ' read from wrfchemi: ncid_f = ncid_emiss_chemi'
+      else if (add_emiss .and. ind .gt. wrf%number_of_conc_variables + &
+      wrf%number_of_emiss_chemi_variables ) then
+         ncid_f = ncid_emiss_firechemi
+         if (debug) print*, ' read from wrffirechemi: ncid_f = ncid_emiss_firechemi'
+      endif
+! LXL/APM ---
+!
       ! get stagger and variable size
-      call nc_check( nf90_inq_varid(ncid(id),wrf_state_variables(1,my_index), &
+!
+! LXL/APM +++
+      call nc_check( nf90_inq_varid(ncid_f(id),wrf_state_variables(1,my_index), &
                      var_id), 'wrf_to_dart', 'inq_var_id '//trim(my_field) )
-
+! LXL/APM ---
+!
       if (  wrf%var_size(3,ind) == 1 ) then
 
          if (debug) then
@@ -162,9 +202,11 @@ WRFDomains2 : do id = 1,num_domains
          endif
 
          allocate(wrf_var_2d(wrf%var_size(1,ind),wrf%var_size(2,ind)))
-
-         call nc_check( nf90_get_var(ncid(id), var_id, wrf_var_2d), &
+!
+! LXL/APM +++
+         call nc_check( nf90_get_var(ncid_f(id), var_id, wrf_var_2d), &
                      'wrf_to_dart','get_var '//trim(my_field) )
+! LXL/APM ---
 !
 ! APM: +++
 ! APM: code to take log10(x*1.e-6) transform of CO chemistry field
@@ -200,9 +242,12 @@ WRFDomains2 : do id = 1,num_domains
          endif
 
          allocate(wrf_var_3d(wrf%var_size(1,ind),wrf%var_size(2,ind),wrf%var_size(3,ind)))
-
-         call nc_check( nf90_get_var(ncid(id), var_id, wrf_var_3d), &
+!
+! LXL/APM +++
+         call nc_check( nf90_get_var(ncid_f(id), var_id, wrf_var_3d), &
                      'wrf_to_dart','get_var '//trim(my_field) )
+! LXL/APM ---
+!
 !
 ! APM: +++
 ! APM: code to take log10(x*1.e-6) transform of CO chemistry field
@@ -295,6 +340,16 @@ call close_restart(dart_unit)
 do id=1,num_domains
    call nc_check ( nf90_sync(ncid(id)),'wrf_to_dart','sync wrfinput' )
    call nc_check ( nf90_close(ncid(id)),'wrf_to_dart','close wrfinput' )
+!
+! LXL/APM +++
+   if(add_emiss) then
+      call nc_check ( nf90_sync(ncid_emiss_chemi(id)),'wrf_to_dart','sync wrfchemi' )
+      call nc_check ( nf90_close(ncid_emiss_chemi(id)),'wrf_to_dart','close wrfchemi' )
+      call nc_check ( nf90_sync(ncid_emiss_firechemi(id)),'wrf_to_dart','sync wrffirechemi' )
+      call nc_check ( nf90_close(ncid_emiss_firechemi(id)),'wrf_to_dart','close wrffirechemi' )
+   endif
+! LXL/APM ---
+!
 enddo
 
 deallocate(dart)

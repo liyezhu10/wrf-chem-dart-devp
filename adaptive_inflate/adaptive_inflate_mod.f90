@@ -366,7 +366,7 @@ call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revis
 ! max from the entire array.  for flavors 1 and 3 there is only a single
 ! value to print out.
 if (inf_flavor > 0) then
-   if (mean_from_restart) then
+   if (my_task_id()==0 .and. mean_from_restart) then
       if (inf_flavor == 2) then
          write(msgstring, '(A, F8.3, A, F8.3)') &
             'inf mean   from restart file: min value: ', minmax_mean(1), ' max value: ', minmax_mean(2)
@@ -376,7 +376,7 @@ if (inf_flavor > 0) then
       endif
       call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
    endif
-   if (sd_from_restart) then
+   if (my_task_id()==0 .and. sd_from_restart) then
       if (inf_flavor == 2) then
          write(msgstring, '(A, F8.3, A, F8.3)') &
             'inf stddev from restart file: min value: ', minmax_sd(1), ' max value: ', minmax_sd(2)

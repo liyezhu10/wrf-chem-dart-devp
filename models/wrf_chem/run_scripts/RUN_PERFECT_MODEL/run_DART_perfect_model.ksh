@@ -38,9 +38,6 @@ export RUN_FILTER=true
 export RUN_WRFCHEM=true
 export RUN_ARCHIVE=true
 #
-export NL_APM_SCALE=1.
-export NL_APM_SCALE_SW=.FALSE.
-#
 # Define warm start run options
 export RUN_WARM=false
 export WARM_PERFECT_MODEL=false
@@ -854,15 +851,6 @@ EOF
       ${DART_DIR}/models/wrf_chem/namelist_scripts/WRFCHEM/wrfchem_create_namelist.input.ksh
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 #
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-         rm -rf obs_def_apm.nml
-         cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
-#     
 # Create job script 
       rm perfm_*.out
       rm perfm_*.err
@@ -1448,15 +1436,6 @@ EOF
       export NL_PRINT_DATA_RANGES=.false.
       rm input.nml
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-#
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-      rm -rf obs_def_apm.nml
-      cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
 #
 # APM: modify for submission to geyser or caldera
 # Create job script

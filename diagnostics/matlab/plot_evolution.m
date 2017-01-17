@@ -41,7 +41,10 @@ function plotdat = plot_evolution(fname, copystring, varargin)
 %
 % fname      = 'obs_diag_output.nc';   % netcdf file produced by 'obs_diag'
 % copystring = 'rmse';                 % 'copy' string == quantity of interest
-% plotdat    = plot_evolution(fname, copystring, 'RADIOSONDE_TEMPERATURE');
+% plotdat    = plot_evolution(fname, copystring, 'varname', 'RADIOSONDE_TEMPERATURE');
+%
+% plotdat    = plot_evolution(fname, copystring, 'varname', 'RADIOSONDE_TEMPERATURE', 'range', [0 10]);
+
 
 %% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -49,13 +52,39 @@ function plotdat = plot_evolution(fname, copystring, varargin)
 %
 % DART $Id$
 
-if nargin == 2
+default_varname = 'none';
+default_range = [NaN NaN];
+p = inputParser;
+
+addRequired(p,'fname',@ischar);
+addRequired(p,'copystring',@ischar);
+addParamValue(p,'varname',default_varname,@ischar);
+addParamValue(p,'range',default_range,@isnumeric);
+parse(p, fname, copystring, varargin{:});
+
+% if you want to echo the input
+%disp(['fname       : ', p.Results.fname])
+%disp(['copystring  : ', p.Results.copystring])
+%disp(['varname     : ', p.Results.varname])
+fprintf( 'range : %f %f \n', p.Results.range)
+
+if ~isempty(fieldnames(p.Unmatched))
+   disp('Extra inputs:')
+   disp(p.Unmatched)
+end
+
+if (numel(p.Results.range) ~= 2)
+   error('range must be an array of length two ... [bottom top]')
+end
+
+fname = p.Results.fname;
+copystring = p.Results.copystring;
+
+if strcmp(p.Results.varname,'none')
    nvars = 0;
-elseif nargin == 3
-   varname = varargin{1};
-   nvars = 1;
 else
-   error('wrong number of arguments ... ')
+   varname = p.Results.varname;
+   nvars = 1;
 end
 
 if (exist(fname,'file') ~= 2)
@@ -256,7 +285,12 @@ for ivar = 1:plotdat.nvars
       plotdat.ges_copy  = guess(:,plotdat.copyindex,  ilevel,:);
       plotdat.anl_copy  = analy(:,plotdat.copyindex,  ilevel,:);
 
-      plotdat.Yrange    = FindRange(plotdat);
+      if isnan(p.Results.range(1))
+         plotdat.Yrange = FindRange(plotdat);
+      else
+         plotdat.Yrange = p.Results.range;
+fprintf( 'range : %f %f \n', plotdat.Yrange)
+      end
 
       % plot each region, each level to a separate figure
 
@@ -279,9 +313,9 @@ for ivar = 1:plotdat.nvars
          % create/append to the postscript file
          print(gcf,'-dpsc','-append',psfname{iregion});
 
-         % block to go slow and look at each one ...
-         % disp('Pausing, hit any key to continue ...')
-         % pause
+%         % block to go slow and look at each one ...
+%           disp('Pausing, hit any key to continue ...')
+%           pause
 
       end
    end
@@ -562,27 +596,31 @@ end
 %=====================================================================
 
 
-function value = local_nc_attget(fname,varid,varname)
+function value = local_nc_attget(fname,varid,attname)
 %% If the (global) attribute exists, return the value.
 % If it does not, do not throw a hissy-fit.
 
 value = [];
 if (varid == nc_global)
-   finfo = ncinfo(fname);
-   for iatt = 1:length(finfo.Attributes)
-      if (strcmp(finfo.Attributes(iatt).Name, deblank(varname)))
-         value = finfo.Attributes(iatt).Value;
-         return
-      end
-   end
+    finfo = ncinfo(fname);
+    for iatt = 1:length(finfo.Attributes)
+        if (strcmp(finfo.Attributes(iatt).Name, deblank(attname)))
+            value = finfo.Attributes(iatt).Value;
+            return
+        end
+    end
 else
-   fprintf('function not supported for local variables, only global atts.\n')
+    vinfo = ncinfo(fname,varid);
+    for iatt = 1:length(vinfo.Attributes)
+        if (strcmp(vinfo.Attributes(iatt).Name, deblank(attname)))
+            value = vinfo.Attributes(iatt).Value;
+            return
+        end
+    end
 end
-
 
 
 % <next few lines under version control, do not edit>
 % $URL$
 % $Revision$
 % $Date$
-

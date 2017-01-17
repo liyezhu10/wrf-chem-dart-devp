@@ -6,10 +6,9 @@
 ############################################################################### 
 #
 # Define experiment parameters
-export START_DATE=2008060106
-export END_DATE=2008063000
+export START_DATE=2008060112
+export END_DATE=2008060812
 export DOMAIN=01
-export DELETE_FLG=false
 export NUM_MEMBERS=20
 export CYCLE_PERIOD=6
 export FCST_PERIOD=6
@@ -22,38 +21,26 @@ export LBC_FREQ=3
 export USE_HSI=false
 #
 # Define code versions
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
 #
-# Set job submission parameters
-export PROJ_NUMBER=P19010000
-export TIME_LIMIT_FILTER=1:40
-export TIME_LIMIT_WRFCHEM=1:40
-export NUM_TASKS=32
-export TASKS_PER_NODE=16
-export JOB_CLASS=small
-#
 # Define independent directory paths
 #
-# Define independent directory paths
-#
-#export DIR_NAME=MOPCOMB_Exp_2_RtDA_60M_p30p30_sp4
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_60M_p30p30_sp4
-export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30
-export DIR_NAME=MOPCOMB_Exp_3_MgDA_20M_p10p00
-#
-export DATA_DIR=/glade/scratch/mizzi/AVE_TEST_DATA
-export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
-#
-export RUN_DIR=/glade/scratch/mizzi/DART_OBS_DIAG/${DIR_NAME}
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_loc0p5
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_ph-loc100
 export TRUNK_DIR=/glade/p/work/mizzi/TRUNK
-export HSI_DATA_DIR=/MIZZI/AVE_TEST_DATA
-export EXP_DIR=/glade/p/acd/mizzi/DART_TEST_AVE/${DIR_NAME}
-export HSI_EXP_DIR=/MIZZI/DART_TEST_AVE/${DIR_NAME}
+export SCRATCH_DIR=/glade/scratch/mizzi
+export ACD_DIR=/glade/p/acd/mizzi
+#
 #
 # Dependent path settings
+export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
+export EXP_DIR=${SCRATCH_DIR}/DART_TEST_AVE/${DIR_NAME}
+export RUN_DIR=${ACD_DIR}/DART_OBS_DIAG/${DIR_NAME}
+#
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
@@ -88,30 +75,17 @@ while [[ ${L_DATE} -le ${END_DATE} ]]; do
 #
 # Create obs_seq file list
    export FILE=obs_seq.final
-   if [[ ! -d ${EXP_DIR}/${L_DATE}/dart_filter ]]; then
-      mkdir -p ${EXP_DIR}/${L_DATE}/dart_filter
-      cd ${EXP_DIR}/${L_DATE}/dart_filter
-   else
-      cd ${EXP_DIR}/${L_DATE}/dart_filter
-   fi
-   if [[ -f ${FILE} && ${DELETE_FLG} == true ]]; then
-      rm -rf ${FILE}
-   fi
-   if [[ ! -f ${FILE} ]]; then
-      hsi get ${FILE} : ${HSI_EXP_DIR}/${L_DATE}/dart_filter/${FILE}
-   fi
    cd ${RUN_DIR}
    if [[ -f ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} ]]; then
       echo ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} >> file_list.txt
    else
-      echo APM: hsi get failed for ${HSI_EXP_DIR}/${L_DATE}/dart_filter/${FILE}
+      echo APM: traget file ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} does not exist
       exit
    fi
 #
 # Loop to next cycle time   
    export L_DATE=${NEXT_DATE}
 done
-cd ${RUN_DIR}
 #
 ###############################################################################
 #
@@ -257,8 +231,8 @@ export NL_VERBOSE=.false.
 #
 # &assim_tools_nml
    export NL_CUTOFF=0.1
-   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_O3_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
-   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.025
+   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_O3_RETRIEVAL','IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
+   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.05,0.05
 #
 # &ensemble_manager_nml
    export NL_SINGLE_RESTART_FILE_IN=.false.       
@@ -372,6 +346,7 @@ export NL_VERBOSE=.false.
                        '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
+                       '${DART_DIR}/obs_def/obs_def_IASI_CO_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90'"
 #
 # &obs_kind_nml
@@ -387,6 +362,7 @@ export NL_VERBOSE=.false.
                                       'SAT_U_WIND_COMPONENT',
                                       'SAT_V_WIND_COMPONENT',
                                       'IASI_O3_RETRIEVAL',
+                                      'IASI_CO_RETRIEVAL',
                                       'MOPITT_CO_RETRIEVAL'"
 #
 # &replace_wrf_fields_nml
@@ -417,7 +393,6 @@ cd ${RUN_DIR}
 ./obs_seq_to_netcdf
 #
 # 
-cp obs_epoch_*.* ${EXP_DIR}/.
 exit
 
 

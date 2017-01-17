@@ -114,6 +114,7 @@
                               '../../../obs_def/obs_def_gps_mod.f90',
                               '../../../obs_def/obs_def_vortex_mod.f90',
                               '../../../obs_def/obs_def_gts_mod.f90',
+                              '../../../obs_def/obs_def_OMI_NO2_mod.f90',
                               '../../../obs_def/obs_def_MODIS_AOD_mod.f90',
                               '../../../obs_def/obs_def_MOPITT_CO_mod.f90',
                               '../../../obs_def/obs_def_IASI_CO_mod.f90',
@@ -132,6 +133,7 @@
                                 'ACARS_TEMPERATURE', 
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
+                                'OMI_NO2_COLUMN',
                                 'MODIS_AOD_RETRIEVAL',
                                 'MOPITT_CO_RETRIEVAL',
                                 'IASI_CO_RETRIEVAL',
@@ -185,7 +187,7 @@
 # not yet supported.
 
 &model_nml
-   default_state_variables = .true.,
+   default_state_variables = .false.,
    wrf_state_variables = 'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 'UPDATE','999',
                          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V', 'UPDATE','999',
                          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W', 'UPDATE','999',
@@ -227,6 +229,68 @@
                          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
                          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
                          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999',
+                         'E_CO' , 'KIND_E_CO',                 'TYPE_E_CO',   'UPDATE','999',
+                         'E_NO' ,' KIND_E_NO',                 'TYPE_E_NO',   'UPDATE','999',
+                         'ebu_in_co' ,'KIND_EBU_CO',           'TYPE_EBU_CO', 'UPDATE','999',
+                         'ebu_in_no' ,'KIND_EBU_NO',           'TYPE_EBU_NO', 'UPDATE','999',
+                         'ebu_in_oc'   ,'KIND_EBU_OC',         'TYPE_EBU_OC',  'UPDATE','999',
+                         'ebu_in_bc'   ,'KIND_EBU_BC',         'TYPE_EBU_BC',  'UPDATE','999',
+                         'ebu_in_c2h4' ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4','UPDATE','999',
+                         'ebu_in_ch2o' ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o, 'UPDATE','999',
+                         'ebu_in_ch3oh','KIND_EBU_ch3oh',      'TYPE_EBU_ch3oh','UPDATE','999',
+
+   conc_state_variables = 'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 'UPDATE','999',
+                          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V', 'UPDATE','999',
+                          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W', 'UPDATE','999',
+                          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ','UPDATE','999',
+                          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T', 'UPDATE','999',
+                          'MU',    'KIND_PRESSURE',             'TYPE_MU','UPDATE','999',
+                          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV','UPDATE','999',
+                          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
+                          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
+                          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
+                          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
+                          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
+                          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
+                          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
+                          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
+                          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
+                          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
+                          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
+                          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
+                          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
+                          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
+                          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
+                          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
+                          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
+                          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
+                          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
+                          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
+                          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
+                          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
+                          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
+                          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
+                          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
+                          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
+                          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
+                          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
+                          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
+                          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
+                          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
+                          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
+                          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
+                          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999',
+   emiss_chemi_variables = 'E_CO' ,'KIND_E_CO',                 'TYPE_E_CO', 'UPDATE','999',
+                           'E_NO' ,'KIND_E_NO',                 'TYPE_E_NO', 'UPDATE','999',
+   emiss_firechemi_variables = 'ebu_in_co'   ,'KIND_EBU_CO',        'TYPE_EBU_CO', 'UPDATE','999',
+                           'ebu_in_no'   ,'KIND_EBU_NO',        'TYPE_EBU_NO', 'UPDATE','999',
+                           'ebu_in_oc'   ,'KIND_EBU_OC',        'TYPE_EBU_OC', 'UPDATE','999',
+                           'ebu_in_bc'   ,'KIND_EBU_BC',        'TYPE_EBU_BC', 'UPDATE','999',
+                           'ebu_in_c2h4' ,'KIND_EBU_c2h4',      'TYPE_EBU_c2h4', 'UPDATE','999',
+                           'ebu_in_ch2o' ,'KIND_EBU_ch2o',      'TYPE_EBU_ch2o', 'UPDATE','999',
+                           'ebu_in_ch3oh','KIND_EBU_ch3oh',     'TYPE_EBU_ch3oh', 'UPDATE','999',
+   add_emiss             = .false., 
+
 
    wrf_state_bounds    = 'QVAPOR','0.0','NULL','CLAMP',
                          'QRAIN', '0.0','NULL','CLAMP',
@@ -255,6 +319,15 @@
                          'macr',  '0.0','NULL','CLAMP',
                          'glyald','0.0','NULL','CLAMP',
                          'c10h16','0.0','NULL','CLAMP',
+                         'E_CO',  '0.0','NULL','CLAMP',
+                         'E_NO',  '0.0','NULL','CLAMP',
+                         'ebu_in_co',  '0.0','NULL','CLAMP',
+                         'ebu_in_no',  '0.0','NULL','CLAMP',
+                         'ebu_in_oc',  '0.0','NULL','CLAMP',
+                         'ebu_in_bc',  '0.0','NULL','CLAMP',
+                         'ebu_in_c2h4','0.0','NULL','CLAMP',
+                         'ebu_in_ch2o','0.0','NULL','CLAMP',
+                         'ebu_in_ch3oh','0.0','NULL','CLAMP',
 
    output_state_vector         = .false.,
    num_domains                 = 1,
@@ -291,12 +364,14 @@
    dart_restart_name   = 'dart_wrf_vector',
    print_data_ranges   = .false.,
    debug               = .false.
+   add_emiss           = .false.,
    / 
 
 &wrf_to_dart_nml
    dart_restart_name   = 'dart_wrf_vector',
    print_data_ranges   = .false.,
-   debug               = .false.
+   debug               = .false.,
+   add_emiss           = .false.,
    / 
 
 &utilities_nml
@@ -509,7 +584,7 @@
   obsdistbdy               = 15.0
   sfc_elevation_check      = .false.  
   sfc_elevation_tol        = 300.0
-  obs_pressure_top         = 0.0
+  obs_pressure_top         = 10000.0
   obs_height_top           = 2.0e10
   include_sig_data         = .true.   
   tc_sonde_radii           = -1.0

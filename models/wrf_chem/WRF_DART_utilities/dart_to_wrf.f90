@@ -40,9 +40,14 @@ logical            :: debug = .false.
 logical            :: print_data_ranges = .false.
 character(len=128) :: dart_restart_name = 'dart_wrf_vector'
 character(len=72)  :: adv_mod_command   = './wrf.exe'
+!
+! LXL/APM +++
+logical            :: add_emiss = .true.
 
 namelist /dart_to_wrf_nml/ model_advance_file, dart_restart_name, &
-                           adv_mod_command, print_data_ranges, debug
+                           adv_mod_command, print_data_ranges, debug, add_emiss
+! LXL/APM ---
+!
 
 !-------------------------------------------------------------
 
@@ -66,6 +71,14 @@ character(len=2)  :: idom
 
 integer, parameter :: max_dom = 50    ! max nested wrf domains
 integer            :: ncid(max_dom), var_id, id, iunit, dart_unit
+!
+! LXL +++
+integer            :: ncid_emiss_chemi(max_dom), ncid_emiss_firechemi(max_dom), &
+                      ncid_f(max_dom), i, ivtype
+character(len=80)  :: varname
+integer            :: ndims, idims(5), dimids(5)
+! LXL ---
+!
 
 if (debug) print*, 'DART to WRF'
 
@@ -180,8 +193,16 @@ WRFDomains2 : do id = 1,num_domains
 
    call nc_check( nf90_open('wrfinput_d' // idom, NF90_WRITE, ncid(id)), &
                   'dart_to_wrf', 'open wrfinput_d' // idom )
- 
-
+!
+! LXL/APM +++
+   if ( add_emiss ) then
+      call nc_check( nf90_open('wrfchemi_d' // idom, NF90_WRITE, ncid_emiss_chemi(id)), &
+                     'dart_to_wrf', 'open wrfchemi_d' // idom )
+      call nc_check( nf90_open('wrffirechemi_d' // idom, NF90_WRITE, ncid_emiss_firechemi(id)), &
+                     'dart_to_wrf', 'open wrffirechemi_d' // idom )
+   endif
+! LXL/APM ---
+!  
    do ind = 1,wrf%number_of_wrf_variables
 
       if (debug) print*, ' ' 
@@ -197,11 +218,28 @@ WRFDomains2 : do id = 1,num_domains
          write(*,*)'skipping update of ', trim(my_field), ' because of namelist control'
          cycle
       endif
+!
+! LXL/APM +++
+      ! read wrfinput or wrfchemi
+      if ( ind .le. wrf%number_of_conc_variables ) then
+         ncid_f = ncid
+         if (debug) print*, ' read from wrfinput: ncid_f = ncid'
+      else if ( add_emiss .and.  ind .gt. wrf%number_of_conc_variables .and. ind .le. &
+      wrf%number_of_conc_variables + wrf%number_of_emiss_chemi_variables ) then
+         ncid_f = ncid_emiss_chemi
+         if (debug) print*, ' read from wrfchemi: ncid_f = ncid_emiss_chemi'
+      else if ( add_emiss .and.  ind .gt. wrf%number_of_conc_variables + &
+         wrf%number_of_emiss_chemi_variables ) then
+         ncid_f = ncid_emiss_firechemi
+         if (debug) print*, ' read from wrffirechemi: ncid_f = ncid_emiss_firechemi'
+      endif
 
       ! get stagger and variable size
-      call nc_check( nf90_inq_varid(ncid(id),wrf_state_variables(1,my_index), &
+      call nc_check( nf90_inq_varid(ncid_f(id),wrf_state_variables(1,my_index), &
                      var_id), 'dart_to_wrf', &
                      'inq_var_id ' // wrf_state_variables(1,my_index))
+! LXL/APM ---
+!
 
       if (  wrf%var_size(3,ind) == 1 ) then
 
@@ -280,9 +318,12 @@ WRFDomains2 : do id = 1,num_domains
 !
          if ( print_data_ranges ) write(*,"(A,2F16.6)") trim(my_field)//': data min/max after  bounds: ', &
                                 minval(wrf_var_2d), maxval(wrf_var_2d)
-
-         call nc_check( nf90_put_var(ncid(id), var_id, wrf_var_2d), &
+!
+! LXL/APM +++
+         call nc_check( nf90_put_var(ncid_f(id), var_id, wrf_var_2d), &
                         'dart_to_wrf','put_var ' // wrf_state_variables(1,my_index) )
+! LXL/APM ---
+! 
 
          deallocate(wrf_var_2d)
 
@@ -363,8 +404,12 @@ WRFDomains2 : do id = 1,num_domains
 !         endif
 ! APM: ---
 !
-         call nc_check( nf90_put_var(ncid(id), var_id, wrf_var_3d), &
+!
+! LXL/APM +++
+         call nc_check( nf90_put_var(ncid_f(id), var_id, wrf_var_3d), &
                         'dart_to_wrf', 'put_var ' // wrf_state_variables(1,my_index) )
+! LXL/APM ---
+!
 
          if ( print_data_ranges ) write(*,"(A,2F16.6)") trim(my_field)//': data min/max after  bounds: ', &
                                 minval(wrf_var_3d), maxval(wrf_var_3d)
@@ -399,6 +444,16 @@ WRFDomains2 : do id = 1,num_domains
    ! at this point we are done with this domain
    call nc_check ( nf90_sync(ncid(id)), 'dart_to_wrf','sync wrfinput' )
    call nc_check ( nf90_close(ncid(id)),'dart_to_wrf','close wrfinput' )
+!
+! LXL/APM +++
+   if ( add_emiss ) then
+      call nc_check ( nf90_sync(ncid_emiss_chemi(id)), 'dart_to_wrf','sync wrfchemi' )
+      call nc_check ( nf90_close(ncid_emiss_chemi(id)),'dart_to_wrf','close wrfchemi' )
+      call nc_check ( nf90_sync(ncid_emiss_firechemi(id)), 'dart_to_wrf','sync wrffirechemi' )
+      call nc_check ( nf90_close(ncid_emiss_firechemi(id)),'dart_to_wrf','close wrffirechemi' )
+   endif
+! LXL/APM ---
+!
 
 enddo WRFDomains2
 

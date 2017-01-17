@@ -321,7 +321,6 @@ call nc_check(nf90_put_att(ncFileID%ncid, MemberVarID, "units",     "nondimensio
 call nc_check(nf90_put_att(ncFileID%ncid, MemberVarID, "valid_range", &
               (/ 1, copies_of_field_per_time /)), 'init_diag_output', 'put_att valid_range')
 
-
 !    Metadata for each Copy
 call nc_check(nf90_def_var(ncid=ncFileID%ncid,name="CopyMetaData", xtype=nf90_char,    &
               dimids = (/ metadataDimID, MemberDimID /),  varid=metadataVarID), &
@@ -384,6 +383,7 @@ call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFile
 !-------------------------------------------------------------------------------
 
 i =  nc_write_model_atts( ncFileID%ncid )
+
 if ( i /= 0 ) then
    write(msgstring, *)'nc_write_model_atts  bombed with error ', i
    call error_handler(E_MSG,'init_diag_output',msgstring,source,revision,revdate)

@@ -10,22 +10,25 @@ program filter
 use types_mod,            only : r8, missing_r8, metadatalength
 use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                  get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
-                                 get_obs_def, get_time_range_keys, write_obs_seq,            &
-                                 get_obs_values, init_obs, set_qc_meta_data, get_expected_obs,&
-                                 assignment(=), get_num_copies, get_qc, get_num_qc,          &
+                                 get_obs_def, get_time_range_keys, set_obs_values, set_obs,  &
+                                 write_obs_seq, get_num_obs, get_obs_values, init_obs,       &
+                                 assignment(=), get_num_copies, get_qc, get_num_qc, set_qc,  &
                                  static_init_obs_sequence, destroy_obs, read_obs_seq_header, &
-                                 delete_seq_head, delete_seq_tail, replace_obs_values, add_qc,&
-                                 destroy_obs_sequence, get_qc_meta_data, replace_qc
-use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
+                                 set_qc_meta_data, get_expected_obs, get_first_obs,          &
+                                 get_obs_time_range, delete_obs_from_seq, delete_seq_head,   &
+                                 delete_seq_tail, replace_obs_values, replace_qc,            &
+                                 destroy_obs_sequence, get_qc_meta_data, add_qc
+use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
+                                 get_obs_kind
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                  operator(-), print_time
 use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
-                                 logfileunit, nmlfileunit, timestamp,                        &
+                                 initialize_utilities, logfileunit, nmlfileunit, timestamp,  &
                                  do_output, find_namelist_in_file, check_namelist_read,      &
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 ens_mean_for_model, end_assim_model
+                                 aoutput_diagnostics, ens_mean_for_model, end_assim_model
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
@@ -33,10 +36,10 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  all_vars_to_all_copies, all_copies_to_all_vars,             &
                                  read_ensemble_restart, write_ensemble_restart,              &
                                  compute_copy_mean, compute_copy_mean_sd,                    &
-                                 compute_copy_mean_var, get_copy_owner_index,                &
+                                 compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
-                                 prepare_to_read_from_vars, prepare_to_write_to_vars,        &
-                                 prepare_to_read_from_copies, get_ensemble_time, set_ensemble_time,&
+                                 prepare_to_read_from_vars, prepare_to_write_to_vars, prepare_to_read_from_copies,    &
+                                 prepare_to_write_to_copies, get_ensemble_time, set_ensemble_time,    &
                                  map_task_to_pe,  map_pe_to_task, prepare_to_update_copies
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
@@ -99,10 +102,6 @@ integer  :: output_interval     = 1
 integer  :: num_groups          = 1
 real(r8) :: outlier_threshold   = -1.0_r8
 logical  :: enable_special_outlier_code = .false.
-!
-! APM: +++
-real(r8) :: special_outlier_threshold   = -1.0_r8
-! APM: ---
 real(r8) :: input_qc_threshold  = 3.0_r8
 logical  :: output_forward_op_errors = .false.
 logical  :: output_timestamps        = .false.
@@ -148,10 +147,6 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
    silence
-!
-! APM: +++
-namelist /filter_apm_nml/ special_outlier_threshold
-! APM: ---
 
 
 !----------------------------------------------------------------
@@ -201,19 +196,6 @@ call filter_initialize_modules_used()
 call find_namelist_in_file("input.nml", "filter_nml", iunit)
 read(iunit, nml = filter_nml, iostat = io)
 call check_namelist_read(iunit, io, "filter_nml")
-
-!
-! APM: +++
-! Read special outlier threshold from filter_apm_nml
-if (enable_special_outlier_code) then
-   open(unit=210,file='filter_apm.nml',form='formatted', &
-   status='old',action='read')
-   read(210,filter_apm_nml)
-   write(msgstring, *) 'APM: special_outlier_threshold=', special_outlier_threshold
-   call error_handler(E_MSG,'filter_main', msgstring, source, revision, revdate)
-   close(210)
-endif
-! APM: ---
 
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
@@ -354,6 +336,7 @@ call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
 
 ! Initialize the output sequences and state files and set their meta data
+!
 if(my_task_id() == 0) then
    call filter_generate_copy_meta_data(seq, prior_inflate, &
       PriorStateUnit, PosteriorStateUnit, in_obs_copy, output_state_mean_index, &
@@ -706,6 +689,8 @@ AdvanceTime : do
 
 
    call trace_message('Before posterior obs space diagnostics')
+!
+! APM filter failed here
 
    ! Do posterior observation space diagnostics
    call obs_space_diagnostics(obs_ens_handle, forward_op_ens_handle, ens_size, &
@@ -904,8 +889,8 @@ if(output_inflation) then
    state_meta(num_state_copies)   = 'inflation sd'
 endif
 
-
 ! Set up diagnostic output for model state, if output is desired
+ 
 PriorStateUnit     = init_diag_output('Prior_Diag', &
                         'prior ensemble state', num_state_copies, state_meta)
 PosteriorStateUnit = init_diag_output('Posterior_Diag', &
@@ -1334,12 +1319,14 @@ type(obs_def_type) :: obs_def
 ! HK: I think it is also assumed that the ensemble members are in the same order in
 ! each of the handles
 
+
 ! Loop through my copies and compute expected value
 my_num_copies = get_my_num_copies(obs_ens_handle)
 
 call prepare_to_write_to_vars(obs_ens_handle)
 call prepare_to_write_to_vars(forward_op_ens_handle)
 call prepare_to_read_from_vars(ens_handle)
+
 
 ! Loop through all observations in the set
 ALL_OBSERVATIONS: do j = 1, num_obs_in_set
@@ -1379,11 +1366,12 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
       if(global_ens_index <= ens_size) then
          ! temporaries to avoid passing array sections which was slow on PGI compiler
          thiskey(1) = keys(j)
+
+
          call get_expected_obs(seq, thiskey, &
             global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
             thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
          obs_ens_handle%vars(j, k) = thisvar(1)
-
          ! If istatus is 0 (successful) then put 0 for assimilate, -1 for evaluate only
          ! and -2 for neither evaluate or assimilate. Otherwise pass through the istatus
          ! in the forward operator evaluation field
@@ -1579,10 +1567,8 @@ do j = 1, obs_ens_handle%my_num_vars
          ! obs type for this obs.
          ! the function should return .true. if this is an outlier, .false. if it is ok.
          if (enable_special_outlier_code) then
-! APM: +++ (modified to add special_outlier_threshold)
-            failed = failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
-                                    obs_ens_handle, OBS_KEY_COPY, j, seq)
-! APM: ---
+            failed = failed_outlier(ratio, outlier_threshold, obs_ens_handle, &
+                                    OBS_KEY_COPY, j, seq)
          else 
             failed = (ratio > outlier_threshold)
          endif
@@ -1888,10 +1874,8 @@ endif
 end subroutine print_obs_time
 
 !-------------------------------------------------------------------------
-! APM: +++ (modified to add special_outlier_threshold)
-function failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
-                        obs_ens_handle, OBS_KEY_COPY, j, seq)
-! APM: ---
+
+function failed_outlier(ratio, outlier_threshold, obs_ens_handle, OBS_KEY_COPY, j, seq)
 
 ! return true if the observation value is too far away from the ensemble mean
 ! and should be rejected and not assimilated.
@@ -1902,9 +1886,6 @@ use obs_kind_mod         ! this allows you to use all the types available
 
 real(r8),                intent(in) :: ratio
 real(r8),                intent(in) :: outlier_threshold
-! APM: +++
-real(r8),                intent(in) :: special_outlier_threshold
-! APM: ---
 type(ensemble_type),     intent(in) :: obs_ens_handle
 integer,                 intent(in) :: OBS_KEY_COPY
 integer,                 intent(in) :: j
@@ -1947,14 +1928,8 @@ this_obs_type = get_obs_kind(obs_def)
 ! to make decisions.  you have the observation so any other part (e.g. the
 ! time, the value, the error) is available to you as well.
 
-select case(this_obs_type) 
-   case (MOPITT_CO_RETRIEVAL)
-      if (ratio > special_outlier_threshold) then
-         failed_outlier = .true.
-      else
-         failed_outlier = .false.
-      endif
-!
+select case (this_obs_type)
+
 ! example of specifying a different threshold value for one obs type:
 !   case (RADIOSONDE_TEMPERATURE)
 !      if (ratio > some_other_value) then
@@ -1962,7 +1937,7 @@ select case(this_obs_type)
 !      else
 !         failed_outlier = .false.
 !      endif
-!
+
 ! accept all values of this observation type no matter how far
 ! from the ensemble mean:
 !   case (AIRCRAFT_U_WIND_COMPONENT, AIRCRAFT_V_WIND_COMPONENT)
@@ -1974,6 +1949,7 @@ select case(this_obs_type)
       else
          failed_outlier = .false.
       endif
+
 end select
 
 end function failed_outlier

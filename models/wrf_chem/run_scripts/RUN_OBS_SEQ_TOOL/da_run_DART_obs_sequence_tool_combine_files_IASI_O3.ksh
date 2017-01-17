@@ -12,8 +12,6 @@
 #
 # SYSTEM SPECIFIC SETTINGS
   export PROCS=8
-  export NL_APM_SCALE=1.
-  export NL_APM_SCALE_SW=.FALSE.
 #
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
@@ -26,10 +24,10 @@
   export DATA_DIR=/glade/p/acd/mizzi/AVE_TEST_DATA
   export ASIM_DIR=/glade/scratch/mizzi/IASI_OBSSEQ_COMB
   export MET_OBS_DIR=${DATA_DIR}/obs_MET
-  export RET_IASI_O3_OBS_DIR=${DATA_DIR}/obs_IASI_O3_Mig_DA
-#  export RET_MOPITT_CO_OBS_DIR=${DATA_DIR}/obs_MOPITT_Mig_DA
-#  export RET_IASI_CO_OBS_DIR=${DATA_DIR}/obs_IASI_CO_DnN_Mig_DA
-#  export RET_MOPnIAS_CO_OBS_DIR=${DATA_DIR}/obs_MOPnIAS_CO_Mig_DA
+  export RET_IASI_O3_OBS_DIR=${DATA_DIR}/obs_IASI_O3_QOR
+#  export RET_MOPITT_CO_OBS_DIR=${DATA_DIR}/obs_MOPITT_QOR
+#  export RET_IASI_CO_OBS_DIR=${DATA_DIR}/obs_IASI_CO_DnN_QOR
+#  export RET_MOPnIAS_CO_OBS_DIR=${DATA_DIR}/obs_MOPnIAS_CO_QOR
 #
 # DEPENDENT DIRECTORIES
   export HYBRID_DIR=${ROOT_DIR}/HYBRID_TRUNK
@@ -137,18 +135,9 @@
      rm input.nml
      ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
 #
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-     rm -rf obs_def_apm.nml
-     cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
-#
      ./obs_sequence_tool
-     mkdir -p ${DATA_DIR}/obs_IASCOMB_O3_Mig_DA/${L_DATE}
-     cp obs_seq.proc ${DATA_DIR}/obs_IASCOMB_O3_Mig_DA/${L_DATE}/obs_seq_comb_${L_DATE}.out
+     mkdir -p ${DATA_DIR}/obs_IASCOMB_O3_QOR/${L_DATE}
+     cp obs_seq.proc ${DATA_DIR}/obs_IASCOMB_O3_QOR/${L_DATE}/obs_seq_comb_${L_DATE}.out
      cd ${ASIM_DIR}
 #
 # LOOP TO NEXT DAY AND TIME 

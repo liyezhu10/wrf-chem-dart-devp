@@ -7,7 +7,7 @@
 #
 # Define experiment parameters
 export W_START_DATE=2008060106
-export W_START_DATE=2008061218
+export W_START_DATE=2008060118
 export W_END_DATE=2008063018
 export W_INITIAL_DATE=2008060106
 export W_INITIAL_FILE_DATE=2008-06-01_06:00:00
@@ -28,7 +28,7 @@ export W_SCRATCH_DIR=/glade/scratch/mizzi
 export W_ACD_DIR=/glade/p/acd/mizzi
 export W_HSI_DIR=/MIZZI
 export W_TRUNK_DIR=${W_PROJECT_DIR}/TRUNK
-export W_DART_DIR=${W_TRUNK_DIR}/DART_CHEM
+export W_DART_DIR=${W_TRUNK_DIR}/DART_CHEM_MY_BRANCH
 export W_RUN_SCRIPT_DIR=${W_DART_DIR}/models/wrf_chem/run_scripts/RUN_WRF_CHEM/EXPERIMENT_SCRIPTS
 export W_RUN_DIR=${W_SCRATCH_DIR}/RUN_${W_EXPERIMENT}
 #

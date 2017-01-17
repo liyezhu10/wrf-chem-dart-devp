@@ -8,7 +8,7 @@
 #########################################################################
 #
 # SELECT RUN OPTIONS
-export RUN_GEOGRID=true
+export RUN_GEOGRID=false
 export RUN_UNGRIB=true
 export RUN_METGRID=true
 export RUN_REAL=true
@@ -22,11 +22,11 @@ export WPS_GEOG_VER=WPSv3.4_GEOG_DATA
 export WRFDA_VER=WRFDAv3.4_dmpar
 export WRFDA_TOOLS_VER=WRFDA_TOOLSv3.4
 export WRF_VER=WRFv3.4_dmpar
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 #
 # Set job submission parameters
-#export PROJ_NUMBER=P19010000
-export PROJ_NUMBER=NACD0002
+export PROJ_NUMBER_ACD=P19010000
+export PROJ_NUMBER_NSC=NACD0006
 export TIME_LIMIT=0:10
 export NUM_TASKS=32
 export TASKS_PER_NODE=8
@@ -34,9 +34,9 @@ export JOB_CLASS=small
 export SINGLE_FILE=false
 #
 # EXPERIMENT DETAILS:
-#export INITIAL_DATE=2008061800
-export INITIAL_DATE=2008072806
-export FINAL_DATE=2008073118
+export INITIAL_DATE=2008060106
+export INITIAL_DATE=2008063000
+export FINAL_DATE=2008063118
 export NUM_MEMBERS=20
 export NUM_PROCS=8
 export MEM_START=1
@@ -326,9 +326,13 @@ export NL_PUT_RAND_SEED='set below'
 export NL_NTMAX=100
 #
 # WRFVAR7
-export NL_VAR_SCALING4=1.0
 export NL_JE_FACTOR=1.0
 export NL_CV_OPTIONS=3
+export NL_AS1=0.25,2.0,1.0
+export NL_AS2=0.25,2.0,1.0
+export NL_AS3=0.25,2.0,1.0
+export NL_AS4=0.25,2.0,1.0
+export NL_AS5=0.25,2.0,1.0
 #
 # WRFVAR11
 export NL_CV_OPTIONS_HUM=1
@@ -400,7 +404,7 @@ if [[ ${RUN_GEOGRID} = "true" ]]; then
    rm -rf *.jout
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
@@ -539,7 +543,7 @@ while [[ ${DATE} -le ${FINAL_DATE} ]] ; do
       export JOBRND=metgrid_$RANDOM
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.out                      # output filename
@@ -610,7 +614,7 @@ EOF
          export JOBRND=real_$RANDOM
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.out                      # output filename
@@ -700,12 +704,12 @@ EOF
             export JOBRND=wrfda_$RANDOM
             cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.out                      # output filename
 #BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:10                              # wallclock time (minutes)
+#BSUB -W 00:15                              # wallclock time (minutes)
 #BSUB -q geyser
 #
 # Run real
@@ -790,7 +794,7 @@ EOF
             export JOBRND=pert_bc_$RANDOM
             cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.out                      # output filename
@@ -798,7 +802,7 @@ EOF
 #BSUB -W 00:10                              # wallclock time (minutes)
 #BSUB -q geyser
 #
-# Run real
+# Run pert_wrf_bc
 mpirun.lsf ./pert_wrf_bc  > index.html 2>&1 
 #
 export RC=\$?     

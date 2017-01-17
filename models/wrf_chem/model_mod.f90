@@ -65,28 +65,26 @@ use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
                               KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
                               KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
                               get_raw_obs_kind_index, get_num_raw_obs_kinds, &
-                              get_raw_obs_kind_name
+                              get_raw_obs_kind_name, get_obs_kind_var_type
 ! APM/AFAJ ++
 ! Mods for chemistry
-use      obs_kind_mod, only : KIND_O3, KIND_O3_COLUMN, KIND_CO, KIND_CO_COLUMN, &
-                              KIND_MOPITT_CO_RETRIEVAL, KIND_IASI_CO_RETRIEVAL, KIND_IASI_O3, &
-                              KIND_NO, KIND_NO2, KIND_HNO3, KIND_HNO4, &
+use      obs_kind_mod, only : KIND_SO2, KIND_O3, KIND_CO, KIND_NO, KIND_NO2, KIND_HNO3, KIND_HNO4, &
                               KIND_N2O5, KIND_PAN, KIND_MEK, KIND_ALD, KIND_CH3O2, &
                               KIND_C3H8, KIND_C2H6, KIND_ACET, KIND_HCHO, KIND_C2H4, &
                               KIND_C3H6, KIND_TOL, KIND_MVK, KIND_BIGALK, KIND_ISOPR, &
                               KIND_MACR, KIND_GLYALD, KIND_C10H16, &
-                              KIND_AOD, &
-                              KIND_CB1, KIND_CB2, KIND_OC1, KIND_OC2, &
+                              KIND_AOD, KIND_CB1, KIND_CB2, KIND_OC1, KIND_OC2, &
                               KIND_DMS, KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
-                              KIND_SO2, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
-                              KIND_SSLT04, &
-                              KIND_DST05, &
-                              KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM10, KIND_PM25, KIND_MODIS_AOD_RETRIEVAL, & 
+                              KIND_DST05, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
+                              KIND_SSLT04, KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
+                              KIND_PM25, KIND_PM10, &
 !
-! Xueling's changes
-                              KIND_OMI_NO2_RETRIEVAL, KIND_OMI_NO2_COLUMN, KIND_E_NO
-! APM/AFAJ --
+! LXL/APM +++
+                              KIND_E_O3, KIND_E_CO, KIND_E_NO, KIND_EBU_CO, KIND_EBU_NO, &
+                              KIND_EBU_OC, KIND_EBU_BC, KIND_EBU_c2h4, KIND_EBU_ch2o, &
+                              KIND_EBU_ch3oh
+                               
+! APM/AFAJ/LXL ---
 
 ! FIXME:
 ! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
@@ -156,7 +154,12 @@ public ::  get_number_domains,       &
            trans_2Dto1D, trans_1Dto2D, &
            get_wrf_date, set_wrf_date, &
            height_diff_check
-
+!
+! LXL/APM +++
+public :: read_emiss_dimensions, &
+          get_emiss_variable_size_from_file
+! LXL/APM ---
+!
 ! public parameters
 public :: max_state_variables, &
           num_state_table_columns, &
@@ -190,6 +193,14 @@ logical :: output_state_vector     = .false.  ! output prognostic variables
 logical :: default_state_variables = .true.   ! use default state list?
 character(len=129) :: wrf_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
 character(len=129) :: wrf_state_bounds(num_bounds_table_columns,max_state_variables) = 'NULL'
+!
+! LXL/APM +++
+character(len=129) :: conc_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
+character(len=129) :: emiss_chemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
+character(len=129) :: emiss_firechemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
+logical :: add_emiss = .true.
+! LXL/APM ---
+!
 integer :: num_domains          = 1
 integer :: calendar_type        = GREGORIAN
 integer :: assimilation_period_seconds = 21600
@@ -228,6 +239,8 @@ character(len = 72) :: adv_mod_command = ''
 ! are IGNORED no matter what their settings in the namelist are.
 ! they are obsolete, but removing them here will cause a fatal error
 ! until users remove them from their input.nml files as well.
+!
+! LXL/APM
 namelist /model_nml/ output_state_vector, num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, wrf_state_variables, &
@@ -236,8 +249,11 @@ namelist /model_nml/ output_state_vector, num_moist_vars, &
                      allow_obs_below_vol, vert_localization_coord, &
                      center_search_half_length, center_spline_grid_scale, &
                      circulation_pres_level, circulation_radius, polar, &
-                     periodic_x, periodic_y, scm
-
+                     periodic_x, periodic_y, scm, &
+                     conc_state_variables, emiss_chemi_variables, &
+                     emiss_firechemi_variables,add_emiss
+! LXL/APM ---
+!
 real(r8), allocatable :: ens_mean(:)
 
 ! if you need to check backwards compatibility, set this to .true.
@@ -271,6 +287,11 @@ real (kind=r8), PARAMETER    :: ts0 = 300.0_r8        ! Base potential temperatu
 TYPE wrf_static_data_for_dart
 
    integer  :: bt, bts, sn, sns, we, wes, sls
+!
+! LXL/APM +++
+   integer  :: e_bt_chemi, e_bt_firechemi, e_sn, e_we
+! LXL/APM ---
+!
    real(r8) :: dx, dy, dt, p_top
    integer  :: map_proj
    real(r8) :: cen_lat,cen_lon
@@ -309,15 +330,20 @@ TYPE wrf_static_data_for_dart
               type_ps, type_mu, type_tsk, type_tslb, type_sh2o, &
               type_smois, type_2dflash
 ! APM/AFAJ ++
-   integer :: type_o3_column, type_o3, type_co, type_no, &
+   integer :: type_so2, type_o3_column, type_o3, type_co, type_no, &
               type_no2, type_hno3, &
               type_hno4, type_n2o5, type_pan, type_mek, type_ald, type_ch3o2, &
               type_c3h8, type_c2h6, type_acet, type_hcho, type_c2h4, type_c3h6, &
               type_tol, type_mvk, type_biglak, type_isopr, type_macr, type_glyald, &
               type_c10h16 
-!
-   integer  :: type_tauaer1, type_tauaer2, type_tauaer3, type_tauaer4
-! APM/AFAJ --
+   integer :: type_tauaer1, type_tauaer2, type_tauaer3, type_tauaer4
+! LXL/APM +++
+   integer :: type_e_o3, type_e_co, type_e_no, type_ebu_in_co, type_ebu_in_no, &
+              type_ebu_in_oc, type_ebu_in_bc, &
+              type_ebu_in_c2h4, type_ebu_in_ch2o, type_ebu_in_ch3oh       
+   integer :: number_of_conc_variables, number_of_emiss_chemi_variables, &
+              number_of_emiss_firechemi_variables
+! APM/AFAJ/LXL --
 
    integer :: number_of_wrf_variables
    integer, dimension(:,:), pointer :: var_index
@@ -361,8 +387,11 @@ contains
 subroutine static_init_model()
 
 ! Initializes class data for WRF
-
-integer :: ncid
+!
+! LXL/APM +++
+integer :: ncid, ncid_emiss_chemi, ncid_emiss_firechemi, idd
+! LXL/APM ---
+!
 integer :: io, iunit
 
 character (len=1)     :: idom
@@ -371,7 +400,11 @@ integer               :: ind, i, j, k, id, dart_index
 integer               :: my_index
 integer               :: var_element_list(max_state_variables)
 logical               :: var_update_list(max_state_variables)
-
+!
+! LXL/APM +++
+logical               :: add_emiss = .true.
+! LXL/APM ---
+!
 
 !----------------------------------------------------------------------
 
@@ -487,7 +520,32 @@ WRFDomains : do id=1,num_domains
    endif
 
    if(debug) write(*,*) ' ncid is ',ncid
-
+!
+! LXL/APM +++
+!   if ( add_emiss ) then
+!
+! WRFCHEMI emissions
+      if(file_exist('wrfchemi_d0'//idom)) then
+         call nc_check( nf90_open('wrfchemi_d0'//idom, NF90_NOWRITE, ncid_emiss_chemi), &
+         'static_init_model','open wrfchemi_d0'//idom )
+      else
+         call error_handler(E_ERR,'static_init_model', &
+         'Please put wrfchemi_d0'//idom//' in the work directory.', source, revision,revdate)
+      endif
+      if(debug) write(*,*) ' ncid_emiss_chemi is ',ncid_emiss_chemi
+!
+! WRFFIRECHEMI emissions
+      if(file_exist('wrffirechemi_d0'//idom)) then
+         call nc_check( nf90_open('wrffirechemi_d0'//idom, NF90_NOWRITE, ncid_emiss_firechemi), &
+         'static_init_model','open wrffirechemi_d0'//idom )
+      else
+         call error_handler(E_ERR,'static_init_model', &
+              'Please put wrffirechemi_d0'//idom//' in the work directory.', source, revision,revdate)
+      endif
+      if(debug) write(*,*) ' ncid_emiss_firechemi is ',ncid_emiss_firechemi
+!   endif
+! LXL/APM ---
+!
 !-------------------------------------------------------
 ! read WRF dimensions
 !-------------------------------------------------------
@@ -495,7 +553,20 @@ WRFDomains : do id=1,num_domains
                                  wrf%dom(id)%sn, wrf%dom(id)%sns, &
                                  wrf%dom(id)%we, wrf%dom(id)%wes, &
                                  wrf%dom(id)%sls)
-
+!
+! LXL/APM +++
+!-------------------------------------------------------
+! read EMISS dimensions
+!-------------------------------------------------------
+!   if ( add_emiss ) then
+      call read_emiss_dimensions(ncid_emiss_chemi,wrf%dom(id)%e_bt_chemi, &
+                                    wrf%dom(id)%e_sn, &
+                                    wrf%dom(id)%e_we)
+      call read_emiss_dimensions(ncid_emiss_firechemi,wrf%dom(id)%e_bt_firechemi, &
+                                    wrf%dom(id)%e_sn, &
+                                    wrf%dom(id)%e_we)
+!   endif
+! LXL/APM ---
 !-------------------------------------------------------
 ! read WRF file attributes
 !-------------------------------------------------------
@@ -523,10 +594,26 @@ WRFDomains : do id=1,num_domains
 !-------------------------------------------------------
 ! end block set up map
 !-------------------------------------------------------
-
-! get the number of wrf variables wanted in this domain's state
+!
+! LXL/APM +++
+! get the number of conc/emiss variables wanted in this domain's state
+   wrf%dom(id)%number_of_conc_variables = get_number_of_wrf_variables(id,conc_state_variables,var_element_list, var_update_list)
+!
+   wrf%dom(id)%number_of_emiss_chemi_variables = get_number_of_wrf_variables(id,emiss_chemi_variables,var_element_list, var_update_list)
+!
+   wrf%dom(id)%number_of_emiss_firechemi_variables = get_number_of_wrf_variables(id,emiss_firechemi_variables,var_element_list, var_update_list)
+! LXL/APM ---
+!
+! get the number of wrf variables wanted in this domain's state (must follow mods because var_element_list is needed and overwritten with each call)
    wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list, var_update_list)
-
+!
+! LXL/APM +++
+   if(debug) write(*,*) ' number of wrf variables is',wrf%dom(id)%number_of_wrf_variables
+   if(debug) write(*,*) ' number of conc variables is',wrf%dom(id)%number_of_conc_variables
+   if(debug) write(*,*) ' number of emiss chemi variables is',wrf%dom(id)%number_of_emiss_chemi_variables
+   if(debug) write(*,*) ' number of emiss firechemi variables is',wrf%dom(id)%number_of_emiss_firechemi_variables
+! LXL/APM ---
+!
 ! allocate and store the table locations of the variables valid on this domain
    allocate(wrf%dom(id)%var_index_list(wrf%dom(id)%number_of_wrf_variables))
    wrf%dom(id)%var_index_list = var_element_list(1:wrf%dom(id)%number_of_wrf_variables)
@@ -561,8 +648,11 @@ WRFDomains : do id=1,num_domains
 
 !  build the variable indices
 !  this accounts for the fact that some variables might not be on all domains
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
+!
+! LXL/APM +++
+   do ind = 1,wrf%dom(id)%number_of_conc_variables
+! LXL/APM ---
+!
 
       ! actual location in state variable table
       my_index =  wrf%dom(id)%var_index_list(ind)
@@ -614,6 +704,111 @@ WRFDomains : do id=1,num_domains
 ! close data file, we have all we need
 
    call nc_check(nf90_close(ncid),'static_init_model','close wrfinput_d0'//idom)
+!
+! LXL/APM +++
+!   if ( add_emiss ) then
+! Read emiss chemi variables
+      do ind = wrf%dom(id)%number_of_conc_variables+1,wrf%dom(id)%number_of_conc_variables + wrf%dom(id)%number_of_emiss_chemi_variables      
+         ! actual location in state variable table
+         my_index =  wrf%dom(id)%var_index_list(ind)
+      
+         wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
+         wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
+      
+!         if ( debug ) then
+!            print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
+!         endif
+      
+         ! get stagger and variable size
+         call get_variable_size_from_file(ncid_emiss_chemi,id,  &
+                                          wrf_state_variables(1,my_index), &
+                                          wrf%dom(id)%bt, wrf%dom(id)%bts, &
+                                          wrf%dom(id)%sn, wrf%dom(id)%sns, &
+                                          wrf%dom(id)%we, wrf%dom(id)%wes, &
+                                          wrf%dom(id)%stagger(ind),        &
+                                          wrf%dom(id)%var_size(:,ind))
+      
+         ! get other variable metadata; units, coordinates and description
+         call get_variable_metadata_from_file(ncid_emiss_chemi,id,  &
+                                          wrf_state_variables(1,my_index), &
+                                          wrf%dom(id)%description(ind),         &
+                                          wrf%dom(id)%coordinates(ind),         &
+                                          wrf%dom(id)%units(ind) )
+      
+         if ( debug ) then
+            print*,'variable size ',trim(wrf_state_variables(1,my_index)),' ',wrf%dom(id)%var_size(:,ind)
+         endif
+      
+         !  add bounds checking information
+         call get_variable_bounds(wrf_state_bounds, wrf_state_variables(1,my_index), &
+                                  wrf%dom(id)%lower_bound(ind), wrf%dom(id)%upper_bound(ind), &
+                                  wrf%dom(id)%clamp_or_fail(ind))
+      
+         if ( debug ) then
+            write(*,*) 'Bounds for variable ',  &
+            trim(wrf_state_variables(1,my_index)), &
+            ' are ',wrf%dom(id)%lower_bound(ind), &
+            wrf%dom(id)%upper_bound(ind), &
+            wrf%dom(id)%clamp_or_fail(ind)
+         endif
+      
+         write(errstring, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+         call error_handler(E_MSG, 'static_init_model: ', errstring)
+      enddo
+      call nc_check(nf90_close(ncid_emiss_chemi),'static_init_model','close wrfchemi_d0'//idom)
+!
+! Read emiss firechemi variables
+      do ind = wrf%dom(id)%number_of_conc_variables+wrf%dom(id)%number_of_emiss_chemi_variables+1,wrf%dom(id)%number_of_wrf_variables
+         ! actual location in state variable table
+         my_index =  wrf%dom(id)%var_index_list(ind)
+      
+         wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
+         wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
+      
+!         if ( debug ) then
+!            print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
+!         endif
+      
+         ! get stagger and variable size
+         call get_variable_size_from_file(ncid_emiss_firechemi,id,  &
+                                          wrf_state_variables(1,my_index), &
+                                          wrf%dom(id)%bt, wrf%dom(id)%bts, &
+                                          wrf%dom(id)%sn, wrf%dom(id)%sns, &
+                                          wrf%dom(id)%we, wrf%dom(id)%wes, &
+                                          wrf%dom(id)%stagger(ind),        &
+                                          wrf%dom(id)%var_size(:,ind))
+      
+         ! get other variable metadata; units, coordinates and description
+         call get_variable_metadata_from_file(ncid_emiss_firechemi,id,  &
+                                          wrf_state_variables(1,my_index), &
+                                          wrf%dom(id)%description(ind),         &
+                                          wrf%dom(id)%coordinates(ind),         &
+                                          wrf%dom(id)%units(ind) )
+      
+         if ( debug ) then
+            print*,'variable size ',trim(wrf_state_variables(1,my_index)),' ',wrf%dom(id)%var_size(:,ind)
+         endif
+      
+         !  add bounds checking information
+         call get_variable_bounds(wrf_state_bounds, wrf_state_variables(1,my_index), &
+                                  wrf%dom(id)%lower_bound(ind), wrf%dom(id)%upper_bound(ind), &
+                                  wrf%dom(id)%clamp_or_fail(ind))
+      
+         if ( debug ) then
+            write(*,*) 'Bounds for variable ',  &
+            trim(wrf_state_variables(1,my_index)), &
+            ' are ',wrf%dom(id)%lower_bound(ind), &
+            wrf%dom(id)%upper_bound(ind), &
+            wrf%dom(id)%clamp_or_fail(ind)
+         endif
+      
+         write(errstring, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+         call error_handler(E_MSG, 'static_init_model: ', errstring)
+      enddo
+      call nc_check(nf90_close(ncid_emiss_firechemi),'static_init_model','close wrffirechemi_d0'//idom)
+!   endif
+! LXL/APM ---
+!
 
 ! indices into 1D array - hopefully this becomes obsolete
 ! JPH changed last dimension here from num_model_var_types
@@ -725,10 +920,22 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_tauaer3 = get_type_ind_from_type_string(id,'TAUAER3')
    wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
 !
-! Xueling's changes
+! LXL/APM +++
    wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
+   if ( add_emiss) then
+      wrf%dom(id)%type_e_o3 = get_type_ind_from_type_string(id,'e_o3')
+      wrf%dom(id)%type_e_co = get_type_ind_from_type_string(id,'e_co')
+      wrf%dom(id)%type_e_no = get_type_ind_from_type_string(id,'e_no')
+      wrf%dom(id)%type_ebu_in_co = get_type_ind_from_type_string(id,'ebu_in_co')
+      wrf%dom(id)%type_ebu_in_no = get_type_ind_from_type_string(id,'ebu_in_no')
+      wrf%dom(id)%type_ebu_in_oc = get_type_ind_from_type_string(id,'ebu_in_oc')
+      wrf%dom(id)%type_ebu_in_bc = get_type_ind_from_type_string(id,'ebu_in_bc')
+      wrf%dom(id)%type_ebu_in_c2h4 = get_type_ind_from_type_string(id,'ebu_in_c2h4')
+      wrf%dom(id)%type_ebu_in_ch2o = get_type_ind_from_type_string(id,'ebu_in_ch2o')
+      wrf%dom(id)%type_ebu_in_ch3oh = get_type_ind_from_type_string(id,'ebu_in_ch3oh')
+   endif
 !
-! APM/AFAJ --
+! APM/AFAJ/LXL ---
 
 enddo WRFDomains 
 
@@ -1028,7 +1235,6 @@ istatus = 0
 fld(:) = missing_r8
 obs_val = missing_r8
 
-
 ! If identity observation (obs_kind < 0), then no need to interpolate
 if ( obs_kind < 0 ) then
 
@@ -1132,6 +1338,7 @@ else
    ! Determine corresponding model level for obs location
    ! This depends on the obs vertical coordinate
    !   From this we get a meaningful z-direction real-valued index number
+
    if(vert_is_level(location)) then
       ! Ob is by model level
       zloc = xyz_loc(3)
@@ -1247,7 +1454,6 @@ else
            source, revision, revdate)
 
    endif
-
 
    ! Deal with missing vertical coordinates -- return with istatus .ne. 0
    if(zloc == missing_r8) then
@@ -3105,7 +3311,6 @@ else
                          dx*real(wrf%dom(id)%land(lr(1), lr(2))) ) + &
                    dy*( dxm*real(wrf%dom(id)%land(ul(1), ul(2))) + &
                          dx*real(wrf%dom(id)%land(ur(1), ur(2))) )
-
       endif
 
 ! APM/AFAJ ++
@@ -3179,8 +3384,6 @@ else
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_co)
 
             fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: is_lev0 ', is_lev0
-!            print *, 'APM: k, fld1',k,fld(1)
 
    ! Interpolation for the CO field at level k+1
             ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_co)
@@ -3188,7 +3391,6 @@ else
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_co)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_co)         
             fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: k+1 fld2',k+1,fld(2)
          endif
       endif
 !
@@ -3204,70 +3406,114 @@ else
    !      SINCE IT REQUIRES THE INTERACTION BETWEEN 4 TAU FIELDS
 
    else if( obs_kind == KIND_AOD ) then
-     
          if ( wrf%dom(id)%type_tauaer1 >= 0 .and. wrf%dom(id)%type_tauaer2 >= 0 .and. &
               wrf%dom(id)%type_tauaer3 >= 0 .and. wrf%dom(id)%type_tauaer4 >= 0) then
-
-   ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer3 ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer3 ) ) then
-         
-               call getCorners(i, j, id, wrf%dom(id)%type_tauaer3, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners TAUAER3 rc = ', rc
-
-               zk_aod = 40 !wrf%dom(id)%bt
+!
+            zk_aod = 32 !wrf%dom(id)%bt
+            aod5 = 0.0_r8
+!
+! Verrtical integration loop
+            do kaod = 1, zk_aod
+!
+! Interpolation for the TAUAER1 field
                aod1 = 0.0_r8
                aod2 = 0.0_r8
                aod3 = 0.0_r8
                aod4 = 0.0_r8
-               aod5 = 0.0_r8
-               do kaod = 1, zk_aod
-   ! Interpolation for the TAUAER1 field
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer1 ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer1 ) .and. &
+                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer1 ) ) then
+                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer1, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) then
+                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER1 rc = ', rc
+                     call abort
+                  endif
+!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
                   ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer1)
                   iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer1)
                   ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer1)
                   iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer1)
-
+!                  write(*,*) 'APM TAUER1 ill,iul,ilr.iur ',ill,iul,ilr,iur
                   aod1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER2 field
+               else
+                  write(*,*) 'APM TAUER1 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+               endif
+!
+! Interpolation for the TAUAER2 field
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer2 ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer2 ) .and. &
+                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer2 ) ) then
+                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer2, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) then
+                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER2 rc = ', rc
+                     call abort
+                  endif
+!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
                   ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer2)
                   iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer2)
                   ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer2)
                   iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer2)
-
+!                  write(*,*) 'APM TAUER2 ill,iul,ilr.iur ',ill,iul,ilr,iur
                   aod2 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER3 field
+               else
+                  write(*,*) 'APM TAUER2 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+               endif
+!
+! Interpolation for the TAUAER3 field
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer3 ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer3 ) .and. &
+                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer3 ) ) then
+                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer3, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) then
+                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER3 rc = ', rc
+                     call abort
+                  endif
+!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
                   ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer3)
                   iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer3)
                   ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer3)
                   iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer3)
-
+!                  write(*,*) 'APM TAUER3 ill,iul,ilr.iur ',ill,iul,ilr,iur
                   aod3 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-   ! Interpolation for the TAUAER4 field
+               else
+                  write(*,*) 'APM TAUER3 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+               endif
+!
+! Interpolation for the TAUAER4 field
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer4 ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer4 ) .and. &
+                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer4 ) ) then
+                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer4, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) then
+                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER4 rc = ', rc
+                     call abort
+                  endif
+!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
                   ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer4)
                   iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer4)
                   ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer4)
                   iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer4)
-
+!                  write(*,*) 'APM TAUER4 ill,iul,ilr.iur ',ill,iul,ilr,iur
                   aod4 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-                  if ( (aod1 > 0.0_r8) .and. (aod4 > 0.0_r8) ) then
-                     ang = log(aod1/aod4)/1.2030 
-                     aod5 = aod5 + aod2*((0.7273)**ang)*10.0_r8
-                  endif
+               else
+                  write(*,*) 'APM TAUER4 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+               endif
+!
+               if ( (aod1 > 0.0_r8) .and. (aod4 > 0.0_r8) ) then
+                  ang = log(aod1/aod4)/1.2030 
+                  aod5 = aod5 + aod2*((0.7273)**ang)
+               else
+                  write(*,*) 'APM AOD conversion failed ',aod1,aod2,aod3,aod4
+               endif
             enddo
             fld(1) = aod5
-            endif
          endif
 !
-! Xueling's changes
+! LXL/APM +++
    !-----------------------------------------------------
    ! 1.zd OMI NO2 Retrieval (NO2)
 
-   else if( obs_kind == KIND_NO2_COLUMN ) then  
+   else if( obs_kind == KIND_NO2 ) then  
 
       if ( wrf%dom(id)%type_no2 >= 0 ) then
 ! APM: OMI CHECK
@@ -3295,8 +3541,6 @@ else
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_no2)
 
             fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: is_lev0 ', is_lev0
-!            print *, 'APM: k, fld1',k,fld(1)
 
    ! Interpolation for the NO2 field at level k+1
             ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_no2)
@@ -3304,11 +3548,10 @@ else
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_no2)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_no2)
             fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-!            print *, 'APM: k+1 fld2',k+1,fld(2)
          endif
       endif
 !
-! APM/AFAJ --
+! APM/AFAJ/LXL --
 
    !-----------------------------------------------------
    ! If obs_kind is not negative (for identity obs), or if it is not one of the above 15
@@ -4132,7 +4375,11 @@ integer :: StateVarDimID, StateVarID, TimeDimID
 
 integer, dimension(num_domains) :: weDimID, weStagDimID, snDimID, snStagDimID, &
      btDimID, btStagDimID, slSDimID, tmp
-
+!
+! LXL/APM +++
+integer, dimension(num_domains) :: e_bt_chemi_DimID, e_bt_firechemi_DimID
+! LXL/APM ---
+!
 integer :: MemberDimID, DomDimID
 integer :: DXVarID, DYVarID, TRUELAT1VarID, TRUELAT2VarID, STAND_LONVarID
 integer :: CEN_LATVarID, CEN_LONVarID, MAP_PROJVarID
@@ -4170,6 +4417,11 @@ character(len=129) :: unitsval, descriptionval, coordinatesval, long_nameval, co
 integer, dimension(5) :: dimids_3D
 integer, dimension(4) :: dimids_2D
 logical               :: debug = .false.
+!
+! LXL/APM +++
+logical               :: add_emiss = .true.
+! LXL/APM ---
+!
 
 !-----------------------------------------------------------------
 
@@ -4275,6 +4527,19 @@ do id=1,num_domains
    call nc_check(nf90_def_dim(ncid=ncFileID, name="soil_layers_stag_d0"//idom,  &
                  len = wrf%dom(id)%sls, dimid = slSDimID(id)), &
                  'nc_write_model_atts','def_dim soil_layers_stag_d0'//idom)
+!
+! LXL/APM +++
+   if ( add_emiss ) then
+      call nc_check(nf90_def_dim(ncid=ncFileID, name="emiss_chemi_zdim_d0"//idom,       &
+                    len = wrf%dom(id)%e_bt_chemi,  dimid = e_bt_chemi_DimID(id)), &
+                    'nc_write_model_atts','def_dim emiss_chemi_zdim_d0'//idom)
+!
+      call nc_check(nf90_def_dim(ncid=ncFileID, name="emiss_firechemi_zdim_d0"//idom,       &
+                    len = wrf%dom(id)%e_bt_firechemi,  dimid = e_bt_firechemi_DimID(id)), &
+                    'nc_write_model_atts','def_dim emiss_firechemi_zdim_d0'//idom)
+   endif
+! LXL/APM ---
+!
 enddo
 
 !-----------------------------------------------------------------
@@ -4871,7 +5136,13 @@ do id=1,num_domains
       if ( wrf%dom(id)%var_size(3,my_index) > 1 ) then ! 3D variable
 
          dimids_3D(4:5) = (/MemberDimID,unlimitedDimID/)
+!
+! LXL/APM +++
+      if ( debug ) write(*,*) 'variable size',wrf%dom(id)%var_size(:,my_index)
 
+      if ( debug ) write(*,*) 'Stagger ',wrf%dom(id)%stagger(ind)
+! LXL/APM ---
+!
          ! get first two dimensions based on stagger (could do this
          ! differently)
          select case (trim(wrf%dom(id)%stagger(ind)))
@@ -4884,7 +5155,11 @@ do id=1,num_domains
          case default 
            dimids_3D(1:2)=(/weDimID(id),snDimId(id)/)
          end select
-
+!
+! LXL/APM +++
+      if ( debug ) write(*,*) '3D horizontal id ',dimids_3D 
+! LXL/APM ---
+!
          ! vertical dimension can be stag, unstag, or staggered soil
          ! need to use if/then/else instead of select because testing
          ! is against variables
@@ -4894,6 +5169,14 @@ do id=1,num_domains
            dimids_3D(3)=btDimID(id)
          elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%sls ) then
            dimids_3D(3)=slSDimID(id)
+!
+! LXL/APM +++
+         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%e_bt_chemi ) then
+           dimids_3D(3)=e_bt_chemi_DimID(id)
+         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%e_bt_firechemi ) then
+           dimids_3D(3)=e_bt_firechemi_DimID(id)
+! LXL/APM ---
+!
          else
            write(errstring,*)'Could not determine dim_id for vertical dimension to output variable '//varname
            call error_handler(E_ERR,'nc_write_model_atts',errstring,source, revision,revdate)
@@ -5393,8 +5676,17 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t 
       pres4 = model_pressure_t(ur(1), ur(2), k,id,x)
 
       v_p(k) = interp_4pressure(pres1, pres2, pres3, pres4, dx, dxm, dy, dym)
+! 
+! LXL/APM +++
+!      print*, 'k, pres1, pres2, pres3, pres4, v_p(k)', k, pres1, pres2, pres3,pres4, v_p(k)
+! LXL/APM ---
+!
    enddo
-
+!
+! LXL/APM+++
+!      print*, 'dx, dxm, dy, dym', dx, dxm, dy, dym
+! LXL/APM ---
+!
    if (debug) &
         print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n)
 
@@ -5778,7 +6070,11 @@ rho = model_rho_t(i,j,k,id,x)
 ! .. total pressure:
 model_pressure_t = ps0 * ( (gas_constant*(ts0+x(it))*qvf1) / &
      (ps0/rho) )**cpovcv
-
+!
+! LXL/APM +++
+! print*, 'k, ts0, x(it) =', k, ts0, x(it)
+! LXL/APM ---
+!
 end function model_pressure_t
 
 !#######################################################
@@ -6908,7 +7204,7 @@ end subroutine get_domain_info
 
 !#######################################################################
 
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+subroutine get_close_obs(gc, base_obs_loc, base_obs_type, obs_loc, obs_kind, &
                             num_close, close_ind, dist)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
@@ -6929,20 +7225,23 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
       
 type(get_close_type), intent(in)     :: gc
 type(location_type),  intent(inout)  :: base_obs_loc, obs_loc(:)
-integer,              intent(in)     :: base_obs_kind, obs_kind(:)
+integer,              intent(in)     :: base_obs_type, obs_kind(:)
 integer,              intent(out)    :: num_close, close_ind(:)
 real(r8),             intent(out)    :: dist(:)
 
 integer                :: t_ind, istatus1, istatus2, k
 integer                :: base_which, local_obs_which
+integer                :: base_obs_kind
 real(r8), dimension(3) :: base_array, local_obs_array
 type(location_type)    :: local_obs_loc
-
+logical                :: use_varloc, use_indep_chem_assim
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
 dist      = 1.0e9
+use_varloc=.false.
+use_indep_chem_assim=.false.
 
 istatus1 = 0
 istatus2 = 0
@@ -6951,10 +7250,11 @@ istatus2 = 0
 
 base_array = get_location(base_obs_loc) 
 base_which = nint(query_location(base_obs_loc))
+base_obs_kind = get_obs_kind_var_type(base_obs_type)
 
 if (.not. horiz_dist_only) then
    if (base_which /= wrf%dom(1)%localization_coord) then
-      call vert_convert(ens_mean, base_obs_loc, base_obs_kind, istatus1)
+      call vert_convert(ens_mean, base_obs_loc, base_obs_type, istatus1)
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
    endif
@@ -6966,7 +7266,7 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+   call loc_get_close_obs(gc, base_obs_loc, base_obs_type, obs_loc, obs_kind, &
                           num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
@@ -6995,10 +7295,268 @@ if (istatus1 == 0) then
       if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
          dist(k) = 1.0e9        
       else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
+         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_type, obs_kind(t_ind))
       endif
-
-   end do
+!
+! APM/AFAJ/LXL +++
+! Chem/Met interaction mods:
+!     When commented:   Met obs update Chem and Met state variables
+!                       and Chem obs update Chem and Met state variables.
+!
+!     When uncommented: Met obs update only Met state variables
+!                       and Chem obs update only Chem state variables.
+!
+! Variable locaization
+      if ( use_varloc ) then
+         if ((base_obs_kind.ne.KIND_O3)       .and. &
+         (base_obs_kind.ne.KIND_CO)           .and. &
+         (base_obs_kind.ne.KIND_NO)           .and. &
+         (base_obs_kind.ne.KIND_AOD)) then
+!
+! Met obs go here
+            if ((obs_kind(t_ind).ne.KIND_SO2)         .and. &
+            (obs_kind(t_ind).ne.KIND_O3)              .and. &
+            (obs_kind(t_ind).ne.KIND_CO)              .and. &
+            (obs_kind(t_ind).ne.KIND_NO)              .and. &
+            (obs_kind(t_ind).ne.KIND_NO2)             .and. &
+            (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
+            (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
+            (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
+            (obs_kind(t_ind).ne.KIND_PAN)             .and. &
+            (obs_kind(t_ind).ne.KIND_MEK)             .and. &
+            (obs_kind(t_ind).ne.KIND_ALD)             .and. &
+            (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
+            (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
+            (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
+            (obs_kind(t_ind).ne.KIND_ACET)            .and. &
+            (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
+            (obs_kind(t_ind).ne.KIND_C2H4)            .and. &
+            (obs_kind(t_ind).ne.KIND_C3H6)            .and. &
+            (obs_kind(t_ind).ne.KIND_TOL)             .and. &
+            (obs_kind(t_ind).ne.KIND_MVK)             .and. &
+            (obs_kind(t_ind).ne.KIND_BIGALK)          .and. &
+            (obs_kind(t_ind).ne.KIND_ISOPR)           .and. &
+            (obs_kind(t_ind).ne.KIND_MACR)            .and. &
+            (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
+            (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
+            (obs_kind(t_ind).ne.KIND_AOD)             .and. &
+            (obs_kind(t_ind).ne.KIND_CB1)             .and. &
+            (obs_kind(t_ind).ne.KIND_CB2)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC2)             .and. &
+            (obs_kind(t_ind).ne.KIND_DMS)             .and. &
+            (obs_kind(t_ind).ne.KIND_DST01)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST02)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST03)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST04)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST05)           .and. &
+            (obs_kind(t_ind).ne.KIND_SO4)             .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER1)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
+            (obs_kind(t_ind).ne.KIND_PM10)            .and. &
+            (obs_kind(t_ind).ne.KIND_PM25)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_O3)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CO)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_OC)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_BC)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+!
+! Met state variable go here
+               dist(k) = dist(k)
+            else
+!
+! Chem state variable go here
+               dist(k) = 1.0e9
+            endif
+!
+! Chem obs go here
+         else if ((obs_kind(t_ind).eq.KIND_SO2)    .or. &
+         (obs_kind(t_ind).eq.KIND_O3)              .or. &
+         (obs_kind(t_ind).eq.KIND_CO)              .or. &
+         (obs_kind(t_ind).eq.KIND_NO)              .or. &
+         (obs_kind(t_ind).eq.KIND_NO2)             .or. &
+         (obs_kind(t_ind).eq.KIND_HNO3)            .or. &
+         (obs_kind(t_ind).eq.KIND_HNO4)            .or. &
+         (obs_kind(t_ind).eq.KIND_N2O5)            .or. &
+         (obs_kind(t_ind).eq.KIND_PAN)             .or. &
+         (obs_kind(t_ind).eq.KIND_MEK)             .or. &
+         (obs_kind(t_ind).eq.KIND_ALD)             .or. &
+         (obs_kind(t_ind).eq.KIND_CH3O2)           .or. &
+         (obs_kind(t_ind).eq.KIND_C3H8)            .or. &
+         (obs_kind(t_ind).eq.KIND_C2H6)            .or. &
+         (obs_kind(t_ind).eq.KIND_ACET)            .or. &
+         (obs_kind(t_ind).eq.KIND_HCHO)            .or. &
+         (obs_kind(t_ind).eq.KIND_C2H4)            .or. &
+         (obs_kind(t_ind).eq.KIND_C3H6)            .or. &
+         (obs_kind(t_ind).eq.KIND_TOL)             .or. &
+         (obs_kind(t_ind).eq.KIND_MVK)             .or. &
+         (obs_kind(t_ind).eq.KIND_BIGALK)          .or. &
+         (obs_kind(t_ind).eq.KIND_ISOPR)           .or. &
+         (obs_kind(t_ind).eq.KIND_MACR)            .or. &
+         (obs_kind(t_ind).eq.KIND_GLYALD)          .or. &
+         (obs_kind(t_ind).eq.KIND_C10H16)          .or. &
+         (obs_kind(t_ind).eq.KIND_AOD)             .or. &
+         (obs_kind(t_ind).eq.KIND_CB1)             .or. &
+         (obs_kind(t_ind).eq.KIND_CB2)             .or. &
+         (obs_kind(t_ind).eq.KIND_OC1)             .or. &
+         (obs_kind(t_ind).eq.KIND_OC2)             .or. &
+         (obs_kind(t_ind).eq.KIND_DMS)             .or. &
+         (obs_kind(t_ind).eq.KIND_DST01)           .or. &
+         (obs_kind(t_ind).eq.KIND_DST02)           .or. &
+         (obs_kind(t_ind).eq.KIND_DST03)           .or. &
+         (obs_kind(t_ind).eq.KIND_DST04)           .or. &
+         (obs_kind(t_ind).eq.KIND_DST05)           .or. &
+         (obs_kind(t_ind).eq.KIND_SO4)             .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT01)          .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT02)          .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT03)          .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT04)          .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER1)         .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER2)         .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER3)         .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER4)         .or. &
+         (obs_kind(t_ind).eq.KIND_PM10)            .or. &
+         (obs_kind(t_ind).eq.KIND_PM25)            .or. &
+         (obs_kind(t_ind).eq.KIND_E_O3)            .or. &
+         (obs_kind(t_ind).eq.KIND_E_CO)            .or. &
+         (obs_kind(t_ind).ne.KIND_E_NO)            .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_CO)          .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_NO)          .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_OC)          .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_BC)          .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .or. &
+         (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+!
+! Chem state variable go here
+            dist(k) = dist(k)
+         else
+!
+! Met state variable go here
+            dist(k) = 1.0e9
+         endif
+      endif
+!
+! Independent assimilaiton of chem obs
+      if (use_indep_chem_assim) then     
+         if ((base_obs_kind.eq.KIND_O3)       .or. &
+         (base_obs_kind.eq.KIND_CO)           .or. &
+         (base_obs_kind.eq.KIND_NO)           .or. &
+         (base_obs_kind.eq.KIND_AOD)) then
+!
+! Chem obs go here
+            if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3).or. &
+            (obs_kind(t_ind).eq.KIND_E_O3))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_CO).and.((obs_kind(t_ind).eq.KIND_CO).or. &
+            (obs_kind(t_ind).eq.KIND_E_CO))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_NO).and.((obs_kind(t_ind).eq.KIND_NO).or. &
+            (obs_kind(t_ind).eq.KIND_E_NO))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_AOD).and.((obs_kind(t_ind).eq.KIND_TAUAER1).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER2).or.(obs_kind(t_ind).eq.KIND_TAUAER3).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER4).or.(obs_kind(t_ind).eq.KIND_PM10).or. &
+            (obs_kind(t_ind).eq.KIND_PM25).or.(obs_kind(t_ind).eq.KIND_DST01).or. &
+            (obs_kind(t_ind).eq.KIND_DST02).or.(obs_kind(t_ind).eq.KIND_DST03).or. &
+            (obs_kind(t_ind).eq.KIND_DST04).or.(obs_kind(t_ind).eq.KIND_DST05).or. &
+            (obs_kind(t_ind).eq.KIND_OC1).or.(obs_kind(t_ind).eq.KIND_OC2).or. &
+            (obs_kind(t_ind).eq.KIND_CB1).or.(obs_kind(t_ind).eq.KIND_CB2).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT01).or.(obs_kind(t_ind).eq.KIND_SSLT02).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT03).or.(obs_kind(t_ind).eq.KIND_SSLT04).or. &
+            (obs_kind(t_ind).eq.KIND_SO4).or.(obs_kind(t_ind).eq.KIND_DMS).or. &
+            (obs_kind(t_ind).eq.KIND_AOD).or.(obs_kind(t_ind).eq.KIND_EBU_CO).or. &
+            (obs_kind(t_ind).eq.KIND_EBU_NO).or.(obs_kind(t_ind).eq.KIND_EBU_OC).or. &
+            (obs_kind(t_ind).eq.KIND_EBU_BC).or.(obs_kind(t_ind).eq.KIND_EBU_c2h4).or. &
+            (obs_kind(t_ind).eq.KIND_EBU_ch2o).or.(obs_kind(t_ind).eq.KIND_EBU_ch3oh))) then
+               dist(k) = dist(k)
+            else
+               dist(k) = 1.0e9
+            endif
+         else
+!
+! Met obs go here
+            if ((obs_kind(t_ind).ne.KIND_SO2)         .and. &
+            (obs_kind(t_ind).ne.KIND_O3)              .and. &
+            (obs_kind(t_ind).ne.KIND_CO)              .and. &
+            (obs_kind(t_ind).ne.KIND_NO)              .and. &
+            (obs_kind(t_ind).ne.KIND_NO2)             .and. &
+            (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
+            (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
+            (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
+            (obs_kind(t_ind).ne.KIND_PAN)             .and. &
+            (obs_kind(t_ind).ne.KIND_MEK)             .and. &
+            (obs_kind(t_ind).ne.KIND_ALD)             .and. &
+            (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
+            (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
+            (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
+            (obs_kind(t_ind).ne.KIND_ACET)            .and. &
+            (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
+            (obs_kind(t_ind).ne.KIND_C2H4)            .and. &
+            (obs_kind(t_ind).ne.KIND_C3H6)            .and. &
+            (obs_kind(t_ind).ne.KIND_TOL)             .and. &
+            (obs_kind(t_ind).ne.KIND_MVK)             .and. &
+            (obs_kind(t_ind).ne.KIND_BIGALK)          .and. &
+            (obs_kind(t_ind).ne.KIND_ISOPR)           .and. &
+            (obs_kind(t_ind).ne.KIND_MACR)            .and. &
+            (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
+            (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
+            (obs_kind(t_ind).ne.KIND_AOD)             .and. &
+            (obs_kind(t_ind).ne.KIND_CB1)             .and. &
+            (obs_kind(t_ind).ne.KIND_CB2)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC2)             .and. &
+            (obs_kind(t_ind).ne.KIND_DMS)             .and. &
+            (obs_kind(t_ind).ne.KIND_DST01)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST02)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST03)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST04)           .and. &
+            (obs_kind(t_ind).ne.KIND_DST05)           .and. &
+            (obs_kind(t_ind).ne.KIND_SO4)             .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER1)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
+            (obs_kind(t_ind).ne.KIND_PM10)            .and. &
+            (obs_kind(t_ind).ne.KIND_PM25)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_O3)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CO)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_OC)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_BC)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_c2h4)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch2o)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+!
+! Met state variable go here
+               dist(k) = dist(k)
+            else
+!
+! Chem state variable go here
+               dist(k) = 1.0e9
+            endif
+         endif
+      endif
+! APM/AFAJ/LXL ---
+!
+   enddo
 endif
 
 end subroutine get_close_obs
@@ -8053,6 +8611,7 @@ do i = 1, row
    ! surface field, otherwise you do the full-up 3d interpolation.
    if ( wrf_state_variables(1, i) == 'PSFC' ) then
       in_state_vector(KIND_SURFACE_PRESSURE) = .true.
+      in_state_vector(KIND_LANDMASK) = .true.
    endif
 
 enddo
@@ -8087,12 +8646,22 @@ do i = 1, size(in_state_vector)
          call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
                             source, revision, revdate)
       endif
- 
+
+   ! the MODIS AOD assimilation case
+   case (KIND_AOD)
+      if ((.not. in_state_vector(KIND_TAUAER1))   .or. &
+          (.not. in_state_vector(KIND_TAUAER2))   .or. &
+          (.not. in_state_vector(KIND_TAUAER3))   .or. &
+          (.not. in_state_vector(KIND_TAUAER4))) then
+         write(errstring, *) 'AOD assimilation requires TAUAER1, 2, 3, and 4 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
+                            source, revision, revdate)
+      endif
+
    ! by default anything else is fine
 
    end select
 enddo
-
 
 ! part 3: fields you just have to have, always, and other exceptions
 ! and things that break the rules.
@@ -8134,7 +8703,6 @@ endif
 if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
     in_state_vector(KIND_PRESSURE) ) in_state_vector(KIND_DENSITY) = .true.
 
-
 ! allow reflectivity to be asked for, because the obs_def has an alternative
 ! way to interpolate it even if it is not in the state vector. if this
 ! is not allowed it will error exit instead of returning with an invalid istatus
@@ -8142,6 +8710,14 @@ if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
 ! ditto for power weighted fall speed.
 in_state_vector(KIND_RADAR_REFLECTIVITY) = .true.
 in_state_vector(KIND_POWER_WEIGHTED_FALL_SPEED) = .true.
+
+! AOD assimilaiton case
+if (in_state_vector(KIND_TAUAER1)    .and. &
+   in_state_vector(KIND_TAUAER2)    .and. &
+   in_state_vector(KIND_TAUAER3)    .and. &
+   in_state_vector(KIND_TAUAER4))  then
+   in_state_vector(KIND_AOD)  = .true.
+endif
 
 ! FIXME:  i was going to suggest nuking this routine all together because it makes
 ! the default behavior be to exit with an error when requesting to interpolate an
@@ -8728,9 +9304,112 @@ function compute_geometric_height(geopot, lat)
    endif
 
 end function compute_geometric_height
+!
+! LXL/APM +++
+! LXL: Added for reading wrfchemi file
+!
+subroutine read_emiss_dimensions(ncid,e_bt,e_sn,e_we)  
+
+! ncid: input, file handl
+! id:   input, domain id
+
+integer, intent(in)            :: ncid
+integer, intent(out)           :: e_bt,e_sn,e_we
+logical, parameter             :: debug = .false.
+integer                        :: var_id 
+character (len=NF90_MAX_NAME)  :: name
+
+! get wrf grid dimensions
+
+   call nc_check( nf90_inq_dimid(ncid, "emissions_zdim_stag", var_id), &
+                     'static_init_model','inq_dimid bottom_top')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_bt), &
+                     'static_init_model','inquire_dimension '//trim(name))
+
+   call nc_check( nf90_inq_dimid(ncid, "south_north", var_id), &
+                     'static_init_model','inq_dimid south_north')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_sn), &
+                     'static_init_model','inquire_dimension '//trim(name))
+
+   call nc_check( nf90_inq_dimid(ncid, "west_east", var_id), &
+                     'static_init_model','inq_dimid west_east')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_we), &
+                     'static_init_model','inquire_dimension '//trim(name))
+
+   if(debug) then
+      write(*,*) ' dimensions e_bt, e_sn, e_we are ',e_bt, &
+           e_sn, e_we
+   endif
+
+   RETURN
+
+end subroutine read_emiss_dimensions
+
+!--------------------------------------------------------------------
+!--------------------------------------------------------------------
+
+subroutine get_emiss_variable_size_from_file(ncid,id,wrf_var_name,e_bt,e_sn, &
+                                       e_we,stagger,var_size)
+
+!NOTE: only supports 2D and 3D variables (ignoring time dimension)
+
+! ncid: input, file handle
+! id:   input, domain index
+
+integer,           intent(in)   :: ncid, id
+integer,           intent(in)   :: e_bt, e_sn, e_we
+character(len=*),  intent(in)   :: wrf_var_name
+integer,           intent(out)  :: var_size(3)
+character(len=129),intent(out)  :: stagger
+
+logical, parameter    :: debug = .false.
+integer               :: var_id, ndims, dimids(10) 
+integer               :: idim
+
+   stagger = ''
+
+! get variable ID
+   call nc_check( nf90_inq_varid(ncid, trim(wrf_var_name), var_id), &
+                     'get_variable_size_from_file',                 &
+                     'inq_varid '//wrf_var_name)
+
+! get number of dimensions and dimension IDs
+   call nc_check( nf90_inquire_variable(ncid, var_id,ndims=ndims,  &
+                     dimids=dimids),                               &
+                     'get_variable_size_from_file',                &
+                     'inquire_variable '//wrf_var_name)
+
+! get dimension length, ignoring first dimension (time)
+! the order is inverse to that in wrf ncfile. we,sn,bt,time
+   do idim = 1,ndims-1
+      call nc_check( nf90_inquire_dimension(ncid, dimids(idim),  &
+                     len=var_size(idim)),                               &
+                     'get_variable_size_from_file',                &
+                     'inquire_dimension '//wrf_var_name)
+   enddo
+
+! if a 2D variable fill the vertical dimension with 1
+   if ( ndims < 4 ) var_size(ndims) = 1  ! set bt=1
+
+   if ( debug ) then
+      print*,'In get_variable_size_from_file got variable size ',var_size
+   endif
 
 
+! get variable attribute stagger
+   call nc_check( nf90_get_att(ncid, var_id, 'stagger', stagger), &
+                     'get_variable_size_from_file', &
+                     'get_att '//wrf_var_name//' '//stagger)
 
+   if ( debug ) then
+      print*,'In get_variable_size_from_file got stagger ',trim(stagger),' for variable ',trim(wrf_var_name)
+   endif
+
+return
+
+end subroutine get_emiss_variable_size_from_file
+! LXL/APM ---
+!
 end module model_mod
 
 ! <next few lines under version control, do not edit>

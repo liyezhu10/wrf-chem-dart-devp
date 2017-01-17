@@ -6,17 +6,17 @@
 ############################################################################### 
 #
 # Define experiment parameters
-export START_DATE=2008061006
+#
+# CPSR DATES
 export START_DATE=2008060112
-export END_DATE=2008061500
-export END_DATE=2008062900
-#export END_DATE=2008061118
+#export END_DATE=2008060318
+export END_DATE=2008060812
+export END_DATE=2008060706
 #
-#export START_DATE=2008060112
-#export END_DATE=2008060200
+# FRAPPE DATES
+##export START_DATE=2014071406
+##export END_DATE=2014071906
 #
-export NL_APM_SCALE=1.
-export NL_APM_SCALE_SW=.FALSE.
 export DOMAIN=01
 export NUM_MEMBERS=20
 export CYCLE_PERIOD=6
@@ -32,61 +32,49 @@ export USE_HSI=false
 export DELETE_FLG=false
 #
 # Define code versions
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
 #
 # Set job submission parameters
+export PROJ_NUMBER=NACD0002
 export PROJ_NUMBER=P19010000
 export TIME_LIMIT_FILTER=1:40
 export TIME_LIMIT_WRFCHEM=1:40
 export NUM_TASKS=32
 export TASKS_PER_NODE=16
-export JOB_CLASS=small
+export JOB_CLASS=regular
 #
 # Define independent directory paths
-#export DIR_NAME=MOPCOMB_Exp_2_RtDA_40M_p30p30_sp4
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_40M_p30p30_sp4
-#export DIR_NAME=MOPCOMB_Exp_3_MgDA_40M_p30p30_sp4
+###export DIR_NAME=MOPnIAS_Exp_2_MgDA_20M_100km_COnO3_p10p30_f1p0
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_loc0p5
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_ph-loc100
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p5_ph-loc100
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_ph-loc400
+##export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_ph-loc700
+##export DIR_NAME=XXXnIAS_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0
+##export DIR_NAME=XXXnIAS_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_loc0p5
+##export DIR_NAME=XXXnIAS_Exp_2_MgDA_20M_100km_XXnO3_p10p30_f1p0
+export DIR_NAME=MOPnIAS_Exp_2_MgDA_20M_100km_COnO3_p10p30_f1p0_indep
+export DIR_NAME=MOPnIAS_Exp_2_MgDA_20M_100km_COnO3_p10p30_f1p0_varloc
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p40p40_f1p0_varloc
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p40p40_f1p5
+export DIR_NAME=MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p40p40_f1p8
+#export DIR_NAME=MOPnIAS_Exp_2_MgDA_20M_100km_COnO3_p10p30_f1p0_no_ia_co
+##export DIR_NAME=XXXnIAS_Exp_2_MgDA_20M_100km_COnO3_p10p30_f1p0
 #
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p30p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p00
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p20p00
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p30p00
-#export DIR_NAME=MOPCOMB_Exp_3_MgDA_20M_p10p00
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30_loc
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_p10p30
-#
-#export DIR_NAME=MOPCOMB_Exp_3_MgDA_20M_100km_p10p00
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_a_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_loc_b_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_1_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bar_2_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_loc_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_NoRot_bloc_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_bloc_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p75
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p50
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p60
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_TEST_p55
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_NV_p10p30
-#export DIR_NAME=MOPCOMB_Exp_2_MgDA_20M_100km_DBL_bloc_p10p30
-export DIR_NAME=MOPCOMB_Exp_2_Mg_XXXnIAS_20M_100km_p10p30
-export DIR_NAME=MOPCOMB_Exp_2_Mg_MOPnIAS_20M_100km_p10p30
-export DIR_NAME=MOPCOMB_Exp_2_Mg_MOPnXXX_20M_100km_p10p30
-export DIR_NAME=MOPCOMB_Exp_2_MgDA_ROE_p75_20M_100km_p10p30
-export DIR_NAME=IASCOMB_O3_Exp_2_MgDA_20M_100km_p10p30/
-#
+##export DIR_NAME=real_FRAPPE_CNTL_VARLOC
+##export DIR_NAME=real_FRAPPE_CNTL_NVARLOC
+##export DIR_NAME=real_FRAPPE_COnXX_VARLOC
+##export DIR_NAME=real_FRAPPE_COnXX_NVARLOC
 #
 # Independent path settings
 export SCRATCH_DIR=/glade/scratch/mizzi
 export PROJECT_DIR=/glade/p/work/mizzi
 export ACD_DIR=/glade/p/acd/mizzi
+export FRAPPE_DIR=/glade/p/FRAPPE
 export HSI_DIR=/MIZZI
 #
 # Dependent path settings
@@ -95,9 +83,11 @@ export EXP_DIR=${RUN_DIR}
 export TRUNK_DIR=${PROJECT_DIR}/TRUNK
 export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
 export HSI_DATA_DIR=${HSI_DIR}/AVE_TEST_DATA
-export SAVE_DIR=${SCRATCH_DIR}/DART_TEST_AVE/${DIR_NAME}
 #export SAVE_DIR=${ACD_DIR}/DART_TEST_AVE/${DIR_NAME}
+export SAVE_DIR=${SCRATCH_DIR}/DART_TEST_AVE/${DIR_NAME}
 export HSI_SAVE_DIR=${HSI_DIR}/DART_TEST_AVE/${DIR_NAME}
+##export SAVE_DIR=${FRAPPE_DIR}/${DIR_NAME}
+##export HSI_SAVE_DIR=${HSI_DIR}/${DIR_NAME}
 #
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
@@ -252,13 +242,18 @@ export NL_TIME_TO_SKIP_HH=0
 export NL_TIME_TO_SKIP_MN=0
 export NL_TIME_TO_SKIP_SS=0
 export NL_MAX_NUM_BINS=1000
+# MOPITT CO
 export NL_PLEVEL='1000., 850., 750., 650., 550., 450., 350., 250., 150., 75.'
-export NL_NREGIONS=3
-export NL_LONLIM1=239.,284.,0.
-export NL_LONLIM2=247.,303.,360.
-export NL_LATLIM1=24.,32.,20.
-export NL_LATLIM2=34.,46.,80.
-export NL_REG_NAMES="'Los Angles','New York','CONUS'"
+# IASI CO
+#export NL_PLEVEL='1000., 850., 750., 650., 550., 475., 425., 375., 320., 275., 230., 195., 170., 150., 130., 110., 95., 82., 70.'
+# IASI O3
+#export NL_PLEVEL='1000., 900., 850., 750., 650., 550., 500., 450., 380., 325., 280., 245., 210., 180., 155., 132., 115., 105., 85., 70., 60., 50., 45., 37.5, 32.5, 28., 22., 21., 17.5, 15., 13., 11., 10., 8.5, 7.5, 6.5, 5.5, 4.75, 4.25, 3.75'
+export NL_NREGIONS=1
+export NL_LONLIM1=0.
+export NL_LONLIM2=360.
+export NL_LATLIM1=20.
+export NL_LATLIM2=80.
+export NL_REG_NAMES="'Domain'"
 export NL_PRINT_MISMATCHED_LOCS=.false.
 export NL_PRINT_OBS_LOCATIONS=.false.
 export NL_VERBOSE=.true.
@@ -413,6 +408,8 @@ export NL_PRINT_TABLE=.false.
                        '${DART_DIR}/obs_def/obs_def_gps_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
+                       '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
+                       '${DART_DIR}/obs_def/obs_def_IASI_CO_mod.f90',
                        '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90'"
 #
 # &obs_kind_nml
@@ -457,23 +454,14 @@ ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 #
 cd ${RUN_DIR}
 #
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-         rm -rf obs_def_apm.nml
-         cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
-#
 ./obs_diag
 #
 # Remove work/run files
-rm -rf advance_time
-rm -rf dart_log.nml
-rm -rf dart_log.out
-rm -rf file_list.txt
-rm -rf input.nml
-rm -rf LargeInnov.txt
-rm -rf obs_diag
+#rm -rf advance_time
+#rm -rf dart_log.nml
+#rm -rf dart_log.out
+#rm -rf file_list.txt
+#rm -rf input.nml
+#rm -rf LargeInnov.txt
+#rm -rf obs_diag
 exit

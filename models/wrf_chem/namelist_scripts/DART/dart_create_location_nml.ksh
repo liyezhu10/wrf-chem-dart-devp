@@ -13,6 +13,7 @@ cat > input.nml_temp << EOF
    horiz_dist_only                 = ${NL_HORIZ_DIST_ONLY:-.false.},
    vert_normalization_pressure     = ${NL_VERT_NORMALIZATION_PRESSURE:-187500.0},
    vert_normalization_height       = ${NL_VERT_NORMALIZATION_HEIGHT:-5000000.0},
+   vert_normalization_scale_height = ${NL_VERT_NORMALIZATION_SCALE_HEIGHT:-1.5},
    vert_normalization_level        = ${NL_VERT_NORMALIZATION_LEVEL:-2666.7},
    approximate_distance            = ${NL_APPROXIMATE_DISTANCE:-.false.},
    nlon                            = ${NL_NLON:-141},

@@ -1,6 +1,8 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program modis_ascii_to_obs
 
@@ -157,9 +159,7 @@ obsloop: do    ! no end limit - have the loop break when input ends
    if (debug) print *, 'next observation located at lat, lon = ', lat, lon
 
    ! check the lat/lon values to see if they are ok
-   !if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
-   !if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
-
+   if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
 
    ! if lon comes in between -180 and 180, use these lines instead:
    if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle obsloop
@@ -319,3 +319,4 @@ end program modis_ascii_to_obs
 ! $Id$
 ! $Revision$
 ! $Date$
+

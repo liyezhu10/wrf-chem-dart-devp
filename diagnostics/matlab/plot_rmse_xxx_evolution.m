@@ -13,13 +13,14 @@ function plotdat = plot_rmse_xxx_evolution(fname, copystring, varargin)
 %                 can be any of the ones available in the netcdf
 %                 file 'CopyMetaData' variable.
 %                 (ncdump -v CopyMetaData obs_diag_output.nc)
-% obstypestring : 'observation type' string. Optional.
+% obsname       : 'observation type' string. Optional.
 %                 Must match something in the netcdf
 %                 file 'ObservationTypes' variable.
 %                 (ncdump -v ObservationTypes obs_diag_output.nc)
 %                 If specified, only this observation type will be plotted.
 %                 If not specified, all observation types incluced in the netCDF file
 %                 will be plotted.
+% level       : 'level' index. Optional.
 %
 % OUTPUT: two files will result for each observation type plotted. One is a
 %         postscript file containing a page for each level - all regions.
@@ -39,8 +40,13 @@ function plotdat = plot_rmse_xxx_evolution(fname, copystring, varargin)
 %
 % fname      = 'obs_diag_output.nc';
 % copystring = 'totalspread';
-% obstype    = 'RADIOSONDE_TEMPERATURE';
-% plotdat    = plot_rmse_xxx_evolution(fname, copystring, obstype);
+% plotdat    = plot_rmse_xxx_evolution(fname, copystring, 'obsname', 'RADIOSONDE_TEMPERATURE');
+%
+% EXAMPLE 3 - plot the RMSE and spread on the same axis - for just one observation type, 1 level.
+%
+% fname      = 'obs_diag_output.nc';
+% copystring = 'totalspread';
+% plotdat    = plot_rmse_xxx_evolution(fname, copystring, 'obsname', 'RADIOSONDE_TEMPERATURE','level',3,'range', [0 10]);
 
 %% DART software - Copyright 2004 - 2013 UCAR. This open source software is
 % provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -48,13 +54,42 @@ function plotdat = plot_rmse_xxx_evolution(fname, copystring, varargin)
 %
 % DART $Id$
 
-if nargin == 2
+default_level = -1;
+default_obsname = 'none';
+default_range = [NaN NaN];
+p = inputParser;
+
+addRequired(p,'fname',@ischar);
+addRequired(p,'copystring',@ischar);
+addParamValue(p,'obsname',default_obsname,@ischar);
+addParamValue(p,'range',default_range,@isnumeric);
+addParamValue(p,'level',default_level,@isnumeric);
+parse(p, fname, copystring, varargin{:});
+
+% if you want to echo the input
+% disp(['fname       : ', p.Results.fname])
+% disp(['copystring  : ', p.Results.copystring])
+% disp(['obsname     : ', p.Results.obsname])
+% fprintf( 'level : %d \n', p.Results.level)
+% fprintf( 'range : %f %f \n', p.Results.range)
+
+if ~isempty(fieldnames(p.Unmatched))
+   disp('Extra inputs:')
+   disp(p.Unmatched)
+end
+
+if (numel(p.Results.range) ~= 2)
+   error('range must be an array of length two ... [bottom top]')
+end
+
+fname = p.Results.fname;
+copystring = p.Results.copystring;
+
+if strcmp(p.Results.obsname,'none')
    nvars = 0;
-elseif nargin == 3
-   varname = varargin{1};
-   nvars = 1;
 else
-   error('wrong number of arguments ... ')
+   obsname = p.Results.obsname;
+   nvars = 1;
 end
 
 if (exist(fname,'file') ~= 2)
@@ -121,7 +156,7 @@ if (nvars == 0)
    [plotdat.varnames,    plotdat.vardims]    = FindTemporalVars(plotdat);
    plotdat.nvars       = length(plotdat.varnames);
 else
-   plotdat.varnames{1} = varname;
+   plotdat.varnames{1} = obsname;
    plotdat.nvars       = nvars;
 end
 
@@ -147,6 +182,9 @@ for ivar = 1:plotdat.nvars
    plotdat.myvarname = plotdat.varnames{ivar};
    plotdat.guessvar  = sprintf('%s_guess',plotdat.varnames{ivar});
    plotdat.analyvar  = sprintf('%s_analy',plotdat.varnames{ivar});
+
+   plotdat.trusted   = local_nc_attget(fname, plotdat.guessvar, 'TRUSTED');
+   if (isempty(plotdat.trusted)), plotdat.trusted = 'NO'; end
 
    % remove any existing postscript file - will simply append each
    % level as another 'page' in the .ps file.
@@ -218,7 +256,13 @@ for ivar = 1:plotdat.nvars
       continue
    end
 
-   for ilevel = 1:plotdat.nlevels
+   if (p.Results.level < 0)
+      wantedlevels = [1:plotdat.nlevels];
+   else
+      wantedlevels = p.Results.level;
+   end
+
+   for ilevel = wantedlevels
 
       fprintf(logfid,'\nlevel %d %f %s\n',ilevel,plotdat.level(ilevel),plotdat.level_units);
       plotdat.ges_Nqc4  = guess(:,plotdat.NQC4index  ,ilevel,:);
@@ -258,7 +302,11 @@ for ivar = 1:plotdat.nvars
       plotdat.ges_rmse  = guess(:,plotdat.rmseindex,  ilevel,:);
       plotdat.anl_rmse  = analy(:,plotdat.rmseindex,  ilevel,:);
 
-      plotdat.Yrange    = FindRange(plotdat);
+      if isnan(p.Results.range(1))
+         plotdat.Yrange = FindRange(plotdat);
+      else
+         plotdat.Yrange = p.Results.range;
+      end
 
       % plot each region, each level to a separate figure
 
@@ -357,6 +405,15 @@ set(h,'Interpreter','none','Box','off')
 axlims = axis;
 axlims = [axlims(1:2) plotdat.Yrange];
 axis(axlims)
+
+switch lower(plotdat.trusted)
+   case 'true'
+      tx = axlims(1) + (axlims(2) - axlims(1))/20;
+      ty = plotdat.Yrange(1) + (plotdat.Yrange(2) - plotdat.Yrange(1))/20;
+      h = text(tx,ty,'TRUSTED OBSERVATION. Values include outlying obs. ');
+      set(h,'FontSize',20)
+   otherwise
+end
 
 switch lower(plotdat.copystring)
    case 'bias'
@@ -574,23 +631,28 @@ end
 %=====================================================================
 
 
-function value = local_nc_attget(fname,varid,varname)
+function value = local_nc_attget(fname,varid,attname)
 %% If the (global) attribute exists, return the value.
-% If it does not, do not throw a hissy-fit.
+% If it does not, do not throw a hissy-fit, just return an empty object.
 
 value = [];
 if (varid == nc_global)
-   finfo = ncinfo(fname);
-   for iatt = 1:length(finfo.Attributes)
-      if (strcmp(finfo.Attributes(iatt).Name, deblank(varname)))
-         value = finfo.Attributes(iatt).Value;
-         return
-      end
-   end
+    finfo = ncinfo(fname);
+    for iatt = 1:length(finfo.Attributes)
+        if (strcmp(finfo.Attributes(iatt).Name, deblank(attname)))
+            value = finfo.Attributes(iatt).Value;
+            return
+        end
+    end
 else
-   fprintf('function not supported for local variables, only global atts.\n')
+    vinfo = ncinfo(fname,varid);
+    for iatt = 1:length(vinfo.Attributes)
+        if (strcmp(vinfo.Attributes(iatt).Name, deblank(attname)))
+            value = vinfo.Attributes(iatt).Value;
+            return
+        end
+    end
 end
-
 
 
 % <next few lines under version control, do not edit>

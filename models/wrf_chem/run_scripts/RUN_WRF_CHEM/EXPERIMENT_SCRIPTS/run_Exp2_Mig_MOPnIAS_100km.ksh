@@ -7,7 +7,6 @@
 #
 # Define experiment parameters
 export START_DATE=${W_DATE}
-#export START_DATE=${W_DATE}
 export END_DATE=${W_DATE}
 export INITIAL_DATE=${W_INITIAL_DATE}
 export INITIAL_FILE_DATE=${W_INITIAL_FILE_DATE}

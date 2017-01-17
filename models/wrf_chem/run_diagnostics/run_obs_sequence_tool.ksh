@@ -5,8 +5,8 @@
 # TO SETUP AN ENVIRONMENT TO RUN obs_sequence_tool.
 #
 # SET TIME INFORMATION
-  export START_DATE=2008060900
-  export END_DATE=2008060900
+  export START_DATE=20080600112
+  export END_DATE=2008060112
   export TIME_INC=6
   export ASIM_WINDOW=3
 #
@@ -16,12 +16,12 @@
 # PATHS
   export WRFDA_VER=WRFDAv3.4_dmpar
   export WRF_VER=WRFv3.4_dmpar
-  export DART_VER=DART_DEVEL_COM
+  export DART_VER=DART_CHEM_MY_BRANCH
 #
 # INDEPENDENT DIRECTORIES
   export CODE_DIR=/glade/p/work/mizzi/TRUNK
-  export DATA_DIR=/glade/scratch/mizzi/DART_TEST_AVE/MOPITT
-  export HSI_DATA_DIR=/MIZZI/DART_TEST_AVE/MOPITT
+  export DATA_DIR=/glade/scratch/mizzi/DART_TEST_AVE
+  export HSI_DATA_DIR=/MIZZI/DART_TEST_AVE
   export ASIM_DIR=/glade/scratch/mizzi/RUN_OBS_SEQUENCE_TOOL
 #
 # DEPENDENT DIRECTORIES
