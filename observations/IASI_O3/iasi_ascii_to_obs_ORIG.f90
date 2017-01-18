@@ -1,25 +1,32 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program iasi_ascii_to_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 !   iasi_ascii_to_obs - a program that only needs minor customization to read
 !      in a iasi_ascii-based dataset - either white-space separated values or
 !      fixed-width column data.
-!
+!      
 !     this is work in progress. IASI dataset are in HDF format. I do not
 !     have HDF libraries for now, so Gabi Pfister reads the hdf file in IDL and
 !     did some processing before she dumped the data in ascii. what you are
 !     reading here is a 'processed' dataset of IASI O3
 !
+!     created 29 Mar 2010   nancy collins NCAR/IMAGe
+!     modified 16 Mar 2012  ave arellano UArizona
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-use         types_mod, only : r4, r8, digits12
+use         types_mod, only : r8, PI, DEG2RAD
 use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               open_file, close_file
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, &
@@ -27,38 +34,31 @@ use  time_manager_mod, only : time_type, set_calendar_type, set_date, &
                               operator(-), GREGORIAN, operator(+), print_date
 use      location_mod, only : VERTISUNDEF, VERTISHEIGHT,VERTISPRESSURE
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
-                              static_init_obs_sequence, init_obs, write_obs_seq, &
-                              init_obs_sequence, get_num_obs, &
+                              static_init_obs_sequence, init_obs, write_obs_seq, & 
+                              init_obs_sequence, get_num_obs, & 
                               set_copy_meta_data, set_qc_meta_data
 use      obs_kind_mod, only : IASI_O3_RETRIEVAL
-use obs_utilities_mod, only : add_obs_to_seq
 
 implicit none
 
-! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=64), parameter :: iasi_ascii_input_file = 'iasi_asciidata.input'
+character(len=64), parameter :: obs_out_file    = 'iasi_obs_seq.out'
 
 logical, parameter :: debug = .true.  ! set to .true. to print info
 
-character(len=64), parameter :: iasi_ascii_input_file = 'iasi_asciidata.input'
-character(len=64), parameter :: obs_out_file          = 'iasi_obs_seq.out'
-character(len=84) :: input_line
-character(len=10) :: otype_char
+character (len=84) :: input_line
+character (len=10) :: otype_char
 
-logical  :: first_obs, file_exist
-
-integer, parameter :: nlevels = 40
-
-integer :: i, oday, osec, rcio, iunit, ilev
+integer :: n, i, oday, osec, rcio, iunit, otype, ilev
 integer :: year, month, day, hour, minute, second
 integer :: num_copies, num_qc, max_obs
+           
+logical  :: file_exist, first_obs
 
+integer, parameter :: nlevels = 40
 integer  :: qc_count
 real(r8) :: iasi_col, iasi_vmr, iasi_err, sza, cloud, dfs100, dfs300
-real(r8) :: lat, lon, retlev2, qc, rnlev_use
+real(r8) :: lat, lon, vert, retlev2, qc, rnlev_use
 real(r8) :: altretlev2(nlevels) = 0.0_r8
 real(r8) :: akcol(nlevels) = 0.0_r8
 real(r8) :: apcol(nlevels) = 0.0_r8
@@ -74,10 +74,11 @@ type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
 type(time_type)         :: comp_day0, time_obs, prev_time
 
-! Start of executable code
+! start of executable code
+
 call initialize_utilities('iasi_ascii_to_obs')
 
-! Time setup
+! time setup
 call set_calendar_type(GREGORIAN)
 
 !! some times are supplied as number of seconds since some reference
@@ -90,31 +91,32 @@ call set_calendar_type(GREGORIAN)
 iunit = open_file(iasi_ascii_input_file, 'formatted', 'read')
 if (debug) print *, 'opened input file ' // trim(iasi_ascii_input_file)
 
-! Each observation in this series will have a single observation value
+
+! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
 ! be specified but it will only write out the actual number created.
 max_obs    = 10000000
 num_copies = 1
 num_qc     = 1
 
-! Call the initialization code, and initialize two empty observation types
+! call the initialization code, and initialize two empty observation types
 call static_init_obs_sequence()
 call init_obs(obs,      num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
 first_obs = .true.
 
-! Create a new, empty obs_seq file.  you must give a max limit
+! create a new, empty obs_seq file.  you must give a max limit
 ! on number of obs.  increase the size if too small.
 call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 
-! The first one needs to contain the string 'observation' and the
+! the first one needs to contain the string 'observation' and the
 ! second needs the string 'QC'.
 call set_copy_meta_data(obs_seq, 1, 'observation')
 call set_qc_meta_data(obs_seq, 1, 'Data QC')
 
 ! if you want to append to existing files (e.g. you have a lot of
 ! small iasi_ascii files you want to combine), you can do it this way,
-! or you can use the obs_sequence_tool to merge a list of files
+! or you can use the obs_sequence_tool to merge a list of files 
 ! once they are in DART obs_seq format.
 
 !  ! existing file found, append to it
@@ -123,15 +125,14 @@ call set_qc_meta_data(obs_seq, 1, 'Data QC')
 !     call read_obs_seq(obs_out_file, 0, 0, max_obs, obs_seq)
 !  endif
 
-! Set the DART data quality control.   0 is good data.
+! Set the DART data quality control.   0 is good data. 
 ! increasingly larger QC values are more questionable quality data.
 qc = 0.0_r8
 qc_count = 0
 
-! Loop for reading IASI ascii data file
-obsloop: do    ! No end limit - have the loop break when input ends
+obsloop: do    ! no end limit - have the loop break when input ends
 
-   ! Read in a line from the iasi_ascii file.   What you need to create an obs:
+   ! read in a line from the iasi_ascii file.   What you need to create an obs:
    !  location: lat, lon, and height in pressure or meters
    !  time: when the observation was taken
    !  type: from the DART list of obs types
@@ -140,30 +141,30 @@ obsloop: do    ! No end limit - have the loop break when input ends
    !  averaging kernel and a priori profile
    !  for now, we chose 2 'retrieval levels' corresponding to highest sensitivity
    !  assume to be independent from each other
-   !  assume here a line is a type (1/2), location, time, value, obs error
+   ! assume here a line is a type (1/2), location, time, value, obs error
 
    ! read in entire iasi_ascii line into a buffer
    read(iunit, "(A)", iostat=rcio) input_line
    !print *, input_line
-   if (rcio /= 0) then
+   if (rcio /= 0) then 
       if (debug) print *, 'got bad read code from input file, rcio = ', rcio
       exit obsloop
    endif
 
    read(input_line(1:10), *, iostat=rcio) otype_char
-   if (rcio /= 0) then
+   if (rcio /= 0) then 
       if (debug) print *, 'got bad read code trying to get obs type, rcio = ', rcio
       exit obsloop
    endif
-
-   ! otype is fixed to 1 for IASI O3
+   
+   ! here, otype is fixed to 1 for IASI O3
    if (debug) print *, 'next observation type = ', otype_char
    read(input_line(12:15), *, iostat=rcio) year
    read(input_line(16:17), *, iostat=rcio) month
    read(input_line(18:19), *, iostat=rcio) day
    ! next line
    read(iunit,"(9F14.4)", iostat=rcio) seconds, lat, lon, sza, cloud, retlev2, &
-                            rnlev_use, dfs100, dfs300
+                            rnlev_use, dfs100, dfs300 
    !write(*,"(9F14.4)", iostat=rcio) seconds, lat, lon, sza, cloud, retlev2, &
    !                         rnlev_use, dfs100, dfs300
 
@@ -248,11 +249,11 @@ obsloop: do    ! No end limit - have the loop break when input ends
     !day = day + 1
     ! play with the error for now
     if (debug) print *, 'next observation located at lat, lon = ', lat, lon
-    if (rcio /= 0) then
+    if (rcio /= 0) then 
        if (debug) print *, 'got bad read code getting rest of iasi o3 obs, rcio = ', rcio
        exit obsloop
     endif
-
+   
    ! check the lat/lon values to see if they are ok
    !if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
    !if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
@@ -273,7 +274,7 @@ obsloop: do    ! No end limit - have the loop break when input ends
    ! extract time of observation into gregorian day, sec.
    call get_time(time_obs, osec, oday)
 
-!   if (retlev2 < 10000.0_r8) then
+!   if (retlev2 < 10000.0_r8) then 
    print *, oday, osec
    qc_count = qc_count + 1
    ! this example assumes there is an obs type, where otype=1 is
@@ -301,18 +302,18 @@ if ( get_num_obs(obs_seq) > 0 ) then
    call write_obs_seq(obs_seq, obs_out_file)
 endif
 
-! End of main program
-
+! end of main program
 call finalize_utilities()
 
 contains
 
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 !   create_3d_obs - subroutine that is used to create an observation
-!                   type from observation data.
+!                   type from observation data.  
 !
-!       NOTE: assumes the code is using the threed_sphere locations module,
+!       NOTE: assumes the code is using the threed_sphere locations module, 
 !             that the observation has a single data value and a single
 !             qc value, and that this obs type has no additional required
 !             data (e.g. gps and radar obs need additional data per obs)
@@ -340,37 +341,35 @@ contains
 !     adapted for more generic use 11 Mar 2010, nancy collins, ncar/image
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, &
-                         obs, akcol, apcol_val, altretlev, aircol_val, qc_count, nlev_use, apcol)
+subroutine create_3d_obs(lat, lon, vval, vkind, obsv, okind, oerr, day, sec, qc, obs, akcol, apcol_val, altretlev, aircol_val, qc_count, nlev_use, apcol)
 use        types_mod, only : r8
-use      obs_def_mod, only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
+use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
                              set_obs_def_error_variance, set_obs_def_location, set_obs_def_key
 use obs_def_iasi_mod, only : set_obs_def_iasi_o3
 use obs_sequence_mod, only : obs_type, set_obs_values, set_qc, set_obs_def
 use time_manager_mod, only : time_type, set_time
 use     location_mod, only : set_location
 
-integer,        intent(in)    :: okind, vkind, day, sec
-real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
-type(obs_type), intent(inout) :: obs
-real(r8),       intent(in)    :: akcol(nlevels)
-real(r8),       intent(in)    :: altretlev(nlevels)
-real(r8),       intent(in)    :: apcol(nlevels)
-real(r8),       intent(in)    :: aircol_val(nlevels)
-real(r8),       intent(in)    :: apcol_val ! aircol_val
-integer,        intent(in)    :: qc_count
-integer,        intent(in)    :: nlev_use
+ integer,        intent(in)    :: okind, vkind, day, sec
+ real(r8),       intent(in)    :: lat, lon, vval, obsv, oerr, qc
+ type(obs_type), intent(inout) :: obs
+ integer, parameter            :: nlevels = 40
+ real(r8),       intent(in)    :: akcol(nlevels)
+ real(r8),       intent(in)    :: altretlev(nlevels)
+ real(r8),       intent(in)    :: apcol(nlevels)
+ real(r8),       intent(in)    :: aircol_val(nlevels)
+ real(r8),       intent(in)    :: apcol_val ! aircol_val
+ integer,        intent(in)    :: qc_count
+ integer,        intent(in)    :: nlev_use
 
-real(r8)           :: obs_val(1), qc_val(1)
-type(obs_def_type) :: obs_def
+ real(r8)           :: obs_val(1), qc_val(1)
+ type(obs_def_type) :: obs_def
 
 call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
 call set_obs_def_kind(obs_def, okind)
 call set_obs_def_time(obs_def, set_time(sec, day))
 call set_obs_def_error_variance(obs_def, oerr * oerr)
-call set_obs_def_iasi_o3(qc_count, akcol(1:nlev_use), apcol_val, altretlev(1:nlev_use), &
-                         aircol_val(1:nlev_use), nlev_use, apcol(1:nlev_use))
+call set_obs_def_iasi_o3(qc_count, akcol(1:nlev_use), apcol_val, altretlev(1:nlev_use), aircol_val(1:nlev_use), nlev_use, apcol(1:nlev_use))
 call set_obs_def_key(obs_def, qc_count)
 !call set_obs_def(obs, obs_def)
 
@@ -378,16 +377,61 @@ obs_val(1) = obsv
 call set_obs_values(obs, obs_val)
 qc_val(1)  = qc
 call set_qc(obs, qc_val)
-call set_obs_def(obs, obs_def)
 
+call set_obs_def(obs, obs_def)
 end subroutine create_3d_obs
 
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   add_obs_to_seq -- adds an observation to a sequence.  inserts if first
+!           obs, inserts with a prev obs to save searching if that's possible.
+!
+!     seq - observation sequence to add obs to
+!     obs - observation, already filled in, ready to add
+!     obs_time - time of this observation, in dart time_type format
+!     prev_obs - the previous observation that was added to this sequence
+!                (will be updated by this routine)
+!     prev_time - the time of the previously added observation (will also
+!                be updated by this routine)
+!     first_obs - should be initialized to be .true., and then will be
+!                updated by this routine to be .false. after the first obs
+!                has been added to this sequence.
+!
+!     created Mar 8, 2010   nancy collins, ncar/image
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+subroutine add_obs_to_seq(seq, obs, obs_time, prev_obs, prev_time, first_obs)
+ use        types_mod, only : r8
+ use obs_sequence_mod, only : obs_sequence_type, obs_type, insert_obs_in_seq
+ use time_manager_mod, only : time_type, operator(>=)
+
+  type(obs_sequence_type), intent(inout) :: seq
+  type(obs_type),          intent(inout) :: obs, prev_obs
+  type(time_type),         intent(in)    :: obs_time
+  type(time_type),         intent(inout) :: prev_time
+  logical,                 intent(inout) :: first_obs
+
+! insert(seq,obs) always works (i.e. it inserts the obs in
+! proper time format) but it can be slow with a long file.
+! supplying a previous observation that is older (or the same
+! time) as the new one speeds up the searching a lot.
+
+if(first_obs) then    ! for the first observation, no prev_obs
+   call insert_obs_in_seq(seq, obs)
+   first_obs = .false.
+else               
+   if(obs_time >= prev_time) then  ! same time or later than previous obs
+      call insert_obs_in_seq(seq, obs, prev_obs)
+   else                            ! earlier, search from start of seq
+      call insert_obs_in_seq(seq, obs)
+   endif
+endif
+
+! update for next time
+prev_obs = obs
+prev_time = obs_time
+
+end subroutine add_obs_to_seq
+
 end program iasi_ascii_to_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-

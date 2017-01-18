@@ -26,9 +26,9 @@ export LBC_FREQ=3
 (( CYCLE_PERIOD_SEC=${CYCLE_PERIOD}*60*60 ))
 #
 # Define special directory names
-export EMISSIONS_DIR=chem_static_100km_p30
-export WPB_RC_DIR=wpb_rc_chem_100km_p10
-export OBS_SEQ_DIR=obs_MODCOMB_AOD_Mig_DA_filt
+export EMISSIONS_DIR=chem_static_100km_p30_corr
+export WPB_RC_DIR=wpb_rc_chem_100km_p10_corr
+export OBS_SEQ_DIR=obs_MODCOMB_AOD_RAWR_filt
 export OBS_SEQ_FLNAME=obs_seq_comb_filtered_
 #
 # Special skips
@@ -68,38 +68,36 @@ if [[ ! ${RUN_WARM} == true ]]; then
 fi
 #
 # Define use options
-export USE_HSI=false
 export USE_WRFDA=false
 export USE_DART_INFL=true
 #
 # Define code versions
-export DART_VER=DART_CHEM
+export DART_VER=DART_CHEM_MY_BRANCH
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar
 #
 # Set job submission parameters
-export PROJ_NUMBER=${W_PROJ_NUMBER}
-export TIME_LIMIT_FILTER=3:59
+export PROJ_NUMBER_ACD=${W_PROJ_NUMBER_ACD}
+export PROJ_NUMBER_NSC=${W_PROJ_NUMBER_NSC}
+export TIME_LIMIT_CONV=0:10
+export TIME_LIMIT_FILTER=2:59
 export TIME_LIMIT_WRF=0:59
 export NUM_TASKS=32
 export TASKS_PER_NODE=8
-export JOB_CLASS_WRF=regular
+export JOB_CLASS_CONV=premium
 export JOB_CLASS_FILTER=regular
+export JOB_CLASS_WRF=regular
 #
 # Define independent directory paths
 export PROJECT_DIR=/glade/p/work/mizzi
 export SCRATCH_DIR=/glade/scratch/mizzi
 export ACD_DIR=/glade/p/acd/mizzi
-export HSI_DIR=/MIZZI
 #
 export TRUNK_DIR=${PROJECT_DIR}/TRUNK
 export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
-export HSI_DATA_DIR=${HSI_DIR}/AVE_TEST_DATA
-export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MODCOMB_AOD_Exp_2_MgDA_20M_100km_p10p30
-export HSI_SAVE_DIR=${HSI_DIR}/DART_TEST_AVE/MODCOMB_AOD_Exp_2_MgDA_20M_100km_p10p30
+export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MODCOMB_AOD_Exp_2_MgDA_20M_100km
 mkdir -p ${RUN_DIR}
-hsi "mkdir -p ${HSI_SAVE_DIR}"
 #
 # Dependent path settings
 export CENTRALDIR=${RUN_DIR}/DART_CENTRALDIR
@@ -163,11 +161,7 @@ if ${RUN_CENTRALDIR_SETUP}; then
    cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ${CENTRALDIR}/.
 #
 # Copy wrfinput to $CENTRALDIR
-   if ${USE_HSI}; then
-      hsi get ${CENTRALDIR}/wrfinput_d${DOMAIN} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${INITIAL_DATE}/wrfinput_d${DOMAIN}_${INITIAL_FILE_DATE}.e001
-   else
-      cp ${DATA_DIR}/${WPB_RC_DIR}/${INITIAL_DATE}/wrfinput_d${DOMAIN}_${INITIAL_FILE_DATE}.e001 wrfinput_d${DOMAIN}
-   fi
+   cp ${DATA_DIR}/${WPB_RC_DIR}/${INITIAL_DATE}/wrfinput_d${DOMAIN}_${INITIAL_FILE_DATE}.e001 wrfinput_d${DOMAIN}
 #
 # Copy necessary files to $WRF_RUN_DIR 
    cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ${WRF_RUN_DIR}/.
@@ -191,17 +185,10 @@ if ${RUN_CENTRALDIR_SETUP}; then
 #
 # Copy necessary files to $WRFCHEM_RUN_DIR
    cd ${WRFCHEM_RUN_DIR} 
-   if ${USE_HSI}; then
-      hsi get ${HSI_DATA_DIR}/${EMISSIONS_DIR}/clim_p_trop.nc 
-      hsi get ${HSI_DATA_DIR}/${EMISSIONS_DIR}/exo_coldens_d${DOMAIN} 
-      hsi get ${HSI_DATA_DIR}/${EMISSIONS_DIR}/ubvals_b40.20th.track1_1996-2005.nc 
-      hsi get ${HSI_DATA_DIR}/${EMISSIONS_DIR}/wrf_season_wes_usgs_d${DOMAIN}.nc 
-   else
-      cp ${DATA_DIR}/${EMISSIONS_DIR}/clim_p_trop.nc ${WRFCHEM_RUN_DIR}/.
-      cp ${DATA_DIR}/${EMISSIONS_DIR}/exo_coldens_d${DOMAIN} ${WRFCHEM_RUN_DIR}/.
-      cp ${DATA_DIR}/${EMISSIONS_DIR}/ubvals_b40.20th.track1_1996-2005.nc ${WRFCHEM_RUN_DIR}/.
-      cp ${DATA_DIR}/${EMISSIONS_DIR}/wrf_season_wes_usgs_d${DOMAIN}.nc ${WRFCHEM_RUN_DIR}/.
-   fi
+   cp ${DATA_DIR}/${EMISSIONS_DIR}/clim_p_trop.nc ${WRFCHEM_RUN_DIR}/.
+   cp ${DATA_DIR}/${EMISSIONS_DIR}/exo_coldens_d${DOMAIN} ${WRFCHEM_RUN_DIR}/.
+   cp ${DATA_DIR}/${EMISSIONS_DIR}/ubvals_b40.20th.track1_1996-2005.nc ${WRFCHEM_RUN_DIR}/.
+   cp ${DATA_DIR}/${EMISSIONS_DIR}/wrf_season_wes_usgs_d${DOMAIN}.nc ${WRFCHEM_RUN_DIR}/.
 fi
 echo COMPLETED RUN_CENTRALDIR_SETUP CODE BLOCK
 #
@@ -324,7 +311,7 @@ if ${RUN_CREATE_NAMELISTS}; then
    export NL_CUTOFF=0.1
    export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'MODIS_AOD_RETRIEVAL'"
    export NL_SAMPLING_ERROR_CORRECTION=.true.
-   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1
+   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05
    export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
 #
 # &ensemble_manager_nml
@@ -386,6 +373,14 @@ if ${RUN_CREATE_NAMELISTS}; then
                               'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
                               'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
                               'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
+                              'TAUAER1','KIND_TAUAER1',             'TYPE_EXTCOF','UPDATE','999',
+                              'TAUAER2','KIND_TAUAER2',             'TYPE_EXTCOF','UPDATE','999',
+                              'TAUAER3','KIND_TAUAER3',             'TYPE_EXTCOF','UPDATE','999',
+                              'TAUAER4','KIND_TAUAER4',             'TYPE_EXTCOF','UPDATE','999',
+                              'PM10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
+                              'PM2_5_DRY','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
+                              'P10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
+                              'P25','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
                               'SEAS_1','KIND_SSLT01',               'TYPE_EXTCOF','UPDATE','999',
                               'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
                               'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
@@ -428,6 +423,14 @@ if ${RUN_CREATE_NAMELISTS}; then
                            'BC2','0.0','NULL','CLAMP',
                            'OC1','0.0','NULL','CLAMP',
                            'OC2','0.0','NULL','CLAMP',
+                           'TAUAER1','0.0','NULL','CLAMP',
+                           'TAUAER2','0.0','NULL','CLAMP',
+                           'TAUAER3','0.0','NULL','CLAMP',
+                           'TAUAER4','0.0','NULL','CLAMP',
+                           'PM10','0.0','NULL','CLAMP',
+                           'PM2_5_DRY','0.0','NULL','CLAMP',
+                           'P10','0.0','NULL','CLAMP',
+                           'P25','0.0','NULL','CLAMP',
                            'SEAS_1','0.0','NULL','CLAMP',
                            'SEAS_2','0.0','NULL','CLAMP',
                            'SEAS_3','0.0','NULL','CLAMP',
@@ -436,7 +439,10 @@ if ${RUN_CREATE_NAMELISTS}; then
    export NL_NUM_DOMAINS=${DOMAIN}
    export NL_CALENDAR_TYPE=3
    export NL_ASSIMILATION_PERIOD_SECONDS=${CYCLE_PERIOD_SEC}
-   export NL_VERT_LOCALIZATION_COORD=3
+# height
+#   export NL_VERT_LOCALIZATION_COORD=3
+# scale height
+   export NL_VERT_LOCALIZATION_COORD=4
    export NL_CENTER_SEARCH_HALF_LENGTH=500000.
    export NL_CENTER_SPLINE_GRID_SCALE=10
    export NL_SFC_ELEV_MAX_DIFF=100.0
@@ -500,6 +506,7 @@ if ${RUN_CREATE_NAMELISTS}; then
    export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                       'RADIOSONDE_U_WIND_COMPONENT',
                                       'RADIOSONDE_V_WIND_COMPONENT',
+                                      'RADIOSONDE_SPECIFIC_HUMIDITY',
                                       'ACARS_U_WIND_COMPONENT',
                                       'ACARS_V_WIND_COMPONENT',
                                       'ACARS_TEMPERATURE',
@@ -527,8 +534,9 @@ if ${RUN_CREATE_NAMELISTS}; then
    export NL_FIELDLIST_FILE="' '"
 #
 # &location_nml
-   export NL_HORIZ_DIST_ONLY=.true.
-   export NL_VERTICAL_NORMALIZATION_HEIGHT=8000.0
+   export NL_HORIZ_DIST_ONLY=.false.
+#   export NL_VERT_NORMALIZATION_HEIGHT=10000.0
+   export NL_VERT_NORMALIZATION_SCALE_HEIGHT=1.5
 #
 # WRFCHEM namelist.input parameters
 # TIME CONTROL
@@ -740,11 +748,7 @@ if ${RUN_INITIAL}; then
       if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
       if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
       if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
-      if ${USE_HSI}; then
-         hsi get wrfinput_d${DOMAIN} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-      else
-         cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfinput_d${DOMAIN}
-      fi
+      cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfinput_d${DOMAIN}
       cp wrfinput_d${DOMAIN} ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${DAY_GREG}_${SEC_GREG}_${KMEM}
 #
 # Convert the wrfinput files to DART output format for advance_model
@@ -779,7 +783,7 @@ if ${RUN_INITIAL}; then
       export JOBRND=conv_$RANDOM
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.out                      # output filename
@@ -842,11 +846,7 @@ EOF
       if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
       if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
       if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
-      if ${USE_HSI}; then
-         hsi get wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-      else
-         cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
-      fi
+      cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
       let IMEM=${IMEM}+1
    done
 #
@@ -884,38 +884,20 @@ EOF
       rm -rf wrffirechemi_*
       cp ${CENTRALDIR}/advance_time ./.
       cp ${CENTRALDIR}/input.nml ./.
-      if ${USE_HSI}; then
-         hsi get wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
-      else
-         cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
-      fi
+      cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
 #
 # Copy the wrfchem time dependent chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
-      if ${USE_HSI}; then
-         export LL_DATE=${L_DATE}
-         while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-            export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-            export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-            export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-            export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-            export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-            hsi get wrfchemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-            hsi get wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-            export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
-         done
-      else
-         export LL_DATE=${L_DATE}
-         while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-            export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-            export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-            export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-            export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-            export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-            cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
-            cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
-            export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
-         done
-      fi
+      export LL_DATE=${L_DATE}
+      while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+         export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+         export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+         export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+         export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+         export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+         cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
+         cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
+         export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
+      done
 #
 # Create filter control file
       cd ${CENTRALDIR}
@@ -932,7 +914,7 @@ EOF
       export JOBRND=advm_$RANDOM
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_NSC}
 #BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
@@ -1007,7 +989,6 @@ EOF
    if ${RUN_ARCHIVE}; then
 #      rm -rf ${RUN_DIR}/${L_DATE}/initial
       cd ${RUN_DIR}/${L_DATE}
-      hsi "mkdir -p ${HSI_SAVE_DIR}/${L_DATE}; cd ${HSI_SAVE_DIR}/${L_DATE}; put -R wrfchem_forecast"
    fi
 fi
 echo COMPLETED RUN_INITIAL CODE BLOCK
@@ -1087,32 +1068,32 @@ if ${RUN_CYCLING}; then
          cp ${CENTRALDIR}/advance_time ./.
          cp ${CENTRALDIR}/wrf_to_dart ./.
          cp ${CENTRALDIR}/wrfinput_d${DOMAIN} ./.
+# APM FIX
+         cp ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_0001 wrfinput_d${DOMAIN}
          cp ${CENTRALDIR}/filter ./.
          cp ${CENTRALDIR}/restart_file_tool ./.
          cp ${CENTRALDIR}/da_run_hold.ksh ./.
          cp ${CENTRALDIR}/final_full.${NUM_MEMBERS} ./.
+         cp ${DATA_DIR}/${EMISSIONS_DIR}/exo_coldens_d${DOMAIN} ./.
+         cp ${DATA_DIR}/${EMISSIONS_DIR}/ubvals_b40.20th.track1_1996-2005.nc ./.
 #
          if [[ ! ${SKIP_FILTER_WRF_TO_DART} == true ]]; then 
 #
-# Copy wrfinput files to parent directory because hsi get does not work from in bsubed script
+# Copy wrfinput files to parent directory
             let IMEM=1
             while [[ ${IMEM} -le ${NUM_MEMBERS} ]]; do
                export KMEM=${IMEM}
-               export CMEM=${IMEM}
+               export CMEM=e${IMEM}
                if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
-               if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
-               if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
+               if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=e0${IMEM}; fi
+               if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=e00${IMEM}; fi
                rm -rf wrfinput_d${DOMAIN}_${KMEM}
                if [[ -e ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} ]]; then
                   cp ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} wrfinput_d${DOMAIN}_${KMEM}
-               elif [[ ${USE_HSI} ]]; then
-                  echo APM: DART FAILED FOR MEMBER ${KMEM} ON DATE ${L_DATE}
-                  exit
-#                  hsi get wrfinput_d${DOMAIN}_${KMEM} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
                else
                   echo APM: DART FAILED FOR MEMBER ${KMEM} ON DATE ${L_DATE}
                   exit
-#                  cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfinput_d${DOMAIN}_${KMEM}
+#                 cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.${CMEM} wrfinput_d${DOMAIN}_${KMEM}
                fi    
                let IMEM=${IMEM}+1
             done
@@ -1133,15 +1114,15 @@ if ${RUN_CYCLING}; then
             rm conv_*.* 
             cat << EOF >job.ksh
 #!/bin/ksh -x
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_NSC}
 #BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n 1                                  # number of total (MPI) tasks
 #BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
 #BSUB -o ${JOBRND}.jout                      # output filename
 #BSUB -e ${JOBRND}.jerr                      # error filename
-#BSUB -W ${TIME_LIMIT_WRF}               # wallclock time (minutes)
-#BSUB -q ${JOB_CLASS_WRF}
+#BSUB -W ${TIME_LIMIT_CONV}               # wallclock time (minutes)
+#BSUB -q ${JOB_CLASS_CONV}
 #
 # Loop through ensemble members
 let IMEM=1
@@ -1229,11 +1210,7 @@ EOF
 #
 # Get the obs_seq.out file for current cycle
          export FILE=${OBS_SEQ_FLNAME}${L_DATE}.out
-         if ${USE_HSI}; then
-            hsi get obs_seq.out : ${HSI_DATA_DIR}/${OBS_SEQ_DIR}/${L_DATE}/${FILE}
-         else
-            cp ${DATA_DIR}/${OBS_SEQ_DIR}/${L_DATE}/${FILE} obs_seq.out
-         fi
+         cp ${DATA_DIR}/${OBS_SEQ_DIR}/${L_DATE}/${FILE} obs_seq.out
 #
 # Generate input.nml
          set -A temp `echo ${ASIM_MIN_DATE} 0 -g | ./advance_time`
@@ -1255,15 +1232,6 @@ special_outlier_threshold=${NL_SPECIAL_OUTLIER_THRESHOLD}
 /
 EOF
 #
-# Make obs_def_apm_nml for apm_scale to adjust observation error variance
-         rm -rf obs_def_apm.nml
-         cat <<EOF > obs_def_apm.nml
-&obs_def_apm_nml
-apm_scale=${NL_APM_SCALE}
-apm_scale_sw=${NL_APM_SCALE_SW}
-/
-EOF
-#
 # Generate job script to run filter
          if [[ -f job.ksh ]]; then
             rm job.ksh
@@ -1275,7 +1243,7 @@ EOF
          export JOBRND=filt_$RANDOM
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_NSC}
 #BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
@@ -1406,11 +1374,7 @@ EOF
             if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
             if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
             if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
-            if ${USE_HSI}; then
-               hsi get wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} : ${HSI_SAVE_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} 
-            else
-               cp ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
-            fi
+            cp ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
             let IMEM=${IMEM}+1
          done
 #
@@ -1427,11 +1391,7 @@ EOF
             if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
             if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=0${IMEM}; fi
             if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=00${IMEM}; fi
-            if ${USE_HSI}; then
-               hsi get wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
-            else
-               cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
-            fi
+            cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
             let IMEM=${IMEM}+1
          done
 #
@@ -1470,38 +1430,20 @@ EOF
             rm -rf wrffirechemi_d${DOMAIN}*
             cp ${CENTRALDIR}/advance_time ./.
             cp ${CENTRALDIR}/input.nml ./.
-            if ${USE_HSI}; then
-               hsi get wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM}
-            else
-               cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
-            fi
+            cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}
 #
 # Copy the wrfchem time dependent chemistry data to $CENTRALDIR/WRFCHEM_RUN for this member
-            if ${USE_HSI}; then
-               export LL_DATE=${L_DATE}
-               while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-                  export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-                  export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-                  export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-                  export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-                  export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-                  hsi get wrfchemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-                  hsi get wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-                  export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
-               done
-            else
-               export LL_DATE=${L_DATE}
-               while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-                  export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-                  export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-                  export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-                  export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-                  export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-                  cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
-                  cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
-                  export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
-               done
-            fi
+            export LL_DATE=${L_DATE}
+            while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
+               export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+               export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+               export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+               export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+               export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
+               cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
+               export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
+            done
 #
 # Create filter control file
             cd ${CENTRALDIR}
@@ -1520,7 +1462,7 @@ EOF
             rm  -rf advm*.ferr
             cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
+#BSUB -P ${PROJ_NUMBER_NSC}
 #BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
@@ -1571,366 +1513,18 @@ EOF
             if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} ]]; then
                echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} failed.
                export COLD_START_FLG=1
-#               exit
+               exit
             fi
             if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} ]]; then
                echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} failed.
                export COLD_START_FLG=1
-#               exit
+               exit
             fi
             if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} ]]; then
                echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} failed.
                export COLD_START_FLG=1
-#               exit
+               exit
             fi
-#
-# Start of WARM/COLD START CODE
-            if [[ ${COLD_START_FLG} -eq 1 ]]; then
-               echo APM: WARM START required for member ${KMEM}. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-#
-# Go to advance_temp directory for this member
-               cd ${RUN_DIR}/${L_DATE}/cycle
-               if [[ ! -e advance_time ]]; then
-                 cp ${CENTRALDIR}/advance_time ./.
-                 if [[ ! -e advance_time ]]; then echo APM: cp advance_time failed; exit; fi
-               elif [[ ! -e wrf_to_dart ]]; then
-                 cp ${CENTRALDIR}/wrf_to_dart ./.
-                 if [[ ! -e wrf_to_dart ]]; then echo APM: cp wrf_to_dart failed; exit; fi
-               elif [[ ! -e restart_file_tool ]]; then
-                 cp ${CENTRALDIR}/WRF_RUN/restart_file_tool ./.
-                 if [[ ! -e restart_file_tool ]]; then echo APM: cp restart_file_tool failed; exit; fi
-               elif [[ ! -e advance_model.ksh ]]; then
-                 cp ${CENTRALDIR}/WRF_RUN/advance_model.ksh ./.
-                 if [[ ! -e advance_model.ksh ]]; then echo APM: cp advance_model.ksh failed; exit; fi
-               fi
-#
-# Copy the DART filter posterior analyses
-               rm -rf ${CENTRALDIR}/assim_model_state_ic_${KMEM}
-               cp ${RUN_DIR}/${L_DATE}/dart_filter/assim_model_state_ic.${KMEM} ${CENTRALDIR}/assim_model_state_ic_${KMEM}
-               if [[ ! -e ${CENTRALDIR}/assim_model_state_ic_${KMEM} ]]; then echo APM: cp ${CENTRALDIR}/assim_model_state_ic_${KMEM} failed; exit; fi
-#
-# Copy past WRFOUT files to $CENTRALDIR/WRF as WRFINPUT file templates
-               if [[ ! -e ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_*_${KMEM} ]]; then
-                  if ${USE_HSI}; then
-                     hsi get ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} : ${HSI_SAVE_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} 
-                  else
-                     cp ${RUN_DIR}/${PAST_DATE}/wrfchem_forecast/wrfout_d${DOMAIN}_${L_FILE_DATE}_${KMEM} ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
-                  fi
-                  if [[ ! -e ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} ]]; then echo APM: cp ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} failed; exit; fi
-               fi
-#
-# One WRFINPUT file as template to $CENTRALDIR
-               rm -rf ${CENTRALDIR}/wrfinput_d${DOMAIN}
-               cp ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} ${CENTRALDIR}/wrfinput_d${DOMAIN}
-#
-# Copy WRFBDY files to $CENTRALDIR/WRF
-               cd ${CENTRALDIR}/WRF
-               if [[ ! -e  wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} ]]; then
-                  if ${USE_HSI}; then
-                     hsi get wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-                  else
-                     cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM}
-                  fi
-                  if [[ ! -e wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} ]]; then echo APM: cp wrfbdy_d${DOMAIN}_${NEXT_DAY_GREG}_${NEXT_SEC_GREG}_${KMEM} failed; exit; fi
-               fi
-#
-# Copy chem static chemistry data to $CENTRALDIR/WRFCHEM_RUN
-               cd ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}
-               rm -rf wrfbiochemi_d${DOMAIN}*
-               if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} ]]; then
-                  if ${USE_HSI}; then
-                     hsi get wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-                  else
-                     cp ${DATA_DIR}/${EMISSIONS_DIR}/${L_YY}${L_MM}${L_DD}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} 
-                  fi
-                  if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} ]]; then echo APM: cp ${WRFCHEM_RUN_DIR}/wrfbiochemi_d${DOMAIN}_${L_FILE_DATE} failed; exit; fi
-               fi
-#
-# Copy the wrfchem time dependent chemistry data to $CENTRALDIR/WRFCHEM_RUN
-               cd ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}
-               rm -rf wrfchemi_d${DOMAIN}*
-               rm -rf wrffirechemi_d${DOMAIN}*
-               cp ${CENTRALDIR}/advance_time ./.
-               cp ${CENTRALDIR}/input.nml ./.
-               if ${USE_HSI}; then
-                  export LL_DATE=${L_DATE}
-                  while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-                     export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-                     export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-                     export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-                     export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-                     export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-                     if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then 
-                        hsi get wrfchemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-                        if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then echo APM: cp wrfchemi_d${DOMAIN}_${LL_FILE_DATE} failed; exit; fi
-                     fi
-                     if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then
-                        hsi get wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} : ${HSI_DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM}
-                        if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then echo APM: cp wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} failed; exit; fi
-                     fi
-                     export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time`
-                  done 
-               else
-                  export LL_DATE=${L_DATE}
-                  while [[ ${LL_DATE} -le ${NEXT_DATE} ]]; do
-                     export LL_YY=`echo ${LL_DATE} | cut -c1-4`
-                     export LL_MM=`echo ${LL_DATE} | cut -c5-6`
-                     export LL_DD=`echo ${LL_DATE} | cut -c7-8`
-                     export LL_HH=`echo ${LL_DATE} | cut -c9-10`
-                     export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-                     if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then 
-                        cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrfchemi_d${DOMAIN}_${LL_FILE_DATE}
-                        if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrfchemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then echo APM: cp wrfchemi_d${DOMAIN}_${LL_FILE_DATE} failed; exit; fi
-                     fi
-                     if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then
-                        cp ${DATA_DIR}/${EMISSIONS_DIR}/${LL_YY}${LL_MM}${LL_DD}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}.e${CMEM} wrffirechemi_d${DOMAIN}_${LL_FILE_DATE}
-                       if [[ ! -e ${WRFCHEM_RUN_DIR}/MEMBER_${KMEM}/wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} ]]; then echo APM: cp wrffirechemi_d${DOMAIN}_${LL_FILE_DATE} failed; exit; fi
-                     fi
-                     export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
-                  done
-               fi
-#
-# Generate DART input.nml and WRFCHEM namelist.input files
-               cd ${CENTRALDIR}
-               rm namelist.input
-               rm input.nml
-               ${DART_DIR}/models/wrf_chem/namelist_scripts/WRFCHEM/wrfchem_create_namelist.input.ksh
-               ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-#
-# Loop for restarting failed member
-               let COLD_START_CNT=1
-               while [[ ${COLD_START_CNT} -lt ${COLD_START_LIMIT} ]]; do 
-#
-# Run WRFCHEM
-# Generate job script to run advance_model.ksh for each member
-#
-# Create filter control file
-                  if [[ -f filter_control_${KMEM} ]]; then rm -rf filter_control_${KMEM}; fi
-                  touch filter_control_${KMEM} 
-                  echo ${KMEM} >> filter_control_${KMEM} 
-                  echo assim_model_state_ic_${KMEM} >> filter_control_${KMEM} 
-                  echo assim_model_state_ud_${KMEM} >> filter_control_${KMEM}
-#
-# Create job script 
-                  if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-                  touch job.ksh
-                  RANDOM=$$
-                  export JOBRND=advm_$RANDOM
-                  rm -rf advm*.fout
-                  rm  -rf advm*.ferr
-                  cat << EOF >job.ksh
-#!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
-#BSUB -x                                    # exclusive use of node (not_shared)
-#BSUB -n ${NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.fout                      # output filename
-#BSUB -e ${JOBRND}.ferr                      # error filename
-#BSUB -W ${TIME_LIMIT_WRF}               # wallclock time (minutes)
-#BSUB -q ${JOB_CLASS_WRF}
-#
-./advance_model.ksh 1 1 filter_control_${KMEM} > index_advance_model_${KMEM} 2>&1 
-
-export RC=\$?     
-if [[ -f ADV_MODEL_SUCCESS ]]; then rm -rf ADV_MODEL_SUCCESS; fi     
-if [[ -f ADV_MODEL_FAILED ]]; then rm -rf ADV_MODEL_FAILED; fi          
-if [[ \$RC = 0 ]]; then
-   touch ADV_MODEL_SUCCESS
-else
-   touch ADV_MODEL_FAILED 
-fi
-EOF
-                  bsub -K < job.ksh
-                  export COLD_START_FLG=0 
-                  export WRFOUT_FILE_ANL=wrfout_d${DOMAIN}_${L_FILE_DATE} 
-                  export WRFOUT_FILE_FOR=wrfout_d${DOMAIN}_${NEXT_FILE_DATE} 
-                  export WRFOUT_FILE_APM=wrfapm_d${DOMAIN}_${NEXT_FILE_DATE} 
-                  echo APM: COLD_START_CNT equals ${COLD_START_CNT}. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} failed. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-                     export COLD_START_FLG=1
-#                     exit
-                  fi
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} failed. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-                     export COLD_START_FLG=1
-#                     exit
-                  fi
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} failed. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-                     export COLD_START_FLG=1
-#                     exit
-                  fi
-                  if [[ ${COLD_START_FLG} -eq 0 ]]; then
-                     let COLD_START_CNT=${COLD_START_LIMIT}
-                  else
-                     let COLD_START_CNT=${COLD_START_CNT}+1 
-                  fi
-               done
-#
-# Perform cold start if warm start failed              
-               if [[ ${COLD_START_FLG} -eq 1 ]]; then 
-#
-# WARM_START failed
-                  echo APM: COLD START required for member ${KMEM}. >> ${RUN_DIR}/${L_DATE}/wrfchem_forecast/WARM_COLD_START_FILE
-#
-###########################
-#                  exit
-###########################
-#
-# Go to advance_temp directory for this member
-                  cd ${CENTRALDIR}/advance_temp_${KMEM}
-#
-# Get WRFINPUT and WRFBDY files and convert to DART format for the COLD START time
-                  if ${USE_HSI}; then
-                     hsi get wrfinput_d${DOMAIN} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-                     hsi get wrfbdy_d${DOMAIN} : ${HSI_DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} 
-                  else
-                     cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfinput_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfinput_d${DOMAIN}
-                     cp ${DATA_DIR}/${WPB_RC_DIR}/${L_DATE}/wrfbdy_d${DOMAIN}_${L_FILE_DATE}.e${CMEM} wrfbdy_d${DOMAIN}
-                  fi
-                  cp wrfinput_d${DOMAIN} ${CENTRALDIR}/WRF/wrfinput_d${DOMAIN}_${DAY_GREG}_${SEC_GREG}_${KMEM}
-                  cp wrfbdy_d${DOMAIN} ${CENTRALDIR}/WRF/wrfbdy_d${DOMAIN}_${DAY_GREG}_${SEC_GREG}_${KMEM}
-#
-# Convert the wrfinput files to DART output format for advance_model
-# &wrf_to_dart_nml
-                  export NL_DART_RESTART_NAME="'assim_model_state_tp_${KMEM}'"
-                  export NL_PRINT_DATA_RANGES=.false.
-#
-# &restart_file_tool_nml
-                  export NL_ENS_SIZE=1
-                  export NL_INPUT_FILE_NAME="'assim_model_state_tp'"
-                  export NL_OUTPUT_FILE_NAME="'assim_model_state_ic'"
-                  export NL_OUTPUT_IS_MODEL_ADVANCE_FILE=.true.
-                  export NL_OVERWRITE_ADVANCE_TIME=.true.
-                  export NL_NEW_ADVANCE_DAYS=${NEXT_DAY_GREG}
-                  export NL_NEW_ADVANCE_SECS=${NEXT_SEC_GREG}
-                  rm input.nml
-                  ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-#
-# make run directory for file conversons
-                  mkdir convert_file_${KMEM} 
-                  cd convert_file_${KMEM} 
-                  cp ../input.nml ./.
-                  cp ../wrfinput_d${DOMAIN} ./.
-                  cp ../../wrf_to_dart ./.
-                  cp ../../restart_file_tool ./.
-#
-# APM: modify for submission to geyser or caldera
-# Create job script 
-                  if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-                  touch job.ksh
-                  RANDOM=$$
-                  export JOBRND=conv_$RANDOM
-                  cat << EOF >job.ksh
-#!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:10                              # wallclock time (minutes)
-#BSUB -q geyser
-#
-# Run wrf_to_dart
-./wrf_to_dart > index_wrf_to_dart 2>&1 
-cp assim_model_state_tp_${KMEM} assim_model_state_tp.0001
-#
-# Run res
-./restart_file_tool > index_restart-file_tool 2>&1
-rm -rf assim_model_state_tp.0001
-mv assim_model_state_ic.0001 assim_model_state_ic_${KMEM}
-cp assim_model_state_ic_${KMEM} ${CENTRALDIR}/assim_model_state_ic_${KMEM}
-#
-export RC=\$?     
-if [[ -f CONV_SUCCESS ]]; then rm -rf CONV_SUCCESS; fi     
-if [[ -f CONV_FAILED ]]; then rm -rf CONV_FAILED; fi          
-if [[ \$RC = 0 ]]; then
-   touch CONV_SUCCESS
-else
-   touch CONV_FAILED 
-   exit
-fi
-EOF
-#
-# Submit convert file script for each and wait until job completes
-                  bsub -K < job.ksh 
-#
-# Check whether DART wrfinput file exist
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/convert_file_${KMEM}/assim_model_state_ic_${KMEM} ]]; then
-                     echo APM: COLD START conversion ${CENTRALDIR}/advance_temp_${KMEM}/convert_file_${KMEM}/assim_model_state_ic_${KMEM} failed.
-                     exit
-                  fi 
-#
-# Copy COLD START DART wrfinput file to run directory 
-                  rm -rf ${CENTRALDIR}/assim_model_state_${KMEM}
-                  cp ${CENTRALDIR}/advance_temp_${KMEM}/convert_file_${KMEM}/assim_model_state_ic_${KMEM} ${CENTRALDIR}/assim_model_state_ic_${KMEM}
-#
-# Run WRFCHEM
-# Generate job script to run advance_model.ksh for this member
-# Create filter control file
-                  cd ${CENTRALDIR}
-                  if [[ -f filter_control_${KMEM} ]]; then rm -rf filter_control_${KMEM}; fi
-                  touch filter_control_${KMEM} 
-                  echo ${KMEM} >> filter_control_${KMEM} 
-                  echo assim_model_state_ic_${KMEM} >> filter_control_${KMEM} 
-                  echo assim_model_state_ud_${KMEM} >> filter_control_${KMEM}
-#
-# Create job script 
-                  if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-                  touch job.ksh
-                  RANDOM=$$
-                  export JOBRND=advm_$RANDOM
-                  rm -rf advm*.fout
-                  rm  -rf advm*.ferr
-                  cat << EOF >job.ksh
-#!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER}
-#BSUB -x                                    # exclusive use of node (not_shared)
-#BSUB -n ${NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.fout                      # output filename
-#BSUB -e ${JOBRND}.ferr                      # error filename
-#BSUB -W ${TIME_LIMIT_WRF}               # wallclock time (minutes)
-#BSUB -q ${JOB_CLASS_WRF}
-#
-./advance_model.ksh 1 1 filter_control_${KMEM} > index_advance_model_${KMEM} 2>&1 
-
-export RC=\$?     
-if [[ -f ADV_MODEL_SUCCESS ]]; then rm -rf ADV_MODEL_SUCCESS; fi     
-if [[ -f ADV_MODEL_FAILED ]]; then rm -rf ADV_MODEL_FAILED; fi          
-if [[ \$RC = 0 ]]; then
-   touch ADV_MODEL_SUCCESS
-else
-   touch ADV_MODEL_FAILED 
-fi
-EOF
-                  bsub -K < job.ksh
-#
-# Check whether wrfout files exist               
-                  export WRFOUT_FILE_ANL=wrfout_d${DOMAIN}_${L_FILE_DATE} 
-                  export WRFOUT_FILE_FOR=wrfout_d${DOMAIN}_${NEXT_FILE_DATE} 
-                  export WRFOUT_FILE_APM=wrfapm_d${DOMAIN}_${NEXT_FILE_DATE} 
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_ANL} COLD START failed.
-                     exit
-                  fi
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_FOR} COLD START failed.
-                     exit
-                  fi
-                  if [[ ! -e ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} ]]; then
-                     echo APM: ${CENTRALDIR}/advance_temp_${KMEM}/${WRFOUT_FILE_APM} COLD_START failed.
-                     exit
-                  fi
-                  export COLD_START_FLG=0
-               fi
-            fi
-# End of COLD START CODE
-#
-            echo " " >> WARM_COLD_START_FILE
             let IMEM=${IMEM}+1
          done
 #
@@ -1982,10 +1576,6 @@ EOF
 #         rm -rf filt_*.jout
 #         rm -rf job.ksh
          cd ..
-#         if ${USE_HSI}; then
-            hsi "mkdir -p ${HSI_SAVE_DIR}/${L_DATE}; cd ${HSI_SAVE_DIR}/${L_DATE}; put -R dart_filter"
-            hsi "cd ${HSI_SAVE_DIR}/${L_DATE}; put -R wrfchem_forecast"
-#         fi
       fi
       echo COMPLETED RUN_ARCHIVE CODE BLOCK
       export L_DATE=${NEXT_DATE}

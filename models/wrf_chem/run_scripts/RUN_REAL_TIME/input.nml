@@ -114,6 +114,7 @@
                               '../../../obs_def/obs_def_gps_mod.f90',
                               '../../../obs_def/obs_def_vortex_mod.f90',
                               '../../../obs_def/obs_def_gts_mod.f90',
+                              '../../../obs_def/obs_def_OMI_NO2_mod.f90',
                               '../../../obs_def/obs_def_MODIS_AOD_mod.f90',
                               '../../../obs_def/obs_def_MOPITT_CO_mod.f90',
                               '../../../obs_def/obs_def_IASI_CO_mod.f90',
@@ -132,6 +133,7 @@
                                 'ACARS_TEMPERATURE', 
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
+                                'OMI_NO2_COLUMN',
                                 'MODIS_AOD_RETRIEVAL',
                                 'MOPITT_CO_RETRIEVAL',
                                 'IASI_CO_RETRIEVAL',
@@ -453,10 +455,10 @@
    obs_types         = '', 
    keep_types        = .false., 
    print_only        = .false., 
-   min_lat           = -90.0, 
-   max_lat           =  90.0, 
-   min_lon           =   0.0, 
-   max_lon           = 360.0,
+   min_lat           = 28.0, 
+   max_lat           = 50.0, 
+   min_lon           = 228.0, 
+   max_lon           = 266.0,
    /
 
 &replace_wrf_fields_nml
@@ -521,9 +523,20 @@
   sat_wind_pres_int        = 2500.0
   overwrite_ncep_satwnd_qc = .false.    
   overwrite_ncep_sfc_qc    = .false.  
+  superob_mopitt_co        = .false.
+  mopitt_co_pres_int       = 2500.0
   mopitt_co_extra          = 'obs_seq.mopitt_co'
   mopitt_co_horiz_int      = 100.0
-  mopitt_co_pres_int       = 2500.0
-  superob_mopitt_co        = .false.
-
+  superob_modis_aod        = .false.
+  modis_aod_pres_int       = 2500.0
+  modis_aod_extra          = 'obs_seq.modis_aod'
+  modis_aod_horiz_int      = 100.0
+  superob_iasi_co        = .false.
+  iasi_co_pres_int       = 2500.0
+  iasi_co_extra          = 'obs_seq.iasi_co'
+  iasi_co_horiz_int      = 100.0
+  superob_iasi_o3        = .false.
+  iasi_o3_pres_int       = 2500.0
+  iasi_o3_extra          = 'obs_seq.iasi_o3'
+  iasi_o3_horiz_int      = 100.0
 /
