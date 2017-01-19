@@ -124,13 +124,14 @@ LD = ifort
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-FFLAGS  = -O2 -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
-LDFLAGS = $(FFLAGS) $(LIBS)
-
+#FFLAGS  = -O2 -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
+#FFLAGS  = -g -C -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
+#
 # for development or debugging, use this instead:
-# FFLAGS = -g -C -check noarg_temp_created -fpe0 -vec-report0 \
-#          -fp-model precise  -ftrapuv -traceback \
-#          -warn argument_checking,declarations,uncalled,unused $(INCS)
+ FFLAGS = -g -C -CB -check noarg_temp_created -fpe0 -vec-report0 -mcmodel=large -shared-intel \
+          -fp-model precise  -ftrapuv -traceback \
+          -warn argument_checking,declarations,uncalled,unused $(INCS)
+ LDFLAGS = $(FFLAGS) $(LIBS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
 #        that the numerical differences aren't too large to be acceptable):

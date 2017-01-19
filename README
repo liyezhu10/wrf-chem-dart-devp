@@ -79,4 +79,15 @@ If any of these steps fail or you don't know how to do them, go to the
 DART project web page listed above for very detailed instructions that
 should get you over any bumps in the process.
 
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+TJH: Wed Jan 18 13:34:06 MST 2017
+
+All the (large-ish) data files have been removed from version control and stored
+in a tar file in /glade/p/image/DART_test_cases/wrf_chem/wrf_chem_data_files.tar
+As long as you are in the same directory as this README, you should be able
+to simply
+tar -xvf /glade/p/image/DART_test_cases/wrf_chem/wrf_chem_data_files.tar
+and be up and running.
+
 
