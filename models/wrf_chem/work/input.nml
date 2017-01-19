@@ -438,9 +438,9 @@
 
 &schedule_nml
    calendar        = 'Gregorian',  
-   first_bin_start =  2012, 6, 1, 3, 0, 0 ,
-   first_bin_end   =  2012, 6, 1, 9, 0, 0 ,
-   last_bin_end    =  2012, 6, 6, 9, 0, 0 ,
+   first_bin_start =  2008, 6, 1, 0, 0, 0 ,
+   first_bin_end   =  2008, 6,30, 0, 0, 0 ,
+   last_bin_end    =  2008, 6,30, 0, 0, 0 ,
    bin_interval_days    = 1000000,
    bin_interval_seconds = 21600,   
    max_num_bins         = 1000,
@@ -448,7 +448,7 @@
    /
    
 &obs_seq_to_netcdf_nml  
-   obs_sequence_name = 'obs_seq.final',
+   obs_sequence_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter/obs_seq.out',
    obs_sequence_list = '',
    append_to_netcdf  = .false.,
    lonlim1    =    0.0,
@@ -518,20 +518,19 @@
    /
 
 &obs_sequence_tool_nml
-   num_input_files   = 1, 
-   filename_seq      = 'obs_seq.out',
-   filename_out      = 'obs_seq.processed', 
+   filename_seq = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter/obs_seq.out',
+   filename_out      = 'obs_seq.minimal', 
    first_obs_days    = -1, 
    first_obs_seconds = -1, 
    last_obs_days     = -1, 
    last_obs_seconds  = -1, 
-   obs_types         = '', 
+   obs_types         = 'ACARS_U_WIND_COMPONENT', 'ACARS_V_WIND_COMPONENT', 'ACARS_TEMPERATURE' 
    keep_types        = .false., 
    print_only        = .false., 
-   min_lat           = -90.0, 
-   max_lat           =  90.0, 
-   min_lon           =   0.0, 
-   max_lon           = 360.0,
+   min_lat           = 25.0, 
+   max_lat           = 35.0, 
+   min_lon           = 220.0, 
+   max_lon           = 300.0,
    /
 
 &replace_wrf_fields_nml
@@ -600,5 +599,14 @@
   mopitt_co_horiz_int      = 100.0
   mopitt_co_pres_int       = 2500.0
   superob_mopitt_co        = .false.
-
 /
+
+&compare_states_nml
+   do_all_numeric_fields = .true.
+   fieldnames = ''
+   fieldlist_file = ''
+   fail_on_missing_field = .true.
+   debug = .false.
+   only_report_differences = .true.
+  /
+
