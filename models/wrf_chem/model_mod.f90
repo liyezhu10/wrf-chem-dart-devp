@@ -5451,7 +5451,7 @@ do id=1,num_domains
                          wrf%dom(id)%var_size(2,ind)/)
 
          allocate ( temp2d(dimsizes_2D(1),dimsizes_2D(2)) )
-         temp2d  = reshape(statevec(i:j), (/ dimsizes_3D(1),dimsizes_3D(2) /) )
+         temp2d  = reshape(statevec(i:j), (/ dimsizes_2D(1),dimsizes_2D(2) /) )
          call nc_check(nf90_put_var( ncFileID, VarID, temp2d, &
                                   start=(/ 1, 1, copyindex, timeindex /) ), &
                     'nc_write_model_vars','put_var '//trim(varname))
@@ -8610,7 +8610,6 @@ do i = 1, row
    ! surface field, otherwise you do the full-up 3d interpolation.
    if ( wrf_state_variables(1, i) == 'PSFC' ) then
       in_state_vector(KIND_SURFACE_PRESSURE) = .true.
-      in_state_vector(KIND_LANDMASK) = .true.
    endif
 
 enddo
@@ -8679,10 +8678,11 @@ if ((.not. in_state_vector(KIND_PRESSURE)) .and. &
                        source, revision, revdate)
 endif
 
-! surface elevation is read in outside the state vector mechanism,
+! surface elevation and land mask are read outside the state vector mechanism,
 ! directly from the wrfinput template file, and does not vary from
 ! one ensemble member to another.
 in_state_vector(KIND_SURFACE_ELEVATION) = .true.
+in_state_vector(KIND_LANDMASK) = .true.
 
 ! there is no field that directly maps to the vortex measurements.
 ! if you have all the fields it needs, allow them.
