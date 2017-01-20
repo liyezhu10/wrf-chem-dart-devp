@@ -115,7 +115,7 @@ export WRFDA_VER=WRFDAv3.4_dmpar
 export PROJ_NUMBER_ACD=${W_PROJ_NUMBER_ACD}
 export PROJ_NUMBER_NSC=${W_PROJ_NUMBER_NSC}
 export TIME_LIMIT_CONV=0:20
-export TIME_LIMIT_FILTER=2:50
+export TIME_LIMIT_FILTER=0:20
 export TIME_LIMIT_WRF=0:59
 export NUM_TASKS=32
 export NUM_TASKS_FILTER=64
@@ -126,11 +126,12 @@ export JOB_CLASS_FILTER=regular
 export JOB_CLASS_WRF=regular
 #
 # Define independent directory paths
-export PROJECT_DIR=/glade/p/work/mizzi
-export SCRATCH_DIR=/glade/scratch/mizzi
-export ACD_DIR=/glade/p/acd/mizzi
+export PROJECT_ME=${W_PROJECT_ME}
+export PROJECT_WRF=${W_PROJECT_WRF}
+export SCRATCH_DIR=${W_SCRATCH_DIR}
+export ACD_DIR=${W_ACD_DIR}
 #
-export TRUNK_DIR=${PROJECT_DIR}/TRUNK
+export TRUNK_DIR_WRF=${PROJECT_WRF}/TRUNK
 export DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
 export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Varloc
 export RUN_DIR=${SCRATCH_DIR}/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint
@@ -144,10 +145,10 @@ export CENTRALDIR=${RUN_DIR}/DART_CENTRALDIR
 export WRF_RUN_DIR=${CENTRALDIR}/WRF_RUN
 export WRFCHEM_RUN_DIR=${CENTRALDIR}/WRFCHEM_RUN
 export WRFBDY_DIR=${CENTRALDIR}/WRF
-export DART_DIR=${TRUNK_DIR}/${DART_VER}
-export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
-export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
-export WRFDA_DIR=${TRUNK_DIR}/${WRFDA_VER}/var
+export DART_DIR=${W_DART_DIR}
+export WRF_DIR=${TRUNK_DIR_WRF}/${WRF_VER}
+export WRFCHEM_DIR=${TRUNK_DIR_WRF}/${WRFCHEM_VER}
+export WRFDA_DIR=${TRUNK_DIR_WRF}/${WRFDA_VER}/var
 #
 ########################################################################
 #
@@ -1417,8 +1418,10 @@ EOF
          fi
 #
 # Get the obs_seq.out file for current cycle
+#>@todo FIXME remove hardcoded reference to obs_seq.minimal
          export FILE=${OBS_SEQ_FLNAME}${L_DATE}.out
-         cp ${DATA_DIR}/${OBS_SEQ_DIR}/${L_DATE}/${FILE} obs_seq.out
+#        cp ${DATA_DIR}/${OBS_SEQ_DIR}/${L_DATE}/${FILE} obs_seq.out
+         cp /glade/p/image/DART_test_cases/wrf_chem/obs_seq.minimal obs_seq.out
 #
 # Generate input.nml
          set -A temp `echo ${ASIM_MIN_DATE} 0 -g | ./advance_time`
@@ -1452,6 +1455,7 @@ EOF
 #BSUB -e ${JOBRND}.jerr                  
 #BSUB -W ${TIME_LIMIT_FILTER}            
 #BSUB -q ${JOB_CLASS_FILTER}
+#BSUB -N -u ${USER}@ucar.edu
 #
 mpirun.lsf ./filter > index_filter 2>&1 
 export RC=\$?
@@ -1526,6 +1530,11 @@ EOF
          done
       fi
       echo COMPLETED RUN_FILTER CODE BLOCK
+
+#>@todo FIXME early exit for testing a non-advancing case
+exit
+
+
 #
 ########################################################################
 #

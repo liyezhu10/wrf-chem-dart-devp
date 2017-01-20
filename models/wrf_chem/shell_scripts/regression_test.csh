@@ -6,8 +6,8 @@
 #
 # $Id$
 
-set GOLDSTANDARD = /glade/p/image/DART_test_cases/wrf_chem/gold_standard_large/2008060500/dart_filter
-set TESTCASE = /glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter_large
+set GOLDSTANDARD = /glade/p/image/DART_test_cases/wrf_chem/gold_standard_fast/2008060500/dart_filter
+set TESTCASE = /glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter
 
 set DARTDIR = /glade/scratch/thoar/wrf_chem_dart/models/wrf_chem/work
 
