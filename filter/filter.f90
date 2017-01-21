@@ -10,25 +10,22 @@ program filter
 use types_mod,            only : r8, missing_r8, metadatalength
 use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                  get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
-                                 get_obs_def, get_time_range_keys, set_obs_values, set_obs,  &
-                                 write_obs_seq, get_num_obs, get_obs_values, init_obs,       &
-                                 assignment(=), get_num_copies, get_qc, get_num_qc, set_qc,  &
+                                 get_obs_def, get_time_range_keys, write_obs_seq,            &
+                                 get_obs_values, init_obs, set_qc_meta_data, get_expected_obs,&
+                                 assignment(=), get_num_copies, get_qc, get_num_qc,          &
                                  static_init_obs_sequence, destroy_obs, read_obs_seq_header, &
-                                 set_qc_meta_data, get_expected_obs, get_first_obs,          &
-                                 get_obs_time_range, delete_obs_from_seq, delete_seq_head,   &
-                                 delete_seq_tail, replace_obs_values, replace_qc,            &
-                                 destroy_obs_sequence, get_qc_meta_data, add_qc
-use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
-                                 get_obs_kind
+                                 delete_seq_head, delete_seq_tail, replace_obs_values, add_qc,&
+                                 destroy_obs_sequence, get_qc_meta_data, replace_qc
+use obs_def_mod,          only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), operator(>),   &
                                  operator(-), print_time
 use utilities_mod,        only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
-                                 initialize_utilities, logfileunit, nmlfileunit, timestamp,  &
+                                 logfileunit, nmlfileunit, timestamp,                        &
                                  do_output, find_namelist_in_file, check_namelist_read,      &
                                  open_file, close_file, do_nml_file, do_nml_term
 use assim_model_mod,      only : static_init_assim_model, get_model_size,                    &
                                  netcdf_file_type, init_diag_output, finalize_diag_output,   & 
-                                 aoutput_diagnostics, ens_mean_for_model, end_assim_model
+                                 ens_mean_for_model, end_assim_model
 use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missing_ok_status
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
@@ -36,10 +33,10 @@ use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,   
                                  all_vars_to_all_copies, all_copies_to_all_vars,             &
                                  read_ensemble_restart, write_ensemble_restart,              &
                                  compute_copy_mean, compute_copy_mean_sd,                    &
-                                 compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
+                                 compute_copy_mean_var, get_copy_owner_index,                &
                                  get_ensemble_time, set_ensemble_time, broadcast_copy,       &
-                                 prepare_to_read_from_vars, prepare_to_write_to_vars, prepare_to_read_from_copies,    &
-                                 prepare_to_write_to_copies, get_ensemble_time, set_ensemble_time,    &
+                                 prepare_to_read_from_vars, prepare_to_write_to_vars,        &
+                                 prepare_to_read_from_copies, get_ensemble_time, set_ensemble_time,&
                                  map_task_to_pe,  map_pe_to_task, prepare_to_update_copies
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
@@ -336,7 +333,6 @@ call     trace_message('Before initializing output files')
 call timestamp_message('Before initializing output files')
 
 ! Initialize the output sequences and state files and set their meta data
-!
 if(my_task_id() == 0) then
    call filter_generate_copy_meta_data(seq, prior_inflate, &
       PriorStateUnit, PosteriorStateUnit, in_obs_copy, output_state_mean_index, &
@@ -689,8 +685,6 @@ AdvanceTime : do
 
 
    call trace_message('Before posterior obs space diagnostics')
-!
-! APM filter failed here
 
    ! Do posterior observation space diagnostics
    call obs_space_diagnostics(obs_ens_handle, forward_op_ens_handle, ens_size, &
@@ -889,8 +883,8 @@ if(output_inflation) then
    state_meta(num_state_copies)   = 'inflation sd'
 endif
 
+
 ! Set up diagnostic output for model state, if output is desired
- 
 PriorStateUnit     = init_diag_output('Prior_Diag', &
                         'prior ensemble state', num_state_copies, state_meta)
 PosteriorStateUnit = init_diag_output('Posterior_Diag', &
@@ -1230,7 +1224,7 @@ if (do_output()) then
          'Reading in initial condition/restart data for all ensemble members from file(s)')
    else
       call error_handler(E_MSG,'filter_read_restart:', &
-         'Reading in a single ensemble and perturbing data for the other ensemble members')
+         'Reading in a single member and perturbing data for the other ensemble members')
    endif
 endif
 
@@ -1319,14 +1313,12 @@ type(obs_def_type) :: obs_def
 ! HK: I think it is also assumed that the ensemble members are in the same order in
 ! each of the handles
 
-
 ! Loop through my copies and compute expected value
 my_num_copies = get_my_num_copies(obs_ens_handle)
 
 call prepare_to_write_to_vars(obs_ens_handle)
 call prepare_to_write_to_vars(forward_op_ens_handle)
 call prepare_to_read_from_vars(ens_handle)
-
 
 ! Loop through all observations in the set
 ALL_OBSERVATIONS: do j = 1, num_obs_in_set
@@ -1366,12 +1358,11 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
       if(global_ens_index <= ens_size) then
          ! temporaries to avoid passing array sections which was slow on PGI compiler
          thiskey(1) = keys(j)
-
-
          call get_expected_obs(seq, thiskey, &
             global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
             thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
          obs_ens_handle%vars(j, k) = thisvar(1)
+
          ! If istatus is 0 (successful) then put 0 for assimilate, -1 for evaluate only
          ! and -2 for neither evaluate or assimilate. Otherwise pass through the istatus
          ! in the forward operator evaluation field

@@ -110,7 +110,7 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
-#\rm -f *.o *.mod 
+\rm -f *.o *.mod 
 \rm -f input.nml*_default
 
 echo

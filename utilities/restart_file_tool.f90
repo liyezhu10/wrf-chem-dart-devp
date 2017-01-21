@@ -40,14 +40,15 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 integer                 :: iunit, model_size, io, member
 type(ensemble_type)     :: ens_handle
-character(len = 128)    :: ifile, ofile, msgstring
+character(len=256)      :: ifile, ofile
+character(len=512)      :: msgstring
 logical                 :: one_by_one, has_cal
 character(len=16)       :: write_format
 
 !----------------------------------------------------------------
 ! Most of these variables are namelist-controllable.
 !
-character(len = 128)  :: input_file_name  = "filter_restart",        &
+character(len=256)    :: input_file_name  = "filter_restart",        &
                          output_file_name = "filter_updated_restart"
 integer               :: ens_size                     = 1
 logical               :: single_restart_file_in       = .true.

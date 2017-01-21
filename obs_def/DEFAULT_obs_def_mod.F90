@@ -47,7 +47,7 @@ module obs_def_mod
 
 use        types_mod, only : r8, missing_i, missing_r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, &
-                             E_MSG, ascii_file_format
+                             ascii_file_format
 use     location_mod, only : location_type, read_location, write_location, &
                              interactive_location, set_location_missing
 use time_manager_mod, only : time_type, read_time, write_time, &
@@ -525,7 +525,7 @@ if (is_ascii) then
 else
    read(ifile)    obs_def%error_variance
 endif
-!                                                                                                                  
+
 end subroutine read_obs_def
 
 !----------------------------------------------------------------------------
