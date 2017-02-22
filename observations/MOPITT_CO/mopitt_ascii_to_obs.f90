@@ -174,6 +174,7 @@ character*2             :: chr_month, chr_day, chr_hour
 character*4             :: chr_year
 character*129           :: filedir, filename, copy_meta_data, filen
 character*129           :: transform_typ
+character*129           :: MOPITT_CO_retrieval_type
 !
 ! QOR/CPSR variables
 integer                                        :: info,nlvls_trc,qstatus
@@ -187,7 +188,14 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end
+! MOPITT_CO_retrieval_type:
+!     RAWR - retrievals in VMR (ppb) units
+!     RETR - retrievals in log10(VMR ([ ])) units
+!     QOR  - quasi-optimal retrievals
+!     CPSR - compact phase space retrievals
+!
+namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
+         MOPITT_CO_retrieval_type
 !
 ! Set constants
 ln_10=log(10.)
@@ -543,8 +551,8 @@ qc_thinning(:)=100
         xg_lat(i,j)=xg_lat(i,j)/xg_twt(i,j)
 !
 ! Skip for SINGLE_CLUSTER   
-        if((xg_lon(i,j).lt.-97. .or. xg_lon(i,j).gt.-93.) .or. &
-           (xg_lat(i,j).lt.38.  .or. xg_lat(i,j).gt.42.)) cycle
+!        if((xg_lon(i,j).lt.-97. .or. xg_lon(i,j).gt.-93.) .or. &
+!           (xg_lat(i,j).lt.38.  .or. xg_lat(i,j).gt.42.)) cycle
 !
         do k=1,mop_dim
            if(xg_norm(i,j,k).eq.0) cycle
@@ -642,150 +650,322 @@ qc_thinning(:)=100
 !             print *, 'cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
 !           enddo
 !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! QOR CODE BLOCK
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+        if(trim(MOPITT_CO_retrieval_type) .eq. 'QOR') then
+!
+! Calculate SVD of ret_cov (Z=U_xxx * SV_xxx * VT_xxx)
+           allocate(Z(nlvls,nlvls),SV_cov(nlvls),SV(nlvls,nlvls))
+           allocate(U_cov(nlvls,nlvls),UT_cov(nlvls,nlvls),V_cov(nlvls,nlvls),VT_cov(nlvls,nlvls))
+           allocate(rs_avg_k(nlvls,nlvls),rs_cov(nlvls,nlvls),rs_x_r(nlvls),rs_x_p(nlvls))       
+           allocate(rr_avg_k(nlvls,nlvls),rr_cov(nlvls,nlvls),rr_x_r(nlvls),rr_x_p(nlvls))       
+           allocate(ZL(nlvls,nlvls),ZR(nlvls,nlvls),ZV(nlvls))
+           Z(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
+           nlvls_trc=0
+           do k=1,nlvls
+              if(SV_cov(k).ge.eps_tol) then
+                 nlvls_trc=k
+              else
+                 SV_cov(k)=0
+                 U_cov(:,k)=0. 
+                 VT_cov(k,:)=0.
+              endif 
+           enddo
+!              print *,'nlvls_trc ',nlvls_trc
+!              print *, 'SV ',SV_cov(:)
+!
+! Scale the singular vectors (NO SCALE/SCALE)     
+           do k=1,nlvls_trc
+              U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
+           enddo
+!              print *, 'nlvls_trc ',nlvls_trc
+!              print *, 'SV ',SV_cov(:)
+!          
+           call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
+           call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
+           call vec_to_mat(SV_cov,SV,nlvls)
+!              do k=1,nlvls
+!                print *, 'U ',k,(U_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!
+! Rotate terms in the forward operator
+           ZL(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:mop_dim,kstr:mop_dim))
+           call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
+           rs_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=kstr,mop_dim
+!                print *, 'xg_avg_k ',k,(xg_avg_k(i,j,k,l),l=kstr,mop_dim)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rs_avg_k ',k,(rs_avg_k(k,l),l=1,nlvls)
+!              enddo
+           ZL(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
+           rs_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=kstr,mop_dim
+!                print *, 'xg_ret_cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rs_cov ',k,(rs_cov(k,l),l=1,nlvls)
+!              enddo
+           ZV(1:nlvls)=dble(xg_ret_adj_x_r(i,j,kstr:mop_dim))
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_r(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'xg_adj_x_r ',(xg_ret_adj_x_r(i,j,l),l=kstr,mop_dim)
+!              print *, 'rs_x_r ',(rs_x_r(l),l=1,nlvls)
+           ZV(1:nlvls)=dble(xg_ret_adj_x_p(i,j,kstr:mop_dim))
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_p(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'xg_adj_x_p ',(xg_ret_adj_x_p(i,j,l),l=kstr,mop_dim)
+!              print *, 'rs_x_p ',(rs_x_p(l),l=1,nlvls)
+!
+! Get new errors (check if err2_rs_r < 0 the qstatus=1)
+           qstatus=0.0
+           do k=1,nlvls
+              err2_rs_r(k)=sqrt(rs_cov(k,k))
+           enddo
+        endif
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! CPSR CODE BLOCK
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 ! Calculate SVD of avg_k (Z=U_xxx * SV_xxx * VT_xxx) - FIRST ROTATION
-        allocate(Z(nlvls,nlvls),SV_cov(nlvls),SV(nlvls,nlvls))
-        allocate(U_cov(nlvls,nlvls),UT_cov(nlvls,nlvls),V_cov(nlvls,nlvls),VT_cov(nlvls,nlvls))
-        allocate(rs_avg_k(nlvls,nlvls),rs_cov(nlvls,nlvls),rs_x_r(nlvls),rs_x_p(nlvls))       
-        allocate(rr_avg_k(nlvls,nlvls),rr_cov(nlvls,nlvls),rr_x_r(nlvls),rr_x_p(nlvls))       
-        allocate(ZL(nlvls,nlvls),ZR(nlvls,nlvls),ZV(nlvls))
-        Z(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:mop_dim,kstr:mop_dim))
-        call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
-        nlvls_trc=0
-        do k=1,nlvls
-           if(SV_cov(k).ge.eps_tol) then
-              nlvls_trc=k
-           else
+        if(trim(MOPITT_CO_retrieval_type) .eq. 'CPSR') then
+           allocate(Z(nlvls,nlvls),SV_cov(nlvls),SV(nlvls,nlvls))
+           allocate(U_cov(nlvls,nlvls),UT_cov(nlvls,nlvls),V_cov(nlvls,nlvls),VT_cov(nlvls,nlvls))
+           allocate(rs_avg_k(nlvls,nlvls),rs_cov(nlvls,nlvls),rs_x_r(nlvls),rs_x_p(nlvls))       
+           allocate(rr_avg_k(nlvls,nlvls),rr_cov(nlvls,nlvls),rr_x_r(nlvls),rr_x_p(nlvls))       
+           allocate(ZL(nlvls,nlvls),ZR(nlvls,nlvls),ZV(nlvls))
+           Z(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:mop_dim,kstr:mop_dim))
+           call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
+           nlvls_trc=0
+           do k=1,nlvls
+              if(SV_cov(k).ge.eps_tol) then
+                 nlvls_trc=k
+              else
+                 SV_cov(k)=0
+                 U_cov(:,k)=0. 
+                 VT_cov(k,:)=0.
+              endif 
+           enddo
+!              print *,'nlvls_trc ',nlvls_trc
+!              print *, 'SV ',SV_cov(:)
+           call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
+           call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
+           call vec_to_mat(SV_cov,SV,nlvls)
+!
+! Rotate terms in the forward operator
+           ZL(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:mop_dim,kstr:mop_dim))
+           call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
+           rr_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=kstr,mop_dim
+!                print *, 'xg_avg_k ',k,(xg_avg_k(i,j,k,l),l=kstr,mop_dim)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rr_avg_k ',k,(rr_avg_k(k,l),l=1,nlvls)
+!              enddo
+           ZL(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
+           rr_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=kstr,mop_dim
+!                print *, 'xg_ret_cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
+!              enddo
+           ZV(1:nlvls)=dble(xg_ret_adj_x_r(i,j,kstr:mop_dim))
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_r(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'xg_adj_x_r ',(xg_ret_adj_x_r(i,j,l),l=kstr,mop_dim)
+!              print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
+           ZV(1:nlvls)=dble(xg_ret_adj_x_p(i,j,kstr:mop_dim))
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_p(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'xg_adj_x_p ',(xg_ret_adj_x_p(i,j,l),l=kstr,mop_dim)
+!              print *, 'rr_x_p ',(rr_x_p(l),l=1,nlvls)
+!
+! Calculate SVD of rr_cov (Z=U_xxx * SV_xxx * VT_xxx) - SECOND ROTATION
+           Z(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
+           call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
+           do k=nlvls_trc+1,nlvls
               SV_cov(k)=0
               U_cov(:,k)=0. 
               VT_cov(k,:)=0.
-           endif 
-        enddo
-!           print *,'nlvls_trc ',nlvls_trc
-!           print *, 'SV ',SV_cov(:)
-        call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
-        call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
-        call vec_to_mat(SV_cov,SV,nlvls)
-!
-! Rotate terms in the forward operator
-        ZL(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:mop_dim,kstr:mop_dim))
-        call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
-        rr_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=kstr,mop_dim
-!             print *, 'xg_avg_k ',k,(xg_avg_k(i,j,k,l),l=kstr,mop_dim)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rr_avg_k ',k,(rr_avg_k(k,l),l=1,nlvls)
-!           enddo
-        ZL(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
-        call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
-        rr_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=kstr,mop_dim
-!             print *, 'xg_ret_cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
-!           enddo
-        ZV(1:nlvls)=dble(xg_ret_adj_x_r(i,j,kstr:mop_dim))
-        call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_r(1:nlvls),nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           print *, 'xg_adj_x_r ',(xg_ret_adj_x_r(i,j,l),l=kstr,mop_dim)
-!           print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
-        ZV(1:nlvls)=dble(xg_ret_adj_x_p(i,j,kstr:mop_dim))
-        call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_p(1:nlvls),nlvls)
-!           do k=1,nlvls
-!              print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           print *, 'xg_adj_x_p ',(xg_ret_adj_x_p(i,j,l),l=kstr,mop_dim)
-!           print *, 'rr_x_p ',(rr_x_p(l),l=1,nlvls)
-!
-! Calculate SVD of rr_cov (Z=U_xxx * SV_xxx * VT_xxx) - SECOND ROTATION
-        Z(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
-        call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
-        do k=nlvls_trc+1,nlvls
-           SV_cov(k)=0
-           U_cov(:,k)=0. 
-           VT_cov(k,:)=0.
-        enddo
+           enddo
 !
 ! Scale the singular vectors (NO SCALE/SCALE)     
-        do k=1,nlvls_trc
-           U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
-        enddo
-!           print *, 'nlvls_trc ',nlvls_trc
-!           print *, 'SV ',SV_cov(:)
-!
-        call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
-        call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
-        call vec_to_mat(SV_cov,SV,nlvls)
-!           do k=1,nlvls
-!             print *, 'U ',k,(U_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
+           do k=1,nlvls_trc
+              U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
+           enddo
+!              print *, 'nlvls_trc ',nlvls_trc
+!              print *, 'SV ',SV_cov(:)
+!          
+           call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
+           call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
+           call vec_to_mat(SV_cov,SV,nlvls)
+!              do k=1,nlvls
+!                print *, 'U ',k,(U_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
 !
 ! Rotate terms in the forward operator
-        ZL(1:nlvls,1:nlvls)=rr_avg_k(1:nlvls,1:nlvls)
-        call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
-        rs_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rr_avg_k ',k,(rr_avg_k(k,l),l=1,nlvls)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rs_avg_k ',k,(rs_avg_k(k,l),l=1,nlvls)
-!           enddo
-        ZL(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
-        call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
-        rs_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
-!           enddo
-!           do k=1,nlvls
-!             print *, 'rs_cov ',k,(rs_cov(k,l),l=1,nlvls)
-!           enddo
-        ZV(1:nlvls)=rr_x_r(1:nlvls)
-        call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_r(1:nlvls),nlvls)
-!           do k=1,nlvls
-!             print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
-!           print *, 'rs_x_r ',(rs_x_r(l),l=1,nlvls)
-        ZV(1:nlvls)=rr_x_p(1:nlvls)
-        call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_p(1:nlvls),nlvls)
-!           do k=1,nlvls
-!              print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
-!           enddo
-!           print *, 'rr_x_p ',(rr_x_p(l),l=1,nlvls)
-!           print *, 'rs_x_p ',(rs_x_p(l),l=1,nlvls)
+           ZL(1:nlvls,1:nlvls)=rr_avg_k(1:nlvls,1:nlvls)
+           call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
+           rs_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rr_avg_k ',k,(rr_avg_k(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rs_avg_k ',k,(rs_avg_k(k,l),l=1,nlvls)
+!              enddo
+           ZL(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
+           call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
+           rs_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
+!              enddo
+!              do k=1,nlvls
+!                print *, 'rs_cov ',k,(rs_cov(k,l),l=1,nlvls)
+!              enddo
+           ZV(1:nlvls)=rr_x_r(1:nlvls)
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_r(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
+!              print *, 'rs_x_r ',(rs_x_r(l),l=1,nlvls)
+           ZV(1:nlvls)=rr_x_p(1:nlvls)
+           call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_p(1:nlvls),nlvls)
+!              do k=1,nlvls
+!                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
+!              enddo
+!              print *, 'rr_x_p ',(rr_x_p(l),l=1,nlvls)
+!              print *, 'rs_x_p ',(rs_x_p(l),l=1,nlvls)
+
 !
 ! Get new errors (check if err2_rs_r < 0 the qstatus=1)
-        qstatus=0.0
-        do k=1,nlvls
-           err2_rs_r(k)=sqrt(rs_cov(k,k))
-        enddo
+           qstatus=0.0
+           do k=1,nlvls
+              err2_rs_r(k)=sqrt(rs_cov(k,k))
+           enddo
+        endif
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! APM make assignments to Ave's scaled variables
-        kstr=mop_dim-xg_nlvls(i,j)+1
-        do k=1,nlvls_trc
 !
-! Remove the higher modes
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! Set vertical for levels (irot=0) or modes (irot=1)
+        irot=1
+        nlvls_fix=nlvls_trc
+        if(trim(MOPITT_CO_retrieval_type).eq.'RAWR' .or. &
+        trim(MOPITT_CO_retrieval_type).eq.'RETR') then
+           irot=0
+           nlvls_fix=xg_nlvls(i,j)
+        endif
+        do k=1,nlvls_fix
+!
+! Remove the higher modes (or remove upper troposphere obs)
 ! This removes upper most ob in physical space and the highest mode ob in phase space
+           if(irot.eq.0 .and. k.eq.xg_nlvls(i,j)) cycle
+!           if(irot.eq.0 .and. (k+kstr-1.eq.8 .or. k+kstr-1.eq.9 .or. k+kstr-1.eq.10)) cycle
 !           if(k.eq.nlvls_trc) cycle
            qc_count=qc_count+1
+!
+! RAW with NO ROT
+           if(trim(MOPITT_CO_retrieval_type) .eq. 'RAWR') then
+              xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
+              xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+              xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
+              do l=1,xg_nlvls(i,j)
+                 avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
+              enddo
+           endif
+!
+! RET with NO ROT
+           if(trim(MOPITT_CO_retrieval_type) .eq. 'RETR') then
+              xcomp(k)=xg_ret_x_r(i,j,k+kstr-1)
+              xcomperr(k)=xg_ret_err(i,j,k+kstr-1)
+              xapr(k)=xg_ret_adj_x_p(i,j,k+kstr-1)
+              do l=1,xg_nlvls(i,j)
+                 avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
+              enddo
+           endif  
+!
+! RAW QOR with NO ROT
+!           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
+!           xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+!           xapr(k)=0.
+!           do l=1,xg_nlvls(i,j)
+!              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
+!           enddo
+!
+! RET QOR with NO ROT
+!           xcomp(k)=xg_ret_adj_x_r(i,j,k+kstr-1)
+!           xcomperr(k)=xg_ret_err(i,j,k+kstr-1)
+!           xapr(k)=0.
+!           do l=1,xg_nlvls(i,j)
+!              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
+!           enddo
+!
+! RET QOR with ROT and NO SCALE
+! comment scaling
+!           xcomp(k)=rs_x_r(k)
+!           xcomperr(k)=err2_rs_r(k)
+!           xapr(k)=0.
+!           do l=1,xg_nlvls(i,j)
+!              avgker(k,l)=rs_avg_k(k,l)
+!           enddo
+!
+! RET QOR with ROT and SCALE
+! uncomment scaling
+           if(trim(MOPITT_CO_retrieval_type) .eq. 'QOR') then
+              xcomp(k)=rs_x_r(k)
+              xcomperr(k)=err2_rs_r(k)
+              xapr(k)=0.
+              do l=1,xg_nlvls(i,j)
+                 avgker(k,l)=rs_avg_k(k,l)
+              enddo
+           endif
 !
 ! RET CPSR with ROT and NO SCALE
 ! comment scaling
@@ -798,18 +978,21 @@ qc_thinning(:)=100
 !
 ! RET CPSR with ROT and SCALE
 ! uncomment scaling
-           xcomp(k)=rs_x_r(k)
-           xcomperr(k)=err2_rs_r(k)
-           xapr(k)=0.
-           do l=1,xg_nlvls(i,j)
-              avgker(k,l)=rs_avg_k(k,l)
-           enddo
+           if(trim(MOPITT_CO_retrieval_type) .eq. 'CPSR') then
+              xcomp(k)=rs_x_r(k)
+              xcomperr(k)=err2_rs_r(k)
+              xapr(k)=0.
+              do l=1,xg_nlvls(i,j)
+                 avgker(k,l)=rs_avg_k(k,l)
+              enddo
+           endif
 !
 ! Calculate vertical average seconds
            xg_sec_avg=0.
            do l=1,xg_nlvls(i,j)
               xg_sec_avg=xg_sec_avg+xg_sec(i,j,l+kstr-1)/xg_nlvls(i,j)
            enddo
+           if(irot.eq.0) xg_sec_avg=xg_sec(i,j,k+kstr-1)
 !
 !--------------------------------------------------------
 ! assign obs variables for obs_sequence
@@ -899,10 +1082,12 @@ qc_thinning(:)=100
 !
 ! APM: change the vertical location to accout for v5 
 !      layer average convention
-           level=k
-           which_vert=1       ! level
-!           level=(xg_prs(i,j,k)+xg_prs(i,j,k+1))/2*100
-!           which_vert=2       ! pressure surfaces
+           level=(xg_prs(i,j,k+kstr-1)+xg_prs(i,j,k+kstr))/2*100
+           which_vert=2       ! pressure surfaces
+           if(irot.eq.1) then
+              level=k
+              which_vert=1       ! level
+           endif  
            obs_kind = MOPITT_CO_RETRIEVAL
 !
            obs_location=set_location(longitude, latitude, level, which_vert)
@@ -931,11 +1116,14 @@ qc_thinning(:)=100
            endif
            obs_old=obs
         enddo
-        deallocate(Z,SV_cov,SV)
-        deallocate(U_cov,UT_cov,V_cov,VT_cov)
-        deallocate(rs_avg_k,rs_cov,rs_x_r,rs_x_p)       
-        deallocate(rr_avg_k,rr_cov,rr_x_r,rr_x_p)       
-        deallocate(ZL,ZR,ZV)
+        if(trim(MOPITT_CO_retrieval_type).eq.'QOR' .or. &
+        trim(MOPITT_CO_retrieval_type).eq.'CPSR') then 
+           deallocate(Z,SV_cov,SV)
+           deallocate(U_cov,UT_cov,V_cov,VT_cov)
+           deallocate(rs_avg_k,rs_cov,rs_x_r,rs_x_p)       
+           deallocate(rr_avg_k,rr_cov,rr_x_r,rr_x_p)       
+           deallocate(ZL,ZR,ZV)
+        endif
      enddo
   enddo   
 !
