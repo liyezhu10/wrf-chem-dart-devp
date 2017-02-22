@@ -1,7 +1,7 @@
-
+!
 ! code to perturb the wrfchem emission files
 !
-! ifort -C perturb_chem_emiss_CORR_RT_FR_CONST.f90 -o perturb_chem_emiss_CORR_RT_FR_CONST.exe -lgfortran -lnetcdff -lnetcdf
+! ifort -C perturb_chem_emiss_CORR_RT_CONST.f90 -o perturb_chem_emiss_CORR_RT_CONST.exe -lgfortran -lnetcdff -lnetcdf
 !
           program main
              implicit none
@@ -19,7 +19,7 @@
              real                                     :: pert_land_chem_m,pert_watr_chem_m
              real                                     :: pert_land_fire_m,pert_watr_fire_m
              real                                     :: pert_land_biog_m,pert_watr_biog_m
-             real,allocatable,dimension(:,:)          :: xland
+             real,allocatable,dimension(:,:)           :: xland
              real,allocatable,dimension(:,:)          :: chem_data2d
              real,allocatable,dimension(:,:,:)        :: chem_data3d
              character(len=20)                        :: cmem
@@ -33,6 +33,7 @@
              namelist /perturb_chem_emiss_CORR_nml/nx,ny,nz,nz_chem,nchem_spc,nfire_spc,nbio_spc, &
              pert_path,nnum_mem,wrfchemi,wrffirechemi,wrfbiochemi,sprd_chem,sprd_fire,sprd_biog, &
              sw_gen,sw_chem,sw_fire,sw_biog
+             namelist /perturb_chem_emiss_spec_nml/ch_chem_spc,ch_fire_spc,ch_bio_spc
 !
 ! Assign constants
              pi=4.*atan(1.)
@@ -72,122 +73,18 @@
              num_mem=nint(nnum_mem)
              allocate(ch_chem_spc(nchem_spc),ch_fire_spc(nfire_spc),ch_bio_spc(nbio_spc))
 !
+             unit=20
+             open(unit=unit,file='perturb_emiss_chem_spec_nml.nl',form='formatted', &
+             status='old',action='read')
+             read(unit,perturb_chem_emiss_spec_nml)
+             close(unit)
+!             print *, 'ch_chem_spc       ',ch_chem_spc
+!             print *, 'ch_fire_spc       ',ch_fire_spc
+!             print *, 'ch_bio_spc        ',ch_bio_spc
+!
              unita=30
              open(unit=unita,file=trim(pert_path)//'/pert_file_emiss',form='unformatted', &
              status='unknown')
-!
-! Assign emission species names
-!
-! FRAPPE
-!             ch_chem_spc(1)='E_CO'
-!             ch_chem_spc(2)='E_NO'
-!             ch_chem_spc(3)='E_NO2'
-!             ch_chem_spc(4)='E_BIGALK'
-!             ch_chem_spc(5)='E_BIGENE'
-!             ch_chem_spc(6)='E_C2H4'
-!             ch_chem_spc(7)='E_C2H5OH'
-!             ch_chem_spc(8)='E_C2H6'
-!             ch_chem_spc(9)='E_C3H6'
-!             ch_chem_spc(10)='E_C3H8'
-!             ch_chem_spc(11)='E_CH2O'
-!             ch_chem_spc(12)='E_CH3CHO'
-!             ch_chem_spc(13)='E_CH3COCH3'
-!             ch_chem_spc(14)='E_CH3OH'
-!             ch_chem_spc(15)='E_MEK'
-!             ch_chem_spc(16)='E_SO2'
-!             ch_chem_spc(17)='E_TOLUENE'
-!             ch_chem_spc(18)='E_NH3'
-!             ch_chem_spc(19)='E_ISOP'
-!             ch_chem_spc(20)='E_C10H16'
-!             ch_chem_spc(21)='E_sulf'
-!             ch_chem_spc(22)='E_CO_A'
-!             ch_chem_spc(23)='E_CO_BB'
-!             ch_chem_spc(24)='E_CO02'
-!             ch_chem_spc(25)='E_CO03'
-!             ch_chem_spc(26)='E_XNO'
-!             ch_chem_spc(27)='E_XNO2'
-!             ch_chem_spc(28)='E_PM25I'
-!             ch_chem_spc(29)='E_PM25J'
-!             ch_chem_spc(30)='E_PM_10'
-!             ch_chem_spc(31)='E_ECI'
-!             ch_chem_spc(32)='E_ECJ'
-!             ch_chem_spc(33)='E_ORGI'
-!             ch_chem_spc(34)='E_ORGJ'
-!             ch_chem_spc(35)='E_SO4I'
-!             ch_chem_spc(36)='E_SO4J'
-!             ch_chem_spc(37)='E_NO3I'
-!             ch_chem_spc(38)='E_NO3J'
-!             ch_chem_spc(39)='E_NH4I'
-!             ch_chem_spc(40)='E_NH4J'
-!             ch_chem_spc(41)='E_PM_25'
-!             ch_chem_spc(42)='E_OC'
-!             ch_chem_spc(43)='E_BC'
-!             ch_chem_spc(44)='E_BALD'
-!             ch_chem_spc(45)='E_C2H2'
-!             ch_chem_spc(46)='E_BENZENE'
-!             ch_chem_spc(47)='E_XYLENE'
-!             ch_chem_spc(48)='E_CRES'
-!             ch_chem_spc(49)='E_HONO'
-!
-! PANDA
-             ch_chem_spc(1)='E_CO'
-             ch_chem_spc(2)='E_NO'
-             ch_chem_spc(3)='E_NO2'
-             ch_chem_spc(4)='E_SO2'
-             ch_chem_spc(5)='E_BIGALK'
-             ch_chem_spc(6)='E_C2H4'
-             ch_chem_spc(7)='E_C2H5OH'
-             ch_chem_spc(8)='E_C2H6'
-             ch_chem_spc(9)='E_C3H6'
-             ch_chem_spc(10)='E_C3H8'
-             ch_chem_spc(11)='E_CH2O'
-             ch_chem_spc(12)='E_CH3CHO'
-             ch_chem_spc(13)='E_BIGENE'
-             ch_chem_spc(14)='E_CH3COCH3'
-             ch_chem_spc(15)='E_CH3OH'
-             ch_chem_spc(16)='E_MEK'
-             ch_chem_spc(17)='E_TOLUENE'
-             ch_chem_spc(18)='E_ISOP'
-             ch_chem_spc(19)='E_C10H16'
-             ch_chem_spc(20)='E_NH3'
-             ch_chem_spc(21)='E_OC'
-             ch_chem_spc(22)='E_BC'
-             ch_chem_spc(23)='E_PM_10'
-             ch_chem_spc(24)='E_PM_25'
-!
-             ch_fire_spc(1)='ebu_in_co'
-             ch_fire_spc(2)='ebu_in_no'
-             ch_fire_spc(3)='ebu_in_so2'
-             ch_fire_spc(4)='ebu_in_bigalk'
-             ch_fire_spc(5)='ebu_in_bigene'
-             ch_fire_spc(6)='ebu_in_c2h4'
-             ch_fire_spc(7)='ebu_in_c2h5oh'
-             ch_fire_spc(8)='ebu_in_c2h6'
-             ch_fire_spc(9)='ebu_in_c3h8'
-             ch_fire_spc(10)='ebu_in_c3h6'
-             ch_fire_spc(11)='ebu_in_ch2o'
-             ch_fire_spc(12)='ebu_in_ch3cho'
-             ch_fire_spc(13)='ebu_in_ch3coch3'
-             ch_fire_spc(14)='ebu_in_ch3oh'
-             ch_fire_spc(15)='ebu_in_mek'
-             ch_fire_spc(16)='ebu_in_toluene'
-             ch_fire_spc(17)='ebu_in_nh3'
-             ch_fire_spc(18)='ebu_in_no2'
-             ch_fire_spc(19)='ebu_in_open'
-             ch_fire_spc(20)='ebu_in_c10h16'
-             ch_fire_spc(21)='ebu_in_ch3cooh'
-             ch_fire_spc(22)='ebu_in_cres'
-             ch_fire_spc(23)='ebu_in_glyald'
-             ch_fire_spc(24)='ebu_in_mgly'
-             ch_fire_spc(25)='ebu_in_gly'
-             ch_fire_spc(26)='ebu_in_acetol'
-             ch_fire_spc(27)='ebu_in_isop'
-             ch_fire_spc(28)='ebu_in_macr'
-             ch_fire_spc(29)='ebu_in_mvk'
-             ch_fire_spc(30)='ebu_in_oc'
-             ch_fire_spc(31)='ebu_in_bc'
-!
-             ch_bio_spc(1)='MSEBIO_ISOP'
 !
 ! Get the land mask data
              print *, 'At read for xland'
@@ -280,6 +177,8 @@
                    if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
                    wrfchem_file=trim(wrfchemi)//trim(cmem)
                    do isp=1,nchem_spc
+!                      print *, 'isp ',isp,trim(ch_chem_spc(isp))
+
                       call get_WRFCHEM_emiss_data(wrfchem_file,ch_chem_spc(isp),chem_data3d,nx,ny,nz_chem)
                       do i=1,nx
                          do j=1,ny
@@ -420,8 +319,8 @@
              enddo
 !
 ! Deallocate arrays
-             deallocate(chem_data3d,chem_data2d,xland)
              deallocate(ch_chem_spc,ch_fire_spc,ch_bio_spc)
+             deallocate(chem_data3d,chem_data2d,xland)
              close(unita)
           end program main
 !
@@ -442,7 +341,7 @@
              character*(80)                         :: file
 !
 ! open netcdf file
-             file='wrfinput_d02'
+             file='wrfinput_d01'
              name='XLAND'
              rc = nf_open(trim(file),NF_NOWRITE,f_id)
 !             print *, trim(file)
@@ -659,7 +558,3 @@
              rc = nf_close(f_id)
              return
           end subroutine put_WRFCHEM_emiss_data   
-
-
-
-
