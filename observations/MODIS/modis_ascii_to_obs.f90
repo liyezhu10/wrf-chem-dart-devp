@@ -1,10 +1,14 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 program modis_ascii_to_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -94,7 +98,7 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 
 ! the first one needs to contain the string 'observation' and the
 ! second needs the string 'QC'.
-call set_copy_meta_data(obs_seq, 1, 'observation')
+call set_copy_meta_data(obs_seq, 1, 'MODIS observation')
 call set_qc_meta_data(obs_seq, 1, 'MODIS QC index')
 
 ! if you want to append to existing files (e.g. you have a lot of
@@ -159,12 +163,19 @@ obsloop: do    ! no end limit - have the loop break when input ends
    if (debug) print *, 'next observation located at lat, lon = ', lat, lon
 
    ! check the lat/lon values to see if they are ok
-   if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
+   !if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
+   !if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
+
 
    ! if lon comes in between -180 and 180, use these lines instead:
+   if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
    if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle obsloop
    if ( lon < 0.0_r8 )  lon = lon + 360.0_r8 ! changes into 0-360
 
+!
+! APM: skip for single obs cluster
+!   if ( lon < 263.0_r8 .or. lon > 267.0_r8 .or. lat < 38.0_r8 .or. lat > 42.0_r8 ) cycle obsloop
+!
    ! put date into a dart time format
    time_obs = set_date(year, month, day, hour, minute, second)
 
@@ -313,10 +324,3 @@ prev_time = obs_time
 end subroutine add_obs_to_seq
 
 end program modis_ascii_to_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
