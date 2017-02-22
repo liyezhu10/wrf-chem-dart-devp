@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-
 #little tool to generate chemistry set to perturb the boundary condition with a normal law
 #you should call the script this way: ./random.py spread ensemble_size
 #also specify the good filew and filer pathways
@@ -40,7 +38,10 @@ for i in range(nens):
                exit()
             coeff=np.random.normal(0,1,1)            
             coef=1+coeff*spread
-         if str(moz)=="'BC1" or str(moz)=="'BC2" or str(moz)=="'OC1" or str(moz)=="'OC2" or str(moz)=="'SEAS_1" or str(moz)=="'SEAS_2" or str(moz)=="'SEAS_3" or str(moz)=="'SEAS_3" or str(moz)=="'SEAS_4" or str(moz)=="'DUST_1" or str(moz)=="'DUST_2" or str(moz)=="'DUST_5":
+         if str(moz)=="'h2" or str(moz)=="'n2o":
+            print '     '+moz+' = '+wrf
+            filer.write('     '+moz+' = '+wrf+'\n')
+         elif str(moz)=="'BC1" or str(moz)=="'BC2" or str(moz)=="'OC1" or str(moz)=="'OC2" or str(moz)=="'SEAS_1" or str(moz)=="'SEAS_2" or str(moz)=="'SEAS_3" or str(moz)=="'SEAS_3" or str(moz)=="'SEAS_4" or str(moz)=="'DUST_1" or str(moz)=="'DUST_2" or str(moz)=="'DUST_5":
             wrf_dec=wrf.split('*')
             coef=coef*float(wrf_dec[0])
             print '     '+moz+' -> '+'%.2f'%float(coef)+'*'+wrf_dec[1]

@@ -9,7 +9,7 @@
              integer,parameter                        :: ny=139
              integer,parameter                        :: nz=36
              integer,parameter                        :: nz_chem=11
-             integer,parameter                        :: nchem_spc=43
+             integer,parameter                        :: nchem_spc=49
              integer,parameter                        :: nfire_spc=31
              integer,parameter                        :: nbio_spc=1
              integer                                  :: unit,isp,nseed,idate,itime,icnt
@@ -97,6 +97,12 @@
              ch_chem_spc(41)='E_PM_25'
              ch_chem_spc(42)='E_OC'
              ch_chem_spc(43)='E_BC'
+             ch_chem_spc(44)='E_BALD'
+             ch_chem_spc(45)='E_C2H2'
+             ch_chem_spc(46)='E_BENZENE'
+             ch_chem_spc(47)='E_XYLENE'
+             ch_chem_spc(48)='E_CRES'
+             ch_chem_spc(49)='E_HONO'
 !
              ch_fire_spc(1)='ebu_in_co'
              ch_fire_spc(2)='ebu_in_no'
