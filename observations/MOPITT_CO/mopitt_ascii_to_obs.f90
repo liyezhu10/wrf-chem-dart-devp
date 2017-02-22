@@ -685,7 +685,7 @@ qc_thinning(:)=100
            enddo
 !              print *, 'nlvls_trc ',nlvls_trc
 !              print *, 'SV ',SV_cov(:)
-!          
+!        
            call mat_transpose(U_cov,UT_cov,nlvls,nlvls)
            call mat_transpose(VT_cov,V_cov,nlvls,nlvls)
            call vec_to_mat(SV_cov,SV,nlvls)
@@ -895,12 +895,13 @@ qc_thinning(:)=100
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! Set vertical for levels (irot=0) or modes (irot=1)
-        irot=1
-        nlvls_fix=nlvls_trc
         if(trim(MOPITT_CO_retrieval_type).eq.'RAWR' .or. &
         trim(MOPITT_CO_retrieval_type).eq.'RETR') then
            irot=0
            nlvls_fix=xg_nlvls(i,j)
+        else
+           irot=1
+           nlvls_fix=nlvls_trc
         endif
         do k=1,nlvls_fix
 !
