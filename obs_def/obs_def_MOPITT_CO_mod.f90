@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
-! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
+! Data Assimilation Research Testbed -- DART
+! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
+! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -72,11 +70,11 @@ integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+! CVS Generated file description for error handling, do not edit
+character(len=128) :: &
+source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_mopitt_mod.f90,v $", &
+revision = "$Revision$", &
+revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
@@ -251,7 +249,14 @@ end subroutine interactive_mopitt_co
 !
     integer             :: nlevels,nnlevels,check_min
     integer             :: iflg,ilv_ocn,ilv_lnd
-    character(len=129)  :: msgstring
+    character(len=129)  :: msgstring,MOPITT_CO_retrieval_type
+!
+! MOPITT_CO_retrieval_type:
+!     RAWR - retrievals in VMR (ppb) units
+!     RETR - retrievals in log10(VMR ([ ])) units
+!     QOR  - quasi-optimal retrievals
+!     CPSR - compact phase space retrievals
+    MOPITT_CO_retrieval_type='CPSR'
 !
 ! Initialize DART
     if ( .not. module_initialized ) call initialize_module
@@ -494,6 +499,8 @@ end subroutine interactive_mopitt_co
        endif
 !
 ! apply averaging kernel
+!
+! Use this form for RAWR, RETR, QOR, and CPSR
        val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
 !       print *, 'val_itr ',i,val
 !       print *, 'avg_ker, obs_val, val ',avg_kernel(key,i),obs_val, &
@@ -505,9 +512,10 @@ end subroutine interactive_mopitt_co
     enddo
     val = val + mopitt_prior(key)
 ! 
-! Use this form for raw retrievals
-!    val = (10.**val)*1.e6
-!    val_vmr = (10.**val)*1.e6
+! Use this correction for raw retrievals
+    if(trim(MOPITT_CO_retrieval_type) .eq. 'RAWR') then
+       val = (10.**val)*1.e6
+    endif
 !
 end subroutine get_expected_mopitt_co
 !
@@ -742,10 +750,3 @@ end subroutine write_mopitt_avg_kernels
 
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
-!-----------------------------------------------------------------------------
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
