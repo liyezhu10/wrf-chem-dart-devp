@@ -96,7 +96,7 @@ export END_IASI_O3_DATA=2016060000
 export NL_DEBUG_LEVEL=200
 #
 export BUILD_DIR=/glade/p/work/mizzi/TRUNK/WRFDAv3.4_dmpar/var/da
-export DART_DIR=/glade/p/FRAPPE/FRAPPE_TRUNK/DART_CHEM_MY_BRANCH_FRAPPE
+export DART_DIR=/glade/p/work/mizzi/TRUNK/DART_CHEM_REPOSITORY
 cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
 cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
 export YYYY=$(echo $DATE | cut -c1-4)
@@ -193,9 +193,9 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -208,7 +208,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false    
-      export RUN_DART_FILTER=true
+      export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_WRFCHEM_CYCLE_FR=false
@@ -228,7 +228,7 @@ else
    export RUN_WRFCHEM_BIO=false
    export RUN_WRFCHEM_FIRE=false
    export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
@@ -387,7 +387,7 @@ export WRFDA_TOOLS_VER=WRFDA_TOOLSv3.4
 export WRF_VER=WRFv3.6.1_dmpar
 export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
 export WRFCHEM_VER_GABI=WRFCHEMv3.6.1_dmpar_GABI_REV1.0
-export DART_VER=DART_CHEM_MY_BRANCH_FRAPPE
+export DART_VER=DART_CHEM_REPOSITORY
 #
 # ROOT DIRECTORIES:
 export SCRATCH_DIR=/glade/scratch/mizzi
@@ -410,7 +410,7 @@ export WPS_GEOG_DIR=/glade/p/work/wrfhelp/WPS_GEOG
 export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
 export WRFCHEM_DIR_GABI=${TRUNK_DIR_GABI}/${WRFCHEM_VER_GABI}
 export WRFVAR_DIR=${TRUNK_DIR}/${WRFDA_VER}
-export DART_DIR=${FRAPPE_DIR}/FRAPPE_TRUNK/${DART_VER}
+export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export BUILD_DIR=${WRFVAR_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_TRUNK_DIR=${WORK_DIR}/HYBRID_TRUNK
@@ -430,6 +430,7 @@ export KORUS_IASI_O3_DIR=${KORUS_DATA_DIR}/iasi_o3_hdf_data
 export KORUS_MODIS_AOD_DIR=${KORUS_DATA_DIR}/modis_aod_hdf_data
 export KORUS_GFS_DIR=${KORUS_DATA_DIR}/gfs_forecasts
 export KORUS_DUST_DIR=${KORUS_DATA_DIR}/dust_fields
+export KORUS_HIST_IO_DIR=${KORUS_DATA_DIR}/hist_io_files
 #
 export INPUT_DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
 export OBSPROC_DIR=${WRFVAR_DIR}/var/obsproc
@@ -439,11 +440,11 @@ export BE_DIR=${WRFVAR_DIR}/var/run
 export MOPITT_IDL_DIR=${ACD_DIR}/for_arthur/MOPITT/idl
 export IASI_IDL_DIR=${ACD_DIR}/for_arthur/IASI/idl
 export MODIS_IDL_DIR=${WORK_DIR}/MODIS_AOD_PROCESSING
-export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT_REV1
-export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT_REV1
+export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
+export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
 
 export GEOGRID_DIR=${RUN_DIR}/geogrid
-export METGRID_DIR=${RUN_DIR}/${DATE}/metgrid
+export METGRID_DIR=${RUN_DIR}/${DATE}/metgridOA
 export REAL_DIR=${RUN_DIR}/${DATE}/real
 export WRFCHEM_MET_IC_DIR=${RUN_DIR}/${DATE}/wrfchem_met_ic
 export WRFCHEM_MET_BC_DIR=${RUN_DIR}/${DATE}/wrfchem_met_bc
@@ -1370,8 +1371,8 @@ if [[ ${RUN_REAL} = "true" ]]; then
    cd ${RUN_DIR}/${DATE}/real
 #
    cp ${WRF_DIR}/main/real.exe ./.
-   cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v1 ./.
-   cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v2 ./.
+   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
+   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
 # LINK IN THE METGRID FILES
    export P_DATE=${DATE}
@@ -3718,8 +3719,8 @@ if ${RUN_WRFCHEM_INITIAL}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v1 ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v2 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
       cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
       cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
@@ -4174,8 +4175,8 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v1 ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v2 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
       cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
       cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
@@ -4318,8 +4319,8 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    cp ${WRFCHEM_DIR}/test/em_real/SOILPARM.TBL ./.
    cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
    cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-   cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v1 ./.
-   cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v2 ./.
+   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
+   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
    cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
    cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
@@ -4476,8 +4477,8 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v1 ./.
-      cp ${DART_DIR}/models/wrf_chem/run_scripts/hist_io_flds_v2 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #     
       cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
       cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
