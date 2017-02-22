@@ -1,8 +1,6 @@
- DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
-! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
+! Data Assimilation Research Testbed -- DART
+! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
+! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MODIS_AOD_RETRIEVAL, KIND_AOD
@@ -52,65 +50,62 @@ use    obs_kind_mod, only  : KIND_AOD
 
 implicit none
 
-public :: write_modis_aod, &
-          read_modis_aod, &
-          interactive_modis_aod, &
-          get_expected_modis_aod, &
-          set_obs_def_modis_aod
+public :: write_modis_aod, read_modis_aod, interactive_modis_aod, &
+          get_expected_modis_aod, set_obs_def_modis_aod
 
 ! Storage for the special information required for observations of this type
-integer, parameter :: max_modis_aod_obs = 10000000
-integer            :: num_modis_aod_obs = 0
+integer, parameter               :: max_modis_aod_obs = 10000000
+integer                          :: num_modis_aod_obs = 0
+
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
-! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+! CVS Generated file description for error handling, do not edit
+character(len=128) :: &
+source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_modis_mod.f90,v $", &
+revision = "$Revision$", &
+revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
 
-character(len=512) :: string1, string2
-
 contains
 
 !----------------------------------------------------------------------
-!>
 
-subroutine initialize_module
+  subroutine initialize_module
+!----------------------------------------------------------------------------
+! subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
 end subroutine initialize_module
 
+
+
+ subroutine read_modis_aod(key, ifile, fform)
 !----------------------------------------------------------------------
-!>
+!subroutine read_modis_aod(key, ifile, fform)
 
-subroutine read_modis_aod(key, ifile, fform)
+integer, intent(out)            :: key
+integer, intent(in)             :: ifile
+character(len=*), intent(in), optional    :: fform
+character(len=32) 		:: fileformat
 
-integer,                    intent(out) :: key
-integer,                    intent(in)  :: ifile
-character(len=*), optional, intent(in)  :: fform
-
-character(len=32) :: fileformat
-
-integer :: keyin
+integer 			:: keyin
 
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = adjustl(fform)
+if(present(fform)) fileformat = trim(adjustl(fform))
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
 
-SELECT CASE (trim(fileformat))
+SELECT CASE (fileformat)
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    read(ifile) keyin
 
@@ -124,27 +119,27 @@ call set_obs_def_modis_aod(key)
 
 end subroutine read_modis_aod
 
+
+ subroutine write_modis_aod(key, ifile, fform)
 !----------------------------------------------------------------------
-!>
+!subroutine write_modis_aod(key, ifile, fform)
 
-subroutine write_modis_aod(key, ifile, fform)
+integer, intent(in)             :: key
+integer, intent(in)             :: ifile
+character(len=*), intent(in), optional 	:: fform
 
-integer,                    intent(in) :: key
-integer,                    intent(in) :: ifile
-character(len=*), optional, intent(in) :: fform
-
-character(len=32) :: fileformat
+character(len=32) 		:: fileformat
 
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = adjustl(fform)
+if(present(fform)) fileformat = trim(adjustl(fform))
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
    
-SELECT CASE (trim(fileformat))
+SELECT CASE (fileformat)
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    write(ifile) key
 
@@ -154,24 +149,27 @@ END SELECT
 
 end subroutine write_modis_aod
 
+
+ subroutine interactive_modis_aod(key)
 !----------------------------------------------------------------------
-!>
-
-subroutine interactive_modis_aod(key)
-
+!subroutine interactive_modis_aod(key)
+!
 ! Initializes the specialized part of a MODIS observation
 ! Passes back up the key for this one
 
 integer, intent(out) :: key
 
+character(len=129) :: msgstring
+
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_modis_aod_obs >= max_modis_aod_obs) then
-   write(string1, *)'Not enough space for a modis AOD obs.'
-   write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR, 'interactive_modis_aod', string1, &
-              source, revision, revdate, text2=string2)
+   ! PUT IN ERROR HANDLER CALL
+   write(msgstring, *)'Not enough space for a modis AOD obs.'
+   call error_handler(E_MSG,'interactive_modis_aod',msgstring,source,revision,revdate)
+   write(msgstring, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
+   call error_handler(E_ERR,'interactive_modis_aod',msgstring,source,revision,revdate)
 endif
 
 ! Increment the index
@@ -183,20 +181,22 @@ write(*, *) 'Creating an interactive_modis_aod observation'
 
 end subroutine interactive_modis_aod
 
+
+
+ subroutine get_expected_modis_aod(state, location, key, val, istatus)
 !----------------------------------------------------------------------
-!>
+!subroutine get_expected_modis_aod(state, location, key, val, istatus)
 
-subroutine get_expected_modis_aod(state, location, key, val, istatus)
+real(r8), intent(in)            :: state(:)
+type(location_type), intent(in) :: location
+integer, intent(in)             :: key
+real(r8), intent(out)           :: val
+integer, intent(out)            :: istatus
 
-real(r8),            intent(in)  :: state(:)
-type(location_type), intent(in)  :: location
-integer,             intent(in)  :: key
-real(r8),            intent(out) :: val
-integer,             intent(out) :: istatus
-
+integer :: i
 type(location_type) :: loc2
-real(r8) :: mloc(3)
-real(r8) :: obs_val
+real(r8)            :: mloc(3)
+real(r8)	    :: obs_val
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -219,21 +219,23 @@ val = obs_val
 !print *, 'AFAJ DEBUG AOD VAL ', val, istatus
 
 end subroutine get_expected_modis_aod
-
 !----------------------------------------------------------------------
-!> Allows passing of obs_def special information 
 
-subroutine set_obs_def_modis_aod(key)
+ subroutine set_obs_def_modis_aod(key)
+!----------------------------------------------------------------------
+! Allows passing of obs_def special information 
 
-integer, intent(in):: key
+integer,	 	intent(in)	:: key
+character(len=129) 			:: msgstring
 
 if ( .not. module_initialized ) call initialize_module
 
 if(num_modis_aod_obs >= max_modis_aod_obs) then
-   write(string1, *)'Not enough space for a modis AOD obs.'
-   write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR, 'set_obs_def_modis_aod', string1, &
-              source, revision, revdate, text2=string2)
+   ! PUT IN ERROR HANDLER CALL
+   write(msgstring, *)'Not enough space for a modis AOD obs.'
+   call error_handler(E_MSG,'set_obs_def_modis_aod',msgstring,source,revision,revdate)
+   write(msgstring, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
+   call error_handler(E_ERR,'set_obs_def_modis_aod',msgstring,source,revision,revdate)
 endif
 
 end subroutine set_obs_def_modis_aod
@@ -241,10 +243,3 @@ end subroutine set_obs_def_modis_aod
 
 end module obs_def_modis_mod
 ! END DART PREPROCESS MODULE CODE
-!-----------------------------------------------------------------------------
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
