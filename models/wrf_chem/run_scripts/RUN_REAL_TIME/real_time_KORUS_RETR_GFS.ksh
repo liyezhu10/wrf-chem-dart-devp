@@ -189,7 +189,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_WRFCHEM_CHEMI=false
    export RUN_PERT_WRFCHEM_CHEM_ICBC=false
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_MODIS_AOD_OBS=false
@@ -208,7 +208,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false    
-      export RUN_DART_FILTER=false
+      export RUN_DART_FILTER=true
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_WRFCHEM_CYCLE_FR=false
@@ -228,7 +228,7 @@ else
    export RUN_WRFCHEM_BIO=false
    export RUN_WRFCHEM_FIRE=false
    export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
@@ -437,14 +437,11 @@ export OBSPROC_DIR=${WRFVAR_DIR}/var/obsproc
 ###export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
 export VTABLE_DIR=${WPS_DIR_v3p7p1}/ungrib/Variable_Tables
 export BE_DIR=${WRFVAR_DIR}/var/run
-export MOPITT_IDL_DIR=${ACD_DIR}/for_arthur/MOPITT/idl
-export IASI_IDL_DIR=${ACD_DIR}/for_arthur/IASI/idl
-export MODIS_IDL_DIR=${WORK_DIR}/MODIS_AOD_PROCESSING
 export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
 export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
 
 export GEOGRID_DIR=${RUN_DIR}/geogrid
-export METGRID_DIR=${RUN_DIR}/${DATE}/metgridOA
+export METGRID_DIR=${RUN_DIR}/${DATE}/metgrid
 export REAL_DIR=${RUN_DIR}/${DATE}/real
 export WRFCHEM_MET_IC_DIR=${RUN_DIR}/${DATE}/wrfchem_met_ic
 export WRFCHEM_MET_BC_DIR=${RUN_DIR}/${DATE}/wrfchem_met_bc
@@ -910,6 +907,7 @@ export NL_INF_SD_LOWER_BOUND_POST=0.0
 export NL_CUTOFF=0.1
 export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
 export NL_SAMPLING_ERROR_CORRECTION=.true.
+# original cutoff
 export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.05
 export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1
 export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
@@ -924,75 +922,211 @@ export NL_WRITE_BINARY_RESTART_FILE=.true.
 # &model_nml
 export NL_DEFAULT_STATE_VARIABLES=.false.
 export NL_WRF_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
-                           'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
-                           'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
-                           'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
-                           'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
-                           'MU',    'KIND_PRESSURE',             'TYPE_MU', 'UPDATE','999',
-                           'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV', 'UPDATE','999',
-                           'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
-                           'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
-                           'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
-                           'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
-                           'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
-                           'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
-                           'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
-                           'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
-                           'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
-                           'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
-                           'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
-                           'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
-                           'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
-                           'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
-                           'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
-                           'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
-                           'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
-                           'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
-                           'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
-                           'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
-                           'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
-                           'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
-                           'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
-                           'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
-                           'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
-                           'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
-                           'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
-                           'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
-                           'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999'"
-#                           'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
-#                           'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
-#                           'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
-#                           'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
-#                           'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
+          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
+          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
+          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
+          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
+          'MU',    'KIND_PRESSURE',             'TYPE_MU', 'UPDATE','999',
+          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV', 'UPDATE','999',
+          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
+          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
+          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
+          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
+          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
+          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
+          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
+          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
+          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
+          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
+          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
+          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
+          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
+          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
+          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
+          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
+          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
+          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
+          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
+          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
+          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
+          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
+          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
+          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
+          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
+          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
+          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
+          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
+          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999'
+          'DUST_1','KIND_DST01',                'TYPE_DST01','UPDATE','999',
+          'DUST_2','KIND_DST02',                'TYPE_DST02','UPDATE','999',
+          'DUST_3','KIND_DST03',                'TYPE_DST03','UPDATE','999',
+          'DUST_4','KIND_DST04',                'TYPE_DST04','UPDATE','999',
+          'DUST_5','KIND_DST05',                'TYPE_DST05','UPDATE','999',
+          'BC1','KIND_CB1',                     'TYPE_EXTCOF','UPDATE','999',
+          'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
+          'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
+          'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER1','KIND_TAUAER1',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER2','KIND_TAUAER2',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER3','KIND_TAUAER3',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER4','KIND_TAUAER4',             'TYPE_EXTCOF','UPDATE','999',
+          'PM10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
+          'PM2_5_DRY','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
+          'P10','KIND_PM10',                    'TYPE_EXTCOF','UPDATE','999',
+          'P25','KIND_PM25',                    'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_1','KIND_SSLT01',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_4','KIND_SSLT04',               'TYPE_EXTCOF','UPDATE','999',
+          'E_CO'   ,'KIND_E_CO',                'TYPE_E_CO',  'UPDATE','999',
+          'E_NO'   ,'KIND_E_NO',                'TYPE_E_NO',  'UPDATE','999',
+          'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE_EBU_CO',  'UPDATE','999',
+          'ebu_in_no'   ,'KIND_EBU_NO',         'TYPE_EBU_NO',  'UPDATE','999',
+          'ebu_in_oc'   ,'KIND_EBU_OC',         'TYPE_EBU_OC',  'UPDATE','999',
+          'ebu_in_bc'   ,'KIND_EBU_BC',         'TYPE_EBU_BC',  'UPDATE','999',
+          'ebu_in_c2h4' ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4','UPDATE','999',
+          'ebu_in_ch2o' ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o','UPDATE','999',
+          'ebu_in_ch3oh' ,'KIND_EBU_ch3oh',     'TYPE_EBU_ch3oh','UPDATE','999'"
+#          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
+#          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
+#          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
+#          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
+#          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
+
+export NL_CONC_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
+          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
+          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
+          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
+          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
+          'MU',    'KIND_PRESSURE',             'TYPE_MU', 'UPDATE','999',
+          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV', 'UPDATE','999',
+          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
+          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
+          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
+          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
+          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
+          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
+          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
+          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
+          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
+          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
+          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
+          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
+          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
+          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
+          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
+          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
+          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
+          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
+          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
+          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
+          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
+          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
+          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
+          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
+          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
+          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
+          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
+          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
+          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999',
+          'DUST_1','KIND_DST01',                'TYPE_DST01','UPDATE','999',
+          'DUST_2','KIND_DST02',                'TYPE_DST02','UPDATE','999',
+          'DUST_3','KIND_DST03',                'TYPE_DST03','UPDATE','999',
+          'DUST_4','KIND_DST04',                'TYPE_DST04','UPDATE','999',
+          'DUST_5','KIND_DST05',                'TYPE_DST05','UPDATE','999',
+          'BC1','KIND_CB1',                     'TYPE_EXTCOF','UPDATE','999',
+          'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
+          'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
+          'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER1','KIND_TAUAER1',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER2','KIND_TAUAER2',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER3','KIND_TAUAER3',             'TYPE_EXTCOF','UPDATE','999',
+          'TAUAER4','KIND_TAUAER4',             'TYPE_EXTCOF','UPDATE','999',
+          'PM10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
+          'PM2_5_DRY','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
+          'P10','KIND_PM10',                    'TYPE_EXTCOF','UPDATE','999',
+          'P25','KIND_PM25',                    'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_1','KIND_SSLT01',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
+          'SEAS_4','KIND_SSLT04',               'TYPE_EXTCOF','UPDATE','999'"
+#          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
+#          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
+#          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
+#          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
+#          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
+
+export NL_EMISS_CHEMI_VARIABLES="'E_CO',     'KIND_E_CO',     'TYPE_E_CO',     'UPDATE','999',
+          'E_NO'        ,'KIND_E_NO',           'TYPE_E_NO',  'UPDATE','999'"
+
+export NL_EMISS_FIRECHEMI_VARIABLES="'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE_EBU_CO',  'UPDATE','999',
+          'ebu_in_no'    ,'KIND_EBU_NO',         'TYPE_EBU_NO',   'UPDATE','999',
+          'ebu_in_oc'    ,'KIND_EBU_OC',         'TYPE_EBU_OC',   'UPDATE','999',
+          'ebu_in_bc'    ,'KIND_EBU_BC',         'TYPE_EBU_BC',   'UPDATE','999',
+          'ebu_in_c2h4'  ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4', 'UPDATE','999',
+          'ebu_in_ch2o'  ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o', 'UPDATE','999',
+          'ebu_in_ch3oh' ,'KIND_EBU_ch3oh',      'TYPE_EBU_ch3oh','UPDATE','999'"
+
 export NL_WRF_STATE_BOUNDS="'QVAPOR','0.0','NULL','CLAMP',
-                        'QRAIN', '0.0','NULL','CLAMP',
-                        'QCLOUD','0.0','NULL','CLAMP',
-                        'QSNOW', '0.0','NULL','CLAMP',
-                        'QICE',  '0.0','NULL','CLAMP',
-                        'o3',    '0.0','NULL','CLAMP',
-                        'co',    '1.e-4','NULL','CLAMP',
-                        'no',    '0.0','NULL','CLAMP',
-                        'no2',   '0.0','NULL','CLAMP',
-                        'hno3',  '0.0','NULL','CLAMP',
-                        'hno4',  '0.0','NULL','CLAMP',
-                        'n2o5',  '0.0','NULL','CLAMP',
-                        'c2h6',  '0.0','NULL','CLAMP',
-                        'acet'   '0.0','NULL','CLAMP',
-                        'hcho'   '0.0','NULL','CLAMP',
-                        'c2h4',  '0.0','NULL','CLAMP',
-                        'c3h6',  '0.0','NULL','CLAMP',
-                        'tol',   '0.0','NULL','CLAMP',
-                        'mvk',   '0.0','NULL','CLAMP',
-                        'bigalk','0.0','NULL','CLAMP',
-                        'isopr', '0.0','NULL','CLAMP',
-                        'macr',  '0.0','NULL','CLAMP',
-                        'c3h8'  ,'0.0','NULL','CLAMP',    
-                        'c10h16','0.0','NULL','CLAMP'"
-#                        'ch3o2', '0.0','NULL','CLAMP',
-#                        'mek',   '0.0','NULL','CLAMP',
-#                        'pan',   '0.0','NULL','CLAMP',
-#                        'ald',   '0.0','NULL','CLAMP',
-#                        'glyald','0.0','NULL','CLAMP',
+          'QRAIN', '0.0','NULL','CLAMP',
+          'QCLOUD','0.0','NULL','CLAMP',
+          'QSNOW', '0.0','NULL','CLAMP',
+          'QICE',  '0.0','NULL','CLAMP',
+          'o3',    '0.0','NULL','CLAMP',
+          'co',    '1.e-4','NULL','CLAMP',
+          'no',    '0.0','NULL','CLAMP',
+          'no2',   '0.0','NULL','CLAMP',
+          'hno3',  '0.0','NULL','CLAMP',
+          'hno4',  '0.0','NULL','CLAMP',
+          'n2o5',  '0.0','NULL','CLAMP',
+          'c2h6',  '0.0','NULL','CLAMP',
+          'acet'   '0.0','NULL','CLAMP',
+          'hcho'   '0.0','NULL','CLAMP',
+          'c2h4',  '0.0','NULL','CLAMP',
+          'c3h6',  '0.0','NULL','CLAMP',
+          'tol',   '0.0','NULL','CLAMP',
+          'mvk',   '0.0','NULL','CLAMP',
+          'bigalk','0.0','NULL','CLAMP',
+          'isopr', '0.0','NULL','CLAMP',
+          'macr',  '0.0','NULL','CLAMP',
+          'c3h8'  ,'0.0','NULL','CLAMP',    
+          'c10h16','0.0','NULL','CLAMP',
+          'DUST_1','0.0','NULL','CLAMP',
+          'DUST_2','0.0','NULL','CLAMP',
+          'DUST_3','0.0','NULL','CLAMP',
+          'DUST_4','0.0','NULL','CLAMP',
+          'DUST_5','0.0','NULL','CLAMP',
+          'BC1','0.0','NULL','CLAMP',
+          'BC2','0.0','NULL','CLAMP',
+          'OC1','0.0','NULL','CLAMP',
+          'OC2','0.0','NULL','CLAMP',
+          'TAUAER1','0.0','NULL','CLAMP',
+          'TAUAER2','0.0','NULL','CLAMP',
+          'TAUAER3','0.0','NULL','CLAMP',
+          'TAUAER4','0.0','NULL','CLAMP',
+          'PM10','0.0','NULL','CLAMP',
+          'PM2_5_DRY','0.0','NULL','CLAMP',
+          'P10','0.0','NULL','CLAMP',
+          'P25','0.0','NULL','CLAMP',
+          'SEAS_1','0.0','NULL','CLAMP',
+          'SEAS_2','0.0','NULL','CLAMP',
+          'SEAS_3','0.0','NULL','CLAMP',
+          'SEAS_4','0.0','NULL','CLAMP',
+          'E_CO','0.0','NULL','CLAMP',
+          'E_NO','0.0','NULL','CLAMP',
+          'ebu_in_co','0.0','NULL','CLAMP',
+          'ebu_in_no','0.0','NULL','CLAMP',
+          'ebu_in_oc','0.0','NULL','CLAMP',
+          'ebu_in_bc','0.0','NULL','CLAMP',
+          'ebu_in_c2h4','0.0','NULL','CLAMP',
+          'ebu_in_ch2o','0.0','NULL','CLAMP',
+          'ebu_in_ch3oh','0.0','NULL','CLAMP'"
+#          'ch3o2', '0.0','NULL','CLAMP',
+#          'mek',   '0.0','NULL','CLAMP',
+#          'pan',   '0.0','NULL','CLAMP',
+#          'ald',   '0.0','NULL','CLAMP',
+#          'glyald','0.0','NULL','CLAMP',
+#
 export NL_OUTPUT_STATE_VECTOR=.false.
 export NL_NUM_DOMAINS=${CR_DOMAIN}
 export NL_CALENDAR_TYPE=3
@@ -1034,6 +1168,7 @@ export NL_SINGLE_RESTART_FILE_OUT=.false.
 export NL_MODEL_ADVANCE_FILE=.false.
 export NL_ADV_MOD_COMMAND="'mpirun -np 64 ./wrf.exe'"
 export NL_DART_RESTART_NAME="'dart_wrf_vector'"
+export NL_ADD_EMISS=.true.
 #
 # &restart_file_tool_nml
 export NL_INPUT_FILE_NAME="'assim_model_state_tp'"
@@ -1056,7 +1191,9 @@ export NL_INPUT_FILES="'${DART_DIR}/obs_def/obs_def_reanalysis_bufr_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_gps_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
+                    '${DART_DIR}/obs_def/obs_def_AIRNOW_OBS_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_IASI_CO_mod.f90',
+                    '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_MODIS_AOD_mod.f90'"
 #
@@ -1073,6 +1210,10 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
+                                   'AIRNOW_O3',
+                                   'AIRNOW_CO',
+                                   'MODIS_AOD_RETRIEVAL',
+                                   'IASI_CO_RETRIEVAL',
                                    'MOPITT_CO_RETRIEVAL'"
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
 #
@@ -2805,7 +2946,8 @@ if ${RUN_MOPITT_CO_OBS}; then
 #
 # COPY EXECUTABLE
    export FILE=mopitt_extract_no_transform_RT.pro
-   cp ${MOPITT_IDL_DIR}/${FILE} ./.
+   rm -rf ${FILE}
+   cp ${DART_DIR}/observations/MOPITT_CO/native_to_ascii/${FILE} ./.
    rm -rf job.ksh
    rm -rf idl_*.err
    rm -rf idl_*.out
@@ -2981,8 +3123,9 @@ if ${RUN_IASI_CO_OBS}; then
 # this is the call to an IDL routine to read and write variables
 # if already processed (with output), then this can be skipped (do_iasi=0)
 # else this needs to be called
-                rm -rf iasi_extract_no_transform_UA.pro
-                cp ${IASI_IDL_DIR}/iasi_extract_no_transform_UA.pro ./.
+                export FILE=iasi_extract_no_transform_UA.pro
+                rm -rf ${FILE}
+                cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                 rm -rf job.ksh
                 rm -rf idl_*.err
                 rm -rf idl_*.out
@@ -3071,8 +3214,9 @@ EOFF
 # this is the call to an IDL routine to read and write variables
 # if already processed (with output), then this can be skipped (do_iasi=0)
 # else this needs to be called 
-               rm -rf iasi_extract_no_transform_UA.pro
-               cp ${IASI_IDL_DIR}/iasi_extract_no_transform_UA.pro ./.
+               export FILE=iasi_extract_no_transform_UA.pro
+               rm -rf ${FILE}
+               cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                idl << EOF
 .compile iasi_extract_no_transform_UA.pro
 iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
@@ -3372,7 +3516,7 @@ if ${RUN_MODIS_AOD_OBS}; then
 # this depends on versions and file times (edit if necessary)
    export FILE_EXT='hdf'
 #
-   export MODIS_INDIR=${FRAPPE_MODIS_AOD_DIR}
+   export MODIS_INDIR=${KORUS_MODIS_AOD_DIR}
    export OUTFILE=modis_aod_ascii_${YYYY}${MM}${DD}${HH}
    (( N_YYYY=${YYYY}+0 ))
    (( N_MM=${MM}+0 ))
@@ -3380,8 +3524,9 @@ if ${RUN_MODIS_AOD_OBS}; then
    (( N_HH=${HH}+0 ))
    (( N_ASIM_WIN=${ASIM_WINDOW}+0 ))
 #
-   rm -rf modis_extract_hdf.pro
-   cp ${MODIS_IDL_DIR}/modis_extract_hdf.pro ./.
+   export FILE=modis_extract_hdf.pro
+   rm -rf ${FILE}
+   cp ${DART_DIR}/observations/MODIS/native_to_ascii/${FILE} ./.
    rm -rf job.ksh
    rm -rf idl_*.err
    rm -rf idl_*.out
@@ -3460,7 +3605,7 @@ if ${RUN_MET_OBS}; then
    cp ${DART_DIR}/observations/NCEP/prep_bufr/work/input.nml ./.
 #
 # RUN_PREPBUFR TO ASCII CONVERTER
-   ${DART_DIR}/observations/NCEP/prep_bufr/work/prepbufr.csh_RT ${D_YYYY} ${DD_MM} ${DD_DD} ${DD_DD} ${DART_DIR}/observations/NCEP/prep_bufr/exe > index.file
+   ${DART_DIR}/observations/NCEP/prep_bufr/work/prepbufr_RT.csh ${D_YYYY} ${DD_MM} ${DD_DD} ${DD_DD} ${DART_DIR}/observations/NCEP/prep_bufr/exe > index.file
 
 # RUN ASCII TO OBS_SEQ CONVERTER
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_ncep_ascii_to_obs_input_nml_RT.ksh
@@ -3569,8 +3714,11 @@ if ${RUN_PREPROCESS_OBS}; then
       cd ${RUN_DIR}/${DATE}/preprocess_obs
    fi
 #
-# GET WRFINPUT TEMPLATE
+# GET TEMPLATE FILES
    cp ${WRFCHEM_MET_IC_DIR}/wrfinput_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfinput_d${CR_DOMAIN}
+   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfbiochemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfbiochemi_d${CR_DOMAIN}
+   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrffirechemi_d${CR_DOMAIN}
+   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfchemi_d${CR_DOMAIN}
 #
 # GET DART UTILITIES
    cp ${DART_DIR}/models/wrf_chem/work/wrf_dart_obs_preprocess ./.
@@ -3794,8 +3942,6 @@ fi
 #
 #########################################################################
 #
-echo ${RUN_WRFCHEM_INITIAL} ${DATE} ${RUN_DART_FILTER} ${FIRST_FILTER_DATE}
-
 if ${RUN_DART_FILTER}; then
    if [[ ! -d ${RUN_DIR}/${DATE}/dart_filter ]]; then
       mkdir -p ${RUN_DIR}/${DATE}/dart_filter
@@ -3807,6 +3953,8 @@ if ${RUN_DART_FILTER}; then
 # Get DART files
    cp ${DART_DIR}/models/wrf_chem/work/filter      ./.
    cp ${DART_DIR}/system_simulation/final_full_precomputed_tables/final_full.${NUM_MEMBERS} ./.
+   cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
+   cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
 #
 # Get background forecasts
    if [[ ${DATE} -eq ${FIRST_FILTER_DATE} ]]; then
@@ -3824,7 +3972,6 @@ if ${RUN_DART_FILTER}; then
    fi
 #
 # Run WRF_TO_DART
-   export T_RANDOM=${RANDOM}
    let MEM=1
    while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
       export CMEM=e${MEM}
@@ -3843,15 +3990,83 @@ if ${RUN_DART_FILTER}; then
       export NL_PRINT_DATA_RANGES=.false.
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
       cp ${DART_DIR}/models/wrf_chem/work/wrf_to_dart ./.
-#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+##
+## APM: +++ 
+## For _ALL and emission inversion use wrfout instead of wrfapm because some needed fields 
+## are not in wrfapm.  Also copy in the emissions files
+      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+## APM: ---
+##
+      let MEM=${MEM}+1
+   done
+#
+# APM: EMISSIONS
+# APM: copy emission files for emission estimation
+   let IMEM=1
+   while [[ ${IMEM} -le ${NUM_MEMBERS} ]]; do
+      cd ${RUN_DIR}/${DATE}/dart_filter
+      export CMEM=e${IMEM}
+      export KMEM=${IMEM}
+      if [[ ${IMEM} -lt 1000 ]]; then export KMEM=0${IMEM}; fi
+      if [[ ${IMEM} -lt 100 ]]; then export KMEM=00${IMEM}; export CMEM=e0${IMEM}; fi
+      if [[ ${IMEM} -lt 10 ]]; then export KMEM=000${IMEM}; export CMEM=e00${IMEM}; fi
+      export LL_DATE=${DATE}
+      export LL_END_DATE=${DATE}
+      while [[ ${LL_DATE} -le ${LL_END_DATE} ]]; do
+         export LL_YY=`echo ${LL_DATE} | cut -c1-4`
+         export LL_MM=`echo ${LL_DATE} | cut -c5-6`
+         export LL_DD=`echo ${LL_DATE} | cut -c7-8`
+         export LL_HH=`echo ${LL_DATE} | cut -c9-10`
+         export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
+         cd dart_wrk_${CMEM}      
+         if [[ ${LL_DATE} -eq ${FIRST_EMISS_INV_DATE} ]]; then
+            cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
+            cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_co,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_no,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_oc,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_bc,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_c2h4,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+         else
+            cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrfchemi_d${CR_DOMAIN}
+            cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_co,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_no,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_oc,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_bc,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_c2h4,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+            ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
+         fi
+         cd ${RUN_DIR}/${DATE}/dart_filter
+         export LL_DATE=`echo ${LL_DATE} +1h | ./advance_time` 
+      done
+      let IMEM=${IMEM}+1
+   done
 #
 # Create job script 
+   RANDOM=$$
+   let MEM=1
+   while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
+      export CMEM=e${MEM}
+      export KMEM=${MEM}
+      if [[ ${MEM} -lt 1000 ]]; then export KMEM=0${MEM}; fi
+      if [[ ${MEM} -lt 100 ]]; then export KMEM=00${MEM}; export CMEM=e0${MEM}; fi
+      if [[ ${MEM} -lt 10 ]]; then export KMEM=000${MEM}; export CMEM=e00${MEM}; fi
+      cd ${RUN_DIR}/${DATE}/dart_filter/dart_wrk_${CMEM}
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=wr2dt_${T_RANDOM}
-   cat << EOF >job.ksh
+      export JOBRND=wr2dt_${RANDOM}
+      cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_ACD}
 #BSUB -n 1                                  # number of total (MPI) tasks
@@ -3864,7 +4079,7 @@ if ${RUN_DART_FILTER}; then
 # Run wrf_to_dart
 ./wrf_to_dart > index_wrf_to_dart 2>&1 
 #
-export RC=\$?
+export RC=\$?     
 rm -rf WRF2DART_SUCCESS_*
 rm -rf WRF2DART_FAILED_*
 if [[ \$RC = 0 ]]; then
@@ -3881,16 +4096,25 @@ EOF
    done
 #
 # Wait for wrf_to_dart to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${T_RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+
+exit
+
 #
    cd ${RUN_DIR}/${DATE}/dart_filter
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
+##
+## APM: +++ another wrfapm / wrfout swap for emission inversion
+   cp dart_wrk_e001/wrfinput_d${CR_DOMAIN} ./
+   cp dart_wrk_e001/wrfchemi_d${CR_DOMAIN} ./
+   cp dart_wrk_e001/wrffirechemi_d${CR_DOMAIN} ./
 #   cp ${BACKGND_FCST_DIR}/run_e001/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-   cp ${BACKGND_FCST_DIR}/run_e001/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-#
+#   cp ${BACKGND_FCST_DIR}/run_e001/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+## APM: ---
+##
 # Copy "out" inflation files from prior cycle to "in" inflation files for current cycle
    if ${USE_DART_INFL}; then
-      if [[ ${DATE} -eq ${FIRST_FILTER_DATE} ]]; then
+      if [[ ${DATE} -eq ${FIRST_DART_INFLATE_DATE} ]]; then
          export NL_INF_INITIAL_FROM_RESTART_PRIOR=.false.
          export NL_INF_SD_INITIAL_FROM_RESTART_PRIOR=.false.
          export NL_INF_INITIAL_FROM_RESTART_POST=.false.
@@ -3901,7 +4125,7 @@ EOF
          export NL_INF_INITIAL_FROM_RESTART_POST=.true.
          export NL_INF_SD_INITIAL_FROM_RESTART_POST=.true.
       fi
-      if [[ ${DATE} -ne ${FIRST_FILTER_DATE} ]]; then
+      if [[ ${DATE} -ne ${FIRST_DART_INFLATE_DATE} ]]; then
          if [[ ${NL_INF_FLAVOR_PRIOR} != 0 ]]; then
             export INF_OUT_FILE_NAME_PRIOR=${RUN_DIR}/${PAST_DATE}/dart_filter/prior_inflate_ic_new
             cp ${INF_OUT_FILE_NAME_PRIOR} prior_inflate_ic_old
@@ -3970,7 +4194,7 @@ EOF
    bsub -K < job.ksh
 #
 # Run DART_TO_WRF 
-   T_RANDOM=$$
+   RANDOM=$$
    let MEM=1
    while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
       export CMEM=e${MEM}
@@ -3991,12 +4215,12 @@ EOF
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
       cp ${DART_DIR}/models/wrf_chem/work/dart_to_wrf ./.
 #      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
 #
 # Create job script 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=dt2wf_${T_RANDOM}
+      export JOBRND=dt2wf_${RANDOM}
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_ACD}
@@ -4027,7 +4251,7 @@ EOF
    done
 #
 # Wait for dart_to_wrf to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${T_RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
 #
 # Copy converted output files
    let MEM=1
@@ -4042,6 +4266,11 @@ EOF
       let MEM=${MEM}+1
    done
 fi
+
+
+exit
+
+
 #
 #########################################################################
 #
