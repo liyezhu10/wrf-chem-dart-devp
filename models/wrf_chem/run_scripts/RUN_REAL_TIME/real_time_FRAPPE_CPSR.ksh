@@ -3928,7 +3928,7 @@ EOF
 ## When using AOD and emissions inversion preprocess is not working
 ## so copy the input obs_seq file to the output obs_seq file
 #
-#   bsub -K < job.ksh 
+   bsub -K < job.ksh 
 #
 # SAVE OUTPUT
 ##   mv obs_seq.new obs_seq_comb_filtered_${DATE}.out 
