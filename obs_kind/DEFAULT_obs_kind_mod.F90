@@ -338,19 +338,22 @@ integer, parameter, public :: &
     KIND_TAUAER4                     = 194, &
     KIND_PM10                        = 195, &
     KIND_PM25                        = 196, &
+    KIND_NOy                         = 197, &
+    KIND_PB                          = 198, &
+    KIND_NMOC			     = 199, &
 !
 ! LXL/APM +++
-    KIND_E_O3                        = 197, &
-    KIND_E_CO                        = 198, &
-    KIND_E_NO                        = 199, &
-    KIND_EBU_CO                      = 200, &
-    KIND_EBU_NO                      = 201, &
-    KIND_EBU_OC                      = 204, &
-    KIND_EBU_BC                      = 205, &
-    KIND_EBU_c2h4                    = 206, &
-    KIND_EBU_ch2o                    = 207, &
-    KIND_EBU_ch3oh                   = 208
-! APM/LXL --
+    KIND_E_O3                        = 200, &
+    KIND_E_CO                        = 201, &
+    KIND_E_NO                        = 202, &
+    KIND_EBU_CO                      = 203, &
+    KIND_EBU_NO                      = 204, &
+    KIND_EBU_OC                      = 205, &
+    KIND_EBU_BC                      = 206, &
+    KIND_EBU_c2h4                    = 207, &
+    KIND_EBU_ch2o                    = 208, &
+    KIND_EBU_ch3oh                   = 209
+! APMLXL --
 !
 
 ! more chemistry kinds (Jerome Barre)  (last three slots)
@@ -725,18 +728,21 @@ obs_kind_names(193) = obs_kind_type(KIND_TAUAER3, 'KIND_TAUAER3')
 obs_kind_names(194) = obs_kind_type(KIND_TAUAER4, 'KIND_TAUAER4')
 obs_kind_names(195) = obs_kind_type(KIND_PM10, 'KIND_PM10')
 obs_kind_names(196) = obs_kind_type(KIND_PM25, 'KIND_PM25')
+obs_kind_names(197) = obs_kind_type(KIND_NOy, 'KIND_NOy')
+obs_kind_names(198) = obs_kind_type(KIND_PB, 'KIND_PB')
+obs_kind_names(199) = obs_kind_type(KIND_NMOC, 'KIND_NMOC')
 !
 ! LXL/APM +++
-obs_kind_names(197) = obs_kind_type(KIND_E_O3,'KIND_E_O3')
-obs_kind_names(198) = obs_kind_type(KIND_E_CO,'KIND_E_CO')
-obs_kind_names(199) = obs_kind_type(KIND_E_NO,'KIND_E_NO')
-obs_kind_names(200) = obs_kind_type(KIND_EBU_CO,'KIND_EBU_CO')
-obs_kind_names(201) = obs_kind_type(KIND_EBU_NO,'KIND_EBU_NO')
-obs_kind_names(204) = obs_kind_type(KIND_EBU_OC,'KIND_EBU_OC')
-obs_kind_names(205) = obs_kind_type(KIND_EBU_BC,'KIND_EBU_BC')
-obs_kind_names(206) = obs_kind_type(KIND_EBU_c2h4,'KIND_EBU_c2h4')
-obs_kind_names(207) = obs_kind_type(KIND_EBU_ch2o,'KIND_EBU_ch2o')
-obs_kind_names(208) = obs_kind_type(KIND_EBU_ch3oh,'KIND_EBU_ch3oh')
+obs_kind_names(200) = obs_kind_type(KIND_E_O3,'KIND_E_O3')
+obs_kind_names(201) = obs_kind_type(KIND_E_CO,'KIND_E_CO')
+obs_kind_names(202) = obs_kind_type(KIND_E_NO,'KIND_E_NO')
+obs_kind_names(203) = obs_kind_type(KIND_EBU_CO,'KIND_EBU_CO')
+obs_kind_names(204) = obs_kind_type(KIND_EBU_NO,'KIND_EBU_NO')
+obs_kind_names(205) = obs_kind_type(KIND_EBU_OC,'KIND_EBU_OC')
+obs_kind_names(206) = obs_kind_type(KIND_EBU_BC,'KIND_EBU_BC')
+obs_kind_names(207) = obs_kind_type(KIND_EBU_c2h4,'KIND_EBU_c2h4')
+obs_kind_names(208) = obs_kind_type(KIND_EBU_ch2o,'KIND_EBU_ch2o')
+obs_kind_names(209) = obs_kind_type(KIND_EBU_ch3oh,'KIND_EBU_ch3oh')
 ! APM/LXL ---
 !
 obs_kind_names(247) = obs_kind_type(KIND_CO2,             'KIND_CO2')

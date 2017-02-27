@@ -114,6 +114,7 @@
                               '../../../obs_def/obs_def_gps_mod.f90',
                               '../../../obs_def/obs_def_vortex_mod.f90',
                               '../../../obs_def/obs_def_gts_mod.f90',
+                              '../../../obs_def/obs_def_AIRNOW_OBS_mod.f90',
                               '../../../obs_def/obs_def_OMI_NO2_mod.f90',
                               '../../../obs_def/obs_def_MODIS_AOD_mod.f90',
                               '../../../obs_def/obs_def_MOPITT_CO_mod.f90',
@@ -133,6 +134,7 @@
                                 'ACARS_TEMPERATURE', 
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
+                                'AIRNOW_O3',
                                 'OMI_NO2_COLUMN',
                                 'MODIS_AOD_RETRIEVAL',
                                 'MOPITT_CO_RETRIEVAL',
@@ -187,7 +189,7 @@
 # not yet supported.
 
 &model_nml
-   default_state_variables = .false.,
+   default_state_variables = .true.,
    wrf_state_variables = 'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 'UPDATE','999',
                          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V', 'UPDATE','999',
                          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W', 'UPDATE','999',
@@ -229,68 +231,6 @@
                          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
                          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
                          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999',
-                         'E_CO' , 'KIND_E_CO',                 'TYPE_E_CO',   'UPDATE','999',
-                         'E_NO' ,' KIND_E_NO',                 'TYPE_E_NO',   'UPDATE','999',
-                         'ebu_in_co' ,'KIND_EBU_CO',           'TYPE_EBU_CO', 'UPDATE','999',
-                         'ebu_in_no' ,'KIND_EBU_NO',           'TYPE_EBU_NO', 'UPDATE','999',
-                         'ebu_in_oc'   ,'KIND_EBU_OC',         'TYPE_EBU_OC',  'UPDATE','999',
-                         'ebu_in_bc'   ,'KIND_EBU_BC',         'TYPE_EBU_BC',  'UPDATE','999',
-                         'ebu_in_c2h4' ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4','UPDATE','999',
-                         'ebu_in_ch2o' ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o, 'UPDATE','999',
-                         'ebu_in_ch3oh','KIND_EBU_ch3oh',      'TYPE_EBU_ch3oh','UPDATE','999',
-
-   conc_state_variables = 'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 'UPDATE','999',
-                          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V', 'UPDATE','999',
-                          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W', 'UPDATE','999',
-                          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ','UPDATE','999',
-                          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T', 'UPDATE','999',
-                          'MU',    'KIND_PRESSURE',             'TYPE_MU','UPDATE','999',
-                          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV','UPDATE','999',
-                          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
-                          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
-                          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
-                          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
-                          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
-                          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
-                          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
-                          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
-                          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
-                          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
-                          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
-                          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
-                          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
-                          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
-                          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
-                          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
-                          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
-                          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
-                          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
-                          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
-                          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
-                          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
-                          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
-                          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
-                          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
-                          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
-                          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
-                          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
-                          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
-                          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
-                          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
-                          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
-                          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
-                          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999',
-   emiss_chemi_variables = 'E_CO' ,'KIND_E_CO',                 'TYPE_E_CO', 'UPDATE','999',
-                           'E_NO' ,'KIND_E_NO',                 'TYPE_E_NO', 'UPDATE','999',
-   emiss_firechemi_variables = 'ebu_in_co'   ,'KIND_EBU_CO',        'TYPE_EBU_CO', 'UPDATE','999',
-                           'ebu_in_no'   ,'KIND_EBU_NO',        'TYPE_EBU_NO', 'UPDATE','999',
-                           'ebu_in_oc'   ,'KIND_EBU_OC',        'TYPE_EBU_OC', 'UPDATE','999',
-                           'ebu_in_bc'   ,'KIND_EBU_BC',        'TYPE_EBU_BC', 'UPDATE','999',
-                           'ebu_in_c2h4' ,'KIND_EBU_c2h4',      'TYPE_EBU_c2h4', 'UPDATE','999',
-                           'ebu_in_ch2o' ,'KIND_EBU_ch2o',      'TYPE_EBU_ch2o', 'UPDATE','999',
-                           'ebu_in_ch3oh','KIND_EBU_ch3oh',     'TYPE_EBU_ch3oh', 'UPDATE','999',
-   add_emiss             = .false., 
-
 
    wrf_state_bounds    = 'QVAPOR','0.0','NULL','CLAMP',
                          'QRAIN', '0.0','NULL','CLAMP',
@@ -319,15 +259,6 @@
                          'macr',  '0.0','NULL','CLAMP',
                          'glyald','0.0','NULL','CLAMP',
                          'c10h16','0.0','NULL','CLAMP',
-                         'E_CO',  '0.0','NULL','CLAMP',
-                         'E_NO',  '0.0','NULL','CLAMP',
-                         'ebu_in_co',  '0.0','NULL','CLAMP',
-                         'ebu_in_no',  '0.0','NULL','CLAMP',
-                         'ebu_in_oc',  '0.0','NULL','CLAMP',
-                         'ebu_in_bc',  '0.0','NULL','CLAMP',
-                         'ebu_in_c2h4','0.0','NULL','CLAMP',
-                         'ebu_in_ch2o','0.0','NULL','CLAMP',
-                         'ebu_in_ch3oh','0.0','NULL','CLAMP',
 
    output_state_vector         = .false.,
    num_domains                 = 1,
@@ -364,14 +295,12 @@
    dart_restart_name   = 'dart_wrf_vector',
    print_data_ranges   = .false.,
    debug               = .false.
-   add_emiss           = .false.,
    / 
 
 &wrf_to_dart_nml
    dart_restart_name   = 'dart_wrf_vector',
    print_data_ranges   = .false.,
-   debug               = .false.,
-   add_emiss           = .false.,
+   debug               = .false.
    / 
 
 &utilities_nml
@@ -438,9 +367,9 @@
 
 &schedule_nml
    calendar        = 'Gregorian',  
-   first_bin_start =  2008, 6, 1, 0, 0, 0 ,
-   first_bin_end   =  2008, 6,30, 0, 0, 0 ,
-   last_bin_end    =  2008, 6,30, 0, 0, 0 ,
+   first_bin_start =  2012, 6, 1, 3, 0, 0 ,
+   first_bin_end   =  2012, 6, 1, 9, 0, 0 ,
+   last_bin_end    =  2012, 6, 6, 9, 0, 0 ,
    bin_interval_days    = 1000000,
    bin_interval_seconds = 21600,   
    max_num_bins         = 1000,
@@ -448,7 +377,7 @@
    /
    
 &obs_seq_to_netcdf_nml  
-   obs_sequence_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter/obs_seq.out',
+   obs_sequence_name = 'obs_seq.final',
    obs_sequence_list = '',
    append_to_netcdf  = .false.,
    lonlim1    =    0.0,
@@ -500,16 +429,13 @@
    debug             = .false.,
    /
 
-input_file_name = '/glade/p/image/DART_test_cases/wrf_chem/gold_standard_fast/2008060500/dart_filter/prior_inflate_ic_new'
-input_file_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter/prior_inflate_ic_new'
-
 &restart_file_tool_nml
    input_file_name              = "filter_restart",        
    output_file_name             = "filter_updated_restart",
-   ens_size                     = 2,
+   ens_size                     = 1,
    single_restart_file_in       = .true.,
    single_restart_file_out      = .true.,
-   write_binary_restart_files   = .false.,
+   write_binary_restart_files   = .true.,
    overwrite_data_time          = .false.,
    new_data_days                = -1,  
    new_data_secs                = -1,
@@ -521,19 +447,20 @@ input_file_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M
    /
 
 &obs_sequence_tool_nml
-   filename_seq = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter/obs_seq.out',
-   filename_out      = 'obs_seq.minimal', 
+   num_input_files   = 1, 
+   filename_seq      = 'obs_seq.out',
+   filename_out      = 'obs_seq.processed', 
    first_obs_days    = -1, 
    first_obs_seconds = -1, 
    last_obs_days     = -1, 
    last_obs_seconds  = -1, 
-   obs_types         = 'ACARS_U_WIND_COMPONENT', 'ACARS_V_WIND_COMPONENT', 'ACARS_TEMPERATURE' 
+   obs_types         = '', 
    keep_types        = .false., 
    print_only        = .false., 
-   min_lat           = 25.0, 
-   max_lat           = 35.0, 
-   min_lon           = 220.0, 
-   max_lon           = 300.0,
+   min_lat           = 28.0, 
+   max_lat           = 50.0, 
+   min_lon           = 228.0, 
+   max_lon           = 266.0,
    /
 
 &replace_wrf_fields_nml
@@ -586,7 +513,7 @@ input_file_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M
   obsdistbdy               = 15.0
   sfc_elevation_check      = .false.  
   sfc_elevation_tol        = 300.0
-  obs_pressure_top         = 10000.0
+  obs_pressure_top         = 0.0
   obs_height_top           = 2.0e10
   include_sig_data         = .true.   
   tc_sonde_radii           = -1.0
@@ -598,18 +525,20 @@ input_file_name = '/glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M
   sat_wind_pres_int        = 2500.0
   overwrite_ncep_satwnd_qc = .false.    
   overwrite_ncep_sfc_qc    = .false.  
+  superob_mopitt_co        = .false.
+  mopitt_co_pres_int       = 2500.0
   mopitt_co_extra          = 'obs_seq.mopitt_co'
   mopitt_co_horiz_int      = 100.0
-  mopitt_co_pres_int       = 2500.0
-  superob_mopitt_co        = .false.
+  superob_modis_aod        = .false.
+  modis_aod_pres_int       = 2500.0
+  modis_aod_extra          = 'obs_seq.modis_aod'
+  modis_aod_horiz_int      = 100.0
+  superob_iasi_co        = .false.
+  iasi_co_pres_int       = 2500.0
+  iasi_co_extra          = 'obs_seq.iasi_co'
+  iasi_co_horiz_int      = 100.0
+  superob_iasi_o3        = .false.
+  iasi_o3_pres_int       = 2500.0
+  iasi_o3_extra          = 'obs_seq.iasi_o3'
+  iasi_o3_horiz_int      = 100.0
 /
-
-&compare_states_nml
-   do_all_numeric_fields = .true.
-   fieldnames = ''
-   fieldlist_file = ''
-   fail_on_missing_field = .true.
-   debug = .false.
-   only_report_differences = .true.
-  /
-

@@ -288,7 +288,7 @@ qc_thinning(:)=100
   open(fileid,file=TRIM(filedir)//TRIM(filen),                     &
        form='formatted', status='old',  &
        iostat=ios)
-
+!
 ! Error Check
   if (ios /=0) then
       write(6,*) 'no mopitt file for the day ', day
@@ -298,14 +298,14 @@ qc_thinning(:)=100
 ! Read MOPITT
   read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
 !  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
-  nlvls=nint(nlevels)
-  nlvlsp=nlvls+1
-
+!
 ! Error Check
   if (ios /=0) then
-      write(6,*) 'no data on file ', TRIM(filen)
+      write(6,*) 'no data in file ', TRIM(filen)
       go to 999
   endif
+  nlvls=nint(nlevels)
+  nlvlsp=nlvls+1
 !
 !-------------------------------------------------------
 ! MAIN LOOP FOR MOPITT OBS
