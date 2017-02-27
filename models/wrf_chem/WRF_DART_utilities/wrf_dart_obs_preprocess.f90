@@ -42,6 +42,7 @@ use     obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT
                              MOPITT_CO_RETRIEVAL,  &
                              IASI_CO_RETRIEVAL, &
                              IASI_O3_RETRIEVAL, &
+                             AIRNOW_CO, &
                              AIRNOW_O3
 ! APM/JB ---
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, set_time
@@ -71,6 +72,7 @@ character(len=129) :: file_name_input    = 'obs_seq.old',        &
                       mopitt_co_extra    = 'obs_seq.mopitt_co',  &
                       iasi_co_extra      = 'obs_seq.iasi_co',    &
                       iasi_o3_extra      = 'obs_seq.iasi_o3',    &
+                      airnow_co_extra    = 'obs_seq.airnow_co',  &
                       airnow_o3_extra    = 'obs_seq.airnow_o3'
 character(len=80)  :: name, sgday, sgsec
 ! APM/JB ---
@@ -125,6 +127,11 @@ logical            :: superob_iasi_o3             = .false.    ! super-ob sat wi
 real(r8)           :: iasi_o3_horiz_int           = 100.0_r8   ! horizontal interval for super-ob
 real(r8)           :: iasi_o3_pres_int            = 2500.0_r8  ! pressure interval for super-ob
 logical            :: overwrite_ncep_iasi_o3_qc   = .false.    ! true to overwrite NCEP QC (see instructions)
+!  AIRNOW CO specific parameters
+logical            :: superob_airnow_co           = .false.    ! super-ob sat wind data
+real(r8)           :: airnow_co_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
+real(r8)           :: airnow_co_pres_int          = 2500.0_r8  ! pressure interval for super-ob
+logical            :: overwrite_ncep_airnow_co_qc = .false.    ! true to overwrite NCEP QC (see instructions)
 !  AIRNOW O3 specific parameters
 logical            :: superob_airnow_o3           = .false.    ! super-ob sat wind data
 real(r8)           :: airnow_o3_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
@@ -149,6 +156,7 @@ namelist /wrf_obs_preproc_nml/file_name_input, file_name_output,      &
          superob_mopitt_co, mopitt_co_pres_int, mopitt_co_extra, mopitt_co_horiz_int, &
          superob_iasi_co, iasi_co_pres_int, iasi_co_extra, iasi_co_horiz_int, &
          superob_iasi_o3, iasi_o3_pres_int, iasi_o3_extra, iasi_o3_horiz_int, &
+         superob_airnow_co, airnow_co_pres_int, airnow_co_extra, airnow_co_horiz_int, &
          superob_airnow_o3, airnow_o3_pres_int, airnow_o3_extra, airnow_o3_horiz_int
 ! APM/JB ---
 
@@ -169,7 +177,7 @@ type(obs_sequence_type) :: seq_all, seq_rawin, seq_sfc, seq_acars, seq_satwnd, &
                            seq_prof, seq_tc, seq_gpsro, seq_other, &
 ! APM/JB +++
                            seq_modis_aod, seq_mopitt_co, seq_iasi_co, seq_iasi_o3, &
-                           seq_airnow_o3
+                           seq_airnow_co, seq_airnow_o3
 ! APM/JB ---
 
 type(time_type)         :: anal_time
@@ -248,6 +256,7 @@ call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_modis_aod)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_mopitt_co)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_iasi_co)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_iasi_o3)
+call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_co)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_o3)
 ! APM/JB ---
 call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_other)
@@ -259,7 +268,7 @@ include_sig_data, obs_pressure_top, obs_height_top, sfc_elevation_check, &
 sfc_elevation_tol, overwrite_ncep_sfc_qc, overwrite_ncep_satwnd_qc, &
 overwrite_obs_time, anal_time, seq_rawin, seq_sfc, seq_acars, seq_satwnd, & 
 seq_tc, seq_gpsro, seq_modis_aod, seq_mopitt_co, seq_iasi_co, seq_iasi_o3, &
-seq_airnow_o3, seq_other)
+seq_airnow_co, seq_airnow_o3, seq_other)
 ! APM/JB ---
 
 !  add supplimental rawinsonde observations from file
@@ -339,6 +348,11 @@ IASI_O3_RETRIEVAL, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
 overwrite_obs_time, anal_time)
 !
+call add_supplimental_obs(airnow_co_extra, seq_airnow_co, max_obs_seq, &
+AIRNOW_CO, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+!
 call add_supplimental_obs(airnow_o3_extra, seq_airnow_o3, max_obs_seq, &
 AIRNOW_O3, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
@@ -370,8 +384,12 @@ if ( superob_sat_winds ) call superob_sat_wind_data(seq_satwnd, anal_time, &
 !  super-ob IASI_O3 data
 ! if ( superob_iasi_o3 ) call superob_iasi_o3_data(seq_iasi_o3, anal_time, &
 !                                     iasi_co_horiz_int, iasi_co_pres_int)
+!  super-ob AIRNOW_CO data
+! if ( superob_airnow_co ) call superob_airnow_co_data(seq_airnow_co, anal_time, &
+!                                     airnow_co_horiz_int, airnow_co_pres_int)
 !  super-ob AIRNOW_O3 data
 ! if ( superob_airnow_o3 ) call superob_airnow_o3_data(seq_airnow_o3, anal_time, &
+!                                     airnow_o3_horiz_int, airnow_o3_pres_int)
 ! APM/JB ---
 
 max_obs_seq = get_num_obs(seq_tc)     + get_num_obs(seq_rawin) + &
@@ -381,7 +399,7 @@ max_obs_seq = get_num_obs(seq_tc)     + get_num_obs(seq_rawin) + &
 ! APM/JB +++
               get_num_obs(seq_modis_aod) + get_num_obs(seq_mopitt_co) + &
               get_num_obs(seq_iasi_co) + get_num_obs(seq_iasi_o3) + &
-              get_num_obs(seq_airnow_o3) 
+              get_num_obs(seq_airnow_co) + get_num_obs(seq_airnow_o3) 
 ! APM/JB ---
 
 call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_all)
@@ -422,6 +440,9 @@ call destroy_obs_sequence(seq_iasi_co)
 !
 call build_master_sequence(seq_iasi_o3, seq_all)
 call destroy_obs_sequence(seq_iasi_o3)
+!
+call build_master_sequence(seq_airnow_co, seq_all)
+call destroy_obs_sequence(seq_airnow_co)
 !
 call build_master_sequence(seq_airnow_o3, seq_all)
 call destroy_obs_sequence(seq_airnow_o3)
@@ -505,6 +526,7 @@ use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONEN
                               MOPITT_CO_RETRIEVAL,  &
                               IASI_CO_RETRIEVAL, &
                               IASI_O3_RETRIEVAL, &
+                              AIRNOW_CO, &
                               AIRNOW_O3
 ! APM/JB ---
 use         model_mod, only : get_domain_info 
@@ -524,7 +546,7 @@ logical  :: file_exist, last_obs, pass_checks, original_observation, &
             sat_wind_obs_check, first_obs, &
 ! APM/JB +++
             modis_aod_obs_check, mopitt_co_obs_check, iasi_co_obs_check, &
-            iasi_o3_obs_check, airnow_o3_obs_check
+            iasi_o3_obs_check, airnow_co_obs_check, airnow_o3_obs_check
 ! APM/JB ---
 real(r8) :: xyz_loc(3), xloc, yloc
 real(r8) :: real_nx, real_ny
@@ -573,6 +595,9 @@ select case (plat_kind)
 !
   case (IASI_O3_RETRIEVAL)                           
     write(6,*) 'Adding Supplimental IASI_O3 Data'   
+!
+  case (AIRNOW_CO)                           
+    write(6,*) 'Adding Supplimental AIRNOW_CO Data'   
 !
   case (AIRNOW_O3)                           
     write(6,*) 'Adding Supplimental AIRNOW_O3 Data'   
@@ -682,6 +707,9 @@ ObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a sequence
 !
     case (IASI_O3_RETRIEVAL)             
       pass_checks = iasi_o3_obs_check()  
+!
+    case (AIRNOW_CO)             
+      pass_checks = airnow_co_obs_check()  
 !
     case (AIRNOW_O3)             
       pass_checks = airnow_o3_obs_check()  
@@ -1161,7 +1189,8 @@ subroutine read_and_parse_input_seq(filename, nx, ny, obs_bdy, siglevel, ptop, &
                                     rawin_seq, sfc_seq, acars_seq, satwnd_seq, &
 ! APM/JB +++
                                     tc_seq, gpsro_seq, modis_aod_seq, mopitt_co_seq, &
-                                    iasi_co_seq, iasi_o3_seq, airnow_o3_seq, other_seq)
+                                    iasi_co_seq, iasi_o3_seq, airnow_co_seq, &
+                                    airnow_o3_seq, other_seq)
 ! APM/JB ---
 
 use         types_mod, only : r8
@@ -1202,6 +1231,7 @@ use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COM
                               MOPITT_CO_RETRIEVAL,  &
                               IASI_CO_RETRIEVAL, &
                               IASI_O3_RETRIEVAL, &
+                              AIRNOW_CO, &
                               AIRNOW_O3
 ! APM/JB ---
 use         model_mod, only : get_domain_info
@@ -1223,7 +1253,8 @@ type(obs_sequence_type), intent(inout) :: rawin_seq, sfc_seq, acars_seq, &
                                           satwnd_seq, tc_seq, gpsro_seq, &
 ! APM/JB +++
                                           modis_aod_seq, mopitt_co_seq, &
-                                          iasi_co_seq, iasi_o3_seq, airnow_o3_seq, other_seq     
+                                          iasi_co_seq, iasi_o3_seq, airnow_co_seq, &
+                                          airnow_o3_seq, other_seq     
 ! APM/JB ---
 
 character(len=129)    :: qcmeta
@@ -1232,7 +1263,7 @@ logical               :: file_exist, last_obs, input_ncep_qc, rawinsonde_obs_che
                          surface_obs_check, aircraft_obs_check, sat_wind_obs_check, &
 ! APM/JB +++
                          modis_aod_obs_check, mopitt_co_obs_check, iasi_co_obs_check, &
-                         iasi_o3_obs_check, airnow_o3_obs_check
+                         iasi_o3_obs_check, airnow_co_obs_check, airnow_o3_obs_check
 ! APM/JB ---
 real(r8), allocatable :: xland(:,:), qc(:)
 real(r8)              :: xyz_loc(3), xloc, yloc
@@ -1408,6 +1439,10 @@ InputObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a seq
     case ( IASI_O3_RETRIEVAL )              
       call copy_obs(obs, obs_in)            
       call append_obs_to_seq(iasi_o3_seq, obs)
+!
+    case ( AIRNOW_CO )              
+      call copy_obs(obs, obs_in)            
+      call append_obs_to_seq(airnow_co_seq, obs)
 !
     case ( AIRNOW_O3 )              
       call copy_obs(obs, obs_in)            
@@ -1613,6 +1648,27 @@ iasi_o3_obs_check = .true.
 
 return
 end function iasi_o3_obs_check
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   airnow_co_obs_check - function that determines whether to include an
+!                        AIRNOW CO observation in the sequence.
+!                        For now, this function is a placeholder and 
+!                        returns true.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function airnow_co_obs_check()
+
+use     types_mod, only : r8
+
+implicit none
+
+logical  :: airnow_co_obs_check
+
+airnow_co_obs_check = .true.
+
+return
+end function airnow_co_obs_check
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !

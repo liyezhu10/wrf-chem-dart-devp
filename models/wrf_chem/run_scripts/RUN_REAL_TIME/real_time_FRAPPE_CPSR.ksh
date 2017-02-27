@@ -96,13 +96,56 @@ export START_IASI_O3_DATA=2014060100
 export END_IASI_O3_DATA=2014073118
 export NL_DEBUG_LEVEL=200
 #
-export BUILD_DIR=/glade/p/work/mizzi/TRUNK/WRFDAv3.4_dmpar/var/da
-##
-## APM: +++ Convert from _FRAPPE to _ALL
-export DART_DIR=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH_ALL
-export DART_DIR=/glade/p/FRAPPE/FRAPPE_TRUNK/DART_CHEM_MY_BRANCH_FRAPPE
-## APM: ---
-##
+#
+# CODE VERSIONS:
+export WPS_VER=WPSv3.6.1_dmpar
+export WPS_GEOG_VER=WPSv3.6.1_GEOG_DATA
+export WRFDA_VER=WRFDAv3.4_dmpar
+export WRF_VER=WRFv3.6.1_dmpar
+export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
+export WRFCHEM_VER_GABI=WRFCHEMv3.6.1_dmpar_GABI_REV1.0
+export DART_VER=DART_CHEM_REPOSITORY
+#
+# ROOT DIRECTORIES:
+export SCRATCH_DIR=/glade/scratch/mizzi
+export WORK_DIR=/glade/p/work/mizzi
+export ACD_DIR=/glade/p/acd/mizzi
+export FRAPPE_DIR=/glade/p/FRAPPE
+#
+# DEPENDENT INPUT DATA DIRECTORIES:
+export RUN_DIR=${FRAPPE_DIR}/real_FRAPPE_CPSR_VARLOC
+export TRUNK_DIR=${WORK_DIR}/TRUNK
+export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
+export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
+export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
+export WRFCHEM_DIR_GABI=${FRAPPE_DIR}/FRAPPE_TRUNK/${WRFCHEM_VER_GABI}
+export WRFDA_DIR=${TRUNK_DIR}/${WRFDA_VER}
+export DART_DIR=${TRUNK_DIR}/${DART_VER}
+export BUILD_DIR=${WRFDA_DIR}/var/da
+export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
+export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
+export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
+export FRAPPE_DATA_DIR=${FRAPPE_DIR}/FRAPPE_REAL_TIME_DATA
+export MOZBC_DATA_DIR=${FRAPPE_DIR}/FRAPPE_REAL_TIME_DATA/mozart_forecasts
+export FRAPPE_STATIC_FILES=${FRAPPE_DATA_DIR}/static_files
+export FRAPPE_WRFCHEMI_DIR=${FRAPPE_DATA_DIR}/anthro_emissions
+export FRAPPE_WRFFIRECHEMI_DIR=${FRAPPE_DATA_DIR}/fire_emissions
+export FRAPPE_WRFBIOCHEMI_DIR=${FRAPPE_DATA_DIR}/bio_emissions
+export FRAPPE_COLDENS_DIR=${FRAPPE_DATA_DIR}/wes_coldens
+export FRAPPE_PREPBUFR_DIR=${FRAPPE_DATA_DIR}/met_obs_prep_data
+export FRAPPE_MOPITT_CO_DIR=${FRAPPE_DATA_DIR}/mopitt_co_hdf_data
+export FRAPPE_IASI_CO_DIR=${FRAPPE_DATA_DIR}/iasi_co_hdf_data
+export FRAPPE_IASI_O3_DIR=${FRAPPE_DATA_DIR}/iasi_o3_hdf_data
+export FRAPPE_AIRNOW_DIR=${FRAPPE_DATA_DIR}/airnow_csv_data
+export FRAPPE_MODIS_AOD_DIR=${FRAPPE_DATA_DIR}/modis_aod_hdf_data
+export FRAPPE_GFS_DIR=${FRAPPE_DATA_DIR}/gfs_forecasts
+export FRAPPE_DUST_DIR=${FRAPPE_DATA_DIR}/dust_fields
+export FRAPPE_HIST_IO_DIR=${FRAPPE_DATA_DIR}/hist_io_files
+export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
+export BE_DIR=${WRFDA_DIR}/var/run
+export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
+export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
+#
 cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
 cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
 export YYYY=$(echo $DATE | cut -c1-4)
@@ -212,7 +255,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=true
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -225,7 +268,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=false
+      export RUN_DART_FILTER=true
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_WRFCHEM_CYCLE_FR=false
@@ -399,73 +442,7 @@ export MISC_NUM_TASKS=1
 export MISC_TASKS_PER_NODE=8
 export MISC_JOB_CLASS=regular
 #
-# CODE VERSIONS:
-export WPS_VER=WPSv3.6.1_dmpar
-export WPS_GEOG_VER=WPSv3.6.1_GEOG_DATA
-export WRFDA_VER=WRFDAv3.4_dmpar
-export WRFDA_TOOLS_VER=WRFDA_TOOLSv3.4
-export WRF_VER=WRFv3.6.1_dmpar
-export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
-export WRFCHEM_VER_GABI=WRFCHEMv3.6.1_dmpar_GABI_REV1.0
-##
-## APM: Convert from _FRAPPE to _ALL
-export DART_VER=DART_CHEM_MY_BRANCH_ALL
-export DART_VER=DART_CHEM_MY_BRANCH_FRAPPE
-export DART_VER=DART_CHEM_REPOSITORY
-## APM: ---
-##
-#
-# ROOT DIRECTORIES:
-export SCRATCH_DIR=/glade/scratch/mizzi
-export WORK_DIR=/glade/p/work/mizzi
-export ACD_DIR=/glade/p/acd/mizzi
-export FRAPPE_DIR=/glade/p/FRAPPE
-#
-# DEPENDENT DIRECTORIES:
-export RUN_DIR=${FRAPPE_DIR}/real_FRAPPE_CPSR_VARLOC
-export TRUNK_DIR=${WORK_DIR}/TRUNK
-export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
-export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
-export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
-export WRFCHEM_DIR_GABI=${FRAPPE_DIR}/FRAPPE_TRUNK/${WRFCHEM_VER_GABI}
-export WRFVAR_DIR=${TRUNK_DIR}/${WRFDA_VER}
-export DART_DIR=${TRUNK_DIR}/${DART_VER}
-###export DART_DIR=${FRAPPE_DIR}/FRAPPE_TRUNK/${DART_VER}
-export BUILD_DIR=${WRFVAR_DIR}/var/da
-export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
-export HYBRID_TRUNK_DIR=${WORK_DIR}/HYBRID_TRUNK
-export HYBRID_SCRIPTS_DIR=${HYBRID_TRUNK_DIR}/hybrid_scripts
-export SCRIPTS_DIR=${TRUNK_DIR}/${WRFDA_TOOLS_VER}/scripts
-export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-export FRAPPE_DATA_DIR=${FRAPPE_DIR}/FRAPPE_REAL_TIME_DATA
-export MOZBC_DATA_DIR=${FRAPPE_DIR}/FRAPPE_REAL_TIME_DATA/mozart_forecasts
-export FRAPPE_STATIC_FILES=${FRAPPE_DATA_DIR}/static_files
-export FRAPPE_WRFCHEMI_DIR=${FRAPPE_DATA_DIR}/anthro_emissions
-export FRAPPE_WRFFIRECHEMI_DIR=${FRAPPE_DATA_DIR}/fire_emissions
-export FRAPPE_WRFBIOCHEMI_DIR=${FRAPPE_DATA_DIR}/bio_emissions
-export FRAPPE_COLDENS_DIR=${FRAPPE_DATA_DIR}/wes_coldens
-export FRAPPE_PREPBUFR_DIR=${FRAPPE_DATA_DIR}/met_obs_prep_data
-export FRAPPE_MOPITT_CO_DIR=${FRAPPE_DATA_DIR}/mopitt_co_hdf_data
-export FRAPPE_IASI_CO_DIR=${FRAPPE_DATA_DIR}/iasi_co_hdf_data
-export FRAPPE_IASI_O3_DIR=${FRAPPE_DATA_DIR}/iasi_o3_hdf_data
-export FRAPPE_AIRNOW_DIR=${FRAPPE_DATA_DIR}/airnow_csv_data
-export FRAPPE_MODIS_AOD_DIR=${FRAPPE_DATA_DIR}/modis_aod_hdf_data
-export FRAPPE_GFS_DIR=${FRAPPE_DATA_DIR}/gfs_forecasts
-export FRAPPE_DUST_DIR=${FRAPPE_DATA_DIR}/dust_fields
-export FRAPPE_HIST_IO_DIR=${FRAPPE_DATA_DIR}/hist_io_files
-#
-export INPUT_DATA_DIR=${ACD_DIR}/AVE_TEST_DATA
-export OBSPROC_DIR=${WRFVAR_DIR}/var/obsproc
-export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
-export BE_DIR=${WRFVAR_DIR}/var/run
-export MODIS_IDL_DIR=${WORK_DIR}/MODIS_AOD_PROCESSING
-##
-## APM: +++ Convert from _FRAPPE to _ALL
-## May need to copy the code from RUN_PERT_CHEM from _FRAPPE to _ALL
-export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
-export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
-## APM: ---
-##
+# RUN DIRECTORIES
 export GEOGRID_DIR=${RUN_DIR}/geogrid
 export METGRID_DIR=${RUN_DIR}/${DATE}/metgrid
 export REAL_DIR=${RUN_DIR}/${DATE}/real
@@ -1234,11 +1211,11 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
-                                   'AIRNOW_O3',
-                                   'AIRNOW_CO',
-                                   'MODIS_AOD_RETRIEVAL',
-                                   'IASI_CO_RETRIEVAL',
                                    'MOPITT_CO_RETRIEVAL'"
+#                                   'AIRNOW_O3',
+#                                   'AIRNOW_CO',
+#                                   'MODIS_AOD_RETRIEVAL',
+#                                   'IASI_CO_RETRIEVAL',
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
 #
 # &replace_wrf_fields_nml
@@ -1992,7 +1969,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
       export NL_PUT_RAND_SEED=true
 #
 # LOOP THROUGH ALL MEMBERS IN THE ENSEMBLE
-      RANDOM=$$
+      TRANDOM=$$
       let MEM=1
       while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
          export CMEM=e${MEM}
@@ -2025,15 +2002,15 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
          cp ${FRAPPE_PREPBUFR_DIR}/${DATE}/prepbufr.gdas.${DATE}.wo40.be ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
-         cp ${WRFVAR_DIR}/run/LANDUSE.TBL ./.
-         cp ${WRFVAR_DIR}/var/da/da_wrfvar.exe ./.
+         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
+         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=wrfda_cr_${RANDOM}
+         export JOBRND=wrfda_cr_${TRANDOM}
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
@@ -2085,15 +2062,15 @@ EOF
          cp ${FRAPPE_PREPBUFR_DIR}/${DATE}/prepbufr.gdas.${DATE}.wo40.be ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
-         cp ${WRFVAR_DIR}/run/LANDUSE.TBL ./.
-         cp ${WRFVAR_DIR}/var/da/da_wrfvar.exe ./.
+         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
+         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=wrfda_fr_${RANDOM}
+         export JOBRND=wrfda_fr_${TRANDOM}
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
@@ -2125,7 +2102,7 @@ EOF
 #
 # Wait for WRFDA to complete for all members
       cd ${RUN_DIR}/${DATE}/wrfchem_met_ic
-      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
 #
       let MEM=1
       while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
@@ -2200,7 +2177,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
 # LOOP THROUGH ALL BDY TENDENCY TIMES FOR THIS MEMBER.
       export L_DATE=${DATE}
       export L_END_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
-      RANDOM=$$
+      TRANDOM=$$
       while [[ ${L_DATE} -lt ${L_END_DATE} ]]; do
          export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 0 -W 2>/dev/null)
          export NEXT_L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${LBC_FREQ} 2>/dev/null)
@@ -2216,7 +2193,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=pert_bc_${RANDOM}
+         export JOBRND=pert_bc_${TRANDOM}
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
@@ -2250,7 +2227,7 @@ EOF
 #         fi
          export L_DATE=${NEXT_L_DATE}
       done
-#      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+#      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
       export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -W 2>/dev/null)
       mv wrfbdy_this wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
       let MEM=${MEM}+1
@@ -2793,6 +2770,7 @@ if ${RUN_PERT_WRFCHEM_CHEM_EMISS}; then
       export WRFBIOCHEMI=wrfbiochemi_d${CR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00
       export WRFINPUT=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
       export WRFINPUT_DIR=${WRFCHEM_CHEM_ICBC_DIR}
+#
       cp ${WRFINPUT_DIR}/${WRFINPUT} wrfinput_d${CR_DOMAIN}
 #        
       let MEM=1
@@ -2802,9 +2780,18 @@ if ${RUN_PERT_WRFCHEM_CHEM_EMISS}; then
          if [[ ${MEM} -lt 10  ]]; then export CMEM=e00${MEM}; fi
          if [[ ${NL_PERT_CHEM} == true ]]; then
             cp ${WRFCHEM_CHEMI_DIR}/${WRFCHEMI} ${WRFCHEMI}.${CMEM}
+            ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" ${WRFCHEMI}.${CMEM}
+            ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" ${WRFCHEMI}.${CMEM}
          fi
          if [[ ${NL_PERT_FIRE} == true ]]; then
             cp ${WRFCHEM_FIRE_DIR}/${WRFFIRECHEMI} ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_co,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_no,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_oc,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_bc,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_c2h4,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
+            ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" ${WRFFIRECHEMI}.${CMEM}
          fi
          if [[ ${NL_PERT_BIO} == true ]]; then
             cp ${WRFCHEM_BIO_DIR}/${WRFBIOCHEMI} ${WRFBIOCHEMI}.${CMEM}
@@ -3671,8 +3658,9 @@ if ${RUN_MODIS_AOD_OBS}; then
    (( N_HH=${HH}+0 ))
    (( N_ASIM_WIN=${ASIM_WINDOW}+0 ))
 #
-   rm -rf modis_extract_hdf.pro
-   cp ${MODIS_IDL_DIR}/modis_extract_hdf.pro ./.
+   export FILE=modis_extract_hdf.pro
+   rm -rf ${FILE}
+   cp ${DART_DIR}/observations/MODIS/native_to_ascii/${FILE} ./.
    rm -rf job.ksh
    rm -rf idl_*.err
    rm -rf idl_*.out
@@ -3878,7 +3866,7 @@ if ${RUN_PREPROCESS_OBS}; then
    fi
 #
 # GET WRFINPUT TEMPLATE
-   cp ${WRFCHEM_MET_IC_DIR}/wrfinput_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfinput_d${CR_DOMAIN}
+   cp ${WRFCHEM_CHEM_ICBC_DIR}/wrfinput_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfinput_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfbiochemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfbiochemi_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrffirechemi_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfchemi_d${CR_DOMAIN}
@@ -3923,18 +3911,10 @@ else
    exit
 fi
 EOF
-##
-## APM: +++
-## When using AOD and emissions inversion preprocess is not working
-## so copy the input obs_seq file to the output obs_seq file
 #
    bsub -K < job.ksh 
 #
-# SAVE OUTPUT
-##   mv obs_seq.new obs_seq_comb_filtered_${DATE}.out 
-   cp obs_seq.old obs_seq_comb_filtered_${DATE}.out 
-## APM: ---
-##
+   mv obs_seq.new obs_seq_comb_filtered_${DATE}.out 
 fi
 #
 #########################################################################
@@ -3952,7 +3932,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
    fi
 #
 # Run WRF-Chem for all ensemble members
-   RANDOM=$$
+   TRANDOM=$$
    let IMEM=1
    export L_NUM_MEMBERS=${NUM_MEMBERS}
    if ${RUN_SPECIAL_FORECAST}; then
@@ -4075,7 +4055,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${RANDOM}
+      export JOBRND=advm_${TRANDOM}
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
@@ -4105,7 +4085,7 @@ EOF
    done
 #
 # Wait for WRFCHEM to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
 fi
 #
 #########################################################################
@@ -4226,7 +4206,7 @@ if ${RUN_DART_FILTER}; then
    done
 #
 # Create job script 
-   RANDOM=$$
+   TRANDOM=$$
    let MEM=1
    while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
       export CMEM=e${MEM}
@@ -4237,7 +4217,7 @@ if ${RUN_DART_FILTER}; then
       cd ${RUN_DIR}/${DATE}/dart_filter/dart_wrk_${CMEM}
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=wr2dt_${RANDOM}
+      export JOBRND=wr2dt_${TRANDOM}
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_ACD}
@@ -4268,7 +4248,7 @@ EOF
    done
 #
 # Wait for wrf_to_dart to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
 #
    cd ${RUN_DIR}/${DATE}/dart_filter
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
@@ -4321,7 +4301,6 @@ EOF
 #
    rm -rf input.nml
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-   cp input.nml input_nml_APM_SAVE
 #
 # Make filter_apm_nml for special_outlier_threshold
    rm -rf filter_apm.nml
@@ -4363,7 +4342,7 @@ EOF
    bsub -K < job.ksh
 #
 # Run DART_TO_WRF 
-   RANDOM=$$
+   TRANDOM=$$
    let MEM=1
    while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
       export CMEM=e${MEM}
@@ -4389,7 +4368,7 @@ EOF
 # Create job script 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=dt2wf_${RANDOM}
+      export JOBRND=dt2wf_${TRANDOM}
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_ACD}
@@ -4420,7 +4399,7 @@ EOF
    done
 #
 # Wait for dart_to_wrf to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
 #
 # Copy converted output files
    let MEM=1
@@ -4485,7 +4464,7 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
    fi
 #
 # Run WRF-Chem for all ensemble members
-   RANDOM=$$
+   TRANDOM=$$
    let IMEM=1
    export L_NUM_MEMBERS=${NUM_MEMBERS}
    if ${RUN_SPECIAL_FORECAST}; then
@@ -4674,7 +4653,7 @@ EOF
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${RANDOM}
+      export JOBRND=advm_${TRANDOM}
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
@@ -4704,7 +4683,7 @@ EOF
    done
 #
 # Wait for WRFCHEM to complete for each member
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RANDOM}
+   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
 fi
 #
 #########################################################################
