@@ -145,7 +145,6 @@ public ::  get_number_domains,       &
            get_domain_info,          &
            get_wrf_state_variables,  &
            fill_default_state_table, &
-           read_wrf_dimensions,      &
            get_number_of_wrf_variables, &
            get_variable_bounds,         &
            set_variable_bound_defaults, &
@@ -154,12 +153,8 @@ public ::  get_number_domains,       &
            trans_2Dto1D, trans_1Dto2D, &
            get_wrf_date, set_wrf_date, &
            height_diff_check
-!
-! LXL/APM +++
-public :: read_emiss_dimensions, &
-          get_emiss_variable_size_from_file
-! LXL/APM ---
-!
+
+
 ! public parameters
 public :: max_state_variables, &
           num_state_table_columns, &
@@ -404,7 +399,8 @@ logical               :: var_update_list(max_state_variables)
 ! LXL/APM +++
 logical               :: add_emiss = .true.
 ! LXL/APM ---
-!
+
+character(len=256) :: wrf_filename, chem_filename, fire_filename
 
 !----------------------------------------------------------------------
 
@@ -500,23 +496,26 @@ WRFDomains : do id=1,num_domains
 
    write( idom , '(I1)') id
 
+   write( wrf_filename,'(''wrfinput_d'',i2.2)')id
+   write(chem_filename,'(''wrfchemi_d'',i2.2)')id
+   write(fire_filename,'(''wrffirechemi_d'',i2.2)')id
+
    ! only print this once, no matter how many parallel tasks are running
    if (do_output()) then
       write(*,*) '******************'
       write(*,*) '**  DOMAIN # ',idom,'  **'
       write(*,*) '******************'
+      call error_handler(E_MSG,'static_init_model','wrf input file is "'//trim(wrf_filename)//'"')
+      call error_handler(E_MSG,'static_init_model','wrfchemi input file is "'//trim(chem_filename)//'"')
+      call error_handler(E_MSG,'static_init_model','wrffirechemi input file is "'//trim(fire_filename)//'"')
    endif
 
-   if(file_exist('wrfinput_d0'//idom)) then
-
-      call nc_check( nf90_open('wrfinput_d0'//idom, NF90_NOWRITE, ncid), &
-                     'static_init_model','open wrfinput_d0'//idom )
-
+   if(file_exist(wrf_filename)) then
+      call nc_check( nf90_open(wrf_filename, NF90_NOWRITE, ncid), &
+                     'static_init_model','open "'//trim(wrf_filename)//'"' )
    else
-
       call error_handler(E_ERR,'static_init_model', &
-           'Please put wrfinput_d0'//idom//' in the work directory.', source, revision,revdate)
-
+           'Please put "'//trim(wrf_filename)//'" in the work directory.', source, revision,revdate)
    endif
 
    if(debug) write(*,*) ' ncid is ',ncid
@@ -525,22 +524,23 @@ WRFDomains : do id=1,num_domains
 !   if ( add_emiss ) then
 !
 ! WRFCHEMI emissions
-      if(file_exist('wrfchemi_d0'//idom)) then
-         call nc_check( nf90_open('wrfchemi_d0'//idom, NF90_NOWRITE, ncid_emiss_chemi), &
-         'static_init_model','open wrfchemi_d0'//idom )
+
+      if(file_exist(chem_filename)) then
+         call nc_check(nf90_open(chem_filename, NF90_NOWRITE, ncid_emiss_chemi), &
+                       'static_init_model','open "'//trim(chem_filename)//'"' )
       else
          call error_handler(E_ERR,'static_init_model', &
-         'Please put wrfchemi_d0'//idom//' in the work directory.', source, revision,revdate)
+         'Please put "'//trim(chem_filename)//'" in the work directory.', source, revision,revdate)
       endif
       if(debug) write(*,*) ' ncid_emiss_chemi is ',ncid_emiss_chemi
 !
 ! WRFFIRECHEMI emissions
-      if(file_exist('wrffirechemi_d0'//idom)) then
-         call nc_check( nf90_open('wrffirechemi_d0'//idom, NF90_NOWRITE, ncid_emiss_firechemi), &
-         'static_init_model','open wrffirechemi_d0'//idom )
+      if(file_exist(fire_filename)) then
+         call nc_check( nf90_open(fire_filename, NF90_NOWRITE, ncid_emiss_firechemi), &
+         'static_init_model','open "'//trim(fire_filename)//'"')
       else
          call error_handler(E_ERR,'static_init_model', &
-              'Please put wrffirechemi_d0'//idom//' in the work directory.', source, revision,revdate)
+              'Please put "'//trim(fire_filename)//'" in the work directory.', source, revision,revdate)
       endif
       if(debug) write(*,*) ' ncid_emiss_firechemi is ',ncid_emiss_firechemi
 !   endif
@@ -549,22 +549,26 @@ WRFDomains : do id=1,num_domains
 !-------------------------------------------------------
 ! read WRF dimensions
 !-------------------------------------------------------
-   call read_wrf_dimensions(ncid,wrf%dom(id)%bt, wrf%dom(id)%bts, &
-                                 wrf%dom(id)%sn, wrf%dom(id)%sns, &
-                                 wrf%dom(id)%we, wrf%dom(id)%wes, &
-                                 wrf%dom(id)%sls)
+   call read_wrf_dimensions(ncid, wrf_filename, &
+                            wrf%dom(id)%bt, wrf%dom(id)%bts, &
+                            wrf%dom(id)%sn, wrf%dom(id)%sns, &
+                            wrf%dom(id)%we, wrf%dom(id)%wes, &
+                            wrf%dom(id)%sls)
 !
 ! LXL/APM +++
 !-------------------------------------------------------
 ! read EMISS dimensions
 !-------------------------------------------------------
 !   if ( add_emiss ) then
-      call read_emiss_dimensions(ncid_emiss_chemi,wrf%dom(id)%e_bt_chemi, &
-                                    wrf%dom(id)%e_sn, &
-                                    wrf%dom(id)%e_we)
-      call read_emiss_dimensions(ncid_emiss_firechemi,wrf%dom(id)%e_bt_firechemi, &
-                                    wrf%dom(id)%e_sn, &
-                                    wrf%dom(id)%e_we)
+      call read_emiss_dimensions(ncid_emiss_chemi, chem_filename, &
+                                 wrf%dom(id)%e_bt_chemi, &
+                                 wrf%dom(id)%e_sn, &
+                                 wrf%dom(id)%e_we )
+
+      call read_emiss_dimensions(ncid_emiss_firechemi, fire_filename, &
+                                 wrf%dom(id)%e_bt_firechemi, &
+                                 wrf%dom(id)%e_sn, &
+                                 wrf%dom(id)%e_we)
 !   endif
 ! LXL/APM ---
 !-------------------------------------------------------
@@ -8099,53 +8103,55 @@ end subroutine getCorners
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
 
-subroutine read_wrf_dimensions(ncid,bt,bts,sn,sns,we,wes,sls)
+subroutine read_wrf_dimensions(ncid,fname,bt,bts,sn,sns,we,wes,sls)
 
 ! ncid: input, file handl
 ! id:   input, domain id
 
-integer, intent(in)            :: ncid
-integer, intent(out)           :: bt,bts,sn,sns,we,wes,sls
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: fname
+integer,          intent(out) :: bt,bts,sn,sns,we,wes,sls
+
 logical, parameter             :: debug = .false.
-integer                        :: var_id 
+integer                        :: dim_id 
 character (len=NF90_MAX_NAME)  :: dimname
 
 ! get wrf grid dimensions
 
-   call nc_check( nf90_inq_dimid(ncid, "bottom_top", var_id), &
+   call nc_check( nf90_inq_dimid(ncid, "bottom_top", dim_id), &
                      'read_wrf_dimensions','inq_dimid bottom_top')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=bt), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=bt), &
+                     'read_wrf_dimensions','inquire_dimension bottom_top "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "bottom_top_stag", var_id), &
-                     'read_wrf_dimensions','inq_dimid bottom_top_stag') ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=bts), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "bottom_top_stag", dim_id), &
+                     'read_wrf_dimensions','inq_dimid bottom_top_stag')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=bts), &
+                     'read_wrf_dimensions','inquire_dimension bottom_top_stag "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "south_north", var_id), &
+   call nc_check( nf90_inq_dimid(ncid, "south_north", dim_id), &
                      'read_wrf_dimensions','inq_dimid south_north')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sn), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=sn), &
+                     'read_wrf_dimensions','inquire_dimension south_north "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "south_north_stag", var_id), &
-                     'read_wrf_dimensions','inq_dimid south_north_stag') ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sns), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "south_north_stag", dim_id), &
+                     'read_wrf_dimensions','inq_dimid south_north_stag')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=sns), &
+                     'read_wrf_dimensions','inquire_dimension south_north_stag "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "west_east", var_id), &
+   call nc_check( nf90_inq_dimid(ncid, "west_east", dim_id), &
                      'read_wrf_dimensions','inq_dimid west_east')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=we), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=we), &
+                     'read_wrf_dimensions','inquire_dimension west_east "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "west_east_stag", var_id), &
-                     'read_wrf_dimensions','inq_dimid west_east_stag')  ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=wes), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "west_east_stag", dim_id), &
+                     'read_wrf_dimensions','inq_dimid west_east_stag')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=wes), &
+                     'read_wrf_dimensions','inquire_dimension west_east_stag "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "soil_layers_stag", var_id), &
-                     'read_wrf_dimensions','inq_dimid soil_layers_stag')  ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sls), &
-                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "soil_layers_stag", dim_id), &
+                     'read_wrf_dimensions','inq_dimid soil_layers_stag')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=sls), &
+                     'read_wrf_dimensions','inquire_dimension soil_layers_stag "'//trim(fname)//'"')
 
    if(debug) then
       write(*,*) ' dimensions bt, sn, we are ',bt, &
@@ -9311,33 +9317,44 @@ end function compute_geometric_height
 ! LXL/APM +++
 ! LXL: Added for reading wrfchemi file
 !
-subroutine read_emiss_dimensions(ncid,e_bt,e_sn,e_we)  
+subroutine read_emiss_dimensions(ncid,fname,e_bt,e_sn,e_we)  
 
 ! ncid: input, file handl
 ! id:   input, domain id
 
-integer, intent(in)            :: ncid
-integer, intent(out)           :: e_bt,e_sn,e_we
-logical, parameter             :: debug = .false.
-integer                        :: var_id 
-character (len=NF90_MAX_NAME)  :: dimname
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: fname
+integer,          intent(out) :: e_bt,e_sn,e_we
+
+logical, parameter            :: debug = .false.
+integer                       :: dim_id 
+character(len=NF90_MAX_NAME)  :: dimname
 
 ! get wrf grid dimensions
 
-   call nc_check( nf90_inq_dimid(ncid, "emissions_zdim_stag", var_id), &
-                     'read_emiss_dimensions','inq_dimid emissions_zdim_stag')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_bt), &
-                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "emissions_zdim_stag", dim_id), &
+                       'read_emiss_dimensions', &
+                       'inq_dimid emissions_zdim_stag "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "south_north", var_id), &
-                     'read_emiss_dimensions','inq_dimid south_north')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_sn), &
-                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=e_bt), &
+                       'read_emiss_dimensions', &
+                       'inquire_dimension emissions_zdim_stag "'//trim(fname)//'"')
 
-   call nc_check( nf90_inq_dimid(ncid, "west_east", var_id), &
-                     'read_emiss_dimensions','inq_dimid west_east')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_we), &
-                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
+   call nc_check( nf90_inq_dimid(ncid, "south_north", dim_id), &
+                       'read_emiss_dimensions', &
+                       'inq_dimid south_north'//trim(fname)//'"')
+
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=e_sn), &
+                       'read_emiss_dimensions', &
+                       'inquire_dimension south_north "'//trim(fname)//'"')
+
+   call nc_check( nf90_inq_dimid(ncid, "west_east", dim_id), &
+                       'read_emiss_dimensions', &
+                       'inq_dimid west_east'//trim(fname)//'"')
+
+   call nc_check( nf90_inquire_dimension(ncid, dim_id, name=dimname, len=e_we), &
+                       'read_emiss_dimensions', &
+                       'inquire_dimension west_east "'//trim(fname)//'"')
 
    if(debug) then
       write(*,*) ' dimensions e_bt, e_sn, e_we are ',e_bt, &
