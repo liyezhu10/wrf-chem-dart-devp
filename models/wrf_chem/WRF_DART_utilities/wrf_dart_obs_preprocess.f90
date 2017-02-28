@@ -203,6 +203,7 @@ anal_time = set_time(gsec, gday)
 
 call static_init_obs_sequence()
 call static_init_model()
+stop
 
 call find_namelist_in_file("input.nml", "wrf_obs_preproc_nml", iunit)
 read(iunit, nml = wrf_obs_preproc_nml, iostat = io)
@@ -242,7 +243,6 @@ else
   call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_all)
 
 end if
-
 !  create obs sequences for different obs types
 call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_rawin)
 call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_sfc)

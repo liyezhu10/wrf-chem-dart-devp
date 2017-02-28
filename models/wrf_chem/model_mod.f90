@@ -912,15 +912,14 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_spdp   = get_type_ind_from_type_string(id,'SPEC_DIFF_10CM')
    wrf%dom(id)%type_fall_spd = get_type_ind_from_type_string(id,'FALL_SPD_Z_WEIGHTED')
    wrf%dom(id)%type_hdiab  = get_type_ind_from_type_string(id,'H_DIABATIC')
-! APM/AFAJ ++
+! APM/AFAJ/LXL ++
    wrf%dom(id)%type_o3  = get_type_ind_from_type_string(id,'o3')
    wrf%dom(id)%type_co  = get_type_ind_from_type_string(id,'co')
+   wrf%dom(id)%type_no  = get_type_ind_from_type_string(id,'no')
    wrf%dom(id)%type_tauaer1 = get_type_ind_from_type_string(id,'TAUAER1')
    wrf%dom(id)%type_tauaer2 = get_type_ind_from_type_string(id,'TAUAER2')
    wrf%dom(id)%type_tauaer3 = get_type_ind_from_type_string(id,'TAUAER3')
    wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
-!
-! LXL/APM +++
    wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
    if ( add_emiss) then
       wrf%dom(id)%type_e_o3 = get_type_ind_from_type_string(id,'e_o3')
