@@ -373,7 +373,7 @@ real(r8) :: stdlon,truelat1,truelat2 !,latinc,loninc
 
 ! have a single, module global error string (rather than 
 ! replicate it in each subroutine and use up more stack space)
-character(len=129) :: errstring, msgstring2, msgstring3
+character(len=512) :: msgstring1, msgstring2, msgstring3
 !
 ! APM/AFAJ ++ 
    integer  :: kaod, zk_aod
@@ -484,8 +484,8 @@ elseif (vert_localization_coord == VERTISSCALEHEIGHT) then
 else
    write(msgstring2,*)'vert_localization_coord must be one of ', &
                      VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT
-   write(errstring,*)'vert_localization_coord is ', vert_localization_coord
-   call error_handler(E_ERR,'static_init_model', errstring, source, revision,revdate, &
+   write(msgstring1,*)'vert_localization_coord is ', vert_localization_coord
+   call error_handler(E_ERR,'static_init_model', msgstring1, source, revision,revdate, &
                       text2=msgstring2)
 endif
 
@@ -697,8 +697,8 @@ WRFDomains : do id=1,num_domains
          wrf%dom(id)%clamp_or_fail(ind)
       endif
 
-      write(errstring, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
-      call error_handler(E_MSG, 'static_init_model: ', errstring)
+      write(msgstring1, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+      call error_handler(E_MSG, 'static_init_model: ', msgstring1)
    enddo
 
 ! close data file, we have all we need
@@ -752,8 +752,8 @@ WRFDomains : do id=1,num_domains
             wrf%dom(id)%clamp_or_fail(ind)
          endif
       
-         write(errstring, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
-         call error_handler(E_MSG, 'static_init_model: ', errstring)
+         write(msgstring1, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+         call error_handler(E_MSG, 'static_init_model: ', msgstring1)
       enddo
       call nc_check(nf90_close(ncid_emiss_chemi),'static_init_model','close wrfchemi_d0'//idom)
 !
@@ -802,8 +802,8 @@ WRFDomains : do id=1,num_domains
             wrf%dom(id)%clamp_or_fail(ind)
          endif
       
-         write(errstring, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
-         call error_handler(E_MSG, 'static_init_model: ', errstring)
+         write(msgstring1, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+         call error_handler(E_MSG, 'static_init_model: ', msgstring1)
       enddo
       call nc_check(nf90_close(ncid_emiss_firechemi),'static_init_model','close wrffirechemi_d0'//idom)
 !   endif
@@ -940,8 +940,8 @@ enddo WRFDomains
 
 wrf%model_size = dart_index - 1
 allocate (ens_mean(wrf%model_size))
-write(errstring,*) ' wrf model size is ',wrf%model_size
-call error_handler(E_MSG, 'static_init_model', errstring)
+write(msgstring1,*) ' wrf model size is ',wrf%model_size
+call error_handler(E_MSG, 'static_init_model', msgstring1)
 
 end subroutine static_init_model
 
@@ -1046,8 +1046,8 @@ integer :: i, id
 logical, parameter :: debug = .false.
 
 if(debug) then
-   write(errstring,*)' index_in = ',index_in
-   call error_handler(E_MSG,'get_state_meta_data',errstring,' ',' ',' ')
+   write(msgstring1,*)' index_in = ',index_in
+   call error_handler(E_MSG,'get_state_meta_data',msgstring1)
 endif
 
 ! identity obs come in with a negative value - absolute
@@ -1061,8 +1061,8 @@ index = abs(index_in)
 if(debug) then
    do id=1,num_domains
       do i=1, wrf%dom(id)%number_of_wrf_variables
-         write(errstring,*)' domain, var, var_type(i) = ',id,i,wrf%dom(id)%var_type(i)
-         call error_handler(E_MSG,'get_state_meta_data',errstring)
+         write(msgstring1,*)' domain, var, var_type(i) = ',id,i,wrf%dom(id)%var_type(i)
+         call error_handler(E_MSG,'get_state_meta_data',msgstring1)
       enddo
    enddo
 endif
@@ -1087,8 +1087,8 @@ do while (.not. var_found)
          id = id + 1
       else
          write(string1,*)' size of state vector = ',wrf%model_size
-         write(errstring,*)' dart_index ',index_in, ' is out of range'
-         call error_handler(E_ERR,'get_state_meta_data', errstring, &
+         write(msgstring1,*)' dart_index ',index_in, ' is out of range'
+         call error_handler(E_ERR,'get_state_meta_data', msgstring1, &
               source, revision, revdate, text2=string1)
       endif
    endif
@@ -1247,9 +1247,9 @@ else
    ! Is this a valid kind to interpolate?  Set up in the static_init_model code,
    ! based on entries in wrf_state_vector namelist item.
    if (.not. in_state_vector(obs_kind)) then
-      write(errstring, *) 'cannot interpolate ' // trim(get_raw_obs_kind_name(obs_kind)) &
+      write(msgstring1, *) 'cannot interpolate ' // trim(get_raw_obs_kind_name(obs_kind)) &
                            // ' with the current WRF arrays in state vector'
-      call error_handler(E_ERR, 'model_interpolate', errstring, &
+      call error_handler(E_ERR, 'model_interpolate', msgstring1, &
                                  source, revision, revdate)
    endif
 
@@ -1290,8 +1290,8 @@ else
       if ( yloc < 1.0_r8 .or. yloc >= real(wrf%dom(id)%sn,r8) ) then
 
          ! Perhaps write to dart_log.out?
-         write(errstring,*)'Obs cannot be polar with restrict_polar on: yloc = ',yloc
-         call error_handler(E_WARN,'model_interpolate', errstring, &
+         write(msgstring1,*)'Obs cannot be polar with restrict_polar on: yloc = ',yloc
+         call error_handler(E_WARN,'model_interpolate', msgstring1, &
               source, revision, revdate)
 
          istatus = 10  ! istatus 10, if it's not used, will mean the observation is too polar
@@ -1447,9 +1447,9 @@ else
       if(debug) print*,' obs height is intentionally undefined'
 
    else
-      write(errstring,*) 'wrong option for which_vert ', &
+      write(msgstring1,*) 'wrong option for which_vert ', &
                          nint(query_location(location,'which_vert'))
-      call error_handler(E_ERR,'model_interpolate', errstring, &
+      call error_handler(E_ERR,'model_interpolate', msgstring1, &
            source, revision, revdate)
 
    endif
@@ -2702,8 +2702,8 @@ else
 
             print*,'i,j,center_search_half_length,center_track_xmin(max),center_track_ymin(max)'
             print*,i,j,center_search_half_length,center_track_xmin,center_track_xmax,center_track_ymin,center_track_ymax
-            write(errstring,*)'Wrong setup in center_track_nml'
-            call error_handler(E_ERR,'model_interpolate', errstring, source, revision, revdate)
+            write(msgstring1,*)'Wrong setup in center_track_nml'
+            call error_handler(E_ERR,'model_interpolate', msgstring1, source, revision, revdate)
 
          endif 
 
@@ -3769,8 +3769,8 @@ endif
 ! so make it a fatal error if it does return an error code.
 call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
 if ( rc /= 0 ) then
-   write(errstring,*) 'for i,j: ', i, j, ' getCorners rc = ', rc
-   call error_handler(E_ERR,'model_mod.f90::vert_convert', errstring, &
+   write(msgstring1,*) 'for i,j: ', i, j, ' getCorners rc = ', rc
+   call error_handler(E_ERR,'model_mod.f90::vert_convert', msgstring1, &
                       source, revision, revdate)
 endif
 
@@ -3890,8 +3890,8 @@ case (VERTISLEVEL)
    ! outgoing vertical coordinate is unrecognized
    ! -------------------------------------------------------
    case default 
-      write(errstring,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', errstring, &
+      write(msgstring1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+      call error_handler(E_ERR,'vert_convert', msgstring1, &
                          source, revision, revdate,  &
                          text2='Incoming vertical coordinate was model level.')
 
@@ -3981,8 +3981,8 @@ case (VERTISPRESSURE)
    ! outgoing vertical coordinate is unrecognized
    ! -------------------------------------------------------
    case default 
-      write(errstring,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', errstring, &
+      write(msgstring1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+      call error_handler(E_ERR,'vert_convert', msgstring1, &
                          source, revision, revdate,  &
                          text2='Incoming vertical coordinate was pressure.')
 
@@ -4082,8 +4082,8 @@ case (VERTISHEIGHT)
    ! outgoing vertical coordinate is unrecognized
    ! -------------------------------------------------------
    case default 
-      write(errstring,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', errstring, &
+      write(msgstring1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+      call error_handler(E_ERR,'vert_convert', msgstring1, &
                          source, revision, revdate,  &
                          text2='Incoming vertical coordinate was height.')
 
@@ -4170,8 +4170,8 @@ case (VERTISSCALEHEIGHT)
    ! outgoing vertical coordinate is unrecognized
    ! -------------------------------------------------------
    case default 
-      write(errstring,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', errstring, &
+      write(msgstring1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+      call error_handler(E_ERR,'vert_convert', msgstring1, &
                          source, revision, revdate,  &
                          text2='Incoming vertical coordinate was scale height.')
 
@@ -4238,8 +4238,8 @@ case(VERTISSURFACE)
    ! outgoing vertical coordinate is unrecognized
    ! -------------------------------------------------------
    case default 
-      write(errstring,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', errstring, &
+      write(msgstring1,*) 'Requested vertical coordinate not recognized: ', ztypeout
+      call error_handler(E_ERR,'vert_convert', msgstring1, &
                          source, revision, revdate,  &
                          text2='Incoming vertical coordinate was surface.')
 
@@ -4251,8 +4251,8 @@ case(VERTISSURFACE)
 ! incoming vertical coordinate has no case section
 ! -------------------------------------------------------
 case default
-   write(errstring,*) 'Incoming vertical coordinate type not recognized: ',ztypein
-   call error_handler(E_ERR,'vert_convert', errstring, &
+   write(msgstring1,*) 'Incoming vertical coordinate type not recognized: ',ztypein
+   call error_handler(E_ERR,'vert_convert', msgstring1, &
         source, revision, revdate)
 
 end select   ! incoming z vertical type
@@ -4281,8 +4281,8 @@ integer, intent(in) :: i,j,k,var_type,id
 integer :: get_wrf_index
 integer :: in
 
-write(errstring,*)'function get_wrf_index should not be called -- still needs updating!'
-call error_handler(E_ERR,'get_wrf_index', errstring, &
+write(msgstring1,*)'function get_wrf_index should not be called -- still needs updating!'
+call error_handler(E_ERR,'get_wrf_index', msgstring1, &
      source, revision, revdate)
 
 do in = 1, wrf%dom(id)%number_of_wrf_variables
@@ -4305,10 +4305,10 @@ if(i >= 1 .and. i <= wrf%dom(id)%var_size(1,in) .and. &
 
 else
 
-  write(errstring,*)'Indices ',i,j,k,' exceed grid dimensions: ', &
+  write(msgstring1,*)'Indices ',i,j,k,' exceed grid dimensions: ', &
        wrf%dom(id)%var_size(1,in), &
        wrf%dom(id)%var_size(2,in),wrf%dom(id)%var_size(3,in)
-  call error_handler(E_ERR,'get_wrf_index', errstring, &
+  call error_handler(E_ERR,'get_wrf_index', msgstring1, &
        source, revision, revdate)
 
 endif
@@ -4448,9 +4448,9 @@ call nc_check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid= TimeDimID), &
               'nc_write_model_atts','inq_dimid time')
 
 if ( TimeDimID /= unlimitedDimId ) then
-   write(errstring,*)'Time Dimension ID ',TimeDimID, &
+   write(msgstring1,*)'Time Dimension ID ',TimeDimID, &
         ' must match Unlimited Dimension ID ',unlimitedDimID
-   call error_handler(E_ERR,'nc_write_model_atts', errstring, source, revision, revdate)
+   call error_handler(E_ERR,'nc_write_model_atts', msgstring1, source, revision, revdate)
 endif
 
 !-----------------------------------------------------------------
@@ -5176,8 +5176,8 @@ do id=1,num_domains
 ! LXL/APM ---
 !
          else
-           write(errstring,*)'Could not determine dim_id for vertical dimension to output variable '//varname
-           call error_handler(E_ERR,'nc_write_model_atts',errstring,source, revision,revdate)
+           write(msgstring1,*)'Could not determine dim_id for vertical dimension to output variable '//varname
+           call error_handler(E_ERR,'nc_write_model_atts',msgstring1,source, revision,revdate)
          endif
 
          if ( debug ) write(*,*) '3D with dim ids ',dimids_3D
@@ -6929,8 +6929,8 @@ subroutine compute_seaprs ( nz, z, t, p , q ,          &
          print*, 't=',t
          print*, 'z=',z
          print*, 'q=',q
-         write(errstring,*)'Error_in_finding_100_hPa_up'
-         call error_handler(E_ERR,'compute_seaprs',errstring,' ',' ',' ')
+         write(msgstring1,*)'Error_in_finding_100_hPa_up'
+         call error_handler(E_ERR,'compute_seaprs',msgstring1,' ',' ',' ')
       END IF
 
 
@@ -6944,8 +6944,8 @@ subroutine compute_seaprs ( nz, z, t, p , q ,          &
          PRINT '(A)','Trapping levels are weird.'
          PRINT '(A,I3,A,I3,A)','klo = ',klo,', khi = ',khi, &
                ': and they should not be equal.'
-         write(errstring,*)'Error_trapping_levels'
-         call error_handler(E_ERR,'compute_seaprs',errstring,' ',' ',' ')
+         write(msgstring1,*)'Error_trapping_levels'
+         call error_handler(E_ERR,'compute_seaprs',msgstring1,' ',' ',' ')
       END IF
 
       plo = p(klo)
@@ -7148,8 +7148,8 @@ do while (.not. dom_found)
        (wrf%dom(id)%proj%code == PROJ_MERC .and. abs(obslat) > 90.0_r8) ) then
 
       ! catch latitudes that are out of range - ignore them but print out a warning.
-      write(errstring, *) 'obs with latitude out of range: ', obslat
-      call error_handler(E_MSG, 'model_mod', errstring)
+      write(msgstring1, *) 'obs with latitude out of range: ', obslat
+      call error_handler(E_MSG, 'get_domain_info', msgstring1)
 
    else
       call latlon_to_ij(wrf%dom(id)%proj,min(max(obslat,-89.9999999_r8),89.9999999_r8),obslon,iloc,jloc)
@@ -8108,44 +8108,44 @@ integer, intent(in)            :: ncid
 integer, intent(out)           :: bt,bts,sn,sns,we,wes,sls
 logical, parameter             :: debug = .false.
 integer                        :: var_id 
-character (len=NF90_MAX_NAME)  :: name
+character (len=NF90_MAX_NAME)  :: dimname
 
 ! get wrf grid dimensions
 
    call nc_check( nf90_inq_dimid(ncid, "bottom_top", var_id), &
-                     'static_init_model','inq_dimid bottom_top')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, bt), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid bottom_top')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=bt), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "bottom_top_stag", var_id), &
-                     'static_init_model','inq_dimid bottom_top_stag') ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, bts), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid bottom_top_stag') ! reuse var_id, no harm
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=bts), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "south_north", var_id), &
-                     'static_init_model','inq_dimid south_north')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, sn), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid south_north')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sn), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "south_north_stag", var_id), &
-                     'static_init_model','inq_dimid south_north_stag') ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, sns), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid south_north_stag') ! reuse var_id, no harm
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sns), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "west_east", var_id), &
-                     'static_init_model','inq_dimid west_east')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, we), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid west_east')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=we), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "west_east_stag", var_id), &
-                     'static_init_model','inq_dimid west_east_stag')  ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, wes), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid west_east_stag')  ! reuse var_id, no harm
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=wes), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "soil_layers_stag", var_id), &
-                     'static_init_model','inq_dimid soil_layers_stag')  ! reuse var_id, no harm
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, sls), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_wrf_dimensions','inq_dimid soil_layers_stag')  ! reuse var_id, no harm
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=sls), &
+                     'read_wrf_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    if(debug) then
       write(*,*) ' dimensions bt, sn, we are ',bt, &
@@ -8172,38 +8172,40 @@ logical, parameter    :: debug = .false.
 ! get meta data and static data we need
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'DX', wrf%dom(id)%dx), &
-                     'static_init_model', 'get_att DX')
+                     'read_wrf_file_attributes', 'get_att DX')
    call nc_check( nf90_get_att(ncid, nf90_global, 'DY', wrf%dom(id)%dy), &
-                     'static_init_model', 'get_att DY')
+                     'read_wrf_file_attributes', 'get_att DY')
    call nc_check( nf90_get_att(ncid, nf90_global, 'DT', wrf%dom(id)%dt), &
-                     'static_init_model', 'get_att DT')
-   write(errstring, *) 'dt from wrfinput_d0X file is: ', wrf%dom(id)%dt
-   call error_handler(E_MSG, ' ', errstring)
+                     'read_wrf_file_attributes', 'get_att DT')
+
+   write(msgstring1, *) 'dt from wrfinput_d0X file is: ', wrf%dom(id)%dt
+   call error_handler(E_MSG, 'read_wrf_file_attributes', msgstring1)
+
    if(debug) write(*,*) ' dx, dy, dt are ',wrf%dom(id)%dx, &
         wrf%dom(id)%dy, wrf%dom(id)%dt
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'MAP_PROJ', wrf%dom(id)%map_proj), &
-                     'static_init_model', 'get_att MAP_PROJ')
+                     'read_wrf_file_attributes', 'get_att MAP_PROJ')
    if(debug) write(*,*) ' map_proj is ',wrf%dom(id)%map_proj
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'CEN_LAT', wrf%dom(id)%cen_lat), &
-                     'static_init_model', 'get_att CEN_LAT')
+                     'read_wrf_file_attributes', 'get_att CEN_LAT')
    if(debug) write(*,*) ' cen_lat is ',wrf%dom(id)%cen_lat
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'CEN_LON', wrf%dom(id)%cen_lon), &
-                     'static_init_model', 'get_att CEN_LON')
+                     'read_wrf_file_attributes', 'get_att CEN_LON')
    if(debug) write(*,*) ' cen_lon is ',wrf%dom(id)%cen_lon
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'TRUELAT1', truelat1), &
-                     'static_init_model', 'get_att TRUELAT1')
+                     'read_wrf_file_attributes', 'get_att TRUELAT1')
    if(debug) write(*,*) ' truelat1 is ',truelat1
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'TRUELAT2', truelat2), &
-                     'static_init_model', 'get_att TRUELAT2')
+                     'read_wrf_file_attributes', 'get_att TRUELAT2')
    if(debug) write(*,*) ' truelat2 is ',truelat2
 
    call nc_check( nf90_get_att(ncid, nf90_global, 'STAND_LON', stdlon), &
-                     'static_init_model', 'get_att STAND_LON')
+                     'read_wrf_file_attributes', 'get_att STAND_LON')
    if(debug) write(*,*) ' stdlon is ',stdlon
 
    RETURN
@@ -8454,7 +8456,7 @@ real(r8) :: latinc,loninc
    elseif(wrf%dom(id)%map_proj == map_cassini) then
       proj_code = PROJ_CASSINI
    else
-      call error_handler(E_ERR,'static_init_model', &
+      call error_handler(E_ERR,'setup_map_projection', &
         'Map projection no supported.', source, revision, revdate)
    endif
 
@@ -8596,8 +8598,8 @@ do i = 1, row
    ! unrecognized kind string in namelist.
    ! 0 is actually KIND_RAW_STATE_VARIABLE and not supported here.
    case (-1, 0) 
-      write(errstring, *) 'unrecognized KIND string: ' // trim(wrf_state_variables(2, i))
-      call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
+      write(msgstring1, *) 'unrecognized KIND string: ' // trim(wrf_state_variables(2, i))
+      call error_handler(E_ERR, 'fill_dart_kinds_table', msgstring1, &
                          source, revision, revdate)
      
    ! everything else, set it to be supported
@@ -8635,19 +8637,17 @@ do i = 1, size(in_state_vector)
           (.not. in_state_vector(KIND_TEMPERATURE))        .or. &
           (.not. in_state_vector(KIND_VAPOR_MIXING_RATIO)) .or. &
           (.not. in_state_vector(KIND_PRESSURE))) then
-         write(errstring, *) 'VORTEX kinds will require U,V,T,QVAPOR,MU in state vector'
+         write(msgstring1, *) 'VORTEX kinds will require U,V,T,QVAPOR,MU in state vector'
          ! FIXME: not fatal error, just informative at this point.
-         call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
-                            source, revision, revdate)
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
       endif
  
    ! if you have one wind component you have to have both
    case (KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
       if (in_state_vector(KIND_U_WIND_COMPONENT) .neqv. in_state_vector(KIND_V_WIND_COMPONENT)) then
-         write(errstring, *) 'WIND kinds will require both U,V in state vector'
+         write(msgstring1, *) 'WIND kinds will require both U,V in state vector'
          ! FIXME: not fatal error, just informative at this point.
-         call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
-                            source, revision, revdate)
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1) 
       endif
 
    ! the MODIS AOD assimilation case
@@ -8656,9 +8656,8 @@ do i = 1, size(in_state_vector)
           (.not. in_state_vector(KIND_TAUAER2))   .or. &
           (.not. in_state_vector(KIND_TAUAER3))   .or. &
           (.not. in_state_vector(KIND_TAUAER4))) then
-         write(errstring, *) 'AOD assimilation requires TAUAER1, 2, 3, and 4 in state vector'
-         call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
-                            source, revision, revdate)
+         write(msgstring1, *) 'AOD assimilation requires TAUAER1, 2, 3, and 4 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
       endif
 
    ! by default anything else is fine
@@ -8669,8 +8668,8 @@ enddo
 ! part 3: fields you just have to have, always, and other exceptions
 ! and things that break the rules.
 if (.not. in_state_vector(KIND_GEOPOTENTIAL_HEIGHT)) then
-   write(errstring, *) 'PH is always a required field'
-   call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
+   write(msgstring1, *) 'PH is always a required field'
+   call error_handler(E_ERR, 'fill_dart_kinds_table', msgstring1, &
                       source, revision, revdate)
 endif
 
@@ -8678,8 +8677,8 @@ endif
 ! pressure required only if you have any of the surface obs?
 if ((.not. in_state_vector(KIND_PRESSURE)) .and. &
     (.not. in_state_vector(KIND_SURFACE_PRESSURE))) then
-    write(errstring, *) 'One of MU or PSFC is a required field'
-    call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
+    write(msgstring1, *) 'One of MU or PSFC is a required field'
+    call error_handler(E_ERR, 'fill_dart_kinds_table', msgstring1, &
                        source, revision, revdate)
 endif
 
@@ -8909,27 +8908,27 @@ character(len=129),intent(out)  :: stagger
 
 logical, parameter    :: debug = .false.
 integer               :: var_id, ndims, dimids(10) 
-integer               :: idim
+integer               :: dimid
 
    stagger = ''
 
 ! get variable ID
    call nc_check( nf90_inq_varid(ncid, trim(wrf_var_name), var_id), &
                      'get_variable_size_from_file',                 &
-                     'inq_varid '//wrf_var_name)
+                     'inq_varid "'//trim(wrf_var_name)//'"')
 
 ! get number of dimensions and dimension IDs
    call nc_check( nf90_inquire_variable(ncid, var_id,ndims=ndims,  &
                      dimids=dimids),                               &
                      'get_variable_size_from_file',                &
-                     'inquire_variable '//wrf_var_name)
+                     'inquire_variable "'//trim(wrf_var_name)//'"')
 
 ! get dimension length, ignoring first dimension (time)
-   do idim = 1,ndims-1
-      call nc_check( nf90_inquire_dimension(ncid, dimids(idim),  &
-                     len=var_size(idim)),                               &
+   do dimid = 1,ndims-1
+      call nc_check( nf90_inquire_dimension(ncid, dimids(dimid),  &
+                     len=var_size(dimid)),                               &
                      'get_variable_size_from_file',                &
-                     'inquire_dimension '//wrf_var_name)
+                     'inquire_dimension "'//trim(wrf_var_name)//'"')
    enddo
 
 ! if a 2D variable fill the vertical dimension with 1
@@ -8943,7 +8942,7 @@ integer               :: idim
 ! get variable attribute stagger
    call nc_check( nf90_get_att(ncid, var_id, 'stagger', stagger), &
                      'get_variable_size_from_file', &
-                     'get_att '//wrf_var_name//' '//stagger)
+                     'get_att "'//trim(wrf_var_name)//'" '//stagger)
 
    if ( debug ) then
       print*,'In get_variable_size_from_file got stagger ',trim(stagger),' for variable ',trim(wrf_var_name)
@@ -8971,22 +8970,22 @@ integer               :: var_id
 
    call nc_check( nf90_inq_varid(ncid, trim(wrf_var_name), var_id), &
                      'get_variable_metadata_from_file', &
-                     'inq_varid '//wrf_var_name)
+                     'inq_varid "'//trim(wrf_var_name)//'"')
 
    description = ''
    call nc_check( nf90_get_att(ncid, var_id, 'description', description), &
                      'get_variable_metadata_from_file', &
-                     'get_att '//wrf_var_name//' '//description)
+                     'get_att description "'//trim(wrf_var_name)//'" '//trim(description))
 
    coordinates = ''
    call nc_check( nf90_get_att(ncid, var_id, 'coordinates', coordinates), &
                      'get_variable_metadata_from_file', &
-                     'get_att '//wrf_var_name//' '//coordinates)
+                     'get_att coordinates"'//trim(wrf_var_name)//'" '//trim(coordinates))
 
    units = ''
    call nc_check( nf90_get_att(ncid, var_id, 'units', units), &
                      'get_variable_metadata_from_file', &
-                     'get_att '//wrf_var_name//' '//units)
+                     'get_att units "'//trim(wrf_var_name)//'" '//trim(units))
 
 return
 
@@ -9049,8 +9048,8 @@ m=size(a1d)
 if ( i /= nx .or. &
      j /= ny .or. &
      m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
+   write(msgstring1,*)'nx, ny, not compatible ',i,j,nx,ny
+   call error_handler(E_ERR,'trans_2Dto1D',msgstring1,source,revision,revdate)
 endif
 
 do j=1,ny
@@ -9082,8 +9081,8 @@ if ( i /= nx .or. &
      j /= ny .or. &
      k /= nz .or. &
      m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
+   write(msgstring1,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
+   call error_handler(E_ERR,'trans_3Dto1D',msgstring1,source,revision,revdate)
 endif
 
 do k=1,nz
@@ -9115,8 +9114,8 @@ m=size(a1d)
 if ( i /= nx .or. &
      j /= ny .or. &
      m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
+   write(msgstring1,*)'nx, ny, not compatible ',i,j,nx,ny
+   call error_handler(E_ERR,'trans_1Dto2D',msgstring1,source,revision,revdate)
 endif
 
 do j=1,ny
@@ -9148,8 +9147,8 @@ if ( i /= nx .or. &
      j /= ny .or. &
      k /= nz .or. &
      m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
+   write(msgstring1,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
+   call error_handler(E_ERR,'trans_1Dto3D',msgstring1,source,revision,revdate)
 endif
 
 do k=1,nz
@@ -9321,24 +9320,24 @@ integer, intent(in)            :: ncid
 integer, intent(out)           :: e_bt,e_sn,e_we
 logical, parameter             :: debug = .false.
 integer                        :: var_id 
-character (len=NF90_MAX_NAME)  :: name
+character (len=NF90_MAX_NAME)  :: dimname
 
 ! get wrf grid dimensions
 
    call nc_check( nf90_inq_dimid(ncid, "emissions_zdim_stag", var_id), &
-                     'static_init_model','inq_dimid bottom_top')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_bt), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_emiss_dimensions','inq_dimid emissions_zdim_stag')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_bt), &
+                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "south_north", var_id), &
-                     'static_init_model','inq_dimid south_north')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_sn), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_emiss_dimensions','inq_dimid south_north')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_sn), &
+                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    call nc_check( nf90_inq_dimid(ncid, "west_east", var_id), &
-                     'static_init_model','inq_dimid west_east')
-   call nc_check( nf90_inquire_dimension(ncid, var_id, name, e_we), &
-                     'static_init_model','inquire_dimension '//trim(name))
+                     'read_emiss_dimensions','inq_dimid west_east')
+   call nc_check( nf90_inquire_dimension(ncid, var_id, name=dimname, len=e_we), &
+                     'read_emiss_dimensions','inquire_dimension "'//trim(dimname)//'"')
 
    if(debug) then
       write(*,*) ' dimensions e_bt, e_sn, e_we are ',e_bt, &
@@ -9368,28 +9367,27 @@ character(len=129),intent(out)  :: stagger
 
 logical, parameter    :: debug = .false.
 integer               :: var_id, ndims, dimids(10) 
-integer               :: idim
+integer               :: dimid
 
    stagger = ''
 
 ! get variable ID
    call nc_check( nf90_inq_varid(ncid, trim(wrf_var_name), var_id), &
-                     'get_variable_size_from_file',                 &
-                     'inq_varid '//wrf_var_name)
+                     'get_emiss_variable_size_from_file', &
+                     'inq_varid "'//trim(wrf_var_name)//'"')
 
 ! get number of dimensions and dimension IDs
-   call nc_check( nf90_inquire_variable(ncid, var_id,ndims=ndims,  &
-                     dimids=dimids),                               &
-                     'get_variable_size_from_file',                &
-                     'inquire_variable '//wrf_var_name)
+   call nc_check(nf90_inquire_variable(ncid, var_id, ndims=ndims, dimids=dimids), &
+                 'get_emiss_variable_size_from_file', &
+                 'inquire_variable "'//trim(wrf_var_name)//'"')
 
 ! get dimension length, ignoring first dimension (time)
 ! the order is inverse to that in wrf ncfile. we,sn,bt,time
-   do idim = 1,ndims-1
-      call nc_check( nf90_inquire_dimension(ncid, dimids(idim),  &
-                     len=var_size(idim)),                               &
-                     'get_variable_size_from_file',                &
-                     'inquire_dimension '//wrf_var_name)
+   do dimid = 1,ndims-1
+
+      write(msgstring1,*)'inquire_dimension ',dimid,' of "'//trim(wrf_var_name)//'"'
+      call nc_check(nf90_inquire_dimension(ncid, dimids(dimid), len=var_size(dimid)), &
+                    'get_emiss_variable_size_from_file', msgstring1)
    enddo
 
 ! if a 2D variable fill the vertical dimension with 1
@@ -9399,14 +9397,13 @@ integer               :: idim
       print*,'In get_variable_size_from_file got variable size ',var_size
    endif
 
-
 ! get variable attribute stagger
    call nc_check( nf90_get_att(ncid, var_id, 'stagger', stagger), &
-                     'get_variable_size_from_file', &
-                     'get_att '//wrf_var_name//' '//stagger)
+                     'get_emiss_variable_size_from_file', &
+                     'get_att stagger "'//trim(wrf_var_name)//'" '//trim(stagger))
 
    if ( debug ) then
-      print*,'In get_variable_size_from_file got stagger ',trim(stagger),' for variable ',trim(wrf_var_name)
+      print*,'In get_emiss_variable_size_from_file got stagger ',trim(stagger),' for variable ',trim(wrf_var_name)
    endif
 
 return
