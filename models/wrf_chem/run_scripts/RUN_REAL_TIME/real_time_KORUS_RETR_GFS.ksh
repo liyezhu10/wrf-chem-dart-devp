@@ -2939,7 +2939,7 @@ EOFF
    cp MOPITT_CO_${D_DATE}.dat ${D_DATE}.dat
    export NL_FILEDIR="'"./"'" 
    export NL_FILENAME=${D_DATE}.dat
-   export NL_MOPITT_CO_RETRIEVAL_TYPE=${RETRIEVAL_TYPE}
+   export NL_MOPITT_CO_RETRIEVAL_TYPE="'"${RETRIEVAL_TYPE}"'"
 #
 # USE MOPITT DATA 
    rm -rf input.nml
@@ -3669,7 +3669,7 @@ if ${RUN_MET_OBS}; then
 #
 # RUN ASCII TO OBS_SEQ CONVERTER
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_ncep_ascii_to_obs_input_nml_RT.ksh
-   ${DART_DIR}/observations/NCEP/ascii_to_obs/work/create_real_obs > index_create 2>&1 
+   ${DART_DIR}/observations/NCEP/ascii_to_obs/work/create_real_obs > index_create 2>&1
 #
    mv obs_seq${D_DATE} obs_seq_prep_${DATE}.out
 fi
@@ -4574,9 +4574,9 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
          rm -rf adjust_chem_emiss.nml
          cat <<  EOF > adjust_chem_emiss.nml
 &adjust_chem_emiss
-nx=${NNX_CR}
-ny=${NNY_CR}
-nz=${NNZ_CR}
+nx=${NNXP_CR}
+ny=${NNYP_CR}
+nz=${NNZP_CR}
 nz_chemi=${NZ_CHEMI}
 nz_firechemi=${NZ_FIRECHEMI}
 nchemi_emiss=${NCHEMI_EMISS}

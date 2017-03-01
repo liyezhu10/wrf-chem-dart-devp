@@ -259,7 +259,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
-      export RUN_WRFCHEM_INITIAL=false
+      export RUN_WRFCHEM_INITIAL=true
       export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
