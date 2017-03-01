@@ -236,30 +236,30 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
-      export RUN_WRFCHEM_INITIAL=true
+      export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
@@ -2676,7 +2676,7 @@ EOF
 #met_file_separator = '.'
 #EOF
 #   cp ${METGRID_DIR}/met_em.d${FR_DOMAIN}.*:00:00.nc ./.
-#   ./random.py ${MOZ_SPREAD} ${NUM_MEMBERS} ${PERT_CHEM_INPUT_DIR} ${RUN_DIR}/${DATE}/wrf#chem_chem_icbc ${RUN_DIR} ${NL_SW_GENERATE}
+#   ./random.py ${MOZ_SPREAD} ${NUM_MEMBERS} ${PERT_CHEM_INPUT_DIR} ${RUN_DIR}/${DATE}/wrfchem_chem_icbc ${RUN_DIR} ${NL_SW_GENERATE}
 #   ./runICBC_parent_rt_FR.ksh
 #   ./runICBC_setN_rt_FR.ksh
 #
@@ -3762,49 +3762,49 @@ if ${RUN_COMBINE_OBS}; then
 #
 # GET OBS_SEQ FILES TO COMBINE
 # MET OBS
-   if [[ -e ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out && ${RUN_MET_OBS} ]]; then 
+   if [[ -s ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out && ${RUN_MET_OBS} ]]; then 
       (( NUM_FILES=${NUM_FILES}+1 ))
       cp ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out ./obs_seq_MET_${DATE}.out
       export FILE_LIST[${NUM_FILES}]=obs_seq_MET_${DATE}.out
    fi
 #
 # MOPITT CO
-   if [[ -e ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out && ${RUN_MOPITT_CO_OBS} ]]; then 
+   if [[ -s ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out && ${RUN_MOPITT_CO_OBS} ]]; then 
       cp ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out ./obs_seq_MOP_CO_${DATE}.out
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_MOP_CO_${DATE}.out
    fi
 #
 # IASI CO
-   if [[ -e ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out && ${RUN_IASI_CO_OBS} ]]; then 
+   if [[ -s ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out && ${RUN_IASI_CO_OBS} ]]; then 
       cp ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out ./obs_seq_IAS_CO_${DATE}.out
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_IAS_CO_${DATE}.out
    fi
 #
 # IASI O3
-   if [[ -e ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out && ${RUN_IASI_O3_OBS} ]]; then 
+   if [[ -s ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out && ${RUN_IASI_O3_OBS} ]]; then 
       cp ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out ./obs_seq_IAS_O3_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_IAS_O3_${DATE}.out
    fi
 #
 # AIRNOW O3
-   if [[ -e ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out && ${RUN_AIRNOW_O3_OBS} ]]; then 
+   if [[ -s ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out && ${RUN_AIRNOW_O3_OBS} ]]; then 
       cp ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out ./obs_seq_AIR_O3_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_AIR_O3_${DATE}.out
    fi
 #
 # AIRNOW CO
-   if [[ -e ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out && ${RUN_AIRNOW_CO_OBS} ]]; then 
+   if [[ -s ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out && ${RUN_AIRNOW_CO_OBS} ]]; then 
       cp ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out ./obs_seq_AIR_CO_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_AIR_CO_${DATE}.out
    fi
 #
 # MODIS AOD
-   if [[ -e ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out && ${RUN_MODIS_AOD_OBS} ]]; then 
+   if [[ -s ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out && ${RUN_MODIS_AOD_OBS} ]]; then 
       cp ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out ./obs_seq_MOD_AOD_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_MOD_AOD_${DATE}.out
@@ -3813,19 +3813,19 @@ if ${RUN_COMBINE_OBS}; then
 #
 # All files present
    if [[ ${NL_NUM_INPUT_FILES} -eq 7 ]]; then
-      export NL_FILENAME_SEQ=${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]},${FILE_LIST[6]},${FILE_LIST[7]}
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 6 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]},${FILE_LIST[6]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 5 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 4 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 3 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 2 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 1 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 0 ]]; then
       echo APM: ERROR no obs_seq files for FILTER
       exit

@@ -88,7 +88,7 @@ export DATE=${CYCLE_DATE}
 export INITIAL_DATE=2016052500
 export FIRST_FILTER_DATE=2016052506
 export FIRST_EMISS_INV_DATE=2016052506
-export FIRST_DART_INFLATE_DATE=2016052506
+export FIRST_DART_INFLATE_DATE=2016052512
 export CYCLE_PERIOD=6
 export HISTORY_INTERVAL_HR=1
 (( HISTORY_INTERVAL_MIN = ${HISTORY_INTERVAL_HR} * 60 ))
@@ -256,7 +256,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -323,9 +323,9 @@ else
 fi
 if [[ ${RUN_FINE_SCALE} = "true" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
    export RUN_PERT_WRFCHEM_MET_IC=false
    export RUN_PERT_WRFCHEM_MET_BC=false
    export RUN_EXO_COLDENS=false
@@ -1921,8 +1921,8 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
          cp ${KORUS_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
-         cp ${WRFVAR_DIR}/run/LANDUSE.TBL ./.
-         cp ${WRFVAR_DIR}/var/da/da_wrfvar.exe ./.
+         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
+         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
@@ -1981,8 +1981,8 @@ EOF
          cp ${KORUS_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
-         cp ${WRFVAR_DIR}/run/LANDUSE.TBL ./.
-         cp ${WRFVAR_DIR}/var/da/da_wrfvar.exe ./.
+         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
+         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
@@ -2566,10 +2566,10 @@ domain    = 1
 dir_wrf   = '${RUN_DIR}/${DATE}/wrfchem_chem_icbc/'
 dir_moz   = '${MOZBC_DATA_DIR}'
 fn_moz    = '${MOZBC_DATA}'
-def_missing_var = .true.
-met_file_prefix  = 'met_em'
-met_file_suffix  = '.nc'
-met_file_separator= '.'
+def_missing_var    = .true.
+met_file_prefix    = 'met_em'
+met_file_suffix    = '.nc'
+met_file_separator = '.'
 moz_var_suffix=''
 EOF
    cp ${METGRID_DIR}/met_em.d${CR_DOMAIN}.*:00:00.nc ./.
@@ -3226,7 +3226,7 @@ EOFF
       NL_BIN_END=21.00
    fi
    export NL_FILEDIR="'"./"'" 
-   export NL_FILENAME=${D_DATE}.dat 
+   export NL_FILENAME=${D_DATE}.dat
    export NL_IASI_CO_RETRIEVAL_TYPE="'"${RETRIEVAL_TYPE}"'"
 #
 # USE IASI DATA 
@@ -3695,49 +3695,49 @@ if ${RUN_COMBINE_OBS}; then
 #
 # GET OBS_SEQ FILES TO COMBINE
 # MET OBS
-   if [[ -e ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out && ${RUN_MET_OBS} ]]; then 
+   if [[ -s ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out && ${RUN_MET_OBS} ]]; then 
       (( NUM_FILES=${NUM_FILES}+1 ))
       cp ${PREPBUFR_MET_OBS_DIR}/obs_seq_prep_${DATE}.out ./obs_seq_MET_${DATE}.out
       export FILE_LIST[${NUM_FILES}]=obs_seq_MET_${DATE}.out
    fi
 #
 # MOPITT CO
-   if [[ -e ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out && ${RUN_MOPITT_CO_OBS} ]]; then 
+   if [[ -s ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out && ${RUN_MOPITT_CO_OBS} ]]; then 
       cp ${MOPITT_CO_OBS_DIR}/obs_seq_mopitt_co_${DATE}.out ./obs_seq_MOP_CO_${DATE}.out
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_MOP_CO_${DATE}.out
    fi
 #
 # IASI CO
-   if [[ -e ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out && ${RUN_IASI_CO_OBS} ]]; then 
+   if [[ -s ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out && ${RUN_IASI_CO_OBS} ]]; then 
       cp ${IASI_CO_OBS_DIR}/obs_seq_iasi_co_${DATE}.out ./obs_seq_IAS_CO_${DATE}.out
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_IAS_CO_${DATE}.out
    fi
 #
 # IASI O3
-   if [[ -e ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out && ${RUN_IASI_O3_OBS} ]]; then 
+   if [[ -s ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out && ${RUN_IASI_O3_OBS} ]]; then 
       cp ${IASI_O3_OBS_DIR}/obs_seq_iasi_o3_${DATE}.out ./obs_seq_IAS_O3_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_IAS_O3_${DATE}.out
    fi
 #
 # AIRNOW O3
-   if [[ -e ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out && ${RUN_AIRNOW_O3_OBS} ]]; then 
+   if [[ -s ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out && ${RUN_AIRNOW_O3_OBS} ]]; then 
       cp ${AIRNOW_O3_OBS_DIR}/obs_seq_airnow_o3_${DATE}.out ./obs_seq_AIR_O3_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_AIR_O3_${DATE}.out
    fi
 #
 # AIRNOW CO
-   if [[ -e ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out && ${RUN_AIRNOW_CO_OBS} ]]; then 
+   if [[ -s ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out && ${RUN_AIRNOW_CO_OBS} ]]; then 
       cp ${AIRNOW_CO_OBS_DIR}/obs_seq_airnow_co_${DATE}.out ./obs_seq_AIR_CO_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_AIR_CO_${DATE}.out
    fi
 #
 # MODIS AOD
-   if [[ -e ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out && ${RUN_MODIS_AOD_OBS} ]]; then 
+   if [[ -s ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out && ${RUN_MODIS_AOD_OBS} ]]; then 
       cp ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out ./obs_seq_MOD_AOD_${DATE}.out   
       (( NUM_FILES=${NUM_FILES}+1 ))
       export FILE_LIST[${NUM_FILES}]=obs_seq_MOD_AOD_${DATE}.out
@@ -3746,19 +3746,19 @@ if ${RUN_COMBINE_OBS}; then
 #
 # All files present
    if [[ ${NL_NUM_INPUT_FILES} -eq 7 ]]; then
-      export NL_FILENAME_SEQ=${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]},${FILE_LIST[6]},${FILE_LIST[7]}
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 6 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]},${FILE_LIST[6]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 5 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]},${FILE_LIST[5]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 4 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]},${FILE_LIST[4]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 3 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]},${FILE_LIST[3]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 2 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]},${FILE_LIST[2]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 1 ]]; then
-      export NL_FILENAME_SEQ="'"${FILE_LIST[1]}"'"
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 0 ]]; then
       echo APM: ERROR no obs_seq files for FILTER
       exit
@@ -3795,9 +3795,9 @@ if ${RUN_PREPROCESS_OBS}; then
    cp ${WRFCHEM_CHEM_ICBC_DIR}/wrfinput_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfinput_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfbiochemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfbiochemi_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrffirechemi_d${CR_DOMAIN}
-   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfchemi_d${CR_DOMAIN}
-#   ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-#   rm temp.nc
+   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 temp.nc
+   ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+   rm temp.nc
 #
 # GET DART UTILITIES
    cp ${DART_DIR}/models/wrf_chem/work/wrf_dart_obs_preprocess ./.
