@@ -203,7 +203,6 @@ anal_time = set_time(gsec, gday)
 
 call static_init_obs_sequence()
 call static_init_model()
-stop
 
 call find_namelist_in_file("input.nml", "wrf_obs_preproc_nml", iunit)
 read(iunit, nml = wrf_obs_preproc_nml, iostat = io)
