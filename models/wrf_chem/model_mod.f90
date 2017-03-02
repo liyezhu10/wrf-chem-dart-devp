@@ -234,9 +234,9 @@ character(len = 72) :: adv_mod_command = ''
 ! they are obsolete, but removing them here will cause a fatal error
 ! until users remove them from their input.nml files as well.
 !
-! LXL/APM
+! LXL/APM +++
 logical :: add_emiss = .true.
-logical :: use_varloc, use_indep_chem_assim
+logical :: use_varloc = .true., use_indep_chem_assim =.false.
 namelist /model_nml/ output_state_vector, num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, wrf_state_variables, &
@@ -398,9 +398,6 @@ integer               :: my_index
 integer               :: var_element_list(max_state_variables)
 logical               :: var_update_list(max_state_variables)
 !
-! LXL/APM +++
-logical               :: add_emiss = .true.
-! LXL/APM ---
 
 character(len=256) :: wrf_filename, chem_filename, fire_filename
 
@@ -4423,10 +4420,6 @@ integer, dimension(5) :: dimids_3D
 integer, dimension(4) :: dimids_2D
 logical               :: debug = .false.
 !
-! LXL/APM +++
-logical               :: add_emiss = .true.
-! LXL/APM ---
-!
 
 !-----------------------------------------------------------------
 
@@ -7244,14 +7237,11 @@ integer                :: base_which, local_obs_which
 integer                :: base_obs_kind
 real(r8), dimension(3) :: base_array, local_obs_array
 type(location_type)    :: local_obs_loc
-logical                :: use_varloc, use_indep_chem_assim
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
 dist      = 1.0e9
-use_varloc=.false.
-use_indep_chem_assim=.false.
 
 istatus1 = 0
 istatus2 = 0
