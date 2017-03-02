@@ -250,11 +250,11 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=true
    export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=false
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
-   export RUN_AIRNOW_O3_OBS=false
-   export RUN_AIRNOW_CO_OBS=false
-   export RUN_MODIS_AOD_OBS=false
+   export RUN_AIRNOW_O3_OBS=true
+   export RUN_AIRNOW_CO_OBS=true
+   export RUN_MODIS_AOD_OBS=true
    export RUN_MET_OBS=true
    export RUN_COMBINE_OBS=true
    export RUN_PREPROCESS_OBS=true
@@ -3106,7 +3106,7 @@ if ${RUN_IASI_CO_OBS}; then
 # else this needs to be called
                 export FILE=iasi_extract_no_transform_UA.pro
                 rm -rf ${FILE}
-                cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
+                cp ${DART_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                 rm -rf job.ksh
                 rm -rf idl_*.err
                 rm -rf idl_*.out
@@ -3197,7 +3197,7 @@ EOFF
 # else this needs to be called
                 export FILE=iasi_extract_no_transform_UA.pro
                 rm -rf ${FILE}
-                cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
+                cp ${DART_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                 rm -rf job.ksh
                 rm -rf idl_*.err
                 rm -rf idl_*.out
@@ -3552,7 +3552,7 @@ if ${RUN_AIRNOW_O3_OBS}; then
 #
 # COPY OUTPUT TO ARCHIVE LOCATION
    export AIRNOW_OUT_FILE=airnow_obs_seq
-   export AIRNOW_ARCH_FILE=obseq_airnow_o3_${DATE}.out
+   export AIRNOW_ARCH_FILE=obs_seq_airnow_o3_${DATE}.out
    if [[ -e ${AIRNOW_OUT_FILE} ]]; then
       cp ${AIRNOW_OUT_FILE} ${AIRNOW_ARCH_FILE}
       rm ${AIRNOW_OUT_FILE}
@@ -3619,7 +3619,7 @@ if ${RUN_AIRNOW_CO_OBS}; then
 #
 # COPY OUTPUT TO ARCHIVE LOCATION
    export AIRNOW_OUT_FILE=airnow_obs_seq
-   export AIRNOW_ARCH_FILE=obseq_airnow_co_${DATE}.out
+   export AIRNOW_ARCH_FILE=obs_seq_airnow_co_${DATE}.out
    if [[ -e ${AIRNOW_OUT_FILE} ]]; then
       cp ${AIRNOW_OUT_FILE} ${AIRNOW_ARCH_FILE}
       rm ${AIRNOW_OUT_FILE}

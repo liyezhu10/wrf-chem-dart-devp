@@ -3043,7 +3043,7 @@ if ${RUN_IASI_CO_OBS}; then
 # else this needs to be called
                 export FILE=iasi_extract_no_transform_UA.pro
                 rm -rf ${FILE}
-                cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
+                cp ${DART_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                 rm -rf job.ksh
                 rm -rf idl_*.err
                 rm -rf idl_*.out
@@ -3134,7 +3134,7 @@ EOFF
 # else this needs to be called
                 export FILE=iasi_extract_no_transform_UA.pro
                 rm -rf ${FILE}
-                cp ${IASI_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
+                cp ${DART_DIR}/observations/IASI_CO/native_to_ascii/${FILE} ./.
                 rm -rf job.ksh
                 rm -rf idl_*.err
                 rm -rf idl_*.out
@@ -3806,9 +3806,9 @@ if ${RUN_PREPROCESS_OBS}; then
    cp ${WRFCHEM_CHEM_ICBC_DIR}/wrfinput_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfinput_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfbiochemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfbiochemi_d${CR_DOMAIN}
    cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrffirechemi_d${CR_DOMAIN}
-   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 temp.nc
-   ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-   rm temp.nc
+   cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${FILE_DATE}.e001 wrfchemi_d${CR_DOMAIN}
+#   ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+#   rm temp.nc
 #
 # GET DART UTILITIES
    cp ${DART_DIR}/models/wrf_chem/work/wrf_dart_obs_preprocess ./.
@@ -4108,9 +4108,9 @@ if ${RUN_DART_FILTER}; then
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
       if [[ ${LL_DATE} -eq ${FIRST_EMISS_INV_DATE} ]]; then
-         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} temp.nc
-         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-         rm temp.nc
+         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
+#         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+#         rm temp.nc
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4122,9 +4122,9 @@ if ${RUN_DART_FILTER}; then
          ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
       else
-         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} temp.nc
-         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-         rm temp.nc
+         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrfchemi_d${CR_DOMAIN}
+#         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+#         rm temp.nc
          cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4305,9 +4305,9 @@ EOF
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
       if [[ ${LL_DATE} -eq ${FIRST_EMISS_INV_DATE} ]]; then
-         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} temp.nc
-         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-         rm temp.nc
+         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
+#         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+#         rm temp.nc
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4319,9 +4319,9 @@ EOF
          ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
       else
-         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} temp.nc
-         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
-         rm temp.nc
+         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrfchemi_d${CR_DOMAIN}
+#         ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
+#         rm temp.nc
          cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_NO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}

@@ -294,14 +294,14 @@ qc_thinning(:)=100
 ! Read IASI
   read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
 !  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
-  nlvls=nint(nlevels)
-  nlvlsp=nlvls+1
 
 ! Error Check
   if (ios /=0) then
       write(6,*) 'no data on file ', TRIM(filen)
       go to 999
   endif
+  nlvls=nint(nlevels)
+  nlvlsp=nlvls+1
 
 !-------------------------------------------------------
 ! MAIN LOOP FOR IASI OBS
