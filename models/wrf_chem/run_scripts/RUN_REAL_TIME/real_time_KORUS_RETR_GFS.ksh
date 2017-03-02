@@ -3287,7 +3287,7 @@ if ${RUN_IASI_O3_OBS}; then
 #
    rm -rf run_idl_code.pro
    cp ${WORK_DIR}/IASI_O3_PROCESSING/createOBSSEQ_IASI_O3_method2.pro_APM_R1 run_idl_code.pro
-   cp ${WORK_DIR}/IASI_O3_PROCESSING/IASI_apcov.dat ./.
+   cp ${EXPERIMENT_IASI_O3_DIR}/IASI_apcov.dat ./.
    chmod +x run_idl_code.pro
 #
 # Create jobs script to run IASI O3 eps to ascii code
