@@ -113,7 +113,8 @@ export ACD_DIR=/glade/p/acd/mizzi
 export FRAPPE_DIR=/glade/p/FRAPPE
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
-export RUN_DIR=${FRAPPE_DIR}/real_KORUS_RETR_VARLOC
+export EXPERIMENT_DIR=${FRAPPE_DIR}
+export RUN_DIR=${EXPERIMENT_DIR}/real_KORUS_RETR_VARLOC
 export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
@@ -125,22 +126,22 @@ export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-export KORUS_DATA_DIR=${FRAPPE_DIR}/KORUS_REAL_TIME_DATA
-export MOZBC_DATA_DIR=${FRAPPE_DIR}/KORUS_REAL_TIME_DATA/mozart_forecasts
-export KORUS_STATIC_FILES=${KORUS_DATA_DIR}/static_files
-export KORUS_WRFCHEMI_DIR=${KORUS_DATA_DIR}/anthro_emissions
-export KORUS_WRFFIRECHEMI_DIR=${KORUS_DATA_DIR}/fire_emissions
-export KORUS_WRFBIOCHEMI_DIR=${KORUS_DATA_DIR}/bio_emissions
-export KORUS_COLDENS_DIR=${KORUS_DATA_DIR}/wes_coldens
-export KORUS_PREPBUFR_DIR=${KORUS_DATA_DIR}/met_obs_prep_data
-export KORUS_MOPITT_CO_DIR=${KORUS_DATA_DIR}/mopitt_co_hdf_data
-export KORUS_IASI_CO_DIR=${KORUS_DATA_DIR}/iasi_co_hdf_data
-export KORUS_IASI_O3_DIR=${KORUS_DATA_DIR}/iasi_o3_hdf_data
-export KORUS_AIRNOW_DIR=${KORUS_DATA_DIR}/airnow_csv_data
-export KORUS_MODIS_AOD_DIR=${KORUS_DATA_DIR}/modis_aod_hdf_data
-export KORUS_GFS_DIR=${KORUS_DATA_DIR}/gfs_forecasts
-export KORUS_DUST_DIR=${KORUS_DATA_DIR}/dust_fields
-export KORUS_HIST_IO_DIR=${KORUS_DATA_DIR}/hist_io_files
+export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/KORUS_REAL_TIME_DATA
+export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/KORUS_REAL_TIME_DATA/mozart_forecasts
+export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
+export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
+export EXPERIMENT_WRFFIRECHEMI_DIR=${EXPERIMENT_DATA_DIR}/fire_emissions
+export EXPERIMENT_WRFBIOCHEMI_DIR=${EXPERIMENT_DATA_DIR}/bio_emissions
+export EXPERIMENT_COLDENS_DIR=${EXPERIMENT_DATA_DIR}/wes_coldens
+export EXPERIMENT_PREPBUFR_DIR=${EXPERIMENT_DATA_DIR}/met_obs_prep_data
+export EXPERIMENT_MOPITT_CO_DIR=${EXPERIMENT_DATA_DIR}/mopitt_co_hdf_data
+export EXPERIMENT_IASI_CO_DIR=${EXPERIMENT_DATA_DIR}/iasi_co_hdf_data
+export EXPERIMENT_IASI_O3_DIR=${EXPERIMENT_DATA_DIR}/iasi_o3_hdf_data
+export EXPERIMENT_AIRNOW_DIR=${EXPERIMENT_DATA_DIR}/airnow_csv_data
+export EXPERIMENT_MODIS_AOD_DIR=${EXPERIMENT_DATA_DIR}/modis_aod_hdf_data
+export EXPERIMENT_GFS_DIR=${EXPERIMENT_DATA_DIR}/gfs_forecasts
+export EXPERIMENT_DUST_DIR=${EXPERIMENT_DATA_DIR}/dust_fields
+export EXPERIMENT_HIST_IO_DIR=${EXPERIMENT_DATA_DIR}/hist_io_files
 export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
 export BE_DIR=${WRFDA_DIR}/var/run
 export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
@@ -1284,10 +1285,10 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
 #
 # UNTAR THE PARENT FORECAST FILES
    FILES=''
-   if [[ -e ${KORUS_GFS_DIR}/${DATE} ]]; then
-      if [[ -e ${KORUS_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
-         cd ${KORUS_GFS_DIR}/${DATE}
-         tar -xf ${KORUS_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2}
+   if [[ -e ${EXPERIMENT_GFS_DIR}/${DATE} ]]; then
+      if [[ -e ${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
+         cd ${EXPERIMENT_GFS_DIR}/${DATE}
+         tar -xf ${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2}
          cd ${RUN_DIR}/${DATE}/ungrib
       else
          echo 'APM: ERROR - No GRIB files in directory'
@@ -1302,12 +1303,12 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
             if [[ ${LBC_ITR} -lt 100  ]]; then export CFTM=0${LBC_ITR}; fi
             if [[ ${LBC_ITR} -lt 10   ]]; then export CFTM=00${LBC_ITR}; fi
             if [[ ${LBC_ITR} -eq 0    ]]; then export CFTM=000; fi
-            export FILE=${KORUS_GFS_DIR}/${DATE}/${GRIB_PART1}${START_YEAR}${START_MONTH}${START_DAY}_${CCHH}_${CFTM}.grb2
+            export FILE=${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}${START_YEAR}${START_MONTH}${START_DAY}_${CCHH}_${CFTM}.grb2
             FILES="${FILES} ${FILE}"
             (( LBC_ITR=${LBC_ITR}+${LBC_FREQ} ))
          done
       else
-         export FILE=${KORUS_GFS_DIR}/${DATE}/GFS_Global_0p5deg_20080612_1800.grib2
+         export FILE=${EXPERIMENT_GFS_DIR}/${DATE}/GFS_Global_0p5deg_20080612_1800.grib2
          FILES="${FILES} ${FILE}"
       fi
    fi
@@ -1324,10 +1325,10 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
    fi
 #
 # TAR THE PARENT FORECAST FILES
-   if [[ -e ${KORUS_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
-      rm -rf ${KORUS_GFS_DIR}/${DATE}/${GRIB_PART1}*.grb2
+   if [[ -e ${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
+      rm -rf ${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}*.grb2
    else
-      cd ${KORUS_GFS_DIR}
+      cd ${EXPERIMENT_GFS_DIR}
       tar -cf ${GRIB_PART1}${DATE}${GRIB_PART2} ${DATE}
       mv ${GRIB_PART1}${DATE}${GRIB_PART2} ${DATE}/.
       if [[ -e ${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
@@ -1424,8 +1425,8 @@ if [[ ${RUN_REAL} = "true" ]]; then
    cd ${RUN_DIR}/${DATE}/real
 #
    cp ${WRF_DIR}/main/real.exe ./.
-   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
-   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
+   cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
+   cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
 # LINK IN THE METGRID FILES
    export P_DATE=${DATE}
@@ -1918,7 +1919,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
          export NL_SEED_ARRAY1=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -f hhddmmyycc)
          export NL_SEED_ARRAY2=`echo ${MEM} \* 100000 | bc -l `
          ${HYBRID_SCRIPTS_DIR}/da_create_wrfda_namelist.ksh
-         cp ${KORUS_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
+         cp ${EXPERIMENT_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
          cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
@@ -1978,7 +1979,7 @@ EOF
          export NL_J_PARENT_START=${JSTR_FR}
          export DA_INPUT_FILE=../../real/wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}
          ${HYBRID_SCRIPTS_DIR}/da_create_wrfda_namelist.ksh
-         cp ${KORUS_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
+         cp ${EXPERIMENT_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
          cp ${DA_INPUT_FILE} fg
          cp ${BE_DIR}/be.dat.cv3 be.dat
          cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
@@ -2176,10 +2177,10 @@ if ${RUN_EXO_COLDENS}; then
    ln -sf ${REAL_DIR}/${FILE_FR}_${FILE_DATE} ${FILE_FR}   
    export FILE=exo_coldens.nc
    rm -rf ${FILE}
-   ln -sf ${KORUS_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
    export FILE=exo_coldens
    rm -rf ${FILE}
-   ln -sf ${KORUS_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
    export FILE=exo_coldens.inp
@@ -2227,10 +2228,10 @@ if ${RUN_SEASON_WES}; then
    ln -sf ${REAL_DIR}/${FILE_FR}_${FILE_DATE} ${FILE_FR}   
    export FILE=season_wes_usgs.nc
    rm -rf ${FILE}
-   ln -sf ${KORUS_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
    export FILE=wesely
    rm -rf ${FILE}
-   ln -sf ${KORUS_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
    export FILE=wesely.inp
@@ -2300,10 +2301,10 @@ if ${RUN_WRFCHEM_BIO}; then
       rm -rf ntr*.nc
       rm -rf shr*.nc
       rm -rf TAS*.nc
-      cp ${KORUS_WRFBIOCHEMI_DIR}/MEGAN-DATA/*.nc ./.
+      cp ${EXPERIMENT_WRFBIOCHEMI_DIR}/MEGAN-DATA/*.nc ./.
       export FILE=megan_bio_emiss
       rm -rf ${FILE}
-      cp ${KORUS_WRFBIOCHEMI_DIR}/MEGAN-BIO/${FILE} ${FILE}
+      cp ${EXPERIMENT_WRFBIOCHEMI_DIR}/MEGAN-BIO/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
       export FILE=megan_bio_emiss.inp
@@ -2388,18 +2389,18 @@ if ${RUN_WRFCHEM_FIRE}; then
    ln -sf ${REAL_DIR}/${FILE_CR}_${FILE_DATE} ${FILE_CR}   
    ln -sf ${REAL_DIR}/${FILE_FR}_${FILE_DATE} ${FILE_FR}   
    rm -rf GLOBAL*.txt
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/GLOBAL*.txt ./.
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/GLOBAL*.txt ./.
    export FILE=fire_emis
    rm -rf ${FILE}
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/src/${FILE} ${FILE}
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/src/${FILE} ${FILE}
    rm -rf grass_from_img.nc
    rm -rf shrub_from_img.nc
    rm -rf tempfor_from_img.nc
    rm -rf tropfor_from_img.nc
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/grass_from_img.nc
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/shrub_from_img.nc
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/tempfor_from_img.nc
-   ln -sf ${KORUS_WRFFIRECHEMI_DIR}/tropfor_from_img.nc
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/grass_from_img.nc
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/shrub_from_img.nc
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/tempfor_from_img.nc
+   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/tropfor_from_img.nc
 #
 # CREATE INPUT FILE
    export FILE=fire_emis.mozc.inp
@@ -2498,7 +2499,7 @@ if ${RUN_WRFCHEM_CHEMI}; then
       export L_DD=$(echo $L_DATE | cut -c7-8)
       export L_HH=$(echo $L_DATE | cut -c9-10)
 #
-      export FILE_PATH=${KORUS_WRFCHEMI_DIR}
+      export FILE_PATH=${EXPERIMENT_WRFCHEMI_DIR}
       cp ${FILE_PATH}/wrfchemi_d${CR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00 ./.
       cp ${FILE_PATH}/wrfchemi_d${FR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00 ./.
       export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 1 2>/dev/null)
@@ -2617,13 +2618,13 @@ EOF
    export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
    export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
    ncks -A ${REAL_DIR}/${WRFINPEN} ${WRFINPEN}
-#   ncks -A ${KORUS_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
+#   ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
    ncks -A ${REAL_DIR}/${WRFBDYEN} ${WRFBDYEN}
 #
 # COMBINE WRFCHEM WITH WRF FR DOMAIN PARENT FILES
 #   export WRFINPEN=wrfinput_d${FR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
 #   ncks -A ${REAL_DIR}/${WRFINPEN} ${WRFINPEN}
-#   ncks -A ${KORUS_DUST_DIR}/EROD_d${FR_DOMAIN} ${WRFINPEN}
+#   ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${FR_DOMAIN} ${WRFINPEN}
 #
 # LOOP THROUGH ALL MEMBERS IN THE ENSEMBLE
    let MEM=1
@@ -2636,13 +2637,13 @@ EOF
       export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
       export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
       ncks -A ${WRFCHEM_MET_IC_DIR}/${WRFINPEN} ${WRFINPEN}
-#      ncks -A ${KORUS_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
+#      ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
       ncks -A ${WRFCHEM_MET_BC_DIR}/${WRFBDYEN} ${WRFBDYEN}
 #
 # COMBINE WRFCHEM WITH WRF FR DOMAIN
 #      export WRFINPEN=wrfinput_d${FR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
 #      ncks -A ${WRFCHEM_MET_IC_DIR}/${WRFINPEN} ${WRFINPEN}
-#      ncks -A ${KORUS_DUST_DIR}/EROD_d${FR_DOMAIN} ${WRFINPEN}
+#      ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${FR_DOMAIN} ${WRFINPEN}
       let MEM=MEM+1
    done
 fi
@@ -2854,11 +2855,11 @@ if ${RUN_MOPITT_CO_OBS}; then
 #
 # SET MOPITT INPUT DATA DIR
    if [[ ${BIN_END} -ne 3 ]]; then
-      export MOP_INFILE=\'${KORUS_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}\'
+      export MOP_INFILE=\'${EXPERIMENT_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}\'
    else
       export FLG=1
       export BIN_END=24
-      export MOP_INFILE=\'${KORUS_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MN_YYYY}${ASIM_MN_MM}${ASIM_MN_DD}${MOPITT_FILE_EXT}\'
+      export MOP_INFILE=\'${EXPERIMENT_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MN_YYYY}${ASIM_MN_MM}${ASIM_MN_DD}${MOPITT_FILE_EXT}\'
    fi
 #
 # COPY EXECUTABLE
@@ -2894,7 +2895,7 @@ EOFF
       export FLG=0
       export BIN_BEG=0
       export BIN_END=3
-      export MOP_INFILE=\'${KORUS_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}\'
+      export MOP_INFILE=\'${EXPERIMENT_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}\'
       rm -rf job.ksh
       touch job.ksh
       RANDOM=$$
@@ -3015,7 +3016,7 @@ if ${RUN_IASI_CO_OBS}; then
             export ND_MM=$(echo $TEST | cut -c5-6)
             export ND_DD=$(echo $TEST | cut -c7-8)
             export ND_HH=$(echo $TEST | cut -c9-10)
-            export FILE=`ls ${KORUS_IASI_CO_DIR}/${A_YY}/${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
+            export FILE=`ls ${EXPERIMENT_IASI_CO_DIR}/${A_YY}/${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
             if [[ -e ${FILE} ]]; then 
                export OUTFILE_NM=TEMP_FILE.dat
                export INFILE=\'${FILE}\'
@@ -3106,7 +3107,7 @@ EOFF
             export ND_MM=$(echo $TEST | cut -c5-6)
             export ND_DD=$(echo $TEST | cut -c7-8)
             export ND_HH=$(echo $TEST | cut -c9-10)
-            export FILE=`ls ${KORUS_IASI_CO_DIR}/${A_YY}${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
+            export FILE=`ls ${EXPERIMENT_IASI_CO_DIR}/${A_YY}${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
             if [[ -e ${FILE} ]]; then 
                export OUTFILE_NM=TEMP_FILE.dat
                export INFILE=\'${FILE}\'
@@ -3436,7 +3437,7 @@ if ${RUN_AIRNOW_O3_OBS}; then
 #
 # GET AIRNOW DATA
    if [[ ! -e airnow_o3_hourly_csv_data ]]; then
-      cp ${KORUS_AIRNOW_DIR}/airnow_o3_hourly_csv_data ./.
+      cp ${EXPERIMENT_AIRNOW_DIR}/airnow_o3_hourly_csv_data ./.
    fi
 #
    export ASIM_MIN_MN=0
@@ -3503,7 +3504,7 @@ if ${RUN_AIRNOW_CO_OBS}; then
 #
 # GET AIRNOW DATA
    if [[ ! -e airnow_co_hourly_csv_data ]]; then
-      cp ${KORUS_AIRNOW_DIR}/airnow_co_hourly_csv_data ./.
+      cp ${EXPERIMENT_AIRNOW_DIR}/airnow_co_hourly_csv_data ./.
    fi
 #
    export ASIM_MIN_MN=0
@@ -3576,7 +3577,7 @@ if ${RUN_MODIS_AOD_OBS}; then
 # this depends on versions and file times (edit if necessary)
    export FILE_EXT='hdf'
 #
-   export MODIS_INDIR=${KORUS_MODIS_AOD_DIR}
+   export MODIS_INDIR=${EXPERIMENT_MODIS_AOD_DIR}
    export OUTFILE=modis_aod_ascii_${YYYY}${MM}${DD}${HH}
    (( N_YYYY=${YYYY}+0 ))
    (( N_MM=${MM}+0 ))
@@ -3656,7 +3657,7 @@ if ${RUN_MET_OBS}; then
       export L_MM=$(echo $L_DATE | cut -c5-6)
       export L_DD=$(echo $L_DATE | cut -c7-8)
       export L_HH=$(echo $L_DATE | cut -c9-10)
-      cp ${KORUS_PREPBUFR_DIR}/${L_YYYY}${L_MM}${L_DD}/${L_YYYY}${L_MM}${L_DD}.nr/prepbufr.gdas.${L_YYYY}${L_MM}${L_DD}.t${L_HH}z.nr prepqm${L_YY}${L_MM}${L_DD}${L_HH}
+      cp ${EXPERIMENT_PREPBUFR_DIR}/${L_YYYY}${L_MM}${L_DD}/${L_YYYY}${L_MM}${L_DD}.nr/prepbufr.gdas.${L_YYYY}${L_MM}${L_DD}.t${L_HH}z.nr prepqm${L_YY}${L_MM}${L_DD}${L_HH}
       export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} +6 2>/dev/null)
    done
 #
@@ -3943,11 +3944,11 @@ if ${RUN_WRFCHEM_INITIAL}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
-      cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
-      cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/clim_p_trop.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
       cp ${EXO_COLDENS_DIR}/exo_coldens_d${CR_DOMAIN} ./.
       cp ${SEASONS_WES_DIR}/wrf_season_wes_usgs_d${CR_DOMAIN}.nc ./.
 #
@@ -4507,11 +4508,11 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
-      cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
-      cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/clim_p_trop.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
       cp ${EXO_COLDENS_DIR}/exo_coldens_d${CR_DOMAIN} ./.
       cp ${SEASONS_WES_DIR}/wrf_season_wes_usgs_d${CR_DOMAIN}.nc ./.
 #
@@ -4712,11 +4713,11 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    cp ${WRFCHEM_DIR}/test/em_real/SOILPARM.TBL ./.
    cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
    cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
-   cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
+   cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
+   cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
-   cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
-   cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
+   cp ${EXPERIMENT_STATIC_FILES}/clim_p_trop.nc ./.
+   cp ${EXPERIMENT_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
    cp ${EXO_COLDENS_DIR}/exo_coldens_d${CR_DOMAIN} ./.
    cp ${EXO_COLDENS_DIR}/exo_coldens_d${FR_DOMAIN} ./.
    cp ${SEASONS_WES_DIR}/wrf_season_wes_usgs_d${CR_DOMAIN}.nc ./.
@@ -4870,11 +4871,11 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
       cp ${WRFCHEM_DIR}/test/em_real/tr67t85 ./.
       cp ${WRFCHEM_DIR}/test/em_real/URBPARM.TBL ./.
       cp ${WRFCHEM_DIR}/test/em_real/VEGPARM.TBL ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v1 ./.
-      cp ${KORUS_HIST_IO_DIR}/hist_io_flds_v2 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
+      cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #     
-      cp ${KORUS_STATIC_FILES}/clim_p_trop.nc ./.
-      cp ${KORUS_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/clim_p_trop.nc ./.
+      cp ${EXPERIMENT_STATIC_FILES}/ubvals_b40.20th.track1_1996-2005.nc ./.
       cp ${EXO_COLDENS_DIR}/exo_coldens_d${CR_DOMAIN} ./.
       cp ${EXO_COLDENS_DIR}/exo_coldens_d${FR_DOMAIN} ./.
       cp ${SEASONS_WES_DIR}/wrf_season_wes_usgs_d${CR_DOMAIN}.nc ./.
