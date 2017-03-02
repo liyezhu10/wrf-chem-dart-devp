@@ -193,7 +193,6 @@ character(len=129) :: wrf_state_bounds(num_bounds_table_columns,max_state_variab
 character(len=129) :: conc_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
 character(len=129) :: emiss_chemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
 character(len=129) :: emiss_firechemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
-logical :: add_emiss = .true.
 ! LXL/APM ---
 !
 integer :: num_domains          = 1
@@ -236,6 +235,8 @@ character(len = 72) :: adv_mod_command = ''
 ! until users remove them from their input.nml files as well.
 !
 ! LXL/APM
+logical :: add_emiss = .true.
+logical :: use_varloc, use_indep_chem_assim
 namelist /model_nml/ output_state_vector, num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, wrf_state_variables, &
@@ -246,7 +247,8 @@ namelist /model_nml/ output_state_vector, num_moist_vars, &
                      circulation_pres_level, circulation_radius, polar, &
                      periodic_x, periodic_y, scm, &
                      conc_state_variables, emiss_chemi_variables, &
-                     emiss_firechemi_variables,add_emiss
+                     emiss_firechemi_variables,add_emiss, &
+                     use_varloc,use_indep_chem_assim
 ! LXL/APM ---
 !
 real(r8), allocatable :: ens_mean(:)

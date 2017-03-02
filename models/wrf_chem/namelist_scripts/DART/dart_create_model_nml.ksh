@@ -11,6 +11,8 @@ touch input.nml_temp
 cat > input.nml_temp << EOF
  &model_nml
    add_emiss                   = ${NL_ADD_EMISS:-.false.},
+   use_varloc                  = ${NL_USE_VARLOC:-.true.},
+   use_indep_chem_assim        = ${NL_USE_INDEP_CHEM_ASSIM:-.false.},
    default_state_variables     = ${NL_DEFAULT_STATE_VARIABLES:-.false.},
    wrf_state_variables         = ${NL_WRF_STATE_VARIABLES:-"null"}
    conc_state_variables        = ${NL_CONC_STATE_VARIABLES:-"null"}

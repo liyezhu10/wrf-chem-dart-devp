@@ -237,27 +237,27 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=false
-   export RUN_METGRID=false
-   export RUN_REAL=false
-   export RUN_PERT_WRFCHEM_MET_IC=false
-   export RUN_PERT_WRFCHEM_MET_BC=false
-   export RUN_EXO_COLDENS=false
-   export RUN_SEASON_WES=false
-   export RUN_WRFCHEM_BIO=false
-   export RUN_WRFCHEM_FIRE=false
-   export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=false
+   export RUN_UNGRIB=true
+   export RUN_METGRID=true
+   export RUN_REAL=true
+   export RUN_PERT_WRFCHEM_MET_IC=true
+   export RUN_PERT_WRFCHEM_MET_BC=true
+   export RUN_EXO_COLDENS=true
+   export RUN_SEASON_WES=true
+   export RUN_WRFCHEM_BIO=true
+   export RUN_WRFCHEM_FIRE=true
+   export RUN_WRFCHEM_CHEMI=true
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_MOPITT_CO_OBS=true
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_MET_OBS=true
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -274,9 +274,9 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_UPDATE_BC=true
       export RUN_WRFCHEM_CYCLE_CR=true
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=false
+      export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=false
+      export RUN_ENSEMBLE_MEAN_OUTPUT=true
    fi
 else
    export RUN_GEOGRID=false
@@ -919,6 +919,9 @@ export NL_SINGLE_RESTART_FILE_OUT=.false.
 export NL_WRITE_BINARY_RESTART_FILE=.true.
 #
 # &model_nml
+export NL_ADD_EMISS=.true.
+export NL_USE_VARLOC=.false.
+export NL_USE_INDEP_CHEM_ASSIM=.false.
 export NL_DEFAULT_STATE_VARIABLES=.false.
 export NL_WRF_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
           'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
@@ -1094,6 +1097,9 @@ export NL_SINGLE_RESTART_FILE_OUT=.false.
 export NL_MODEL_ADVANCE_FILE=.false.
 export NL_ADV_MOD_COMMAND="'mpirun -np 64 ./wrf.exe'"
 export NL_DART_RESTART_NAME="'dart_wrf_vector'"
+export NL_ADD_EMISS=.true.
+#
+# &wrf_to_dart_nml
 export NL_ADD_EMISS=.true.
 #
 # &restart_file_tool_nml
