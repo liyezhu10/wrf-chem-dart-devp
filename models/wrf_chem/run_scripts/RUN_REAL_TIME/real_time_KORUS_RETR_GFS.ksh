@@ -256,7 +256,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=true
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -4166,13 +4166,13 @@ fi
 EOF
 #
 # Submit convert file script for each and wait until job completes
-      bsub < job.ksh 
+#      bsub < job.ksh 
       let MEM=${MEM}+1
    done
 #
 # Wait for wrf_to_dart to complete for each member
    cd ${RUN_DIR}/${DATE}/dart_filter
-   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
+#   ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 ##
 ## APM: +++ another wrfapm / wrfout swap for emission inversion
@@ -4261,7 +4261,7 @@ else
 fi
 EOF
 #
-   bsub -K < job.ksh
+#   bsub -K < job.ksh
 #
 # Run DART_TO_WRF 
    TRANDOM=$$
@@ -4294,7 +4294,7 @@ EOF
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
       if [[ ${LL_DATE} -eq ${FIRST_EMISS_INV_DATE} ]]; then
-         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} temp
+         cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} temp.nc
          ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
          rm temp.nc
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
@@ -4308,7 +4308,7 @@ EOF
          ncatted -O -a coordinates,ebu_in_ch2o,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,ebu_in_ch3oh,c,c,"XLONG, XLAT" wrffirechemi_d${CR_DOMAIN}
       else
-         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} temp
+         cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE} temp.nc
          ncap2 -Oh -s 'defdim("bottom_top",28);defdim("emissions_zdim_stag",6)' temp.nc wrfchemi_d${CR_DOMAIN}
          rm temp.nc
          cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE} wrffirechemi_d${CR_DOMAIN}

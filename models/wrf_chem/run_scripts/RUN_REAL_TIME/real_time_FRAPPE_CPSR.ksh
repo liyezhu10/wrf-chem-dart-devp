@@ -510,10 +510,10 @@ export NL_SPREAD=${SPREAD_FAC}
 #########################################################################
 #
 # WPS SHARE NAMELIST:
-export NL_WRF_CORE="'"ARW"'"
+export NL_WRF_CORE=/'ARW/'
 export NL_MAX_DOM=${MAX_DOMAINS}
 export NL_IO_FORM_GEOGRID=2
-export NL_OPT_OUTPUT_FROM_GEOGRID_PATH="'"${GEOGRID_DIR}"'"
+export NL_OPT_OUTPUT_FROM_GEOGRID_PATH=/'${GEOGRID_DIR}/'
 export NL_ACTIVE_GRID=".true.",".true."
 #
 # WPS GEOGRID NAMELIST:
@@ -527,20 +527,20 @@ export NL_PARENT_ID="0,1"
 export NL_PARENT_GRID_RATIO=1,5
 export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
 export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
-export NL_GEOG_DATA_RES="'"10s"'","'"10s"'"
+export NL_GEOG_DATA_RES=/'10s/',/'10s/'
 export NL_DX=${DX_CR}
 export NL_DY=${DX_CR}
-export NL_MAP_PROJ="'"lambert"'"
+export NL_MAP_PROJ=/'lambert/'
 export NL_REF_LAT=40.0
 export NL_REF_LON=-112.0
 export NL_STAND_LON=-105.0
 export NL_TRUELAT1=30.0
 export NL_TRUELAT2=60.0
-export NL_GEOG_DATA_PATH="'"${WPS_GEOG_DIR}"'"
-export NL_OPT_GEOGRID_TBL_PATH="'"${WPS_DIR}/geogrid"'"
+export NL_GEOG_DATA_PATH=/'${WPS_GEOG_DIR}/'
+export NL_OPT_GEOGRID_TBL_PATH=/'${WPS_DIR}/geogrid/'
 #
 # WPS UNGRIB NAMELIST:
-export NL_OUT_FORMAT="'"WPS"'"
+export NL_OUT_FORMAT=/'WPS/'
 #
 # WPS METGRID NAMELIST:
 export NL_IO_FORM_METGRID=2
@@ -574,10 +574,10 @@ export NL_IO_FORM_RESTART=2
 export NL_FINE_INPUT_STREAM=0,2
 export NL_IO_FORM_INPUT=2
 export NL_IO_FORM_BOUNDARY=2
-export NL_AUXINPUT2_INNAME="'"wrfinput_d\<domain\>"'"
-export NL_AUXINPUT5_INNAME="'"wrfchemi_d\<domain\>_\<date\>"'"
-export NL_AUXINPUT6_INNAME="'"wrfbiochemi_d\<domain\>_\<date\>"'"
-export NL_AUXINPUT7_INNAME="'"wrffirechemi_d\<domain\>_\<date\>"'"
+export NL_AUXINPUT2_INNAME=/'wrfinput_d\<domain\>/'
+export NL_AUXINPUT5_INNAME=/'wrfchemi_d\<domain\>_\<date\>/'
+export NL_AUXINPUT6_INNAME=/'wrfbiochemi_d\<domain\>_\<date\>/'
+export NL_AUXINPUT7_INNAME=/'wrffirechemi_d\<domain\>_\<date\>/'
 export NL_AUXINPUT2_INTERVAL_M=60480,60480
 export NL_AUXINPUT5_INTERVAL_M=60,60
 export NL_AUXINPUT6_INTERVAL_M=60480,60480
@@ -590,10 +590,10 @@ export NL_IO_FORM_AUXINPUT2=2
 export NL_IO_FORM_AUXINPUT5=2
 export NL_IO_FORM_AUXINPUT6=2
 export NL_IO_FORM_AUXINPUT7=2
-export NL_IOFIELDS_FILENAME="'"hist_io_flds_v1"'","'"hist_io_flds_v2"'"
+export NL_IOFIELDS_FILENAME=/'hist_io_flds_v1/',/'hist_io_flds_v2/'
 export NL_WRITE_INPUT=".true."
 export NL_INPUTOUT_INTERVAL=360
-export NL_INPUT_OUTNAME="'"wrfapm_d\<domain\>_\<date\>"'"
+export NL_INPUT_OUTNAME=/'wrfapm_d\<domain\>_\<date\>/'
 #
 # DOMAINS NAMELIST:
 export NL_TIME_STEP=60
@@ -752,7 +752,7 @@ export NL_AER_OP_OPT=1
 export NL_OPT_PARS_OUT=1
 export NL_HAVE_BCS_UPPER=".false.",".false."
 export NL_FIXED_UBC_PRESS=50.,50.
-export NL_FIXED_UBC_INNAME="'"ubvals_b40.20th.track1_1996-2005.nc"'"
+export NL_FIXED_UBC_INNAME=/'ubvals_b40.20th.track1_1996-2005.nc/'
 #
 # WRFDA NAMELIST PARAMETERS
 # WRFVAR1 NAMELIST:
@@ -826,19 +826,19 @@ export NL_ALPHA_VERTLOC=false
 export NL_ALPHA_TRUNCATION=1
 #
 # WRFVAR17 NAMELIST:
-export NL_ANALYSIS_TYPE="'"RANDOMCV"'"
+export NL_ANALYSIS_TYPE=/'RANDOMCV/'
 #
 # WRFVAR18 NAMELIST:
 export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -W 2>/dev/null)
 #
 # WRFVAR19 NAMELIST:
-export NL_PSEUDO_VAR="'"t"'"
+export NL_PSEUDO_VAR=/'t/'
 #
 # WRFVAR21 NAMELIST:
-export NL_TIME_WINDOW_MIN="'"$(${BUILD_DIR}/da_advance_time.exe ${DATE} -${ASIM_WINDOW} -W 2>/dev/null)"'"
+export NL_TIME_WINDOW_MIN=/'$(${BUILD_DIR}/da_advance_time.exe ${DATE} -${ASIM_WINDOW} -W 2>/dev/null)/'
 #
 # WRFVAR22 NAMELIST:
-export NL_TIME_WINDOW_MAX="'"$(${BUILD_DIR}/da_advance_time.exe ${DATE} +${ASIM_WINDOW} -W 2>/dev/null)"'"
+export NL_TIME_WINDOW_MAX=/'$(${BUILD_DIR}/da_advance_time.exe ${DATE} +${ASIM_WINDOW} -W 2>/dev/null)/'
 #
 # WRFVAR23 NAMELIST:
 export NL_JCDFI_USE=false
@@ -1177,10 +1177,10 @@ export NL_NEW_ADVANCE_DAYS=${NEXT_DAY_GREG}
 export NL_NEW_ADVANCE_SECS=${NEXT_SEC_GREG}
 #
 # &preprocess_nml
-export NL_INPUT_OBS_KIND_MOD_FILE="'"${DART_DIR}/obs_kind/DEFAULT_obs_kind_mod.F90"'"
-export NL_OUTPUT_OBS_KIND_MOD_FILE="'"${DART_DIR}/obs_kind/obs_kind_mod.f90"'"
-export NL_INPUT_OBS_DEF_MOD_FILE="'"${DART_DIR}/obs_kind/DEFAULT_obs_def_mod.F90"'"
-export NL_OUTPUT_OBS_DEF_MOD_FILE="'"${DART_DIR}/obs_kind/obs_def_mod.f90"'"
+export NL_INPUT_OBS_KIND_MOD_FILE=/'${DART_DIR}/obs_kind/DEFAULT_obs_kind_mod.F90/'
+export NL_OUTPUT_OBS_KIND_MOD_FILE=/'${DART_DIR}/obs_kind/obs_kind_mod.f90/'
+export NL_INPUT_OBS_DEF_MOD_FILE=/'${DART_DIR}/obs_kind/DEFAULT_obs_def_mod.F90/'
+export NL_OUTPUT_OBS_DEF_MOD_FILE=/'${DART_DIR}/obs_kind/obs_def_mod.f90/'
 export NL_INPUT_FILES="'${DART_DIR}/obs_def/obs_def_reanalysis_bufr_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_radar_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_metar_mod.f90',
@@ -1351,8 +1351,8 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
    export NL_END_MONTH=$(echo $L_END_DATE | cut -c5-6),$(echo $L_END_DATE | cut -c5-6)
    export NL_END_DAY=$(echo $L_END_DATE | cut -c7-8),$(echo $L_END_DATE | cut -c7-8)
    export NL_END_HOUR=$(echo $L_END_DATE | cut -c9-10),$(echo $L_END_DATE | cut -c9-10)
-   export NL_START_DATE="'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'","'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'"
-   export NL_END_DATE="'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'","'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'"
+   export NL_START_DATE=/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/',/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/'
+   export NL_END_DATE=/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/',/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/'
    ${HYBRID_SCRIPTS_DIR}/da_create_wps_namelist_RT.ksh
 #
 # UNTAR THE PARENT FORECAST FILES
@@ -1448,8 +1448,8 @@ if [[ ${RUN_METGRID} = "true" ]]; then
    export NL_END_MONTH=$(echo $L_END_DATE | cut -c5-6),$(echo $L_END_DATE | cut -c5-6)
    export NL_END_DAY=$(echo $L_END_DATE | cut -c7-8),$(echo $L_END_DATE | cut -c7-8)
    export NL_END_HOUR=$(echo $L_END_DATE | cut -c9-10),$(echo $L_END_DATE | cut -c9-10)
-   export NL_START_DATE="'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'","'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'"
-   export NL_END_DATE="'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'","'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'"
+   export NL_START_DATE=/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/',/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/'
+   export NL_END_DATE=/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/',/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/'
    ${HYBRID_SCRIPTS_DIR}/da_create_wps_namelist_RT.ksh
 #
 # JOB SCRIPT
@@ -1542,8 +1542,8 @@ if [[ ${RUN_REAL} = "true" ]]; then
       export NL_END_MONTH=$(echo $L_END_DATE | cut -c5-6),$(echo $L_END_DATE | cut -c5-6)
       export NL_END_DAY=$(echo $L_END_DATE | cut -c7-8),$(echo $L_END_DATE | cut -c7-8)
       export NL_END_HOUR=$(echo $L_END_DATE | cut -c9-10),$(echo $L_END_DATE | cut -c9-10)
-      export NL_START_DATE="'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'","'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'"
-      export NL_END_DATE="'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'","'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'"
+      export NL_START_DATE=/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/',/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/'
+      export NL_END_DATE=/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/',/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/'
       ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_nested_RT.ksh
 #
 # JOB SCRIPT
@@ -1944,8 +1944,8 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
    export NL_END_MONTH=$(echo $L_END_DATE | cut -c5-6),$(echo $L_END_DATE | cut -c5-6)
    export NL_END_DAY=$(echo $L_END_DATE | cut -c7-8),$(echo $L_END_DATE | cut -c7-8)
    export NL_END_HOUR=$(echo $L_END_DATE | cut -c9-10),$(echo $L_END_DATE | cut -c9-10)
-   export NL_START_DATE="'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'","'"${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00"'"
-   export NL_END_DATE="'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'","'"${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00"'"
+   export NL_START_DATE=/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/',/'${L_START_YEAR}-${L_START_MONTH}-${L_START_DAY}_${L_START_HOUR}:00:00/'
+   export NL_END_DATE=/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/',/'${L_END_YEAR}-${L_END_MONTH}-${L_END_DAY}_${L_END_HOUR}:00:00/'
 #
 # LOOP THROUGH ALL BDY TENDENCY TIMES
    export P_DATE=${DATE}
@@ -1954,10 +1954,10 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
 #
 # SET WRFDA PARAMETERS
       export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} 0 -W 2>/dev/null)
-      export NL_ANALYSIS_DATE="'"${ANALYSIS_DATE}"'"
-      export NL_TIME_WINDOW_MIN="'"$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} -${ASIM_WINDOW} -W 2>/dev/null)"'"
-      export NL_TIME_WINDOW_MAX="'"$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} +${ASIM_WINDOW} -W 2>/dev/null)"'"
-      export NL_ANALYSIS_TYPE="'"RANDOMCV"'"
+      export NL_ANALYSIS_DATE=/'${ANALYSIS_DATE}/'
+      export NL_TIME_WINDOW_MIN=/'$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} -${ASIM_WINDOW} -W 2>/dev/null)/'
+      export NL_TIME_WINDOW_MAX=/'$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} +${ASIM_WINDOW} -W 2>/dev/null)/'
+      export NL_ANALYSIS_TYPE=/'RANDOMCV/'
       export NL_PUT_RAND_SEED=true
 #
 # LOOP THROUGH ALL MEMBERS IN THE ENSEMBLE
@@ -2911,7 +2911,7 @@ if ${RUN_MOPITT_CO_OBS}; then
 # SET MOPITT PARAMETERS
    export MOPITT_FILE_PRE=MOP02J-
    export MOPITT_FILE_EXT=-L2V10.1.3.beta.hdf   
-   export MOP_OUTFILE="'"MOPITT_CO_${D_DATE}'.dat'"'"
+   export MOP_OUTFILE=/'MOPITT_CO_${D_DATE}'.dat'/'
    rm -rf ${MOP_OUTFILE}
 #
 #  SET OBS WINDOW
@@ -2921,11 +2921,11 @@ if ${RUN_MOPITT_CO_OBS}; then
 #
 # SET MOPITT INPUT DATA DIR
    if [[ ${BIN_END} -ne 3 ]]; then
-      export MOP_INFILE="'"${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}"'"
+      export MOP_INFILE=/'${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}/'
    else
       export FLG=1
       export BIN_END=24
-      export MOP_INFILE="'"${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MN_YYYY}${ASIM_MN_MM}${ASIM_MN_DD}${MOPITT_FILE_EXT}"'"
+      export MOP_INFILE=/'${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MN_YYYY}${ASIM_MN_MM}${ASIM_MN_DD}${MOPITT_FILE_EXT}/'
    fi
 #
 # COPY EXECUTABLE
@@ -2961,7 +2961,7 @@ EOFF
       export FLG=0
       export BIN_BEG=0
       export BIN_END=3
-      export MOP_INFILE="'"${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}"'"
+      export MOP_INFILE=/'${FRAPPE_MOPITT_CO_DIR}/${MOPITT_FILE_PRE}${ASIM_MX_YYYY}${ASIM_MX_MM}${ASIM_MX_DD}${MOPITT_FILE_EXT}/'
       rm -rf job.ksh
       touch job.ksh
       RANDOM=$$
@@ -3004,9 +3004,9 @@ EOFF
       export NL_BIN_END=21.00
    fi
    cp MOPITT_CO_${D_DATE}.dat ${D_DATE}.dat
-   export NL_FILEDIR="'"./"'" 
+   export NL_FILEDIR=/'.//' 
    export NL_FILENAME=${D_DATE}.dat
-   export NL_MOPITT_CO_RETRIEVAL_TYPE="'"${RETRIEVAL_TYPE}"'"
+   export NL_MOPITT_CO_RETRIEVAL_TYPE=/'${RETRIEVAL_TYPE}/'
 #
 # USE MOPITT DATA 
    rm -rf input.nml
@@ -3085,8 +3085,8 @@ if ${RUN_IASI_CO_OBS}; then
             export FILE=`ls ${FRAPPE_IASI_CO_DIR}/${A_YY}/${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
             if [[ -e ${FILE} ]]; then 
                export OUTFILE_NM=TEMP_FILE.dat
-               export INFILE="'"${FILE}"'"
-               export OUTFILE="'"${OUTFILE_NM}"'"
+               export INFILE=/'${FILE}/'
+               export OUTFILE=/'${OUTFILE_NM}/'
 #
 # echo what we are processing at the moment
 #               echo ${INFILE}
@@ -3176,8 +3176,8 @@ EOFF
             export FILE=`ls ${FRAPPE_IASI_CO_DIR}/${A_YY}/${A_MM}/${A_DD}/${FILE_PRE}_${A_YY}${A_MM}${A_DD}${A_HH}*Z_${ND_YY}${ND_MM}${ND_DD}${ND_HH}*Z_*`
             if [[ -e ${FILE} ]]; then 
                export OUTFILE_NM=TEMP_FILE.dat
-               export INFILE="'"${FILE}"'"
-               export OUTFILE="'"${OUTFILE_NM}"'"
+               export INFILE=/'${FILE}/'
+               export OUTFILE=/'${OUTFILE_NM}/'
 #
 # echo what we are processing at the moment
 #               echo ${INFILE}
@@ -3292,9 +3292,9 @@ EOFF
       NL_BIN_BEG=15.01
       NL_BIN_END=21.00
    fi
-   export NL_FILEDIR="'"./"'" 
+   export NL_FILEDIR=/'.//' 
    export NL_FILENAME=${D_DATE}.dat
-   export NL_IASI_CO_RETRIEVAL_TYPE="'"${RETRIEVAL_TYPE}"'"
+   export NL_IASI_CO_RETRIEVAL_TYPE=/'${RETRIEVAL_TYPE}/'
 #
 # USE IASI DATA 
    rm -rf input.nml
@@ -3530,7 +3530,7 @@ if ${RUN_AIRNOW_O3_OBS}; then
    export NL_DAY=${L_DD}
    export NL_HOUR=${L_HH}
 #
-   export NL_FILENAME="'"airnow_o3_hourly_csv_data"'"
+   export NL_FILENAME=/'airnow_o3_hourly_csv_data/'
    export NL_LAT_MN=${NL_MIN_LAT}
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
@@ -3597,7 +3597,7 @@ if ${RUN_AIRNOW_CO_OBS}; then
    export NL_DAY=${L_DD}
    export NL_HOUR=${L_HH}
 #
-   export NL_FILENAME="'"airnow_co_hourly_csv_data"'"
+   export NL_FILENAME=/'airnow_co_hourly_csv_data/'
    export NL_LAT_MN=${NL_MIN_LAT}
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
@@ -4037,7 +4037,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
 #
 # Create WRF-Chem namelist.input
       export NL_MAX_DOM=1
-      export NL_IOFIELDS_FILENAME="'"hist_io_flds_v1"'","'"hist_io_flds_v2"'"
+      export NL_IOFIELDS_FILENAME=/'hist_io_flds_v1/',/'hist_io_flds_v2/'
       rm -rf namelist.input
       ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_RT.ksh
 #
@@ -4341,7 +4341,7 @@ EOF
 #
 # &dart_to_wrf_nml
       export NL_MODEL_ADVANCE_FILE=.false.
-      export NL_DART_RESTART_NAME="'"../filter_ic_new.${KMEM}"'"
+      export NL_DART_RESTART_NAME=/'../filter_ic_new.${KMEM}/'
       rm -rf input.nml
       ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
       cp ${DART_DIR}/models/wrf_chem/work/dart_to_wrf ./.
@@ -4657,7 +4657,7 @@ EOF
 #
 # Create WRF-Chem namelist.input 
       export NL_MAX_DOM=1
-      export NL_IOFIELDS_FILENAME="'"hist_io_flds_v1"'","'"hist_io_flds_v2"'"
+      export NL_IOFIELDS_FILENAME=/'hist_io_flds_v1/',/'hist_io_flds_v2/'
       rm -rf namelist.input
       ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_RT.ksh
 #
@@ -4823,7 +4823,7 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
 #
 # Create WRF-Chem namelist.input 
    export NL_MAX_DOM=2
-   export NL_IOFIELDS_FILENAME="'"hist_io_flds_v1"'","'"hist_io_flds_v2"'"
+   export NL_IOFIELDS_FILENAME=/'hist_io_flds_v1/',/'hist_io_flds_v2/'
    rm -rf namelist.input
    ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_nested_RT.ksh
 #
@@ -4977,7 +4977,7 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
 #
 # Create WRF-Chem namelist.input 
    export NL_MAX_DOM=2
-   export NL_IOFIELDS_FILENAME="'"hist_io_flds_v1"'","'"hist_io_flds_v2"'"
+   export NL_IOFIELDS_FILENAME=/'hist_io_flds_v1/',/'hist_io_flds_v2/'
    export NL_RESTART_INTERVAL=360
    export NL_TIME_STEP=40
    export NL_BIOEMDT=1,.5
