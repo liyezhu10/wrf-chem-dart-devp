@@ -441,12 +441,18 @@ if ( default_state_variables ) then
                   'Using predefined wrf variable list for dart state vector.', &
                    text2=msgstring2, text3=msgstring3)
 
+else
+  ! Consolidate all the input variable tables into one 'wrf_state_variables' table.
+  ! Since all the variables of interest are scoped module global, no arguments are needed.
+  call concatenate_variable_tables()
 endif
 
 if ( debug ) then
   print*,'WRF state vector table'
   print*,'default_state_variables = ',default_state_variables
-  print*,wrf_state_variables
+  do i = 1,size(wrf_state_variables,2)
+     print*,'variable ',i,' ',trim(wrf_state_variables(1,i)),' ',trim(wrf_state_variables(2,i))
+  enddo
 endif
 
 !---------------------------
@@ -8584,6 +8590,39 @@ default_table(:,row) = (/ 'QVAPOR                 ', &
 return
 
 end subroutine fill_default_state_table
+
+!--------------------------------------------
+!--------------------------------------------
+
+subroutine concatenate_variable_tables( )
+
+integer :: iline,irow
+
+irow = 0
+
+CONV_LOOP : do iline = 1,max_state_variables
+   if (conv_state_variables(iline,1) == 'NULL') exit CONV_LOOP
+   irow = irow+1
+   wrf_state_variables(irow,:) = conv_state_variables(iline,:)    
+enddo CONV_LOOP
+
+if ( add_emiss ) then
+   CHEMI_LOOP : do iline = 1,max_state_variables
+      if (emiss_chemi_variables(iline,1) == 'NULL') exit CHEMI_LOOP
+      irow = irow+1
+      wrf_state_variables(irow,:) = emiss_chemi_variables(iline,:)    
+   enddo CHEMI_LOOP
+   
+   FIRE_LOOP : do iline = 1,max_state_variables
+      if (emiss_firechemi_variables(iline,1) == 'NULL') exit FIRE_LOOP
+      irow = irow+1
+      wrf_state_variables(irow,:) = emiss_firechemi_variables(iline,:)    
+   enddo FIRE_LOOP
+endif
+
+return
+
+end subroutine concatenate_variable_tables
 
 !--------------------------------------------
 !--------------------------------------------
