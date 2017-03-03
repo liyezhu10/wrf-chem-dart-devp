@@ -190,7 +190,7 @@ character(len=129) :: wrf_state_variables(num_state_table_columns,max_state_vari
 character(len=129) :: wrf_state_bounds(num_bounds_table_columns,max_state_variables) = 'NULL'
 !
 ! LXL/APM +++
-character(len=129) :: conc_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
+character(len=129) :: conv_state_variables(num_state_table_columns,max_state_variables) = 'NULL'
 character(len=129) :: emiss_chemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
 character(len=129) :: emiss_firechemi_variables(num_state_table_columns,max_state_variables) = 'NULL'
 ! LXL/APM ---
@@ -246,7 +246,7 @@ namelist /model_nml/ output_state_vector, num_moist_vars, &
                      center_search_half_length, center_spline_grid_scale, &
                      circulation_pres_level, circulation_radius, polar, &
                      periodic_x, periodic_y, scm, &
-                     conc_state_variables, emiss_chemi_variables, &
+                     conv_state_variables, emiss_chemi_variables, &
                      emiss_firechemi_variables,add_emiss, &
                      use_varloc,use_indep_chem_assim
 ! LXL/APM ---
@@ -338,7 +338,7 @@ TYPE wrf_static_data_for_dart
    integer :: type_e_o3, type_e_co, type_e_no, type_ebu_in_co, type_ebu_in_no, &
               type_ebu_in_oc, type_ebu_in_bc, &
               type_ebu_in_c2h4, type_ebu_in_ch2o, type_ebu_in_ch3oh       
-   integer :: number_of_conc_variables, number_of_emiss_chemi_variables, &
+   integer :: number_of_conv_variables, number_of_emiss_chemi_variables, &
               number_of_emiss_firechemi_variables
 ! APM/AFAJ/LXL --
 
@@ -393,10 +393,16 @@ integer :: io, iunit
 
 character (len=1)     :: idom
 logical, parameter    :: debug = .false.
-integer               :: ind, i, j, k, id, dart_index
+integer               :: ind, ind_str,ind_end, i, j, k, id, dart_index
 integer               :: my_index
 integer               :: var_element_list(max_state_variables)
+integer               :: var_element_list_conv(max_state_variables)
+integer               :: var_element_list_chemi(max_state_variables)
+integer               :: var_element_list_firechemi(max_state_variables)
 logical               :: var_update_list(max_state_variables)
+logical               :: var_update_list_conv(max_state_variables)
+logical               :: var_update_list_chemi(max_state_variables)
+logical               :: var_update_list_firechemi(max_state_variables)
 !
 
 character(len=256) :: wrf_filename, chem_filename, fire_filename
@@ -451,6 +457,10 @@ endif
 
 num_obs_kinds = get_num_raw_obs_kinds()
 allocate(in_state_vector(num_obs_kinds))
+
+
+
+
 call fill_dart_kinds_table(wrf_state_variables, in_state_vector)
 
 
@@ -599,26 +609,53 @@ WRFDomains : do id=1,num_domains
 !-------------------------------------------------------
 !
 ! LXL/APM +++
-! get the number of conc/emiss variables wanted in this domain's state
+! get the number of conv/emiss variables wanted in this domain's state
+      wrf%dom(id)%number_of_conv_variables = get_number_of_wrf_variables(id,conv_state_variables,var_element_list_conv, var_update_list_conv)
+!
    if ( add_emiss ) then
-      wrf%dom(id)%number_of_conc_variables = get_number_of_wrf_variables(id,conc_state_variables,var_element_list, var_update_list)
+      wrf%dom(id)%number_of_emiss_chemi_variables = get_number_of_wrf_variables(id,emiss_chemi_variables,var_element_list_chemi, var_update_list_chemi)
 !
-      wrf%dom(id)%number_of_emiss_chemi_variables = get_number_of_wrf_variables(id,emiss_chemi_variables,var_element_list, var_update_list)
-!
-      wrf%dom(id)%number_of_emiss_firechemi_variables = get_number_of_wrf_variables(id,emiss_firechemi_variables,var_element_list, var_update_list)
+      wrf%dom(id)%number_of_emiss_firechemi_variables = get_number_of_wrf_variables(id,emiss_firechemi_variables,var_element_list_firechemi, var_update_list_firechemi)
    endif
 ! LXL/APM ---
 !
 ! get the number of wrf variables wanted in this domain's state (must follow mods because var_element_list is needed and overwritten with each call)
-   wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list, var_update_list)
+!   wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list, var_update_list)
 !
 ! LXL/APM +++
    if ( add_emiss ) then
-      if(debug) write(*,*) ' number of wrf variables is',wrf%dom(id)%number_of_wrf_variables
-      if(debug) write(*,*) ' number of conc variables is',wrf%dom(id)%number_of_conc_variables
+!      if(debug) write(*,*) ' number of wrf variables is',wrf%dom(id)%number_of_wrf_variables
+      if(debug) write(*,*) ' number of conv variables is',wrf%dom(id)%number_of_conv_variables
       if(debug) write(*,*) ' number of emiss chemi variables is',wrf%dom(id)%number_of_emiss_chemi_variables
       if(debug) write(*,*) ' number of emiss firechemi variables is',wrf%dom(id)%number_of_emiss_firechemi_variables
    endif
+!
+  if ( add_emiss ) then
+      wrf%dom(id)%number_of_wrf_variables=wrf%dom(id)%number_of_conv_variables + &
+      wrf%dom(id)%number_of_emiss_chemi_variables + wrf%dom(id)%number_of_emiss_firechemi_variables
+      do ind=1,wrf%dom(id)%number_of_wrf_variables
+         if(ind .ge. 1 .and. ind .le. wrf%dom(id)%number_of_conv_variables) then
+            var_element_list(ind)=var_element_list_conv(ind)
+            var_update_list(ind)=var_update_list_conv(ind)
+         elseif (ind .ge. wrf%dom(id)%number_of_conv_variables+1 .and. ind .le. & 
+         wrf%dom(id)%number_of_conv_variables+wrf%dom(id)%number_of_emiss_chemi_variables) then   
+            var_element_list(ind)=var_element_list_chemi(ind-wrf%dom(id)%number_of_conv_variables)
+            var_update_list(ind)=var_update_list_chemi(ind-wrf%dom(id)%number_of_conv_variables)
+         elseif (ind .ge. wrf%dom(id)%number_of_conv_variables+wrf%dom(id)%number_of_emiss_chemi_variables+1 &
+         .and. ind .le. wrf%dom(id)%number_of_wrf_variables) then   
+            var_element_list(ind)=var_element_list_firechemi(ind-wrf%dom(id)%number_of_conv_variables &
+            -wrf%dom(id)%number_of_emiss_chemi_variables)
+            var_update_list(ind)=var_update_list_firechemi(ind-wrf%dom(id)%number_of_conv_variables &
+            -wrf%dom(id)%number_of_emiss_chemi_variables)
+         endif
+      enddo
+  else
+      wrf%dom(id)%number_of_wrf_variables=wrf%dom(id)%number_of_conv_variables
+      do ind=1,wrf%dom(id)%number_of_wrf_variables
+         var_element_list(ind)=var_element_list_conv(ind)
+         var_update_list(ind)=var_update_list_conv(ind)
+      enddo       
+  endif
 ! LXL/APM ---
 !
 ! allocate and store the table locations of the variables valid on this domain
@@ -657,9 +694,7 @@ WRFDomains : do id=1,num_domains
 !  this accounts for the fact that some variables might not be on all domains
 !
 ! LXL/APM +++
-   do ind = 1,wrf%dom(id)%number_of_conc_variables
-! LXL/APM ---
-!
+   do ind = 1,wrf%dom(id)%number_of_conv_variables
 
       ! actual location in state variable table
       my_index =  wrf%dom(id)%var_index_list(ind)
@@ -715,7 +750,7 @@ WRFDomains : do id=1,num_domains
 ! LXL/APM +++
    if ( add_emiss ) then
 ! Read emiss chemi variables
-      do ind = wrf%dom(id)%number_of_conc_variables+1,wrf%dom(id)%number_of_conc_variables + wrf%dom(id)%number_of_emiss_chemi_variables      
+      do ind = wrf%dom(id)%number_of_conv_variables+1,wrf%dom(id)%number_of_conv_variables + wrf%dom(id)%number_of_emiss_chemi_variables      
          ! actual location in state variable table
          my_index =  wrf%dom(id)%var_index_list(ind)
       
@@ -765,7 +800,8 @@ WRFDomains : do id=1,num_domains
       call nc_check(nf90_close(ncid_emiss_chemi),'static_init_model','close wrfchemi_d0'//idom)
 !
 ! Read emiss firechemi variables
-      do ind = wrf%dom(id)%number_of_conc_variables+wrf%dom(id)%number_of_emiss_chemi_variables+1,wrf%dom(id)%number_of_wrf_variables
+      do ind = wrf%dom(id)%number_of_conv_variables + wrf%dom(id)%number_of_emiss_chemi_variables + 1, &
+      wrf%dom(id)%number_of_wrf_variables
          ! actual location in state variable table
          my_index =  wrf%dom(id)%var_index_list(ind)
       
