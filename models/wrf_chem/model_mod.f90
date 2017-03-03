@@ -235,7 +235,7 @@ character(len = 72) :: adv_mod_command = ''
 ! until users remove them from their input.nml files as well.
 !
 ! LXL/APM +++
-logical :: add_emiss = .true.
+logical :: add_emiss = .false.
 logical :: use_varloc = .true., use_indep_chem_assim =.false.
 namelist /model_nml/ output_state_vector, num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
@@ -657,62 +657,60 @@ WRFDomains : do id=1,num_domains
 !  this accounts for the fact that some variables might not be on all domains
 !
 ! LXL/APM +++
-   if (add_emiss ) then
-      do ind = 1,wrf%dom(id)%number_of_conc_variables
+   do ind = 1,wrf%dom(id)%number_of_conc_variables
 ! LXL/APM ---
 !
 
       ! actual location in state variable table
-         my_index =  wrf%dom(id)%var_index_list(ind)
+      my_index =  wrf%dom(id)%var_index_list(ind)
 
-         wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
-         wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
+      wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
+      wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
 
-         if ( debug ) then
-            print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
-         endif
+      if ( debug ) then
+         print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
+      endif
 
       ! get stagger and variable size
-         call get_variable_size_from_file(ncid,id,  &
-                                          wrf_state_variables(1,my_index), &
-                                          wrf%dom(id)%bt, wrf%dom(id)%bts, &
-                                          wrf%dom(id)%sn, wrf%dom(id)%sns, &
-                                          wrf%dom(id)%we, wrf%dom(id)%wes, & 
-                                          wrf%dom(id)%stagger(ind),        &
-                                          wrf%dom(id)%var_size(:,ind))
+      call get_variable_size_from_file(ncid,id,  &
+                                       wrf_state_variables(1,my_index), &
+                                       wrf%dom(id)%bt, wrf%dom(id)%bts, &
+                                       wrf%dom(id)%sn, wrf%dom(id)%sns, &
+                                       wrf%dom(id)%we, wrf%dom(id)%wes, & 
+                                       wrf%dom(id)%stagger(ind),        &
+                                       wrf%dom(id)%var_size(:,ind))
          
       ! get other variable metadata; units, coordinates and description
-         call get_variable_metadata_from_file(ncid,id,  &
-                                          wrf_state_variables(1,my_index), &
-                                          wrf%dom(id)%description(ind),         &
-                                          wrf%dom(id)%coordinates(ind),         &
-                                          wrf%dom(id)%units(ind) )
-         
-         if ( debug ) then
-            print*,'variable size ',trim(wrf_state_variables(1,my_index)),' ',wrf%dom(id)%var_size(:,ind)
-         endif
+      call get_variable_metadata_from_file(ncid,id,  &
+                                       wrf_state_variables(1,my_index), &
+                                       wrf%dom(id)%description(ind),         &
+                                       wrf%dom(id)%coordinates(ind),         &
+                                       wrf%dom(id)%units(ind) )
+      
+      if ( debug ) then
+         print*,'variable size ',trim(wrf_state_variables(1,my_index)),' ',wrf%dom(id)%var_size(:,ind)
+      endif
 
       !  add bounds checking information
-         call get_variable_bounds(wrf_state_bounds, wrf_state_variables(1,my_index), &
-                                  wrf%dom(id)%lower_bound(ind), wrf%dom(id)%upper_bound(ind), &
-                                  wrf%dom(id)%clamp_or_fail(ind))
-         
-         if ( debug ) then
-            write(*,*) 'Bounds for variable ',  &
-            trim(wrf_state_variables(1,my_index)), &
-            ' are ',wrf%dom(id)%lower_bound(ind), &
-            wrf%dom(id)%upper_bound(ind), &
-            wrf%dom(id)%clamp_or_fail(ind)
-         endif
-         
-         write(msgstring1, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
-         call error_handler(E_MSG, 'static_init_model: ', msgstring1)
-      enddo
+      call get_variable_bounds(wrf_state_bounds, wrf_state_variables(1,my_index), &
+                               wrf%dom(id)%lower_bound(ind), wrf%dom(id)%upper_bound(ind), &
+                               wrf%dom(id)%clamp_or_fail(ind))
+      
+      if ( debug ) then
+         write(*,*) 'Bounds for variable ',  &
+         trim(wrf_state_variables(1,my_index)), &
+         ' are ',wrf%dom(id)%lower_bound(ind), &
+         wrf%dom(id)%upper_bound(ind), &
+         wrf%dom(id)%clamp_or_fail(ind)
+      endif
+      
+      write(msgstring1, '(A,I4,2A)') 'state vector array ', ind, ' is ', trim(wrf_state_variables(1,my_index))
+      call error_handler(E_MSG, 'static_init_model: ', msgstring1)
+   enddo
 
 ! close data file, we have all we need
 
-      call nc_check(nf90_close(ncid),'static_init_model','close wrfinput_d0'//idom)
-   endif
+   call nc_check(nf90_close(ncid),'static_init_model','close wrfinput_d0'//idom)
 !
 ! LXL/APM +++
    if ( add_emiss ) then
