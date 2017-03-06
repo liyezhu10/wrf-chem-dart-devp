@@ -71,11 +71,13 @@ use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_kind, write
 use     obs_kind_mod, only : max_obs_kinds, get_obs_kind_name, get_obs_kind_index, &
                              write_obs_kind
 
+use location_utils_mod, only : nc_write_location_atts, nc_write_location_vert, &
+                             nc_get_location_varids, nc_write_location, has_vert_choice
+
 use     location_mod, only : location_type, get_location, set_location_missing, &
                              write_location, operator(/=), operator(==), &
                              set_location, is_location_in_region, query_location, &
-                             nc_write_location_atts, nc_get_location_varids, &
-                             nc_write_location, LocationDims, VERTISUNDEF, &
+                             LocationDims, VERTISUNDEF, &
                              vert_is_undef, vert_is_surface, vert_is_pressure
 
 use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
@@ -1153,10 +1155,8 @@ call nc_check(nf90_put_att(ncid, VarID, 'units',     'seconds'), &
 
 ! let the location module write what it needs to ...
 
-if ( nc_write_location_atts( ncid, fname, ncmeta%StationsDimID ) /= 0 ) then
-   write(string1,*)'problem initializing netCDF location attributes'
-   call error_handler(E_ERR,'InitNetCDF:',string1,source,revision,revdate)
-endif
+call nc_write_location_atts( ncid, fname, ncmeta%StationsDimID )
+if (has_vert_choice()) call nc_write_location_vert( ncid, fname ) 
 
 !----------------------------------------------------------------------------
 ! Define the RECORD variables
