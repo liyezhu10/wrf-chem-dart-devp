@@ -1,4 +1,5 @@
 common/types_mod.f90
+location/common/location_utils.f90
 location/location_test.f90
 location/threed/location_mod.f90
 mpi_utilities/null_mpi_utilities_mod.f90
