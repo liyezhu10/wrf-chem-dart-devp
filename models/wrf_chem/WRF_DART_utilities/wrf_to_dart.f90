@@ -49,7 +49,7 @@ integer            :: ndims, idims(5), dimids(5)
 ! APM: +++
 integer            :: ii,jj,kk
 ! APM: ---
-integer            :: i, ivtype, ind, dart_ind, my_index, io
+integer            :: i, ivtype, ind, ind_lim, dart_ind, my_index, io
 character(len=80)  :: varname
 character(len=19)  :: timestring
 character(len=2)   :: idom
@@ -76,7 +76,7 @@ character(len=129) :: dart_restart_name = "dart_wrf_vector"
 
 !
 ! LXL/APM +++
-logical :: add_emiss = .true.
+logical :: add_emiss = .false.
 
 namelist /wrf_to_dart_nml/  &
     dart_restart_name, print_data_ranges, debug, add_emiss
@@ -158,10 +158,17 @@ WRFDomains2 : do id = 1,num_domains
       call nc_check( nf90_open('wrffirechemi_d' // idom, NF90_NOWRITE, ncid_emiss_firechemi(id)), &
                      'wrf_to_dart', 'open wrffirechemi_d' // idom )
    endif
+!
+   if(add_emiss) then
+      ind_lim = wrf%number_of_conv_variables + wrf%number_of_emiss_chemi_variables + &
+      wrf%number_of_emiss_firechemi_variables 
+   else  
+      ind_lim = wrf%number_of_conv_variables
+   endif
+!   
+   do ind = 1, ind_lim
 ! LXL/APM ---
 !
-   do ind = 1,wrf%number_of_wrf_variables
-
       if (debug) print*, ' '
 
       ! actual location in state variable table
@@ -172,14 +179,14 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! LXL/APM +++
       ! read wrfinput or wrfchemi
-      if ( ind .le. wrf%number_of_conc_variables ) then 
+      if ( ind .le. wrf%number_of_conv_variables ) then 
          ncid_f = ncid
          if (debug) print*, ' read from wrfinput: ncid_f = ncid'
-      else if (add_emiss .and. ind .gt. wrf%number_of_conc_variables .and. &
-      ind .le. wrf%number_of_conc_variables + wrf%number_of_emiss_chemi_variables ) then
+      else if (add_emiss .and. ind .gt. wrf%number_of_conv_variables .and. &
+      ind .le. wrf%number_of_conv_variables + wrf%number_of_emiss_chemi_variables ) then
          ncid_f = ncid_emiss_chemi
          if (debug) print*, ' read from wrfchemi: ncid_f = ncid_emiss_chemi'
-      else if (add_emiss .and. ind .gt. wrf%number_of_conc_variables + &
+      else if (add_emiss .and. ind .gt. wrf%number_of_conv_variables + &
       wrf%number_of_emiss_chemi_variables ) then
          ncid_f = ncid_emiss_firechemi
          if (debug) print*, ' read from wrffirechemi: ncid_f = ncid_emiss_firechemi'

@@ -14,8 +14,7 @@ cat > input.nml_temp << EOF
    use_varloc                  = ${NL_USE_VARLOC:-.true.},
    use_indep_chem_assim        = ${NL_USE_INDEP_CHEM_ASSIM:-.false.},
    default_state_variables     = ${NL_DEFAULT_STATE_VARIABLES:-.false.},
-   wrf_state_variables         = ${NL_WRF_STATE_VARIABLES:-"null"}
-   conc_state_variables        = ${NL_CONC_STATE_VARIABLES:-"null"}
+   conv_state_variables        = ${NL_CONV_STATE_VARIABLES:-"null"}
    emiss_chemi_variables       = ${NL_EMISS_CHEMI_VARIABLES:-"null"}
    emiss_firechemi_variables   = ${NL_EMISS_FIRECHEMI_VARIABLES:-"null"}
    wrf_state_bounds            = ${NL_WRF_STATE_BOUNDS:-"null"}

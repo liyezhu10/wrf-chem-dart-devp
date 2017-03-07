@@ -16,6 +16,9 @@ export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072600
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
+export ADD_EMISS=.false.
+export VARLOC=.true.
+export INDEP_CHEM_ASIM=.false.
 #
 # Run fine scale forecast only
 export RUN_FINE_SCALE=false
@@ -919,83 +922,11 @@ export NL_SINGLE_RESTART_FILE_OUT=.false.
 export NL_WRITE_BINARY_RESTART_FILE=.true.
 #
 # &model_nml
-export NL_ADD_EMISS=.false.
-export NL_USE_VARLOC=.true.
-export NL_USE_INDEP_CHEM_ASSIM=.false.
+export NL_ADD_EMISS=${ADD_EMISS}
+export NL_USE_VARLOC=${VARLOC}
+export NL_USE_INDEP_CHEM_ASSIM=${INDEP_CHEM_ASIM}
 export NL_DEFAULT_STATE_VARIABLES=.false.
-export NL_WRF_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
-          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
-          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
-          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
-          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
-          'MU',    'KIND_PRESSURE',             'TYPE_MU', 'UPDATE','999',
-          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV', 'UPDATE','999',
-          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
-          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
-          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
-          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
-          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
-          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
-          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
-          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
-          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
-          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
-          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
-          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
-          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
-          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
-          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
-          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
-          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
-          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
-          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
-          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
-          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
-          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
-          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
-          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
-          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
-          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
-          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
-          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
-          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999'
-          'DUST_1','KIND_DST01',                'TYPE_DST01','UPDATE','999',
-          'DUST_2','KIND_DST02',                'TYPE_DST02','UPDATE','999',
-          'DUST_3','KIND_DST03',                'TYPE_DST03','UPDATE','999',
-          'DUST_4','KIND_DST04',                'TYPE_DST04','UPDATE','999',
-          'DUST_5','KIND_DST05',                'TYPE_DST05','UPDATE','999',
-          'BC1','KIND_CB1',                     'TYPE_EXTCOF','UPDATE','999',
-          'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
-          'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
-          'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
-          'TAUAER1','KIND_TAUAER1',             'TYPE_EXTCOF','UPDATE','999',
-          'TAUAER2','KIND_TAUAER2',             'TYPE_EXTCOF','UPDATE','999',
-          'TAUAER3','KIND_TAUAER3',             'TYPE_EXTCOF','UPDATE','999',
-          'TAUAER4','KIND_TAUAER4',             'TYPE_EXTCOF','UPDATE','999',
-          'PM10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
-          'PM2_5_DRY','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
-          'P10','KIND_PM10',                    'TYPE_EXTCOF','UPDATE','999',
-          'P25','KIND_PM25',                    'TYPE_EXTCOF','UPDATE','999',
-          'SEAS_1','KIND_SSLT01',               'TYPE_EXTCOF','UPDATE','999',
-          'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
-          'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
-          'SEAS_4','KIND_SSLT04',               'TYPE_EXTCOF','UPDATE','999',
-          'E_CO'   ,'KIND_E_CO',                'TYPE_E_CO',  'UPDATE','999',
-          'E_NO'   ,'KIND_E_NO',                'TYPE_E_NO',  'UPDATE','999',
-          'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE_EBU_CO',  'UPDATE','999',
-          'ebu_in_no'   ,'KIND_EBU_NO',         'TYPE_EBU_NO',  'UPDATE','999',
-          'ebu_in_oc'   ,'KIND_EBU_OC',         'TYPE_EBU_OC',  'UPDATE','999',
-          'ebu_in_bc'   ,'KIND_EBU_BC',         'TYPE_EBU_BC',  'UPDATE','999',
-          'ebu_in_c2h4' ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4','UPDATE','999',
-          'ebu_in_ch2o' ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o','UPDATE','999',
-          'ebu_in_ch3oh' ,'KIND_EBU_ch3oh',     'TYPE_EBU_ch3oh','UPDATE','999'"
-#          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
-#          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
-#          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
-#          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
-#          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
-
-export NL_CONC_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
+export NL_CONV_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
           'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
           'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
           'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
@@ -1052,15 +983,8 @@ export NL_CONC_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 
           'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
           'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
           'SEAS_4','KIND_SSLT04',               'TYPE_EXTCOF','UPDATE','999'"
-#          'ch3o2', 'KIND_CH3O2',                'TYPE_CH3O2', 'UPDATE','999',
-#          'mek',   'KIND_MEK',                  'TYPE_MEK', 'UPDATE','999',
-#          'pan',   'KIND_PAN',                  'TYPE_PAN', 'UPDATE','999',
-#          'ald',   'KIND_ALD',                  'TYPE_ALD', 'UPDATE','999',
-#          'glyald','KIND_GLYALD',               'TYPE_GLYALD', 'UPDATE','999',
-
 export NL_EMISS_CHEMI_VARIABLES="'E_CO',     'KIND_E_CO',     'TYPE_E_CO',     'UPDATE','999',
           'E_NO'        ,'KIND_E_NO',           'TYPE_E_NO',  'UPDATE','999'"
-
 export NL_EMISS_FIRECHEMI_VARIABLES="'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE_EBU_CO',  'UPDATE','999',
           'ebu_in_no'    ,'KIND_EBU_NO',         'TYPE_EBU_NO',   'UPDATE','999',
           'ebu_in_oc'    ,'KIND_EBU_OC',         'TYPE_EBU_OC',   'UPDATE','999',
@@ -1068,7 +992,6 @@ export NL_EMISS_FIRECHEMI_VARIABLES="'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE
           'ebu_in_c2h4'  ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4', 'UPDATE','999',
           'ebu_in_ch2o'  ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o', 'UPDATE','999',
           'ebu_in_ch3oh' ,'KIND_EBU_ch3oh',      'TYPE_EBU_ch3oh','UPDATE','999'"
-
 export NL_WRF_STATE_BOUNDS="'QVAPOR','0.0','NULL','CLAMP',
           'QRAIN', '0.0','NULL','CLAMP',
           'QCLOUD','0.0','NULL','CLAMP',
@@ -1123,12 +1046,6 @@ export NL_WRF_STATE_BOUNDS="'QVAPOR','0.0','NULL','CLAMP',
           'ebu_in_c2h4','0.0','NULL','CLAMP',
           'ebu_in_ch2o','0.0','NULL','CLAMP',
           'ebu_in_ch3oh','0.0','NULL','CLAMP'"
-#          'ch3o2', '0.0','NULL','CLAMP',
-#          'mek',   '0.0','NULL','CLAMP',
-#          'pan',   '0.0','NULL','CLAMP',
-#          'ald',   '0.0','NULL','CLAMP',
-#          'glyald','0.0','NULL','CLAMP',
-#
 export NL_OUTPUT_STATE_VECTOR=.false.
 export NL_NUM_DOMAINS=${CR_DOMAIN}
 export NL_CALENDAR_TYPE=3
@@ -1170,10 +1087,10 @@ export NL_SINGLE_RESTART_FILE_OUT=.false.
 export NL_MODEL_ADVANCE_FILE=.false.
 export NL_ADV_MOD_COMMAND="'mpirun -np 64 ./wrf.exe'"
 export NL_DART_RESTART_NAME="'dart_wrf_vector'"
-export NL_ADD_EMISS=.true.
+export NL_ADD_EMISS=${ADD_EMISS}
 #
 # &wrf_to_dart_nml
-export NL_ADD_EMISS=.true.
+export NL_ADD_EMISS=${ADD_EMISS}
 #
 # &restart_file_tool_nml
 export NL_INPUT_FILE_NAME="'assim_model_state_tp'"
@@ -4342,7 +4259,7 @@ EOF
       if [[ ${MEM} -lt 10 ]]; then export KMEM=000${MEM}; export CMEM=e00${MEM}; fi
 #
       cd ${RUN_DIR}/${DATE}/dart_filter
-      rm -rf dart_wrk_${CMEM}
+#      rm -rf dart_wrk_${CMEM}
       mkdir dart_wrk_${CMEM}
       cd ${RUN_DIR}/${DATE}/dart_filter/dart_wrk_${CMEM}
 #
@@ -5090,3 +5007,69 @@ fi
 export CYCLE_DATE=${NEXT_DATE}
 done
 #
+#export NL_WRF_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
+#          'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
+#          'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
+#          'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
+#          'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
+#          'MU',    'KIND_PRESSURE',             'TYPE_MU', 'UPDATE','999',
+#          'QVAPOR','KIND_VAPOR_MIXING_RATIO',   'TYPE_QV', 'UPDATE','999',
+#          'QRAIN', 'KIND_RAINWATER_MIXING_RATIO','TYPE_QRAIN', 'UPDATE','999',
+#          'QCLOUD','KIND_CLOUD_LIQUID_WATER',   'TYPE_QCLOUD', 'UPDATE','999',
+#          'QSNOW', 'KIND_SNOW_MIXING_RATIO',    'TYPE_QSNOW', 'UPDATE','999',
+#          'QICE',  'KIND_CLOUD_ICE',            'TYPE_QICE', 'UPDATE','999',
+#          'U10',   'KIND_U_WIND_COMPONENT',     'TYPE_U10','UPDATE','999',
+#          'V10',   'KIND_V_WIND_COMPONENT',     'TYPE_V10','UPDATE','999',
+#          'T2',    'KIND_TEMPERATURE',          'TYPE_T2', 'UPDATE','999',
+#          'TH2',   'KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
+#          'Q2',    'KIND_SPECIFIC_HUMIDITY',    'TYPE_Q2', 'UPDATE','999',
+#          'PSFC',  'KIND_PRESSURE',             'TYPE_PS', 'UPDATE','999',
+#          'o3',    'KIND_O3',                   'TYPE_O3', 'UPDATE','999',
+#          'co',    'KIND_CO',                   'TYPE_CO', 'UPDATE','999',
+#          'no',    'KIND_NO',                   'TYPE_NO', 'UPDATE','999',
+#          'no2',   'KIND_NO2',                  'TYPE_NO2', 'UPDATE','999',
+#          'hno3',  'KIND_HNO3',                 'TYPE_HNO3', 'UPDATE','999',
+#          'hno4',  'KIND_HNO4',                 'TYPE_HNO4', 'UPDATE','999',
+#          'n2o5',  'KIND_N2O5',                 'TYPE_N2O5', 'UPDATE','999',
+#          'c2h6',  'KIND_C2H6',                 'TYPE_C2H6', 'UPDATE','999',
+#          'acet',  'KIND_ACET',                 'TYPE_ACET', 'UPDATE','999',
+#          'hcho',  'KIND_HCHO',                 'TYPE_HCHO', 'UPDATE','999',
+#          'c2h4',  'KIND_C2H4',                 'TYPE_C2H4', 'UPDATE','999',
+#          'c3h6',  'KIND_C3H6',                 'TYPE_C3H6', 'UPDATE','999',
+#          'tol',   'KIND_TOL',                  'TYPE_TOL', 'UPDATE','999',
+#          'mvk',   'KIND_MVK',                  'TYPE_MVK', 'UPDATE','999',
+#          'bigalk','KIND_BIGALK',               'TYPE_BIGALK', 'UPDATE','999',
+#          'isopr', 'KIND_ISOPR',                'TYPE_ISOPR', 'UPDATE','999',
+#          'macr',  'KIND_MACR',                 'TYPE_MACR', 'UPDATE','999',
+#          'c3h8',  'KIND_C3H8',                 'TYPE_C3H8', 'UPDATE','999',
+#          'c10h16','KIND_C10H16',               'TYPE_C10H16', 'UPDATE','999'
+#          'DUST_1','KIND_DST01',                'TYPE_DST01','UPDATE','999',
+#          'DUST_2','KIND_DST02',                'TYPE_DST02','UPDATE','999',
+#          'DUST_3','KIND_DST03',                'TYPE_DST03','UPDATE','999',
+#          'DUST_4','KIND_DST04',                'TYPE_DST04','UPDATE','999',
+#          'DUST_5','KIND_DST05',                'TYPE_DST05','UPDATE','999',
+#          'BC1','KIND_CB1',                     'TYPE_EXTCOF','UPDATE','999',
+#          'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
+#          'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
+#          'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
+#          'TAUAER1','KIND_TAUAER1',             'TYPE_EXTCOF','UPDATE','999',
+#          'TAUAER2','KIND_TAUAER2',             'TYPE_EXTCOF','UPDATE','999',
+#          'TAUAER3','KIND_TAUAER3',             'TYPE_EXTCOF','UPDATE','999',
+#          'TAUAER4','KIND_TAUAER4',             'TYPE_EXTCOF','UPDATE','999',
+#          'PM10','KIND_PM10',                   'TYPE_EXTCOF','UPDATE','999',
+#          'PM2_5_DRY','KIND_PM25' ,             'TYPE_EXTCOF','UPDATE','999',
+#          'P10','KIND_PM10',                    'TYPE_EXTCOF','UPDATE','999',
+#          'P25','KIND_PM25',                    'TYPE_EXTCOF','UPDATE','999',
+#          'SEAS_1','KIND_SSLT01',               'TYPE_EXTCOF','UPDATE','999',
+#          'SEAS_2','KIND_SSLT02',               'TYPE_EXTCOF','UPDATE','999',
+#          'SEAS_3','KIND_SSLT03',               'TYPE_EXTCOF','UPDATE','999',
+#          'SEAS_4','KIND_SSLT04',               'TYPE_EXTCOF','UPDATE','999',
+#          'E_CO'   ,'KIND_E_CO',                'TYPE_E_CO',  'UPDATE','999',
+#          'E_NO'   ,'KIND_E_NO',                'TYPE_E_NO',  'UPDATE','999',
+#          'ebu_in_co'   ,'KIND_EBU_CO',         'TYPE_EBU_CO',  'UPDATE','999',
+#          'ebu_in_no'   ,'KIND_EBU_NO',         'TYPE_EBU_NO',  'UPDATE','999',
+#          'ebu_in_oc'   ,'KIND_EBU_OC',         'TYPE_EBU_OC',  'UPDATE','999',
+#          'ebu_in_bc'   ,'KIND_EBU_BC',         'TYPE_EBU_BC',  'UPDATE','999',
+#          'ebu_in_c2h4' ,'KIND_EBU_c2h4',       'TYPE_EBU_c2h4','UPDATE','999',
+#          'ebu_in_ch2o' ,'KIND_EBU_ch2o',       'TYPE_EBU_ch2o','UPDATE','999',
+#          'ebu_in_ch3oh' ,'KIND_EBU_ch3oh',     'TYPE_EBU_ch3oh','UPDATE','999'"
