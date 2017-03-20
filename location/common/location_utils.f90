@@ -66,6 +66,11 @@ integer, parameter :: VERTISPRESSURE    =  2  ! by pressure (in pascals)
 integer, parameter :: VERTISHEIGHT      =  3  ! by height (in meters)
 integer, parameter :: VERTISSCALEHEIGHT =  4  ! by scale height (unitless)
 
+interface nc_write_location
+   module procedure nc_write_single_location
+   module procedure nc_write_multiple_locations
+end interface
+
 contains
 
 !----------------------------------------------------------------------------
@@ -174,7 +179,7 @@ end subroutine nc_get_location_varids
 !> The LocationVarID and WhichVertVarID must be the values returned from
 !> the nc_get_location_varids call.
 
-subroutine nc_write_location(ncFileID, LocationVarID, loc, locindex, WhichVertVarID)
+subroutine nc_write_single_location(ncFileID, LocationVarID, loc, locindex, WhichVertVarID)
  
 integer,             intent(in) :: ncFileID, LocationVarID
 type(location_type), intent(in) :: loc
@@ -184,22 +189,70 @@ integer, optional,   intent(in) :: WhichVertVarID
 real(r8), dimension(LocationDims) :: locations
 integer,  dimension(1) :: intval
 
-locations = get_location( loc ) ! converts from radians to degrees, btw
+locations = get_location( loc ) 
 
 call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
               start=(/ 1, locindex /), count=(/ LocationDims, 1 /) ), &
-              'nc_write_location', 'put_var:location')
+              'nc_write_single_location', 'put_var:location')
 
 if (present(WhichVertVarID)) then
    if (WhichVertVarID /= MISSING_I) then
       intval = query_location(loc, 'WHICH_VERT')
       call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
                     start=(/ locindex /), count=(/ 1 /) ), &
-                    'nc_write_location','put_var:vert' )
+                    'nc_write_single_location','put_var:vert' )
    endif
 endif
 
-end subroutine nc_write_location
+end subroutine nc_write_single_location
+
+!----------------------------------------------------------------------------
+!> Writes an array of locations to the specified netCDF variable and file.
+!> The LocationVarID and WhichVertVarID must be the values returned from
+!> the nc_get_location_varids call.
+
+subroutine nc_write_multiple_locations(ncFileID, LocationVarID, loc, loccount, startlocindex, WhichVertVarID)
+ 
+integer,             intent(in) :: ncFileID, LocationVarID
+type(location_type), intent(in) :: loc(:)
+integer,             intent(in) :: loccount
+integer,             intent(in) :: startlocindex
+integer, optional,   intent(in) :: WhichVertVarID
+
+real(r8), allocatable :: locations(:,:)
+integer,  allocatable :: intvals(:)
+logical :: dovert
+
+dovert = .false.
+if (present(WhichVertVarID)) then 
+   if (WhichVertVarID /= MISSING_I) dovert = .true.
+endif
+
+allocate(locations(LocationDims,loccount))
+if (dovert) allocate(intvals(loccount))
+
+do i=1, loccount
+   locations(:,i) = get_location( loc(i) ) 
+   if (dovert) intvals(i) = query_location(loc, 'WHICH_VERT')
+enddo
+
+call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
+              start=(/ 1, startlocindex /), count=(/ LocationDims, loccount /) ), &
+              'nc_write_multiple_locations', 'put_var:location')
+
+if (present(WhichVertVarID)) then
+   if (WhichVertVarID /= MISSING_I) then
+      intval = query_location(loc, 'WHICH_VERT')
+      call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
+                    start=(/ startlocindex /), count=(/ loccount /) ), &
+                    'nc_write_multiple_locations','put_var:vert' )
+   endif
+endif
+
+deallocate(locations)
+if (dovert) deallocate(intvals)
+
+end subroutine nc_write_multiple_locations
 
 !----------------------------------------------------------------------------
 
