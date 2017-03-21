@@ -1,0 +1,16 @@
+March 20, 2017;
+
+The following has ADD_EMISS=false and VARLOC=true
+
+Re-run FRAPPE initial for test at 2014072518.  Question is whether wrfchem runs beyond zero hour-forecast.  Problem in preprocess_obs with the TAUAER fields not being in the wrfinput file.  TAUAER fields are said to be in DART state vector but are not in the wrfinput file.  Try a fix in real (does not work).Try removing from state vector for this cycle (remove TAUAER and PM fields).  Problem solved by runningpreprocess with default_state_variables=true.  This run worked. 
+
+PANDA_RETR intitial at 2014072418 worked.  But for the first cycle at 2014072500 wrfchen fails.  
+
+Re-run KORUS_RETR initial at 2016052500 to see if it works.  Problem in wrfchem_initial with the job queue - cannot be exclusive when submitted to geyser (fixed and resubmtted). 
+
+Re-run 2008CASE initial at 2008060106 to see if it works.  This run worked.
+
+March 21, 2017:
+The problem with the initial forecast seems to be solved.  The next set of tests is for the first assimilation cycle.
+
+NEED TO STANDARDIZE THE input.nml CREATIONS.
