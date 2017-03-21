@@ -151,8 +151,11 @@ hour, window, lon_min, lon_max, lat_min, lat_max
       path_dir=strcompress(path_dir1, /REMOVE_ALL)
       path_file=strcompress(path_file1, /REMOVE_ALL)
 ;
+;      print, path_dir
+;      print, path_file
       filelist=file_search(path_dir,path_file)
       nfiles=size(filelist)
+;      print, 'nfiles ',nfiles
       nlimit=-1
       if (nfiles(0) gt 0.) then begin
          nlimit=nfiles(1)-1

@@ -483,6 +483,7 @@ endif
 !
 ! set calendar type
 call set_calendar_type(calendar_type)
+
 !
 ! Store vertical localization coordinate
 ! Only 4 are allowed: level(1), pressure(2), height(3), or scale height(4)
@@ -576,7 +577,7 @@ WRFDomains : do id=1,num_domains
 !-------------------------------------------------------
 ! read EMISS dimensions
 !-------------------------------------------------------
-   if ( add_emiss ) then
+   if ( add_emiss .and. (.not. default_state_variables) ) then
       call read_emiss_dimensions(ncid_emiss_chemi, chem_filename, &
                                  wrf%dom(id)%e_bt_chemi, &
                                  wrf%dom(id)%e_sn, &
@@ -619,10 +620,14 @@ WRFDomains : do id=1,num_domains
 !
 ! LXL/APM +++
 ! get the number of conv/emiss variables wanted in this domain's state
+      wrf%dom(id)%number_of_conv_variables=0
+      wrf%dom(id)%number_of_emiss_chemi_variables=0
+      wrf%dom(id)%number_of_emiss_firechemi_variables=0
+!
       wrf%dom(id)%number_of_conv_variables = get_number_of_wrf_variables(id, &
       conv_state_variables,var_element_list_conv,var_update_list_conv)
 !
-   if ( add_emiss ) then
+   if ( add_emiss .and. (.not. default_state_variables) ) then
       wrf%dom(id)%number_of_emiss_chemi_variables = get_number_of_wrf_variables(id, &
       emiss_chemi_variables,var_element_list_chemi,var_update_list_chemi)
 !      do ind=1,wrf%dom(id)%number_of_emiss_chemi_variables
@@ -637,10 +642,9 @@ WRFDomains : do id=1,num_domains
    endif
 ! LXL/APM ---
 !
+! LXL/APM +++
 ! get the number of wrf variables wanted in this domain's state (must follow mods because var_element_list is needed and overwritten with each call)
    wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list, var_update_list)
-!
-! LXL/APM +++
 !   if ( add_emiss ) then
 !      write(*,*) ' number of wrf variables is',wrf%dom(id)%number_of_wrf_variables
 !      write(*,*) ' number of conv variables is',wrf%dom(id)%number_of_conv_variables
@@ -707,6 +711,9 @@ WRFDomains : do id=1,num_domains
 !  this accounts for the fact that some variables might not be on all domains
 !
 ! LXL/APM +++
+   if ( default_state_variables ) then
+      wrf%dom(id)%number_of_conv_variables=wrf%dom(id)%number_of_wrf_variables
+   endif
    do ind = 1,wrf%dom(id)%number_of_conv_variables
 !
 ! actual location in state variable table
@@ -764,7 +771,7 @@ WRFDomains : do id=1,num_domains
 !   print *, 'APM: end of conventional variables'
 !
 ! LXL/APM +++
-   if ( add_emiss ) then
+   if ( add_emiss .and. (.not. default_state_variables) ) then
 !
 ! Read emiss chemi variables
       do ind = wrf%dom(id)%number_of_conv_variables+1,wrf%dom(id)%number_of_conv_variables + &
@@ -819,7 +826,7 @@ WRFDomains : do id=1,num_domains
          call error_handler(E_MSG, 'static_init_model: ', msgstring1)
       enddo
       call nc_check(nf90_close(ncid_emiss_chemi),'static_init_model','close wrfchemi_d0'//idom)
-!      print *, 'APM: end of chemi variables'
+      print *, 'APM: end of chemi variables'
 !
 ! Read emiss firechemi variables
       do ind = wrf%dom(id)%number_of_conv_variables + wrf%dom(id)%number_of_emiss_chemi_variables + 1, &

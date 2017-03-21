@@ -177,7 +177,7 @@
                    if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
                    wrfchem_file=trim(wrfchemi)//trim(cmem)
                    do isp=1,nchem_spc
-!                      print *, 'isp ',isp,trim(ch_chem_spc(isp))
+                      print *, 'isp ',isp,trim(ch_chem_spc(isp))
 
                       call get_WRFCHEM_emiss_data(wrfchem_file,ch_chem_spc(isp),chem_data3d,nx,ny,nz_chem)
                       do i=1,nx

@@ -1,6 +1,5 @@
 #!/bin/ksh -aeux
-#########################################################################
-#
+##########################################################################
 # Purpose: Set global environment variables for real_time_wrf_chem
 #
 # NOTE: To generate the chemistry perturbations check NL_SW_GENERATE comments
@@ -11,13 +10,13 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072600
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072500
+export CYCLE_END_DATE=2014072600
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
-export ADD_EMISS=.false.
-export VARLOC=.true.
+export ADD_EMISS=.true.
+export VARLOC=.false.
 export INDEP_CHEM_ASIM=.false.
 #
 # Run fine scale forecast only
@@ -88,10 +87,10 @@ let BACK_WT=.5000
 #
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 export DATE=${CYCLE_DATE}
-export INITIAL_DATE=2014072418
-export FIRST_FILTER_DATE=2014072500
-export FIRST_EMISS_INV_DATE=2014072500
-export FIRST_DART_INFLATE_DATE=2014072500
+export INITIAL_DATE=2014071400
+export FIRST_FILTER_DATE=2014071406
+export FIRST_EMISS_INV_DATE=2014072600
+export FIRST_DART_INFLATE_DATE=2014072600
 export CYCLE_PERIOD=6
 export HISTORY_INTERVAL_HR=1
 (( HISTORY_INTERVAL_MIN = ${HISTORY_INTERVAL_HR} * 60 ))
@@ -116,7 +115,7 @@ export FRAPPE_DIR=/glade/p/FRAPPE
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
 export EXPERIMENT_DIR=${FRAPPE_DIR}
-export RUN_DIR=${EXPERIMENT_DIR}/real_PANDA_RETR_VARLOC
+export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_CPSR_VARLOC
 export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
@@ -128,12 +127,10 @@ export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-####export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
 export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA
-####export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
 export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
-export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions_PANDA
+export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
 export EXPERIMENT_WRFFIRECHEMI_DIR=${EXPERIMENT_DATA_DIR}/fire_emissions
 export EXPERIMENT_WRFBIOCHEMI_DIR=${EXPERIMENT_DATA_DIR}/bio_emissions
 export EXPERIMENT_COLDENS_DIR=${EXPERIMENT_DATA_DIR}/wes_coldens
@@ -241,27 +238,27 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
+   export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
-   export RUN_MODIS_AOD_OBS=true
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MODIS_AOD_OBS=false
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -275,12 +272,12 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=true
-      export RUN_UPDATE_BC=true
-      export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_UPDATE_BC=false
+      export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=true
+      export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=true
+      export RUN_ENSEMBLE_MEAN_OUTPUT=false
    fi
 else
    export RUN_GEOGRID=false
@@ -367,11 +364,11 @@ export NUM_MEMBERS=10
 export MAX_DOMAINS=02
 export CR_DOMAIN=01
 export FR_DOMAIN=02
-export NNXP_CR=149
-export NNYP_CR=111
+export NNXP_CR=179
+export NNYP_CR=139
 export NNZP_CR=36
-export NNXP_FR=147
-export NNYP_FR=156
+export NNXP_FR=320
+export NNYP_FR=290
 export NNZP_FR=36
 (( NNXP_STAG_CR=${NNXP_CR}+1 ))
 (( NNYP_STAG_CR=${NNYP_CR}+1 ))
@@ -379,8 +376,8 @@ export NNZP_FR=36
 (( NNXP_STAG_FR=${NNXP_FR}+1 ))
 (( NNYP_STAG_FR=${NNYP_FR}+1 ))
 (( NNZP_STAG_FR=${NNZP_FR}+1 ))
-export NNZ_CHEM=10
-export NNCHEM_SPC=24
+export NNZ_CHEM=11
+export NNCHEM_SPC=49
 export NNFIRE_SPC=31
 export NNBIO_SPC=1
 export NZ_CHEMI=${NNZ_CHEM}
@@ -389,10 +386,10 @@ export NCHEMI_EMISS=2
 export NFIRECHEMI_EMISS=7
 export ISTR_CR=1
 export JSTR_CR=1
-export ISTR_FR=59
-export JSTR_FR=44
-export DX_CR=60000
-export DX_FR=20000
+export ISTR_FR=86
+export JSTR_FR=35
+export DX_CR=15000
+export DX_FR=3000
 (( LBC_END=2*${FCST_PERIOD} ))
 export LBC_FREQ=3
 (( INTERVAL_SECONDS=${LBC_FREQ}*60*60 ))
@@ -421,19 +418,20 @@ export PROJ_NUMBER=NACD0002
 export PROJ_NUMBER_ACD=P19010000
 export PROJ_NUMBER_NSC=NACD0006
 export PROJ_NUMBER_NSC=${PROJ_NUMBER_ACD}
-export GENERAL_JOB_CLASS=geyser
+export GENERAL_JOB_CLASS=regular
 export GEOGRID_TIME_LIMIT=0:10
 export GEOGRID_NUM_TASKS=32
 export GEOGRID_TASKS_PER_NODE=8
-export GEOGRID_JOB_CLASS=geyser
+export GEOGRID_JOB_CLASS=regular
 export WRFCHEM_TIME_LIMIT=6:00
-export WRFCHEM_NUM_TASKS=32
-export WRFCHEM_TASKS_PER_NODE=8
-export WRFCHEM_JOB_CLASS=geyser
+export WRFCHEM_TIME_LIMIT_LONG=10:00
+export WRFCHEM_NUM_TASKS=256
+export WRFCHEM_TASKS_PER_NODE=16
+export WRFCHEM_JOB_CLASS=regular
 export WRFDA_TIME_LIMIT=0:10
-export WRFDA_NUM_TASKS=32
+export WRFDA_NUM_TASKS=64
 export WRFDA_TASKS_PER_NODE=8
-export WRFDA_JOB_CLASS=geyser
+export WRFDA_JOB_CLASS=regular
 export FILTER_TIME_LIMIT=3:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
@@ -441,7 +439,7 @@ export FILTER_JOB_CLASS=geyser
 export MISC_TIME_LIMIT=0:02
 export MISC_NUM_TASKS=1
 export MISC_TASKS_PER_NODE=8
-export MISC_JOB_CLASS=geyser
+export MISC_JOB_CLASS=regular
 #
 # RUN DIRECTORIES
 export GEOGRID_DIR=${RUN_DIR}/geogrid
@@ -482,10 +480,10 @@ export VTABLE_TYPE=GFS
 export METGRID_TABLE_TYPE=ARW
 #
 # WRF PREPROCESS PARAMETERS
-export NL_MIN_LAT=-15.
-export NL_MAX_LAT=60.
-export NL_MIN_LON=40.
-export NL_MAX_LON=170.
+export NL_MIN_LAT=27.
+export NL_MAX_LAT=48.
+export NL_MIN_LON=228.
+export NL_MAX_LON=266.
 export NNL_MIN_LAT=${NL_MIN_LAT}
 export NNL_MAX_LAT=${NL_MAX_LAT}
 export NNL_MIN_LON=${NL_MIN_LON}
@@ -528,16 +526,16 @@ export NL_E_SN=${NNYP_STAG_CR},${NNYP_STAG_FR}
 export NL_S_VERT=1,1
 export NL_E_VERT=${NNZP_STAG_CR},${NNZP_STAG_FR}
 export NL_PARENT_ID="0,1"
-export NL_PARENT_GRID_RATIO=1,3
+export NL_PARENT_GRID_RATIO=1,5
 export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
 export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
 export NL_GEOG_DATA_RES=\'10s\',\'10s\'
 export NL_DX=${DX_CR}
 export NL_DY=${DX_CR}
-export NL_MAP_PROJ=\'mercator\'
-export NL_REF_LAT=25.0
-export NL_REF_LON=105.0
-export NL_STAND_LON=105.0
+export NL_MAP_PROJ=\'lambert\'
+export NL_REF_LAT=40.0
+export NL_REF_LON=-112.0
+export NL_STAND_LON=-105.0
 export NL_TRUELAT1=30.0
 export NL_TRUELAT2=60.0
 export NL_GEOG_DATA_PATH=\'${WPS_GEOG_DIR}\'
@@ -600,7 +598,7 @@ export NL_INPUTOUT_INTERVAL=360
 export NL_INPUT_OUTNAME=\'wrfapm_d\<domain\>_\<date\>\'
 #
 # DOMAINS NAMELIST:
-export NL_TIME_STEP=240
+export NL_TIME_STEP=60
 export NNL_TIME_STEP=${NL_TIME_STEP}
 export NL_TIME_STEP_FRACT_NUM=0
 export NL_TIME_STEP_FRACT_DEN=1
@@ -619,8 +617,8 @@ export NL_GRID_ID=1,2
 export NL_PARENT_ID=0,1
 export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
 export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
-export NL_PARENT_GRID_RATIO=1,3
-export NL_PARENT_TIME_STEP_RATIO=1,2
+export NL_PARENT_GRID_RATIO=1,5
+export NL_PARENT_TIME_STEP_RATIO=1,5
 export NL_FEEDBACK=0
 export NL_SMOOTH_OPTION=1
 export NL_LAGRANGE_ORDER=2
@@ -1135,7 +1133,7 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'MOPITT_CO_RETRIEVAL',
                                    'AIRNOW_O3',
                                    'AIRNOW_CO',
-                                   'MODIS_AOD_RETRIEVAL',
+!                                   'MODIS_AOD_RETRIEVAL',
                                    'IASI_CO_RETRIEVAL'"
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
 #
@@ -1930,6 +1928,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${WRFDA_NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${WRFDA_TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
@@ -1969,7 +1968,7 @@ EOF
          export NL_DY=${DX_FR}
          export NL_GRID_ID=2
          export NL_PARENT_ID=1
-         export NL_PARENT_GRID_RATIO=3
+         export NL_PARENT_GRID_RATIO=5
          export NL_I_PARENT_START=${ISTR_FR}
          export NL_J_PARENT_START=${JSTR_FR}
          export DA_INPUT_FILE=../../real/wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}
@@ -1989,6 +1988,7 @@ EOF
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${WRFDA_NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${WRFDA_TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
@@ -2047,7 +2047,7 @@ EOF
    export NL_DY=${DX_CR},${DX_FR}
    export NL_GRID_ID=1,2
    export NL_PARENT_ID=0,1
-   export NL_PARENT_GRID_RATIO=1,3
+   export NL_PARENT_GRID_RATIO=1,5
    export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
    export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
 fi
@@ -2111,6 +2111,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x
 #BSUB -n ${MISC_NUM_TASKS}
 #BSUB -R "span[ptile=${MISC_TASKS_PER_NODE}]"
 #BSUB -J ${JOBRND}
@@ -2326,7 +2327,7 @@ EOF
 #BSUB -J ${JOBRND}
 #BSUB -o ${JOBRND}.out
 #BSUB -e ${JOBRND}.err
-#BSUB -W 00:30        
+#BSUB -W 00:15        
 #BSUB -q ${GENERAL_JOB_CLASS}
 #
 # RUN megan_bio_emis
@@ -2531,8 +2532,7 @@ if ${RUN_PERT_WRFCHEM_CHEM_ICBC}; then
 #  if [[ ${MM} -eq 06 ]]; then export MOZBC_DATA=/h0001.nc; fi
 #  if [[ ${MM} -eq 07 ]]; then export MOZBC_DATA=/h0002.nc; fi
 #  if [[ ${YYYY} -eq 2014 ]]; then export MOZBC_DATA=/h0003.nc; fi
-#  if [[ ${YYYY} -eq 2014 ]]; then export MOZBC_DATA=/h0004.nc; fi
-  if [[ ${YYYY} -eq 2014 ]]; then export MOZBC_DATA=/h0005.nc; fi
+  if [[ ${YYYY} -eq 2014 ]]; then export MOZBC_DATA=/h0004.nc; fi
 #
 # CREATE INPUT FILES COARSE DOMAIN
    rm -rf mozbc.ic.inp
@@ -2606,7 +2606,7 @@ EOF
    export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
    export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00
    ncks -A ${REAL_DIR}/${WRFINPEN} ${WRFINPEN}
-#   ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
+   ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
    ncks -A ${REAL_DIR}/${WRFBDYEN} ${WRFBDYEN}
 #
 # COMBINE WRFCHEM WITH WRF FR DOMAIN PARENT FILES
@@ -2625,7 +2625,7 @@ EOF
       export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
       export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
       ncks -A ${WRFCHEM_MET_IC_DIR}/${WRFINPEN} ${WRFINPEN}
-#      ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
+      ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
       ncks -A ${WRFCHEM_MET_BC_DIR}/${WRFBDYEN} ${WRFBDYEN}
 #
 # COMBINE WRFCHEM WITH WRF FR DOMAIN
@@ -2739,7 +2739,7 @@ EOF
       rm -rf perturb_emiss_chem_spec_nml.nl
       cat << EOF > perturb_emiss_chem_spec_nml.nl
 &perturb_chem_emiss_spec_nml
-ch_chem_spc='E_CO','E_NO','E_NO2','E_SO2','E_BIGALK','E_C2H4','E_C2H5OH','E_C2H6','E_C3H6','E_C3H8','E_CH2O','E_CH3CHO','E_BIGENE','E_CH3COCH3','E_CH3OH','E_MEK','E_TOLUENE','E_ISOP','E_C10H16','E_NH3','E_OC','E_BC','E_PM_10','E_PM_25',
+ch_chem_spc='E_CO','E_NO','E_NO2','E_BIGALK','E_BIGENE','E_C2H4','E_C2H5OH','E_C2H6','E_C3H6','E_C3H8','E_CH2O','E_CH3CHO','E_CH3COCH3','E_CH3OH','E_MEK','E_SO2','E_TOLUENE','E_NH3','E_ISOP','E_C10H16','E_sulf','E_CO_A','E_CO_BB','E_CO02','E_CO03','E_XNO','E_XNO2','E_BALD','E_C2H2','E_BENZENE','E_XYLENE','E_CRES','E_HONO','E_PM25I','E_PM25J','E_PM_10','E_ECI','E_ECJ','E_ORGI','E_ORGJ','E_SO4I','E_SO4J','E_NO3I','E_NO3J','E_NH4I','E_NH4J','E_PM_25','E_OC','E_BC',
 ch_fire_spc='ebu_in_co','ebu_in_no','ebu_in_so2','ebu_in_bigalk','ebu_in_bigene','ebu_in_c2h4','ebu_in_c2h5oh','ebu_in_c2h6','ebu_in_c3h8','ebu_in_c3h6','ebu_in_ch2o','ebu_in_ch3cho','ebu_in_ch3coch3','ebu_in_ch3oh','ebu_in_mek','ebu_in_toluene','ebu_in_nh3','ebu_in_no2','ebu_in_open','ebu_in_c10h16','ebu_in_ch3cooh','ebu_in_cres','ebu_in_glyald','ebu_in_mgly','ebu_in_gly','ebu_in_acetol','ebu_in_isop','ebu_in_macr','ebu_in_mvk','ebu_in_oc','ebu_in_bc',
 ch_bio_spc='MSEBIO_ISOP',
 /
@@ -2802,7 +2802,7 @@ EOF
 #      rm -rf perturb_emiss_chem_spec_nml.nl
 #      cat << EOF > perturb_emiss_chem_spec_nml.nl
 #&perturb_chem_emiss_spec_nml
-#ch_chem_spc='E_CO','E_NO','E_NO2','E_SO2','E_BIGALK','E_C2H4','E_C2H5OH','E_C2H6','E_C3H6','E_C3H8','E_CH2O','E_H3CHO','E_BIGENE','E_CH3COCH3','E_CH3OH','E_MEK','E_TOLUENE','E_ISOP','E_C10H16','E_NH3','E_OC','E_BC','E_PM_10','PM_25',
+#ch_chem_spc='E_CO','E_NO','E_NO2','E_BIGALK','E_BIGENE','E_C2H4','E_C2H5OH','E_C2H6','E_C3H6','E_C3H8','E_CH2O','E_CH3CHO','E_CH3COCH3','E_CH3OH','E_MEK','E_SO2','E_TOLUENE','E_NH3','E_ISOP','E_C10H16','E_sulf','E_CO_A','E_CO_BB','E_COO2','E_COO3','E_XNO','E_XNO2','E_PM25I','E_PM25J','E_PM_10','E_ECI','E_ECJ','E_ORGI',E_ORGJ','E_SO4I','E_SO4J','E_NO3I','E_NO3J','E_NH4I','E_NH4J','E_PM_25','E_OC','E_BC','E_BALD','E_C2H2','E_BENZENE','E_XYLENE','E_CRES','E_HONO',
 #ch_fire_spc='ebu_in_co','ebu_in_no','ebu_in_so2','ebu_in_bigalk','ebu_in_bigene','ebu_in_c2h4','ebu_in_c2h5oh','ebu_in_c2h6','ebu_in_c3h8','ebu_in_c3h6','ebu_in_ch2o','ebu_in_ch3cho','ebu_in_ch3coch3','ebu_in_ch3oh','ebu_in_mek','ebu_in_toluene','ebu_in_nh3','ebu_in_no2','ebu_in_open','ebu_in_c10h16','ebu_in_ch3cooh','ebu_in_cres','ebu_in_glyald','ebu_in_mgly','ebu_in_gly','ebu_in_acetol','ebu_in_isop','ebu_in_macr','ebu_in_mvk','ebu_in_oc','ebu_in_bc',
 #ch_bio_spc='MSEBIO_ISOP',
 #/
@@ -3223,7 +3223,7 @@ EOFF
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_iasi_input_nml.ksh
 #
 # GET INTERMEDIATE ASCII DATA
-   if [[ ! -e ${D_DATE}.dat ]]; then cp ${DD_DATE}.dat ./${D_DATE}.dat; fi
+   if [[ ! -e ${D_DATE}.dat ]] then; cp ${DD_DATE}.dat ./${D_DATE}.dat; fi
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/IASI_CO/work/iasi_ascii_to_obs ./.
@@ -3790,10 +3790,7 @@ if ${RUN_PREPROCESS_OBS}; then
    cp ${DART_DIR}/models/wrf_chem/work/wrf_dart_obs_preprocess ./.
    cp ${DART_DIR}/models/wrf_chem/WRF_DART_utilities/wrf_dart_obs_preprocess.nml ./.
 #   cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
-   rm -rf input.nml
-   export NL_DEFAULT_STATE_VARIABLES=.true.
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-   export NL_DEFAULT_STATE_VARIABLES=.false.
 #
 # GET INPUT DATA
    rm -rf obs_seq.old
@@ -3974,6 +3971,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${WRFCHEM_NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
@@ -4060,10 +4058,10 @@ if ${RUN_DART_FILTER}; then
 ## APM: +++ 
 ## For _ALL and emission inversion use wrfout instead of wrfapm because some needed fields 
 ## are not in wrfapm.  Also copy in the emissions files
-      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
-#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
-#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+##      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+##      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
 ## APM: ---
 ##
       let MEM=${MEM}+1
@@ -4593,6 +4591,7 @@ EOF
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x                                    # exclusive use of node (not_shared)
 #BSUB -n ${WRFCHEM_NUM_TASKS}                       # number of total (MPI) tasks
 #BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"    # mpi tasks per node
 #BSUB -J ${JOBRND}                          # job name
@@ -4759,12 +4758,13 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x
 #BSUB -n ${WRFCHEM_NUM_TASKS}
 #BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"
 #BSUB -J ${JOBRND}
 #BSUB -o ${JOBRND}.out
 #BSUB -e ${JOBRND}.err
-#BSUB -W ${WRFCHEM_TIME_LIMIT}
+#BSUB -W ${WRFCHEM_TIME_LIMIT_LONG}
 #BSUB -q ${WRFCHEM_JOB_CLASS}
 #
 mpirun.lsf ./wrf.exe > index_wrfchem 2>&1 
@@ -4906,7 +4906,7 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
    export NL_BIOEMDT=1,.5
    export NL_PHOTDT=1,.5
    export NL_CHEMDT=1,.5
-   export L_TIME_LIMIT=${WRFCHEM_TIME_LIMIT}
+   export L_TIME_LIMIT=${WRFCHEM_TIME_LIMIT_LONG}
    if [[ ${RUN_FINE_SCALE_RESTART} = "true" ]]; then
       export RE_YYYY=$(echo $RESTART_DATE | cut -c1-4)
       export RE_YY=$(echo $RESTART_DATE | cut -c3-4)
@@ -4933,6 +4933,7 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #BSUB -P ${PROJ_NUMBER_NSC}
+#BSUB -x
 #BSUB -n ${WRFCHEM_NUM_TASKS}
 #BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"
 #BSUB -J ${JOBRND}
