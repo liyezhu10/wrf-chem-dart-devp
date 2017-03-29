@@ -52,16 +52,16 @@
    adv_ens_command          = 'no_CESM_advance_script'
    async                    = 0
    tasks_per_model_advance  = 1
-   stages_to_write          = 'null','preassim','null','output'
+   stages_to_write          = 'preassim','output'
    write_all_stages_at_end  = .true.
    distributed_state        = .true.,
    ens_size                 = 3
    num_groups               = 1
    
-   input_restart_file_list  = 'cam_init_files',
+   input_state_file_list  = 'cam_init_files',
    single_file_in           = .false.,
-   init_time_days           = -1
-   init_time_seconds        = -1
+   init_time_days             = 146827,
+   init_time_seconds          = 0,
    perturb_from_single_instance = .false.
    perturbation_amplitude       = 0.2,
    
@@ -86,18 +86,18 @@
    obs_window_days          = -1
    obs_window_seconds       = -1
    
-   output_restarts          = .true.
+   output_members           = .true.
    output_mean              = .true.
    output_sd                = .true.
    single_file_out          = .false.,
-   output_restart_file_list = 'cam_init_files',
+   output_state_file_list = 'cam_init_files',
    
    num_output_state_members = 3
    output_interval          = 1
    output_timestamps        = .false.
    output_forward_op_errors = .false.
    silence                  = .false.
-   trace_execution          = .false.
+   trace_execution          = .true.
      /
      
 &state_vector_io_nml
@@ -106,26 +106,65 @@
 !  single_precision_output
 
 &perfect_model_obs_nml
-  start_from_restart       = .true.
-  output_restart           = .true.
-  async                    = 0
-  init_time_days           = -1
-  init_time_seconds        = -1
-  first_obs_days           = -1
-  first_obs_seconds        = -1
-  last_obs_days            = -1
-  last_obs_seconds         = -1
-  output_timestamps        = .true.
-  trace_execution          = .true.
-  output_forward_op_errors = .false.
-  print_every_nth_obs      = 100
-  silence                  = .false.
-  output_interval          = 1
-  restart_in_file_name     = "perfect_ics"
-  restart_out_file_name    = "perfect_restart"
-  obs_seq_in_file_name     = "obs_seq.in"
-  obs_seq_out_file_name    = "obs_seq.perfect"
-  adv_ens_command          = "no_model_advance"
+   read_input_state_from_file  = .true.,
+   single_file_in              = .true.
+   input_state_files           = "perfect_input.nc"
+
+   write_output_state_to_file = .true.,
+   single_file_out            = .true.
+   output_state_files         = "perfect_output.nc"
+   output_interval            = 1,
+
+   async                      = 0,
+   adv_ens_command            = "no_model_advance"
+
+   obs_seq_in_file_name       = "obs_seq.in",
+   obs_seq_out_file_name      = "obs_seq.out",
+   init_time_days             = 146827,
+   init_time_seconds          = 0,
+   first_obs_days             = -1,
+   first_obs_seconds          = -1,
+   last_obs_days              = -1,
+   last_obs_seconds           = -1,
+
+   trace_execution            = .true.,
+   output_timestamps          = .false.,
+   print_every_nth_obs        = -1,
+   output_forward_op_errors   = .false.,
+   silence                    = .false.,
+   /
+
+
+! if single_file_in or out is true, you get a
+! confusing message from netcdf.  we should figure out
+! what isn't being supported and give a better error msg.
+&perfect_model_obs_nml_dies
+   read_input_state_from_file  = .true.,
+   single_file_in              = .true.
+   input_state_files           = "perfect_input.nc"
+
+   write_output_state_to_file = .false.,
+   single_file_out            = .true.
+   output_state_files         = "perfect_output.nc"
+   output_interval            = 1,
+
+   async                      = 0,
+   adv_ens_command            = "no_model_advance"
+
+   obs_seq_in_file_name       = "obs_seq.in",
+   obs_seq_out_file_name      = "obs_seq.out",
+   init_time_days             = 146827,
+   init_time_seconds          = 0,
+   first_obs_days             = -1,
+   first_obs_seconds          = -1,
+   last_obs_days              = -1,
+   last_obs_seconds           = -1,
+
+   trace_execution            = .false.,
+   output_timestamps          = .false.,
+   print_every_nth_obs        = -1,
+   output_forward_op_errors   = .false.,
+   silence                    = .false.,
    /
 
 &smoother_nml
@@ -154,6 +193,7 @@
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
    print_every_nth_obs             = 10000,
+   distribute_mean                 = .true.
    /
 
 &cov_cutoff_nml

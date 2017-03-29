@@ -24,11 +24,12 @@ use netcdf
 implicit none
 private
 
-public :: nc_check, nc_add_global_attribute, nc_add_global_creation_time
+public :: nc_check, nc_add_global_attribute, nc_add_global_creation_time, &
+          nc_redef 
 
 interface nc_add_global_attribute
-   module procedure nc_add_global_string_attr
-   module procedure nc_add_global_real_attr
+   module procedure nc_add_global_char_att
+   module procedure nc_add_global_real_att
 end interface
 
 ! version controlled file description for error handling, do not edit
@@ -62,13 +63,13 @@ if (istatus == nf90_noerr) return
 ! context is optional, but is very useful if specified.
 ! if context + error code > 129, the assignment will truncate.
 if (present(context)) then
-  error_msg = trim(context) // ': ' // trim(nf90_strerror(istatus))
+  msgstring1 = trim(context) // ': ' // trim(nf90_strerror(istatus))
 else
-  error_msg = nf90_strerror(istatus)
+  msgstring1 = nf90_strerror(istatus)
 endif
 
 ! this does not return 
-call error_handler(E_ERR, subr_name, error_msg, source, revision, revdate)
+call error_handler(E_ERR, subr_name, msgstring1, source, revision, revdate)
   
 
 end subroutine nc_check
@@ -76,11 +77,12 @@ end subroutine nc_check
 !------------------------------------------------------------------
 !--------------------------------------------------------------------
 
-subroutine nc_add_global_char_att(ncid, name, val)
+subroutine nc_add_global_char_att(ncid, name, val, context)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: name
 character(len=*), intent(in) :: val
+character(len=*), intent(in), optional :: context
 
 integer :: ret
 
@@ -91,11 +93,12 @@ end subroutine nc_add_global_char_att
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_global_real_att(ncid, name, val)
+subroutine nc_add_global_real_att(ncid, name, val, context)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: name
 real(r8),         intent(in) :: val
+character(len=*), intent(in), optional :: context
 
 integer :: ret
 
@@ -106,8 +109,9 @@ end subroutine nc_add_global_real_att
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_global_creation_time(ncid)
+subroutine nc_add_global_creation_time(ncid, context)
 integer, intent(in) :: ncid
+character(len=*), intent(in), optional :: context
 
 character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
@@ -122,7 +126,20 @@ write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
 
 call nc_add_global_char_att(ncid, "creation_date", str1)
 
-end subroutine nc_put_global_creation_time
+end subroutine nc_add_global_creation_time
+
+!--------------------------------------------------------------------
+
+subroutine nc_redef(ncid, context)
+integer, intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+
+integer :: ret
+
+ret = nf90_Redef(ncid)
+call nc_check(ret, 'nc_redef', 'nf90_Redef')
+
+end subroutine nc_redef
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------

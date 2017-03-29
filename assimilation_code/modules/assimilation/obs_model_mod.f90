@@ -9,7 +9,7 @@ module obs_model_mod
 use utilities_mod,        only : register_module, error_handler,     &
                                  E_ERR, E_MSG, E_WARN,               &
                                  get_unit, file_exist, set_output
-use assim_model_mod,      only : aget_closest_state_time_to,         &
+use assim_model_mod,      only : get_closest_state_time_to,         &
                                  get_model_time_step,  adv_1step
 
 use state_vector_io_mod,  only : read_state, write_state
@@ -184,7 +184,7 @@ endif
 ! Figure out what time to advance the model to.
 
 ! More control over time window use of observations would come in here
-time2 = aget_closest_state_time_to(ens_time, next_time)
+time2 = get_closest_state_time_to(ens_time, next_time)
 
 ! WATCH OUT FOR USING BOUNDARY TIME OBS TWICE; add one second to bottom time
 ! ALSO, avoid having a negative time for the start (for low-order models in general)

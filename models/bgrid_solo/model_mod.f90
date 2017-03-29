@@ -56,19 +56,12 @@ use        hs_forcing_mod, only: hs_forcing_init, hs_forcing
 
 ! DART routines 
 use          location_mod, only: location_type, get_location, set_location, &
-                                 vert_is_level, query_location, &
-                                 LocationDims, LocationName, LocationLName, &
-                                 vert_is_pressure, vert_is_surface, &
-                                 get_close_maxdist_init, get_close_obs_init, &
-                                 loc_get_close_obs => get_close_obs, &
-                                 VERTISSURFACE, VERTISLEVEL, &
-                                 get_close_type
+                                 is_vertical, query_location, VERTISLEVEL,  &
+                                 VERTISSURFACE
 
 
 use        random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 use             types_mod, only: r8, i4, i8, pi, MISSING_R8
-! combined duplicate use lines for utilities_mod; the intel 8.x compiler
-! was unhappy about the repetition.  nsc 11apr06
 use        utilities_mod, only : open_file, error_handler, E_ERR, E_MSG, &
                                  nmlfileunit, register_module, &
                                  find_namelist_in_file, check_namelist_read, &
@@ -84,7 +77,7 @@ use          obs_kind_mod, only: QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
 ! routines used by rma
 use mpi_utilities_mod,     only : my_task_id, task_count
 
-use ensemble_manager_mod,    only : ensemble_type, copies_in_window, &
+use ensemble_manager_mod,    only : ensemble_type, &
                                     get_var_owner_index, map_pe_to_task, &
                                     get_copy_owner_index
 
@@ -95,19 +88,20 @@ use state_structure_mod,  only : add_domain, add_dimension_to_variable, &
                                  get_num_variables, get_model_variable_indices, &
                                  get_dart_vector_index, get_index_start, get_index_end
 
+use default_model_mod,     only : get_close_obs, get_close_state, convert_vertical_obs, &
+                                  convert_vertical_state 
+
 use dart_time_io_mod,      only : read_model_time, write_model_time
 
 implicit none
 private
 
 public  get_model_size, adv_1step, get_state_meta_data, &
-        get_model_time_step, end_model, static_init_model, init_time, &
-        init_conditions, nc_write_model_atts, nc_write_model_vars, &
-        pert_model_copies, &
-        get_close_maxdist_init, get_close_obs_init, get_close_obs, &
-        model_interpolate, &
-        query_vert_localization_coord, &
-        vert_convert, &
+        shortest_time_between_assimilations, end_model, static_init_model, &
+        init_time, init_conditions, nc_write_model_atts, nc_write_model_vars, &
+        pert_model_copies, model_interpolate, &
+        get_close_obs, get_close_state, &
+        convert_vertical_obs, convert_vertical_state, &
         read_model_time, write_model_time
 
 !-----------------------------------------------------------------------
@@ -990,20 +984,17 @@ end subroutine vector_to_prog_var
 
 !#######################################################################
 
-function get_model_time_step()
+function shortest_time_between_assimilations()
 !------------------------------------------------------------------------
-! function get_model_time_step()
-!
-! Returns the the time step of the model. In the long run should be repalced
-! by a more general routine that returns details of a general time-stepping
-! capability.
+! the shortest time you are willing to run the model between assimilation
+! windows
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Time_step_atmos is global static storage
-get_model_time_step =  Time_step_atmos
+shortest_time_between_assimilations =  Time_step_atmos
 
 
 ! CODE ADDED TO SIMULATE MODEL ERROR BY MAKING MODEL THINK IT IS
@@ -1011,9 +1002,9 @@ get_model_time_step =  Time_step_atmos
 ! THIS auxiliary timestep is only used if namelist parameter
 ! dt_bias is set to a non-zero value 
 
-if(dt_bias > 0) get_model_time_step = set_time(dt_bias, 0)
+if(dt_bias > 0) shortest_time_between_assimilations = set_time(dt_bias, 0)
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
 !#######################################################################
 
@@ -1023,9 +1014,8 @@ end function get_model_time_step
 ! Given an integer index into the state vector structure, returns the
 ! associated location and optionally the generic kind.
 !---------------------------------------------------------------------
-subroutine get_state_meta_data(state_handle, index_in, location, var_type)
+subroutine get_state_meta_data(index_in, location, var_type)
 
-type(ensemble_type), intent(in)  :: state_handle
 integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type
@@ -1102,11 +1092,11 @@ tmp_status = 0
 ! Get the position, determine if it is model level or pressure in vertical
 lon_lat_lev = get_location(location)
 lon = lon_lat_lev(1); lat = lon_lat_lev(2); 
-if(vert_is_level(location)) then 
+if(is_vertical(location, "LEVEL")) then 
    level = lon_lat_lev(3)
-else if(vert_is_pressure(location)) then
+else if(is_vertical(location, "PRESSURE")) then
    pressure = lon_lat_lev(3)
-else if(vert_is_surface(location)) then
+else if(is_vertical(location, "SURFACE")) then
    ! level is not used for surface pressure observations
    level = -1
 else
@@ -1175,7 +1165,7 @@ else
 endif
 
 ! Case 1: model level specified in vertical
-if(vert_is_level(location) .or. vert_is_surface(location)) then
+if(is_vertical(location, "LEVEL") .or. is_vertical(location, "SURFACE")) then
 ! Now, need to find the values for the four corners
    val(1, 1,:) =  get_val(state_handle, ens_size, &
                      lon_below, lat_below, nint(level), obs_type)
@@ -1407,18 +1397,9 @@ end subroutine init_time
 
 
 
-function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
+subroutine nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) 
 !-----------------------------------------------------------------------------------------
-! Writes the model-specific attributes to a netCDF file
-! TJH Dec 5 2002
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
-!                                                                                
 ! There are two different (staggered) 3D grids being used simultaneously here. 
-! The routine "prog_var_to_vector" packs the prognostic variables into
-! the requisite array for the data assimilation routines. That routine
-! is the basis for the information stored in the netCDF files.
 !
 ! TemperatureGrid : surface pressure  vars%ps(tis:tie, tjs:tje) 
 !                 : temperature       vars%t (tis:tie, tjs:tje, klb:kup)
@@ -1429,16 +1410,12 @@ function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) resul
 ! So there are six different dimensions and five different variables as long as
 ! simply lump "tracers" into one. 
 !
-! TJH 22 May 2003 -- It is now possible to output the prognostic variables 
-! _or_ the state vector. If a "state" variable exists, we do nothing. 
-! If it does not exist, we can assume we need to define the prognostic variables.
 
 use typeSizes
 use netcdf
 
 integer, intent(in)  :: ncFileID        ! netCDF file identifier
 logical, intent(out) :: model_mod_writes_state_variables
-integer              :: ierr            ! return value of function
 
 !-----------------------------------------------------------------------------------------
 
@@ -1465,7 +1442,6 @@ character(len=256) :: msgstring
 
 if ( .not. module_initialized ) call static_init_model
 
-ierr = 0     ! assume normal termination
 model_mod_writes_state_variables = .true. 
 
 !-------------------------------------------------------------------------------
@@ -1694,8 +1670,6 @@ endif
 !-------------------------------------------------------------------------------
 call check(nf90_sync(ncFileID),"atts sync")
 
-!write (*,*)'nc_write_model_atts: netCDF file ',ncFileID,' is synched ...'
-
 contains
 
   ! Internal subroutine - checks error status after each netcdf, prints 
@@ -1727,17 +1701,12 @@ contains
 
   end subroutine check
 
-end function nc_write_model_atts
+end subroutine nc_write_model_atts
 
 
 
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
+subroutine nc_write_model_vars( ncFileID, statevec, memberindex, timeindex ) 
 !-----------------------------------------------------------------------------------------
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
 !                                                                                
 ! There are two different (staggered) 3D grids being used simultaneously here. 
 ! The routines "prog_var_to_vector" and "vector_to_prog_var", 
@@ -1759,16 +1728,11 @@ use netcdf
 
 integer,                intent(in) :: ncFileID      ! netCDF file identifier
 real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: copyindex
+integer,                intent(in) :: memberindex
 integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
 
 !-------------------------------------------------------------------------------
 real(r8), dimension(SIZE(statevec)) :: x
-! removed local instance of Var (since it contains pointers which are
-! then left hanging if Var goes out of scope), and replaced all references
-! to Var with global_Var below.    nsc 31mar06
-!type(prog_var_type) :: Var
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: StateVarID, psVarID, tVarID, rVarID, uVarID, vVarID
@@ -1778,8 +1742,6 @@ integer :: kub, klb
 integer :: nTmpI, nTmpJ, nVelI, nVelJ, nlev, ntracer
 
 if ( .not. module_initialized ) call static_init_model
-
-ierr = 0     ! assume normal termination
 
 !-------------------------------------------------------------------------------
 ! Get the bounds for storage on Temp and Velocity grids
@@ -1827,34 +1789,32 @@ call vector_to_prog_var(x, get_model_size(), global_Var)
 
 call check(NF90_inq_varid(ncFileID, "ps", psVarID), "ps inq_varid")
 call check(nf90_put_var( ncFileID, psVarID, global_Var%ps(tis:tie, tjs:tje), &
-                         start=(/ 1, 1, copyindex, timeindex /) ), "ps put_var")
+                         start=(/ 1, 1, memberindex, timeindex /) ), "ps put_var")
 
 call check(NF90_inq_varid(ncFileID,  "t",  tVarID), "t inq_varid")
 call check(nf90_put_var( ncFileID,  tVarID, global_Var%t( tis:tie, tjs:tje, klb:kub ), &
-                         start=(/ 1, 1, 1, copyindex, timeindex /) ), "t put_var")
+                         start=(/ 1, 1, 1, memberindex, timeindex /) ), "t put_var")
 
 call check(NF90_inq_varid(ncFileID,  "u",  uVarID), "u inq_varid")
 call check(nf90_put_var( ncFileID,  uVarId, global_Var%u( vis:vie, vjs:vje, klb:kub ), &
-                         start=(/ 1, 1, 1, copyindex, timeindex /) ), "u put_var")
+                         start=(/ 1, 1, 1, memberindex, timeindex /) ), "u put_var")
 
 call check(NF90_inq_varid(ncFileID,  "v",  vVarID), "v inq_varid")
 call check(nf90_put_var( ncFileID,  vVarId, global_Var%v( vis:vie, vjs:vje, klb:kub ), &
-                         start=(/ 1, 1, 1, copyindex, timeindex /) ), "v put_var")
+                         start=(/ 1, 1, 1, memberindex, timeindex /) ), "v put_var")
 
 if ( ntracer > 0 ) then
    call check(NF90_inq_varid(ncFileID,  "r",  rVarID), "r inq_varid")
    call check(nf90_put_var( ncFileID,  rVarID, &
                  global_Var%r( tis:tie, tjs:tje, klb:kub, 1:ntracer ), & 
-                start=(/  1,   1,   1,   1, copyindex, timeindex /) ), "r put_var")
+                start=(/  1,   1,   1,   1, memberindex, timeindex /) ), "r put_var")
 endif
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
 
-! write (*,*)'Finished filling variables ...'
 call check(nf90_sync(ncFileID), "sync")
-! write (*,*)'netCDF file is synched ...'
 
 contains
 
@@ -1887,7 +1847,7 @@ contains
 
   end subroutine check
 
-end function nc_write_model_vars
+end subroutine nc_write_model_vars
 
 !--------------------------------------------------------------------
 subroutine pert_model_copies(ens_handle, ens_size, pert_amp, interf_provided)
@@ -2185,48 +2145,6 @@ call error_handler(E_ERR,'get_varid_from_kind', errstring, &
                    source, revision, revdate)
 
 end function get_varid_from_kind
-
-!--------------------------------------------------------------------
-!> pass the vertical localization coordinate to assim_tools_mod
-function query_vert_localization_coord()
-
-integer :: query_vert_localization_coord
-
-query_vert_localization_coord = 1 ! any old value
-
-end function query_vert_localization_coord
-
-!--------------------------------------------------------------------
-!> This is used in the filter_assim. The vertical conversion is done using the 
-!> mean state.
-!> Calling this is a waste of time
-subroutine vert_convert(state_handle, location, obs_kind, istatus)
-
-type(ensemble_type), intent(in)  :: state_handle
-type(location_type), intent(in)  :: location
-integer,             intent(in)  :: obs_kind
-integer,             intent(out) :: istatus
-
-istatus = 0
-
-end subroutine vert_convert
-
-!--------------------------------------------------------------------
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, &
-                                 obs_kind, num_close, close_ind, dist, state_handle)
-
-type(ensemble_type),         intent(inout)  :: state_handle
-type(get_close_type),        intent(in)     :: gc
-type(location_type),         intent(inout)  :: base_obs_loc, obs_loc(:)
-integer,                     intent(in)     :: base_obs_kind, obs_kind(:)
-integer,                     intent(out)    :: num_close, close_ind(:)
-real(r8),                    intent(out)    :: dist(:)
-
-
-call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
-                          num_close, close_ind, dist)
-
-end subroutine get_close_obs
 
 !#######################################################################
 

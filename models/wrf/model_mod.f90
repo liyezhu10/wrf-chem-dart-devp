@@ -51,8 +51,8 @@ use      location_mod,   only : location_type, get_location, set_location, &
                                 vert_is_scale_height, VERTISUNDEF, VERTISSURFACE, &
                                 VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
                                 VERTISSCALEHEIGHT, &
-                                get_close_type, get_dist, get_close_maxdist_init, &
-                                get_close_obs_init, loc_get_close_obs => get_close_obs
+                                get_close_type, get_dist, &
+                                loc_get_close_obs => get_close
 
 use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 register_module, error_handler, E_ERR, E_WARN, &
@@ -135,15 +135,15 @@ public ::  get_model_size,                &
            get_state_meta_data,           &
            get_model_time_step,           &
            static_init_model,             &
-           pert_model_copies,             &
+           model_interpolate,             &
            nc_write_model_atts,           &
            nc_write_model_vars,           &
            get_close_obs,                 &
-           get_close_maxdist_init,        &
-           get_close_obs_init,            &
-           model_interpolate,             &
-           vert_convert,                  &
+           get_close_state,               &
+           convert_vert_obs,              &
+           convert_vert_state,            &
            query_vert_localization_coord, &
+           pert_model_copies,             &
            read_model_time,               &
            write_model_time
 
@@ -857,7 +857,7 @@ end function get_model_time_step
 !#######################################################################
 
 
-subroutine get_state_meta_data(state_handle, index_in, location, var_type_out, id_out)
+subroutine get_state_meta_data(index_in, location, var_type_out, id_out)
 
 ! Given an integer index into the DART state vector structure, returns the
 ! associated location. This is not a function because the more general
@@ -867,7 +867,6 @@ subroutine get_state_meta_data(state_handle, index_in, location, var_type_out, i
 ! this version has an optional last argument that is never called by
 ! any of the dart code, which can return the wrf domain number.
 
-type(ensemble_type), intent(in)  :: state_handle
 integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type_out, id_out
@@ -906,28 +905,36 @@ call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
 !  more sense for everyone to blast through all their pieces of state. Idea: overlap this
 !  with task 0 writing the diagnostic files. 
 
-! now convert to desired vertical coordinate (defined in the namelist)
-if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
-   ! here we need level index of mass grid
-   if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
-      lev = real(kp) - 0.5_r8
-   else
-      lev = real(kp)
+if (.false.) then
+   ! now convert to desired vertical coordinate (defined in the namelist)
+   if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
+      ! here we need level index of mass grid
+      if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+         lev = real(kp) - 0.5_r8
+      else
+         lev = real(kp)
+      endif
+   elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
+      ! directly convert to pressure
+      lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
+      lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
+      lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
+                 model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
    endif
-elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
-   ! directly convert to pressure
-   lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
-elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
-   lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
-elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
-   lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
-              model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
 endif
 
+if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+   lev = real(kp) - 0.5_r8
+else
+   lev = real(kp)
+endif
 if(debug) write(*,*) 'lon, lat, lev: ',lon, lat, lev
+location = set_location(lon, lat, lev, VERTISLEVEL)
 
-! convert to DART location type
-location = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
+!! convert to DART location type
+!location = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
 
 ! return DART variable kind if requested
 if(present(var_type_out)) var_type_out = dart_type
@@ -2918,7 +2925,7 @@ istatus = 1
 !> @todo This in not true anymore if you don't convert all the state variables 
 ! to the localization coordinate in get_state_meta_data
 if (obs_kind < 0) then
-   call get_state_meta_data(state_handle, int(obs_kind,i8),location)
+   call get_state_meta_data(int(obs_kind,i8),location)
    istatus = 0
    return
 endif
@@ -6859,8 +6866,8 @@ end subroutine get_domain_info
 
 !#######################################################################
 !> Distributed version of get_close_obs
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, &
-                         obs_kind, num_close, close_ind, dist, state_handle)
+subroutine get_close_obs(gc, base_loc, base_type, locs, &
+                         loc_qtys, num_close, close_ind, dist, state_handle)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
 ! (obs_loc, obs_kind), returns the subset of close ones to the "base" ob, their
@@ -6872,19 +6879,19 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, &
 
 ! Vertical conversion is carried out by the subroutine vert_convert.
 
-! Note that both base_obs_loc and obs_loc are intent(inout), meaning that these
+! Note that both base_loc and locs are intent(inout), meaning that these
 ! locations are possibly modified here and returned as such to the calling routine.
 ! The calling routine is always filter_assim and these arrays are local arrays
 ! within filter_assim. In other words, these modifications will only matter within
 ! filter_assim, but will not propagate backwards to filter.
 
 !HK
-type(ensemble_type),         intent(in)  :: state_handle
 type(get_close_type),        intent(in)     :: gc
-type(location_type),         intent(inout)  :: base_obs_loc, obs_loc(:)
-integer,                     intent(in)     :: base_obs_kind, obs_kind(:)
+type(location_type),         intent(inout)  :: base_loc, locs(:)
+integer,                     intent(in)     :: base_type, loc_qtys(:)
 integer,                     intent(out)    :: num_close, close_ind(:)
 real(r8),                    intent(out)    :: dist(:)
+type(ensemble_type),         intent(in)     :: state_handle
 
 integer                :: t_ind, istatus1, istatus2, k
 integer                :: base_which, local_obs_which
@@ -6902,13 +6909,13 @@ istatus2 = 0
 
 ! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
 
-base_array = get_location(base_obs_loc) 
-base_which = nint(query_location(base_obs_loc))
+base_array = get_location(base_loc) 
+base_which = nint(query_location(base_loc))
 
 if (.not. horiz_dist_only) then
    if (base_which /= wrf%dom(1)%localization_coord) then
       !print*, 'base_which ', base_which, 'loc coord ', wrf%dom(1)%localization_coord
-      call vert_convert(state_handle, base_obs_loc, base_obs_kind, istatus1)
+      call vert_convert(state_handle, base_loc, base_obs_type, istatus1)
       !call error_handler(E_ERR, 'you should not call this ', 'get_close_obs')
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
@@ -6921,14 +6928,14 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+   call loc_get_close_obs(gc, base_loc, base_obs_type, locs, loc_qtys, &
                           num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
    do k = 1, num_close
 
       t_ind = close_ind(k)
-      local_obs_loc   = obs_loc(t_ind)
+      local_obs_loc   = locs(t_ind)
       local_obs_which = nint(query_location(local_obs_loc))
 
       ! Convert local_obs vertical coordinate to requested vertical coordinate if necessary.
@@ -6936,9 +6943,9 @@ if (istatus1 == 0) then
       ! contains the correct vertical coordinate (filter_assim's call to get_state_meta_data).
       if (.not. horiz_dist_only) then
          if (local_obs_which /= wrf%dom(1)%localization_coord) then
-            call vert_convert(state_handle, local_obs_loc, obs_kind(t_ind), istatus2)
+            call vert_convert(state_handle, local_obs_loc, loc_qtys(t_ind), istatus2)
             ! Store the "new" location into the original full local array
-            obs_loc(t_ind) = local_obs_loc !HK Overwritting the location
+            locs(t_ind) = local_obs_loc !HK Overwritting the location
          else
             istatus2 = 0
          endif
@@ -6950,7 +6957,7 @@ if (istatus1 == 0) then
       if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
          dist(k) = 1.0e9
       else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
+         dist(k) = get_dist(base_loc, local_obs_loc, base_obs_type, loc_qtys(t_ind))
       endif
 
       !print*, 'k ', k, 'rank ', my_task_id()

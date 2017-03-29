@@ -589,7 +589,7 @@ call get_my_vars(ens_handle, my_state_indx)
 ! Get the location and kind of all my state variables
 if (timing) call start_mpi_timer(base)
 do i = 1, ens_handle%my_num_vars
-   call get_state_meta_data(ens_handle, my_state_indx(i), my_state_loc(i), my_state_kind(i))
+   call get_state_meta_data(my_state_indx(i), my_state_loc(i), my_state_kind(i))
 end do
 if (timing) then
    elapsed = read_mpi_timer(base)
@@ -688,7 +688,7 @@ if (filter_kind == 9) then
       if (base_obs_type > 0) then
          base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
       else
-         call get_state_meta_data(ens_handle, -1 * int(base_obs_type,i8), dummyloc, base_obs_kind)
+         call get_state_meta_data(-1 * int(base_obs_type,i8), dummyloc, base_obs_kind)
       endif
    
       ! Get the value of the observation
@@ -824,7 +824,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if (base_obs_type > 0) then
       base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
    else
-      call get_state_meta_data(ens_handle, -1 * int(base_obs_type,i8), dummyloc, base_obs_kind)  ! identity obs
+      call get_state_meta_data(-1 * int(base_obs_type,i8), dummyloc, base_obs_kind)  ! identity obs
    endif
    ! Get the value of the observation
    call get_obs_values(observation, obs, obs_val_index)
@@ -3806,12 +3806,12 @@ Get_Obs_Locations: do i = 1, obs_ens_handle%my_num_vars
    if (my_obs_type(i) > 0) then
          my_obs_kind(i) = get_quantity_for_type_of_obs(my_obs_type(i))
    else
-      !call get_state_meta_data(ens_handle, win, -1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
+      !call get_state_meta_data(win, -1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
       ! This is just to get the kind.  WRF needs state_ensemble_handle because it converts the state
       ! element to the required vertical coordinate.  Should this be allowed anyway?
       ! With dummy loc you are going to end up converting the vertical twice for identity obs. FIXME use
       ! actual ob location so you can store the converted vertical?
-      call get_state_meta_data(state_ens_handle, -1 * int(my_obs_type(i),i8), dummyloc, my_obs_kind(i))
+      call get_state_meta_data(-1 * int(my_obs_type(i),i8), dummyloc, my_obs_kind(i))
    endif
 end do Get_Obs_Locations
 

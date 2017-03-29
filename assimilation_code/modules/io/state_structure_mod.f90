@@ -270,7 +270,9 @@ logical :: diagnostic_initialized = .false.
 ! debug flag for get_state_indices
 logical :: debug = .false.
 
-!>@todo ultimately only support blank and from_file ... models that currently do not start from netCDF can easily be made to start from netCDF because the nc_write_model_vars() functions already exist ... Tim thinks this is easy.
+!>@todo ultimately only support blank and from_file ... models that currently do not start 
+!> from netCDF can easily be made to start from netCDF because the nc_write_model_vars() functions 
+!> already exist ... Tim thinks this is easy.
 interface add_domain
    module procedure add_domain_blank
    module procedure add_domain_from_file

@@ -2297,8 +2297,8 @@ call nc_check(nf90_Redef(nc_file_ID), 'nc_write_model_atts', 'Redef '//trim(stri
 ! We need the dimension ID for the number of copies
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-call nc_check(nf90_inq_dimid(ncid=nc_file_ID, name="copy", dimid=member_dim_ID), &
-              'nc_write_model_atts', 'inq_dimid copy')
+call nc_check(nf90_inq_dimid(ncid=nc_file_ID, name="member", dimid=member_dim_ID), &
+              'nc_write_model_atts', 'inq_dimid member')
 call nc_check(nf90_inq_dimid(ncid=nc_file_ID, name="time", dimid=  time_dim_ID), &
               'nc_write_model_atts', 'inq_dimid time')
 
@@ -2615,20 +2615,20 @@ end function nc_write_model_atts
 !> @param[in] statevec(:)
 !> The state vector to be written to 'nc_file_ID'
 !> 
-!> @param[in] copyindex
-!> The 'copy' in the file into which the state vector will be written
+!> @param[in] memindex
+!> The 'member' in the file into which the state vector will be written
 !> 
 !> @param[in] timeindex
 !> The time slot in the file, into which the state vector will be written
 
-function nc_write_model_vars( nc_file_ID, statevec, copyindex, timeindex ) result(ierr)
+function nc_write_model_vars( nc_file_ID, statevec, memindex, timeindex ) result(ierr)
 
 ! Writes the model-specific variables to a netCDF file
 ! TJH 25 June 2003
 
 integer,  intent(in) :: nc_file_ID
 real(r8), intent(in) :: statevec(:)
-integer,  intent(in) :: copyindex
+integer,  intent(in) :: memindex
 integer,  intent(in) :: timeindex
 integer   :: ierr
 
@@ -2657,7 +2657,7 @@ if (output_state_vector) then
 
    call nc_check(nf90_inq_varid(nc_file_ID, "state", state_var_ID),'nc_write_model_vars ','inq_varid state' )
    call nc_check(nf90_put_var(nc_file_ID, state_var_ID, statevec,  &
-                start=(/ 1, copyindex, timeindex /)),'nc_write_model_vars ','put_var state')
+                start=(/ 1, memindex, timeindex /)),'nc_write_model_vars ','put_var state')
 
 else
 
@@ -2676,7 +2676,7 @@ else
       call nc_check(nf90_inq_varid(nc_file_ID, cfield, nc_var_ID),       &
                     'nc_write_model_vars ','inq_varid 0d '//cfield)
       call nc_check(nf90_put_var(nc_file_ID, nc_var_ID, Var%vars_0d(i),  &
-                                 start=(/ copyindex, timeindex /) ),   &
+                                 start=(/ memindex, timeindex /) ),   &
                     'nc_write_model_vars ','put_var 0d '//cfield)
    enddo ZeroDVars
 
@@ -2689,7 +2689,7 @@ else
                     'nc_write_model_vars ','inq_varid 1d '//cfield)
       call nc_check(nf90_put_var(nc_file_ID, nc_var_ID,                                               &
                     Var%vars_1d(1:f_dim_1d(1, i), i),                                              &
-                    start=   (/ 1              ,copyindex, timeindex /),                          &
+                    start=   (/ 1              ,memindex, timeindex /),                          &
                     count=   (/   f_dim_1d(1, i),1        , 1/) ),                                 &
                     'nc_write_model_vars ','put_var 1d '//cfield)
    enddo OneDVars
@@ -2705,7 +2705,7 @@ else
                     'nc_write_model_vars ','inq_varid 2d '//cfield)
       call nc_check(nf90_put_var(nc_file_ID, nc_var_ID,                                               &
                     Var%vars_2d(1:f_dim_2d(1,i),1:f_dim_2d(2,i), i),                              &
-                    start=   (/ 1              ,1              , copyindex, timeindex /),         &
+                    start=   (/ 1              ,1              , memindex, timeindex /),         &
                     count=   (/   f_dim_2d(1,i),  f_dim_2d(2,i), 1        , 1/) ),                &
                     'nc_write_model_vars ','put_var 2d '//cfield)
    enddo TwoDVars
@@ -2718,7 +2718,7 @@ else
                     'nc_write_model_vars ','inq_varid 3d '//cfield)
       call nc_check(nf90_put_var(nc_file_ID, nc_var_ID,                                               &
                  Var%vars_3d(1:f_dim_3d(1,i),1:f_dim_3d(2,i),1:f_dim_3d(3,i),i)                   &
-                 ,start=   (/1              ,1              ,1              ,copyindex,timeindex/)&
+                 ,start=   (/1              ,1              ,1              ,memindex,timeindex/)&
                  ,count=   (/  f_dim_3d(1,i),  f_dim_3d(2,i),  f_dim_3d(3,i),1        ,1 /) ),    &
                     'nc_write_model_vars ','put_var 3d '//cfield)
    enddo ThreeDVars
