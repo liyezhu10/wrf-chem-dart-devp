@@ -44,15 +44,12 @@ use  time_manager_mod,   only : time_type, set_time, set_calendar_type, GREGORIA
                                 set_date, get_date
 
 use      location_mod,   only : location_type, get_location, set_location, &
-                                horiz_dist_only,                                  &
-                                LocationDims, LocationName, LocationLName, &
-                                query_location, vert_is_undef, vert_is_surface, &
-                                vert_is_level, vert_is_pressure, vert_is_height, &
-                                vert_is_scale_height, VERTISUNDEF, VERTISSURFACE, &
+                                query_location, VERTISUNDEF, VERTISSURFACE, &
                                 VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
-                                VERTISSCALEHEIGHT, &
-                                get_close_type, get_dist, &
-                                loc_get_close_obs => get_close
+                                VERTISSCALEHEIGHT, vertical_localization_on, &
+                                set_vertical_localization_coord, &
+                                get_close_type, get_dist, is_vertical, &
+                                get_close
 
 use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 register_module, error_handler, E_ERR, E_WARN, &
@@ -133,16 +130,15 @@ private
 
 public ::  get_model_size,                &
            get_state_meta_data,           &
-           get_model_time_step,           &
+           shortest_time_between_assimilations, &
            static_init_model,             &
            model_interpolate,             &
            nc_write_model_atts,           &
            nc_write_model_vars,           &
            get_close_obs,                 &
            get_close_state,               &
-           convert_vert_obs,              &
-           convert_vert_state,            &
-           query_vert_localization_coord, &
+           convert_vertical_obs,          &
+           convert_vertical_state,        &
            pert_model_copies,             &
            read_model_time,               &
            write_model_time
@@ -757,6 +753,9 @@ wrf%model_size = dart_index - 1
 write(errstring,*) ' wrf model size is ',wrf%model_size
 call error_handler(E_MSG, 'static_init_model', errstring)
 
+! tell the location module how we want to localize in the vertical
+call set_vertical_localization_coord(vert_localization_coord)
+
 end subroutine static_init_model
 
 !#######################################################################
@@ -827,18 +826,9 @@ end subroutine get_wrf_state_variables
 
 !#######################################################################
 
-function get_model_time_step()
-!------------------------------------------------------------------------
-! function get_model_time_step()
-!
-! Returns the time step of the model. In the long run should be replaced
-! by a more general routine that returns details of a general time-stepping
-! capability.
-!
-! toward that end ... we are now reading a namelist variable for the
-! width of the assimilation time window.
+function shortest_time_between_assimilations()
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 integer :: model_dt, assim_dt
 
 ! We need to coordinate the desired assimilation window to be a 
@@ -849,9 +839,9 @@ model_dt = nint(wrf%dom(1)%dt)
 ! The integer arithmetic does its magic.
 assim_dt = (assimilation_period_seconds / model_dt) * model_dt
 
-get_model_time_step = set_time(assim_dt)
+shortest_time_between_assimilations = set_time(assim_dt)
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
 
 !#######################################################################
@@ -906,23 +896,23 @@ call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
 !  with task 0 writing the diagnostic files. 
 
 if (.false.) then
-   ! now convert to desired vertical coordinate (defined in the namelist)
-   if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
-      ! here we need level index of mass grid
-      if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
-         lev = real(kp) - 0.5_r8
-      else
-         lev = real(kp)
-      endif
-   elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
-      ! directly convert to pressure
-      lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
-   elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
-      lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
-   elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
-      lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
-                 model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
-   endif
+!   ! now convert to desired vertical coordinate (defined in the namelist)
+!   if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
+!      ! here we need level index of mass grid
+!      if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+!         lev = real(kp) - 0.5_r8
+!      else
+!         lev = real(kp)
+!      endif
+!   elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
+!      ! directly convert to pressure
+!      lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
+!   elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
+!      lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
+!   elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
+!      lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
+!                 model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
+!   endif
 endif
 
 if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
@@ -1167,8 +1157,8 @@ else
    ! 0.b Vertical stuff
 
    if ( debug ) then
-      write(*,*) 'vert_is_pressure ',vert_is_pressure(location)
-      write(*,*) 'vert_is_height ',vert_is_height(location)
+      write(*,*) 'is_vertical(PRESSURE) ',is_vertical(location,"PRESSURE")
+      write(*,*) 'is_vertical(HEIGHT) ',is_vertical(location,"HEIGHT")
    endif
 
    ! HK
@@ -1181,11 +1171,11 @@ else
    ! Determine corresponding model level for obs location
    ! This depends on the obs vertical coordinate
    !   From this we get a meaningful z-direction real-valued index number
-   if(vert_is_level(location)) then
+   if(is_vertical(location,"LEVEL")) then
       ! Ob is by model level
       zloc = xyz_loc(3)
 
-   elseif(vert_is_pressure(location)) then
+   elseif(is_vertical(location,"PRESSURE")) then
       ! Ob is by pressure: get corresponding mass level zloc from
       ! computed column pressure profile
       call get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_p,state_handle, ens_size)
@@ -1226,7 +1216,7 @@ else
 
       enddo
 
-   elseif(vert_is_height(location)) then
+   elseif(is_vertical(location,"HEIGHT")) then
 
       ! Ob is by height: get corresponding mass level zloc from
       ! computed column height profile
@@ -1254,7 +1244,7 @@ else
 
       enddo
 
-   elseif(vert_is_surface(location)) then
+   elseif(is_vertical(location,"SURFACE")) then
       zloc = 1.0_r8
       surf_var = .true.
       if(debug) print*,' obs is at the surface = ', xyz_loc(3)
@@ -1295,7 +1285,7 @@ else
          if ( .not. height_diff_check(sfc_elev_max_diff,xyz_loc(3),mod_sfc_elevation) ) zloc = missing_r8
       endif
 
-   elseif(vert_is_undef(location)) then
+   elseif(is_vertical(location,"UNDEFINED")) then
       ! the zloc value should not be used since there is no actual vertical
       ! location for this observation, but give zloc a valid value to avoid
       ! the error checks below for missing_r8
@@ -2789,7 +2779,7 @@ else
 
          ! If a surface variable, or a variable with no particular vertical location
          ! (basically the entire column) then no need to do any vertical interpolation
-         if ( surf_var .or. vert_is_undef(location) ) then
+         if ( surf_var .or. is_vertical(location,"UNDEFINED") ) then
 
             !obs_val = fld(1)
              expected_obs(e) = fld(1,e) !HK
@@ -2862,6 +2852,48 @@ deallocate(v_h, v_p)
 deallocate(uniquek)
 
 end subroutine model_interpolate
+
+!#######################################################################
+subroutine convert_vertical_obs(state_handle, num, locs, loc_qtys, which_vert, status)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status
+
+integer :: i
+
+do i=1, num
+   call vert_convert(state_handle, locs(i), loc_qtys(i), status)
+enddo
+
+status = 0
+
+end subroutine convert_vertical_obs
+
+
+!#######################################################################
+subroutine convert_vertical_state(state_handle, num, locs, loc_qtys, which_vert, status)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status
+
+integer :: i
+
+do i=1, num
+   call vert_convert(state_handle, locs(i), loc_qtys(i), status)
+enddo
+
+status = 0
+
+end subroutine convert_vertical_state
+
 
 !#######################################################################
 !> This is used in the filter_assim. The vertical conversion is done using the 
@@ -3619,19 +3651,14 @@ end subroutine get_wrf_horizontal_location
 !***********************************************************************
 
 
-function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
+subroutine nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) 
 !-----------------------------------------------------------------
 ! Writes the model-specific attributes to a netCDF file
-! A. Caya May 7 2003
-! T. Hoar Mar 8 2004 writes prognostic flavor
-
-logical, parameter :: write_precip = .false.
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
 logical, intent(out) :: model_mod_writes_state_variables
-integer              :: ierr          ! return value of function
 
-!-----------------------------------------------------------------
+logical, parameter :: write_precip = .false.
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: StateVarDimID, StateVarID, TimeDimID
@@ -3679,7 +3706,6 @@ logical               :: debug = .false.
 
 !-----------------------------------------------------------------
 
-ierr = 0     ! assume normal termination
 model_mod_writes_state_variables = .true. 
 
 !-----------------------------------------------------------------
@@ -4232,133 +4258,6 @@ do id=1,num_domains
 
 enddo
 
-if ( output_state_vector ) then
-
-   !-----------------------------------------------------------------
-   ! Create attributes for the state vector 
-   !-----------------------------------------------------------------
-
-   call nc_check(nf90_inq_dimid(ncFileID, "metadatalength", metadataID), &
-                 'nc_write_model_atts','inq_dimid metadatalength')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFStateVariables", &
-                 len = wrf%dom(1)%number_of_wrf_variables,  dimid = wrfStateID), &
-                 'nc_write_model_atts','def_dim WRFStateVariables')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFVarDimension", &
-                 len = 3,  dimid = wrfDimID), &
-                 'nc_write_model_atts','def_dim WRFVarDimensionID')
-
-   ! Define the state variable name variable
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateVariables", xtype=nf90_char, &
-                 dimids=(/ metadataID, wrfStateID /), varid=WRFStateVarID), &
-                 'nc_write_model_atts','def_var WRFStateVariables')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateVarID, "long_name", &
-                 "WRF State Variable Name"), &
-                 'nc_write_model_atts','put_att WRFStateVariables long_name')
-
-   ! Define the WRF state variable dimension lengths
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateDimensions", xtype=nf90_int, &
-                 dimids=(/ wrfDimID, wrfStateID, DomDimID /), varid=WRFStateDimID), &
-                 'nc_write_model_atts','def_var WRFStateDimensions')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateDimID, "long_name", &
-                 "WRF State Variable Dimensions"), &
-                 'nc_write_model_atts','put_att WRFStateDimensions long_name')
-
-   ! Define the actual state vector
-
-   call nc_check(nf90_def_var(ncid=ncFileID, name="state", xtype=nf90_real, &
-                 dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
-                 varid=StateVarID), &
-                 'nc_write_model_atts','def_var state')
-   call nc_check(nf90_put_att(ncFileID, StateVarID, "long_name", &
-                 "model state or fcopy"), &
-                 'nc_write_model_atts','put_att state long_name')
-
-   ! only define those that are present in the state vector
-   do id = 1,num_domains ! this makes sure we get them all 
-   write( idom , '(I1)') id
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-      ! units
-      attname = trim(wrf_state_variables(1,my_index))//'_units'
-
-      ! if we didn't already write it, do it now
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-
-         unitsval = trim(wrf%dom(id)%units(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    unitsval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! description
-      attname = trim(wrf_state_variables(1,my_index))//'_description'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         descriptionval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    descriptionval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! long_name - same as description
-      attname = trim(wrf_state_variables(1,my_index))//'_long_name'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         long_nameval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    long_nameval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! coordinates - define the name of the (sometimes staggered) 
-      !               coordinate variables to use to decode locations
-      attname = trim(wrf_state_variables(1,my_index))//'_coordinates'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         coordinatesval = trim(wrf%dom(id)%coordinates(ind))
-         if (coordinatesval(1:7) .eq. 'XLONG_U') then
-           coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
-         else if (coordinatesval(1:7) .eq. 'XLONG_V') then
-           coordinate_char = "XLONG_V_d0"//idom//" XLAT_V_d0"//idom
-         else
-           coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-         end if
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    trim(coordinate_char)), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-   enddo
-   enddo
-
-   ! Leave define mode so we can actually fill the variables.
-
-   call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
-
-   do ind = 1,wrf%dom(1)%number_of_wrf_variables
-      my_index =  wrf%dom(1)%var_index_list(ind)
-      call nc_check(nf90_put_var(ncFileID,WRFStateVarID,trim(wrf_state_variables(1,my_index)), &
-                    start = (/ 1, ind /), count = (/ len_trim(wrf_state_variables(1,my_index)),  1 /)), &
-                    'nc_write_model_atts', 'put_var WRFStateVariables')
-   enddo
-
-   do id = 1, num_domains
-      do ind = 1,wrf%dom(id)%number_of_wrf_variables
-        call nc_check(nf90_put_var(ncFileID,WRFStateDimID,wrf%dom(id)%var_size(:,ind), &
-                      start = (/ 1, ind, id /), count = (/ 3, 1, 1 /)), &
-                      'nc_write_model_atts', 'put_var WRFStateDimensions')
-      enddo
-   enddo
-
-else ! physical arrays
-
 do id=1,num_domains
    write( idom , '(I1)') id
 
@@ -4475,8 +4374,6 @@ enddo ! domains
 ! Leave define mode so we can actually fill the variables.
 call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
 
-endif
-
 !-----------------------------------------------------------------
 ! Fill the variables we can
 !-----------------------------------------------------------------
@@ -4577,24 +4474,18 @@ enddo
 
 call nc_check(nf90_sync(ncFileID),'nc_write_model_atts','sync')
 
-end function nc_write_model_atts
+end subroutine nc_write_model_atts
 
 
 
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
+subroutine nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) 
 !-----------------------------------------------------------------
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
 
 
 integer,                intent(in) :: ncFileID      ! netCDF file identifier
 real(r8), dimension(:), intent(in) :: statevec
 integer,                intent(in) :: copyindex
 integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
 
 !-----------------------------------------------------------------
 
@@ -4609,7 +4500,6 @@ character(len=1) :: idom
 integer, dimension(2) :: dimsizes_2D
 integer, dimension(3) :: dimsizes_3D
 
-ierr = 0     ! assume normal termination
 
 !-----------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file, 
@@ -4618,16 +4508,6 @@ ierr = 0     ! assume normal termination
 
 call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
               'nc_write_model_vars','inquire')
-
-if ( output_state_vector ) then
-
-   call nc_check(nf90_inq_varid(ncFileID, "state", StateVarID), &
-              'nc_write_model_vars','inq_varid state')
-   call nc_check(nf90_put_var(ncFileID, StateVarID, statevec, &
-                start=(/ 1, copyindex, timeindex /)), &
-              'nc_write_model_vars','put_var statevec')
-
-else
 
 j = 0
 
@@ -4689,15 +4569,13 @@ do id=1,num_domains
 
 enddo ! domains
 
-endif
-
 !-----------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-----------------------------------------------------------------
 
 call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars','sync')
 
-end function nc_write_model_vars
+end subroutine nc_write_model_vars
 
 !-------------------------------
 
@@ -6865,6 +6743,22 @@ end do
 end subroutine get_domain_info
 
 !#######################################################################
+subroutine get_close_state(gc, base_loc, base_type, locs, &
+                          loc_qtys, num_close, close_ind, dist, state_handle)
+
+type(get_close_type),        intent(in)     :: gc
+type(location_type),         intent(inout)  :: base_loc, locs(:)
+integer,                     intent(in)     :: base_type, loc_qtys(:)
+integer,                     intent(out)    :: num_close, close_ind(:)
+real(r8),                    intent(out)    :: dist(:)
+type(ensemble_type),         intent(in)     :: state_handle
+
+call get_close_obs(gc, base_loc, base_type, locs, &
+                   loc_qtys, num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_state
+
+!#######################################################################
 !> Distributed version of get_close_obs
 subroutine get_close_obs(gc, base_loc, base_type, locs, &
                          loc_qtys, num_close, close_ind, dist, state_handle)
@@ -6894,9 +6788,9 @@ real(r8),                    intent(out)    :: dist(:)
 type(ensemble_type),         intent(in)     :: state_handle
 
 integer                :: t_ind, istatus1, istatus2, k
-integer                :: base_which, local_obs_which
-real(r8), dimension(3) :: base_array, local_obs_array
-type(location_type)    :: local_obs_loc
+integer                :: base_which, local_which
+real(r8), dimension(3) :: base_array, local_array
+type(location_type)    :: local_loc
 
 
 ! Initialize variables to missing status
@@ -6907,15 +6801,15 @@ dist      = 1.0e9
 istatus1 = 0
 istatus2 = 0
 
-! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
+! Convert base vertical coordinate to requested vertical coordinate if necessary
 
 base_array = get_location(base_loc) 
 base_which = nint(query_location(base_loc))
 
-if (.not. horiz_dist_only) then
+if (vertical_localization_on()) then
    if (base_which /= wrf%dom(1)%localization_coord) then
       !print*, 'base_which ', base_which, 'loc coord ', wrf%dom(1)%localization_coord
-      call vert_convert(state_handle, base_loc, base_obs_type, istatus1)
+      call vert_convert(state_handle, base_loc, base_type, istatus1)
       !call error_handler(E_ERR, 'you should not call this ', 'get_close_obs')
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
@@ -6928,24 +6822,24 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_loc, base_obs_type, locs, loc_qtys, &
-                          num_close, close_ind)
+   call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                  num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
    do k = 1, num_close
 
       t_ind = close_ind(k)
-      local_obs_loc   = locs(t_ind)
-      local_obs_which = nint(query_location(local_obs_loc))
+      local_loc   = locs(t_ind)
+      local_which = nint(query_location(local_loc))
 
-      ! Convert local_obs vertical coordinate to requested vertical coordinate if necessary.
+      ! Convert local vertical coordinate to requested vertical coordinate if necessary.
       ! This should only be necessary for obs priors, as state location information already
       ! contains the correct vertical coordinate (filter_assim's call to get_state_meta_data).
-      if (.not. horiz_dist_only) then
-         if (local_obs_which /= wrf%dom(1)%localization_coord) then
-            call vert_convert(state_handle, local_obs_loc, loc_qtys(t_ind), istatus2)
+      if (vertical_localization_on()) then
+         if (local_which /= wrf%dom(1)%localization_coord) then
+            call vert_convert(state_handle, local_loc, loc_qtys(t_ind), istatus2)
             ! Store the "new" location into the original full local array
-            locs(t_ind) = local_obs_loc !HK Overwritting the location
+            locs(t_ind) = local_loc !HK Overwritting the location
          else
             istatus2 = 0
          endif
@@ -6953,11 +6847,11 @@ if (istatus1 == 0) then
 
        ! Compute distance - set distance to a very large value if vert coordinate is missing
       ! or vert_convert returned error (istatus2=1)
-      local_obs_array = get_location(local_obs_loc)
-      if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
+      local_array = get_location(local_loc)
+      if (((vertical_localization_on()).and.(local_array(3) == missing_r8)).or.(istatus2 == 1)) then
          dist(k) = 1.0e9
       else
-         dist(k) = get_dist(base_loc, local_obs_loc, base_obs_type, loc_qtys(t_ind))
+         dist(k) = get_dist(base_loc, local_loc, base_type, loc_qtys(t_ind))
       endif
 
       !print*, 'k ', k, 'rank ', my_task_id()
