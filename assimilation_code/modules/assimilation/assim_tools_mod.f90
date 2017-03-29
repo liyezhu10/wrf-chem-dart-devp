@@ -588,6 +588,12 @@ if (timing) then
 endif
 
 !call test_get_state_meta_data(my_state_loc, ens_handle%my_num_vars)
+!>@todo FIXME  if we want to convert all the state up front, this is
+!>where we call convert_vertical_state()
+if (has_vertical_choice()) then
+   if (.false.) call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
+                                      get_vertical_localization_coord(), vstatus)
+endif
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
 ! INCREMENTS. OWNING PE WOULD SHIP IT'S PRIOR TO THIS ONE

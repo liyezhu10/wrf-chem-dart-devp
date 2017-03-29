@@ -4,9 +4,10 @@
 !
 ! $Id$
 
-!> common routines used no matter which location module compiled with
+!> common routines which can write netcdf arrays no matter which
+!> location module is compiled in.
 
-!>@todo FIXME  define ALL the VERTISXXX her, add a call to has_vert_choice
+!>@todo FIXME  define ALL the VERTISXXX here, add a call to has_vertical_choice
 !>to the xxx/location_mod, and if no, return without needing routines
 !>in each of the specific location routines.  if yes, call query and 
 !>match it with the type to return true/false.  remove vert_is_xxx from 
@@ -14,29 +15,16 @@
 !>will have to replicate the VERTISxxx in the location modules because
 !>fortran doesn't allow circular 'use's between modules.  ugh.
 
-!> the key for the netcdf routines is this sits above the location routines.  
-!> but that makes a circular dep for VERTIS... if they are here it forces
-!> a consistent set of values and removes all the vert_is_xxx routines from
-!> modules that don't have any vert choices.  but you have to replicate the
-!> parameters since you can't have this code use the publics and have the
-!> specific location_mods use VERTISxxx from here.  and depending on which
-!> specific module you use, only some or possibly none of the VERTs are defined.
-!> best we can do, i guess.  fortran sucks sometimes.
+module location_io_mod
 
-!> can we do something about get_close here? simplify the code for
-!> modules which don't have variable vertical options?
+use            types_mod, only : r8, MISSING_I
+use netcdf_utilities_mod, only : nc_check
 
-module location_utilitiess_mod
-
-use      types_mod, only : r8, MISSING_R8, MISSING_I, PI, RAD2DEG, DEG2RAD, OBSTYPELENGTH
-use  utilities_mod, only : error_handler, E_ERR, nc_check, E_MSG
-
-!>@todo FIXME: there should be accessor functions for 5 LocationXXX variables below.
-use location_mod, only: location_type, get_location, &
-          LocationDims, LocationName, LocationLName, &
-          LocationStorageOrder, LocationUnits, has_vert_choice, &
-          vert_is_height, vert_is_pressure, vert_is_undef, vert_is_level, &
-          vert_is_surface, vert_is_scale_height, query_location
+!>@todo FIXME: should there be accessor functions for 5 LocationXXX variables below?
+use        location_mod, only : location_type, get_location, &
+                                LocationDims, LocationName, LocationLName, &
+                                LocationStorageOrder, LocationUnits, &
+                                has_vertical_choice, query_location
 
 
 use typeSizes
@@ -45,8 +33,8 @@ use netcdf
 implicit none
 private
 
-public :: nc_write_location_atts, nc_get_location_varids, nc_write_location, &
-          nc_write_location_vert, has_vert_choice
+public :: nc_write_location_atts, nc_get_location_varids, &
+          nc_write_location, nc_write_location_vert
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -74,14 +62,18 @@ contains
 !----------------------------------------------------------------------------
 !> Create and add attributes to a 'location' dimension and variable.
 
-subroutine nc_write_location_atts( ncFileID, fname, unlimDimID ) 
+subroutine nc_write_location_atts( ncFileID, fname, use_unlimited_dim ) 
  
 integer,           intent(in) :: ncFileID    ! handle to the netcdf file
 character(len=*),  intent(in) :: fname       ! file name (for printing purposes)
-integer, optional, intent(in) :: unlimDimID  ! handle to the dimension that grows
+logical, optional, intent(in) :: use_unlimited_dim ! if true, query and use unlimdim
 
-integer :: LocDimID
-integer :: VarID
+integer :: unlimDimID, LocDimID, VarID
+
+logical :: unlimited
+
+unlimited = .false.
+if (present(use_unlimited_dim)) unlimited = use_unlimited_dim
 
 ! define the rank/dimension of the location information
 call nc_check(nf90_def_dim(ncid=ncFileID, name='location', len=LocationDims, &
@@ -89,7 +81,10 @@ call nc_check(nf90_def_dim(ncid=ncFileID, name='location', len=LocationDims, &
 
 ! Define the location variable and attributes
 
-if (present(unlimDimID)) then
+if (unlimited) then
+   call nc_check(nf90_Inquire(ncFileID, unlimitedDimId=unlimDimID), &
+                           'nc_write_model_atts', 'nf90_Inquire')
+
    call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
              dimids=(/ LocDimID, unlimDimID /), varid=VarID), &
             'nc_write_location_atts', 'location:def_var')
@@ -100,7 +95,7 @@ else
 endif
 
 call nc_check(nf90_put_att(ncFileID, VarID, 'description', 'location coordinates'), &
-              'nc_write_location_basics', 'location:description')
+              'nc_write_location_atts', 'location:description')
 call nc_check(nf90_put_att(ncFileID, VarID, 'location_type', trim(LocationName)), &
               'nc_write_location_atts', 'location:location_type')
 call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', trim(LocationLName)), &
@@ -124,22 +119,22 @@ integer :: VarID
 
 call nc_check(nf90_def_var(ncid=ncFileID, name='which_vert', xtype=nf90_int, &
           dimids=(/ nf90_unlimited /), varid=VarID), &
-            'nc_write_location_atts', 'which_vert:def_var')
+            'nc_write_location_vert', 'which_vert:def_var')
 
 call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', 'vertical coordinate system code'), &
-           'nc_write_location_atts', 'which_vert:long_name')
+           'nc_write_location_vert', 'which_vert:long_name')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISUNDEF', VERTISUNDEF), &
-           'nc_write_location_atts', 'which_vert:VERTISUNDEF')
+           'nc_write_location_vert', 'which_vert:VERTISUNDEF')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISSURFACE', VERTISSURFACE), &
-           'nc_write_location_atts', 'which_vert:VERTISSURFACE')
+           'nc_write_location_vert', 'which_vert:VERTISSURFACE')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISLEVEL', VERTISLEVEL), &
-           'nc_write_location_atts', 'which_vert:VERTISLEVEL')
+           'nc_write_location_vert', 'which_vert:VERTISLEVEL')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISPRESSURE', VERTISPRESSURE), &
-           'nc_write_location_atts', 'which_vert:VERTISPRESSURE')
+           'nc_write_location_vert', 'which_vert:VERTISPRESSURE')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISHEIGHT', VERTISHEIGHT), &
-           'nc_write_location_atts', 'which_vert:VERTISHEIGHT')
+           'nc_write_location_vert', 'which_vert:VERTISHEIGHT')
 call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISSCALEHEIGHT', VERTISSCALEHEIGHT), &
-           'nc_write_location_atts', 'which_vert:VERTISSCALEHEIGHT')
+           'nc_write_location_vert', 'which_vert:VERTISSCALEHEIGHT')
 
 end subroutine nc_write_location_vert
 
@@ -219,6 +214,7 @@ integer, optional,   intent(in) :: WhichVertVarID
 
 real(r8), allocatable :: locations(:,:)
 integer,  allocatable :: intvals(:)
+integer :: i
 logical :: dovert
 
 dovert = .false.
@@ -231,7 +227,7 @@ if (dovert) allocate(intvals(loccount))
 
 do i=1, loccount
    locations(:,i) = get_location( loc(i) ) 
-   if (dovert) intvals(i) = query_location(loc, 'WHICH_VERT')
+   if (dovert) intvals(i) = query_location(loc(i), 'WHICH_VERT')
 enddo
 
 call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
@@ -240,8 +236,7 @@ call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
 
 if (present(WhichVertVarID)) then
    if (WhichVertVarID /= MISSING_I) then
-      intval = query_location(loc, 'WHICH_VERT')
-      call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
+      call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intvals, &
                     start=(/ startlocindex /), count=(/ loccount /) ), &
                     'nc_write_multiple_locations','put_var:vert' )
    endif
@@ -254,7 +249,7 @@ end subroutine nc_write_multiple_locations
 
 !----------------------------------------------------------------------------
 
-end module location_utilitiess_mod
+end module location_io_mod
 
 ! <next few lines under version control, do not edit>
 ! $URL$
