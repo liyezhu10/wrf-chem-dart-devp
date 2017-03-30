@@ -9,8 +9,9 @@ program id_set_def_stdin
 use     types_mod, only : r8
 use  location_mod, only : location_type
 use utilities_mod, only : get_unit
+use  obs_kind_mod, only : QTY_SURFACE_PRESSURE
 use     model_mod, only : static_init_model, get_model_size, &
-                          TYPE_PS, get_state_meta_data
+                          get_state_meta_data
 
 implicit none
 
@@ -52,7 +53,7 @@ do i = 1, model_size
    call get_state_meta_data(i, location, var_type)
 
    ! Output the appropriate observational error variance
-   if(var_type == TYPE_PS) then
+   if(var_type == QTY_SURFACE_PRESSURE) then
    write(iunit, *)  10000.0_r8
    else
       write(iunit, *) 1.0_r8
