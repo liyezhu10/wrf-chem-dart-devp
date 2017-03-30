@@ -62,6 +62,9 @@ contains
 !----------------------------------------------------------------------------
 !> Create and add attributes to a 'location' dimension and variable.
 
+!>@todo FIXME does the last arg need to be an optional actual dim?
+!>or an additional dim?  check obs_seq_verify for usage
+
 subroutine nc_write_location_atts( ncFileID, fname, use_unlimited_dim ) 
  
 integer,           intent(in) :: ncFileID    ! handle to the netcdf file
