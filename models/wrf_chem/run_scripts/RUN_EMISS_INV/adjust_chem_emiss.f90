@@ -23,7 +23,7 @@
              character(len=150)                        :: wrffirechemi_old,wrffirechemi_new
              character(len=20),dimension(mchemi_emiss) :: chemi_emiss
              character(len=20),dimension(mfirechemi_emiss) :: firechemi_emiss
-             namelist /adjust_chem_emiss/nx,ny,nz,nz_chemi,nz_firechemi,nchemi_emiss, &
+             namelist /adjust_chem_emiss/fac,facc,nx,ny,nz,nz_chemi,nz_firechemi,nchemi_emiss, &
              nfirechemi_emiss,wrfchemi_prior,wrfchemi_post,wrfchemi_old,wrfchemi_new, &
              wrffirechemi_prior,wrffirechemi_post,wrffirechemi_old,wrffirechemi_new
 !
@@ -33,7 +33,8 @@
              status='old',action='read')
              read(unit,adjust_chem_emiss)
              close(unit)
-             print *, 'nx                      ',nx
+             print *, 'fac                     ',fac
+             print *, 'facc                    ',facc
              print *, 'ny                      ',ny
              print *, 'nz                      ',nz
              print *, 'nz_chemi                ',nz_chemi
@@ -61,12 +62,12 @@
 !
 ! multiplier to damp the emissions update at the cycle time and after the cycle time 
 ! when based on an emissions factor
-             fac=0.
+!             fac=0.
 !
 ! multiplier to damp the emission update at forecast times after the cycle time 
 ! when based on the tendency (in this case the emissions factor correction does not
 ! work because the denominator - the prior - is zero
-             facc=0.
+!             facc=0.
 !
              print *, 'APM Adjust chem emissions '
              chemi_emiss(1)='E_CO'

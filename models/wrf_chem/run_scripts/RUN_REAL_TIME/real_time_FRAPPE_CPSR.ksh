@@ -15,9 +15,12 @@ export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072600
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
-export ADD_EMISS=.false.
+export ADD_EMISS=.true.
 export VARLOC=.true.
 export INDEP_CHEM_ASIM=.false.
+export EMISS_DAMP_CYCLE=0.
+export EMISS_DAMP_INTRA_CYCLE=0.
+let BAND_ISO_VAL_CO=.09
 #
 # Run fine scale forecast only
 export RUN_FINE_SCALE=false
@@ -31,15 +34,15 @@ if [[ ${RUN_FINE_SCALE_RESTART} = "true" ]]; then
 fi
 #
 # Run WRF-Chem for failed forecasts
-export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=1
+export RUN_SPECIAL_FORECAST=true
+export NUM_SPECIAL_FORECAST=3
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
-export SPECIAL_FORECAST_MEM[1]=18
-export SPECIAL_FORECAST_MEM[2]=23
-export SPECIAL_FORECAST_MEM[3]=3
-export SPECIAL_FORECAST_MEM[4]=4
-export SPECIAL_FORECAST_MEM[5]=5
+export SPECIAL_FORECAST_MEM[1]=2
+export SPECIAL_FORECAST_MEM[2]=7
+export SPECIAL_FORECAST_MEM[3]=9
+export SPECIAL_FORECAST_MEM[4]=7
+export SPECIAL_FORECAST_MEM[5]=9
 export SPECIAL_FORECAST_MEM[6]=6
 export SPECIAL_FORECAST_MEM[7]=7
 export SPECIAL_FORECAST_MEM[8]=8
@@ -68,6 +71,7 @@ export SPECIAL_FORECAST_MEM[30]=30
 #
 # Run temporal interpolation for missing background files
 export RUN_INTERPOLATE=false
+
 #
 # for 2014072212 and 2014072218
 #export BACK_DATE=2014072206
@@ -147,6 +151,7 @@ export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
 export BE_DIR=${WRFDA_DIR}/var/run
 export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
 export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
+export RUN_BAND_DEPTH_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_BAND_DEPTH
 #
 cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
 cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
@@ -238,42 +243,44 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
+   export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
-   export RUN_AIRNOW_O3_OBS=true
-   export RUN_AIRNOW_CO_OBS=true
-   export RUN_MODIS_AOD_OBS=true
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_AIRNOW_O3_OBS=false
+   export RUN_AIRNOW_CO_OBS=false
+   export RUN_MODIS_AOD_OBS=false
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
       export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
+      export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
       export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=true
-      export RUN_UPDATE_BC=true
+      export RUN_DART_FILTER=false
+      export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
       export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_ENSMEAN_CYCLE_FR=false
@@ -308,6 +315,7 @@ else
       export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_CR=false
+      export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
       export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
@@ -315,8 +323,9 @@ else
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=false
-      export RUN_UPDATE_BC=false
+      export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_UPDATE_BC=false
       export RUN_WRFCHEM_CYCLE_FR=false
       export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_ENSMEAN_CYCLE_FR=false
@@ -424,7 +433,7 @@ export GEOGRID_NUM_TASKS=32
 export GEOGRID_TASKS_PER_NODE=8
 export GEOGRID_JOB_CLASS=geyser
 export WRFCHEM_TIME_LIMIT=6:00
-export WRFCHEM_TIME_LIMIT=2:59
+export WRFCHEM_TIME_LIMIT=4:59
 export WRFCHEM_NUM_TASKS=32
 export WRFCHEM_TASKS_PER_NODE=8
 export WRFCHEM_JOB_CLASS=geyser
@@ -432,7 +441,7 @@ export WRFDA_TIME_LIMIT=0:10
 export WRFDA_NUM_TASKS=32
 export WRFDA_TASKS_PER_NODE=8
 export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=3:59
+export FILTER_TIME_LIMIT=4:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
 export FILTER_JOB_CLASS=geyser
@@ -469,6 +478,7 @@ export PREPROCESS_OBS_DIR=${RUN_DIR}/${DATE}/preprocess_obs
 export WRFCHEM_CHEM_ICBC_DIR=${RUN_DIR}/${DATE}/wrfchem_chem_icbc
 export DART_FILTER_DIR=${RUN_DIR}/${DATE}/dart_filter
 export UPDATE_BC_DIR=${RUN_DIR}/${DATE}/update_bc
+export BAND_DEPTH_DIR=${RUN_DIR}/${DATE}/band_depth
 export ENSEMBLE_MEAN_INPUT_DIR=${RUN_DIR}/${DATE}/ensemble_mean_input
 export ENSEMBLE_MEAN_OUTPUT_DIR=${RUN_DIR}/${DATE}/ensemble_mean_output
 export REAL_TIME_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_REAL_TIME
@@ -1443,6 +1453,7 @@ if [[ ${RUN_REAL} = "true" ]]; then
 #
 # CREATE WRF NAMELIST
       export NL_IOFIELDS_FILENAME=' '
+      export NL_IOFIELDS_FILENAME=\'hist_io_flds_v1\',\'hist_io_flds_v2\'
       export L_FCST_RANGE=${FCST_PERIOD}
       export NL_DX=${DX_CR},${DX_FR}
       export NL_DY=${DX_CR},${DX_FR}
@@ -2938,8 +2949,10 @@ EOFF
 # COPY OUTPUT TO ARCHIVE LOCATION
    export MOPITT_FILE=mopitt_obs_seq${D_DATE}
    touch obs_seq_mopitt_co_${DATE}.out
-   if [[ -e ${MOPITT_FILE} ]]; then
+   if [[ -s ${MOPITT_FILE} ]]; then
       cp ${MOPITT_FILE} obs_seq_mopitt_co_${DATE}.out
+   else
+      touch NO_MOPITT_CO_${DATE}
    fi
 fi
 #
@@ -3228,7 +3241,7 @@ EOFF
 #
 # COPY OUTPUT TO ARCHIVE LOCATION
    export IASI_FILE=iasi_obs_seq${D_DATE}
-   if [[ -e ${IASI_FILE} ]]; then
+   if [[ -s ${IASI_FILE} ]]; then
       cp ${IASI_FILE} obs_seq_iasi_co_${DATE}.out
    else
       touch NO_DATA_${D_DATE}
@@ -3399,7 +3412,7 @@ EOFF
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
 #
    ./obs_sequence_tool
-   if [[ -e obs_seq_${DATE}.out ]]; then
+   if [[ -s obs_seq_${DATE}.out ]]; then
       cp obs_seq_${DATE}.out ${DATA_OUT_DIR}/obs_IASI_O3_DnN_QOR/.
    else
        touch ${DATA_OUT_DIR}/obs_IASI_O3_DnN_QOR/NO_OBS_SEQ.OUT_DATA_${DATE}
@@ -3465,7 +3478,7 @@ if ${RUN_AIRNOW_O3_OBS}; then
 # COPY OUTPUT TO ARCHIVE LOCATION
    export AIRNOW_OUT_FILE=airnow_obs_seq
    export AIRNOW_ARCH_FILE=obs_seq_airnow_o3_${DATE}.out
-   if [[ -e ${AIRNOW_OUT_FILE} ]]; then
+   if [[ -s ${AIRNOW_OUT_FILE} ]]; then
       cp ${AIRNOW_OUT_FILE} ${AIRNOW_ARCH_FILE}
       rm ${AIRNOW_OUT_FILE}
    else
@@ -3532,7 +3545,7 @@ if ${RUN_AIRNOW_CO_OBS}; then
 # COPY OUTPUT TO ARCHIVE LOCATION
    export AIRNOW_OUT_FILE=airnow_obs_seq
    export AIRNOW_ARCH_FILE=obs_seq_airnow_co_${DATE}.out
-   if [[ -e ${AIRNOW_OUT_FILE} ]]; then
+   if [[ -s ${AIRNOW_OUT_FILE} ]]; then
       cp ${AIRNOW_OUT_FILE} ${AIRNOW_ARCH_FILE}
       rm ${AIRNOW_OUT_FILE}
    else
@@ -3602,15 +3615,18 @@ EOFF
    rm -rf input.nml
    rm -rf modis_asciidata.input
    rm -rf modis_obs_seq.out
-   if [[ -e modis_aod_ascii_${YYYY}${MM}${DD}${HH} ]]; then
+   if [[ -s modis_aod_ascii_${YYYY}${MM}${DD}${HH} ]]; then
       cp modis_aod_ascii_${YYYY}${MM}${DD}${HH} modis_asciidata.input
       cp ${DART_DIR}/observations/MODIS/work/input.nml ./.
       ${DART_DIR}/observations/MODIS/work/modis_ascii_to_obs
-      export MODIS_FILE=obs_seq_modis_aod_${DATE}.out
-      mv modis_obs_seq.out ${MODIS_FILE}
+      if [[ -s modis_obs_seq.out ]]; then
+         export MODIS_FILE=obs_seq_modis_aod_${DATE}.out
+         mv modis_obs_seq.out ${MODIS_FILE}
+      else
+         touch NO_MODIS_AOD_${DATE}
+      fi
    else
-      echo APM: ERROR modis_aod_ascii_${YYYY}${MM}${DD}${HH} does not exit
-      exit
+      touch NO_MODIS_AOD_${DATE}
    fi
 fi
 #
@@ -3632,7 +3648,7 @@ if ${RUN_MET_OBS}; then
       cd ${RUN_DIR}/${DATE}/prepbufr_met_obs
    fi
 #
-# GET PREPBUFR FILES
+# GET PREPBUF FILES
 #           
    export L_DATE=${D_YYYY}${D_MM}${D_DD}06
    export E_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} +24 2>/dev/null)
@@ -3879,8 +3895,8 @@ if ${RUN_WRFCHEM_INITIAL}; then
       fi
 #
 # Get WRF-Chem parameter files
-#      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
+      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
+#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.
@@ -4061,6 +4077,8 @@ if ${RUN_DART_FILTER}; then
       cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
 #      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
 #      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfrst_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfrst_d${CR_DOMAIN}_${FILE_DATE} ../wrfinput_d${CR_DOMAIN}_${CMEM}
 ## APM: ---
 ##
       let MEM=${MEM}+1
@@ -4157,13 +4175,14 @@ EOF
    cd ${RUN_DIR}/${DATE}/dart_filter
    ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
-##
-## APM: +++ another wrfapm / wrfout swap for emission inversion
-   cp wrk_wrf_e001/wrfinput_d${CR_DOMAIN} ./
+#
+# APM: +++ another wrfapm / wrfout swap for emission inversion
    cp wrk_wrf_e001/wrfchemi_d${CR_DOMAIN} ./
    cp wrk_wrf_e001/wrffirechemi_d${CR_DOMAIN} ./
-#   cp ${BACKGND_FCST_DIR}/run_e001/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+   cp wrk_wrf_e001/wrfinput_d${CR_DOMAIN} ./
+   cp ${BACKGND_FCST_DIR}/run_e001/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
 #   cp ${BACKGND_FCST_DIR}/run_e001/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+#   cp ${BACKGND_FCST_DIR}/run_e001/wrfrst_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
 ## APM: ---
 ##
 # Copy "out" inflation files from prior cycle to "in" inflation files for current cycle
@@ -4269,6 +4288,7 @@ EOF
       cp ${DART_DIR}/models/wrf_chem/work/dart_to_wrf ./.
       cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
 #      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfapm_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
+#      cp ${BACKGND_FCST_DIR}/run_${CMEM}/wrfrst_d${CR_DOMAIN}_${FILE_DATE} wrfinput_d${CR_DOMAIN}
       export LL_DATE=${DATE}
       export LL_END_DATE=${DATE}
       export LL_YY=`echo ${LL_DATE} | cut -c1-4`
@@ -4434,8 +4454,8 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
 # Get WRF-Chem parameter files
       cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
       cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
-#      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
+      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
+#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.
@@ -4553,6 +4573,8 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
          rm -rf adjust_chem_emiss.nml
          cat <<  EOF > adjust_chem_emiss.nml
 &adjust_chem_emiss
+fac=${EMISS_DAMP_CYCLE}
+facc=${EMISS_DAMP_INTRA_CYCLE}
 nx=${NNXP_CR}
 ny=${NNYP_CR}
 nz=${NNZP_CR}
@@ -4620,6 +4642,79 @@ fi
 #
 #########################################################################
 #
+# FIND DEEPEST MEMBER
+#
+#########################################################################
+#
+if ${RUN_BAND_DEPTH}; then
+   if [[ ! -d ${RUN_DIR}/${DATE}/band_depth ]]; then
+      mkdir -p ${RUN_DIR}/${DATE}/band_depth
+      cd ${RUN_DIR}/${DATE}/band_depth
+   else
+      cd ${RUN_DIR}/${DATE}/band_depth
+   fi
+#
+# set the forecast directory
+   if [[ ${DATE} -eq ${INITIAL_DATE} ]]; then
+      export OUTPUT_DIR=${WRFCHEM_INITIAL_DIR}
+   else
+      export OUTPUT_DIR=${WRFCHEM_CYCLE_CR_DIR}
+   fi
+   cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
+   export END_CYCLE_DATE=$($BUILD_DIR/da_advance_time.exe ${START_DATE} ${CYCLE_PERIOD} 2>/dev/null)
+   export B_YYYY=$(echo $END_CYCLE_DATE | cut -c1-4)
+   export B_MM=$(echo $END_CYCLE_DATE | cut -c5-6) 
+   export B_DD=$(echo $END_CYCLE_DATE | cut -c7-8)
+   export B_HH=$(echo $END_CYCLE_DATE | cut -c9-10)
+   export B_FILE_DATE=${B_YYYY}-${B_MM}-${B_DD}_${B_HH}:00:00
+#
+# link in forecasts for deepest member determination
+   let MEM=1
+   while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
+      export CMEM=e${MEM}
+      export KMEM=${MEM}
+      if [[ ${MEM} -lt 1000 ]]; then export KMEM=0${MEM}; fi
+      if [[ ${MEM} -lt 100 ]]; then export KMEM=00${MEM}; export CMEM=e0${MEM}; fi
+      if [[ ${MEM} -lt 10 ]]; then export KMEM=000${MEM}; export CMEM=e00${MEM}; fi
+      rm -rf wrfout_d${CR_DOMAIN}.${CMEM}
+#      ln -sf ${OUTPUT_DIR}/run_${CMEM}/wrfout_d${CR_DOMAIN}_${B_FILE_DATE}.${CMEM} wrfout_d${CR_DOMAIN}.${CMEM}
+      ln -sf /glade/p/FRAPPE/real_FRAPPE_CPSR_VARLOC/${DATE}/wrfchem_cycle_cr_T_T_F_fac_0p5/run_${CMEM}/wrfout_d${CR_DOMAIN}_${B_FILE_DATE} wrfout_d${CR_DOMAIN}.${CMEM}
+      let MEM=${MEM}+1
+   done
+#
+# copy band depth code
+   cp ${RUN_BAND_DEPTH_DIR}/ComputeBandDepth.m ./.
+   rm -rf job.ksh
+   rm -rf mat_*.err
+   rm -rf mat_*.out
+   touch job.ksh
+   RANDOM=$$
+   export JOBRND=mat_${RANDOM}
+   cat <<EOF >job.ksh
+#!/bin/ksh -aeux
+#BSUB -P ${PROJ_NUMBER_ACD}
+#BSUB -n 1
+#BSUB -J ${JOBRND}
+#BSUB -o ${JOBRND}.out
+#BSUB -e ${JOBRND}.err
+#BSUB -W 00:02
+#BSUB -q geyser
+#
+matlab -nosplash -nodesktop -r 'ComputeBandDepth(.09)'
+exit
+EOF
+   bsub -K < job.ksh
+#
+# run band depth script
+   source shell_file.ksh
+   export CMEM=e${DEEP_MEMBER}
+   if [[ ${DEEP_MEMBER} -lt 100 ]]; then export CMEM=e0${DEEP_MEMBER}; fi
+   if [[ ${DEEP_MEMBER} -lt 10 ]]; then export CMEM=e00${DEEP_MEMBER}; fi
+   export CLOSE_MEM_ID=${CMEM}
+fi
+#
+#########################################################################
+#
 # CALCULATE ENSEMBLE MEAN_INPUT
 #
 #########################################################################
@@ -4656,14 +4751,6 @@ fi
 #
 #########################################################################
 #
-# FIND ENSEMBLE MEMBER CLOSEST TO ENSEMBLE MEAN
-#
-#########################################################################
-#
-   export CLOSE_MEM_ID=e001
-#
-#########################################################################
-#
 # RUN WRFCHEM_CYCLE_FR
 #
 #########################################################################
@@ -4677,8 +4764,8 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    fi
 #
 # Get WRF-Chem parameter files
-#   cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-   cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
+   cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
+#   cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
    cp ${WRFCHEM_DIR}/test/em_real/CAM_ABS_DATA ./.
    cp ${WRFCHEM_DIR}/test/em_real/CAM_AEROPT_DATA ./.
    cp ${WRFCHEM_DIR}/test/em_real/ETAMPNEW_DATA ./.
@@ -4795,8 +4882,8 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
 #
 # Get WRF-Chem parameter files
    if [[ ${RUN_FINE_SCALE_RESTART} = "false" ]]; then
-#      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
+      cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
+#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.

@@ -229,7 +229,7 @@ WRFDomains2 : do id = 1,num_domains
       endif
 !
 ! LXL/APM +++
-      ! read wrfinput or wrfchemi
+! determine where to place variable from the dart state vector (wrfinput, wrfchemi, or wrffirechemi)
       if ( ind .le. wrf%number_of_conv_variables ) then
          ncid_f = ncid
          if (debug) print*, ' read from wrfinput: ncid_f = ncid'
@@ -241,6 +241,9 @@ WRFDomains2 : do id = 1,num_domains
          wrf%number_of_emiss_chemi_variables ) then
          ncid_f = ncid_emiss_firechemi
          if (debug) print*, ' read from wrffirechemi: ncid_f = ncid_emiss_firechemi'
+      else
+         print *, 'APM: dart_to_wrf - ind index exceeds the number of wrf state variables'
+         stop
       endif
 
       ! get stagger and variable size
@@ -249,8 +252,11 @@ WRFDomains2 : do id = 1,num_domains
                      'inq_var_id ' // wrf_state_variables(1,my_index))
 ! LXL/APM ---
 !
+      print *, 'APM: var_size ',ind,wrf%var_size(3,ind)
+      print *, 'APM: variable ',ind,wrf_state_variables(1,my_index)
       if (  wrf%var_size(3,ind) == 1 ) then
-
+!
+! 1-D or 2-D field
          if ( debug ) then
             write(*,"(A,2(A,I5))") trim(my_field), ': 2D, size: ', wrf%var_size(1,ind), &
                                     ' by ', wrf%var_size(2,ind)
@@ -336,7 +342,8 @@ WRFDomains2 : do id = 1,num_domains
          deallocate(wrf_var_2d)
 
       else
-
+!
+! 3-D field
          if ( debug ) then
             write(*,"(A,3(A,I5))") trim(my_field), ': 3D, size: ', wrf%var_size(1,ind), &
                                     " by ", wrf%var_size(2, ind), " by ", wrf%var_size(3, ind)
@@ -426,9 +433,9 @@ WRFDomains2 : do id = 1,num_domains
 
       endif 
 
-      if (debug) write(*,"(A,I9)") trim(my_field)//': starts at offset into state vector: ', dart_ind
+      write(*,"(A,I9)") trim(my_field)//': starts at offset into state vector: ', dart_ind
       dart_ind = dart_ind + wrf%var_size(1,ind) * wrf%var_size(2,ind) * wrf%var_size(3,ind)
-      if (debug) write(*,"(A,I9)") trim(my_field)//': ends at offset into state vector:   ', dart_ind-1
+      write(*,"(A,I9)") trim(my_field)//': ends at offset into state vector:   ', dart_ind-1
  
    enddo
 
