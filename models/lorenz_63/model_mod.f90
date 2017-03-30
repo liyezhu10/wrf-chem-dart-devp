@@ -26,10 +26,8 @@ use distributed_state_mod, only : get_state
 use state_structure_mod,   only : add_domain
 
 use     location_mod,      only : location_type, set_location, get_location, &
-                                  get_close_obs   => get_close, &
-                                  get_close_state => get_close, &
-                                  convert_vertical_obs   => convert_vertical, &
-                                  convert_vertical_state => convert_vertical
+                                  get_close_obs, get_close_state, &
+                                  convert_vertical_obs, convert_vertical_state
 
 use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
                                   nc_write_location

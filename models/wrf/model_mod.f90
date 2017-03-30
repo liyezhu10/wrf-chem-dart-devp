@@ -49,7 +49,7 @@ use      location_mod,   only : location_type, get_location, set_location, &
                                 VERTISSCALEHEIGHT, vertical_localization_on, &
                                 set_vertical_localization_coord, &
                                 get_close_type, get_dist, is_vertical, &
-                                get_close
+                                loc_get_close => get_close_obs
 
 use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 register_module, error_handler, E_ERR, E_WARN, &
@@ -2854,43 +2854,46 @@ deallocate(uniquek)
 end subroutine model_interpolate
 
 !#######################################################################
-subroutine convert_vertical_obs(state_handle, num, locs, loc_qtys, which_vert, status)
+subroutine convert_vertical_obs(state_handle, num, locs, loc_qtys, loc_types, &
+                                which_vert, status)
 
 type(ensemble_type), intent(in)    :: state_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
 integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: loc_types(:)
 integer,             intent(in)    :: which_vert
-integer,             intent(out)   :: status
+integer,             intent(out)   :: status(:)
 
 integer :: i
 
 do i=1, num
-   call vert_convert(state_handle, locs(i), loc_qtys(i), status)
+   call vert_convert(state_handle, locs(i), loc_qtys(i), status(i))
 enddo
-
-status = 0
 
 end subroutine convert_vertical_obs
 
 
 !#######################################################################
-subroutine convert_vertical_state(state_handle, num, locs, loc_qtys, which_vert, status)
+subroutine convert_vertical_state(state_handle, num, locs, loc_qtys, loc_indx, &
+                                  which_vert, istatus)
 
 type(ensemble_type), intent(in)    :: state_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
 integer,             intent(in)    :: loc_qtys(:)
+integer(i8),         intent(in)    :: loc_indx(:)
 integer,             intent(in)    :: which_vert
-integer,             intent(out)   :: status
+integer,             intent(out)   :: istatus
 
-integer :: i
+integer :: i, istat
+
+istatus = 0
 
 do i=1, num
-   call vert_convert(state_handle, locs(i), loc_qtys(i), status)
+   call vert_convert(state_handle, locs(i), loc_qtys(i), istat)
+   istatus = istatus + istat   
 enddo
-
-status = 0
 
 end subroutine convert_vertical_state
 
@@ -6743,25 +6746,41 @@ end do
 end subroutine get_domain_info
 
 !#######################################################################
-subroutine get_close_state(gc, base_loc, base_type, locs, &
-                          loc_qtys, num_close, close_ind, dist, state_handle)
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, state_handle)
 
 type(get_close_type),        intent(in)     :: gc
 type(location_type),         intent(inout)  :: base_loc, locs(:)
 integer,                     intent(in)     :: base_type, loc_qtys(:)
+integer(i8),                 intent(in)     :: loc_indx(:)
 integer,                     intent(out)    :: num_close, close_ind(:)
 real(r8),                    intent(out)    :: dist(:)
 type(ensemble_type),         intent(in)     :: state_handle
 
-call get_close_obs(gc, base_loc, base_type, locs, &
-                   loc_qtys, num_close, close_ind, dist, state_handle)
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
 
 end subroutine get_close_state
 
 !#######################################################################
-!> Distributed version of get_close_obs
-subroutine get_close_obs(gc, base_loc, base_type, locs, &
-                         loc_qtys, num_close, close_ind, dist, state_handle)
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, state_handle)
+
+type(get_close_type),        intent(in)     :: gc
+type(location_type),         intent(inout)  :: base_loc, locs(:)
+integer,                     intent(in)     :: base_type, loc_qtys(:), loc_types(:)
+integer,                     intent(out)    :: num_close, close_ind(:)
+real(r8),                    intent(out)    :: dist(:)
+type(ensemble_type),         intent(in)     :: state_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_obs
+
+!#######################################################################
+subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                     num_close, close_ind, dist, state_handle)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
 ! (obs_loc, obs_kind), returns the subset of close ones to the "base" ob, their
@@ -6822,8 +6841,8 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call get_close(gc, base_loc, base_type, locs, loc_qtys, &
-                  num_close, close_ind)
+   call loc_get_close(gc, base_loc, base_type, locs, loc_qtys, loc_qtys, &
+                      num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
    do k = 1, num_close
@@ -6859,7 +6878,7 @@ if (istatus1 == 0) then
    end do
 endif
 
-end subroutine get_close_obs
+end subroutine get_close
 
 !#######################################################################
 !nc -- additional function from Greg Lawson & Nancy Collins

@@ -14,11 +14,8 @@ use        types_mod,      only : r8, i8, i4, MISSING_R8
 use time_manager_mod,      only : time_type, set_time
 
 use     location_mod,      only : location_type, set_location, set_location_missing, &
-                                  get_close_type, &
-                                  get_close_obs   => get_close, &
-                                  get_close_state => get_close, &
-                                  convert_vertical_obs   => convert_vertical, &
-                                  convert_vertical_state => convert_vertical
+                                  get_close_type, get_close_obs, get_close_state, &
+                                  convert_vertical_obs, convert_vertical_state
 
 use    utilities_mod,      only : register_module, error_handler, E_ERR, E_MSG, nmlfileunit, &
                                   do_output, find_namelist_in_file, check_namelist_read,     &

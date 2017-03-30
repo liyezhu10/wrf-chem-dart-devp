@@ -39,7 +39,7 @@ use         location_mod, only : location_type, get_close_type, query_location, 
                                  operator(==), set_location_missing, write_location,      &
                                  LocationDims, is_vertical, vertical_localization_on,     &
                                  set_vertical, has_vertical_choice, get_close_init,       &
-                                 get_vertical_localization_coord,                         &
+                                 get_vertical_localization_coord, get_close_destroy,      &
                                  set_vertical_localization_coord
 
 use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars,             & 
@@ -59,9 +59,7 @@ use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate,         
 use time_manager_mod,     only : time_type, get_time
 
 use assim_model_mod,      only : get_state_meta_data,                                     &
-                                 get_close_obs_init,    get_close_state_init,             &
                                  get_close_obs,         get_close_state,                  &
-                                 get_close_obs_destroy, get_close_state_destroy,          &
                                  convert_vertical_obs,  convert_vertical_state
 
 use distributed_state_mod, only : create_mean_window, free_mean_window
@@ -394,6 +392,12 @@ integer,                     intent(in)    :: OBS_PRIOR_MEAN_START, OBS_PRIOR_ME
 integer,                     intent(in)    :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END
 logical,                     intent(in)    :: inflate_only
 
+!>@todo FIXME this routine has a huge amount of local/stack storage.
+!>at some point does it need to be allocated instead?  this routine isn't
+!>called frequently so doing allocate/deallocate isn't a timing issue.  
+!>putting arrays on the stack is fast, but risks running out of stack space 
+!>and dying with strange errors.
+
 real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
 real(r8) :: reg_factor, impact_factor
 real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
@@ -459,7 +463,8 @@ logical, parameter :: timing = .false.
 logical, parameter :: timing1 = .false.
 real(digits12), allocatable :: elapse_array(:)
 
-integer :: vstatus !< for vertical conversion status. Can we just smash the dart qc instead?
+integer :: istatus 
+integer :: vstatus(obs_ens_handle%my_num_vars) !< for vertical conversion status.
 
 
 ! we are going to read/write the copies array
@@ -556,15 +561,20 @@ if (.not. lanai_bitwise .and. has_vertical_choice()) then
    ! convert the verical of all my observations to the localization coordinate
    ! this may not be bitwise with Lanai because of a different number of set_location calls
    if (timing) call start_mpi_timer(base)
+   call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
+                             my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
+   !do i = 1, obs_ens_handle%my_num_vars
+   !   !>@todo FIXME how to do multiple obs and record the status correctly?
+   !   !>does vstatus need to be an array?  same for state or no? (thinking yes for obs, no for state)
+   !   !call convert_vertical_obs(ens_handle, 1, my_obs_loc(i), my_obs_kind(i), vstatus)
+   !   lc(1) = my_obs_loc(i)
+   !   kd(1) = my_obs_kind(i)
+   !   call convert_vertical_obs(ens_handle, 1, lc, kd, 0, vstatus)
+   !   my_obs_loc(i) = lc(1)
    do i = 1, obs_ens_handle%my_num_vars
-      !call convert_vertical_obs(ens_handle, 1, my_obs_loc(i), my_obs_kind(i), vstatus)
-      lc(1) = my_obs_loc(i)
-      kd(1) = my_obs_kind(i)
-      call convert_vertical_obs(ens_handle, 1, lc, kd, 0, vstatus)
-      my_obs_loc(i) = lc(1)
       if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
          !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
-         if (vstatus /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
+         if (vstatus(i) /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
       endif
    enddo
    if (timing) then
@@ -592,7 +602,7 @@ endif
 !>where we call convert_vertical_state()
 if (has_vertical_choice()) then
    if (.false.) call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
-                                      get_vertical_localization_coord(), vstatus)
+                                            my_state_indx, get_vertical_localization_coord(), istatus)
 endif
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
@@ -610,14 +620,6 @@ if(local_varying_ss_inflate .or. local_single_ss_inflate) then
    end do
 endif
 
-! the get_close_maxdist_init() call is quick - it just allocates space.
-! it's the get_close_obs_init() call that takes time.  correct me if
-! i'm confused but the obs list is different each time, so it can't 
-! be skipped.  i guess the state space obs_init is redundant and we 
-! could just do it once the first time - but knowing when to 
-! deallocate the space is a question.
-
-! NOTE THESE COULD ONLY BE DONE ONCE PER RUN!!! FIGURE THIS OUT.
 ! The computations in the two get_close_maxdist_init are redundant
 
 ! Initialize the method for getting state variables close to a given ob on my process
@@ -841,7 +843,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
    if (.not. close_obs_caching) then
       if (timing) call start_mpi_timer(base)
-      call get_close_obs(gc_obs, base_obs_loc, base_obs_type, my_obs_loc, my_obs_kind, num_close_obs, close_obs_ind, close_obs_dist, ens_handle)
+      call get_close_obs(gc_obs, base_obs_loc, base_obs_type, &
+                         my_obs_loc, my_obs_kind, my_obs_type, &
+                         num_close_obs, close_obs_ind, close_obs_dist, ens_handle)
       if (timing) then
          elapsed = read_mpi_timer(base)
          print*, 'get_close_obs1 time :', elapsed, 'rank ', my_task_id()
@@ -856,7 +860,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          num_close_obs_cached = num_close_obs_cached + 1
       else
          if (timing .and. i < 100) call start_mpi_timer(base)
-         call get_close_obs(gc_obs, base_obs_loc, base_obs_type, my_obs_loc, my_obs_kind, num_close_obs, close_obs_ind, close_obs_dist, ens_handle)
+         call get_close_obs(gc_obs, base_obs_loc, base_obs_type, &
+                            my_obs_loc, my_obs_kind, my_obs_type, &
+                            num_close_obs, close_obs_ind, close_obs_dist, ens_handle)
          if (timing .and. i < 100) then
             elapsed = read_mpi_timer(base)
             print*, 'get_close_obs2 time :', elapsed, 'rank ', my_task_id()
@@ -959,8 +965,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    ! Find state variables on my process that are close to observation being assimilated
    if (.not. close_obs_caching) then
       if (timing .and. i < 100) call start_mpi_timer(base)
-      call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-         num_close_states, close_state_ind, close_state_dist, ens_handle)
+      call get_close_state(gc_state, base_obs_loc, base_obs_type, &
+                           my_state_loc, my_state_kind, my_state_indx, &
+                           num_close_states, close_state_ind, close_state_dist, ens_handle)
       if (timing .and. i < 100) then
          elapsed = read_mpi_timer(base)
          print*, 'get_close_state1 time :', elapsed, 'rank ', my_task_id()
@@ -973,8 +980,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          num_close_states_cached = num_close_states_cached + 1
       else
          if (timing .and. i < 100) call start_mpi_timer(base)
-         call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-            num_close_states, close_state_ind, close_state_dist, ens_handle)
+         call get_close_state(gc_state, base_obs_loc, base_obs_type, &
+                              my_state_loc, my_state_kind, my_state_indx, &
+                              num_close_states, close_state_ind, close_state_dist, ens_handle)
          if (timing .and. i < 100) then
             elapsed = read_mpi_timer(base)
             print*, 'get_close_state2 time :', elapsed, 'rank ', my_task_id()
@@ -1220,8 +1228,8 @@ end if
 
 ! Free up the storage
 call destroy_obs(observation)
-call get_close_state_destroy(gc_state)
-call get_close_obs_destroy(gc_obs)
+call get_close_destroy(gc_state)
+call get_close_destroy(gc_obs)
 
 ! print some stats about the assimilation
 if (my_task_id() == 0 .and. timing) then

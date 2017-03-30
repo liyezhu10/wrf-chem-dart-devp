@@ -35,10 +35,12 @@ use       reg_factor_mod, only : comp_reg_factor
 
 use       obs_impact_mod, only : allocate_impact_table, read_impact_table, free_impact_table
 
-use         location_mod, only : location_type, get_close_type, get_close_obs_destroy,    &
+use         location_mod, only : location_type, get_close_type, query_location,           &
                                  operator(==), set_location_missing, write_location,      &
-                                 LocationDims, vert_is_surface, has_vertical_localization,&
-                                 get_vert, set_vert, set_which_vert
+                                 LocationDims, is_vertical, vertical_localization_on,     &
+                                 set_vertical, has_vertical_choice, get_close_init,       &
+                                 get_vertical_localization_coord,                         &
+                                 set_vertical_localization_coord
 
 use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars,             & 
                                  compute_copy_mean_var, get_var_owner_index,              &
@@ -56,13 +58,11 @@ use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate,         
 
 use time_manager_mod,     only : time_type, get_time
 
-use assim_model_mod,      only : get_state_meta_data, get_close_maxdist_init,             &
-                                 get_close_obs_init, get_close_state_init,                &
-                                 get_close_obs, get_close_state,                          &
-                                 query_vert_localization_coord, vert_convert
-
-!>@todo FIXME would like to separate vert_convert into these:
-!                                 convert_vert_obs, convert_vert_state
+use assim_model_mod,      only : get_state_meta_data,                                     &
+                                 get_close_obs_init,    get_close_state_init,             &
+                                 get_close_obs,         get_close_state,                  &
+                                 get_close_obs_destroy, get_close_state_destroy,          &
+                                 convert_vertical_obs,  convert_vertical_state
 
 use distributed_state_mod, only : create_mean_window, free_mean_window
 
@@ -174,8 +174,13 @@ logical            :: allow_any_impact_values = .false.
 ! sections.  to try out the alternatives, set this to .false.
 logical  :: only_area_adapt  = .true.
 
-! Option to distribute the mean.
-logical  :: distribute_mean  = .true.
+! Option to distribute the mean.  If 'false' each task will have a full
+! copy of the ensemble mean, which speeds models doing vertical conversion.
+! If 'true' the mean will be spread across all tasks which reduces the
+! memory needed per task but requires communication if the mean is used
+! for vertical conversion.  We have changed the default to be .false.
+! compared to previous versions of this namelist item.
+logical  :: distribute_mean  = .false.
 
 ! Lanai bitwise. This is for unit testing and runs much slower.
 ! Only use for when testing against the non-rma trunk.
@@ -399,6 +404,12 @@ integer,                     intent(in)    :: OBS_PRIOR_MEAN_START, OBS_PRIOR_ME
 integer,                     intent(in)    :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END
 logical,                     intent(in)    :: inflate_only
 
+!>@todo FIXME this routine has a huge amount of local/stack storage.
+!>at some point does it need to be allocated instead?  this routine isn't
+!>called frequently so doing allocate/deallocate isn't a timing issue.  
+!>putting arrays on the stack is fast, but risks running out of stack space 
+!>and dying with strange errors.
+
 real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
 real(r8) :: reg_factor, impact_factor
 real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
@@ -464,6 +475,8 @@ logical :: local_obs_inflate
 
 ! HK observation location conversion
 real(r8) :: vert_obs_loc_in_localization_coord
+type(location_type) :: lc(1)
+integer             :: kd(1)
 
 ! timing - set one or both of the parameters to true
 ! to get timing info printed out.
@@ -472,7 +485,8 @@ logical, parameter :: timing = .false.
 logical, parameter :: timing1 = .false.
 real(digits12), allocatable :: elapse_array(:)
 
-integer :: vstatus !< for vertical conversion status. Can we just smash the dart qc instead?
+integer :: istatus 
+integer :: vstatus(obs_ens_handle%my_num_vars) !< for vertical conversion status.
 
 
 ! we are going to read/write the copies array
@@ -565,20 +579,29 @@ call init_obs(observation, get_num_copies(obs_seq), get_num_qc(obs_seq))
 ! do the forward operator calculation
 call get_my_obs_loc(ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
 
-if (.not. lanai_bitwise) then
+if (.not. lanai_bitwise .and. has_vertical_choice()) then
    ! convert the verical of all my observations to the localization coordinate
    ! this may not be bitwise with Lanai because of a different number of set_location calls
    if (timing) call start_mpi_timer(base)
+   call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
+                             my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
+   !do i = 1, obs_ens_handle%my_num_vars
+   !   !>@todo FIXME how to do multiple obs and record the status correctly?
+   !   !>does vstatus need to be an array?  same for state or no? (thinking yes for obs, no for state)
+   !   !call convert_vertical_obs(ens_handle, 1, my_obs_loc(i), my_obs_kind(i), vstatus)
+   !   lc(1) = my_obs_loc(i)
+   !   kd(1) = my_obs_kind(i)
+   !   call convert_vertical_obs(ens_handle, 1, lc, kd, 0, vstatus)
+   !   my_obs_loc(i) = lc(1)
    do i = 1, obs_ens_handle%my_num_vars
-      call vert_convert(ens_handle, my_obs_loc(i), my_obs_kind(i), vstatus)
       if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
          !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
-         if (vstatus /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
+         if (vstatus(i) /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
       endif
    enddo
    if (timing) then
       elapsed = read_mpi_timer(base)
-      print*, 'vert_convert time :', elapsed, 'rank ', my_task_id()
+      print*, 'convert_vertical_obs time :', elapsed, 'rank ', my_task_id()
    endif
 endif
 
@@ -597,6 +620,12 @@ if (timing) then
 endif
 
 !call test_get_state_meta_data(my_state_loc, ens_handle%my_num_vars)
+!>@todo FIXME  if we want to convert all the state up front, this is
+!>where we call convert_vertical_state()
+if (has_vertical_choice()) then
+   if (.false.) call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
+                                            my_state_indx, get_vertical_localization_coord(), istatus)
+endif
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
 ! INCREMENTS. OWNING PE WOULD SHIP IT'S PRIOR TO THIS ONE
@@ -625,19 +654,17 @@ endif
 
 ! Initialize the method for getting state variables close to a given ob on my process
 if (has_special_cutoffs) then
-   call get_close_maxdist_init(gc_state, 2.0_r8*cutoff, 2.0_r8*cutoff_list)
+   call get_close_init(gc_state, my_num_state, 2.0_r8*cutoff, my_state_loc, 2.0_r8*cutoff_list)
 else
-   call get_close_maxdist_init(gc_state, 2.0_r8*cutoff)
+   call get_close_init(gc_state, my_num_state, 2.0_r8*cutoff, my_state_loc)
 endif
-call get_close_state_init(gc_state, my_num_state, my_state_loc)
 
 ! Initialize the method for getting obs close to a given ob on my process
 if (has_special_cutoffs) then
-   call get_close_maxdist_init(gc_obs, 2.0_r8*cutoff, 2.0_r8*cutoff_list)
+   call get_close_init(gc_obs, my_num_obs, 2.0_r8*cutoff, my_obs_loc, 2.0_r8*cutoff_list)
 else
-   call get_close_maxdist_init(gc_obs, 2.0_r8*cutoff)
+   call get_close_init(gc_obs, my_num_obs, 2.0_r8*cutoff, my_obs_loc)
 endif
-call get_close_obs_init(gc_obs, my_num_obs, my_obs_loc)
 
 if (close_obs_caching) then
    ! Initialize last obs and state get_close lookups, to take advantage below 
@@ -836,7 +863,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    !-----------------------------------------------------------------------
    if(ens_handle%my_pe == owner) then
       ! need to convert global to local obs number
-      vert_obs_loc_in_localization_coord = get_vert(my_obs_loc(owners_index))
+      vert_obs_loc_in_localization_coord = query_location(base_obs_loc, "VLOC")
 
       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
       ! Only value of 0 for DART QC field should be assimilated
@@ -974,10 +1001,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
       endif
 
-      if (.not. lanai_bitwise) then 
+      if (.not. lanai_bitwise .and. has_vertical_choice()) then 
          ! use converted vertical coordinate from owner
-         call set_vert(base_obs_loc, get_vert(my_obs_loc(owners_index))) 
-         call set_which_vert(base_obs_loc, query_vert_localization_coord())
+         call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
+                                         int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
       endif
 
    ! Next block is done by processes that do NOT own this observation
@@ -1013,10 +1040,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
       endif
 
-      if (.not. lanai_bitwise) then
+      if (.not. lanai_bitwise .and. has_vertical_choice()) then
          ! use converted vertical coordinate from owner
-         call set_vert(base_obs_loc, vert_obs_loc_in_localization_coord)
-         call set_which_vert(base_obs_loc,query_vert_localization_coord())
+         call set_vertical(base_obs_loc, vert_obs_loc_in_localization_coord, &
+                                         get_vertical_localization_coord())
 
       endif
    endif
@@ -1182,7 +1209,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if (.not. close_obs_caching) then
       if (timing .and. i < 100) call start_mpi_timer(base)
       call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-         num_close_states, close_state_ind, close_state_dist, ens_handle)
+               my_state_indx, num_close_states, close_state_ind, close_state_dist, ens_handle)
       if (timing .and. i < 100) then
          elapsed = read_mpi_timer(base)
          print*, 'get_close_state1 time :', elapsed, 'rank ', my_task_id()
@@ -1196,7 +1223,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       else
          if (timing .and. i < 100) call start_mpi_timer(base)
          call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-            num_close_states, close_state_ind, close_state_dist, ens_handle)
+                  my_state_indx, num_close_states, close_state_ind, close_state_dist, ens_handle)
          if (timing .and. i < 100) then
             elapsed = read_mpi_timer(base)
             print*, 'get_close_state2 time :', elapsed, 'rank ', my_task_id()
@@ -1589,7 +1616,7 @@ end if
 
 ! Free up the storage
 call destroy_obs(observation)
-call get_close_obs_destroy(gc_state)
+call get_close_state_destroy(gc_state)
 call get_close_obs_destroy(gc_obs)
 
 ! print some stats about the assimilation
@@ -3709,13 +3736,13 @@ else if (LocationDims == 3) then
    ! localizing in the vertical or not.)   if surface obs, assume a hemisphere
    ! and shrink more.
 
-   if (has_vertical_localization()) then
+   if (vertical_localization_on()) then
       ! cube root for volume
       revised_distance = orig_dist * ((real(newcount, r8) / oldcount) &
                                       ** 0.33333333333333333333_r8)
 
       ! Cut the adaptive localization threshold in half again for 'surface' obs
-      if (vert_is_surface(base)) then
+      if (is_vertical(base, "SURFACE")) then
          revised_distance = revised_distance * (0.5_r8 ** 0.33333333333333333333_r8)
       endif
    else
