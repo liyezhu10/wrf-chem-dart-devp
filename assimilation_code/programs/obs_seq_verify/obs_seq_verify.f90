@@ -964,7 +964,7 @@ integer                      :: InitNetCDF
 
 integer :: ncid, i, nlines, linelen, ndims
 integer ::  LineLenDimID,   nlinesDimID,   stringDimID
-integer :: VarID, LocationVarID, WhichVertVarID
+integer :: VarID
 character(len=nf90_max_name) :: dimName
 integer, dimension(nf90_max_var_dims) :: dimIDs, dimLengths
 
@@ -1154,7 +1154,7 @@ call nc_check(nf90_put_att(ncid, VarID, 'units',     'seconds'), &
 
 ! let the location module write what it needs to ...
 
-call nc_write_location_atts( ncid, fname, use_unlimited_dim = .false. )
+call nc_write_location_atts(ncid, num_stations, ncmeta%StationsDimID)
 
 !----------------------------------------------------------------------------
 ! Define the RECORD variables
@@ -1261,11 +1261,8 @@ call nc_check(nf90_put_var(ncid, VarID, forecast_leads ), &
 
 ! Record station locations using location_mod:nc_write_location()
 
-call nc_get_location_varids(ncid, fname, LocationVarID, WhichVertVarID)
-
 do i = 1,num_stations
-   call nc_write_location(ncid, LocationVarId, station(i)%location, &
-             i, WhichVertVarId)
+   call nc_write_location(ncid, station(i)%location, i, do_vert=.true.)
 enddo
 
 !----------------------------------------------------------------------------

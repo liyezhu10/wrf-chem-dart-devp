@@ -25,7 +25,7 @@ implicit none
 private
 
 public :: nc_check, nc_add_global_attribute, nc_add_global_creation_time, &
-          nc_redef 
+          nc_redef, nc_enddef
 
 interface nc_add_global_attribute
    module procedure nc_add_global_char_att
@@ -140,6 +140,19 @@ ret = nf90_Redef(ncid)
 call nc_check(ret, 'nc_redef', 'nf90_Redef')
 
 end subroutine nc_redef
+
+!--------------------------------------------------------------------
+
+subroutine nc_enddef(ncid, context)
+integer, intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+
+integer :: ret
+
+ret = nf90_EndDef(ncid)
+call nc_check(ret, 'nc_enddef', 'nf90_EndDef')
+
+end subroutine nc_enddef
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------

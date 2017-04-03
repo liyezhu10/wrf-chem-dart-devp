@@ -17,7 +17,7 @@ use    utilities_mod,      only : register_module, error_handler, E_ERR, E_MSG, 
                                   check_namelist_read, do_nml_file, do_nml_term
 
 use netcdf_utilities_mod, only : nc_check, nc_add_global_attribute, &
-                                 nc_add_global_creation_time, nc_redef
+                                 nc_add_global_creation_time, nc_redef, nc_enddef
 
 use time_manager_mod,      only : time_type, set_time
 
@@ -423,37 +423,38 @@ end subroutine linearize
 !> Writes the model-specific attributes to a netCDF file
 !> For the lorenz_63 model, each state variable is at a separate location.
 
-subroutine nc_write_model_atts(ncFileID, model_mod_writes_state_variables) 
+subroutine nc_write_model_atts(ncid, model_mod_writes_state_variables) 
 
-integer, intent(in)  :: ncFileID      ! netCDF file identifier
+integer, intent(in)  :: ncid      ! netCDF file identifier
 logical, intent(out) :: model_mod_writes_state_variables
 
-integer :: LocationVarID
+integer :: msize
 
 ! other parts of the dart system will write the state into the file
 ! so this routine just needs to write any model-specific
 ! attributes it wants to record.
 
 model_mod_writes_state_variables = .false.
+msize = int(model_size, i4)
 
 ! Write Global Attributes 
 
-call nc_redef(ncFileID)
+call nc_redef(ncid)
 
-call nc_add_global_creation_time(ncFileID)
+call nc_add_global_creation_time(ncid)
 
-call nc_add_global_attribute(ncFileID, "model_source", source )
-call nc_add_global_attribute(ncFileID, "model_revision", revision )
-call nc_add_global_attribute(ncFileID, "model_revdate", revdate )
-call nc_add_global_attribute(ncFileID, "model", "Lorenz_63")
-call nc_add_global_attribute(ncFileID, "model_r", r )
-call nc_add_global_attribute(ncFileID, "model_b", b )
-call nc_add_global_attribute(ncFileID, "model_sigma", sigma )
-call nc_add_global_attribute(ncFileID, "model_deltat", deltat )
+call nc_add_global_attribute(ncid, "model_source", source )
+call nc_add_global_attribute(ncid, "model_revision", revision )
+call nc_add_global_attribute(ncid, "model_revdate", revdate )
+call nc_add_global_attribute(ncid, "model", "Lorenz_63")
+call nc_add_global_attribute(ncid, "model_r", r )
+call nc_add_global_attribute(ncid, "model_b", b )
+call nc_add_global_attribute(ncid, "model_sigma", sigma )
+call nc_add_global_attribute(ncid, "model_deltat", deltat )
 
-call nc_write_location_atts(ncFileID, "")
-call nc_get_location_varids(ncFileID, "", LocationVarID)
-call nc_write_location(ncFileID, LocationVarID, state_loc, int(model_size,i4), 1)
+call nc_write_location_atts(ncid, msize)
+call nc_enddef(ncid)
+call nc_write_location(ncid, state_loc, msize)
 
 end subroutine nc_write_model_atts
 

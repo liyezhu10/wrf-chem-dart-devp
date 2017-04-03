@@ -65,36 +65,48 @@ contains
 !>@todo FIXME does the last arg need to be an optional actual dim?
 !>or an additional dim?  check obs_seq_verify for usage
 
-subroutine nc_write_location_atts( ncFileID, fname, use_unlimited_dim ) 
+subroutine nc_write_location_atts(ncFileID, dimlen, use_dimID, fname) 
  
-integer,           intent(in) :: ncFileID    ! handle to the netcdf file
-character(len=*),  intent(in) :: fname       ! file name (for printing purposes)
-logical, optional, intent(in) :: use_unlimited_dim ! if true, query and use unlimdim
+integer,                    intent(in) :: ncFileID    ! handle to the netcdf file
+integer,                    intent(in) :: dimlen      ! number of locations to be created
+integer,          optional, intent(in) :: use_dimID   ! if other than locations dim, use this
+character(len=*), optional, intent(in) :: fname       ! file name (for error printing purposes)
 
-integer :: unlimDimID, LocDimID, VarID
+integer :: LocDimID, LDimID, VarID
+integer :: rc
 
-logical :: unlimited
-
-unlimited = .false.
-if (present(use_unlimited_dim)) unlimited = use_unlimited_dim
 
 ! define the rank/dimension of the location information
-call nc_check(nf90_def_dim(ncid=ncFileID, name='location', len=LocationDims, &
-       dimid = LocDimID), 'nc_write_location_atts', 'def_dim:location '//trim(fname))
+rc = nf90_def_dim(ncid=ncFileID, name='location', len=dimlen, dimid=LocDimID)
+call checkit(rc, 'nc_write_location_atts', 'def_dim:location', fname)
+
+if (LocationDims > 1) then
+   rc = nf90_def_dim(ncid=ncFileID, name='locdim', len=LocationDims, dimid=LDimID)
+   call checkit(rc, 'nc_write_location_atts', 'def_dim:locdim', fname)
+endif
 
 ! Define the location variable and attributes
 
-if (unlimited) then
-   call nc_check(nf90_Inquire(ncFileID, unlimitedDimId=unlimDimID), &
-                           'nc_write_model_atts', 'nf90_Inquire')
-
-   call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-             dimids=(/ LocDimID, unlimDimID /), varid=VarID), &
-            'nc_write_location_atts', 'location:def_var')
+if (LocationDims > 1) then
+   if (present(use_dimID)) then
+      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ LDimID, use_dimID /), varid=VarID), &
+               'nc_write_location_atts', 'location:def_var')
+   else
+      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ LDimID, LocDimID /), varid=VarID), &
+               'nc_write_location_atts', 'location:def_var')
+   endif
 else
-   call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-             dimids=(/ LocDimID /), varid=VarID), &
-            'nc_write_location_atts', 'location:def_var')
+   if (present(use_dimID)) then
+      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ use_dimID /), varid=VarID), &
+               'nc_write_location_atts', 'location:def_var')
+   else
+      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ LocDimID /), varid=VarID), &
+               'nc_write_location_atts', 'location:def_var')
+   endif
 endif
 
 call nc_check(nf90_put_att(ncFileID, VarID, 'description', 'location coordinates'), &
@@ -143,23 +155,24 @@ end subroutine nc_write_location_vert
 
 !----------------------------------------------------------------------------
 !> Return the LocationVarID and WhichVertVarID variables from a given netCDF file.
+!>@todo FIXME why do we need this?
 !>
 !> ncFileId         the netcdf file descriptor
 !> fname            the name of the netcdf file (for error messages only)
 !> LocationVarID    the integer ID of the 'location' variable in the netCDF file
 !> WhichVertVarID   the integer ID of the 'which_vert' variable in the netCDF file
 
-subroutine nc_get_location_varids( ncFileID, fname, LocationVarID, WhichVertVarID )
+subroutine nc_get_location_varids(ncFileID, LocationVarID, WhichVertVarID, fname)
 
-integer,           intent(in)  :: ncFileID   ! handle to the netcdf file
-character(len=*),  intent(in)  :: fname      ! file name (for printing purposes)
-integer,           intent(out) :: LocationVarID
-integer, optional, intent(out) :: WhichVertVarID
+integer,                    intent(in)  :: ncFileID   ! handle to the netcdf file
+integer,                    intent(out) :: LocationVarID
+integer,          optional, intent(out) :: WhichVertVarID
+character(len=*), optional, intent(in)  :: fname      ! file name (for printing purposes)
 
 integer :: rc
 
-call nc_check(nf90_inq_varid(ncFileID, 'location', varid=LocationVarID), &
-          'nc_get_location_varids', 'inq_varid:location '//trim(fname))
+rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
+call checkit(rc, 'nc_get_location_varids', 'inq_varid:location ', fname)
 
 if (present(WhichVertVarID)) then
   rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
@@ -175,15 +188,26 @@ end subroutine nc_get_location_varids
 !> The LocationVarID and WhichVertVarID must be the values returned from
 !> the nc_get_location_varids call.
 
-subroutine nc_write_single_location(ncFileID, LocationVarID, loc, locindex, WhichVertVarID)
+subroutine nc_write_single_location(ncFileID, loc, locindex, do_vert, fname)
  
-integer,             intent(in) :: ncFileID, LocationVarID
+integer,             intent(in) :: ncFileID
 type(location_type), intent(in) :: loc
 integer,             intent(in) :: locindex
-integer, optional,   intent(in) :: WhichVertVarID
+logical, optional,   intent(in) :: do_vert
+character(len=*), optional, intent(in) :: fname       ! file name (for error printing purposes)
 
+integer :: LocationVarID
+integer :: WhichVertVarID
 real(r8), dimension(LocationDims) :: locations
 integer,  dimension(1) :: intval
+logical :: write_vert
+integer :: rc
+
+write_vert = .false.
+if (present(do_vert)) write_vert = do_vert
+
+rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
+call checkit(rc, 'nc_write_single_location', 'inq_varid:location ', fname)
 
 locations = get_location( loc ) 
 
@@ -191,12 +215,13 @@ call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
               start=(/ 1, locindex /), count=(/ LocationDims, 1 /) ), &
               'nc_write_single_location', 'put_var:location')
 
-if (present(WhichVertVarID)) then
-   if (WhichVertVarID /= MISSING_I) then
-      intval = query_location(loc, 'WHICH_VERT')
-      call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
-                    start=(/ locindex /), count=(/ 1 /) ), &
-                    'nc_write_single_location','put_var:vert' )
+if (write_vert) then
+   rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
+   if (rc /= NF90_NOERR) then
+     intval = query_location(loc, 'WHICH_VERT')
+     call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
+                   start=(/ locindex /), count=(/ 1 /) ), &
+                   'nc_write_single_location','put_var:vert' )
    endif
 endif
 
@@ -207,48 +232,73 @@ end subroutine nc_write_single_location
 !> The LocationVarID and WhichVertVarID must be the values returned from
 !> the nc_get_location_varids call.
 
-subroutine nc_write_multiple_locations(ncFileID, LocationVarID, loc, loccount, startlocindex, WhichVertVarID)
- 
-integer,             intent(in) :: ncFileID, LocationVarID
+subroutine nc_write_multiple_locations(ncFileID, loc, loccount, startlocindex, do_vert, fname)
+
+integer,             intent(in) :: ncFileID
 type(location_type), intent(in) :: loc(:)
 integer,             intent(in) :: loccount
-integer,             intent(in) :: startlocindex
-integer, optional,   intent(in) :: WhichVertVarID
+integer, optional,   intent(in) :: startlocindex
+logical, optional,   intent(in) :: do_vert
+character(len=*), optional, intent(in) :: fname       ! file name (for error printing purposes)
 
+integer :: LocationVarID
+integer :: WhichVertVarID
 real(r8), allocatable :: locations(:,:)
 integer,  allocatable :: intvals(:)
-integer :: i
-logical :: dovert
+logical :: write_vert
+integer :: rc, i, starthere
 
-dovert = .false.
-if (present(WhichVertVarID)) then 
-   if (WhichVertVarID /= MISSING_I) dovert = .true.
-endif
+write_vert = .false.
+if (present(do_vert)) write_vert = do_vert
+
+starthere = 1
+if (present(startlocindex)) starthere = startlocindex
+
+rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
+call checkit(rc, 'nc_write_multiple_locations', 'inq_varid:location ', fname)
 
 allocate(locations(LocationDims,loccount))
-if (dovert) allocate(intvals(loccount))
+if (write_vert) allocate(intvals(loccount))
 
 do i=1, loccount
    locations(:,i) = get_location( loc(i) ) 
-   if (dovert) intvals(i) = query_location(loc(i), 'WHICH_VERT')
+   if (write_vert) intvals(i) = query_location(loc(i), 'WHICH_VERT')
 enddo
 
 call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
-              start=(/ 1, startlocindex /), count=(/ LocationDims, loccount /) ), &
+              start=(/ 1, starthere /), count=(/ LocationDims, loccount /) ), &
               'nc_write_multiple_locations', 'put_var:location')
 
-if (present(WhichVertVarID)) then
-   if (WhichVertVarID /= MISSING_I) then
-      call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intvals, &
-                    start=(/ startlocindex /), count=(/ loccount /) ), &
-                    'nc_write_multiple_locations','put_var:vert' )
+if (write_vert) then
+   rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
+   if (rc /= NF90_NOERR) then
+     call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intvals, &
+                   start=(/ starthere /), count=(/ loccount /) ), &
+                   'nc_write_multiple_locations','put_var:vert' )
    endif
 endif
 
 deallocate(locations)
-if (dovert) deallocate(intvals)
+if (write_vert) deallocate(intvals)
 
 end subroutine nc_write_multiple_locations
+
+!----------------------------------------------------------------------------
+
+subroutine checkit(rc, subname, action, fname)
+
+integer,                    intent(in) :: rc
+character(len=*),           intent(in) :: subname
+character(len=*),           intent(in) :: action
+character(len=*), optional, intent(in) :: fname
+
+if (present(fname)) then
+   call nc_check(rc, subname, action//trim(fname))
+else
+   call nc_check(rc, subname, action)
+endif
+
+end subroutine checkit
 
 !----------------------------------------------------------------------------
 

@@ -1041,7 +1041,8 @@ call nc_check(nf90_put_att(ncid, VarID, 'long_name', &
 
 ! let the location module write what it needs to ...
 
-call nc_write_location_atts( ncid, fname, use_unlimited_dim = .true. ) 
+!>@todo FIXME what was this doing?
+call nc_write_location_atts(ncid, 0, voxelsDimID)
 
 ! Define the mandatory level corresponding to each voxel
 
@@ -1212,8 +1213,7 @@ integer :: DimID, ntimes, voxelindex, days, secs, i
 integer, dimension(1) :: istart, icount
 
 integer :: voxelVarID, TimeVarID, NTimesVarID, &
-           T1VarID, TNVarID, ObsTypeVarID, &
-           LocationVarID, WhichVertVarID, IlevVarID
+           T1VarID, TNVarID, ObsTypeVarID, IlevVarID
 
 real(digits12), allocatable, dimension(:) :: mytimes
 integer, dimension(num_voxels) :: gooduns    ! Cray compiler likes this better
@@ -1255,8 +1255,6 @@ call nc_check(nf90_inq_varid(ncid, 'last_time', varid=TNVarID), &
 
 call nc_check(nf90_inq_varid(ncid, 'voxel_level_index', varid=IlevVarID), &
           'WriteNetCDF', 'inq_varid:voxel_level_index '//trim(fname))
-
-call nc_get_location_varids(ncid, fname, LocationVarID, WhichVertVarID)
 
 allocate(mytimes(ntimes))
 
@@ -1311,8 +1309,7 @@ WriteObs : do voxelindex = 1,num_voxels
    !----------------------------------------------------------------------------
    ! Using the location_mod:nc_write_location() routine.
    !----------------------------------------------------------------------------
-   call nc_write_location(ncid, LocationVarId, voxels(voxelindex)%location, &
-             voxelindex, WhichVertVarId)
+   call nc_write_location(ncid, voxels(voxelindex)%location, voxelindex, do_vert=.true.)
 
 enddo WriteObs
 
