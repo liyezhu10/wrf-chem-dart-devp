@@ -108,6 +108,9 @@ if (module_initialized) return
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
+! give the model a chance to initialize itself once
+call static_init_model()
+
 end subroutine static_init_assim_model
 
 
