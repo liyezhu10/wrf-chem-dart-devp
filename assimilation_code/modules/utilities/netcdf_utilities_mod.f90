@@ -49,23 +49,27 @@ contains
 !> check return code from previous call. on error, print and stop.
 !> if you want to continue after an error don't use this call. 
 
-subroutine nc_check(istatus, subr_name, context)
+subroutine nc_check(istatus, subr_name, context, filename)
 
 integer, intent (in)                   :: istatus
 character(len=*), intent(in)           :: subr_name
 character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
   
 
 if (istatus == nf90_noerr) return
 
 ! something wrong.  construct an error string and call the handler.
+msgstring1 = nf90_strerror(istatus)
 
 ! context is optional, but is very useful if specified.
-! if context + error code > 129, the assignment will truncate.
 if (present(context)) then
-  msgstring1 = trim(context) // ': ' // trim(nf90_strerror(istatus))
-else
-  msgstring1 = nf90_strerror(istatus)
+  msgstring1 = trim(context) // ': ' // trim(msgstring1)
+endif
+
+! filename is optional, but is very useful if specified.
+if (present(filename)) then
+  msgstring1 = trim(msgstring1) // ', file "' // trim(filename) // '"'
 endif
 
 ! this does not return 
