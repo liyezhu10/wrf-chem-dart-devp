@@ -49,6 +49,7 @@ pro iasi_extract_no_transform_UA, inf, outf, bin_beg_sec, bin_end_sec, lon_min, 
 ;  bin_end      --> end hour of the bin (follows DART 6-hourly bins)
 ;  when saving IASI data
 ;=======================================================================
+;
 ; floating underflow in la_svd routines (compared output with matlab)
 ; seems to be very similar --suppress exception for now
 ;
@@ -97,91 +98,122 @@ print, 'APM: bin_end_sec: ', bin_end_sec
 ; read IASI file
 ;=======================================================================
 ;
-; Read Seconds in Day
-name = 'Seconds in Day'
-sec = get_vd(iasi_input_file, name)
-nx   = long(n_elements(sec)-1)
-;print, 'Seconds in Day ',sec[0]
-;
 ; Read Observation Time
 name = 'Observation Time UTC HMS'
 obs_time = get_vd(iasi_input_file, name)
 ;print, 'Observation Time UTC HMS ',obs_time[0]
 ;
-; Read Time
-name = 'Time'
-time = get_vd(iasi_input_file, name)
-;print, 'Time ',time[0]
-;
-; Read Latitude;
-name = 'Latitude'
-lat  = get_vd(iasi_input_file, name)
-;
-; Read Longitude;
-name = 'Longitude'
-lon  = get_vd(iasi_input_file, name)
+; Read Seconds in Day
+name = 'Seconds in Day'
+obs_sec = get_vd(iasi_input_file, name)
+nx = long(n_elements(obs_sec)-1)
+;print, 'Seconds in Day ',obs_sec[0]
 ;
 ; Read Pressure grid;
 name = 'Pressure Grid'
 press = read_iasi(iasi_input_file, name)
-;
-; Read Surface Pressure
-name  = 'Surface Pressure'
-psurf = get_vd(iasi_input_file, name)
-;
-; Read DEM Altitude
-name = 'DEM Altitude'
-dem_alt = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
 ;
 ; Read Solar Zenith Angle
 name = 'Solar Zenith Angle'
-sza  = get_vd(iasi_input_file, name)
+sza = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read Surface Pressure
+name = 'Surface Pressure'
+psurf = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
 ;
 ; Read Surface Emissivity
 name = 'Surface Emissivity'
 semiss = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read Retrieved CO Mixing Ratio Profile
+name = 'Retrieved CO Mixing Ratio Profile'
+codata = read_iasi(iasi_input_file, name)
+covmr = reform(codata[0,*,*])
+covmr_err = reform(codata[1,*,*])
+print, 'APM: Read ',name
+;
+; Read Retrieved CO Surface Mixing Ratio 
+name = 'Retrieved CO Surface Mixing Ratio'
+codata = read_iasi(iasi_input_file, name)
+scovmr = reform(codata[0,*])
+scovmr_err = reform(codata[1,*])
+print, 'APM: Read ',name
 ;
 ; Read Retrieved CO Total Column
 name  = 'Retrieved CO Total Column'
-cocol = read_iasi(iasi_input_file, name)
-cocol0 = reform(cocol[0,*])
-cocol1 = reform(cocol[1,*])
-;
-; Read Degrees of Freedom for Signal
-name = 'Degrees of Freedom for Signal'
-dofs = get_vd(iasi_input_file, name)
-;
-; Read Retrieved CO Mixing Ratio Profile
-name     = 'Retrieved CO Mixing Ratio Profile'
-codata   = read_iasi(iasi_input_file, name)
-comix    = reform(codata[0,*,*])
-comixerr = reform(codata[1,*,*])
-;
-; Read Retrieved CO Surface Mixing Ratio 
-name      = 'Retrieved CO Surface Mixing Ratio'
-codata    = read_iasi(iasi_input_file, name)
-scomix    = reform(codata[0,*])
-scomixerr = reform(codata[1,*])
+cocoldata = read_iasi(iasi_input_file, name)
+cototcol = reform(cocoldata[0,*])
+cototcol_err = reform(cocoldata[1,*])
+print, 'APM: Read ',name
 ;
 ; Read Retrieval Averaging Kernel Matrix
-name   = 'Retrieval Averaging Kernel Matrix'
+name = 'Retrieval Averaging Kernel Matrix'
 avgker = read_iasi(iasi_input_file, name)
-;
-; Read A Priori CO Mixing Ratio Profile
-name    = 'A Priori CO Mixing Ratio Profile'
-codata  = read_iasi(iasi_input_file, name)
-perc    = reform(codata[0,*,*])
-percerr = reform(codata[1,*,*])
-;
-; Read A Priori Surface CO Mixing Ratio 
-name     = 'A Priori CO Surface Mixing Ratio'
-codata   = read_iasi(iasi_input_file, name)
-sperc    = reform(codata[0,*])
-spercerr = reform(codata[1,*])
+print, 'APM: Read ',name
 ;
 ; Read Retrieval Error Covariance Matrix
 name = 'Retrieval Error Covariance Matrix'
 covmatrix = read_iasi(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read A Priori CO Mixing Ratio Profile
+name = 'A Priori CO Mixing Ratio Profile'
+codata = read_iasi(iasi_input_file, name)
+copriorvmr = reform(codata[0,*,*])
+copriorvmr_err = reform(codata[1,*,*])
+print, 'APM: Read ',name
+;
+; Read A Priori Surface CO Mixing Ratio 
+name = 'A Priori CO Surface Mixing Ratio'
+codata = read_iasi(iasi_input_file, name)
+scoprior = reform(codata[0,*])
+scoprior_err = reform(codata[1,*])
+print, 'APM: Read ',name
+;
+; Read Degrees of Freedom for Signal
+name = 'Degrees of Freedom for Signal'
+dofs = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read DEM Altitude
+name = 'DEM Altitude'
+dem_alt = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read Time
+name = 'Time'
+time = get_vd(iasi_input_file, name)
+print, 'Time ',time[0]
+;
+; Read Latitude;
+name = 'Latitude'
+lat  = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read Longitude;
+name = 'Longitude'
+lon  = get_vd(iasi_input_file, name)
+print, 'APM: Read ',name
+;
+; Read Retrieved CO Column Profile
+name = 'Retrieved CO Column Profile'
+codata = read_iasi(iasi_input_file, name)
+cocol = reform(codata[0,*,*])
+cocol_err = reform(codata[1,*,*])
+print, 'APM: Read ',name
+;
+; Read Apriori CO Column Profile
+name = 'Apriori CO Column Profile'
+codata = read_iasi(iasi_input_file, name)
+copriorcol = reform(codata[0,*,*])
+copriorcol_err = reform(codata[1,*,*])
+print, 'APM: Read ',name
+;   
+print, 'APM: Complted data read '
 ;
 ; Open output file
 unit=10
@@ -225,75 +257,72 @@ for k = 0L, nx do begin
    iasi_A = fltarr(iasi_dim,iasi_dim, /nozero)
    iasi_A = avgker[*,*,k]
 ;
-; Transpose (IDL column-major)
-   iasi_A = transpose(iasi_A)
-;
 ; Truncate to effective number of levels (not needed for IASI)
    A = fltarr(iasi_dimm,iasi_dimm, /nozero)
    A = iasi_A[iasi_dim-iasi_dimm:iasi_dim-1,iasi_dim-iasi_dimm:iasi_dim-1]
-;
-; Identity matrix
-;   I = Identity(iasi_dimm)
-;   ImA=I-A
-;   inv_ImA=invert(ImA,status)
-;   if ( status ne 1 ) then begin
-;      qatatus=1
-;      print, 'APM : Singular pivot for  inv_ImA ',k
-;   endif else begin
-;      qstatus=0
-;   endelse
+   A = transpose(A)
 ;
 ; RETRIEVAL ERROR COVARIANCE: change notation (for clarity)
    iasi_Cx = covmatrix[*,*,k]
 ;
-; Transpose (IDL column-major)
-   iasi_Cx = transpose(iasi_Cx)
-;
 ; Truncate to effective number of levels (not needed for IASI)
    Cx = fltarr(iasi_dimm,iasi_dimm, /nozero)
    Cx = iasi_Cx[iasi_dim-iasi_dimm:iasi_dim-1,iasi_dim-iasi_dimm:iasi_dim-1]
+   Cx = transpose(Cx)
    Co_col = fltarr(iasi_dimm, /nozero)
-   Co_col = cocol0[iasi_dim-iasi_dimm:iasi_dim-1]
+   Co_col = cocol[iasi_dim-iasi_dimm:iasi_dim-1,k]
    Co_vmr = fltarr(iasi_dimm, /nozero)
-   Co_vmr = comix[iasi_dim-iasi_dimm:iasi_dim-1]
+   Co_vmr = covmr[iasi_dim-iasi_dimm:iasi_dim-1,k]
+   Co_prior_col = fltarr(iasi_dimm, /nozero)
+   Co_prior_col = copriorcol[iasi_dim-iasi_dimm:iasi_dim-1,k]
+   Co_prior_vmr = fltarr(iasi_dimm, /nozero)
+   Co_prior_vmr = copriorvmr[iasi_dim-iasi_dimm:iasi_dim-1,k]
    air_column = fltarr(iasi_dimm, /nozero)
-   for i = idx_str,iasi_dim-1 do begin
+   for i = 0,iasi_dimm-1 do begin
       air_column(i)=Co_col(i)/Co_vmr(i)
    endfor
-;
-; Convert averaging kernel
-   for i = idx_str,iasi_dim-1 do begin 
-      for j = idx_str,iasi_dim-1 do begin 
-         A(i-idx_str,j-idx_str) = A(i-idx_str,j-idx_str) * air_column(i) / air_column(j) 
-      endfor
+;   print, 'APM air_column: ', air_column(0:iasi_dimm-1)
+   for i = 0,iasi_dimm-1 do begin
+      air_column(i)=Co_prior_col(i)/Co_prior_vmr(i)
    endfor
+;   print, 'APM air_column: ',air_column(0:iasi_dimm-1)
 ;
-; Convert Cx from percent to VMR
-   for i = idx_str,iasi_dim-1 do begin 
-      for j = idx_str,iasi_dim-1 do begin 
-         Cx(i-idx_str,j-idx_str) = Cx(i-idx_str,j-idx_str) * perc(i,k) * perc(j,k) 
-      endfor
-   endfor
+; Convert averaging kernel to VMR (i,j error application corrected)
+; Conversion needed but done in DART obs converter
+;   for i = 0,iasi_dimm-1 do begin 
+;      for j = 0,iasi_dimm-1 do begin
+;         print, 'APM A, ac_i, ac_j ',A(i,j), air_column(i), air_column(j) 
+;         A(i,j) = A(i,j) * air_column(i) / air_column(j) 
+;      endfor
+;   endfor
+;
+; Convert Cx from percent to VMR (not needed)
+;   for i = 0,iasi_dimm-1 do begin 
+;      for j = 0,iasi_dimm-1 do begin 
+;         Cx(i,j) = Cx(i,j) * Co_prior_vmr(i) * Co_prior_vmr(j) 
+;      endfor
+;   endfor
 ;
 ; A PRIORI ERROR COVARIANCE: (this is a placeholder)
    Ca = fltarr(iasi_dimm,iasi_dimm, /nozero)
    Czero=(0.3*log10e)^2.
    Pref=100.0
    zmin=200.
-   for i = idx_str,iasi_dim-1 do begin
-      for j = idx_str, iasi_dim-1 do begin
+   for i = 0,iasi_dimm-1 do begin
+      for j = 0, iasi_dimm-1 do begin
          if( i eq j ) then begin
-            Ca(i-idx_str,j-idx_str) = Czero
+            Ca(i,j) = Czero
          endif else begin
-            press_i=(press(i,k)+press(i+1,k))/2.
-            press_j=(press(j,k)+press(j+1,k))/2.
+            press_i=(press(i+idx_str,k)+press(i+idx_str+1,k))/2.
+            press_j=(press(j+idx_str,k)+press(j+idx_str+1,k))/2.
 ;            if( press_i lt zmin) then begin
 ;               press_i = zmin
 ;            endif 
 ;            if( press_j lt zmin) then begin
 ;               press_j = zmin 
 ;            endif   
-            Ca(i-idx_str,j-idx_str) = Czero/exp(((press_i-press_j)/Pref)^2.)
+;            Ca(i,j) = Czero/exp(((press_i-press_j)/Pref)^2.)
+            Ca(i,j) = Czero
          endelse
       endfor
    endfor
@@ -319,11 +348,12 @@ for k = 0L, nx do begin
    min=float(fix(obs_time[k]/100)-hr*100)
    scc=float(obs_time[k]-hr*10000-min*100)
    tod_sec=hr*60*60+min*60+scc   
+;   print, 'IDL lon, lat ', lon[k],lat[k]
    if( $
 ;      ( dfs ge dofs_threshold_low ) && ( dfs le dofs_threshold_hi ) && $
       ((( sza[k] lt sza_day ) && ( lat[k] gt day_lat_edge_1 ) && ( lat[k] lt day_lat_edge_2 )) || $
       (( sza[k] ge sza_day ) && ( lat[k] gt nit_lat_edge_1 ) && ( lat[k] lt nit_lat_edge_2 ))) && $
-      ( sec[k] ge bin_beg_sec ) and (sec[k] lt bin_end_sec ) and $
+      ( obs_sec[k] ge bin_beg_sec ) and (obs_sec[k] lt bin_end_sec ) and $
       ( tod_sec ge bin_beg_sec ) && (tod_sec lt bin_end_sec ) && $
       ( lat[k] ge lat_min ) && ( lat[k] le lat_max ) && $
       ( lon[k] ge lon_min ) && lon[k] le ( lon_max ) && $
@@ -343,10 +373,10 @@ for k = 0L, nx do begin
 ; save free atmospheric data in profiles
       for ik=idx_str,iasi_dim-1 do begin
          ik_lev = ik-idx_str
-         co[ik_lev]=comix[ik,k]
-         coerr[ik_lev]=comixerr[ik,k] 
-         prior[ik_lev]=perc[ik,k]
-         priorerrb[ik_lev]=percerr[ik,k] 
+         co[ik_lev]=Co_vmr[ik_lev]
+         coerr[ik_lev]=covmr_err[ik,k] 
+         prior[ik_lev]=Co_prior_vmr[ik_lev]
+         priorerrb[ik_lev]=copriorvmr_err[ik,k] 
          pressure[ik_lev]=press[ik,k]
       endfor
       if (iasi_dimm eq iasi_dim) then begin
@@ -402,36 +432,50 @@ for k = 0L, nx do begin
          allqc_count = allqc_count + 1.0
 ;
 ; note that the format is for iasi_dim levels
-;         print, 'SEC, TOD_SEC ',sec[k],tod_sec
-         if ((k gt 0) && (sec[k-1] lt sec[k])) then begin
-            printf, unit, 'NO_SVD_TRANS', sec[k], lat[k], lon[k], $
-            iasi_dimm, dfs, format='(a15,16(e14.6))'
+         if ((k gt 0) && (obs_sec[k-1] lt obs_sec[k])) then begin
+;            printf, unit, 'NO_SVD_TRANS', obs_sec[k], lat[k], lon[k], $
+;            iasi_dimm, dfs, format='(a12,1x,3(g15.7,1x),i2,1x,g15.7)'
+            print, 'APM SEC, TOD_SEC ',obs_sec[k],tod_sec
+            printf, unit, 'NO_SVD_TRANS', obs_sec[k], lat[k], lon[k], $
+            iasi_dimm, dfs
 ;
 ; effective height levels
-            printf, unit, pressure, format='(20(e14.6))'
+;            printf, unit, pressure[0:iasi_dimm], format='(20(g15.7,1x))'
+            printf, unit, pressure[0:iasi_dimm]
 ;
 ; retrieval
-            printf, unit, x, format='(19(e14.6))'
+;            printf, unit, x[0:iasi_dimm-1], format='(19(g15.7,1x))'
+            printf, unit, x[0:iasi_dimm-1]
 ;
-; retrieval prior
-            printf, unit, xa, format='(19(e14.6))'
+; retrieval prior vmr
+;            printf, unit, xa[0:iasi_dimm-1], format='(19(g15.7,1x))'
+            printf, unit, xa[0:iasi_dimm-1]
+;
+; retrieval prior col
+;            printf, unit, Co_prior_col[0:iasi_dimm-1], format='(19(g15.7,1x))'
+            printf, unit, Co_prior_col[0:iasi_dimm-1]
 ;
 ; averaging kernal
-            printf, unit, transpose(A), format='(361(e14.6))'
-;   print, 'APM: ak ', A(0,0:iasi_dim-1)
-;stop
-;
+;            printf, unit, A[0:iasi_dimm-1,0:iasi_dimm-1], format='(361(g15.7,1x))'
+            printf, unit, A[0:iasi_dimm-1,0:iasi_dimm-1]
+;   print, 'APM: ak ', A(0,0:iasi_dimm-1)
+;   print, 'APM: prior_col ',Co_prior_col(0:iasi_dimm-1)
+;   print, 'APM: prior_vmr ',Co_prior_vmr(0:iasi_dimm-1)
 ; prior error covariance (PLACE HOLDER)
-            printf, unit, transpose(Ca), format='(361(e14.6))'
+;            printf, unit, Ca[0:iasi_dimm-1,0:iasi_dimm-1], format='(361(g15.7,1x))'
+            printf, unit, Ca[0:iasi_dimm-1,0:iasi_dimm-1]
 ;
 ; retrieval error covariance
-            printf, unit, transpose(Cx), format='(361(e14.6))'
+;            printf, unit, Cx[0:iasi_dimm-1,0:iasi_dimm-1], format='(361(g15.7,1x))'
+            printf, unit, Cx[0:iasi_dimm-1,0:iasi_dimm-1]
 ;
 ; measurment error covariance (PLACE HOLDER)
-            printf, unit, transpose(Cm), format='(361(e14.6))'
+;            printf, unit, Cm[0:iasi_dimm-1,0:iasi_dimm-1], format='(361(g15.7,1x))'
+            printf, unit, Cm[0:iasi_dimm-1,0:iasi_dimm-1]
 ;
 ; total column data
-            printf, unit, cocol0[k],cocol1[k], format='(2(e14.6))'
+;            printf, unit, cototcol[k],cototcol_err[k], format='(2(g15.7,1x))'
+            printf, unit, cototcol[k],cototcol_err[k]
              endif
           endif   ; QC --qstatus for numerical issues       
 ;       endif      ; QC -- max error reduction
@@ -461,4 +505,3 @@ print, '================================'
 print, ' '
 ;
 end    ; end of iasi_extract_no_svd_transform
-

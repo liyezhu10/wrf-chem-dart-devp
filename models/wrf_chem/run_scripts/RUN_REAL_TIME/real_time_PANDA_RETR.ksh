@@ -11,9 +11,9 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072406
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072500
+export CYCLE_END_DATE=2014072406
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
 export ADD_EMISS=.true.
@@ -35,12 +35,12 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=1
+export NUM_SPECIAL_FORECAST=3
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
-export SPECIAL_FORECAST_MEM[1]=18
-export SPECIAL_FORECAST_MEM[2]=23
-export SPECIAL_FORECAST_MEM[3]=3
+export SPECIAL_FORECAST_MEM[1]=1
+export SPECIAL_FORECAST_MEM[2]=2
+export SPECIAL_FORECAST_MEM[3]=8
 export SPECIAL_FORECAST_MEM[4]=4
 export SPECIAL_FORECAST_MEM[5]=5
 export SPECIAL_FORECAST_MEM[6]=6
@@ -90,10 +90,10 @@ let BACK_WT=.5000
 #
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 export DATE=${CYCLE_DATE}
-export INITIAL_DATE=2014072418
-export FIRST_FILTER_DATE=2014072500
-export FIRST_EMISS_INV_DATE=2014072500
-export FIRST_DART_INFLATE_DATE=2014072500
+export INITIAL_DATE=2014072400
+export FIRST_FILTER_DATE=2014072406
+export FIRST_EMISS_INV_DATE=2014072406
+export FIRST_DART_INFLATE_DATE=2014072406
 export CYCLE_PERIOD=6
 export HISTORY_INTERVAL_HR=1
 (( HISTORY_INTERVAL_MIN = ${HISTORY_INTERVAL_HR} * 60 ))
@@ -123,19 +123,16 @@ export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
 export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
-export WRFCHEM_DIR_GABI=${FRAPPE_DIR}/FRAPPE_TRUNK/${WRFCHEM_VER_GABI}
 export WRFDA_DIR=${TRUNK_DIR}/${WRFDA_VER}
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-####export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
-export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA
-####export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
-export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA/mozart_forecasts
+export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
+export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
-export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions_PANDA
+export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
 export EXPERIMENT_WRFFIRECHEMI_DIR=${EXPERIMENT_DATA_DIR}/fire_emissions
 export EXPERIMENT_WRFBIOCHEMI_DIR=${EXPERIMENT_DATA_DIR}/bio_emissions
 export EXPERIMENT_COLDENS_DIR=${EXPERIMENT_DATA_DIR}/wes_coldens
@@ -256,14 +253,14 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=false
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=false
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
-   export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_MODIS_AOD_OBS=true
+   export RUN_MET_OBS=true
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -277,12 +274,12 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=true
-      export RUN_UPDATE_BC=false
-      export RUN_WRFCHEM_CYCLE_CR=false
+      export RUN_UPDATE_BC=true
+      export RUN_WRFCHEM_CYCLE_CR=true
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=false
+      export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=false
+      export RUN_ENSEMBLE_MEAN_OUTPUT=true
    fi
 else
    export RUN_GEOGRID=false
@@ -534,6 +531,7 @@ export NL_PARENT_GRID_RATIO=1,3
 export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
 export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
 export NL_GEOG_DATA_RES=\'10s\',\'10s\'
+#export NL_GEOG_DATA_RES=\'gtopo_10m+usgs_10m+nesdis_greenfrac+10m\',\'gtopo_2m+usgs_2m+nesdis_greenfrac+2m\'
 export NL_DX=${DX_CR}
 export NL_DY=${DX_CR}
 export NL_MAP_PROJ=\'mercator\'
@@ -3217,7 +3215,7 @@ EOFF
       NL_BIN_BEG=15.01
       NL_BIN_END=21.00
    fi
-   export NL_FILEDIR=\'./\' 
+   export NL_FILEDIR=\'\' 
    export NL_FILENAME=${D_DATE}.dat
    export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
 #
@@ -3230,7 +3228,7 @@ EOFF
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/IASI_CO/work/iasi_ascii_to_obs ./.
-   ./iasi_ascii_to_obs
+   ./iasi_ascii_to_obs > index.html 2>&1  
 #
 # COPY OUTPUT TO ARCHIVE LOCATION
    export IASI_FILE=iasi_obs_seq${D_DATE}
@@ -3886,7 +3884,6 @@ if ${RUN_WRFCHEM_INITIAL}; then
 #
 # Get WRF-Chem parameter files
       cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.
@@ -4441,7 +4438,6 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
       cp ${DART_DIR}/models/wrf_chem/work/advance_time ./.
       cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
       cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.
@@ -4686,7 +4682,6 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
 #
 # Get WRF-Chem parameter files
    cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-#   cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
    cp ${WRFCHEM_DIR}/test/em_real/CAM_ABS_DATA ./.
    cp ${WRFCHEM_DIR}/test/em_real/CAM_AEROPT_DATA ./.
    cp ${WRFCHEM_DIR}/test/em_real/ETAMPNEW_DATA ./.
@@ -4804,7 +4799,6 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
 # Get WRF-Chem parameter files
    if [[ ${RUN_FINE_SCALE_RESTART} = "false" ]]; then
       cp ${WRFCHEM_DIR}/test/em_real/wrf.exe ./.
-#      cp ${WRFCHEM_DIR_GABI}/test/em_real/wrf.exe ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lat.formatted ./.
       cp ${WRFCHEM_DIR}/test/em_real/aerosol_lon.formatted ./.

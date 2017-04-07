@@ -15,7 +15,7 @@ export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072600
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
-export ADD_EMISS=.true.
+export ADD_EMISS=.false.
 export VARLOC=.true.
 export INDEP_CHEM_ASIM=.false.
 export EMISS_DAMP_CYCLE=0.
@@ -34,12 +34,12 @@ if [[ ${RUN_FINE_SCALE_RESTART} = "true" ]]; then
 fi
 #
 # Run WRF-Chem for failed forecasts
-export RUN_SPECIAL_FORECAST=true
-export NUM_SPECIAL_FORECAST=3
+export RUN_SPECIAL_FORECAST=false
+export NUM_SPECIAL_FORECAST=2
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
-export SPECIAL_FORECAST_MEM[1]=2
-export SPECIAL_FORECAST_MEM[2]=7
+export SPECIAL_FORECAST_MEM[1]=9
+export SPECIAL_FORECAST_MEM[2]=10
 export SPECIAL_FORECAST_MEM[3]=9
 export SPECIAL_FORECAST_MEM[4]=7
 export SPECIAL_FORECAST_MEM[5]=9
@@ -246,24 +246,24 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_UNGRIB=false
    export RUN_METGRID=false
    export RUN_REAL=false
-   export RUN_PERT_WRFCHEM_MET_IC=false
-   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_PERT_WRFCHEM_MET_IC=true
+   export RUN_PERT_WRFCHEM_MET_BC=true
    export RUN_EXO_COLDENS=false
    export RUN_SEASON_WES=false
    export RUN_WRFCHEM_BIO=false
    export RUN_WRFCHEM_FIRE=false
    export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_MOPITT_CO_OBS=true
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
-   export RUN_AIRNOW_O3_OBS=false
-   export RUN_AIRNOW_CO_OBS=false
-   export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_AIRNOW_O3_OBS=true
+   export RUN_AIRNOW_CO_OBS=true
+   export RUN_MODIS_AOD_OBS=true
+   export RUN_MET_OBS=true
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -277,14 +277,14 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=false
+      export RUN_DART_FILTER=true
       export RUN_UPDATE_BC=false
-      export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=true
+      export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=true
+      export RUN_ENSEMBLE_MEAN_OUTPUT=false
    fi
 else
    export RUN_GEOGRID=false
@@ -369,7 +369,7 @@ fi
 export USE_DART_INFL=true
 export FCST_PERIOD=6
 (( CYCLE_PERIOD_SEC=${CYCLE_PERIOD}*60*60 ))
-export NUM_MEMBERS=10
+export NUM_MEMBERS=30
 export MAX_DOMAINS=02
 export CR_DOMAIN=01
 export FR_DOMAIN=02
@@ -490,10 +490,19 @@ export VTABLE_TYPE=GFS
 export METGRID_TABLE_TYPE=ARW
 #
 # WRF PREPROCESS PARAMETERS
+#
+# TARG_LAT=31.56 (33,15) for 072600
+# TARG_LON=-120.14 = 239.85 (33,15)
+#export NL_MIN_LAT=27.5
+#export NL_MAX_LAT=38.5
+#export NL_MIN_LON=234.5
+export NL_MAX_LON=244.5
+#
 export NL_MIN_LAT=27.
 export NL_MAX_LAT=48.
 export NL_MIN_LON=228.
 export NL_MAX_LON=266.
+#
 export NNL_MIN_LAT=${NL_MIN_LAT}
 export NNL_MAX_LAT=${NL_MAX_LAT}
 export NNL_MIN_LON=${NL_MIN_LON}
@@ -501,13 +510,6 @@ if [[ ${NL_MIN_LON} -gt 180. ]]; then ((NNL_MIN_LON=${NL_MIN_LON}-360.)); fi
 export NNL_MAX_LON=${NL_MAX_LON}
 if [[ ${NL_MAX_LON} -gt 180. ]]; then ((NNL_MAX_LON=${NL_MAX_LON}-360.)); fi 
 export NL_OBS_PRESSURE_TOP=10000.
-#
-# TARG_LAT=38.92 (91,61)
-# TARG_LON=-111.52 = 248.48 (91,61)
-#export NL_MIN_LAT=38.32
-#export NL_MAX_LAT=39.52
-#export NL_MIN_LON=248.08
-#export NL_MAX_LON=248.88
 #
 # PERT CHEM PARAMETERS
 export SPREAD_FAC=0.30
