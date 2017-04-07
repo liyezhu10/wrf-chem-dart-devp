@@ -103,12 +103,12 @@ end subroutine init_time
 
 !------------------------------------------------------------------
 
-subroutine model_interpolate(state_handle, ens_size, location, itype, expected_obs, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_quantity, expected_obs, istatus)
 
 type(ensemble_type),  intent(in) :: state_handle
 integer,              intent(in) :: ens_size
 type(location_type),  intent(in) :: location
-integer,              intent(in) :: itype
+integer,              intent(in) :: obs_quantity
 real(r8),            intent(out) :: expected_obs(ens_size)
 integer,             intent(out) :: istatus(ens_size)
 
