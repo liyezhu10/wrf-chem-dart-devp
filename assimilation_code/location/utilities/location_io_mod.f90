@@ -74,82 +74,94 @@ character(len=*), optional, intent(in) :: fname       ! file name (for error pri
 
 integer :: LocDimID, LDimID, VarID
 integer :: rc
+character(len=32) :: context = 'nc_write_location_atts'
 
 
 ! define the rank/dimension of the location information
 rc = nf90_def_dim(ncid=ncFileID, name='location', len=dimlen, dimid=LocDimID)
-call checkit(rc, 'nc_write_location_atts', 'def_dim:location', fname)
+call nc_check(rc, context, 'def_dim:location', fname)
 
 if (LocationDims > 1) then
    rc = nf90_def_dim(ncid=ncFileID, name='locdim', len=LocationDims, dimid=LDimID)
-   call checkit(rc, 'nc_write_location_atts', 'def_dim:locdim', fname)
+   call nc_check(rc, context, 'def_dim:locdim', fname)
 endif
 
 ! Define the location variable and attributes
 
 if (LocationDims > 1) then
    if (present(use_dimID)) then
-      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ LDimID, use_dimID /), varid=VarID), &
-               'nc_write_location_atts', 'location:def_var')
+      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                        dimids=(/ LDimID, use_dimID /), varid=VarID)
+      call nc_check(rc, context, 'def_var1:location', fname)
    else
-      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ LDimID, LocDimID /), varid=VarID), &
-               'nc_write_location_atts', 'location:def_var')
+      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ LDimID, LocDimID /), varid=VarID)
+      call nc_check(rc, context, 'def_var2:location', fname)
    endif
 else
    if (present(use_dimID)) then
-      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ use_dimID /), varid=VarID), &
-               'nc_write_location_atts', 'location:def_var')
+      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ use_dimID /), varid=VarID)
+      call nc_check(rc, context, 'def_var3:location', fname)
    else
-      call nc_check(nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ LocDimID /), varid=VarID), &
-               'nc_write_location_atts', 'location:def_var')
+      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                dimids=(/ LocDimID /), varid=VarID)
+      call nc_check(rc, context, 'def_var4:location', fname)
    endif
 endif
 
-call nc_check(nf90_put_att(ncFileID, VarID, 'description', 'location coordinates'), &
-              'nc_write_location_atts', 'location:description')
-call nc_check(nf90_put_att(ncFileID, VarID, 'location_type', trim(LocationName)), &
-              'nc_write_location_atts', 'location:location_type')
-call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', trim(LocationLName)), &
-              'nc_write_location_atts', 'location:long_name')
-call nc_check(nf90_put_att(ncFileID, VarID, 'storage_order', trim(LocationStorageOrder)),  &
-              'nc_write_location_atts', 'location:storage_order')
-call nc_check(nf90_put_att(ncFileID, VarID, 'units', trim(LocationUnits)),   &
-              'nc_write_location_atts', 'location:units')
+rc = nf90_put_att(ncFileID, VarID, 'description', 'location coordinates')
+call nc_check(rc, context, 'put_att:description', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'location_type', trim(LocationName))
+call nc_check(rc, context, 'put_att:location_type', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'long_name', trim(LocationLName))
+call nc_check(rc, context, 'put_att:long_name', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'storage_order', trim(LocationStorageOrder))
+call nc_check(rc, context, 'put_att:storage_order', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'units', trim(LocationUnits))
+call nc_check(rc, context, 'put_att:units', fname)
 
 end subroutine nc_write_location_atts
 
 !----------------------------------------------------------------------------
 !> Define the ancillary vertical array and attributes
 
-subroutine nc_write_location_vert( ncFileID, fname )
+subroutine nc_write_location_vert(ncFileID, fname)
 
-integer,           intent(in) :: ncFileID    ! handle to the netcdf file
-character(len=*),  intent(in) :: fname       ! file name (for printing purposes)
+integer,                     intent(in) :: ncFileID    ! handle to the netcdf file
+character(len=*), optional,  intent(in) :: fname       ! file name (for printing purposes)
 
-integer :: VarID
+integer :: VarID, rc
+character(len=32) :: context = 'nc_write_location_vert'
 
-call nc_check(nf90_def_var(ncid=ncFileID, name='which_vert', xtype=nf90_int, &
-          dimids=(/ nf90_unlimited /), varid=VarID), &
-            'nc_write_location_vert', 'which_vert:def_var')
+rc = nf90_def_var(ncid=ncFileID, name='which_vert', xtype=nf90_int, &
+                  dimids=(/ nf90_unlimited /), varid=VarID)
+call nc_check(rc, context, 'def_var:which_vert', fname)
 
-call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', 'vertical coordinate system code'), &
-           'nc_write_location_vert', 'which_vert:long_name')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISUNDEF', VERTISUNDEF), &
-           'nc_write_location_vert', 'which_vert:VERTISUNDEF')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISSURFACE', VERTISSURFACE), &
-           'nc_write_location_vert', 'which_vert:VERTISSURFACE')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISLEVEL', VERTISLEVEL), &
-           'nc_write_location_vert', 'which_vert:VERTISLEVEL')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISPRESSURE', VERTISPRESSURE), &
-           'nc_write_location_vert', 'which_vert:VERTISPRESSURE')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISHEIGHT', VERTISHEIGHT), &
-           'nc_write_location_vert', 'which_vert:VERTISHEIGHT')
-call nc_check(nf90_put_att(ncFileID, VarID, 'VERTISSCALEHEIGHT', VERTISSCALEHEIGHT), &
-           'nc_write_location_vert', 'which_vert:VERTISSCALEHEIGHT')
+rc = nf90_put_att(ncFileID, VarID, 'long_name', 'vertical coordinate system code')
+call nc_check(rc, context, 'put_att:long_name', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISUNDEF', VERTISUNDEF)
+call nc_check(rc, context, 'put_att:VERTISUNDEF', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISSURFACE', VERTISSURFACE)
+call nc_check(rc, context, 'put_att:VERTISSURFACE', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISLEVEL', VERTISLEVEL)
+call nc_check(rc, context, 'put_att:VERTISLEVEL', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISPRESSURE', VERTISPRESSURE)
+call nc_check(rc, context, 'put_att:VERTISPRESSURE', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISHEIGHT', VERTISHEIGHT)
+call nc_check(rc, context, 'put_att:VERTISHEIGHT', fname)
+
+rc = nf90_put_att(ncFileID, VarID, 'VERTISSCALEHEIGHT', VERTISSCALEHEIGHT)
+call nc_check(rc, context, 'put_att:VERTISSCALEHEIGHT', fname)
 
 end subroutine nc_write_location_vert
 
@@ -170,9 +182,10 @@ integer,          optional, intent(out) :: WhichVertVarID
 character(len=*), optional, intent(in)  :: fname      ! file name (for printing purposes)
 
 integer :: rc
+character(len=32) :: context = 'nc_write_location_vert'
 
 rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
-call checkit(rc, 'nc_get_location_varids', 'inq_varid:location ', fname)
+call nc_check(rc, context, 'inq_varid:location ', fname)
 
 if (present(WhichVertVarID)) then
   rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
@@ -190,10 +203,10 @@ end subroutine nc_get_location_varids
 
 subroutine nc_write_single_location(ncFileID, loc, locindex, do_vert, fname)
  
-integer,             intent(in) :: ncFileID
-type(location_type), intent(in) :: loc
-integer,             intent(in) :: locindex
-logical, optional,   intent(in) :: do_vert
+integer,                    intent(in) :: ncFileID
+type(location_type),        intent(in) :: loc
+integer,                    intent(in) :: locindex
+logical, optional,          intent(in) :: do_vert
 character(len=*), optional, intent(in) :: fname       ! file name (for error printing purposes)
 
 integer :: LocationVarID
@@ -202,27 +215,28 @@ real(r8), dimension(LocationDims) :: locations
 integer,  dimension(1) :: intval
 logical :: write_vert
 integer :: rc
+character(len=32) :: context = 'nc_write_single_location'
 
 write_vert = .false.
 if (present(do_vert)) write_vert = do_vert
 
 rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
-call checkit(rc, 'nc_write_single_location', 'inq_varid:location ', fname)
+call nc_check(rc, context, 'location', fname)
 
 locations = get_location( loc ) 
 
-call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
-              start=(/ 1, locindex /), count=(/ LocationDims, 1 /) ), &
-              'nc_write_single_location', 'put_var:location')
+rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+                 start=(/ 1, locindex /), count=(/ LocationDims, 1 /) )
+call nc_check(rc, context, 'put_var:location', fname)
 
 if (write_vert) then
    rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
-   if (rc /= NF90_NOERR) then
-     intval = query_location(loc, 'WHICH_VERT')
-     call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intval, &
-                   start=(/ locindex /), count=(/ 1 /) ), &
-                   'nc_write_single_location','put_var:vert' )
-   endif
+   call nc_check(rc, context, 'inq_varid:which_vert', fname)
+
+   intval = query_location(loc, 'WHICH_VERT')
+   rc = nf90_put_var(ncFileID, WhichVertVarID, intval, &
+                     start=(/ locindex /), count=(/ 1 /) )
+   call nc_check(rc, context, 'put_var:which_vert', fname)
 endif
 
 end subroutine nc_write_single_location
@@ -247,6 +261,7 @@ real(r8), allocatable :: locations(:,:)
 integer,  allocatable :: intvals(:)
 logical :: write_vert
 integer :: rc, i, starthere
+character(len=32) :: context = 'nc_write_single_location'
 
 write_vert = .false.
 if (present(do_vert)) write_vert = do_vert
@@ -255,7 +270,7 @@ starthere = 1
 if (present(startlocindex)) starthere = startlocindex
 
 rc = nf90_inq_varid(ncFileID, 'location', varid=LocationVarID)
-call checkit(rc, 'nc_write_multiple_locations', 'inq_varid:location ', fname)
+call nc_check(rc, context, 'location', fname)
 
 allocate(locations(LocationDims,loccount))
 if (write_vert) allocate(intvals(loccount))
@@ -265,40 +280,23 @@ do i=1, loccount
    if (write_vert) intvals(i) = query_location(loc(i), 'WHICH_VERT')
 enddo
 
-call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
-              start=(/ 1, starthere /), count=(/ LocationDims, loccount /) ), &
-              'nc_write_multiple_locations', 'put_var:location')
+rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+              start=(/ 1, starthere /), count=(/ LocationDims, loccount /) )
+call nc_check(rc, context, 'put_var:location', fname)
 
 if (write_vert) then
    rc = nf90_inq_varid(ncFileID, 'which_vert', varid=WhichVertVarID)
-   if (rc /= NF90_NOERR) then
-     call nc_check(nf90_put_var(ncFileID, WhichVertVarID, intvals, &
-                   start=(/ starthere /), count=(/ loccount /) ), &
-                   'nc_write_multiple_locations','put_var:vert' )
-   endif
+   call nc_check(rc, context, 'inq_varid:which_vert', fname)
+
+   rc = nf90_put_var(ncFileID, WhichVertVarID, intvals, &
+                     start=(/ starthere /), count=(/ loccount /) )
+   call nc_check(rc, context, 'put_var:which_vert', fname)
 endif
 
 deallocate(locations)
 if (write_vert) deallocate(intvals)
 
 end subroutine nc_write_multiple_locations
-
-!----------------------------------------------------------------------------
-
-subroutine checkit(rc, subname, action, fname)
-
-integer,                    intent(in) :: rc
-character(len=*),           intent(in) :: subname
-character(len=*),           intent(in) :: action
-character(len=*), optional, intent(in) :: fname
-
-if (present(fname)) then
-   call nc_check(rc, subname, action//trim(fname))
-else
-   call nc_check(rc, subname, action)
-endif
-
-end subroutine checkit
 
 !----------------------------------------------------------------------------
 
