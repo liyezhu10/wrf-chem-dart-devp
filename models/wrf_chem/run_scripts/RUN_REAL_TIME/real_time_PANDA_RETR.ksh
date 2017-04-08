@@ -12,8 +12,10 @@
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
 export CYCLE_STR_DATE=2014072406
+export CYCLE_STR_DATE=2016081600
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072406
+export CYCLE_END_DATE=2016081600
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export RETRIEVAL_TYPE=RETR
 export ADD_EMISS=.true.
@@ -130,6 +132,7 @@ export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
 export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
+export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA_IDIR
 export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
 export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
@@ -141,6 +144,7 @@ export EXPERIMENT_MOPITT_CO_DIR=${EXPERIMENT_DATA_DIR}/mopitt_co_hdf_data
 export EXPERIMENT_IASI_CO_DIR=${EXPERIMENT_DATA_DIR}/iasi_co_hdf_data
 export EXPERIMENT_IASI_O3_DIR=${EXPERIMENT_DATA_DIR}/iasi_o3_hdf_data
 export EXPERIMENT_AIRNOW_DIR=${EXPERIMENT_DATA_DIR}/airnow_csv_data
+export EXPERIMENT_PANDA_DIR=${EXPERIMENT_DATA_DIR}/panda_csv_data
 export EXPERIMENT_MODIS_AOD_DIR=${EXPERIMENT_DATA_DIR}/modis_aod_hdf_data
 export EXPERIMENT_GFS_DIR=${EXPERIMENT_DATA_DIR}/gfs_forecasts
 export EXPERIMENT_DUST_DIR=${EXPERIMENT_DATA_DIR}/dust_fields
@@ -253,14 +257,17 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=false
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=true
+   export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
-   export RUN_MODIS_AOD_OBS=true
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_PANDA_CO_OBS=false
+   export RUN_PANDA_O3_OBS=false
+   export RUN_PANDA_PM25_OBS=true
+   export RUN_MODIS_AOD_OBS=false
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -300,6 +307,9 @@ else
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
+   export RUN_PANDA_CO_OBS=false
+   export RUN_PANDA_O3_OBS=false
+   export RUN_PANDA_PM25_OBS=false
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=false
@@ -344,6 +354,9 @@ if [[ ${RUN_FINE_SCALE} = "true" ]]; then
    export RUN_IASI_O3_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
+   export RUN_PANDA_CO_OBS=false
+   export RUN_PANDA_O3_OBS=false
+   export RUN_PANDA_PM25_OBS=false
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=false
@@ -462,8 +475,11 @@ export PREPBUFR_MET_OBS_DIR=${RUN_DIR}/${DATE}/prepbufr_met_obs
 export MOPITT_CO_OBS_DIR=${RUN_DIR}/${DATE}/mopitt_co_obs
 export IASI_CO_OBS_DIR=${RUN_DIR}/${DATE}/iasi_co_obs
 export IASI_O3_OBS_DIR=${RUN_DIR}/${DATE}/iasi_o3_obs
-export AIRNOW_O3_OBS_DIR=${RUN_DIR}/${DATE}/airnow_o3_obs
 export AIRNOW_CO_OBS_DIR=${RUN_DIR}/${DATE}/airnow_co_obs
+export AIRNOW_O3_OBS_DIR=${RUN_DIR}/${DATE}/airnow_o3_obs
+export PANDA_CO_OBS_DIR=${RUN_DIR}/${DATE}/panda_co_obs
+export PANDA_O3_OBS_DIR=${RUN_DIR}/${DATE}/panda_o3_obs
+export PANDA_PM25_OBS_DIR=${RUN_DIR}/${DATE}/panda_pm25_obs
 export MODIS_AOD_OBS_DIR=${RUN_DIR}/${DATE}/modis_aod_obs
 export COMBINE_OBS_DIR=${RUN_DIR}/${DATE}/combine_obs
 export PREPROCESS_OBS_DIR=${RUN_DIR}/${DATE}/preprocess_obs
@@ -1114,6 +1130,7 @@ export NL_INPUT_FILES="'${DART_DIR}/obs_def/obs_def_reanalysis_bufr_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_gts_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_vortex_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_AIRNOW_OBS_mod.f90',
+                    '${DART_DIR}/obs_def/obs_def_PANDA_OBS_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_IASI_CO_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_IASI_O3_mod.f90',
                     '${DART_DIR}/obs_def/obs_def_MOPITT_CO_mod.f90',
@@ -1132,11 +1149,14 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
-                                   'MOPITT_CO_RETRIEVAL',
-                                   'AIRNOW_O3',
-                                   'AIRNOW_CO',
                                    'MODIS_AOD_RETRIEVAL',
-                                   'IASI_CO_RETRIEVAL'"
+                                   'MOPITT_CO_RETRIEVAL'"
+#                                   'PANDA_CO',
+#                                   'PANDA_O3',
+#                                   'PANDA_PM25',
+#                                   'AIRNOW_CO',
+#                                   'AIRNOW_O3',
+#                                   'IASI_CO_RETRIEVAL'"
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
 #
 # &replace_wrf_fields_nml
@@ -3546,6 +3566,219 @@ fi
 #
 #########################################################################
 #
+# RUN PANDA CO OBSERVATIONS
+#
+#########################################################################
+#
+if ${RUN_PANDA_CO_OBS}; then
+   if [[ ! -d ${RUN_DIR}/${DATE}/panda_co_obs ]]; then
+      mkdir ${RUN_DIR}/${DATE}/panda_co_obs
+      cd ${RUN_DIR}/${DATE}/panda_co_obs
+   else
+      cd ${RUN_DIR}/${DATE}/panda_co_obs
+   fi
+#
+# GET PANDA DATA
+   if [[ ! -e panda_station_coordinates.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_station_coordinates.csv ./.
+   fi
+   if [[ ! -e panda_stationData.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_stationData.csv ./.
+   fi
+#
+   export ASIM_MIN_MN=0
+   export ASIM_MIN_SS=0
+   export ASIM_MAX_MN=0
+   export ASIM_MAX_SS=0
+#
+# RUN_PANDA_CO_ASCII_TO_DART
+   if [[ ${HH} -eq 0 ]] then
+      export L_YYYY=${ASIM_MIN_YYYY}
+      export L_MM=${ASIM_MIN_MM}
+      export L_DD=${ASIM_MIN_DD}
+      export L_HH=24
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   else
+      export L_YYYY=${YYYY}
+      export L_MM=${MM}
+      export L_DD=${DD}
+      export L_HH=${HH}
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   fi
+   export NL_YEAR=${L_YYYY}
+   export NL_MONTH=${L_MM}
+   export NL_DAY=${L_DD}
+   export NL_HOUR=${L_HH}
+#
+   export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
+   export NL_FILENAME_DATA=\'panda_stationData.csv\'
+   export NL_LAT_MN=${NL_MIN_LAT}
+   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LON_MN=${NNL_MIN_LON}
+   export NL_LON_MX=${NNL_MAX_LON}
+#
+# GET EXECUTABLE
+   cp ${DART_DIR}/observations/PANDA/work/panda_co_ascii_to_obs ./.
+   rm -rf create_panda_obs_nml.nl
+   rm -rf input.nml
+   ${HYBRID_SCRIPTS_DIR}/da_create_dart_panda_input_nml.ksh
+   ./panda_co_ascii_to_obs
+#
+# COPY OUTPUT TO ARCHIVE LOCATION
+   export PANDA_OUT_FILE=panda_obs_seq
+   export PANDA_ARCH_FILE=obs_seq_panda_co_${DATE}.out
+   if [[ -e ${PANDA_OUT_FILE} ]]; then
+      cp ${PANDA_OUT_FILE} ${PANDA_ARCH_FILE}
+      rm ${PANDA_OUT_FILE}
+   else
+      touch NO_DATA_${D_DATE}
+   fi     
+fi
+#
+#########################################################################
+#
+# RUN PANDA O3 OBSERVATIONS
+#
+#########################################################################
+#
+if ${RUN_PANDA_O3_OBS}; then
+   if [[ ! -d ${RUN_DIR}/${DATE}/panda_o3_obs ]]; then
+      mkdir ${RUN_DIR}/${DATE}/panda_o3_obs
+      cd ${RUN_DIR}/${DATE}/panda_o3_obs
+   else
+      cd ${RUN_DIR}/${DATE}/panda_o3_obs
+   fi
+#
+# GET PANDA DATA
+   if [[ ! -e panda_station_coordinates.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_station_coordinates.csv ./.
+   fi
+   if [[ ! -e panda_stationData.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_stationData.csv ./.
+   fi
+#
+   export ASIM_MIN_MN=0
+   export ASIM_MIN_SS=0
+   export ASIM_MAX_MN=0
+   export ASIM_MAX_SS=0
+#
+# RUN_PANDA_O3_ASCII_TO_DART
+   if [[ ${HH} -eq 0 ]] then
+      export L_YYYY=${ASIM_MIN_YYYY}
+      export L_MM=${ASIM_MIN_MM}
+      export L_DD=${ASIM_MIN_DD}
+      export L_HH=24
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   else
+      export L_YYYY=${YYYY}
+      export L_MM=${MM}
+      export L_DD=${DD}
+      export L_HH=${HH}
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   fi
+   export NL_YEAR=${L_YYYY}
+   export NL_MONTH=${L_MM}
+   export NL_DAY=${L_DD}
+   export NL_HOUR=${L_HH}
+#
+   export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
+   export NL_FILENAME_DATA=\'panda_stationData.csv\'
+   export NL_LAT_MN=${NL_MIN_LAT}
+   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LON_MN=${NNL_MIN_LON}
+   export NL_LON_MX=${NNL_MAX_LON}
+#
+# GET EXECUTABLE
+   cp ${DART_DIR}/observations/PANDA/work/panda_o3_ascii_to_obs ./.
+   rm -rf create_panda_obs_nml.nl
+   rm -rf input.nml
+   ${HYBRID_SCRIPTS_DIR}/da_create_dart_panda_input_nml.ksh
+   ./panda_o3_ascii_to_obs
+#
+# COPY OUTPUT TO ARCHIVE LOCATION
+   export PANDA_OUT_FILE=panda_obs_seq
+   export PANDA_ARCH_FILE=obs_seq_panda_o3_${DATE}.out
+   if [[ -e ${PANDA_OUT_FILE} ]]; then
+      cp ${PANDA_OUT_FILE} ${PANDA_ARCH_FILE}
+      rm ${PANDA_OUT_FILE}
+   else
+      touch NO_DATA_${D_DATE}
+   fi     
+fi
+#
+#########################################################################
+#
+# RUN PANDA PM25 OBSERVATIONS
+#
+#########################################################################
+#
+if ${RUN_PANDA_PM25_OBS}; then
+   if [[ ! -d ${RUN_DIR}/${DATE}/panda_pm25_obs ]]; then
+      mkdir ${RUN_DIR}/${DATE}/panda_pm25_obs
+      cd ${RUN_DIR}/${DATE}/panda_pm25_obs
+   else
+      cd ${RUN_DIR}/${DATE}/panda_pm25_obs
+   fi
+#
+# GET PANDA DATA
+   if [[ ! -e panda_station_coordinates.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_station_coordinates.csv ./.
+   fi
+   if [[ ! -e panda_stationData.csv  ]]; then
+      cp ${EXPERIMENT_PANDA_DIR}/panda_stationData.csv ./.
+   fi
+#
+   export ASIM_MIN_MN=0
+   export ASIM_MIN_SS=0
+   export ASIM_MAX_MN=0
+   export ASIM_MAX_SS=0
+#
+# RUN_PANDA_PM25_ASCII_TO_DART
+   if [[ ${HH} -eq 0 ]] then
+      export L_YYYY=${ASIM_MIN_YYYY}
+      export L_MM=${ASIM_MIN_MM}
+      export L_DD=${ASIM_MIN_DD}
+      export L_HH=24
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   else
+      export L_YYYY=${YYYY}
+      export L_MM=${MM}
+      export L_DD=${DD}
+      export L_HH=${HH}
+      export D_DATE=${L_YYYY}${L_MM}${L_DD}${L_HH}
+   fi
+   export NL_YEAR=${L_YYYY}
+   export NL_MONTH=${L_MM}
+   export NL_DAY=${L_DD}
+   export NL_HOUR=${L_HH}
+#
+   export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
+   export NL_FILENAME_DATA=\'panda_stationData.csv\'
+   export NL_LAT_MN=${NL_MIN_LAT}
+   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LON_MN=${NNL_MIN_LON}
+   export NL_LON_MX=${NNL_MAX_LON}
+#
+# GET EXECUTABLE
+   cp ${DART_DIR}/observations/PANDA/work/panda_pm25_ascii_to_obs ./.
+   rm -rf create_panda_obs_nml.nl
+   rm -rf input.nml
+   ${HYBRID_SCRIPTS_DIR}/da_create_dart_panda_input_nml.ksh
+   ./panda_pm25_ascii_to_obs
+#
+# COPY OUTPUT TO ARCHIVE LOCATION
+   export PANDA_OUT_FILE=panda_obs_seq
+   export PANDA_ARCH_FILE=obs_seq_panda_pm25_${DATE}.out
+   if [[ -e ${PANDA_OUT_FILE} ]]; then
+      cp ${PANDA_OUT_FILE} ${PANDA_ARCH_FILE}
+      rm ${PANDA_OUT_FILE}
+   else
+      touch NO_DATA_${D_DATE}
+   fi     
+fi
+#
+#########################################################################
+#
 # RUN MODIS AOD OBSERVATIONS
 #
 #########################################################################
@@ -3726,6 +3959,27 @@ if ${RUN_COMBINE_OBS}; then
       export FILE_LIST[${NUM_FILES}]=obs_seq_AIR_CO_${DATE}.out
    fi
 #
+# PANDA CO
+   if [[ -s ${PANDA_CO_OBS_DIR}/obs_seq_panda_co_${DATE}.out && ${RUN_PANDA_CO_OBS} ]]; then 
+      cp ${PANDA_CO_OBS_DIR}/obs_seq_panda_co_${DATE}.out ./obs_seq_PAN_CO_${DATE}.out   
+      (( NUM_FILES=${NUM_FILES}+1 ))
+      export FILE_LIST[${NUM_FILES}]=obs_seq_PAN_CO_${DATE}.out
+   fi
+#
+# PANDA O3
+   if [[ -s ${PANDA_O3_OBS_DIR}/obs_seq_panda_o3_${DATE}.out && ${RUN_PANDA_O3_OBS} ]]; then 
+      cp ${PANDA_O3_OBS_DIR}/obs_seq_panda_o3_${DATE}.out ./obs_seq_PAN_O3_${DATE}.out   
+      (( NUM_FILES=${NUM_FILES}+1 ))
+      export FILE_LIST[${NUM_FILES}]=obs_seq_PAN_O3_${DATE}.out
+   fi
+#
+# PANDA PM25
+   if [[ -s ${PANDA_PM25_OBS_DIR}/obs_seq_panda_pm25_${DATE}.out && ${RUN_PANDA_PM25_OBS} ]]; then 
+      cp ${PANDA_PM25_OBS_DIR}/obs_seq_panda_pm25_${DATE}.out ./obs_seq_PAN_PM25_${DATE}.out   
+      (( NUM_FILES=${NUM_FILES}+1 ))
+      export FILE_LIST[${NUM_FILES}]=obs_seq_PAN_PM25_${DATE}.out
+   fi
+#
 # MODIS AOD
    if [[ -s ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out && ${RUN_MODIS_AOD_OBS} ]]; then 
       cp ${MODIS_AOD_OBS_DIR}/obs_seq_modis_aod_${DATE}.out ./obs_seq_MOD_AOD_${DATE}.out   
@@ -3735,7 +3989,13 @@ if ${RUN_COMBINE_OBS}; then
    export NL_NUM_INPUT_FILES=${NUM_FILES}
 #
 # All files present
-   if [[ ${NL_NUM_INPUT_FILES} -eq 7 ]]; then
+   if [[ ${NL_NUM_INPUT_FILES} -eq 10 ]]; then
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\',\'${FILE_LIST[8]}\',\'${FILE_LIST[9]},\'${FILE_LIST[10]}\'
+   elif [[ ${NL_NUM_INPUT_FILES} -eq 9 ]]; then
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\',\'${FILE_LIST[8]},\'${FILE_LIST[9]}\'
+   elif [[ ${NL_NUM_INPUT_FILES} -eq 8 ]]; then
+      export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\',\'${FILE_LIST[8]}\'
+   elif [[ ${NL_NUM_INPUT_FILES} -eq 7 ]]; then
       export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]},\'${FILE_LIST[7]}\'
    elif [[ ${NL_NUM_INPUT_FILES} -eq 6 ]]; then
       export NL_FILENAME_SEQ=\'${FILE_LIST[1]}\',\'${FILE_LIST[2]}\',\'${FILE_LIST[3]}\',\'${FILE_LIST[4]}\',\'${FILE_LIST[5]}\',\'${FILE_LIST[6]}\'
@@ -3758,8 +4018,8 @@ if ${RUN_COMBINE_OBS}; then
    export NL_FIRST_OBS_SECONDS=${ASIM_MIN_SEC_GREG}
    export NL_LAST_OBS_DAYS=${ASIM_MAX_DAY_GREG}
    export NL_LAST_OBS_SECONDS=${ASIM_MAX_SEC_GREG}
-   export NL_SYNONYMOUS_COPY_LIST="'NCEP BUFR observation','MOPITT CO observation','IASI CO observation','IASI O3 observation','AIRNOW observation','MODIS observation'"
-   export NL_SYNONYMOUS_QC_LIST="'NCEP QC index','MOPITT CO QC index','IASI CO QC index','IASI O3 QC index','AIRNOW QC index','MODIS QC index'"
+   export NL_SYNONYMOUS_COPY_LIST="'NCEP BUFR observation','MOPITT CO observation','IASI CO observation','IASI O3 observation','AIRNOW observation','PANDA observation','MODIS observation'"
+   export NL_SYNONYMOUS_QC_LIST="'NCEP QC index','MOPITT CO QC index','IASI CO QC index','IASI O3 QC index','AIRNOW QC index','PANDA QC index','MODIS QC index'"
    rm -rf input.nml
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
 #
