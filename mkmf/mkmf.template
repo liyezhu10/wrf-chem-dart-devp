@@ -56,8 +56,8 @@
 # http://gcc.gnu.org/onlinedocs/gfortran/GFORTRAN_005fCONVERT_005fUNIT.html#GFORTRAN_005fCONVERT_005fUNIT
 #
 
-MPIFC = mpif90
-MPILD = mpif90
+MPIFC = /Users/thoar/gnu_5.1.0/bin/mpif90
+MPILD = /Users/thoar/gnu_5.1.0/bin/mpif90
 FC = gfortran
 LD = gfortran
 
@@ -80,14 +80,15 @@ LD = gfortran
 # uncomment the following line and set value to where lib and include
 # are found for the netcdf files that match this compiler.
 #
-# NETCDF = /opt/local
+# NETCDF = /Users/thoar/gnu_4.5.0
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 # FFLAGS  = -O2 -ffree-line-length-none $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
-  FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
+# FFLAGS = -g -O0 -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow -ffree-line-length-none $(INCS)
+  FFLAGS = -g -O0 -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
            -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
 
 # <next few lines under version control, do not edit>

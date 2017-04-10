@@ -4,9 +4,20 @@
 !
 ! $Id$
 
-program closest_member_tool
+!> Program to find one or more ensemble members where the values
+!> are the "closest" to the ensemble mean.  There are several metrics
+!> for measuring this, which can be selected via a namelist option.
+!>
+!> This program should be compiled in a particular model's work directory.
+!> It uses subroutines from the model_mod.f90 file, in particular 
+!> get_state_meta_data() to find the location and variable type of
+!> each item in the state vector.
+!> 
+!> It also has namelist options to only compute "distances" for a
+!> subset of the state vector kinds.
+!>
 
-! Program to overwrite the time on each ensemble in a restart file.
+program closest_member_tool
 
 use types_mod,         only : r8
 use time_manager_mod,  only : time_type, set_time_missing,               &
@@ -22,7 +33,7 @@ use  location_mod,     only : location_type
 use  obs_kind_mod,     only : get_num_raw_obs_kinds, get_raw_obs_kind_index, &
                               paramname_length, get_raw_obs_kind_name
 
-use  sort_mod,         only : slow_index_sort
+use  sort_mod,         only : index_sort
 
 use assim_model_mod,   only : static_init_assim_model, get_model_size,   &
                               open_restart_read, aread_state_restart,    &
@@ -291,7 +302,7 @@ endif
 
 !------------------- Print out results     -----------------------
 
-call slow_index_sort(diffs, index_list, ens_size)
+call index_sort(diffs, index_list, ens_size)
 call error_handler(E_MSG, '', ' ')
 write(msgstring, "(A,I5)") 'Member with the minimum difference from the mean is ', index_list(1)
 call error_handler(E_MSG, '', msgstring)
