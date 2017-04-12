@@ -314,7 +314,7 @@ end function interactive_obs_sequence
 !---------------------------------------------------------
 
 subroutine get_expected_obs(seq, keys, ens_index, state, state_time, isprior, &
-   obs_vals, istatus, assimilate_this_ob, evaluate_this_ob)
+   obs_vals, obs_mytags, istatus, assimilate_this_ob, evaluate_this_ob)
 
 ! Compute forward operator for set of obs in sequence
 
@@ -325,6 +325,7 @@ real(r8),                intent(in)  :: state(:)
 type(time_type),         intent(in)  :: state_time
 logical,                 intent(in)  :: isprior
 real(r8),                intent(out) :: obs_vals(:)
+integer,                 intent(out) :: obs_mytags(:)
 integer,                 intent(out) :: istatus
 logical,                 intent(out) :: assimilate_this_ob, evaluate_this_ob
 
@@ -355,14 +356,17 @@ do i = 1, num_obs
          'identity obs is outside of state vector ', &
          source, revision, revdate)
       obs_vals(i) = state(-1 * obs_kind_ind)
+      obs_mytags(i)= -1
       ! fixme: we currently have no option to eval only identity obs,
       ! or select to skip their assimilation via namelist.
       assimilate_this_ob = .true.; evaluate_this_ob = .false.
-     if (obs_vals(i) == missing_r8) istatus = 1
+     if (obs_vals(i) == missing_r8) then 
+        istatus = 1
+     endif 
 ! Otherwise do forward operator for this kind
    else
       call get_expected_obs_from_def(keys(i), obs_def, obs_kind_ind, &
-         ens_index, state, state_time, isprior, obs_vals(i), istatus, &
+         ens_index, state, state_time, isprior, obs_vals(i), obs_mytags(i), istatus, &
          assimilate_this_ob, evaluate_this_ob)
    endif
 end do

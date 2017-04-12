@@ -256,7 +256,7 @@ end function ezlh_inverse
 
 
 function deconstruct_filename(filename, gridarea, iyear, idoy, &
-                passdir, freq, polarization, is_time_file, time_file_name)
+                passdir, freq, polarization, is_time_file)
 character(len=*), intent(in)    :: filename
 character(len=2), intent(out)   :: gridarea
 integer,          intent(out)   :: iyear, idoy
@@ -264,7 +264,6 @@ character(len=1), intent(out)   :: passdir
 real,             intent(out)   :: freq
 character(len=1), intent(out)   :: polarization
 logical,          intent(out)   :: is_time_file
-character(len=*), intent(inout) :: time_file_name
 integer                         :: deconstruct_filename
 
 ! http://nsidc.org/data/docs/daac/nsidc0301_amsre_gridded_tb.gd.html#namingconvention
@@ -336,11 +335,8 @@ endif
 
 if (myfile(nchars-2:nchars) == 'TIM') then
    is_time_file = .true.
-   read(myfile(ipos:nchars),100,iostat=iocode)gridarea,iyear,idoy,passdir
-   time_file_name = myfile
 else
    read(myfile(ipos:nchars),200,iostat=iocode)gridarea,iyear,idoy,passdir,channel,polarization
-   time_file_name = myfile(1:nchars-3)//'TIM'
 endif
 
 deconstruct_filename = iocode

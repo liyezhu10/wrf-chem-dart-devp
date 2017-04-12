@@ -123,6 +123,7 @@ integer                 :: model_size, key_bounds(2), num_qc, last_key_used
 integer                 :: seed
 
 real(r8)                :: true_obs(1), obs_value(1), qc(1)
+integer                 :: temp_mytags(1)
 
 character(len=metadatalength) :: copy_meta_data(2), qc_meta_data, obs_seq_read_format
 character(len=metadatalength) :: state_meta(1)
@@ -346,7 +347,7 @@ AdvanceTime: do
       ! Compute the observations from the state
       call get_expected_obs(seq, keys(j:j), &
          1, ens_handle%vars(:, 1), ens_handle%time(1), .true., &
-         true_obs(1:1), istatus, assimilate_this_ob, evaluate_this_ob)
+         true_obs(1:1), temp_mytags(1:1), istatus, assimilate_this_ob, evaluate_this_ob)
 
       ! Get the observational error covariance (diagonal at present)
       ! Generate the synthetic observations by adding in error samples

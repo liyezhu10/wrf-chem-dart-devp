@@ -18,8 +18,7 @@ use    utilities_mod, only : initialize_utilities, nc_check, &
 use     location_mod, only : location_type, set_location, write_location, get_dist, &
                              query_location, LocationDims, get_location, VERTISHEIGHT
 use     obs_kind_mod, only : get_raw_obs_kind_name, get_raw_obs_kind_index, &
-                             KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE, &
-                             KIND_BRIGHTNESS_TEMPERATURE
+                             KIND_SNOWCOVER_FRAC, KIND_SOIL_TEMPERATURE, KIND_BRIGHTNESS_TEMPERATURE
 use  assim_model_mod, only : open_restart_read, open_restart_write, close_restart, &
                              aread_state_restart, awrite_state_restart, &
                              netcdf_file_type, aoutput_diagnostics, &
@@ -72,8 +71,16 @@ type(netcdf_file_type) :: ncFileID
 type(location_type) :: loc
 
 real(r8) :: interp_val
+integer  :: interp_mytag
 
 real(r8), dimension(6) :: metadata
+
+!===================================================================Long
+INTEGER(KIND=4) :: NX, NY
+INTEGER(KIND=4) :: ncid
+CHARACTER(LEN=100) :: infile
+CHARACTER(LEN=50) :: xname, yname
+!===================================================================Long
 
 !----------------------------------------------------------------------
 ! This portion checks the geometry information.
@@ -216,12 +223,13 @@ endif
 
 if (test1thru > 8) then
    write(*,*)
-   write(*,*)'Testing compute_gridcell_value() with KIND_SNOWCOVER_FRAC ...'
+   write(*,*)'Testing compute_gridcell_value() with "frac_sno" ...'
 
    loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 
-   call compute_gridcell_value(statevector, loc, KIND_SNOWCOVER_FRAC, interp_val, ios_out)
-
+   call compute_gridcell_value(statevector, loc, "frac_sno", interp_val, ios_out) ! ===original
+   !call get_grid_vertval(statevector, loc, "frac_sno", interp_val, ios_out)         ! ===Long
+   
    if ( ios_out == 0 ) then
       write(*,*)'compute_gridcell_value : value is ',interp_val
    else
@@ -230,11 +238,11 @@ if (test1thru > 8) then
 
 
    write(*,*)
-   write(*,*)'Testing get_grid_vertval() with KIND_SOIL_TEMPERATURE ...'
+   write(*,*)'Testing get_grid_vertval() with "T_SOISNO" ...'
 
    loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
 
-   call get_grid_vertval(statevector, loc, KIND_SOIL_TEMPERATURE, interp_val, ios_out)
+   call get_grid_vertval(statevector, loc, "T_SOISNO", interp_val, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'get_grid_vertval : value is ',interp_val
@@ -250,9 +258,18 @@ endif
 
 if (test1thru > 9) then
    write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_SNOWCOVER_FRAC'
-
-   call model_interpolate(statevector, loc, KIND_SNOWCOVER_FRAC, interp_val, ios_out)
+   ! write(*,*)'Testing model_interpolate() with KIND_SNOWCOVER_FRAC'   !=====Long
+   write(*,*)'Testing model_interpolate() with KIND_BRIGHTNESS_TEMPERATURE'
+   
+   metadata(1)=0
+   metadata(2)=10
+   metadata(3)=25
+   metadata(4)=1.0
+   metadata(5)=55.0
+   metadata(6)=40   
+   
+   call model_interpolate(statevector, loc, KIND_BRIGHTNESS_TEMPERATURE, interp_val, interp_mytag, ios_out, metadata)
+   
 
    if ( ios_out == 0 ) then
       write(*,*)'model_interpolate : value is ',interp_val
@@ -264,7 +281,7 @@ if (test1thru > 9) then
    write(*,*)
    write(*,*)'Testing model_interpolate() with KIND_SOIL_TEMPERATURE'
 
-   call model_interpolate(statevector, loc, KIND_SOIL_TEMPERATURE, interp_val, ios_out)
+   call model_interpolate(statevector, loc, KIND_SOIL_TEMPERATURE, interp_val, interp_mytag, ios_out)
 
    if ( ios_out == 0 ) then
       write(*,*)'model_interpolate : value is ',interp_val
@@ -272,28 +289,34 @@ if (test1thru > 9) then
       write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
    endif
 
+endif
 
-   write(*,*)
-   write(*,*)'Testing model_interpolate() with KIND_BRIGHTNESS_TEMPERATURE'
+!==============================================================Long
 
-   ! igbp type = 23
-   ! frequency = 37.5
-   ! footprint = 54.0
-   ! polarization  > 0.0 => H
-   ! angle = 55.0
-   ! ensemble_index = 20
+if (test1thru >9) then
 
-   metadata = (/ 23.0, 37.5, 54.0, 1.0, 55.0, 20.0 /)
+   infile='/work/02714/zhaol/DART_Tb/models/clm/work/clm_restart.nc'
+ 
+   !Open netCDF file
+   !:-------:-------:-------:-------:-------:-------:-------:
+!   CALL nc_check(nf90_open(trim(infile), nf90_nowrite, ncid))
 
-   call model_interpolate(statevector, loc, KIND_BRIGHTNESS_TEMPERATURE, interp_val, ios_out, metadata)
+   !Inquire about the dimensions
+   !:-------:-------:-------:-------:-------:-------:-------:
+!   CALL check(nf90_inquire_dimension(ncid,1,xname,NX))
+!   CALL check(nf90_inquire_dimension(ncid,2,yname,NY))
 
-   if ( ios_out == 0 ) then 
-      write(*,*)'model_interpolate : value is ',interp_val
-   else
-      write(*,*)'model_interpolate : value is ',interp_val,'with error code',ios_out
-   endif
+   write(*,*)'dimlens(1)= ',NX,' dimname= ',xname
+   write(*,*)'dimlens(2)= ',NY,' dimname= ',yname
+
+   !Close netCDF file
+   !:-------:-------:-------:-------:-------:-------:-------:
+!   CALL check(nf90_close(ncid))
+
+   pause
 
 endif
+!==============================================================Long
 
 call finalize_utilities('model_mod_check')
 

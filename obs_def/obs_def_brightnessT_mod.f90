@@ -23,17 +23,21 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(AMSRE_BRIGHTNESS_T)
-!     ! This operator reads information from a CLM history file, whose contents
+!     ! This operator reads information from a CLM restart file, whose contents
 !     ! are not modified by the assimilation process. There is no point doing
 !     ! the posterior call as it returns the same value as the prior.
 !     ! Need to pass metadata and ensemble index to interpolate. Terrible.
+!     ! The IF clause commented by Long to enable posterior calculation -- a test !===Long
 !     if (isprior) then
-!        call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, istatus, &
-!        (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
+!       call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, obs_mytag, istatus, &
+!       (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
 !     else
-!        obs_val = MISSING_R8
-!        istatus = 1
+!       obs_val = MISSING_R8
+!       istatus = 1
 !     endif
+!     ! The IF clause commented by Long to enable posterior calculation -- a test !===Long
+!     ! call interpolate(state, location, KIND_BRIGHTNESS_TEMPERATURE, obs_val, obs_mytag, istatus, &
+!     !    (/ get_amsre_metadata(obs_def%key), real(ens_index,r8) /) )
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 

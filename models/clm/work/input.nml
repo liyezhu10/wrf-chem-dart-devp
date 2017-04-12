@@ -1,93 +1,93 @@
 &perfect_model_obs_nml
-   start_from_restart    = .true.
-   output_restart        = .false.
-   async                 = 0
-   init_time_days        = -1
-   init_time_seconds     = -1
-   first_obs_days        = -1
-   first_obs_seconds     = -1
-   last_obs_days         = -1
-   last_obs_seconds      = -1
-   output_interval       = 1
-   trace_execution       = .false.
-   restart_in_file_name  = 'perfect_ics'
-   restart_out_file_name = 'perfect_restart'
-   obs_seq_in_file_name  = 'obs_seq.in'
-   obs_seq_out_file_name = 'obs_seq.perfect'
-   adv_ens_command       = 'no_advance_script'
-   output_timestamps     = .false.
-   trace_execution       = .false.
-   output_forward_op_errors = .false.
-   print_every_nth_obs   = -1
-   silence               = .false.
+   start_from_restart    = .true.,
+   output_restart        = .false.,
+   async                 = 0,
+   init_time_days        = -1,
+   init_time_seconds     = -1,
+   first_obs_days        = -1,
+   first_obs_seconds     = -1,
+   last_obs_days         = -1,
+   last_obs_seconds      = -1,
+   output_interval       = 1,
+   trace_execution       = .false.,
+   restart_in_file_name  = "perfect_ics",
+   restart_out_file_name = "perfect_restart",
+   obs_seq_in_file_name  = "obs_seq.in",
+   obs_seq_out_file_name = "obs_seq.perfect",
+   adv_ens_command       = "no_advance_script"
+   output_timestamps     = .false.,
+   trace_execution       = .false.,
+   output_forward_op_errors = .false.,
+   print_every_nth_obs   = -1,
+   silence               = .false.,
    /
-   obs_seq_in_file_name  = 'obs_seq.5coop.in'
+   obs_seq_in_file_name  = "obs_seq.5coop.in",
 
 &filter_nml
-   async                    = 0
-   adv_ens_command          = 'no_advance_script'
-   ens_size                 =  40
-   start_from_restart       = .true.
-   output_restart           = .true.
-   obs_sequence_in_name     = 'obs_seq.out'
-   obs_sequence_out_name    = 'obs_seq.final'
-   restart_in_file_name     = 'filter_ics'
-   restart_out_file_name    = 'filter_restart'
-   init_time_days           = -1
-   init_time_seconds        = -1
-   first_obs_days           = -1
-   first_obs_seconds        = -1
-   last_obs_days            = -1
-   last_obs_seconds         = -1
-   num_output_state_members = 20
-   num_output_obs_members   = 20
-   output_interval          = 1
-   num_groups               = 1
-   input_qc_threshold       = 3.0
-   outlier_threshold        = 3
-   output_forward_op_errors = .false.
-   output_timestamps        = .false.
-   output_inflation         = .true.
-   trace_execution          = .true.
-   silence                  = .false.
+   async                    = 0,
+   adv_ens_command          = "no_advance_script",
+   ens_size                 =  40,
+   start_from_restart       = .true.,
+   output_restart           = .true.,
+   obs_sequence_in_name     = "obs_seq.out",
+   obs_sequence_out_name    = "obs_seq.final",
+   restart_in_file_name     = "filter_ics",
+   restart_out_file_name    = "filter_restart",
+   init_time_days           = -1,
+   init_time_seconds        = -1,
+   first_obs_days           = -1,
+   first_obs_seconds        = -1,
+   last_obs_days            = -1,
+   last_obs_seconds         = -1,
+   num_output_state_members = 20,
+   num_output_obs_members   = 20,
+   output_interval          = 1,
+   num_groups               = 1,
+   input_qc_threshold       = 3.0,
+   outlier_threshold        = 3,
+   output_forward_op_errors = .false.,
+   output_timestamps        = .false.,
+   output_inflation         = .true.,
+   trace_execution          = .true.,
+   silence                  = .false.,
 
-   inf_flavor                  = 0,                       0
-   inf_initial_from_restart    = .false.,                 .false.
-   inf_sd_initial_from_restart = .false.,                 .false.
-   inf_output_restart          = .true.,                  .true.
-   inf_deterministic           = .true.,                  .true.
-   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics'
-   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart'
-   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag'
-   inf_initial                 = 1.02,                     1.0
-   inf_sd_initial              = 0.6,                     0.6
-   inf_damping                 = 0.9,                     0.9
-   inf_lower_bound             = 1.0,                     1.0
-   inf_upper_bound             = 100.0,               1000.0
+   inf_flavor                  = 0,                       0,
+   inf_initial_from_restart    = .false.,                 .false.,
+   inf_sd_initial_from_restart = .false.,                 .false.,
+   inf_output_restart          = .true.,                  .true.,
+   inf_deterministic           = .true.,                  .true.,
+   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
+   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
+   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
+   inf_initial                 = 1.02,                     1.0,
+   inf_sd_initial              = 0.6,                     0.6,
+   inf_damping                 = 0.9,                     0.9,
+   inf_lower_bound             = 1.0,                     1.0,
+   inf_upper_bound             = 100.0,               1000.0,
    inf_sd_lower_bound          = 0.6,                     0.6
    /
 
 
 &smoother_nml
-   num_lags              = 0
-   start_from_restart    = .false.
-   output_restart        = .false.
-   restart_in_file_name  = 'smoother_ics'
+   num_lags              = 0,
+   start_from_restart    = .false.,
+   output_restart        = .false.,
+   restart_in_file_name  = 'smoother_ics',
    restart_out_file_name = 'smoother_restart'
    /
 
 
 # cutoff of 0.03 (radians) is about 200km
 &assim_tools_nml
-   filter_kind                     = 1
-   cutoff                          = 0.05
-   allow_missing_in_clm            = .true.
-   sort_obs_inc                    = .false.
-   spread_restoration              = .false.
-   sampling_error_correction       = .false.
-   adaptive_localization_threshold = -1
-   output_localization_diagnostics = .false.
-   localization_diagnostics_file   = 'localization_diagnostics'
+   filter_kind                     = 1,
+   cutoff                          = 0.05,
+   allow_missing_in_clm            = .true.,
+   sort_obs_inc                    = .false.,
+   spread_restoration              = .false.,
+   sampling_error_correction       = .false.,
+   adaptive_localization_threshold = -1,
+   output_localization_diagnostics = .false.,
+   localization_diagnostics_file   = 'localization_diagnostics',
    print_every_nth_obs             = 0
    /
 
@@ -107,10 +107,10 @@
 
 
 &reg_factor_nml
-   select_regression    = 1
-   input_reg_file       = 'time_mean_reg'
-   save_reg_diagnostics = .false.
-   reg_diagnostics_file = 'reg_diagnostics'
+   select_regression    = 1,
+   input_reg_file       = "time_mean_reg",
+   save_reg_diagnostics = .false.,
+   reg_diagnostics_file = "reg_diagnostics"
    /
 
 
@@ -120,14 +120,14 @@
 
 
 &preprocess_nml
-           overwrite_output = .true.
-    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90'
-   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90'
-     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90'
-    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90'
+           overwrite_output = .true.,
+    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
+   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
+     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
+    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
    input_files              = '../../../obs_def/obs_def_brightnessT_mod.f90',
                               '../../../obs_def/obs_def_tower_mod.f90',
-                              '../../../obs_def/obs_def_GRACE_Long_mod.f90'
+                              '../../../obs_def/obs_def_GRACE_Long_mod.f90',
    /
 
 
@@ -135,8 +135,8 @@
 # hist_nhtfrq should be negative (hours) ... same context as in
 # the CLM namelist for the .h1. files.
 &obs_def_tower_nml
-   casename    = '../clm_dart'
-   hist_nhtfrq = -HISTORY_OUTPUT_INTERVAL
+   casename    = '../clm_dart',
+   hist_nhtfrq = -HISTORY_OUTPUT_INTERVAL,
    debug       = .false.
    /
 
@@ -154,7 +154,7 @@
    /
 
 &assim_model_nml
-   write_binary_restart_files = .true.
+   write_binary_restart_files = .true.,
    netCDF_large_file_support  = .true.
    /
 
@@ -165,54 +165,54 @@
 # The definitions for most of the DART kinds are in obs_def_tower_mod.f90
 
 &model_nml
-   casename                     = 'cesm_standard'
+   casename                     = 'cesm_standard',
    auxiliary_nc                 = 'rtm_auxiliary.nc'
-   lai_nc                       = 'rtm_lai_modis.nc'
-   clm_restart_filename         = 'clm_restart.nc'
-   clm_history_filename         = 'clm_history.nc'
+   lai_nc                       = 'rtm_lai_modis.nc',
+   clm_restart_filename         = 'clm_restart.nc',
+   clm_history_filename         = 'clm_history.nc',
    clm_vector_history_filename  = 'clm_vector_history.nc'
-   output_state_vector          = .false.
-   assimilation_period_days     = 1
-   assimilation_period_seconds  = 0
-   model_perturbation_amplitude = 0.2
-   calendar                     = 'Gregorian'
-   debug                        = 0
+   output_state_vector          = .false.,
+   assimilation_period_days     = 1,
+   assimilation_period_seconds  = 0,
+   model_perturbation_amplitude = 0.2,
+   calendar                     = 'Gregorian',
+   debug                        = 0,
    clm_variables                = 'H2OSOI_LIQ',     'KIND_SOIL_MOISTURE',          '0',      '1510',    'RESTART', 'UPDATE',
                                   'T_SOISNO',       'KIND_SOIL_TEMPERATURE',       '200',    '330',     'RESTART', 'UPDATE',
                                   'T_VEG',          'KIND_VEGETATION_TEMPERATURE', '200',    '330',     'RESTART', 'NO_COPY_BACK',
-                                  'SNLSNO',         'KIND_NUM_SNOW_LAYERS',        'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'SNLSNO',         'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
                                   'T_GRND',         'KIND_SKIN_TEMPERATURE',       '200',    '330',     'RESTART', 'NO_COPY_BACK', 
                                   'frac_sno',       'KIND_SNOWCOVER_FRAC',         '0',      '1',       'RESTART', 'NO_COPY_BACK',
                                   'H2OSNO',         'KIND_SNOW_WATER',             '0',      '1000',    'RESTART', 'UPDATE',
                                   'H2OSOI_ICE',     'KIND_ICE',                    '0',      '1510',    'RESTART', 'UPDATE',
                                   'SNOWDP',         'KIND_SNOW_THICKNESS',         '0',      '10',      'RESTART', 'UPDATE',
                                   'H2OCAN',         'KIND_CANOPY_WATER',           'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'SANDFRAC_CKYH',  'KIND_SAND_FRACTION',          'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'CLAYFRAC_CKYH',  'KIND_CLAY_FRACTION',          'NA',     'NA',      'RESTART', 'NO_COPY_BACK', 
-                                  'T_VEG_CKYH',     'KIND_VEGETATION_TEMPERATURE', 'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'ELAI_CKYH',      'KIND_LEAF_AREA_INDEX',        'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'VF_CKYH',        'KIND_VF_CKYH'                 'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_PBOT_CKYH', 'KIND_FORC_PBOT_CKYH',         'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_T_CKYH',    'KIND_FORC_T_CKYH',            'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_RH_CKYH',   'KIND_FORC_RH_CKYH',           'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'STICKINESS_CKYH','KIND_STICKINESS_CKYH',        'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'B_PRIME_CKYH',   'KIND_B_PRIME_CKYH',           'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'X_LAMBDA_CKYH',  'KIND_X_LAMBDA_CKYH',          'NA',     'NA',      'RESTART', 'UPDATE',
+                                  'SANDFRAC_CKYH',  'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'CLAYFRAC_CKYH',  'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK', 
+                                  'T_VEG_CKYH',     'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'ELAI_CKYH',      'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'VF_CKYH',        'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'FORC_PBOT_CKYH', 'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'FORC_T_CKYH',    'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'FORC_RH_CKYH',   'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'STICKINESS_CKYH','KIND_RTM_PARAMETERS_P',       'NA',     'NA',      'RESTART', 'UPDATE',
+                                  'B_PRIME_CKYH',   'KIND_RTM_PARAMETERS_P',       'NA',     'NA',      'RESTART', 'UPDATE',
+                                  'X_LAMBDA_CKYH',  'KIND_RTM_PARAMETERS_N',       'NA',     'NA',      'RESTART', 'UPDATE',
                                   'DZSNO',          'KIND_SNOW_THICKNESS',         'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'ZSNO',           'KIND_SNOW_DEPTH',             'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'ZISNO',          'KIND_SNOW_INTERFACES',        'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'ZSNO',           'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
+                                  'ZISNO',          'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
                                   'snw_rds',        'KIND_SNOW_GRAIN_SIZE',        'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'WT',             'KIND_TOTAL_WATER_STORAGE',    '0',      'NA',      'RESTART', 'UPDATE',
-                                  'WA',             'KIND_WATER_UNCONFINED',       '0',      'NA',      'RESTART', 'UPDATE',
-                                  'LAI',            'KIND_LEAF_AREA_INDEX',        'NA',     'NA',      'LAIIN',   'NO_COPY_BACK',
-                                  'WATSAT',         'KIND_SATURATED_WATER',        'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'SANDFRAC_C',     'KIND_CALIBRATED_SANDFRAC',    'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'CLAYFRAC_C',     'KIND_CALIBRATED_CLAYFRAC',    'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'FMV',            'KIND_RTM_FMV',                'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'BMV',            'KIND_RTM_BMV',                'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'XMV',            'KIND_RTM_XMV',                'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'QMV',            'KIND_RTM_QMV',                'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'HMV',            'KIND_RTM_HMV',                'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'WT',             'KIND_TOTAL_WATER_STORAGE',    '0',      'NA',      'RESRART', 'UPDATE',
+                                  'WA',             'KIND_TOTAL_WATER_STORAGE',    '0',      'NA',      'RESRART', 'UPDATE',
+                                  'LAI',            'KIND_MODIS_LAI',              'NA',     'NA',      'LAIIN',   'NO_COPY_BACK',
+                                  'WATSAT',         'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'SANDFRAC_C',     'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'CLAYFRAC_C',     'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'FMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'BMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'XMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'QMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+                                  'HMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
    /
 
                                   'tlai',        'KIND_LEAF_AREA_INDEX',
@@ -249,28 +249,28 @@
 
 
 &dart_to_clm_nml
-   dart_to_clm_input_file   = 'dart_restart'
+   dart_to_clm_input_file   = 'dart_restart',
    advance_time_present     = .false.
    /
 
 
 &location_nml
-   horiz_dist_only             = .true.
-   vert_normalization_pressure = 100000.0
-   vert_normalization_height   = 10000.0
-   vert_normalization_level    = 20.0
-   approximate_distance        = .false.
-   nlon                        = 71
-   nlat                        = 36
+   horiz_dist_only             = .true.,
+   vert_normalization_pressure = 100000.0,
+   vert_normalization_height   = 10000.0,
+   vert_normalization_level    = 20.0,
+   approximate_distance        = .false.,
+   nlon                        = 71,
+   nlat                        = 36,
    output_box_info             = .true.
    /
 
 
 &utilities_nml
-   TERMLEVEL = 2
-   module_details = .false.
-   logfilename = 'dart_log.out'
-   nmlfilename = 'dart_log.nml'
+   TERMLEVEL = 2,
+   module_details = .false.,
+   logfilename = 'dart_log.out',
+   nmlfilename = 'dart_log.nml',
    write_nml   = 'file'
    /
 
@@ -283,20 +283,20 @@
 # Gregorian: 12 Z 1 January 2000 <==> DART: 145731 days 43200 seconds
 
 &restart_file_tool_nml
-   input_file_name              = 'filter_restart'
-   output_file_name             = 'filter_updated_restart'
-   ens_size                     = 1
-   single_restart_file_in       = .true.
-   single_restart_file_out      = .true.
-   write_binary_restart_files   = .true.
-   overwrite_data_time          = .false.
-   new_data_days                = -1
-   new_data_secs                = -1
-   input_is_model_advance_file  = .false.
-   output_is_model_advance_file = .false.
-   overwrite_advance_time       = .false.
-   new_advance_days             = -1
-   new_advance_secs             = -1
+   input_file_name              = "filter_restart",
+   output_file_name             = "filter_updated_restart",
+   ens_size                     = 1,
+   single_restart_file_in       = .true.,
+   single_restart_file_out      = .true.,
+   write_binary_restart_files   = .true.,
+   overwrite_data_time          = .false.,
+   new_data_days                = -1,
+   new_data_secs                = -1,
+   input_is_model_advance_file  = .false.,
+   output_is_model_advance_file = .false.,
+   overwrite_advance_time       = .false.,
+   new_advance_days             = -1,
+   new_advance_secs             = -1,
    gregorian_cal                = .true.
    /
 
@@ -304,91 +304,91 @@
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
 # year   month   day   hour   minute   second
-# max_num_bins can be used to specify a fixed number of bins
+# max_num_bins can be used to specify a fixed number of bins,
 # in which case last_bin_center should be safely in the future.
 #
 # Acceptable latitudes range from  [-90,  90]
 # Acceptable longitudes range from [  0, Inf]
 
 &obs_diag_nml
-   obs_sequence_name = ''
-   obs_sequence_list = 'obs_seq_files.txt'
-   first_bin_center =  2003, 7,  2, 0, 0, 0
-   last_bin_center  =  2003, 7,  6, 0, 0, 0
-   bin_separation   =     0, 0,  1, 0, 0, 0
-   bin_width        =     0, 0,  1, 0, 0, 0
-   time_to_skip     =     0, 0,  0, 0, 0, 0
-   max_num_bins     = 1000
-   trusted_obs      = 'null'
-   Nregions   = 4
-   lonlim1    =     0.0,     0.0,    0.0,  180.0
-   lonlim2    =   360.0,   360.0,  180.0,  360.0
-   latlim1    =   -90.0,     0.0,  -90.0,  -90.0
-   latlim2    =     0.0,    90.0,   90.0,   90.0
-   reg_names  = 'South', 'North', 'East', 'West'
-   hlevel_edges =  0.0, 1.0, 2.0, 5.0, 10.0, 40.0
-   print_mismatched_locs = .false.
-   create_rank_histogram = .true.
-   outliers_in_histogram = .true.
-   use_zero_error_obs    = .false.
-   verbose               = .true.
+   obs_sequence_name = '',
+   obs_sequence_list = 'obs_seq_files.txt',
+   first_bin_center =  2003, 7,  2, 0, 0, 0 ,
+   last_bin_center  =  2003, 7,  6, 0, 0, 0 ,
+   bin_separation   =     0, 0,  1, 0, 0, 0 ,
+   bin_width        =     0, 0,  1, 0, 0, 0 ,
+   time_to_skip     =     0, 0,  0, 0, 0, 0 ,
+   max_num_bins     = 1000,
+   trusted_obs      = 'null',
+   Nregions   = 4,
+   lonlim1    =     0.0,     0.0,    0.0,  180.0,
+   lonlim2    =   360.0,   360.0,  180.0,  360.0,
+   latlim1    =   -90.0,     0.0,  -90.0,  -90.0,
+   latlim2    =     0.0,    90.0,   90.0,   90.0,
+   reg_names  = 'South', 'North', 'East', 'West',
+   hlevel_edges =  0.0, 1.0, 2.0, 5.0, 10.0, 40.0,
+   print_mismatched_locs = .false.,
+   create_rank_histogram = .true.,
+   outliers_in_histogram = .true.,
+   use_zero_error_obs    = .false.,
+   verbose               = .true.,
    /
 
 
 &obs_sequence_tool_nml
-   filename_seq      = '../work/obs_seq.in'
-   filename_seq_list = ''
-   filename_out      = 'obs_seq.2004-01-04-00000.in'
-   print_only        = .false.
-   gregorian_cal     = .true.
-   first_obs_days    = 147194
-   first_obs_seconds = 43201
-   last_obs_days     = 147195
-   last_obs_seconds  = 43200
-   edit_qc_metadata   = .true.
+   filename_seq      = '../work/obs_seq.in',
+   filename_seq_list = '',
+   filename_out      = 'obs_seq.2004-01-04-00000.in',
+   print_only        = .false.,
+   gregorian_cal     = .true.,
+   first_obs_days    = 147194,
+   first_obs_seconds = 43201,
+   last_obs_days     = 147195,
+   last_obs_seconds  = 43200,
+   edit_qc_metadata   = .true.,
    new_qc_metadata    = 'Original QC'
    synonymous_qc_list = 'Original QC','Data QC','Ameriflux QC','COSMOS QC','MODIS QC'
    /
 
 
 &schedule_nml
-   calendar        = 'Gregorian'
-   first_bin_start =  1601,  1,  1,  0,  0,  0
-   first_bin_end   =  2999,  1,  1,  0,  0,  0
-   last_bin_end    =  2999,  1,  1,  0,  0,  0
-   bin_interval_days    = 1000000
-   bin_interval_seconds = 0
-   max_num_bins         = 1000
+   calendar        = 'Gregorian',
+   first_bin_start =  1601,  1,  1,  0,  0,  0,
+   first_bin_end   =  2999,  1,  1,  0,  0,  0,
+   last_bin_end    =  2999,  1,  1,  0,  0,  0,
+   bin_interval_days    = 1000000,
+   bin_interval_seconds = 0,
+   max_num_bins         = 1000,
    print_table          = .true.
    /
 
 
 &obs_seq_to_netcdf_nml
    obs_sequence_name = 'obs_seq.final'
-   obs_sequence_list = ''
-   append_to_netcdf  = .false.
-   lonlim1    =    0.0
-   lonlim2    =  360.0
-   latlim1    =  -90.0
-   latlim2    =   90.0
+   obs_sequence_list = '',
+   append_to_netcdf  = .false.,
+   lonlim1    =    0.0,
+   lonlim2    =  360.0,
+   latlim1    =  -90.0,
+   latlim2    =   90.0,
    verbose    = .false.
    /
 
 ! useful input for model_mod_check_nml ...
 
    x_inds    of interest   720, 7000
-   loc_of_interest      = 287.5,  82.48, 0.35
-   loc_of_interest      = 287.5, -40.70, 0.35
-   loc_of_interest      =  90.0,  41.00, 0.35
+   loc_of_interest      = 287.5,  82.48, 0.35,
+   loc_of_interest      = 287.5, -40.70, 0.35,
+   loc_of_interest      =  90.0,  41.00, 0.35,
 
 &model_mod_check_nml
-   input_file           = 'allones.ics'
-   output_file          = 'check_me_out'
-   advance_time_present = .FALSE.
-   verbose              = .TRUE.
-   test1thru            = 16
-   x_ind                = 720
-   kind_of_interest     = 'H2OSOI_LIQ'
-   loc_of_interest      = 287.5, 82.48, 0.35
+   input_file           = "allones.ics",
+   output_file          = "check_me_out",
+   advance_time_present = .FALSE.,
+   verbose              = .TRUE.,
+   test1thru            = 16,
+   x_ind                = 720,
+   kind_of_interest     = 'H2OSOI_LIQ',
+   loc_of_interest      = 287.5, 82.48, 0.35,
    /
 

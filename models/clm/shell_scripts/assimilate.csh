@@ -2,7 +2,7 @@
 #
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
-# http://www.image.ucar.edu/DAReS/DART/DART_download
+# htt://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
 
@@ -32,15 +32,17 @@ switch ("`hostname`")
       set  LAUNCHCMD = mpirun.lsf
    breaksw
 
-   case lone*:
+   case stam*:
       # UT lonestar
       set   MOVE = '/bin/mv -fv'
       set   COPY = '/bin/cp -fv --preserve=timestamps'
       set   LINK = '/bin/ln -fvs'
       set REMOVE = '/bin/rm -fr'
 
-      set BASEOBSDIR = ${WORK}/DART/observations/snow/work/obs_seqs
-      set  LAUNCHCMD = mpirun.lsf
+      set BASEOBSDIR = /obs
+      set LAIDIR = /scratch/02714/zhaol/data/LAI/GLASS
+      set MVPARADIR = /scratch/02714/zhaol/data/AMSR-E
+      set LAUNCHCMD = mpirun.lsf
    breaksw
 
    case la*:
@@ -72,8 +74,11 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /your/observation/directory/here
-      set  LAUNCHCMD = "mpirun -n $NTASKS_LND"
+      set BASEOBSDIR = mybaseobsdir
+      set MVPARFILENAME = myparfilepathname
+      set LAIDIR     = mylaidir
+      # set LAUNCHCMD  = "mpirun -n $NTASKS_LND"
+      set LAUNCHCMD  = "ibrun"
    breaksw
 endsw
 
@@ -86,7 +91,8 @@ set ensemble_size = ${NINST_LND}
 # Piping stuff through 'bc' strips off any preceeding zeros.
 #-------------------------------------------------------------------------
 
-set FILE = `head -n 1 rpointer.lnd_0001`
+# set FILE = `head -n 1 rpointer.lnd_0001`      
+set FILE = `head -n 1 $RUNDIR/rpointer.lnd_0001`                         # Long
 set FILE = $FILE:r
 set LND_DATE_EXT = `echo $FILE:e`
 set LND_DATE     = `echo $FILE:e | sed -e "s#-# #g"`
@@ -103,7 +109,8 @@ echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 # Create temporary working directory for the assimilation and go there
 #-------------------------------------------------------------------------
 
-set temp_dir = assimilate_clm
+# set temp_dir = assimilate_clm                                
+set temp_dir = $RUNDIR/assimilate_clm      # Long
 echo "temp_dir is $temp_dir"
 
 if ( -d $temp_dir ) then
@@ -138,6 +145,10 @@ set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}.out
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.out
+else if ( -d ${BASEOBSDIR}) then
+   echo "unfortunately ... no observation on ${LND_DATE_EXT}."
+   echo "assimilate.csh -- continue with next CESM simulation."
+   exit 1
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
@@ -415,7 +426,16 @@ while ( ${member} <= ${ensemble_size} )
        -e "s#dart_restart#../${DART_RESTART_FILE}#" < ../input.nml >! input.nml
 
    ${LINK} ../../$LND_RESTART_FILENAME clm_restart.nc
-   ${LINK} ../../$LND_HISTORY_FILENAME clm_history.nc
+#   ${LINK} ../../$LND_HISTORY_FILENAME clm_history.nc
+   ${LINK} /work/02714/zhaol/lonestar/data/multi_out/hist_sample.nc clm_history.nc 
+
+#=========================================================================================Long  
+#   set          MVPARA_FILENAME = defaultpara_0.9x1.25_c140917.nc
+   set          MVPARA_FILENAME = optpara_0.9x1.25_c141024.nc
+   set             LAI_FILENAME = `printf LAI_GLASS_%04d-%02d-%02d.nc ${LND_YEAR} ${LND_MONTH} ${LND_DAY}`   
+   ${LINK} ${MVPARFILENAME} rtm_auxiliary.nc
+   ${LINK} ${LAIDIR}/$LAI_FILENAME rtm_lai_modis.nc
+#=========================================================================================Long
 
    if (  -e   ../../$LND_VEC_HISTORY_FILENAME ) then
       ${LINK} ../../$LND_VEC_HISTORY_FILENAME clm_vector_history.nc
@@ -472,10 +492,18 @@ set     LND_HISTORY_FILENAME = ${CASE}.clm2_0001.h0.${LND_DATE_EXT}.nc
 set LND_VEC_HISTORY_FILENAME = ${CASE}.clm2_0001.h2.${LND_DATE_EXT}.nc
 
 ${LINK} ../$LND_RESTART_FILENAME clm_restart.nc
-${LINK} ../$LND_HISTORY_FILENAME clm_history.nc
+# ${LINK} ../$LND_HISTORY_FILENAME clm_history.nc
+${LINK} /work/02714/zhaol/lonestar/data/multi_out/hist_sample.nc clm_history.nc
 if (  -e   ../$LND_VEC_HISTORY_FILENAME ) then
    ${LINK} ../$LND_VEC_HISTORY_FILENAME clm_vector_history.nc
 endif
+
+#=========================================================================================Long
+# set          MVPARA_FILENAME = defaultpara_0.9x1.25_c140917.nc
+set             LAI_FILENAME = `printf LAI_GLASS_%04d-%02d-%02d.nc ${LND_YEAR} ${LND_MONTH} ${LND_DAY}`
+${LINK} ${MVPARFILENAME} rtm_auxiliary.nc
+${LINK} ${LAIDIR}/$LAI_FILENAME rtm_lai_modis.nc
+#=========================================================================================Long
 
 # On yellowstone, you can explore task layouts with the following:
 if ( $?LSB_PJL_TASK_GEOMETRY ) then
@@ -488,6 +516,7 @@ endif
 
 echo "`date` -- BEGIN FILTER"
 ${LAUNCHCMD} ${EXEROOT}/filter || exit -7
+# ${EXEROOT}/filter || exit -7
 echo "`date` -- END FILTER"
 
 if ( $?LSB_PJL_TASK_GEOMETRY ) then

@@ -349,7 +349,7 @@ end subroutine set_obs_def_time
 !----------------------------------------------------------------------------
 
 subroutine get_expected_obs_from_def(key, obs_def, obs_kind_ind, ens_index, &
-   state, state_time, isprior, obs_val, istatus, assimilate_this_ob, evaluate_this_ob)
+   state, state_time, isprior, obs_val, obs_mytag, istatus, assimilate_this_ob, evaluate_this_ob)
 
 ! Compute forward operator for a particular obs_def
 integer,            intent(in)  :: key
@@ -359,6 +359,7 @@ real(r8),           intent(in)  :: state(:)
 type(time_type),    intent(in)  :: state_time
 logical,            intent(in)  :: isprior
 real(r8),           intent(out) :: obs_val
+integer,            intent(out) :: obs_mytag
 integer,            intent(out) :: istatus
 logical,            intent(out) :: assimilate_this_ob, evaluate_this_ob
 
@@ -370,6 +371,8 @@ real(r8)            :: error_var
 ! Load up the assimilate and evaluate status for this observation kind
 assimilate_this_ob = assimilate_this_obs_kind(obs_kind_ind)
 evaluate_this_ob = evaluate_this_obs_kind(obs_kind_ind)
+
+obs_mytag = 1000
 
 ! If not being assimilated or evaluated return with missing_r8 and istatus 0
 if(assimilate_this_ob .or. evaluate_this_ob) then
@@ -402,7 +405,7 @@ if(assimilate_this_ob .or. evaluate_this_ob) then
       !   istatus -- return code: 0=ok, >0 is error, <0 reserved for system use
       !
       ! to call interpolate() directly, the arg list MUST BE:
-      !  interpolate(state, location, KIND_xxx, obs_val, istatus)
+      !  interpolate(state, location, KIND_xxx, obs_val, obs_mytag, istatus)
       !
       ! the preprocess program generates lines like this automatically,
       ! and this matches the interfaces in each model_mod.f90 file.

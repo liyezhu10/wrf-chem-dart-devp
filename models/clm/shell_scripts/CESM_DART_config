@@ -322,7 +322,8 @@ if ($CplLogFile == "") then
    echo 'ERROR: DART will not be attempted.'
    setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
    setenv EXITCODE -1
-   ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
+   ibrun ${CASEROOT}/shell_exit.sh
+   # mpirun.lsf ${CASEROOT}/shell_exit.sh
    exit -1
 endif
 
@@ -331,23 +332,30 @@ if ( $status == 0 ) then
 
 #  If you want to use DART, uncomment the line with 'DARTSCRIPTNAME',
 #  otherwise, CESM is running as usual.
-#  ${CASEROOT}/DARTSCRIPTNAME
+   ${CASEROOT}/DARTSCRIPTNAME
 
-   if ( $status == 0 ) then
+   setenv mycheck $status
+   if ( $mycheck == 0 ) then
       echo "`date` -- DART HAS FINISHED"
    else
-      echo "`date` -- DART ERROR - ABANDON HOPE"
-      setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
-      setenv EXITCODE -3
-      ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
-      exit -3
+      if ( $mycheck == 1 ) then
+         echo "DART -- continue with next CESM simulation."
+      else
+         echo "`date` -- DART ERROR - ABANDON HOPE"
+         setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
+         setenv EXITCODE -3
+         ibrun ${CASEROOT}/shell_exit.sh
+         # mpirun.lsf ${CASEROOT}/shell_exit.sh
+         exit -3
+      endif
    endif
 else
    echo 'ERROR: Model did not complete successfully - exiting.'
    echo 'ERROR: DART will not be attempted.'
    setenv LSB_PJL_TASK_GEOMETRY "{(0)}"
    setenv EXITCODE -2
-   ${MPI_RUN_COMMAND} ${CASEROOT}/shell_exit.sh
+   ibrun ${CASEROOT}/shell_exit.sh
+   # mpirun.lsf ${CASEROOT}/shell_exit.sh
    exit -2
 endif
 

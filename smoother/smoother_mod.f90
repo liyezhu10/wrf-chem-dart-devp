@@ -359,7 +359,7 @@ end subroutine smoother_write_restart
 
 !-----------------------------------------------------------
 
-subroutine smoother_assim(obs_ens_handle, seq, keys, ens_size, num_groups, obs_val_index, &
+subroutine smoother_assim(obs_ens_handle, seq, keys, obs_tags_in, ens_size, num_groups, obs_val_index, &
    ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, &
    OBS_GLOBAL_QC_COPY, OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START, &
    OBS_PRIOR_VAR_END)
@@ -367,6 +367,7 @@ subroutine smoother_assim(obs_ens_handle, seq, keys, ens_size, num_groups, obs_v
 type(ensemble_type),         intent(inout) :: obs_ens_handle
 type(obs_sequence_type),     intent(in) :: seq
 integer,                     intent(in)    :: keys(:)
+integer,                     intent(in)    :: obs_tags_in(:)
 integer,                     intent(in)    :: ens_size, num_groups, obs_val_index
 integer,                     intent(in)    :: ENS_MEAN_COPY, ENS_SD_COPY, PRIOR_INF_COPY
 integer,                     intent(in)    :: PRIOR_INF_SD_COPY
@@ -401,7 +402,7 @@ do i = 1, num_current_lags
 
    ! NEED A LAG INFLATE TYPE THAT DOES NO INFLATION FOR NOW
    call filter_assim(lag_handle(smoother_index), obs_ens_handle, &
-      seq, keys, ens_size, num_groups, &
+      seq, keys, obs_tags_in, ens_size, num_groups, &
       obs_val_index, lag_inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
       PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
       OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START, &

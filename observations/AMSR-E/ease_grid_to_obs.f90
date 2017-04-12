@@ -16,12 +16,13 @@ program ease_grid_to_obs
 
 use          types_mod, only : r4, r8, PI, DEG2RAD
 
+use          netcdf
+
 use      utilities_mod, only : initialize_utilities, finalize_utilities, &
                                open_file, close_file, find_namelist_in_file, &
                                check_namelist_read, nmlfileunit, get_unit, &
                                do_nml_file, do_nml_term, get_next_filename, &
-                               error_handler, E_ERR, E_MSG, file_exist, &
-                               find_textfile_dims
+                               error_handler, E_ERR, E_MSG, file_exist, nc_check
 
 use   time_manager_mod, only : time_type, set_calendar_type, set_date, get_date, &
                                operator(>=), increment_time, set_time, get_time, &
@@ -37,10 +38,8 @@ use            location_mod, only : VERTISSURFACE, set_location
 use       obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 use            obs_kind_mod, only : AMSRE_BRIGHTNESS_T
 use obs_def_brightnessT_mod, only : set_amsre_metadata
-
 use      EASE_utilities_mod, only : get_grid_dims, ezlh_inverse, read_ease_Tb, &
-                                    deconstruct_filename, read_ease_TIM, &
-                                    EASE_MISSING
+                                    deconstruct_filename
 
 implicit none
 
@@ -56,17 +55,17 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=256) :: input_file_list = 'file_list.txt'
 character(len=256) :: obs_out_file = 'obs_seq.out'
 logical            :: verbose = .false.
-integer            :: max_num_input_files = 10
 
 namelist /ease_grid_to_obs_nml/ &
-         input_file_list, obs_out_file, verbose, max_num_input_files
+         input_file_list, obs_out_file, verbose
 
 !----------------------------------------------------------------
 
+! max_num_input_files : max number of input files to be processed
+integer, parameter :: max_num_input_files = 500  ! Long; change from 500
 integer            :: num_input_files = 0  ! actual number of files
 integer            :: ifile, istatus
-character(len=256), allocatable, dimension(:) :: filename_seq_list
-character(len=256) :: time_file_name
+character(len=256), dimension(max_num_input_files) :: filename_seq_list
 
 ! information gleaned from filenaming convention
 integer          :: iyear, idoy
@@ -79,25 +78,29 @@ real             :: frequency   ! real type to match EASE type
 
 character(len=256) :: input_line
 character(len=256) :: msgstring1,msgstring2,msgstring3
+! character(len=256) :: outfilelog='/scratch/02714/zhaol/data/AMSR-E/&
+!                 AMSR-E_interpolated_090_125/dart_obs_seq/latlonlog.txt' !==============Long
 
-integer :: oday, osec, fday, fsec, iocode, iunit
+integer :: oday, osec, iocode, iunit, otype
+integer :: year, month, day, hour, minute, second
 integer :: num_copies, num_qc, max_obs
 integer :: landcode = 0  ! FIXME ... totally bogus for now
            
 logical  :: first_obs
 
-! The EASE grid is a 2D array of 16 bit unsigned integers
-integer, allocatable, dimension(:,:) :: Tb
-integer, allocatable, dimension(:,:) :: Obs_Minutes
-integer, dimension(2) :: ndims
-integer :: key, nrows, ncols, irow, icol
+! The interpolated EASE grid is a double array of data
+real(r8), allocatable, dimension(:) :: Tb
+real(r8), allocatable, dimension(:) :: RI6v
+real(r8), allocatable, dimension(:) :: LON
+real(r8), allocatable, dimension(:) :: LAT
+integer :: key, icount, counts, ncid, VarID
 
 real(r8) :: temp, terr, qc
 real     :: rlat, rlon
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: file_time, time_obs, prev_time
+type(time_type)         :: cal_day0, time_obs, prev_time
 
 !----------------------------------------------------------------
 ! start of executable code
@@ -116,44 +119,30 @@ call check_namelist_read(iunit, iocode, "ease_grid_to_obs_nml")
 if (do_nml_file()) write(nmlfileunit, nml=ease_grid_to_obs_nml)
 if (do_nml_term()) write(     *     , nml=ease_grid_to_obs_nml)
 
-call find_textfile_dims(input_file_list, num_input_files)
-if (num_input_files > max_num_input_files) then
-   write(msgstring1,*) 'Found ',num_input_files,' input files in ',trim(input_file_list)
-   write(msgstring2,*) 'Greater than "max_num_input_files" in input namelist (', max_num_input_files, ').'
-   write(msgstring3,*) 'If you mean it, change "max_num_input_files" in the ease_grid_to_obs_nml.'
-   call error_handler(E_ERR, 'main', msgstring1, source, revision, revdate, &
-              text2=msgstring2, text3=msgstring3)
-elseif (num_input_files > 0) then
-   allocate(filename_seq_list(num_input_files))
-else
-   write(msgstring1,*) 'Found no valid filenames in ',trim(input_file_list)
-   call error_handler(E_ERR, 'main', msgstring1, source, revision, revdate) 
-endif
-
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
 write(*,*)' There are ',num_input_files,' input files.'
 
 ! need some basic information from the first file
 istatus = deconstruct_filename( filename_seq_list(1), &
-             gridarea, iyear, idoy, passdir, frequency, polarization, &
-             is_time_file, time_file_name)
+             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
 if (istatus /= 0) then
    write(msgstring2,*) 'filename nonconforming'
    call error_handler(E_ERR, 'main', trim(filename_seq_list(1)), &
                  source, revision, revdate, text2=msgstring2)
 endif
 
-ndims = get_grid_dims(gridarea)
-nrows = ndims(1)
-ncols = ndims(2)
+counts = 17199     !====192x288====================FIXME Long
 
-allocate( Tb(nrows,ncols), Obs_Minutes(nrows,ncols) )
+allocate( Tb(counts) ) 
+allocate( RI6v(counts) )  
+allocate( LON(counts))
+allocate( LAT(counts))
 
 ! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
 ! be specified but it will only write out the actual number created.
 ! There is a lot of observations per day. Should only do 1 day at at time.
-max_obs    = nrows*ncols*num_input_files ! overkill
+max_obs    = counts*num_input_files ! overkill
 num_copies = 1
 num_qc     = 1
 
@@ -179,6 +168,8 @@ call   set_qc_meta_data(obs_seq, 1,     'Data QC')
 ! --------------------------------------------------------------------------------
 ! Loop over all the input data files.
 
+! open(77,file=outfilelog, status='unknown')      !=====================Long
+
 iunit = get_unit()  ! Get free unit for AMSR-E data file
 FileLoop: do ifile = 1,num_input_files
 
@@ -187,80 +178,123 @@ FileLoop: do ifile = 1,num_input_files
    call error_handler(E_MSG, 'main', msgstring1, text2 = trim(filename_seq_list(ifile)))
 
    istatus = deconstruct_filename( filename_seq_list(ifile), &
-             gridarea, iyear, idoy, passdir, frequency, polarization, &
-             is_time_file, time_file_name)
+             gridarea, iyear, idoy, passdir, frequency, polarization, is_time_file)
    if (istatus /= 0) then
       call error_handler(E_ERR, 'main', 'filename nonconforming', &
              source, revision, revdate, text2= trim(filename_seq_list(ifile)))
    endif
 
    if (gridarea(2:2) == 'L') then
-      footprint = 25.0_r8  ! EASE grid is 25km resolution
+!      footprint = 25.0_r8  ! EASE grid is 25km resolution
+      footprint = 100.0_r8  ! interpolated AMSR-E data is about 50km resolution
    else
       call error_handler(E_ERR, 'main', 'unknown footprint', &
              source, revision, revdate, text2= trim(filename_seq_list(ifile)))
    endif
 
+   ! FIXME - crude time information at this point
    ! put date into a dart time format
-   ! calculate first day of the year, then add in day-of-year from the file name
-   file_time = set_date(iyear,1,1,0,0,0)
-   call get_time(file_time, fsec, fday)
-   file_time = set_time(fsec, fday+idoy-1)
-   call get_time(file_time, fsec, fday)
+   ! calculate first day of the year, then add in day-of-year
+   time_obs = set_date(iyear,1,1,0,0,0)
+   call get_time(time_obs, osec, oday)
+   time_obs = set_time(osec, oday+idoy-1)
+   call get_time(time_obs, osec, oday)
 
    if (verbose) then
       write(*,*)trim(filename_seq_list(ifile))
-      call print_date(file_time, str='file date is')
-      call print_time(file_time, str='file time is')
+      call print_date(time_obs, str='file date is')
+      call print_time(time_obs, str='file time is')
    endif
-
-   ! Read the time for each observation (minutes since filetime)
-   iocode = read_ease_TIM(time_file_name, iunit, Obs_Minutes)
 
    ! Ignoring time files for now
    if ( is_time_file ) cycle FileLoop
 
    ! Fills up matrix of brightness temperatures
-   iocode = read_ease_Tb(filename_seq_list(ifile), iunit, Tb)
 
-   COLLOOP: do icol=1,ncols
-   ROWLOOP: do irow=1,nrows
+   call nc_check(nf90_open(trim(filename_seq_list(ifile)), nf90_nowrite, ncid), &
+       'ease_grid_to_dart','open '//trim(filename_seq_list(ifile)))
 
-      if (          Tb(irow,icol) == 0            ) cycle ROWLOOP
-      if ( Obs_Minutes(irow,icol) == EASE_MISSING ) cycle ROWLOOP
+   call nc_check(nf90_inq_varid(ncid, 'lat', VarID), &
+            'ease_grid_to_dart', 'inq_varid lat')
+   call nc_check(nf90_get_var(ncid, VarID, LAT), &
+            'ease_grid_to_dart', 'get_var LAT')
 
-      ! Create the time of the observation by adding the base time
-      ! for all the obs in the file to the number of minutes from the
-      ! *.TIM file. Convert to DART time type and back to automatically
-      ! make sure the number of seconds is [0,86400] etc.
+   call nc_check(nf90_inq_varid(ncid, 'lon', VarID), &
+            'ease_grid_to_dart', 'inq_varid lon')
+   call nc_check(nf90_get_var(ncid, VarID, LON), &
+            'ease_grid_to_dart', 'get_var LON')
 
-      time_obs = set_time(fsec + Obs_Minutes(irow,icol)*60, fday)
-      call get_time(time_obs, osec, oday)
+   call nc_check(nf90_inq_varid(ncid, 'tb', VarID), &
+            'ease_grid_to_dart', 'inq_varid tb')
+   call nc_check(nf90_get_var(ncid, VarID, Tb), &
+            'ease_grid_to_dart', 'get_var Tb')
 
-      ! Convert icol,irow to lat/lon using EASE routine
-      ! Intentional conversion between row-major and column-major nomenclature
-      iocode = ezlh_inverse(gridarea, real(irow), real(icol), rlat, rlon)
-      if (iocode /= 0) cycle ROWLOOP
+   call nc_check(nf90_inq_varid(ncid, 'ri', VarID), &
+            'ease_grid_to_dart', 'inq_varid ri')
+   call nc_check(nf90_get_var(ncid, VarID, RI6v), &
+            'ease_grid_to_dart', 'get_var RI6v')
+
+
+   call nc_check(nf90_close(ncid), 'ease_grid_to_dart','close '//trim(filename_seq_list(ifile)))
+
+   COUNTLOOP: do icount=1,counts
+
+      if ( Tb(icount) ==  0.0_r8 ) cycle COUNTLOOP
+
+      rlat = LAT(icount)
+      rlon = LON(icount)
 
       ! ensure the lat/lon values are in range
-      if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle ROWLOOP
-      if ( rlon > 180.0_r8 .or. rlon < -180.0_r8 ) cycle ROWLOOP
-      if ( rlon < 0.0_r8 ) rlon = rlon + 360.0_r8 ! changes into 0-360
-   
-      ! make an obs derived type, and then add it to the sequence
-      temp = real(Tb(irow,icol),r8) / 10.0_r8
-      terr = 2.0_r8   ! temps are [200,300] so this is about one percent
+      if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle COUNTLOOP
+      if ( rlon > 360.0_r8 .or. rlon <    0.0_r8 ) cycle COUNTLOOP
 
+!==================================================================================Long
+
+      if ( rlat < -60.0_r8 .or. rlat >   66.5_r8 ) then 
+         if (frequency==6.9 .or. frequency==10.7) cycle COUNTLOOP 
+      endif                                                              !=========Long
+      
+!==========for globe
+      if ((rlon > 235.0_r8 .and. rlon < 300.0_r8 .and. rlat < 49.0_r8 .and. rlat > 25.0_r8) .or. &
+!          (rlon > 35.0_r8  .and. rlon < 75.0_r8  .and. rlat < 35.0_r8 .and. rlat > 15.0_r8)) then
+          (rlon > 35.0_r8  .and. rlon < 90.0_r8  .and. rlat < 35.0_r8 .and. rlat > 15.0_r8) .or. &
+          RI6v(icount) >= 1.0_r8 ) then
+         if (frequency==6.9) cycle COUNTLOOP
+      else 
+         if (frequency==10.7) cycle COUNTLOOP 
+      endif
+
+      if ( rlat < 25.0_r8 ) then 
+         if (frequency==18.7 .or. frequency==23.8) cycle COUNTLOOP 
+      endif                                                              !=========Long
+      
+
+!==================================================================================Long
+  
+      ! make an obs derived type, and then add it to the sequence
+      temp = Tb(icount)
+
+!     if ( verbose) then
+!        write(77,'(A20,i6,f10.4,f10.4,f8.1)')'icount,lat,lon,Tb',icount,rlat,rlon,temp
+!     endif
+ 
+      terr = 2.0_r8   ! temps are [200,300] so this is about one percent
+!      terr = 5.0_r8  ! set terr to a larger value
+!      terr =Tbstd(icount) ! use std of Tbs within this CLM grids when upscaling
+      
       call set_amsre_metadata(key, real(frequency,r8), footprint, polarization, landcode)
 
       call create_3d_obs(real(rlat,r8), real(rlon,r8), 0.0_r8, VERTISSURFACE, temp, &
                             AMSRE_BRIGHTNESS_T, terr, oday, osec, qc, obs, key)
+
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
-   
-   enddo ROWLOOP
-   enddo COLLOOP
+    
+
+   enddo COUNTLOOP
 
 enddo FileLoop
+
+! close(77)
 
 ! if we added any obs to the sequence, write it out to a file now.
 if ( get_num_obs(obs_seq) > 0 ) then
@@ -268,7 +302,10 @@ if ( get_num_obs(obs_seq) > 0 ) then
    call write_obs_seq(obs_seq, obs_out_file)
 endif
 
-deallocate(Tb,filename_seq_list)
+deallocate(Tb)
+deallocate(RI6v)
+deallocate(LON)
+deallocate(LAT)
 
 ! end of main program
 call finalize_utilities()
@@ -284,14 +321,15 @@ character(len=*), dimension(:), intent(out) :: output_list
 integer                                     :: Check_Input_Files
 
 character(len=256) :: ladjusted
-integer :: iline, fnamelen
+integer, parameter :: MAXLINES = 500             ! Long; change from 1000
+integer :: iline
 
 Check_Input_files = -1
 
 iunit = open_file(trim(input_list), 'formatted', 'read')
 
 Check_Input_Files = 0
-FileNameLoop: do iline = 1,size(output_list) ! a lot of lines 
+FileNameLoop: do iline = 1,MAXLINES ! a lot of lines 
 
    ! read in entire text line into a buffer
    read(iunit, "(A)", iostat=iocode) input_line
@@ -304,17 +342,9 @@ FileNameLoop: do iline = 1,size(output_list) ! a lot of lines
       ! Normal end of file
       exit FileNameLoop
    else
-
-      ladjusted = adjustl(input_line)
-      fnamelen  = len_trim(ladjusted)
-
-      ! Remove any file with a .TIM extension.
-      ! These are TIME files, not data files.
-
-      if ( ladjusted(fnamelen-2:fnamelen) == 'TIM' ) cycle FileNameLoop
-
       Check_Input_Files = Check_Input_Files + 1
 
+      ladjusted = adjustl(input_line)
       if ( file_exist(trim(ladjusted)) ) then
          output_list(Check_Input_Files) = trim(ladjusted)
       else
@@ -325,6 +355,11 @@ FileNameLoop: do iline = 1,size(output_list) ! a lot of lines
    endif
 
 enddo FileNameLoop
+
+if (Check_Input_Files >= MAXLINES-1 ) then
+   write(msgstring1,*)'Too many files to process. Increase MAXLINES and try again.'
+   call error_handler(E_ERR,'Check_Input_Files',msgstring1,source,revision,revdate)
+endif
 
 end function Check_Input_Files
 

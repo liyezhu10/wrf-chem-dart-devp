@@ -3,8 +3,7 @@ common/types_mod.f90
 diagnostics/threed_sphere/obs_diag.f90
 location/threed_sphere/location_mod.f90
 models/clm/model_mod.f90
-models/clm/rtm_memls_ss_mod.f90
-models/clm/rtm_memls_ssva_mod.f90
+models/clm/radiative_transfer_mod.f90
 mpi_utilities/null_mpi_utilities_mod.f90
 obs_def/obs_def_mod.f90
 obs_kind/obs_kind_mod.f90
@@ -13,3 +12,13 @@ random_seq/random_seq_mod.f90
 sort/sort_mod.f90
 time_manager/time_manager_mod.f90
 utilities/utilities_mod.f90
+models/clm/RTM_YHK/atm_model.f90
+models/clm/RTM_YHK/czergg.F
+models/clm/RTM_YHK/mod_dielectric_constant.F90
+models/clm/RTM_YHK/mod_disort.F90
+models/clm/RTM_YHK/mod_dmrtml.f90
+models/clm/RTM_YHK/mod_dmrtparameters.F90
+models/clm/RTM_YHK/mod_fresnel.F90
+models/clm/RTM_YHK/mod_soil.F90
+models/clm/RTM_YHK/rad_xfer_model.f90
+models/clm/RTM_YHK/rtm_main.F90

@@ -165,6 +165,7 @@ type(time_type)             :: curr_ens_time, next_ens_time, window_time
 type(adaptive_inflate_type) :: prior_inflate, post_inflate
 
 integer,    allocatable :: keys(:)
+integer,    allocatable :: obs_tags(:)
 integer                 :: i, iunit, io, time_step_number, num_obs_in_set
 integer                 :: ierr, last_key_used, model_size, key_bounds(2)
 integer                 :: in_obs_copy, obs_val_index
@@ -490,6 +491,8 @@ AdvanceTime : do
 
    ! Allocate storage for the keys for this number of observations
    allocate(keys(num_obs_in_set))
+   allocate(obs_tags(num_obs_in_set))
+   obs_tags(:)=-99
 
    ! Get all the keys associated with this set of observations
    ! Is there a way to distribute this?
@@ -528,7 +531,7 @@ AdvanceTime : do
    ! and obs_values. ens_size is the number of regular ensemble members, 
    ! not the number of copies
    call get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, &
-      seq, keys, obs_val_index, input_qc_index, num_obs_in_set, &
+      seq, keys, obs_tags, obs_val_index, input_qc_index, num_obs_in_set, &
       OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
       isprior=.true.)
 
@@ -589,7 +592,7 @@ AdvanceTime : do
    call     trace_message('Before observation assimilation')
    call timestamp_message('Before observation assimilation')
 
-   call filter_assim(ens_handle, obs_ens_handle, seq, keys, &
+   call filter_assim(ens_handle, obs_ens_handle, seq, keys, obs_tags, &
       ens_size, num_groups, obs_val_index, prior_inflate, &
       ENS_MEAN_COPY, ENS_SD_COPY, &
       PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
@@ -608,7 +611,7 @@ AdvanceTime : do
 
       call     trace_message('Before smoother assimilation')
       call timestamp_message('Before smoother assimilation')
-      call smoother_assim(obs_ens_handle, seq, keys, ens_size, num_groups, &
+      call smoother_assim(obs_ens_handle, seq, keys, obs_tags, ens_size, num_groups, &
          obs_val_index, ENS_MEAN_COPY, ENS_SD_COPY, &
          PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
          OBS_MEAN_START, OBS_MEAN_END, OBS_VAR_START, &
@@ -650,7 +653,7 @@ AdvanceTime : do
    ! and obs_values.  ens_size is the number of regular ensemble members, 
    ! not the number of copies
    call get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, &
-      seq, keys, obs_val_index, input_qc_index, num_obs_in_set, &
+      seq, keys, obs_tags, obs_val_index, input_qc_index, num_obs_in_set, &
       OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
       isprior=.false.)
 
@@ -716,7 +719,7 @@ AdvanceTime : do
          ! Need obs to be copy complete for assimilation: IS NEXT LINE REQUIRED???
          call all_vars_to_all_copies(obs_ens_handle)
 
-         call filter_assim(ens_handle, obs_ens_handle, seq, keys, ens_size, num_groups, &
+         call filter_assim(ens_handle, obs_ens_handle, seq, keys, obs_tags, ens_size, num_groups, &
             obs_val_index, post_inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
             POST_INF_COPY, POST_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
             OBS_MEAN_START, OBS_MEAN_END, OBS_VAR_START, &
@@ -740,6 +743,7 @@ AdvanceTime : do
    call trace_message('Near bottom of main loop, cleaning up obs space')
    ! Deallocate storage used for keys for each set
    deallocate(keys)
+   deallocate(obs_tags)
 
    ! The last key used is updated to move forward in the observation sequence
    last_key_used = key_bounds(2)
@@ -1224,7 +1228,7 @@ if (do_output()) then
          'Reading in initial condition/restart data for all ensemble members from file(s)')
    else
       call error_handler(E_MSG,'filter_read_restart:', &
-         'Reading in a single member and perturbing data for the other ensemble members')
+         'Reading in a single ensemble and perturbing data for the other ensemble members')
    endif
 endif
 
@@ -1288,7 +1292,7 @@ end subroutine filter_ensemble_inflate
 !-------------------------------------------------------------------------
 
 subroutine get_obs_ens(ens_handle, obs_ens_handle, forward_op_ens_handle, seq, keys, &
-   obs_val_index, input_qc_index, num_obs_in_set, &
+   obs_tags_out, obs_val_index, input_qc_index, num_obs_in_set, &
    OBS_ERR_VAR_COPY, OBS_VAL_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, isprior)
 
 ! Computes forward observation operators and related quality control indicators.
@@ -1302,7 +1306,10 @@ integer,                 intent(in)    :: OBS_ERR_VAR_COPY, OBS_VAL_COPY
 integer,                 intent(in)    :: OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
 logical,                 intent(in)    :: isprior
 
+integer,                 intent(inout) :: obs_tags_out(:)
+
 real(r8)           :: input_qc(1), obs_value(1), obs_err_var, thisvar(1)
+integer            :: thistag(1)
 integer            :: j, k, my_num_copies, istatus , global_ens_index, thiskey(1)
 logical            :: evaluate_this_ob, assimilate_this_ob
 type(obs_def_type) :: obs_def
@@ -1360,8 +1367,9 @@ ALL_OBSERVATIONS: do j = 1, num_obs_in_set
          thiskey(1) = keys(j)
          call get_expected_obs(seq, thiskey, &
             global_ens_index, ens_handle%vars(:, k), ens_handle%time(1), isprior, &
-            thisvar, istatus, assimilate_this_ob, evaluate_this_ob)
+            thisvar, thistag, istatus, assimilate_this_ob, evaluate_this_ob)
          obs_ens_handle%vars(j, k) = thisvar(1)
+         obs_tags_out(j)=thistag(1)
 
          ! If istatus is 0 (successful) then put 0 for assimilate, -1 for evaluate only
          ! and -2 for neither evaluate or assimilate. Otherwise pass through the istatus

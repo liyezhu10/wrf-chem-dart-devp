@@ -26,7 +26,23 @@ use          obs_def_mod, only : obs_def_type, get_obs_def_location, get_obs_def
                                  get_obs_def_error_variance, get_obs_kind
 
 use         obs_kind_mod, only : get_num_obs_kinds, get_obs_kind_index,                   &
-                                 get_obs_kind_var_type, assimilate_this_obs_kind
+                                 get_obs_kind_var_type, assimilate_this_obs_kind,         &
+                                 KIND_BRIGHTNESS_TEMPERATURE,                             &
+                                 KIND_SNOWCOVER_FRAC,                                     &
+                                 KIND_TOTAL_WATER_STORAGE,                                &
+                                 KIND_VEGETATION_TEMPERATURE,                             &
+                                 KIND_SNOW_WATER,                                         &
+                                 KIND_SNOW_THICKNESS,                                     &
+                                 KIND_SNOW_GRAIN_SIZE,                                    &
+                                 KIND_SOIL_MOISTURE,                                      &
+                                 KIND_ICE,                                                &
+                                 KIND_SOIL_TEMPERATURE,                                   &
+                                 KIND_SKIN_TEMPERATURE,                                   &
+                                 KIND_RTM_PARAMETERS_P,                                   &
+                                 KIND_RTM_PARAMETERS_N,                                   &
+                                 KIND_TEMP,                                               &
+                                 KIND_MODIS_LAI,                                          &
+                                 KIND_MVPARA_ZL                                 
 
 use       cov_cutoff_mod, only : comp_cov_factor
 
@@ -73,7 +89,6 @@ integer                :: num_types = 0
 real(r8), allocatable  :: cutoff_list(:)
 logical                :: has_special_cutoffs
 logical                :: close_obs_caching = .true.
-real(r8), parameter    :: small = epsilon(1.0_r8)   ! threshold for avoiding NaNs/Inf
 
 character(len = 255)   :: msgstring, msgstring2, msgstring3
 
@@ -282,7 +297,7 @@ end subroutine assim_tools_init
 
 !-------------------------------------------------------------
 
-subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys,           &
+subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys, obs_tags, &
    ens_size, num_groups, obs_val_index, inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
    ENS_INF_COPY, ENS_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY,          &
    OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START,            &
@@ -291,6 +306,7 @@ subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys,           &
 type(ensemble_type),         intent(inout) :: ens_handle, obs_ens_handle
 type(obs_sequence_type),     intent(in)    :: obs_seq
 integer,                     intent(in)    :: keys(:)
+integer,                     intent(in)    :: obs_tags(:)
 integer,                     intent(in)    :: ens_size, num_groups, obs_val_index
 type(adaptive_inflate_type), intent(inout) :: inflate
 integer,                     intent(in)    :: ENS_MEAN_COPY, ENS_SD_COPY, ENS_INF_COPY
@@ -314,7 +330,9 @@ real(r8) :: close_obs_dist(obs_ens_handle%my_num_vars)
 real(r8) :: close_state_dist(ens_handle%my_num_vars)
 real(r8) :: last_close_obs_dist(obs_ens_handle%my_num_vars)
 real(r8) :: last_close_state_dist(ens_handle%my_num_vars)
-real(r8) :: diff_sd, outlier_ratio
+
+integer  :: up_corr_index                   !kyh04142015 for rule-based updating
+integer  :: up_idx                          !Long, introduced for obs-dependent updating 
 
 integer  :: my_num_obs, i, j, owner, owners_index, my_num_state
 integer  :: my_obs_indx(obs_ens_handle%my_num_vars), my_state_indx(ens_handle%my_num_vars)
@@ -343,12 +361,11 @@ type(obs_type)       :: observation
 type(obs_def_type)   :: obs_def
 type(time_type)      :: obs_time, this_obs_time
 
-logical :: do_adapt_inf_update
-logical :: missing_in_state
 ! for performance, local copies 
 logical :: local_single_ss_inflate
 logical :: local_varying_ss_inflate
 logical :: local_obs_inflate
+logical :: missing_in_state
 
 ! we are going to read/write the copies array
 call prepare_to_update_copies(ens_handle)
@@ -579,21 +596,17 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                   ! have been needed.
                   ens_obs_mean = orig_obs_prior_mean(group)
                   ens_obs_var = orig_obs_prior_var(group)
-                  ! gamma is hardcoded as 1.0, so no test is needed here.
                   ens_var_deflate = ens_obs_var / &
                      (1.0_r8 + gamma*(sqrt(ss_inflate_base) - 1.0_r8))**2
                   
                   ! If this is inflate_only (i.e. posterior) remove impact of this obs.
                   ! This is simulating independent observation by removing its impact.
-                  if(inflate_only .and. &
-                        ens_var_deflate               > small .and. &
-                        obs_err_var                   > small .and. & 
-                        obs_err_var - ens_var_deflate > small ) then 
+                  if(inflate_only) then
                      r_var = 1.0_r8 / (1.0_r8 / ens_var_deflate - 1.0_r8 / obs_err_var)
                      r_mean = r_var *(ens_obs_mean / ens_var_deflate - obs(1) / obs_err_var)
                   else
-                     r_var = ens_var_deflate
                      r_mean = ens_obs_mean
+                     r_var = ens_var_deflate
                   endif
 
                   ! Update the inflation value
@@ -774,18 +787,93 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       endif
    endif
 
+   ! write(*,*)'base_obs_kind = ',base_obs_kind, ', obs_tag= ',obs_tags(i)
+
    ! Loop through to update each of my state variables that is potentially close
    STATE_UPDATE: do j = 1, num_close_states
       state_index = close_state_ind(j)
+            
+      !==============================================================Long
+      !=== begin observation-dependent updating
+      up_idx = 0                 ! by default no updating 
+      up_corr_index = 3          ! by default no rule-based updating (Yonghwan)
 
-      if ( allow_missing_in_clm ) then
-         ! Some models can take evasive action if one or more of the ensembles have
-         ! a missing value. Generally means 'do nothing' (as opposed to DIE)
-         missing_in_state = any(ens_handle%copies(1:ens_size, state_index) == MISSING_R8)
-         if ( missing_in_state ) cycle STATE_UPDATE
-      ! else
-      !> @TODO FIXME what happens if we do not allow missing in state ...
-      !>             we never check to see if there are missing values ...
+      if (base_obs_kind == KIND_BRIGHTNESS_TEMPERATURE) then
+         ! if (j==1) write(*,*)'AMSR-E TB, obs_tag= ',obs_tags(i)
+
+         if ( (obs_tags(i)==6) .or. (obs_tags(i)==10))    then ! Soil moistrue DA
+            if ( (my_state_kind(state_index) == KIND_SOIL_MOISTURE) ) then
+               up_idx = 1
+            endif      
+         elseif ((obs_tags(i)==18) .or. (obs_tags(i)==23) .or. &
+                 (obs_tags(i)==36) .or. (obs_tags(i)==89)) then ! SNOW DA
+          
+            if ( (my_state_kind(state_index) == KIND_SNOW_THICKNESS)  .or.  &
+                 (my_state_kind(state_index) == KIND_SNOW_WATER)      .or.  &
+                 (my_state_kind(state_index) == KIND_SOIL_MOISTURE)   .or.  &
+                 (my_state_kind(state_index) == KIND_ICE)             .or.  &
+                 (my_state_kind(state_index) == KIND_SNOW_GRAIN_SIZE) .or.  &
+                 (my_state_kind(state_index) == KIND_RTM_PARAMETERS_N) ) then
+                up_idx = 1
+                up_corr_index = 1
+            elseif ( (my_state_kind(state_index) == KIND_RTM_PARAMETERS_P) .or. &
+                     (my_state_kind(state_index) == KIND_SOIL_TEMPERATURE) ) then
+                up_idx = 1
+                up_corr_index =2
+            endif
+
+         else
+            write(msgstring, *) 'invalid obs_tag  = ',obs_tags(i),'for AMSR-E TB'
+            call error_handler(E_MSG,'filter_assim', msgstring)
+         endif
+
+      elseif (base_obs_kind == KIND_SNOWCOVER_FRAC) then
+         if ( (my_state_kind(state_index) == KIND_SNOWCOVER_FRAC)  .or.  &
+              (my_state_kind(state_index) == KIND_SNOW_WATER)      .or.  &
+              (my_state_kind(state_index) == KIND_SNOW_THICKNESS) ) then
+            up_idx = 1
+         endif
+      elseif (base_obs_kind == KIND_TOTAL_WATER_STORAGE) then
+         if ( (my_state_kind(state_index) == KIND_SNOW_WATER)      .or.  &
+              (my_state_kind(state_index) == KIND_SOIL_MOISTURE)   .or.  &
+              (my_state_kind(state_index) == KIND_SNOW_THICKNESS)  .or.  &
+              (my_state_kind(state_index) == KIND_ICE)             .or.  &
+              (my_state_kind(state_index) == KIND_TOTAL_WATER_STORAGE) ) then
+            up_idx = 1
+         endif
+      else
+         write(msgstring, *) 'unknown observation KIND: ',base_obs_kind
+         call error_handler(E_ERR,'filter_assim', msgstring)
+      endif
+      !=== end   observation-dependent updating
+      !==============================================================Long
+
+      !! or this, for performance reasons?  it won't warn you if there are missing
+      ! values when you don't expect them, but it also won't do the any() unless
+      ! the namelist says you might expect to see them.
+      !if ( allow_missing_in_clm ) then
+      !   ! Some models can take evasive action if one or more of the ensembles have
+      !   ! a missing value. Generally means 'do nothing' (as opposed to DIE) 
+      !   missing_in_state = any(ens_handle%copies(1:ens_size, state_index) == MISSING_R8)
+      !   if ( missing_in_state ) then
+      !      cycle STATE_UPDATE
+      !endif
+
+      ! Some models can take evasive action if one or more of the ensembles have
+      ! a missing value. Generally means 'do nothing' (as opposed to DIE) 
+      missing_in_state = any(ens_handle%copies(1:ens_size, state_index) == MISSING_R8)
+      
+      if ( missing_in_state ) then
+         if ( allow_missing_in_clm ) then
+            cycle STATE_UPDATE
+         else
+            ! FIXME ... at some point ... convey which instances are missing
+            write(msgstring,*)'Encountered a MISSING_R8 in DART at state index ',state_index
+            write(msgstring2,*)'namelist value of allow_missing_in_clm (.false.) &
+                            &implies a fatal error.'
+            call error_handler(E_ERR, 'filter_assim', msgstring, &
+               source, revision, revdate, text2=msgstring2)
+         endif
       endif
 
       ! Get the initial values of inflation for this variable if state varying inflation
@@ -812,12 +900,12 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          ! Do update of state, correl only needed for varying ss inflate
          if(local_varying_ss_inflate .and. varying_ss_inflate > 0.0_r8 .and. &
             varying_ss_inflate_sd > 0.0_r8) then
-            call update_from_obs_inc(obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
+            call update_from_obs_inc(up_idx, up_corr_index, obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
                obs_prior_var(group), obs_inc(grp_bot:grp_top), &
                ens_handle%copies(grp_bot:grp_top, state_index), grp_size, &
                increment(grp_bot:grp_top), reg_coef(group), net_a(group), correl(group))
          else
-            call update_from_obs_inc(obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
+            call update_from_obs_inc(up_idx, up_corr_index, obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
                obs_prior_var(group), obs_inc(grp_bot:grp_top), &
                ens_handle%copies(grp_bot:grp_top, state_index), grp_size, &
                increment(grp_bot:grp_top), reg_coef(group), net_a(group))
@@ -843,7 +931,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             ens_handle%copies(1:ens_size, state_index) + reg_factor * increment
       endif
 
-      ! Compute spatially-varying state space inflation
+      ! Compute spatially-variing state space inflation
       if(local_varying_ss_inflate) then
          ! base is the initial inflate value for this state variable
          ss_inflate_base = ens_handle%copies(ENS_SD_COPY, state_index)
@@ -858,23 +946,23 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                ens_obs_var =  orig_obs_prior_var(group)
 
                ! Remove the impact of inflation to allow efficient single pass with assim.
-               if ( abs(gamma) > small ) then
-                  ens_var_deflate = ens_obs_var / &
-                     (1.0_r8 + gamma*(sqrt(ss_inflate_base) - 1.0_r8))**2
-               else
-                  ens_var_deflate = ens_obs_var
-               endif
+               ens_var_deflate = ens_obs_var / &
+                  (1.0_r8 + gamma*(sqrt(ss_inflate_base) - 1.0_r8))**2
                   
                ! If this is inflate only (i.e. posterior) remove impact of this obs.
-               if(inflate_only .and. &
-                     ens_var_deflate               > small .and. &
-                     obs_err_var                   > small .and. & 
-                     obs_err_var - ens_var_deflate > small ) then 
-                  r_var  = 1.0_r8 / (1.0_r8 / ens_var_deflate - 1.0_r8 / obs_err_var)
-                  r_mean = r_var *(ens_obs_mean / ens_var_deflate - obs(1) / obs_err_var)
+               if(inflate_only) then
+                  ! It's possible that obs_error variance is smaller than posterior
+                  ! Need to explain this, but fix here
+                  if(obs_err_var > ens_var_deflate) then 
+                     r_var  = 1.0_r8 / (1.0_r8 / ens_var_deflate - 1.0_r8 / obs_err_var)
+                     r_mean = r_var *(ens_obs_mean / ens_var_deflate - obs(1) / obs_err_var)
+                  else
+                     r_var = ens_var_deflate
+                     r_mean = ens_obs_mean
+                  endif
                else
-                  r_var = ens_var_deflate
                   r_mean = ens_obs_mean
+                  r_var  = ens_var_deflate
                endif
 
                ! IS A TABLE LOOKUP POSSIBLE TO ACCELERATE THIS?
@@ -882,21 +970,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                call update_inflation(inflate, varying_ss_inflate, varying_ss_inflate_sd, &
                   r_mean, r_var, obs(1), obs_err_var, gamma)
             endif
-
-            ! Update adaptive values if posterior outlier_ratio test doesn't fail.
-            ! Match code in obs_space_diags() in filter.f90
-            do_adapt_inf_update = .true.
-            if (inflate_only) then
-               diff_sd = sqrt(obs_err_var + r_var) 
-               if (diff_sd > 0.0_r8) then
-                  outlier_ratio = abs(obs(1) - r_mean) / diff_sd
-                  do_adapt_inf_update = (outlier_ratio <= 3.0_r8) 
-               endif
-            endif
-            if (do_adapt_inf_update) then   
-               ens_handle%copies(ENS_INF_COPY, state_index) = varying_ss_inflate
-               ens_handle%copies(ENS_INF_SD_COPY, state_index) = varying_ss_inflate_sd
-            endif
+            ! Copy updated values into ensemble obs storage
+            ens_handle%copies(ENS_INF_COPY, state_index) = varying_ss_inflate
+            ens_handle%copies(ENS_INF_SD_COPY, state_index) = varying_ss_inflate_sd
          end do GroupInflate
       endif
 
@@ -923,7 +999,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          do group = 1, num_groups
             grp_bot = grp_beg(group)
             grp_top = grp_end(group)
-            call update_from_obs_inc(obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
+            call update_from_obs_inc(up_idx, up_corr_index, obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
                obs_prior_var(group), obs_inc(grp_bot:grp_top), &
                 obs_ens_handle%copies(grp_bot:grp_top, obs_index), grp_size, &
                 increment(grp_bot:grp_top), reg_coef(group), net_a(group))
@@ -975,7 +1051,7 @@ if (print_trace_details >= 0) call error_handler(E_MSG,'filter_assim:',msgstring
 
 ! diagnostics for stats on saving calls by remembering obs at the same location.
 ! change .true. to .false. in the line below to remove the output completely.
-if (close_obs_caching) then
+if (close_obs_caching .and. .true.) then
    if (num_close_obs_cached > 0 .and. do_output()) then
       print *, "Total number of calls made    to get_close_obs for obs/states:    ", &
                 num_close_obs_calls_made + num_close_states_calls_made
@@ -1050,9 +1126,10 @@ if(do_obs_inflate(inflate)) then
       prior_var  = sum((ens - prior_mean)**2) / (ens_size - 1)
 endif
 
-! If obs_var == 0, delta function.  The mean becomes obs value with no spread.
-! If prior_var == 0, obs has no effect.  The increments are 0.
-! If both obs_var and prior_var == 0 there is no right thing to do, so Stop.
+! If both obs_var and prior_var are 0 there is no right thing to do.
+! if obs_var == 0, delta function -- mean becomes obs value with no spread.
+! if prior_var == 0, obs has no effect -- increment is 0
+! if both true, stop with a fatal error.
 if ((obs_var == 0.0_r8) .and. (prior_var == 0.0_r8)) then
 
    ! fail if both obs variance and prior spreads are 0.
@@ -1095,7 +1172,7 @@ else
    else if(filter_kind == 7) then
       call obs_increment_boxcar(ens, ens_size, obs, obs_var, obs_inc, rel_weights)
    else if(filter_kind == 8) then
-      call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
+      call obs_increment_boxcar2(ens, ens_size, prior_var, obs, obs_var, obs_inc)
    else 
       call error_handler(E_ERR,'obs_increment', &
                  'Illegal value of filter_kind in assim_tools namelist [1-8 OK]', &
@@ -1512,7 +1589,7 @@ end subroutine obs_increment_kernel
 
 
 
-subroutine update_from_obs_inc(obs, obs_prior_mean, obs_prior_var, obs_inc, &
+subroutine update_from_obs_inc(up_idx_in, up_corr_index_in, obs, obs_prior_mean, obs_prior_var, obs_inc, &
                state, ens_size, state_inc, reg_coef, net_a, correl_out)
 !========================================================================
 
@@ -1526,6 +1603,8 @@ real(r8),           intent(in)    :: state(ens_size)
 real(r8),           intent(out)   :: state_inc(ens_size), reg_coef
 real(r8),           intent(inout) :: net_a
 real(r8), optional, intent(inout) :: correl_out
+
+integer,            intent(in)    :: up_idx_in, up_corr_index_in
 
 real(r8) :: obs_state_cov, intermed
 real(r8) :: restoration_inc(ens_size), state_mean, state_var, correl
@@ -1569,7 +1648,7 @@ endif
 ! Be very cautious if changing any code in this section, taking into
 ! account underflow and overflow for 32 bit floats.
 
-if(present(correl_out) .or. sampling_error_correction) then
+!if(present(correl_out) .or. sampling_error_correction) then
    if (obs_state_cov == 0.0_r8 .or. obs_prior_var <= 0.0_r8) then
       correl = 0.0_r8
    else
@@ -1587,7 +1666,7 @@ if(present(correl_out) .or. sampling_error_correction) then
    endif
    if(correl >  1.0_r8) correl =  1.0_r8
    if(correl < -1.0_r8) correl = -1.0_r8
-endif
+!endif
 if(present(correl_out)) correl_out = correl
 
 
@@ -1610,6 +1689,30 @@ endif
 
 ! Then compute the increment as product of reg_coef and observation space increment
 state_inc = reg_coef * obs_inc
+
+!================================================================Long
+!== begin observtion-dependent updating on model statevariables
+
+if ( up_idx_in == 0 ) then
+
+   state_inc = 0.0_r8
+
+elseif ( up_idx_in == 1 ) then
+
+   if (up_corr_index_in == 1) then
+      if (correl > 0) then
+         state_inc = 0.0_r8
+      endif
+   elseif (up_corr_index_in == 2) then
+      if (correl < 0) then
+         state_inc = 0.0_r8
+      endif
+   endif
+
+endif
+
+!== end   observtion-dependent updating on model statevariables
+!================================================================Long
 
 
 ! Spread restoration algorithm option
@@ -1926,7 +2029,7 @@ end subroutine obs_increment_boxcar
 
 
 
-subroutine obs_increment_rank_histogram(ens, ens_size, prior_var, &
+subroutine obs_increment_boxcar2(ens, ens_size, prior_var, &
    obs, obs_var, obs_inc)
 !------------------------------------------------------------------------
 ! 
@@ -2162,7 +2265,7 @@ do i = 1, ens_size
                      new_ens(i) = adj_r2
                   else
                      msgstring = 'Did not get a satisfactory quadratic root' 
-                     call error_handler(E_ERR, 'obs_increment_rank_histogram', msgstring, &
+                     call error_handler(E_ERR, 'obs_increment_boxcar2', msgstring, &
                         source, revision, revdate)
                   endif
                endif
@@ -2183,7 +2286,7 @@ do i = 1, ens_size
    obs_inc(e_ind(i)) = new_ens(i) - x(i)
 end do
 
-end subroutine obs_increment_rank_histogram
+end subroutine obs_increment_boxcar2
 
 
 

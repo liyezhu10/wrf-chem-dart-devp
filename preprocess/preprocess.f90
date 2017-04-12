@@ -687,7 +687,7 @@ ITEMS: do i = 1, 8
         11 format(3A)
         write(obs_def_out_unit, 11) '      case(', trim(type_string(j)), ')'
         write(obs_def_out_unit, 11) '         call interpolate(state, location, ', &
-           trim(kind_string(kind_index(j))), ', obs_val, istatus)'
+           trim(kind_string(kind_index(j))), ', obs_val, obs_mytag, istatus)'
      case (read_item, write_item, interactive_item)
         write(obs_def_out_unit, 11) '   case(', trim(type_string(j)), ')'
         write(obs_def_out_unit, 21) '      continue'

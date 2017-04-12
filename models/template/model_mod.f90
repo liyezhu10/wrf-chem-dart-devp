@@ -201,7 +201,7 @@ end subroutine init_time
 
 
 
-subroutine model_interpolate(x, location, itype, obs_val, istatus, optionals)
+subroutine model_interpolate(x, location, itype, obs_val, obs_mytag, istatus, optionals)
 !------------------------------------------------------------------
 !
 ! Given a state vector, a location, and a model state variable type,
@@ -220,6 +220,7 @@ real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 integer,             intent(in) :: itype
 real(r8),           intent(out) :: obs_val
+integer,            intent(out) :: obs_mytag
 integer,            intent(out) :: istatus
 real(r8), dimension(:), optional, intent(in) :: optionals
 
@@ -232,6 +233,8 @@ endif
 ! This should be the result of the interpolation of a
 ! given kind (itype) of variable at the given location.
 obs_val = MISSING_R8
+
+obs_mytag = 0
 
 ! The return code for successful return should be 0. 
 ! Any positive number is an error.
