@@ -816,14 +816,11 @@ select case(level)
       else
         write(taskstr, '(a,i5)' ) "PE ", task_number
         write(     *     , *) trim(taskstr),': ',trim(routine),' ', trim(text)
-        write(logfileunit, *) trim(taskstr),': ',trim(routine),' ', trim(text)
         if ( present(text2)) then
            write(     *     , *) trim(taskstr),': ',trim(routine),' ... ', trim(text2)
-           write(logfileunit, *) trim(taskstr),': ',trim(routine),' ... ', trim(text2)
         endif
         if ( present(text3)) then
            write(     *     , *) trim(taskstr),': ',trim(routine),' ... ', trim(text3)
-           write(logfileunit, *) trim(taskstr),': ',trim(routine),' ... ', trim(text3)
         endif
       endif
 
