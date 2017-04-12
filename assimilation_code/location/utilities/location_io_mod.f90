@@ -225,8 +225,13 @@ call nc_check(rc, context, 'location', fname)
 
 locations = get_location( loc ) 
 
-rc = nf90_put_var(ncFileID, LocationVarId, locations, &
-                 start=(/ 1, locindex /), count=(/ LocationDims, 1 /) )
+if (LocationDims > 1) then
+   rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+                     start=(/ 1, locindex /), count=(/ LocationDims, 1 /) )
+else
+   rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+                     start=(/ locindex /), count=(/ 1 /) )
+endif
 call nc_check(rc, context, 'put_var:location', fname)
 
 if (write_vert) then
@@ -280,8 +285,13 @@ do i=1, loccount
    if (write_vert) intvals(i) = query_location(loc(i), 'WHICH_VERT')
 enddo
 
-rc = nf90_put_var(ncFileID, LocationVarId, locations, &
-              start=(/ 1, starthere /), count=(/ LocationDims, loccount /) )
+if (LocationDims > 1) then
+   rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+                     start=(/ 1, starthere /), count=(/ LocationDims, loccount /) )
+else
+   rc = nf90_put_var(ncFileID, LocationVarId, locations, &
+                     start=(/ starthere /), count=(/ loccount /) )
+endif
 call nc_check(rc, context, 'put_var:location', fname)
 
 if (write_vert) then

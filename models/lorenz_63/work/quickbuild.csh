@@ -52,6 +52,7 @@ if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
 endif
 
+\rm -f *.o *.mod 
 
 #----------------------------------------------------------------------
 # Build any NetCDF files from .cdl files
@@ -59,7 +60,7 @@ endif
 
 @ n = 0
 
-foreach DATAFILE ( *.cdl )
+foreach DATAFILE ( `ls *.cdl` )
 
    set OUTNAME = `basename $DATAFILE .cdl`.nc
 

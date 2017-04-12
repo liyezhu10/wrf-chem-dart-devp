@@ -699,7 +699,11 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    !-----------------------------------------------------------------------
    if(ens_handle%my_pe == owner) then
       ! need to convert global to local obs number
-      vert_obs_loc_in_localization_coord = query_location(base_obs_loc, "VLOC")
+      if (has_vertical_choice()) then 
+         vert_obs_loc_in_localization_coord = query_location(base_obs_loc, "VLOC")
+      else
+         vert_obs_loc_in_localization_coord = 0.0_r8
+      endif
 
       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
       ! Only value of 0 for DART QC field should be assimilated

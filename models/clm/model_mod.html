@@ -466,10 +466,10 @@ prematurely terminating the namelist.
         or not the file should be updated after the assimilation.
         <em class=removed> Only CLM variable names in the CLM restart file are valid.</em>
         The DART kind must be one found in the 
-        <em class=file>DART/obs_kind/obs_kind_mod.f90</em>
+        <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em>
         AFTER it gets built by <em class=program>preprocess</em>. Most of
         the land observation kinds are specified by 
-        <em class=file>DART/obs_def/obs_def_tower_mod.f90</em>, so it should
+        <em class=file>DART/observations/forward_operators/obs_def_tower_mod.f90</em>, so it should
         be specified in the preprocess_nml:input_files variable.
         </TD>
 </TR>
@@ -1013,7 +1013,7 @@ In distance computations any two locations closer than the
 given <em class=code>maxdist</em> will be considered close
 by the <em class=code>get_close_obs()</em> routine.
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_maxdist_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -1038,7 +1038,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -1070,7 +1070,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 
 <P>
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of this subroutine.
 </P>
 

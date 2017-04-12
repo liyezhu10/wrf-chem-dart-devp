@@ -54,7 +54,7 @@ current directory (and <em class=file>d02</em>, etc. for multiple domain cases).
 This file must be at the same resolution and have the same surface elevation
 data as the files converted to create the DART initial conditions.  No data
 will be read from this file, but the grid information must match exactly.
-See the <a href="models/wrf/WRF_DART_utilities/dart_to_wrf.html">wrf_to_dart</a>
+See the <a href="WRF_DART_utilities/dart_to_wrf.html">wrf_to_dart</a>
 documentation for more information on how to generate DART IC/restart files
 given WRF NetCDF files.
 </P>
@@ -379,7 +379,7 @@ circulation calculation is done when searching for the vortex center.
 <P> The following items used to be in the WRF namelist
 but have been removed.  The first 4 are no longer needed,
 and the last one was moved to
-<a href="models/wrf/WRF_DART_utilities/dart_to_wrf.html#Namelist">&amp;dart_to_wrf_nml</a>
+<a href="WRF_DART_utilities/dart_to_wrf.html#Namelist">&amp;dart_to_wrf_nml</a>
 in 2010.
 In the Lanai release having these values in the namelist
 does not cause a fatal error, but more recent versions of
@@ -420,7 +420,7 @@ Remove them from your namelist to avoid errors.
 <TR><TD> adv_mod_command </TD>
     <TD> character(len=32) </TD>
     <TD>OBSOLETE -- This variable was moved to the 
-<a href="models/wrf/WRF_DART_utilities/dart_to_wrf.html#Namelist">&amp;dart_to_wrf_nml</a>
+<a href="WRF_DART_utilities/dart_to_wrf.html#Namelist">&amp;dart_to_wrf_nml</a>
 namelist. Now an error to specify this here.
 </TD></TR>
 
@@ -843,7 +843,7 @@ real(r8),             intent(in)    :: <em class=code>maxdist</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_maxdist_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -868,7 +868,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -901,7 +901,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 <P>
 Calls the 3-D sphere locations module to get a list of potentially
 close state vector points, and again for unassimilated observations.
-See <A HREF="../../location/threed-sphere/location_mod.html#get_close_obs">
+See <A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of the locations module
 version of this code.  Then,
 if vertical localization is enabled, this code converts all vertical
@@ -1062,8 +1062,8 @@ Not supported for the WRF model.  Will throw a fatal error if called.
 <A NAME="References"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
-<a href="http://www.mmm.ucar.edu/wrf/users/docs/user_guide/contents.html">
-http://www.mmm.ucar.edu/wrf/users/docs/user_guide/contents.html</a>
+<a href="http://www2.mmm.ucar.edu/wrf/users/docs/user_guide_V3/contents.html">
+http://www2.mmm.ucar.edu/wrf/users/docs/user_guide_V3/contents.html</a>
 
 <!--==================================================================-->
 <!-- Describe all the error conditions and codes.                     -->

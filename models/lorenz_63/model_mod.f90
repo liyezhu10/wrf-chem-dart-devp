@@ -16,7 +16,7 @@ use    utilities_mod,      only : register_module, error_handler, E_ERR, E_MSG, 
                                   nmlfileunit, do_output, find_namelist_in_file, &
                                   check_namelist_read, do_nml_file, do_nml_term
 
-use netcdf_utilities_mod, only : nc_check, nc_add_global_attribute, &
+use netcdf_utilities_mod, only : nc_add_global_attribute, &
                                  nc_add_global_creation_time, nc_redef, nc_enddef
 
 use time_manager_mod,      only : time_type, set_time
@@ -421,7 +421,6 @@ end subroutine linearize
 
 !------------------------------------------------------------------
 !> Writes the model-specific attributes to a netCDF file
-!> For the lorenz_63 model, each state variable is at a separate location.
 
 subroutine nc_write_model_atts(ncid, model_mod_writes_state_variables) 
 
