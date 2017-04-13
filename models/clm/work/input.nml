@@ -44,7 +44,7 @@
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       = 3.0,
-   outlier_threshold        = 3,
+   outlier_threshold        = -1.0,
    output_forward_op_errors = .false.,
    output_timestamps        = .false.,
    output_inflation         = .true.,
@@ -59,12 +59,12 @@
    inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-   inf_initial                 = 1.02,                     1.0,
-   inf_sd_initial              = 0.6,                     0.6,
-   inf_damping                 = 0.9,                     0.9,
+   inf_initial                 = 1.0,                     1.0,
+   inf_sd_initial              = 0.0,                     0.0,
+   inf_damping                 = 1.0,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 100.0,               1000.0,
-   inf_sd_lower_bound          = 0.6,                     0.6
+   inf_upper_bound             = 1000000.0,               1000000.0,
+   inf_sd_lower_bound          = 0.0,                     0.0
    /
 
 
@@ -80,24 +80,22 @@
 # cutoff of 0.03 (radians) is about 200km
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 0.05,
+   cutoff                          = 0.03,
    allow_missing_in_clm            = .true.,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
-   output_localization_diagnostics = .false.,
+   output_localization_diagnostics = .true.,
    localization_diagnostics_file   = 'localization_diagnostics',
    print_every_nth_obs             = 0
    /
 
 
 &ensemble_manager_nml
-   single_restart_file_in  = .false.
-   single_restart_file_out = .false.
+   single_restart_file_in  = .false.,
+   single_restart_file_out = .false.,
    perturbation_amplitude  = 0.2
-   layout                  = 1
-   tasks_per_node          = 1
    /
 
 
@@ -127,7 +125,7 @@
     output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
    input_files              = '../../../obs_def/obs_def_brightnessT_mod.f90',
                               '../../../obs_def/obs_def_tower_mod.f90',
-                              '../../../obs_def/obs_def_GRACE_Long_mod.f90',
+                              '../../../obs_def/obs_def_COSMOS_mod.f90',
    /
 
 
@@ -148,8 +146,6 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'AMSRE_BRIGHTNESS_T',
-                                'MODIS_SNOWCOVER_FRAC',
-                                'GRACE_TWS',
    evaluate_these_obs_types   = 'null'
    /
 
@@ -166,56 +162,19 @@
 
 &model_nml
    casename                     = 'cesm_standard',
-   auxiliary_nc                 = 'rtm_auxiliary.nc'
-   lai_nc                       = 'rtm_lai_modis.nc',
+   surftexture_nc               = '/scratch/02714/zhaol/data/AMSR-E/surfdata_0.9x1.25_soiltexture_c140705.nc'
+   coefg_nc                     = '/scratch/02714/zhaol/data/AMSR-E/coefg/coefg_amsre',
    clm_restart_filename         = 'clm_restart.nc',
    clm_history_filename         = 'clm_history.nc',
-   clm_vector_history_filename  = 'clm_vector_history.nc'
-   output_state_vector          = .false.,
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
+   output_state_vector          = .false.,
    calendar                     = 'Gregorian',
-   debug                        = 0,
-   clm_variables                = 'H2OSOI_LIQ',     'KIND_SOIL_MOISTURE',          '0',      '1510',    'RESTART', 'UPDATE',
-                                  'T_SOISNO',       'KIND_SOIL_TEMPERATURE',       '200',    '330',     'RESTART', 'UPDATE',
-                                  'T_VEG',          'KIND_VEGETATION_TEMPERATURE', '200',    '330',     'RESTART', 'NO_COPY_BACK',
-                                  'SNLSNO',         'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'T_GRND',         'KIND_SKIN_TEMPERATURE',       '200',    '330',     'RESTART', 'NO_COPY_BACK', 
-                                  'frac_sno',       'KIND_SNOWCOVER_FRAC',         '0',      '1',       'RESTART', 'NO_COPY_BACK',
-                                  'H2OSNO',         'KIND_SNOW_WATER',             '0',      '1000',    'RESTART', 'UPDATE',
-                                  'H2OSOI_ICE',     'KIND_ICE',                    '0',      '1510',    'RESTART', 'UPDATE',
-                                  'SNOWDP',         'KIND_SNOW_THICKNESS',         '0',      '10',      'RESTART', 'UPDATE',
-                                  'H2OCAN',         'KIND_CANOPY_WATER',           'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'SANDFRAC_CKYH',  'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'CLAYFRAC_CKYH',  'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK', 
-                                  'T_VEG_CKYH',     'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'ELAI_CKYH',      'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'VF_CKYH',        'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_PBOT_CKYH', 'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_T_CKYH',    'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'FORC_RH_CKYH',   'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'STICKINESS_CKYH','KIND_RTM_PARAMETERS_P',       'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'B_PRIME_CKYH',   'KIND_RTM_PARAMETERS_P',       'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'X_LAMBDA_CKYH',  'KIND_RTM_PARAMETERS_N',       'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'DZSNO',          'KIND_SNOW_THICKNESS',         'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'ZSNO',           'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'ZISNO',          'KIND_TEMP',                   'NA',     'NA',      'RESTART', 'NO_COPY_BACK',
-                                  'snw_rds',        'KIND_SNOW_GRAIN_SIZE',        'NA',     'NA',      'RESTART', 'UPDATE',
-                                  'WT',             'KIND_TOTAL_WATER_STORAGE',    '0',      'NA',      'RESRART', 'UPDATE',
-                                  'WA',             'KIND_TOTAL_WATER_STORAGE',    '0',      'NA',      'RESRART', 'UPDATE',
-                                  'LAI',            'KIND_MODIS_LAI',              'NA',     'NA',      'LAIIN',   'NO_COPY_BACK',
-                                  'WATSAT',         'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'SANDFRAC_C',     'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'CLAYFRAC_C',     'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'FMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'BMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'XMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'QMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
-                                  'HMV',            'KIND_MVPARA_ZL',              'NA',     'NA',      'AUXIIN',  'NO_COPY_BACK',
+   debug                        = 1,
+   clm_state_variables          = 'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',
    /
 
-                                  'tlai',        'KIND_LEAF_AREA_INDEX',
                                   'T_SOISNO',    'KIND_SOIL_TEMPERATURE',
                                   'livecrootc',  'KIND_ROOT_CARBON',
                                   'deadcrootc',  'KIND_ROOT_CARBON',
@@ -276,6 +235,7 @@
 
 
 &mpi_utilities_nml
+   reverse_task_layout = .true.,
    /
 
 
