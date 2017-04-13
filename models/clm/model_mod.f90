@@ -4576,9 +4576,9 @@ call nc_check(nf90_close(ncidsurftexture), 'get_brightness_temperature','close '
 ! area-weight the average
 obs_val = sum(tb * weights) / sum(weights)
 
-if (obs_val > 350.0_r8 .or. obs_val < 200.0_r8 ) then
-   obs_val=MISSING_R8
-endif  
+!if (obs_val > 350.0_r8 .or. obs_val < 200.0_r8 ) then
+!   obs_val=MISSING_R8
+!endif  
 
 !==================Long
 ! if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
@@ -4838,7 +4838,7 @@ endif
 ! Fill the output array ... finally
 soilcolumn%nlayers = nlayers
 ! Currently, only consider the first layer of topsoil, i.e., the 6th layer of levtot
-soilcolumn%ssm = h2osoi_liq(6) * 0.001 / ((LEVGRND(6)+LEVGRND(7))/2) ! convert unit from kg/m2 to m3/m3
+soilcolumn%ssm = h2osoi_liq(6) * 0.001 / ((LEVGRND(1)+LEVGRND(2))/2) ! convert unit from kg/m2 to m3/m3 !!! mistakely using the 6th and 7th layer before, corected
 soilcolumn%stg = t_soisno(6) 
 
 deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
