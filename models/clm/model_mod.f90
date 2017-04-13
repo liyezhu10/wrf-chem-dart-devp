@@ -100,6 +100,7 @@ public :: clm_to_dart_state_vector,     &
           sv_to_restart_file,           &
           get_clm_restart_filename,     &
           get_state_time,               &
+          get_column_value,             &
           get_grid_vertval,             &
           compute_gridcell_value,       &
           gridcell_components,          &
@@ -114,7 +115,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: string1, string2, string3, string4
+character(len=256) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -232,6 +233,26 @@ type snowprops
    real(r4) :: soilsat         ! aux_ins(3) soil saturation [fraction]
    real(r4) :: soilporos       ! aux_ins(4) soil porosity [fraction]
    real(r4) :: propconst       ! aux_ins(5) proportionality between grain size & correlation length.
+   
+   !----------------------------------------------------------------------------------------------kyh04032014
+   real(r4) :: soil_liq        ! aux_ins(6) soil liquid water content (fraction)
+   real(r4) :: soil_ice        ! aux_ins(7) soil ice contet (fraction)
+   real(r4) :: sandf           ! aux_ins(8) sand fraction (fraction)
+   real(r4) :: clayf           ! aux_ins(9) clay fraction (fraction)
+   real(r4) :: Tcanopy         ! aux_ins(10) vegetation physical temperature (K)
+   real(r4) :: lai_vege        ! aux_ins(11) leaf area index
+   real(r4) :: forc_pbot       ! aux_ins(12) ground level pressure (Pa)
+   real(r4) :: forc_t          ! aux_ins(13) ground level air temperature (K)
+   real(r4) :: forc_rh         ! aux_ins(14) relative humidity
+   real(r4) :: vf              ! aux_ins(15) vegetated area fraction
+   !----------------------------------------------------------------------------------------------kyh04032014
+
+   !----------------------------------------------------------------------------------------------RTM parameters   !kyh11202014
+   real(r4) :: stickiness       !snowpack stickiness (-)
+   real(r4) :: b_prime          !vegetation RTM coefficient (-)
+   real(r4) :: x_lambda         !vegetation RTM coefficient (-)
+   !----------------------------------------------------------------------------------------------RTM parameters   !kyh11202014
+
    integer  :: nprops          ! [thickness, density, diameter, liqwater, temperature]
    real(r4), pointer, dimension(:) :: thickness      !  LAYER THICKNESS [M]
    real(r4), pointer, dimension(:) :: density        !  LAYER DENSITY [KG/M3]
@@ -1798,7 +1819,7 @@ else
          endif
 
          allocate(data_1d_array( progvar(ivar)%dimlens(1) ) )
-         call vector_to_prog_var(state_vec, ivar, data_1d_array)
+         call vector_to_prog_var(state_vec, ivar, 0, data_1d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array, &
              start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -1817,7 +1838,7 @@ else
 
          allocate(data_2d_array( progvar(ivar)%dimlens(1),  &
                                  progvar(ivar)%dimlens(2) ))
-         call vector_to_prog_var(state_vec, ivar, data_2d_array)
+         call vector_to_prog_var(state_vec, ivar, 0, data_2d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
              start = ncstart(1:ncNdims), count=nccount(1:ncNdims)), &
                    'nc_write_model_vars', 'put_var '//trim(string2))
@@ -2203,9 +2224,22 @@ character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: dart_time
 
 ! temp space to hold data while we are writing it
-integer :: i, ni, nj, ivar
-real(r8), allocatable, dimension(:)         :: data_1d_array
-real(r8), allocatable, dimension(:,:)       :: data_2d_array
+integer :: i, ni, nj, ivar, j, c
+
+integer,  allocatable, dimension(:)   :: snlsno
+
+real(r8), allocatable, dimension(:)   :: data_1d_array !state vector after assimilation
+real(r8), allocatable, dimension(:)   :: x_1d_array    !state vector before assimilation
+real(r8), allocatable, dimension(:)   :: h2osno_pr,h2osno_po,snowdp_pr,snowdp_po, & 
+                                         gain_snowdp, scf_pr, scf_po
+
+real(r8), allocatable, dimension(:,:) :: data_2d_array
+real(r8), allocatable, dimension(:,:) :: x_2d_array
+real(r8), allocatable, dimension(:,:) :: gain_h2osno_l,  gain_dzsno, gain_h2oliq_l,&
+                                         gain_h2oice_l, dzsno_pr, dzsno_po, h2oliq_pr, &
+                                         h2oliq_po, h2oice_pr, h2oice_po
+
+real(r8) :: wt_liq_l, snowden, wt_swe_l, reduce_factor
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
@@ -2255,7 +2289,43 @@ if (do_output()) call print_date(file_time,'date of restart file '//trim(filenam
 ! In order to avoid the negative values of H2OSNO produced by DART, I added some "if" conditions
 ! to set the value of H2OSNO back to the value before assimilation if negative value is found.
 
-UPDATE : do ivar=1, nfields
+!==========================================================================
+!!****************BLOCK and hereafter copied from Yongfei******************
+!
+! Test codes written by Fei. I intend to send DZSNO,H2OSOI_ICE, H2OSOI_LIQ,
+! H2OSNO and SNOWDP back to CLM4. But only H2OSNO is used to be updated 
+! directly by the filter. The update of other variables will be calculated
+! based on their physical relationships.
+! SnowDensity(layer,column)  = (H2OSOI_LIQ(layer,column)+H2OSOI_ICE(layer,column))
+!                              /DZSNO(layer,column)
+! GainH2OSNO_l(layer,column) = GainH2OSNO(column)*wt_swe(layer,column)
+! wt_swe(layer,column)       = H2OSOI_LIQ(layer,column)+H2OSOI_ICE(layer,column))
+!                              /H2OSNO(column)                             
+! GainDZSNO(layer,column)    = GainH2OSNO_l(layer,column)/SnowDensity(layer,column)
+! wt_liq(layer,column)       = H2OSOI_LIQ(layer,column)/(H2OSOI_LIQ(layer,column)+
+!                               H2OSOI_ICE(layer,column))
+! wt_ice(layer,column)       = 1-wt_liq(layer,column)
+! GainH2O_LIQ(layer,column)  = GainH2OSNO_l(layer,column)*wt_liq(layer,column)
+! GainH2O_ICE(layer,column)  = GainH2OSNO_l(layer,column)*(1-wt_liq(layer,column))
+! GainSNOWDP(column)         = sum(GainDZSNO(layer,column))
+! SNOWDP_update(column)      = SNOWDP(column)+GainSNOWDP(column)
+! H2OSOI_ICE_update(layer,column)   = H2OSOI_ICE(layer,column)+GainH2O_ICE(layer,column)
+! H2OSOI_LIQ_update(layer,column)   = H2OSOI_LIQ(layer,column)+GainH2O_LIQ(layer,column)
+! ivar              state 
+!  1                frac_sno
+!  2                H2OSNO
+!  3                H2OSOI_LIQ
+!  4                H2OSOI_ICE
+!  5                SNOWDP
+!  6                DZSNO
+!!=========================================================================
+
+allocate(snlsno(Ncolumn))
+call nc_check(nf90_inq_varid(ncFileID,'SNLSNO', VarID), 'sv_to_restart_file', 'inq_varid SNLSNO')
+call nc_check(nf90_get_var(ncFileID, VarID, snlsno), 'sv_to_restart_file', 'get_var SNLSNO')
+
+
+TEMP : do ivar=1, nfields
 
    varname = trim(progvar(ivar)%varname)
    string2 = trim(filename)//' '//trim(varname)
@@ -2264,7 +2334,7 @@ UPDATE : do ivar=1, nfields
       write(string1,*)'intentionally not updating '//trim(string2) 
       write(string3,*)'as per namelist control in model_nml:clm_variables'
       call error_handler(E_MSG, 'sv_to_restart_file', string1, text2=string3)
-      cycle UPDATE
+      cycle TEMP
    endif
 
    if (trim(varname) == 'ZWT') then
@@ -2273,7 +2343,7 @@ UPDATE : do ivar=1, nfields
       ! Simply updating ZWT will have no effect because upon restart
       ! CLM will calculate ZWT given the same old WA and WT.
       call update_water_table_depth( ivar, state_vector, ncFileID, filename, dart_time)
-      cycle UPDATE
+      cycle TEMP
    endif
 
    ! Ensure netCDF variable is conformable with progvar quantity.
@@ -2308,29 +2378,172 @@ UPDATE : do ivar=1, nfields
    if (progvar(ivar)%numdims == 1) then
 
       ni = progvar(ivar)%dimlens(1)
-      allocate(data_1d_array(ni))
-      call vector_to_prog_var(state_vector, ivar, data_1d_array, ncFileID)
 
-      call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array), &
+      !if (trim(progvar(ivar)%varname) == 'frac_sno') then 
+      !  allocate(scf_po(ni))
+      !  allocate(scf_pr(ni))
+      !  call vector_to_prog_var(state_vector, ivar, 0, scf_po, ncFileID)
+      !  call vector_to_prog_var(state_vector, ivar, 1, scf_pr, ncFileID)
+      !  where(isnan(scf_po)) scf_po = scf_pr
+      !  where((scf_po == MISSING_R8)) scf_po = 0.0_r8
+      
+      if (trim(progvar(ivar)%varname) == 'H2OSNO') then
+        allocate(h2osno_pr(ni))
+        allocate(h2osno_po(ni))
+        call vector_to_prog_var(state_vector, ivar, 0, h2osno_po, ncFileID)
+        call vector_to_prog_var(state_vector, ivar, 1, h2osno_pr, ncFileID)     
+        where(isnan(h2osno_po))  h2osno_po = h2osno_pr
+        where((h2osno_po == MISSING_R8)) h2osno_po = 0.0_r8
+        where((h2osno_pr == MISSING_R8)) h2osno_pr = 0.0_r8
+        where(isnan(h2osno_pr)) h2osno_pr = 0.0_r8
+
+      elseif (trim(progvar(ivar)%varname) == 'SNOWDP') then
+        allocate(snowdp_pr(ni))
+        allocate(snowdp_po(ni))
+        allocate(gain_snowdp(ni))
+        call vector_to_prog_var(state_vector, ivar, 1, snowdp_pr, ncFileID)
+        where((snowdp_pr == MISSING_R8)) snowdp_pr = 0.0_r8
+        where(isnan(snowdp_pr)) snowdp_pr = 0.0_r8
+
+      else
+        allocate(data_1d_array(ni))
+        call vector_to_prog_var(state_vector, ivar, 0, data_1d_array, ncFileID)
+        call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array), &
             'sv_to_restart_file', 'put_var '//trim(varname))
-      deallocate(data_1d_array)
+        deallocate(data_1d_array)
+      endif
 
    elseif (progvar(ivar)%numdims == 2) then
 
       ni = progvar(ivar)%dimlens(1)
       nj = progvar(ivar)%dimlens(2)
-      allocate(data_2d_array(ni, nj))
-      call vector_to_prog_var(state_vector, ivar, data_2d_array, ncFileID)
 
-      call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array), &
-            'sv_to_restart_file', 'put_var '//trim(varname))
-      deallocate(data_2d_array)
+      if (trim(progvar(ivar)%varname) == "DZSNO") then
+        allocate(dzsno_pr(ni, nj))
+        allocate(dzsno_po(ni, nj))
+        !Temp variables allocated here
+        allocate(gain_h2osno_l(ni,nj)) ! the SWE gained in each layer (total SWE gained *weight)
+        allocate(gain_dzsno(ni,nj))    ! the gained snow thickness of each layer
+        allocate(gain_h2oliq_l(ni,nj)) ! the gained snow water of each layer
+        allocate(gain_h2oice_l(ni,nj)) ! the gained snow ice of each layer
+        call vector_to_prog_var(state_vector, ivar, 1, dzsno_pr, ncFileID)
+        where((dzsno_pr ==MISSING_R8)) dzsno_pr = 0.0_r8
+      
+      elseif (trim(progvar(ivar)%varname) == "H2OSOI_LIQ") then
+        allocate(h2oliq_pr(ni, nj))
+        allocate(h2oliq_po(ni, nj))
+        call vector_to_prog_var(state_vector, ivar, 1, h2oliq_pr, ncFileID)
+        where((h2oliq_pr == MISSING_R8)) h2oliq_pr = 0.0_r8
+            
+      elseif (trim(progvar(ivar)%varname) == "H2OSOI_ICE") then
+        allocate(h2oice_pr(ni, nj))
+        allocate(h2oice_po(ni, nj))
+        call vector_to_prog_var(state_vector, ivar, 1, h2oice_pr, ncFileID)
+        where((h2oice_pr == MISSING_R8)) h2oice_pr = 0.0_r8
+      
+      else
+        allocate(data_2d_array(ni, nj))
+        call vector_to_prog_var(state_vector, ivar, 0, data_2d_array, ncFileID)
+        call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array), &
+              'sv_to_restart_file', 'put_var '//trim(varname))
+        deallocate(data_2d_array)
+      endif
 
    else
       write(string1, *) 'no support for data array of dimension ', ncNdims
       call error_handler(E_ERR,'sv_to_restart_file', string1, &
                         source,revision,revdate)
    endif
+
+enddo TEMP
+
+h2oliq_po = h2oliq_pr
+h2oice_po = h2oice_pr
+dzsno_po  = dzsno_pr
+snowdp_po = snowdp_pr
+
+wt_liq_l  = 0
+snowden   = 0
+
+reduce_factor = 0.1_r8 ! FIX ME. 0.1 is chosen for no reason
+
+!We have read all the temp vars needed. Now we need to adjust the variables to be consistant with
+!the updated H2OSNO
+gain_snowdp = 0
+
+do j = 1,nj
+   if (h2osno_po(j)<0) then
+      !write(*,*)'negative value found: column ',j
+      if (snlsno(j)==0) h2osno_po(j) = reduce_factor * h2osno_pr(j) ! FIX ME. 0.1 is chosen for no reason 
+      do i=1,-snlsno(j)
+         h2oliq_po(i,j)= reduce_factor * h2oliq_pr(i,j)
+         h2oice_po(i,j)= reduce_factor * h2oice_pr(i,j)
+         dzsno_po(i,j) = reduce_factor * dzsno_pr(i,j)   !FIX ME. The value chosen is kind of random.
+      end do
+      snowdp_po(j) = sum(dzsno_po(:,j))
+      h2osno_po(j) = sum(h2oice_po(:,j))+sum(h2oliq_po(:,j))
+   else 
+      if (snlsno(j)<0) then 
+       do c = 1, -snlsno(j)
+         i = 5 - c +1
+         wt_liq_l           = h2oliq_pr(i,j)/(h2oliq_pr(i,j) + h2oice_pr(i,j))
+         snowden            = (h2oliq_pr(i,j) + h2oice_pr(i,j))/dzsno_pr(i,j)
+         if(isnan(snowden)) snowden = 0.0_r8
+         wt_swe_l           = (h2oliq_pr(i,j) + h2oice_pr(i,j))/h2osno_pr(j)
+         if(isnan(wt_swe_l)) wt_swe_l = 0.0_r8
+         gain_h2osno_l(i,j) = (h2osno_po(j) - h2osno_pr(j))*wt_swe_l
+         gain_h2oliq_l(i,j) = gain_h2osno_l(i,j)*wt_liq_l
+         gain_h2oice_l(i,j) = gain_h2osno_l(i,j)*(1 - wt_liq_l)
+         gain_dzsno(i,j)    = gain_h2osno_l(i,j)/snowden
+         if(isnan(gain_dzsno(i,j))) gain_dzsno(i,j) =0.0_r8
+         h2oliq_po(i,j)     = h2oliq_pr(i,j) + gain_h2oliq_l(i,j)
+         h2oice_po(i,j)     = h2oice_pr(i,j) + gain_h2oice_l(i,j)
+         dzsno_po(i,j)      = dzsno_pr(i,j)  + gain_dzsno(i,j)
+       end do
+      endif
+      gain_snowdp(j)     = sum(gain_dzsno(:,j))
+      snowdp_po(j)       = snowdp_pr(j) + gain_snowdp(j)
+   endif
+end do
+
+deallocate(gain_h2osno_l)
+deallocate(gain_h2oliq_l)
+deallocate(gain_h2oice_l)
+deallocate(gain_dzsno)
+deallocate(gain_snowdp)
+deallocate(snowdp_pr)
+deallocate(h2osno_pr)
+deallocate(h2oliq_pr)
+deallocate(h2oice_pr)
+deallocate(dzsno_pr)
+
+! filanly, UPDATE SCF related variables
+
+!call nc_check(nf90_inq_varid(ncFileID,'frac_sno',VarID), 'sv_to_restart_file', 'inq_varid frac_sno')
+!call nc_check(nf90_put_var(ncFileID, varID, scf_pr), &
+!          'sv_to_restart_file', 'put_var '//'frac_sno')
+!deallocate(scf_pr)
+!deallocate(scf_po)
+call nc_check(nf90_inq_varid(ncFileID,'H2OSNO', VarID), 'sv_to_restart_file', 'inq_varid H2OSNO')
+call nc_check(nf90_put_var(ncFileID, VarID, h2osno_po), &
+          'sv_to_restart_file', 'put_var '//'H2OSNO')
+deallocate(h2osno_po)
+call nc_check(nf90_inq_varid(ncFileID,'SNOWDP', VarID), 'sv_to_restart_file', 'inq_varid SNOWDP')
+call nc_check(nf90_put_var(ncFileID, VarID, snowdp_po), &
+          'sv_to_restart_file', 'put_var '//'SNOWDP')
+deallocate(snowdp_po)
+call nc_check(nf90_inq_varid(ncFileID,'DZSNO', VarID), 'sv_to_restart_file', 'inq_varid DZSNO')
+call nc_check(nf90_put_var(ncFileID, VarID, dzsno_po), &
+          'sv_to_restart_file', 'put_var '//'DZSNO')
+deallocate(dzsno_po)
+call nc_check(nf90_inq_varid(ncFileID,'H2OSOI_LIQ', VarID), 'sv_to_restart_file', 'inq_varid H2OSOI_LIQ')
+call nc_check(nf90_put_var(ncFileID, VarID, h2oliq_po), &
+          'sv_to_restart_file', 'put_var '//'H2OSOI_LIQ')
+deallocate(h2oliq_po)
+call nc_check(nf90_inq_varid(ncFileID,'H2OSOI_ICE', VarID), 'sv_to_restart_file', 'inq_varid H2OSOI_ICE')
+call nc_check(nf90_put_var(ncFileID, VarID, h2oice_po), &
+          'sv_to_restart_file', 'put_var '//'H2OSOI_ICE')
+deallocate(h2oice_po)
 
    ! TJH FIXME ... this works perfectly if it were not for a bug in netCDF.
    ! When they fix the bug, this will be a useful thing to restore.
@@ -2339,8 +2552,6 @@ UPDATE : do ivar=1, nfields
 !  call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
 !                'sv_to_restart_file', 'modified '//trim(varname))
 !  call nc_check(nf90_enddef(ncfileID),'sv_to_restart_file','state enddef '//trim(filename))
-
-enddo UPDATE
 
 call nc_check(nf90_close(ncFileID),'sv_to_restart_file','close '//trim(filename))
 ncFileID = 0
@@ -2457,35 +2668,17 @@ elseif (obs_kind == KIND_SOIL_MOISTURE) then
    endif
 elseif (obs_kind == KIND_BRIGHTNESS_TEMPERATURE ) then
    if (present(optionals)) then
-      call get_brightness_temperature_new(x, model_time, location, optionals, interp_val, istatus)
+      call get_brightness_temperature_multi(x, model_time, location, optionals, interp_val, istatus)
    else
       write(string1, '(''Tb obs at lon,lat ('',f12.6,'','',f12.6,'') has no metadata.'')') &
                                   llon, llat
       write(string2,*)'cannot call model_interpolate() for Tb without metadata argument.'
       call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate,text2=string2)
    endif
-elseif (obs_kind == KIND_LIQUID_WATER ) then
-   call get_grid_vertval(x, location, 'H2OSOI_LIQ',interp_val, istatus )
-elseif (obs_kind == KIND_ICE ) then
-   call get_grid_vertval(x, location, 'H2OSOI_ICE',interp_val, istatus )
 elseif (obs_kind == KIND_SNOWCOVER_FRAC ) then
    call compute_gridcell_value(x, location, 'frac_sno', interp_val, istatus)
 elseif (obs_kind == KIND_LEAF_CARBON ) then
    call compute_gridcell_value(x, location, 'leafc',    interp_val, istatus)
-elseif (obs_kind == KIND_WATER_TABLE_DEPTH ) then
-   call compute_gridcell_value(x, location, 'ZWT',    interp_val, istatus)
-elseif (obs_kind == KIND_SNOW_THICKNESS ) then
-   write(string1,*)'model_interpolate for DZSNO not written yet.'
-   call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
-   istatus = 5
-elseif ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
-   if (nint(lheight) > nlevgrnd) then
-      interp_val = MISSING_R8
-      istatus = 1
-   else
-      interp_val = LEVGRND(nint(lheight))
-      istatus = 0
-   endif
 else
    write(string1,*)'model_interpolate not written for (integer) kind ',obs_kind
    call error_handler(E_ERR,'model_interpolate',string1,source,revision,revdate)
@@ -2622,6 +2815,82 @@ endif
 
 end subroutine compute_gridcell_value
 
+
+!------------------------------------------------------------------
+
+
+subroutine get_column_value(x, varstring, colid, layersin, out_val, istatus)
+!
+! Get value for a specified column and CLM variable stored in DART sequence
+! First version by Long ZHAO, Nov 11, 2015
+
+! Passed variables
+
+real(r8),               intent(in)  :: x(:)         ! state vector
+character(len=*),       intent(in)  :: varstring    ! 'frac_sno', 'leafc', etc.
+integer,                intent(in)  :: colid        ! index for the target column
+                                                    ! 1 < colid < 45689 (e.g.,)
+integer,  dimension(:), intent(in)  :: layersin     ! layers to get in a column 
+                                                    ! (/1,2,3,4,5,6/)
+real(r8), allocatable,  dimension(:), intent(out) :: out_val      ! target result
+integer,                intent(out) :: istatus      ! error code (0 == good)
+
+! Local storage
+
+integer  :: ivar, index1, indexN, indexi, layeri, maxlevs, nlayers 
+
+if ( .not. module_initialized ) call static_init_model
+
+! Let's assume failure. 
+
+! determine the portion of interest of the state vector
+ivar   = findVarIndex(varstring, 'get_column_value')
+index1 = progvar(ivar)%index1 ! in the DART state vector, start looking here
+indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
+maxlevs= progvar(ivar)%maxlevels ! returns the total number of levels for this var
+
+! BOMBPROOFING - check for a vertical dimension for this variable
+! if (progvar(ivar)%maxlevels > 1) then
+!    write(*,*)'progvar(ivar)%maxlevels = ',progvar(ivar)%maxlevels  !====Long
+!    write(string1, *)'Variable '//trim(varstring)//' cannot use this routine.'
+!    write(string2, *)'use get_grid_vertval() instead.'
+!   call error_handler(E_ERR,'compute_gridcell_value', string1, &
+!                   source, revision, revdate, text2=string2)
+! endif
+
+nlayers = size(layersin)
+allocate(out_val(nlayers))
+out_val = MISSING_R8  ! the DART bad value flag
+istatus    = 99          ! unknown error
+
+LAYERS : do layeri = 1, nlayers
+
+   indexi = (index1-1)  + (colid-1) * maxlevs + layersin(layeri)
+
+   if ( indexi > indexN ) then
+      write(string1, *)'Variable '//trim(varstring)//' encounter indexi > indexN' 
+      call error_handler(E_ERR, 'get_column_value', string1)
+   endif
+  
+   out_val(layeri) = x(indexi)
+
+   if ((debug > 5) .and. do_output()) then
+      write(*,*)
+      write(*,*)'column id with ',colid,'at statevector index',indexi
+      write(*,*)'statevector value is (',x(indexi),')'
+      write(*,*)'closest lev is       (',levels(indexi),')'
+   endif
+
+enddo LAYERS 
+
+istatus    = 0
+
+! Print more information for the really curious
+if ((debug > 5) .and. do_output()) then
+   write(*,*)'out_val, istatus', out_val, istatus
+endif
+
+end subroutine get_column_value
 
 !------------------------------------------------------------------
 
@@ -2869,7 +3138,7 @@ end subroutine get_grid_vertval
 !------------------------------------------------------------------
 
 
-subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
+subroutine vector_to_1d_prog_var(x, ivar, replace_org, data_1d_array, ncid)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset, into a 1d array.
 !
@@ -2879,9 +3148,18 @@ subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
 ! Anywhere the DART MISSING code is encountered in the input array,
 ! the corresponding (i.e. original) value from the netCDF file is
 ! used.
+!
+!
+! Modified By Long Zhao on Oct 28, 2015 to add parameter "replace_org",
+! where:
+! replace_org = 1  means completely replace variable value with restart orginal.
+!                  this value comes together with the input of "ncid"
+! replace_org = 0  means no further actions, i.e., same as the default run
+!
 
 real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
+integer,                  intent(in)  :: replace_org
 real(r8), dimension(:),   intent(out) :: data_1d_array
 integer, OPTIONAL,        intent(in)  :: ncid
 
@@ -2939,26 +3217,74 @@ if (present(ncid)) then
 
    ! restoring the indeterminate original values
 
-   where(data_1d_array == MISSING_R8) data_1d_array = org_array
+   if (replace_org == 1) then
 
-   ! clamping the assimilated values to physically meaningful ranges.
+      data_1d_array = org_array
 
-   if (trim(progvar(ivar)%varname) == 'SNOWDP') &
-      where((data_1d_array < 0.0_r8)) data_1d_array = org_array
+   else 
 
-   if (trim(progvar(ivar)%varname) == 'H2OSNO') &
-      where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
+      where(data_1d_array == MISSING_R8) data_1d_array = org_array
+
+      ! clamping the assimilated values to physically meaningful ranges.
+
+      if (trim(progvar(ivar)%varname) == 'SNOWDP') &
+         where((data_1d_array < 0.0_r8)) data_1d_array = org_array
+
+      if (trim(progvar(ivar)%varname) == 'H2OSNO') then
+         where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
+
+         !---------------------------------------------------------------------kyh05062014
+         where((data_1d_array > 1000._r8)) data_1d_array = org_array
+         !---------------------------------------------------------------------kyh05062014
+      endif
+
+      if (trim(progvar(ivar)%varname) == 'T_VEG') then
+         where((data_1d_array < 0.0_r8)) data_1d_array = org_array
+         !===========================================================Long
+         where(isnan(data_1d_array)) data_1d_array = org_array
+         where((data_1d_array < 260.0_r8)) data_1d_array = org_array
+         where((data_1d_array > 310.0_r8)) data_1d_array = org_array
+         !===========================================================Long
+      endif
+
+      !-------------------------------------------------------------------------------------------------kyh12182014 (RTM parameters)
+      if (trim(progvar(ivar)%varname) == 'STICKINESS_CKYH') then
+         where((data_1d_array < 0.1_r8)) data_1d_array = org_array
+         where((data_1d_array > 0.5_r8)) data_1d_array = org_array
+
+      elseif (trim(progvar(ivar)%varname) == 'B_PRIME_CKYH') then
+         where((data_1d_array < 0.496_r8)) data_1d_array = org_array
+         where((data_1d_array > 0.744_r8)) data_1d_array = org_array
+
+      elseif (trim(progvar(ivar)%varname) == 'X_LAMBDA_CKYH') then
+         where((data_1d_array < -1.656_r8)) data_1d_array = org_array
+         where((data_1d_array > -0.804_r8)) data_1d_array = org_array
+      endif
+      !-------------------------------------------------------------------------------------------------kyh12182014 (RTM parameters)      
+
+   endif
 
    deallocate(org_array)
 
 else
 
-   if     (progvar(ivar)%xtype == NF90_INT) then
-      where(data_1d_array == MISSING_I) data_1d_array = progvar(ivar)%spvalINT
-   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
-      where(data_1d_array == MISSING_R4) data_1d_array = progvar(ivar)%spvalR4
-   elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
-      where(data_1d_array == MISSING_R8) data_1d_array = progvar(ivar)%spvalR8
+   if ( replace_org == 1 ) then
+
+      write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+      write(string2, *)'NCID is missing when replace_org = 1.'
+      call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
+                    source, revision, revdate, text2=string2)
+
+   else
+
+      if     (progvar(ivar)%xtype == NF90_INT) then
+         where(data_1d_array == MISSING_I) data_1d_array = progvar(ivar)%spvalINT
+      elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+         where(data_1d_array == MISSING_R4) data_1d_array = progvar(ivar)%spvalR4
+      elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+         where(data_1d_array == MISSING_R8) data_1d_array = progvar(ivar)%spvalR8
+      endif
+
    endif
 
 endif
@@ -2969,13 +3295,22 @@ end subroutine vector_to_1d_prog_var
 !------------------------------------------------------------------
 
 
-subroutine vector_to_2d_prog_var(x, ivar, data_2d_array, ncid)
+subroutine vector_to_2d_prog_var(x, ivar, replace_org, data_2d_array, ncid)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 2d array.
 !
+!
+! Modified By Long Zhao on Oct 28, 2015 to add parameter "replace_org",
+! where:
+! replace_org = 1  means completely replace variable value with restart orginal.
+!                  this value comes together with the input of "ncid"
+! replace_org = 0  means no further actions, i.e., same as the default run
+!
+
 real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
+integer,                  intent(in)  :: replace_org
 real(r8), dimension(:,:), intent(out) :: data_2d_array
 integer, OPTIONAL,        intent(in)  :: ncid
 
@@ -3035,51 +3370,97 @@ if (present(ncid)) then
 
    ! restoring the indeterminate original values
 
-   where(data_2d_array == MISSING_R8 ) data_2d_array = org_array
-
-   ! clamping the assimilated values to physically meaningful ranges.
-
-   if     (trim(progvar(ivar)%varname) == 'DZSNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'ZSNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'ZISNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'H2OSOI_LIQ') then
-      !===========================================================Long
-      ! Currently, update the first and second layers of soil moisture, 
-      ! i.e., the 6th and 7th layers in levtot.
-      ! So replace other layers' value with original value.
-      data_2d_array(1:5,:)  = org_array(1:5,:)
+   if (replace_org == 1) then
       
-      data_2d_array(7:20,:) = org_array(7:20,:)
-!      data_2d_array(8:20,:) = org_array(8:20,:)
+      data_2d_array = org_array
 
-!      where(isnan(data_2d_array)) data_2d_array = org_array
+   else 
 
-!      where((data_2d_array > 1.0_r8)) data_2d_array = org_array 
-      !===========================================================Long
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'T_SOISNO') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'T_LAKE') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = org_array
-   elseif (trim(progvar(ivar)%varname) == 'leafc') then
-      where((data_2d_array < 0.0_r8)) data_2d_array = 0.0_r8
+      where(data_2d_array == MISSING_R8 ) data_2d_array = org_array
+
+      ! clamping the assimilated values to physically meaningful ranges.
+
+      if     (trim(progvar(ivar)%varname) == 'DZSNO') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+      elseif (trim(progvar(ivar)%varname) == 'ZSNO') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+      elseif (trim(progvar(ivar)%varname) == 'ZISNO') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+      elseif (trim(progvar(ivar)%varname) == 'H2OSOI_LIQ') then
+         !===========================================================Long
+         ! Currently, update the first and second layers of soil moisture, 
+         ! i.e., the 6th and 7th layers in levtot.
+         ! So replace other layers' value with original value.
+         ! data_2d_array(1:5,:)  = org_array(1:5,:)
+         ! data_2d_array(7:20,:) = org_array(7:20,:)
+         data_2d_array(8:20,:) = org_array(8:20,:)
+         ! data_2d_array(14:20,:) = org_array(14:20,:)
+
+         where(isnan(data_2d_array)) data_2d_array = org_array
+         !===========================================================Long
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+      elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+         !------------------------------------------------------------------------kyh05052014
+         ! Currently, only update snow layers and soil surface layer,
+         ! i.e., the 1th - 6th layer in levtot.
+         ! So replace other layers' value with original value.
+         data_2d_array(8:20,:) = org_array(8:20,:)
+         !data_2d_array(6:20,:) = org_array(6:20,:)
+         !where((data_2d_array > 1.0_r8)) data_2d_array = org_array
+         !------------------------------------------------------------------------kyh05052014
+     
+      elseif (trim(progvar(ivar)%varname) == 'T_SOISNO') then
+         !===========================================================Long
+         ! Currently, update the first and second layers of soil temperature,
+         ! i.e., the 1th - 6th layers in levtot.
+         ! So replace other layers' value with original value.
+         ! data_2d_array(1:5,:)  = org_array(1:5,:)
+         ! data_2d_array(7:20,:) = org_array(7:20,:)
+         data_2d_array(8:20,:) = org_array(8:20,:)
+
+         where(isnan(data_2d_array)) data_2d_array = org_array
+         !===========================================================Long
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+         where((data_2d_array < 260.0_r8)) data_2d_array = org_array
+         where((data_2d_array > 320.0_r8)) data_2d_array = org_array
+      
+      !---------------------------------------------------------------------------kyh05012014
+      elseif (trim(progvar(ivar)%varname) == 'snw_rds') then
+         where((data_2d_array < 54.526_r8)) data_2d_array = org_array       !microns
+         where((data_2d_array > 1500._r8))  data_2d_array = org_array        !microns
+         ! data_2d_array(1:4,:) = org_array(1:4,:)                                                  !kyh03122015
+      !---------------------------------------------------------------------------kyh05012014
+
+      elseif (trim(progvar(ivar)%varname) == 'T_LAKE') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = org_array
+      elseif (trim(progvar(ivar)%varname) == 'leafc') then
+         where((data_2d_array < 0.0_r8)) data_2d_array = 0.0_r8
+      endif
+
    endif
 
    deallocate(org_array)
 
 else
 
-   if     (progvar(ivar)%xtype == NF90_INT) then
-      where(data_2d_array == MISSING_I) data_2d_array = progvar(ivar)%spvalINT
-   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
-      where(data_2d_array == MISSING_R4) data_2d_array = progvar(ivar)%spvalR4
-   elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
-      where(data_2d_array == MISSING_R8) data_2d_array = progvar(ivar)%spvalR8
+  if ( replace_org == 1 ) then
+
+      write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
+      write(string2, *)'NCID is missing when replace_org = 1.'
+      call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
+                    source, revision, revdate, text2=string2)
+
+   else
+
+      if     (progvar(ivar)%xtype == NF90_INT) then
+         where(data_2d_array == MISSING_I) data_2d_array = progvar(ivar)%spvalINT
+      elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+         where(data_2d_array == MISSING_R4) data_2d_array = progvar(ivar)%spvalR4
+      elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
+         where(data_2d_array == MISSING_R8) data_2d_array = progvar(ivar)%spvalR8
+      endif
+
    endif
 
 endif
@@ -4828,7 +5209,7 @@ zwt(:) = 0.0_r8
 ! missing code with the value in the corresponding variable in the netCDF file.
 ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
 
-call vector_to_prog_var(state_vector, ivar, zwt, ncFileID)
+call vector_to_prog_var(state_vector, ivar, 0, zwt, ncFileID)
 
 PARTITION: do i = 1,ni
 
@@ -4897,12 +5278,18 @@ deallocate(zwt, wa, wt)
 end subroutine update_water_table_depth
 
 
+!===========================================================================================
 
-!===========================================================================================Long
-subroutine get_brightness_temperature_new(x, state_time, location, metadata, obs_val, istatus)
+
+subroutine get_brightness_temperature_multi(x, state_time, location, metadata, obs_val, istatus)
 ! This is THE forward observation operator. Given the state and a location, return the value
+!
+! Modified by Long ZHAO on Nov 13, 2015 
+! To include Yonghwan's column-based TB calculation
+!
 
 use   radiative_transfer_mod, only : forward_Qh
+use   rtm_main,               only : rtm_main1                !kyh04022014
 
 real(r8),               intent(in)  :: x(:)            ! state vector
 type(time_type),        intent(in)  :: state_time      ! valid time of DART state
@@ -4913,18 +5300,30 @@ integer,                intent(out) :: istatus         ! status of the calculati
 
 integer,  parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer,  parameter :: N_POL  = 2  ! code automatically computes both polarizations
-
-! variables required by forward_wg() routine
-
-real(r8) :: aux_ins(12)    ! [surface_sm, ground_T, porosity, %sand, %clay, 'g']
-real(r4) :: aux_ins_in(12)
+real(r8), parameter :: density_h2o = 1000.0_r8 ! Water density Kg/m3
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
 real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
+! grid-cell-based TB calculation -- variables required by forward_wg() routine
+real(r8) :: aux_ins(12)    ! [surface_sm, ground_T, porosity, %sand, %clay, 'g']
+real(r4) :: aux_ins_in(12)
+
+! column-based SNOW TB calculation -- variables required by rtm_main1() routine
+real(r4), allocatable, dimension(:,:) :: y ! 2D array of snow properties
+real(r4) :: aux_ins_col(15)! [nsnowlyrs, ground_T, soilsat, poros, proportionality,soil_liq,soil_ice, &
+                           ! sandf, clayf, Tcanopy, lai_vege, forc_pbot, forc_t, forc_rh, vf]  !kyh04042014
+integer  :: ctrl(4)        ! [n_lyrs, n_aux_ins, n_snow_ins, n_freq]
+real(r4) :: stickiness_snow, b_prime_vege, x_lambda_vege                                       !kyh11202014
+integer  :: year_kyh, month_kyh, day_kyh, hour_kyh, minute_kyh, second_kyh                     !kyh04042014
+
 ! support variables 
+real(r4), allocatable, dimension(:) :: tb_col
+integer,  allocatable, dimension(:) :: columns_to_get
+real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
 real(r8)  :: loc_lon, loc_lat, loc_lev
+real(r8)  :: cri_snfrac, cri_soiltemp, cri_snlayers ! criterion for snow/soil TB RTM modulers
 integer   :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
 integer   :: ilon, ilat, icol, ncols
     
@@ -4939,8 +5338,8 @@ real(r8)  :: incidence_angle ! satellite incidence angle
 ! temporal variables
 real(r8)            :: d1, d2    ! thinkness of first and second soil layers
 type(location_type) :: mylocation
-integer             :: istatus_temp(12), istatus_temp_1, istatus_temp_2
-real(r8)            :: interp_temp(12), interp_temp_1, interp_temp_2
+integer             :: istatus_temp(12), cri_istatus(3), istatus_temp_1, istatus_temp_2
+real(r8)            :: interp_temp(12),  interp_temp_1,  interp_temp_2
 
 istatus  = 1
 obs_val  = MISSING_R8
@@ -4971,33 +5370,37 @@ if (ncols == 0) then
    return
 endif
 
+allocate( columns_to_get(ncols) )
+columns_to_get(:)= -1
+call get_colids_in_gridcell(ilon, ilat, columns_to_get)
+
 ! FIXME Presently skipping gridcells with lakes.
 ! grid_cell with lake may have problems
-! if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
-!   if ((debug > 1) .and. do_output()) then
-!      write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
-!      write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
-!      call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
-!   endif
-!   deallocate(columns_to_get, tb, weights)
-!   return
-! endif
+if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
+   if ((debug > 1) .and. do_output()) then
+      write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
+      write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
+      call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
+   endif
+   deallocate(columns_to_get)
+   return
+endif
 
 ! TJH FIXME - no bulletproofing on order ... 
-   landcovercode   =  int(metadata(1))
-   frequency       =      metadata(2)
-   footprint       =      metadata(3)
-   if ( metadata(4) > 0.0_r8 ) then
-      polarization    = 'H'
-   else
-      polarization    = 'V'
-   endif
-   incidence_angle =      metadata(5)
-   ens_index       =  int(metadata(6))
-
+landcovercode   =  int(metadata(1))
+frequency       =      metadata(2)
+footprint       =      metadata(3)
+if ( metadata(4) > 0.0_r8 ) then
+   polarization = 'H'
+else
+   polarization = 'V'
+endif
+incidence_angle =      metadata(5)
+ens_index       =  int(metadata(6))
 
 if ((debug > 99) .and. do_output()) then
    write(*,*)'TJH debug ... computing gridcell   ',ilon,ilat
+   write(*,*)'TJH debug ... gridcell has columns ',columns_to_get
    write(*,*)'TJH debug ... ens_index            ',ens_index
    write(*,*)'TJH debug ... landcovercode        ',landcovercode
    write(*,*)'TJH debug ... frequency            ',frequency
@@ -5009,66 +5412,260 @@ endif
 tetad(:) = incidence_angle
 freq(:)  = frequency
 
-! begin reading RTM input data
-istatus_temp(:) = 99
-interp_temp(:)  = 0.0_r8
-
-! get soil moisture in m3m-3
+! read criterion variables
+cri_istatus(:) = 99
 mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
-call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_1  , istatus_temp_1   )
-mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
-call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_2  , istatus_temp_2   )
-if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
-   aux_ins(1) = (interp_temp_1*0.001 + interp_temp_2*0.001)/(d1+d2)
-   istatus_temp(1)=0
-endif 
+call get_grid_vertval(x, mylocation,     'T_SOISNO', cri_soiltemp, cri_istatus(1))
+call compute_gridcell_value(x, location, 'SNLSNO',   cri_snlayers, cri_istatus(2))
+call compute_gridcell_value(x, location, 'frac_sno', cri_snfrac,   cri_istatus(3))
 
-! get soil temperature in K
-mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
-call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_1  , istatus_temp_1   )
-mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
-call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_2  , istatus_temp_2   )
-if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
-   aux_ins(2) = interp_temp_1 !! only use the first layer soil temp
-   istatus_temp(2)=0
-endif
+!************************************************************************************
+!
+! Begin implementation of RTM
+!
+!************************************************************************************
 
-! get vegetation temperature in K and other RTM mv parameters
-call compute_gridcell_value(x, location, 'TVEG',       aux_ins(3), istatus_temp(3))
-
-call compute_gridcell_value(x, location, 'WATSAT',     aux_ins(4), istatus_temp(4))
-call compute_gridcell_value(x, location, 'SANDFRAC_C', aux_ins(5), istatus_temp(5))
-call compute_gridcell_value(x, location, 'CLAYFRAC_C', aux_ins(6), istatus_temp(6))
-call compute_gridcell_value(x, location, 'LAI',        aux_ins(7), istatus_temp(7))
-call compute_gridcell_value(x, location, 'FMV',        aux_ins(8), istatus_temp(8))
-call compute_gridcell_value(x, location, 'BMV',        aux_ins(9), istatus_temp(9))
-call compute_gridcell_value(x, location, 'XMV',        aux_ins(10),istatus_temp(10))
-call compute_gridcell_value(x, location, 'QMV',        aux_ins(11),istatus_temp(11))
-call compute_gridcell_value(x, location, 'HMV',        aux_ins(12),istatus_temp(12))
-
-if (sum(istatus_temp(1:12)) == 0) then
-  aux_ins_in=sngl(aux_ins)
-  if (landcovercode >= 0 ) then
-      ! the tb_out array contains the calculated brightness temperature outputs
-      ! at each polarization (rows) and frequency (columns).
-      call forward_Qh(N_FREQ, freq, tetad, aux_ins_in, tb_out)
-   else
-      ! call to alternative radiative transfer model goes here.
-   endif
-
-   if ((debug > 2) .and. do_output()) then
-      write(*,*)'gridcell ilon/ilat (',ilon,ilat,') tb_out is ', tb_out
-      write(*,*)'aux_ins is', aux_ins_in
-   endif
-
-   if (polarization == 'H') then
-      obs_val = tb_out(1,1)   ! second dimension is only 1 frequency
-   else
-      obs_val = tb_out(2,1)   ! second dimension is only 1 frequency
-   endif
-   istatus=0 
-else
+if (any(cri_istatus/= 0) .or. any((/cri_soiltemp,cri_snlayers,cri_snfrac/)==MISSING_R4)) then
+   
    obs_val = MISSING_R8
+   return
+
+elseif ((freq(1)<17.0_r4) .and. (cri_snfrac   == 0.0_r4) .and. (cri_soiltemp>273.15_r4)) then
+   
+   !===================================================================================
+   ! calculate TB using emprical Qh-RTM over veg-soil at grid-cell  base    
+
+   ! begin reading RTM input data at grid-cell scale
+   istatus_temp(:) = 99
+   interp_temp(:)  = 0.0_r8
+   aux_ins(:)      = MISSING_R4
+
+   ! get soil moisture in m3m-3
+   mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
+   call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_1, istatus_temp_1   )
+   mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
+   call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_2, istatus_temp_2   )
+   if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
+      aux_ins(1) = (interp_temp_1*0.001 + interp_temp_2*0.001)/(d1+d2) ! L1+L2
+      ! aux_ins(1) = interp_temp_1*0.001/d1                            ! L1
+      istatus_temp(1)=0
+   endif 
+
+   ! get soil temperature in K
+   mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
+   call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_1  , istatus_temp_1   )
+   mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
+   call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_2  , istatus_temp_2   )
+   if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
+      aux_ins(2) = interp_temp_1 !! only use the first layer soil temp
+      ! aux_ins(2) = (interp_temp_1*d1+interp_temp_2*d2)/(d1+d2)
+      istatus_temp(2)=0
+   endif
+
+   ! get vegetation temperature in K and other RTM mv parameters
+   call compute_gridcell_value(x, location, 'T_VEG',      aux_ins(3), istatus_temp(3))
+
+   call compute_gridcell_value(x, location, 'WATSAT',     aux_ins(4), istatus_temp(4))
+   call compute_gridcell_value(x, location, 'SANDFRAC_C', aux_ins(5), istatus_temp(5))
+   call compute_gridcell_value(x, location, 'CLAYFRAC_C', aux_ins(6), istatus_temp(6))
+   call compute_gridcell_value(x, location, 'LAI',        aux_ins(7), istatus_temp(7))
+   call compute_gridcell_value(x, location, 'FMV',        aux_ins(8), istatus_temp(8))
+   call compute_gridcell_value(x, location, 'BMV',        aux_ins(9), istatus_temp(9))
+   call compute_gridcell_value(x, location, 'XMV',        aux_ins(10),istatus_temp(10))
+   call compute_gridcell_value(x, location, 'QMV',        aux_ins(11),istatus_temp(11))
+   call compute_gridcell_value(x, location, 'HMV',        aux_ins(12),istatus_temp(12))
+
+   if ( any(istatus_temp /= 0) .or. any(aux_ins == MISSING_R4) ) then
+      obs_val = MISSING_R8
+      return
+   else
+      if (landcovercode >= 0 ) then
+         ! the tb_out array contains the calculated brightness temperature outputs
+         ! at each polarization (rows) and frequency (columns).
+         aux_ins_in = aux_ins
+         call forward_Qh(N_FREQ, freq, tetad, aux_ins_in, tb_out)
+      else
+         ! call to alternative radiative transfer model goes here.
+      endif
+
+      if ((debug > 0) .and. do_output()) then
+         write(*,*)'gridcell ilon/ilat (',ilon,ilat,') tb_out is ', tb_out
+         write(*,*)'aux_ins is', aux_ins
+      endif
+
+      if (polarization == 'H') then
+         obs_val = tb_out(1,1)   ! second dimension is only 1 frequency
+      else
+         obs_val = tb_out(2,1)   ! second dimension is only 1 frequency
+      endif
+   
+      ! if ((debug > 0) .and. do_output()) then
+      !  if (obs_val > 350.0_r8 .or. obs_val < 200.0_r8 ) then
+      !     write(*,*)'gridcell ilon/ilat (',ilon,ilat,') obs_val = ', obs_val,' skipping'
+      !     write(*,*)'aux_ins is', aux_ins
+      !     write(*,*)'prior TB beyond normal range, skipping...'
+      !     obs_val=MISSING_R8
+      !     return
+      !  endif
+      ! endif
+
+      istatus=0 
+
+   endif
+   !======================================================================================
+
+elseif ((freq(1)>17.0_r4) .and. (cri_snlayers>0.0_r4) .and. (cri_snfrac>0.5_r4)) then
+
+   !=====================================================================================
+   ! calculate TB using DMRT-RTM over snow at column base
+   ! Adapted from Yonghwan KWON
+
+   allocate( tb_col(ncols), weights(ncols) )
+   aux_ins_col(:)    = MISSING_R4
+   tb_col(:)         = 0.0_r4
+   weights(:)        = 0.0_r8
+
+   ! Loop over all columns in the gridcell that has the right location.
+
+   SNOWCOLS : do icol = 1,ncols
+
+      weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of column
+      call get_column_snow(x, columns_to_get(icol))        ! allocates snowcolumn
+
+      if ( (debug > 2) .and. do_output() ) then
+         if (snowcolumn%nlayers < 1) then
+            write(string1, *) 'column (',columns_to_get(icol),') has no snow'
+            call error_handler(E_MSG,'get_brightness_temperature',string1)
+         else
+            write(*,*)'nprops   ',snowcolumn%nprops
+            write(*,*)'nlayers  ',snowcolumn%nlayers
+            write(*,*)'t_grnd   ',snowcolumn%t_grnd
+            write(*,*)'soilsat  ',snowcolumn%soilsat
+            write(*,*)'soilpor  ',snowcolumn%soilporos
+            write(*,*)'proconst ',snowcolumn%propconst
+            write(*,*)'thickness',snowcolumn%thickness
+            write(*,*)'density  ',snowcolumn%density
+            write(*,*)'radius   ',snowcolumn%grain_radius
+            write(*,*)'liqwater ',snowcolumn%liquid_water
+            write(*,*)'temp     ',snowcolumn%temperature
+            write(*,*)'soil_liq ',snowcolumn%soil_liq       
+            write(*,*)'soil_ice ',snowcolumn%soil_ice       
+            write(*,*)'sandf    ',snowcolumn%sandf          
+            write(*,*)'clayf    ',snowcolumn%clayf          
+            write(*,*)'Tcanopy  ',snowcolumn%Tcanopy        
+            write(*,*)'lai_vege ',snowcolumn%lai_vege       
+            write(*,*)'forc_pbot',snowcolumn%forc_pbot      
+            write(*,*)'forc_t   ',snowcolumn%forc_t         
+            write(*,*)'forc_rh  ',snowcolumn%forc_rh        
+            write(*,*)'vf       ',snowcolumn%vf             
+            write(*,*)'stickiness',snowcolumn%stickiness  
+            write(*,*)'b_prime'  ,snowcolumn%b_prime      
+            write(*,*)'x_lambda' ,snowcolumn%x_lambda      
+         endif
+      endif
+
+      if ( snowcolumn%nlayers == 0 ) then
+         ! If there is no snow, the ss_model will calculate the brightness
+         ! temperature of the bare soil. To indicate this, aux_ins(1) must
+         ! be 0 and ctrl(1) must be 1
+         ctrl(1) = 1
+      else
+         ctrl(1) = snowcolumn%nlayers
+      endif
+      ctrl(2) = 0              ! not used as far as I can tell
+      ctrl(3) = snowcolumn%nprops
+      ctrl(4) = N_FREQ
+
+      aux_ins_col(1)  = real(snowcolumn%nlayers,r4)
+      aux_ins_col(2)  = snowcolumn%t_grnd
+      aux_ins_col(3)  = snowcolumn%soilsat
+      aux_ins_col(4)  = snowcolumn%soilporos
+      aux_ins_col(5)  = 0.5_r4                ! FIXME - hardwired
+      aux_ins_col(6)  = snowcolumn%soil_liq
+      aux_ins_col(7)  = snowcolumn%soil_ice
+      aux_ins_col(8)  = snowcolumn%sandf
+      aux_ins_col(9)  = snowcolumn%clayf
+      aux_ins_col(10) = snowcolumn%Tcanopy
+      aux_ins_col(11) = snowcolumn%lai_vege
+      aux_ins_col(12) = snowcolumn%forc_pbot
+      aux_ins_col(13) = snowcolumn%forc_t
+      aux_ins_col(14) = snowcolumn%forc_rh
+      aux_ins_col(15) = snowcolumn%vf
+
+      stickiness_snow = snowcolumn%stickiness
+      b_prime_vege    = snowcolumn%b_prime
+      x_lambda_vege   = snowcolumn%x_lambda
+
+      !-------------------------------------------------------------------
+      ! Ally's description of the y(:,4) variable.
+      ! LWC in kg/m2  -->  kg is mass of liquid water
+      !               -->  m2  is surface area
+      ! LWC 'kg/m2' by water density 'kg/m3', we get depth
+      ! of liquid water (m). Then, (depth of liquid water (m) / depth of snowpack (m))
+      ! provides the fraction of LWC (m water/m snowpack). 
+      ! Since, both liquid water and snowpack has same surface area (m2), 
+      ! we can also express it as 'm3/m3'.
+
+      allocate( y(ctrl(1), snowcolumn%nprops) )
+
+      if ( aux_ins_col(1) > 0 ) then
+         y(:,1)  = snowcolumn%thickness
+         y(:,2)  = snowcolumn%density
+         y(:,3)  = snowcolumn%grain_radius * 2.0_r4 / 1000000.0_r4 ! need meters (from microns)
+         y(:,4)  = snowcolumn%liquid_water / (density_h2o * snowcolumn%thickness)
+         y(:,5)  = snowcolumn%temperature
+      else ! dummy values for bare ground
+         y(:,:)  = 0.0_r4
+      endif
+
+      ! FIXME Ally ... if you have a better way to specify/determine,
+      ! a different radiative transfer model ... implement it here.
+      ! this will involve changing the following 'if' statement.
+
+      if ( any(aux_ins_col == MISSING_R4) ) then
+         obs_val = MISSING_R8
+         return
+      endif
+
+      if (landcovercode >= 0 ) then
+         ! the tb_out array contains the calculated brightness temperature outputs
+         ! at each polarization (rows) and frequency (columns).
+         call get_date(state_time, year_kyh, month_kyh, day_kyh, hour_kyh, minute_kyh, second_kyh)
+         call rtm_main1(ctrl, freq, tetad, y, aux_ins_col, tb_out, month_kyh, &
+                        stickiness_snow, b_prime_vege, x_lambda_vege)   
+      else
+         ! call to alternative radiative transfer model goes here.
+      endif
+
+      if ((debug > 2) .and. do_output()) then
+         write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
+      endif
+
+      if (polarization == 'H') then
+         tb_col(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
+      else
+         tb_col(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
+      endif
+
+      deallocate( y )
+      call destroy_column_snow()
+
+   enddo SNOWCOLS
+
+   ! FIXME ... account for heterogeneity somehow ...
+   ! must aggregate all columns in the gridcell
+   ! area-weight the average
+   obs_val = sum(tb_col * weights) / sum(weights)
+   istatus=0 
+   
+   deallocate(columns_to_get, tb_col, weights)
+   !======================================================================================
+
+else
+
+   obs_val = MISSING_R8
+   return
+
 endif
 
 if ((debug > 1) .and. do_output()) then  
@@ -5076,51 +5673,49 @@ if ((debug > 1) .and. do_output()) then
    write(*,*)'(weighted) obs value    is ', obs_val
 endif     
 
-end subroutine get_brightness_temperature_new
-!===========================================================================================Long
+end subroutine get_brightness_temperature_multi
 
 
+!===========================================================================================
 
-subroutine get_column_snow(ncid, filename, snow_column )
+
+subroutine get_column_snow(x, snow_column )
+! From Yonghwan
+!
 ! Read all the variables needed for the radiative transfer model as applied
 ! to a single CLM column.
 !
-! The treatment of snow-related variables is complicated.
-! The SNLSNO variable defines the number of snow layers with valid values.
-! HOWEVER, if the snow depth is < 0.01 m, the snow is not represented by a layer,
-! so the SNLSNO(i) is zero even though there is a trace of snow.
-! Even a trace amount of snow results in some sort of snow cover fraction.
+! Modified by Long ZHAO on Nov 11, 2015
+! To read column-based info from DART sequence
 !
-! Lakes are treated differently.
-! The SNLSNO(i) is always zero, even though there is snow.
-! The snow over lakes is wholly contained in the bulk formulation variables
-! as opposed to the snow layer variables.
 
+real(r8), intent(in)  :: x(:)         ! state vector
+integer,  intent(in)  :: snow_column
 
-! float WATSAT(levgrnd, lat, lon) ;
-!       WATSAT:long_name = "saturated soil water content (porosity)" ;
-!       WATSAT:units = "mm3/mm3" ;
-!       WATSAT:_FillValue = 1.e+36f ;
-!       WATSAT:missing_value = 1.e+36f ;
+integer, allocatable, dimension(:) :: istatusi_temp
 
-integer,          intent(in)  :: ncid
-character(len=*), intent(in)  :: filename
-integer,          intent(in)  :: snow_column
-
-real(r8) :: t_grnd(1) ! ground temperature
-integer  :: snlsno(1) ! number of snow layers
+real(r8), allocatable, dimension(:) :: snlsno        ! number of snow layers
+real(r8), allocatable, dimension(:) :: t_grnd        ! ground temperature
+real(r8), allocatable, dimension(:) :: sandfrac_ckyh    ! sand fraction (fraction)
+real(r8), allocatable, dimension(:) :: clayfrac_ckyh    ! clay fraction (fraction)
+real(r8), allocatable, dimension(:) :: t_veg_ckyh       ! vegetation physical temperature (K)
+real(r8), allocatable, dimension(:) :: elai_ckyh        ! leaf area index
+real(r8), allocatable, dimension(:) :: vf_ckyh          ! vegetated area fraction
+real(r8), allocatable, dimension(:) :: forc_pbot_ckyh   ! ground level pressure (Pa)
+real(r8), allocatable, dimension(:) :: forc_t_ckyh      ! ground level air temperature (K)
+real(r8), allocatable, dimension(:) :: forc_rh_ckyh     ! relative humidity
+real(r8), allocatable, dimension(:) :: stickiness_ckyh  ! snowpack stickiness (-)
+real(r8), allocatable, dimension(:) :: b_prime_ckyh     ! vegetation RTM coefficient (-)
+real(r8), allocatable, dimension(:) :: x_lambda_ckyh    ! vegetation RTM coefficient (-)
 
 real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
 real(r8), allocatable, dimension(:) :: dzsno, zsno, zisno, snw_rds
 
-integer               :: varid, ilayer, nlayers, ij
-integer, dimension(2) :: ncstart, nccount
+integer               :: ilayer, nlayers, ij, i
 
+allocate(istatusi_temp(20))
 ! Get the (scalar) number of active snow layers for this column.
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), &
-        'get_column_snow', 'inq_varid SNLSNO'//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, snlsno, start=(/ snow_column /), count=(/ 1 /)), &
-        'get_column_snow', 'get_var SNLSNO '//trim(filename))
+call get_column_value(x, 'SNLSNO',     snow_column, (/ 1 /), snlsno,      istatusi_temp(1))
 
 nlayers = abs(snlsno(1))
 
@@ -5136,10 +5731,41 @@ snowcolumn%propconst = 0.5     ! aux_ins(5) proportionality between grain size &
 
 ! Get the ground temperature for this column.
 ! double T_GRND(column); long_name = "ground temperature" ; units = "K" ;
-call nc_check(nf90_inq_varid(ncid,'T_GRND', varid), &
-        'get_column_snow', 'inq_varid T_GRND '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, t_grnd, start=(/ snow_column /), count=(/ 1 /)), &
-        'get_column_snow', 'get_var T_GRND '//trim(filename))
+call get_column_value(x, 'T_GRND',      snow_column, (/ 1 /), t_grnd,     istatusi_temp(2))
+
+! Get other information for this column
+! double SANDFRAC_CKYH(column); long_name='sand fraction in a column', units='fraction')
+call get_column_value(x, 'SANDFRAC_CKYH',  snow_column, (/ 1 /), sandfrac_ckyh, istatusi_temp(3))
+
+! double CLAYFRAC_CKYH(column); long_name='clay fraction in a column', units='fraction')
+call get_column_value(x, 'CLAYFRAC_CKYH',  snow_column, (/ 1 /), clayfrac_ckyh, istatusi_temp(4))
+
+! double T_VEG_CKYH(column); long_name='vegetation physical temperature in a column', units='K')
+call get_column_value(x, 'T_VEG_CKYH',     snow_column, (/ 1 /), t_veg_ckyh,    istatusi_temp(5))
+
+! double ELAI_CKYH(column); long_name='leaf area index in a column', units='-')
+call get_column_value(x, 'ELAI_CKYH',      snow_column, (/ 1 /), elai_ckyh,     istatusi_temp(6))
+
+! double VF_CKYH(column); long_name='vegetated area fraction in a column', units='fraction')
+call get_column_value(x, 'VF_CKYH',        snow_column, (/ 1 /), vf_ckyh,       istatusi_temp(7))
+
+! double FORC_PBOT_CKYH(column); long_name='atmospheric pressure', units='Pa')
+call get_column_value(x, 'FORC_PBOT_CKYH', snow_column, (/ 1 /),forc_pbot_ckyh, istatusi_temp(8))
+
+! double FORC_T_CKYH(column); long_name='atmospheric temperature', units='K')
+call get_column_value(x, 'FORC_T_CKYH',    snow_column, (/ 1 /), forc_t_ckyh,    istatusi_temp(9))
+
+! double FORC_RH_CKYH(column); long_name='atmospheric relative humidity', units='%')
+call get_column_value(x, 'FORC_RH_CKYH',   snow_column, (/ 1 /), forc_rh_ckyh,   istatusi_temp(10))
+
+! double sTICKINESS_CKYH(column); long_name=''Snowpack stickiness', units='unitless')
+call get_column_value(x, 'STICKINESS_CKYH',snow_column, (/ 1 /), stickiness_ckyh,istatusi_temp(11))
+
+! double B_PRIME_CKYH(column); long_name='Vegetation RTM coefficient', units='unitless')
+call get_column_value(x, 'B_PRIME_CKYH',   snow_column, (/ 1 /), b_prime_ckyh,   istatusi_temp(12))
+
+! double X_LAMBDA_CKYH(column); long_name='Vegetation RTM coefficient', units='unitless')
+call get_column_value(x, 'X_LAMBDA_CKYH',  snow_column, (/ 1 /), x_lambda_ckyh,  istatusi_temp(13))
 
 ! FIXME ... lake columns use a bulk formula for snow
 if (cols1d_ityplun(snow_column) == LAKE ) return ! we are a lake
@@ -5149,23 +5775,9 @@ if (cols1d_ityplun(snow_column) == LAKE ) return ! we are a lake
 ! double T_SOISNO(  column, levtot); long_name = "soil-snow temperature" ; units = "K" ;
 
 allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot))
-ncstart = (/ 1, snow_column /)
-nccount = (/ nlevtot,   1   /)
-
-call nc_check(nf90_inq_varid(ncid,'T_SOISNO', varid), &
-        'get_column_snow', 'inq_varid T_SOISNO '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, t_soisno, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var T_SOISNO '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ', varid), &
-        'get_column_snow', 'inq_varid H2OSOI_LIQ '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, h2osoi_liq, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var H2OSOI_LIQ '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), &
-        'get_column_snow', 'inq_varid H2OSOI_ICE '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var H2OSOI_ICE '//trim(filename))
+call get_column_value(x, 'T_SOISNO',   snow_column, (/ (i, i = 1, nlevtot) /), t_soisno,   istatusi_temp(14))
+call get_column_value(x, 'H2OSOI_LIQ', snow_column, (/ (i, i = 1, nlevtot) /), h2osoi_liq, istatusi_temp(15))
+call get_column_value(x, 'H2OSOI_ICE', snow_column, (/ (i, i = 1, nlevtot) /), h2osoi_ice, istatusi_temp(16))
 
 ! double   DZSNO(column, levsno); long_name = "snow layer thickness"        ; units = "m" ;
 ! double    ZSNO(column, levsno); long_name = "snow layer depth"            ; units = "m" ;
@@ -5173,28 +5785,10 @@ call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccou
 ! double snw_rds(column, levsno); long_name = "snow layer effective radius" ; units = "um" ;
 
 allocate(dzsno(nlevsno), zsno(nlevsno), zisno(nlevsno), snw_rds(nlevsno))
-ncstart = (/ 1, snow_column /)
-nccount = (/ nlevsno,   1   /)
-
-call nc_check(nf90_inq_varid(ncid,'DZSNO', varid), &
-        'get_column_snow', 'inq_varid DZSNO '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, dzsno, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var DZSNO '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'ZSNO', varid), &
-        'get_column_snow', 'inq_varid ZSNO '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, zsno, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var ZSNO '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'ZISNO', varid), &
-        'get_column_snow', 'inq_varid ZISNO '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, zisno, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var ZISNO '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'snw_rds', varid), &
-        'get_column_snow', 'inq_varid snw_rds '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, snw_rds, start=ncstart, count=nccount), &
-        'get_column_snow', 'get_var snw_rds '//trim(filename))
+call get_column_value(x, 'DZSNO',      snow_column, (/ (i, i = 1, nlevsno) /), dzsno,      istatusi_temp(17))
+call get_column_value(x, 'ZSNO',       snow_column, (/ (i, i = 1, nlevsno) /), zsno,       istatusi_temp(18))
+call get_column_value(x, 'ZISNO',      snow_column, (/ (i, i = 1, nlevsno) /), zisno,      istatusi_temp(19))
+call get_column_value(x, 'snw_rds',    snow_column, (/ (i, i = 1, nlevsno) /), snw_rds,    istatusi_temp(20))
 
 ! Print a summary so far
 if ((debug > 3) .and. do_output()) then
@@ -5217,7 +5811,20 @@ allocate( snowcolumn%thickness(nlayers)     , &
 
 ! Fill the output array ... finally
 
-snowcolumn%t_grnd = t_grnd(1)
+snowcolumn%t_grnd       = t_grnd(1)
+snowcolumn%soil_liq     = h2osoi_liq(6)    !soil layer index starts from 6 (since snow layer index is from 1 to 5)
+snowcolumn%soil_ice     = h2osoi_ice(6)
+snowcolumn%sandf        = sandfrac_ckyh(1)
+snowcolumn%clayf        = clayfrac_ckyh(1)
+snowcolumn%Tcanopy      = t_veg_ckyh(1)
+snowcolumn%lai_vege     = elai_ckyh(1)
+snowcolumn%forc_pbot    = forc_pbot_ckyh(1)
+snowcolumn%forc_t       = forc_t_ckyh(1)
+snowcolumn%forc_rh      = forc_rh_ckyh(1)
+snowcolumn%vf           = vf_ckyh(1)
+snowcolumn%stickiness   = stickiness_ckyh(1)
+snowcolumn%b_prime      = b_prime_ckyh(1)
+snowcolumn%x_lambda     = x_lambda_ckyh(1)
 
 ij = 0
 do ilayer = (nlevsno-nlayers+1),nlevsno
@@ -5229,11 +5836,12 @@ do ilayer = (nlevsno-nlayers+1),nlevsno
    snowcolumn%temperature(ij)  = t_soisno(ilayer)
    if ((debug > 3) .and. do_output()) &
       write(*,*)'   get_column_snow: filling column ',snow_column, &
-                ' layer ',ij,' with info from ilayer ',ilayer
+                '      layer ',ij,' with info from ilayer ',ilayer
 enddo
 
 deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
 deallocate(dzsno, zsno, zisno, snw_rds)
+deallocate(istatusi_temp)
 
 end subroutine get_column_snow
 
@@ -5253,6 +5861,19 @@ snowcolumn%t_grnd    = 0.0_r4
 snowcolumn%soilsat   = 0.0_r4
 snowcolumn%soilporos = 0.0_r4
 snowcolumn%propconst = 0.0_r4
+
+!--------------------------------kyh04032014
+snowcolumn%soil_liq  = 0.0_r4
+snowcolumn%soil_ice  = 0.0_r4
+snowcolumn%sandf     = 0.0_r4
+snowcolumn%clayf     = 0.0_r4
+snowcolumn%Tcanopy    = 0.0_r4
+snowcolumn%lai_vege  = 0.0_r4
+snowcolumn%forc_pbot = 0.0_r4
+snowcolumn%forc_t    = 0.0_r4
+snowcolumn%forc_rh   = 0.0_r4
+snowcolumn%vf        = 0.0_r4
+!--------------------------------kyh04032014
 
 end subroutine destroy_column_snow
 
