@@ -116,7 +116,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: string1, string2, string3
+character(len=256) :: string1, string2, string3, string4
 logical, save :: module_initialized = .false.
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -158,11 +158,13 @@ character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: clm_restart_filename = 'clm_restart.nc'
 character(len=256) :: clm_history_filename = 'clm_history.nc'
 character(len=256) :: casename = 'clm_dart'
+character(len=256) :: coefg_nc = 'coefg_amsre2003_10D.nc'
 
 character(len=obstypelength) :: clm_state_variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
-   casename,                    &
+   casename,                    & 
+   coefg_nc,                    &
    clm_restart_filename,        &
    clm_history_filename,        &
    output_state_vector,         &
@@ -202,6 +204,20 @@ type(progvartype), dimension(max_state_variables) :: progvar
 !----------------------------------------------------------------------
 ! Properties required for a snow column
 !----------------------------------------------------------------------
+
+
+type soilprops
+   private
+   integer  :: nlayers  ! snow layers
+   real(r4) :: ssm      ! aux_ins(1) surface soil moisture [m3m-3]
+   real(r4) :: stg      ! aux_ins(2) surface layer temperature [k]   
+   real(r4) :: sat      ! aux_ins(3) topsoil porosity
+   real(r4) :: ssand    ! aux_ins(4) soil sand content percentage (0~100)
+   real(r4) :: sclay    ! aux_ins(5) soil clay content percentage (0~100)
+   real(r4) :: scoefg   ! aux_ins(6) background value for coefficient "g"
+end type soilprops
+
+type(soilprops) :: soilcolumn
 
 type snowprops
    private
@@ -2328,6 +2344,7 @@ indexN = progvar(ivar)%indexN ! in the DART state vector, stop  looking here
 
 ! BOMBPROOFING - check for a vertical dimension for this variable
 if (progvar(ivar)%maxlevels > 1) then
+   write(*,*)'progvar(ivar)%maxlevels = ',progvar(ivar)%maxlevels  !====Long
    write(string1, *)'Variable '//trim(varstring)//' cannot use this routine.'
    write(string2, *)'use get_grid_vertval() instead.'
    call error_handler(E_ERR,'compute_gridcell_value', string1, &
@@ -2732,7 +2749,8 @@ real(r8), dimension(:,:), intent(out) :: data_2d_array
 integer, optional,        intent(in)  :: ncid
 
 integer :: i,j,ii, VarID
-real(r8), allocatable, dimension(:,:) :: org_array
+real(r8), allocatable, dimension(:,:) :: org_array, org_porosity
+real(r8), allocatable, dimension(:)   :: org_watsat
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2761,12 +2779,24 @@ endif
 if (present(ncid)) then
 
    allocate(org_array(size(data_2d_array,1),size(data_2d_array,2)))
+   allocate(org_porosity(15,size(data_2d_array,2)))      !============Long
+   allocate(org_watsat(size(data_2d_array,2)))           !============Long
 
    call nc_check(nf90_inq_varid(ncid, progvar(ivar)%varname, VarID), &
             'vector_to_2d_prog_var', 'inq_varid '//trim(progvar(ivar)%varname))
 
    call nc_check(nf90_get_var(ncid, VarID, org_array), &
             'vector_to_2d_prog_var', 'get_var '//trim(progvar(ivar)%varname))
+
+   call nc_check(nf90_inq_varid(ncid, 'WATSAT', VarID), &
+            'vector_to_2d_prog_var', 'inq_varid WATSAT')
+
+   call nc_check(nf90_get_var(ncid, VarID, org_porosity), &
+            'vector_to_2d_prog_var', 'get_var WATSAT')
+
+   ! to convert top layer soil porosity with unit: m3/m3 to kg/m2
+   where((org_porosity>1)) org_porosity=0.5_r8
+   org_watsat=org_porosity(1,:)*(LEVGRND(6)+LEVGRND(7))/2*1000
 
    ! restoring the indeterminate original values
 
@@ -2781,6 +2811,20 @@ if (present(ncid)) then
    elseif (trim(progvar(ivar)%varname) == 'ZISNO') then
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'H2OSOI_LIQ') then
+      !===========================================================Long
+      ! Currently, only update the first layer of soil, 
+      ! i.e., the 6th layer in levtot.
+      ! So replace other layers' value with original value.
+      data_2d_array(1:5,:)  = org_array(1:5,:)
+      data_2d_array(7:20,:) = org_array(7:20,:)
+
+      ! change the positive increment to negative
+      ! data_2d_array(6,:) = org_array(6,:)-(data_2d_array(6,:)-org_array(6,:))
+
+!      where(isnan(data_2d_array)) data_2d_array = org_array
+
+      where((data_2d_array(6,:) > org_watsat)) data_2d_array(6,:) = org_watsat 
+      !===========================================================Long
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
@@ -2793,6 +2837,8 @@ if (present(ncid)) then
    endif
 
    deallocate(org_array)
+   deallocate(org_porosity)
+   deallocate(org_watsat)
 
 endif
 
@@ -4325,7 +4371,7 @@ subroutine get_brightness_temperature(state_time, location, metadata, obs_val, i
 ! be part of the DART state vector. They are currently directly harvested from the CLM
 ! restart file. As such, the posteriors are not informative.
 
-use   radiative_transfer_mod, only : ss_model
+use   radiative_transfer_mod, only : forward_wg
 
 type(time_type),        intent(in)  :: state_time      ! valid time of DART state
 type(location_type),    intent(in)  :: location        ! observation location
@@ -4337,17 +4383,15 @@ integer,  parameter :: N_FREQ = 1  ! observations come in one frequency at a tim
 integer,  parameter :: N_POL  = 2  ! code automatically computes both polarizations
 real(r8), parameter :: density_h2o = 1000.0_r8 ! Water density Kg/m3
 
-! variables required by ss_snow() routine
-real(r4), allocatable, dimension(:,:) :: y ! 2D array of snow properties
-real(r4) :: aux_ins(5)     ! [nsnowlyrs, ground_T, soilsat, poros, proportionality]
-integer  :: ctrl(4)        ! [n_lyrs, n_aux_ins, n_snow_ins, n_freq]
+! variables required by forward_wg() routine
+
+real(r4) :: aux_ins(6)     ! [surface_sm, ground_T, porosity, %sand, %clay, 'g']
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
 real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
-real(r4) :: tb_ubc(N_POL,N_FREQ) ! upper boundary condition brightness temperature
 real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
 ! support variables 
-integer                             :: ncid
+integer                             :: ncid, ncidcoefg
 character(len=256)                  :: filename
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
@@ -4399,6 +4443,7 @@ weights(:)        = 0.0_r8
 call get_colids_in_gridcell(ilon, ilat, columns_to_get)
 
 ! FIXME Presently skipping gridcells with lakes.
+! grid_cell with lake may have problems
 ! get_column_snow() must also modified to use bulk snow formulation for lakes.
 if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
    if ((debug > 1) .and. do_output()) then
@@ -4438,88 +4483,62 @@ tetad(:) = incidence_angle
 freq(:)  = frequency
 
 ! need to know which restart file to use to harvest information
+
+! read Tg and sm variables from CLM restart file =============Long
+! filename = clm_restart_filename
 call build_clm_instance_filename(ens_index, state_time, filename)
+! write(*,*)'mark-01_Long'                           !====Long
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
               'get_brightness_temperature','open '//trim(filename))
+call nc_check(nf90_open(trim(coefg_nc), NF90_NOWRITE, ncidcoefg), &
+              'get_brightness_temperature','open '//trim(coefg_nc))
 
+! write(*,*)'mark-02_Long'                           !====Long
 ! Loop over all columns in the gridcell that has the right location.
 
-SNOWCOLS : do icol = 1,ncols
+SOILCOLS : do icol = 1,ncols
 
-   weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of column
-   call get_column_snow(ncid, filename, columns_to_get(icol)) ! allocates snowcolumn
+   weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of columin
+!   write(*,*)'Start to read soilcolumn data for column: ',columns_to_get(icol)
+   call get_column_soil(ncid, filename, columns_to_get(icol)) 
+                                                    ! allocates soilcolumn====Long
+!   write(*,*)'Successfully read soilcolumn data for column: ',columns_to_get(icol)
+   call get_column_coefg(ncidcoefg, coefg_nc, columns_to_get(icol))
+   
+   ! FIXME Presently skipping gridcells with snow.
+!   if ( soilcolumn%nlayers > 0 )  then
+!      if ((debug > 1) .and. do_output()) then
+!         write(string3, *) 'gridcell ilon/ilat (',ilon,ilat,') has snow columns - skipping.'
+!         write(string4, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
+!         call error_handler(E_MSG,'get_brightness_temperature',string3,text2=string4)
+!      endif
+!      deallocate(columns_to_get, tb, weights)
+!      return
+!   endif
+   
+   if ( (debug > 2) .and. do_output() ) then      !===Long
+         write(*,*)'column = ',columns_to_get(icol)!===Long
+         write(*,*)'ssm   ',soilcolumn%ssm
+         write(*,*)'stg   ',soilcolumn%stg
+         write(*,*)'sat   ',soilcolumn%sat
+         write(*,*)'ssand ',soilcolumn%ssand
+         write(*,*)'sclay ',soilcolumn%sclay
+         write(*,*)'scoefg',soilcolumn%scoefg
+   endif                                           !===Long
 
-   if ( (debug > 2) .and. do_output() ) then
-      if (snowcolumn%nlayers < 1) then
-         write(string1, *) 'column (',columns_to_get(icol),') has no snow'
-         call error_handler(E_MSG,'get_brightness_temperature',string1)
-      else
-         write(*,*)'nprops   ',snowcolumn%nprops
-         write(*,*)'nlayers  ',snowcolumn%nlayers
-         write(*,*)'t_grnd   ',snowcolumn%t_grnd
-         write(*,*)'soilsat  ',snowcolumn%soilsat
-         write(*,*)'soilpor  ',snowcolumn%soilporos
-         write(*,*)'proconst ',snowcolumn%propconst
-         write(*,*)'thickness',snowcolumn%thickness
-         write(*,*)'density  ',snowcolumn%density
-         write(*,*)'radius   ',snowcolumn%grain_radius
-         write(*,*)'liqwater ',snowcolumn%liquid_water
-         write(*,*)'temp     ',snowcolumn%temperature
-      endif
-   endif
+   aux_ins(1) = soilcolumn%ssm
+   aux_ins(2) = soilcolumn%stg
+   aux_ins(3) = soilcolumn%sat
+   aux_ins(4) = soilcolumn%ssand
+   aux_ins(5) = soilcolumn%sclay
+   aux_ins(6) = soilcolumn%scoefg
 
-   if ( snowcolumn%nlayers == 0 ) then
-      ! If there is no snow, the ss_model will calculate the brightness
-      ! temperature of the bare soil. To indicate this, aux_ins(1) must
-      ! be 0 and ctrl(1) must be 1
-      ctrl(1) = 1
-   else
-      ctrl(1) = snowcolumn%nlayers
-   endif
-   ctrl(2) = 0              ! not used as far as I can tell
-   ctrl(3) = snowcolumn%nprops
-   ctrl(4) = N_FREQ
-
-   aux_ins(1) = real(snowcolumn%nlayers,r4)
-   aux_ins(2) = snowcolumn%t_grnd
-   aux_ins(3) = snowcolumn%soilsat
-   aux_ins(4) = snowcolumn%soilporos
-   aux_ins(5) = 0.5_r4                ! FIXME - hardwired
-
-   !-------------------------------------------------------------------
-   ! Ally's description of the y(:,4) variable.
-   ! LWC in kg/m2  -->  kg is mass of liquid water
-   !               -->  m2  is surface area
-   ! LWC 'kg/m2' by water density 'kg/m3', we get depth
-   ! of liquid water (m). Then, (depth of liquid water (m) / depth of snowpack (m))
-   ! provides the fraction of LWC (m water/m snowpack). 
-   ! Since, both liquid water and snowpack has same surface area (m2), 
-   ! we can also express it as 'm3/m3'.
-
-   allocate( y(ctrl(1), snowcolumn%nprops) )
-
-   if ( aux_ins(1) > 0 ) then
-      y(:,1)  = snowcolumn%thickness
-      y(:,2)  = snowcolumn%density
-      y(:,3)  = snowcolumn%grain_radius * 2.0_r4 / 1000000.0_r4 ! need meters (from microns)
-      y(:,4)  = snowcolumn%liquid_water / (density_h2o * snowcolumn%thickness)
-      y(:,5)  = snowcolumn%temperature
-   else ! dummy values for bare ground
-      y(:,:)  = 0.0_r4
-   endif
-
-   ! FIXME Ally ... if you have a better way to specify/determine,
-   ! tb_ubc do it here. Call your atmospheric model to calculate it.
-   tb_ubc(:,N_FREQ) = (/ 2.7_r4, 2.7_r4 /)
-
-   ! If the landcovercode indicates that you want to use
-   ! a different radiative transfer model ... implement it here.
    ! this will involve changing the following 'if' statement.
 
    if (landcovercode >= 0 ) then
       ! the tb_out array contains the calculated brightness temperature outputs
       ! at each polarization (rows) and frequency (columns).
-      call ss_model(ctrl, freq, tetad, y, tb_ubc, aux_ins, tb_out)
+      call forward_wg(N_FREQ, freq, tetad, aux_ins, tb_out)
    else
       ! call to alternative radiative transfer model goes here.
    endif
@@ -4534,24 +4553,26 @@ SNOWCOLS : do icol = 1,ncols
       tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
    endif
 
-   deallocate( y )
-   call destroy_column_snow()
+!   if (isnan(tb(icol))) write(*,*)'Bad Tb at icol= ',icol
+!   if (tb(icol)<200 .or. tb(icol)>300) write(*,*)'Bad Tb at icol=; Tb= ',icol,tb(icol)      
 
-enddo SNOWCOLS
+   call destroy_column_soil()
+
+enddo SOILCOLS
 
 call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(filename))
+call nc_check(nf90_close(ncidcoefg), 'get_brightness_temperature','close '//trim(coefg_nc))
 
 ! FIXME ... account for heterogeneity somehow ...
 ! must aggregate all columns in the gridcell
 ! area-weight the average
 obs_val = sum(tb * weights) / sum(weights)
 
-if ((debug > 1) .and. do_output()) then
+ if ((debug > 1) .and. do_output()) then  !===Long
    write(*,*)'tb      for all columns is ',tb
    write(*,*)'weights for all columns is ',weights
    write(*,*)'(weighted) obs value    is ',obs_val
-   write(*,*)
-endif
+ endif                                     !===Long
 
 deallocate( columns_to_get, tb, weights )
 
@@ -4736,6 +4757,152 @@ snowcolumn%propconst = 0.0_r4
 
 end subroutine destroy_column_snow
 
+subroutine get_column_soil(ncid, filename, soil_column )
+! Read all the variables needed for the radiative transfer model as applied
+! to a single CLM column.
+!
+! float WATSAT(levgrnd, lat, lon) ;
+!       WATSAT:long_name = "saturated soil water content (porosity)" ;
+!       WATSAT:units = "mm3/mm3" ;
+!       WATSAT:_FillValue = 1.e+36f ;
+!       WATSAT:missing_value = 1.e+36f ;
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: filename
+integer,          intent(in)  :: soil_column
+
+integer  :: snlsno(1) ! number of snow layers
+
+real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno, watsat
+real(r8)                            :: sandfrac_c(1), clayfrac_c(1) 
+
+integer               :: varid, ilayer, nlayers, ij
+integer, dimension(2) :: ncstart, nccount, nccountw
+
+! FIXME ... lake columns --- passed
+if (cols1d_ityplun(soil_column) == LAKE ) return ! we are a lake
+
+! Get the (scalar) number of active snow layers for this column.
+call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), &
+        'get_column_soil', 'inq_varid SNLSNO'//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, snlsno, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_soil', 'get_var SNLSNO '//trim(filename))
+
+nlayers = abs(snlsno(1))
+
+! double H2OSOI_LIQ(column, levtot); long_name = "liquid water" ; units = "kg/m2" ;
+! double H2OSOI_ICE(column, levtot); long_name = "ice lens"     ; units = "kg/m2" ;
+! double T_SOISNO(  column, levtot); long_name = "soil-snow temperature" ; units = "K" ;
+! double SANDFRAC_C(column); long_name = "first layer sand fraction"; units = "fraction";
+! double CLAYFRAC_C(column); long_name = "first layer clay fraction"; units = "fraction";
+! double WATSAT(column, levgrnd); long_name = "soil porosity"; units = "fraction";
+
+allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot), watsat(nlevgrnd))
+ncstart = (/ 1, soil_column /)
+nccount = (/ nlevtot,   1   /)
+nccountw= (/ nlevgrnd,  1   /)
+
+call nc_check(nf90_inq_varid(ncid,'T_SOISNO', varid), &
+        'get_column_soil', 'inq_varid T_SOISNO '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, t_soisno, start=ncstart, count=nccount), &
+        'get_column_soil', 'get_var T_SOISNO '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ', varid), &
+        'get_column_soil', 'inq_varid H2OSOI_LIQ '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, h2osoi_liq, start=ncstart, count=nccount), &
+        'get_column_soil', 'get_var H2OSOI_LIQ '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), &
+        'get_column_soil', 'inq_varid H2OSOI_ICE '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
+        'get_column_soil', 'get_var H2OSOI_ICE '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'WATSAT', varid), &
+        'get_column_soil', 'inq_varid WATSAT '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, watsat, start=ncstart, count=nccountw), &
+        'get_column_soil', 'get_var WATSAT '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'SANDFRAC_C', varid), &
+        'get_column_soil', 'inq_varid SANDFRAC_C '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, sandfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_soil', 'get_var SANDFRAC_C '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'CLAYFRAC_C', varid), &
+        'get_column_soil', 'inq_varid CLAYFRAC_C '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, clayfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_soil', 'get_var CLAYFRAC_C '//trim(filename))
+
+where((watsat>1)) watsat=0.5_r8
+
+! Print a summary so far
+if ((debug > 3) .and. do_output()) then
+   write(*,*)'get_column_soil: raw CLM data for column ',soil_column
+   write(*,*)'  # of column ityp, snow layers :', cols1d_ityplun(soil_column), nlayers
+   write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevtot)
+   write(*,*)'  h2osoi_ice :', h2osoi_ice(1:nlevtot)
+   write(*,*)'  t_soisno   :',   t_soisno(1:nlevtot)
+   write(*,*)'  sandfrac_c :', sandfrac_c
+   write(*,*)'  clayfrac_c :', clayfrac_c
+   write(*,*)'  watsat     :',     watsat(1:nlevgrnd)
+endif
+
+! Fill the output array ... finally
+soilcolumn%nlayers = nlayers
+! Currently, only consider the first layer of topsoil, i.e., the 6th layer of levtot
+soilcolumn%ssm = h2osoi_liq(6) * 0.001 / ((LEVGRND(6)+LEVGRND(7))/2) ! convert unit from kg/m2 to m3/m3
+soilcolumn%stg = t_soisno(6) 
+soilcolumn%sat    = watsat(1)
+soilcolumn%ssand  = sandfrac_c(1) * 100
+soilcolumn%sclay  = clayfrac_c(1) * 100
+
+deallocate(h2osoi_liq, h2osoi_ice, t_soisno, watsat)
+
+end subroutine get_column_soil
+
+
+
+subroutine get_column_coefg(ncid, filename, soil_column)
+! Read "coefg" for radiative transfer model
+! follow Njoku and Chan (2006)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: filename
+integer,          intent(in) :: soil_column
+
+real(r8) :: coefg(1)
+
+integer  :: varid
+
+! double coefg(column); long_name = "coefg"; units ="none";
+
+call nc_check(nf90_inq_varid(ncid,'coefg', varid), &
+        'get_column_coefg', 'inq_varid coefg '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, coefg, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_coefg', 'get_var coefg '//trim(filename))
+
+if ((debug > 3) .and. do_output()) then
+   write(*,*)'get_column_coefg: raw COEFG data for column ',soil_column
+   write(*,*)'  coefg :', coefg
+endif
+
+! Fill the output value
+soilcolumn%scoefg = coefg(1)
+
+end subroutine get_column_coefg
+
+
+
+subroutine destroy_column_soil
+
+soilcolumn%nlayers= 0
+soilcolumn%ssm    = 0.0_r4
+soilcolumn%stg    = 0.0_r4
+soilcolumn%sat    = 0.0_r4
+soilcolumn%ssand  = 0.0_r4
+soilcolumn%sclay  = 0.0_r4
+soilcolumn%scoefg = 0.0_r4
+
+end subroutine destroy_column_soil
 
 !======================================================================
 
