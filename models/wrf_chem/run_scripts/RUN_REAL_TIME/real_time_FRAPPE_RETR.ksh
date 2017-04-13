@@ -14,6 +14,12 @@ export CYCLE_STR_DATE=2014072018
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072018
 export CYCLE_DATE=${CYCLE_STR_DATE}
+export NL_FAC_OBS_ERROR_MOPITT=1.00
+export NL_FAC_OBS_ERROR_MOPITT=2.00
+export NL_FAC_OBS_ERROR_MOPITT=4.00
+export NL_FAC_OBS_ERROR_MOPITT=10.00
+export NL_FAC_OBS_ERROR_MOPITT=3.00
+export NL_FAC_OBS_ERROR_MOPITT=2.50
 export RETRIEVAL_TYPE=RETR
 export ADD_EMISS=.false.
 export VARLOC=.true.
@@ -243,25 +249,25 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=true
+   export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
-   export RUN_AIRNOW_O3_OBS=true
-   export RUN_AIRNOW_CO_OBS=true
-   export RUN_MODIS_AOD_OBS=true
-   export RUN_MET_OBS=true
+   export RUN_AIRNOW_O3_OBS=false
+   export RUN_AIRNOW_CO_OBS=false
+   export RUN_MODIS_AOD_OBS=false
+   export RUN_MET_OBS=false
    export RUN_COMBINE_OBS=true
    export RUN_PREPROCESS_OBS=true
 #
@@ -278,13 +284,13 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=true
-      export RUN_UPDATE_BC=true
-      export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_UPDATE_BC=false
+      export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=true
+      export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=true
+      export RUN_ENSEMBLE_MEAN_OUTPUT=false
    fi
 else
    export RUN_GEOGRID=false
@@ -2939,6 +2945,7 @@ EOFF
    export NL_FILEDIR=\'./\' 
    export NL_FILENAME=${D_DATE}.dat
    export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_MOPITT}
 #
 # USE MOPITT DATA 
    rm -rf input.nml

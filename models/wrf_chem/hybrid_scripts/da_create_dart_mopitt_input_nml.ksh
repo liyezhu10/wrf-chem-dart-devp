@@ -11,6 +11,7 @@ rm -f input.nml
 touch input.nml
 cat > input.nml << EOF
 &create_mopitt_obs_nml
+   fac_obs_error               = ${NL_FAC_OBS_ERROR}
    year                        = ${NL_YEAR}
    month                       = ${NL_MONTH}
    day                         = ${NL_DAY}

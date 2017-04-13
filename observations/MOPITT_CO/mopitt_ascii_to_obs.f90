@@ -141,7 +141,7 @@ real*8                          :: latitude, longitude, level
 real*8                          :: co_psurf, err, co_error, co_prior
 real                            :: bin_beg, bin_end
 real                            :: sec, lat, lon, nlevels
-real                            :: pi ,rad2deg, re, wt, corr_err, fac
+real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
 real                            :: ln_10, xg_sec_avg
 real                            :: irot, nlvls_fix
 real*8, dimension(1000)         :: unif
@@ -195,7 +195,7 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !     CPSR - compact phase space retrievals
 !
 namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         MOPITT_CO_retrieval_type
+         MOPITT_CO_retrieval_type,fac_obs_error
 !
 ! Set constants
 ln_10=log(10.)
@@ -210,6 +210,7 @@ day_lst=-9999
 hour_lst=-9999
 minute_lst=-9999
 second_lst=-9999 
+fac=1.0
 !
 call find_namelist_in_file("input.nml", "create_mopitt_obs_nml", iunit)
 read(iunit, nml = create_mopitt_obs_nml, iostat = io)
@@ -249,6 +250,9 @@ call set_qc_meta_data(seq, 1, qc_meta_data)
 
 qc_mopitt(:)=100
 qc_thinning(:)=100
+!
+! assign obs error scale factor
+fac=fac_obs_error
 
 !-------------------------------------------------------
 ! Read MOPITT obs
@@ -462,10 +466,6 @@ qc_thinning(:)=100
 !
 ! Assign cov_use
         cov_use(:,:)=cov_r(:,:)
-!
-! Scale cov_use
-        fac=1.0
-        cov_use(:,:)=fac*cov_use(:,:)
         ret_cov(:,:)=cov_use(:,:)
 !
 ! Calculate prior term
@@ -915,7 +915,7 @@ qc_thinning(:)=100
 ! RAW with NO ROT
            if(trim(MOPITT_CO_retrieval_type) .eq. 'RAWR') then
               xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
-              xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+              xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
               xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -925,7 +925,7 @@ qc_thinning(:)=100
 ! RET with NO ROT
            if(trim(MOPITT_CO_retrieval_type) .eq. 'RETR') then
               xcomp(k)=xg_ret_x_r(i,j,k+kstr-1)
-              xcomperr(k)=xg_ret_err(i,j,k+kstr-1)
+              xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
               xapr(k)=xg_ret_adj_x_p(i,j,k+kstr-1)
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -934,7 +934,7 @@ qc_thinning(:)=100
 !
 ! RAW QOR with NO ROT
 !           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
-!           xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+!           xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -942,7 +942,7 @@ qc_thinning(:)=100
 !
 ! RET QOR with NO ROT
 !           xcomp(k)=xg_ret_adj_x_r(i,j,k+kstr-1)
-!           xcomperr(k)=xg_ret_err(i,j,k+kstr-1)
+!           xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -951,7 +951,7 @@ qc_thinning(:)=100
 ! RET QOR with ROT and NO SCALE
 ! comment scaling
 !           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=err2_rs_r(k)
+!           xcomperr(k)=fac*err2_rs_r(k)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=rs_avg_k(k,l)
@@ -961,7 +961,7 @@ qc_thinning(:)=100
 ! uncomment scaling
            if(trim(MOPITT_CO_retrieval_type) .eq. 'QOR') then
               xcomp(k)=rs_x_r(k)
-              xcomperr(k)=err2_rs_r(k)
+              xcomperr(k)=fac*err2_rs_r(k)
               xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=rs_avg_k(k,l)
@@ -971,7 +971,7 @@ qc_thinning(:)=100
 ! RET CPSR with ROT and NO SCALE
 ! comment scaling
 !           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=err2_rs_r(k)
+!           xcomperr(k)=fac*err2_rs_r(k)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=rs_avg_k(k,l)
@@ -981,7 +981,7 @@ qc_thinning(:)=100
 ! uncomment scaling
            if(trim(MOPITT_CO_retrieval_type) .eq. 'CPSR') then
               xcomp(k)=rs_x_r(k)
-              xcomperr(k)=err2_rs_r(k)
+              xcomperr(k)=fac*err2_rs_r(k)
               xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=rs_avg_k(k,l)

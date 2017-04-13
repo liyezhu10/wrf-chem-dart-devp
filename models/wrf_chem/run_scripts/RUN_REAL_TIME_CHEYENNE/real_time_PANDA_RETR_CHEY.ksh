@@ -126,12 +126,10 @@ export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-####export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
-export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA
-####export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
-export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/FRAPPE_REAL_TIME_DATA/mozart_forecasts
+export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
+export MOZBC_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
-export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions_PANDA
+export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
 export EXPERIMENT_WRFFIRECHEMI_DIR=${EXPERIMENT_DATA_DIR}/fire_emissions
 export EXPERIMENT_WRFBIOCHEMI_DIR=${EXPERIMENT_DATA_DIR}/bio_emissions
 export EXPERIMENT_COLDENS_DIR=${EXPERIMENT_DATA_DIR}/wes_coldens
@@ -243,14 +241,14 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_METGRID=false
    export RUN_REAL=false
    export RUN_PERT_WRFCHEM_MET_IC=false
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=true
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
@@ -415,6 +413,7 @@ export GRIB_PART1=gfs_4_
 export GRIB_PART2=.g2.tar
 #
 # COMPUTER PARAMETERS:
+export LOGIN_ID=mizzi
 export PROJ_NUMBER=NACD0009
 export PROJ_NUMBER_ACD=P19010000
 export PROJ_NUMBER_NSC=NACD0009
@@ -438,7 +437,7 @@ export FILTER_JOB_CLASS=geyser
 export FILTER_NODES=2
 export FILTER_CORES=36
 export FILTER_PROCS=36
-export MISC_TIME_LIMIT=00:20:00
+export MISC_TIME_LIMIT=01:00:00
 export MISC_JOB_CLASS=regular
 export MISC_NODES=2
 export MISC_CORES=36
@@ -1187,7 +1186,7 @@ if [[ ${RUN_GEOGRID} = "true" ]] then
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=geogrid_${RANDOM}
+   export JOBRND=${RANDOM}_geogrid
    rm -rf geogrid_*.o*
    rm -rf geogrid.log.0*
    cat << EOF >job.ksh
@@ -1355,7 +1354,7 @@ if [[ ${RUN_METGRID} = "true" ]]; then
    rm -rf *.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=metgrid_${RANDOM}
+   export JOBRND=${RANDOM}_metgrid
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -1392,8 +1391,7 @@ if [[ ${RUN_REAL} = "true" ]]; then
    mkdir -p ${RUN_DIR}/${DATE}/real
    cd ${RUN_DIR}/${DATE}/real
 #
-#   cp ${WRF_DIR}/main/real.exe ./.
-   cp /glade/scratch/duda/arthur/real/real.exe ./.
+   cp ${WRF_DIR}/main/real.exe ./.
    cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v1 ./.
    cp ${EXPERIMENT_HIST_IO_DIR}/hist_io_flds_v2 ./.
 #
@@ -1450,7 +1448,7 @@ if [[ ${RUN_REAL} = "true" ]]; then
       rm -rf *.out
       touch job.ksh
       RANDOM=$$
-      export JOBRND=real_${RANDOM}
+      export JOBRND=${RANDOM}_real
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -1899,7 +1897,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=wrfda_cr_${TRANDOM}
+         export JOBRND=${TRANDOM}_wrfda_cr
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -1957,7 +1955,7 @@ EOF
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=wrfda_fr_${TRANDOM}
+         export JOBRND=${TRANDOM}_wrfda_fr
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -1981,13 +1979,14 @@ else
 fi
 EOF
 #
-         qsub -Wblock=true job.ksh 
+         qsub job.ksh 
          let MEM=${MEM}+1
       done
 #
 # Wait for WRFDA to complete for all members
       cd ${RUN_DIR}/${DATE}/wrfchem_met_ic
       ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
+#      echo APM: da_run_hold.ksh completed
 #
       let MEM=1
       while [[ ${MEM} -le ${NUM_MEMBERS} ]]; do
@@ -2078,18 +2077,19 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
          rm -rf *.err
          rm -rf *.out
          touch job.ksh
-         export JOBRND=pert_bc_${TRANDOM}
+         export JOBRND=${TRANDOM}_pert_bc
          cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
 #PBS -A ${PROJ_NUMBER_ACD}
-#PBS -l walltime=${MISC_TIME_LIMIT}
+#PBS -l walltime=${REAL_TIME_LIMIT}
 #PBS -q regular 
 #PBS -j oe
 #PBS -m abe
-#PBS -l select=${MISC_NODES}:ncpus=${MISC_CORES}:mpiprocs=${MISC_PROCS}
+#PBS -l select=${REAL_NODES}:ncpus=${REAL_CORES}:mpiprocs=${REAL_PROCS}
 #
-mpiexec_mpt omplace ./pert_wrf_bc  > index.html 2>&1 
+#mpiexec_mpt omplace ./pert_wrf_bc  > index.html 2>&1 
+./pert_wrf_bc  > index.html 2>&1 
 #
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -2155,7 +2155,38 @@ domains = 2,
 EOF
 #
 # RUN exo_coldens
-   ./exo_coldens < exo_coldens.inp
+#
+# JOB SCRIPT 
+         if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+         rm -rf *.err
+         rm -rf *.out
+         touch job.ksh
+         TRANDOM=$$
+         export JOBRND=${TRANDOM}_pert_bc
+         cat << EOF >job.ksh
+#!/bin/ksh -aeux
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER_ACD}
+#PBS -l walltime=${REAL_TIME_LIMIT}
+#PBS -q regular 
+#PBS -j oe
+#PBS -m abe
+#PBS -l select=${REAL_NODES}:ncpus=${REAL_CORES}:mpiprocs=${REAL_PROCS}
+#
+./exo_coldens < exo_coldens.inp
+#
+export RC=\$?     
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+if [[ \$RC = 0 ]]; then
+   touch SUCCESS
+else
+   touch FAILED 
+   exit
+fi
+EOF
+#
+         qsub -Wblock=true job.ksh 
 #
 # TEST WHETHER OUTPUT EXISTS
    export FILE_CR=exo_coldens_d${CR_DOMAIN}
@@ -2287,7 +2318,7 @@ EOF
       rm -rf core.*
       touch job.ksh
       RANDOM=$$
-      export JOBRND=wrf_bio_${RANDOM}
+      export JOBRND=${RANDOM}_wrf_bio
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -2298,7 +2329,7 @@ EOF
 #PBS -m abe
 #PBS -l select=${MISC_NODES}:ncpus=${MISC_CORES}:mpiprocs=${MISC_PROCS}
 #
-mpiexec_mpt omplace ./megan_bio_emiss < megan_bio_emiss.inp > index_megan_bio 2>&1
+./megan_bio_emiss < megan_bio_emiss.inp > index_megan_bio 2>&1
 # 
 export RC=\$?     
 rm -rf WRFCHEM_BIO_SUCCESS
@@ -2311,7 +2342,7 @@ else
 fi
 EOF
 #
-      qsub -Wbloc=true job.ksh 
+      qsub -Wblock=true job.ksh 
 #
 # TEST WHETHER OUTPUT EXISTS
       export FILE_CR=wrfbiochemi_d${CR_DOMAIN}
@@ -2390,7 +2421,7 @@ EOF
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=wrf_fire_${RANDOM}
+   export JOBRND=${RANDOM}_wrf_fire
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -2401,7 +2432,7 @@ EOF
 #PBS -m abe
 #PBS -l select=${MISC_NODES}:ncpus=${MISC_CORES}:mpiprocs=${MISC_PROCS}
 #
-mpiexec_mpt omplace ./fire_emis < fire_emis.mozc.inp > index_fire_emis 2>&1
+./fire_emis < fire_emis.mozc.inp > index_fire_emis 2>&1
 # 
 export RC=\$?     
 rm -rf WRFCHEM_FIRE_SUCCESS     
@@ -2821,6 +2852,8 @@ if ${RUN_MOPITT_CO_OBS}; then
    export FILE=mopitt_extract_no_transform_RT.pro
    rm -rf ${FILE}
    cp ${DART_DIR}/observations/MOPITT_CO/native_to_ascii/${FILE} ./.
+#
+# LSF job script
    rm -rf job.ksh
    rm -rf idl_*.err
    rm -rf idl_*.out
@@ -2829,13 +2862,13 @@ if ${RUN_MOPITT_CO_OBS}; then
    export JOBRND=idl_${RANDOM}
    cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
-#PBS -N ${JOBRND}
-#PBS -A ${PROJ_NUMBER_ACD}
-#PBS -l walltime=${MISC_TIME_LIMIT}
-#PBS -q regular 
-#PBS -j oe
-#PBS -m abe
-#PBS -l select=${MISC_NODES}:ncpus=${MISC_CORES}:mpiprocs=${MISC_PROCS}
+#BSUB -P ${PROJ_NUMBER_ACD}
+#BSUB -n 1
+#BSUB -J ${JOBRND}
+#BSUB -o ${JOBRND}.out
+#BSUB -e ${JOBRND}.err
+#BSUB -W 00:10
+#BSUB -q geyser
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
@@ -2843,7 +2876,37 @@ mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN
 exit
 EOF
 EOFF
-   qsub -Wblock=true job.ksh
+   qinteractive ${PROJ_NUMBER_ACD}
+ 
+   bsub -K < job.ksh
+
+   exit
+#
+# PBS job script
+#   rm -rf job.ksh
+#   rm -rf idl_*.err
+#   rm -rf idl_*.out
+#   touch job.ksh
+#   RANDOM=$$
+#   export JOBRND=${RANDOM}_idl
+#   cat <<EOFF >job.ksh
+##!/bin/ksh -aeux
+##PBS -N ${JOBRND}
+##PBS -A ${PROJ_NUMBER_ACD}
+##PBS -l walltime=${MISC_TIME_LIMIT}
+##PBS -q regular
+##PBS -j oe
+##PBS -m abe
+##PBS -l select=${MISC_NODES}:ncpus=${MISC_CORES}:mpiprocs=${MISC_PROCS}
+##
+#idl << EOF
+#.compile mopitt_extract_no_transform_RT.pro
+#mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NNL_MIN_LON}, ${NN#L_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+#exit
+#EOF
+#EOFF
+#   qsub -Wblock=true job.ksh
+#
 #
 # GET ADDITIONAL DATA FOR DAY-TO-DAY CROSSOVER
    if [[ ${FLG} -eq 1 ]];  then
@@ -2854,7 +2917,7 @@ EOFF
       rm -rf job.ksh
       touch job.ksh
       RANDOM=$$
-      export JOBRND=idl_${RANDOM}
+      export JOBRND=${RANDOM}_idl
       cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -2994,7 +3057,7 @@ if ${RUN_IASI_CO_OBS}; then
                 rm -rf idl_*.out
                 touch job.ksh
                 RANDOM=$$
-                export JOBRND=idl_${RANDOM}
+                export JOBRND=${RANDOM}_idl
                 cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -3085,7 +3148,7 @@ EOFF
                 rm -rf idl_*.out
                 touch job.ksh
                 RANDOM=$$
-                export JOBRND=idl_${RANDOM}
+                export JOBRND=${RANDOM}_idl
                 cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -3241,7 +3304,7 @@ if ${RUN_IASI_O3_OBS}; then
    rm -rf idl_*.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=idl_${RANDOM}
+   export JOBRND=${RANDOM}_idl
    cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -3548,7 +3611,7 @@ if ${RUN_MODIS_AOD_OBS}; then
    rm -rf idl_*.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=idl_${RANDOM}
+   export JOBRND=${RANDOM}_idl
    cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -3768,7 +3831,7 @@ if ${RUN_PREPROCESS_OBS}; then
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=pre_${RANDOM}
+   export JOBRND=${RANDOM}_pre
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -3933,7 +3996,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${TRANDOM}
+      export JOBRND=${TRANDOM}_advm
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4088,7 +4151,7 @@ if ${RUN_DART_FILTER}; then
       cd ${RUN_DIR}/${DATE}/dart_filter/wrk_wrf_${CMEM}
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=wf2dt_${TRANDOM}
+      export JOBRND=${TRANDOM}_wf2dt
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4184,7 +4247,7 @@ EOF
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=filter_${RANDOM}
+   export JOBRND=${RANDOM}_filter
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4268,7 +4331,7 @@ EOF
 # Create job script 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=dt2wf_${TRANDOM}
+      export JOBRND=${TRANDOM}_dt2wf
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4547,7 +4610,7 @@ EOF
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${TRANDOM}
+      export JOBRND=${TRANDOM}_advm
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4711,7 +4774,7 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=advm_${RANDOM}
+   export JOBRND=${RANDOM}_advm
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}
@@ -4883,7 +4946,7 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=advm_${RANDOM}
+   export JOBRND=${RANDOM}_advm
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
 #PBS -N ${JOBRND}

@@ -107,7 +107,7 @@
       integer                      :: year_temp,month_temp,day_temp,hour_temp,minute_temp, &
                                       data_greg_sec_temp
       integer,dimension(indx_max)  :: year,month,day,hour,minute,data_greg_sec
-      real                         :: lat_mn,lat_mx,lon_mn,lon_mx
+      real                         :: fac,lat_mn,lat_mx,lon_mn,lon_mx
       real*8                       :: latitude,longitude,level
       real*8                       :: ob_err_var
       real                         :: lat_temp,lon_temp,obs_val_temp
@@ -130,6 +130,7 @@
 !============================================================
 !
 !============================================================
+      fac=1.
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
       file_in,lat_mn,lat_mx,lon_mn,lon_mx
@@ -230,7 +231,7 @@
             day(indx)=day_temp
             hour(indx)=hour_temp
             minute(indx)=minute_temp
-            obs_val(indx)=obs_val_temp
+            obs_val(indx)=obs_val_temp*fac
             obs_err(indx)=.005
             data_greg_sec(indx)=data_greg_sec_temp
          endif
