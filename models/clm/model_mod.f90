@@ -2811,7 +2811,7 @@ if (present(ncid)) then
 
 !      where(isnan(data_2d_array)) data_2d_array = org_array
 
-      where((data_2d_array > 1.0_r8)) data_2d_array = org_array 
+!      where((data_2d_array > 1.0_r8)) data_2d_array = org_array 
       !===========================================================Long
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
@@ -4357,7 +4357,7 @@ subroutine get_brightness_temperature(state_time, location, metadata, obs_val, i
 ! be part of the DART state vector. They are currently directly harvested from the CLM
 ! restart file. As such, the posteriors are not informative.
 
-use   radiative_transfer_mod, only : forward_wg
+use   radiative_transfer_mod, only : forward_Qh
 
 type(time_type),        intent(in)  :: state_time      ! valid time of DART state
 type(location_type),    intent(in)  :: location        ! observation location
@@ -4535,7 +4535,7 @@ SOILCOLS : do icol = 1,ncols
    if (landcovercode >= 0 ) then
       ! the tb_out array contains the calculated brightness temperature outputs
       ! at each polarization (rows) and frequency (columns).
-      call forward_wg(N_FREQ, freq, tetad, aux_ins, tb_out)
+      call forward_Qh(N_FREQ, freq, tetad, aux_ins, tb_out)
    else
       ! call to alternative radiative transfer model goes here.
    endif
