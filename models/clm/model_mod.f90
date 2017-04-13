@@ -158,12 +158,14 @@ character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: clm_restart_filename = 'clm_restart.nc'
 character(len=256) :: clm_history_filename = 'clm_history.nc'
 character(len=256) :: casename = 'clm_dart'
+character(len=256) :: surftexture_nc= 'surfdata_0.9x1.25_soiltexture_c140705.nc'
 character(len=256) :: coefg_nc = 'coefg_amsre2003_10D.nc'
 
 character(len=obstypelength) :: clm_state_variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
-   casename,                    & 
+   casename,                    &
+   surftexture_nc,              & 
    coefg_nc,                    &
    clm_restart_filename,        &
    clm_history_filename,        &
@@ -2751,8 +2753,7 @@ real(r8), dimension(:,:), intent(out) :: data_2d_array
 integer, optional,        intent(in)  :: ncid
 
 integer :: i,j,ii, VarID
-real(r8), allocatable, dimension(:,:) :: org_array, org_porosity
-real(r8), allocatable, dimension(:)   :: org_watsat
+real(r8), allocatable, dimension(:,:) :: org_array
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2781,24 +2782,12 @@ endif
 if (present(ncid)) then
 
    allocate(org_array(size(data_2d_array,1),size(data_2d_array,2)))
-   allocate(org_porosity(15,size(data_2d_array,2)))      !============Long
-   allocate(org_watsat(size(data_2d_array,2)))           !============Long
 
    call nc_check(nf90_inq_varid(ncid, progvar(ivar)%varname, VarID), &
             'vector_to_2d_prog_var', 'inq_varid '//trim(progvar(ivar)%varname))
 
    call nc_check(nf90_get_var(ncid, VarID, org_array), &
             'vector_to_2d_prog_var', 'get_var '//trim(progvar(ivar)%varname))
-
-   call nc_check(nf90_inq_varid(ncid, 'WATSAT', VarID), &
-            'vector_to_2d_prog_var', 'inq_varid WATSAT')
-
-   call nc_check(nf90_get_var(ncid, VarID, org_porosity), &
-            'vector_to_2d_prog_var', 'get_var WATSAT')
-
-   ! to convert top layer soil porosity with unit: m3/m3 to kg/m2
-   where((org_porosity>1)) org_porosity=0.5_r8
-   org_watsat=org_porosity(1,:)*(LEVGRND(6)+LEVGRND(7))/2*1000
 
    ! restoring the indeterminate original values
 
@@ -2825,7 +2814,7 @@ if (present(ncid)) then
 
 !      where(isnan(data_2d_array)) data_2d_array = org_array
 
-      where((data_2d_array(6,:) > org_watsat)) data_2d_array(6,:) = org_watsat 
+      where((data_2d_array > 1.0_r8)) data_2d_array = org_array 
       !===========================================================Long
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'H2OSOI_ICE') then
@@ -2839,8 +2828,6 @@ if (present(ncid)) then
    endif
 
    deallocate(org_array)
-   deallocate(org_porosity)
-   deallocate(org_watsat)
 
 endif
 
@@ -4393,8 +4380,9 @@ real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
 ! support variables 
-integer                             :: ncid, ncidcoefg
+integer                             :: ncid, ncidcoefg, ncidsurftexture
 character(len=256)                  :: filename
+character(len=256)                  :: coefg_filename
 character(len=256)                  :: priortbfile
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
@@ -4490,6 +4478,7 @@ freq(:)  = frequency
 ! read Tg and sm variables from CLM restart file =============Long
 ! filename = clm_restart_filename
 call build_clm_instance_filename(ens_index, state_time, filename)
+call build_coefg_filename(frequency,state_time,coefg_filename)
 
 ! call build_Prior_Tb_instance_filename(ens_index, state_time, priortbfile)
 
@@ -4498,8 +4487,10 @@ call build_clm_instance_filename(ens_index, state_time, filename)
 ! write(*,*)'mark-01_Long'                           !====Long
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
               'get_brightness_temperature','open '//trim(filename))
-call nc_check(nf90_open(trim(coefg_nc), NF90_NOWRITE, ncidcoefg), &
-              'get_brightness_temperature','open '//trim(coefg_nc))
+call nc_check(nf90_open(trim(coefg_filename), NF90_NOWRITE, ncidcoefg), &
+              'get_brightness_temperature','open '//trim(coefg_filename))
+call nc_check(nf90_open(trim(surftexture_nc), NF90_NOWRITE, ncidsurftexture), &
+              'get_brightness_temperature','open '//trim(surftexture_nc))
 
 ! write(*,*)'mark-02_Long'                           !====Long
 ! Loop over all columns in the gridcell that has the right location.
@@ -4511,8 +4502,9 @@ SOILCOLS : do icol = 1,ncols
    call get_column_soil(ncid, filename, columns_to_get(icol)) 
                                                     ! allocates soilcolumn====Long
 !   write(*,*)'Successfully read soilcolumn data for column: ',columns_to_get(icol)
-   call get_column_coefg(ncidcoefg, coefg_nc, columns_to_get(icol))
-   
+   call get_column_coefg(ncidcoefg, coefg_filename, columns_to_get(icol))
+   call get_column_surftexture(ncidsurftexture,surftexture_nc,columns_to_get(icol))   
+ 
    ! FIXME Presently skipping gridcells with snow.
 !   if ( soilcolumn%nlayers > 0 )  then
 !      if ((debug > 1) .and. do_output()) then
@@ -4576,12 +4568,17 @@ enddo SOILCOLS
 ! close(7777)                                             !====Long
 
 call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(filename))
-call nc_check(nf90_close(ncidcoefg), 'get_brightness_temperature','close '//trim(coefg_nc))
+call nc_check(nf90_close(ncidcoefg), 'get_brightness_temperature','close '//trim(coefg_filename))
+call nc_check(nf90_close(ncidsurftexture), 'get_brightness_temperature','close '//trim(surftexture_nc))
 
 ! FIXME ... account for heterogeneity somehow ...
 ! must aggregate all columns in the gridcell
 ! area-weight the average
 obs_val = sum(tb * weights) / sum(weights)
+
+if (obs_val > 350.0_r8 .or. obs_val < 200.0_r8 ) then
+   obs_val=MISSING_R8
+endif  
 
 !==================Long
 ! if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
@@ -4782,12 +4779,6 @@ end subroutine destroy_column_snow
 subroutine get_column_soil(ncid, filename, soil_column )
 ! Read all the variables needed for the radiative transfer model as applied
 ! to a single CLM column.
-!
-! float WATSAT(levgrnd, lat, lon) ;
-!       WATSAT:long_name = "saturated soil water content (porosity)" ;
-!       WATSAT:units = "mm3/mm3" ;
-!       WATSAT:_FillValue = 1.e+36f ;
-!       WATSAT:missing_value = 1.e+36f ;
 
 integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: filename
@@ -4795,8 +4786,7 @@ integer,          intent(in)  :: soil_column
 
 integer  :: snlsno(1) ! number of snow layers
 
-real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno, watsat
-real(r8)                            :: sandfrac_c(1), clayfrac_c(1) 
+real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
 
 integer               :: varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount, nccountw
@@ -4815,11 +4805,8 @@ nlayers = abs(snlsno(1))
 ! double H2OSOI_LIQ(column, levtot); long_name = "liquid water" ; units = "kg/m2" ;
 ! double H2OSOI_ICE(column, levtot); long_name = "ice lens"     ; units = "kg/m2" ;
 ! double T_SOISNO(  column, levtot); long_name = "soil-snow temperature" ; units = "K" ;
-! double SANDFRAC_C(column); long_name = "first layer sand fraction"; units = "fraction";
-! double CLAYFRAC_C(column); long_name = "first layer clay fraction"; units = "fraction";
-! double WATSAT(column, levgrnd); long_name = "soil porosity"; units = "fraction";
 
-allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot), watsat(nlevgrnd))
+allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot))
 ncstart = (/ 1, soil_column /)
 nccount = (/ nlevtot,   1   /)
 nccountw= (/ nlevgrnd,  1   /)
@@ -4839,23 +4826,6 @@ call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), &
 call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
         'get_column_soil', 'get_var H2OSOI_ICE '//trim(filename))
 
-call nc_check(nf90_inq_varid(ncid,'WATSAT', varid), &
-        'get_column_soil', 'inq_varid WATSAT '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, watsat, start=ncstart, count=nccountw), &
-        'get_column_soil', 'get_var WATSAT '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'SANDFRAC_C', varid), &
-        'get_column_soil', 'inq_varid SANDFRAC_C '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, sandfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_soil', 'get_var SANDFRAC_C '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'CLAYFRAC_C', varid), &
-        'get_column_soil', 'inq_varid CLAYFRAC_C '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, clayfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_soil', 'get_var CLAYFRAC_C '//trim(filename))
-
-where((watsat>1)) watsat=0.5_r8
-
 ! Print a summary so far
 if ((debug > 3) .and. do_output()) then
    write(*,*)'get_column_soil: raw CLM data for column ',soil_column
@@ -4863,9 +4833,6 @@ if ((debug > 3) .and. do_output()) then
    write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevtot)
    write(*,*)'  h2osoi_ice :', h2osoi_ice(1:nlevtot)
    write(*,*)'  t_soisno   :',   t_soisno(1:nlevtot)
-   write(*,*)'  sandfrac_c :', sandfrac_c
-   write(*,*)'  clayfrac_c :', clayfrac_c
-   write(*,*)'  watsat     :',     watsat(1:nlevgrnd)
 endif
 
 ! Fill the output array ... finally
@@ -4873,14 +4840,49 @@ soilcolumn%nlayers = nlayers
 ! Currently, only consider the first layer of topsoil, i.e., the 6th layer of levtot
 soilcolumn%ssm = h2osoi_liq(6) * 0.001 / ((LEVGRND(6)+LEVGRND(7))/2) ! convert unit from kg/m2 to m3/m3
 soilcolumn%stg = t_soisno(6) 
-soilcolumn%sat    = watsat(1)
-soilcolumn%ssand  = sandfrac_c(1) * 100
-soilcolumn%sclay  = clayfrac_c(1) * 100
 
-deallocate(h2osoi_liq, h2osoi_ice, t_soisno, watsat)
+deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
 
 end subroutine get_column_soil
 
+
+subroutine get_column_surftexture(ncid, filename, soil_column)
+! Read "soil first layer texture" data for radiative transfer model
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: filename
+integer,          intent(in)  :: soil_column
+
+real(r8)                      :: sandfrac_c(1), clayfrac_c(1),watsat(1)
+integer                       :: varid
+
+call nc_check(nf90_inq_varid(ncid,'WATSAT', varid), &
+        'get_column_surftexture', 'inq_varid WATSAT '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, watsat,     start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_surftexture', 'get_var WATSAT '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'SANDFRAC_C', varid), &
+        'get_column_surftexture', 'inq_varid SANDFRAC_C '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, sandfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_surftexture', 'get_var SANDFRAC_C '//trim(filename))
+
+call nc_check(nf90_inq_varid(ncid,'CLAYFRAC_C', varid), &
+        'get_column_surftexture', 'inq_varid CLAYFRAC_C '//trim(filename))
+call nc_check(nf90_get_var(  ncid, varid, clayfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
+        'get_column_surftexture', 'get_var CLAYFRAC_C '//trim(filename))
+
+! Print a summary so far
+if ((debug > 3) .and. do_output()) then
+   write(*,*)'get_column_soil: raw CLM data for column ',soil_column
+   write(*,*)'  sandfrac_c :', sandfrac_c
+   write(*,*)'  clayfrac_c :', clayfrac_c
+   write(*,*)'  watsat     :', watsat
+endif
+
+soilcolumn%sat    = watsat(1)
+soilcolumn%ssand  = sandfrac_c(1)
+soilcolumn%sclay  = clayfrac_c(1)
+
+end subroutine get_column_surftexture
 
 
 subroutine get_column_coefg(ncid, filename, soil_column)
@@ -4969,6 +4971,44 @@ endif
 
 end subroutine build_clm_instance_filename
 
+
+subroutine build_coefg_filename(freqin, state_time, coefgfilename)
+
+real(r8),         intent(in)  :: freqin 
+type(time_type),  intent(in)  :: state_time
+character(len=*), intent(out) :: coefgfilename
+
+integer :: year, month, day, hour, minute, second
+integer :: FF
+
+120 format (A,'_',I2.2,'D_',I4.4,'-',I2.2,'-',I2.2,'.nc')
+
+if (freqin < 7.0_r8 .and. freqin > 6.5_r8) then
+   FF=6
+else 
+   if (freqin < 11.0_r8 .and. freqin > 10.0_r8 ) then
+      FF=10
+   else
+      if (freqin < 19.0_r8 .and. freqin > 18.0_r8 ) then
+         FF=18
+      endif
+   endif
+endif
+      
+call get_date(state_time, year, month, day, hour, minute, second)
+
+write(coefgfilename, 120) trim(coefg_nc),FF,year,month,day
+
+if( file_exist(coefgfilename) ) then ! perfect model scenario
+
+   if ( (debug > 99) .and. do_output()) then
+      write(string1,*)'Using coefg data with ',trim(coefgfilename)
+      call error_handler(E_MSG, 'model_mod:build_coefg_filename', string1)
+   endif
+
+endif
+
+end subroutine build_coefg_filename
 
 subroutine build_Prior_Tb_instance_filename(instance, state_time, filename)
 ! If the instance is 1, it could be a perfect model scenario
