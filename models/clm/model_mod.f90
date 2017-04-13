@@ -2233,6 +2233,8 @@ llon      = loc_array(1)
 llat      = loc_array(2)
 lheight   = loc_array(3)
 
+! write(*,"(f10.4,f10.4,f10.4)")loc_array      !=====================Long
+
 if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
 
 ! FIXME may be better to check the %maxlevels and kick the interpolation to the
@@ -4393,6 +4395,7 @@ real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 ! support variables 
 integer                             :: ncid, ncidcoefg
 character(len=256)                  :: filename
+character(len=256)                  :: priortbfile
 integer,  allocatable, dimension(:) :: columns_to_get
 real(r4), allocatable, dimension(:) :: tb
 real(r8), allocatable, dimension(:) :: weights
@@ -4487,6 +4490,11 @@ freq(:)  = frequency
 ! read Tg and sm variables from CLM restart file =============Long
 ! filename = clm_restart_filename
 call build_clm_instance_filename(ens_index, state_time, filename)
+
+! call build_Prior_Tb_instance_filename(ens_index, state_time, priortbfile)
+
+! open(7777,file=priortbfile, status='unknown')           !======Long
+
 ! write(*,*)'mark-01_Long'                           !====Long
 call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
               'get_brightness_temperature','open '//trim(filename))
@@ -4552,6 +4560,11 @@ SOILCOLS : do icol = 1,ncols
    else
       tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
    endif
+   
+!   if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
+!      write(*,"(f10.4,f10.4,A10,f10.4,f10.4,f10.4,f10.4,f10.4,f10.4,f10.4)") &
+!              loc_lon, loc_lat,polarization,tb(icol),aux_ins !===Long Long Long fixme
+!   endif
 
 !   if (isnan(tb(icol))) write(*,*)'Bad Tb at icol= ',icol
 !   if (tb(icol)<200 .or. tb(icol)>300) write(*,*)'Bad Tb at icol=; Tb= ',icol,tb(icol)      
@@ -4560,6 +4573,8 @@ SOILCOLS : do icol = 1,ncols
 
 enddo SOILCOLS
 
+! close(7777)                                             !====Long
+
 call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(filename))
 call nc_check(nf90_close(ncidcoefg), 'get_brightness_temperature','close '//trim(coefg_nc))
 
@@ -4567,6 +4582,13 @@ call nc_check(nf90_close(ncidcoefg), 'get_brightness_temperature','close '//trim
 ! must aggregate all columns in the gridcell
 ! area-weight the average
 obs_val = sum(tb * weights) / sum(weights)
+
+!==================Long
+! if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
+!    write(*,"(f10.4,f10.4,A10,f10.4)") &
+!               loc_lon, loc_lat,polarization,obs_val !===Long Long Long fixme
+! endif
+!==================Long
 
  if ((debug > 1) .and. do_output()) then  !===Long
    write(*,*)'tb      for all columns is ',tb
@@ -4946,6 +4968,28 @@ else ! multi-instance scenario
 endif
 
 end subroutine build_clm_instance_filename
+
+
+subroutine build_Prior_Tb_instance_filename(instance, state_time, filename)
+! If the instance is 1, it could be a perfect model scenario
+! or it could be the first instance of many. CESM has a different
+! naming scheme for these.
+
+integer,          intent(in)  :: instance
+type(time_type),  intent(in)  :: state_time
+character(len=*), intent(out) :: filename
+
+integer :: year, month, day, hour, minute, second
+
+100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+110 format (A,'.clm2'      ,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
+
+call get_date(state_time, year, month, day, hour, minute, second)
+second = second + minute*60 + hour*3600
+
+write(filename,100) trim('/scratch/02714/zhaol/prior_tb'),instance,year,month,day,second
+
+end subroutine build_Prior_Tb_instance_filename
 
 
 !===================================================================
