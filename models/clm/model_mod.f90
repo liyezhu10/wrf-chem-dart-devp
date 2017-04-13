@@ -2803,14 +2803,11 @@ if (present(ncid)) then
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'H2OSOI_LIQ') then
       !===========================================================Long
-      ! Currently, only update the first layer of soil, 
-      ! i.e., the 6th layer in levtot.
+      ! Currently, update the first and second layers of soil moisture, 
+      ! i.e., the 6th and 7th layers in levtot.
       ! So replace other layers' value with original value.
       data_2d_array(1:5,:)  = org_array(1:5,:)
-      data_2d_array(7:20,:) = org_array(7:20,:)
-
-      ! change the positive increment to negative
-      ! data_2d_array(6,:) = org_array(6,:)-(data_2d_array(6,:)-org_array(6,:))
+      data_2d_array(8:20,:) = org_array(8:20,:)
 
 !      where(isnan(data_2d_array)) data_2d_array = org_array
 
@@ -4787,6 +4784,7 @@ integer,          intent(in)  :: soil_column
 integer  :: snlsno(1) ! number of snow layers
 
 real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
+real(r8) :: d1, d2    ! thinkness of first and second soil layers
 
 integer               :: varid, ilayer, nlayers, ij
 integer, dimension(2) :: ncstart, nccount, nccountw
@@ -4838,8 +4836,10 @@ endif
 ! Fill the output array ... finally
 soilcolumn%nlayers = nlayers
 ! Currently, only consider the first layer of topsoil, i.e., the 6th layer of levtot
-soilcolumn%ssm = h2osoi_liq(6) * 0.001 / ((LEVGRND(1)+LEVGRND(2))/2) ! convert unit from kg/m2 to m3/m3 !!! mistakely using the 6th and 7th layer before, corected
-soilcolumn%stg = t_soisno(6) 
+d1 = (LEVGRND(1)+LEVGRND(2))/2
+d2 = (LEVGRND(3)-LEVGRND(1))/2
+soilcolumn%ssm = ( h2osoi_liq(6) * 0.001 + h2osoi_liq(7) * 0.001 ) / ( d1 + d2 ) ! convert unit from kg/m2 to m3/m3
+soilcolumn%stg = ( t_soisno(6) * d1 + t_soisno(7) * d2 ) / ( d1 + d2 )           ! effective temperature of top two soil layers
 
 deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
 
