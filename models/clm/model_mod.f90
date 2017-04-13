@@ -171,14 +171,14 @@ character(len=256) :: clm_restart_filename = 'clm_restart.nc'
 character(len=256) :: clm_history_filename = 'clm_history.nc'
 character(len=256) :: clm_vector_history_filename = 'clm_vector_history.nc'
 character(len=256) :: casename = 'clm_dart'
-character(len=256) :: surfpara_nc= 'Yangpara_0.9x1.25_c140822.nc'
-character(len=256) :: lai_nc = 'LAI_GLASS.nc'
+character(len=256) :: auxiliary_nc= '../rtm_auxiliary.nc'
+character(len=256) :: lai_nc = '../rtm_lai_modis.nc'
 
 character(len=obstypelength) :: clm_variables(max_state_variables*num_state_table_columns) = ' '
 
 namelist /model_nml/            &
    casename,                    &
-   surfpara_nc,                 & 
+   auxiliary_nc,                & 
    lai_nc,                      &
    clm_restart_filename,        &
    clm_history_filename,        &
@@ -225,27 +225,6 @@ type(progvartype), dimension(max_state_variables) :: progvar
 !----------------------------------------------------------------------
 ! Properties required for a snow column
 !----------------------------------------------------------------------
-
-
-type soilprops
-   private
-   integer  :: nlayers  ! snow layers
-   real(r4) :: ssm      ! aux_ins(1) surface soil moisture [m3m-3]
-   real(r4) :: stg      ! aux_ins(2) surface layer temperature [k]
-   real(r4) :: stv      ! aux_ins(3) ground vegetation temperature [K]  
-   real(r4) :: sat      ! aux_ins(4) topsoil porosity (0~1)
-   real(r4) :: ssand    ! aux_ins(5) soil sand content percentage (0~100)
-   real(r4) :: sclay    ! aux_ins(6) soil clay content percentage (0~100)
-   real(r4) :: lai      ! aux_ins(7) MODIS (GLASS) leaf area index
-   real(r4) :: fmv      ! aux_ins(8) coefficient f in calculating vegetation water content
-   real(r4) :: bmv      ! aux_ins(9) coefficient in calculating Tao
-   real(r4) :: xmv      ! aux_ins(10) coefficient in calculating Tao
-   real(r4) :: qmv      ! aux_ins(11) surface roughness parameters
-   real(r4) :: hmv      ! aux_ins(12) surface roughness parameters
-end type soilprops
-
-type(soilprops) :: soilcolumn
-
 type snowprops
    private
    integer  :: nlayers         ! aux_ins(1)
@@ -2478,7 +2457,7 @@ elseif (obs_kind == KIND_SOIL_MOISTURE) then
    endif
 elseif (obs_kind == KIND_BRIGHTNESS_TEMPERATURE ) then
    if (present(optionals)) then
-      call get_brightness_temperature(model_time, location, optionals, interp_val, istatus)
+      call get_brightness_temperature_new(x, model_time, location, optionals, interp_val, istatus)
    else
       write(string1, '(''Tb obs at lon,lat ('',f12.6,'','',f12.6,'') has no metadata.'')') &
                                   llon, llat
@@ -2773,7 +2752,7 @@ GRIDCELL : do indexi = index1, indexN
 enddo GRIDCELL
 
 if ( (counter1+counter2) == 0 ) then
-   if ((debug > 1) .and. do_output()) then
+   if ((debug > 0) .and. do_output()) then
       write(string1, *)'statevector variable '//trim(varstring)//' had no viable data'
       write(string2, *)'at gridcell lon/lat = (',gridloni,',',gridlatj,')'
       write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
@@ -4919,15 +4898,13 @@ end subroutine update_water_table_depth
 
 
 
-subroutine get_brightness_temperature(state_time, location, metadata, obs_val, istatus)
-
+!===========================================================================================Long
+subroutine get_brightness_temperature_new(x, state_time, location, metadata, obs_val, istatus)
 ! This is THE forward observation operator. Given the state and a location, return the value
-! The parts of the state required for this forward operator are not required to
-! be part of the DART state vector. They are currently directly harvested from the CLM
-! restart file. As such, the posteriors are not informative.
 
 use   radiative_transfer_mod, only : forward_Qh
 
+real(r8),               intent(in)  :: x(:)            ! state vector
 type(time_type),        intent(in)  :: state_time      ! valid time of DART state
 type(location_type),    intent(in)  :: location        ! observation location
 real(r8), dimension(:), intent(in)  :: metadata
@@ -4936,29 +4913,21 @@ integer,                intent(out) :: istatus         ! status of the calculati
 
 integer,  parameter :: N_FREQ = 1  ! observations come in one frequency at a time
 integer,  parameter :: N_POL  = 2  ! code automatically computes both polarizations
-real(r8), parameter :: density_h2o = 1000.0_r8 ! Water density Kg/m3
 
 ! variables required by forward_wg() routine
 
-real(r4) :: aux_ins(12)     ! [surface_sm, ground_T, porosity, %sand, %clay, 'g']
+real(r8) :: aux_ins(12)    ! [surface_sm, ground_T, porosity, %sand, %clay, 'g']
+real(r4) :: aux_ins_in(12)
 real(r4) :: freq( N_FREQ)  ! frequencies at which calculations are to be done
 real(r4) :: tetad(N_FREQ)  ! incidence angle of satellite
 real(r4) :: tb_out(N_POL,N_FREQ) ! calculated brightness temperature - output
 
 ! support variables 
-integer                             :: ncid, ncidlai, ncidsurfpara
-character(len=256)                  :: filename
-character(len=256)                  :: lai_filename
-character(len=256)                  :: priortbfile
-integer,  allocatable, dimension(:) :: columns_to_get
-real(r4), allocatable, dimension(:) :: tb
-real(r8), allocatable, dimension(:) :: weights
 real(r8), dimension(LocationDims)   :: loc
-real(r8)  :: loc_lon, loc_lat
-    
+real(r8)  :: loc_lon, loc_lat, loc_lev
 integer   :: ilonmin(1), ilatmin(1) ! need to be array-valued for minloc intrinsic
 integer   :: ilon, ilat, icol, ncols
-
+    
 ! AMSR-E Tb observation metadata
 integer   :: ens_index       ! Ensemble member number
 integer   :: landcovercode   ! for this location - future use
@@ -4966,6 +4935,12 @@ real(r8)  :: frequency       ! observation frequency
 real(r8)  :: footprint       ! observation footprint
 character :: polarization    ! observation polarization
 real(r8)  :: incidence_angle ! satellite incidence angle
+
+! temporal variables
+real(r8)            :: d1, d2    ! thinkness of first and second soil layers
+type(location_type) :: mylocation
+integer             :: istatus_temp(12), istatus_temp_1, istatus_temp_2
+real(r8)            :: interp_temp(12), interp_temp_1, interp_temp_2
 
 istatus  = 1
 obs_val  = MISSING_R8
@@ -4982,6 +4957,9 @@ ilon     = ilonmin(1)
 ilat     = ilatmin(1)
 ncols    = get_ncols_in_gridcell(ilon,ilat)
 
+d1 = (LEVGRND(1)+LEVGRND(2))/2
+d2 = (LEVGRND(3)-LEVGRND(1))/2
+
 ! Early return if there are no CLM columns at this location.
 ! Forward operator returns 'failed', but life goes on.
 if (ncols == 0) then
@@ -4993,24 +4971,17 @@ if (ncols == 0) then
    return
 endif
 
-allocate( columns_to_get(ncols), tb(ncols), weights(ncols) )
-columns_to_get(:) = -1
-tb(:)             = 0.0_r4
-weights(:)        = 0.0_r8
-call get_colids_in_gridcell(ilon, ilat, columns_to_get)
-
 ! FIXME Presently skipping gridcells with lakes.
 ! grid_cell with lake may have problems
-! get_column_snow() must also modified to use bulk snow formulation for lakes.
-if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
-   if ((debug > 1) .and. do_output()) then
-      write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
-      write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
-      call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
-   endif
-   deallocate(columns_to_get, tb, weights)
-   return
-endif
+! if ( any(cols1d_ityplun(columns_to_get) == LAKE))  then
+!   if ((debug > 1) .and. do_output()) then
+!      write(string1, *) 'gridcell ilon/ilat (',ilon,ilat,') has a lake - skipping.'
+!      write(string2, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
+!      call error_handler(E_MSG,'get_brightness_temperature',string1,text2=string2)
+!   endif
+!   deallocate(columns_to_get, tb, weights)
+!   return
+! endif
 
 ! TJH FIXME - no bulletproofing on order ... 
    landcovercode   =  int(metadata(1))
@@ -5027,7 +4998,6 @@ endif
 
 if ((debug > 99) .and. do_output()) then
    write(*,*)'TJH debug ... computing gridcell   ',ilon,ilat
-   write(*,*)'TJH debug ... gridcell has columns ',columns_to_get
    write(*,*)'TJH debug ... ens_index            ',ens_index
    write(*,*)'TJH debug ... landcovercode        ',landcovercode
    write(*,*)'TJH debug ... frequency            ',frequency
@@ -5039,144 +5009,75 @@ endif
 tetad(:) = incidence_angle
 freq(:)  = frequency
 
-! need to know which restart file to use to harvest information
+! begin reading RTM input data
+istatus_temp(:) = 99
+interp_temp(:)  = 0.0_r8
 
-! read Tg and sm variables from CLM restart file =============Long
-! filename = clm_restart_filename
-call build_clm_instance_filename(ens_index, state_time, filename)
-call build_lai_filename(frequency,state_time,lai_filename)
+! get soil moisture in m3m-3
+mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
+call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_1  , istatus_temp_1   )
+mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
+call get_grid_vertval(x, mylocation, 'H2OSOI_LIQ', interp_temp_2  , istatus_temp_2   )
+if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
+   aux_ins(1) = (interp_temp_1*0.001 + interp_temp_2*0.001)/(d1+d2)
+   istatus_temp(1)=0
+endif 
 
-! call build_Prior_Tb_instance_filename(ens_index, state_time, priortbfile)
+! get soil temperature in K
+mylocation = set_location( loc_lon, loc_lat, LEVGRND(1), VERTISHEIGHT)
+call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_1  , istatus_temp_1   )
+mylocation = set_location( loc_lon, loc_lat, LEVGRND(2), VERTISHEIGHT)
+call get_grid_vertval(x, mylocation, 'T_SOISNO', interp_temp_2  , istatus_temp_2   )
+if ((istatus_temp_1 == 0) .and. (istatus_temp_2 == 0)) then
+   aux_ins(2) = interp_temp_1 !! only use the first layer soil temp
+   istatus_temp(2)=0
+endif
 
-! open(7777,file=priortbfile, status='unknown')           !======Long
+! get vegetation temperature in K and other RTM mv parameters
+call compute_gridcell_value(x, location, 'TVEG',       aux_ins(3), istatus_temp(3))
 
-! write(*,*)'mark-01_Long'                           !====Long
-call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-              'get_brightness_temperature','open '//trim(filename))
-call nc_check(nf90_open(trim(lai_filename), NF90_NOWRITE, ncidlai), &
-              'get_brightness_temperature','open '//trim(lai_filename))
-call nc_check(nf90_open(trim(surfpara_nc), NF90_NOWRITE, ncidsurfpara), &
-              'get_brightness_temperature','open '//trim(surfpara_nc))
+call compute_gridcell_value(x, location, 'WATSAT',     aux_ins(4), istatus_temp(4))
+call compute_gridcell_value(x, location, 'SANDFRAC_C', aux_ins(5), istatus_temp(5))
+call compute_gridcell_value(x, location, 'CLAYFRAC_C', aux_ins(6), istatus_temp(6))
+call compute_gridcell_value(x, location, 'LAI',        aux_ins(7), istatus_temp(7))
+call compute_gridcell_value(x, location, 'FMV',        aux_ins(8), istatus_temp(8))
+call compute_gridcell_value(x, location, 'BMV',        aux_ins(9), istatus_temp(9))
+call compute_gridcell_value(x, location, 'XMV',        aux_ins(10),istatus_temp(10))
+call compute_gridcell_value(x, location, 'QMV',        aux_ins(11),istatus_temp(11))
+call compute_gridcell_value(x, location, 'HMV',        aux_ins(12),istatus_temp(12))
 
-! write(*,*)'mark-02_Long'                           !====Long
-! Loop over all columns in the gridcell that has the right location.
-
-SOILCOLS : do icol = 1,ncols
-
-   weights(icol) = cols1d_wtxy(   columns_to_get(icol)) ! relative weight of columin
-!   write(*,*)'Start to read soilcolumn data for column: ',columns_to_get(icol)
-   call get_column_soil(ncid, filename, columns_to_get(icol)) 
-                                                    ! allocates soilcolumn====Long
-!   write(*,*)'Successfully read soilcolumn data for column: ',columns_to_get(icol)
-   call get_column_lai(ncidlai, lai_filename, columns_to_get(icol))
-   call get_column_surfpara(ncidsurfpara,surfpara_nc,columns_to_get(icol))   
- 
-   ! FIXME Presently skipping gridcells with snow.
-!   if ( soilcolumn%nlayers > 0 )  then
-!      if ((debug > 1) .and. do_output()) then
-!         write(string3, *) 'gridcell ilon/ilat (',ilon,ilat,') has snow columns - skipping.'
-!         write(string4, '(''obs lon,lat ('',f12.6,'','',f12.6,'')'')') loc_lon, loc_lat
-!         call error_handler(E_MSG,'get_brightness_temperature',string3,text2=string4)
-!      endif
-!      deallocate(columns_to_get, tb, weights)
-!      return
-!   endif
-   
-   if ( (debug > 2) .and. do_output() ) then      !===Long
-         write(*,*)'column = ',columns_to_get(icol)!===Long
-         write(*,*)'ssm   ',soilcolumn%ssm
-         write(*,*)'stg   ',soilcolumn%stg
-         write(*,*)'stv   ',soilcolumn%stv
-         write(*,*)'sat   ',soilcolumn%sat
-         write(*,*)'ssand ',soilcolumn%ssand
-         write(*,*)'sclay ',soilcolumn%sclay
-         write(*,*)'lai   ',soilcolumn%lai
-         write(*,*)'fmv   ',soilcolumn%fmv
-         write(*,*)'bmv   ',soilcolumn%bmv
-         write(*,*)'xmv   ',soilcolumn%xmv
-         write(*,*)'qmv   ',soilcolumn%qmv
-         write(*,*)'hmv   ',soilcolumn%hmv
-   endif                                           !===Long
-
-   aux_ins(1) = soilcolumn%ssm
-   aux_ins(2) = soilcolumn%stg
-   aux_ins(3) = soilcolumn%stv
-   aux_ins(4) = soilcolumn%sat
-   aux_ins(5) = soilcolumn%ssand
-   aux_ins(6) = soilcolumn%sclay
-   aux_ins(7) = soilcolumn%lai
-   aux_ins(8) = soilcolumn%fmv
-   aux_ins(9) = soilcolumn%bmv
-   aux_ins(10)= soilcolumn%xmv
-   aux_ins(11)= soilcolumn%qmv
-   aux_ins(12)= soilcolumn%hmv
-
-   ! this will involve changing the following 'if' statement.
-
-   if (landcovercode >= 0 ) then
+if (sum(istatus_temp(1:12)) == 0) then
+  aux_ins_in=sngl(aux_ins)
+  if (landcovercode >= 0 ) then
       ! the tb_out array contains the calculated brightness temperature outputs
       ! at each polarization (rows) and frequency (columns).
-      call forward_Qh(N_FREQ, freq, tetad, aux_ins, tb_out)
+      call forward_Qh(N_FREQ, freq, tetad, aux_ins_in, tb_out)
    else
       ! call to alternative radiative transfer model goes here.
    endif
 
    if ((debug > 2) .and. do_output()) then
-      write(*,*)'column ', columns_to_get(icol),' tb_out is ',tb_out
+      write(*,*)'gridcell ilon/ilat (',ilon,ilat,') tb_out is ', tb_out
+      write(*,*)'aux_ins is', aux_ins_in
    endif
 
    if (polarization == 'H') then
-      tb(icol) = tb_out(1,1)   ! second dimension is only 1 frequency
+      obs_val = tb_out(1,1)   ! second dimension is only 1 frequency
    else
-      tb(icol) = tb_out(2,1)   ! second dimension is only 1 frequency
+      obs_val = tb_out(2,1)   ! second dimension is only 1 frequency
    endif
-   
-!   if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
-!      write(*,"(f10.4,f10.4,A10,f10.4,f10.4,f10.4,f10.4,f10.4,f10.4,f10.4)") &
-!              loc_lon, loc_lat,polarization,tb(icol),aux_ins !===Long Long Long fixme
-!   endif
+   istatus=0 
+else
+   obs_val = MISSING_R8
+endif
 
-!   if (isnan(tb(icol))) write(*,*)'Bad Tb at icol= ',icol
-!   if (tb(icol)<200 .or. tb(icol)>300) write(*,*)'Bad Tb at icol=; Tb= ',icol,tb(icol)      
-
-   call destroy_column_soil()
-
-enddo SOILCOLS
-
-! close(7777)                                             !====Long
-
-call nc_check(nf90_close(ncid), 'get_brightness_temperature','close '//trim(filename))
-call nc_check(nf90_close(ncidlai), 'get_brightness_temperature','close '//trim(lai_filename))
-call nc_check(nf90_close(ncidsurfpara), 'get_brightness_temperature','close '//trim(surfpara_nc))
-
-! FIXME ... account for heterogeneity somehow ...
-! must aggregate all columns in the gridcell
-! area-weight the average
-obs_val = sum(tb * weights) / sum(weights)
-
-!if (obs_val > 350.0_r8 .or. obs_val < 200.0_r8 ) then
-!   obs_val=MISSING_R8
-!endif  
-
-!==================Long
-! if (loc_lon > 330_r8 .or. loc_lon < 180_r8) then
-!    write(*,"(f10.4,f10.4,A10,f10.4)") &
-!               loc_lon, loc_lat,polarization,obs_val !===Long Long Long fixme
-! endif
-!==================Long
-
- if ((debug > 1) .and. do_output()) then  !===Long
+if ((debug > 1) .and. do_output()) then  
    write(*,*)'grid lon: ',loc_lon,' lat: ', loc_lat
-   write(*,*)'tb      for all columns is ',tb
-   write(*,*)'weights for all columns is ',weights
-   write(*,*)'(weighted) obs value    is ',obs_val
- endif                                     !===Long
+   write(*,*)'(weighted) obs value    is ', obs_val
+endif     
 
-deallocate( columns_to_get, tb, weights )
-
-istatus = 0
-
-end subroutine get_brightness_temperature
+end subroutine get_brightness_temperature_new
+!===========================================================================================Long
 
 
 
@@ -5355,213 +5256,6 @@ snowcolumn%propconst = 0.0_r4
 
 end subroutine destroy_column_snow
 
-subroutine get_column_soil(ncid, filename, soil_column )
-! Read all the variables needed for the radiative transfer model as applied
-! to a single CLM column.
-
-integer,          intent(in)  :: ncid
-character(len=*), intent(in)  :: filename
-integer,          intent(in)  :: soil_column
-
-integer  :: snlsno(1) ! number of snow layers
-
-real(r8), allocatable, dimension(:) :: h2osoi_liq, h2osoi_ice, t_soisno
-real(r8) :: t_veg(1)
-real(r8) :: d1, d2    ! thinkness of first and second soil layers
-
-integer               :: varid, ilayer, nlayers, ij
-integer, dimension(2) :: ncstart, nccount, nccountw
-
-! FIXME ... lake columns --- passed
-if (cols1d_ityplun(soil_column) == LAKE ) return ! we are a lake
-
-! Get the (scalar) number of active snow layers for this column.
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', varid), &
-        'get_column_soil', 'inq_varid SNLSNO'//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, snlsno, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_soil', 'get_var SNLSNO '//trim(filename))
-
-nlayers = abs(snlsno(1))
-
-! double H2OSOI_LIQ(column, levtot); long_name = "liquid water" ; units = "kg/m2" ;
-! double H2OSOI_ICE(column, levtot); long_name = "ice lens"     ; units = "kg/m2" ;
-! double T_SOISNO(  column, levtot); long_name = "soil-snow temperature" ; units = "K" ;
-
-allocate(h2osoi_liq(nlevtot), h2osoi_ice(nlevtot), t_soisno(nlevtot))
-ncstart = (/ 1, soil_column /)
-nccount = (/ nlevtot,   1   /)
-nccountw= (/ nlevgrnd,  1   /)
-
-call nc_check(nf90_inq_varid(ncid,'T_SOISNO', varid), &
-        'get_column_soil', 'inq_varid T_SOISNO '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, t_soisno, start=ncstart, count=nccount), &
-        'get_column_soil', 'get_var T_SOISNO '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_LIQ', varid), &
-        'get_column_soil', 'inq_varid H2OSOI_LIQ '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, h2osoi_liq, start=ncstart, count=nccount), &
-        'get_column_soil', 'get_var H2OSOI_LIQ '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'H2OSOI_ICE', varid), &
-        'get_column_soil', 'inq_varid H2OSOI_ICE '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, h2osoi_ice, start=ncstart, count=nccount), &
-        'get_column_soil', 'get_var H2OSOI_ICE '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'T_VEG', varid), &
-        'get_column_soil', 'inq_varid T_VEG '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, t_veg, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_soil', 'get_var T_VEG '//trim(filename))
-
-! Print a summary so far
-if ((debug > 3) .and. do_output()) then
-   write(*,*)'get_column_soil: raw CLM data for column ',soil_column
-   write(*,*)'  # of column ityp, snow layers :', cols1d_ityplun(soil_column), nlayers
-   write(*,*)'  h2osoi_liq :', h2osoi_liq(1:nlevtot)
-   write(*,*)'  h2osoi_ice :', h2osoi_ice(1:nlevtot)
-   write(*,*)'  t_soisno   :',   t_soisno(1:nlevtot)
-   write(*,*)'  t_veg      :',      t_veg(1)
-endif
-
-! Fill the output array ... finally
-soilcolumn%nlayers = nlayers
-! Currently, only consider the first layer of topsoil, i.e., the 6th layer of levtot
-d1 = (LEVGRND(1)+LEVGRND(2))/2
-d2 = (LEVGRND(3)-LEVGRND(1))/2
-
-! soilcolumn%ssm = ( h2osoi_liq(6) * 0.001 + h2osoi_liq(7) * 0.001 ) / ( d1 + d2 ) ! convert unit from kg/m2 to m3/m3
-soilcolumn%ssm = h2osoi_liq(6) * 0.001 / d1                                        ! convert unit from kg/m2 to m3/m3
-! soilcolumn%stg = ( t_soisno(6) * d1 + t_soisno(7) * d2 ) / ( d1 + d2 )           ! effective temperature of top two soil layers
-soilcolumn%stg = t_soisno(6)                                                       ! effective temperature of first soil layer
-
-soilcolumn%stv = t_veg(1)
-
-deallocate(h2osoi_liq, h2osoi_ice, t_soisno)
-
-end subroutine get_column_soil
-
-
-subroutine get_column_surfpara(ncid, filename, soil_column)
-! Read "soil first layer texture" data for radiative transfer model
-integer,          intent(in)  :: ncid
-character(len=*), intent(in)  :: filename
-integer,          intent(in)  :: soil_column
-
-real(r8)                      :: sandfrac_c(1), clayfrac_c(1),watsat(1)
-real(r8)                      :: fmv_in(1), bmv_in(1), xmv_in(1), hmv_in(1), qmv_in(1) 
-integer                       :: varid
-
-call nc_check(nf90_inq_varid(ncid,'WATSAT', varid), &
-        'get_column_surfpara', 'inq_varid WATSAT '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, watsat,     start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var WATSAT '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'SANDFRAC_C', varid), &
-        'get_column_surfpara', 'inq_varid SANDFRAC_C '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, sandfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var SANDFRAC_C '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'CLAYFRAC_C', varid), &
-        'get_column_surfpara', 'inq_varid CLAYFRAC_C '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, clayfrac_c, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var CLAYFRAC_C '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'FMV', varid), &
-        'get_column_surfpara', 'inq_varid FMV '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, fmv_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var FMV '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'BMV', varid), &
-        'get_column_surfpara', 'inq_varid BMV '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, bmv_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var BMV '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'XMV', varid), &
-        'get_column_surfpara', 'inq_varid XMV '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, xmv_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var XMV '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'QMV', varid), &
-        'get_column_surfpara', 'inq_varid QMV '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, qmv_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var QMV '//trim(filename))
-
-call nc_check(nf90_inq_varid(ncid,'HMV', varid), &
-        'get_column_surfpara', 'inq_varid HMV '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, hmv_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_surfpara', 'get_var HMV '//trim(filename))
-
-! Print a summary so far
-if ((debug > 3) .and. do_output()) then
-   write(*,*)'get_column_soil: raw CLM data for column ',soil_column
-   write(*,*)'  sandfrac_c :', sandfrac_c
-   write(*,*)'  clayfrac_c :', clayfrac_c
-   write(*,*)'  watsat     :', watsat
-   write(*,*)'  fmv        :', fmv_in
-   write(*,*)'  bmv        :', bmv_in
-   write(*,*)'  xmv        :', xmv_in
-   write(*,*)'  qmv        :', qmv_in
-   write(*,*)'  hmv        :', hmv_in
-endif
-
-soilcolumn%sat    = watsat(1)
-soilcolumn%ssand  = sandfrac_c(1)
-soilcolumn%sclay  = clayfrac_c(1)
-soilcolumn%fmv    = fmv_in(1)
-soilcolumn%bmv    = bmv_in(1)
-soilcolumn%xmv    = xmv_in(1)
-soilcolumn%qmv    = qmv_in(1)
-soilcolumn%hmv    = hmv_in(1)
-
-end subroutine get_column_surfpara
-
-
-subroutine get_column_lai(ncid, filename, soil_column)
-! Read "lai" for radiative transfer model
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: filename
-integer,          intent(in) :: soil_column
-
-real(r8) :: lai_in(1)
-
-integer  :: varid
-
-call nc_check(nf90_inq_varid(ncid,'LAI', varid), &
-        'get_column_lai', 'inq_varid LAI '//trim(filename))
-call nc_check(nf90_get_var(  ncid, varid, lai_in, start=(/ soil_column /), count=(/ 1 /)), &
-        'get_column_lai', 'get_var LAI '//trim(filename))
-
-if ((debug > 3) .and. do_output()) then
-   write(*,*)'get_column_lai: raw LAI data for column ',soil_column
-   write(*,*)'           LAI:', lai_in
-endif
-
-! Fill the output value
-soilcolumn%lai = lai_in(1)
-
-end subroutine get_column_lai
-
-
-
-subroutine destroy_column_soil
-
-soilcolumn%nlayers= 0
-soilcolumn%ssm    = 0.0_r4
-soilcolumn%stg    = 0.0_r4
-soilcolumn%stv    = 0.0_r4
-soilcolumn%sat    = 0.0_r4
-soilcolumn%ssand  = 0.0_r4
-soilcolumn%sclay  = 0.0_r4
-soilcolumn%lai    = 0.0_r4
-soilcolumn%fmv    = 0.0_r4
-soilcolumn%bmv    = 0.0_r4
-soilcolumn%xmv    = 0.0_r4
-soilcolumn%qmv    = 0.0_r4
-soilcolumn%hmv    = 0.0_r4
-
-end subroutine destroy_column_soil
-
-!======================================================================
 
 
 subroutine build_clm_instance_filename(instance, state_time, filename)
@@ -5604,53 +5298,6 @@ endif
 
 end subroutine build_clm_instance_filename
 
-
-subroutine build_lai_filename(freqin, state_time, laifilename)
-
-real(r8),         intent(in)  :: freqin 
-type(time_type),  intent(in)  :: state_time
-character(len=*), intent(out) :: laifilename
-
-integer :: year, month, day, hour, minute, second
-integer :: FF
-
-120 format (A,'_',I4.4,'-',I2.2,'-',I2.2,'.nc')
-
-call get_date(state_time, year, month, day, hour, minute, second)
-
-write(laifilename, 120) trim(lai_nc),year,month,day
-
-if( file_exist(laifilename) ) then ! perfect model scenario
-
-   if ( (debug > 99) .and. do_output()) then
-      write(string1,*)'Using lai data with ',trim(laifilename)
-      call error_handler(E_MSG, 'model_mod:build_lai_filename', string1)
-   endif
-
-endif
-
-end subroutine build_lai_filename
-
-subroutine build_Prior_Tb_instance_filename(instance, state_time, filename)
-! If the instance is 1, it could be a perfect model scenario
-! or it could be the first instance of many. CESM has a different
-! naming scheme for these.
-
-integer,          intent(in)  :: instance
-type(time_type),  intent(in)  :: state_time
-character(len=*), intent(out) :: filename
-
-integer :: year, month, day, hour, minute, second
-
-100 format (A,'.clm2_',I4.4,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
-110 format (A,'.clm2'      ,'.r.',I4.4,'-',I2.2,'-',I2.2,'-',I5.5,'.nc')
-
-call get_date(state_time, year, month, day, hour, minute, second)
-second = second + minute*60 + hour*3600
-
-write(filename,100) trim('/scratch/02714/zhaol/prior_tb'),instance,year,month,day,second
-
-end subroutine build_Prior_Tb_instance_filename
 
 
 subroutine SetLocatorArrays()
@@ -5812,6 +5459,10 @@ progvar(ivar)%update            = .false.
 
 if (variable_table(ivar,VT_ORIGININDX) == 'VECTOR') then
    progvar(ivar)%origin = trim(clm_vector_history_filename)
+elseif (variable_table(ivar,VT_ORIGININDX) == 'LAIIN') then
+   progvar(ivar)%origin = trim(lai_nc)
+elseif (variable_table(ivar,VT_ORIGININDX) == 'AUXIIN') then
+   progvar(ivar)%origin = trim(auxiliary_nc)
 elseif (variable_table(ivar,VT_ORIGININDX) == 'HISTORY') then
    progvar(ivar)%origin = trim(clm_history_filename)
 else
