@@ -1,0 +1,4 @@
+&convert_gridded_sif_nml
+   netcdf_file = 'ret_f_nr5_nsvd12_v26_waves734_nolog.grid_SIF_gome2__0.5x0.5_20080101_07.nc sif_input.nc'
+   out_file = 'obs_seq.out'
+  /

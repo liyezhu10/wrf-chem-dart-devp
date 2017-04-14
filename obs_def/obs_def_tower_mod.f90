@@ -26,7 +26,8 @@
 !TOWER_V_WIND_COMPONENT,         KIND_V_WIND_COMPONENT,           COMMON_CODE
 !TOWER_GLOBAL_RADIATION,         KIND_RADIATION,                  COMMON_CODE
 !TOWER_NET_CARBON_FLUX,          KIND_NET_CARBON_FLUX,            COMMON_CODE
-!FSIF,                           KIND_FSIF,                       COMMON_CODE
+!SOLAR_INDUCED_FLUORESCENCE,     KIND_SOLAR_INDUCED_FLUORESCENCE, COMMON_CODE
+!PARNORM_SIF,                    KIND_PAR_NORMALIZED_SIF,         COMMON_CODE
 !FPSN,                           KIND_FPSN,                       COMMON_CODE
 !TOWER_LATENT_HEAT_FLUX,         KIND_LATENT_HEAT_FLUX
 !TOWER_SENSIBLE_HEAT_FLUX,       KIND_SENSIBLE_HEAT_FLUX
@@ -504,16 +505,17 @@ real(r8) :: visible_in, visible_out, nir_in, nir_out
 real(r8) :: numer, denom
 
 integer :: stat(4)
+integer :: obs_mytag !>@todo remove this usage
 
 istatus = 1           ! positive indicates failure, 0 == success
 obs_val = MISSING_R8
 
 if ( .not. module_initialized ) call initialize_module(state_time)
 
-call interpolate(state, location, KIND_RADIATION_VISIBLE_DOWN, visible_in, stat(1))
-call interpolate(state, location, KIND_RADIATION_NEAR_IR_DOWN,     nir_in, stat(2))
-call interpolate(state, location, KIND_RADIATION_VISIBLE_UP,  visible_out, stat(3))
-call interpolate(state, location, KIND_RADIATION_NEAR_IR_UP,      nir_out, stat(4))
+call interpolate(state, location, KIND_RADIATION_VISIBLE_DOWN, visible_in, obs_mytag, stat(1))
+call interpolate(state, location, KIND_RADIATION_NEAR_IR_DOWN,     nir_in, obs_mytag, stat(2))
+call interpolate(state, location, KIND_RADIATION_VISIBLE_UP,  visible_out, obs_mytag, stat(3))
+call interpolate(state, location, KIND_RADIATION_NEAR_IR_UP,      nir_out, obs_mytag, stat(4))
 
 if (any(stat /= 0)) then
    istatus = stat(1)*1000 + stat(2)*100 + stat(3)*10 + stat(4)
