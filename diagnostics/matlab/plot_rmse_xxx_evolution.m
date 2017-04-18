@@ -406,6 +406,8 @@ string_other = sprintf('%s pr=%.5g, po=%.5g', plotdat.copystring, ...
     mean_pr_other, mean_po_other);
 plotdat.subtitle = sprintf('%s     %s',string_rmse, string_other);
 
+% Plot the requested quantity on the left axis. This is the first
+% thing plotted to get the proper legend symbols in the easiest manner.
 % Plot the rmse and 'xxx' on the same (left) axis.
 % The observation count will use the axis on the right.
 % We want to suppress the 'auto' feature of the axis labelling,
@@ -418,8 +420,16 @@ set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
 h  = legend(h1,'rmse', plotdat.copystring);
 set(h,'Interpreter','none','Box','off')
 
-% set the range of the existing axis to be consistent with all the bins.
-% replace y axis values
+% Attempt to make plotting robust in the face of 'empty' bins.
+% There was one case where the observations were only at one time, but
+% obs_diag was run with multple bins. All the empty bins had NaN in them,
+% so matlab auto-ranged to the single time (+/-). Then along comes the
+% need to plot symbols for how many obs are possible (zero) and the axes
+% were a mess.
+% The 't' variable has all the temporal bins specified, so we use that
+% to determine the X axis limits. After we know them, we turn OFF the
+% bits (which normally causes the X axis limits revert) and manually
+% reinstate the full axis values.
 
 hdummy = line(t, ones(size(t)) * plotdat.Yrange);
 axlims = axis;
@@ -466,8 +476,8 @@ ax2 = axes( ...
     'XLim'    ,get(ax1,'XLim'), ...
     'XTick'   ,get(ax1,'XTick'), ...
     'YDir'    ,get(ax1,'YDir'), ...
-    'Color','none', ...
-    'YColor','b', ...
+    'Color'   ,'none', ...
+    'YColor'  ,'b', ...
     'XAxisLocation','top', ...
     'YAxisLocation','right');
 

@@ -272,7 +272,7 @@ for ivar = 1:plotdat.nvars
         sum(guess(:,plotdat.NQC6index ,:,:));
     
     if ( sum(nposs(:)) < 1 )
-        fprintf('%s no obs for %s...  skipping\n', plotdat.varnames{ivar})
+        fprintf('no obs for %s...  skipping\n', plotdat.varnames{ivar})
         continue
     end
     
@@ -393,7 +393,8 @@ string_guess = sprintf('forecast: mean=%.5g', mean_prior);
 string_analy = sprintf('analysis: mean=%.5g', mean_post);
 plotdat.subtitle = sprintf('%s   %s',string_guess, string_analy);
 
-% Plot the requested quantity on the left axis.
+% Plot the requested quantity on the left axis. This is the first
+% thing plotted to get the proper legend symbols in the easiest manner.
 % The observation count will use the axis on the right.
 % We want to suppress the 'auto' feature of the axis labelling,
 % so we manually set some values that normally
@@ -405,8 +406,16 @@ set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
 h  = legend('forecast', 'analysis');
 set(h,'Interpreter','none','Box','off')
 
-% set the range of the existing axis to be consistent with all the bins.
-% replace y axis values
+% Attempt to make plotting robust in the face of 'empty' bins.
+% There was one case where the observations were only at one time, but
+% obs_diag was run with multple bins. All the empty bins had NaN in them,
+% so matlab auto-ranged to the single time (+/-). Then along comes the
+% need to plot symbols for how many obs are possible (zero) and the axes
+% were a mess.
+% The 't' variable has all the temporal bins specified, so we use that
+% to determine the X axis limits. After we know them, we turn OFF the
+% bits (which normally causes the X axis limits revert) and manually
+% reinstate the full axis values.
 
 hdummy = line(t, ones(size(t)) * plotdat.Yrange);
 axlims = axis;

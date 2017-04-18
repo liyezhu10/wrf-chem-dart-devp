@@ -161,6 +161,7 @@ figuredata = setfigure();
 %----------------------------------------------------------------------
 % Loop around (time-copy-level-region) observation types
 %----------------------------------------------------------------------
+psfname = cell(plotdat.nvars);
 
 for ivar = 1:plotdat.nvars
     
@@ -227,7 +228,7 @@ for ivar = 1:plotdat.nvars
         plotdat.nlevels, plotdat.nregions);
     
     % Collapse the time dimension if need be.
-    % TJH FIXME ... this should honor the time_to_skip ...
+    % >@todo TJH FIXME ... this should honor the time_to_skip ...
     
     if ( timeindex < 0 )
         guess             = sum(guess,1);
