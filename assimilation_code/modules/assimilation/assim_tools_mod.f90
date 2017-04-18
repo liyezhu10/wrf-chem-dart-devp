@@ -372,7 +372,7 @@ if (do_output()) then
                              text3='coordinate conversion; controlled by namelist item "distribute_mean"')
        else
           call error_handler(E_MSG,'assim_tools_init:', 'Replicating a copy of the ensemble mean on every task', &
-                             text2='(uses more memory per task but may run faster if doing vertical ', &
+                             text2='uses more memory per task but may run faster if doing vertical ', &
                              text3='coordinate conversion; controlled by namelist item "distribute_mean"')
        endif
    endif
