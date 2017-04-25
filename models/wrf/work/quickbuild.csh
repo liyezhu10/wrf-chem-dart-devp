@@ -52,6 +52,7 @@ if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
 endif
 
+\rm -f *.o *.mod 
 
 #----------------------------------------------------------------------
 # Build any NetCDF files from .cdl files
