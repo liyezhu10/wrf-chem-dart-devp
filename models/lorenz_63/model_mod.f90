@@ -43,6 +43,9 @@ use default_model_mod,     only : end_model, pert_model_copies, nc_write_model_v
 implicit none
 private
 
+! these routines must be public and you cannot change the
+! arguments because they will be called *from* other DART code.
+
 !> required routines with code in this module
 public :: get_model_size, &
           get_state_meta_data,  &
