@@ -52,6 +52,7 @@ if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
 endif
 
+\rm -f *.o *.mod 
 
 #----------------------------------------------------------------------
 # Build any NetCDF files from .cdl files
@@ -59,20 +60,24 @@ endif
 
 @ n = 0
 
-foreach DATAFILE ( *.cdl )
+@ has_cdl = `ls *.cdl | wc -l` >& /dev/null
 
-   set OUTNAME = `basename $DATAFILE .cdl`.nc
-
-   if ( ! -f $OUTNAME ) then
-      @ n = $n + 1
-      echo
-      echo "---------------------------------------------------"
-      echo "constructing $MODEL data file $n named $OUTNAME" 
+if ( $has_cdl > 0 ) then
+   foreach DATAFILE ( *.cdl )
    
-      ncgen -o $OUTNAME $DATAFILE  || exit $n
-   endif
-
-end
+      set OUTNAME = `basename $DATAFILE .cdl`.nc
+   
+      if ( ! -f $OUTNAME ) then
+         @ n = $n + 1
+         echo
+         echo "---------------------------------------------------"
+         echo "constructing $MODEL data file $n named $OUTNAME" 
+      
+         ncgen -o $OUTNAME $DATAFILE  || exit $n
+      endif
+   
+   end
+endif
 
 
 #----------------------------------------------------------------------
