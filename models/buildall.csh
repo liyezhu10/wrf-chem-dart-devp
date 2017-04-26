@@ -108,7 +108,7 @@ foreach MODEL ( $DO_THESE_MODELS )
     if ( $FAILURE ) then
       echo "ERROR - unsuccessful build of $MODEL at "`date`
     else
-      echo "End of succesful build of $MODEL at "`date`
+      echo "End of successful build of $MODEL at "`date`
     endif
     echo "=================================================================="
     echo "=================================================================="

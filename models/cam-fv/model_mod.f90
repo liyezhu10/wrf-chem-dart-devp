@@ -153,16 +153,11 @@ use mpi_utilities_mod, only : my_task_id, task_count
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 use location_mod,      only : location_type, get_location, set_location, query_location,         &
-                              LocationDims, LocationName, LocationLName, horiz_dist_only,        &
-                              vert_is_level, vert_is_pressure, vert_is_height, vert_is_surface,  &
-                              vert_is_undef, vert_is_scale_height,                               &
+                              is_vertical,                                                       &
                               VERTISUNDEF, VERTISSURFACE, VERTISLEVEL,                           &
                               VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT, write_location,   &
-                              get_close_type, get_close_maxdist_init, get_close_obs_init,        &
-                              get_close_obs_destroy,get_dist,loc_get_close_obs => get_close_obs
+                              get_close_type, get_dist, loc_get_close_obs => get_close_obs
 
-! get_close_maxdist_init, get_close_obs_init, can be modified here (i.e. to add vertical information
-! to the initial distance calcs), but will need subroutine pointers like get_close_obs.
 ! READ THIS SYNTAX as:
 !   There's a subroutine in location_mod named 'get_close_obs'.
 !   If I want to use that one in this module then refer to it as 'loc_get_close_obs'.
@@ -233,6 +228,7 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices, get_di
                                   get_num_dims, get_domain_size, get_dart_vector_index, &
                                   get_index_start, get_index_end
 
+use default_model_mod,    only : adv_1step, init_time, init_conditions
 ! end of use statements
 != = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 
@@ -243,17 +239,15 @@ private
 
 ! The first block are the 16 required interfaces.  The following block
 ! are additional useful interfaces that utility programs can call.
-public ::                                                            &
-   static_init_model, get_model_size, get_model_time_step,           &
-   pert_model_copies, get_state_meta_data, model_interpolate,         &
-   nc_write_model_atts, nc_write_model_vars,                         &
-   init_conditions, init_time, adv_1step, end_model,                 &
-   get_close_maxdist_init, get_close_obs_init, get_close_obs, &
-   construct_file_name_in, write_model_time, vert_convert,    &
-   query_vert_localization_coord, read_model_time
-
-! Why were these in public?   get_close_maxdist_init, get_close_obs_init, &
-! Because assim_model needs them to be there.
+public ::                                                      &
+   static_init_model, get_model_size,                          &
+   shortest_time_between_assimilations,                        &
+   pert_model_copies, get_state_meta_data, model_interpolate,  &
+   nc_write_model_atts, nc_write_model_vars,                   &
+   init_conditions, init_time, adv_1step, end_model,           &
+   get_close_obs, get_close_state,                             &
+   convert_vertical_obs, convert_vertical_state,               &
+   query_vert_localization_coord, read_model_time, write_model_time
 
 public ::                                                   &
    model_type, prog_var_to_vector, vector_to_prog_var,      &
@@ -541,7 +535,7 @@ subroutine static_init_model()
 ! For now, does this by reading info from a fixed name netcdf file.
 
 integer  :: iunit, io, i, nc_file_ID
-integer  :: max_levs, ierr
+integer  :: max_levs
 real(r8), allocatable :: clampfield(:,:)
 ! RMA-KR; clampfield added to assist restricting the range of some variable values.
 
@@ -2127,9 +2121,6 @@ end subroutine write_cam_times
 !> returns the associated location and vertical location type 'which_vert'.
 !> Optionally returns the DART KIND of the variable.
 !> 
-!> @param[in]    state_handle
-!> The DART ensemble_type structure which gives access to the ensemble of model states.
-!>
 !> @param[in]    index_in
 !> The 'index' of a variable in the state vector, whose physical location 
 !> and possibly variable kind are needed,
@@ -2141,7 +2132,7 @@ end subroutine write_cam_times
 !> The optional argument which can return the DART KIND of the variable.
 
 
-subroutine get_state_meta_data(state_handle, index_in, location, var_kind)
+subroutine get_state_meta_data(index_in, location, var_kind)
 
 ! Given an integer index into the state vector structure, returns the
 ! associated location.
@@ -2152,7 +2143,6 @@ subroutine get_state_meta_data(state_handle, index_in, location, var_kind)
 ! coordinate (it will be ignored), but the others will require more interesting  fixes.
 ! See order_state_fields for the QTY_s (and corresponding model variable names).
 
-type(ensemble_type), intent(in)  :: state_handle
 integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_kind
@@ -2226,37 +2216,34 @@ end function get_model_size
 
 !-----------------------------------------------------------------------
 !>
-!> Function get_model_time_step assigns the 'Time_step_atmos' calculated in 
-!> static_init_model to the function result 'get_model_time_step'.
+!> Function shortest_time_between_assimilations assigns the 'Time_step_atmos' calculated in 
+!> static_init_model to the function result 'shortest_time_between_assimilations'.
 
-function get_model_time_step()
+function shortest_time_between_assimilations()
 
-! Returns the time step of the model.
+! Returns the shortest time you want to ask the model to
+! advance in a single step
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 
 if (.not. module_initialized) call static_init_model()
 
-get_model_time_step =  Time_step_atmos
+shortest_time_between_assimilations =  Time_step_atmos
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
 !-----------------------------------------------------------------------
 !>
 !> Function nc_write_model_atts
 !> writes the model-specific attributes to a netCDF file.
 !> 
-!> @param[in] nc_file_ID      
-!>  netCDF file identifier
-
-function nc_write_model_atts( nc_file_ID, model_mod_will_write_state ) result(ierr)
+subroutine nc_write_model_atts( nc_file_ID, model_mod_will_write_state ) 
 
 ! Writes the model-specific attributes to a netCDF file.
 ! TJH Fri Aug 29 MDT 2003
 
 integer, intent(in)  :: nc_file_ID      ! netCDF file identifier
 logical, intent(out) :: model_mod_will_write_state
-integer              :: ierr          ! return value of function
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -2278,8 +2265,6 @@ if (.not. module_initialized) call static_init_model()
 
 model_mod_will_write_state = .true.
 
-! FIXME; bad strategy; start with failure.
-ierr = 0     ! assume normal termination
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ! Make sure nc_file_ID refers to an open netCDF file,
@@ -2602,7 +2587,7 @@ endif
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 call nc_check(nf90_sync(nc_file_ID),'nc_write_model_atts', 'sync ')
 
-end function nc_write_model_atts
+end subroutine nc_write_model_atts
 
 !-----------------------------------------------------------------------
 !>
@@ -2621,7 +2606,7 @@ end function nc_write_model_atts
 !> @param[in] timeindex
 !> The time slot in the file, into which the state vector will be written
 
-function nc_write_model_vars( nc_file_ID, statevec, memindex, timeindex ) result(ierr)
+subroutine nc_write_model_vars( nc_file_ID, statevec, memindex, timeindex ) 
 
 ! Writes the model-specific variables to a netCDF file
 ! TJH 25 June 2003
@@ -2630,7 +2615,6 @@ integer,  intent(in) :: nc_file_ID
 real(r8), intent(in) :: statevec(:)
 integer,  intent(in) :: memindex
 integer,  intent(in) :: timeindex
-integer   :: ierr
 
 type(model_type) :: Var
 
@@ -2642,8 +2626,6 @@ character(len=8) :: cfield
 
 if (.not. module_initialized) call static_init_model()
 
-! FIXME; bad strategy; start with failure.
-ierr = 0     ! assume normal termination
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ! make sure nc_file_ID refers to an open netCDF file,
@@ -2733,7 +2715,7 @@ call nc_check(nf90_sync(nc_file_ID),'nc_write_model_vars ','sync ')
 
 call end_model_instance(Var)   ! should avoid any memory leaking
 
-end function nc_write_model_vars
+end subroutine nc_write_model_vars
 
 
 ! End of Module I/O
@@ -3035,7 +3017,7 @@ if (obs_kind == QTY_SURFACE_ELEVATION) then
       call error_handler(E_WARN, 'interp_lonlat', string1,source,revision,revdate)
    endif
 
-elseif (vert_is_level(obs_loc)) then
+elseif (is_vertical(obs_loc, "LEVEL")) then
    ! Pobs
    ! FIXME; I may want to change get_val_level to accept REAL level, not INT.
    !        What's the benefit?
@@ -3053,7 +3035,7 @@ elseif (vert_is_level(obs_loc)) then
 
    ! Pobs end
 
-elseif (vert_is_pressure(obs_loc)) then
+elseif (is_vertical(obs_loc, "PRESSURE")) then
    call get_val_pressure(state_handle, ens_size,lon_ind_below,lat_ind_below,lon_lat_lev(3),obs_kind,val_11,cur_vstatus)
    call update_vstatus(ens_size, cur_vstatus, vstatus)
    call get_val_pressure(state_handle, ens_size,lon_ind_below,lat_ind_above,lon_lat_lev(3),obs_kind,val_12,cur_vstatus)
@@ -3063,7 +3045,7 @@ elseif (vert_is_pressure(obs_loc)) then
    call get_val_pressure(state_handle, ens_size,lon_ind_above,lat_ind_above,lon_lat_lev(3),obs_kind,val_22,cur_vstatus)
    call update_vstatus(ens_size, cur_vstatus, vstatus)
 
-elseif (vert_is_height(obs_loc)) then
+elseif (is_vertical(obs_loc, "HEIGHT")) then
    call get_val_height(state_handle, ens_size, lon_ind_below, lat_ind_below, lon_lat_lev(3), obs_loc, obs_kind, val_11, cur_vstatus)
    call update_vstatus(ens_size, cur_vstatus, vstatus)
    call get_val_height(state_handle, ens_size, lon_ind_below, lat_ind_above, lon_lat_lev(3), obs_loc, obs_kind, val_12, cur_vstatus)
@@ -3073,7 +3055,7 @@ elseif (vert_is_height(obs_loc)) then
    call get_val_height(state_handle,  ens_size,lon_ind_above, lat_ind_above, lon_lat_lev(3), obs_loc, obs_kind, val_22, cur_vstatus)
    call update_vstatus(ens_size, cur_vstatus, vstatus)
 
-elseif (vert_is_surface(obs_loc)) then
+elseif (is_vertical(obs_loc, "SURFACE")) then
    ! The 'lev' argument is set to 1 because there is no level for these types, and 'lev' will be
    ! ignored.
    call get_val(state_handle, ens_size, lon_ind_below, lat_ind_below, 1, obs_kind, val_11, cur_vstatus)
@@ -3093,13 +3075,13 @@ elseif (vert_is_surface(obs_loc)) then
 !     write(string1,'(A)') 'No code available yet for obs_kind = QTY_PRESSURE '
 !     call error_handler(E_ERR, 'interp_lon_lat', string1)
 
-elseif (vert_is_scale_height(obs_loc)) then
-   ! Need option for vert_is_scale_height
+elseif (is_vertical(obs_loc, "SCALE_HEIGHT")) then
+   ! Need option for this case
    write(string1,*)'Scale height is not an acceptable vert coord yet.  Skipping observation'
    call error_handler(E_WARN, 'interp_lonlat', string1,source,revision,revdate)
    return
 
-! Need option for vert_is_undefined
+! Need option for is_vertical("UNDEFINED")
 else
    write(string1,*) '   No vert option chosen!'
    call error_handler(E_WARN, 'interp_lonlat', string1,source,revision,revdate)
@@ -3854,10 +3836,10 @@ end subroutine vector_to_prog_var
 !> @param[in]    filt_gc
 !> The DART get_close_type containing the state variables which are potentially close to 'location'
 !> 
-!> @param[in]    base_obs_loc
+!> @param[in]    base_loc
 !> The DART location_type location of the observation, which is the target of *get_close_obs*
 !> 
-!> @param[in]    base_obs_type 
+!> @param[in]    base_type 
 !> The DART TYPE (not KIND) of the observation
 !> 
 !> @param[inout] locs(:)
@@ -3879,8 +3861,50 @@ end subroutine vector_to_prog_var
 !> @param[in]    state_handle
 !> The DART ensemble_type structure which gives access to the ensemble of model states.
 
-subroutine get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
-                            num_close, close_indices, distances, state_handle)
+subroutine get_close_obs(filt_gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_indices, distances, state_handle)
+
+type(get_close_type), intent(in)    :: filt_gc
+type(location_type),  intent(in)    :: base_loc
+integer,              intent(in)    :: base_type
+type(location_type),  intent(inout) :: locs(:)
+integer,              intent(in)    :: loc_qtys(:)
+integer,              intent(in)    :: loc_types(:)
+integer,              intent(out)   :: num_close
+integer,              intent(out)   :: close_indices(:)
+real(r8),             intent(out), optional :: distances(:)
+type(ensemble_type),  intent(in),  optional :: state_handle
+
+call get_close(filt_gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_indices, distances, state_handle)
+
+end subroutine get_close_obs
+
+!-----------------------------------------------------------------------
+
+subroutine get_close_state(filt_gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                         num_close, close_indices, distances, state_handle)
+
+type(get_close_type), intent(in)    :: filt_gc
+type(location_type),  intent(in)    :: base_loc
+integer,              intent(in)    :: base_type
+type(location_type),  intent(inout) :: locs(:)
+integer,              intent(in)    :: loc_qtys(:)
+integer(i8),          intent(in)    :: loc_indx(:)
+integer,              intent(out)   :: num_close
+integer,              intent(out)   :: close_indices(:)
+real(r8),             intent(out), optional :: distances(:)
+type(ensemble_type),  intent(in),  optional :: state_handle
+
+call get_close(filt_gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_indices, distances, state_handle)
+
+end subroutine get_close_state
+
+!-----------------------------------------------------------------------
+
+subroutine get_close(filt_gc, base_loc, base_type, locs, loc_qtys, &
+                     num_close, close_indices, distances, state_handle)
 
 ! get_close_obs takes as input an "observation" location, a DART TYPE (not KIND),
 ! and a list of all potentially close locations and KINDS on this task.
@@ -3897,15 +3921,15 @@ subroutine get_close_obs(filt_gc, base_obs_loc, base_obs_type, locs, kinds, &
 ! get_close_obs will use the ensemble average to convert the obs and/or state
 !               vertical location(s) to a standard (vert_coord) vertical location
 
-type(ensemble_type),  intent(in)    :: state_handle
 type(get_close_type), intent(in)    :: filt_gc
-type(location_type),  intent(in)    :: base_obs_loc
-integer,              intent(in)    :: base_obs_type
+type(location_type),  intent(in)    :: base_loc
+integer,              intent(in)    :: base_type
 type(location_type),  intent(inout) :: locs(:)
-integer,              intent(in)    :: kinds(:)
+integer,              intent(in)    :: loc_qtys(:)
 integer,              intent(out)   :: num_close
 integer,              intent(out)   :: close_indices(:)
-real(r8),             intent(out)   :: distances(:)
+real(r8),             intent(out), optional :: distances(:)
+type(ensemble_type),  intent(in),  optional :: state_handle
 
 ! FIXME remove some (unused) variables?
 integer  :: k, t_ind
@@ -3913,14 +3937,14 @@ integer  :: base_which, local_base_which, obs_which, local_obs_which
 integer  :: base_obs_kind
 real(r8) :: base_array(3), local_base_array(3), obs_array(3), local_obs_array(3)
 real(r8) :: damping_dist, threshold, thresh_wght
-type(location_type) :: local_base_obs_loc, local_loc, vert_only_loc
+type(location_type) :: local_base_loc, local_loc, vert_only_loc
 
 if (.not. module_initialized) call static_init_model()
 
 ! If base_obs vert type is not pressure; convert it to pressure
-base_which    = nint(query_location(base_obs_loc))
-base_array    = get_location(base_obs_loc)
-base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
+base_which    = nint(query_location(base_loc))
+base_array    = get_location(base_loc)
+base_obs_kind = get_quantity_for_type_of_obs(base_type)
 
 ! Upgrading convert_vert to use field profiles at the actual ob location is
 ! probably not worthwhile: that approx horiz location of the obs is used only to
@@ -3930,18 +3954,18 @@ base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
 ! so any errors introduced by this approx will be continuous and random,
 ! introducing no bias.
 if (base_which == VERTISPRESSURE .and. vert_coord == 'pressure') then
-   local_base_obs_loc = base_obs_loc
-   local_base_array   = get_location(base_obs_loc)  ! needed in num_close loop
+   local_base_loc = base_loc
+   local_base_array   = get_location(base_loc)  ! needed in num_close loop
    local_base_which   = base_which
 else
-   call convert_vert(state_handle, base_array, base_which, base_obs_loc, base_obs_kind, &
+   call convert_vert(state_handle, base_array, base_which, base_loc, base_obs_kind, &
                      local_base_array, local_base_which)
-   local_base_obs_loc = set_location(base_array(1), base_array(2), local_base_array(3), &
+   local_base_loc = set_location(base_array(1), base_array(2), local_base_array(3), &
                                      local_base_which)
 endif
 
 ! Get all the potentially close obs but no distances. 
-call loc_get_close_obs(filt_gc, local_base_obs_loc, base_obs_type, locs, kinds, &
+call loc_get_close_obs(filt_gc, local_base_loc, base_type, locs, loc_qtys, loc_qtys, &
                        num_close, close_indices)
 
 do k = 1, num_close
@@ -3974,7 +3998,7 @@ do k = 1, num_close
       local_obs_which    = local_base_which
 
    else
-      call convert_vert(state_handle, obs_array, obs_which, locs(t_ind), kinds(t_ind), &
+      call convert_vert(state_handle, obs_array, obs_which, locs(t_ind), loc_qtys(t_ind), &
                         local_obs_array, local_obs_which)
 
       ! save the converted location back into the original list.
@@ -3995,16 +4019,16 @@ do k = 1, num_close
 !  obs kinds to only other obs and state vars of the same kind.
    if ((impact_kind_index >= 0)                .and. &
        (impact_kind_index == base_obs_kind)    .and. &
-       (impact_kind_index /= kinds(t_ind))) then
+       (impact_kind_index /= loc_qtys(t_ind))) then
       distances(k) = 999999.0_r8     ! arbitrary very large distance
 
    else
       ! Need to damp the influence of all obs (VERTISUNDEF, VERTISSURFACE too) on model state vars
       ! above highest_state_pressure_Pa.
 
-      ! The which vert of local_base_obs_loc determines how vertical distance to local_loc is calculated.
+      ! The which vert of local_base_loc determines how vertical distance to local_loc is calculated.
       ! It can be VERTISSCALEHEIGHT.
-      distances(k) = get_dist(local_base_obs_loc, local_loc, base_obs_type, kinds(t_ind))
+      distances(k) = get_dist(local_base_loc, local_loc, base_type, loc_qtys(t_ind))
 
       ! Damp the influence of obs, which are below the namelist variable highest_OBS_pressure_Pa,
       ! on variables above highest_STATE_pressure_Pa.
@@ -4040,7 +4064,7 @@ do k = 1, num_close
 
 enddo
 
-end subroutine get_close_obs
+end subroutine get_close
 
 !-----------------------------------------------------------------------
 !> wrapper for convert_vert so it can be called from assim_tools
@@ -4057,40 +4081,91 @@ end subroutine get_close_obs
 !> @param[out]   vstatus 
 !> The status of the conversion from one vertical location to another.
 !>
-subroutine vert_convert(state_handle, obs_loc, obs_kind, vstatus)
+!--------------------------------------------------------------------
 
-type(ensemble_type),    intent(in)    :: state_handle
-type(location_type),    intent(inout) :: obs_loc
-integer,                intent(in)    :: obs_kind
-integer,                intent(out)   :: vstatus
+subroutine convert_vertical_obs(state_handle, num, locs, loc_kinds, loc_types, &
+                                which_vert, status)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_kinds(:), loc_types(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status(:)
 
 real(r8) :: old_array(3)
-integer  :: old_which
+integer  :: old_which, wanted_vert
 type(location_type) :: old_loc
 
 real(r8) :: new_array(3)
-integer  :: new_which
+integer  :: new_which, i
 
 
-vstatus = 0 ! I don't think cam has a return status for vertical conversion
+status(:) = 0 ! I don't think cam has a return status for vertical conversion
+wanted_vert = query_vert_localization_coord() 
 
-old_loc = obs_loc
-old_array = get_location(obs_loc)
-old_which = query_location(obs_loc, 'which_vert')
+do i=1, num
+   old_loc = locs(i)
+   old_array = get_location(locs(i))
+   old_which = query_location(locs(i), 'which_vert')
 
-if (old_which == query_vert_localization_coord() ) then
-   return
-endif
+   if (old_which == wanted_vert) cycle
 
-call convert_vert(state_handle, old_array, old_which, old_loc, obs_kind, new_array, new_which)
+   call convert_vert(state_handle, old_array, old_which, old_loc, loc_kinds(i), new_array, new_which)
 
-if(new_which == MISSING_I) then
-   vstatus = 1
-else
-   obs_loc = set_location(new_array(1), new_array(2), new_array(3), new_which)
-endif
+   if(new_which == MISSING_I) then
+      status(i) = 1
+   else
+      locs(i) = set_location(new_array(1), new_array(2), new_array(3), new_which)
+   endif
+enddo
 
-end subroutine vert_convert
+
+end subroutine convert_vertical_obs
+
+!--------------------------------------------------------------------
+
+subroutine convert_vertical_state(state_handle, num, locs, loc_kinds, loc_indx, &
+                                  which_vert, istatus)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_kinds(:)
+integer(i8),         intent(in)    :: loc_indx(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: istatus
+
+real(r8) :: old_array(3)
+integer  :: old_which, wanted_vert
+type(location_type) :: old_loc
+
+real(r8) :: new_array(3)
+integer  :: new_which, i
+
+wanted_vert = query_vert_localization_coord() 
+
+do i=1, num
+   old_loc = locs(i)
+   old_array = get_location(locs(i))
+   old_which = query_location(locs(i), 'which_vert')
+
+   if (old_which == wanted_vert) cycle
+
+   call convert_vert(state_handle, old_array, old_which, old_loc, loc_kinds(i), new_array, new_which)
+
+   ! this is converting state locations.  it shouldn't fail.
+   if(new_which == MISSING_I) then
+      istatus = 1
+      return
+   else
+      locs(i) = set_location(new_array(1), new_array(2), new_array(3), new_which)
+   endif
+enddo
+
+istatus = 0
+
+end subroutine convert_vertical_state
 
 
 !-----------------------------------------------------------------------
@@ -4483,34 +4558,6 @@ Vars2Perturb : do pert_fld=1,100
 enddo Vars2Perturb
 
 end subroutine pert_model_copies
-
-!-----------------------------------------------------------------------
-!>
-!> Subroutine init_conditions
-!> reads in restart initial conditions  -- noop for CESM atmospheric components.
-!> 
-!> @param[inout] st_vec(:)
-!> The state vector which is NOT read from a file by this routine.
-
-subroutine init_conditions(st_vec)
-
-! Reads in restart initial conditions  -- noop for CAM
-
-real(r8), intent(inout) :: st_vec(:)
-
-if (.not. module_initialized) call static_init_model()
-
-call error_handler(E_ERR,"init_conditions", &
-                  "WARNING!!  CAM model has no built-in default state", &
-                  source, revision, revdate, &
-                  text2="cannot run with 'start_from_restart = .false.'", &
-                  text3="use 'cam_to_dart' to create a CAM state vector file")
-
-st_vec = MISSING_R8  ! just to silence compiler messages
-
-end subroutine init_conditions
-
-
 
 ! End of initial model state section
 
@@ -5130,40 +5177,6 @@ end subroutine end_model_instance
 
 !-----------------------------------------------------------------------
 !>
-!> Subroutine adv_1step
-!> advances model 1 forecast length  -- noop for CESM atmospheric components.
-!> 
-!> @param[inout] st_vec(:)
-!> The state vector which is NOT advanced by this routine.
-!> 
-!> @param[in] Time
-!> The DART time_type which is NOT the end of a forecast.
-
-
-subroutine adv_1step(st_vec, Time)
-
-real(r8), intent(inout) :: st_vec(:)
-
-! Time is needed for more general models like this; need to add in to low-order models.
-type(time_type), intent(in) :: Time
-
-! This is a no-op for CAM; only asynch integration
-! Can be used to test the assim capabilities with a null advance
-
-if (.not. module_initialized) call static_init_model()
-
-! make it an error by default; comment these calls out to actually
-! test assimilations with null advance.
-
-call error_handler(E_ERR,'adv_1step', &
-                  'CAM model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-! newFIXME; add code here to silence compiler warnings about unused variables.
-
-end subroutine adv_1step
-
-!-----------------------------------------------------------------------
-!>
 !> Subroutine end_model
 !> deallocates arrays that are in module global storage.
 
@@ -5197,33 +5210,6 @@ call end_grid_1d_instance(ilev)
 call end_grid_1d_instance(P0)
 
 end subroutine end_model
-
-!-----------------------------------------------------------------------
-!>
-!> Subroutine init_time
-!> reads in initial time  -- noop for CESM atmospheric components.
-!> 
-!> @param[inout] time
-!> The DART time_type time which is NOT initialized here.
-
-subroutine init_time(time)
-
-! For now returns value of Time_init which is set in initialization routines.
-
-type(time_type), intent(out) :: time
-
-if (.not. module_initialized) call static_init_model()
-
-call error_handler(E_ERR,"init_conditions", &
-                  "WARNING!!  CAM model has no built-in default time", &
-                  source, revision, revdate, &
-                  text2="cannot run with 'start_from_restart = .false.'", &
-                  text3="use 'cam_to_dart' to create a CAM state vector file")
-
-! To silence the compiler warnings:
-time = set_time(0, 0)
-
-end subroutine init_time
 
 !-------------------------------------------------------------------------
 !> This replaces set_ps_arrays.  It handles the whole ensemble,
