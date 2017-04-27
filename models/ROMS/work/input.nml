@@ -170,7 +170,6 @@
 
 &model_nml
    roms_filename               = 'roms_input.nc'
-   output_state_vector         = .false.
    assimilation_period_days    = 8
    assimilation_period_seconds = 0
    vert_localization_coord     = 3
