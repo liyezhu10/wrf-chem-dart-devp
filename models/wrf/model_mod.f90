@@ -93,6 +93,8 @@ use sort_mod,              only : sort
 
 use distributed_state_mod, only : get_state
 
+use default_model_mod,   only : adv_1step, init_conditions, init_time
+
 use state_structure_mod, only : add_domain, get_model_variable_indices, &
                                 state_structure_info, &
                                 get_index_start, get_index_end, &
@@ -124,9 +126,7 @@ private
 
 
 !-----
-! DART requires 16 specific public interfaces from model_mod.f90 -- Note
-!   that the last four are simply "stubs" since WRF currently requires use
-!   of system called shell scripts to advance the model.
+! DART requires 16 specific public interfaces from model_mod.f90 
 
 public ::  get_model_size,                &
            get_state_meta_data,           &
@@ -141,12 +141,12 @@ public ::  get_model_size,                &
            convert_vertical_state,        &
            pert_model_copies,             &
            read_model_time,               &
-           write_model_time
+           write_model_time,              &
+           end_model
 
 
-!  public stubs 
+!  public stubs with no code in this module
 public ::  adv_1step,       &
-           end_model,       &
            init_time,       &
            init_conditions
 
@@ -167,8 +167,6 @@ public ::  get_number_domains,          &
            get_variable_bounds,         &
            set_variable_bound_defaults, &
            get_variable_size_from_file, &
-           trans_3Dto1D, trans_1Dto3D,  &
-           trans_2Dto1D, trans_1Dto2D,  &
            get_wrf_date, set_wrf_date,  &
            height_diff_check
 
@@ -3709,7 +3707,7 @@ logical               :: debug = .false.
 
 !-----------------------------------------------------------------
 
-model_mod_writes_state_variables = .true. 
+model_mod_writes_state_variables = .false. 
 
 !-----------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file, 
@@ -4480,169 +4478,13 @@ call nc_check(nf90_sync(ncFileID),'nc_write_model_atts','sync')
 end subroutine nc_write_model_atts
 
 
-
-subroutine nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) 
-!-----------------------------------------------------------------
-
-
-integer,                intent(in) :: ncFileID      ! netCDF file identifier
-real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: copyindex
-integer,                intent(in) :: timeindex
-
-!-----------------------------------------------------------------
-
-logical, parameter :: debug = .false.  
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarID, VarID, id, ind, my_index
-integer :: i,j
-real(r8), allocatable, dimension(:,:)   :: temp2d
-real(r8), allocatable, dimension(:,:,:) :: temp3d
-character(len=NF90_MAX_NAME) :: varname
-character(len=1) :: idom
-integer, dimension(2) :: dimsizes_2D
-integer, dimension(3) :: dimsizes_3D
-
-
-!-----------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! then get all the Variable ID's we need.
-!-----------------------------------------------------------------
-
-call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-              'nc_write_model_vars','inquire')
-
-j = 0
-
-do id=1,num_domains
-
-   write( idom , '(I1)') id
-
-   !----------------------------------------------------------------------------
-   ! Fill the variables
-   !----------------------------------------------------------------------------
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-
-      varname = trim(wrf_state_variables(1,my_index))//'_d0'//idom
-
-      call nc_check(nf90_inq_varid(ncFileID, trim(varname), VarID), &
-                 'nc_write_model_vars','inq_varid '//trim(varname))
-
-      i       = j + 1
-      j       = i + wrf%dom(id)%var_size(1,ind) *  &
-                    wrf%dom(id)%var_size(2,ind) *  &
-                    wrf%dom(id)%var_size(3,ind) - 1 
-
-      if (debug) write(*,'(a10,'' = statevec('',i7,'':'',i7,'') with dims '',3(1x,i3))') &
-              trim(varname),i,j,wrf%dom(id)%var_size(1,ind),wrf%dom(id)%var_size(2,ind),wrf%dom(id)%var_size(3,ind)
-
-      if ( wrf%dom(id)%var_size(3,ind) > 1 ) then
-
-         dimsizes_3D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind), &
-                         wrf%dom(id)%var_size(3,ind)/)
-
-         allocate ( temp3d(dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3)) )
-         temp3d  = reshape(statevec(i:j), (/ dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3) /) ) 
-         call nc_check(nf90_put_var( ncFileID, VarID, temp3d, &
-                                  start=(/ 1, 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp3d)
-
-      else ! must be 2D
-
-         dimsizes_2D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind)/)
-
-         allocate ( temp2d(dimsizes_2D(1),dimsizes_2D(2)) )
-         temp2d  = reshape(statevec(i:j), (/ dimsizes_2D(1),dimsizes_2D(2) /) )
-         call nc_check(nf90_put_var( ncFileID, VarID, temp2d, &
-                                  start=(/ 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp2d)
-
-
-      endif
-
-   enddo ! variables
-
-enddo ! domains
-
-!-----------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-----------------------------------------------------------------
-
-call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars','sync')
-
-end subroutine nc_write_model_vars
-
-!-------------------------------
-
-!  public stubs
-
-!**********************************************
-
-subroutine adv_1step(x, Time)
-
-! Does single time-step advance with vector state as
-! input and output.
-
-  real(r8), intent(inout) :: x(:)
-
-! Time is needed for more general models like this; need to add in to 
-! low-order models
-  type(time_type), intent(in) :: Time
-
-call error_handler(E_ERR,'adv_1step', &
-                  'WRF model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-
-
-end subroutine adv_1step
-
-!**********************************************
+!#######################################################################
 
 subroutine end_model()
 
 deallocate(domain_id)
 
 end subroutine end_model
-
-!**********************************************
-
-subroutine init_time(i_time)
-! For now returns value of Time_init which is set in initialization routines.
-
-  type(time_type), intent(out) :: i_time
-
-!Where should initial time come from here?
-! WARNING: CURRENTLY SET TO 0
-  i_time = set_time(0, 0)
-
-end subroutine init_time
-
-!**********************************************
-
-subroutine init_conditions(x)
-! Reads in restart initial conditions and converts to vector
-
-! Following changed to intent(inout) for ifc compiler;should be like this
-  real(r8), intent(inout) :: x(:)
-
-msgstring2 = "cannot run with 'start_from_restart = .false.' "
-msgstring3 = 'use ensemble_init in the WRF utils dir, or use wrf_to_dart'
-call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  WRF model has no built-in default state', &
-                  source, revision, revdate, &
-                  text2=msgstring2, text3=msgstring3)
-
-end subroutine init_conditions
-
-
 
 !#######################################################################
 
@@ -8330,145 +8172,11 @@ integer function get_type_ind_from_type_string(id, wrf_varname)
 
 end function get_type_ind_from_type_string
 
-!-------------------------------------------------------------
-
-subroutine trans_2Dto1D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a1d(i + nx*(j-1)) = a2d(i,j)
-   enddo
-enddo
-
-end subroutine trans_2Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_3Dto1D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a1d(i + nx*(j-1) + nx*ny*(k-1) ) = a3d(i,j,k)
-      enddo
-   enddo
-enddo
-
-end subroutine trans_3Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto2D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a2d(i,j) = a1d(i + nx*(j-1))
-   enddo
-enddo
-
-end subroutine trans_1Dto2D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto3D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a3d(i,j,k) = a1d(i + nx*(j-1) + nx*ny*(k-1) )
-      enddo
-   enddo
-enddo
-
-end subroutine trans_1Dto3D
-
 !----------------------------------------------------------------------
-
-subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(out) :: year, month, day, hour, minute, second
 character(len=19), intent(in)  :: tstring
@@ -8485,12 +8193,10 @@ return
 end subroutine get_wrf_date
 
 !----------------------------------------------------------------------
-
-subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(in) :: year, month, day, hour, minute, second
 character(len=19), intent(out)  :: tstring
