@@ -78,14 +78,13 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=512) :: string1, string2, string3
+character(len=512) :: string1
 
 ! Simplest 1D advection model with spatially-constant wind
 
 ! Module storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
 logical :: random_seq_init = .false.
-logical :: verbose = .false.
 
 ! Permanent static initialized information about domain width
 real(r8) :: domain_width_meters 
@@ -136,8 +135,6 @@ real(r8)  :: source_damping_rate    = 0.000002777778
 real(r8)  :: source_diurnal_rel_amp = 0.05_r8
 real(r8)  :: source_phase_noise     = 0.0_r8
 
-logical   :: output_state_vector    = .false.
-
 integer, parameter :: NVARS = 5
 integer :: my_ens_size = 1
 
@@ -147,7 +144,7 @@ namelist /model_nml/ num_grid_points, grid_spacing_meters, &
                      lagrangian_for_wind, destruction_rate, &
                      source_random_amp_frac, source_damping_rate, &
                      source_diurnal_rel_amp, source_phase_noise, &
-                     output_state_vector, template_file
+                     template_file
 
 
 ! Define the location of the state variables in module storage
@@ -295,7 +292,7 @@ real(r8), intent(inout) :: x(:)
 type(time_type), intent(in) :: time
 
 integer :: next, prev, seconds, days, ens_size
-type(location_type) :: this_loc, source_loc
+type(location_type) :: source_loc
 real(r8) :: lctn, source_location, old_u_mean, new_u_mean
 real(r8) :: du_dx, dt_seconds, t_phase, phase, random_src
 type(ensemble_type) :: temp_handle
@@ -616,7 +613,15 @@ call nc_add_global_attribute(ncid, "model_revision", revision )
 call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
 call nc_add_global_attribute(ncid, "model", "simple_advection")
-!>@todo add other parameters here
+
+call nc_add_global_attribute(ncid, "mean_wind"              , mean_wind )
+call nc_add_global_attribute(ncid, "wind_random_amp"        , wind_random_amp )
+call nc_add_global_attribute(ncid, "wind_damping_rate"      , wind_damping_rate )
+call nc_add_global_attribute(ncid, "destruction_rate"       , destruction_rate )
+call nc_add_global_attribute(ncid, "source_random_amp_frac" , source_random_amp_frac )
+call nc_add_global_attribute(ncid, "source_damping_rate"    , source_damping_rate )
+call nc_add_global_attribute(ncid, "source_diurnal_rel_amp" , source_diurnal_rel_amp )
+call nc_add_global_attribute(ncid, "source_phase_noise"     , source_phase_noise )
 
 call nc_write_location_atts(ncid, msize)
 call nc_enddef(ncid)

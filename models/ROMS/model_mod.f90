@@ -464,7 +464,7 @@ integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 ! for the dimensions and coordinate variables
 integer :: nxirhoDimID, nxiuDimID, nxivDimID
 integer :: netarhoDimID, netauDimID, netavDimID
-integer :: nsrhoDimID
+integer :: nsrhoDimID, nswDimID
 integer :: VarID
 
 ! local variables
@@ -472,6 +472,7 @@ integer :: VarID
 character(len=256) :: filename
 
 if ( .not. module_initialized ) call static_init_model
+
 
 model_writes_state = .false.
 
@@ -494,7 +495,6 @@ call nc_add_global_attribute(ncid, "model_revdate", revdate)
 
 call nc_add_global_attribute(ncid, "model", "ROMS")
 
-
 ! We need to output the grid information
 ! Define the new dimensions IDs
 
@@ -506,6 +506,9 @@ call nc_check(nf90_def_dim(ncid=ncid, name='eta_rho', len = Neta_rho,&
 
 call nc_check(nf90_def_dim(ncid=ncid, name='s_rho',   len = Ns_rho,&
      dimid = nsrhoDimID),'nc_write_model_atts', 's_rho def_dim '//trim(filename))
+
+call nc_check(nf90_def_dim(ncid=ncid, name='s_w',   len = Ns_w,&
+     dimid = nswDimID),'nc_write_model_atts', 's_w def_dim '//trim(filename))
 
 call nc_check(nf90_def_dim(ncid=ncid, name='xi_u',    len = Nxi_u,&
      dimid = nxiuDimID),'nc_write_model_atts', 'xi_u def_dim '//trim(filename))
@@ -571,7 +574,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
               'nc_write_model_atts', 'lat_v units '//trim(filename))
 
 call nc_check(nf90_def_var(ncid,name='z_rho', xtype=nf90_double, &
-              dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
+              dimids=(/ nxirhoDimID, netarhoDimID, nsrhoDimID /), varid=VarID),&
               'nc_write_model_atts', 'z_rho def_var '//trim(filename))
 call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
               'nc_write_model_atts', 'z_rho long_name '//trim(filename))
@@ -579,7 +582,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
               'nc_write_model_atts', 'z_rho units '//trim(filename))
 
 call nc_check(nf90_def_var(ncid,name='z_u', xtype=nf90_double, &
-              dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
+              dimids=(/ nxiuDimID, netauDimID, nsrhoDimID /), varid=VarID),&
               'nc_write_model_atts', 'z_u def_var '//trim(filename))
 call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
               'nc_write_model_atts', 'z_u long_name '//trim(filename))
@@ -587,7 +590,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
               'nc_write_model_atts', 'z_u units '//trim(filename))
 
 call nc_check(nf90_def_var(ncid,name='z_v', xtype=nf90_double, &
-              dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
+              dimids=(/ nxivDimID, netavDimID, nsrhoDimID /), varid=VarID),&
               'nc_write_model_atts', 'z_v def_var '//trim(filename))
 call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
               'nc_write_model_atts', 'z_v long_name '//trim(filename))
@@ -595,7 +598,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
               'nc_write_model_atts', 'z_v units '//trim(filename))
 
 call nc_check(nf90_def_var(ncid,name='z_w', xtype=nf90_double, &
-              dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
+              dimids=(/ nxirhoDimID, netarhoDimID, nswDimID /), varid=VarID),&
               'nc_write_model_atts', 'z_w def_var '//trim(filename))
 call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
               'nc_write_model_atts', 'z_w long_name '//trim(filename))
@@ -606,7 +609,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
 
 call nc_enddef(ncid)
 
-! Fill the coordinate variables that DART needs and has locally
+! Fill the coordinate variable values
 
 ! the RHO grid
 
@@ -666,16 +669,13 @@ call nc_check(NF90_inq_varid(ncid, 'z_w', VarID), &
 call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
              'nc_write_model_atts', 'z_w put_var '//trim(filename))
 
-
 ! Flush the buffer and leave netCDF file open
 call nc_sync(ncid)
 
 
 end subroutine nc_write_model_atts
 
-
 !-----------------------------------------------------------------------
-!>
 !> writes the time of the current state and (optionally) the time
 !> to be conveyed to ROMS to dictate the length of the forecast.
 !> This file is then used by scripts to modify the ROMS run.

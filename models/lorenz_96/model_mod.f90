@@ -326,6 +326,7 @@ integer :: msize
 type(location_type) :: lctn 
 character(len=128)  :: filename
 
+
 model_mod_writes_state_variables = .false. 
 msize = int(model_size, i4)
 
