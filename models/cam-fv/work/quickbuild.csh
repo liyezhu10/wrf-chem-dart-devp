@@ -21,7 +21,7 @@
 #----------------------------------------------------------------------
 
 # this model name:
-set MODEL = "cam-fv"
+set BUILDING = "CAM FV"
 
 # programs which have the option of building with MPI:
 set MPI_TARGETS = "filter perfect_model_obs model_mod_check wakeup_filter"
@@ -46,11 +46,14 @@ if ( $#argv >= 1 ) then
 endif
 
 set preprocess_done = 0
-set debug = 1
+set tdebug = 0
 set cdebug = 0
 
 if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
+endif
+if ( $?DART_TEST ) then
+   set tdebug = $DART_TEST
 endif
 
 \rm -f *.o *.mod 
@@ -72,7 +75,7 @@ if ( $has_cdl > 0 ) then
          @ n = $n + 1
          echo
          echo "---------------------------------------------------"
-         echo "constructing $MODEL data file $n named $OUTNAME" 
+         echo "constructing $BUILDING data file $n named $OUTNAME" 
       
          ncgen -o $OUTNAME $DATAFILE  || exit $n
       endif
@@ -102,12 +105,12 @@ foreach TARGET ( mkmf_preprocess mkmf_* )
    @ n = $n + 1
    echo
    echo "---------------------------------------------------"
-   echo "$MODEL build number $n is $PROG" 
+   echo "$BUILDING build number $n is $PROG" 
    \rm -f $PROG
    csh $TARGET || exit $n
    make        || exit $n
 
-   if ( $debug ) then
+   if ( $tdebug ) then
       echo 'removing all files between builds'
       \rm -f *.o *.mod
    endif
@@ -153,12 +156,12 @@ foreach PROG ( $MPI_TARGETS )
    @ n = $n + 1
    echo
    echo "---------------------------------------------------"
-   echo "$MODEL MPI build number $n is $PROG" 
+   echo "$BUILDING with MPI build number $n is $PROG" 
    \rm -f $PROG
    csh $TARGET -mpi || exit $n
    make             || exit $n
 
-   if ( $debug ) then
+   if ( $tdebug ) then
       echo 'removing all files between builds'
       \rm -f *.o *.mod
    endif
