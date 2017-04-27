@@ -29,6 +29,7 @@ public :: nc_check, nc_add_global_attribute, nc_add_global_creation_time, &
 
 interface nc_add_global_attribute
    module procedure nc_add_global_char_att
+   module procedure nc_add_global_int_att
    module procedure nc_add_global_real_att
    module procedure nc_add_global_real_array_att
 end interface
@@ -95,6 +96,22 @@ ret = nf90_put_att(ncid, NF90_GLOBAL, name, val)
 call nc_check(ret, 'put_global_char_att', 'adding the global attribute: '//trim(name))
 
 end subroutine nc_add_global_char_att
+
+!--------------------------------------------------------------------
+
+subroutine nc_add_global_int_att(ncid, name, val, context)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: name
+integer,          intent(in) :: val
+character(len=*), intent(in), optional :: context
+
+integer :: ret
+
+ret = nf90_put_att(ncid, NF90_GLOBAL, name, val)
+call nc_check(ret, 'put_global_char_att', 'adding the global attribute: '//trim(name))
+
+end subroutine nc_add_global_int_att
 
 !--------------------------------------------------------------------
 

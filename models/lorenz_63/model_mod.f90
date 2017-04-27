@@ -80,7 +80,6 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! Model size is fixed for Lorenz-63
 integer(i8), parameter :: model_size = 3
 
-!-------------------------------------------------------------
 ! Namelist with default values
 
 real(r8) ::  sigma = 10.0_r8
@@ -92,7 +91,6 @@ integer  :: time_step_seconds = 3600
 
 namelist /model_nml/ sigma, r, b, deltat, time_step_days, time_step_seconds
 
-!---------------------------------------------------------------
 
 ! Define the location of the state variables in module storage
 type(location_type) :: state_loc(model_size)
@@ -100,9 +98,6 @@ type(time_type)     :: time_step
 
 
 contains
-
-!==================================================================
-
 
 
 !------------------------------------------------------------------
@@ -159,18 +154,6 @@ dt(3) = x(1)*x(2) - b*x(3)
 end subroutine comp_dt
 
 
-!------------------------------------------------------------------
-!>  off-attractor initial conditions for lorenz 63
-
-subroutine init_conditions(x)
-
-real(r8), intent(out) :: x(:)
-
-! Initial conditions that move nicely onto attractor
-x = 0.10_r8
-
-end subroutine init_conditions
-
 
 !------------------------------------------------------------------
 !> does single time step advance for lorenz convective 3 variable model
@@ -214,31 +197,6 @@ end subroutine adv_single
 
 
 !------------------------------------------------------------------
-!> Returns size of model
-
-function get_model_size()
-
-integer :: get_model_size
-
-get_model_size = model_size
-
-end function get_model_size
-
-
-!------------------------------------------------------------------
-!> Sets the initial time for a state from the model.
-
-subroutine init_time(time)
-
-type(time_type), intent(out) :: time
-
-! Set to 0
-time = set_time(0, 0)
-
-end subroutine init_time
-
-
-!------------------------------------------------------------------
 !> Interpolates from state vector x to the location.
 !>
 !> Argument itype is not used here because there is only one type of variable.
@@ -275,6 +233,44 @@ end subroutine model_interpolate
 
 
 !------------------------------------------------------------------
+!> Returns number of items in the state vector
+
+function get_model_size()
+
+integer :: get_model_size
+
+get_model_size = model_size
+
+end function get_model_size
+
+
+!------------------------------------------------------------------
+!> Sets the initial time for a state from the model.
+
+subroutine init_time(time)
+
+type(time_type), intent(out) :: time
+
+! Set to 0
+time = set_time(0, 0)
+
+end subroutine init_time
+
+
+!------------------------------------------------------------------
+!>  off-attractor initial conditions for lorenz 63
+
+subroutine init_conditions(x)
+
+real(r8), intent(out) :: x(:)
+
+! Initial conditions that move nicely onto attractor
+x = 0.10_r8
+
+end subroutine init_conditions
+
+
+!------------------------------------------------------------------
 !> Returns the mininum time step of the model.
 
 function shortest_time_between_assimilations()
@@ -284,6 +280,7 @@ type(time_type) :: shortest_time_between_assimilations
 shortest_time_between_assimilations = time_step
 
 end function shortest_time_between_assimilations
+
 
 !------------------------------------------------------------------
 !> Given an integer index into the state vector structure, returns the
@@ -300,6 +297,7 @@ if (present(var_type)) var_type = RAW_STATE_VARIABLE    ! default variable type
 
 end subroutine get_state_meta_data
 
+
 !------------------------------------------------------------------
 !> old version of linearized lorenz 63 model time tendency computation
 
@@ -315,6 +313,7 @@ dt(2) = (r - x(3))*dx(1) - dx(2) - x(1)*dx(3)
 dt(3) = x(2)*dx(1) + x(1)*dx(2) - b*dx(3)
 
 end subroutine linear_dt
+
 
 !------------------------------------------------------------------
 !> does single time step advance for lorenz convective 3 variable model
@@ -347,6 +346,7 @@ x4 = fract * deltat * dx
 x = x + x1/6.0_r8 + x2/3.0_r8 + x3/3.0_r8 + x4/6.0_r8
 
 end subroutine adv_single_rk4
+
 
 !------------------------------------------------------------------
 !>  compute inv linear model lorenz time tendency (see notes 13mar94)
@@ -452,7 +452,7 @@ call nc_add_global_attribute(ncid, "model", "Lorenz_63")
 call nc_add_global_attribute(ncid, "model_r", r )
 call nc_add_global_attribute(ncid, "model_b", b )
 call nc_add_global_attribute(ncid, "model_sigma", sigma )
-call nc_add_global_attribute(ncid, "model_deltat", deltat )
+call nc_add_global_attribute(ncid, "model_delta_t", deltat )
 
 call nc_write_location_atts(ncid, msize)
 call nc_enddef(ncid)
