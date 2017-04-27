@@ -1127,13 +1127,13 @@ end subroutine set_vertical
 
 !--------------------------------------------------------------------
 
-subroutine convert_vertical_obs(ens_handle, num, locs, loc_kinds, loc_types, &
+subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
                                 which_vert, status)
 
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
-integer,             intent(in)    :: loc_kinds(:), loc_types(:)
+integer,             intent(in)    :: loc_qtys(:), loc_types(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: status(:)
 
@@ -1143,13 +1143,13 @@ end subroutine convert_vertical_obs
 
 !--------------------------------------------------------------------
 
-subroutine convert_vertical_state(ens_handle, num, locs, loc_kinds, loc_indx, &
+subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
                                   which_vert, istatus)
 
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
-integer,             intent(in)    :: loc_kinds(:)
+integer,             intent(in)    :: loc_qtys(:)
 integer(i8),         intent(in)    :: loc_indx(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: istatus
@@ -1394,7 +1394,7 @@ subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
 ! distance computation is needed.
 
 type(get_close_type),          intent(in)  :: gc
-type(location_type),           intent(in)  :: base_loc, locs(:)
+type(location_type),           intent(inout) :: base_loc, locs(:)
 integer,                       intent(in)  :: base_type, loc_qtys(:), loc_types(:)
 integer,                       intent(out) :: num_close, close_ind(:)
 real(r8),            optional, intent(out) :: dist(:)
@@ -1415,7 +1415,7 @@ subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
 ! distance computation is needed.
 
 type(get_close_type),          intent(in)  :: gc
-type(location_type),           intent(in)  :: base_loc, locs(:)
+type(location_type),           intent(inout)  :: base_loc, locs(:)
 integer,                       intent(in)  :: base_type, loc_qtys(:)
 integer(i8),                   intent(in)  :: loc_indx(:)
 integer,                       intent(out) :: num_close, close_ind(:)
@@ -1437,7 +1437,7 @@ subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
 ! distance computation is needed.
 
 type(get_close_type),          intent(in)  :: gc
-type(location_type),           intent(in)  :: base_loc, locs(:)
+type(location_type),           intent(inout)  :: base_loc, locs(:)
 integer,                       intent(in)  :: base_type, loc_qtys(:)
 integer,                       intent(out) :: num_close, close_ind(:)
 real(r8),            optional, intent(out) :: dist(:)
