@@ -21,10 +21,10 @@
 #----------------------------------------------------------------------
 
 # this model name:
-set MODEL = "Lorenz_63"
+set BUILDING = "Lorenz 63"
 
 # programs which have the option of building with MPI:
-set MPI_TARGETS = "filter perfect_model_obs"
+set MPI_TARGETS = "filter perfect_model_obs model_mod_check"
 
 # set default (override with -mpi or -nompi):
 #  0 = build without MPI, 1 = build with MPI
@@ -46,10 +46,14 @@ if ( $#argv >= 1 ) then
 endif
 
 set preprocess_done = 0
+set tdebug = 0
 set cdebug = 0
 
 if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
+endif
+if ( $?DART_TEST ) then
+   set tdebug = $DART_TEST
 endif
 
 \rm -f *.o *.mod 
@@ -60,20 +64,24 @@ endif
 
 @ n = 0
 
-foreach DATAFILE ( `ls *.cdl` )
+@ has_cdl = `ls *.cdl | wc -l` >& /dev/null
 
-   set OUTNAME = `basename $DATAFILE .cdl`.nc
-
-   if ( ! -f $OUTNAME ) then
-      @ n = $n + 1
-      echo
-      echo "---------------------------------------------------"
-      echo "constructing $MODEL data file $n named $OUTNAME" 
+if ( $has_cdl > 0 ) then
+   foreach DATAFILE ( *.cdl )
    
-      ncgen -o $OUTNAME $DATAFILE  || exit $n
-   endif
-
-end
+      set OUTNAME = `basename $DATAFILE .cdl`.nc
+   
+      if ( ! -f $OUTNAME ) then
+         @ n = $n + 1
+         echo
+         echo "---------------------------------------------------"
+         echo "constructing $BUILDING data file $n named $OUTNAME" 
+      
+         ncgen -o $OUTNAME $DATAFILE  || exit $n
+      endif
+   
+   end
+endif
 
 
 #----------------------------------------------------------------------
@@ -97,10 +105,15 @@ foreach TARGET ( mkmf_preprocess mkmf_* )
    @ n = $n + 1
    echo
    echo "---------------------------------------------------"
-   echo "$MODEL build number $n is $PROG" 
+   echo "$BUILDING build number $n is $PROG" 
    \rm -f $PROG
    csh $TARGET || exit $n
    make        || exit $n
+
+   if ( $tdebug ) then
+      echo 'removing all files between builds'
+      \rm -f *.o *.mod
+   endif
 
    # preprocess creates module files that are required by
    # the rest of the executables, so it must be run in addition
@@ -143,10 +156,15 @@ foreach PROG ( $MPI_TARGETS )
    @ n = $n + 1
    echo
    echo "---------------------------------------------------"
-   echo "$MODEL MPI build number $n is $PROG" 
+   echo "$BUILDING with MPI build number $n is $PROG" 
    \rm -f $PROG
    csh $TARGET -mpi || exit $n
    make             || exit $n
+
+   if ( $tdebug ) then
+      echo 'removing all files between builds'
+      \rm -f *.o *.mod
+   endif
 
 end
 

@@ -16,7 +16,7 @@ use    utilities_mod,      only : register_module, error_handler, E_ERR, E_MSG, 
                                   nmlfileunit, do_output, find_namelist_in_file, &
                                   check_namelist_read, do_nml_file, do_nml_term
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, &
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, &
                                  nc_add_global_creation_time, nc_redef, nc_enddef
 
 use time_manager_mod,      only : time_type, set_time
@@ -457,6 +457,8 @@ call nc_add_global_attribute(ncid, "model_deltat", deltat )
 call nc_write_location_atts(ncid, msize)
 call nc_enddef(ncid)
 call nc_write_location(ncid, state_loc, msize)
+
+call nc_sync(ncid)
 
 end subroutine nc_write_model_atts
 
