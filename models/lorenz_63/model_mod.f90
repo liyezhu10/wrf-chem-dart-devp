@@ -197,7 +197,7 @@ end subroutine adv_single
 
 
 !------------------------------------------------------------------
-!> Interpolates from state vector x to the location.
+!> Interpolates an ensemble of expected values at the given location.
 !>
 !> Argument itype is not used here because there is only one type of variable.
 
@@ -448,6 +448,7 @@ call nc_add_global_creation_time(ncid)
 call nc_add_global_attribute(ncid, "model_source", source )
 call nc_add_global_attribute(ncid, "model_revision", revision )
 call nc_add_global_attribute(ncid, "model_revdate", revdate )
+
 call nc_add_global_attribute(ncid, "model", "Lorenz_63")
 call nc_add_global_attribute(ncid, "model_r", r )
 call nc_add_global_attribute(ncid, "model_b", b )
