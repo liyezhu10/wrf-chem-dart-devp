@@ -150,23 +150,22 @@ end subroutine end_model
 
 !------------------------------------------------------------------
 
-subroutine nc_write_model_atts(ncFileID, model_mod_writes_state_variables) 
+subroutine nc_write_model_atts(ncid, domain_id) 
 
-integer, intent(in)  :: ncFileID   
-logical, intent(out) :: model_mod_writes_state_variables
-
-model_mod_writes_state_variables = .false.
+integer, intent(in) :: ncid
+integer, intent(in) :: domain_id
 
 end subroutine nc_write_model_atts
 
 !------------------------------------------------------------------
 
-subroutine nc_write_model_vars( ncFileID, statevec, memberindex, timeindex)
+subroutine nc_write_model_vars(ncid, domain_id, state_ens_handle, memberindex, timeindex)
 
-integer,                intent(in) :: ncFileID      
-real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: memberindex
-integer,                intent(in) :: timeindex
+integer,             intent(in) :: ncid      
+integer,             intent(in) :: domain_id
+type(ensemble_type), intent(in) :: state_ens_handle
+integer, optional,   intent(in) :: memberindex
+integer, optional,   intent(in) :: timeindex
 
 end subroutine nc_write_model_vars
 
