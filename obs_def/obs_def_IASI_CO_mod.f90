@@ -40,7 +40,10 @@
 ! BEGIN DART PREPROCESS MODULE CODE
 module obs_def_iasi_CO_mod
 use        types_mod, only : r8
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
+                             nmlfileunit, check_namelist_read, &
+                             find_namelist_in_file, do_nml_file, do_nml_term, &
+                             ascii_file_format
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE
 use  assim_model_mod, only : interpolate
 use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE
@@ -71,14 +74,39 @@ revision = "$Revision$", &
 revdate  = "$Date$"
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
-contains
 !
+character(len=129)  :: IASI_CO_retrieval_type
+logical             :: use_log_co=.false.
+!
+! IASI_CO_retrieval_type:
+!     RAWR - retrievals in VMR (ppb) units
+!     QOR  - quasi-optimal retrievals
+!     CPSR - compact phase space retrievals
+namelist /obs_def_IASI_CO_nml/ IASI_CO_retrieval_type, use_log_co
+
+contains
+
 !----------------------------------------------------------------------
-subroutine initialize_module
+
+  subroutine initialize_module
 !----------------------------------------------------------------------------
 ! subroutine initialize_module
+
+integer :: iunit, rc
 call register_module(source, revision, revdate)
 module_initialized = .true.
+
+! Read the namelist entry.
+IASI_CO_retrieval_type='RETR'
+use_log_co=.false.
+call find_namelist_in_file("input.nml", "obs_def_IASI_CO_nml", iunit)
+read(iunit, nml = obs_def_IASI_CO_nml, iostat = rc)
+call check_namelist_read(iunit, rc, "obs_def_IASI_CO_nml")
+
+! Record the namelist values used for the run ... 
+if (do_nml_file()) write(nmlfileunit, nml=obs_def_IASI_CO_nml)
+if (do_nml_term()) write(     *     , nml=obs_def_IASI_CO_nml)
+
 end subroutine initialize_module
 !
 subroutine read_iasi_co(key, ifile, fform)
@@ -210,10 +238,11 @@ integer, intent(out)            :: istatus
 integer :: i,kstr
 type(location_type) :: loc2
 real(r8)            :: mloc(3)
-real(r8)	    :: obs_val,wrf_psf,level,missing
-real(r8)            :: co_min,iasi_prs_mid,iasi_psf,iasi_psf_save
+real(r8)	    :: obs_val,obs_val_min,obs_val_min_log,wrf_psf,level,missing
+real(r8)            :: co_min,co_min_log,iasi_prs_mid,iasi_psf,iasi_psf_save
 integer             :: nlevels,nlevelsp,nnlevels
 integer             :: iflg
+!
 character(len=129)  :: msgstring
 real(r8)            :: vert_mode_filt
 !
@@ -221,7 +250,14 @@ real(r8)            :: vert_mode_filt
 if ( .not. module_initialized ) call initialize_module
 !
 ! Initialize variables
-co_min=1.e-4
+co_min=1.e-2
+co_min_log=-8.
+obs_val_min=4.e-2
+obs_val_min_log=-8.
+if ( use_log_co ) then
+   co_min=co_min_log
+   obs_val_min=obs_val_min_log
+endif
 missing=-888888.0_r8
 !
 ! Get iasi data
@@ -335,7 +371,7 @@ do i=1,nlevels
 !
 ! Check for WRF CO lower bound
    if (obs_val.lt.co_min) then
-      obs_val=co_min
+      obs_val=obs_val_min
       write(msgstring, *)'APM NOTICE: in obs_def_iasi resetting minimum IASI CO value '
       call error_handler(E_MSG,'set_obs_def_iasi_co',msgstring,source,revision,revdate)
    endif

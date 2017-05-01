@@ -16,6 +16,7 @@ cat > input.nml_temp << EOF
    print_data_ranges            = ${NL_PRINT_DATA_RANGES:-.false.},
    debug                        = ${NL_DEBUG:-.false.},
    add_emiss                    = ${NL_ADD_EMISS:-.false.},
+   use_log_co                   = ${NL_USE_LOG_CO:-.false.},
 /
 EOF
 #

@@ -168,14 +168,15 @@ while [[ ${STATE_COPY} -le ${NUM_STATES} ]]; do
    cp wrffirechemi_d${DOMAIN} wrffirechemi_d${DOMAIN}_${L_FILE_DATE}
 #
 # APM: adjust emission for other forecast time here
-   export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-#   export LM_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 1 2>/dev/null)
-#   export LM_END_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
-   export LM_DATE=`echo ${L_DATE} +1h | ./advance_time`
-   export LM_END_DATE=`echo ${L_DATE} +${FCST_PERIOD}h | ./advance_time`
-   echo ${LM_DATE}
-   echo ${LM_END_DATE}
-   cp ${ADJUST_EMISS_DIR}/adjust_chem_emiss.exe ./.
+   if [[ ${ADD_EMISS} ]]; then
+      export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
+#      export LM_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 1 2>/dev/null)
+#      export LM_END_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
+      export LM_DATE=`echo ${L_DATE} +1h | ./advance_time`
+      export LM_END_DATE=`echo ${L_DATE} +${FCST_PERIOD}h | ./advance_time`
+      echo ${LM_DATE}
+      echo ${LM_END_DATE}
+      cp ${ADJUST_EMISS_DIR}/adjust_chem_emiss.exe ./.
 #
 #########################################################################
 #
@@ -183,28 +184,28 @@ while [[ ${STATE_COPY} -le ${NUM_STATES} ]]; do
 #
 #########################################################################
 #
-   while [[ ${LM_DATE} -le ${LM_END_DATE} ]]; do
-      export LM_YY=$(echo $LM_DATE | cut -c1-4)
-      export LM_MM=$(echo $LM_DATE | cut -c5-6)
-      export LM_DD=$(echo $LM_DATE | cut -c7-8)
-      export LM_HH=$(echo $LM_DATE | cut -c9-10)
-      export LM_FILE_DATE=${LM_YY}-${LM_MM}-${LM_DD}_${LM_HH}:00:00
-#
-      export NL_WRFCHEMI_PRIOR=wrfchemi_d${DOMAIN}_prior
-      export NL_WRFCHEMI_POST=wrfchemi_d${DOMAIN}
-      export NL_WRFCHEMI_OLD=wrfchemi_d${DOMAIN}_${LM_FILE_DATE}
-      export NL_WRFCHEMI_NEW=wrfchemi_d${DOMAIN}_new
-      cp ${NL_WRFCHEMI_OLD} ${NL_WRFCHEMI_NEW}
-#
-      export NL_WRFFIRECHEMI_PRIOR=wrffirechemi_d${DOMAIN}_prior
-      export NL_WRFFIRECHEMI_POST=wrffirechemi_d${DOMAIN}
-      export NL_WRFFIRECHEMI_OLD=wrffirechemi_d${DOMAIN}_${LM_FILE_DATE}
-      export NL_WRFFIRECHEMI_NEW=wrffirechemi_d${DOMAIN}_new
-      cp ${NL_WRFFIRECHEMI_OLD} ${NL_WRFFIRECHEMI_NEW}
+      while [[ ${LM_DATE} -le ${LM_END_DATE} ]]; do
+         export LM_YY=$(echo $LM_DATE | cut -c1-4)
+         export LM_MM=$(echo $LM_DATE | cut -c5-6)
+         export LM_DD=$(echo $LM_DATE | cut -c7-8)
+         export LM_HH=$(echo $LM_DATE | cut -c9-10)
+         export LM_FILE_DATE=${LM_YY}-${LM_MM}-${LM_DD}_${LM_HH}:00:00
+#     
+         export NL_WRFCHEMI_PRIOR=wrfchemi_d${DOMAIN}_prior
+         export NL_WRFCHEMI_POST=wrfchemi_d${DOMAIN}
+         export NL_WRFCHEMI_OLD=wrfchemi_d${DOMAIN}_${LM_FILE_DATE}
+         export NL_WRFCHEMI_NEW=wrfchemi_d${DOMAIN}_new
+         cp ${NL_WRFCHEMI_OLD} ${NL_WRFCHEMI_NEW}
+#     
+         export NL_WRFFIRECHEMI_PRIOR=wrffirechemi_d${DOMAIN}_prior
+         export NL_WRFFIRECHEMI_POST=wrffirechemi_d${DOMAIN}
+         export NL_WRFFIRECHEMI_OLD=wrffirechemi_d${DOMAIN}_${LM_FILE_DATE}
+         export NL_WRFFIRECHEMI_NEW=wrffirechemi_d${DOMAIN}_new
+         cp ${NL_WRFFIRECHEMI_OLD} ${NL_WRFFIRECHEMI_NEW}
 #
 # Make adjust_chem_nml for special_outlier_threshold
-      rm -rf adjust_chem_emiss.nml
-      cat <<  EOF > adjust_chem_emiss.nml
+         rm -rf adjust_chem_emiss.nml
+         cat <<  EOF > adjust_chem_emiss.nml
 &adjust_chem_emiss
 wrfchemi_prior=${NL_WRFCHEMI_PRIOR}
 wrfchemi_post=${NL_WRFCHEMI_POST}
@@ -216,12 +217,13 @@ wrffirechemi_old=${NL_WRFFIRECHEMI_OLD}
 wrffirechemi_new=${NL_WRFFIRECHEMI_NEW}
 /
 EOF
-      ./adjust_chem_emiss.exe > index_adjust_chem_emiss
+         ./adjust_chem_emiss.exe > index_adjust_chem_emiss
 #
-      cp ${NL_WRFCHEMI_NEW} ${NL_WRFCHEMI_OLD}
-      cp ${NL_WRFFIRECHEMI_NEW} ${NL_WRFFIRECHEMI_OLD}
-      export LM_DATE=`echo ${LM_DATE} +1h | ./advance_time`
-   done
+         cp ${NL_WRFCHEMI_NEW} ${NL_WRFCHEMI_OLD}
+         cp ${NL_WRFFIRECHEMI_NEW} ${NL_WRFFIRECHEMI_OLD}
+         export LM_DATE=`echo ${LM_DATE} +1h | ./advance_time`
+      done
+   fi
 ##
 ## APM ---
 #

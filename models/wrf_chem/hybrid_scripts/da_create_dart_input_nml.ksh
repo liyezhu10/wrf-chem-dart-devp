@@ -64,6 +64,14 @@ cat > input.nml << EOF
    write_nml                   = 'file',
    module_details              = .false.
 /
+ &obs_def_MOPITT_CO_nml
+   MOPITT_CO_retrieval_type   = ${NL_MOPITT_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co   = ${NL_USE_LOG_CO:-.false.},
+/
+ &obs_def_IASI_CO_nml
+   IASI_CO_retrieval_type   = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co   = ${NL_USE_LOG_CO:-.false.},
+/
 EOF
 
 

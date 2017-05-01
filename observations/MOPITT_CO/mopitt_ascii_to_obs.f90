@@ -186,6 +186,9 @@ double precision,allocatable,dimension(:,:)    :: Z,ZL,ZR,SV,U_cov,V_cov,UT_cov,
 double precision,allocatable,dimension(:,:)    :: rr_avg_k,rr_cov
 double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
+logical                 :: use_log_co
+
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! MOPITT_CO_retrieval_type:
@@ -195,7 +198,7 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !     CPSR - compact phase space retrievals
 !
 namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         MOPITT_CO_retrieval_type,fac_obs_error
+         MOPITT_CO_retrieval_type,fac_obs_error,use_log_co
 !
 ! Set constants
 ln_10=log(10.)
@@ -237,6 +240,12 @@ call init_obs_sequence(seq, num_copies, num_qc, max_num_obs)
 ! Initialize the obs variable
 call init_obs(obs, num_copies, num_qc)
 
+! If use_log_co is 'true' the make sure retrieval type is RETR
+if (use_log_co.eq..TRUE. .and. trim(MOPITT_CO_retrieval_type).ne.'RETR') then
+   print *, 'APM: if use_log_co=true then MOPITT_CO_retrieval_type=RETR'
+   stop
+endif  
+!
 do icopy =1, num_copies
    if (icopy == 1) then
        copy_meta_data='MOPITT CO observation'

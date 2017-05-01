@@ -42,10 +42,10 @@ character(len=128) :: dart_restart_name = 'dart_wrf_vector'
 character(len=72)  :: adv_mod_command   = './wrf.exe'
 !
 ! LXL/APM +++
-logical            :: add_emiss = .false.
+logical            :: add_emiss = .false., use_log_co = .false.
 
 namelist /dart_to_wrf_nml/ model_advance_file, dart_restart_name, &
-                           adv_mod_command, print_data_ranges, debug, add_emiss
+                           adv_mod_command, print_data_ranges, debug, add_emiss, use_log_co
 ! LXL/APM ---
 !
 
@@ -315,19 +315,19 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to reverse log10(x*1.e-6) transform of CO chemistry field
-!         if (trim(my_field).eq.'co') then
-!!            print *, 'APM: dart_to_wrf 2D CO conversion '
-!            do jj=1,wrf%var_size(2,ind)
-!               do ii=1,wrf%var_size(1,ind)
-!                  if(wrf_var_2d(ii,jj).gt.-9.0) then
-!                     wrf_var_2d(ii,jj)=(10.**wrf_var_2d(ii,jj))*1.e6
-!                  else
-!                     wrf_var_2d(ii,jj)=1.e-3
-!                     print *, 'APM 2d: dart_to_wrf reset ',ii,jj
-!                  endif
-!               enddo
-!            enddo
-!         endif
+         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+!            print *, 'APM: dart_to_wrf 2D CO conversion '
+            do jj=1,wrf%var_size(2,ind)
+               do ii=1,wrf%var_size(1,ind)
+                  if(wrf_var_2d(ii,jj).gt.-9.0) then
+                     wrf_var_2d(ii,jj)=(10.**wrf_var_2d(ii,jj))*1.e6
+                  else
+                     wrf_var_2d(ii,jj)=1.e-3
+                     print *, 'APM 2d: dart_to_wrf reset ',ii,jj
+                  endif
+               enddo
+            enddo
+         endif
 ! APM: ---
 !
          if ( print_data_ranges ) write(*,"(A,2F16.6)") trim(my_field)//': data min/max after  bounds: ', &
@@ -402,21 +402,21 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to reverse log10(x*1.e-6) transform of CO chemistry field
-!         if (trim(my_field).eq.'co') then
-!!            print *, 'APM: dart_to_wrf 3D CO conversion '
-!            do kk=1,wrf%var_size(3,ind)
-!               do jj=1,wrf%var_size(2,ind)
-!                  do ii=1,wrf%var_size(1,ind)
-!                     if(wrf_var_3d(ii,jj,kk).gt.-9.0) then
-!                        wrf_var_3d(ii,jj,kk)=(10.**wrf_var_3d(ii,jj,kk))*1.e6
-!                     else
-!                        wrf_var_3d(ii,jj,kk)=1.e-3
-!                        print *, 'APM 3d: dart_to_wrf reset ',ii,jj,kk
-!                     endif
-!                  enddo
-!               enddo
-!            enddo
-!         endif
+         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+!            print *, 'APM: dart_to_wrf 3D CO conversion '
+            do kk=1,wrf%var_size(3,ind)
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_3d(ii,jj,kk).gt.-9.0) then
+                        wrf_var_3d(ii,jj,kk)=(10.**wrf_var_3d(ii,jj,kk))*1.e6
+                     else
+                        wrf_var_3d(ii,jj,kk)=1.e-3
+                        print *, 'APM 3d: dart_to_wrf reset ',ii,jj,kk
+                     endif
+                  enddo
+               enddo
+            enddo
+         endif
 ! APM: ---
 !
 !

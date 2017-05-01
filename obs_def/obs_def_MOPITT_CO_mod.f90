@@ -42,7 +42,10 @@
 module obs_def_mopitt_mod
 
 use        types_mod, only : r8, missing_r8
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
+                             nmlfileunit, check_namelist_read, &
+                             find_namelist_in_file, do_nml_file, do_nml_term, &
+                             ascii_file_format
 use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISSURFACE, &
         VERTISUNDEF
 
@@ -78,6 +81,16 @@ revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
+!
+    character(len=129)  :: MOPITT_CO_retrieval_type
+    logical             :: use_log_co
+!
+! MOPITT_CO_retrieval_type:
+!     RAWR - retrievals in VMR (ppb) units
+!     RETR - retrievals in log10(VMR ([ ])) units
+!     QOR  - quasi-optimal retrievals
+!     CPSR - compact phase space retrievals
+    namelist /obs_def_MOPITT_CO_nml/ MOPITT_CO_retrieval_type, use_log_co
 
 contains
 
@@ -87,14 +100,24 @@ contains
 !----------------------------------------------------------------------------
 ! subroutine initialize_module
 
+integer :: iunit, rc
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
+! Read the namelist entry.
+MOPITT_CO_retrieval_type='RETR'
+use_log_co=.false.
+call find_namelist_in_file("input.nml", "obs_def_MOPITT_CO_nml", iunit)
+read(iunit, nml = obs_def_MOPITT_CO_nml, iostat = rc)
+call check_namelist_read(iunit, rc, "obs_def_MOPITT_CO_nml")
+
+! Record the namelist values used for the run ... 
+if (do_nml_file()) write(nmlfileunit, nml=obs_def_MOPITT_CO_nml)
+if (do_nml_term()) write(     *     , nml=obs_def_MOPITT_CO_nml)
+
 end subroutine initialize_module
 
-
-
- subroutine read_mopitt_co(key, ifile, fform)
+subroutine read_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
 !subroutine read_mopitt_co(key, ifile, fform)
 
@@ -239,9 +262,9 @@ end subroutine interactive_mopitt_co
 !
     integer :: i,ii,kstr
     type(location_type) :: loc2
-    real(r8)            :: mloc(3),fac,obs_val_min
+    real(r8)            :: mloc(3),fac,obs_val_min,obs_val_min_log
     real(r8)	        :: obs_val,wrf_psf,level,wrf_landmask
-    real(r8)            :: co_min,mopitt_prs_mid,mopitt_psf
+    real(r8)            :: co_min,co_min_log,mopitt_prs_mid,mopitt_psf
     real(r8)            :: vert_mode_filt,val_vmr
     real(r8)            :: wt_lnd_up,wt_lnd_dw
     real(r8)            :: wt_ocn_up,wt_ocn_dw
@@ -249,21 +272,21 @@ end subroutine interactive_mopitt_co
 !
     integer             :: nlevels,nnlevels,check_min
     integer             :: iflg,ilv_ocn,ilv_lnd
-    character(len=129)  :: msgstring,MOPITT_CO_retrieval_type
-!
-! MOPITT_CO_retrieval_type:
-!     RAWR - retrievals in VMR (ppb) units
-!     RETR - retrievals in log10(VMR ([ ])) units
-!     QOR  - quasi-optimal retrievals
-!     CPSR - compact phase space retrievals
-    MOPITT_CO_retrieval_type='CPSR'
+    character(len=129)  :: msgstring
+
 !
 ! Initialize DART
     if ( .not. module_initialized ) call initialize_module
 !
 ! Initialize variables
     co_min=1.e-2
+    co_min_log=-8.
     obs_val_min=4.e-2
+    obs_val_min_log=-8.
+    if ( use_log_co ) then
+       co_min=co_min_log
+       obs_val_min=obs_val_min_log
+    endif
 !
 ! Set background profiles
     prs_prf_ocn(1:nlvls)=(/101282.5,100419.1,99251.30,97776.66, &
@@ -501,7 +524,11 @@ end subroutine interactive_mopitt_co
 ! apply averaging kernel
 !
 ! Use this form for RAWR, RETR, QOR, and CPSR
-       val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
+       if(use_log_co) then
+          val = val + avg_kernel(key,i) * obs_val  
+       else
+          val = val + avg_kernel(key,i) * log10(obs_val*1.e-6)  
+       endif
 !       print *, 'val_itr ',i,val
 !       print *, 'avg_ker, obs_val, val ',avg_kernel(key,i),obs_val, &
 !       log10(obs_val*1.e-6)
