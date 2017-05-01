@@ -27,7 +27,7 @@ use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids
 
 use default_model_mod,     only : end_model, pert_model_copies, nc_write_model_vars
 
-use         obs_kind_mod,  only : RAW_STATE_VARIABLE
+use         obs_kind_mod,  only : QTY_STATE_VARIABLE
 
 use ensemble_manager_mod,  only : ensemble_type
 

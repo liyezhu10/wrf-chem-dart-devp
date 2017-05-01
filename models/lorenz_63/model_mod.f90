@@ -32,7 +32,7 @@ use     location_mod,      only : location_type, set_location, get_location, &
 use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
                                   nc_write_location
 
-use         obs_kind_mod,  only : RAW_STATE_VARIABLE
+use         obs_kind_mod,  only : QTY_STATE_VARIABLE
 
 use ensemble_manager_mod,  only : ensemble_type
 
@@ -293,7 +293,7 @@ type(location_type), intent(out) :: location
 integer,             intent(out), optional :: var_type
 
 location = state_loc(index_in)
-if (present(var_type)) var_type = RAW_STATE_VARIABLE    ! default variable type
+if (present(var_type)) var_type = QTY_STATE_VARIABLE    ! default variable quantity
 
 end subroutine get_state_meta_data
 

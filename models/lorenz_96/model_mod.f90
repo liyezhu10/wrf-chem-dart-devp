@@ -24,7 +24,7 @@ use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, &
                                  nc_add_global_creation_time, nc_redef, nc_enddef
 
-use         obs_kind_mod,  only : RAW_STATE_VARIABLE
+use         obs_kind_mod,  only : QTY_STATE_VARIABLE
 
 use ensemble_manager_mod,  only : ensemble_type
 
@@ -288,7 +288,7 @@ type(location_type), intent(out) :: location
 integer,             intent(out), optional :: var_type
 
 location = state_loc(index_in)
-if (present(var_type)) var_type = RAW_STATE_VARIABLE 
+if (present(var_type)) var_type = QTY_STATE_VARIABLE 
 
 end subroutine get_state_meta_data
 
