@@ -31,4 +31,4 @@ observations/obs_converters/GSI2DART/gsi_to_dart.f90
 observations/obs_converters/GSI2DART/mpisetup.f90
 observations/obs_converters/GSI2DART/params.f90
 observations/obs_converters/GSI2DART/radinfo.f90
-observations/utilities/obs_utilities_mod.f90
+observations/obs_converters/utilities/obs_utilities_mod.f90
