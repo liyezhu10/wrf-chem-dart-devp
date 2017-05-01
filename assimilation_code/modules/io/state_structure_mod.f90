@@ -441,7 +441,7 @@ state%domain(dom_id)%variable(1)%index_start = domain_offset + 1
 state%domain(dom_id)%variable(1)%index_end   = domain_offset + domain_size
 !>@todo FIXME : should this be raw state variable or -1?, optional argument
 !>              for kind??
-state%domain(dom_id)%variable(1)%kind_string = 'QTY_RAW_STATE_VARIABLE'
+state%domain(dom_id)%variable(1)%kind_string = 'QTY_STATE_VARIABLE'
 state%domain(dom_id)%variable(1)%dart_kind   = &
        get_index_for_quantity(state%domain(dom_id)%variable(1)%kind_string)
 
