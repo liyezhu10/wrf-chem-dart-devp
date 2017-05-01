@@ -33,7 +33,7 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT,  &
                              loc_get_close_obs => get_close_obs,               &
                              loc_get_close_state => get_close_state,           &
-                             is_vertical
+                             is_vertical, set_vertical_localization_coord
                              
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, &
                                  nc_add_global_creation_time, nc_redef, nc_enddef
@@ -814,6 +814,9 @@ domid =  add_domain( trim(model_analysis_filename), nfields,    &
 
 if ( debug > 4 ) call state_structure_info(domid)
 
+! tell the location module how we want to localize in the vertical
+call set_vertical_localization_coord(vert_localization_coord)
+
 end subroutine static_init_model
 
 
@@ -1269,7 +1272,6 @@ integer :: nVertLevelsP1DimID
 
 integer :: VarID, mpasFileID
 
-character(len=NF90_MAX_NAME) :: varname
 integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
 integer :: myndims
 
@@ -4550,7 +4552,7 @@ select case (ztypeout)
    ! -------------------------------------------------------
    case default
       write(string1,*) 'Requested vertical coordinate not recognized: ', ztypeout
-      call error_handler(E_ERR,'vert_convert', string1, &
+      call error_handler(E_ERR,'convert_vert_distrib', string1, &
                          source, revision, revdate)
 
 end select   ! outgoing vert type
