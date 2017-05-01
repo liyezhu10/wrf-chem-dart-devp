@@ -2241,11 +2241,11 @@ end function shortest_time_between_assimilations
 !> nc_write_model_atts
 !> writes the model-specific attributes to a netCDF file.
 !> 
-subroutine nc_write_model_atts( ncid, model_mod_will_write_state ) 
+subroutine nc_write_model_atts( ncid, domain_id ) 
 
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_will_write_state
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -2259,10 +2259,6 @@ integer :: i, ifld, dim_id, g_id
 integer :: grid_id(grid_num_1d)
 
 if (.not. module_initialized) call static_init_model()
-
-! this should be false for large models, as it never call nc_write_model_vars
-model_mod_will_write_state = .false.
-
 
 ! Write Global Attributes
 

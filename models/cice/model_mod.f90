@@ -1861,9 +1861,9 @@ end subroutine end_model
 !> This includes coordinate variables and some metadata, but NOT
 !> the model state vector.
 
-subroutine nc_write_model_atts( ncid, model_mod_writes_state_variables ) 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+subroutine nc_write_model_atts( ncid, domain_id ) 
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 ! for the dimensions and coordinate variables
 integer :: NlonDimID, NlatDimID, NcatDimID
@@ -1874,8 +1874,6 @@ integer     :: i
 character(len=128)  :: filename
 
 if ( .not. module_initialized ) call static_init_model
-
-model_mod_writes_state_variables = .false. 
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
@@ -2221,7 +2219,7 @@ subroutine get_close_obs(filt_gc, base_loc, base_type, locs, loc_qtys, loc_types
                          num_close, close_indices, distances, state_handle)
 
 type(get_close_type), intent(in)    :: filt_gc
-type(location_type),  intent(in)    :: base_loc
+type(location_type),  intent(inout) :: base_loc
 integer,              intent(in)    :: base_type
 type(location_type),  intent(inout) :: locs(:)
 integer,              intent(in)    :: loc_qtys(:)
@@ -2276,7 +2274,7 @@ subroutine get_close_state(filt_gc, base_loc, base_type, locs, loc_qtys, loc_ind
                          num_close, close_indices, distances, state_handle)
 
 type(get_close_type), intent(in)    :: filt_gc
-type(location_type),  intent(in)    :: base_loc
+type(location_type),  intent(inout) :: base_loc
 integer,              intent(in)    :: base_type
 type(location_type),  intent(inout) :: locs(:)
 integer,              intent(in)    :: loc_qtys(:)

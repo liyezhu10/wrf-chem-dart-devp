@@ -93,7 +93,7 @@ use sort_mod,              only : sort
 
 use distributed_state_mod, only : get_state
 
-use default_model_mod,   only : adv_1step, init_conditions, init_time
+use default_model_mod,   only : adv_1step, init_conditions, init_time, nc_write_model_vars
 
 use state_structure_mod, only : add_domain, get_model_variable_indices, &
                                 state_structure_info, &
@@ -3652,12 +3652,12 @@ end subroutine get_wrf_horizontal_location
 !***********************************************************************
 
 
-subroutine nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) 
+subroutine nc_write_model_atts( ncFileID, domain_id ) 
 !-----------------------------------------------------------------
 ! Writes the model-specific attributes to a netCDF file
 
-integer, intent(in)  :: ncFileID      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+integer, intent(in) :: ncFileID      ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 logical, parameter :: write_precip = .false.
 
@@ -3706,8 +3706,6 @@ integer, dimension(4) :: dimids_2D
 logical               :: debug = .false.
 
 !-----------------------------------------------------------------
-
-model_mod_writes_state_variables = .false. 
 
 !-----------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file, 

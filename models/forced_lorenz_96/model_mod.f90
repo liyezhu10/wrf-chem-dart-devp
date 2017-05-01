@@ -373,10 +373,10 @@ end subroutine get_state_meta_data
 !------------------------------------------------------------------
 !> Writes the model-specific attributes to a netCDF file
 
-subroutine nc_write_model_atts(ncid, model_mod_writes_state_variables)
+subroutine nc_write_model_atts(ncid, domain_id)
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+integer, intent(in)  :: ncid
+integer, intent(in) :: domain_id
 
 integer :: msize
 
@@ -384,7 +384,6 @@ integer :: msize
 ! so this routine just needs to write any model-specific
 ! attributes it wants to record.
 
-model_mod_writes_state_variables = .false.
 msize = int(model_size, i4)
 
 ! Write Global Attributes

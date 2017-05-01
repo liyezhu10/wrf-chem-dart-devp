@@ -1116,7 +1116,7 @@ end subroutine end_model
 
 
 
-subroutine nc_write_model_atts( ncid, model_mod_writes_state_variables )
+subroutine nc_write_model_atts( ncid, domain_id ) 
 !------------------------------------------------------------------
 ! TJH -- Writes the model-specific attributes to a netCDF file.
 !     This includes coordinate variables and some metadata, but NOT
@@ -1136,9 +1136,8 @@ subroutine nc_write_model_atts( ncid, model_mod_writes_state_variables )
 !    NF90_put_var       ! provide values for variable
 ! NF90_CLOSE            ! close: save updated netCDF dataset
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
-integer              :: ierr          ! return value of function
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
@@ -1195,9 +1194,6 @@ integer :: i, myndims
 character(len=128) :: filename
 
 if ( .not. module_initialized ) call static_init_model
-
-ierr = -1 ! assume things go poorly
-model_mod_writes_state_variables  = .true.
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
@@ -1475,8 +1471,6 @@ call nc_check(nf90_put_var(ncid, VarID, pfts1d_wtxy ), &
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
 call nc_sync(ncid)
-
-ierr = 0 ! If we got here, things went well.
 
 end subroutine nc_write_model_atts
 

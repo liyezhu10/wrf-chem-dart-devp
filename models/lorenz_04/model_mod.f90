@@ -564,20 +564,17 @@ end subroutine get_state_meta_data
 !------------------------------------------------------------------
 !> Writes the model-specific attributes to a netCDF file
 
-subroutine nc_write_model_atts( ncid , model_will_write_state )
+subroutine nc_write_model_atts(ncid, domain_id)
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_will_write_state 
+integer, intent(in)  :: ncid
+integer, intent(in) :: domain_id
 
 integer :: msize
-
-model_will_write_state = .false.
 
 ! other parts of the dart system will write the state into the file
 ! so this routine just needs to write any model-specific
 ! attributes it wants to record.
 
-model_will_write_state = .false.
 msize = int(model_size, i4)
 
 ! Write Global Attributes 

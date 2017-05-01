@@ -454,10 +454,10 @@ end subroutine end_model
 !> @param model_writes_state have the state structure write out all of the
 !>                 state variables
 
-subroutine nc_write_model_atts(ncid, model_writes_state) 
+subroutine nc_write_model_atts(ncid, domain_id)
 
-integer, intent(in)  :: ncid           ! netCDF file identifier
-logical, intent(out) :: model_writes_state ! if true, dart lib writes state info
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 
@@ -472,9 +472,6 @@ integer :: VarID
 character(len=256) :: filename
 
 if ( .not. module_initialized ) call static_init_model
-
-
-model_writes_state = .false.
 
 ! we only have a netcdf handle here so we do not know the filename
 ! or the fortran unit number.  but construct a string with at least

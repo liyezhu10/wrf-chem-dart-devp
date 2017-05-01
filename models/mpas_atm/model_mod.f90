@@ -1255,10 +1255,10 @@ end subroutine model_interpolate
 
 !------------------------------------------------------------------
 
-subroutine nc_write_model_atts( ncid, model_mod_writes_state_variables ) 
+subroutine nc_write_model_atts(ncid, domain_id)
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+integer, intent(in) :: ncid
+integer, intent(in) :: domain_id
 
 ! for the dimensions and coordinate variables
 integer :: nCellsDimID
@@ -1281,8 +1281,6 @@ real(r8), allocatable, dimension(:)   :: data1d
 
 
 if ( .not. module_initialized ) call static_init_model
-
-model_mod_writes_state_variables = .false. 
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename

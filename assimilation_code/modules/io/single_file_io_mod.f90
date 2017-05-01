@@ -110,6 +110,8 @@ character(len=512)  :: msgstring
 
 !-------------------------------------------------------------------------------
 
+!@todo FIXME : need to have this work for multiple domains
+
 contains
 
 
@@ -166,7 +168,7 @@ logical :: local_model_mod_will_write_state_variables = .false.
 
 ! Local variables including counters and storing names
 character(len=256) :: fname, copyname
-integer :: icopy, ivar, ret, ens_size, num_output_ens
+integer :: icopy, ivar, ret, ens_size, num_output_ens, domain
 
 if (my_task_id() == 0) then
    if(.not. byteSizesOK()) then
@@ -286,7 +288,11 @@ if (my_task_id() == 0) then
    !----------------------------------------------------------------------------
    ! Define the model-specific components
    !----------------------------------------------------------------------------
-   call nc_write_model_atts( ncFileID%ncid, local_model_mod_will_write_state_variables)
+   ! for single file io, we are assuming a single domain, no lower order models
+   ! have multiple domains.
+
+   domain = 1
+   call nc_write_model_atts( ncFileID%ncid, domain)
 
    if ( .not. local_model_mod_will_write_state_variables ) then
       call write_model_attributes(ncFileID, MemberDimID, TimeDimID)

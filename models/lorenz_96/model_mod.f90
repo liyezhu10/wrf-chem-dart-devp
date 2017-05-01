@@ -317,17 +317,16 @@ end subroutine initialize
 !------------------------------------------------------------------
 ! Writes model-specific attributes to a netCDF file
 
-subroutine nc_write_model_atts(ncid, model_mod_writes_state_variables) 
+subroutine nc_write_model_atts(ncid, domain_id)
 
-integer, intent(in)  :: ncid      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+integer, intent(in) :: ncid
+integer, intent(in) :: domain_id
 
 integer :: msize
 type(location_type) :: lctn 
 character(len=128)  :: filename
 
 
-model_mod_writes_state_variables = .false. 
 msize = int(model_size, i4)
 
 call nc_redef(ncid)

@@ -1397,7 +1397,7 @@ end subroutine init_time
 
 
 
-subroutine nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) 
+subroutine nc_write_model_atts( ncFileID, domain_id ) 
 !-----------------------------------------------------------------------------------------
 ! There are two different (staggered) 3D grids being used simultaneously here. 
 !
@@ -1414,8 +1414,8 @@ subroutine nc_write_model_atts( ncFileID, model_mod_writes_state_variables )
 use typeSizes
 use netcdf
 
-integer, intent(in)  :: ncFileID        ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
+integer, intent(in) :: ncFileID        ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 !-----------------------------------------------------------------------------------------
 
@@ -1441,8 +1441,6 @@ character(len=256) :: msgstring
 !-----------------------------------------------------------------------------------------
 
 if ( .not. module_initialized ) call static_init_model
-
-model_mod_writes_state_variables = .false. 
 
 !-------------------------------------------------------------------------------
 ! Get the bounds for storage on Temp and Velocity grids

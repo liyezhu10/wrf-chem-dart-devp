@@ -150,8 +150,8 @@
 
 
 &model_nml
-   model_analysis_filename      = 'mpas_init.nc'
-   grid_definition_filename     = 'mpas_init.nc'
+   model_analysis_filename      = 'mpas_restart.nc'
+   grid_definition_filename     = 'mpas_mesh.nc'
    assimilation_period_days     = 0
    assimilation_period_seconds  = 43200
    model_perturbation_amplitude = 0.0001
