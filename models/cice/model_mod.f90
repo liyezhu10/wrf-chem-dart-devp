@@ -176,7 +176,6 @@ integer, parameter :: VAR_QTY_INDEX = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
 
 ! things which can/should be in the model_nml
-logical  :: output_state_vector = .false.
 integer  :: assimilation_period_days = 1
 integer  :: assimilation_period_seconds = 0
 real(r8) :: model_perturbation_amplitude = 0.2
