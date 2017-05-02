@@ -82,9 +82,6 @@ use mpi_utilities_mod, only: my_task_id
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-!> @todo FIXME write a write_model_time for CLM
-use dart_time_io_mod,      only : write_model_time
-
 use default_model_mod,     only : adv_1step, init_time, init_conditions, nc_write_model_vars
 
 use typesizes
@@ -1538,6 +1535,17 @@ call nc_check(nf90_close(ncid),'read_model_time', 'close '//trim(filename))
 
 end function read_model_time
 
+!-----------------------------------------------------------------------
+!>@todo this routine should write the model time when 
+!>      creating files from scratch
+subroutine write_model_time(ncid, dart_time)
+
+integer,             intent(in) :: ncid !< netcdf file handle
+type(time_type),     intent(in) :: dart_time
+
+call error_handler(E_MSG, 'write_model_time', 'no routine for clm write model time')
+
+end subroutine write_model_time
 
 !==================================================================
 ! The remaining PUBLIC interfaces come next
