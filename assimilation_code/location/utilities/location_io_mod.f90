@@ -77,9 +77,13 @@ integer :: rc
 character(len=32) :: context = 'nc_write_location_atts'
 
 
-! define the rank/dimension of the location information
-rc = nf90_def_dim(ncid=ncFileID, name='location', len=dimlen, dimid=LocDimID)
-call nc_check(rc, context, 'def_dim:location', fname)
+! define the rank/dimension of the location information.
+! an initial size of 0 signals we are using the unlimited dim
+! and don't need to define a separate one.
+if (dimlen /= 0) then
+   rc = nf90_def_dim(ncid=ncFileID, name='location', len=dimlen, dimid=LocDimID)
+   call nc_check(rc, context, 'def_dim:location', fname)
+endif
 
 if (LocationDims > 1) then
    rc = nf90_def_dim(ncid=ncFileID, name='locdim', len=LocationDims, dimid=LDimID)
@@ -135,11 +139,14 @@ subroutine nc_write_location_vert(ncFileID, fname)
 integer,                     intent(in) :: ncFileID    ! handle to the netcdf file
 character(len=*), optional,  intent(in) :: fname       ! file name (for printing purposes)
 
-integer :: VarID, rc
+integer :: VarID, unlimID, rc
 character(len=32) :: context = 'nc_write_location_vert'
 
-rc = nf90_def_var(ncid=ncFileID, name='which_vert', xtype=nf90_int, &
-                  dimids=(/ nf90_unlimited /), varid=VarID)
+rc = nf90_inquire(ncFileID, UnlimitedDimID=unlimID)
+call nc_check(rc, context, 'inquire:unlimited_dim', fname)
+
+rc = nf90_def_var(ncFileID, name='which_vert', xtype=nf90_int, &
+                  dimids=(/ unlimID /), varid=VarID)
 call nc_check(rc, context, 'def_var:which_vert', fname)
 
 rc = nf90_put_att(ncFileID, VarID, 'long_name', 'vertical coordinate system code')
