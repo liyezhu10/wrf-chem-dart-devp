@@ -600,7 +600,7 @@ integer :: msize
 ! so this routine just needs to write any model-specific
 ! attributes it wants to record.
 
-msize = NVARS*num_grid_points
+msize = int(num_grid_points, i4)
 
 ! Write Global Attributes
 
