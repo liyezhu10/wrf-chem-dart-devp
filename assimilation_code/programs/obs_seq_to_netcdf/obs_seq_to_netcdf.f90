@@ -24,8 +24,7 @@ use      obs_def_mod, only : obs_def_type, get_obs_def_error_variance, get_obs_d
 use     obs_kind_mod, only : max_defined_types_of_obs, get_name_for_type_of_obs
 use     location_mod, only : location_type, write_location, operator(/=), operator(==), &
                              set_location, is_location_in_region, query_location
-use  location_io_mod, only : nc_write_location_atts, nc_get_location_varids, &
-                             nc_write_location
+use  location_io_mod, only : nc_write_location_atts, nc_write_location
 use time_manager_mod, only : time_type, get_time, print_time, &
                              get_calendar_string, print_date, &
                              operator(>), operator(<) 

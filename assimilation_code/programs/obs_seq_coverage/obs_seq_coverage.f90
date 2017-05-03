@@ -37,8 +37,7 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              set_location, is_location_in_region, query_location, &
                              is_vertical, VERTISUNDEF
 
-use  location_io_mod, only : nc_write_location_atts, nc_get_location_varids, &
-                             nc_write_location
+use  location_io_mod, only : nc_write_location_atts, nc_write_location
 
 use time_manager_mod, only : time_type, set_date, set_time, get_time, &
                              set_calendar_type, get_calendar_string, &
@@ -1041,7 +1040,7 @@ call nc_check(nf90_put_att(ncid, VarID, 'long_name', &
 
 ! let the location module write what it needs to ...
 
-!>@todo FIXME what was this doing?
+! create a 'location' variable
 call nc_write_location_atts(ncid, 0, voxelsDimID)
 
 ! Define the mandatory level corresponding to each voxel

@@ -76,8 +76,7 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              set_location, is_location_in_region, query_location, &
                              VERTISUNDEF, is_vertical
 
-use  location_io_mod, only : nc_write_location_atts, nc_get_location_varids, &
-                             nc_write_location
+use  location_io_mod, only : nc_write_location_atts, nc_write_location
 
 use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
                              set_time_missing, print_date, set_calendar_type, &
