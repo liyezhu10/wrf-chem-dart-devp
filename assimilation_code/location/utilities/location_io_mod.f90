@@ -76,15 +76,26 @@ integer :: LocDimID, LDimID, VarID
 integer :: rc
 character(len=32) :: context = 'nc_write_location_atts'
 
+! get an id for the locations dimension:  
+!  if the user passes us in a dimension id, 
+!     assume it is already created and use it.
+!  if they pass in a valid length, create a 'location' dimension.
+!  otherwise, use the unlimited dimension
 
-! define the rank/dimension of the location information.
-! an initial size of 0 signals we are using the unlimited dim
-! and don't need to define a separate one.
-if (dimlen /= 0) then
+if (present(use_dimID)) then
+   LocDimID = use_dimID
+
+else if (dimlen /= 0) then
    rc = nf90_def_dim(ncid=ncFileID, name='location', len=dimlen, dimid=LocDimID)
    call nc_check(rc, context, 'def_dim:location', fname)
+
+else
+   rc = nf90_inquire(ncFileID, UnlimitedDimID=LocDimID)
+   call nc_check(rc, context, 'inquire:unlimited_dim', fname)
 endif
 
+! if there is more than a single number associated with each location
+! define the dimension "across" the locations.  e.g. len 3 for 3d dimensions.
 if (LocationDims > 1) then
    rc = nf90_def_dim(ncid=ncFileID, name='locdim', len=LocationDims, dimid=LDimID)
    call nc_check(rc, context, 'def_dim:locdim', fname)
@@ -93,25 +104,13 @@ endif
 ! Define the location variable and attributes
 
 if (LocationDims > 1) then
-   if (present(use_dimID)) then
-      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                        dimids=(/ LDimID, use_dimID /), varid=VarID)
-      call nc_check(rc, context, 'def_var1:location', fname)
-   else
-      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ LDimID, LocDimID /), varid=VarID)
-      call nc_check(rc, context, 'def_var2:location', fname)
-   endif
+   rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                     dimids=(/ LDimID, LocDimID /), varid=VarID)
+   call nc_check(rc, context, 'def_var2:location', fname)
 else
-   if (present(use_dimID)) then
-      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ use_dimID /), varid=VarID)
-      call nc_check(rc, context, 'def_var3:location', fname)
-   else
-      rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
-                dimids=(/ LocDimID /), varid=VarID)
-      call nc_check(rc, context, 'def_var4:location', fname)
-   endif
+   rc = nf90_def_var(ncFileID, 'location', xtype=nf90_double, &
+                     dimids=(/ LocDimID /), varid=VarID)
+   call nc_check(rc, context, 'def_var4:location', fname)
 endif
 
 rc = nf90_put_att(ncFileID, VarID, 'description', 'location coordinates')
@@ -129,28 +128,46 @@ call nc_check(rc, context, 'put_att:storage_order', fname)
 rc = nf90_put_att(ncFileID, VarID, 'units', trim(LocationUnits))
 call nc_check(rc, context, 'put_att:units', fname)
 
+! if there is more than a single option for the vertical,
+! create a variable to store the vert choice
+
+if (has_vertical_choice()) then
+   call nc_write_location_vert(ncFileID, LocDimID, fname)
+endif
+
 end subroutine nc_write_location_atts
 
 !----------------------------------------------------------------------------
 !> Define the ancillary vertical array and attributes
 
-subroutine nc_write_location_vert(ncFileID, fname)
+subroutine nc_write_location_vert(ncFileID, use_dimID, fname)
 
 integer,                     intent(in) :: ncFileID    ! handle to the netcdf file
+integer,          optional,  intent(in) :: use_dimID   ! handle to the netcdf file
 character(len=*), optional,  intent(in) :: fname       ! file name (for printing purposes)
 
-integer :: VarID, unlimID, rc
+integer :: VarID, dimID, rc
 character(len=32) :: context = 'nc_write_location_vert'
 
-rc = nf90_inquire(ncFileID, UnlimitedDimID=unlimID)
-call nc_check(rc, context, 'inquire:unlimited_dim', fname)
+! if they give us the dimension the 'locations' array is using,
+! use that.  otherwise default to the unlimited dimension for this variable.
+if (present(use_dimID)) then
+   dimID = use_dimID
+else
+   rc = nf90_inquire(ncFileID, UnlimitedDimID=dimID)
+   call nc_check(rc, context, 'inquire:unlimited_dim', fname)
+endif
 
 rc = nf90_def_var(ncFileID, name='which_vert', xtype=nf90_int, &
-                  dimids=(/ unlimID /), varid=VarID)
+                  dimids=(/ dimID /), varid=VarID)
 call nc_check(rc, context, 'def_var:which_vert', fname)
 
 rc = nf90_put_att(ncFileID, VarID, 'long_name', 'vertical coordinate system code')
 call nc_check(rc, context, 'put_att:long_name', fname)
+
+! these are the same across all location modules, for better
+! or worse.  if we find location schemes which differ, this
+! needs to come from a call to the location module proper.
 
 rc = nf90_put_att(ncFileID, VarID, 'VERTISUNDEF', VERTISUNDEF)
 call nc_check(rc, context, 'put_att:VERTISUNDEF', fname)
@@ -174,7 +191,7 @@ end subroutine nc_write_location_vert
 
 !----------------------------------------------------------------------------
 !> Return the LocationVarID and WhichVertVarID variables from a given netCDF file.
-!>@todo FIXME why do we need this?
+!>@todo FIXME do we still need this?
 !>
 !> ncFileId         the netcdf file descriptor
 !> fname            the name of the netcdf file (for error messages only)

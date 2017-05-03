@@ -1137,7 +1137,7 @@ integer,             intent(in)    :: loc_qtys(:), loc_types(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: status(:)
 
-status(:) = 1
+status(:) = 0
 
 end subroutine convert_vertical_obs
 
@@ -1154,7 +1154,7 @@ integer(i8),         intent(in)    :: loc_indx(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: istatus
 
-istatus = 1
+istatus = 0
 
 end subroutine convert_vertical_state
 
