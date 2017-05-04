@@ -150,7 +150,10 @@ logical  :: gaussian_likelihood_tails       = .false.
 ! Some models are allowed to have MISSING_R8 values in the DART state vector.
 ! If they are encountered, it is not necessarily a FATAL error.
 ! Most of the time, if a MISSING_R8 is encountered, DART should die.
-! CLM and POP (more?) should have allow_missing_in_clm = .true.
+! CLM should have allow_missing_in_clm = .true.
+! maybe POP - but in POP the missing values are land and all ensemble members
+! have the same missing values.  CLM is different in that only some ensemble members may
+! have missing values and so we have a deficient ensemble size at those state locations.
 logical  :: allow_missing_in_clm = .false.
 
 ! False by default; if true, expect to read in an ascii table
