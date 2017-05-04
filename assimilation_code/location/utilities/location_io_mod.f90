@@ -143,7 +143,7 @@ end subroutine nc_write_location_atts
 subroutine nc_write_location_vert(ncFileID, use_dimID, fname)
 
 integer,                     intent(in) :: ncFileID    ! handle to the netcdf file
-integer,          optional,  intent(in) :: use_dimID   ! handle to the netcdf file
+integer,          optional,  intent(in) :: use_dimID   ! dimension to use 
 character(len=*), optional,  intent(in) :: fname       ! file name (for printing purposes)
 
 integer :: VarID, dimID, rc
