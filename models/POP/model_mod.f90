@@ -2068,8 +2068,6 @@ call nc_check(nf90_put_var(ncid, KMTVarID, KMT ), &
 call nc_check(nf90_put_var(ncid, KMUVarID, KMU ), &
              'nc_write_model_atts', 'KMU put_var '//trim(filename))
 
-call nc_enddef(ncid)
-
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
