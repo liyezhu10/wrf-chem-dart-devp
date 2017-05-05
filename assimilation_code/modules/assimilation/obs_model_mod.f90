@@ -176,6 +176,7 @@ if (print_trace_details > 0) then
    end_time = ens_time + delta_time / 2
    call timechat(ens_time,    'move_ahead', .false.,        'Current model data time            is: ')
    call timechat(start_time,  'move_ahead', .false.,        'Current assimilation window starts at: ')
+   call timechat(next_time,   'move_ahead', .false.,        'Next available observation time    is: ')
    call timechat(end_time,    'move_ahead', .false.,        'Current assimilation window ends   at: ')
   !call timechat(delta_time,  'move_ahead', .false.,        'Width of assimilation window       is: ')
 endif
@@ -206,7 +207,7 @@ endif
 if(next_time < start_time .or. next_time > end_time .or. print_trace_details > 0) then
 
    if (time2 /= ens_time) then
-      call timechat(next_time,   'move_ahead', .false.,     'Next available observation time    is: ')
+      !call timechat(next_time,   'move_ahead', .false.,     'Next available observation time    is: ')
       call timechat(time2,       'move_ahead', .false.,     'Next data time should be           at: ', &
          'Not within current window, model will be called to advance state.')
       call timechat(start_time,  'move_ahead', .false.,     'Next assimilation window starts    at: ')

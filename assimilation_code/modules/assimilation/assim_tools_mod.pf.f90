@@ -35,12 +35,13 @@ use       reg_factor_mod, only : comp_reg_factor
 
 use       obs_impact_mod, only : allocate_impact_table, read_impact_table, free_impact_table
 
-use         location_mod, only : location_type, get_close_type, query_location,           &
+use sampling_error_correction_mod, only : get_sampling_error_table_size, &
+                                          read_sampling_error_correction
+
+use         location_mod, only : location_type, get_close_type, get_close_obs_destroy,    &
                                  operator(==), set_location_missing, write_location,      &
-                                 LocationDims, is_vertical, vertical_localization_on,     &
-                                 set_vertical, has_vertical_choice, get_close_init,       &
-                                 get_vertical_localization_coord,                         &
-                                 set_vertical_localization_coord
+                                 LocationDims, vert_is_surface, has_vertical_localization,&
+                                 get_vert, set_vert, set_which_vert
 
 use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars,             & 
                                  compute_copy_mean_var, get_var_owner_index,              &
@@ -58,11 +59,13 @@ use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate,         
 
 use time_manager_mod,     only : time_type, get_time
 
-use assim_model_mod,      only : get_state_meta_data,                                     &
-                                 get_close_obs_init,    get_close_state_init,             &
-                                 get_close_obs,         get_close_state,                  &
-                                 get_close_obs_destroy, get_close_state_destroy,          &
-                                 convert_vertical_obs,  convert_vertical_state
+use assim_model_mod,      only : get_state_meta_data, get_close_maxdist_init,             &
+                                 get_close_obs_init, get_close_state_init,                &
+                                 get_close_obs, get_close_state,                          &
+                                 query_vert_localization_coord, vert_convert
+
+!>@todo FIXME would like to separate vert_convert into these:
+!                                 convert_vert_obs, convert_vert_state
 
 use distributed_state_mod, only : create_mean_window, free_mean_window
 
@@ -96,13 +99,11 @@ real(r8), parameter    :: small = epsilon(1.0_r8)   ! threshold for avoiding NaN
 character(len = 255)   :: msgstring, msgstring2, msgstring3
 
 ! Need to read in table for off-line based sampling correction and store it
-logical                :: first_get_correction = .true.
-real(r8)               :: exp_true_correl(200), alpha(200)
+integer                :: sec_table_size
+real(r8), allocatable  :: exp_true_correl(:), alpha(:)
 
 ! if adjust_obs_impact is true, read in triplets from the ascii file
-! and fill this 2d impact table.  it should be allocated for both
-! kinds and types, 0-N for kinds, 1-N for types, with a type offset
-! computed somehow.
+! and fill this 2d impact table. 
 real(r8), allocatable  :: obs_impact_table(:,:)
 
 ! version controlled file description for error handling, do not edit
@@ -195,7 +196,8 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    output_localization_diagnostics, localization_diagnostics_file,         &
    special_localization_obs_types, special_localization_cutoffs,           &
    allow_missing_in_clm, distribute_mean, close_obs_caching,               &
-   allow_any_impact_values, lanai_bitwise
+   adjust_obs_impact, obs_impact_filename,                                 &  
+   allow_any_impact_values, lanai_bitwise ! don't document these last two for now
 
 !============================================================================
 
@@ -285,6 +287,12 @@ end do
 if (has_special_cutoffs .and. close_obs_caching) then
    cache_override = .true.
    close_obs_caching = .false.
+endif
+
+if(sampling_error_correction) then
+   sec_table_size = get_sampling_error_table_size()
+   allocate(exp_true_correl(sec_table_size), alpha(sec_table_size))
+   ! we can't read the table here because we don't have access to the ens_size
 endif
 
 ! log what the user has selected via the namelist choices
@@ -404,12 +412,6 @@ integer,                     intent(in)    :: OBS_PRIOR_MEAN_START, OBS_PRIOR_ME
 integer,                     intent(in)    :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END
 logical,                     intent(in)    :: inflate_only
 
-!>@todo FIXME this routine has a huge amount of local/stack storage.
-!>at some point does it need to be allocated instead?  this routine isn't
-!>called frequently so doing allocate/deallocate isn't a timing issue.  
-!>putting arrays on the stack is fast, but risks running out of stack space 
-!>and dying with strange errors.
-
 real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
 real(r8) :: reg_factor, impact_factor
 real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
@@ -475,8 +477,6 @@ logical :: local_obs_inflate
 
 ! HK observation location conversion
 real(r8) :: vert_obs_loc_in_localization_coord
-type(location_type) :: lc(1)
-integer             :: kd(1)
 
 ! timing - set one or both of the parameters to true
 ! to get timing info printed out.
@@ -485,8 +485,7 @@ logical, parameter :: timing = .false.
 logical, parameter :: timing1 = .false.
 real(digits12), allocatable :: elapse_array(:)
 
-integer :: istatus 
-integer :: vstatus(obs_ens_handle%my_num_vars) !< for vertical conversion status.
+integer :: vstatus !< for vertical conversion status. Can we just smash the dart qc instead?
 
 
 ! we are going to read/write the copies array
@@ -579,29 +578,20 @@ call init_obs(observation, get_num_copies(obs_seq), get_num_qc(obs_seq))
 ! do the forward operator calculation
 call get_my_obs_loc(ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
 
-if (.not. lanai_bitwise .and. has_vertical_choice()) then
+if (.not. lanai_bitwise) then
    ! convert the verical of all my observations to the localization coordinate
    ! this may not be bitwise with Lanai because of a different number of set_location calls
    if (timing) call start_mpi_timer(base)
-   call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
-                             my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
-   !do i = 1, obs_ens_handle%my_num_vars
-   !   !>@todo FIXME how to do multiple obs and record the status correctly?
-   !   !>does vstatus need to be an array?  same for state or no? (thinking yes for obs, no for state)
-   !   !call convert_vertical_obs(ens_handle, 1, my_obs_loc(i), my_obs_kind(i), vstatus)
-   !   lc(1) = my_obs_loc(i)
-   !   kd(1) = my_obs_kind(i)
-   !   call convert_vertical_obs(ens_handle, 1, lc, kd, 0, vstatus)
-   !   my_obs_loc(i) = lc(1)
    do i = 1, obs_ens_handle%my_num_vars
+      call vert_convert(ens_handle, my_obs_loc(i), my_obs_kind(i), vstatus)
       if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
          !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
-         if (vstatus(i) /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
+         if (vstatus /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
       endif
    enddo
    if (timing) then
       elapsed = read_mpi_timer(base)
-      print*, 'convert_vertical_obs time :', elapsed, 'rank ', my_task_id()
+      print*, 'vert_convert time :', elapsed, 'rank ', my_task_id()
    endif
 endif
 
@@ -612,7 +602,7 @@ call get_my_vars(ens_handle, my_state_indx)
 ! Get the location and kind of all my state variables
 if (timing) call start_mpi_timer(base)
 do i = 1, ens_handle%my_num_vars
-   call get_state_meta_data(my_state_indx(i), my_state_loc(i), my_state_kind(i))
+   call get_state_meta_data(ens_handle, my_state_indx(i), my_state_loc(i), my_state_kind(i))
 end do
 if (timing) then
    elapsed = read_mpi_timer(base)
@@ -620,12 +610,6 @@ if (timing) then
 endif
 
 !call test_get_state_meta_data(my_state_loc, ens_handle%my_num_vars)
-!>@todo FIXME  if we want to convert all the state up front, this is
-!>where we call convert_vertical_state()
-if (has_vertical_choice()) then
-   if (.false.) call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
-                                            my_state_indx, get_vertical_localization_coord(), istatus)
-endif
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
 ! INCREMENTS. OWNING PE WOULD SHIP IT'S PRIOR TO THIS ONE
@@ -654,17 +638,19 @@ endif
 
 ! Initialize the method for getting state variables close to a given ob on my process
 if (has_special_cutoffs) then
-   call get_close_init(gc_state, my_num_state, 2.0_r8*cutoff, my_state_loc, 2.0_r8*cutoff_list)
+   call get_close_maxdist_init(gc_state, 2.0_r8*cutoff, 2.0_r8*cutoff_list)
 else
-   call get_close_init(gc_state, my_num_state, 2.0_r8*cutoff, my_state_loc)
+   call get_close_maxdist_init(gc_state, 2.0_r8*cutoff)
 endif
+call get_close_state_init(gc_state, my_num_state, my_state_loc)
 
 ! Initialize the method for getting obs close to a given ob on my process
 if (has_special_cutoffs) then
-   call get_close_init(gc_obs, my_num_obs, 2.0_r8*cutoff, my_obs_loc, 2.0_r8*cutoff_list)
+   call get_close_maxdist_init(gc_obs, 2.0_r8*cutoff, 2.0_r8*cutoff_list)
 else
-   call get_close_init(gc_obs, my_num_obs, 2.0_r8*cutoff, my_obs_loc)
+   call get_close_maxdist_init(gc_obs, 2.0_r8*cutoff)
 endif
+call get_close_obs_init(gc_obs, my_num_obs, my_obs_loc)
 
 if (close_obs_caching) then
    ! Initialize last obs and state get_close lookups, to take advantage below 
@@ -715,7 +701,7 @@ if (filter_kind == 9) then
       if (base_obs_type > 0) then
          base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
       else
-         call get_state_meta_data(-1 * int(base_obs_type,i8), dummyloc, base_obs_kind)
+         call get_state_meta_data(ens_handle, -1 * int(base_obs_type,i8), dummyloc, base_obs_kind)
       endif
    
       ! Get the value of the observation
@@ -851,7 +837,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if (base_obs_type > 0) then
       base_obs_kind = get_quantity_for_type_of_obs(base_obs_type)
    else
-      call get_state_meta_data(-1 * int(base_obs_type,i8), dummyloc, base_obs_kind)  ! identity obs
+      call get_state_meta_data(ens_handle, -1 * int(base_obs_type,i8), dummyloc, base_obs_kind)  ! identity obs
    endif
    ! Get the value of the observation
    call get_obs_values(observation, obs, obs_val_index)
@@ -863,7 +849,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    !-----------------------------------------------------------------------
    if(ens_handle%my_pe == owner) then
       ! need to convert global to local obs number
-      vert_obs_loc_in_localization_coord = query_location(base_obs_loc, "VLOC")
+      vert_obs_loc_in_localization_coord = get_vert(my_obs_loc(owners_index))
 
       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
       ! Only value of 0 for DART QC field should be assimilated
@@ -1001,10 +987,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
       endif
 
-      if (.not. lanai_bitwise .and. has_vertical_choice()) then 
+      if (.not. lanai_bitwise) then 
          ! use converted vertical coordinate from owner
-         call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
-                                         int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
+         call set_vert(base_obs_loc, get_vert(my_obs_loc(owners_index))) 
+         call set_which_vert(base_obs_loc, query_vert_localization_coord())
       endif
 
    ! Next block is done by processes that do NOT own this observation
@@ -1040,10 +1026,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
       endif
 
-      if (.not. lanai_bitwise .and. has_vertical_choice()) then
+      if (.not. lanai_bitwise) then
          ! use converted vertical coordinate from owner
-         call set_vertical(base_obs_loc, vert_obs_loc_in_localization_coord, &
-                                         get_vertical_localization_coord())
+         call set_vert(base_obs_loc, vert_obs_loc_in_localization_coord)
+         call set_which_vert(base_obs_loc,query_vert_localization_coord())
 
       endif
    endif
@@ -1209,7 +1195,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    if (.not. close_obs_caching) then
       if (timing .and. i < 100) call start_mpi_timer(base)
       call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-               my_state_indx, num_close_states, close_state_ind, close_state_dist, ens_handle)
+         num_close_states, close_state_ind, close_state_dist, ens_handle)
       if (timing .and. i < 100) then
          elapsed = read_mpi_timer(base)
          print*, 'get_close_state1 time :', elapsed, 'rank ', my_task_id()
@@ -1223,7 +1209,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       else
          if (timing .and. i < 100) call start_mpi_timer(base)
          call get_close_state(gc_state, base_obs_loc, base_obs_type, my_state_loc, my_state_kind, &
-                  my_state_indx, num_close_states, close_state_ind, close_state_dist, ens_handle)
+            num_close_states, close_state_ind, close_state_dist, ens_handle)
          if (timing .and. i < 100) then
             elapsed = read_mpi_timer(base)
             print*, 'get_close_state2 time :', elapsed, 'rank ', my_task_id()
@@ -1616,7 +1602,7 @@ end if
 
 ! Free up the storage
 call destroy_obs(observation)
-call get_close_state_destroy(gc_state)
+call get_close_obs_destroy(gc_state)
 call get_close_obs_destroy(gc_obs)
 
 ! print some stats about the assimilation
@@ -2806,10 +2792,9 @@ endif
 if(present(correl_out)) correl_out = correl
 
 
-! BEGIN TEST OF CORRECTION FROM FILE +++++++++++++++++++++++++++++++++++++++++++++++++
 ! Get the expected actual correlation and the regression weight reduction factor
 if(sampling_error_correction) then
-   call get_correction_from_file(ens_size, correl, mean_factor, exp_true_correl)
+   call get_correction_from_table(correl, mean_factor, exp_true_correl, ens_size)
    ! Watch out for division by zero; if correl is really small regression is safely 0
    if(abs(correl) > 0.001_r8) then
       reg_coef = reg_coef * (exp_true_correl / correl) * mean_factor
@@ -2818,8 +2803,6 @@ if(sampling_error_correction) then
    endif
    correl = exp_true_correl
 endif
-
-! END TEST OF CORRECTION FROM FILE +++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 
@@ -2865,56 +2848,23 @@ end subroutine update_from_obs_inc
 
 !------------------------------------------------------------------------
 
-subroutine get_correction_from_file(ens_size, scorrel, mean_factor, expected_true_correl)
+subroutine get_correction_from_table(scorrel, mean_factor, expected_true_correl, ens_size)
 
-integer,   intent(in) :: ens_size
 real(r8),  intent(in) :: scorrel
 real(r8), intent(out) :: mean_factor, expected_true_correl
+integer,  intent(in)  :: ens_size
 
-! Reads in a regression error file for a give ensemble_size and uses interpolation
-! to get correction factor into the file
+! Uses interpolation to get correction factor into the table
 
 integer             :: iunit, i, low_indx, high_indx
 real(r8)            :: temp, temp2, correl, fract, low_correl, low_exp_correl, low_alpha
 real(r8)            :: high_correl, high_exp_correl, high_alpha
-character(len = 20) :: correction_file_name
 
-if(first_get_correction) then
-   ! Compute the file name for this ensemble size
-   if(ens_size < 10) then
-      write(correction_file_name, 11) 'final_full.', ens_size
-   else if(ens_size < 100) then
-      write(correction_file_name, 21) 'final_full.', ens_size
-   else if(ens_size < 1000) then
-      write(correction_file_name, 31) 'final_full.', ens_size
-   else if(ens_size < 10000) then
-      write(correction_file_name, 41) 'final_full.', ens_size
-   else
-      write(msgstring,*)'Trying to use ',ens_size,' model states -- too many.'
-      call error_handler(E_ERR,'get_correction_from_file','Use less than 10000 ens members.',&
-         source,revision,revdate, text2=msgstring)
+logical, save :: first_time = .true.
 
-    11   format(a11, i1)
-    21   format(a11, i2)
-    31   format(a11, i3)
-    41   format(a11, i4)
-   endif
- 
-   ! Make sure that the correction file exists, else an error
-   if(.not. file_exist(correction_file_name)) then
-      write(msgstring,*) 'Correction file ', correction_file_name, ' does not exist'
-      call error_handler(E_ERR,'get_correction_from_file',msgstring,source,revision,revdate)
-   endif
-
-   ! Read in file to get the expected value of the true correlation given the sample
-   iunit = get_unit()
-   open(unit = iunit, file = correction_file_name)
-   do i = 1, 200
-      read(iunit, *) temp, temp2, exp_true_correl(i), alpha(i)
-   end do
-   close(iunit)
-
-   first_get_correction = .false.
+if (first_time) then
+   call read_sampling_error_correction(ens_size, exp_true_correl, alpha)
+   first_time = .false.
 endif
 
 ! Interpolate to get values of expected correlation and mean_factor
@@ -2930,8 +2880,8 @@ else if(scorrel <= -0.995_r8) then
    mean_factor = (alpha(1) - 1.0_r8) * fract + 1.0_r8
 else if(scorrel >= 0.995_r8) then
    fract = (scorrel - 0.995_r8) / 0.005_r8
-   correl = (1.0_r8 - exp_true_correl(200)) * fract + exp_true_correl(200)
-   mean_factor = (1.0_r8 - alpha(200)) * fract + alpha(200)
+   correl = (1.0_r8 - exp_true_correl(sec_table_size)) * fract + exp_true_correl(sec_table_size)
+   mean_factor = (1.0_r8 - alpha(sec_table_size)) * fract + alpha(sec_table_size)
 else
    ! given the ifs above, the floor() computation below for low_indx 
    ! should always result in a value in the range 1 to 199.  but if this
@@ -2966,7 +2916,7 @@ else if(abs(expected_true_correl) > abs(scorrel)) then
    expected_true_correl = scorrel
 endif 
 
-end subroutine get_correction_from_file
+end subroutine get_correction_from_table
 
 
 
@@ -3736,13 +3686,13 @@ else if (LocationDims == 3) then
    ! localizing in the vertical or not.)   if surface obs, assume a hemisphere
    ! and shrink more.
 
-   if (vertical_localization_on()) then
+   if (has_vertical_localization()) then
       ! cube root for volume
       revised_distance = orig_dist * ((real(newcount, r8) / oldcount) &
                                       ** 0.33333333333333333333_r8)
 
       ! Cut the adaptive localization threshold in half again for 'surface' obs
-      if (is_vertical(base, "SURFACE")) then
+      if (vert_is_surface(base)) then
          revised_distance = revised_distance * (0.5_r8 ** 0.33333333333333333333_r8)
       endif
    else
@@ -3833,12 +3783,12 @@ Get_Obs_Locations: do i = 1, obs_ens_handle%my_num_vars
    if (my_obs_type(i) > 0) then
          my_obs_kind(i) = get_quantity_for_type_of_obs(my_obs_type(i))
    else
-      !call get_state_meta_data(win, -1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
+      !call get_state_meta_data(ens_handle, win, -1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
       ! This is just to get the kind.  WRF needs state_ensemble_handle because it converts the state
       ! element to the required vertical coordinate.  Should this be allowed anyway?
       ! With dummy loc you are going to end up converting the vertical twice for identity obs. FIXME use
       ! actual ob location so you can store the converted vertical?
-      call get_state_meta_data(-1 * int(my_obs_type(i),i8), dummyloc, my_obs_kind(i))
+      call get_state_meta_data(state_ens_handle, -1 * int(my_obs_type(i),i8), dummyloc, my_obs_kind(i))
    endif
 end do Get_Obs_Locations
 

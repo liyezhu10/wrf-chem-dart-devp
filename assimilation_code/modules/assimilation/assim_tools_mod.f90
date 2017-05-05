@@ -94,6 +94,10 @@ logical                :: has_special_cutoffs
 logical                :: close_obs_caching = .true.
 real(r8), parameter    :: small = epsilon(1.0_r8)   ! threshold for avoiding NaNs/Inf
 
+! true if we have multiple vert choices and we're doing vertical localization
+! (make it a local variable so we don't keep making subroutine calls)
+logical                :: is_doing_vertical_conversion = .false.
+
 character(len = 255)   :: msgstring, msgstring2, msgstring3
 
 ! Need to read in table for off-line based sampling correction and store it
@@ -164,6 +168,24 @@ logical            :: adjust_obs_impact  = .false.
 character(len=256) :: obs_impact_filename = ''
 logical            :: allow_any_impact_values = .false.
 
+! These next two only affect models with multiple options
+! for vertical localization:
+!
+! "convert_state" is false by default; it depends on the model
+! what is faster - do the entire state up front and possibly
+! do unneeded work, or do the conversion during the assimilation
+! loop. we think this depends heavily on how much of the state
+! is going to be adjusted by the obs.  for a global model
+! we think false may be better; for a regional model with
+! a lot of obs and full coverage true may be better.
+!
+! "convert_obs" is true by default; in general it seems to
+! be better for each task to convert the obs vertical before
+! going into the loop but again this depends on how many
+! obs per task and whether the mean is distributed or 
+! replicated on each task.
+logical :: convert_all_state_verticals_first = .false.
+logical :: convert_all_obs_verticals_first   = .true.
 
 ! Not in the namelist; this var disables the experimental
 ! linear and spherical case code in the adaptive localization 
@@ -189,8 +211,9 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    output_localization_diagnostics, localization_diagnostics_file,         &
    special_localization_obs_types, special_localization_cutoffs,           &
    allow_missing_in_clm, distribute_mean, close_obs_caching,               &
-   adjust_obs_impact, obs_impact_filename,                                 &  
-   allow_any_impact_values, lanai_bitwise ! don't document these last two for now
+   adjust_obs_impact, obs_impact_filename, allow_any_impact_values,        &
+   convert_all_state_verticals_first, convert_all_obs_verticals_first,     &
+   lanai_bitwise ! don't document this one -- only used for regression tests
 
 !============================================================================
 
@@ -288,98 +311,10 @@ if(sampling_error_correction) then
    ! we can't read the table here because we don't have access to the ens_size
 endif
 
-! log what the user has selected via the namelist choices
-! E_MSG only prints from PE0 by default, but go ahead and only
-! construct the messages on PE0 as well.
-if (do_output()) then 
+is_doing_vertical_conversion = (has_vertical_choice() .and. vertical_localization_on() .and. &
+                                .not. lanai_bitwise)
 
-   select case (filter_kind)
-    case (1)
-      msgstring = 'Ensemble Adjustment Kalman Filter (EAKF)'
-    case (2)
-      msgstring = 'Ensemble Kalman Filter (ENKF)'
-    case (3)
-      msgstring = 'Kernel filter'
-    case (4)
-      msgstring = 'observation space particle filter'
-    case (5)
-      msgstring = 'random draw from posterior'
-    case (6)
-      msgstring = 'deterministic draw from posterior with fixed kurtosis'
-    case (7)
-      msgstring = 'Boxcar'
-    case (8)
-      msgstring = 'Rank Histogram Filter'
-    case default 
-      call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8', &
-                         source, revision, revdate)
-   end select
-   call error_handler(E_MSG, 'assim_tools_init:', 'Selected filter type is '//trim(msgstring))
-
-   if (adjust_obs_impact) then
-      call allocate_impact_table(obs_impact_table)
-      call read_impact_table(obs_impact_filename, obs_impact_table, allow_any_impact_values)
-      call error_handler(E_MSG, 'assim_tools_init:', &
-                         'Using observation impact table from file "'//trim(obs_impact_filename)//'"')
-   endif
-
-   write(msgstring,  '(A,F18.6)') 'The cutoff namelist value is ', cutoff
-   write(msgstring2, '(A)') 'cutoff is the localization half-width parameter,'
-   write(msgstring3, '(A,F18.6)') 'so the effective localization radius is ', cutoff*2.0_r8
-   call error_handler(E_MSG,'assim_tools_init:', msgstring, text2=msgstring2, text3=msgstring3)
-
-   if (has_special_cutoffs) then
-      call error_handler(E_MSG, '', '')
-      call error_handler(E_MSG,'assim_tools_init:','Observations with special localization treatment:')
-      call error_handler(E_MSG,'assim_tools_init:','(type name, specified cutoff distance, effective localization radius)') 
-   
-      do i = 1, num_special_cutoff
-         write(msgstring, '(A32,F18.6,F18.6)') special_localization_obs_types(i), &
-               special_localization_cutoffs(i), special_localization_cutoffs(i)*2.0_r8                     
-         call error_handler(E_MSG,'assim_tools_init:', msgstring)
-      end do
-      call error_handler(E_MSG,'assim_tools_init:','all other observation types will use the default cutoff distance')
-      call error_handler(E_MSG, '', '')
-   endif
-
-   if (cache_override) then
-      call error_handler(E_MSG,'assim_tools_init:','Disabling the close obs caching because specialized localization')
-      call error_handler(E_MSG,'assim_tools_init:','distances are enabled. ')
-   endif
-
-   if(adaptive_localization_threshold > 0) then
-      write(msgstring, '(A,I10,A)') 'Using adaptive localization, threshold ', &
-                                     adaptive_localization_threshold, ' obs'
-      call error_handler(E_MSG,'assim_tools_init:', msgstring)
-      if(adaptive_cutoff_floor > 0.0_r8) then
-         write(msgstring, '(A,F18.6)') 'Minimum cutoff will not go below ', &
-                                        adaptive_cutoff_floor
-         call error_handler(E_MSG,'assim_tools_init:', 'Using adaptive localization cutoff floor.', &
-                            text2=msgstring)
-      endif
-   endif
-
-   if(output_localization_diagnostics) then
-      call error_handler(E_MSG,'assim_tools_init:', 'Writing localization diagnostics to file:')
-      call error_handler(E_MSG,'assim_tools_init:', trim(localization_diagnostics_file))
-   endif
-
-   if(sampling_error_correction) then
-      call error_handler(E_MSG,'assim_tools_init:', 'Using Sampling Error Correction')
-   endif
-
-   if (task_count() > 1) then
-       if(distribute_mean) then
-          call error_handler(E_MSG,'assim_tools_init:', 'Distributing one copy of the ensemble mean across all tasks', &
-                             text2='uses less memory per task but may run slower if doing vertical ', &
-                             text3='coordinate conversion; controlled by namelist item "distribute_mean"')
-       else
-          call error_handler(E_MSG,'assim_tools_init:', 'Replicating a copy of the ensemble mean on every task', &
-                             text2='uses more memory per task but may run faster if doing vertical ', &
-                             text3='coordinate conversion; controlled by namelist item "distribute_mean"')
-       endif
-   endif
-endif
+call log_namelist_selections(num_special_cutoff, cache_override)
 
 end subroutine assim_tools_init
 
@@ -463,7 +398,9 @@ logical :: local_varying_ss_inflate
 logical :: local_obs_inflate
 
 ! HK observation location conversion
-real(r8) :: vert_obs_loc_in_localization_coord
+real(r8) :: vertvalue_obs_in_localization_coord
+integer  :: whichvert_obs_in_localization_coord
+real(r8) :: whichvert_real
 type(location_type) :: lc(1)
 integer             :: kd(1)
 
@@ -568,20 +505,12 @@ call init_obs(observation, get_num_copies(obs_seq), get_num_qc(obs_seq))
 ! do the forward operator calculation
 call get_my_obs_loc(ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
 
-if (.not. lanai_bitwise .and. has_vertical_choice()) then
-   ! convert the verical of all my observations to the localization coordinate
+if (convert_all_obs_verticals_first .and. is_doing_vertical_conversion) then
+   ! convert the vertical of all my observations to the localization coordinate
    ! this may not be bitwise with Lanai because of a different number of set_location calls
    if (timing) call start_mpi_timer(base)
    call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
                              my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
-   !do i = 1, obs_ens_handle%my_num_vars
-   !   !>@todo FIXME how to do multiple obs and record the status correctly?
-   !   !>does vstatus need to be an array?  same for state or no? (thinking yes for obs, no for state)
-   !   !call convert_vertical_obs(ens_handle, 1, my_obs_loc(i), my_obs_kind(i), vstatus)
-   !   lc(1) = my_obs_loc(i)
-   !   kd(1) = my_obs_kind(i)
-   !   call convert_vertical_obs(ens_handle, 1, lc, kd, 0, vstatus)
-   !   my_obs_loc(i) = lc(1)
    do i = 1, obs_ens_handle%my_num_vars
       if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
          !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
@@ -609,11 +538,16 @@ if (timing) then
 endif
 
 !call test_get_state_meta_data(my_state_loc, ens_handle%my_num_vars)
-!>@todo FIXME  if we want to convert all the state up front, this is
-!>where we call convert_vertical_state()
-if (has_vertical_choice()) then
-   if (.false.) call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
+
+!> optionally convert all state location verticals
+if (convert_all_state_verticals_first .and. is_doing_vertical_conversion) then
+   if (timing) call start_mpi_timer(base)
+   call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
                                             my_state_indx, get_vertical_localization_coord(), istatus)
+   if (timing) then
+      elapsed = read_mpi_timer(base)
+      print*, 'convert_vertical_state time :', elapsed, 'rank ', my_task_id()
+   endif
 endif
 
 ! PAR: MIGHT BE BETTER TO HAVE ONE PE DEDICATED TO COMPUTING 
@@ -709,11 +643,15 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    ! Following block is done only by the owner of this observation
    !-----------------------------------------------------------------------
    if(ens_handle%my_pe == owner) then
-      ! need to convert global to local obs number
-      if (has_vertical_choice()) then 
-         vert_obs_loc_in_localization_coord = query_location(base_obs_loc, "VLOC")
+      ! each task has its own subset of all obs.  if they were converted in the
+      ! vertical up above, then we need to broadcast the new values to all the other
+      ! tasks so they're computing the right distances when applying the increments.
+      if (is_doing_vertical_conversion) then
+         vertvalue_obs_in_localization_coord = query_location(base_obs_loc, "VLOC")
+         whichvert_obs_in_localization_coord = query_location(base_obs_loc, "WHICH_VERT")
       else
-         vert_obs_loc_in_localization_coord = 0.0_r8
+         vertvalue_obs_in_localization_coord = 0.0_r8
+         whichvert_obs_in_localization_coord = 0
       endif
 
       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
@@ -781,43 +719,62 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
       !Broadcast the info from this obs to all other processes
       ! What gets broadcast depends on what kind of inflation is being done
+      !>@todo it should also depend on if vertical is being converted.  the last
+      !>two values aren't needed unless vertical conversion is happening.
+      !>@todo FIXME: this is messy, but should we have 6 different broadcasts,
+      !>the three below and three more which omit the 2 localization values?
+      !>how much does this cost in time? time this and see.
+      whichvert_real = real(whichvert_obs_in_localization_coord, r8)
       if(local_varying_ss_inflate) then
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, orig_obs_prior_mean, &
-            orig_obs_prior_var, net_a, scalar1=obs_qc, scalar2=vert_obs_loc_in_localization_coord)
+         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+            orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
+            scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
 
       else if(local_single_ss_inflate .or. local_obs_inflate) then
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, net_a, &
-           scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, scalar4=vert_obs_loc_in_localization_coord)
+         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+           net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
+           scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
       else
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, net_a, scalar1=obs_qc, scalar2=vert_obs_loc_in_localization_coord)
+         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+           net_a, scalar1=obs_qc, &
+           scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
       endif
 
-      if (.not. lanai_bitwise .and. has_vertical_choice()) then 
-         ! use converted vertical coordinate from owner
-         call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
-                                         int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
-      endif
+      !>@todo FIXME it should be ok to remove this, right? 
+      !>  i'm the owner - i should not have to set anything here because
+      !>  this obs was already converted
+      !if (is_doing_vertical_conversion) then
+      !   ! use converted vertical coordinate from owner
+     !    call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
+     !                                    int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
+      !endif
 
    ! Next block is done by processes that do NOT own this observation
    !-----------------------------------------------------------------------
    else
       ! I don't store this obs; receive the obs prior and increment from broadcast
       ! Also get qc and inflation information if needed
+      ! also a converted vertical coordinate if needed
+      !>@todo FIXME see the comment in the broadcast_send() section about
+      !>the cost of sending unneeded values 
       if(local_varying_ss_inflate) then
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, orig_obs_prior_mean, &
-            orig_obs_prior_var, net_a, scalar1=obs_qc, scalar2=vert_obs_loc_in_localization_coord)
+         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+            orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
+            scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
       else if(local_single_ss_inflate .or. local_obs_inflate) then
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, net_a, &
-            scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, scalar4=vert_obs_loc_in_localization_coord)
+         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+            net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
+            scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
       else
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, net_a, scalar1=obs_qc, scalar2=vert_obs_loc_in_localization_coord)
+         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+           net_a, scalar1=obs_qc, &
+           scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
       endif
+      whichvert_obs_in_localization_coord = nint(whichvert_real)
 
-      if (.not. lanai_bitwise .and. has_vertical_choice()) then
-         ! use converted vertical coordinate from owner
-         call set_vertical(base_obs_loc, vert_obs_loc_in_localization_coord, &
-                                         get_vertical_localization_coord())
-
+      if (is_doing_vertical_conversion) then
+         ! use converted vertical coordinate value and type from owner
+         call set_vertical(base_obs_loc, vertvalue_obs_in_localization_coord, whichvert_obs_in_localization_coord)
       endif
    endif
    !-----------------------------------------------------------------------
@@ -848,8 +805,9 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    !> @todo This is very messy. 
 
    !--------------------------------------------------------
-   !> @todo have to set location so you are bitwise with Lanai for WRF. There is a bitwise creep with get and set location.
-   ! I beleive this is messing up CAM_SE because you get a different % saved for close_obs_caching
+   !> @todo have to set location so you are bitwise with Lanai for WRF. There is a bitwise creep with 
+   !> get and set location.
+   ! I believe this is messing up CAM_SE because you get a different % saved for close_obs_caching
    !  The base_obs_loc are different for cam if you do this set.
    !--------------------------------------------------------
 
@@ -2894,7 +2852,123 @@ my_obs_time = get_obs_def_time(obs_def)
 end subroutine get_my_obs_loc
 
 !--------------------------------------------------------------------
+!> log what the user has selected via the namelist choices
 
+subroutine log_namelist_selections(num_special_cutoff, cache_override)
+
+integer, intent(in) :: num_special_cutoff
+logical, intent(in) :: cache_override
+
+integer :: i
+
+select case (filter_kind)
+ case (1)
+   msgstring = 'Ensemble Adjustment Kalman Filter (EAKF)'
+ case (2)
+   msgstring = 'Ensemble Kalman Filter (ENKF)'
+ case (3)
+   msgstring = 'Kernel filter'
+ case (4)
+   msgstring = 'observation space particle filter'
+ case (5)
+   msgstring = 'random draw from posterior'
+ case (6)
+   msgstring = 'deterministic draw from posterior with fixed kurtosis'
+ case (7)
+   msgstring = 'Boxcar'
+ case (8)
+   msgstring = 'Rank Histogram Filter'
+ case default 
+   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8', &
+                      source, revision, revdate)
+end select
+call error_handler(E_MSG, 'assim_tools_init:', 'Selected filter type is '//trim(msgstring))
+
+if (adjust_obs_impact) then
+   call allocate_impact_table(obs_impact_table)
+   call read_impact_table(obs_impact_filename, obs_impact_table, allow_any_impact_values)
+   call error_handler(E_MSG, 'assim_tools_init:', &
+                      'Using observation impact table from file "'//trim(obs_impact_filename)//'"')
+endif
+
+write(msgstring,  '(A,F18.6)') 'The cutoff namelist value is ', cutoff
+write(msgstring2, '(A)') 'cutoff is the localization half-width parameter,'
+write(msgstring3, '(A,F18.6)') 'so the effective localization radius is ', cutoff*2.0_r8
+call error_handler(E_MSG,'assim_tools_init:', msgstring, text2=msgstring2, text3=msgstring3)
+
+if (has_special_cutoffs) then
+   call error_handler(E_MSG, '', '')
+   call error_handler(E_MSG,'assim_tools_init:','Observations with special localization treatment:')
+   call error_handler(E_MSG,'assim_tools_init:','(type name, specified cutoff distance, effective localization radius)') 
+
+   do i = 1, num_special_cutoff
+      write(msgstring, '(A32,F18.6,F18.6)') special_localization_obs_types(i), &
+            special_localization_cutoffs(i), special_localization_cutoffs(i)*2.0_r8                     
+      call error_handler(E_MSG,'assim_tools_init:', msgstring)
+   end do
+   call error_handler(E_MSG,'assim_tools_init:','all other observation types will use the default cutoff distance')
+   call error_handler(E_MSG, '', '')
+endif
+
+if (cache_override) then
+   call error_handler(E_MSG,'assim_tools_init:','Disabling the close obs caching because specialized localization')
+   call error_handler(E_MSG,'assim_tools_init:','distances are enabled. ')
+endif
+
+if(adaptive_localization_threshold > 0) then
+   write(msgstring, '(A,I10,A)') 'Using adaptive localization, threshold ', &
+                                  adaptive_localization_threshold, ' obs'
+   call error_handler(E_MSG,'assim_tools_init:', msgstring)
+   if(adaptive_cutoff_floor > 0.0_r8) then
+      write(msgstring, '(A,F18.6)') 'Minimum cutoff will not go below ', &
+                                     adaptive_cutoff_floor
+      call error_handler(E_MSG,'assim_tools_init:', 'Using adaptive localization cutoff floor.', &
+                         text2=msgstring)
+   endif
+endif
+
+if(output_localization_diagnostics) then
+   call error_handler(E_MSG,'assim_tools_init:', 'Writing localization diagnostics to file:')
+   call error_handler(E_MSG,'assim_tools_init:', trim(localization_diagnostics_file))
+endif
+
+if(sampling_error_correction) then
+   call error_handler(E_MSG,'assim_tools_init:', 'Using Sampling Error Correction')
+endif
+
+if (task_count() > 1) then
+    if(distribute_mean) then
+       msgstring  = 'Distributing one copy of the ensemble mean across all tasks'
+       msgstring2 = 'uses less memory per task but may run slower if doing vertical '
+    else
+       msgstring  = 'Replicating a copy of the ensemble mean on every task'
+       msgstring2 = 'uses more memory per task but may run faster if doing vertical '
+    endif
+    call error_handler(E_MSG,'assim_tools_init:', msgstring, text2=msgstring2, &
+                       text3='coordinate conversion; controlled by namelist item "distribute_mean"')
+endif
+
+if (has_vertical_choice()) then
+   if (.not. vertical_localization_on()) then
+      msgstring = 'Not doing vertical localization, no vertical coordinate conversion required'
+      call error_handler(E_MSG,'assim_tools_init:', msgstring)
+   else
+      msgstring = 'Doing vertical localization, vertical coordinate conversion may be required'
+      if (convert_all_state_verticals_first) then
+         msgstring2 = 'Converting all state vector verticals to localization coordinate first.'
+      else
+         msgstring2 = 'Converting all state vector verticals only as needed.'
+      endif
+      if (convert_all_obs_verticals_first) then
+         msgstring3 = 'Converting all observation verticals to localization coordinate first.'
+      else
+         msgstring3 = 'Converting all observation verticals only as needed.'
+      endif
+      call error_handler(E_MSG,'assim_tools_init:', msgstring, text2=msgstring2, text3=msgstring3)
+   endif
+endif
+
+end subroutine log_namelist_selections
 
 !===========================================================
 ! TEST FUNCTIONS BELOW THIS POINT

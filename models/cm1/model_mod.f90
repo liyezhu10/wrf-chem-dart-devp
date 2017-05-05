@@ -58,7 +58,7 @@ use default_model_mod,     only : pert_model_copies, nc_write_model_vars, &
 use ensemble_manager_mod, only : ensemble_type, copies_in_window
 
 use typesizes
-use netcdf 
+use netcdf
 
 implicit none
 private
@@ -114,7 +114,7 @@ logical            :: periodic_x = .true.
 logical            :: periodic_y = .true.
 logical            :: periodic_z = .false. ! not supported at the moment
 
-!  The DART state vector may consist of things like:  
+!  The DART state vector may consist of things like:
 !
 ! float prs(nk, nj, ni) ;
 !         prs:long_name = "pressure" ;
@@ -150,7 +150,7 @@ real(r8) ::                    clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
 
 ! indices associated with variable_table columns
 integer, parameter :: VT_VARNAME_INDEX  = 1
-integer, parameter :: VT_DARTQTY_INDEX = 2
+integer, parameter :: VT_DARTQTY_INDEX  = 2
 integer, parameter :: VT_UPDATE_INDEX   = 3
 integer, parameter :: VT_MINVAL_INDEX   = 4
 integer, parameter :: VT_MAXVAL_INDEX   = 5
@@ -159,11 +159,11 @@ namelist /model_nml/  &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
    model_perturbation_amplitude,&
-   cm1_template_file,           & 
+   cm1_template_file,           &
    calendar,                    &
    debug,                       &
    model_variables,             &
-   periodic_x,                  & ! FIXME: should we grab this information from namelist.input
+   periodic_x,                  & !>@todo FIXME: should we grab this information from namelist.input
    periodic_y,                  & ! or have this information written as attributes to restart files?
    periodic_z
 
@@ -176,7 +176,7 @@ integer :: domid
 ! vector grids: i+1, j+1, k+1 (3 vector grids)
 ! Also have 2d fields on scalar grid (should these be treated separately).
 integer  :: ni  =-1, nj  =-1, nk  =-1   ! scalar grid counts
-integer  :: nip1=-1, njp1=-1, nkp1=-1 ! staggered grid counts 
+integer  :: nip1=-1, njp1=-1, nkp1=-1 ! staggered grid counts
 
 ! Arrays of grid values
 
@@ -196,8 +196,8 @@ real(r8), allocatable :: zs(:,:) ! terrain height
 real(r8), allocatable :: axis(:) ! this array is the length of largest axis
 
 ! full grid points
-real(r8), allocatable :: zfull(:,:,:) ! height full (w) grid points (3d array) 
-real(r8), allocatable :: zhalf(:,:,:) ! height half (scalar) grid points (3d array) 
+real(r8), allocatable :: zfull(:,:,:) ! height full (w) grid points (3d array)
+real(r8), allocatable :: zhalf(:,:,:) ! height half (scalar) grid points (3d array)
 
 ! logicals to store what grid a variable is on
 logical, allocatable :: on_ugrid(:), on_vgrid(:), on_z_full(:)
@@ -211,7 +211,7 @@ type(time_type)       :: model_timestep  ! smallest time to adv model
 contains
 
 !==================================================================
-! REQUIRED interfaces. the names and arguments cannot be changed 
+! REQUIRED interfaces. the names and arguments cannot be changed
 !    because these are called by DART routines.
 
 !------------------------------------------------------------------
@@ -222,7 +222,6 @@ contains
 
 subroutine static_init_model()
 
-! FIXME:
 ! Local variables - all the important ones have module scope
 
 integer :: ncid
@@ -267,16 +266,16 @@ call nc_check( nf90_open(trim(cm1_template_file), NF90_NOWRITE, ncid), &
 ! 1) get grid dimensions
 ! 2) allocate space for the grid
 ! 3) read it from the template file
- 
+
 call get_grid_info(ncid)
 
-if((debug > 0) .and. do_output()) then
+if(debug > 0 .and. do_output()) then
    write(string1,'("static    grid: ni,   nj,   nk   =",3(1x,i5))')  ni, nj, nk
    call say(string1)
    write(string1,'("staggered grid: nip1, njp1, nkp1 =",3(1x,i5))') nip1, njp1, nkp1
    call say(string1)
 endif
- 
+
 ! reads in staggered and scalar grid arrays
 call get_grid(ncid)
 
@@ -311,20 +310,20 @@ domid = add_domain(cm1_template_file, nfields, &
 
 ! print information in the state structure
 
-if ((debug > 0) .and. do_output()) call state_structure_info(domid)
+if (debug > 0 .and. do_output()) call state_structure_info(domid)
 
 model_size = get_domain_size(domid)
 
-if ((debug > 0) .and. do_output()) then
+if (debug > 0 .and. do_output()) then
   write(string1, *)'static_init_model: model_size = ', model_size
   call say(string1)
 endif
- 
+
 call set_calendar_type( calendar )   ! comes from model_mod_nml
 
 model_timestep = set_model_time_step()
- 
-if ((debug > 0) .and. do_output()) then
+
+if (debug > 0 .and. do_output()) then
    call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
    write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
    call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
@@ -362,14 +361,14 @@ do i = 1, get_num_variables(domid)
 
 enddo
 
-
 end subroutine static_init_model
 
-!------------------------------------------------------------------
 
-! Returns the size of the model as an integer. 
-! this version assumes that static_init_model has computed the count
-! and put it in the module global 'model_size'
+!------------------------------------------------------------------
+!>
+!> Returns the size of the model as an integer.
+!> this version assumes that static_init_model has computed the count
+!> and put it in the module global 'model_size'
 
 function get_model_size()
 
@@ -381,18 +380,19 @@ get_model_size = model_size
 
 end function get_model_size
 
-!------------------------------------------------------------------
 
-! given an index into the state vector, return its location and
-! if given, the var kind.   despite the name, var_type is a generic
-! kind, like those in obs_kind/obs_kind_mod.f90, starting with QTY_
+!------------------------------------------------------------------
+!>
+!> given an index into the state vector, return its location and
+!> if given, the var kind.   despite the name, var_type is a generic
+!> kind, like those in obs_kind/obs_kind_mod.f90, starting with QTY_
 
 subroutine get_state_meta_data(index_in, location, var_type)
 
 integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type
-  
+
 ! Local variables
 
 integer :: x_index, y_index, z_index
@@ -401,7 +401,7 @@ real(r8) :: xlocation, ylocation, zlocation
 
 if ( .not. module_initialized ) call static_init_model()
 
-! get the local indicies and type from dart index. 
+! get the local indicies and type from dart index.
 call get_model_variable_indices(index_in, x_index, y_index, z_index, var_id=var_id)
 
 xlocation = 0.0_r8
@@ -472,17 +472,20 @@ endif
 
 
 location = set_location(xlocation, ylocation, zlocation)
- 
+
 if (present(var_type)) then
    var_type = get_kind_index(domid, var_id)
 endif
 
 end subroutine get_state_meta_data
 
+
 !------------------------------------------------------------------
-! Extrapolate height from s points to u/v points at the edge of the 
-! grid. Used when the grid is not periodic.
-! Doing a linear extrapolation
+!>
+!> Extrapolate height from s points to u/v points at the edge of the
+!> grid. Used when the grid is not periodic.
+!> Doing a linear extrapolation
+
 function extrapolate(x1, x2, z1, z2, x)
 
 real(r8), intent(in) :: x1, x2 ! x (or y) values at 2 points
@@ -503,9 +506,12 @@ extrapolate = z1 + ((x - x1) / (x2 - x1)) *(z2 - z1)
 
 end function extrapolate
 
+
 !------------------------------------------------------------------
-! Return zfull or zhalf at index i,j,k depending on whether
-! the variable is on zfull or zhalf.
+!>
+!> Return zfull or zhalf at index i,j,k depending on whether
+!> the variable is on zfull or zhalf.
+
 function get_my_z(varid, i, j, k)
 
 integer, intent(in) :: varid ! this is the variable order in the state
@@ -520,10 +526,10 @@ endif
 
 end function
 
+
 !------------------------------------------------------------------
 ! Returns the smallest increment in time that the model is capable of 
 ! advancing the state
-
 function shortest_time_between_assimilations()
 
 type(time_type) :: shortest_time_between_assimilations
@@ -536,21 +542,23 @@ end function shortest_time_between_assimilations
 
 
 !------------------------------------------------------------------
-! called once at the end of a run
+!>
+!> called once at the end of a run
 
 subroutine end_model()
 
 deallocate( xh, yh, zh ) ! deallocate half grid points
 deallocate( xf, yf, zf ) ! deallocate full grid points
 deallocate( zs, zhalf, zfull ) ! deallocate terrain values
-              
+
 end subroutine end_model
 
 
 !------------------------------------------------------------------
-! Writes the model-specific attributes to a netCDF file.
-!     This includes coordinate variables and some metadata, but NOT
-!     the model state vector.
+!>
+!> Writes the model-specific attributes to a netCDF file.
+!> This includes coordinate variables and some metadata, but NOT
+!> the model state vector.
 
 subroutine nc_write_model_atts(ncid, domain_id)
 
@@ -566,9 +574,9 @@ integer :: LineLenDimID, nlinesDimID, nmlVarID
 integer :: nlines, linelen
 logical :: has_model_namelist
 
-! local variables 
+! local variables
 
-integer :: i
+integer :: io
 
 character(len=128) :: filename
 
@@ -582,7 +590,6 @@ if ( .not. module_initialized ) call static_init_model()
 write(filename,*) 'ncid', ncid
 
 
-
 ! Write Global Attributes 
 call nc_redef(ncid)
 
@@ -591,22 +598,15 @@ call nc_add_global_creation_time(ncid)
 call nc_add_global_attribute(ncid, "model_source", source )
 call nc_add_global_attribute(ncid, "model_revision", revision )
 call nc_add_global_attribute(ncid, "model_revdate", revdate )
-call nc_add_global_attribute(ncid, "model", "CM1 model")
+
+call nc_add_global_attribute(ncid, "model", "CM1")
 
 !call nc_write_location_atts(ncid, msize)
 !call nc_enddef(ncid)
 !call nc_write_location(ncid, state_loc, msize)
 
 
-! Determine shape of most important namelist
-
-
-! We need the dimension ID for the number of copies/ensemble members, and
-! we might as well check to make sure that Time is the Unlimited dimension. 
-! Our job is create the 'model size' dimension.
-
-call nc_check(nf90_inq_dimid(ncid=ncid, name='NMLlinelen', dimid=LineLenDimID), &
-                           'nc_write_model_atts','inq_dimid NMLlinelen')
+! Determine shape of CM1 namelist
 
 call find_textfile_dims('namelist.input', nlines, linelen)
 if (nlines > 0) then
@@ -615,20 +615,29 @@ else
   has_model_namelist = .false.
 endif
 
-if ((debug > 0) .and. do_output()) then
+if (debug > 0 .and. do_output()) then
    write(string1, *) 'model namelist: nlines, linelen = ', nlines, linelen
    call say(string1)
 endif
-  
-if (has_model_namelist) then 
+
+if (has_model_namelist) then
    allocate(textblock(nlines))
    textblock = ''
 
-   call nc_check(nf90_def_dim(ncid=ncid, name='nlines', &
+   io = nf90_inq_dimid(ncid, name='NMLlinelen', dimid=LineLenDimID)
+   if ( io == NF90_NOERR ) then
+      continue
+   else
+      call nc_check(nf90_def_dim(ncid, name='NMLlinelen', &
+                 len = nlines, dimid = LineLenDimID), &
+                 'nc_write_model_atts', 'def_dim NMLlinelen ')
+   endif
+
+   call nc_check(nf90_def_dim(ncid, name='nlines', &
                  len = nlines, dimid = nlinesDimID), &
                  'nc_write_model_atts', 'def_dim nlines ')
 
-   call nc_check(nf90_def_var(ncid,name='CM1_namelist', xtype=nf90_char,    &
+   call nc_check(nf90_def_var(ncid, name='CM1_namelist', xtype=nf90_char,    &
                  dimids = (/ linelenDimID, nlinesDimID /),  varid=nmlVarID), &
                  'nc_write_model_atts', 'def_var model_in')
    call nc_check(nf90_put_att(ncid, nmlVarID, 'long_name',       &
@@ -636,8 +645,7 @@ if (has_model_namelist) then
 
 endif
 
-
-! Leave define mode
+! Leave define mode so we can write the static data
 call nc_enddef(ncid)
 
 ! Fill the variables we can
@@ -657,13 +665,13 @@ end subroutine nc_write_model_atts
 
 
 !------------------------------------------------------------------
-!
-! given a set of multiple distributed state vectors, a location and 
-! generic obs kind, return a set of expected obs values and a 
-! success/failure code
-!
-!       ISTATUS = 12: observation not contained within grid
-!
+!>
+!> given a set of multiple distributed state vectors, a location and
+!> generic obs kind, return a set of expected obs values and a
+!> success/failure code
+!>
+!>       ISTATUS = 12: observation not contained within grid
+
 subroutine model_interpolate(state_ens_handle, ens_size, location, obs_type, expected_obs, istatus)
 
 ! passed variables
@@ -696,13 +704,13 @@ integer :: axis_length
 if ( .not. module_initialized ) call static_init_model()
 
 expected_obs(:) = MISSING_R8
-istatus(:)      = 99         
+istatus(:)      = 99
 
 ! rename for sanity - we can't change the argument names
 ! to this subroutine, but this really is a kind.
 obs_kind = obs_type
 
-if (debug > 0) then
+if (debug > 99) then
    call write_location(0,location,charstring=string1)
    write(string1, *) 'task ', my_task_id(), ' kind, loc ', obs_kind, ' ', trim(string1)
    call say(string1)
@@ -712,7 +720,7 @@ obs_loc_array = get_location(location)
 
 varid = get_varid_from_kind(domid, obs_kind)
 if (varid < 0) then
-   if (debug > 0) then
+   if (debug > 99) then
       call write_location(0,location,charstring=string1)
       write(string1, *) 'obs kind not found in state.  kind ', obs_kind, ' (', &
                                  trim(get_name_for_quantity(obs_kind)), ')  loc: ', trim(string1)
@@ -725,7 +733,7 @@ endif
 
 nlevs = get_z_axis_length(varid)
 ndims = get_num_dims(domid, varid)
-if (debug > 0) then
+if (debug > 99) then
    write(string1, *) 'varid, nlevs, ndims = ', varid, nlevs, ndims
    call say(string1)
 endif
@@ -755,13 +763,13 @@ if( .not. observation_on_grid(obs_loc_array, ndims) ) then
    return ! exit early
 endif
 
-if (debug > 0) then
+if (debug > 99) then
    write(string1, *) 'nlevs', nlevs
    call say(string1)
 endif
 
-! Interpolate the height field (z) to get the height at each level at 
-! the observation location. This allows us to find which level an observation 
+! Interpolate the height field (z) to get the height at each level at
+! the observation location. This allows us to find which level an observation
 ! is in.
 
 ! Find the x, y enclosing box on the variable grid (which ever grid the variable is on).
@@ -785,11 +793,11 @@ if (nlevs == 2) then ! you need to find which 2 levels you are between
       if (hstatus /= 0) return
    endif
 
-if (debug > 0) print*, 'x y enclosing', x_ind, y_ind, x_val, y_val
+if (debug > 99) print*, 'x y enclosing', x_ind, y_ind, x_val, y_val
 
-if (debug > 0) print*, 'nlevs: ', nlevs, ', num_dims:', get_num_dims(domid, varid)
+if (debug > 99) print*, 'nlevs: ', nlevs, ', num_dims:', get_num_dims(domid, varid)
 
-if (debug > 0) print*, 'z_ind', z_ind, 'varid', varid
+if (debug > 99) print*, 'z_ind', z_ind, 'varid', varid
 
 endif
 
@@ -811,8 +819,8 @@ do i = 1, nlevs
    Q21_ens(:, i) = get_state(indx, state_ens_handle)
    indx = get_dart_vector_index(x_ind(2), y_ind(2), z_ind(i), domid, varid)
    Q22_ens(:, i) = get_state(indx, state_ens_handle)
-if (debug > 0)    print*,'level :', i  
-if (debug > 0)    print*,'   Q11, Q12, Q21, Q22', Q11_ens(:,1), Q12_ens(:,1), Q21_ens(:,1), Q22_ens(:,1)
+if (debug > 99)    print*,'level :', i
+if (debug > 99)    print*,'   Q11, Q12, Q21, Q22', Q11_ens(:,1), Q12_ens(:,1), Q21_ens(:,1), Q22_ens(:,1)
 enddo
 
 ! P_ens is the interpolated value at the level below and above the obs for each ensemble member.
@@ -835,10 +843,13 @@ istatus(:) = 0
 
 end subroutine model_interpolate
 
+
 !--------------------------------------------------------------------
+!>
 !> For variables on the horizontal s grid
 !> Interpolate height from corners of the bounding box locations to the
 !> observation location.
+
 subroutine height_interpolate_s_grid(obs_loc_array, varid, nlevs, z_ind, z_val)
 
 real(r8), intent(in)  :: obs_loc_array(3)
@@ -888,12 +899,9 @@ else ! on z half levels
 
 endif
 
-
 ! Z is the height at the xy location of the obs for each level.
 Z(:) = bilinear_interpolation(nlevs, obs_loc_array(1), obs_loc_array(2), &
                               x_val(1), x_val(2), y_val(1), y_val(2), Q11, Q12, Q21, Q22)
-
-!print*, 'Z(:)', Z(:)
 
 ! Find out which level the point is in:
 call get_enclosing_coord(obs_loc_array(3), Z, z_ind, z_val)
@@ -902,11 +910,14 @@ call get_enclosing_coord(obs_loc_array(3), Z, z_ind, z_val)
 
 end subroutine height_interpolate_s_grid
 
+
 !--------------------------------------------------------------------
+!>
 !> For variables not on the horizonal s grid
 !> Interpolate from the height field (zhalf or zfull) to the bounding box
 !> of the observation. Then interpolate the height at each corner of the
 !> bounding box to the observation location
+
 subroutine height_interpolate(obs_loc_array, varid, nlevs, x_ind, y_ind, z_ind, x_val, y_val, z_val, istatus)
 
 real(r8), intent(in)  :: obs_loc_array(3)
@@ -943,7 +954,7 @@ integer  :: staggered_ind(3) !  Z bounding boxes indices
 !                     | o |
 !                     x - x
 
-!> @todo You don't have to loop around dimensions - on_ugrid and on_vgrid is calculated
+!>@todo You don't have to loop around dimensions - on_ugrid and on_vgrid is calculated
 !> during static_init_model_mod and stored in module global storage.  See get_state_meta_data
 !> for an example of usage.
 do i = 1, get_num_dims(domid, varid)
@@ -955,7 +966,7 @@ do i = 1, get_num_dims(domid, varid)
          staggered_ind(2) = x_ind(j)
          staggered_ind(3) = x_ind(j) + 1
 
-         !> @todo peridic and off the grid
+         !>@todo peridic and off the grid
 
          ! periodic boundary conditions
          do k = 1,3
@@ -975,7 +986,7 @@ if (debug > 0) then
    print *, 'X staggered_ind(2) : ', staggered_ind(2)
    print *, 'X staggered_ind(3) : ', staggered_ind(3)
 endif
-        
+
          do level = 1, nlevs
 
             P1(j, level) = zhalf(staggered_ind(1), y_ind(1), level)
@@ -1023,7 +1034,7 @@ endif
          staggered_ind(2) = y_ind(j)
          staggered_ind(3) = y_ind(j) + 1
 
-         !> @todo peridic and off the grid
+         !>@todo peridic and off the grid
 
          ! periodic boundary conditions
          do k = 1,3
@@ -1080,12 +1091,14 @@ istatus = 0
 
 end subroutine height_interpolate
 
+
 !--------------------------------------------------------------------
 !> Test if an observation is on the grid
+
 function observation_on_grid(obs_location, ndims)
 
 real(r8), intent(in) :: obs_location(3)
-integer,  intent(in) :: ndims 
+integer,  intent(in) :: ndims
 
 logical :: observation_on_grid
 
@@ -1104,7 +1117,7 @@ if ( periodic_x .and. periodic_y ) then
    if ( (obs_location(1) < xf(1)) .or. (obs_location(1) > xf(nip1)) .or. &
         (obs_location(2) < yf(1)) .or. (obs_location(2) > yf(njp1)) ) then
 
-      observation_on_grid = .false. 
+      observation_on_grid = .false.
 
       if (debug > 0) then
          print *, 'periodic boundary conditions'
@@ -1115,7 +1128,7 @@ if ( periodic_x .and. periodic_y ) then
 
       return ! exit early
 
-   endif 
+   endif
 elseif ( (.not. periodic_x) .and. (.not. periodic_y) ) then
    ! require that the point is contained within the staggered grid for now.
    ! you could extrapolate for values that are within xf-xh, yf-yh
@@ -1123,7 +1136,7 @@ elseif ( (.not. periodic_x) .and. (.not. periodic_y) ) then
    if ( (obs_location(1) < xh(1)) .or. (obs_location(1) > xh(ni)) .or. &
         (obs_location(2) < yh(1)) .or. (obs_location(2) > yh(nj)) ) then
 
-      observation_on_grid = .false. 
+      observation_on_grid = .false.
 
       if (debug > 0) then
          print *, 'non-periodic boundary conditions'
@@ -1131,7 +1144,7 @@ elseif ( (.not. periodic_x) .and. (.not. periodic_y) ) then
          print *, 'x_min, x_max ', xh(1), xh(ni)
          print *, 'y_min, y_max ', yh(1), yh(nj)
       endif
-      
+
       return ! exit early
 
    endif
@@ -1149,7 +1162,7 @@ if (ndims == 3) then
    ! with some extra work.
    if ( (obs_location(3) < zh(1)) .or. (obs_location(3) > zh(nk)) )  then
 
-      observation_on_grid = .false. 
+      observation_on_grid = .false.
 
       if (debug > 0) then
          print *, 'outside z grid'
@@ -1164,8 +1177,10 @@ endif
 
 end function observation_on_grid
 
+
 !--------------------------------------------------------------------
 !> Test if a variable is on the s grid
+
 function is_on_s_grid(varid)
 
 integer, intent(in) :: varid
@@ -1188,8 +1203,10 @@ is_on_s_grid = (on_ni .and. on_nj)
 
 end function
 
+
 !--------------------------------------------------------------------
 !> Return the x axis and length of the x axis
+
 subroutine get_x_axis(varid, axis, axis_length)
 
 integer,  intent(in)  :: varid
@@ -1214,8 +1231,10 @@ enddo
 
 end subroutine get_x_axis
 
+
 !--------------------------------------------------------------------
 !> Return the y axis and length of the z axis
+
 subroutine get_y_axis(varid, axis, axis_length)
 
 integer,  intent(in)  :: varid
@@ -1239,8 +1258,10 @@ enddo
 
 end subroutine get_y_axis
 
+
 !--------------------------------------------------------------------
 !> Return the length of the z axis
+
 function get_z_axis_length(varid)
 
 integer, intent(in)  :: varid
@@ -1269,8 +1290,10 @@ enddo
 
 end function get_z_axis_length
 
+
 !--------------------------------------------------------------------
 !> For periodic boundary conditions in the x direction.
+
 subroutine wrap_x(obs_x_loc, x_ind, x_val)
 
 real(r8), intent(in)    :: obs_x_loc
@@ -1280,13 +1303,12 @@ real(r8), intent(inout) :: x_val(2) !  bounding box values
 ! wrap in x if observation location is between xf(1) and xh(1)
 if ( obs_x_loc <= xh(1) .and. obs_x_loc >= xf(1) ) then ! x is off the grid
 
-   x_ind(1) = 1 
+   x_ind(1) = 1
    x_ind(2) = ni
    x_val(1) = xh(1)
    x_val(2) = xh(ni) - xf(nip1) ! subtracting lenght of grid to get correct
                                 ! distance for interpolation
-   if (debug > 0) then
-
+   if (debug > 1) then
       print*, 'OBS_X_LOC, xh(1) :' , obs_x_loc, xh(1)
       print*, ' wrapping back in the x-direction'
       print*, 'x_val, xh(ni) , xf(nip1) ', x_val, xh(ni) , xf(nip1)
@@ -1302,8 +1324,7 @@ if ( obs_x_loc > xh(ni) .and. obs_x_loc <= xf(nip1) ) then ! x is off the grid
    x_val(1) = xh(ni)
    x_val(2) = xh(1) + xf(nip1) ! adding lenght of grid to get correct
                                ! distance for interpolation
-
-   if (debug > 0) then
+   if (debug > 1) then
       print*, 'OBS_X_LOC, xh(ni) :' , obs_x_loc, xh(1)
       print*, ' wrapping forward the x-direction'
       print*, 'x_val, xh(ni) , xf(nip1) ', x_val, xh(ni) , xf(nip1)
@@ -1313,8 +1334,10 @@ endif
 
 end subroutine wrap_x
 
+
 !--------------------------------------------------------------------
 !> For periodic boundary conditions in the y direction.
+
 subroutine wrap_y(obs_y_loc, y_ind, y_val)
 
 real(r8), intent(in) :: obs_y_loc
@@ -1324,13 +1347,13 @@ real(r8), intent(inout) :: y_val(2) !  bounding box values
 ! wrap in y if observation location is between yf(1) and yh(1)
 if ( obs_y_loc <= yh(1) .and. obs_y_loc >= yf(1) ) then ! y is off the grid
 
-   y_ind(1) = 1 
+   y_ind(1) = 1
    y_ind(2) = nj
    y_val(1) = yh(1)
    y_val(2) = yh(nj) - yf(njp1) ! subtracting lenght of grid to get correct
                                 ! distrance for interpolation
 
-   if (debug > 0 ) then
+   if (debug > 1) then
       print*, 'OBS_Y_LOC, yh(1) :' , obs_y_loc, yh(1)
       print*, ' wrapping back in the y-direction'
       print*, 'y_val, yh(nj) , yf(njp1) ', y_val, yh(nj) , yf(njp1)
@@ -1347,7 +1370,7 @@ if ( obs_y_loc > yh(nj) .and. obs_y_loc <= yf(njp1) ) then ! y is off the grid
    y_val(2) = yh(1) + yf(njp1) ! adding length of grid to get correct
                                ! distance for interpolation
 
-   if (debug > 0) then
+   if (debug > 1) then
       print*, 'OBS_Y_LOC, yh(nj) :' , obs_y_loc, yh(1)
       print*, ' wrapping forward the y-direction'
       print*, 'y_val, yh(nj) , yf(njp1) ', y_val, yh(nj) , yf(njp1)
@@ -1357,9 +1380,9 @@ endif
 
 end subroutine wrap_y
 
-!--------------------------------------------------------------------
 
 !--------------------------------------------------------------------
+!>
 !> Performs bilinear interpolation.
 !> Acts on arrays so you can do a whole column in one function call
 
@@ -1388,9 +1411,12 @@ P = yfrac*R1 + (1-yfrac)*R2
 
 end function bilinear_interpolation
 
+
 !--------------------------------------------------------------------
+!>
 !> Performs bilinear interpolation.
 !> Acts on arrays so you can do a whole column in one function call
+
 function bilinear_interpolation_ens(m, n, x, y, x1,x2, y1, y2, Q11, Q12, Q21, Q22) result (P)
 
 integer,  intent(in)  :: m ! ensemble_size - why not do the whole ensemble at once?
@@ -1417,7 +1443,10 @@ P = yfrac*R1 + (1-yfrac)*R2
 
 end function bilinear_interpolation_ens
 
+
 !--------------------------------------------------------------------
+!>
+
 function linear_interpolation(n, z, z1, z2, P1, P2) result (val)
 
 integer,  intent(in) :: n ! length of array to interpolate on (e.g. ens_size)
@@ -1428,25 +1457,28 @@ real(r8) :: val(n)
 
 real(r8) :: zfrac
 
-if (debug > 0) print*, 'P1, P2', P1, P2
+if (debug > 1) print*, 'P1, P2', P1, P2
 
 zfrac = (z2 - z) / (z2 - z1)
 
-if (debug > 0) print*, 'zfrac', zfrac
+if (debug > 1) print*, 'zfrac', zfrac
 
 val(:) = zfrac*P1(:) + (1-zfrac)*P2(:)
 
-if (debug > 0) print*, 'val', val
+if (debug > 1) print*, 'val', val
 
 end function linear_interpolation
 
+
 !--------------------------------------------------------------------
-!> Returns the enclosing INCIDIES and VALUES for a given point on an axis
-!> @todo FIXME Are all the comments in this routine about being off
+!>
+!> Returns the enclosing INDICES and VALUES for a given point on an axis
+!>@todo FIXME Are all the comments in this routine about being off
 !> the grid still true? The calling code above gives the correct axis
 !> for the variable kind.
-!> The observation being off the grid is checked before any call to 
+!> The observation being off the grid is checked before any call to
 !> get_enclosing_coord
+
 subroutine get_enclosing_coord(x, xcoords, ind, val)
 
 real(r8), intent(in)  :: x ! observation point in 1 dimension
@@ -1467,7 +1499,7 @@ endif
 xloop: do i = 2, size(xcoords)
    if(x <= xcoords(i)) then  ! does this work?
       ind(1) = i -1 !> What if x is outside the grid?
-      ind(2) = i    !> @todo What if x is the last in the array?
+      ind(2) = i    !>@todo What if x is the last in the array?
       ! periodic vs. bail out.
       val(1) = xcoords(ind(1))
       val(2) = xcoords(ind(2))
@@ -1477,7 +1509,7 @@ xloop: do i = 2, size(xcoords)
    ! y is off the grid - this happens with height - extrapolate
    ! What if it is not height? I don't know.
 
- !> @todo What is this error message trying to do?
+ !>@todo What is this error message trying to do?
  !> It gets called every time x > xcoords(i)
  ! call error_handler(E_ERR, 'get_enclosing_coord', 'off the grid, unexpected 2', &
   !                   source, revision, revdate)
@@ -1491,8 +1523,9 @@ endif
 
 end subroutine get_enclosing_coord
 
-!--------------------------------------------------------------------
 
+!--------------------------------------------------------------------
+!>
 !> pass the vertical localization coordinate to assim_tools_mod
 
 function query_vert_localization_coord()
@@ -1503,14 +1536,15 @@ query_vert_localization_coord = 0
 
 end function query_vert_localization_coord
 
-!--------------------------------------------------------------------
 
+!--------------------------------------------------------------------
+!>
 !> read the time from the input file
 !> gets the start time of the experiment from the global attributes
 !> and the current offset, in seconds, from the time() variable.
 !>
-!> @todo FIXME should only process 0 read this and broadcast it
-!> to all the other tasks instead of everyone opening the same 
+!>@todo FIXME should only process 0 read this and broadcast it
+!> to all the other tasks instead of everyone opening the same
 !> file at the same time?
 
 function read_model_time(filename)
@@ -1526,45 +1560,32 @@ type(time_type) :: base_time
 integer, allocatable :: seconds(:)
 integer :: year, month, day, hour, minute, second
 
-!> these were also in the param9 namelist - do we need them?
-!> we might want the location, and set the origin of the local
-!> grid to that place. FIXME  @todo
-!>integer  :: radopt = 0
-!>real(r8) :: dtrad  = 300.0_r8
-!>real(r8) :: ctrlat = 0.0_r8
-!>real(r8) :: ctrlon = 0.0_r8
-
-
 if ( .not. module_initialized ) call static_init_model()
-
-if (debug > 0) print *, 'read_model_time was called to get time from: '//trim(filename)
 
 ret = nf90_open(filename, NF90_NOWRITE, ncid)
 call nc_check(ret, 'opening', filename)
 
-! The netcdf files have the time since the start of the experiment
+! The netcdf files have the time since the start of the simulation
 ! in the 'time' variable.
-! The start of the experiment is in global attributes.
+! The start of the simulation is in global attributes.
 
-! FIXME: get the times from the attributes
-
-year   = get_netcdf_integer_attr(ncid, "year", filename)
-month  = get_netcdf_integer_attr(ncid, "month", filename)
-day    = get_netcdf_integer_attr(ncid, "day", filename)
-hour   = get_netcdf_integer_attr(ncid, "hour", filename)
+year   = get_netcdf_integer_attr(ncid, "year",   filename)
+month  = get_netcdf_integer_attr(ncid, "month",  filename)
+day    = get_netcdf_integer_attr(ncid, "day",    filename)
+hour   = get_netcdf_integer_attr(ncid, "hour",   filename)
 minute = get_netcdf_integer_attr(ncid, "minute", filename)
 second = get_netcdf_integer_attr(ncid, "second", filename)
 
 base_time = set_date(year, month, day, hour, minute, second)
 
 call nc_check( nf90_inq_varid(ncid, 'time', VarID), &
-              'read_model_time', 'inquire time '//trim(filename))
+              'read_model_time', 'inquire varid "time" '//trim(filename))
 
 call nc_check( nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'read_model_time', 'inquire TIME '//trim(filename))
+              'read_model_time', 'inquire variable "time" '//trim(filename))
 
 if (numdims /= 1) then
-   write(string1,*) 'time variable has unknown shape in ', trim(filename)
+   write(string1,*) '"time" variable has unknown shape in ', trim(filename)
    call error_handler(E_ERR,'read_model_time',string1,source,revision,revdate)
 endif
 
@@ -1575,23 +1596,22 @@ call nc_check( nf90_inquire_dimension(ncid, dimIDs(1), len=idims(1)), &
 allocate(seconds(idims(1)))
 
 call nc_check( nf90_get_var(ncid, VarID, seconds), &
-              'read_model_time', 'get_var time '//trim(filename))
+              'read_model_time', 'get_var "time"'//trim(filename))
 
 second = seconds(idims(1)) ! the last one.
 
-if (debug > 99 .and. do_output()) call say('getting ready to return model time')
 read_model_time = base_time + set_time(second, days=0)
- 
+
 deallocate(seconds)
 
 ret = nf90_close(ncid)
 call nc_check(ret, 'closing', filename)
 
-if ((debug > 99) .and. do_output()) then
+if (debug > 0 .and. do_output()) then
    write(string1,*) 'read_model_time was called to get date/time from: '//trim(filename)
    call say(string1)
-   call print_date(base_time, 'read_model_time:starting date')
-   call print_time(base_time, 'read_model_time:starting time')
+   call print_date(base_time, 'read_model_time:simulation starting date')
+   call print_time(base_time, 'read_model_time:simulation starting time')
    write(string1,*)'model offset is ',second ,' seconds.'
    call say(string1)
    call print_date(read_model_time, 'read_model_time:current model date')
@@ -1600,26 +1620,150 @@ endif
 
 end function read_model_time
 
+
 !-----------------------------------------------------------------------
-!>@todo this routine should print the model time when 
-!>      creating files from scratch
+!>
+!> write model time to netCDF file when creating files from scratch
+!>
+!> CM1 uses units of 'seconds' since a start time that is defined
+!> as part of the global file attributes.
+
 subroutine write_model_time(ncid, dart_time)
 
-integer,             intent(in) :: ncid !< netcdf file handle
-type(time_type),     intent(in) :: dart_time
+integer,         intent(in) :: ncid
+type(time_type), intent(in) :: dart_time
 
-call error_handler(E_MSG, 'write_model_time', 'no routine for cm1 to write model time')
+! This routine assumes the file comes in already opened, and doesn't close it.
+
+integer :: dim_id, var_id, ret
+integer :: year, month, day, hour, minute, second
+integer :: unlimitedDimID
+type(time_type) :: base_time, time_offset
+integer :: offset_seconds(1)
+integer :: ncstart(1), nccount(1)
+
+call get_date(dart_time, year, month, day, hour, minute, second)
+
+call nc_check(nf90_inquire(ncid, unlimitedDimID=unlimitedDimID),&
+        'write_model_time:', 'inquire')
+
+call nc_check(nf90_redef(ncid),'write_model_time:','redef')
+
+! If the file already has a simulation start time defined, just return it.
+! If it does not, set the simulation start time.
+
+call define_run_start_time(ncid,year,month,day,hour,minute,second,base_time)
+
+! Create time dimension if it does not exist
+ret = nf90_inq_dimid(ncid, "time", dim_id)
+if (ret /= NF90_NOERR) then
+   call nc_check(nf90_def_dim(ncid, "time", NF90_UNLIMITED, dim_id), &
+                "write_model_time: def_dim time")
+else
+   if (dim_id /= unlimitedDimID) then
+      string1 = '"time" dimension is not the unlimited dimension.'
+      call error_handler(E_ERR,'write_model_time',string1,source,revision,revdate)
+   endif
+endif
+
+! Create time variable if it does not exist
+ret = nf90_inq_varid(ncid, "time", var_id)
+if (ret /= NF90_NOERR) then
+   call nc_check(nf90_def_var(ncid, name="time", xtype=NF90_DOUBLE, &
+      dimids=(/ dim_id /), varid=var_id), "write_model_time: def_var time")
+
+   call nc_check(nf90_put_att(ncid,var_id,'long_name', &
+                 'time since beginning of simulation'),&
+                 'write_model_time:','put_att: "time" long_name')
+   call nc_check(nf90_put_att(ncid,var_id,'units','seconds'),&
+                 'write_model_time:','put_att: "time" units')
+   ncstart = 1
+   nccount = 1
+else
+   ! If the variable exists, get the length of the time dimension so
+   ! we can write the time into the last slot.
+   !>@todo check that the time variable uses the time dimension?
+   !> it has been that way for every CM1 file I have seen, but ...
+   call nc_check(nf90_inquire_dimension(ncid,dim_id,len=ncstart(1)), &
+           'write_model_time','inquire time dimension length')
+   nccount = 1
+endif
+
+call nc_check(nf90_enddef(ncid),"enddef")
+
+time_offset = dart_time - base_time
+
+call get_time(time_offset,offset_seconds(1))
+
+call nc_check(nf90_put_var(ncid, var_id, offset_seconds, &
+        start=ncstart, count=nccount), 'write_model_time:', 'put_var time')
 
 end subroutine write_model_time
 
 
+!-----------------------------------------------------------------------
+!> CM1 files have the simulation start time defined as global attribures
+!> in the netCDF file.  This routine either reads an existing simulation
+!> start time or creates new attributes defining the simulation start time.
+
+subroutine define_run_start_time(ncid,year,month,day,hour,minute, second, sim_start)
+
+integer,         intent(in)  :: ncid
+integer,         intent(in)  :: year
+integer,         intent(in)  :: month
+integer,         intent(in)  :: day
+integer,         intent(in)  :: hour
+integer,         intent(in)  :: minute
+integer,         intent(in)  :: second
+type(time_type), intent(out) :: sim_start
+
+integer :: istatus(6)
+integer :: ivalues(6)
+
+istatus(1) = nf90_get_att(ncid, NF90_GLOBAL, 'year',   ivalues(1))
+istatus(2) = nf90_get_att(ncid, NF90_GLOBAL, 'month',  ivalues(2))
+istatus(3) = nf90_get_att(ncid, NF90_GLOBAL, 'day',    ivalues(3))
+istatus(4) = nf90_get_att(ncid, NF90_GLOBAL, 'hour',   ivalues(4))
+istatus(5) = nf90_get_att(ncid, NF90_GLOBAL, 'minute', ivalues(5))
+istatus(6) = nf90_get_att(ncid, NF90_GLOBAL, 'second', ivalues(6))
+
+if(all(istatus == NF90_NOERR)) then
+   sim_start = set_date(ivalues(1), ivalues(2), ivalues(3), &
+                        ivalues(4), ivalues(5), ivalues(6))
+   return ! EARLY RETURN
+elseif(any(istatus == NF90_NOERR)) then
+   write(string1,*)'global attributes specifying the simulation start time '&
+                   &'and date not fully specified.'
+   write(string2,*)'need "year", "month", "day", "hour", "minute", and "second"'
+   call error_handler(E_ERR, 'define_run_start_time',string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
+! All of the required attributes are not defined, so we define them.
+
+istatus(1) = nf90_put_att(ncid, NF90_GLOBAL, 'year',   year)
+istatus(2) = nf90_put_att(ncid, NF90_GLOBAL, 'month',  month)
+istatus(3) = nf90_put_att(ncid, NF90_GLOBAL, 'day',    day)
+istatus(4) = nf90_put_att(ncid, NF90_GLOBAL, 'hour',   hour)
+istatus(5) = nf90_put_att(ncid, NF90_GLOBAL, 'minute', minute)
+istatus(6) = nf90_put_att(ncid, NF90_GLOBAL, 'second', second)
+
+if (any(istatus /= NF90_NOERR) ) then
+   write(string1,*)'unable to set the simulation start time'
+   call error_handler(E_ERR,'define_run_start_time', string1, &
+              source, revision, revdate)
+endif
+
+sim_start = set_date(year, month, day, hour, minute, second)
+
+end subroutine define_run_start_time
+
 !==================================================================
-! FIXME!!!  some things below here are needed; others are NOT.
+!>@todo FIXME some things below here are needed; others are NOT.
 ! figure out what's here, and why.
 !==================================================================
 
 !------------------------------------------------------------------
-
 ! parse a string to extract time.  the expected format of
 ! the string is YYYY-MM-DD hh:mm:ss  (although the exact
 ! non-numeric separator chars are skipped and not validated.)
@@ -1637,7 +1781,6 @@ string_to_time = set_date(iyear, imonth, iday, ihour, imin, isec)
 end function string_to_time
 
 !-------------------------------------------------------
-
 ! return a global integer attribute from a netcdf file
 
 function get_netcdf_integer_attr(ncid, varname, filename)
@@ -1660,7 +1803,6 @@ get_netcdf_integer_attr = val
 end function get_netcdf_integer_attr
 
 !-------------------------------------------------------
-
 ! set a global string attribute from a netcdf file
 
 subroutine set_netcdf_string_attr(ncid, varname, val, filename)
@@ -1683,7 +1825,7 @@ end subroutine set_netcdf_string_attr
 ! write to both the logfile (assumes logfileunit is accessible and
 ! an open filehandle to the log) and to the stdout/console.
 ! THIS IS FOR DEBUGGING ONLY - if this is a message that the user
-! should see and it should stay in the code long-term, call the 
+! should see and it should stay in the code long-term, call the
 ! error_handler with E_MSG.  once we decide to remove the debugging,
 ! we can search for all instances of this call and remove it or
 ! convert it to using the error_handler.   p.s. using the error_handler
@@ -1707,7 +1849,7 @@ real(r8)             :: get_grid_value
 integer, intent(in)  :: base_offset, ilon, ilat, ialt
 real(r8), intent(in) :: x(:)
 
-! Returns the value for the given lon,lat,alt point in the field that 
+! Returns the value for the given lon,lat,alt point in the field that
 ! starts at offset base_offset
 
 integer :: offset
@@ -1725,7 +1867,7 @@ end function get_grid_value
 ! The file name comes from module storage namelist.
 
 subroutine get_grid_info(ncid)
-   
+
 integer,  intent(in)  :: ncid
 
 ! set module dimension information
@@ -1775,7 +1917,7 @@ if ( .not. module_initialized ) call static_init_model()
 !                 zf:long_name = "nominal height of staggered w grid points" ;
 !                 zf:units = "m" ;
 
-! read the scalar grid points 
+! read the scalar grid points
 call nc_check( nf90_inq_dimid(ncid, 'ni', dimid=dimID), &
               'get_grid_info', 'inquire ni ')
 
@@ -1833,7 +1975,7 @@ integer,          intent(in)    :: ncid
 !  yf(:)        - south-north location of staggered v grid points
 !  zf(:)        - nominal height of staggered w grid points
 !  zs(:,:)      - terrain height
-!  zhalf(:,:,:) - height of half (scalar) grid points (3d array) 
+!  zhalf(:,:,:) - height of half (scalar) grid points (3d array)
 !  zfull(:,:,:) - height of full (w) grid points (3d array)
 
 integer :: VarID ! netcdf variable id
@@ -1849,7 +1991,7 @@ allocate( yf( njp1 )) ! south-north location of staggered v grid points
 allocate( zf( nkp1 )) ! nominal height of staggered w grid points
 
 allocate(    zs( ni, nj ))       ! terrain height
-allocate( zhalf( ni, nj, nk ))   ! height of half (scalar) grid points (3d array) 
+allocate( zhalf( ni, nj, nk ))   ! height of half (scalar) grid points (3d array)
 allocate( zfull( ni, nj, nkp1 )) ! height of full (w) grid points (3d array)
 
 ! grab scalar grid points
@@ -1896,7 +2038,7 @@ ret = nf90_inq_varid(ncid, 'zhalf', VarID)
 if (ret == NF90_NOERR ) then
    call nc_check( nf90_inq_varid(ncid, 'zhalf', VarID), &
                  'get_grid', 'inquire zhalf ')
-   
+
    call nc_check( nf90_get_var(ncid, VarID, zhalf), &
                  'get_grid', 'get_var zhalf ')
 else
@@ -1905,7 +2047,7 @@ else
 
    call nc_check( nf90_inq_varid(ncid, 'zs', VarID), &
                  'get_grid', 'inquire zs to calculate zhalf')
-   
+
    call nc_check( nf90_get_var(ncid, VarID, zs), &
                  'get_grid', 'get_var zs to calculate zhalf')
 
@@ -1919,7 +2061,7 @@ ret = nf90_inq_varid(ncid, 'zfull', VarID)
 if (ret == NF90_NOERR ) then
    call nc_check( nf90_inq_varid(ncid, 'zfull', VarID), &
                  'get_grid', 'inquire zfull ')
-   
+
    call nc_check( nf90_get_var(ncid, VarID, zfull), &
                  'get_grid', 'get_var zfull ')
 else
@@ -1928,7 +2070,7 @@ else
 
    call nc_check( nf90_inq_varid(ncid, 'zs', VarID), &
                  'get_grid', 'inquire zs to calculate zfull ')
-   
+
    call nc_check( nf90_get_var(ncid, VarID, zs), &
                  'get_grid', 'get_var zs to calculate zfull')
 
@@ -1937,7 +2079,7 @@ else
    !           zf(i,j,k)=zs(i,j)+sigmaf(k)*(zt-zs(i,j))/zt
 endif
 
-if ((debug > 0) .and. do_output()) then ! A little sanity check
+if (debug > 0 .and. do_output()) then ! A little sanity check
    write(*,*)'xh    range ',minval(xh),maxval(xh)
    write(*,*)'yh    range ',minval(yh),maxval(yh)
    write(*,*)'zh    range ',minval(zh),maxval(zh)
@@ -1964,12 +2106,11 @@ type(time_type) :: set_model_time_step
 if ( .not. module_initialized ) call static_init_model()
 
 ! Model dynamical timestep is namelist.input param1  dtl
-!> @todo
-! FIXME should we add the test we have done in other models
-! where we enforce that this time is an even multiple of the
-! internal model time step? i'm voting no for now, because
-! george says if they don't divide evenly that CM1 will stop 
-! at the requested time by shortening the last step.
+!>@todo FIXME should we add the test we have done in other models
+!> where we enforce that this time is an even multiple of the
+!> internal model time step? i'm voting no for now, because
+!> george says if they don't divide evenly that CM1 will stop
+!> at the requested time by shortening the last step.
 
 set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
 

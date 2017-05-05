@@ -840,6 +840,11 @@ gc%maxdist = maxdist
 allocate(gc%box%loc_box(num))
 gc%box%loc_box(:) = -1
 
+! Allocate the storage for the grid dependent boxes
+allocate(gc%box%count(nx,ny,nz), gc%box%start(nx,ny,nz))
+gc%box%count  = -1
+gc%box%start  = -1
+
 ! Set the value of num_locs in the structure
 gc%num = num
 
@@ -1281,11 +1286,11 @@ rc = -1
 dist = 1e38_r8                ! something big and positive.
 
 ! the list of locations in the loc() argument must be the same
-! as the list of locations passed into get_close_obs_init(), so
+! as the list of locations passed into get_close_init(), so
 ! gc%num and size(loc) better be the same.   if the list changes,
 ! you have to destroy the old gc and init a new one.
 if (size(loc_list) /= gc%num) then
-   write(errstring,*)'loc() array must match one passed to get_close_obs_init()'
+   write(errstring,*)'loc() array must match one passed to get_close_init()'
    call error_handler(E_ERR, 'find_nearest_boxes', errstring, source, revision, revdate)
 endif
 

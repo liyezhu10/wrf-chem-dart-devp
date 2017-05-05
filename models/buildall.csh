@@ -143,13 +143,12 @@ foreach MODEL ( $DO_THESE_MODELS )
     cd ${modeldir}/${MODEL}/work
     set FAILURE = 0
 
-    cp input.nml input.nml.$$
     @ ncdlfiles = `ls *.cdl | wc -l`
 
     if ( -f workshop_setup.csh ) then
       echo "Trying to run workshop_setup.csh for model $MODEL as a test"
       ./workshop_setup.csh || set FAILURE = 1
-      echo "Rerunning workshop_setup.csh to test overwriting files for model $MODEL"
+      echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
       ./workshop_setup.csh || set FAILURE = 1
     else
       echo "Trying to run pmo for model $MODEL as a test"
@@ -179,8 +178,7 @@ foreach MODEL ( $DO_THESE_MODELS )
         if ( -f ${base}.nc ) rm ${base}.nc
       end
     endif
-    mv -f input.nml.$$ input.nml
-    # or svn revert input.nml?
+    svn revert input.nml obs_seq.*
 
     @ modelnum = $modelnum + 1
 
