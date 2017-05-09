@@ -745,8 +745,8 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       !>  this obs was already converted
       !if (is_doing_vertical_conversion) then
       !   ! use converted vertical coordinate from owner
-     !    call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
-     !                                    int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
+      !   call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
+      !                                   int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
       !endif
 
    ! Next block is done by processes that do NOT own this observation
@@ -2835,13 +2835,8 @@ Get_Obs_Locations: do i = 1, obs_ens_handle%my_num_vars
    my_obs_loc(i)  = get_obs_def_location(obs_def)
    my_obs_type(i) = get_obs_def_type_of_obs(obs_def)
    if (my_obs_type(i) > 0) then
-         my_obs_kind(i) = get_quantity_for_type_of_obs(my_obs_type(i))
+      my_obs_kind(i) = get_quantity_for_type_of_obs(my_obs_type(i))
    else
-      !call get_state_meta_data(win, -1 * my_obs_type(i), dummyloc, my_obs_kind(i))    ! identity obs
-      ! This is just to get the kind.  WRF needs state_ensemble_handle because it converts the state
-      ! element to the required vertical coordinate.  Should this be allowed anyway?
-      ! With dummy loc you are going to end up converting the vertical twice for identity obs. FIXME use
-      ! actual ob location so you can store the converted vertical?
       call get_state_meta_data(-1 * int(my_obs_type(i),i8), dummyloc, my_obs_kind(i))
    endif
 end do Get_Obs_Locations
