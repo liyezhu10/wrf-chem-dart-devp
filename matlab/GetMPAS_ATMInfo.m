@@ -9,8 +9,8 @@ function pinfo = GetMPAS_ATMInfo(pinfo_in,fname,routine)
 % fname     Name of the DART netcdf file - usually [Prior,Posterior]_Diag.nc
 % routine   name of subsequent plot routine.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -18,7 +18,7 @@ function pinfo = GetMPAS_ATMInfo(pinfo_in,fname,routine)
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
 pinfo = pinfo_in;
-model = nc_attget(fname, nc_global, 'model');
+model = ncreadatt(fname, '/', 'model');
 
 if strcmpi(model,'mpas_atm') ~= 1
    error('Not so fast, this is not a MPAS_ATM model.')
@@ -31,11 +31,11 @@ end
 
 varexist(fname, {'lonCell','latCell','areaCell'})
 
-pinfo.area     = nc_varget(fname,'areaCell');
-pinfo.lonCell  = nc_varget(fname,'lonCell');
-pinfo.latCell  = nc_varget(fname,'latCell');
-pinfo.lonunits = nc_attget(fname,'lonCell','units');
-pinfo.latunits = nc_attget(fname,'latCell','units');
+pinfo.area     = ncread(fname,'areaCell');
+pinfo.lonCell  = ncread(fname,'lonCell');
+pinfo.latCell  = ncread(fname,'latCell');
+pinfo.lonunits = ncreadatt(fname,'lonCell','units');
+pinfo.latunits = ncreadatt(fname,'latCell','units');
 
 %% code for each plot type
 
@@ -138,7 +138,7 @@ switch lower(deblank(routine))
       % So now I have to figure out if the posterior and prior copy metadata match.
 
       for i = 1:copy,
-         copyi = get_copy_index(pinfo_in.posterior_file,copymetadata{i});
+         copyi = get_member_index(pinfo_in.posterior_file,copymetadata{i});
          pstruct.postcopyindices = copyi;
       end
 
@@ -164,7 +164,7 @@ switch lower(deblank(routine))
        var3_cellind           = GetClosestCell(var3, pinfo.latCell, pinfo.lonCell, var1_cellind);
 
       % query for ensemble member string
-      metastrings = nc_varget(fname,'CopyMetaData');
+      metastrings = ncread(fname,'CopyMetaData');
       if(size(metastrings,2) == 1), metastrings = metastrings'; end
       metadata    = cellstr(metastrings);
       ens_mem     = strtrim(metadata{1});
@@ -371,4 +371,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

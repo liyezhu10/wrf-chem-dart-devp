@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -134,7 +134,7 @@ module utilities_mod
 !
 !-----------------------------------------------------------------------
 
-use types_mod, only : r4, r8, digits12, i4, i8, PI
+use types_mod, only : r4, r8, digits12, i4, i8, PI, MISSING_R8, MISSING_I
 use netcdf
 
 implicit none
@@ -164,7 +164,8 @@ public :: file_exist, get_unit, open_file, close_file, timestamp,           &
           set_tasknum, set_output, do_output, set_nml_output, do_nml_file,  &
           E_DBG, E_MSG, E_ALLMSG, E_WARN, E_ERR, DEBUG, MESSAGE, WARNING, FATAL,      &
           is_longitude_between, get_next_filename, ascii_file_format,       &
-          set_filename_list, scalar
+          set_filename_list, scalar, string_to_real, string_to_integer,     &
+          string_to_logical
 
 ! this routine is either in the null_mpi_utilities_mod.f90, or in
 ! the mpi_utilities_mod.f90 file, but it is not a module subroutine.
@@ -178,7 +179,10 @@ interface
  end subroutine exit_all
 end interface
 
-! make a converter from a 1D array to a scalar
+! make a converter from a 1 element 1D array to a scalar.
+! (will this have problems compiling if "integer" is coerced to I8 by
+! compiler flags?  making to_scalar_int and to_scalar_int8 the same?
+! if so, make to_scalar_int explicitly I4, i guess.)
 interface scalar
    module procedure to_scalar_real
    module procedure to_scalar_int
@@ -191,7 +195,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=512) :: msgstring
+character(len=512) :: msgstring1, msgstring2, msgstring3
 
 !----------------------------------------------------------------
 ! Namelist input with default values
@@ -933,108 +937,154 @@ end subroutine error_handler
 !#######################################################################
 
 
-   function open_file (fname, form, action) result (iunit)
+   function open_file (fname, form, action, access, convert, delim, reclen, return_rc) result (iunit)
 
-   character(len=*), intent(in) :: fname
-   character(len=*), intent(in), optional :: form, action
+   character(len=*), intent(in)            :: fname
+   character(len=*), intent(in),  optional :: form, action, access, convert, delim
+   integer,          intent(in),  optional :: reclen
+   integer,          intent(out), optional :: return_rc
    integer  :: iunit
 
-   integer           :: nc, rc
-   logical           :: open
-   character(len=11) :: format
-   character(len=6)  :: pos
-   character(len=9)  :: act
-   character(len=7)  :: stat
+   integer           :: nc, rc, rlen
+   logical           :: open, use_recl
+   character(len=32) :: format, pos, act, stat, acc, conversion, recl, del
 
    if ( .not. module_initialized ) call initialize_utilities
 
-   inquire (file=trim(fname), opened=open, number=iunit,  &
-            form=format, iostat=rc)
-
+   ! if file already open, set iunit and return
+   inquire (file=trim(fname), opened=open, number=iunit, iostat=rc)
    if (open) then
-! ---------- check format ??? ---------
-! ---- (skip this and let fortran i/o catch bug) -----
+      if (present(return_rc)) return_rc = rc
+      return
+   endif
 
-    !    if (present(form)) then
-    !        nc = min(11,len(form))
-    !        if (format == 'UNFORMATTED') then
-    !             if (form(1:nc) /= 'unformatted' .and.  &
-    !                 form(1:nc) /= 'UNFORMATTED')       &
-    !                 call error_mesg ('open_file in utilities_mod', &
-    !                                  'invalid form argument', 2)
-    !        else if (format(1:9) == 'FORMATTED') then
-    !             if (form(1:nc) /= 'formatted' .and.  &
-    !                 form(1:nc) /= 'FORMATTED')       &
-    !                 call error_mesg ('open_file in utilities_mod', &
-    !                                  'invalid form argument', 2)
-    !        else
-    !             call error_mesg ('open_file in utilities_mod', &
-    !                       'unexpected format returned by inquire', 2)
-    !        endif
-    !    endif
+   ! not already open, so open it.
          
-   else
-! ---------- open file ----------
+   ! set defaults, and then modify depending on what user requests
+   ! via the arguments.  this combination of settings either creates
+   ! a new file or overwrites an existing file from the beginning.
 
-      ! this code used to only set the form and position, not the action.
-      ! not specifying 'read' meant that many compilers would create an
-      ! empty file instead of returning a read error.  this leads to lots
-      ! of confusion.  add an explicit action here.  if the incoming argument
-      ! is read, make sure the open() call passes that in as an action.
+   format     = 'formatted'
+   act        = 'readwrite'
+   pos        = 'rewind'
+   stat       = 'unknown'
+   acc        = 'sequential'
+   rlen       = 1
+   del        = 'apostrophe'
+   conversion = 'native'
 
-      format   = 'formatted'
-      act      = 'readwrite'
-      pos      = 'rewind'
-      stat     = 'unknown'
+   if (present(form)) format = form
+   call to_upper(format)  
 
-      if (present(form)) then
-          nc = min(len(format),len(form))
-          format(1:nc) = form(1:nc)
-      endif
+   ! change defaults based on intended action.
+   if (present(action)) then
+       select case(action)
 
-      if (present(action)) then
-          select case(action)
-
-             case ('read', 'READ')
+          case ('read', 'READ')
              ! open existing file.  fail if not found.  read from start.
-                act  = 'read'
-                stat = 'old'
-                pos  = 'rewind'
+             act  = 'read'
+             stat = 'old'
 
-             case ('write', 'WRITE')
+          case ('write', 'WRITE')
              ! create new file/replace existing file.  write at start.
-                act  = 'write'
-                stat = 'replace'
-                pos  = 'rewind'
+             act  = 'write'
+             stat = 'replace'
 
-             case ('append', 'APPEND')
-             ! create new/open existing file.  write at end.
-                act  = 'readwrite'
-                stat = 'unknown'
-                pos  = 'append'
+          case ('append', 'APPEND')
+             ! create new/open existing file.  write at end if existing.
+             act  = 'readwrite'
+             pos  = 'append'
 
-             case default
-             ! leave defaults specified above, currently
-             ! create new/open existing file.  write at start.
-                !print *, 'action specified, and is ', action
-          end select
+          case default
+             ! if the user specifies an action, make sure it is a valid one.
+             write(msgstring1,*) 'opening file "'//trim(fname)//'"'
+             write(msgstring2,*) 'unrecognized action, "'//trim(action)//'"; valid values: "read", "write", "append"'
+             call error_handler(E_ERR, 'open_file', msgstring1, source, revision, revdate, text2=msgstring2)
+       end select
+   endif
+
+   ! from the ibm help pages:
+   !   valid values for access: SEQUENTIAL, DIRECT or STREAM. 
+   !   If ACCESS= is DIRECT, RECL= must be specified. 
+   !   If ACCESS= is STREAM, RECL= must not be specified.
+   !   SEQUENTIAL is the default, for which RECL= is optional
+   ! i can't see how to specify all the options in any kind of reasonable way.
+   ! but i need to be able to specify 'stream'... so here's a stab at it.
+
+   if (present(access)) then
+      acc = access
+      call to_upper(acc)
+   endif
+
+   ! recl can't apply to stream files, is required for direct,
+   ! and is optional for sequential.  ugh.
+   if (present(reclen)) then
+      rlen = reclen
+      use_recl = .true.
+   else if (acc == 'DIRECT') then
+      use_recl = .true.
+   else
+      use_recl = .false.
+   endif
+
+   ! endian-conversion only applies to binary files
+   ! valid values seem to be:  'native', 'big-endian', 'little-endian', and possibly 'cray'
+   ! depending on the compiler.
+   if (present(convert)) then 
+      if (format == 'FORMATTED') then
+         write(msgstring1,*) 'opening file "'//trim(fname)//'"'
+         write(msgstring2,*) 'cannot specify binary conversion on a formatted file'
+         call error_handler(E_ERR, 'open_file ', msgstring1, source, revision, revdate, text2=msgstring2)
       endif
+      conversion = convert
+   endif
 
-      iunit = get_unit()
+   ! string delimiters only apply to ascii files
+   if (present(delim)) then
+      if (format /= 'FORMATTED') then
+         write(msgstring1,*) 'opening file "'//trim(fname)//'"'
+         write(msgstring2,*) 'cannot specify a delimiter on an unformatted file'
+         call error_handler(E_ERR, 'open_file ', msgstring1, source, revision, revdate, text2=msgstring2)
+      endif
+      del = delim
+   endif
 
-      if (format == 'formatted' .or. format == 'FORMATTED') then
-          open (iunit, file=trim(fname), form=format,     &
-                position=pos, delim='apostrophe',    &
-                action=act, status=stat, iostat=rc)
+   ! ok, now actually open the file
+
+   iunit = get_unit()
+
+   if (format == 'FORMATTED') then
+      ! formatted file: only pass in recl if required
+      if (use_recl) then
+         open (iunit, file=trim(fname), form=format, access=acc, recl=rlen, &
+               delim=del, position=pos, action=act, status=stat, iostat=rc)
       else
-          open (iunit, file=trim(fname), form=format,     &
-                position=pos, action=act, status=stat, iostat=rc)
+         open (iunit, file=trim(fname), form=format, access=acc,            &
+               delim=del, position=pos, action=act, status=stat, iostat=rc)
       endif
+   else  
+      ! unformatted file - again, only pass in recl if required 
+      if (use_recl) then
+         open (iunit, file=trim(fname), form=format, access=acc, recl=rlen, &
+               convert=conversion, position=pos, action=act, status=stat, iostat=rc)
+      else
+         open (iunit, file=trim(fname), form=format, access=acc,            &
+               convert=conversion, position=pos, action=act, status=stat, iostat=rc)
+      endif
+   endif
+   if (rc /= 0 .and. print_debug) call dump_unit_attributes(iunit) 
 
-      if (rc /= 0) then
-         write(msgstring,*)'Cannot open file "'//trim(fname)//'" for '//trim(act)
-         call error_handler(E_ERR, 'open_file: ', msgstring, source, revision, revdate)
-      endif
+   if (present(return_rc)) then
+      return_rc = rc
+      return
+   endif
+
+   if (rc /= 0) then
+      write(msgstring1, *)'Cannot open file "'//trim(fname)//'" for '//trim(act)
+      write(msgstring2,*)'File may not exist or permissions may prevent the requested operation'
+      write(msgstring3,*)'Error code was ', rc
+      call error_handler(E_ERR, 'open_file: ', msgstring1, source, revision, revdate, &
+                         text2=msgstring2, text3=msgstring3)
    endif
 
    end function open_file
@@ -1288,8 +1338,8 @@ if ( .not. module_initialized ) call initialize_utilities
 
 inquire (unit=iunit, opened=open, iostat=ios)
 if ( ios /= 0 ) then
-   write(msgstring,*)'Unable to determine status of file unit ', iunit
-   call error_handler(E_MSG, 'close_file: ', msgstring, source, revision, revdate)
+   write(msgstring1,*)'Unable to determine status of file unit ', iunit
+   call error_handler(E_MSG, 'close_file: ', msgstring1, source, revision, revdate)
 endif
 
 if (open) close(iunit)
@@ -1343,15 +1393,15 @@ if(file_exist(trim(namelist_file_name))) then
       read(iunit, '(A)', iostat = io) nml_string
       if(io /= 0) then
          ! No values for this namelist; error
-         write(msgstring, *) 'Namelist entry &', nml_name, ' must exist in ', namelist_file_name
+         write(msgstring1, *) 'Namelist entry &', nml_name, ' must exist in ', namelist_file_name
          ! Can't write to logfile if it hasn't yet been opened
          if(write_to_logfile) then
-            call error_handler(E_ERR, 'find_namelist_in_file', msgstring, &
+            call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
                source, revision, revdate)
          else
             write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
             write(*, *) 'Error is in subroutine find_namelist_in_file'
-            write(*, *) msgstring
+            write(*, *) msgstring1
             write(*,*)'  ',trim(source)
             write(*,*)'  ',trim(revision)
             write(*,*)'  ',trim(revdate)
@@ -1371,14 +1421,14 @@ if(file_exist(trim(namelist_file_name))) then
    end do
 else
    ! No namelist_file_name file is an error
-   write(msgstring, *) 'Namelist input file: ', namelist_file_name, ' must exist.'
+   write(msgstring1, *) 'Namelist input file: ', namelist_file_name, ' must exist.'
    if(write_to_logfile) then
-      call error_handler(E_ERR, 'find_namelist_in_file', msgstring, &
+      call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
          source, revision, revdate)
    else
       write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
       write(*, *) 'Error is in subroutine find_namelist_in_file'
-      write(*, *) msgstring
+      write(*, *) msgstring1
       write(*,*)'  ',trim(source)
       write(*,*)'  ',trim(revision)
       write(*,*)'  ',trim(revdate)
@@ -1422,14 +1472,14 @@ else
    ! A failure in this read means that the namelist started but never terminated
    ! Result was falling off the end, so backspace followed by read fails
    if(io /= 0) then
-      write(msgstring, *) 'Namelist ', trim(nml_name), ' started but never terminated'
+      write(msgstring1, *) 'Namelist ', trim(nml_name), ' started but never terminated'
       if(write_to_logfile) then
-         call error_handler(E_ERR, 'check_namelist_read', msgstring, &
+         call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
             source, revision, revdate)
       else
          write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
          write(*, *) 'Error is in subroutine check_namelist_read'
-         write(*, *) msgstring
+         write(*, *) msgstring1
          write(*,*)'  ',trim(source)
          write(*,*)'  ',trim(revision)
          write(*,*)'  ',trim(revdate)
@@ -1437,14 +1487,14 @@ else
       endif
    else
       ! Didn't fall off end so bad entry in the middle of namelist
-      write(msgstring, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
+      write(msgstring1, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
       if(write_to_logfile) then
-         call error_handler(E_ERR, 'check_namelist_read', msgstring, &
+         call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
             source, revision, revdate)
       else
          write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
          write(*, *) 'Error is in subroutine check_namelist_read'
-         write(*, *) msgstring
+         write(*, *) msgstring1
          write(*,*)'  ',trim(source)
          write(*,*)'  ',trim(revision)
          write(*,*)'  ',trim(revdate)
@@ -1677,7 +1727,7 @@ integer                         :: set_filename_list
 
 integer :: fileindex, max_num_input_files
 logical :: from_file
-character(len=32) :: fsource
+character(len=64) :: fsource
 
 ! here's the logic:
 ! if the user specifies neither name_array nor listname, error
@@ -1724,8 +1774,10 @@ do fileindex = 1, max_num_input_files
 
    if (name_array(fileindex) == '') then
       if (fileindex == 1) then
-         call error_handler(E_ERR, caller_name, &
-             'found no '//trim(fsource), source,revision,revdate)
+         write(msgstring2,*)'reading file # ',fileindex
+         write(msgstring3,*)'reading file name "'//trim(name_array(fileindex))//'"'
+         call error_handler(E_ERR, caller_name, 'found no '//trim(fsource), &
+                    source,revision,revdate,text2=msgstring2,text3=msgstring3)
       endif
 
       ! at the end of the list. return how many filenames were found, 
@@ -1744,8 +1796,8 @@ enddo
 
 if (from_file) then
    if (get_next_filename(listname, max_num_input_files+1) /= '') then
-      write(msgstring, *) 'cannot specify more than ',max_num_input_files,' filenames in the list file'
-      call error_handler(E_ERR, caller_name, msgstring, source,revision,revdate)
+      write(msgstring1, *) 'cannot specify more than ',max_num_input_files,' filenames in the list file'
+      call error_handler(E_ERR, caller_name, msgstring1, source,revision,revdate)
    endif
 endif
 
@@ -2029,6 +2081,84 @@ pure function to_scalar_int8(x)
 to_scalar_int8 = x(1)
 
 end function to_scalar_int8
+
+!-----------------------------------------------------------------------
+!>
+
+function string_to_real(inputstring)
+
+character(len=*), intent(in) :: inputstring
+real(r8)                     :: string_to_real
+
+integer :: io
+
+! if the string converts - great, if not, it's MISSING_R8
+read(inputstring,*,iostat=io)string_to_real
+if (io /= 0) string_to_real = MISSING_R8
+
+end function string_to_real
+
+!-----------------------------------------------------------------------
+!>
+
+function string_to_integer(inputstring)
+
+character(len=*), intent(in) :: inputstring
+integer                      :: string_to_integer
+
+integer :: io
+
+! if the string converts - great, if not, it's MISSING_I
+read(inputstring,*,iostat=io)string_to_integer
+if (io /= 0) string_to_integer = MISSING_I
+
+end function string_to_integer
+
+
+!-----------------------------------------------------------------------
+!>  if matching true or false, uppercase the string so any
+!>  combination of upper and lower case matches.  match with
+!>  and without the enclosing periods (e.g. .true. and true
+!>  both match, as would .TrUe.).  also allow plain T and F.
+!>  if 'string to match' is provided, no upper casing is done
+!>  and the string must match exactly.
+
+function string_to_logical(inputstring, string_to_match)
+
+character(len=*), intent(in)           :: inputstring
+character(len=*), intent(in), optional :: string_to_match
+logical                                :: string_to_logical
+
+! to_upper() works in place, so if looking for true/false
+! make a copy first so the input string can stay intent(in).
+
+character(len=len_trim(inputstring)) :: ucase_instring
+
+! see if the input matches the string given by the caller
+if (present(string_to_match)) then
+   string_to_logical = (inputstring == string_to_match)
+   return
+endif
+
+! see if the input matches true or false
+ucase_instring = trim(inputstring)
+call to_upper(ucase_instring)
+
+select case (ucase_instring)
+   case ("TRUE", ".TRUE.", "T")
+      string_to_logical = .true.
+   case ("FALSE", ".FALSE.", "F")
+      string_to_logical = .false.
+   case default 
+      ! we can't give any context here for where it was
+      ! being called, but if it isn't true or false, error out.
+      msgstring1 = '.TRUE., TRUE, T or .FALSE., FALSE, F are valid values'         
+      call error_handler(E_ERR,'string_to_logical', &
+                 'Cannot parse true or false value from string: "'//trim(inputstring)//'"', &
+                  source, revision, revdate, text2=msgstring1)
+end select
+
+end function string_to_logical
 
 
 !=======================================================================

@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -12,10 +12,10 @@
 ! files (e.g. for the obs_diag program) might be a larger number than 100K.
 
 ! BEGIN DART PREPROCESS KIND LIST
-! TEMPERATURE,        KIND_TEMPERATURE,        COMMON_CODE
-! SPECIFIC_HUMIDITY,  KIND_SPECIFIC_HUMIDITY,  COMMON_CODE
-! PRESSURE,           KIND_PRESSURE,           COMMON_CODE
-! GPSRO_REFRACTIVITY, KIND_GPSRO
+! TEMPERATURE,        QTY_TEMPERATURE,        COMMON_CODE
+! SPECIFIC_HUMIDITY,  QTY_SPECIFIC_HUMIDITY,  COMMON_CODE
+! PRESSURE,           QTY_PRESSURE,           COMMON_CODE
+! GPSRO_REFRACTIVITY, QTY_GPSRO
 ! END DART PREPROCESS KIND LIST
 
 
@@ -62,8 +62,8 @@ use     location_mod, only : location_type, set_location, get_location, &
                              VERTISHEIGHT
 use  assim_model_mod, only : interpolate
 
-use     obs_kind_mod, only : KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY, &
-                             KIND_PRESSURE
+use     obs_kind_mod, only : QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
+                             QTY_PRESSURE
 
 use  ensemble_manager_mod, only : ensemble_type
 use obs_def_utilities_mod, only : track_status
@@ -90,7 +90,7 @@ logical, save :: module_initialized = .false.
 ! obs in all obs_seq files that are read in (e.g. for obs_diag if you
 ! cover multiple days or weeks, you must have enough room for all of them.)
 ! the local operator needs none of this additional info; the best approach
-! would be to keep a single KIND_GPSRO, but make 2 observation types.
+! would be to keep a single QTY_GPSRO, but make 2 observation types.
 ! the local has no additional metadata; the nonlocal needs one of these
 ! allocated and filled in.
 integer :: max_gpsro_obs = 100000
@@ -438,7 +438,7 @@ call ref_local(state_handle, ens_size,  lat, lon, height, ref_perigee, this_ista
 call track_status(ens_size, this_istatus, ro_ref, istatus, return_now)
 if (return_now) return
 
-!> @TODO we need to add a different obs type and kind for the local operator,
+!>@todo we need to add a different obs type and kind for the local operator,
 !> so we can avoid allocating metadata because it isn't needed *at all*
 !> for the local operator.  nsc 30oct2015
 choosetype: if(gps_data(gpskey)%gpsro_ref_form == 'GPSREF') then
@@ -532,7 +532,7 @@ else  ! gps_data(gpskey)%gpsro_ref_form == 'GPSEXC'
 endif choosetype
 
 ! make sure return is missing_r8 if failure.
-!> @TODO is the first line necessary?  i believe the second one
+!>@todo is the first line necessary?  i believe the second one
 !> is a necessary test.
 where (istatus /= 0) ro_ref = missing_r8
 where (istatus == 0 .and. ro_ref < 0.0_r8)
@@ -590,15 +590,15 @@ location = set_location(lon2, lat, height,  VERTISHEIGHT)
 istatus0 = 0
 ref00 = missing_r8
 
-call interpolate(state_handle, ens_size, location,  KIND_TEMPERATURE, t, this_istatus)
+call interpolate(state_handle, ens_size, location,  QTY_TEMPERATURE, t, this_istatus)
 call track_status(ens_size, this_istatus, ref00, istatus0, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location, KIND_SPECIFIC_HUMIDITY, q, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_SPECIFIC_HUMIDITY, q, this_istatus)
 call track_status(ens_size, this_istatus, ref00, istatus0, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location,  KIND_PRESSURE, p, this_istatus)
+call interpolate(state_handle, ens_size, location,  QTY_PRESSURE, p, this_istatus)
 call track_status(ens_size, this_istatus, ref00, istatus0, return_now)
 if (return_now) return
 

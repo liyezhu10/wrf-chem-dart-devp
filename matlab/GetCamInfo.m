@@ -7,8 +7,8 @@ function pinfo = GetCamInfo(pstruct,fname,routine)
 % pstruct   structure containing the names of the truth_file and the diagn_file of the DART netcdf file
 % routine   name of subsequent plot routine.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -16,7 +16,7 @@ function pinfo = GetCamInfo(pstruct,fname,routine)
 if (exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
 pinfo  = pstruct;
-model  = nc_attget(fname,nc_global,'model');
+model  = ncreadatt(fname,'/','model');
 
 if strcmpi(model,'cam') ~= 1
    error('Not so fast, this is not a cam model.')
@@ -24,10 +24,10 @@ end
 
 %% Get the domain information.
 
-ilevel = nc_varget(fname,'ilev');    % interfaces
-levels = nc_varget(fname, 'lev');    % midpoints
-lon    = nc_varget(fname, 'lon');
-lat    = nc_varget(fname, 'lat');
+ilevel = ncread(fname,'ilev');    % interfaces
+levels = ncread(fname, 'lev');    % midpoints
+lon    = ncread(fname, 'lon');
+lat    = ncread(fname, 'lat');
 
 switch lower(deblank(routine))
 
@@ -308,4 +308,3 @@ lat    = lats(latind);
 % $URL$
 % $Revision$
 % $Date$
-

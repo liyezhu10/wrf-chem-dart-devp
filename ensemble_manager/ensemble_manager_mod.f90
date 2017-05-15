@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -14,7 +14,7 @@ module ensemble_manager_mod
 ! have been placed here for efficiency even though they might be more 
 ! appropriately abstracted at a higher level of code.
 
-use types_mod,         only : r8, i8,  MISSING_R8
+use types_mod,         only : r8, i4, i8,  MISSING_R8
 use utilities_mod,     only : register_module, do_nml_file, do_nml_term, &
                               error_handler, E_ERR, E_MSG, do_output, &
                               nmlfileunit, find_namelist_in_file,        &
@@ -37,12 +37,12 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           get_my_num_copies,          get_my_copies,            get_my_num_vars,            &
           get_my_vars,                compute_copy_mean,        compute_copy_mean_sd,       &
           get_copy,                   put_copy,                 all_vars_to_all_copies,     &
-          all_copies_to_all_vars,      &
+          all_copies_to_all_vars,     allocate_vars,            deallocate_vars,            &
           compute_copy_mean_var,      get_copy_owner_index,     set_ensemble_time,          &
           broadcast_copy,             prepare_to_write_to_vars, prepare_to_write_to_copies, &
           prepare_to_read_from_vars,  prepare_to_read_from_copies, prepare_to_update_vars,  &
-          prepare_to_update_copies,   print_ens_handle,              &
-          map_task_to_pe,             map_pe_to_task,            &
+          prepare_to_update_copies,   print_ens_handle,         set_current_time,           &
+          map_task_to_pe,             map_pe_to_task,           get_current_time,           &
           allocate_single_copy,       put_single_copy,          get_single_copy,            &
           deallocate_single_copy
 
@@ -54,8 +54,11 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 type ensemble_type
 
-!> @todo Extra argument to init_ensemble_manager so you could set up an ensemble handle
-!> that allowed transposes (e.g. state, fwd_op) or not allow tranposes( e.g. static data)
+!>@todo Extra argument to init_ensemble_manager so you could set up an ensemble handle
+!>that allowed transposes (e.g. state, fwd_op) or not allow tranposes( e.g. static data)
+
+!>@todo FIXME the rule here should be that we only access %copies and %vars for efficiency
+!>but every other part of this structure should go through accessor routines.
 
    !DIRECT ACCESS INTO STORAGE IS USED TO REDUCE COPYING: BE CAREFUL
    !!!private
@@ -115,7 +118,8 @@ logical  :: use_var2copy_rec_loop  = .true.
 ! namelist with default values
 
 ! Complain if unneeded transposes are done
-logical  :: flag_unneeded_transposes = .false.
+!>@todo remove all things related to this
+! logical  :: flag_unneeded_transposes = .false.
 ! Communication configuration:
 !  1 = usual default, 2 - 4 are valid and depend on the machine, ensemble count, and task count
 integer  :: communication_configuration = 1
@@ -126,7 +130,7 @@ logical  :: debug = .false.
 
 namelist / ensemble_manager_nml / communication_configuration, &
                                   layout, tasks_per_node,  &
-                                  debug, flag_unneeded_transposes
+                                  debug
                                   
 !-----------------------------------------------------------------
 
@@ -194,7 +198,7 @@ endif
 ! Optional transpose type:
 ! 1 not transposable - always copy complete
 ! 2 tranposable - has a vars array
-! 3 dupilcatable - really only 1 copy, but this gets duplicated as vars array on every task during a transpose
+! 3 duplicatable - really only 1 copy, but this gets duplicated as vars array on every task during a transpose
 if (.not. present(transpose_type_in)) then
    transpose_type = 1
 else
@@ -547,7 +551,7 @@ type(time_type),     intent(in)    :: mtime
 
 if(indx < 1 .or. indx > ens_handle%my_num_copies) then
    write(msgstring, *) 'indx: ', indx, ' cannot exceed ', ens_handle%my_num_copies
-   call error_handler(E_ERR,'get_ensemble_time', msgstring, source, revision, revdate)
+   call error_handler(E_ERR,'set_ensemble_time', msgstring, source, revision, revdate)
 endif
 
 ens_handle%time(indx) = mtime
@@ -1440,8 +1444,12 @@ MYLOOP : do i = 1, ens_handle%my_num_vars
       ens_handle%copies(  sd_copy, i) = MISSING_R8
    else
       ens_handle%copies(mean_copy, i) = sum(ens_handle%copies(start_copy:end_copy, i)) / num_copies
-      ens_handle%copies(  sd_copy, i) = sqrt((sum((ens_handle%copies(start_copy:end_copy, i) - &
-                                        ens_handle%copies(mean_copy, i))**2) / (num_copies - 1)))
+      if(num_copies >= 2) then
+         ens_handle%copies(  sd_copy, i) = sqrt((sum((ens_handle%copies(start_copy:end_copy, i) - &
+                                           ens_handle%copies(mean_copy, i))**2) / (num_copies - 1)))
+      else
+         ens_handle%copies(  sd_copy, i) = 0.0_r8
+      endif
    endif
 
 end do MYLOOP
@@ -1479,8 +1487,12 @@ MYLOOP : do i = 1, ens_handle%my_num_vars
       ens_handle%copies( var_copy, i) = MISSING_R8
    else
       ens_handle%copies(mean_copy, i) = sum(ens_handle%copies(start_copy:end_copy, i)) / num_copies
-      ens_handle%copies( var_copy, i) = (sum((ens_handle%copies(start_copy:end_copy, i) - &
-         ens_handle%copies(mean_copy, i))**2) / (num_copies - 1))
+      if (num_copies >= 2) then
+         ens_handle%copies( var_copy, i) = (sum((ens_handle%copies(start_copy:end_copy, i) - &
+            ens_handle%copies(mean_copy, i))**2) / (num_copies - 1))
+      else
+         ens_handle%copies( var_copy, i) = 0.0_r8
+      endif
    endif
 end do MYLOOP
 
@@ -1525,14 +1537,23 @@ endif
 end subroutine timestamp_message
 
 !--------------------------------------------------------------------------------
+! print an ensemble handle file type.  normally won't print unless 'debug' in the
+! namelist is true, but 'force' will override that and print no matter what.
+! if 'contents' is true, print the %copies and %vars arrays.  set integer 'limit'
+! to print only the first N values for each.
 
-subroutine print_ens_handle(ens_handle, force, label)
+subroutine print_ens_handle(ens_handle, force, label, contents, limit)
  type(ensemble_type),        intent(in) :: ens_handle
  logical,          optional, intent(in) :: force
  character(len=*), optional, intent(in) :: label
+ logical,          optional, intent(in) :: contents
+ integer,          optional, intent(in) :: limit
 
 logical :: print_anyway
 logical :: has_label
+logical :: do_contents
+integer :: limit_count
+integer :: i,j
 
 print_anyway = .false.
 if (present(force)) then
@@ -1542,6 +1563,16 @@ endif
 has_label = .false.
 if (present(label)) then
    has_label = .true.
+endif
+
+do_contents = .false.
+if (present(contents)) then
+   do_contents = contents
+endif
+
+limit_count = HUGE(1_i4)
+if (present(limit)) then
+   limit_count = limit
 endif
 
 ! print out contents of an ensemble handle derived type
@@ -1573,6 +1604,24 @@ if (allocated(ens_handle%pe_to_task_list)) then
    call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 endif
 
+! warning - for large state vectors this is a lot of output
+if (do_contents .and. allocated(ens_handle%copies)) then
+   do j = 1, min(ens_handle%my_num_vars, limit_count)
+      do i = 1, min(ens_handle%num_copies, limit_count)
+         write(msgstring, *) 'ens_handle%copies(i,j) : ', i, j, ens_handle%copies(i,j)
+         call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      enddo
+   enddo
+endif
+
+if (do_contents .and. allocated(ens_handle%vars)) then
+   do j = 1, min(ens_handle%my_num_copies, limit_count)
+      do i = 1, min(ens_handle%num_vars, limit_count)
+         write(msgstring, *) 'ens_handle%vars(i,j) : ', i, j, ens_handle%vars(i,j)
+         call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      enddo
+   enddo
+endif
 
 end subroutine print_ens_handle
 
@@ -1756,6 +1805,43 @@ map_task_to_pe = ens_handle%task_to_pe_list(t + 1)
 end function map_task_to_pe
 
 !--------------------------------------------------------------------------------
+!> if allow_transpose is ok, allocate the vars if they aren't already allocated,
+!> error out if allow_transpose is false.
+subroutine allocate_vars(ens_handle)
+
+type(ensemble_type), intent(inout) :: ens_handle
+
+!>@todo FIXME: solution 1, don't check.  solution 2, don't override
+!>@ distributed_state if ntasks = 1 in filter.
+!if (.not. get_allow_transpose(ens_handle)) then
+!   call error_handler(E_ERR, 'allocate_vars', &
+!      'cannot allocate the vars array because "allow_transpose" is false', &
+!       source, revision, revdate)
+!endif
+
+if(.not. allocated(ens_handle%vars)) &
+   allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+
+end subroutine allocate_vars
+
+!--------------------------------------------------------------------------------
+!> not clear if we want to deallocate the vars array - if we needed it once
+!> we'll probably need it again.  but for completeness, make an explicit dealloc.
+subroutine deallocate_vars(ens_handle)
+
+type(ensemble_type), intent(inout) :: ens_handle
+
+!if (.not. get_allow_transpose(ens_handle)) then
+!   call error_handler(E_ERR, 'allocate_vars', &
+!      'cannot deallocate the vars array because "allow_transpose" is false', &
+!       source, revision, revdate)
+!endif
+
+if(allocated(ens_handle%vars)) deallocate(ens_handle%vars)
+
+end subroutine deallocate_vars
+
+!--------------------------------------------------------------------------------
 !> allocate enough space to an allocatable array to hold a single copy
 !> requires the ens_handle be copy-complete.  must know copy number to
 !> know how many items are on this task.  must be a collective call.
@@ -1805,10 +1891,33 @@ if (allocated(x)) deallocate(x)
 
 end subroutine deallocate_single_copy
 
+!--------------------------------------------------------------------------------
+!> accessor routines for the single 'current_time'.  all mpi tasks must call this
+!> so there's a consistent view of the current time, even if they didn't advance
+!> a model.
+subroutine set_current_time(ens_handle, t)
+
+type(ensemble_type),   intent(inout) :: ens_handle
+type(time_type),       intent(in)    :: t
+
+ens_handle%current_time = t
+
+end subroutine set_current_time
+
+!--------------------------------------------------------------------------------
+
+subroutine get_current_time(ens_handle, t)
+
+type(ensemble_type),   intent(in)  :: ens_handle
+type(time_type),       intent(out) :: t
+
+t = ens_handle%current_time 
+
+end subroutine get_current_time
+
 !---------------------------------------------------------------------------------
 
 end module ensemble_manager_mod
-
 
 ! <next few lines under version control, do not edit>
 ! $URL$

@@ -22,20 +22,26 @@ function PlotCorrel( pinfo )
 % pinfo.base_time      = 238;        % ditto
 % PlotCorrel(pinfo)                  % generates a plot
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
 
 if (exist(pinfo.fname,'file') ~= 2), error('%s does not exist.',pinfo.fname), end
 
+% todo FIXME put in some error cheching to make sure base_var_index > 0,
+% for example.
+
 contourlevels = [-1:0.2:-0.2 0.2:0.2:1.0];  % no contour at zero, please
 
 switch(lower(pinfo.model))
 
-    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_96_2scale', ...
-            'lorenz_04','forced_lorenz_96','ikeda','simple_advection'}
+    case {'lorenz_96_2scale','simple_advection'}
+
+        error('%s not supported yet',pinfo.model)
+
+    case {'9var','lorenz_63','lorenz_84','lorenz_96','lorenz_04','forced_lorenz_96','ikeda'}
 
         % The Base Variable Index must be a valid state variable
         if ( pinfo.base_var_index > pinfo.num_state_vars )
@@ -50,21 +56,24 @@ switch(lower(pinfo.model))
         end
 
         % Get 'standard' ensemble series
-        base = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-            'copy1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
-            'stateindex',pinfo.base_var_index);
+        base = get_hyperslab('fname',pinfo.fname, ...
+                   'varname',pinfo.base_var, ...
+                   'stateindex',pinfo.base_var_index, ...
+                   'permute','true');
 
         % Get (potentially large) state.
-        state_var = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-            'copy1',pinfo.ensemble_indices(1),'copycount',pinfo.num_ens_members, ...
-            'state1',pinfo.min_state_var,'statecount',pinfo.num_state_vars);
+        state_var = get_hyperslab('fname',pinfo.fname, ...
+                   'varname',pinfo.base_var, ...
+                   'state1',pinfo.min_state_var, ...
+                   'statecount',pinfo.num_state_vars, ...
+                   'permute','true');
 
         % It is efficient to preallocate correl storage ...
         correl = zeros(pinfo.num_state_vars,pinfo.time_series_length);
 
         % Need to loop through all variables in the ensemble
         for i = 1:pinfo.num_state_vars,
-            correl(i, :) = ens_correl(base, pinfo.base_time, state_var(:,:,i));
+            correl(i,:) = ens_correl(base, pinfo.base_time, state_var(:,:,i));
         end
 
         % Now for the plotting part ...
@@ -97,27 +106,33 @@ switch(lower(pinfo.model))
 
         switch lower(pinfo.comp_var)
             case {'ps','t'}
-                lats     = nc_varget(pinfo.fname,'TmpJ'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'TmpI'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'TmpJ','units');
-                lonunits = nc_attget(pinfo.fname,'TmpI','units');
+                lats     = ncread(pinfo.fname,'TmpJ'); ny = length(lats);
+                lons     = ncread(pinfo.fname,'TmpI'); nx = length(lons);
+                latunits = ncreadatt(pinfo.fname,'TmpJ','units');
+                lonunits = ncreadatt(pinfo.fname,'TmpI','units');
             otherwise
-                lats     = nc_varget(pinfo.fname,'VelJ'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'VelI'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'VelJ','units');
-                lonunits = nc_attget(pinfo.fname,'VelI','units');
+                lats     = ncread(pinfo.fname,'VelJ'); ny = length(lats);
+                lons     = ncread(pinfo.fname,'VelI'); nx = length(lons);
+                latunits = ncreadatt(pinfo.fname,'VelJ','units');
+                lonunits = ncreadatt(pinfo.fname,'VelI','units');
         end
 
         nxny = nx*ny;
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
-        bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
         corr     = zeros(nxny,1);
@@ -168,14 +183,14 @@ switch(lower(pinfo.model))
         % Each of the WRF variables has a 'coordinate' attribute signifying which
         % of the 6 possible lat/lon variables is appropriate.
 
-        coordinates{1} = sscanf(nc_attget(pinfo.fname,pinfo.comp_var,'coordinates'),'%s %*s');
-        coordinates{2} = sscanf(nc_attget(pinfo.fname,pinfo.comp_var,'coordinates'),'%*s %s');
+        coordinates{1} = sscanf(ncreadatt(pinfo.fname,pinfo.comp_var,'coordinates'),'%s %*s');
+        coordinates{2} = sscanf(ncreadatt(pinfo.fname,pinfo.comp_var,'coordinates'),'%*s %s');
         latcoord = find(strncmp('XLAT',coordinates,length('XLAT')) > 0);
         loncoord = find(strncmp('XLON',coordinates,length('XLON')) > 0);
-        latmat   = nc_varget(pinfo.fname,coordinates{latcoord});
-        lonmat   = nc_varget(pinfo.fname,coordinates{loncoord});
-        latunits = nc_attget(pinfo.fname,coordinates{latcoord},'units');
-        lonunits = nc_attget(pinfo.fname,coordinates{latcoord},'units');
+        latmat   = ncread(pinfo.fname,coordinates{latcoord});
+        lonmat   = ncread(pinfo.fname,coordinates{loncoord});
+        latunits = ncreadatt(pinfo.fname,coordinates{latcoord},'units');
+        lonunits = ncreadatt(pinfo.fname,coordinates{latcoord},'units');
 
         inds = (lonmat < 0); % Convert to 0,360 to minimize dateline probs.
         lonmat(inds) = lonmat(inds) + 360.0;
@@ -183,23 +198,29 @@ switch(lower(pinfo.model))
 
         % Get the actual goods ... and perform the correlation
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
         if (std(base_mem) == 0.0)
-            warning('%s at level %d lat %d lon %d time %s is a constant\n',pinfo.base_var,...
+            warning('%s at level %d lat %d lon %d time %s is a constant\n',pinfo.base_var, ...
                 pinfo.base_lvlind,pinfo.base_latind,pinfo.base_lonind,datestr(pinfo.base_time))
             error('Cannot calculate correlation coefficient with a constant.')
         end
 
-        bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         if (std(bob(:)) == 0.0)
-            warning('%s at level %d time %s is a constant\n',pinfo.comp_var,...
+            warning('%s at level %d time %s is a constant\n',pinfo.comp_var, ...
                 pinfo.comp_lvlind, datestr(pinfo.base_time))
             error('Cannot calculate correlation coefficient with a constant.')
         end
@@ -248,32 +269,38 @@ switch(lower(pinfo.model))
 
         switch lower(pinfo.comp_var)
             case {'u'}
-                lats     = nc_varget(pinfo.fname,'YC'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'XG'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'YC','units');
-                lonunits = nc_attget(pinfo.fname,'XG','units');
+                lats     = ncread(pinfo.fname,'YC'); ny = length(lats);
+                lons     = ncread(pinfo.fname,'XG'); nx = length(lons);
+                latunits = ncreadatt(pinfo.fname,'YC','units');
+                lonunits = ncreadatt(pinfo.fname,'XG','units');
             case {'v'}
-                lats     = nc_varget(pinfo.fname,'YG'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'XC'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'YG','units');
-                lonunits = nc_attget(pinfo.fname,'XC','units');
+                lats     = ncread(pinfo.fname,'YG'); ny = length(lats);
+                lons     = ncread(pinfo.fname,'XC'); nx = length(lons);
+                latunits = ncreadatt(pinfo.fname,'YG','units');
+                lonunits = ncreadatt(pinfo.fname,'XC','units');
             otherwise
-                lats     = nc_varget(pinfo.fname,'YC'); ny = length(lats);
-                lons     = nc_varget(pinfo.fname,'XC'); nx = length(lons);
-                latunits = nc_attget(pinfo.fname,'YC','units');
-                lonunits = nc_attget(pinfo.fname,'XC','units');
+                lats     = ncread(pinfo.fname,'YC'); ny = length(lats);
+                lons     = ncread(pinfo.fname,'XC'); nx = length(lons);
+                latunits = ncreadatt(pinfo.fname,'YC','units');
+                lonunits = ncreadatt(pinfo.fname,'XC','units');
         end
 
         nxny = nx*ny;
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
-        bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
         corr     = zeros(nxny,1);
@@ -311,20 +338,26 @@ switch(lower(pinfo.model))
 
         clf;
 
-        lats     = nc_varget(pinfo.fname,'lat'); ny = length(lats);
-        lons     = nc_varget(pinfo.fname,'lon'); nx = length(lons);
-        latunits = nc_attget(pinfo.fname,'lat','units');
-        lonunits = nc_attget(pinfo.fname,'lon','units');
+        lats     = ncread(pinfo.fname,'lat'); ny = length(lats);
+        lons     = ncread(pinfo.fname,'lon'); nx = length(lons);
+        latunits = ncreadatt(pinfo.fname,'lat','units');
+        lonunits = ncreadatt(pinfo.fname,'lon','units');
         nxny     = nx*ny;
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
-        bob      = get_hyperslab( 'fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab( 'fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
         corr     = zeros(nxny,1);
@@ -362,24 +395,30 @@ switch(lower(pinfo.model))
 
         clf;
 
-        lats     = nc_varget(pinfo.fname,'lat'); ny = length(lats);
-        lons     = nc_varget(pinfo.fname,'lon'); nx = length(lons);
-        latunits = nc_attget(pinfo.fname,'lat','units');
-        lonunits = nc_attget(pinfo.fname,'lon','units');
+        lats     = ncread(pinfo.fname,'lat'); ny = length(lats);
+        lons     = ncread(pinfo.fname,'lon'); nx = length(lons);
+        latunits = ncreadatt(pinfo.fname,'lat','units');
+        lonunits = ncreadatt(pinfo.fname,'lon','units');
 
         inds = find(lons >= 180);
         lons(inds) = lons(inds) - 360.0;
 
         nxny     = nx*ny;
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
-        bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
         corr     = zeros(nxny,1);
@@ -418,14 +457,19 @@ switch(lower(pinfo.model))
 
         clf;
 
-        base_mem = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'cellindex', pinfo.base_cellindex );
+        base_mem = get_hyperslab('fname',pinfo.fname, ...
+                   'varname',pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'cellindex', pinfo.base_cellindex );
 
-        comp_ens = get_hyperslab('fname',pinfo.fname, 'varname',pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        comp_ens = get_hyperslab('fname',pinfo.fname, ...
+                   'varname',pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         [~, nxny] = size(comp_ens);
         corr      = zeros(nxny,1);
@@ -465,10 +509,10 @@ switch(lower(pinfo.model))
 
         clf;
 
-        lats     = nc_varget(pinfo.fname,'lat'); ny = length(lats);
-        lons     = nc_varget(pinfo.fname,'lon'); nx = length(lons);
-        latunits = nc_attget(pinfo.fname,'lat','units');
-        lonunits = nc_attget(pinfo.fname,'lon','units');
+        lats     = ncread(pinfo.fname,'lat'); ny = length(lats);
+        lons     = ncread(pinfo.fname,'lon'); nx = length(lons);
+        latunits = ncreadatt(pinfo.fname,'lat','units');
+        lonunits = ncreadatt(pinfo.fname,'lon','units');
 
         nxny     = nx*ny;
 
@@ -477,7 +521,7 @@ switch(lower(pinfo.model))
         %  Need all copies  ... base_mem has shape [1,nmembers]
         %  Need all copies  ... comp_ens has shape [nmembers,nxny]
 
-        metadata    = nc_varget(pinfo.fname,'CopyMetaData');  % get all the metadata
+        metadata    = ncread(pinfo.fname,'CopyMetaData');  % get all the metadata
         copyindices = strmatch('ensemble member',metadata);   % find all 'member's
         nmembers    = length(copyindices);
 
@@ -537,28 +581,34 @@ switch(lower(pinfo.model))
 
         switch lower(pinfo.comp_var)
             case {'uvel', 'vvel'}
-                lats     = nc_varget(pinfo.fname,'ULAT');
-%               lons     = nc_varget(pinfo.fname,'ULON');
-%               latunits = nc_attget(pinfo.fname,'ULAT','units');
-%               lonunits = nc_attget(pinfo.fname,'ULON','units');
+                lats     = ncread(pinfo.fname,'ULAT');
+%               lons     = ncread(pinfo.fname,'ULON');
+%               latunits = ncreadatt(pinfo.fname,'ULAT','units');
+%               lonunits = ncreadatt(pinfo.fname,'ULON','units');
             otherwise
-                lats     = nc_varget(pinfo.fname,'TLAT');
-%               lons     = nc_varget(pinfo.fname,'TLON');
-%               latunits = nc_attget(pinfo.fname,'TLAT','units');
-%               lonunits = nc_attget(pinfo.fname,'TLON','units');
+                lats     = ncread(pinfo.fname,'TLAT');
+%               lons     = ncread(pinfo.fname,'TLON');
+%               latunits = ncreadatt(pinfo.fname,'TLAT','units');
+%               lonunits = ncreadatt(pinfo.fname,'TLON','units');
         end
 
         [nx, ny] = size(lats);
         nxny     = nx*ny;
 
-        base_mem = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.base_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex',pinfo.base_lvlind, ...
-            'latindex',  pinfo.base_latind, 'lonindex',  pinfo.base_lonind );
+        base_mem = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.base_var, ...
+                   'permute', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex',pinfo.base_lvlind, ...
+                   'latindex',  pinfo.base_latind, ...
+                   'lonindex',  pinfo.base_lonind );
 
-        bob      = get_hyperslab('fname', pinfo.fname, 'varname', pinfo.comp_var, ...
-            'copy1', pinfo.ensemble_indices(1), 'copycount',pinfo.num_ens_members, ...
-            'timeindex', pinfo.base_tmeind, 'levelindex', pinfo.comp_lvlind);
+        bob      = get_hyperslab('fname', pinfo.fname, ...
+                   'varname', pinfo.comp_var, ...
+                   'permute', 'T', ...
+                   'squeeze', 'T', ...
+                   'timeindex', pinfo.base_tmeind, ...
+                   'levelindex', pinfo.comp_lvlind);
 
         comp_ens = reshape(bob,[pinfo.num_ens_members, nxny]);
         corr     = zeros(nxny,1);
@@ -607,10 +657,10 @@ function PlotMPAScells(fname,x)
 %  for some reason, the lonCell,latCell stuff is [0,360] and the
 %  latVertex,lonVertex is [-pi,pi] ... daffy.
 
-nEdgesOnCell   = nc_varget(fname,'nEdgesOnCell');
-verticesOnCell = nc_varget(fname,'verticesOnCell');
-latVertex      = nc_varget(fname,'latVertex') * 180/pi; % cvrt to [-90,90]
-lonVertex      = nc_varget(fname,'lonVertex') * 180/pi; % cvrt to [-180,180]
+nEdgesOnCell   = ncread(fname,'nEdgesOnCell');
+verticesOnCell = ncread(fname,'verticesOnCell');
+latVertex      = ncread(fname,'latVertex') * 180/pi; % cvrt to [-90,90]
+lonVertex      = ncread(fname,'lonVertex') * 180/pi; % cvrt to [-180,180]
 
 inds = lonVertex < 0;
 lonVertex(inds) = lonVertex(inds) + 360.0;
@@ -656,4 +706,3 @@ set(h,'LineStyle','none');
 % $URL$
 % $Revision$
 % $Date$
-

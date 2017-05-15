@@ -130,10 +130,10 @@ enclosed in quotes to prevent them from prematurely terminating the namelist.
    output_state_vector          = .false.,
    calendar                     = 'Gregorian',
    debug                        = 0,
-   gitm_state_variables = 'Temperature',            'KIND_TEMPERATURE',
-                          'eTemperature',           'KIND_TEMPERATURE_ELECTRON',
-                          'ITemperature',           'KIND_TEMPERATURE_ION',
-                          'iO_3P_NDensityS',        'KIND_DENSITY_NEUTRAL_O3P',
+   gitm_state_variables = 'Temperature',            'QTY_TEMPERATURE',
+                          'eTemperature',           'QTY_TEMPERATURE_ELECTRON',
+                          'ITemperature',           'QTY_TEMPERATURE_ION',
+                          'iO_3P_NDensityS',        'QTY_DENSITY_NEUTRAL_O3P',
    ...
 </pre>
 </div>
@@ -276,9 +276,8 @@ None.
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
-This open source software is provided by UCAR, "as is",<br />
-without charge, subject to all terms of use at<br />
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

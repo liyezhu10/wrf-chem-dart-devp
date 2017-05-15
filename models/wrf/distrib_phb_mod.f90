@@ -1,3 +1,9 @@
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
+
 !> Aim: to replace the array phb, with a distributed version
 !> Current thinking: Only distribute the array as much as necessary.
 !> Ideally, if memory was unliimited, every task would have the whole array.
@@ -79,6 +85,7 @@ integer, intent(out)    :: group_members(group_size)
 integer bottom, top !< start and end members of the group
 integer i
 
+! integer arithmatic. rouding down to the lowest group size
 bottom = (myrank / group_size ) * group_size
 top = bottom + group_size - 1
 if (top >= task_count()) then
@@ -195,7 +202,7 @@ stride = (/1, 1, 1, 1/)
 ret = nfmpi_inq_varid(ncfile, 'PHB', varId) ! get status of variable
 call pnet_check(ret, 'read_phb', 'phb id')
 
-ret = nfmpi_get_vars_real_all(ncfile, varId, start, count, stride, phb_array)
+ret = nfmpi_get_vars_double_all(ncfile, varId, start, count, stride, phb_array)
 call pnet_check(ret, 'read_phb', 'reading phb')
 
 ! check against matlab read
@@ -279,3 +286,9 @@ target_disp = (j - 1)*bts_length*owner_num_we + (local_we- 1)*bts_length + k -1 
 end subroutine who_has_grid_info
 
 end module distrib_phb_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

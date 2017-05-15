@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -8,49 +8,49 @@
 ! each column can be at most 32 characters wide.
 ! xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 ! BEGIN DART PREPROCESS KIND LIST
-! SAT_TEMPERATURE,                 KIND_TEMPERATURE,                COMMON_CODE
-! SAT_TEMPERATURE_ELECTRON,        KIND_TEMPERATURE_ELECTRON,       COMMON_CODE
-! SAT_TEMPERATURE_ION,             KIND_TEMPERATURE_ION,            COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O3P,         KIND_DENSITY_NEUTRAL_O3P,        COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O2,          KIND_DENSITY_NEUTRAL_O2,         COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2,          KIND_DENSITY_NEUTRAL_N2,         COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N4S,         KIND_DENSITY_NEUTRAL_N4S,        COMMON_CODE
-! SAT_DENSITY_NEUTRAL_NO,          KIND_DENSITY_NEUTRAL_NO,         COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2D,         KIND_DENSITY_NEUTRAL_N2D,        COMMON_CODE
-! SAT_DENSITY_NEUTRAL_N2P,         KIND_DENSITY_NEUTRAL_N2P,        COMMON_CODE
-! SAT_DENSITY_NEUTRAL_H,           KIND_DENSITY_NEUTRAL_H,          COMMON_CODE
-! SAT_DENSITY_NEUTRAL_HE,          KIND_DENSITY_NEUTRAL_HE,         COMMON_CODE
-! SAT_DENSITY_NEUTRAL_CO2,         KIND_DENSITY_NEUTRAL_CO2,        COMMON_CODE
-! SAT_DENSITY_NEUTRAL_O1D,         KIND_DENSITY_NEUTRAL_O1D,        COMMON_CODE
-! SAT_DENSITY_ION_O4SP,            KIND_DENSITY_ION_O4SP,           COMMON_CODE
-! SAT_DENSITY_ION_O2P,             KIND_DENSITY_ION_O2P,            COMMON_CODE
-! SAT_DENSITY_ION_N2P,             KIND_DENSITY_ION_N2P,            COMMON_CODE
-! SAT_DENSITY_ION_NP,              KIND_DENSITY_ION_NP,             COMMON_CODE
-! SAT_DENSITY_ION_NOP,             KIND_DENSITY_ION_NOP,            COMMON_CODE
-! SAT_DENSITY_ION_O2DP,            KIND_DENSITY_ION_O2DP,           COMMON_CODE
-! SAT_DENSITY_ION_O2PP,            KIND_DENSITY_ION_O2PP,           COMMON_CODE
-! SAT_DENSITY_ION_HP,              KIND_DENSITY_ION_HP,             COMMON_CODE
-! SAT_DENSITY_ION_HEP,             KIND_DENSITY_ION_HEP,            COMMON_CODE
-! SAT_DENSITY_ION_E,               KIND_DENSITY_ION_E,              COMMON_CODE
-! SAT_VELOCITY_U,                  KIND_VELOCITY_U,                 COMMON_CODE
-! SAT_VELOCITY_V,                  KIND_VELOCITY_V,                 COMMON_CODE
-! SAT_VELOCITY_W,                  KIND_VELOCITY_W,                 COMMON_CODE
-! SAT_VELOCITY_U_ION,              KIND_VELOCITY_U_ION,             COMMON_CODE
-! SAT_VELOCITY_V_ION,              KIND_VELOCITY_V_ION,             COMMON_CODE
-! SAT_VELOCITY_W_ION,              KIND_VELOCITY_W_ION,             COMMON_CODE
-! SAT_VELOCITY_VERTICAL_O3P,       KIND_VELOCITY_VERTICAL_O3P,      COMMON_CODE
-! SAT_VELOCITY_VERTICAL_O2,        KIND_VELOCITY_VERTICAL_O2,       COMMON_CODE
-! SAT_VELOCITY_VERTICAL_N2,        KIND_VELOCITY_VERTICAL_N2,       COMMON_CODE
-! SAT_VELOCITY_VERTICAL_N4S,       KIND_VELOCITY_VERTICAL_N4S,      COMMON_CODE
-! SAT_VELOCITY_VERTICAL_NO,        KIND_VELOCITY_VERTICAL_NO,       COMMON_CODE
-! SAT_F107,                        KIND_1D_PARAMETER,               COMMON_CODE
-! SAT_RHO,                         KIND_DENSITY
-! GPS_PROFILE,                     KIND_ELECTRON_DENSITY,           COMMON_CODE
-! GND_GPS_VTEC,		           KIND_GND_GPS_VTEC
-! CHAMP_DENSITY,                   KIND_DENSITY
-! MIDAS_TEC,                       KIND_VERTICAL_TEC
-! SSUSI_O_N2_RATIO,                KIND_O_N2_COLUMN_DENSITY_RATIO
-! GPS_VTEC_EXTRAP,                 KIND_VERTICAL_TEC,               COMMON_CODE
+! SAT_TEMPERATURE,                 QTY_TEMPERATURE,                COMMON_CODE
+! SAT_TEMPERATURE_ELECTRON,        QTY_TEMPERATURE_ELECTRON,       COMMON_CODE
+! SAT_TEMPERATURE_ION,             QTY_TEMPERATURE_ION,            COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O3P,         QTY_DENSITY_NEUTRAL_O3P,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O2,          QTY_DENSITY_NEUTRAL_O2,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2,          QTY_DENSITY_NEUTRAL_N2,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N4S,         QTY_DENSITY_NEUTRAL_N4S,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_NO,          QTY_DENSITY_NEUTRAL_NO,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2D,         QTY_DENSITY_NEUTRAL_N2D,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_N2P,         QTY_DENSITY_NEUTRAL_N2P,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_H,           QTY_DENSITY_NEUTRAL_H,          COMMON_CODE
+! SAT_DENSITY_NEUTRAL_HE,          QTY_DENSITY_NEUTRAL_HE,         COMMON_CODE
+! SAT_DENSITY_NEUTRAL_CO2,         QTY_DENSITY_NEUTRAL_CO2,        COMMON_CODE
+! SAT_DENSITY_NEUTRAL_O1D,         QTY_DENSITY_NEUTRAL_O1D,        COMMON_CODE
+! SAT_DENSITY_ION_O4SP,            QTY_DENSITY_ION_O4SP,           COMMON_CODE
+! SAT_DENSITY_ION_O2P,             QTY_DENSITY_ION_O2P,            COMMON_CODE
+! SAT_DENSITY_ION_N2P,             QTY_DENSITY_ION_N2P,            COMMON_CODE
+! SAT_DENSITY_ION_NP,              QTY_DENSITY_ION_NP,             COMMON_CODE
+! SAT_DENSITY_ION_NOP,             QTY_DENSITY_ION_NOP,            COMMON_CODE
+! SAT_DENSITY_ION_O2DP,            QTY_DENSITY_ION_O2DP,           COMMON_CODE
+! SAT_DENSITY_ION_O2PP,            QTY_DENSITY_ION_O2PP,           COMMON_CODE
+! SAT_DENSITY_ION_HP,              QTY_DENSITY_ION_HP,             COMMON_CODE
+! SAT_DENSITY_ION_HEP,             QTY_DENSITY_ION_HEP,            COMMON_CODE
+! SAT_DENSITY_ION_E,               QTY_DENSITY_ION_E,              COMMON_CODE
+! SAT_VELOCITY_U,                  QTY_VELOCITY_U,                 COMMON_CODE
+! SAT_VELOCITY_V,                  QTY_VELOCITY_V,                 COMMON_CODE
+! SAT_VELOCITY_W,                  QTY_VELOCITY_W,                 COMMON_CODE
+! SAT_VELOCITY_U_ION,              QTY_VELOCITY_U_ION,             COMMON_CODE
+! SAT_VELOCITY_V_ION,              QTY_VELOCITY_V_ION,             COMMON_CODE
+! SAT_VELOCITY_W_ION,              QTY_VELOCITY_W_ION,             COMMON_CODE
+! SAT_VELOCITY_VERTICAL_O3P,       QTY_VELOCITY_VERTICAL_O3P,      COMMON_CODE
+! SAT_VELOCITY_VERTICAL_O2,        QTY_VELOCITY_VERTICAL_O2,       COMMON_CODE
+! SAT_VELOCITY_VERTICAL_N2,        QTY_VELOCITY_VERTICAL_N2,       COMMON_CODE
+! SAT_VELOCITY_VERTICAL_N4S,       QTY_VELOCITY_VERTICAL_N4S,      COMMON_CODE
+! SAT_VELOCITY_VERTICAL_NO,        QTY_VELOCITY_VERTICAL_NO,       COMMON_CODE
+! SAT_F107,                        QTY_1D_PARAMETER,               COMMON_CODE
+! SAT_RHO,                         QTY_DENSITY
+! GPS_PROFILE,                     QTY_ELECTRON_DENSITY,           COMMON_CODE
+! GND_GPS_VTEC,		           QTY_GND_GPS_VTEC
+! CHAMP_DENSITY,                   QTY_DENSITY
+! MIDAS_TEC,                       QTY_VERTICAL_TEC
+! SSUSI_O_N2_RATIO,                QTY_O_N2_COLUMN_DENSITY_RATIO
+! GPS_VTEC_EXTRAP,                 QTY_VERTICAL_TEC,               COMMON_CODE
 ! SUPER_DARN_ELECTRIC_POTENTIAL,   KIND_ELECTRIC_POTENTIAL,         COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
@@ -121,16 +121,16 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
 use     location_mod, only : location_type, get_location, set_location, &
                              VERTISHEIGHT, VERTISLEVEL
 use  assim_model_mod, only : interpolate
-use     obs_kind_mod, only : KIND_ATOMIC_OXYGEN_MIXING_RATIO, &
-                             KIND_MOLEC_OXYGEN_MIXING_RATIO, &
-                             KIND_TEMPERATURE, &
-                             KIND_PRESSURE, &
-                             KIND_DENSITY, &
-                             KIND_DENSITY_ION_E, &
-                             KIND_GND_GPS_VTEC, &
-                             KIND_GEOPOTENTIAL_HEIGHT, &
-                             KIND_GEOMETRIC_HEIGHT, &
-                             KIND_O_N2_COLUMN_DENSITY_RATIO
+use     obs_kind_mod, only : QTY_ATOMIC_OXYGEN_MIXING_RATIO, &
+                             QTY_MOLEC_OXYGEN_MIXING_RATIO, &
+                             QTY_TEMPERATURE, &
+                             QTY_PRESSURE, &
+                             QTY_DENSITY, &
+                             QTY_DENSITY_ION_E, &
+                             QTY_GND_GPS_VTEC, &
+                             QTY_GEOPOTENTIAL_HEIGHT, &
+                             QTY_GEOMETRIC_HEIGHT, &
+                             QTY_O_N2_COLUMN_DENSITY_RATIO
 use  ensemble_manager_mod, only : ensemble_type
 use obs_def_utilities_mod, only : track_status
 
@@ -169,7 +169,7 @@ module_initialized = .true.
 end subroutine initialize_module
 
 !-----------------------------------------------------------------------------
-!> @todo Test RMA.
+!>@todo Test RMA.
 ! Given DART state vector and a location, 
 ! it computes thermospheric neutral density [Kg/m3] 
 ! The istatus variable should be returned as 0 unless there is a problem
@@ -195,26 +195,26 @@ istatus = 0
 ! If it is available, just return it. If density is not state,
 ! then we need to create it from its constituents.
 
-call interpolate(state_handle, ens_size, location, KIND_DENSITY, obs_val, istatus)
+call interpolate(state_handle, ens_size, location, QTY_DENSITY, obs_val, istatus)
 if(any(istatus == 0)) return ! density is part of the state
 
 
 ! This part was implemented for TIEGCM. Check the units for use with
 ! other models.
 istatus(:) = 0
-call interpolate(state_handle, ens_size, location, KIND_ATOMIC_OXYGEN_MIXING_RATIO, mmro1, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_ATOMIC_OXYGEN_MIXING_RATIO, mmro1, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location, KIND_MOLEC_OXYGEN_MIXING_RATIO, mmro2, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_MOLEC_OXYGEN_MIXING_RATIO, mmro2, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location, KIND_PRESSURE, pressure, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_PRESSURE, pressure, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location, KIND_TEMPERATURE, temperature, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_TEMPERATURE, temperature, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
@@ -237,7 +237,7 @@ end subroutine get_expected_upper_atm_density
 ! Given DART state vector and a location, 
 ! it computes ground GPS vertical total electron content
 ! The istatus variable should be returned as 0 unless there is a problem
-!> @todo Is the logic correct in this code on the Trunk
+!>@todo Is the logic correct in this code on the Trunk
 !>  Should you return from the subroutine instead of exiting 
 !> the loop at exit LEVELS
 subroutine get_expected_gnd_gps_vtec(state_handle, ens_size, location, obs_val, istatus)
@@ -287,11 +287,11 @@ LEVELS: do iAlt=1, size(ALT)+1
    ! point's lon-lat and at all model altitudes.
    probe = set_location(loc_vals(1), loc_vals(2), real(iAlt, r8), VERTISLEVEL) !probe is where we have data 
 
-   call interpolate(state_handle, ens_size, probe, KIND_DENSITY_ION_E, IDensityS_ie(:, iAlt), this_istatus) 
+   call interpolate(state_handle, ens_size, probe, QTY_DENSITY_ION_E, IDensityS_ie(:, iAlt), this_istatus) 
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (any(istatus /= 0)) exit LEVELS
 
-   call interpolate(state_handle, ens_size, probe, KIND_GEOPOTENTIAL_HEIGHT, ALT(:, iAlt), this_istatus) 
+   call interpolate(state_handle, ens_size, probe, QTY_GEOPOTENTIAL_HEIGHT, ALT(:, iAlt), this_istatus) 
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (any(istatus /= 0)) exit LEVELS
    
@@ -410,7 +410,7 @@ FILLINTERFACES : do ilayer = 1,MAXLEVELS
 
    loc = set_location(loc_lon, loc_lat, real(ilayer,r8), VERTISLEVEL)
 
-   call interpolate(state_handle, ens_size, loc, KIND_GEOMETRIC_HEIGHT, heights(:, ilayer), istatus)
+   call interpolate(state_handle, ens_size, loc, QTY_GEOMETRIC_HEIGHT, heights(:, ilayer), istatus)
    if (any(istatus /= 0)) exit FILLINTERFACES
 
    nilevels = nilevels + 1
@@ -432,19 +432,19 @@ FILLMIDPOINTS : do ilayer = 1,MAXLEVELS
 
    loc = set_location(loc_lon, loc_lat, real(ilayer,r8), VERTISLEVEL)
 
-   call interpolate(state_handle, ens_size, loc, KIND_PRESSURE, pressure(:, ilayer), this_istatus)
+   call interpolate(state_handle, ens_size, loc, QTY_PRESSURE, pressure(:, ilayer), this_istatus)
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (any(istatus /= 0)) exit FILLMIDPOINTS
 
-   call interpolate(state_handle, ens_size, loc, KIND_TEMPERATURE, temperature(:, ilayer), this_istatus)
+   call interpolate(state_handle, ens_size, loc, QTY_TEMPERATURE, temperature(:, ilayer), this_istatus)
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (return_now) return
 
-   call interpolate(state_handle, ens_size, loc, KIND_ATOMIC_OXYGEN_MIXING_RATIO, O_mmr(:, ilayer), this_istatus)
+   call interpolate(state_handle, ens_size, loc, QTY_ATOMIC_OXYGEN_MIXING_RATIO, O_mmr(:, ilayer), this_istatus)
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (return_now) return
 
-   call interpolate(state_handle, ens_size, loc, KIND_MOLEC_OXYGEN_MIXING_RATIO, O2_mmr(:, ilayer), this_istatus)
+   call interpolate(state_handle, ens_size, loc, QTY_MOLEC_OXYGEN_MIXING_RATIO, O2_mmr(:, ilayer), this_istatus)
    call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
    if (return_now) return
 
@@ -455,7 +455,7 @@ enddo FILLMIDPOINTS
 if (nlevels == 0) return
 
 ! Check to make sure we have more interfaces than layers.
-!> @TODO should this be an error instead of a message?
+!>@todo should this be an error instead of a message?
 
 if (nilevels /= (nlevels+1)) then
    write(string1,*)'Require there to be 1 more interfaces than midpoints.'

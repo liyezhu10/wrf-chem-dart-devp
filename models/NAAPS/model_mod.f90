@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -14,7 +14,7 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 
-use        types_mod, only : r8, r4, MISSING_R8, metadatalength
+use        types_mod, only : r8, r4, MISSING_R8, metadatalength, obstypelength
 use time_manager_mod, only : time_type, set_calendar_type, operator(/=), &
                              set_time, print_time, set_date, print_date
 use     location_mod, only : location_type,      get_close_maxdist_init, &
@@ -27,7 +27,7 @@ use    utilities_mod, only : register_module, error_handler, nc_check, &
                              find_namelist_in_file, check_namelist_read, &
                              do_nml_file, do_nml_term, do_output, &
                              nmlfileunit, logfileunit
-use     obs_kind_mod, only : paramname_length, get_raw_obs_kind_index
+use     obs_kind_mod, only : get_index_for_quantity
 
 use netcdf
 use typesizes
@@ -105,7 +105,7 @@ type progvartype
    integer :: index1        ! location in dart state vector of first occurrence
    integer :: indexN        ! location in dart state vector of last  occurrence
    integer :: dart_kind
-   character(len=paramname_length) :: kind_string
+   character(len=obstypelength) :: kind_string
    logical  :: clamping     ! does variable need to be range-restricted before 
    real(r8) :: range(2)     ! being stuffed back into MPAS analysis file.
 end type progvartype
@@ -153,16 +153,16 @@ subroutine static_init_model()
                      'smoke_conc  ', &
                      'seasalt_conc'/)
        CHARACTER(len=metadatalength),dimension(10) :: species_kinds = (/ &
-                     'KIND_INTEGRATED_SULFATE', &
-                     'KIND_INTEGRATED_DUST   ', &
-                     'KIND_INTEGRATED_SMOKE  ', &
-                     'KIND_INTEGRATED_SEASALT', &
-                     'KIND_INTEGRATED_AOD    ', & 
-                     'KIND_SO2               ', &
-                     'KIND_SULFATE           ', &
-                     'KIND_DUST              ', &
-                     'KIND_SMOKE             ', &
-                     'KIND_SEASALT           '/)
+                     'QTY_INTEGRATED_SULFATE', &
+                     'QTY_INTEGRATED_DUST   ', &
+                     'QTY_INTEGRATED_SMOKE  ', &
+                     'QTY_INTEGRATED_SEASALT', &
+                     'QTY_INTEGRATED_AOD    ', & 
+                     'QTY_SO2               ', &
+                     'QTY_SULFATE           ', &
+                     'QTY_DUST              ', &
+                     'QTY_SMOKE             ', &
+                     'QTY_SEASALT           '/)
        !integer  :: iunit, io
 
        if ( module_initialized ) return
@@ -200,7 +200,7 @@ subroutine static_init_model()
            progvar(i)%indexN = i*(nx*ny) 
            progvar(i)%varname = species_names(i)
            progvar(i)%kind_string = species_kinds(i)
-           progvar(i)%dart_kind = get_raw_obs_kind_index(progvar(i)%kind_string)
+           progvar(i)%dart_kind = get_index_for_quantity(progvar(i)%kind_string)
 
            if (debug) WRITE(*,*)
            if (debug) WRITE(*,*) progvar(i)%numdims 
@@ -227,7 +227,7 @@ subroutine static_init_model()
            progvar(i)%indexN = progvar(i)%index1 + nx*ny*nz -1 
            progvar(i)%varname = species_names(i)
            progvar(i)%kind_string = species_kinds(i)
-           progvar(i)%dart_kind = get_raw_obs_kind_index(progvar(i)%kind_string)
+           progvar(i)%dart_kind = get_index_for_quantity(progvar(i)%kind_string)
 
            if (debug) WRITE(*,*)
            if (debug) WRITE(*,*) progvar(i)%numdims 

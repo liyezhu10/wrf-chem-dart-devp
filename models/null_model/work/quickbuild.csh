@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -38,6 +38,22 @@
 # 'obs_diag' is a program that will create observation-space diagnostics
 # for any result of 'filter' and results in a couple data files that can
 # be explored with yet more matlab scripts.
+
+#----------------------------------------------------------------------
+# The input model states for both perfect_model_obs and filter come
+# from netCDF files and must be built from the source .cdl files.
+#----------------------------------------------------------------------
+
+which ncgen > /dev/null
+if ($status != 0) then
+  echo "The required input netCDF files must be build using 'ncgen'"
+  echo "'ncgen' is not currently available. It comes with every"
+  echo "netCDF installation and is needed by DART. Stopping."
+  exit 1
+endif
+
+if ( ! -e perfect_input.nc ) ncgen -o perfect_input.nc perfect_input.cdl
+if ( ! -e  filter_input.nc ) ncgen -o  filter_input.nc  filter_input.cdl
 
 #----------------------------------------------------------------------
 # 'preprocess' is a program that culls the appropriate sections of the

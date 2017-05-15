@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -39,7 +39,7 @@ character(len=128), parameter :: id  = "$Id$"
 integer :: ios, i
 
 ! make all strings the same as the max length of the parameter limit
-integer, parameter :: string_length = paramname_length
+integer, parameter :: string_length = obstypelength
 
 integer, parameter :: MAXLINELEN = 512
 character(len=MAXLINELEN) :: readbuf
@@ -240,8 +240,8 @@ integer :: kind_count, type_count
 ! default to 'unset'.  at the end, anything unset will be
 ! changed to 1.0, which means impact like usual with no change.
 
-kind_count = get_num_raw_obs_kinds() 
-type_count = get_num_obs_kinds() 
+kind_count = get_num_quantities() 
+type_count = get_num_types_of_obs() 
 
 allocate(table(type_count, 0:kind_count))
 table(:,:) = missing_r8
@@ -315,7 +315,7 @@ where (table(:,:) == missing_r8) table(:,:) = 1.0_r8
 do j=0, ubound(table, 2)
    do i=1, ubound(table, 1)
       if (table(i, j) /= 1.0_r8) then
-         write(errline, '(2A33,F12.6)') get_obs_kind_name(i), get_raw_obs_kind_name(j), table(i,j)
+         write(errline, '(2A33,F12.6)') get_name_for_type_of_obs(i), get_name_for_quantity(j), table(i,j)
          call error_handler(E_MSG, 'read_impact_table', errline)
       endif
       ! if (table(i, j) /= 1.0_r8) print *, i, j, table(i,j)
@@ -343,8 +343,8 @@ integer :: index1, index2
 ! expect exactly 3 tokens on these lines:
 !  type  kind  real(r8)
 
-index1 = get_obs_kind_index(typename)
-index2 = get_raw_obs_kind_index(kindname)
+index1 = get_index_for_type_of_obs(typename)
+index2 = get_index_for_quantity(kindname)
 !print *, 'in set_impact, index values are: ', index1, index2
 
 if (index1 < 0) then
@@ -403,7 +403,7 @@ subroutine free_impact_table(table)
 
 real(r8), intent(inout), allocatable :: table(:,:)
 
-deallocate(table)
+if (allocated(table)) deallocate(table)
 
 end subroutine free_impact_table
 
@@ -428,7 +428,7 @@ integer :: funit
 if (module_initialized) return
 
 module_initialized = .true.
-call register_module(id)
+call register_module(source, revision, revdate)
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "obs_impact_tool_nml", funit)
@@ -460,18 +460,18 @@ character(len=obstypelength), allocatable :: knowntypes(:)
 
 ! first, get all possible generic kinds from obs_kind_mod
 ! BEWARE!! the first kind number is 0!!!!!
-kind_count = get_num_raw_obs_kinds() 
+kind_count = get_num_quantities() 
 allocate(knownkinds(0:kind_count))
 do i=0, kind_count
-   knownkinds(i) = get_raw_obs_kind_name(i)
+   knownkinds(i) = get_name_for_quantity(i)
    call to_upper(knownkinds(i))
 enddo
 
 ! then, get all possible specific types from obs_kind_mod
-type_count = get_num_obs_kinds() 
+type_count = get_num_types_of_obs() 
 allocate(knowntypes(type_count))
 do i=1, type_count
-   knowntypes(i) = get_obs_kind_name(i)
+   knowntypes(i) = get_name_for_type_of_obs(i)
    call to_upper(knowntypes(i))
 enddo
 
@@ -876,7 +876,6 @@ select case (this_state)
                                source, revision, revdate, text2=errline, text3=readbuf)
          endif
        
-         ! FIXME
          this_category = itemlist(1)
 
          ! require group be empty to start.
@@ -1342,7 +1341,7 @@ typesfound = 0
 typeidlist(:) = -1
 
 do i=1, typecount
-   kindindex = get_obs_kind_var_type(i)
+   kindindex = get_quantity_for_type_of_obs(i)
    if (kindindex == givenkind) then
       typesfound = typesfound + 1
       typeidlist(typesfound) = i
@@ -1485,10 +1484,6 @@ character(len=*), intent(in), optional :: label
 integer :: i, typeid(toc%type_count), typesfound
 integer :: kindid
 
-if (present(label)) then
-!   print *, trim(label)
-endif
-
 ! expand tableindex1 if type here and loop over list
 if (get_toc_type(tocindex1, toc) == ENTRY_DARTKIND) then
 
@@ -1524,14 +1519,13 @@ type(type_toc),   intent(in)           :: toc
 character(len=*), intent(in), optional :: label
 
 
-if (present(label)) then
-!   print *, trim(label)
+if (present(label) .and. debug) then
+   print *, trim(label), ' set_impact_table_values: ', tableindex1, tableindex2
 endif
 
-!print *, 'set_impact_table_values: ', tableindex1, tableindex2
 if ((table(tableindex1, tableindex2) /= missing_r8) .and. &
     (table(tableindex1, tableindex2) /= rvalue)) then
-   write(msgstring, *) 'error; different impact factor already set for this pair'
+   write(msgstring,  *) 'error; different impact factor already set for this pair'
    write(msgstring2, *) 'previous value was', table(tableindex1, tableindex2), ' new value is ', rvalue
    write(msgstring3, *) trim(get_name_by_value(tableindex1, ENTRY_DARTTYPE, toc)), ' and ',  &
                         trim(get_name_by_value(tableindex2, ENTRY_DARTKIND, toc))
@@ -1665,7 +1659,6 @@ if (item > toc%toc_count) then
                      source, revision, revdate)
 endif
 
-!print *, 'get_toc_type: item = ', item
 get_toc_type = toc%toc_entries(item)%etype
 
 end function get_toc_type
@@ -1743,7 +1736,6 @@ nkinds = ubound(table, 2)
 do j=0, nkinds
    do i=1, ntypes
       if (table(i, j) /= 1.0_r8) then
-print *, i, j, table(i, j)
          write(funit, '(A34,A34,F18.6)') &
                         trim(get_name_by_value(i, ENTRY_DARTTYPE, toc)), &
                         trim(get_name_by_value(j, ENTRY_DARTKIND, toc)), &

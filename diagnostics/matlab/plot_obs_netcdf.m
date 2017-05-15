@@ -51,8 +51,8 @@ function obsstruct = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, .
 % plot(bob.lons,bob.lats,'*')
 % continents('light');
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -454,20 +454,26 @@ set(get(hb,'YLabel'),'String',pstruct.colorbarstring,'Interpreter','none')
 function h1 = plot_2D(obsstruct, pstruct)
 
 if (pstruct.clim(1) == pstruct.clim(2))
-   % If all the observations have the same value, setting the
-   % colorbar limits is a real pain. Fundamentally, I am
-   % forcing the plot symbols to be the lowest color of the
-   % colormap and setting the colorbar to have some more
-   % colors 'on top' - that are never used.
-   cmap = colormap;
-   h = plot(obsstruct.lons, obsstruct.lats, 'bd');
-   set(h,'MarkerFaceColor',cmap(1,:),'MarkerEdgeColor',cmap(1,:))
-   set(gca,'Clim',[pstruct.clim(1) pstruct.clim(2)+1])
-   set(gca,'XGrid','on','YGrid','on')
-
+    % If all the observations have the same value, setting the
+    % colorbar limits is a real pain. Fundamentally, I am
+    % forcing the plot symbols to be the lowest color of the
+    % colormap and setting the colorbar to have some more
+    % colors 'on top' - that are never used.
+    cmap = colormap;
+    h = plot(obsstruct.lons, obsstruct.lats, 'bd');
+    set(h,'MarkerFaceColor',cmap(1,:),'MarkerEdgeColor',cmap(1,:))
+    set(gca,'Clim',[pstruct.clim(1) pstruct.clim(2)+1])
+    set(gca,'XGrid','on','YGrid','on')
+    
 else
-   scatter3(obsstruct.lons, obsstruct.lats, 0.0, ...
-         pstruct.scalearray, obsstruct.obs, 'd', 'filled');
+    if (isfield(obsstruct,'z'))
+        scatter3(obsstruct.lons, obsstruct.lats, obsstruct.z, ...
+            pstruct.scalearray, obsstruct.obs, 'd', 'filled');
+    else
+        
+        scatter3(obsstruct.lons, obsstruct.lats, zeros(size(obsstruct.lons)), ...
+            pstruct.scalearray, obsstruct.obs, 'd', 'filled');
+    end
 end
 h1   = gca;
 clim = get(h1,'CLim');
@@ -489,4 +495,3 @@ view(0,90)
 % $URL$
 % $Revision$
 % $Date$
-

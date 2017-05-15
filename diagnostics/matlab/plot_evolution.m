@@ -40,7 +40,7 @@ function plotdat = plot_evolution(fname, copy, varargin)
 %         A postscript file containing a page for each level - each region.
 %         The other file is a simple text file containing summary information
 %         about how many observations were assimilated, how many were available, etc.
-%         Both of these filenames contain the observation type, 
+%         Both of these filenames contain the observation type,
 %         copy and region as part of the name.
 %
 % EXAMPLE 1 - plot the evolution of the bias for all observation types, all levels
@@ -51,7 +51,7 @@ function plotdat = plot_evolution(fname, copy, varargin)
 %
 %
 % EXAMPLE 2 - plot the evolution of the rmse for just the radiosonde temperature obs
-%             This requires that the 'RADIOSONDE_TEMPERATURE' is one of the known 
+%             This requires that the 'RADIOSONDE_TEMPERATURE' is one of the known
 %             observation types in the netCDF file.
 %
 % fname   = 'obs_diag_output.nc';
@@ -65,8 +65,8 @@ function plotdat = plot_evolution(fname, copy, varargin)
 % plotdat    = plot_evolution(fname, copy, 'obsname', 'RADIOSONDE_TEMPERATURE', ...
 %                             'level', 4, 'range', [0 10]);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -78,9 +78,15 @@ p = inputParser;
 
 addRequired(p,'fname',@ischar);
 addRequired(p,'copy',@ischar);
-addParamValue(p,'obsname',default_obsname,@ischar);
-addParamValue(p,'range',default_range,@isnumeric);
-addParamValue(p,'level',default_level,@isnumeric);
+if (exist('inputParser/addParameter','file') == 2)
+   addParameter(p,'obsname',default_obsname,@ischar);
+   addParameter(p,'range',default_range,@isnumeric);
+   addParameter(p,'level',default_level,@isnumeric);
+else
+   addParamValue(p,'obsname',default_obsname,@ischar);
+   addParamValue(p,'range',default_range,@isnumeric);
+   addParamValue(p,'level',default_level,@isnumeric);
+end
 parse(p, fname, copy, varargin{:});
 
 % if you want to echo the input
@@ -116,37 +122,31 @@ end
 
 plotdat.fname         = fname;
 plotdat.copystring    = copy;
-plotdat.bincenters    = nc_varget(fname,'time');
-plotdat.binedges      = nc_varget(fname,'time_bounds');
-plotdat.mlevel        = local_nc_varget(fname,'mlevel');
-plotdat.plevel        = local_nc_varget(fname,'plevel');
-plotdat.plevel_edges  = local_nc_varget(fname,'plevel_edges');
-plotdat.hlevel        = local_nc_varget(fname,'hlevel');
-plotdat.hlevel_edges  = local_nc_varget(fname,'hlevel_edges');
-plotdat.ncopies       = length(nc_varget(fname,'copy'));
-plotdat.nregions      = length(nc_varget(fname,'region'));
-plotdat.region_names  = nc_varget(fname,'region_names');
+plotdat.bincenters    = ncread(fname,'time');
+plotdat.binedges      = ncread(fname,'time_bounds');
+plotdat.mlevel        = local_ncread(fname,'mlevel');
+plotdat.plevel        = local_ncread(fname,'plevel');
+plotdat.plevel_edges  = local_ncread(fname,'plevel_edges');
+plotdat.hlevel        = local_ncread(fname,'hlevel');
+plotdat.hlevel_edges  = local_ncread(fname,'hlevel_edges');
+[plotdat.ncopies, ~]  = nc_dim_info(fname,'copy');
+[plotdat.nregions, ~] = nc_dim_info(fname,'region');
+plotdat.region_names  = ncread(fname,'region_names')';
 
-% Matlab wants character matrices to be Nx1 instead of 1xN.
-
-if (plotdat.nregions == 1 && (size(plotdat.region_names,2) == 1) )
-   plotdat.region_names = deblank(plotdat.region_names');
-end
-
-dimensionality        = nc_read_att(fname, nc_global, 'LocationRank');
-plotdat.binseparation = nc_read_att(fname, nc_global, 'bin_separation');
-plotdat.binwidth      = nc_read_att(fname, nc_global, 'bin_width');
-time_to_skip          = nc_read_att(fname, nc_global, 'time_to_skip');
-plotdat.lonlim1       = nc_read_att(fname, nc_global, 'lonlim1');
-plotdat.lonlim2       = nc_read_att(fname, nc_global, 'lonlim2');
-plotdat.latlim1       = nc_read_att(fname, nc_global, 'latlim1');
-plotdat.latlim2       = nc_read_att(fname, nc_global, 'latlim2');
-plotdat.biasconv      = nc_read_att(fname, nc_global, 'bias_convention');
+dimensionality        = nc_read_att(fname, '/', 'LocationRank');
+plotdat.binseparation = nc_read_att(fname, '/', 'bin_separation');
+plotdat.binwidth      = nc_read_att(fname, '/', 'bin_width');
+time_to_skip          = nc_read_att(fname, '/', 'time_to_skip');
+plotdat.lonlim1       = nc_read_att(fname, '/', 'lonlim1');
+plotdat.lonlim2       = nc_read_att(fname, '/', 'lonlim2');
+plotdat.latlim1       = nc_read_att(fname, '/', 'latlim1');
+plotdat.latlim2       = nc_read_att(fname, '/', 'latlim2');
+plotdat.biasconv      = nc_read_att(fname, '/', 'bias_convention');
 
 % Coordinate between time types and dates
 
-calendar     = nc_attget(fname,'time','calendar');
-timeunits    = nc_attget(fname,'time','units');
+%calendar     = nc_read_att(fname,'time','calendar');
+timeunits    = nc_read_att(fname,'time','units');
 timebase     = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin   = datenum(timebase(1),timebase(2),timebase(3));
 if ( isempty(time_to_skip) == 1)
@@ -187,6 +187,7 @@ figuredata = setfigure();
 %%---------------------------------------------------------------------
 % Loop around (time-copy-level-region) observation types
 %----------------------------------------------------------------------
+psfname = cell(plotdat.nvars);
 
 for ivar = 1:plotdat.nvars
 
@@ -217,36 +218,42 @@ for ivar = 1:plotdat.nvars
    logfid = fopen(lgfname,'wt');
    fprintf(logfid,'%s\n',lgfname);
 
+   %% todo FIXME replace with a permute routine to get desired shape
    % get appropriate vertical coordinate variable
+   % regions-levels-copy-time
 
-   guessdims = nc_var_dims(fname, plotdat.guessvar);
-   analydims = nc_var_dims(fname, plotdat.analyvar);
+   [dimnames, ~] = nc_var_dims(fname, plotdat.guessvar);
 
    if ( dimensionality == 1 ) % observations on a unit circle, no level
       plotdat.level = 1;
       plotdat.level_units = [];
-   elseif ( strfind(guessdims{3},'surface') > 0 )
+   elseif ( strfind(dimnames{2},'surface') > 0 )
       plotdat.level       = 1;
       plotdat.level_units = 'surface';
-   elseif ( strfind(guessdims{3},'undef') > 0 )
+   elseif ( strfind(dimnames{2},'undef') > 0 )
       plotdat.level       = 1;
       plotdat.level_units = 'undefined';
    else
-      plotdat.level       = nc_varget(fname, guessdims{3});
-      plotdat.level_units = nc_attget(fname, guessdims{3}, 'units');
+      plotdat.level       = ncread(fname, dimnames{2});
+      plotdat.level_units = nc_read_att(fname, dimnames{2}, 'units');
    end
    plotdat.nlevels = length(plotdat.level);
 
-   % Here is the tricky part. Singleton dimensions are auto-squeezed ...
-   % single levels, single regions ...
+   % Here is the tricky part.
+   % ncread returns: region-level-copy-time ... we need:
+   %                 time-copy-level-region
+   % Singleton dimensions are auto-squeezed; single levels, single regions ...
+   % The reshape restores the singleton dimensions
 
-   guess_raw = nc_varget(fname, plotdat.guessvar);
+   guess_raw = ncread(fname, plotdat.guessvar);
+   guess_raw = permute(guess_raw,length(size(guess_raw)):-1:1);
    guess = reshape(guess_raw, plotdat.Nbins,   plotdat.ncopies, ...
-      plotdat.nlevels, plotdat.nregions);
+                              plotdat.nlevels, plotdat.nregions);
 
-   analy_raw = nc_varget(fname, plotdat.analyvar);
+   analy_raw = ncread(fname, plotdat.analyvar);
+   analy_raw = permute(analy_raw,length(size(analy_raw)):-1:1);
    analy = reshape(analy_raw, plotdat.Nbins,   plotdat.ncopies, ...
-      plotdat.nlevels, plotdat.nregions);
+                              plotdat.nlevels, plotdat.nregions);
 
    % check to see if there is anything to plot
    % The number possible is decreased by the number of observations
@@ -265,12 +272,12 @@ for ivar = 1:plotdat.nvars
            sum(guess(:,plotdat.NQC6index ,:,:));
 
    if ( sum(nposs(:)) < 1 )
-      fprintf('%s no obs for %s...  skipping\n', plotdat.varnames{ivar})
+      fprintf('no obs for %s...  skipping\n', plotdat.varnames{ivar})
       continue
    end
 
    if (p.Results.level < 0)
-      wantedlevels = [1:plotdat.nlevels];
+      wantedlevels = 1:plotdat.nlevels;
    else
       wantedlevels = p.Results.level;
    end
@@ -393,11 +400,10 @@ plotdat.subtitle = sprintf('%s   %s',string_guess, string_analy);
 % don't need to be set.
 
 ax1 = subplot('position',figdata.position);
-set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
-
 h1 = plot(tg,cg,'k+-',ta,ca,'ro-','LineWidth',figdata.linewidth);
-h  = legend('forecast', 'analysis');
-set(h,'Interpreter','none','Box','off')
+set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
+h  = legend(h1,'forecast', 'analysis');
+set(h,'Interpreter','none','Box','off','FontSize',figdata.fontsize)
 
 % get the range of the existing axis and replace with
 % replace y axis values
@@ -406,7 +412,6 @@ set(h,'Interpreter','none','Box','off')
 axlims = axis;
 axlims = [axlims(1:2) plotdat.Yrange];
 axis(axlims)
-
 
 switch lower(plotdat.copystring)
    case 'bias'
@@ -422,31 +427,35 @@ end
 ttot = plotdat.bincenters(plotdat.Nbins) - plotdat.bincenters(1) + 1;
 
 if ((plotdat.bincenters(1) > 1000) && (ttot > 5))
-   datetick('x',6,'keeplimits','keepticks');
-   monstr = datestr(plotdat.bincenters(1),21);
-   xlabelstring = sprintf('month/day - %s start',monstr);
+    datetick('x',6,'keeplimits','keepticks');
+    monstr = datestr(plotdat.bincenters(1),21);
+    xlabelstring = sprintf('month/day - %s start',monstr);
 elseif (plotdat.bincenters(1) > 1000)
-   datetick('x',15,'keeplimits','keepticks')
-   monstr = datestr(plotdat.bincenters(1),21);
-   xlabelstring = sprintf('%s start',monstr);
+    datetick('x',15,'keeplimits','keepticks')
+    monstr = datestr(plotdat.bincenters(1),21);
+    xlabelstring = sprintf('%s start',monstr);
 else
-   xlabelstring = 'days';
+    xlabelstring = 'days';
 end
 set(get(ax1,'Xlabel'),'String',xlabelstring, ...
-   'Interpreter','none','FontSize',figdata.fontsize)
+    'Interpreter','none','FontSize',figdata.fontsize)
 
 title({plotdat.myregion, plotdat.title, plotdat.subtitle}, ...
       'Interpreter', 'none', 'Fontsize', figdata.fontsize, 'FontWeight', 'bold')
 BottomAnnotation(plotdat)
 
 % create a separate scale for the number of observations
-ax2 = axes('position',get(ax1,'Position'), ...
-   'XAxisLocation','top', ...
-   'YAxisLocation','right', ...
+ax2 = axes( ...
+   'Position',get(ax1,'Position'), ...
+   'FontSize',get(ax1,'FontSize'), ...
+   'XColor'  ,get(ax1,'Xcolor'), ...
+   'XLim'    ,get(ax1,'XLim'), ...
+   'XTick'   ,get(ax1,'XTick'), ...
+   'YDir'    ,get(ax1,'YDir'), ...
    'Color','none', ...
-   'XColor',get(ax1,'Xcolor'), ...
    'YColor','b', ...
-   'FontSize',get(ax1,'FontSize'));
+   'XAxisLocation','top', ...
+   'YAxisLocation','right');
 
 h2 = line(t,nobs_poss,'Color','b','Parent',ax2);
 h3 = line(t,nobs_used,'Color','b','Parent',ax2);
@@ -519,7 +528,7 @@ for i = 1:length(x.allvarnames)
    end
 end
 
-[~,i,j] = unique(basenames);
+[~,i,~] = unique(basenames);
 y     = cell(length(i),1);
 ydims = cell(length(i),1);
 for k = 1:length(i)
@@ -615,16 +624,14 @@ figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
 %=====================================================================
 
 
-function value = local_nc_varget(fname,varname)
+function value = local_ncread(fname,varname)
 %% If the variable exists in the file, return the contents of the variable.
 % if the variable does not exist, return empty value instead of error-ing
 % out.
 
-[variable_present, varid] = nc_var_exists(fname,varname);
+[variable_present, ~] = nc_var_exists(fname,varname);
 if (variable_present)
-   ncid  = netcdf.open(fname,'NOWRITE');
-   value = netcdf.getVar(ncid, varid);
-   netcdf.close(ncid)
+   value = ncread(fname,varname);
 else
    value = [];
 end
@@ -634,4 +641,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

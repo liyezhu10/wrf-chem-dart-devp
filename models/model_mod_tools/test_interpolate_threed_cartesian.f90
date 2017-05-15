@@ -1,8 +1,8 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: model_mod_check.f90 6739 2014-01-15 20:44:54Z hkershaw $
+! $Id$
 
 module test_interpolate_mod
 
@@ -20,7 +20,7 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
 use          location_mod, only : location_type, set_location, write_location,  &
                                   get_dist
 
-use          obs_kind_mod, only : get_raw_obs_kind_name
+use          obs_kind_mod, only : get_name_for_quantity
 
 use  ensemble_manager_mod, only : ensemble_type
 
@@ -34,9 +34,9 @@ public :: test_interpolate_range, test_interpolate_single
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/rma_model_mod_check/models/template/model_mod_check.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 6739 $"
-character(len=128), parameter :: revdate  = "$Date: 2014-01-15 13:44:54 -0700 (Wed, 15 Jan 2014) $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 contains
 
@@ -60,7 +60,7 @@ integer               , intent(in)    :: ens_size
 real(r8)              , intent(in)    :: interp_test_dx
 real(r8)              , intent(in)    :: interp_test_dy
 real(r8)              , intent(in)    :: interp_test_dz
-integer,                intent(in)    :: interp_test_vertcoord
+character(len=*)      , intent(in)    :: interp_test_vertcoord
 real(r8), dimension(2), intent(in)    :: interp_test_xrange
 real(r8), dimension(2), intent(in)    :: interp_test_yrange
 real(r8), dimension(2), intent(in)    :: interp_test_zrange
@@ -223,7 +223,7 @@ do imem = 1, ens_size
    call nc_check(nf90_def_var(ncid=ncid, name=field_name, xtype=nf90_double, &
            dimids=(/ nxDimID, nyDimID, nzDimID /), varid=VarID(imem)), 'test_interpolate_range', &
                     'field def_var '//trim(ncfilename))
-   kind_of_interest = get_raw_obs_kind_name(mykindindex)
+   kind_of_interest = get_name_for_quantity(mykindindex)
    call nc_check(nf90_put_att(ncid, VarID(imem), 'long_name', kind_of_interest), &
               'test_interpolate_range', 'put_att field long_name '//trim(ncfilename))
    call nc_check(nf90_put_att(ncid, VarID(imem), '_FillValue', MISSING_R8), &
@@ -343,3 +343,9 @@ end subroutine count_error_codes
 !-------------------------------------------------------------------------------
 
 end module test_interpolate_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

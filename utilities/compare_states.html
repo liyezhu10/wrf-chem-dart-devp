@@ -85,6 +85,7 @@ prematurely terminating the namelist.
   fieldnames = '', 
   fieldlist_file = '',
   fail_on_missing_field = .true.,
+  only_report_differences = .true.,
   debug = .false., 
 /
 </pre>
@@ -131,6 +132,13 @@ Only read if <em class=code>do_all_numeric_fields</em> is .false.
     <TD>If .true. and any one of the field names is not found in both files it is
 a fatal error.  If .false. a message is printed about the missing field but
 execution continues.
+</TD></TR>
+
+<TR><TD>only_report_differences</TD>
+    <TD>logical</TD>
+    <TD>If .true. only print the name of the variable being tested; skip printing
+the variable value min and max if the two files are identical.  If .false. print
+more details about both variables which differ and varibles with the same values.
 </TD></TR>
 
 <TR><TD>debug</TD>
@@ -247,9 +255,8 @@ none
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
-This open source software is provided by UCAR, "as is",<br>
-without charge, subject to all terms of use at<br>
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

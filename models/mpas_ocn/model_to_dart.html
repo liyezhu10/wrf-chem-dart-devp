@@ -55,12 +55,12 @@
 </P>
    
 <pre>&amp;mpas_vars_nml
-   mpas_state_variables = 'temperature',  'KIND_TEMPERATURE',
-                          'salinity',     'KIND_SALINITY',
-                          'rho',          'KIND_DENSITY',
-                          'u',            'KIND_EDGE_NORMAL_SPEED',
-                          'h',            'KIND_SEA_SURFACE_HEIGHT'
-                          'tracer1',      'KIND_TRACER_CONCENTRATION'
+   mpas_state_variables = 'temperature',  'QTY_TEMPERATURE',
+                          'salinity',     'QTY_SALINITY',
+                          'rho',          'QTY_DENSITY',
+                          'u',            'QTY_EDGE_NORMAL_SPEED',
+                          'h',            'QTY_SEA_SURFACE_HEIGHT'
+                          'tracer1',      'QTY_TRACER_CONCENTRATION'
    /
 </pre>  
  
@@ -163,12 +163,12 @@ derived from the MPAS analysis file.
 <P>For example:</P>
 <pre>
 &amp;mpas_vars_nml
-   mpas_state_variables = 'temperature',  'KIND_TEMPERATURE',
-                          'salinity',     'KIND_SALINITY',
-                          'rho',          'KIND_DENSITY',
-                          'u',            'KIND_EDGE_NORMAL_SPEED',
-                          'h',            'KIND_SEA_SURFACE_HEIGHT'
-                          'tracer1',      'KIND_TRACER_CONCENTRATION'
+   mpas_state_variables = 'temperature',  'QTY_TEMPERATURE',
+                          'salinity',     'QTY_SALINITY',
+                          'rho',          'QTY_DENSITY',
+                          'u',            'QTY_EDGE_NORMAL_SPEED',
+                          'h',            'QTY_SEA_SURFACE_HEIGHT'
+                          'tracer1',      'QTY_TRACER_CONCENTRATION'
    /
 </pre>
 
@@ -187,7 +187,6 @@ model_to_dart.f90
 model_mod.f90
 null_mpi_utilities_mod.f90
 obs_kind_mod.f90
-random_nr_mod.f90
 random_seq_mod.f90
 time_manager_mod.f90
 utilities_mod.f90
@@ -255,9 +254,8 @@ None.
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
-This open source software is provided by UCAR, "as is",<br />
-without charge, subject to all terms of use at<br />
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

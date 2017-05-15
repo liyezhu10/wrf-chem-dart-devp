@@ -1,12 +1,22 @@
 %% DART:plot_smoother_err - summary plots of global error and spread using the smoother
+%
+% A reminder of the sequence:
+% truth  run (from    pmo):
+%           perfect_input  --->  perfect_output.nc
+% filter run (from filter):
+%           filter_input.nc  --->  [prior inflation]  --->
+%                 preassim.nc   --->  [assimilation]  --->
+%                       postassim.nc  ---> [posterior inflation]  --->
+%                             filter_output.nc
+%
 % Example 1
-% diagn_file = 'Posterior_Diag.nc';
-% truth_file = 'True_State.nc';   % for smoother, is Lag_00001_Diag.nc better?
+% diagn_file = 'postassim.nc';
+% truth_file = 'perfect_output.nc';   % for smoother, is Lag_00001_Diag.nc better?
 % num_lags   = 10;
 % plot_total_err
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -72,4 +82,3 @@ clear pinfo
 % $URL$
 % $Revision$
 % $Date$
-

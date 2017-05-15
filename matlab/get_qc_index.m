@@ -8,8 +8,8 @@ function copy_index = get_qc_index(fname, copystring)
 % copystring = 'ensemble member 5';
 % copy_index = get_qc_index(fname, copystring);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -19,9 +19,8 @@ function copy_index = get_qc_index(fname, copystring)
 
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
-qc_meta_data = nc_varget(fname,'QCMetaData');
-atts         = nc_getdiminfo(fname,'qc_copy');
-num_copies   = atts.Length;
+qc_meta_data    = ncread(fname,'QCMetaData')';
+[num_copies, ~] = nc_dim_info(fname,'qc_copy');
 
 % For a single copy, the size is nx1, for more k copies, it's kxn
 if size(qc_meta_data, 2) == 1
@@ -65,4 +64,3 @@ str2 = str1(i);
 % $URL$
 % $Revision$
 % $Date$
-

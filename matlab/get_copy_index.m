@@ -4,25 +4,25 @@ function copy_index = get_copy_index(fname, copystring)
 % file fname. If string is not found in meta_data list, a -1 is returned.
 %
 % Example:
-% fname = 'Prior_Diag.nc';
-% copystring = 'ensemble member 5';
+% fname = 'obs_diag_output.nc';
+% copystring = 'N_DARTqc_5';
 % copy_index = get_copy_index(fname, copystring);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
 
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
-copy_meta_data = nc_varget(fname,'CopyMetaData');
-atts           = nc_getdiminfo(fname,'copy');
-num_copies     = atts.Length;
+% Matlab seems to always need to transpose character variables.
+copy_meta_data  = ncread(fname,'CopyMetaData')';
+[num_copies, ~] = nc_dim_info(fname,'copy');
+[metalen, ~]    = nc_dim_info(fname,'stringlength');
 
-% For a single copy, the size is nx1, for more k copies, it's kxn
-if size(copy_meta_data, 2) == 1
-   copy_meta_data = transpose(copy_meta_data);
+if( size(copy_meta_data,1) ~= num_copies || size(copy_meta_data,2) ~= metalen)
+    error('%s from %s does not have the shape expected',copystring,fname)
 end
 
 nowhitecs = dewhite(copystring);
@@ -35,7 +35,6 @@ for i = 1:num_copies,
    nowhitemd = dewhite(copy_meta_data(i,:));
 
    if strcmp(nowhitemd , nowhitecs) == 1
-%     fprintf('%s is copy %3i\n', copystring,i);
       copy_index = i;
    end
 end
@@ -43,12 +42,13 @@ end
 % Provide modest error support
 
 if (copy_index < 0)
-   fprintf('WARNING: %s is not a valid metadata string for file %s\n', ...
+   fprintf('ERROR: %s is not a valid metadata string for file %s\n', ...
                 strtrim(copystring), fname)
    disp('valid metadata strings are: ')
    for i = 1:num_copies,
       fprintf('%s\n',deblank(copy_meta_data(i,:)))
    end
+   error('Thats all. Start over')
 end
 
 
@@ -62,4 +62,3 @@ str2 = str1(~isspace(str1));
 % $URL$
 % $Revision$
 % $Date$
-

@@ -7,16 +7,16 @@
      model_perturbation_amplitude = 0.0,
      output_state_vector          = .false.,
      debug                        = 1,
-     noah_state_variables         = 'SOIL_T',   'KIND_SOIL_TEMPERATURE',
-                                    'SOIL_M',   'KIND_SOIL_MOISTURE',
-                                    'SOIL_W',   'KIND_SOIL_LIQUID_WATER',
-                                    'SKINTEMP', 'KIND_SKIN_TEMPERATURE',
-                                    'SNODEP',   'KIND_SNOW_THICKNESS',
-                                    'WEASD',    'KIND_SNOW_WATER',
-                                    'CANWAT',   'KIND_CANOPY_WATER',
-                                    'QFX',      'KIND_LATENT_HEAT_FLUX',
-                                    'HFX',      'KIND_SENSIBLE_HEAT_FLUX',
-                                    'GRDFLX',   'KIND_GROUND_HEAT_FLUX'
+     noah_state_variables         = 'SOIL_T',   'QTY_SOIL_TEMPERATURE',
+                                    'SOIL_M',   'QTY_SOIL_MOISTURE',
+                                    'SOIL_W',   'QTY_SOIL_LIQUID_WATER',
+                                    'SKINTEMP', 'QTY_SKIN_TEMPERATURE',
+                                    'SNODEP',   'QTY_SNOW_THICKNESS',
+                                    'WEASD',    'QTY_SNOW_WATER',
+                                    'CANWAT',   'QTY_CANOPY_WATER',
+                                    'QFX',      'QTY_LATENT_HEAT_FLUX',
+                                    'HFX',      'QTY_SENSIBLE_HEAT_FLUX',
+                                    'GRDFLX',   'QTY_GROUND_HEAT_FLUX'
   /
 
 &noah_to_dart_nml
@@ -155,11 +155,6 @@
                               '../../../obs_def/obs_def_COSMOS_mod.f90'
   /
 
-&assim_model_nml
-   write_binary_restart_files = .false.,
-   netCDF_large_file_support  = .false.
-  /
-
 &location_nml
    horiz_dist_only             = .true.,
    vert_normalization_pressure = 100000.0,
@@ -246,7 +241,7 @@
    verbose              = .TRUE.,
    test1thru            = 10,
    x_ind                = 4,
-   kind_of_interest     = 'KIND_SOIL_MOISTURE',
+   kind_of_interest     = 'QTY_SOIL_MOISTURE',
    loc_of_interest      = 287.5, 82.48, -2.00,
    /
 

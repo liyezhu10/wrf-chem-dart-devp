@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -13,7 +13,7 @@ use time_manager_mod, only : time_type, get_date, set_date, get_time, set_time, 
 use    utilities_mod, only : get_unit, open_file, close_file, file_exist, &
                              register_module, error_handler, nc_check, &
                              find_namelist_in_file, check_namelist_read, &
-                             E_ERR, E_MSG, find_textfile_dims, &
+                             E_ERR, E_WARN, E_MSG, find_textfile_dims, &
                              logfileunit
 
 use typesizes
@@ -25,7 +25,8 @@ private
 public :: get_pop_calendar, set_model_time_step, &
           get_horiz_grid_dims, get_vert_grid_dim, &
           read_horiz_grid, read_topography, read_vert_grid, &
-          write_pop_namelist, get_pop_restart_filename
+          write_pop_namelist, get_pop_restart_filename, &
+          set_binary_file_conversion
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -33,7 +34,8 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=256) :: msgstring
+character(len=512) :: string1, string2, string3
+
 logical, save :: module_initialized = .false.
 
 character(len=256) :: ic_filename      = 'pop.r.nc'
@@ -43,6 +45,12 @@ character(len=256) :: ic_filename      = 'pop.r.nc'
 ! after each N observations are processed, for benchmarking.
 logical :: print_timestamps = .false.
 integer :: print_every_Nth  = 10000
+
+! if the binary grid files are big_endian and you are running on
+! a little_endian machine, set this string so the convert will
+! happen correctly.  options are:  'native', 'big_endian', 'little_endian'
+
+character(len=64) :: conversion = 'native'    ! no conversion
 
 !------------------------------------------------------------------
 ! The POP time manager namelist variables
@@ -87,7 +95,7 @@ namelist /restart_nml/ restart_freq_opt, restart_freq, &
     restart_fmt, leven_odd_on, even_odd_freq, pressure_correction
 
 !------------------------------------------------------------------
-! The POP initial temperature and salinity namelist 
+! The POP initial temperature and salinity namelist
 !------------------------------------------------------------------
 
 character(len=100) :: init_ts_file ! length consistent with POP
@@ -96,11 +104,11 @@ character(len= 64) :: init_ts_option, init_ts_suboption
 character(len= 64) :: init_ts_file_fmt, init_ts_outfile_fmt
 
 namelist /init_ts_nml/ init_ts_option, init_ts_suboption, &
-                       init_ts_file, init_ts_file_fmt, & 
+                       init_ts_file, init_ts_file_fmt, &
                        init_ts_outfile, init_ts_outfile_fmt
 
 !------------------------------------------------------------------
-! The POP domain namelist 
+! The POP domain namelist
 !------------------------------------------------------------------
 
 character(len= 64) :: clinic_distribution_type, tropic_distribution_type
@@ -112,12 +120,12 @@ namelist /domain_nml/ clinic_distribution_type, nprocs_clinic, &
                       ew_boundary_type, ns_boundary_type
 
 !------------------------------------------------------------------
-! The POP grid info namelist 
+! The POP grid info namelist
 !------------------------------------------------------------------
 !
 ! POP grid information comes in several files:
-!   horizontal grid lat/lons in one, 
-!   topography (lowest valid vert level) in another, and 
+!   horizontal grid lat/lons in one,
+!   topography (lowest valid vert level) in another, and
 !   the vertical grid spacing in a third.
 !
 !------------------------------------------------------------------
@@ -168,13 +176,13 @@ contains
 
 
 subroutine initialize_module
-!------------------------------------------------------------------
+
 integer :: iunit, io
 
 ! Read POP calendar information
 ! In 'restart' mode, this is primarily the calendar type and 'stop'
-! information. The time attributes of the restart file override 
-! the namelist time information. 
+! information. The time attributes of the restart file override
+! the namelist time information.
 
 call find_namelist_in_file('pop_in', 'time_manager_nml', iunit)
 read(iunit, nml = time_manager_nml, iostat = io)
@@ -207,15 +215,15 @@ call check_namelist_read(iunit, io, 'init_ts_nml')
 !   restart_filename = trim(pointer_filename)//'.restart'
 !
 !   if ( .not. file_exist(restart_filename) ) then
-!      msgstring = 'pop_in:pointer file '//trim(restart_filename)//' not found'
+!      string1 = 'pop_in:pointer file '//trim(restart_filename)//' not found'
 !      call error_handler(E_ERR,'initialize_module', &
-!             msgstring, source, revision, revdate)
+!             string1, source, revision, revdate)
 !   endif
 !
 !   iunit = open_file(restart_filename,'formatted')
 !   read(iunit,'(A)')ic_filename
 !
-!   restart_filename = ' '  
+!   restart_filename = ' '
 !   write(*,*)'DEBUG ... pointer filename dereferenced to ',trim(ic_filename )
 !
 !else
@@ -224,9 +232,9 @@ call check_namelist_read(iunit, io, 'init_ts_nml')
 
 ! Make sure we have a pop restart file (for grid dims)
 if ( .not. file_exist(ic_filename) ) then
-   msgstring = 'pop_in:init_ts_file '//trim(ic_filename)//' not found'
+   string1 = 'pop_in:init_ts_file '//trim(ic_filename)//' not found'
    call error_handler(E_ERR,'initialize_module', &
-          msgstring, source, revision, revdate)
+          string1, source, revision, revdate)
 endif
 
 ! Read POP restart information (for model timestepping)
@@ -252,15 +260,14 @@ call register_module(source, revision, revdate)
 end subroutine initialize_module
 
 
+!------------------------------------------------------------------
+!> Read the lon, lat grid size from the restart netcdf file.
+!> The actual grid file is a binary file with no header information.
+!>
+!> The file name comes from module storage ... namelist.
+
 
 subroutine get_horiz_grid_dims(Nx, Ny)
-!------------------------------------------------------------------
-! subroutine get_horiz_grid_dims(Nx, Ny)
-!
-! Read the lon, lat grid size from the restart netcdf file.
-! The actual grid file is a binary file with no header information.
-!
-! The file name comes from module storage ... namelist.
 
 integer, intent(out) :: Nx   ! Number of Longitudes
 integer, intent(out) :: Ny   ! Number of Latitudes
@@ -279,9 +286,9 @@ nc_rc = nf90_inq_dimid(grid_id, 'i', dimid)
 if (nc_rc /= nf90_noerr) then
    nc_rc = nf90_inq_dimid(grid_id, 'nlon', dimid)
    if (nc_rc /= nf90_noerr) then
-      msgstring = "unable to find either 'i' or 'nlon' in file "//trim(ic_filename)
-      call error_handler(E_ERR, 'get_horiz_grid_dims', msgstring, &
-                         source,revision,revdate) 
+      string1 = "unable to find either 'i' or 'nlon' in file "//trim(ic_filename)
+      call error_handler(E_ERR, 'get_horiz_grid_dims', string1, &
+                         source,revision,revdate)
    endif
 endif
 
@@ -293,8 +300,8 @@ nc_rc = nf90_inq_dimid(grid_id, 'j', dimid)
 if (nc_rc /= nf90_noerr) then
    nc_rc = nf90_inq_dimid(grid_id, 'nlat', dimid)
    if (nc_rc /= nf90_noerr) then
-      msgstring = "unable to find either 'j' or 'nlat' in "//trim(ic_filename)
-      call error_handler(E_ERR, 'get_horiz_grid_dims', msgstring, &
+      string1 = "unable to find either 'j' or 'nlat' in "//trim(ic_filename)
+      call error_handler(E_ERR, 'get_horiz_grid_dims', string1, &
                          source,revision,revdate)
    endif
 endif
@@ -310,13 +317,12 @@ call nc_check(nf90_close(grid_id), &
 end subroutine get_horiz_grid_dims
 
 
-
-  subroutine get_vert_grid_dim(Nz)
 !------------------------------------------------------------------
-! subroutine get_vert_grid_dim(Nz)
-!
-! count the number of lines in the ascii file to figure out max
-! number of vert blocks.
+!> count the number of lines in the ascii file to figure out max
+!> number of vert blocks.
+
+
+subroutine get_vert_grid_dim(Nz)
 
 integer, intent(out) :: Nz
 
@@ -329,14 +335,16 @@ call find_textfile_dims(vert_grid_file, Nz, linelen)
 end subroutine get_vert_grid_dim
 
 
-   
-subroutine get_pop_calendar(calstring)
 !------------------------------------------------------------------
-! the initialize_module ensures that the pop namelists are read and 
-! the DART time manager gets the pop calendar setting.
-!
-! Then, the DART time manager is queried to return what it knows ...
-!
+!> the initialize_module ensures that the pop namelists are read and
+!> the DART time manager gets the pop calendar setting.
+!>
+!> Then, the DART time manager is queried to return what it knows ...
+
+
+subroutine get_pop_calendar(calstring)
+
+
 character(len=*), INTENT(OUT) :: calstring
 
 if ( .not. module_initialized ) call initialize_module
@@ -346,38 +354,62 @@ call get_calendar_string(calstring)
 end subroutine get_pop_calendar
 
 
-
-function set_model_time_step()
 !------------------------------------------------------------------
-! the initialize_module ensures that the pop namelists are read.
-! The restart times in the pop_in&restart_nml are used to define
-! appropriate assimilation timesteps.
-!
+!> the initialize_module ensures that the pop namelists are read.
+!> The restart times in the pop_in&restart_nml are used to define
+!> appropriate assimilation timesteps.
+
+
+function set_model_time_step(seconds,days)
+
+integer, intent(in) :: seconds ! input.nml assimilation_period_seconds
+integer, intent(in) :: days    ! input.nml assimilation_period_days
 type(time_type) :: set_model_time_step
 
 if ( .not. module_initialized ) call initialize_module
 
-! Check the 'restart_freq_opt' and 'restart_freq' to determine
-! when we can stop the model
+! Check to see if the input.nml:&model_nml:assimilation_period_[seconds,days]
+! are specifying the nominal model output frequency/assimilation interval.
 
-if ( trim(restart_freq_opt) == 'nday' ) then
-   set_model_time_step = set_time(0, restart_freq) ! (seconds, days)
-else if ( trim(restart_freq_opt) == 'nyear' ) then
-   ! FIXME ... CCSM_POP uses a bogus value for this
-   set_model_time_step = set_time(0, 1) ! (seconds, days)
+if (seconds <= 0 .and. days <= 0) then
+
+   ! Check the 'restart_freq_opt' and 'restart_freq' to determine
+   ! when we can stop the model
+
+   if ( trim(restart_freq_opt) == 'nday' ) then
+      set_model_time_step = set_time(0, restart_freq) ! (seconds, days)
+   else if ( trim(restart_freq_opt) == 'nyear' ) then
+      ! FIXME ... CCSM_POP uses a bogus value for this
+      set_model_time_step = set_time(0, 1) ! (seconds, days)
+      write(string1,*)'WARNING: POP namelist variable "restart_freq_opt" read as "nyear"'
+      write(string2,*)'CESM uses bogus value - using default value of 1 day.'
+      call error_handler(E_MSG,'set_model_time_step', string1, &
+                 source, revision, revdate, text2=string2)
+   else
+      write(string1,*)'POP namelist variable "restart_freq_opt" must be "nday" or "nyear"'
+      write(string2,*)'read as "'//trim(restart_freq_opt)//'"'
+      call error_handler(E_ERR,'set_model_time_step', string1, &
+                 source, revision, revdate, text2=string2)
+   endif
+
+elseif (seconds < 0 .or. days < 0) then
+   write(string1,*)'Unable to determine the assimilation interval.'
+   write(string2,*)'input.nml:&model_nml:assimilation_period_seconds must be >= 0; is ',seconds
+   write(string3,*)'input.nml:&model_nml:assimilation_period_days    must be >= 0; is ',days
+   call error_handler(E_ERR,'set_model_time_step', string1, &
+              source, revision, revdate, text2=string2, text3=string3)
 else
-   call error_handler(E_ERR,'set_model_time_step', &
-              'restart_freq_opt must be nday', source, revision, revdate)
+   set_model_time_step = set_time(seconds, days) ! (seconds, days)
 endif
 
 end function set_model_time_step
 
 
+!------------------------------------------------------------------
 
 
 subroutine write_pop_namelist(model_time, adv_to_time)
-!------------------------------------------------------------------
-!
+
 type(time_type), INTENT(IN) :: model_time, adv_to_time
 type(time_type) :: offset
 
@@ -389,8 +421,8 @@ offset = adv_to_time - model_time
 call get_time(offset, secs, days)
 
 if (secs /= 0 ) then
-   write(msgstring,*)'adv_to_time has seconds == ',secs,' must be zero'
-   call error_handler(E_ERR,'write_pop_namelist', msgstring, source, revision, revdate)
+   write(string1,*)'adv_to_time has seconds == ',secs,' must be zero'
+   call error_handler(E_ERR,'write_pop_namelist', string1, source, revision, revdate)
 endif
 
 ! call print_date( model_time,'write_pop_namelist:dart model date')
@@ -404,9 +436,21 @@ endif
 
 if ( trim(stop_option) == 'nday' ) then
    stop_count = days
+elseif ( trim(stop_option) == 'nyear' ) then
+   if (days > 365) then
+      stop_count = days/365   ! relying on integer arithmetic
+   else
+      ! CESM totally ignores this value
+      write(string1,*)'POP time_manager_nml:stop_option,stop_count are ',trim(stop_option),stop_count
+      write(string2,*)'DART wants to advance ',days,' "days"'
+      write(string3,*)'Unable to reconcile; using original stop_option,stop_count.'
+      call error_handler(E_WARN,'write_pop_namelist', string1, &
+                 source, revision, revdate, text2=string2)
+      continue
+   endif
 else
    call error_handler(E_ERR,'write_pop_namelist', &
-              'stop_option must be "nday"', source, revision, revdate)
+              'stop_option must be "nday" or "nyear"', source, revision, revdate)
 endif
 
 iunit = open_file('pop_in.DART',form='formatted',action='rewind')
@@ -417,12 +461,11 @@ close(iunit)
 end subroutine write_pop_namelist
 
 
-
-  subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
 !------------------------------------------------------------------
-! subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
-!
-! Open and read the binary grid file
+!> Open and read the binary grid file
+
+
+subroutine read_horiz_grid(nx, ny, ULAT, ULON, TLAT, TLON)
 
 integer,                    intent(in)  :: nx, ny
 real(r8), dimension(nx,ny), intent(out) :: ULAT, ULON, TLAT, TLON
@@ -441,9 +484,9 @@ if ( .not. module_initialized ) call initialize_module
 ! Check to see that the file exists.
 
 if ( .not. file_exist(horiz_grid_file) ) then
-   msgstring = 'pop_in:horiz_grid_file '//trim(horiz_grid_file)//' not found'
+   string1 = 'pop_in:horiz_grid_file '//trim(horiz_grid_file)//' not found'
    call error_handler(E_ERR,'read_horiz_grid', &
-          msgstring, source, revision, revdate)
+          string1, source, revision, revdate)
 endif
 
 ! Open it and read them in the EXPECTED order.
@@ -452,7 +495,7 @@ endif
 grid_unit = get_unit()
 INQUIRE(iolength=reclength) ULAT
 
-open(grid_unit, file=trim(horiz_grid_file), form='unformatted', &
+open(grid_unit, file=trim(horiz_grid_file), form='unformatted', convert=conversion, &
             access='direct', recl=reclength, status='old', action='read' )
 read(grid_unit, rec=1) ULAT
 read(grid_unit, rec=2) ULON
@@ -487,11 +530,11 @@ where (TLAT >  90.0_r8) TLAT =  90.0_r8
 end subroutine read_horiz_grid
 
 
-  subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
 !------------------------------------------------------------------
-! subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
-!
-! mimic POP grid.F90:calc_tpoints(), but for one big block.
+!> mimic POP grid.F90:calc_tpoints(), but for one big block.
+
+
+subroutine calc_tpoints(nx, ny, ULAT, ULON, TLAT, TLON)
 
 integer,                    intent( in) :: nx, ny
 real(r8), dimension(nx,ny), intent( in) :: ULAT, ULON
@@ -516,7 +559,7 @@ pih    = p5*pi
 radian = 180.0_r8/pi
 
 ! initialize these arrays to 0. in the code below there is
-! a column that is referenced by a where() construct before 
+! a column that is referenced by a where() construct before
 ! those values are set.  make sure that it doesn't cause a
 ! floating point exception from random memory bits which aren't
 ! valid floating point numbers.
@@ -526,7 +569,7 @@ TLON(:,:) = c0
 do j=2,ny
 do i=2,nx
 
-   !*** convert neighbor U-cell coordinates to 3-d Cartesian coordinates 
+   !*** convert neighbor U-cell coordinates to 3-d Cartesian coordinates
    !*** to prevent problems with averaging near the pole
 
    zsw = cos(ULAT(i-1,j-1))
@@ -583,7 +626,7 @@ end do
 where (TLON(:,:) > pi2) TLON(:,:) = TLON(:,:) - pi2
 where (TLON(:,:) < c0 ) TLON(:,:) = TLON(:,:) + pi2
 
-!*** this leaves the leftmost/western edge to be filled 
+!*** this leaves the leftmost/western edge to be filled
 !*** if the longitudes wrap, this is easy.
 !*** the gx3v5 grid TLON(:,2) and TLON(:,nx) are both about 2pi,
 !*** so taking the average is reasonable.
@@ -595,20 +638,19 @@ if ( trim(ew_boundary_type) == 'cyclic' ) then
    TLON(1,:) = (TLON(2,:) + TLON(nx,:))/c2
 
 else
-   write(msgstring,'(''pop_in&domain_nml:ew_boundary_type '',a,'' unknown.'')') &
+   write(string1,'(''pop_in&domain_nml:ew_boundary_type '',a,'' unknown.'')') &
                                     trim(ew_boundary_type)
-   call error_handler(E_ERR,'calc_tpoints',msgstring,source,revision,revdate)
+   call error_handler(E_ERR,'calc_tpoints',string1,source,revision,revdate)
 endif
 
 end subroutine calc_tpoints
 
 
-
-  subroutine read_topography(nx, ny, KMT, KMU)
 !------------------------------------------------------------------
-! subroutine read_topography(nx, ny, KMT, KMU)
-!
-! Open and read the binary topography file
+!> Open and read the binary topography file
+
+
+subroutine read_topography(nx, ny, KMT, KMU)
 
 integer,                   intent(in)  :: nx, ny
 integer, dimension(nx,ny), intent(out) :: KMT, KMU
@@ -620,9 +662,9 @@ if ( .not. module_initialized ) call initialize_module
 ! Check to see that the file exists.
 
 if ( .not. file_exist(topography_file) ) then
-   msgstring = 'pop_in:topography_file '//trim(topography_file)//' not found'
+   string1 = 'pop_in:topography_file '//trim(topography_file)//' not found'
    call error_handler(E_ERR,'read_topography', &
-          msgstring, source, revision, revdate)
+          string1, source, revision, revdate)
 endif
 
 ! read the binary file
@@ -630,7 +672,7 @@ endif
 topo_unit = get_unit()
 INQUIRE(iolength=reclength) KMT
 
-open( topo_unit, file=trim(topography_file), form='unformatted', &
+open( topo_unit, file=trim(topography_file), form='unformatted', convert=conversion, &
             access='direct', recl=reclength, status='old', action='read' )
 read( topo_unit, rec=1) KMT
 close(topo_unit)
@@ -643,17 +685,17 @@ close(topo_unit)
 ! south and west. so the T points which surround any U(i,j) point are
 ! in fact at indices i,i+1, and j,j+1 .
 !
-!  NO: KMU(i,j) = min(KMT(i, j), KMT(i-1, j), KMT(i, j-1), KMT(i-1, j-1)) 
+!  NO: KMU(i,j) = min(KMT(i, j), KMT(i-1, j), KMT(i, j-1), KMT(i-1, j-1))
 ! YES: KMU(i,j) = min(KMT(i, j), KMT(i+1, j), KMT(i, j+1), KMT(i+1, j+1))
 !
 ! the latter matches the POP source code, on yellowstone, lines 908 and 909 in:
 !  /glade/p/cesm/releases/cesm1_2_2/models/ocn/pop2/source/grid.F90
 !
 ! wrap around longitude boundary at i == nx.  set the topmost (last) latitude
-! U row to the same value in all cases. in the shifted pole grid currently in 
+! U row to the same value in all cases. in the shifted pole grid currently in
 ! use all these points are on land and so are 0.  in the original unshifted
 ! lat/lon grid these last row U points are above the final T row and are believed
-! to be unused.  for completeness we set all values in the last U row to the 
+! to be unused.  for completeness we set all values in the last U row to the
 ! minimum of the all T row values immediately below it, for all longitudes.
 
 do j=1,ny-1
@@ -667,13 +709,12 @@ KMU(:,ny) = minval(KMT(:,ny))
 end subroutine read_topography
 
 
-
-  subroutine read_vert_grid(nz, ZC, ZG)
 !------------------------------------------------------------------
-! subroutine read_vert_grid(nz, ZC, ZG)
-!
-! Open and read the ASCII vertical grid information
-!
+!> Open and read the ASCII vertical grid information
+
+
+subroutine read_vert_grid(nz, ZC, ZG)
+
 ! The vert grid file is in ascii, with either 3 columns/line
 !    cell thickness(in cm)   cell center(in m)   cell bottom(in m)
 ! or it can contain 2 columns/line
@@ -688,7 +729,7 @@ integer  :: iunit, i, ios
 real(r8) :: depth
 
 logical :: three_columns
-character(len=256)  :: line
+character(len=256) :: line
 
 real(r8), parameter :: centemeters_to_meters = 0.01_r8
 
@@ -697,9 +738,9 @@ if ( .not. module_initialized ) call initialize_module
 ! Check to see that the file exists.
 
 if ( .not. file_exist(vert_grid_file) ) then
-   msgstring = 'pop_in:vert_grid_file '//trim(vert_grid_file)//' not found'
+   string1 = 'pop_in:vert_grid_file '//trim(vert_grid_file)//' not found'
    call error_handler(E_ERR,'read_vert_grid', &
-          msgstring, source, revision, revdate)
+          string1, source, revision, revdate)
 endif
 
 ! read the ASCII file
@@ -715,28 +756,28 @@ if(ios == 0) then
    three_columns = .true.
 else
    three_columns = .false.
-   
-   ! read depth and calculate center and bottom of cells
-   read(line,*,iostat=ios) depth 
 
-   ZC(1) = depth*centemeters_to_meters*0.5 
+   ! read depth and calculate center and bottom of cells
+   read(line,*,iostat=ios) depth
+
+   ZC(1) = depth*centemeters_to_meters*0.5_r8
    ZG(1) = depth*centemeters_to_meters
 endif
 
 do i=2, nz
-   
+
    if(three_columns) then
       read(iunit,*,iostat=ios) depth, ZC(i), ZG(i)
    else
       read(iunit,*,iostat=ios) depth
 
-      ZC(i) = ZG(i-1) + depth*centemeters_to_meters*0.5
+      ZC(i) = ZG(i-1) + depth*centemeters_to_meters*0.5_r8
       ZG(i) = ZG(i-1) + depth*centemeters_to_meters
    endif
 
    if ( ios /= 0 ) then ! error
-      write(msgstring,*)'error reading depths, line ',i
-      call error_handler(E_ERR,'read_vert_grid',msgstring,source,revision,revdate)
+      write(string1,*)'error reading depths, line ',i
+      call error_handler(E_ERR,'read_vert_grid',string1,source,revision,revdate)
    endif
 
 enddo
@@ -748,13 +789,31 @@ end subroutine read_vert_grid
 
 
 subroutine get_pop_restart_filename( filename )
-character(len=*), intent(OUT) :: filename
+
+character(len=*), intent(out) :: filename
 
 if ( .not. module_initialized ) call initialize_module
 
 filename   = trim(ic_filename)
 
 end subroutine get_pop_restart_filename
+
+
+!------------------------------------------------------------------
+
+
+subroutine set_binary_file_conversion(convertstring)
+
+character(len=*), intent(in) :: convertstring
+
+if ( .not. module_initialized ) call initialize_module
+
+conversion = convertstring
+
+end subroutine set_binary_file_conversion
+
+
+!------------------------------------------------------------------
 
 
 end module dart_pop_mod

@@ -4,11 +4,11 @@ function vars = CheckModel(fname)
 % vars is a structure containing a minimal amount of metadata about the netCDF file.
 %
 % EXAMPLE:
-% fname = 'Prior_Diag.nc';
+% fname = 'preassim.nc';
 % vars = CheckModel(fname)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -16,13 +16,17 @@ function vars = CheckModel(fname)
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
 % Get some information from the file
-model      = nc_attget(fname,nc_global,'model');
-num_copies = dim_length(fname,'copy'); % determine # of ensemble members
+model      = ncreadatt(fname,'/','model');
+num_copies = dim_length(fname,'member'); % determine # of ensemble members
 [ens_size, ens_indices] = get_ensemble_indices(fname);
-times      = nc_varget(fname,'time');
-timeunits  = nc_attget(fname,'time','units');
+times      = ncread(fname,'time');
+timeunits  = ncreadatt(fname,'time','units');
 timebase   = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
-timeorigin = datenum(timebase(1),timebase(2),timebase(3));
+if (timebase(1) > 0000) 
+   timeorigin = datenum(timebase(1),timebase(2),timebase(3));
+else
+   timeorigin = 0;
+end
 dates      = times + timeorigin;
 num_times  = length(dates);
 
@@ -36,11 +40,10 @@ switch lower(model)
 
    case {'9var','lorenz_63','lorenz_84','ikeda'}
 
-      num_vars      = dim_length(fname,'StateVariable'); % determine # of state varbls
-      StateVariable =  nc_varget(fname,'StateVariable');
+      num_vars      = dim_length(fname,'location'); % determine # of state varbls
 
       def_state_vars = zeros(1,num_vars);    % for use as a subscript array,
-      def_state_vars(:) = StateVariable(:);  % def_state_vars must be a row vector.
+      def_state_vars(:) = 1:num_vars;        % def_state_vars must be a row vector.
 
       vars = struct('model',model, ...
               'def_var','state', ...
@@ -50,16 +53,15 @@ switch lower(model)
               'ensemble_indices',ens_indices, ...
               'time',dates, ...
               'time_series_length',num_times, ...
-              'min_state_var',min(StateVariable), ...
-              'max_state_var',max(StateVariable), ...
+              'min_state_var',1, ...
+              'max_state_var',num_vars, ...
               'def_state_vars',def_state_vars);
 
       vars.fname = fname;
 
    case {'lorenz_96', 'lorenz_04'}
 
-      num_vars      = dim_length(fname,'StateVariable'); % determine # of state varbls
-      StateVariable =  nc_varget(fname,'StateVariable');
+      num_vars = dim_length(fname,'location'); % determine # of state varbls
 
       % The only trick is to pick an equally-spaced subset of state
       % variables for the default.
@@ -74,8 +76,8 @@ switch lower(model)
               'ensemble_indices',ens_indices, ...
               'time',dates, ...
               'time_series_length',num_times, ...
-              'min_state_var',min(StateVariable), ...
-              'max_state_var',max(StateVariable), ...
+              'min_state_var',1, ...
+              'max_state_var',num_vars, ...
               'def_state_vars',def_state_vars);
 
       vars.fname = fname;
@@ -84,13 +86,13 @@ switch lower(model)
 
       % This model has the state variables replicated, so there is a difference
       % between num_state_vars and the length of the state variable.
-      forcing           = nc_attget(fname, nc_global, 'model_forcing');
-      delta_t           = nc_attget(fname, nc_global, 'model_delta_t');
-      time_step_days    = nc_attget(fname, nc_global, 'model_time_step_days');
-      time_step_seconds = nc_attget(fname, nc_global, 'model_time_step_seconds');
-      num_model_vars    = nc_attget(fname, nc_global, 'model_num_state_vars');
+      forcing           = ncreadatt(fname, '/', 'model_forcing');
+      delta_t           = ncreadatt(fname, '/', 'model_delta_t');
+      time_step_days    = ncreadatt(fname, '/', 'model_time_step_days');
+      time_step_seconds = ncreadatt(fname, '/', 'model_time_step_seconds');
+      num_model_vars    = ncreadatt(fname, '/', 'model_num_state_vars');
 
-      num_vars = dim_length(fname,'StateVariable'); % determine # of state varbls
+      num_vars = dim_length(fname,'location'); % determine # of state varbls
 
       % The only trick is to pick an equally-spaced subset of state
       % variables for the default.
@@ -123,10 +125,10 @@ switch lower(model)
    case {'lorenz_96_2scale'}
 
       num_X  = dim_length(fname,'Xdim'); % # of X variables
-      Xdim   =  nc_varget(fname,'Xdim');
+      Xdim   =     ncread(fname,'Xdim');
 
       num_Y  = dim_length(fname,'Ydim'); % # of Y variables
-      Ydim   =  nc_varget(fname,'Ydim');
+      Ydim   =     ncread(fname,'Ydim');
 
       % The only trick is to pick an equally-spaced subset of state
       % variables for the default.
@@ -153,7 +155,7 @@ switch lower(model)
    case {'simple_advection'}
 
       num_locs = dim_length(fname,'loc1d'); % # of X variables
-      loc1d    =  nc_varget(fname,'loc1d');
+      loc1d    =     ncread(fname,'loc1d');
 
       if ( nc_isvar(fname,'state') )
          varnames = {'state'};
@@ -210,8 +212,7 @@ switch lower(model)
 
       varnames = get_DARTvars(fname);
       num_vars = length(varnames);
-      dinfo    = nc_getdiminfo(fname,'levtot');
-      nlevels  = dinfo.Length;
+      [nlevels,~] = nc_dim_info(fname,'levtot');
 
       vars = struct('model',model, ...
               'num_state_vars',num_vars, ...
@@ -252,12 +253,12 @@ function x = dim_length(fname,dimname)
 % Check for the existence of the named dimension and return it
 % if it exists. If it does not, error out with a useful message.
 
-info = nc_info(fname);
+info = ncinfo(fname);
 n    = length(dimname);
 x    = [];
-for i = 1:length(info.Dimension),
-   if ( strncmp(info.Dimension(i).Name, dimname, n) > 0 )
-      x = info.Dimension(i).Length;
+for i = 1:length(info.Dimensions),
+   if ( strncmp(info.Dimensions(i).Name, dimname, n) > 0 )
+      x = info.Dimensions(i).Length;
       break
    end
 end
@@ -271,4 +272,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

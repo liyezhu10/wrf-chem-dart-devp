@@ -1,12 +1,12 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
-! RAW_STATE_VARIABLE,    KIND_RAW_STATE_VARIABLE, COMMON_CODE
-! RAW_STATE_1D_INTEGRAL, KIND_1D_INTEGRAL
+! RAW_STATE_VARIABLE,    QTY_RAW_STATE_VARIABLE, COMMON_CODE
+! RAW_STATE_1D_INTEGRAL, QTY_1D_INTEGRAL
 ! END DART PREPROCESS KIND LIST
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE

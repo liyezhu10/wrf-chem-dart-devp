@@ -37,8 +37,8 @@ function data = plot_wind_vectors( fname, platform, CopyString, QCString, vararg
 % obs = plot_wind_vectors('obs_epoch_001.nc', 'SAT', ...
 %       'NCEP BUFR observation', 'DART quality control','region',region);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -175,7 +175,7 @@ set(h,'FontSize',18)
 
 h = xlabel(data.filename); set(h,'Interpreter','none');
 
-legend(legh,legstr,'Location','Best')
+legend(legh,legstr,'Location','Best','FontSize',18)
 
 hold off;
 
@@ -195,7 +195,6 @@ dx = 0.05 * (axlims(2) - axlims(1));
 dy = 0.05 * (axlims(4) - axlims(3));
 axlims(1:4) = axlims(1:4) + [-dx dx -dy dy];
 axis(axlims)
-axis image
 
 % It is nice to know where the land is
 worldmap('light');
@@ -247,7 +246,7 @@ function [ustring, vstring] = FindObsType( ncname, platform )
 % data.timeunits    the units string e.g. 'days since yyyy-mm-dd'
 % data.timeorigin
 
-ObsTypeStrings = nc_varget(ncname,'ObsTypesMetaData');
+ObsTypeStrings = ncread(ncname,'ObsTypesMetaData')';
 
 % Find the types of data in the obs_sequence file for this epoch.
 % Turns out all the winds are either xxxx_U_WIND_COMPONENT or xxxx_U_10_METER_WIND
@@ -265,11 +264,11 @@ for i = 1:size(ObsTypeStrings,1)
    vtf = strncmpi(ObsTypeStrings(i,:),vtarget,n);
 
    if ( utf )
-      ustring = ObsTypeStrings(i,:);
+      ustring = deblank(ObsTypeStrings(i,:));
       uindex  = i;
    end 
    if ( vtf )
-      vstring = ObsTypeStrings(i,:);
+      vstring = deblank(ObsTypeStrings(i,:));
       vindex  = i;
    end 
 
@@ -281,7 +280,7 @@ end
 
 % echo a little informational statement about the number of obs
 
-obs_type = nc_varget(ncname,'obs_type');
+obs_type = ncread(ncname,'obs_type');
 numU     = sum(obs_type == uindex);
 numV     = sum(obs_type == vindex);
 fprintf('%8d %s observations in %s\n', numU, ustring, ncname)
@@ -333,4 +332,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

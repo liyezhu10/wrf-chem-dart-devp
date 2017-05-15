@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -43,6 +43,12 @@ foreach TARGET ( mkmf_* )
 
    switch ( $TARGET )
    case mkmf_preprocess:
+      breaksw
+   case mkmf_integrate_model:
+      breaksw
+   case mkmf_restart_file_tool:
+      breaksw
+   case mkmf_closest_member_tool:
       breaksw
    default:
       @ n = $n + 1

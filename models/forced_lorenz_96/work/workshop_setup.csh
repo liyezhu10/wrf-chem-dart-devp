@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -11,8 +11,8 @@
 #
 # Executes a known "perfect model" experiment using an existing
 # observation sequence file (obs_seq.in) and initial conditions appropriate
-# for both 'perfect_model_obs' (perfect_ics) and 'filter' (filter_ics).
-# There are enough initial conditions for 80 ensemble members in filter.
+# for both 'perfect_model_obs' (perfect_input.nc) and 'filter' (filter_input.nc).
+# There are enough initial conditions for a 80 member ensemble in filter.
 # Use ens_size = 81 and it WILL bomb. Guaranteed.
 # The 'input.nml' file controls all facets of this execution.
 #
@@ -40,6 +40,21 @@
 # 'obs_diag' is a program that will create observation-space diagnostics
 # for any result of 'filter' and results in a couple data files that can
 # be explored with yet more matlab scripts.
+#----------------------------------------------------------------------
+
+# The input model states for both perfect_model_obs and filter come
+# from netCDF files and must be built from the source .cdl files.
+
+which ncgen > /dev/null
+if ($status != 0) then
+  echo "The required input netCDF files must be build using 'ncgen'"
+  echo "'ncgen' is not currently available. It comes with every"
+  echo "netCDF installation and is needed by DART. Stopping."
+  exit 1
+endif
+
+if ( ! -e perfect_input.nc ) ncgen -o perfect_input.nc perfect_input.cdl
+if ( ! -e  filter_input.nc ) ncgen -o  filter_input.nc  filter_input.cdl
 
 #----------------------------------------------------------------------
 # 'preprocess' is a program that culls the appropriate sections of the
@@ -93,6 +108,7 @@ echo 'wq'               >> ex_script
 
 cat ex_script | ex input.nml || exit 40
 
+echo 'running perfect_model_obs'
 ./perfect_model_obs || exit 41
 
 #----------------------------------------------------------------------
@@ -107,6 +123,7 @@ echo 'wq'                  >> ex_script
 
 cat ex_script | ex input.nml || exit 50
 
+echo 'running filter'
 ./filter || exit 51
 
 \rm -f ex_script

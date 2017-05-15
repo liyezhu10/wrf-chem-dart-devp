@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -11,7 +11,7 @@ use types_mod,        only : r4, r8, digits12, deg2rad, rad2deg
 use obs_def_mod,      only : obs_def_type, get_obs_def_time, read_obs_def,     &
                              write_obs_def, destroy_obs_def,                   &
                              interactive_obs_def, copy_obs_def,                &
-                             set_obs_def_time, set_obs_def_kind,               &
+                             set_obs_def_time, set_obs_def_type_of_obs,               &
                              set_obs_def_error_variance, set_obs_def_location, &
                              get_obs_def_location
 
@@ -27,8 +27,8 @@ use    utilities_mod, only : get_unit, open_file, close_file, file_exist, &
 use     location_mod, only : location_type, set_location, VERTISPRESSURE, &
                              get_location
 
-use     obs_kind_mod, only : get_obs_kind_index, &
-                             KIND_TEMPERATURE, KIND_SPECIFIC_HUMIDITY
+use     obs_kind_mod, only : get_index_for_type_of_obs, &
+                             QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY
 
 use obs_kind_mod,     only : AIRS_TEMPERATURE, AIRS_SPECIFIC_HUMIDITY
 
@@ -142,8 +142,8 @@ call init_obs(     obs, num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
 
 ! assign each observation the correct observation type
-tobstype = get_obs_kind_index('AIRS_TEMPERATURE')
-qobstype = get_obs_kind_index('AIRS_SPECIFIC_HUMIDITY')
+tobstype = get_index_for_type_of_obs('AIRS_TEMPERATURE')
+qobstype = get_index_for_type_of_obs('AIRS_SPECIFIC_HUMIDITY')
 if ((tobstype < 1) .or. (qobstype < 1)) then
    msgstring = 'unknown observation type [AIRS_TEMPERATURE, AIRS_SPECIFIC_HUMIDITY]'
    call error_handler(E_ERR,'real_obs_sequence',msgstring,source,revision,revdate)
@@ -238,8 +238,11 @@ rowloop:  do irow=1,AIRS_RET_GEOTRACK
       obs_time = base_time + set_time(int(granule%Time(icol, irow)))
       call get_time(obs_time, seconds, days)
      
+      ! avoid -9999 in the starting vertical level
+      istart = granule%nBestStd(icol, irow)
+      if (istart < 1) goto 100   ! skip vert_T_loop
 
-      vert_T_loop: do ivert=granule%nBestStd(icol, irow), temperature_top_index
+      vert_T_loop: do ivert=istart, temperature_top_index
 
          tqc = 0   ! if we get here, the quality control is 'best' == 0
 
@@ -281,7 +284,12 @@ rowloop:  do irow=1,AIRS_RET_GEOTRACK
  
       enddo vert_T_loop
 
+100   continue
+
+      ! avoid -9999 in the starting vertical layer
       istart = granule%nSurfStd(icol, irow)
+      if (istart < 1) goto 200  !skip vert_Q_loop
+
       vert_Q_loop:  do ivert=istart,humidity_top_index
 
          if (granule%Qual_H2O(icol, irow) > 0) exit vert_Q_loop
@@ -329,6 +337,8 @@ rowloop:  do irow=1,AIRS_RET_GEOTRACK
          obs_num = obs_num + 1
  
       enddo vert_Q_loop
+
+200   continue
 
    enddo colloop
 enddo rowloop
@@ -413,7 +423,7 @@ loc0 = set_location(lon, lat, vloc, which_vert )
 call set_obs_def_location(obs_def, loc0)
 
 ! set obs kind
-call set_obs_def_kind(obs_def, obs_kind)
+call set_obs_def_type_of_obs(obs_def, obs_kind)
 
 call set_obs_def_time(obs_def, set_time(seconds, days) )
 call set_obs_def_error_variance(obs_def, var2)

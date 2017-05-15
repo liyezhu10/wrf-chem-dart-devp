@@ -5,31 +5,11 @@
 % The beauty of addpath is that if the desired directory is already
 % in your path, nothing happens, so there is no harm trying.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
-
-%% Adds the netCDF operators if possible
-
-if ( exist('ncstartup.m','file') == 2 )
-   ncstartup;
-elseif ( exist('/contrib/matlab/ncstartup.m','file') == 2 )
-   addpath  /contrib/matlab
-   ncstartup;
-elseif ( exist('/usr/local/matlab/ncstartup.m','file') == 2 )
-   addpath  /usr/local/matlab
-   ncstartup;
-end
-
-%% See if we have succeeded in adding the netcdf operators.
-
-if ( exist('nc_varget','file') ~= 2 )
-   disp('Sorry. Unable to locate the snctools matlab operators.')
-   disp('The DART diagnostics will not run.')
-   return
-end
 
 %% Try to intelligently add the general DART tools.
 
@@ -82,8 +62,8 @@ end
 
 % summarize
 
-truth_file = fullfile(mydir,'True_State.nc');
-diagn_file = fullfile(mydir,'Prior_Diag.nc');
+truth_file = fullfile(mydir,'perfect_output.nc');
+diagn_file = fullfile(mydir,'preassim.nc');
 
 disp(' ')
 fprintf('the default data directory is          %s\n',mydir)
@@ -95,4 +75,3 @@ disp('To change your defaults, set ''truth_file'' and/or ''diagn_file'' accordin
 % $URL$
 % $Revision$
 % $Date$
-

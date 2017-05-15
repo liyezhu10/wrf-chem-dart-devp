@@ -2,8 +2,8 @@
 %
 %
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -34,12 +34,12 @@ tol = input('Input margin (m): ');
 
 map_proj = {'lambert', 'ups', 'mercator'};
 
-if ( exist('Prior_Diag.nc','file') ~= 0 )
-  fname = 'Prior_Diag';
-elseif ( exist('Posterior_Diag.nc','file') ~= 0 )
-  fname = 'Posterior_Diag';
-elseif ( exist('True_State.nc','file') ~= 0 )
-  fname = 'True_State';
+if ( exist('preassim.nc','file') ~= 0 )
+  fname = 'preassim';
+elseif ( exist('postassim.nc','file') ~= 0 )
+  fname = 'postassim';
+elseif ( exist('perfect_output.nc','file') ~= 0 )
+  fname = 'perfect_output';
 else
   fname = input('Enter the name of the netCDF file containing domain information: ');
 end
@@ -58,16 +58,16 @@ if strcmp(fname(1:8),'wrfinput')
 
      id = 1;
 
-     xlon = nc_varget(fname, 'XLONG');
-     xlat = nc_varget(fname, 'XLAT');
+     xlon = ncread(fname, 'XLONG');
+     xlat = ncread(fname, 'XLAT');
 
 else
 
-     stdlat1 = nc_varget(fname, 'TRUELAT1');
-     stdlat2 = nc_varget(fname, 'TRUELAT2');
-     cen_lat = nc_varget(fname, 'CEN_LAT');
-     cen_lon = nc_varget(fname, 'CEN_LON');
-     mp = nc_varget(fname, 'MAP_PROJ');
+     stdlat1 = ncread(fname, 'TRUELAT1');
+     stdlat2 = ncread(fname, 'TRUELAT2');
+     cen_lat = ncread(fname, 'CEN_LAT');
+     cen_lon = ncread(fname, 'CEN_LON');
+     mp      = ncread(fname, 'MAP_PROJ');
 
      num_domains = size(mp,1);
 
@@ -82,8 +82,8 @@ else
 
 end
 
-     xlon = nc_varget(fname, ['XLON_d0',int2str(id)]);
-     xlat = nc_varget(fname, ['XLAT_d0',int2str(id)]);
+     xlon = ncread(fname, ['XLON_d0',int2str(id)]);
+     xlat = ncread(fname, ['XLAT_d0',int2str(id)]);
 
 end
 
@@ -298,4 +298,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

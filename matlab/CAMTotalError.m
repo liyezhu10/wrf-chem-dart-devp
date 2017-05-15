@@ -3,15 +3,15 @@ function CAMTotalError( pinfo )
 % Plot the total area-weighted error for each variable.
 %---------------------------------------------------------------------
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
 
 % Since the models are "compatible", get the info from either one.
-lons       = nc_varget(pinfo.truth_file, 'lon');
-gw         = nc_varget(pinfo.truth_file, 'gw');
+lons       = ncread(pinfo.truth_file, 'lon');
+gw         = ncread(pinfo.truth_file, 'gw');
 num_lons   = length(lons);
 
 % make a matrix of weights for each horizontal slice
@@ -19,12 +19,6 @@ num_lons   = length(lons);
 [~,weights] = meshgrid(ones(1,num_lons),gw);
 weights     = weights/sum(weights(:));
 wts         = weights(:);
-
-% Get the indices for the true state, ensemble mean and spread
-% The metadata is queried to determine which "copy" is appropriate.
-truth_index      = get_copy_index(pinfo.truth_file, 'true state');
-ens_mean_index   = get_copy_index(pinfo.diagn_file, 'ensemble mean');
-ens_spread_index = get_copy_index(pinfo.diagn_file, 'ensemble spread');
 
 %----------------------------------------------------------------------
 %
@@ -84,7 +78,7 @@ for ivar=1:pinfo.num_state_vars,
    % Each variable in its own figure window
    %-------------------------------------------------------------------
    figure(ivar); clf;
-      varunits = nc_attget(pinfo.truth_file, pinfo.vars{ivar}, 'units');
+      varunits = ncreadatt(pinfo.truth_file, pinfo.vars{ivar}, 'units');
 
       plot(pinfo.time,rmse,'-', pinfo.time,sprd,'--')
 
@@ -120,4 +114,3 @@ xlabel(xlabelstring)
 % $URL$
 % $Revision$
 % $Date$
-

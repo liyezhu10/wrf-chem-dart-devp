@@ -5,19 +5,17 @@ function bins = rank_hist(ens, verif)
 %
 % Example
 %
-% truth_file = 'True_State.nc';
-% diagn_file = 'Prior_Diag.nc';
+% truth_file = 'perfect_output.nc';
+% diagn_file = 'preassim.nc';
 % plot_bins
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
 
-% Determine how long the time series is
-num_times = size(ens, 1);
-ens_size  = size(ens, 2);
+[ens_size, num_times] = size(ens);
 
 % If one of the dimensions of 'ens' is unity - it must be time.
 % If that happens, transpose these things. Why can't Matlab just
@@ -34,10 +32,10 @@ end
 bins(1:ens_size + 1) = 0.0;
 
 % Loop through time series to get count for each bin
-for i = 1:num_times
+for itime = 1:num_times
    count = 0;
-   for j = 1:ens_size
-      if verif(i) > ens(i, j)
+   for imem = 1:ens_size
+      if verif(itime) > ens(imem,itime)
          count = count + 1;
       end
    end
@@ -48,4 +46,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -74,10 +74,10 @@ use        utilities_mod, only : open_file, error_handler, E_ERR, E_MSG, &
                                  find_namelist_in_file, check_namelist_read, &
                                  do_nml_file, do_nml_term, do_output, nc_check
 
-use          obs_kind_mod, only: KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                                 KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, &
-                                 KIND_PRESSURE, KIND_SPECIFIC_HUMIDITY, &
-                                 get_raw_obs_kind_index
+use          obs_kind_mod, only: QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
+                                 QTY_SURFACE_PRESSURE, QTY_TEMPERATURE, &
+                                 QTY_PRESSURE, QTY_SPECIFIC_HUMIDITY, &
+                                 get_index_for_quantity
 
 
 
@@ -95,6 +95,7 @@ use state_structure_mod,  only : add_domain, add_dimension_to_variable, &
                                  get_num_variables, get_model_variable_indices, &
                                  get_dart_vector_index, get_index_start, get_index_end
 
+use dart_time_io_mod,      only : read_model_time, write_model_time
 
 implicit none
 private
@@ -107,7 +108,6 @@ public  get_model_size, adv_1step, get_state_meta_data, &
         model_interpolate, &
         query_vert_localization_coord, &
         vert_convert, &
-        construct_file_name_in, &
         read_model_time, write_model_time
 
 !-----------------------------------------------------------------------
@@ -161,6 +161,7 @@ logical, save :: module_initialized = .false.
    real(r8) :: noise_sd = -1.0_r8
    integer  :: dt_bias  = -1
    logical  :: output_state_vector = .false.  ! output prognostic variables
+   character(len=256) :: template_file = 'null'   ! optional; sets sizes of arrays
 
    ! dimensions for the namelist state variable table 
 
@@ -175,7 +176,8 @@ logical, save :: module_initialized = .false.
 
    namelist /model_nml/ current_time, override, dt_atmos, &
                        days, hours, minutes, seconds, noise_sd, &
-                       dt_bias, output_state_vector, state_variables
+                       dt_bias, output_state_vector, state_variables, &
+                       template_file
 
 !-----------------------------------------------------------------------
 ! More stuff from atmos_solo driver
@@ -437,6 +439,9 @@ end subroutine init_conditions
    endif
 
    !----- read restart file -----
+   ! this is a bgrid/fms style restart.  for dart style,
+   ! if a template file is given, set the sizes of things from that.
+   ! otherwise construct the domain from scratch.
 
    if (file_exist('INPUT/atmos_model.res')) then
        iunit = open_restart_file ('INPUT/atmos_model.res', 'read')
@@ -557,8 +562,8 @@ call check_namelist_read(iunit, io, "atmosphere_nml")
 !----- write version and namelist to log file -----
 
    call write_version_number ( version, tag )
-   if (do_nml_file()) write (stdlog(),    nml=atmosphere_nml)
-   if (do_nml_term()) write (nmlfileunit, nml=atmosphere_nml)
+   if (do_nml_file()) write (nmlfileunit, nml=atmosphere_nml)
+   if (do_nml_term()) write (stdlog(),    nml=atmosphere_nml)
 
 !---- compute physics/atmos time step in seconds ----
 
@@ -903,22 +908,22 @@ do varnum = 1, get_num_variables(dom_id)
    vsize = get_variable_size(dom_id, varnum) 
    eindx = sindx + vsize - 1
 
-   if (state_variables(1, varnum) == 'T') then
+   if (state_variables(1, varnum) == 't') then
       x(sindx:eindx) = reshape(vars%t(tis:tie, tjs:tje,vars%klb:vars%kub), (/vsize/) )
    
-   else if (state_variables(1, varnum) == 'U') then
+   else if (state_variables(1, varnum) == 'u') then
       x(sindx:eindx) = reshape(vars%u(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
 
-   else if (state_variables(1, varnum) == 'V') then
+   else if (state_variables(1, varnum) == 'v') then
       x(sindx:eindx) = reshape(vars%v(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
 
-   else if (state_variables(1, varnum) == 'PS') then
+   else if (state_variables(1, varnum) == 'ps') then
       x(sindx:eindx) = reshape(vars%ps(tis:tie, tjs:tje), (/ vsize /) )
 
    else ! must be tracer
       x(sindx:eindx) = reshape(vars%r(tis:tie,tjs:tje,vars%klb:vars%kub,ntracer), (/ vsize /))
       ntracer = ntracer + 1
-endif
+   endif
    sindx = eindx + 1
 enddo
 
@@ -955,13 +960,13 @@ ntracer = 1
 do varnum = 1, get_num_variables(dom_id)
    vsize = get_variable_size(dom_id, varnum) 
    eindx = sindx + vsize - 1
-   if (state_variables(1, varnum) == 'T') then
+   if (state_variables(1, varnum) == 't') then
       vars%t(tis:tie, tjs:tje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'U') then
+   else if (state_variables(1, varnum) == 'u') then
       vars%u(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'V') then
+   else if (state_variables(1, varnum) == 'v') then
       vars%v(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
-   else if (state_variables(1, varnum) == 'PS') then
+   else if (state_variables(1, varnum) == 'ps') then
       vars%ps(tis:tie, tjs:tje) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1 /) )
       vars%pssl = vars%ps   !> @TODO why is this here?  original comment was:
    ! For non-eta models, pssl is same as ps??? Need to change?
@@ -1036,17 +1041,17 @@ call get_model_variable_indices(index_in, i, j, k, var_id=var_id)
 
 thiskind = state_kinds_list(var_id)
 
-if (thiskind == KIND_TEMPERATURE) then
+if (thiskind == QTY_TEMPERATURE) then
    lon = t_lons(i)
    lat = t_lats(j)
    lev = k
    vtype = VERTISLEVEL
-else if (thiskind == KIND_U_WIND_COMPONENT .or. thiskind == KIND_V_WIND_COMPONENT) then
+else if (thiskind == QTY_U_WIND_COMPONENT .or. thiskind == QTY_V_WIND_COMPONENT) then
    lon = v_lons(i)
    lat = v_lats(j)
    lev = k
    vtype = VERTISLEVEL
-else if (thiskind == KIND_SURFACE_PRESSURE) then
+else if (thiskind == QTY_SURFACE_PRESSURE) then
    lon = t_lons(i)
    lat = t_lats(j)
    lev = 1
@@ -1112,7 +1117,7 @@ else
 endif
    
 ! Depending on obs_type, get appropriate lon and lat grid specs
-if(obs_type == KIND_U_WIND_COMPONENT .or. obs_type == KIND_V_WIND_COMPONENT) then
+if(obs_type == QTY_U_WIND_COMPONENT .or. obs_type == QTY_V_WIND_COMPONENT) then
    num_lons = size(v_lons)
    num_lats = size(v_lats)
    bot_lon = v_lons(1)
@@ -1223,7 +1228,6 @@ real(r8) :: get_val(ens_size)
 character(len = 129) :: msg_string
 integer :: model_type
 integer(i8) :: state_index
-
 ! Need to change the obs kind defined itype to the appropriate model type
 ! The itype_in variable uses types defined in the kinds module. The whole bgrid 
 ! model_mod should be modified to use this correctly. However, as a fast patch
@@ -1235,7 +1239,7 @@ model_type = get_varid_from_kind(itype)
 
 ! Find the index into state array and return this value
 state_index = get_dart_vector_index(lon_index, lat_index, level, dom_id, model_type)
-get_val = get_state(state_index, state_handle)
+get_val     = get_state(state_index, state_handle)
 
 end function get_val
 
@@ -1270,9 +1274,9 @@ istatus(:) = 0
 ! For t or tracers (on mass grid with ps) this is trivial
 ! For u or v (on velocity grid)
 
-if(itype == KIND_TEMPERATURE .or. itype == KIND_SURFACE_PRESSURE) then
+if(itype == QTY_TEMPERATURE .or. itype == QTY_SURFACE_PRESSURE) then
 
-   ps(1,1,:) = get_val(state_handle, ens_size, lon_index, lat_index, -1, KIND_SURFACE_PRESSURE)
+   ps(1,1,:) = get_val(state_handle, ens_size, lon_index, lat_index, -1, QTY_SURFACE_PRESSURE)
 
 else
 
@@ -1282,7 +1286,7 @@ else
    if(ps_lon > 360.00_r8 .and. ps_lon < 360.00001_r8) ps_lon = 360.0_r8
 
    ps_location = set_location(ps_lon, v_lats(lat_index), -1.0_r8, VERTISSURFACE )
-   call model_interpolate(state_handle, ens_size, ps_location, KIND_SURFACE_PRESSURE, ps(1,1,:), istatus)
+   call model_interpolate(state_handle, ens_size, ps_location, QTY_SURFACE_PRESSURE, ps(1,1,:), istatus)
 
 endif
 
@@ -1497,8 +1501,8 @@ call check(nf90_Redef(ncFileID),"redef")
 ! We need the dimension ID for the number of copies 
 !-------------------------------------------------------------------------------
 
-call check(nf90_inq_dimid(ncid=ncFileID, name="copy", dimid=MemberDimID),"copy dimid")
-call check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid=  TimeDimID),"time dimid")
+call check(nf90_inq_dimid(ncid=ncFileID, name="member", dimid=MemberDimID),"member dimid")
+call check(nf90_inq_dimid(ncid=ncFileID, name="time",   dimid=  TimeDimID),"time dimid")
 
 if ( TimeDimID /= unlimitedDimId ) then
    write(errstring,*)"Time Dimension ID ",TimeDimID, &
@@ -1961,6 +1965,7 @@ type(random_seq_type) :: r
 logical :: trunk_bitwise
 ! change the amount of perturbation here and recompile
 real(r8), parameter :: model_pert_amp = 0.01 ! This is hard coded in the trunk
+real(r8) :: bob
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1978,13 +1983,14 @@ if ( .not. module_initialized ) call static_init_model
 interf_provided = .true.
 ! Find temperature in kinds list
 do i = 1, size(state_kinds_list)
-   if (state_kinds_list(i) == KIND_TEMPERATURE) then
+   if (state_kinds_list(i) == QTY_TEMPERATURE) then
       temp_ind = i
       exit
    endif
 enddo
 
 trunk_bitwise = .true.
+!trunk_bitwise = .false.
 
 if (trunk_bitwise) then
 
@@ -2003,10 +2009,15 @@ else
 
    call init_random_seq(r, my_task_id()+1)
 
+print *, 'kind index, start/end varindex for temperature: ', temp_ind, &
+           get_index_start(dom_id, temp_ind), get_index_end(dom_id, temp_ind)
    do i = 1, ens_handle%my_num_vars
       if (ens_handle%my_vars(i) >= get_index_start(dom_id, temp_ind) .and. ens_handle%my_vars(i) <= get_index_end(dom_id, temp_ind)) then
          do j = 1, ens_size
+bob = ens_handle%copies(j, i)
             ens_handle%copies(j, i)  = random_gaussian(r, ens_handle%copies(j,i), model_pert_amp)
+print *, 'model_mod perturb routine: ensnum, varindex, val before/after: ', j, i, bob, ens_handle%copies(j,i)
+
          enddo
       endif
    enddo
@@ -2069,20 +2080,6 @@ enddo
 end subroutine pert_model_copies_bitwise_trunk
 
 !--------------------------------------------------------------------
-!> construct restart file name for reading
-!> model time for CESM format?
-function construct_file_name_in(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
-
-write(construct_file_name_in, '(A, i4.4, A)') TRIM(stub), copy, '.nc'
-
-end function construct_file_name_in
-
-!--------------------------------------------------------------------
 
 !> for a cold start we need to be able to fill the dart state structure
 !> without having any information from an existing netcdf file.
@@ -2130,76 +2127,86 @@ endif
 
 allocate(state_kinds_list(numrows))
 do i = 1, numrows
-   state_kinds_list(i) = get_raw_obs_kind_index(state_variables(2,i))
+   state_kinds_list(i) = get_index_for_quantity(state_variables(2,i))
    if (state_kinds_list(i) < 0) then
       call error_handler(E_ERR,'fill_domain_structure', "bad namelist: unknown kind: "//trim(state_variables(2,i)), &
                          source, revision, revdate)
    endif
-      end do
+end do
 
-dom_id = add_domain(numrows, state_variables(1,1:numrows), state_kinds_list(:))
+! if the user gives us a template file, use that to set the sizes of everything.
+! otherwise, like if using 'start_from_restart = .false', set things by hand.
 
-kub = Var_dt%kub
-klb = Var_dt%klb
+if (template_file /= 'null') then
 
-do i = 1, numrows
+   dom_id = add_domain(template_file, numrows, state_variables(1,1:numrows), state_kinds_list(:))
 
-   ! add each variable to the domain structure, with fixed
-   ! dimension names because we know what they should be.
-
-   thiskind = state_kinds_list(i)
-  
-   if (thiskind == KIND_U_WIND_COMPONENT .or. thiskind == KIND_V_WIND_COMPONENT) then
-      ! the velocity grid is staggered compared to the temperature grid
-      vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
-      vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-      nVelI   = vie - vis + 1
-      nVelJ   = vje - vjs + 1
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "slon", nVelI)
-      call add_dimension_to_variable(dom_id, i, "slat", nVelJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   else if (thiskind == KIND_TEMPERATURE .or. thiskind == KIND_PRESSURE) then
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   else if (thiskind == KIND_SURFACE_PRESSURE) then
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      nlev    = 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-
-   else ! is tracer, Q, CO, etc
-      tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-      tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-      nTmpI   = tie - tis + 1
-      nTmpJ   = tje - tjs + 1
-      !ntracer = Var_dt%ntrace 
-      nlev    = Var_dt%kub - Var_dt%klb + 1
-
-      call add_dimension_to_variable(dom_id, i, "lon", nTmpI)
-      call add_dimension_to_variable(dom_id, i, "lat", nTmpJ)
-      call add_dimension_to_variable(dom_id, i, "lev", nlev)
-
-   endif
-    
+else
+   
+   dom_id = add_domain(numrows, state_variables(1,1:numrows), state_kinds_list(:))
+   
+   kub = Var_dt%kub
+   klb = Var_dt%klb
+   
+   do i = 1, numrows
+   
+      ! add each variable to the domain structure, with fixed
+      ! dimension names because we know what they should be.
+   
+      thiskind = state_kinds_list(i)
+     
+      if (thiskind == QTY_U_WIND_COMPONENT .or. thiskind == QTY_V_WIND_COMPONENT) then
+         ! the velocity grid is staggered compared to the temperature grid
+         vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
+         vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
+         nVelI   = vie - vis + 1
+         nVelJ   = vje - vjs + 1
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "VelI", nVelI)
+         call add_dimension_to_variable(dom_id, i, "VelJ", nVelJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      else if (thiskind == QTY_TEMPERATURE .or. thiskind == QTY_PRESSURE) then
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      else if (thiskind == QTY_SURFACE_PRESSURE) then
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         nlev    = 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+   
+      else ! is tracer, Q, CO, etc
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         !ntracer = Var_dt%ntrace 
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      endif
+       
    end do
+   
+   call finished_adding_domain(dom_id)
+endif
 
-
-call finished_adding_domain(dom_id)
 
 !> @TODO we will have to fill in the lon, lat, and lev arrays
 !> with actual grid values somewhere so they get written to
@@ -2230,115 +2237,6 @@ call error_handler(E_ERR,'get_varid_from_kind', errstring, &
                    source, revision, revdate)
 
 end function get_varid_from_kind
-
-!--------------------------------------------------------------------
-!> read the dart time from the input file
-!--------------------------------------------------------------------
-function read_model_time(filename)
-
-use typeSizes
-use netcdf
-
-character(len=1024), intent(in) :: filename
-type(time_type) :: read_model_time
-
-integer :: ret !< netcdf return code
-integer :: ncid, dart_secsVarID, dart_daysVarID
-integer :: seconds, days
-
-! open netcdf file
-call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
-               'read_model_time opening : ', filename )
-
-
-! grab dart_days from file
-call nc_check( nf90_inq_varid(ncid, "dart_days", dart_daysVarID), &
-               'read_model_time', 'inq_varid dart_days' )
-
-call nc_check( nf90_get_var(ncid, dart_daysVarID, days), &
-               'read_model_time','get_var dart_days' )
-
-
-! grab dart_seconds from file
-call nc_check( nf90_inq_varid(ncid, "dart_seconds", dart_secsVarID), &
-               'read_model_time', 'inq_varid dart_days' )
-
-call nc_check( nf90_get_var(ncid, dart_secsVarID, seconds), &
-               'read_model_time','get_var dart_seconds' )
-
-read_model_time = set_time(seconds, days)
-
-call nc_check( nf90_close(ncid) , 'read_model_time closing : ', filename)
-
-end function read_model_time
-
-!--------------------------------------------------------------------
-!> read the time from the input file
-!--------------------------------------------------------------------
-subroutine write_model_time(ncid, dart_time)
-
-use typeSizes
-use netcdf
-
-integer,             intent(in) :: ncid
-type(time_type),     intent(in) :: dart_time
-integer                         :: ret !< netcdf return code
-integer                         :: dart_daysVarID, dart_secondsVarID
-integer                         :: dart_days, dart_seconds
-
-! begin define mode
-call nc_check(nf90_Redef(ncid),"write_model_time", "redef")
-
-! define days if it does not exist
-ret = nf90_inq_varid(ncid, "dart_days", dart_daysVarID)
-if (ret /= NF90_NOERR) then
-   call nc_check( nf90_def_var(ncid, name="dart_days", &
-                  xtype=nf90_int, varid=dart_daysVarID) , &
-                  "write_model_time", "dart_days def_var")
-
-   ! define days attributed
-   call nc_check( nf90_put_att(ncid, dart_daysVarID, "long_name", "days"), &
-                  "write_model_time", "dart_days long_name")
-
-   call nc_check( nf90_put_att(ncid, dart_daysVarID, "calendar", "no calendar"), &
-                  "write_model_time", "dart_days calendar")
-
-   call nc_check( nf90_put_att(ncid, dart_daysVarID, "units", "days since 0000-00-00 00:00:00"), &
-                  "write_model_time", "dart_days units")
-endif
-
-! define seconds if it does not exist
-ret = nf90_inq_varid(ncid, "dart_seconds", dart_secondsVarID)
-if (ret /= NF90_NOERR) then
-   call nc_check( nf90_def_var(ncid, name="dart_seconds", &
-                  xtype=nf90_int, varid=dart_secondsVarID) , &
-                  "write_model_time", "dart_secondsdef_var")
-
-   ! define seconds attributed
-   call nc_check( nf90_put_att(ncid, dart_secondsVarID, "long_name", "seconds"), &
-                  "write_model_time", "dart_seconds long_name")
-
-   call nc_check( nf90_put_att(ncid, dart_secondsVarID, "calendar", "no calendar"), &
-                  "write_model_time", "dart_seconds calendar")
-
-   call nc_check( nf90_put_att(ncid, dart_secondsVarID, "units", "seconds since midnight"), &
-                  "write_model_time", "dart_seconds units")
-endif
-  
-! end define mode
-call nc_check( nf90_Enddef(ncid),"write_model_time", "Enddef" )
-
-! get the dart time
-call get_time(dart_time, dart_seconds, dart_days)
-
-! write dart days and seconds files to netcdf file
-call nc_check( nf90_put_var(ncid, dart_daysVarID, dart_days ), &
-               "write_model_time", "dart_days put_var")
-
-call nc_check( nf90_put_var(ncid, dart_secondsVarID, dart_seconds ), &
-               "write_model_time", "dart_seconds put_var")
-
-end subroutine write_model_time
 
 !--------------------------------------------------------------------
 !> pass the vertical localization coordinate to assim_tools_mod

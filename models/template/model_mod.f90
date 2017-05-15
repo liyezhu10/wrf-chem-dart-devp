@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -44,14 +44,12 @@ public :: get_model_size,         &
           init_conditions,        &
           nc_write_model_atts,    &
           nc_write_model_vars,    &
-          pert_model_state,       &
           pert_model_copies,      &
           get_close_maxdist_init, &
           get_close_obs_init,     &
           get_close_obs,          &
           query_vert_localization_coord, &
           vert_convert, &
-          construct_file_name_in, &
           read_model_time, &
           write_model_time
 
@@ -301,50 +299,18 @@ end subroutine end_model
 
 
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+function nc_write_model_atts( ncFileID , model_writes_state ) result (ierr)
 !------------------------------------------------------------------
 ! TJH 24 Oct 2006 -- Writes the model-specific attributes to a netCDF file.
-!     This includes coordinate variables and some metadata, but NOT
-!     the model state vector. We do have to allocate SPACE for the model
-!     state vector, but that variable gets filled as the model advances.
+!     This includes coordinate variables and some metadata, and the state
+!     as a single vector.
 !
-! As it stands, this routine will work for ANY model, with no modification.
-!
-! The simplest possible netCDF file would contain a 3D field
-! containing the state of 'all' the ensemble members. This requires
-! three coordinate variables -- one for each of the dimensions 
-! [model_size, ensemble_member, time]. A little metadata is useful, 
-! so we can also create some 'global' attributes. 
-! This is what is implemented here.
-!
-! Once the simplest case is working, this routine (and nc_write_model_vars)
-! can be extended to create a more logical partitioning of the state vector,
-! fundamentally creating a netCDF file with variables that are easily 
-! plotted. The bgrid model_mod is perhaps a good one to view, keeping
-! in mind it is complicated by the fact it has two coordinate systems. 
-! There are stubs in this template, but they are only stubs.
-!
-! TJH 29 Jul 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
-!
-! assim_model_mod:init_diag_output uses information from the location_mod
-!     to define the location dimension and variable ID. All we need to do
-!     is query, verify, and fill ...
-!
-! Typical sequence for adding new dimensions,variables,attributes:
-! NF90_OPEN             ! open existing netCDF dataset
-!    NF90_redef         ! put into define mode 
-!    NF90_def_dim       ! define additional dimensions (if any)
-!    NF90_def_var       ! define variables: from name, type, and dims
-!    NF90_put_att       ! assign attribute values
-! NF90_ENDDEF           ! end definitions: leave define mode
-!    NF90_put_var       ! provide values for variable
-! NF90_CLOSE            ! close: save updated netCDF dataset
 
 use typeSizes
 use netcdf
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
+logical, intent(out) :: model_writes_state ! if true, dart libs will write state
 integer              :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
@@ -368,6 +334,8 @@ integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
 
 integer :: i
+
+model_writes_state = .true.
 
 !-------------------------------------------------------------------------------
 ! make sure ncFileID refers to an open netCDF file, 
@@ -398,13 +366,6 @@ if ( TimeDimID /= unlimitedDimId ) then
 endif
 
 !-------------------------------------------------------------------------------
-! Define the model size / state variable dimension / whatever ...
-!-------------------------------------------------------------------------------
-call nc_check(nf90_def_dim(ncid=ncFileID, name="StateVariable",  &
-                           len=model_size, dimid=StateVarDimID), &
-                           "nc_write_model_atts", "def_dim state")
-
-!-------------------------------------------------------------------------------
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
 
@@ -423,57 +384,6 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revdate" ,revdate), &
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","template"), &
                           "nc_write_model_atts", "put_att model")
 
-!-------------------------------------------------------------------------------
-! Here is the extensible part. The simplest scenario is to output the state vector,
-! parsing the state vector into model-specific parts is complicated, and you need
-! to know the geometry, the output variables (PS,U,V,T,Q,...) etc. We're skipping
-! complicated part.
-!-------------------------------------------------------------------------------
-
-if ( output_state_vector ) then
-
-   !----------------------------------------------------------------------------
-   ! Create a variable for the state vector
-   !----------------------------------------------------------------------------
-
-  ! Define the state vector coordinate variable and some attributes.
-   call nc_check(nf90_def_var(ncid=ncFileID,name="StateVariable", xtype=NF90_INT, &
-                              dimids=StateVarDimID, varid=StateVarVarID), &
-                             "nc_write_model_atts", "def_var StateVariable")
-   call nc_check(nf90_put_att(ncFileID, StateVarVarID,"long_name","State Variable ID"), &
-                             "nc_write_model_atts", "put_att StateVariable long_name")
-   call nc_check(nf90_put_att(ncFileID, StateVarVarID, "units",     "indexical"), &
-                             "nc_write_model_atts", "put_att StateVariable units")
-   call nc_check(nf90_put_att(ncFileID, StateVarVarID, "valid_range", (/ 1, model_size /)), &
-                             "nc_write_model_atts", "put_att StateVariable valid_range")
-
-   ! Define the actual (3D) state vector, which gets filled as time goes on ... 
-   call nc_check(nf90_def_var(ncid=ncFileID, name="state", xtype=NF90_REAL, &
-                 dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
-                 varid=StateVarID), "nc_write_model_atts", "def_var state")
-   call nc_check(nf90_put_att(ncFileID, StateVarID, "long_name", "model state or fcopy"), &
-                             "nc_write_model_atts", "put_att state long_name")
-
-   ! Leave define mode so we can fill the coordinate variable.
-   call nc_check(nf90_enddef(ncfileID),"nc_write_model_atts", "state_vector enddef")
-
-   ! Fill the state variable coordinate variable
-   call nc_check(nf90_put_var(ncFileID, StateVarVarID, (/ (i,i=1,model_size) /)), &
-                                    "nc_write_model_atts", "put_var state")
-
-else
-
-   !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
-   !----------------------------------------------------------------------------
-
-   ! This block is a stub for something more complicated.
-   ! Usually, the control for the execution of this block is a namelist variable.
-   ! Take a peek at the bgrid model_mod.f90 for a (rather complicated) example.
-
-   call nc_check(nf90_enddef(ncfileID), "nc_write_model_atts", "prognostic enddef")
-
-endif
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -519,101 +429,21 @@ integer,                intent(in) :: copyindex
 integer,                intent(in) :: timeindex
 integer                            :: ierr          ! return value of function
 
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-
-integer :: StateVarID
-
-!-------------------------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-!-------------------------------------------------------------------------------
-
-ierr = -1 ! assume things go poorly
-
-call nc_check(nf90_inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-                          "nc_write_model_vars", "inquire")
-
-if ( output_state_vector ) then
-
-   call nc_check(nf90_inq_varid(ncFileID, "state", StateVarID), &
-                               "nc_write_model_vars", "inq_varid state" )
-   call nc_check(nf90_put_var(ncFileID, StateVarID, statevec,  &
-                              start=(/ 1, copyindex, timeindex /)), &
-                             "nc_write_model_vars", "put_var state")                   
-
-else
-
-   !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
-   !----------------------------------------------------------------------------
-
-   ! This block is a stub for something more complicated.
-   ! Usually, the control for the execution of this block is a namelist variable.
-   ! Take a peek at the bgrid model_mod.f90 for a (rather complicated) example.
-   !
-   ! Generally, it is necessary to take the statevec and decompose it into 
-   ! the separate prognostic variables. In this (commented out) example,
-   ! global_Var is a user-defined type that has components like:
-   ! global_Var%ps, global_Var%t, ... etc. Each of those can then be passed
-   ! directly to the netcdf put_var routine. This may cause a huge storage
-   ! hit, so large models may want to avoid the duplication if possible.
-
-   ! call vector_to_prog_var(statevec, get_model_size(), global_Var)
-
-   ! the 'start' array is crucial. In the following example, 'ps' is a 2D
-   ! array, and the netCDF variable "ps" is a 4D array [lat,lon,copy,time]
-
-   ! call nc_check(nf90_inq_varid(ncFileID, "ps", psVarID), &
-   !                             "nc_write_model_vars",  "inq_varid ps")
-   ! call nc_check(nf90_put_var( ncFileID, psVarID, global_Var%ps, &
-   !                             start=(/ 1, 1, copyindex, timeindex /)), &
-   !                            "nc_write_model_vars", "put_var ps")
-
-endif
-
-!-------------------------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-------------------------------------------------------------------------------
+! just sync the file and return.  lib routines will write state vector
 
 call nc_check(nf90_sync(ncFileID), "nc_write_model_vars", "sync")
 
-ierr = 0 ! If we got here, things went well.
+ierr = 0 
 
 end function nc_write_model_vars
 
-
-
-subroutine pert_model_state(state, pert_state, interf_provided)
-!------------------------------------------------------------------
-!
-! Perturbs a model state for generating initial ensembles.
-! The perturbed state is returned in pert_state.
-! A model may choose to provide a NULL INTERFACE by returning
-! .false. for the interf_provided argument. This indicates to
-! the filter that if it needs to generate perturbed states, it
-! may do so by adding an O(0.1) magnitude perturbation to each
-! model state variable independently. The interf_provided argument
-! should be returned as .true. if the model wants to do its own
-! perturbing of states.  The returned pert_state should in any
-! case be valid, since it will be read by filter even if 
-! interf_provided is .false.
-
-real(r8), intent(in)  :: state(:)
-real(r8), intent(out) :: pert_state(:)
-logical,  intent(out) :: interf_provided
-
-pert_state      = state
-interf_provided = .false.
-
-end subroutine pert_model_state
-
-
 !------------------------------------------------------------------
 
-subroutine pert_model_copies(state_handle, pert_amp, interf_provided)
-
+subroutine pert_model_copies(state_handle, ens_size, pert_amp, interf_provided)
  type(ensemble_type), intent(inout) :: state_handle
- real(r8),  intent(in) :: pert_amp
- logical,  intent(out) :: interf_provided
+ integer,             intent(in)    :: ens_size
+ real(r8),            intent(in)    :: pert_amp
+ logical,             intent(out)   :: interf_provided
 
 ! Perturbs a model state copies for generating initial ensembles.
 ! The perturbed state is returned in pert_state.
@@ -626,7 +456,6 @@ subroutine pert_model_copies(state_handle, pert_amp, interf_provided)
 ! perturbing of states.
 
 interf_provided = .false.
-return
 
 end subroutine pert_model_copies
 
@@ -678,24 +507,11 @@ istatus = 0
 end subroutine vert_convert
 
 !--------------------------------------------------------------------
-!> construct restart file name for reading
-function construct_file_name_in(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
-
-write(construct_file_name_in, '(A, i4.4, A)') trim(stub), copy, ".nc"
-
-end function construct_file_name_in
-
-!--------------------------------------------------------------------
 !> read the time from the input file
 !> Stolen from pop model_mod.f90 restart_to_sv
 function read_model_time(filename)
 
-character(len=1024) :: filename
+character(len=*), intent(in) :: filename
 type(time_type) :: read_model_time
 
 read_model_time = set_time_missing()

@@ -1,8 +1,8 @@
-function varid = SetCopyID(fname);
+function varid = SetCopyID(fname)
 %% SetCopyID queries for the copy index for a set of ensemble members of a specific netCDF file.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -13,14 +13,10 @@ if (exist(fname,'file') ~= 2), error('%s does not exist.',fname); end
 
 if ( isempty(copyindices) )
    fprintf('%s has no ensemble members\n',fname)
-   disp('To be a valid ensemble member, the CopyMetaData for the member')
+   disp('To be a valid ensemble member, the MemberMetadata for the member')
    disp('must start with the character string ''ensemble member''')
    error('%s has no ensemble members.',fname)
 end
-
-metastrings = nc_varget(fname,'CopyMetaData');
-if(size(metastrings,2) == 1), metastrings = metastrings'; end
-metadata    = cellstr(metastrings);
 
 def_copies  = round([1*ncopies/4 , 2*ncopies/4 , 3*ncopies/4 ]);
 def_string  = sprintf(' %d ',def_copies);
@@ -37,7 +33,7 @@ if isempty(IDstring)                 % take the default
    varid = zeros(1,length(ensmems));
    for i = 1:length(ensmems),
       copystring = sprintf('ensemble member %d',ensmems(i));
-      varid(i) = get_copy_index(fname,copystring);
+      varid(i) = get_member_index(fname,copystring);
    end
 else
    ensmems = sscanf(IDstring,'%d');  % convert text to numbers
@@ -47,14 +43,12 @@ else
       varid = zeros(1,length(ensmems));
       for i = 1:length(ensmems),
          copystring = sprintf('ensemble member %d',ensmems(i));
-         varid(i) = get_copy_index(fname,copystring);
+         varid(i) = get_member_index(fname,copystring);
       end
    end
 end
-
 
 % <next few lines under version control, do not edit>
 % $URL$
 % $Revision$
 % $Date$
-

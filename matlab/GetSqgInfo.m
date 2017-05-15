@@ -8,8 +8,8 @@ function pinfo = GetSqgInfo(pstruct,fname,routine)
 % fname     Name of the DART netcdf file
 % routine   name of subsequent plot routine.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -17,17 +17,17 @@ function pinfo = GetSqgInfo(pstruct,fname,routine)
 if ( exist(fname,'file') ~= 2 ), error('%s does not exist.',fname); end
 
 pinfo  = pstruct;
-model  = nc_attget(fname,nc_global,'model');
+model  = ncreadatt(fname,'/','model');
 
 if strcmpi(model,'sqg') ~= 1
    error('Not so fast, this is not a sqg model.')
 end
 
-copy   = nc_varget(fname,'copy');
-times  = nc_varget(fname,'time');
-levels = nc_varget(fname,'lev');
-lons   = nc_varget(fname,'lon');
-lats   = nc_varget(fname,'lat');
+copy   = ncread(fname,'copy');
+times  = ncread(fname,'time');
+levels = ncread(fname,'lev');
+lons   = ncread(fname,'lon');
+lats   = ncread(fname,'lat');
 
 switch lower(deblank(routine))
 
@@ -355,4 +355,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

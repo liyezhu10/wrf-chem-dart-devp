@@ -20,11 +20,11 @@ function two_experiments_evolution(files, titles, obsnames, copy, prpo, varargin
 %
 % USAGE: two_experiments_evolution(files, titles, obsnames, copy, prpo, 'level', 1)
 %
-% files    : Cell array containing the locations of the obs_diag_output.nc 
+% files    : Cell array containing the locations of the obs_diag_output.nc
 %            files to compare. Each file is presumed to be the results from
 %            a single experiment.
 %
-% titles   : Cell array containing the titles used to annotate each of the experiments. 
+% titles   : Cell array containing the titles used to annotate each of the experiments.
 %
 % obsnames : Cell array containing the strings of each observation type to plot.
 %            Each observation type will be plotted in a separate graphic.
@@ -40,7 +40,7 @@ function two_experiments_evolution(files, titles, obsnames, copy, prpo, varargin
 %
 % level    : The index of the level to plot. Defaults to level 1.
 %
-% OUTPUT: A .pdf of each graphic is created. Each .pdf has a name that 
+% OUTPUT: A .pdf of each graphic is created. Each .pdf has a name that
 %         reflects the variable, quantity, and region being plotted.
 %
 % EXAMPLE
@@ -56,8 +56,8 @@ function two_experiments_evolution(files, titles, obsnames, copy, prpo, varargin
 %
 % two_experiments_evolution(files, titles, obsnames, copy, prpo, 'level', 1)
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -74,7 +74,13 @@ addRequired(p,'titles',@iscell);
 addRequired(p,'obsnames',@iscell);
 addRequired(p,'copy',@ischar);
 addRequired(p,'prpo',@ischar);
-addParamValue(p,'level',default_level,@isnumeric);
+
+if (exist('inputParser/addParameter','file') == 2)
+   addParameter(p,'level',default_level,@isnumeric);
+else
+   addParamValue(p,'level',default_level,@isnumeric);
+end
+
 parse(p, files, titles, obsnames, copy, prpo, varargin{:});
 
 % if you want to echo the input
@@ -185,30 +191,19 @@ for i = 1:length(varnames)
 end
 
 for i = 1:nexp
-
    varexist(filenames{i}, {priornames{:}, postenames{:}, 'time', 'time_bounds'})
 
-   diminfo = nc_getdiminfo(filenames{i},    'copy'); ncopies   = diminfo.Length;
-   diminfo = nc_getdiminfo(filenames{i},'obstypes'); nobstypes = diminfo.Length;
-   diminfo = nc_getdiminfo(filenames{i},  'region'); nregions  = diminfo.Length;
-
-   commondata{i}.ncopies   = ncopies;
-   commondata{i}.nobstypes = nobstypes;
-   commondata{i}.nregions  = nregions;
-   commondata{i}.times     = nc_varget(filenames{i},'time');
-   commondata{i}.time_bnds = nc_varget(filenames{i},'time_bounds');
-   commondata{i}.copyindex = get_copy_index(filenames{i},copystring);
-   commondata{i}.lonlim1   = nc_attget(filenames{i},nc_global,'lonlim1');
-   commondata{i}.lonlim2   = nc_attget(filenames{i},nc_global,'lonlim2');
-   commondata{i}.latlim1   = nc_read_att(filenames{i}, nc_global,'latlim1');
-   commondata{i}.latlim2   = nc_read_att(filenames{i}, nc_global,'latlim2');
-
-   commondata{i}.region_names = nc_varget(filenames{i},'region_names');
-
-   if (commondata{i}.nregions == 1 && (size(commondata{i}.region_names,2) == 1) )
-      commondata{i}.region_names = deblank(commondata{i}.region_names');
-   end
-
+   commondata{i}.region_names = ncread(filenames{i},'region_names')';
+   commondata{i}.times        = ncread(filenames{i}, 'time');
+   commondata{i}.time_bnds    = ncread(filenames{i}, 'time_bounds');
+   commondata{i}.copyindex    = get_copy_index(filenames{i},copystring);
+   commondata{i}.ncopies      = nc_dim_info(filenames{i}, 'copy');
+   commondata{i}.nobstypes    = nc_dim_info(filenames{i}, 'obstypes');
+   commondata{i}.nregions     = nc_dim_info(filenames{i}, 'region');
+   commondata{i}.lonlim1      = nc_read_att(filenames{i}, '/','lonlim1');
+   commondata{i}.lonlim2      = nc_read_att(filenames{i}, '/','lonlim2');
+   commondata{i}.latlim1      = nc_read_att(filenames{i}, '/','latlim1');
+   commondata{i}.latlim2      = nc_read_att(filenames{i}, '/','latlim2');
 end
 
 % error checking - compare everything to the first experiment
@@ -262,28 +257,28 @@ plotdat.varname       = varname;
 plotdat.copystring    = copystring;
 plotdat.region        = regionindex;
 plotdat.levelindex    = levelindex;
-plotdat.bincenters    = nc_varget(fname,'time');
-plotdat.binedges      = nc_varget(fname,'time_bounds');
-plotdat.mlevel        = local_nc_varget(fname,'mlevel');
-plotdat.plevel        = local_nc_varget(fname,'plevel');
-plotdat.plevel_edges  = local_nc_varget(fname,'plevel_edges');
-plotdat.hlevel        = local_nc_varget(fname,'hlevel');
-plotdat.hlevel_edges  = local_nc_varget(fname,'hlevel_edges');
-plotdat.ncopies       = length(nc_varget(fname,'copy'));
+plotdat.bincenters    = ncread(fname,'time');
+plotdat.binedges      = ncread(fname,'time_bounds');
+plotdat.mlevel        = local_ncread(fname,'mlevel');
+plotdat.plevel        = local_ncread(fname,'plevel');
+plotdat.plevel_edges  = local_ncread(fname,'plevel_edges');
+plotdat.hlevel        = local_ncread(fname,'hlevel');
+plotdat.hlevel_edges  = local_ncread(fname,'hlevel_edges');
+plotdat.ncopies       = nc_dim_info(fname,'copy');
 
-dimensionality        = nc_read_att(fname, nc_global, 'LocationRank');
-plotdat.biasconv      = nc_attget(fname, nc_global, 'bias_convention');
-plotdat.binseparation = nc_attget(fname, nc_global, 'bin_separation');
-plotdat.binwidth      = nc_attget(fname, nc_global, 'bin_width');
-plotdat.lonlim1       = nc_attget(fname, nc_global, 'lonlim1');
-plotdat.lonlim2       = nc_attget(fname, nc_global, 'lonlim2');
-plotdat.latlim1       = nc_read_att(fname, nc_global, 'latlim1');
-plotdat.latlim2       = nc_read_att(fname, nc_global, 'latlim2');
+dimensionality        = nc_read_att(fname, '/', 'LocationRank');
+plotdat.biasconv      = nc_read_att(fname, '/', 'bias_convention');
+plotdat.binseparation = nc_read_att(fname, '/', 'bin_separation');
+plotdat.binwidth      = nc_read_att(fname, '/', 'bin_width');
+plotdat.lonlim1       = nc_read_att(fname, '/', 'lonlim1');
+plotdat.lonlim2       = nc_read_att(fname, '/', 'lonlim2');
+plotdat.latlim1       = nc_read_att(fname, '/', 'latlim1');
+plotdat.latlim2       = nc_read_att(fname, '/', 'latlim2');
 
 % Coordinate between time types and dates
 
-timeunits             = nc_attget(fname,'time','units');
-calendar              = nc_attget(fname,'time','calendar');
+timeunits             = nc_read_att(fname,'time','units');
+calendar              = nc_read_att(fname,'time','calendar');
 timebase              = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin            = datenum(timebase(1),timebase(2),timebase(3));
 
@@ -319,31 +314,32 @@ myinfo.levelindex     = plotdat.levelindex;
 
 % get appropriate vertical coordinate variable
 
-guessdims = nc_var_dims(fname, plotdat.priorvar);
-analydims = nc_var_dims(fname, plotdat.postevar);
+[dimnames, ~] = nc_var_dims(fname, plotdat.priorvar);
 
 if ( dimensionality == 1 ) % observations on a unit circle, no level
    plotdat.level = 1;
    plotdat.level_units = [];
-elseif ( strfind(guessdims{3},'surface') > 0 )
+elseif ( strfind(dimnames{2},'surface') > 0 )
    plotdat.level       = 1;
    plotdat.level_units = 'surface';
    plotdat.level_edges = [];
-elseif ( strfind(guessdims{3},'undef') > 0 )
+elseif ( strfind(dimnames{2},'undef') > 0 )
    plotdat.level       = 1;
    plotdat.level_units = 'undefined';
    plotdat.level_edges = [];
 else
-   plotdat.level       = nc_varget(fname, guessdims{3});
-   plotdat.level_units = nc_attget(fname, guessdims{3}, 'units');
-   plotdat.level_edges = nc_varget(fname,sprintf('%s_edges',guessdims{3}));
+   plotdat.level       = ncread(fname, dimnames{2});
+   plotdat.level_units = nc_read_att(fname, dimnames{2}, 'units');
+   plotdat.level_edges = ncread(fname,sprintf('%s_edges',dimnames{2}));
 end
 
-[start, count]        = GetNCindices(myinfo,'diagn',plotdat.priorvar);
-plotdat.prior         = nc_varget(fname, plotdat.priorvar, start, count);
+[start, count] = GetNCindices(myinfo,'diagn',plotdat.priorvar);
+hyperslab      = ncread(fname, plotdat.priorvar, start, count);
+plotdat.prior  = squeeze(hyperslab);
 
-[start, count]        = GetNCindices(myinfo,'diagn',plotdat.postevar);
-plotdat.poste         = nc_varget(fname, plotdat.postevar, start, count);
+[start, count] = GetNCindices(myinfo,'diagn',plotdat.postevar);
+hyperslab      = ncread(fname, plotdat.postevar, start, count);
+plotdat.poste  = squeeze(hyperslab);
 
 %% Determine data limits - Do we use prior and/or posterior
 %  always make sure we have a zero bias line ...
@@ -384,26 +380,26 @@ myinfo.diagn_file = fname;
 myinfo.copyindex  = plotdat.Npossindex;
 myinfo.levelindex = plotdat.levelindex;
 [start, count]    = GetNCindices(myinfo,'diagn',plotdat.priorvar);
-plotdat.nposs     = nc_varget(fname, plotdat.priorvar, start, count);
+plotdat.nposs     = squeeze(ncread(fname, plotdat.priorvar, start, count));
 
 myinfo.copyindex  = plotdat.NQC5index;
 [start, count]    = GetNCindices(myinfo,'diagn',plotdat.priorvar);
-plotdat.Nqc5      = nc_varget(fname, plotdat.priorvar, start, count);
+plotdat.Nqc5      = squeeze(ncread(fname, plotdat.priorvar, start, count));
 plotdat.nposs     = plotdat.nposs - plotdat.Nqc5;
 
 myinfo.copyindex  = plotdat.NQC6index;
 [start, count]    = GetNCindices(myinfo,'diagn',plotdat.priorvar);
-plotdat.Nqc6      = nc_varget(fname, plotdat.priorvar, start, count);
+plotdat.Nqc6      = squeeze(ncread(fname, plotdat.priorvar, start, count));
 plotdat.nposs     = plotdat.nposs - plotdat.Nqc6;
 
 if ( plotdat.useprior )
    myinfo.copyindex = plotdat.Nusedindex;
    [start, count]   = GetNCindices(myinfo,'diagn',plotdat.priorvar);
-   plotdat.nused    = nc_varget(fname, plotdat.priorvar, start, count);
+   plotdat.nused    = squeeze(ncread(fname, plotdat.priorvar, start, count));
 else
    myinfo.copyindex = plotdat.Nusedindex;
    [start, count]   = GetNCindices(myinfo,'diagn',plotdat.postevar);
-   plotdat.nused    = nc_varget(fname, plotdat.postevar, start, count);
+   plotdat.nused    = squeeze(ncread(fname, plotdat.postevar, start, count));
 end
 
 %% Set the last of the ranges
@@ -478,15 +474,17 @@ end
 
 % Create another axes to use for plotting the observation counts
 
-ax2 = axes('position',get(ax1,'Position'), ...
-   'XAxisLocation','top', ...
-   'YAxisLocation','right', ...
+ax2 = axes( ...
+   'Position',get(ax1,'Position'), ...
+   'FontSize',get(ax1,'FontSize'), ...
+   'XColor'  ,get(ax1,'XColor'), ...
+   'XLim'    ,get(ax1,'XLim'), ...
+   'XTick'   ,get(ax1,'XTick'), ...
+   'YDir'    ,get(ax1,'YDir'), ...
    'Color','none', ...
-   'XColor',get(ax1,'XColor'), ...
    'YColor','b', ...
-   'XLim',get(ax1,'XLim'), ...
-   'YDir',get(ax1,'YDir'), ...
-   'FontSize',get(ax1,'FontSize'));
+   'XAxisLocation','top', ...
+   'YAxisLocation','right');
 
 % Plot the data, which sets the range of the axis
 for i = 1:Nexp
@@ -580,7 +578,7 @@ for ifile = 1:Nexp
    set(h, 'Interpreter', 'none', ...
           'HorizontalAlignment','left', ...
           'FontSize', 8);
-      
+
    % If the observation is trusted for this experiment, annotate as such.
 
    switch lower(plotstruct{ifile}.trusted)
@@ -604,7 +602,7 @@ nvars  = length(varnames);
 gotone = ones(1,nvars);
 
 for i = 1:nvars
-   gotone(i) = nc_isvar(filename,varnames{i});
+   gotone(i) = nc_var_exists(filename,varnames{i});
    if ( ~ gotone(i) )
       fprintf('\n%s is not a variable in %s\n',varnames{i},filename)
    end
@@ -642,7 +640,7 @@ figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
 %=====================================================================
 
 
-function value = local_nc_varget(fname,varname)
+function value = local_ncread(fname,varname)
 %% If the variable exists in the file, return the contents of the variable.
 % if the variable does not exist, return empty value instead of error-ing
 % out.
@@ -661,4 +659,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

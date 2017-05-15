@@ -7,8 +7,8 @@ function pinfo = GetMITgcm_oceanInfo(pstruct,fname,routine);
 % fname     Name of the DART netcdf file
 % routine   name of subsequent plot routine.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -19,15 +19,15 @@ if strcmp(lower(pstruct.model),'mitgcm_ocean') ~= 1
    error('Not so fast, this is not an MITgcm_ocean model.')
 end
 
-copy   = nc_varget(fname,'copy');
-levels = nc_varget(fname,  'ZG');
-XG     = nc_varget(fname,  'XG');
-XC     = nc_varget(fname,  'XC');
-YG     = nc_varget(fname,  'YG');
-YC     = nc_varget(fname,  'YC');
+copy   = ncread(fname,'copy');
+levels = ncread(fname,  'ZG');
+XG     = ncread(fname,  'XG');
+XC     = ncread(fname,  'XC');
+YG     = ncread(fname,  'YG');
+YC     = ncread(fname,  'YC');
 
-times      = nc_varget(fname,'time');
-timeunits  = nc_attget(fname,'time','units');
+times      = ncread(fname,'time');
+timeunits  = ncreadatt(fname,'time','units');
 timebase   = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin = datenum(timebase(1),timebase(2),timebase(3));
 dates      = times + timeorigin;
@@ -301,4 +301,3 @@ lat    = lats(latind);
 % $URL$
 % $Revision$
 % $Date$
-

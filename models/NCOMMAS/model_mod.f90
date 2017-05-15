@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -10,7 +10,8 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
-                             rad2deg, deg2rad, PI
+                             rad2deg, deg2rad, PI, obstypelength
+
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
@@ -34,11 +35,10 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              open_file, file_exist, find_textfile_dims,        &
                              file_to_text
 
-use     obs_kind_mod, only : KIND_U_WIND_COMPONENT,   &
-                             KIND_V_WIND_COMPONENT,   &
-                             KIND_VERTICAL_VELOCITY,  &
-                             paramname_length,        &
-                             get_raw_obs_kind_index
+use     obs_kind_mod, only : QTY_U_WIND_COMPONENT,   &
+                             QTY_V_WIND_COMPONENT,   &
+                             QTY_VERTICAL_VELOCITY,  &
+                             get_index_for_quantity
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -159,7 +159,7 @@ type progvartype
    integer :: index1      ! location in dart state vector of first occurrence
    integer :: indexN      ! location in dart state vector of last  occurrence
    integer :: dart_kind
-   character(len=paramname_length) :: kind_string
+   character(len=obstypelength) :: kind_string
 end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
@@ -348,7 +348,7 @@ subroutine get_state_meta_data(index_in, location, var_type)
   lat_index = jloc
   lon_index = iloc
 
-  IF ( progvar(nf)%dart_kind == KIND_VERTICAL_VELOCITY ) THEN
+  IF ( progvar(nf)%dart_kind == QTY_VERTICAL_VELOCITY ) THEN
         height = ze(kloc)
   ELSE
         height = zc(kloc)
@@ -356,13 +356,13 @@ subroutine get_state_meta_data(index_in, location, var_type)
   
   IF (debug > 5) THEN
 
-    IF ( progvar(nf)%dart_kind == KIND_U_WIND_COMPONENT ) THEN
+    IF ( progvar(nf)%dart_kind == QTY_U_WIND_COMPONENT ) THEN
        x1 = xe(lon_index)
     ELSE
        x1 = xc(lon_index)
     ENDIF
     
-    IF ( progvar(nf)%dart_kind == KIND_V_WIND_COMPONENT ) THEN
+    IF ( progvar(nf)%dart_kind == QTY_V_WIND_COMPONENT ) THEN
        y1 = ye(lat_index)
     ELSE
        y1 = yc(lat_index)
@@ -377,11 +377,11 @@ subroutine get_state_meta_data(index_in, location, var_type)
 ! Here we assume:
 ! That anything not a velocity is zone centered.
   
-  IF(progvar(nf)%dart_kind == KIND_U_WIND_COMPONENT) THEN
+  IF(progvar(nf)%dart_kind == QTY_U_WIND_COMPONENT) THEN
     location = set_location(ulon(iloc,jloc), ulat(iloc,jloc), height, VERTISHEIGHT)
-  ELSEIF(progvar(nf)%dart_kind == KIND_V_WIND_COMPONENT) THEN
+  ELSEIF(progvar(nf)%dart_kind == QTY_V_WIND_COMPONENT) THEN
     location = set_location(vlon(iloc,jloc), vlat(iloc,jloc), height, VERTISHEIGHT)
-  ELSEIF(progvar(nf)%dart_kind == KIND_VERTICAL_VELOCITY) THEN
+  ELSEIF(progvar(nf)%dart_kind == QTY_VERTICAL_VELOCITY) THEN
     height   = ze(kloc)
     location = set_location(wlon(iloc,jloc), wlat(iloc,jloc), height, VERTISHEIGHT)
   ELSE
@@ -426,7 +426,7 @@ subroutine static_init_model()
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
-character(len=paramname_length)       :: kind_string
+character(len=obstypelength)          :: kind_string
 integer :: ncid, VarID, numdims, dimlen, varsize
 integer :: iunit, io, ivar, i, index1, indexN
 integer :: ss, dd
@@ -531,7 +531,7 @@ do ivar = 1, nfields
    kind_string               = trim(variable_table(ivar,2))
    progvar(ivar)%varname     = varname
    progvar(ivar)%kind_string = kind_string
-   progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string ) 
+   progvar(ivar)%dart_kind   = get_index_for_quantity( progvar(ivar)%kind_string ) 
    progvar(ivar)%dimlens     = 0
 
    string2 = trim(ncommas_restart_filename)//' '//trim(varname)
@@ -2878,7 +2878,7 @@ MyLoop : do i = 1, nrows
 
    ! Make sure DART kind is valid
 
-   if( get_raw_obs_kind_index(dartstr) < 0 ) then
+   if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif

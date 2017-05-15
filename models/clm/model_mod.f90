@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -28,6 +28,7 @@ module model_mod
 use        types_mod, only : r4, r8, SECPERDAY, MISSING_R8,                    &
                              MISSING_I, MISSING_R4, rad2deg, deg2rad, PI,      &
                              obstypelength, i8
+
 use time_manager_mod, only : time_type, set_time, get_time, set_date, get_date,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+),  operator(-),          &
@@ -53,27 +54,26 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              open_file, close_file, do_nml_file, do_nml_term,  &
                              nmlfileunit
 
-use     obs_kind_mod, only : KIND_SOIL_TEMPERATURE,       &
-                             KIND_SOIL_MOISTURE,          &
-                             KIND_LIQUID_WATER,           &
-                             KIND_ICE,                    &
-                             KIND_SNOWCOVER_FRAC,         &
-                             KIND_SNOW_THICKNESS,         &
-                             KIND_LEAF_CARBON,            &
-                             KIND_LEAF_AREA_INDEX,        &
-                             KIND_WATER_TABLE_DEPTH,      &
-                             KIND_GEOPOTENTIAL_HEIGHT,    &
-                             KIND_VEGETATION_TEMPERATURE, &
-                             KIND_FPAR,                   &
-                             KIND_FPAR_SUNLIT_DIRECT,     &
-                             KIND_FPAR_SUNLIT_DIFFUSE,    &
-                             KIND_FPAR_SHADED_DIRECT,     &
-                             KIND_FPAR_SHADED_DIFFUSE,    &
-                             KIND_FPAR_SHADED_DIRECT,     &
-                             KIND_FPAR_SHADED_DIFFUSE,    &
-                             paramname_length,            &
-                             get_raw_obs_kind_index,      &
-                             get_raw_obs_kind_name
+use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
+                             QTY_SOIL_MOISTURE,          &
+                             QTY_LIQUID_WATER,           &
+                             QTY_ICE,                    &
+                             QTY_SNOWCOVER_FRAC,         &
+                             QTY_SNOW_THICKNESS,         &
+                             QTY_LEAF_CARBON,            &
+                             QTY_LEAF_AREA_INDEX,        &
+                             QTY_WATER_TABLE_DEPTH,      &
+                             QTY_GEOPOTENTIAL_HEIGHT,    &
+                             QTY_VEGETATION_TEMPERATURE, &
+                             QTY_FPAR,                   &
+                             QTY_FPAR_SUNLIT_DIRECT,     &
+                             QTY_FPAR_SUNLIT_DIFFUSE,    &
+                             QTY_FPAR_SHADED_DIRECT,     &
+                             QTY_FPAR_SHADED_DIFFUSE,    &
+                             QTY_FPAR_SHADED_DIRECT,     &
+                             QTY_FPAR_SHADED_DIFFUSE,    &
+                             get_index_for_quantity,      &
+                             get_name_for_quantity
 
  use ensemble_manager_mod, only : ensemble_type, &
                                   map_pe_to_task, &
@@ -128,8 +128,7 @@ public :: get_gridsize,                 &
           compute_gridcell_value,       &
           gridcell_components,          &
           DART_get_var,                 &
-          get_model_time,               &
-          construct_file_name_in
+          get_model_time
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -232,7 +231,7 @@ type progvartype
    real(r8) :: spvalR8, missingR8
    logical  :: has_fill_value      ! intended for future use
    logical  :: has_missing_value   ! intended for future use
-   character(len=paramname_length) :: kind_string
+   character(len=obstypelength) :: kind_string
    character(len=512) :: origin    ! the file it came from
    logical  :: update
 end type progvartype
@@ -496,7 +495,7 @@ integer  :: spvalINT
 real(r4) :: spvalR4
 real(r8) :: spvalR8
 
-character(len=paramname_length) :: var_names(max_state_variables)
+character(len=obstypelength) :: var_names(max_state_variables)
 real(r8) :: var_ranges(max_state_variables,2)
 integer :: nvars, domid
 
@@ -1997,25 +1996,6 @@ call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 
 end subroutine get_close_obs
 
-
-!--------------------------------------------------------------------
-! New RMA rountines
-!--------------------------------------------------------------------
-!> construct restart file name for reading
-!> model time for CESM format?
-function construct_file_name_in(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
-
-write(construct_file_name_in, '(A, i4.4)') TRIM(stub), copy
-
-end function construct_file_name_in
-
-
-
 function read_model_time(filename)
 !------------------------------------------------------------------
 ! the static_init_model ensures that the clm namelists are read.
@@ -2527,7 +2507,7 @@ real(r8) :: llon, llat, lheight
 integer  :: imem
 integer  :: istatus_2(ens_size)
 real(r8) :: interp_val_2(ens_size)
-character(len=paramname_length) :: kind_string
+character(len=obstypelength) :: kind_string
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2556,12 +2536,12 @@ if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon
 
 select case( obs_kind )
 
-   case ( KIND_SOIL_MOISTURE )
+   case ( QTY_SOIL_MOISTURE )
 
       ! TJH FIXME - actually ROLAND FIXME
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
-      call get_grid_vertval(state_handle, ens_size, location, KIND_LIQUID_WATER, expected_obs,  istatus)
-      call get_grid_vertval(state_handle, ens_size, location, KIND_ICE,          interp_val_2, istatus_2)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_LIQUID_WATER, expected_obs,  istatus)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_ICE,          interp_val_2, istatus_2)
 
       do imem = 1,ens_size
          if ((istatus(imem) == 0) .and. (istatus_2(imem) == 0)) then
@@ -2572,18 +2552,18 @@ select case( obs_kind )
          endif
       enddo
 
-   case ( KIND_SOIL_TEMPERATURE, KIND_LIQUID_WATER, KIND_ICE )
+   case ( QTY_SOIL_TEMPERATURE, QTY_LIQUID_WATER, QTY_ICE )
 
       call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
-   case ( KIND_SNOWCOVER_FRAC, KIND_LEAF_AREA_INDEX, KIND_LEAF_CARBON, KIND_WATER_TABLE_DEPTH, &
-          KIND_VEGETATION_TEMPERATURE)
+   case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, QTY_WATER_TABLE_DEPTH, &
+          QTY_VEGETATION_TEMPERATURE)
 
       call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
    case default
 
-      kind_string = get_raw_obs_kind_name(obs_kind)
+      kind_string = get_name_for_quantity(obs_kind)
 
       write(string1,*)'not written for (integer) kind ',obs_kind
       write(string2,*)'AKA '//trim(kind_string)
@@ -2629,7 +2609,7 @@ real(r8) :: total_area(ens_size)
 real(r8), dimension(1) :: loninds,latinds
 real(r8), dimension(LocationDims) :: loc
 integer :: imem
-character(len=paramname_length) :: varstring
+character(len=obstypelength) :: varstring
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2775,7 +2755,7 @@ real(r8), allocatable, dimension(:, :) :: area_below
 integer :: counter, counter_above, counter_below
 integer :: imem
 real(r8) :: state(ens_size)
-character(len=paramname_length) :: varstring
+character(len=obstypelength) :: varstring
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -3901,7 +3881,7 @@ MyLoop : do i = 1, nrows
 
    ! Make sure DART kind is valid
 
-   if( get_raw_obs_kind_index(dartstr) < 0 ) then
+   if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'parse_variable_table',string1,source,revision,revdate)
    endif
@@ -4812,7 +4792,7 @@ character(len=*), intent(in) :: caller
 integer                      :: findKindIndex
 
 integer :: i
-character(len=paramname_length) :: kind_string
+character(len=obstypelength) :: kind_string
 findKindIndex = -1
 
 ! Skip to the right variable
@@ -4824,7 +4804,7 @@ VARTYPES : do i = 1,nfields
 enddo VARTYPES
 
 if (findKindIndex < 1) then
-   kind_string = get_raw_obs_kind_name( kind_index )
+   kind_string = get_name_for_quantity( kind_index )
    write(string1,*) trim(caller)//' cannot find "'//trim(kind_string)//'" in list of DART state variables.'
    write(string2,*) trim(caller)//' looking for DART KIND (index) ', kind_index
    call error_handler(E_ERR,'findKindIndex',string1,source,revision,revdate, text2=string2)
@@ -4974,7 +4954,7 @@ real(r8) :: minvalue, maxvalue
 
 progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
 progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
-progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
+progvar(ivar)%dart_kind   = get_index_for_quantity( progvar(ivar)%kind_string )
 progvar(ivar)%maxlevels   = 0
 progvar(ivar)%dimlens     = 0
 progvar(ivar)%dimnames    = ' '

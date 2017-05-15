@@ -11,8 +11,8 @@ function pinfo = GetWRFInfo(pinfo_in,fname,routine)
 % fname = '/glade/proj2/image/romine/dart/work_Radar/rad_regression/geom/Prior_Diag.nc';
 %
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -28,7 +28,7 @@ end
 %% Get the domain-independent information.
 
 varexist(fname, {'copy'});
-copy       = nc_varget(fname,'copy');
+copy       = ncread(fname,'copy');
 
 %% Get 'optional' variables.
 
@@ -47,8 +47,7 @@ polar      = varget(fname,     'POLAR');
 % If there is only one domain, we know what to do.
 % otherwise, ask which domain is of interest.
 
-dinfo       = nc_getdiminfo(fname,'domain');  % no graceful error
-num_domains = dinfo.Length;
+[num_domains,~] = nc_dim_info(fname,'domain');  % no graceful error
 
 dID    = 1;
 if (num_domains > 1)
@@ -171,7 +170,7 @@ switch lower(deblank(routine))
       % So now I have to figure out if the posterior and prior copy metadata match.
 
       for i = 1:copy,
-         copyi = get_copy_index(pinfo_in.posterior_file,copymetadata{i});
+         copyi = get_member_index(pinfo_in.posterior_file,copymetadata{i});
          pstruct.postcopyindices = copyi;
       end
 
@@ -197,7 +196,7 @@ switch lower(deblank(routine))
       [var3_lat, var3_lon, var3_latind, var3_lonind] = GetLatLon(fname, var3);
 
       % query for ensemble member string
-      metadata   = nc_varget(fname,'CopyMetaData');
+      metadata   = ncread(fname,'MemberMetadata');
       [N,M]      = size(metadata);
       if M == 1
          cell_array{1} = metadata';
@@ -323,9 +322,9 @@ if (isempty(leveldim))
 
 else
 
-   levelvar = varinfo.Dimension{leveldim};
-   dinfo    = nc_getdiminfo(fname,levelvar);
-   levels   = 1:dinfo.Length;
+   levelvar    = varinfo.Dimension{leveldim};
+   [nlevels,~] = nc_dim_info(fname,levelvar);
+   levels      = 1:nlevels;
 
    if (isempty(level)), level = levels(1); end
 
@@ -372,20 +371,20 @@ dID  = pgvar(indx:length(pgvar));
 if ( isempty(latstag) && isempty(lonstag) )
 
    % Both unstaggered.
-   latmat = nc_varget(fname,sprintf( 'XLAT%s',dID));
-   lonmat = nc_varget(fname,sprintf('XLONG%s',dID));
+   latmat = ncread(fname,sprintf( 'XLAT%s',dID));
+   lonmat = ncread(fname,sprintf('XLONG%s',dID));
 
 elseif ( isempty(latstag) )
 
    % LAT unstaggered, LON staggered.
-   latmat = nc_varget(fname,sprintf( 'XLAT_U%s',dID));
-   lonmat = nc_varget(fname,sprintf('XLONG_U%s',dID));
+   latmat = ncread(fname,sprintf( 'XLAT_U%s',dID));
+   lonmat = ncread(fname,sprintf('XLONG_U%s',dID));
 
 else
 
    % LAT staggered, LON unstaggered.
-   latmat = nc_varget(fname,sprintf( 'XLAT_V%s',dID));
-   lonmat = nc_varget(fname,sprintf('XLONG_V%s',dID));
+   latmat = ncread(fname,sprintf( 'XLAT_V%s',dID));
+   lonmat = ncread(fname,sprintf('XLONG_V%s',dID));
 
 end
 
@@ -513,7 +512,7 @@ function x = varget(filename,varname)
 % do not die such a theatrical death ... return an empty.
 
 if ( nc_isvar(filename,varname) )
-   x = nc_varget(filename, varname);
+   x = ncread(filename, varname);
 else
    x = [];
 end
@@ -523,4 +522,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

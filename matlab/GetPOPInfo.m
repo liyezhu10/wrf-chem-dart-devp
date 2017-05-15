@@ -8,8 +8,8 @@ function pinfo = GetPOPInfo(pinfo_in,fname,routine)
 % fname     Name of the DART netcdf file
 % routine   name of subsequent plot routine.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -28,17 +28,17 @@ global copy ULON ULAT TLON TLAT ZG ZC KMU KMT
 
 varexist(fname, {'copy','ULON','ULAT','TLON','TLAT','ZG','ZC','KMT','KMU'});
 
-copy = nc_varget(fname, 'copy');
-ULON = nc_varget(fname, 'ULON');
-ULAT = nc_varget(fname, 'ULAT');
-TLON = nc_varget(fname, 'TLON');
-TLAT = nc_varget(fname, 'TLAT');
-ZG   = nc_varget(fname,   'ZG');
-ZC   = nc_varget(fname,   'ZC');
-KMU  = nc_varget(fname,  'KMU');
-KMT  = nc_varget(fname,  'KMT');
+copy = ncread(fname, 'copy');
+ULON = ncread(fname, 'ULON');
+ULAT = ncread(fname, 'ULAT');
+TLON = ncread(fname, 'TLON');
+TLAT = ncread(fname, 'TLAT');
+ZG   = ncread(fname,   'ZG');
+ZC   = ncread(fname,   'ZC');
+KMU  = ncread(fname,  'KMU');
+KMT  = ncread(fname,  'KMT');
 
-depthunits = nc_attget(fname,'ZG','units');
+depthunits = ncreadatt(fname,'ZG','units');
 
 
 %% The POP model has different number of possible levels for each location.
@@ -149,7 +149,7 @@ switch lower(deblank(routine))
         % So now I have to figure out if the posterior and prior copy metadata match.
 
         for i = 1:copy,
-            copyi = get_copy_index(pinfo_in.posterior_file,copymetadata{i});
+            copyi = get_member_index(pinfo_in.posterior_file,copymetadata{i});
             pstruct.postcopyindices = copyi;
         end
 
@@ -175,7 +175,7 @@ switch lower(deblank(routine))
         [var3_lvl, var3_lvlind] = GetLevel(fname,var3,var3_lonind,var3_latind,var1_lvl);
 
         % query for ensemble member string
-        metadata   = nc_varget(fname,'CopyMetaData');
+        metadata   = ncread(fname,'MemberMetadata');
         [N,M]      = size(metadata);
         if M == 1
             cell_array{1} = metadata';
@@ -291,10 +291,9 @@ if (isempty(leveldim))
 
 else
 
-    levelvar = varinfo.Dimension{leveldim};
-    dinfo    = nc_getdiminfo(fname,levelvar);
-
-    levels   = 1:dinfo.Length;
+    levelvar    = varinfo.Dimension{leveldim};
+    [nlevels,~] = nc_dim_info(fname,levelvar);
+    levels      = 1:nlevels;
 
     % must find the lowest level at this gridcell for this variable
     velcomp = regexp(varinfo.Name,'VEL','ONCE');
@@ -436,4 +435,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

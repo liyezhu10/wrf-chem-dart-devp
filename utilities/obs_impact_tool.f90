@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -39,18 +39,18 @@
 !
 ! # rest of line is comment after hash mark
 ! GROUP groupname1
-!  KIND_xxx  KIND_xxx  KIND_xxx
-!  KIND_xxx
+!  QTY_xxx  QTY_xxx  QTY_xxx
+!  QTY_xxx
 ! END GROUP
 !
 ! GROUP groupname2
-!  KIND_xxx  KIND_xxx  KIND_xxx
-!  KIND_xxx
+!  QTY_xxx  QTY_xxx  QTY_xxx
+!  QTY_xxx
 ! END GROUP
 !
 ! GROUP groupnameM
-! ALL EXCEPT KIND_xxx KIND_xxx
-! KIND_xxx
+! ALL EXCEPT QTY_xxx QTY_xxx
+! QTY_xxx
 ! END GROUP
 ! # to choose all kinds except a select few
 !
@@ -62,9 +62,9 @@
 ! also ALLTYPES, ALLKINDS, as well as ALL
 !
 ! IMPACT
-!  KIND_xxx    KIND_xxx     0.0
-!  KIND_xxx    groupname1   0.0
-!  groupname1  KIND_xxx     0.0
+!  QTY_xxx    QTY_xxx     0.0
+!  QTY_xxx    groupname1   0.0
+!  groupname1  QTY_xxx     0.0
 !  groupname1  groupname1   0.0
 ! END IMPACT
 
@@ -115,7 +115,7 @@ real(r8), allocatable :: table(:,:)
 ! initialization and setup
 
 call initialize_utilities('obs_impact_tool')
-call register_module(id)
+call register_module(source,revision,revdate)
 
 ! build and output impact_table
 call create_impact_table()
@@ -125,3 +125,8 @@ call finalize_utilities('obs_impact_tool')
 
 end program
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
