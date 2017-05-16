@@ -73,6 +73,8 @@ do
       echo "  or   $0 pgf90 "
       echo "  etc."
       exit 1
+    elif [ "$1" = ftn ]; then
+      export todo=out
     elif [ "$1" = gfortran ]; then
       export todo=out
     else
