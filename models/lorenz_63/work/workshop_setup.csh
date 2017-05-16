@@ -21,15 +21,15 @@
 # what/where/when we want observations. This script builds these
 # programs in support of the tutorial exercises but does not RUN them.
 #
-# 'perfect_model_obs' results in a True_State.nc file that contains
-# the true state, and obs_seq.out - a file that contains the "observations"
-# that will be assimilated by 'filter'.
+# 'perfect_model_obs' results in a true_state.nc file that contains
+# the true state, and obs_seq.out - a file that contains the 
+# synthetic "observations" that will be assimilated by 'filter'.
 #
-# 'filter' results in three files (at least): Prior_Diag.nc - the state
+# 'filter' results in three files (at least): preassim.nc - the state
 # of all ensemble members prior to the assimilation (i.e. the forecast),
-# Posterior_Diag.nc - the state of all ensemble members after the
-# assimilation (i.e. the analysis), and obs_seq.final - the ensemble
-# members' estimate of what the observations should have been.
+# analysis.nc - the state of all ensemble members after the
+# assimilation, and obs_seq.final - the ensemble members'
+# estimate of what the observations should have been.
 #
 # Once 'perfect_model_obs' has advanced the model and harvested the
 # observations for the assimilation experiment, 'filter' may be run
@@ -67,8 +67,6 @@ cp -f input.workshop.nml input.nml
 #----------------------------------------------------------------------
 
 \rm -f preprocess *.o *.mod
-\rm -f ../../../obs_def/obs_def_mod.f90
-\rm -f ../../../obs_kind/obs_kind_mod.f90
 
 set MODEL = "lorenz_63"
 

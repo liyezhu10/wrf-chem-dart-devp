@@ -4,8 +4,8 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (GITM)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css" />
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -15,10 +15,10 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
-       <P><a href="../../index.html">DART Documentation Main Index</a><br />
+       <P><a href="../../documentation/index.html">DART Documentation Main Index</a><br />
           <small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
           $Id$</small>
@@ -215,7 +215,7 @@ enclosed in quotes to prevent them from prematurely terminating the namelist.
 <div class=namelist><pre>
 
 # The list of variables to put into the state vector is here:
-# The definitions for the DART kinds are in DART/obs_def/obs_def*f90
+# The definitions for the DART kinds are in DART/observations/forward_operators/obs_def*f90
 # The order doesn't matter to DART. It may to you.
 
 &amp;model_nml
@@ -353,14 +353,14 @@ enclosed in quotes to prevent them from prematurely terminating the namelist.
 <H2>OTHER MODULES USED</H2>
 
 <PRE>
-<a href="../../common/types_mod.html">types_mod</a>
-<a href="../../time_manager/time_manager_mod.html">time_manager_mod</a>
+<a href="../../assimilation_code/modules/utilities/types_mod.html">types_mod</a>
+<a href="../../assimilation_code/modules/utilities/time_manager_mod.html">time_manager_mod</a>
 <a href="../../location/threed_sphere/location_mod.html">threed_sphere/location_mod</a>
-<a href="../../utilities/utilities_mod.html">utilities_mod</a>
-<a href="../../obs_kind/obs_kind_mod.html">obs_kind_mod</a>
-<a href="../../mpi_utilities/mpi_utilities_mod.html">mpi_utilities_mod</a>
-<a href="../../random_seq/random_seq_mod.html">random_seq_mod</a>
-<a href="dart_gitm_mod.html">dart_gitm_mod</a>
+<a href="../../assimilation_code/modules/utilities/utilities_mod.html">utilities_mod</a>
+<a href="../../assimilation_code/modules/observations/obs_kind_mod.html">obs_kind_mod</a>
+<a href="../../assimilation_code/modules/utilities/mpi_utilities_mod.html">mpi_utilities_mod</a>
+<a href="../../assimilation_code/modules/utilities/random_seq_mod.html">random_seq_mod</a>
+<a href="">dart_gitm_mod</a>
 </PRE>
 
 <!--==================================================================-->
@@ -536,13 +536,13 @@ to model_mod if required.
         The type is one of the list of supported observation types, found in
         the block of code starting 
         <em class=code>!&nbsp;Integer&nbsp;definitions&nbsp;for&nbsp;DART&nbsp;TYPES</em>
-        in <em class=file>DART/obs_kind/obs_kind_mod.f90</em> 
+        in <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em> 
         </TD></TR>
 
 </TABLE>
 
 <P>
-The list of supported variables in <em class=file>DART/obs_kind/obs_kind_mod.f90</em>
+The list of supported variables in <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em>
 is created by <em class=program>preprocess</em>.
 </P>
 
@@ -819,9 +819,9 @@ are preserved in the netCDF file as variables <em class=code>inputnml</em> and
 <P>
 <em class=code>nc_write_model_atts</em>
 is responsible for the model-specific attributes in the following DART-output netCDF files:
-<em class=file>True_State.nc</em>, 
-<em class=file>Prior_Diag.nc</em>, and 
-<em class=file>Posterior_Diag.nc</em>.
+<em class=file>true_state.nc</em>, 
+<em class=file>preassim.nc</em>, and 
+<em class=file>analysis.nc</em>.
 </P>
 
 </div>
@@ -1283,11 +1283,11 @@ extracts the time of the model state as contained in the
     <TD>provides grid dimensions, model state, and 'valid_time' of the model state</TD></TR>
 <TR><TD>header.rst, bNNNN.rst</TD>
     <TD>provides the 'valid_time' of the model state and the model state, respectively</TD></TR>
-<TR><TD>True_State.nc</TD>
+<TR><TD>true_state.nc</TD>
     <TD>the time-history of the "true" model state from an OSSE</TD></TR>
-<TR><TD>Prior_Diag.nc</TD>
+<TR><TD>preassim.nc</TD>
     <TD>the time-history of the model state before assimilation</TD></TR>
-<TR><TD>Posterior_Diag.nc&nbsp;</TD>
+<TR><TD>analysis.nc&nbsp;</TD>
     <TD>the time-history of the model state after assimilation</TD></TR>
 <TR><TD>dart_log.out [default name]</TD>
     <TD>the run-time diagnostic output</TD></TR>

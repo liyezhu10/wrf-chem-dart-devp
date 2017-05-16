@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (wrf)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css" />
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,10 +14,10 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
-       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
           <small><small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
           $Id$</small></small>
@@ -843,7 +843,7 @@ real(r8),             intent(in)    :: <em class=code>maxdist</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_maxdist_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -868,7 +868,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed-sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -901,7 +901,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 <P>
 Calls the 3-D sphere locations module to get a list of potentially
 close state vector points, and again for unassimilated observations.
-See <A HREF="../../location/threed-sphere/location_mod.html#get_close_obs">
+See <A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of the locations module
 version of this code.  Then,
 if vertical localization is enabled, this code converts all vertical
@@ -1062,8 +1062,8 @@ Not supported for the WRF model.  Will throw a fatal error if called.
 <A NAME="References"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
-<a href="http://www.mmm.ucar.edu/wrf/users/docs/user_guide/contents.html">
-http://www.mmm.ucar.edu/wrf/users/docs/user_guide/contents.html</a>
+<a href="http://www2.mmm.ucar.edu/wrf/users/docs/user_guide_V3/contents.html">
+http://www2.mmm.ucar.edu/wrf/users/docs/user_guide_V3/contents.html</a>
 
 <!--==================================================================-->
 <!-- Describe all the error conditions and codes.                     -->

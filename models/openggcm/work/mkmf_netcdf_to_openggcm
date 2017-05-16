@@ -6,7 +6,7 @@
 #
 # DART $Id$
 
-../../../mkmf/mkmf -p netcdf_to_openggcm -t ../../../mkmf/mkmf.template   \
+../../../build_templates/mkmf -p netcdf_to_openggcm -t ../../../build_templates/mkmf.template   \
  -a "../../.." path_names_netcdf_to_openggcm
 
 exit $status

@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (POP)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css" />
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,10 +14,10 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
-       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
           <small><small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
           $Id$</small></small>
@@ -38,7 +38,7 @@
 
 <P>The <strong>Parallel Ocean Program (POP)</strong> may be used with the 
    <strong>Data Assimilation Research Testbed (DART)</strong>.
-   Both main variants - <a href="http://climate.lanl.gov/Models/POP/">LANL POP</a> and
+   Both main variants - <a href="http://gcmd.nasa.gov/getserf.htm?LANL-POP">LANL POP</a> and
    <a href="http://www.cesm.ucar.edu/models/cesm1.0/pop2/">CESM1.0 POP2</a> have been 
    tested. We are assimilating salinity and temperature 
    observations from either the World Ocean Database (2005) or (2009).
@@ -168,7 +168,7 @@
       The observations come from the 
       <a href="http://www.nodc.noaa.gov/OC5/WOD05/pr_wod05.html">World Ocean Database 2005</a>
       and are processed by DART routines in the
-   <a href="../../observations/WOD/WOD.html">DART/observations/WOD</a> directory.  
+   <a href="../../observations/obs_converters/WOD/WOD.html">DART/observations/WOD</a> directory.  
    </P>
 </div>
 
@@ -233,9 +233,9 @@
       </li>
 
       <li>create a TINY (i.e. 1) set of 'perfect' observations in the normal fashion:
-         <a href="../../../obs_sequence/create_obs_sequence.html">create_obs_sequence</a>
+         <a href="../../assimilation_code/programs/create_obs_sequence/create_obs_sequence.html">create_obs_sequence</a>
          and then 
-         <a href="../../../obs_sequence/create_fixed_network_seq.html">create_fixed_network_seq</a>
+         <a href="../../assimilation_code/programs/create_fixed_network_seq/create_fixed_network_seq.html">create_fixed_network_seq</a>
          to create an empty observation sequence file 
          (usually called <em class=file>obs_seq.in</em>).
 	 The programs will prompt you for all the information they require.
@@ -266,11 +266,11 @@
 	  The script may require some modification, but not much. 
 	  Please let me know if I can improve the readability or comments. 
 	  <em class=program>run_perfect_model_obs.batch</em> runs 
-	  <a href="../../perfect_model_obs/perfect_model_obs.html">perfect_model_obs</a>
+	  <a href="../../assimilation_code/programs/perfect_model_obs/perfect_model_obs.html">perfect_model_obs</a>
       </li>
 
       <li><em class=program>run_filter.batch</em> runs 
-          <a href="../../filter/filter.html">filter</a> in a similar fashion.
+          <a href="../../assimilation_code/programs/filter/filter.html">filter</a> in a similar fashion.
 	  I have not finished the documentation for this yet.
       </li>
    </ol>
@@ -287,7 +287,7 @@
       <em class=file>DART/matlab</em> directory. 
       There are Matlab&#174; scripts for exploring the performance of the 
       assimilation in observation-space (after running 
-      <a href="../../diagnostics/threed_sphere/obs_diag.html">obs_diag</a> 
+      <a href="../../assimilation_code/programs/obs_diag/threed_sphere/obs_diag.html">obs_diag</a> 
       to explore the <em class=file>obs_seq.final</em> file) - use the 
       scripts starting with 'plot_', i.e. 
       <em class=file>DART/diagnostics/matlab/plot_*.m</em>.
@@ -297,7 +297,7 @@
       <br />
       <br />
       It is also worthwhile to convert your obs_seq.final file to a netCDF format
-      obs_sequence file with <a href="../../obs_sequence/obs_seq_to_netcdf.html">obs_seq_to_netcdf</a>
+      obs_sequence file with <a href="../../assimilation_code/programs/obs_seq_to_netcdf/obs_seq_to_netcdf.html">obs_seq_to_netcdf</a>
 </P>
 </div>
 
@@ -319,7 +319,6 @@ The variables and their default values are listed here:
    assimilation_period_days     = -1
    assimilation_period_seconds  = -1
    model_perturbation_amplitude = 0.2
-   output_state_vector          = .false.
    binary_grid_file_format      = 'big_endian'
    debug                        = 0,
    model_state_variables        = 'SALT_CUR ', 'QTY_SALINITY             ', 'UPDATE',
@@ -380,16 +379,6 @@ The variables and their default values are listed here:
                        of a gaussian distribution with the mean at the value of 
                        the state vector element. --> </TD></TR> 
 
-<TR><!--contents--><TD valign=top>output_state_vector</TD>
-    <!--  type  --><TD valign=top>logical</TD>
-    <!--descript--><TD valign=top>The switch to determine the form of the state vector in the
-                       diagnostic output netCDF files. If <em class=code>.true.</em> 
-                       the state vector will be output exactly as DART uses it 
-                       ... one long array.  If <em class=code>.false.</em>, 
-                       the state vector is parsed into prognostic variables and 
-                       output that way -- much easier to use with 'ncview', for
-                       example.</TD></TR>
-
 <TR><!--contents--><TD valign=top>binary_grid_file_format</TD>
     <!--  type  --><TD valign=top>character(len=32)</em></TD>
     <!--descript--><TD valign=top>The POP grid files are in a binary format.
@@ -423,10 +412,10 @@ The variables and their default values are listed here:
                        observation operator but have no impact on the forecast trajectory 
                        of the model could have a value of 'NO_COPY_BACK'.
                        The DART kind must be one found in the 
-                       <em class=file>DART/obs_kind/obs_kind_mod.f90</em> AFTER it gets 
+                       <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em> AFTER it gets 
                        built by <em class=program>preprocess</em>. Most of the ocean 
                        observation kinds are specified by
-                       <em class=file>DART/obs_def/obs_def_ocean_mod.f90</em>, 
+                       <em class=file>DART/observations/forward_operators/obs_def_ocean_mod.f90</em>, 
                        so it should be specified in the
                        <em class=code>&amp;preprocess_nml:input_files</em> variable.
                        </TD></TR>
@@ -613,7 +602,7 @@ is read from file <em class=file>data.cal</em>.
 
 <TABLE>
 <TR><TD><em class=call>use location_mod, only : </em></TD>
-    <TD><A HREF="../../location/threed_sphere/location_mod.html#get_close_obs">get_close_obs</A></TD></TR>
+    <TD><A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs">get_close_obs</A></TD></TR>
 </TABLE>
 
 <P>The presence of 'dry' gridpoints causes a little extra work for the
@@ -758,13 +747,13 @@ to model_mod if required.
         The type is one of the list of supported observation types, found in
         the block of code starting 
         <em class=code>!&nbsp;Integer&nbsp;definitions&nbsp;for&nbsp;DART&nbsp;TYPES</em>
-        in <em class=file>DART/obs_kind/obs_kind_mod.f90</em> 
+        in <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em> 
         </TD></TR>
 
 </TABLE>
 
 <P>
-The list of supported variables in <em class=file>DART/obs_kind/obs_kind_mod.f90</em>
+The list of supported variables in <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em>
 is created by <em class=program>preprocess</em> using the entries in 
 <em class=file>input.nml</em>[<em class=code>&amp;preprocess_nml, &amp;obs_kind_nml</em>], 
 <em class=file>DEFAULT_obs_kin_mod.F90</em> and
@@ -1044,9 +1033,9 @@ are preserved in the netCDF file as variables <em class=code>inputnml</em> and
 <P>
 <em class=code>nc_write_model_atts</em>
 is responsible for the model-specific attributes in the following DART-output netCDF files:
-<em class=file>True_State.nc</em>, 
-<em class=file>Prior_Diag.nc</em>, and 
-<em class=file>Posterior_Diag.nc</em>.
+<em class=file>true_state.nc</em>, 
+<em class=file>preassim.nc</em>, and 
+<em class=file>analysis.nc</em>.
 </P>
 
 </div>
@@ -1181,7 +1170,7 @@ real(r8),             intent(in)    :: <em class=code>maxdist</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_maxdist_init">get_close_maxdist_init()</A> for the documentation of this subroutine.
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_maxdist_init">get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
 </div>
@@ -1205,7 +1194,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3-D sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -1409,7 +1398,7 @@ type(time_type), intent(in) :: <em class=code>dart_time</em>
 
 <P>
 Writes the time to a netCDF file. For POP, this is actually a 'pass-through' to a routine of the same name in 
-<a href='../../../io/dart_time_io_mod.f90'>io/dart_time_io_mod.f90</a>  
+<a href='../../assimilation_code/modules/io/dart_time_io_mod.f90'>io/dart_time_io_mod.f90</a>  
 which will write variables <em class=code>dart_days</em> and
 <em class=code>dart_seconds</em> to the netCDF file if they do 
 not already exist.
@@ -1644,11 +1633,11 @@ normally part of the user-callable routines.
     <TD>contains the values of the horizontal grid</TD></TR>
 <TR><TD><em class=code>&amp;grid_nml</em> "vert_grid_file"</TD>
     <TD>contains the number and values of the vertical levels</TD></TR>
-<TR><TD>True_State.nc</TD>
+<TR><TD>true_state.nc</TD>
     <TD>the time-history of the "true" model state from an OSSE</TD></TR>
-<TR><TD>Prior_Diag.nc</TD>
+<TR><TD>preassim.nc</TD>
     <TD>the time-history of the model state before assimilation</TD></TR>
-<TR><TD>Posterior_Diag.nc&nbsp;</TD>
+<TR><TD>analysis.nc&nbsp;</TD>
     <TD>the time-history of the model state after assimilation</TD></TR>
 <TR><TD>dart_log.out [default name]</TD>
     <TD>the run-time diagnostic output</TD></TR>

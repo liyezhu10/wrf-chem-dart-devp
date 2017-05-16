@@ -72,8 +72,7 @@ integer  :: time_step_days      = 0
 integer  :: time_step_seconds   = 3600
 logical  :: output_state_vector = .true.
 
-namelist /model_nml/ a, b, mu, time_step_days, time_step_seconds, &
-                     output_state_vector
+namelist /model_nml/ a, b, mu, time_step_days, time_step_seconds
 
 
 !==================================================================
@@ -443,7 +442,6 @@ call check(NF90_def_var(ncFileID, name=trim(adjustl(LocationName)), xtype=nf90_d
               dimids = StateVarDimID, varid=LocationVarID),"location def" )
 call check(nf90_put_att(ncFileID, LocationVarID, "long_name", trim(adjustl(LocationLName))))
 call check(nf90_put_att(ncFileID, LocationVarID, "dimension", LocationDims ))
-call check(nf90_put_att(ncFileID, LocationVarID, "units", "nondimensional"))
 call check(nf90_put_att(ncFileID, LocationVarID, "valid_range", (/ 0.0_r8, 1.0_r8 /)))
 
 !-------------------------------------------------------------------------------

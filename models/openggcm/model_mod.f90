@@ -10,7 +10,7 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
-                             earth_radius
+                             earth_radius, vtablenamelength
 
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
@@ -18,24 +18,24 @@ use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              operator(>),  operator(<), operator(/),           &
                              operator(/=), operator(<=), GREGORIAN
 
-use     location_mod, only : location_type, get_dist, get_close_maxdist_init,  &
-                             get_close_obs_init, set_location,                 &
-                             VERTISUNDEF, VERTISHEIGHT, get_location,          &
-                             vert_is_height, vert_is_level, vert_is_surface,   &
-                             vert_is_undef, get_close_type,                    &
-                             loc_get_close_obs => get_close_obs, write_location
+use     location_mod, only : location_type, set_location, get_location, & 
+                             VERTISUNDEF, VERTISHEIGHT, write_location, &
+                             get_close_type,  get_dist, is_vertical,    &
+                             convert_vertical_obs, convert_vertical_state
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             nc_check, do_output, to_upper,                    &
+                             do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text,     &
                              do_nml_file, do_nml_term, nmlfileunit, open_file, &
                              close_file
 
-use     obs_kind_mod, only : KIND_ELECTRON_DENSITY, KIND_ELECTRIC_POTENTIAL,   &
-                             get_raw_obs_kind_index, get_raw_obs_kind_name,    &
-                             paramname_length 
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
+                                 nc_add_global_creation_time, nc_redef, nc_enddef
+
+use     obs_kind_mod, only : QTY_ELECTRON_DENSITY, QTY_ELECTRIC_POTENTIAL,     &
+                             get_index_for_quantity, get_name_for_quantity
 
 use     mpi_utilities_mod, only : my_task_id, task_count
 
@@ -55,6 +55,8 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices,       
 
 use      dart_time_io_mod, only : write_model_time
 
+use default_model_mod,     only : get_close_obs, get_close_state, nc_write_model_vars
+
 use              cotr_mod, only : transform, cotr_set, cotr, xyzdeg, degxyz
 
 use typesizes
@@ -65,28 +67,28 @@ private
 
 ! these routines must be public and you cannot change
 ! the arguments - they will be called *from* the DART code.
+
+!> required routines with code in this module
 public :: get_model_size,                &
-          adv_1step,                     &
           get_state_meta_data,           &
           model_interpolate,             &
-          get_model_time_step,           &
+          shortest_time_between_assimilations, &
           static_init_model,             &
           end_model,                     &
           init_time,                     &
           init_conditions,               &
-          nc_write_model_atts,           &
-          nc_write_model_vars,           &
+          adv_1step,                     &
           pert_model_copies,             &
-          get_close_maxdist_init,        &
-          get_close_obs_init,            &
-          get_close_obs,                 &
-          query_vert_localization_coord, &
-          vert_convert,                  &
-          construct_file_name_in,        &
-          read_model_time,               &
+          nc_write_model_atts,           &
+          read_model_time
+
+!> required routines where code is in other modules
+public :: get_close_obs,                 &
+          get_close_state,               &
+          nc_write_model_vars,           &
+          convert_vertical_obs,          &
+          convert_vertical_state, &
           write_model_time
-
-
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -124,15 +126,12 @@ integer, parameter :: GEO_TO_SM = 2
 ! Logical to keep track of if we have initialized static_init_model
 logical, save :: module_initialized = .false.
 
-! Storage for a random sequence for perturbing a single initial state
-type(random_seq_type) :: random_seq
-
 ! DART state vector contents are specified in the input.nml:&model_nml namelist.
 integer, parameter :: max_state_variables = 10 
 integer, parameter :: num_state_table_columns = 4
 ! NOTE: may need to increase character length if netcdf variables are
-! larger than paramname_length = 32.
-character(len=paramname_length) :: variable_table( max_state_variables, num_state_table_columns )
+! larger than vtablenamelength = 64.
+character(len=vtablenamelength) :: variable_table( max_state_variables, num_state_table_columns )
 integer :: state_kinds_list( max_state_variables )
 logical ::  update_var_list( max_state_variables )
 integer ::   grid_info_list( max_state_variables )
@@ -153,7 +152,7 @@ character(len=NF90_MAX_NAME) :: openggcm_template
 integer  :: assimilation_period_days     = 1
 integer  :: assimilation_period_seconds  = 0
 real(r8) :: model_perturbation_amplitude = 0.2
-character(len=paramname_length) :: model_state_variables(max_state_variables * num_state_table_columns ) = ' '
+character(len=vtablenamelength) :: model_state_variables(max_state_variables * num_state_table_columns ) = ' '
 integer  :: debug = 0   ! turn up for more and more debug messages
 
 namelist /model_nml/  &
@@ -375,12 +374,12 @@ llon    = loc_array(1)
 llat    = loc_array(2)
 lheight = loc_array(3)
 
-if( vert_is_undef(location) ) then
+if ( is_vertical(location, "UNDEFINED") ) then
    ! this is what we expect and it is ok
-elseif ( vert_is_height(location) ) then
+elseif ( is_vertical(location, "HEIGHT") ) then
    ! this is what we expect and it is ok
    ! once we write the code to search in the vertical
-elseif (vert_is_level(location)) then
+elseif ( is_vertical(location, "LEVEL") ) then
    write(msgstring,*)'requesting interp of an obs on level, not supported yet'
    call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
@@ -419,7 +418,7 @@ SELECT CASE (get_grid_type(obs_kind))
 END SELECT
 
 
-if( vert_is_undef(location) ) then
+if( is_vertical(location,"UNDEFINED") ) then
    call lon_lat_interpolate(state_handle, ens_size, mygrid, obs_kind, llon, llat, VERT_LEVEL_1, &
                             expected_obs, istatus)
 
@@ -744,26 +743,25 @@ end subroutine height_bounds
 !> in time that the model is capable of advancing the state in a given
 !> implementation. In fact this sets the assimilation window size.
 
-function get_model_time_step()
+function shortest_time_between_assimilations()
 
-type(time_type) :: get_model_time_step !< returned timestep
+type(time_type) :: shortest_time_between_assimilations !< returned timestep
 
 if ( .not. module_initialized ) call static_init_model
 
-get_model_time_step = model_timestep
+shortest_time_between_assimilations = model_timestep
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
+
 
 !------------------------------------------------------------------
-
 !> Given an integer index into the state vector structure, returns the
 !> associated location and (optionally) the generic kind.  For this model
 !> we must always return geographic coordinates.  For fields on the
 !> magnetic grid this requires a coordinate transformation.
 
-subroutine get_state_meta_data(state_handle, index_in, location, var_type)
+subroutine get_state_meta_data(index_in, location, var_type)
 
-type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
 integer(i8),         intent(in)  :: index_in     !< dart state index of interest
 type(location_type), intent(out) :: location     !< location of interest
 integer, OPTIONAL,   intent(out) :: var_type     !< optional dart kind return
@@ -796,7 +794,7 @@ endif
 
 ! Here we are ASSUMING that electric potential is a 2D
 ! variable.  If this is NOT the case FIX HERE!
-if (local_var == KIND_ELECTRIC_POTENTIAL) then
+if (local_var == QTY_ELECTRIC_POTENTIAL) then
    height   = 0.0_r8
    location = set_location(lon, lat, height, VERTISUNDEF)
 else
@@ -933,22 +931,10 @@ end subroutine read_vert_levels
 !> This includes coordinate variables for the geometric and
 !> magnetic grids.
 
-function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
+subroutine nc_write_model_atts( ncid, domain_id )
 
-integer, intent(in)  :: ncFileID !> netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables !< false if you want DART to write the state variables
-integer              :: ierr !> return error status
-
-
-!  Typical sequence for adding new dimensions,variables,attributes:
-!  NF90_OPEN             ! open existing netCDF dataset
-!     NF90_redef         ! put into define mode 
-!     NF90_def_dim       ! define additional dimensions (if any)
-!     NF90_def_var       ! define variables: from name, type, and dims
-!     NF90_put_att       ! assign attribute values
-!  NF90_ENDDEF           ! end definitions: leave define mode
-!     NF90_put_var       ! provide values for variable
-!  NF90_CLOSE            ! close: save updated netCDF dataset
+integer, intent(in)  :: ncid
+integer, intent(in)  :: domain_id
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -962,26 +948,12 @@ integer :: geoLonVarID, geoLatVarID, geoHeightVarID
 integer :: magLonVarID, magLatVarID, magHeightVarID
 integer ::  coLonVarID,  coLatVarID
 
-
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=NF90_MAX_NAME) :: str1
 
 character(len=128)  :: filename
 
 if ( .not. module_initialized ) call static_init_model
-
-ierr = -1 ! assume things go poorly
-
-!-------------------------------------------------------------------------------
-! Have dart write out the prognostic variables
-!-------------------------------------------------------------------------------
-model_mod_writes_state_variables = .false. 
 
 !--------------------------------------------------------------------
 ! we only have a netcdf handle here so we do not know the filename
@@ -990,30 +962,28 @@ model_mod_writes_state_variables = .false.
 ! which netcdf file is involved.
 !--------------------------------------------------------------------
 
-write(filename,*) 'ncFileID', ncFileID
+write(filename,*) 'ncid', ncid
 
 !-------------------------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
+! make sure ncid refers to an open netCDF file, 
 ! and then put into define mode.
 !-------------------------------------------------------------------------------
 
-call nc_check(nf90_Inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID),&
+call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID),&
                                    'nc_write_model_atts', 'inquire '//trim(filename))
-call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts',   'redef '//trim(filename))
+call nc_check(nf90_Redef(ncid),'nc_write_model_atts',   'redef '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
 
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
+call nc_add_global_creation_time(ncid)
 
-call add_string_att(ncFileID, NF90_GLOBAL, 'creation_date', str1,      filename)
-call add_string_att(ncFileID, NF90_GLOBAL, 'model_source'  ,source,    filename)
-call add_string_att(ncFileID, NF90_GLOBAL, 'model_revision',revision,  filename)
-call add_string_att(ncFileID, NF90_GLOBAL, 'model_revdate' ,revdate,   filename)
-call add_string_att(ncFileID, NF90_GLOBAL, 'model',        'openggcm', filename)
+call nc_add_global_attribute(ncid, "model_source", source )
+call nc_add_global_attribute(ncid, "model_revision", revision )
+call nc_add_global_attribute(ncid, "model_revdate", revdate )
+
+call nc_add_global_attribute(ncid, "model", "openggcm")
 
 !----------------------------------------------------------------------------
 ! We need to output grid information
@@ -1021,154 +991,128 @@ call add_string_att(ncFileID, NF90_GLOBAL, 'model',        'openggcm', filename)
 ! Define the new dimensions IDs
 !----------------------------------------------------------------------------
 
-NlonDimID = set_dim(ncFileID, 'geo_lon', geo_grid%nlon,    filename)
-NlatDimID = set_dim(ncFileID, 'geo_lat', geo_grid%nlat,    filename)
-NhgtDimID = set_dim(ncFileID, 'geo_hgt', geo_grid%nheight, filename)
-
-!----------------------------------------------------------------------------
-! Create the (empty) Coordinate Variables and the Attributes
-!----------------------------------------------------------------------------
+NlonDimID = set_dim(ncid, 'geo_lon', geo_grid%nlon,    filename)
+NlatDimID = set_dim(ncid, 'geo_lat', geo_grid%nlat,    filename)
+NhgtDimID = set_dim(ncid, 'geo_hgt', geo_grid%nheight, filename)
 
 !----------------------------------------------------------------------------
 ! Write out Geographic Grid attributes
 !----------------------------------------------------------------------------
 
-call nc_check(NF90_def_var(ncFileID,name='geo_lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='geo_lon', xtype=NF90_real, &
               dimids=NlonDimID, varid=geoLonVarID),&
               'nc_write_model_atts', 'geo_lon def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  geoLonVarID, 'long_name', 'longitudes of geo grid'), &
+call nc_check(NF90_put_att(ncid,  geoLonVarID, 'long_name', 'longitudes of geo grid'), &
               'nc_write_model_atts', 'geo_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='geo_lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='geo_lat', xtype=NF90_real, &
               dimids=NlatDimID, varid=geoLatVarID),&
               'nc_write_model_atts', 'geo_lat def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  geoLatVarID, 'long_name', 'latitudes of geo grid'), &
+call nc_check(NF90_put_att(ncid,  geoLatVarID, 'long_name', 'latitudes of geo grid'), &
               'nc_write_model_atts', 'geo_lat long_name '//trim(filename))
 
 ! Heights
-call nc_check(NF90_def_var(ncFileID,name='geo_heights', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='geo_heights', xtype=NF90_real, &
               dimids=NhgtDimID, varid= geoHeightVarID), &
               'nc_write_model_atts', 'geo_heights def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, geoHeightVarID, 'long_name', 'height of geo grid'), &
+call nc_check(NF90_put_att(ncid, geoHeightVarID, 'long_name', 'height of geo grid'), &
               'nc_write_model_atts', 'geo_heights long_name '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Write out Magnetic Grid attributes
 !----------------------------------------------------------------------------
 
-NlonDimID = set_dim(ncFileID, 'mag_lon', mag_grid%nlon,    filename)
-NlatDimID = set_dim(ncFileID, 'mag_lat', mag_grid%nlat,    filename)
-NhgtDimID = set_dim(ncFileID, 'mag_hgt', mag_grid%nheight, filename)
+NlonDimID = set_dim(ncid, 'mag_lon', mag_grid%nlon,    filename)
+NlatDimID = set_dim(ncid, 'mag_lat', mag_grid%nlat,    filename)
+NhgtDimID = set_dim(ncid, 'mag_hgt', mag_grid%nheight, filename)
 
 ! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='mag_lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='mag_lon', xtype=NF90_real, &
               dimids=NlonDimID, varid=magLonVarID),&
               'nc_write_model_atts', 'mag_lon def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  magLonVarID, 'long_name', 'longitudes mag grid'), &
+call nc_check(NF90_put_att(ncid,  magLonVarID, 'long_name', 'longitudes mag grid'), &
               'nc_write_model_atts', 'mag_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='mag_lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='mag_lat', xtype=NF90_real, &
               dimids=NlatDimID, varid=magLatVarID),&
               'nc_write_model_atts', 'mag_lat def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  magLatVarID, 'long_name', 'latitudes of mag grid'), &
+call nc_check(NF90_put_att(ncid,  magLatVarID, 'long_name', 'latitudes of mag grid'), &
               'nc_write_model_atts', 'mag_lat long_name '//trim(filename))
 
 ! Heights
-call nc_check(NF90_def_var(ncFileID,name='mag_heights', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='mag_heights', xtype=NF90_real, &
               dimids=NhgtDimID, varid= magHeightVarID), &
               'nc_write_model_atts', 'mag_heights def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID, magHeightVarID, 'long_name', 'height for mag grid'), &
+call nc_check(NF90_put_att(ncid, magHeightVarID, 'long_name', 'height for mag grid'), &
               'nc_write_model_atts', 'mag_heights long_name '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Write out Co-Latitude Grid attributes
 !----------------------------------------------------------------------------
 
-NlonDimID = set_dim(ncFileID, 'co_lon', mag_grid%nlon,    filename)
-NlatDimID = set_dim(ncFileID, 'co_lat', mag_grid%nlat,    filename)
+NlonDimID = set_dim(ncid, 'co_lon', mag_grid%nlon,    filename)
+NlatDimID = set_dim(ncid, 'co_lat', mag_grid%nlat,    filename)
 
 ! Grid Longitudes
-call nc_check(NF90_def_var(ncFileID,name='co_lon', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='co_lon', xtype=NF90_real, &
               dimids=(/ NlonDimID, NlatDimID /), varid=coLonVarID),&
               'nc_write_model_atts', 'co_lon def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  coLonVarID, 'long_name', 'longitudes co grid'), &
+call nc_check(NF90_put_att(ncid,  coLonVarID, 'long_name', 'longitudes co grid'), &
               'nc_write_model_atts', 'co_lon long_name '//trim(filename))
 
 ! Grid Latitudes
-call nc_check(NF90_def_var(ncFileID,name='co_lat', xtype=NF90_real, &
+call nc_check(NF90_def_var(ncid,name='co_lat', xtype=NF90_real, &
               dimids=(/ NlonDimID, NlatDimID /), varid=coLatVarID),&
               'nc_write_model_atts', 'co_lat def_var '//trim(filename))
-call nc_check(NF90_put_att(ncFileID,  coLatVarID, 'long_name', 'latitudes of co grid'), &
+call nc_check(NF90_put_att(ncid,  coLatVarID, 'long_name', 'latitudes of co grid'), &
               'nc_write_model_atts', 'co_lat long_name '//trim(filename))
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_check(NF90_enddef(ncfileID), 'prognostic enddef '//trim(filename))
+call nc_enddef(ncid, 'nc_write_model_atts enddef "'//trim(filename)//'"')
 
 !----------------------------------------------------------------------------
 ! Fill Geographic Grid values
 !----------------------------------------------------------------------------
 
-call nc_check(NF90_put_var(ncFileID, geoLonVarID, geo_grid%longitude ), &
+call nc_check(NF90_put_var(ncid, geoLonVarID, geo_grid%longitude ), &
              'nc_write_model_atts', 'geo_lon put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, geoLatVarID, geo_grid%latitude ), &
+call nc_check(NF90_put_var(ncid, geoLatVarID, geo_grid%latitude ), &
              'nc_write_model_atts', 'geo_lat put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, geoHeightVarID, geo_grid%heights ), &
+call nc_check(NF90_put_var(ncid, geoHeightVarID, geo_grid%heights ), &
              'nc_write_model_atts', 'geo_heights put_var '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Fill Magnetic Grid values
 !----------------------------------------------------------------------------
 
-call nc_check(NF90_put_var(ncFileID, magLonVarID, mag_grid%longitude ), &
+call nc_check(NF90_put_var(ncid, magLonVarID, mag_grid%longitude ), &
              'nc_write_model_atts', 'mag_lon put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, magLatVarID, mag_grid%latitude ), &
+call nc_check(NF90_put_var(ncid, magLatVarID, mag_grid%latitude ), &
              'nc_write_model_atts', 'mag_lat put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, magHeightVarID, mag_grid%heights ), &
+call nc_check(NF90_put_var(ncid, magHeightVarID, mag_grid%heights ), &
              'nc_write_model_atts', 'mag_heights put_var '//trim(filename))
 
 !----------------------------------------------------------------------------
 ! Fill Co-Latitude Grid values
 !----------------------------------------------------------------------------
 
-call nc_check(NF90_put_var(ncFileID, coLonVarID, mag_grid%conv_2d_lon(:,:)), &
+call nc_check(NF90_put_var(ncid, coLonVarID, mag_grid%conv_2d_lon(:,:)), &
              'nc_write_model_atts', 'co_lon put_var '//trim(filename))
-call nc_check(NF90_put_var(ncFileID, coLatVarID, mag_grid%conv_2d_lat(:,:) ), &
+call nc_check(NF90_put_var(ncid, coLatVarID, mag_grid%conv_2d_lat(:,:) ), &
              'nc_write_model_atts', 'co_lat put_var '//trim(filename))
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_check(NF90_sync(ncFileID), 'nc_write_model_atts', 'atts sync')
+call nc_sync(ncid, 'nc_write_model_atts')
 
-ierr = 0 ! If we got here, things went well.
+end subroutine nc_write_model_atts
 
-end function nc_write_model_atts
-
-!------------------------------------------------------------------
-
-!> Do not need to to use this since state_space_diag_mod takes care 
-!> of writing out the state variables. This is because :
-!>
-!>   model_mod_writes_state_variables = .false. in nc_write_model_atts
-
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)         
-integer,  intent(in) :: ncFileID    !< netCDF file identifier
-real(r8), intent(in) :: statevec(:) !< dart state vector
-integer,  intent(in) :: copyindex   !< copy number index
-integer,  intent(in) :: timeindex   !< time index from model
-integer              :: ierr        !< return value of function
-
-if ( .not. module_initialized ) call static_init_model
-
-ierr = 0
-
-end function nc_write_model_vars
 
 !------------------------------------------------------------------
-
 !> Perturbs state copies for generating initial ensembles.
 
 subroutine pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provided)
@@ -1210,34 +1154,6 @@ enddo
 
 
 end subroutine pert_model_copies
-
-!------------------------------------------------------------------
-
-!> Given a DART location (referred to as "base") and a set of candidate
-!> locations & kinds (obs, obs_kind), returns the subset close to the
-!> "base", their indices, and their distances to the "base" ...
-!>
-!> For vertical distance computations, general philosophy is to convert all
-!> vertical coordinates to a common coordinate. This coordinate type is defined
-!> in the namelist with the variable "vert_localization_coord".
-
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, &
-                         obs, obs_kind, num_close, close_ind, dist, state_handle)
-
-type(ensemble_type),  intent(in)  :: state_handle  !< state ensemble handle
-type(get_close_type), intent(in)  :: gc            !< get_close_type handle
-type(location_type),  intent(in)  :: base_obs_loc  !< base observation location
-integer,              intent(in)  :: base_obs_kind !< base dart observation kind
-type(location_type),  intent(in)  :: obs(:)        !< observation sequence
-integer,              intent(in)  :: obs_kind(:)   !< dart kind
-integer,              intent(out) :: num_close     !< number of close found
-integer,              intent(out) :: close_ind(:)  !< list of close indicies
-real(r8), OPTIONAL,   intent(out) :: dist(:)       !< list of distances of close observations
-
-call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs, obs_kind, &
-                       num_close, close_ind, dist)
-
-end subroutine get_close_obs
 
 !------------------------------------------------------------------
 
@@ -1286,25 +1202,6 @@ elsewhere
 endwhere
 
 end subroutine do_interp
-
-!--------------------------------------------------------------------
-
-!> construct restart file name for reading
-!>
-!> stub is found in input.nml io_filename_nml
-!> restart files typically are of the form openggcm3D_0001.nc
-
-function construct_file_name_in(stub, domain, copy)
-
-character(len=512), intent(in) :: stub !< stubname of file
-integer,            intent(in) :: domain !< domain of file
-integer,            intent(in) :: copy !< copy number (i.e. ensemble number)
-character(len=1024)            :: construct_file_name_in !< constructed filename
-
-
-write(construct_file_name_in, '(A,''_'',I4.4,''.nc'')') trim(stub), copy
-
-end function construct_file_name_in
 
 !--------------------------------------------------------------------
 
@@ -1359,22 +1256,6 @@ integer :: query_vert_localization_coord !< return which height we want to
 query_vert_localization_coord = VERTISHEIGHT
 
 end function query_vert_localization_coord
-
-!--------------------------------------------------------------------
-
-!> This is used in the filter_assim. The vertical conversion is done using the 
-!> mean state.  Currently this model is not doing any vertical conversions.
-
-subroutine vert_convert(state_handle, location, obs_kind, istatus)
-
-type(ensemble_type), intent(in)  :: state_handle !< state ensemble handle
-type(location_type), intent(in)  :: location !< location to convert
-integer,             intent(in)  :: obs_kind !< dart kind
-integer,             intent(out) :: istatus !< status of conversion
-
-istatus = 0
-
-end subroutine vert_convert
 
 !------------------------------------------------------------
 
@@ -1506,7 +1387,7 @@ MyLoop : do i = 1, nrows
 
    ! Make sure DART kind is valid
 
-   kind_list(i) = get_raw_obs_kind_index(dartstr)
+   kind_list(i) = get_index_for_quantity(dartstr)
    if( kind_list(i)  < 0 ) then
       write(msgstring,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',msgstring,source,revision,revdate)
@@ -1573,7 +1454,7 @@ do i = 1,nfields
    endif
 enddo
 
-write(msgstring,*)' Can not find grid type for : ', get_raw_obs_kind_name(dart_kind)
+write(msgstring,*)' Can not find grid type for : ', get_name_for_quantity(dart_kind)
 call error_handler(E_ERR,'get_grid_type',msgstring,source,revision,revdate)
 
 end function get_grid_type
@@ -1777,27 +1658,6 @@ rc = NF90_get_var(ncFileID, VarID, data_array)
 call nc_check(rc, trim(context)//' getting data for 3d array '//trim(var_name))
 
 end subroutine get_data_3d
-
-!----------------------------------------------------------------------
-
-!> add a string attribute to a netcdf variable
-
-subroutine add_string_att(ncFileID, varid, attname, attval, context)
-
-integer,          intent(in)    :: ncFileID !< netcdf file id
-integer,          intent(in)    :: varid !< netcdf variable id
-character(len=*), intent(in)    :: attname !< netcdf attribute name
-character(len=*), intent(in)    :: attval !< netcdf attrivute value
-character(len=*), intent(in)    :: context !< routine called by
-
-
-!netcdf variables
-integer :: rc
-
-rc = NF90_put_att(ncFileID, varid, attname, attval)
-call nc_check(rc, trim(context)//' putting attribute '//trim(attname))
-
-end subroutine add_string_att
 
 !----------------------------------------------------------------------
 

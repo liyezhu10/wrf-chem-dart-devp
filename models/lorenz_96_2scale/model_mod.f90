@@ -69,7 +69,7 @@ integer  :: time_step_seconds = 3600
 
 namelist /model_nml/ model_size_x, y_per_x, forcing, delta_t, &
                      coupling_b, coupling_c, coupling_h, &
-                     output_state_vector, local_y, time_step_days, time_step_seconds
+                     local_y, time_step_days, time_step_seconds
 !----------------------------------------------------------------
 
 ! Definition of variable types
@@ -588,7 +588,6 @@ if ( output_state_vector) then
               dimids = StateVarDimID, varid=LocationVarID) )
    call check(nf90_put_att(ncFileID, LocationVarID, "long_name", trim(adjustl(LocationLName))))
    call check(nf90_put_att(ncFileID, LocationVarID, "dimension", LocationDims ))
-   call check(nf90_put_att(ncFileID, LocationVarID, "units", "nondimensional"))
    call check(nf90_put_att(ncFileID, LocationVarID, "valid_range", (/ 0.0_r8, 1.0_r8 /)))
 
 else
@@ -597,14 +596,12 @@ else
               dimids = XDimID, varid=XLocationVarID) )
    call check(nf90_put_att(ncFileID, XLocationVarID, "long_name", trim(adjustl(LocationLName))))
    call check(nf90_put_att(ncFileID, XLocationVarID, "dimension", LocationDims ))
-   call check(nf90_put_att(ncFileID, XLocationVarID, "units", "nondimensional"))
    call check(nf90_put_att(ncFileID, XLocationVarID, "valid_range", (/ 0.0_r8, 1.0_r8 /)))
 
    call check(NF90_def_var(ncFileID, name="YLocation", xtype=nf90_double, &
               dimids = YDimID, varid=YLocationVarID) )
    call check(nf90_put_att(ncFileID, YLocationVarID, "long_name", trim(adjustl(LocationLName))))
    call check(nf90_put_att(ncFileID, YLocationVarID, "dimension", LocationDims ))
-   call check(nf90_put_att(ncFileID, YLocationVarID, "units", "nondimensional"))
    call check(nf90_put_att(ncFileID, YLocationVarID, "valid_range", (/ 0.0_r8, 1.0_r8 /)))
 
 endif
