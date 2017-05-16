@@ -1,5 +1,5 @@
-# DART software - Copyright 2004 - 2016 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -77,9 +77,29 @@ Mon Aug 22 17:06:09 MDT 2016 : TJH : Notes to discuss with Jimmy on Tues Aug 23r
 Tue Aug 23 15:55:01 MDT 2016 : TJH : There has to be a way to describe these grids.
 Some of them are 'magnetic grid in geographic [lon,lat,height]', for example.
 Some of them are 'xxx grid in geographic colatitude' or somesuch ...
-Right now we scaled back to simply writing out the the bare-bones information about oplus and edensity since they are the prognostic variable and diagnostic variable of interest. Jimmy has to ensure that the conversion/interpolation of edensity is happening correctly (to the same grid as oplus, for which we have geographic coordinates).
+Right now we scaled back to simply writing out the the bare-bones information 
+about oplus and edensity since they are the prognostic variable and diagnostic 
+variable of interest. Jimmy has to ensure that the conversion/interpolation 
+of edensity is happening correctly (to the same grid as oplus, for which we 
+have geographic coordinates).
 
-The oplus grid is actually a regular lat/lon grid. The vertical coordinates can be envisioned as straight (i.e. radially-emanating) with a different set of heights for each lat,lon point. Hence, the most parsimonious representation is a 2D lat/lon grid and a 3D height grid. The future is for a full 3D grid (when they upgrade some model component.)
+The oplus grid is actually a regular lat/lon grid. The vertical coordinates 
+can be envisioned as straight (i.e. radially-emanating) with a different set 
+of heights for each lat,lon point. Hence, the most parsimonious representation 
+is a 2D lat/lon grid and a 3D height grid. The future is for a full 3D grid 
+(when they upgrade some model component.)
 
-
-
+Thu Apr 20 13:50:24 MDT 2017 : TJH : Have a videocon with Jimmy. 
+Jimmy will create the oplus grid in geographic coordinates to simplify the 
+distance calculations with the satellite observations - which come in 
+geographic coordinates. Once those variables have been calculated, Jimmy 
+will tell me where they are and I will write them out in netCDF so DART can 
+read them. After that - it was agreed that Jimmy will write a job script 
+that will reserve a node for DART and then launch N separate instances of 
+openggcm. There will be a single semaphore/control file written by openggcm 
+containing the ensemble size followed by the sequence of file names of each 
+of the openggcm states to be updated. The script running DART will wait 
+for the semaphore - do it's thing - and then write some semaphore back that 
+openggcm will recognize (how?) and advance till the next assimilation cycle.
+Jimmy is gone (Europe) until May 15th. I've got a calendar reminder (May 17)
+to request the next call. I am on PTO the following week. 

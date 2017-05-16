@@ -10,8 +10,8 @@ function [oplus, cg_height, zkm] = binary_vs_netcdf(binaryfile,file2)
 %    [oplus, height] = binary_vs_netcdf(binaryfile, file2);
 %
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$

@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -383,7 +383,7 @@ elseif ( is_vertical(location, "LEVEL") ) then
    write(msgstring,*)'requesting interp of an obs on level, not supported yet'
    call error_handler(E_ERR,'model_interpolate',msgstring,source,revision,revdate)
 
-   !> @todo FIXME something like this
+   !>@todo FIXME something like this
    ! convert the heights index to an actual height 
    ind = nint(loc_array(3))
    if ( (ind < 1) .or. (ind > size(geo_grid%heights,1)) ) then 
@@ -766,7 +766,7 @@ integer(i8),         intent(in)  :: index_in     !< dart state index of interest
 type(location_type), intent(out) :: location     !< location of interest
 integer, OPTIONAL,   intent(out) :: var_type     !< optional dart kind return
 
-!>@TODO FIXME TJH check for correct application of the new oplus grid.
+!>@todo FIXME TJH check for correct application of the new oplus grid.
 
 ! Local variables
 real(r8) :: lat, lon, height
@@ -1469,7 +1469,7 @@ end function get_grid_type
 !> If not debugging, return_now is set to true if any istatues are non-zero
 !>  and any remaining zero istatues are set to 1.
 
-!> @todo FIXME: this should be in the utilities mod!!!
+!>@todo FIXME: this should be in the utilities mod!!!
 
 subroutine track_status(ens_size, val_istatus, val_data, istatus, return_now)
 
@@ -1541,7 +1541,7 @@ end subroutine deallocate_grid_space
 
 !------------------------------------------------------------------
 
-!> @todo FIXME: the following routines should be in a netcdf utils 
+!>@todo FIXME: the following routines should be in a netcdf utils 
 !> module somewhere
 
 !------------------------------------------------------------------
