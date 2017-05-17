@@ -1,43 +1,108 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! DART software - Copyright 2004 - 2011 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id$
 
 module model_mod
 
 !--------------------------------------------------------------------------------------------
 !                Assimilation interface for LMDZ  model
 !-------------------------------------------------------------------------------------------
+! This is the interface between the LMDZ atmospheric model and DART.
+! There are 16 required public interfaces whose arguments CANNOT be changed.
+! There are potentially many other public routines that are typically
+! used by the these 16 interfaces and other convertor routines. 
+!
+! Author: Tarkeshwar Singh
+!         PhD, IIT Delhi
+!         Email: tarkphysics87@gmail.com
+!
+! based on subroutines from others models especially CAM in the DART package
+! NOTE:  This interface codes do not convert LMDZ state vectors 'ucov', 'vcov' and 'teta' 
+!        in natural winds fields (u,v) and temperaure (t) . Hence it is required to convert
+!        them inside LMDZ before writting LMDZ restart file. Similarly
+!        conversion from (u,v,t) to (ucov,vcov,teta) is required outside of this
+!        program. For more details please see  LMDZ5_modified_codes/README 
+!
+!
+!---------------Variables and grid structure of start.nc ----------------------
+!               
+!
+!          (PS,T,Q,CLDLIQ)               (PS,T,Q,CLDLIQ)
+!               *--------------(U)--------------*
+!               !                               !
+!               !                               !
+!               !                               !
+!               !                               !
+!  rlatv------>(V)              *              (V)       
+! (~slat)       !          (rlonu,rlatv)        !       
+!               !                               !
+!               !                               !
+!               !                               !
+!  rlatu-__---->*-------------(U)---------------*
+!  (~lat)  (PS,T,Q,CLDLIQ)     ^          (PS,T,Q,CLDLIQ)
+!               ^              !
+!               !              !
+!               !              !
+!           rlonv (~lon)    rlonu (~slon)
+!
+! Following coorinate variables has been renamed
+! rlonv -> lon
+! rlonu -> slon  ! Staggered Grid
+! rlatu -> lat
+! rlatv -> slat  ! Staggered Grid
+!-------------------------------------------------------------------------------------
+! Variables  coordinate          
+! (PS,PHIS)(lon,lat)  ! (T,Q,CLDLIQ)(lon,lat,sigs),! U(slon,lat,sigs),! V(lon,slat,sigs)
+!--------------------------------------------------------------------------------------
+! PHIS  : Surface Geopotential 
+! PS    : Surface Pressure (Pa)
+! T     : Air Temparature  (K)
+! U     : Zonal Wind Comp  (m/s)
+! V     : Meridional Wind  (m/s)
+! Q     : Water Vapor Specific Humidity (kg/kg)
+! CLDLIQ: Cloud liq. water
+! 
+! State Vector has 6 variables in fixed order
+! State Vector = (/ PS, T, U , V , Q , CLDLIQ /) 
+!------------------------------------------------------------------
+!------------------------------------------------------------------
+! In start.nc lon~(-180,180), lat~(90,-90), level(bottom,top) but
+! for  DART  it has been converted to lon~(0,360), lat~(-90, 90), level(top, bottom)
+!----------------------------------------------------------------
+
+
+!----------------------------------------------------------------
 !---------------- m o d u l e   i n f o r m a t i o n --------------------------------------
 !-------------------------------------------------------------------------------------------
 
 
 use           netcdf
 use        types_mod, only : r8, MISSING_I,MISSING_R8,  gravity_const => gravity
-use time_manager_mod, only : time_type, set_time,set_date,get_date, set_calendar_type, operator(+)
+use time_manager_mod, only : time_type, set_time,set_date,get_date, set_calendar_type
 use    utilities_mod, only : register_module, error_handler, nc_check,                           &
                              E_ERR, E_MSG, nmlfileunit, do_output, do_nml_file, do_nml_term,     &
                              find_namelist_in_file, check_namelist_read,logfileunit,file_exist,  &
                              get_unit
 use mpi_utilities_mod, only : my_task_id, task_count
-
+!-------------------------------------------------------------------------
 use     location_mod,  only : location_type, get_location, set_location, query_location,         &
                               LocationDims, LocationName, LocationLName,horiz_dist_only,         &
                               vert_is_level, vert_is_pressure, vert_is_height,vert_is_surface,   &
                               VERTISUNDEF, VERTISSURFACE, VERTISLEVEL,                           &
-                              VERTISPRESSURE, VERTISHEIGHT,                                      &
+                              VERTISPRESSURE, VERTISHEIGHT,VERTISSCALEHEIGHT,                    &
                               get_close_type, get_close_maxdist_init, get_close_obs_init,        &
                               get_dist,loc_get_close_obs => get_close_obs
 
-
+! BEGIN DART PREPROCESS USED KINDS
 use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT,KIND_PRESSURE,         &
                              KIND_SURFACE_PRESSURE, KIND_TEMPERATURE,KIND_SPECIFIC_HUMIDITY,     &
                              KIND_CLOUD_LIQUID_WATER, KIND_SURFACE_ELEVATION
+use    random_nr_mod, only : init_ran1
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
 ! end of use statements
 !==============================================================================================
+!
 ! LMDZ global/module declarations
 
 implicit none
@@ -45,43 +110,29 @@ private
 
 ! The first block are the 16 required interfaces.  The following block
 ! are additional useful interfaces that utility programs can call.
-public :: static_init_model,      &
-          get_model_size,         &
-          get_model_time_step,    &
-          pert_model_state,       &
-          get_state_meta_data,    &
-          model_interpolate,      &
-          nc_write_model_atts,    &
-          nc_write_model_vars,    &
-          init_conditions,        &
-          init_time,              &
-          adv_1step,              &
-          end_model,              &
-          get_close_maxdist_init, &
-          get_close_obs_init,     &
-          get_close_obs,          &
-          ens_mean_for_model
+public ::                                                            &
+   static_init_model, get_model_size, get_model_time_step,           &
+   pert_model_state, get_state_meta_data, model_interpolate,         &
+   nc_write_model_atts, nc_write_model_vars,                         &
+   init_conditions, init_time, adv_1step, end_model,                 &
+   get_close_maxdist_init, get_close_obs_init, get_close_obs,        &
+   ens_mean_for_model
 
-public :: data_2d_type, &
-          data_3d_type, &
-          PS, T, U, V, Q, CLDLIQ, &
-          prog_var_to_vector, &
-          vector_to_prog_var, &
-          read_lmdz_init, &
-          read_lmdz_init_size, &
-          init_model_instance, &
-          end_model_instance, &
-          write_lmdz_init, &
-          coord_index
+public ::                                                            &
+   data_2d_type,data_3d_type,PS,T,U,V,Q,CLDLIQ, prog_var_to_vector,  &
+    vector_to_prog_var,  read_lmdz_init, read_lmdz_init_size,        &
+   init_model_instance, end_model_instance, write_lmdz_init, coord_index
+   
+
 
 !----------------------------------------------------------------------------
 !----------------------------------------------------------------------------
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len= 32), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=128), parameter :: &
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 
 ! Ensemble mean is used so that the same "state" will be used for the heigh calculations
 ! on all processors, for all ensemble members.
@@ -111,42 +162,7 @@ type(location_type), allocatable :: state_loc(:)
 ! temporary output
 integer :: num_calced = 0, num_searched = 0
 
-!---------------Variables and grid structure of start.nc ----------------------
-!               
-!
-!          (PS,T,Q,CLDLIQ)               (PS,T,Q,CLDLIQ)
-!               *--------------(U)--------------*
-!               !                               !
-!               !                               !
-!               !                               !
-!               !                               !
-!  rlatv------>(V)              *              (V)       
-! (~slat)       !          (rlonu,rlatv)        !       
-!               !                               !
-!               !                               !
-!               !                               !
-!  rlatu-__---->*-------------(U)---------------*
-!  (~lat)  (PS,T,Q,CLDLIQ)     ^          (PS,T,Q,CLDLIQ)
-!               ^              !
-!               !              !
-!               !              !
-!           rlonv (~lon)    rlonu (~slon)
-!---------------------------------------------------------------------------------            
-! (PS,PHIS)(lon,lat)  ! (T,Q,CLDLIQ)(lon,lat,sigs),! U(slon,lat,sigs),! V(lon,slat,sigs)
-!--------------------------------------------------------------------------------
-! PHIS  : Surface Geopotential 
-! PS    : Surface Pressure (Pa)
-! T     : Air Temparature  (K)
-! U     : Zonal Wind Comp  (m/s)
-! V     : Meridional Wind  (m/s)
-! Q     : Specific Humidity (kg/kg)   ??
-! CLDLIQ: Cloud liq. water
-!------------------------------------------------------------------
-!------------------------------------------------------------------
-! In start.nc lon~(-180,180), lat~(90,-90), level(bottom,top) but
-! for  DART  it has been converted to lon~(0,360), lat~(-90, 90), level(top, bottom)
-!----------------------------------------------------------------
-!----------------------------------------------------------------
+
 
 type grid_1D_type
     !private
@@ -196,6 +212,7 @@ logical :: module_initialized = .false.
 type(time_type) :: Time_step_atmos
 ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 ! Random sequence and init for pert_model_state
+logical                 :: first_pert_call = .true.
 type(random_seq_type)   :: random_seq
 ! Variable for keeping track of which ensemble member is to be perturbed
 ! by pert_model_state, which is called by filter for each ensemble member
@@ -206,7 +223,7 @@ integer                 :: ens_member = 0
 logical                 :: do_out
 
 ! common message string used by many subroutines
-character(len=512)               :: msgstring, string2
+character(len=150)               :: msgstring, string2
 !----
 character (len=8), allocatable   :: cflds(:)
 integer                          :: nflds         ! # fields to read
@@ -259,7 +276,7 @@ character(len=32) :: impact_only_same_kind = ' '
 integer           :: impact_kind_index = -1
 
 logical :: print_details = .false.
-logical :: write_grads   = .false.
+logical :: write_grads   = .true.
 
 
 ! output_state_vector = .true.     results in a "state-vector" netCDF file
@@ -276,14 +293,12 @@ real(r8)         ,dimension(MAX_STATE_NAMES) :: pert_sd    = (/(-888888.0d0,ii=1
 real(r8)         ,dimension(MAX_STATE_NAMES) :: pert_base_vals = (/(-888888.0d0,ii=1,MAX_STATE_NAMES)/)
 
 ! Specify shortest time step that the model will support
-! This is limited below by CAMs fixed time step but is also impacted
-! by numerical stability concerns for repeated restarting in leapfrog.
 integer  :: time_step_days      = 1
 integer  :: time_step_seconds   = 0
 
-
 ! Define location restrictions on which observations are assimilated
 ! (values are calculated anyway, but istatus is set to 2)
+character(len = 8) :: vert_coord = 'pressure'            ! or 'log_invP'
 real(r8) :: max_obs_lat_degree        = 90.0_r8
 real(r8) :: highest_obs_pressure_mb   = 150.0_r8
 real(r8) :: highest_state_pressure_mb = 150.0_r8
@@ -294,11 +309,28 @@ integer  :: exclude_pert_upper_levs = 1
 ! highest_obs_pressure_mb
 real(r8) :: highest_obs_level         = MISSING_R8
 real(r8) :: highest_obs_height_m      = MISSING_R8
+! Better damping
+! Variables to deal with LMDZ's damping of the top levels of the model.
+! These are set in static_init_model and used in get_close_obs.
+real(r8)            :: highest_state_scale_h  = MISSING_R8
+real(r8)            :: model_top              = MISSING_R8
+real(r8)            :: model_reff             = MISSING_R8
+real(r8)            :: damp_wght              = MISSING_R8
+type(location_type) :: highest_state_loc, model_top_loc
+
+!-----------------------------------------------------------------------
+
+
 !---- end of namelist (found in file input.nml) ----
+
+
+
+
 
 namelist /model_nml/ output_state_vector, model_config_file,time_step_seconds, time_step_days, write_grads, &
                      impact_only_same_kind, print_details, max_obs_lat_degree, highest_obs_pressure_mb,     &
-                      highest_state_pressure_mb, pert_names,pert_sd,pert_base_vals, exclude_pert_upper_levs    
+                      highest_state_pressure_mb, pert_names,pert_sd,pert_base_vals, exclude_pert_upper_levs,&
+                      vert_coord    
 
 
 contains
@@ -337,7 +369,7 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, "model_nml")
 
 ! set the printed output logical variable to reduce printed output;
-! depends on whether this is being called by dart_to_cam (read ens member # from
+! depends on whether this is being called by dart_to_lmdz (read ens member # from
 ! file 'element' )  or by filter (multiple processes, printout controlled by do_output())
 
 if (file_exist('element')) then
@@ -406,8 +438,44 @@ call change_lon_lat_lev_to_dart()
 allocate(apm%vals(sigs%length))
 allocate(bpm%vals(sigs%length))
 call hybrid_coefi_mid_layer(apm, bpm, sig%length)
-!-----------------------------------------------------------------------
 
+!------------------------------------------------------------------------
+! Better damping algorithm for state variables near/in the LMDZ damped levels
+! at the top of the model.  
+if (vert_coord == 'pressure') then
+   !FIXME LMDZ's model_top is 1/2 level below the highest level, so
+   ! apm instead of ap ???.
+   !model_top   = apm%vals(1)  ! 
+   model_top   = ap%vals(1)  ! 
+   model_reff  = 101325.0_r8  !! surface refrence pressure in LMDZ
+
+   ! The (lon,lat) here must match the ones in the definition of vert_only_loc
+   ! in get_close_obs.
+   highest_state_loc = set_location(1.0_r8,1.0_r8,highest_state_pressure_mb*100.0_r8,VERTISPRESSURE)
+   model_top_loc     = set_location(1.0_r8,1.0_r8,model_top, VERTISPRESSURE)
+
+   ! damp_wght must be in the same units (dist = radians) as the distances in get_close_obs.
+   if (highest_state_pressure_mb*100.0_r8 /= model_top) then
+      damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)
+   end if
+
+else if (vert_coord == 'log_invP') then
+
+    highest_state_scale_h = scale_height(p_surface=model_reff, p_above=highest_state_pressure_mb*100.0_r8)
+    !model_top             = scale_height(p_surface=model_reff, p_above=apm%vals(1))
+    model_top             = scale_height(p_surface=model_reff, p_above=ap%vals(1))
+    highest_state_loc = set_location(1.0_r8,1.0_r8,highest_state_scale_h,VERTISSCALEHEIGHT)
+    model_top_loc     = set_location(1.0_r8,1.0_r8,model_top, VERTISSCALEHEIGHT)
+
+   if (highest_state_scale_h /= model_top) then
+      damp_wght = 1.0_r8/get_dist(highest_state_loc,model_top_loc,no_vert=.false.)
+   end if
+else
+   write(msgstring, *) 'Somehow vert_coord /= {pressure,log_invP}: ', vert_coord
+   call error_handler(E_ERR,'static_init_model',msgstring,source,revision,revdate)
+end if
+
+!------------------------------------------------------------------------
 !----
 max_levs = sig%length  !(sig%length = sigs%length + 1)
 
@@ -431,7 +499,7 @@ call nc_read_model_atts_3d( ncfileid ,'title', CLDLIQ  , 'H2Ol    ')
 
 topog_lats= lat%length
 topog_lons= lon%length
-allocate(PHIS%vals (topog_lons, topog_lats))
+allocate(phis%vals (topog_lons, topog_lats))
 
 
 allocate (p_col(max_levs), model_h(max_levs))
@@ -822,16 +890,15 @@ end function get_model_size
 
 ! Initialize the storage space and return
 ! keep some others name of variabls
+    type(data_2D_type), intent(in) :: PS_local
+    type(data_3D_type), intent(in) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
-    type(data_2D_type), intent(out) :: PS_local
-    type(data_3D_type), intent(out) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
-
-    allocate(    PS_local%vals( lon%length, lat%length))
-    allocate(     T_local%vals( lon%length, lat%length, sigs%length))
-    allocate(     U_local%vals(slon%length, lat%length, sigs%length))
-    allocate(     V_local%vals( lon%length,slat%length, sigs%length))
-    allocate(     Q_local%vals( lon%length, lat%length, sigs%length))
-    allocate(CLDLIQ_local%vals( lon%length, lat%length, sigs%length))
+    allocate(PS_local%vals(lon%length,lat%length))
+    allocate(T_local%vals(lon%length,lat%length,sigs%length))
+    allocate(U_local%vals(slon%length,lat%length,sigs%length))
+    allocate(V_local%vals(lon%length,slat%length,sigs%length))
+    allocate(Q_local%vals(lon%length,lat%length,sigs%length))
+    allocate(CLDLIQ_local%vals(lon%length,lat%length,sigs%length))
 
 end subroutine init_model_instance
 
@@ -842,8 +909,8 @@ end subroutine init_model_instance
 
 ! Initialize the storage space and return
 ! keep some others name of variables
-    type(data_2D_type), intent(inout) :: PS_local
-    type(data_3D_type), intent(inout) ::  U_local,V_local,T_local,Q_local,CLDLIQ_local
+    type(data_2D_type), intent(in) :: PS_local
+    type(data_3D_type), intent(in) ::  U_local,V_local,T_local,Q_local,CLDLIQ_local
 
     deallocate(PS_local%vals)
     deallocate(U_local%vals)
@@ -868,7 +935,7 @@ integer :: ncfileid, ncfldid, dimid, varid, dimlen
 integer(kind=4),save :: iyear, ayear, imonth, iday, ihour, imin, isec, rem
 integer, allocatable, dimension(:) :: datetmp, datesec
 
-integer :: i, j
+integer :: i, j, k
 real(r8) , allocatable ::  tmp_2d(:,:), tmp_3d(:,:,:)
 
 !----------------------------------------------------------------------
@@ -899,6 +966,18 @@ call nc_check(nf90_inq_varid(ncfileid,'H2Ov', ncfldid), &
 call nc_check(nf90_get_var(ncfileid, ncfldid, Q%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
                            'read_lmdz_init', 'get_var '//trim('H2Ov'))
+!! start.nc has mixing ratio. It has been replaced  to specific humidity.
+!  allocate( tmp_3d (lon%length, lat%length, sigs%length ))
+!   do i=1,lon%length
+!    do j=1,lat%length
+!     do k=1,sigs%length
+!       tmp_3d(i, j, k)  = Q%vals(i, j, k) / (1 + Q%vals(i, j, k))
+!     end do
+!    end do
+!   end do
+! Q%vals = tmp_3d
+! deallocate(tmp_3d)
+ 
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,Q%vals)
 
 !-----CLDLIQ--
@@ -930,6 +1009,12 @@ call convert_grid_3d_data_to_dart(lon%length,slat%length,sigs%length,botm_positi
 call nc_check(nf90_close(ncfileid), 'read_lmdz_init', 'closing '//trim(file_name))
 
 
+if(write_grads)then
+ call write_state_vectori_grads(lon%length-1,lat%length-1, sigs%length,lon%vals,lat%vals,  &
+             PHIS%vals,U%vals, V%vals,T%vals,Q%vals, PS%vals)
+endif
+
+
 ! Read the time of the current state.
 ! extarct date information from  time unit atrribute 
 !e.g temps:unit='days since 2009-05-13 00:00:00' 
@@ -944,20 +1029,14 @@ if (present( model_time)) then
  read(temps%atts_vals(2)(29:30),'(I2)') isec
 
  !temps%vals is fraction of day for 6 hourly run its value is {0,.25,0.5,.75,1}
+ 
+ ihour         = ihour + INT((24.0_r8*temps%vals(1)))
+ 
+ PRINT*,"********************************************************"
+ PRINT*,'MODEL RESTART Timeeee',iyear,imonth,iday,ihour,imin,isec
+ PRINT*,"********************************************************"
 
  model_time = set_date(iyear,imonth,iday,ihour,imin,isec)
- 
- PRINT*,"*********************************************************"
- PRINT*,'MODEL RESTART BaseTime',iyear,imonth,iday,ihour,imin,isec
- PRINT*,"*********************************************************"
-
- ! the time is in days - multiply by 86400 to get total seconds
- model_time = model_time + set_time(int(24 * 60 * 60 * temps%vals(1)))
- call get_date(model_time, iyear,imonth,iday,ihour,imin,isec)
-
- PRINT*,"*********************************************************"
- PRINT*,'MODEL RESTART Time    ',iyear,imonth,iday,ihour,imin,isec
- PRINT*,"*********************************************************"
 
 end if
 
@@ -2397,10 +2476,9 @@ end if
 ! for all previous obs, and we want to use the most up to date state to get the  best location.
 call model_heights(vec, p_surf, lon_index, lat_index, num_levs, stagr_lon, stagr_lat, &
                    model_h, vstatus)
-
 !print*,model_h
 ! debug
- write(logfileunit,'(A,6F7.0,/(10F7.0))') 'heights = ',(model_h(i),i=1,num_levs)
+! write(logfileunit,'(A,6F7.0,/(10F7.0))') 'heights = ',(model_h(i),i=1,num_levs)
 
 ! Interpolate in vertical to get two bounding levels
 if (height >= model_h(1) .or. height <= model_h(num_levs)) then
@@ -2477,10 +2555,9 @@ end subroutine get_val_height
    subroutine convert_vert (old_array, old_which, new_array, new_which, dart_kind)
 !=======================================================================
 ! subroutine convert_vert(old_loc, new_loc, dart_kind)
-!
 ! Uses model information and subroutines to convert the vertical location of an  ob 
 ! (prior, model state variable, or actual ob) into the standard vertical
-! coordinate (pressure).
+! coordinate (pressure or log_invP = log(P0/ps)).
 ! Called by model_mod:get_close_obs.
 !-----Code history
 ! Kevin Raeder 10/26/2006 for CAM
@@ -2511,7 +2588,7 @@ new_which       = MISSING_I
 
 if (old_which == VERTISPRESSURE .or. old_which == VERTISHEIGHT  .or. &
     old_which == VERTISLEVEL    .or. old_which == VERTISSURFACE .or. &
-    old_which == VERTISUNDEF   ) then
+    old_which == VERTISUNDEF    .or. old_which == VERTISSCALEHEIGHT ) then
    !  proceed
 else
    ! make this a fatal error - there should be no other options for vert.
@@ -2527,7 +2604,7 @@ if (dart_kind > 0) then
    lmdz_kind = dart_to_lmdz_kinds(dart_kind)
 else if (dart_kind < 0) then
    ! identity obs; dart_kind = -1*state_vector_index
-   ! Value returned in cam_kind will be the nfld value of this field, not the
+   ! Value returned in lmdz_kind will be the nfld value of this field, not the
    ! usual dart_kind.
    call get_state_meta_data(dart_kind, dum_loc, lmdz_kind)
 end if
@@ -2562,7 +2639,7 @@ end if
 !   interpolation of the 
 !      surrounding 4 columns).  
 
-! Convert vertical coordinate from one of the following to pressure.
+! Convert vertical coordinate from one of the following to pressure or log_invP
 ! integer, parameter :: VERTISUNDEF    = -2 ! has no vertical location
 ! (undefined)
 ! integer, parameter :: VERTISSURFACE  = -1 ! surface value
@@ -2575,15 +2652,41 @@ if (old_which == VERTISUNDEF) then
    new_which    = old_which
 
 elseif (old_which == VERTISSURFACE ) then
-   ! surface field; change which_vert for the distance calculation
-   new_array(3) =  p_surf
-   new_which    = 2
+
+   if (vert_coord == 'pressure') then
+      new_array(3) =  p_surf
+      new_which = VERTISPRESSURE
+   else if (vert_coord == 'log_invP') then
+    ! Scale height at the surface is 0.0_r8 by definition [log(p_surf/p_surf)]
+      new_array(3) = 0.0_r8
+      new_which = VERTISSCALEHEIGHT
+   end if
+
+elseif (old_which == VERTISPRESSURE) then
+   if (vert_coord == 'log_invP') then
+      new_array(3) = scale_height(p_surface=p_surf, p_above=old_array(3))
+      new_which = VERTISSCALEHEIGHT
+   end if
+
+else if (old_which == VERTISSCALEHEIGHT) then
+   if (vert_coord == 'pressure') then
+      new_array(3) = p_surf / exp(old_array(3))
+      new_which = VERTISPRESSURE
+   end if
+
 
 elseif (old_which == VERTISLEVEL ) then
    num_levs = sigs%length
    call plevs_lmdz(p_surf, num_levs, p_col)
-   new_array(3) = p_col(nint(old_array(3)))
-   new_which    = 2
+
+   if (vert_coord == 'pressure') then
+      new_array(3) =            p_col(nint(old_array(3)))
+      new_which = VERTISPRESSURE
+   else if (vert_coord == 'log_invP') then
+      new_array(3) = scale_height(p_surface=p_surf, p_above=p_col(nint(old_array(3))))
+      new_which = VERTISSCALEHEIGHT
+   end if
+
 
 elseif (old_which == VERTISHEIGHT) then
 
@@ -2606,8 +2709,8 @@ elseif (old_which == VERTISHEIGHT) then
    if (top_lev == 1 .and. old_array(3) > model_h(1)) then
       ! above top of model
       frac = 1.0_r8
-      write(msgstring, *) 'ob height ',old_array(2),' above LMDZ levels at '  &
-                          ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
+      !write(msgstring, *) 'ob height ',old_array(2),' above LMDZ levels at '  &
+      !                    ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
       call error_handler(E_MSG, 'convert_vert', msgstring,source,revision,revdate)
 
 
@@ -2617,14 +2720,20 @@ elseif (old_which == VERTISHEIGHT) then
    else
       ! below bottom of model
       frac = 0.0_r8
-      write(msgstring, *) 'ob height ',old_array(3),' below LMDZ levels at ' &
-                          ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
+      !write(msgstring, *) 'ob height ',old_array(3),' below LMDZ levels at ' &
+      !                    ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
       call error_handler(E_MSG, 'convert_vert', msgstring,source,revision,revdate)
    endif
 
 
    new_array(3) = (1.0_r8 - frac) * p_col(bot_lev) + frac * p_col(top_lev)
-   new_which    = 2
+
+   if (vert_coord == 'pressure') then
+      new_which = VERTISPRESSURE
+   else if (vert_coord == 'log_invP') then
+      new_array(3) = scale_height(p_surface=p_surf, p_above=new_array(3))
+      new_which = VERTISSCALEHEIGHT
+   end if
 
 else
    write(msgstring, *) 'model which_vert = ',old_which,' not handled in convert_vert '
@@ -2635,32 +2744,33 @@ return
 
   end subroutine convert_vert
 
+!======================================================================================
+
    subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                             num_close, close_ind, dist)
 !----------------------------------------------------------------------------
+! get_close_obs takes as input an "observation" location, a DART TYPE (not
+! KIND),
+! and a list of all potentially close locations and KINDS on this task.
+!
+! get_close_obs
+!    *) converts vertical coordinates as needed to vert_coord,
+!    *) calls location_mod/threed_sphere:get_close_obs,
+!       to which it sends this (converted) array of locations,
+!    *) gets back the distances and indices of those locations that are
+!       "close" to the base observation.
+!    *) tests for being above the highest_obs_pressure_Pa threshold,
+!       and increases the vertical distance based on height above highest_*.
+!
+! get_close_obs will use the ensemble average to convert the obs and/or state
+!               vertical location(s) to a standard (vert_coord) vertical
+!               location
 
-! get_close_obs will be getting an ob, with its location, and its horizontal
-! distances  to an array of other locations (and the locations).
-!  These locations were picked out based on the efficient search/box algorithm.
-!    It converts vertical coordinates as needed, 
-!    It tests for being above the highest_obs_pressure_mb threshold, and
-!    increases the vertical distance based on height above highest_.
-!    It calls location_mod/threed_sphere:get_close_obs, 
-!       to which it sends this (converted) array of locations.
-!    It gets back the new total distances and arrays of those locations that are
-!    "close" to the base ob.
-!    get_close_obs will use the ensemble average passed through new interface;
-!    ens_mean_for_model  Convert the obs and/or state vertical location(s) to a standard (pressure)
-!    vertical location   3D model_h would be useful here; calc once and use over and over.
-!       reinstall height/lon slice code for model_heights to facilitate that
-!    3D pressures also useful here; 
-!       reinstall height/lon slice code for plevs_lmdz to facilitate that
-!    throw away ens_mean after it's been used (or don't worry about it for now).
-! 
-! The kinds are available to do more sophisticated distance computations if
-! needed
+!FIXME : This routine is for kodiak version but latest version may differ.
+!e.g. latest version has base_obs_type instead of base_obs_kind hence
+!need to use base_obs_kind = get_obs_kind_var_type(base_obs_type) in latest
+!version. see CAM model_mod.f90
 
-implicit none
 
 type(get_close_type), intent(in)  :: gc
 type(location_type),  intent(in)  :: base_obs_loc, obs_loc(:)
@@ -2670,18 +2780,16 @@ real(r8),             intent(out) :: dist(:)
 integer                :: k, t_ind
 integer                :: base_which, local_base_which, obs_which,local_obs_which
 real(r8), dimension(3) :: base_array, local_base_array, obs_array, local_obs_array
-real(r8)               :: increment, threshold, thresh_wght
-type(location_type)    :: local_base_obs_loc, local_obs_loc
+real(r8)               :: damping_dist, increment, threshold, thresh_wght
+type(location_type)    :: local_base_obs_loc, local_obs_loc,vert_only_loc
 
 !If base_obs vert type is not pressure; convert it to pressure
 
-   base_array = get_location(base_obs_loc)
+ base_array = get_location(base_obs_loc)
+ ! query_location returns location%which_vert, if no 'attr' argument is given.
+ base_which = nint(query_location(base_obs_loc))
 
-
-base_which = nint(query_location(base_obs_loc))
-
-
-if (base_which == VERTISPRESSURE) then
+if (base_which == VERTISPRESSURE .and. vert_coord == 'pressure') then
    local_base_obs_loc = base_obs_loc
    local_base_array   = get_location(base_obs_loc)  ! needed in num_close loop
    local_base_which   = base_which
@@ -2708,8 +2816,8 @@ end if
 call loc_get_close_obs(gc, local_base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
                        num_close, close_ind)
 
-threshold = highest_state_pressure_mb *100._r8
-if (threshold > 0.0_r8) thresh_wght = 1._r8/(threshold * threshold)
+!threshold = highest_state_pressure_mb *100._r8
+!if (threshold > 0.0_r8) thresh_wght = 1._r8/(threshold * threshold)
 
 
 do k = 1, num_close
@@ -2717,8 +2825,9 @@ do k = 1, num_close
    t_ind = close_ind(k)
    obs_array = get_location(obs_loc(t_ind))
    obs_which = nint(query_location(obs_loc(t_ind)))
-   
-   if (obs_which == VERTISPRESSURE ) then
+
+   if ((obs_which == VERTISPRESSURE    .and. vert_coord == 'pressure') .or. &
+       (obs_which == VERTISSCALEHEIGHT .and. vert_coord == 'log_invP')) then  
       ! put the vertical (pressure) of the state/ob in local storage
       local_obs_array(3) = obs_array(3)
       local_obs_which    = obs_which
@@ -2739,9 +2848,9 @@ do k = 1, num_close
       end if
    end if
 
-   local_obs_loc = set_location(obs_array(1), obs_array(2), local_obs_array(3), &
+    local_obs_loc = set_location(obs_array(1), obs_array(2), local_obs_array(3), &
                                    local_obs_which)
-!  nsc fri, 13mar09
+
 !  allow a namelist specified kind string to restrict the impact of those
 !  obs kinds to only other obs and state vars of the same kind.
    if ((impact_kind_index >= 0)                .and. &
@@ -2758,26 +2867,49 @@ do k = 1, num_close
       !   even if ob has which_vert = VERTISUNDEF.
       !   I think that testing on local_base_which will do that.
    else
+      ! Need to damp the influence   on model state vars
+      ! above highest_state_pressure_mb.
+      ! The which vert of local_base_obs_loc determines how vertical distance to
+      ! local_loc is calculated.  It can be VERTISSCALEHEIGHT.
+
 
       dist(k) = get_dist(local_base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
-      ! Damp the influence of obs (below the namelist variable
-      ! highest_obs_pressure_mb) 
+      ! Damp the influence of obs (below the namelist variable highest_obs_pressure_mb) 
       ! on variables above highest_state_pressure_mb.  
       ! This section could also change the distance based on the KIND_s of the
       ! base_obs and obs.
-
       ! dist = 0 for some for synthetic obs.
-      ! Additive increase, based on height above threshold, works better than
-      ! multiplicative
 
-      ! See model_mod circa 1/1/2007 for other damping algorithms.
+      ! Better damping
+      ! Should be units of distance (radians), so normalize the distance added
+      ! to the existing dist(k),
+      ! below, by the vert_normalization_{pressure,scale_height}.
+      ! Vert_norm is not public, so call get_dist with 2 locations having the
+      ! same horiz location, but different verticals, and the appropriate which_vert.
+      if ((vert_coord == 'pressure' .and. (local_obs_array(3) < highest_state_pressure_mb*100.0_r8)) .or. &
+          (vert_coord == 'log_invP' .and. (local_obs_array(3) > highest_state_scale_h))    ) then
+         ! The (lon,lat) here (1.0_r8,1.0_r8) must match the definition of highest_state_loc in
+         ! static_init_mod.
+         ! local_obs_which should be consistent with local_base_obs_which, (and  vert_coord).
 
-      increment = threshold - local_obs_array(3)
-      ! This if-test handles the case where no damping is performed, i.e. 
-      ! highest_state_pressure_mb = 0 and threshold = 0.
-      if (increment > 0) then
-          dist(k) = dist(k) + increment * increment * thresh_wght
-      ! too sharp      dist(k) = dist(k) + increment / threshold
+         vert_only_loc = set_location(1.0_r8,1.0_r8,local_obs_array(3),local_obs_which)
+
+         ! This gets the vertical distance (> 0) only, and uses the appropriate 
+         ! vert_normalization to convert from pressure or scale_height to
+         ! radians.
+         ! This gets the vertical distance (> 0) only, and uses the  appropriate 
+         ! vert_normalization to convert from pressure or scale_height to radians.
+
+         damping_dist = get_dist(highest_state_loc,vert_only_loc,no_vert=.false.)
+
+         ! This (new) added distance varies smoothly from 0 at  highest_state_pressure_mb 
+         !to > 2*cutoff*vert_normalization at the levels where CAM has extra  damping 
+         ! (assuming that highest_state_pressure_mb has been chosen low enough).
+         ! If damping_dist is <= 0 then no damping is required.
+ 
+         !dist(k) = dist(k) + damping_dist * damping_dist * damp_wght 
+         dist(k) = dist(k) + damping_dist * damping_dist * damp_wght*damp_wght 
+         !dist(k) = dist(k) + damping_dist * damp_wght 
       end if
    endif
 
@@ -2850,7 +2982,8 @@ lon_lat_lev = get_location(location)
 ! but can be calculated for LMDZ, so obs_type = KIND_PRESSURE is acceptable.
 lmdz_type = dart_to_lmdz_kinds(obs_type)
 
-if (lmdz_type == MISSING_I .and.(obs_type .ne. KIND_PRESSURE) ) then
+if (lmdz_type == MISSING_I .and.(obs_type .ne. KIND_PRESSURE)  &
+                     .and.  (obs_type .ne. KIND_SURFACE_ELEVATION)) then
    istatus = 3
 ! should be MISSING_R8 ?
    interp_val = MISSING_R8
@@ -2870,11 +3003,15 @@ lat_name = 'lat     '
 !   Can't do it automatically/generically because they're not part of state
 !   vector and that info isn't coming from DART.
 
-if (obs_type .eq. KIND_PRESSURE) then
+if (obs_type .eq. KIND_SURFACE_ELEVATION) then
+   lev_name = 'none    '
+elseif (obs_type .eq. KIND_PRESSURE) then
    lev_name = 'lev     '
 endif
 
-if (lmdz_type == MISSING_I .and. (obs_type .eq. KIND_PRESSURE) ) then
+
+if (lmdz_type == MISSING_I .and. (obs_type .eq. KIND_PRESSURE) &
+        .or.  (obs_type .eq. KIND_SURFACE_ELEVATION)) then
    ! use defaults lon_name and lat_name set above
 
 elseif(lmdz_type==TYPE_PS)then
@@ -2988,7 +3125,18 @@ end if
 ! Now, need to find the values for the four corners
 ! determine the vertical coordinate: model level, pressure, or height
 
-if (vert_is_level(location)) then
+
+if (obs_type == KIND_SURFACE_ELEVATION) then
+   ! Acceptable KIND that's not in the state vector
+   ! convert from geopotential height to real height in meters
+
+   vals(1,1) = phis%vals(lon_ind_below, lat_ind_below) / gravity_const
+   vals(1,2) = phis%vals(lon_ind_below, lat_ind_above) / gravity_const
+   vals(2,1) = phis%vals(lon_ind_above, lat_ind_below) / gravity_const
+   vals(2,2) = phis%vals(lon_ind_above, lat_ind_above) / gravity_const
+
+
+elseif (vert_is_level(location)) then
  ! Case 1: model level specified in vertical
  ! Pobs
  level = lon_lat_lev(3)
@@ -3065,7 +3213,7 @@ else
    interp_val = MISSING_R8
 end if
 
-!!PRINT*,'*****************************************************************'
+!PRINT*,'*****************************************************************'
 !PRINT*,'LEV,obs_type,lmdz_type',obs_type,lmdz_type
 !PRINT*,'BOX around Given location lon1,lon2',lon_ind_below ,lon_ind_above 
 !PRINT*,'BOX around Given location lon1,lon2',lon_below ,lon_above 
@@ -3107,7 +3255,6 @@ type(data_2d_type)      :: PS_temp
 integer                 :: i, j, k, m, pert_fld, mode, field_num
 integer                 :: dim1, dim2, dim3, member
 real(r8)                :: pert_val
-integer, save           :: seed = -1
 
 ! perturb model parameters for the filter_ics.
 ! Use the (single) state value as the "ens_mean" here.
@@ -3117,12 +3264,35 @@ interf_provided = .true.
 call init_model_instance(PS_temp,T_temp,U_temp,V_temp,Q_temp,CLDLIQ_temp)
 call vector_to_prog_var(state,PS_temp,T_temp,U_temp,V_temp,Q_temp,CLDLIQ_temp)
 
-! seed the random number generator differently on each task, and if one task
-! has more than one ensemble member, make sure the seed next time through is
-! a different value.  note that seed has the 'save' attribute so it maintains
-! the value from the last time this routine was called.
-call init_random_seq(random_seq, seed * (my_task_id()+1))
-seed = seed - 1000
+
+! If first call, then initialize random sequence for perturbations.
+! init_random_seq only needed for documentation; initializing the module.
+
+if (first_pert_call) then
+   call init_random_seq(random_seq)
+   first_pert_call = .false.
+end if
+
+! init_random_seq calls init_ran1, but I need to call init_ran1 with a different
+! seed/temp for each ens_member.  Get a new seed by keeping track of the previous seed.
+
+! init_ran1 wants negative seeds for some reason.  The algorithm subtracts seed from some
+!           large number, divides by a smaller number, and uses the remainder
+!           for other calcs. The rest of DART also increments by -1, so I'll trust that this
+!           gives a different random sequence for each seed.
+
+if (ens_member == 0) then
+   ! Change ens_member from 0 for first time pert_model_state is called for by a
+   ! process.
+   ens_member = my_task + 1
+else
+   ! Subsequent calls from the same process need unique ensemble member #s.
+   ! Adding num_tasks to the previous value should yield the right total set of
+   ! ens_members.
+   ens_member = ens_member + num_tasks
+endif
+
+call init_ran1(random_seq,-1*ens_member)
 
 print*,nflds,cflds
 
@@ -3447,11 +3617,11 @@ type(data_2d_type),  intent(inout)        :: PS_local
 type(data_3D_type),  intent(inout)        :: T_local,U_local,V_local,Q_local,CLDLIQ_local
 type(time_type),     intent(in), optional :: model_time
 
-integer               :: i, k, n, m, ifld, ncfileid, ncfldid, dim1, dim2, dim3
+integer               :: i, j, k, n, m, ifld, ncfileid, ncfldid, dim1, dim2, dim3
 integer               :: iyear, imonth, iday, ihour, imin, isec
 integer               :: dimid, dimlen, varid
 integer, allocatable, dimension(:) :: datetmp, datesec
-real(r8), allocatable :: temp_3d(:,:,:), temp_2d(:,:)
+real(r8), allocatable :: tmp_3d(:,:,:), tmp_2d(:,:)
 !character*30 unites
 character(len=30) unites
 integer status
@@ -3542,7 +3712,20 @@ PS_local%vals(1,:) = PS_local%vals(dim1,:) !periodicity
    call nc_check(nf90_put_var(ncfileid, ncfldid                          &
               ,V_local%vals(1:dim1, 1:dim2, 1:dim3) ,start=(/1,1,1,1/) , &
     count=(/dim1, dim2, dim3, 1/) ), 'write_lmdz_init', 'put_var '//trim(cflds(ifld)))
+
 !--------Q----
+!! Convert back specific humidity to  mixing ratio. It has been replaced  to specific humidity.
+!  allocate( tmp_3d (lon%length, lat%length, sigs%length ))
+!   do i=1,lon%length
+!    do j=1,lat%length
+!     do k=1,sigs%length
+!       tmp_3d(i, j, k)  = Q_local%vals(i, j, k) / (1 - Q_local%vals(i, j, k))
+!     end do
+!    end do
+!   end do
+!  Q_local%vals = tmp_3d
+!  deallocate(tmp_3d)
+
    ifld = 5
    dim1 = lon%length
    dim2 = lat%length
@@ -4393,15 +4576,175 @@ end subroutine rad_to_degree
  
 end subroutine degree_to_rad
 
+!======================================================
 
-!===================================================================
-! End of model_mod
-!===================================================================
-end module model_mod
+subroutine write_state_vectori_grads(iim,jjm,llm,lon,lat,phis,U,V,T,Q,PS)
+!! Write state vector for plotting in grads 
+!! .ctl and .dat file will be written
+!****************************************************************
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+ implicit none
+ integer,   intent(in) :: iim,jjm,llm
+ real(r8) , intent(in) :: U(iim+1,jjm+1,llm),V(iim+1,jjm,llm),T(iim+1,jjm+1,llm)
+ real(r8) , intent(in) :: Q(iim+1,jjm+1,llm)
+ real(r8) , intent(in) :: PS(iim+1,jjm+1),lon(iim+1),lat(jjm+1),phis(iim+1,jjm+1)
 
+ real(r8) :: v_ave(iim+1,jjm+1,llm)
+ real(r8) plev(llm), pi
+ integer irec,isor,nout
+ data nout/90/
+ integer  :: i,j,l,ij
+
+ pi = 4.0_r8 * atan( 1.0_r8)
+
+ OPEN (nout+1,FILE='start.dat', FORM='UNFORMATTED', ACCESS='DIRECT', RECL=4*(iim+1)*(jjm+1))
+          irec=1
+          isor=0
+
+   do l=1,llm
+      plev(l)=float(L)
+   enddo
+
+
+  do l=1,llm
+
+     do j=1,jjm-1
+      do i=1,iim
+       v_ave(i,j+1,L)=0.25*(V(i,j,l)+V(i+1,j,l)+ V(i,j,l)+V(i,j+1,l))
+      enddo
+     enddo
+
+     do i=1,iim
+       v_ave(i,jjm+1,l)=(V(i,jjm,l)+V(i+1,jjm,l))*0.5
+       v_ave(i,1,l)=(V(i,1,l)+V(i+1,1,l))*0.5
+     enddo
+
+       v_ave(iim+1,jjm+1,l)=v_ave(1,jjm+1,l)
+       v_ave(iim+1,1,l)=v_ave(1,1,l)
+  enddo
+
+       write(nout+1,rec=irec) ((real(PS(i,j),4),i=1,iim+1),j=1,jjm+1)
+       irec=irec+1
+
+       do l=1,llm
+         write(nout+1,rec=irec) ((real(U(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+         irec=irec+1
+       enddo
+       do L=1,LLM
+         write(nout+1,rec=irec) ((real(v_ave(i,j,L),4),i=1,iim+1),j=1,jjm+1)
+         irec=irec+1
+       enddo
+       do l=1,llm
+         write(nout+1,rec=irec) ((real(T(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+         irec=irec+1
+       enddo
+
+       do l=1,llm
+         write(nout+1,rec=irec) ((real(Q(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+         irec=irec+1
+       enddo
+
+      open(nout,file='start.ctl',form='formatted',status='unknown')
+      write(nout,*) 'DSET start.dat'
+!      write(nout,'(a4,2x,a20)') 'DSET','h.dat'
+      write(nout,'(a5,2x,a20)') 'UNDEF ','1.0E30'
+      !write(nout,'(a11)') 'FORMAT YREV'
+      write(nout,'(a11)') 'FORMAT ZREV'
+      write(nout,'(a5,2x,a20)') 'TITLE ','state vector start.nc'
+      call formcoord(nout,iim+1-1/iim,lon,1._r8,.false.,'XDEF')
+      !call formcoord(nout,jjm+1,lat,1._r8,.true.,'YDEF')
+      call formcoord(nout,jjm+1,lat,1._r8,.false.,'YDEF')
+!     call formcoord(nout,llm,presnivs,1.,.false.,'ZDEF')
+      call formcoord(nout,llm,plev,1.0_r8,.false.,'ZDEF')
+      write(nout,'(a5,i4,a30)') 'TDEF ',isor,' LINEAR 02JAN1987 1MO '
+      write(nout,'(a6)') 'VARS 5'
+      write(nout,1000) 'PS      ',0,  99,'surface pressure Pa'
+      write(nout,1000) 'U       ',llm,  99,'U-component wind'
+      write(nout,1000) 'V       ',llm,  99,'V-component WInd'
+      write(nout,1000) 'T       ',llm,  99,'temperature DegK'
+      write(nout,1000) 'Q       ',llm,  99,'mixing ratio (kg/kg)'
+      write(nout,'(a7)') 'ENDVARS'
+      close(nout)
+
+1000  format(a9,i4,i3,1x,a39)
+
+end subroutine write_state_vectori_grads 
+
+!!+++++
+
+ subroutine formcoord(unit,n,x,a,rev,text)
+! Form coordinate dicription for .ctl file
+! called by write_state_vectori_grads subroutine
+
+!****************************************************************
+ implicit none
+ integer    :: n,unit,ndec
+ logical    ::  rev
+ real(r8)   ::  x(n),a
+ character*4::  text
+
+ integer    ::  i,id,i1,i2,in
+ real(r8)   ::  dx,dxmin, pi
+
+ pi = 4.0_r8 * atan( 1.0_r8)
+
+ if(rev) then
+    id=-1
+    i1=n
+    i2=n-1
+    in=1
+   write(unit,3000) text(1:1)
+  else
+   id=1
+   i1=1
+   i2=2
+   in=n
+ endif
+
+ if (n.lt.2) then
+     ndec=1
+     write(unit,1000) text,n,x(1)*a
+  else
+     dxmin=abs(x(2)-x(1))
+   do i=2,n-1
+     dx=abs(x(i+1)-x(i))
+     if (dx.lt.dxmin) dxmin=dx
+   enddo
+
+      ndec=-log10(dxmin)+2
+    if(mod(n,6).eq.1) then
+      write(unit,1000) text,n,x(i1)*a
+      write(unit,2000) (x(i)*a,i=i2,in,id)
+    else
+      write(unit,1000) text,n
+      write(unit,2000) (x(i)*a,i=i1,in,id)
+    endif
+  endif
+
+1000  format(a4,2x,i4,' LEVELS',43x,f12.2)
+2000  format(6f12.2)
+3000  format('FORMAT ',a1,'REV')
+      return
+
+ end subroutine formcoord
+!======================================================
+
+!=======================================================================
+function scale_height(p_surface, p_above)
+! Function to calculate scale height, given a surface pressure and a pressure.
+! Using the surface pressure instead of, e.g., mean sea level as the reference
+! pressure ensures that scale height is always positive.
+
+real(r8), intent(in) :: p_surface
+real(r8), intent(in) :: p_above
+real(r8)             :: scale_height
+
+scale_height = 5000.0_r8  ! arbitrary impossibly large number of scale heights.
+if (p_above > 0.0_r8) scale_height = log(p_surface/p_above)
+
+end function scale_height
+!=======================================================================
+
+
+
+end module

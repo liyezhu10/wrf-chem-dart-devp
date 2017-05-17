@@ -6,11 +6,18 @@
 #
 # $Id$
 
+#***********************************************************************************
+# Tarkeshwar Singh
+# PhD, IIT Delhi
+# Email: tarkphysics87@gmail.com
+
 # Script to advance one ensemble member one filter "time step"
 # when the model advance is executed as a separate process.
 # Calls run_lmdz.csh, the LMDZ execution script.
 #
+# Edited in ../../template/shell_scripts/advance_model.csh
 #
+#************************************************************************************#
 # Arguments are (created by 'filter' or 'perfect_model_obs' and include):
 # 1) the process number of caller,
 # 2) the number of ensemble members/state copies belonging to that process, and 
@@ -154,7 +161,7 @@ while($state_copy <= $num_states)
    # advance LMDZ
    echo executing: ${CENTRALDIR}/run_lmdz.csh $element 
    echo executing: ${CENTRALDIR}/run_lmdz.csh $element  >> lmdz_out_temp
-   ${CENTRALDIR}/run_lmdz.csh >& gcm.log
+   ${CENTRALDIR}/run_lmdz.csh $process >& gcm.log
  
    
    grep 'GLOB '               gcm.log  

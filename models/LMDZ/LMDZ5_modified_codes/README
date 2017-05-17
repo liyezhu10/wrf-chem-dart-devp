@@ -1,0 +1,43 @@
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#***********************************************************************************
+# Tarkeshwar Singh
+# PhD, IIT Delhi
+# Email: tarkphysics87@gmail.com
+
+
+Minor modifications are required in few LMDZ source codes for interface with DART.
+These are listed below
+
+(1) Minimum restarts time of LMDZ is 24 hours hence regular LMDZ can't be used for
+    3h or 6h assimilation cycle. 
+
+   - Few codes of LMDZ have been modifed to run it with user choice restart cycles both 
+     in parallel and serial version of LMDZ. These codes belong to 'dyn3d',
+     'dyn3dmem', 'dyn3d_common' and 'phylmd' dir in  LMDZ source code. For parallel 
+     LMDZ run, modified codes are given in this directory. It can be used directly inside
+     LMDZ. The changes from original codes can be tracked by searching 'DART-LMDZ'
+     inside codes.
+
+(2) LMDZ is formulated around covariant wind vectors and potential temperature and same variables 
+    are written in restart.nc netcdf file. This file is input/output to DART-LMDZ interface code.
+    At each assimilation/forecast cycle, it is required to convert these restart variables to 
+    natuaral wind and temperaure. After updating these variables by assimilation, it 
+    should be converted back to covariant wind and potential temperature for next LMDZ model advance.
+
+   - two codes 'naturel_mod.F90' and 'naturel_loc.F90' is given in this directory. Both codes can be 
+     placed in 'dyn3dmem' dir inside model to do this task.
+     
+    
+(3) After each assimilation cycle, it is required to recompute the air mass and vertical air
+    pressure from updated surface pressure after assimilation. 
+
+   - It has been done in modified  'leapfrog_loc.F' code in dyn3dmem dir.
+ 
+
+
+
+
+
+

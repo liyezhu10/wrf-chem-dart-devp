@@ -1,37 +1,50 @@
 #!/bin/csh
-#****************************************************************************
-# Set control variables for assimilation
-# It will be used by job.csh and run_lmdz.csh 
-# Tarkeshwar Singh Sep 2014
+
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+# 
+#**************************************************************************
+#   Tarkeshwar Singh
+#   PhD, IIT Delhi
+#   Email: tarkphysics87@gmail.com
+#   
+#  PURPOSE: Set all control variables for assimilation
+#  It will be used by job.csh and run_lmdz.csh
 # ****************************************************************************
-set num_proc       = 40
-set host_file      = my-hosts2
-set mpi_path       = /data/opt/mpi/openmpi-1.6.3
-set Host_File_Path = /home/tk
 
-# List of obs_seq.out files to be assimilated. 
-set obs_seq_list   = olist
+# Set start date of assimilation
+set start_year=2010
+set start_month=5
+set start_day=17
 
-# store restart file at every $restart_store_freq day
-set restart_store_freq = 2
+# Set end date of assimilation
+set end_year=2010
+set end_month=5
+set end_day=30
 
-# Define initial inflation parameters
-set inf_initial    = 1.0
-set inf_sd_initial = 0.6
+# if assimilation start from initial then set .true. else set .false.
+set  assim_job_start_from_init = .true.
 
-# Logical parameter to control assimilation with or without sampling corrections
-# 1 = with sampling corrections
-# any others values means no sampling correction
-set sampling_error_correction = 1
+# store DART restart file at every $restart_store_freq day
+set restart_store_freq = 1
 
-# Define the LMDZ exe and limit file name
-set gcm_exe    = gcm_360x180x19_phylmd_seq.e
-set ce0l_exe   = ce0l_360x180x19_phylmd_seq.e
-set limit_file = limit.nc_360x180x19
-
-# Path of model control files, data and excutables.
-set DART_LMDZ5        = /home/tarkesh/DART/kodiak/models/LMDZ5
-set DART_ics          = /home/tk/WORK/DART/monsoon_360x180x19/ENSEMBLES/clim_fnl_22May/ 
-set LMDZ_DEF_PATH     = /home/tk/WORK/DART/monsoon_360x180x19/LMDZ_init
-set OBS_PATH          = /home/tarkesh/DART/lanai/observations/NCEP/ascii_to_obs/obs_seq2010/ 
-set DART_restarts_ics = /home/tk/WORK/DART/monsoon_360x180x19/FILTER_RUN/NCEP/EXP1/OUTPUT_20100928
+# set the LMDZ exe, ics and bcs data  names
+# These should be exist in $LMDZ_DIR
+set gcm_exe    = gcm_360x180x39_phylmd_para_mem.e
+set ce0l_exe   = ce0l_360x180x39_phylmd_para.e
+set limit_file = limit.nc_360x180x39
+# requirs for creating perturbed ensemble members
+set start_file = start.nc_360x180x39
+set startphy_file = startphy.nc_360x180x39
+#
+# Set path for OUTPUT storage
+set OUTPUT_DIR   = `pwd` 
+# Path of DART software
+set DART_DIR          = /home/cas/phd/asz118162/DART/kodiak/ 
+# Path of DART initial start files
+set DART_ics_DIR      = /scratch/cas/phd/asz118162/WORK/DART/monsoon_360x180x39/ENSEMBLES
+# Define path where LMDZ gcm.e , ce0l.e , limit.nc and all LMDZ control input files (def files) exists
+set LMDZ_DIR          = /scratch/cas/phd/asz118162/WORK/DART/monsoon_360x180x39/LMDZ_init 
+# Path of obseravtion obs_seqYYYYMMDD files
+set OBS_DIR           = /scratch/cas/phd/asz118162/DATA/OBS/DART/NCEP+GPS_2010_MJJAS 

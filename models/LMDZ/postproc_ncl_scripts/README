@@ -1,0 +1,35 @@
+# DART software - Copyright 2004 - 2011 UCAR. This open source software is
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#***********************************************************************************
+# Tarkeshwar Singh
+# PhD, IIT Delhi
+# Email: tarkphysics87@gmail.com
+
+
+This directory contains following shell script and ncl codes for Postprocessing of Posterior.c and Prior.nc files
+resulting from sequential assimilation with LMDZ.
+
+run_extract_state_vectors.csh
+extract_state_vectors_ens_mean_ml_to_pl.ncl 
+extract_state_vectors_spread_ml.ncl
+extract_state_vectors_ens_mean_ml.ncl  
+extract_state_vectors_inf.ncl
+extract_state_vectors_spread_ml_to_pl.ncl
+
+
+use 'run_extract_state_vectors.csh' script  to extract
+
+      (1) Mean state vectors (T,U,V,Q,ps,CDLIQ)  on A-grid and press levs from C-grid and model levs
+          using extract_state_vectors_ens_mean_ml_to_pl.ncl 
+
+      (2) State Vectors inflation on A-grid and model levs
+          using extract_state_vectors_inf.ncl
+
+      (3) State Vectors  spread on A-grid and press levs
+          using extract_state_vectors_spread_ml.ncl 
+
+Others two ncl scripts 'extract_state_vectors_ens_mean_ml.ncl'  and 'extract_state_vectors_spread_ml.ncl' 
+can be used to extract Mean state vectors and their Spreads, respectively on model levels.
+
+
