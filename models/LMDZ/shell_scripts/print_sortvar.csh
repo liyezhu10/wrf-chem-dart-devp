@@ -1,15 +1,19 @@
 #!/bin/csh
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
 
-#******************************************************************************************
+#****************************************************************************
 # Tarkeshwar Singh
 # PhD, IIT Delhi
 # Email: tarkphysics87@gmail.com
 #
-# PURPOSE: This script prints output of sortvar.F90 routine from gcm.log files for each ensmemle member. 
-
+# Purpose: This script prints output of sortvar.F90 routine from gcm.log files 
+#          for each ensemble member. 
+#
 # It prints GLOBAL 'masse', 'rmsdpdt', 'energie', 'enstrophie', 'entropie', 'rmsv', 'mt.ang'
 # For model stability, these parameter should be conversed ans stable with time.
 # If these are increasing or decreasing significantly with time during free run or 
@@ -22,9 +26,9 @@
 # tetagdiv = 500.
 # tetagrot = 700.
 # tetatemp = 700.
-
+#
 # During assimilation, iperiod  = 3 is recomended.
-#******************************************************************************************
+#****************************************************************************
 
 set num_ens = 60
 
@@ -38,3 +42,11 @@ echo "**************************************************************************
    cat advance_temp$n/gcm.log | grep GLOB
   @ n ++
 end
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
+

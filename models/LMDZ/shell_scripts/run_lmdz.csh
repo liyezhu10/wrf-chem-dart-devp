@@ -1,16 +1,18 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# #**************************************************************************
-#  Tarkeshwar Singh
-#  PhD, IIT Delhi
-#  Email: tarkphysics87@gmail.com
-#  
-# PURPOSE: copy required inputs and launch each LMDZ member
-# #**************************************************************************
+# DART $Id$
+
+#****************************************************************************
+# Tarkeshwar Singh
+# PhD, IIT Delhi
+# Email: tarkphysics87@gmail.com
+#
+# Purpose: copy required inputs and launch each LMDZ member
+#****************************************************************************
 
 limit stacksize unlimited
 limit stacksize unlimited
@@ -99,3 +101,11 @@ mv stok_paprs.dat ../stok_paprs.dat_$ens_member
 echo "*******************************************************************************" >> ../GLOB_$ens_member
 cat times | head -1 >> ../GLOB_$ens_member
 grep GLOB gcm.log >> ../GLOB_$ens_member
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
+

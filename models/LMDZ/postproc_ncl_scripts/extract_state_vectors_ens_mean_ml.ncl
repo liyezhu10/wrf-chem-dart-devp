@@ -1,5 +1,5 @@
-; DART software - Copyright 2004 - 2011 UCAR. This open source software is
-; provided by UCAR, "as is", without charge, subject to all terms of use at
+; DART software - Copyright UCAR. This open source software is provided
+; by UCAR, "as is", without charge, subject to all terms of use at
 ; http://www.image.ucar.edu/DAReS/DART/DART_download
 ;***********************************************************************************
 ; Tarkeshwar Singh
@@ -18,46 +18,42 @@ begin
 ;************************************************
 ; read needed variables from file
 ;************************************************
-   T      =  in->T(:,0,:,:,:)     
-   U      =  in->U(:,0,:,:,:) 
+
+   T      =  in->T(:,0,:,:,:)
+   U      =  in->U(:,0,:,:,:)
    V      =  in->V(:,0,:,:,:)
    Q      =  in->Q(:,0,:,:,:)
    CLDLIQ =  in->CLDLIQ(:,0,:,:,:)
    PS     =  in->PS(:,0,:,:)
 
-   time   = in->time  
-   lat    = in->lat   
-   lon    = in->lon  
-   slat   = in->slat   
-   slon   = in->slon  
-   sigs   = in->sigs 
-   hyam   = in->apm 
+   time   = in->time
+   lat    = in->lat
+   lon    = in->lon
+   slat   = in->slat
+   slon   = in->slon
+   sigs   = in->sigs
+   hyam   = in->apm
    hybm   = in->bpm
 
-      
 ;________________
 ; Due to periodicity in longitude in LMDZ, two values in lon and slon are same
 ; but 'linint2' function require monotonic increasing/decreasing lon values.
 ; following do loop identify those same values in lon and slon using where function
 ; and then decrease one of them by a small value ( e.g. 0.05)
-
    i = 0
    do while(i.le.dimsizes(lon)-2)
-
     ; following logic is applied by where function to make monotonic increasing
     ; if lon(i) = lon(i+1) then  lon(i) = lon(i) -0.05 ; else lon(i) = lon(i)
-
      lon(i)  =  where ( lon(i)  .eq. lon(i+1), lon(i) -0.05, lon(i))
      slon(i) =  where ( slon(i) .eq. slon(i+1), slon(i) -0.05, slon(i))
-
      i=i+1
-
    end do
 ;________________
 
- 
+
+
 ;********************************************************************************************
-;Interpolate  U and V at scalar point 
+;Interpolate  U and V at scalar point
 
 Unew = linint2(slon,lat,U(:,:,:,:),True,lon,lat,0)
 Vnew = linint2(lon,slat,V(:,:,:,:),True,lon,lat,0)

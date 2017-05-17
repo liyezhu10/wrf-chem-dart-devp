@@ -1,14 +1,17 @@
 #!/bin/csh
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
 
-#**************************************************************************
+#****************************************************************************
 # Tarkeshwar Singh
 # PhD, IIT Delhi
 # Email: tarkphysics87@gmail.com
 #
-# PURPOSE: Check running status ( START and FINISH time) of LMDZ ensembles
+# Purpose: Check running status ( START and FINISH time) of LMDZ ensembles
 # Some LMDZ members may take much time to finish due to slow computations on 
 # some nodes. Sometimes few members hangs on the nodes.
 # If this happen, allocate some extra free nodes in job.csh and put each 
@@ -26,7 +29,7 @@
 #  ..............
 # (These lines are already added and commented in run_lmdz.csh script. Uncomment 
 # and edit it for particular slow member and their manually allocated hostfile)
-#**************************************************************************
+#****************************************************************************
  
 set num_ens = 60
 
@@ -76,4 +79,12 @@ else
  echo ""
 
 endif
+
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

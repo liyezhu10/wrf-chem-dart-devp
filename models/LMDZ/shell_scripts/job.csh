@@ -1,17 +1,20 @@
 #!/bin/csh
-
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
 
-#***********************************************************************************
+#****************************************************************************
 # Tarkeshwar Singh
 # PhD, IIT Delhi
 # Email: tarkphysics87@gmail.com
 #
-# PURPOSE :  Copy all dart ics, submit filter run, store restart and outputs files
+# Purpose:  Copy all dart ics, submit filter run, store restart and outputs files
+#****************************************************************************
 
-#************* PBS SETTING *********************************************************
+#************* PBS SETTING **************************************************
 ### Set the job name
 #PBS -N dart_assim 
 ### Request email when job begins and ends
@@ -26,6 +29,7 @@
 #PBS -V
 ## After job starts, must goto working directory. 
 ## $PBS_O_WORKDIR is the directory from where the job is fired. 
+
 cd $PBS_O_WORKDIR
 
 set num_proc = 120
@@ -37,8 +41,7 @@ cat PBS_NODEFILE | tail -1 > hostfile_lastFreeNode
 
 echo $PBS_JOBID
 
-
-#***********************************************************************************
+#****************************************************************************
 
 # Set alias
 # #
@@ -274,4 +277,8 @@ $REMOVE  start.nc assim_model_state_* lmdz_out_temp* advance_temp* stok_paprs* h
 
 exit 0
 
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

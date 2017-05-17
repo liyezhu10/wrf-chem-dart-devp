@@ -1,6 +1,8 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module model_mod
 
@@ -123,16 +125,17 @@ public ::                                                            &
     vector_to_prog_var,  read_lmdz_init, read_lmdz_init_size,        &
    init_model_instance, end_model_instance, write_lmdz_init, coord_index
    
-
-
 !----------------------------------------------------------------------------
 !----------------------------------------------------------------------------
 
 ! version controlled file description for error handling, do not edit
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   '$URL$', &
+character(len=32 ), parameter :: revision = '$Revision$'
+character(len=128), parameter :: revdate  = '$Date$'
 
 ! Ensemble mean is used so that the same "state" will be used for the heigh calculations
 ! on all processors, for all ensemble members.
@@ -4745,6 +4748,10 @@ if (p_above > 0.0_r8) scale_height = log(p_surface/p_above)
 end function scale_height
 !=======================================================================
 
-
-
 end module
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

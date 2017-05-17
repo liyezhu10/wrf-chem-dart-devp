@@ -1,6 +1,8 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program dart_to_lmdz
 
@@ -30,18 +32,18 @@ use time_manager_mod, only : time_type, print_time, print_date
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   '$URL$'
+character(len=32 ), parameter :: revision = '$Revision$'
+character(len=128), parameter :: revdate  = '$Date$'
 
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
 
-character (len = 128) :: dart_to_lmdz_input_file  = 'dart_ics'
-character (len = 128) :: dart_to_lmdz_output_file = 'start.nc'
-logical               :: advance_time_present    = .true.
+character(len=256) :: dart_to_lmdz_input_file  = 'dart_ics'
+character(len=256) :: dart_to_lmdz_output_file = 'start.nc'
+logical            :: advance_time_present     = .true.
 
 namelist /dart_to_lmdz_nml/ dart_to_lmdz_input_file,  &
                            dart_to_lmdz_output_file, &
@@ -111,4 +113,3 @@ end program dart_to_lmdz
 ! $Id$
 ! $Revision$
 ! $Date$
-

@@ -1,11 +1,10 @@
-; DART software - Copyright 2004 - 2011 UCAR. This open source software is
-; provided by UCAR, "as is", without charge, subject to all terms of use at
+; DART software - Copyright UCAR. This open source software is provided
+; by UCAR, "as is", without charge, subject to all terms of use at
 ; http://www.image.ucar.edu/DAReS/DART/DART_download
 ;***********************************************************************************
 ; Tarkeshwar Singh
 ; PhD, IIT Delhi
 ; Email: tarkphysics87@gmail.com
-
 ;************************************************
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
@@ -19,48 +18,43 @@ begin
 ;************************************************
 ; read needed variables from file
 ;************************************************
-   T      =  in->T     
-   U      =  in->U 
+
+   T      =  in->T
+   U      =  in->U
    V      =  in->V
    Q      =  in->Q
    CLDLIQ =  in->CLDLIQ
-   PS     =  in->PS 
-   PSmean =  in->PS(:,0,:,:) 
+   PS     =  in->PS
+   PSmean =  in->PS(:,0,:,:)
 
-
-   time   = in->time  
-   lat    = in->lat   
-   lon    = in->lon  
-   slat   = in->slat   
-   slon   = in->slon  
-   sigs   = in->sigs 
-   hyam   = in->apm 
+   time   = in->time
+   lat    = in->lat
+   lon    = in->lon
+   slat   = in->slat
+   slon   = in->slon
+   sigs   = in->sigs
+   hyam   = in->apm
    hybm   = in->bpm
-
 
 ;________________
 ; Due to periodicity in longitude in LMDZ, two values in lon and slon are same
 ; but 'linint2' function require monotonic increasing/decreasing lon values.
-; following do loop identify those same values in lon and slon using where function 
+; following do loop identify those same values in lon and slon using where function
 ; and then decrease one of them by a small value ( e.g. 0.05)
-
    i = 0
    do while(i.le.dimsizes(lon)-2)
-
-    ; following logic is applied by where function to make monotonic increasing  
-    ; if lon(i) = lon(i+1) then  lon(i) = lon(i) -0.05 ; else lon(i) = lon(i) 
- 
-     lon(i)  =  where ( lon(i)  .eq. lon(i+1), lon(i) -0.05, lon(i)) 
-     slon(i) =  where ( slon(i) .eq. slon(i+1), slon(i) -0.05, slon(i)) 
-
+    ; following logic is applied by where function to make monotonic increasing
+    ; if lon(i) = lon(i+1) then  lon(i) = lon(i) -0.05 ; else lon(i) = lon(i)
+     lon(i)  =  where ( lon(i)  .eq. lon(i+1), lon(i) -0.05, lon(i))
+     slon(i) =  where ( slon(i) .eq. slon(i+1), slon(i) -0.05, slon(i))
      i=i+1
-
    end do
 ;________________
 
 
+
 ;********************************************************************************************
-;Interpolate  U and V at scalar point 
+;Interpolate  U and V at scalar point
 
 Unew = linint2(slon,lat,U(:,0,:,:,:),True,lon,lat,0)
 Vnew = linint2(lon,slat,V(:,0,:,:,:),True,lon,lat,0)
@@ -68,13 +62,13 @@ Vnew = linint2(lon,slat,V(:,0,:,:,:),True,lon,lat,0)
 ;*********************************************************************************************
 ; Model Hyprid level to pressure level conversion
 ;*********************************************************************************************
-   P0mb =1000.  
+   P0mb =1000.
    hyam = hyam /100000   ; Divide by 100000  to mak similar coefficient like CAM
 
-   pnew = (/ 1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 70, 50,30, 20, 10/)  
+   pnew = (/ 1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 70, 50,30, 20, 10/)
    ;pnew =(/10,20,30,50,70,100,150,200,250,300,400,500,600,700,850,925,1000/)
 ; type of interpolation: 1 = linear, 2 = log, 3 = loglog
-   interp = 2 
+   interp = 2
 ; is extrapolation desired if data is outside the range of PS
    extrap = False
 ; create an array of desired pressure levels:
@@ -134,7 +128,7 @@ Vnew = linint2(lon,slat,V(:,0,:,:,:),True,lon,lat,0)
 
      varNames2D        = (/ "Psurf" /)
      varTypes2D        = (/ "float" /)
-      
+
      varNames1D        = (/ "plev" /)
      varTypes1D        = (/ "float" /)
 

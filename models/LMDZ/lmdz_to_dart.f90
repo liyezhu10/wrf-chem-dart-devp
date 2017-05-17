@@ -1,15 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program lmdz_to_dart
-
-!----------------------------------------------------------------------
-! <next few lines under version control, do not edit>
-! $URL:https://proxy.subversion.ucar.edu/DAReS/DART/releases/Kodiak/models/LMDZ/lmdz_to_dart.f90  $
-! $Id$
-! $Revision$
-! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: interface between LMDZ and DART
@@ -22,7 +17,6 @@ program lmdz_to_dart
 !         PhD, IIT Delhi
 !         Email: tarkphysics87@gmail.com
 !----------------------------------------------------------------------
-
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, do_output,     &
@@ -37,18 +31,17 @@ use time_manager_mod, only : time_type
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
-
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 !-----------------------------------------------------------------------
 ! namelist parameters with default values.
 !-----------------------------------------------------------------------
 
-character (len = 128) :: lmdz_to_dart_input_file  = 'start.nc'
-character (len = 128) :: lmdz_to_dart_output_file = 'dart_ics'
+character(len=256) :: lmdz_to_dart_input_file  = 'start.nc'
+character(len=256) :: lmdz_to_dart_output_file = 'dart_ics'
 
 namelist /lmdz_to_dart_nml/ lmdz_to_dart_input_file, lmdz_to_dart_output_file
 
@@ -81,13 +74,11 @@ call static_init_assim_model()
 x_size = get_model_size()
 allocate(statevector(x_size))
 
-
 ! Allocate the instance of the lmdz model type for storage
 call init_model_instance(PS, T, U, V, Q, CLDLIQ)
 
 ! Read the file lmdz state fragments into var;
 ! transform fields into state vector for DART
-
 
 call read_lmdz_init(lmdz_to_dart_input_file, model_time)
 
@@ -103,3 +94,9 @@ call close_restart(iunit)
 call finalize_utilities()
 
 end program lmdz_to_dart
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -1,17 +1,19 @@
 #!/bin/csh
-
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
-# 
-#**************************************************************************
-#   Tarkeshwar Singh
-#   PhD, IIT Delhi
-#   Email: tarkphysics87@gmail.com
-#   
-#  PURPOSE: Set all control variables for assimilation
-#  It will be used by job.csh and run_lmdz.csh
-# ****************************************************************************
+#
+# DART $Id$
+
+#****************************************************************************
+# Tarkeshwar Singh
+# PhD, IIT Delhi
+# Email: tarkphysics87@gmail.com
+#
+# Purpose: Set all control variables for assimilation
+#          It will be used by job.csh and run_lmdz.csh
+#****************************************************************************
 
 # Set start date of assimilation
 set start_year=2010
@@ -48,3 +50,11 @@ set DART_ics_DIR      = /scratch/cas/phd/asz118162/WORK/DART/monsoon_360x180x39/
 set LMDZ_DIR          = /scratch/cas/phd/asz118162/WORK/DART/monsoon_360x180x39/LMDZ_init 
 # Path of obseravtion obs_seqYYYYMMDD files
 set OBS_DIR           = /scratch/cas/phd/asz118162/DATA/OBS/DART/NCEP+GPS_2010_MJJAS 
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
+

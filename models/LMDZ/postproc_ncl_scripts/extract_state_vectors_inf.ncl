@@ -1,11 +1,10 @@
-; DART software - Copyright 2004 - 2011 UCAR. This open source software is
-; provided by UCAR, "as is", without charge, subject to all terms of use at
+; DART software - Copyright UCAR. This open source software is provided
+; by UCAR, "as is", without charge, subject to all terms of use at
 ; http://www.image.ucar.edu/DAReS/DART/DART_download
 ;***********************************************************************************
 ; Tarkeshwar Singh
 ; PhD, IIT Delhi
 ; Email: tarkphysics87@gmail.com
-
 ;************************************************
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
@@ -21,22 +20,21 @@ begin
 ;************************************************
    copy=3  ; copy index for inf mean  ..counting start with zero
 
-
-   T      =  in->T(:,copy,:,:,:)     
-   U      =  in->U(:,copy,:,:,:) 
+   T      =  in->T(:,copy,:,:,:)
+   U      =  in->U(:,copy,:,:,:)
    V      =  in->V(:,copy,:,:,:)
    Q      =  in->Q(:,copy,:,:,:)
    CLDLIQ =  in->CLDLIQ(:,copy,:,:,:)
    PS     =  in->PS(:,copy,:,:)
-   PSmean =  in->PS(:,0,:,:) 
+   PSmean =  in->PS(:,0,:,:)
 
-   time   = in->time  
-   lat    = in->lat   
-   lon    = in->lon  
-   slat   = in->slat   
-   slon   = in->slon  
-   sigs   = in->sigs 
-   hyam   = in->apm 
+   time   = in->time
+   lat    = in->lat
+   lon    = in->lon
+   slat   = in->slat
+   slon   = in->slon
+   sigs   = in->sigs
+   hyam   = in->apm
    hybm   = in->bpm
 
 ;________________
@@ -55,9 +53,9 @@ begin
 ;________________
 
 
-       
+
 ;********************************************************************************************
-;Interpolate  U and V at aclar point 
+;Interpolate  U and V at scalar point
 
 Unew = linint2(slon,lat,U(:,:,:,:),False,lon,lat,0)
 Vnew = linint2(lon,slat,V(:,:,:,:),False,lon,lat,0)

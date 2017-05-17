@@ -1,23 +1,22 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # $Id$
 
-#***********************************************************************************
+#****************************************************************************
 # Tarkeshwar Singh
 # PhD, IIT Delhi
 # Email: tarkphysics87@gmail.com
-
-# Script to advance one ensemble member one filter "time step"
-# when the model advance is executed as a separate process.
-# Calls run_lmdz.csh, the LMDZ execution script.
+#
+# Purpose: Script to advance one ensemble member one filter "time step"
+#          when the model advance is executed as a separate process.
+#          Calls run_lmdz.csh, the LMDZ execution script.
 #
 # Edited in ../../template/shell_scripts/advance_model.csh
-#
-#************************************************************************************#
+#****************************************************************************
 # Arguments are (created by 'filter' or 'perfect_model_obs' and include):
 # 1) the process number of caller,
 # 2) the number of ensemble members/state copies belonging to that process, and 

@@ -1,11 +1,10 @@
-; DART software - Copyright 2004 - 2011 UCAR. This open source software is
-; provided by UCAR, "as is", without charge, subject to all terms of use at
+; DART software - Copyright UCAR. This open source software is provided
+; by UCAR, "as is", without charge, subject to all terms of use at
 ; http://www.image.ucar.edu/DAReS/DART/DART_download
 ;***********************************************************************************
 ; Tarkeshwar Singh
 ; PhD, IIT Delhi
 ; Email: tarkphysics87@gmail.com
-
 ;************************************************
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
 load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
@@ -19,20 +18,21 @@ begin
 ;************************************************
 ; read needed variables from file
 ;************************************************
-   T      =  in->T(:,1,:,:,:)     
-   U      =  in->U(:,1,:,:,:) 
+
+   T      =  in->T(:,1,:,:,:)
+   U      =  in->U(:,1,:,:,:)
    V      =  in->V(:,1,:,:,:)
    Q      =  in->Q(:,1,:,:,:)
    CLDLIQ =  in->CLDLIQ(:,1,:,:,:)
    PS     =  in->PS(:,1,:,:)
 
-   time   = in->time  
-   lat    = in->lat   
-   lon    = in->lon  
-   slat   = in->slat   
-   slon   = in->slon  
-   sigs   = in->sigs 
-   hyam   = in->apm 
+   time   = in->time
+   lat    = in->lat
+   lon    = in->lon
+   slat   = in->slat
+   slon   = in->slon
+   sigs   = in->sigs
+   hyam   = in->apm
    hybm   = in->bpm
 
 ;________________
@@ -40,24 +40,20 @@ begin
 ; but 'linint2' function require monotonic increasing/decreasing lon values.
 ; following do loop identify those same values in lon and slon using where function
 ; and then decrease one of them by a small value ( e.g. 0.05)
-
    i = 0
    do while(i.le.dimsizes(lon)-2)
-
     ; following logic is applied by where function to make monotonic increasing
     ; if lon(i) = lon(i+1) then  lon(i) = lon(i) -0.05 ; else lon(i) = lon(i)
-
      lon(i)  =  where ( lon(i)  .eq. lon(i+1), lon(i) -0.05, lon(i))
      slon(i) =  where ( slon(i) .eq. slon(i+1), slon(i) -0.05, slon(i))
-
      i=i+1
-
    end do
 ;________________
 
- 
+
+
 ;********************************************************************************************
-;Interpolate  U and V at scalar point 
+;Interpolate  U and V at scalar point
 
 Unew = linint2(slon,lat,U(:,:,:,:),True,lon,lat,0)
 Vnew = linint2(lon,slat,V(:,:,:,:),True,lon,lat,0)
