@@ -22,10 +22,9 @@ use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, do_output,     &
                              check_namelist_read, find_namelist_in_file, nmlfileunit, &
                              do_nml_file, do_nml_term
-use        model_mod, only : data_2d_type,data_3d_type, init_model_instance, end_model_instance, &
-                             prog_var_to_vector, read_lmdz_init, static_init_model,PS,T,U,V,Q,CLDLIQ
-use  assim_model_mod, only : static_init_assim_model, get_model_size, &
-                             open_restart_write, awrite_state_restart, close_restart
+use        model_mod, only : get_model_size, init_model_instance, end_model_instance, &
+                             prog_var_to_vector, read_lmdz_init, PS,T,U,V,Q,CLDLIQ
+use  assim_model_mod, only : open_restart_write, awrite_state_restart, close_restart
 use time_manager_mod, only : time_type
 
 implicit none
@@ -47,28 +46,20 @@ namelist /lmdz_to_dart_nml/ lmdz_to_dart_input_file, lmdz_to_dart_output_file
 
 ! allocatable storage to read in a native format for lmdz state
 
-real(r8), allocatable  :: statevector(:)
-type(time_type)        :: model_time
-integer                :: iunit, x_size, io
+real(r8), allocatable :: statevector(:)
+type(time_type)       :: model_time
+integer               :: iunit, x_size, io
 
 call initialize_utilities('lmdz_to_dart')
 
-! Read the namelist entry
+! Read the namelist
 call find_namelist_in_file("input.nml", "lmdz_to_dart_nml", iunit)
 read(iunit, nml = lmdz_to_dart_nml, iostat = io)
 call check_namelist_read(iunit, io, "lmdz_to_dart_nml")
 
 ! Record the namelist values
-
-! do_nml_file () :  *** return whether nml should be written to nml file 
-
 if (do_nml_file()) write(nmlfileunit, nml=lmdz_to_dart_nml)
 if (do_nml_term()) write(     *     , nml=lmdz_to_dart_nml)
-
-! Static init assim model sets the output file format (binary/ascii)
-! call static_init_model() 
-
-call static_init_assim_model()
 
 ! Allocate the local state vector
 x_size = get_model_size()

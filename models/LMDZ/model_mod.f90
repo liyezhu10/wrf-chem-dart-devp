@@ -121,8 +121,9 @@ public ::                                                            &
    ens_mean_for_model
 
 public ::                                                            &
-   data_2d_type,data_3d_type,PS,T,U,V,Q,CLDLIQ, prog_var_to_vector,  &
-    vector_to_prog_var,  read_lmdz_init, read_lmdz_init_size,        &
+   data_2d_type, data_3d_type, PS, T, U, V, Q, CLDLIQ, &
+   prog_var_to_vector,  &
+    vector_to_prog_var,  read_lmdz_init, &
    init_model_instance, end_model_instance, write_lmdz_init, coord_index
    
 !----------------------------------------------------------------------------
@@ -174,17 +175,18 @@ type grid_1D_type
 end type grid_1D_type
 
 !-------
+
 type data_2d_type
-   !private
    integer               :: var_id
    integer               :: length
    real(r8), pointer     :: vals(:,:)
    character (len=128)   :: atts_names  ! start.nc have only one attribute
    character (len=128)   :: atts_vals  
 end type data_2d_type
+
 !-------
+
 type data_3d_type
-   !private
    integer               :: var_id
    integer               :: length
    real(r8), pointer     :: vals(:,:,:)
@@ -194,9 +196,9 @@ end type data_3d_type
 
 ! renaming of coordinate variables in  start.nc: lon=rlonv, lat=rlatu, slon=rlonu, slat=rlatv 
 ! here slat & slon represents staggered coordinates.
- type(grid_1D_type)    ::  slon, lat, lon, slat, sig, sigs, ap,apm,bp, bpm, presnivs,temps 
- type(data_3d_type)    ::  T,U,V,Q,CLDLIQ
- type(data_2d_type)    ::  PHIS,PS
+type(grid_1D_type) :: slon, lat, lon, slat, sig, sigs, ap,apm,bp, bpm, presnivs,temps 
+type(data_3d_type) :: T,U,V,Q,CLDLIQ
+type(data_2d_type) :: PHIS, PS
 
 ! end of model section
 !----------------------------------------------------------------------
@@ -204,7 +206,7 @@ end type data_3d_type
 
 ! make sure static init code only called once
 logical :: module_initialized = .false.
-!-------
+
 
 type(time_type) :: Time_step_atmos
 ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
@@ -334,21 +336,21 @@ contains
 
 !==================================================================
 
+!------------------------------------------------------------------
+!> Called to do one time initialization of the model. As examples,
+!> might define information about the model size or model timestep.
+!> In models that require pre-computed static data, for instance
+!> spherical harmonic weights, these would also be computed here.
+!> Can be a NULL INTERFACE for the simplest models.
+
 subroutine static_init_model()
-!------------------------------------------------------------------
-!
-! Called to do one time initialization of the model. As examples,
-! might define information about the model size or model timestep.
-! In models that require pre-computed static data, for instance
-! spherical harmonic weights, these would also be computed here.
-! Can be a NULL INTERFACE for the simplest models.
 
- integer         :: iunit, io, ncfileid
- integer         :: max_levs, topog_lons, topog_lats
+integer :: iunit, io, ncfileid
+integer :: max_levs, topog_lons, topog_lats
 
-!------------------------------------------------------------------
 ! only execute this code once
 if (module_initialized) return
+
 ! Print module information to log file and stdout.
 call register_module(source, revision, revdate)
 
@@ -391,6 +393,7 @@ end if
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
+
 ! Set the model minimum time step from the namelist seconds and days input
 Time_step_atmos = set_time(time_step_seconds, time_step_days)
 
@@ -401,20 +404,18 @@ call nc_check(nf90_open(path = trim(model_config_file), mode =nf90_nowrite , nci
 
 call nc_check(nf90_inquire(ncfileid, num_dims), 'read_lmdz_init_size', 'inquire num_dims')
 
-write(*,*)'Num of coordinate var. in start.nc=',num_dims
-
 call read_lmdz_init_size(ncfileid)
 
-  PS%length     = lon%length*lat%length
-  U%length      = slon%length*lat%length*sigs%length
-  V%length      = lon%length*slat%length*sigs%length
-  T%length      = lon%length*lat%length*sigs%length
-  Q%length      = lon%length*lat%length*sigs%length
-  CLDLIQ%length = lon%length*lat%length*sigs%length
+PS%length     = lon%length*lat%length
+U%length      = slon%length*lat%length*sigs%length
+V%length      = lon%length*slat%length*sigs%length
+T%length      = lon%length*lat%length*sigs%length
+Q%length      = lon%length*lat%length*sigs%length
+CLDLIQ%length = lon%length*lat%length*sigs%length
 
-! Lenght of state vector
-  model_size =  PS%length + U%length + V%length + T%length + Q%length + CLDLIQ%length
-print*, 'Model Size =',model_size
+model_size = PS%length + U%length + V%length + T%length + Q%length + CLDLIQ%length
+
+if (do_output()) print*, 'Model Size =',model_size
 
 call read_lmdz_coord(ncfileid, lon,      'rlonv     ')
 call read_lmdz_coord(ncfileid, lat,      'rlatu     ')
@@ -426,15 +427,15 @@ call read_lmdz_coord(ncfileid, bp   ,    'bp        ')
 call read_lmdz_coord(ncfileid, sigs ,    'nivsigs   ')
 call read_lmdz_coord(ncfileid, temps   , 'temps     ')
 
-
 call change_lon_lat_lev_to_dart()
-!-----------------------------------------------------------------------
+
+write(*,*) 'TJH before hybrid_coefi_mid_layer sigs%length is ',sigs%length
+
 !find hybrid layer coefficient at mid point of layers
 allocate(apm%vals(sigs%length))
 allocate(bpm%vals(sigs%length))
 call hybrid_coefi_mid_layer(apm, bpm, sig%length)
 
-!------------------------------------------------------------------------
 ! Better damping algorithm for state variables near/in the LMDZ damped levels
 ! at the top of the model.  
 if (vert_coord == 'pressure') then
@@ -470,6 +471,8 @@ else
    call error_handler(E_ERR,'static_init_model',msgstring,source,revision,revdate)
 end if
 
+write(*,*) 'TJH before order_state_fields'
+
 !------------------------------------------------------------------------
 !----
 max_levs = sig%length  !(sig%length = sigs%length + 1)
@@ -492,18 +495,16 @@ call nc_read_model_atts_3d( ncfileid ,'title', CLDLIQ  , 'H2Ol    ')
 
 ! Read surface geopotential for use in vertical interpolation in height
 
-topog_lats= lat%length
-topog_lons= lon%length
-allocate(phis%vals (topog_lons, topog_lats))
-
-
-allocate (p_col(max_levs), model_h(max_levs))
+topog_lats = lat%length
+topog_lons = lon%length
+allocate(phis%vals(topog_lons, topog_lats))
+allocate(p_col(max_levs), model_h(max_levs))
 allocate(ens_mean(model_size))
 
-!--get PHIS data
-call read_lmdz_horiz (ncfileid, phis , topog_lons, topog_lats, 'phisinit')
+write(*,*) 'TJH before read_lmdz_horiz'
 
-!-------
+call read_lmdz_horiz (ncfileid, phis, topog_lons, topog_lats, 'phisinit')
+
 call nc_check(nf90_close(ncfileid), &
               'static_init_model', 'closing '//trim(model_config_file))
 
@@ -511,6 +512,8 @@ call nc_check(nf90_close(ncfileid), &
 ! arrays for the linking of obs_kinds (KIND_) to model field TYPE_s; 
 ! Makes an array of 'locations within the state vector'
 ! of  all the available obs kinds that come from obs_kind_mod.
+
+write(*,*) 'TJH before map_kinds'
 
 call map_kinds()
 
@@ -522,47 +525,52 @@ call map_kinds()
 
 module_initialized = .true.
 
+write(*,*) 'TJH leaving static_init_model'
+
 !=======================================================================
-end subroutine 
+end subroutine static_init_model
 
 
+
+!-----------------------------------------------------------------------
+!>
 
 subroutine read_lmdz_init_size(ncfileid)
-
-!=======================================================================
 integer,  intent(in)  :: ncfileid
 
-!   dim_ids(i) = i   ! Dimension ids are sequential integers on the NetCDF file.
+!>@todo FIXME ... do not assume the order of the dimensions ... query for the dimid
+!> given the name with   nf90_inq_dimid()
 
-   call nc_check(nf90_inquire_dimension(ncfileid, 2, slon%var_name , slon%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(slon%var_name))
-   call nc_check(nf90_inquire_dimension(ncfileid, 3, lat%var_name , lat%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(lat%var_name))
-   call nc_check(nf90_inquire_dimension(ncfileid, 4, lon%var_name , lon%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(lon%var_name))
-   call nc_check(nf90_inquire_dimension(ncfileid, 5, slat%var_name , slat%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(slat%var_name))
-   call nc_check(nf90_inquire_dimension(ncfileid, 6, sigs%var_name , sigs%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(sigs%var_name))
-   call nc_check(nf90_inquire_dimension(ncfileid, 7, sig%var_name , sig%length), &
-                 'read_lmdz_init_size', 'inquire for '//trim(sig%var_name))
-   !call nc_check(nf90_inquire_dimension(ncfileid, 15, temps%var_name , temps%length), &
-   !              'read_lmdz_init_size', 'inquire for '//trim(temps%var_name))
-    !if (print_details .and. do_out) write(*,*) 'Dims info = ',i, trim(dim_names(i)), dim_sizes(i)
+call nc_check(nf90_inquire_dimension(ncfileid, 2, slon%var_name , slon%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(slon%var_name))
+call nc_check(nf90_inquire_dimension(ncfileid, 3, lat%var_name , lat%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(lat%var_name))
+call nc_check(nf90_inquire_dimension(ncfileid, 4, lon%var_name , lon%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(lon%var_name))
+call nc_check(nf90_inquire_dimension(ncfileid, 5, slat%var_name , slat%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(slat%var_name))
+call nc_check(nf90_inquire_dimension(ncfileid, 6, sigs%var_name , sigs%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(sigs%var_name))
+call nc_check(nf90_inquire_dimension(ncfileid, 7, sig%var_name , sig%length), &
+              'read_lmdz_init_size', 'inquire for '//trim(sig%var_name))
 
-    ap%length       = sig%length
-    bp%length       = sig%length
-    presnivs%length = sigs%length
-    temps%length    = 1
+!call nc_check(nf90_inquire_dimension(ncfileid, 15, temps%var_name , temps%length), &
+!              'read_lmdz_init_size', 'inquire for '//trim(temps%var_name))
+!if (print_details .and. do_out) write(*,*) 'Dims info = ',i, trim(dim_names(i)), dim_sizes(i)
 
-    write(*,"(A10,I3)") slon%var_name , slon%length
-    write(*,"(A10,I3)")  lat%var_name ,  lat%length
-    write(*,"(A10,I3)")  lon%var_name ,  lon%length
-    write(*,"(A10,I3)") slat%var_name , slat%length
-    write(*,"(A10,I3)") sigs%var_name , sigs%length
-    write(*,"(A10,I3)")  sig%var_name ,  sig%length
+ap%length       = sig%length
+bp%length       = sig%length
+presnivs%length = sigs%length
+temps%length    = 1
 
-end subroutine
+write(*,"(A10,I3)") slon%var_name , slon%length
+write(*,"(A10,I3)")  lat%var_name ,  lat%length
+write(*,"(A10,I3)")  lon%var_name ,  lon%length
+write(*,"(A10,I3)") slat%var_name , slat%length
+write(*,"(A10,I3)") sigs%var_name , sigs%length
+write(*,"(A10,I3)")  sig%var_name ,  sig%length
+
+end subroutine read_lmdz_init_size
 
 !-----------------------------------------------------------------------
 !>
@@ -570,56 +578,55 @@ end subroutine
 subroutine read_lmdz_coord(ncfileid, var, cfield)
 integer,            intent(in)  :: ncfileid
 type(grid_1d_type), intent(out) :: var
-character (len=8),  intent(in)  :: cfield
+character (len=*),  intent(in)  :: cfield
 
 ! Local workspace
 integer :: i
 integer :: ncfldid
 integer :: num_atts
 integer, dimension(nf90_max_var_dims) :: coord_dims
-character (len=nf90_max_name) , pointer     :: att_names(:)
-character (len=nf90_max_name), pointer      :: att_vals(:)
-real(r8)                                    :: resol, resol_1, resol_n
+character(len=nf90_max_name), pointer :: att_names(:)
+character(len=nf90_max_name), pointer :: att_vals(:)
+real(r8) :: resol, resol_1, resol_n
 
-!>@todo how does the att_names pointer thing work?
+if (do_output()) write(*,*)'read_lmdz_coord for variable "'//trim(cfield)//'"'
 
-  call nc_check(nf90_inq_varid(ncfileid,trim(cfield), ncfldid), &
-                 'read_lmdz_coord', 'inq_varid '//trim(cfield))
-  call nc_check( nf90_inquire_variable(ncfileid, ncfldid, dimids = coord_dims, nAtts =num_atts), &
-               'read_lmdz_coord', 'inqure_variable '//trim('cfield'))
+call nc_check(nf90_inq_varid(ncfileid,trim(cfield), ncfldid), &
+               'read_lmdz_coord', 'inq_varid '//trim(cfield))
+call nc_check( nf90_inquire_variable(ncfileid, ncfldid, dimids = coord_dims, nAtts =num_atts), &
+             'read_lmdz_coord', 'inqure_variable '//trim('cfield'))
 
-  allocate(att_names(num_atts), att_vals(num_atts))
+allocate(att_names(num_atts), att_vals(num_atts))
 
- do i=1,num_atts
+do i=1,num_atts
 
-  call nc_check(nf90_inq_attname(ncfileid, ncfldid, i, att_names(i)), &
-                 'read_lmdz_coord', 'inq_attname '//trim('att_names(i)'))
+ call nc_check(nf90_inq_attname(ncfileid, ncfldid, i, att_names(i)), &
+                'read_lmdz_coord', 'inq_attname for variable "'//trim(cfield)//'"')
 
-  call nc_check(nf90_get_att(ncfileid, ncfldid, att_names(i),att_vals(i)), &
-                    'read_lmdz_coord', 'get_att '//trim('att_vals(i)' ))
+ call nc_check(nf90_get_att(ncfileid, ncfldid, att_names(i),att_vals(i)), &
+                   'read_lmdz_coord', 'get_att '//trim(att_vals(i))//'"')
 
- end do
+end do
 
- call init_grid_1d_instance(var, var%length, num_atts)
+call init_grid_1d_instance(var, var%length, num_atts)
 
- var%var_name   = cfield
- var%dim_id     = coord_dims(1)
- var%atts_vals  = att_vals 
- var%atts_names = att_names
+var%var_name   = trim(cfield)
+var%dim_id     = coord_dims(1)   ! these variables better be 1D
+var%atts_vals  = att_vals 
+var%atts_names = att_names
 
- call nc_check(nf90_get_var(ncfileid, ncfldid, var%vals, start=(/1/) &
-    ,count=(/var%length/) ), 'read_lmdz_coord' ,'get_var '//cfield)
+call nc_check(nf90_get_var(ncfileid, ncfldid, var%vals, start=(/1/), &
+        count=(/var%length/) ), 'read_lmdz_coord' ,'get_var "'//trim(cfield)//'"')
 
-   !PRINT*,'reading ',cfield,' using id ',ncfldid,' size ',var%length
-   !WRITE(*,*) 'first, last val: ', var%vals(1),var%vals(var%length)
-   !PRINT*,var%length
 ! radian to degree
 if (cfield(1:2) == 'rl') then
    call rad_to_degree(var)
 end if
 
-
 if (cfield(1:2) == 'ap'.OR.cfield(1:2) == 'bp') then
+   var%resolution = MISSING_R8
+elseif (var%length < 2 .and. cfield == 'temps') then
+   ! sometimes there is only 1 time in the file.
    var%resolution = MISSING_R8
 else
    resol_1 = var%vals(2) - var%vals(1)
@@ -640,9 +647,12 @@ else
    end do Res
 endif
 
- deallocate(att_names, att_vals)
+! If desired, pring a summary of the variable.
+if (do_output()) call dump_grid_type(var)
 
-end subroutine
+deallocate(att_names, att_vals)
+
+end subroutine read_lmdz_coord
 
 
    subroutine init_grid_1d_instance(var, length, num_atts)
@@ -746,22 +756,22 @@ end subroutine nc_read_model_atts_2d
 
 
 
+!-----------------------------------------------------------------------
+!>
 
-   subroutine read_lmdz_horiz(ncfileid, var, dim1, dim2, cfield)
-!======================================================
+subroutine read_lmdz_horiz(ncfileid, var, dim1, dim2, cfield)
+
+integer,            intent(in)    :: ncfileid
+type(data_2d_type), intent(inout) :: var
+integer,            intent(in)    :: dim1, dim2
+character (len=*),  intent(in)    :: cfield
+
 ! should be called with cfield = a 2D record variable  (time,lat,lon):
-
-implicit none
-!------------------------------------------------------
-integer,                         intent(in)  :: ncfileid, dim1, dim2
-type(data_2d_type)                           :: var
-character (len=8),               intent(in)  :: cfield
-
-!------------------------------------------------------
 integer :: ncfldid
 integer :: i, j
-!if (print_details .and. do_out) PRINT*,'read_lmdz_horiz; reading ',cfield
 
+!if (print_details .and. do_out) PRINT*,'read_lmdz_horiz; reading ',cfield
+!>@todo confirm: This always reads the first time step (tcount = 1)
 
 call nc_check(nf90_inq_varid(ncfileid, trim(cfield), ncfldid), &
               'read_lmdz_horiz', 'inq_varid '//trim(cfield))
@@ -770,28 +780,30 @@ call nc_check(nf90_get_var(ncfileid, ncfldid, var%vals, start=(/1,1,1/), &
 
 call convert_grid_2d_data_to_dart(dim1,dim2,botm_positive_lon_index,var%vals)
 
-if (cfield == 'phisinit') then
+if (cfield == 'phisinit' .and. alloc_phis) then
 
- if (alloc_phis) then
-     allocate ( phis_stagr_lonu( slon%length,  lat%length) )   ! at UCOV on grid C
-     allocate ( phis_stagr_latv( lon%length , slat%length) )   ! at VCOV on grid C
-     alloc_phis = .false. 
+   allocate ( phis_stagr_lonu( slon%length,  lat%length) )   ! at UCOV on grid C
+   allocate ( phis_stagr_latv( lon%length , slat%length) )   ! at VCOV on grid C
+   alloc_phis = .false. 
 
+   write(*,*)'TJH size of PHIS%vals       is ',shape(PHIS%vals)
+   write(*,*)'TJH size of phis_stagr_lonu is ',shape(phis_stagr_lonu)
+   write(*,*)'TJH size of phis_stagr_latv is ',shape(phis_stagr_latv)
 
-     do i = 1, slon%length
-       do j = 1, lat%length
-        phis_stagr_lonu(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i+1, j))       
-       end do
-     end do 
+   do i = 1, slon%length
+      do j = 1, lat%length
+         phis_stagr_lonu(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i+1, j))       
+      end do
+   end do 
 
-     do i = 1, lon%length
-       do j = 1, slat%length
-        phis_stagr_latv(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i, j+1))       
-       end do
-     end do 
+   do i = 1, lon%length
+      do j = 1, slat%length
+         phis_stagr_latv(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i, j+1))       
+      end do
+   end do 
 
-  end if ! alloc_phis 
-end if ! cfield 
+endif ! cfield 
+
 end subroutine read_lmdz_horiz
 
  
@@ -869,9 +881,12 @@ function get_model_size()
 
 integer :: get_model_size
 
+if ( .not. module_initialized ) call static_init_model
+
 get_model_size = model_size
 
 end function get_model_size
+
 
 !-----------------------------------------------------------------------
 !>
@@ -880,17 +895,23 @@ end function get_model_size
 subroutine init_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDLIQ_local)
 
 type(data_2D_type), intent(out) :: PS_local
-type(data_3D_type), intent(out) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
+type(data_3D_type), intent(out) :: U_local
+type(data_3D_type), intent(out) :: V_local
+type(data_3D_type), intent(out) :: T_local
+type(data_3D_type), intent(out) :: Q_local
+type(data_3D_type), intent(out) :: CLDLIQ_local
+
+if ( .not. module_initialized ) call static_init_model
 
 ! Initialize the storage space and return
 ! keep some others name of variables
 
-allocate(    PS_local%vals(lon%length, lat%length))
-allocate(     T_local%vals(lon%length, lat%length, sigs%length))
-allocate(     U_local%vals(slon%length,lat%length, sigs%length))
-allocate(     V_local%vals(lon%length, slat%length,sigs%length))
-allocate(     Q_local%vals(lon%length, lat%length, sigs%length))
-allocate(CLDLIQ_local%vals(lon%length, lat%length, sigs%length))
+allocate(    PS_local%vals( lon%length,  lat%length))
+allocate(     T_local%vals( lon%length,  lat%length, sigs%length))
+allocate(     U_local%vals(slon%length,  lat%length, sigs%length))
+allocate(     V_local%vals( lon%length, slat%length, sigs%length))
+allocate(     Q_local%vals( lon%length,  lat%length, sigs%length))
+allocate(CLDLIQ_local%vals( lon%length,  lat%length, sigs%length))
 
 end subroutine init_model_instance
 
@@ -902,6 +923,8 @@ subroutine end_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDL
 
 type(data_2D_type), intent(inout) :: PS_local
 type(data_3D_type), intent(inout) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
+
+if ( .not. module_initialized ) call static_init_model
 
 deallocate(    PS_local%vals)
 deallocate(     U_local%vals)
@@ -923,40 +946,46 @@ type(time_type), optional, intent(out)   :: model_time
 
 ! Local workspace
 integer :: ncfileid, ncfldid
-
 integer(kind=4),save :: iyear, imonth, iday, ihour, imin, isec
 
 ! integer :: i, j, k
 ! real(r8) , allocatable :: tmp_3d(:,:,:)
 
 !----------------------------------------------------------------------
+
+if ( .not. module_initialized ) call static_init_model
+
 call nc_check(nf90_open(path = trim(file_name), mode = nf90_nowrite, ncid = ncfileid), &
       'read_lmdz_init', 'opening "'//trim(file_name)//'"')
 
 !----PS--
+
 call nc_check(nf90_inq_varid(ncfileid,'ps', ncfldid), &
                 'read_lmdz_init', 'inq_varid ps')
 
-call nc_check(nf90_get_var(ncfileid, ncfldid, PS%vals ,start=(/1,1,1/)  &
-                           ,count=(/lon%length,lat%length, 1/) ), &
+call nc_check(nf90_get_var(ncfileid, ncfldid, PS%vals ,start=(/1,1,1/),  &
+                           count=(/lon%length,lat%length, 1/) ), &
                            'read_lmdz_init', 'get_var ps')
 call convert_grid_2d_data_to_dart(lon%length,lat%length,botm_positive_lon_index,PS%vals)
+
 !----T--
 
 call nc_check(nf90_inq_varid(ncfileid,'teta', ncfldid), &
                 'read_lmdz_init', 'inq_varid teta')
-call nc_check(nf90_get_var(ncfileid, ncfldid, T%vals ,start=(/1,1,1,1/)  &
-                           ,count=(/lon%length,lat%length, sigs%length,1/) ), &
+call nc_check(nf90_get_var(ncfileid, ncfldid, T%vals ,start=(/1,1,1,1/),  &
+                           count=(/lon%length,lat%length, sigs%length,1/) ), &
                            'read_lmdz_init', 'get_var teta')
 
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,T%vals)
 
 !-----Q--
+
 call nc_check(nf90_inq_varid(ncfileid,'H2Ov', ncfldid), &
                 'read_lmdz_init', 'inq_varid H2Ov')
-call nc_check(nf90_get_var(ncfileid, ncfldid, Q%vals ,start=(/1,1,1,1/)  &
-                           ,count=(/lon%length,lat%length, sigs%length,1/) ), &
+call nc_check(nf90_get_var(ncfileid, ncfldid, Q%vals ,start=(/1,1,1,1/),  &
+                           count=(/lon%length,lat%length, sigs%length,1/) ), &
                            'read_lmdz_init', 'get_var H2Ov')
+
 !! start.nc has mixing ratio. It has been replaced  to specific humidity.
 !  allocate( tmp_3d (lon%length, lat%length, sigs%length ))
 !   do i=1,lon%length
@@ -972,12 +1001,14 @@ call nc_check(nf90_get_var(ncfileid, ncfldid, Q%vals ,start=(/1,1,1,1/)  &
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,Q%vals)
 
 !-----CLDLIQ--
+
 call nc_check(nf90_inq_varid(ncfileid,'H2Ol', ncfldid), &
                 'read_lmdz_init', 'inq_varid H2Ol')
 call nc_check(nf90_get_var(ncfileid, ncfldid, CLDLIQ%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
                            'read_lmdz_init', 'get_var H2Ol')
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,CLDLIQ%vals)
+
 !----U--
 
 call nc_check(nf90_inq_varid(ncfileid,'ucov', ncfldid), &
@@ -997,6 +1028,7 @@ call nc_check(nf90_get_var(ncfileid, ncfldid, V%vals ,start=(/1,1,1,1/)  &
 call convert_grid_3d_data_to_dart(lon%length,slat%length,sigs%length,botm_positive_lon_index,V%vals)
 
 !---
+
 call nc_check(nf90_close(ncfileid), 'read_lmdz_init', 'closing "'//trim(file_name)//'"')
 
 
@@ -1007,7 +1039,7 @@ endif
 
 
 ! Read the time of the current state.
-! extarct date information from  time unit atrribute 
+! extract date information from  time unit atrribute 
 !e.g temps:unit='days since 2009-05-13 00:00:00' 
 
 if (present( model_time)) then
@@ -1045,6 +1077,8 @@ type(data_3D_type), intent(in) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
 integer :: i, j, k,indx
 !---
+
+if ( .not. module_initialized ) call static_init_model
 
 indx=0
 
@@ -1132,6 +1166,9 @@ type(data_3D_type), intent(out) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
 integer :: i, j, k,indx
 !---
+
+if ( .not. module_initialized ) call static_init_model
+
 
 indx=0
 
@@ -1223,6 +1260,8 @@ real(r8), intent(inout) :: x(:)
 ! low-order models
 type(time_type), intent(in) :: Time
 
+if ( .not. module_initialized ) call static_init_model
+
 ! make it an error by default; comment these calls out to actually
 ! test assimilations with null advance.
 
@@ -1243,6 +1282,8 @@ end subroutine adv_1step
 
 type(time_type) :: get_model_time_step
 
+if ( .not. module_initialized ) call static_init_model
+
 ! Time_step_atmos is global static storage
 get_model_time_step =  Time_step_atmos
 
@@ -1252,6 +1293,9 @@ end function get_model_time_step
   subroutine end_model()
 !=======================================================================
 ! subroutine end_model()
+
+if ( .not. module_initialized ) call static_init_model
+
 deallocate(ens_mean)
 
 ! Deallocate other variables?
@@ -1266,6 +1310,8 @@ end subroutine end_model
 ! Reads in restart initial conditions  -- noop for LMDZ
 
 real(r8), intent(inout) :: x(:)
+
+if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_ERR,"init_conditions", &
                   "WARNING!!  LMDZ model has no built-in default state", &
@@ -1282,6 +1328,9 @@ end subroutine init_conditions
 ! For now returns value of Time_init which is set in initialization routines.
 
 type(time_type), intent(out) :: time
+
+if ( .not. module_initialized ) call static_init_model
+
 ! WARNING: CURRENTLY SET TO 0
 time = set_time(0, 0)
 end subroutine init_time
@@ -1414,7 +1463,6 @@ end subroutine coord_val
 ! ------------------------------------------------------------------------
 ! Borrowed from CAM
 
-  implicit none
   real (r8) :: xmu, ae, f, w, xm, f2, f4, ge, g, galt, xlat,alt
 !
       xmu = 398600.4415_r8       ! km^3/s^2
@@ -1448,8 +1496,6 @@ end subroutine gravity
   function gph2gmh (h, lat)
  !======================================================
 ! Barrowed from CAM
-
-      implicit none
 
       real(r8) ::  h, lat, gph2gmh
       real(r8) ::  be, ae, pi, G, g0, r0, latr
@@ -1564,17 +1610,17 @@ end if  ! (alloc_ps)
 
 end subroutine set_ps_ens_mean_arrays
 
-    subroutine coord_index(dim_name, val, indx, other_indx)
-!==========================================================================
-! subroutine coord_index(dim_name, indx, val, indx, other_indx)
 
-! Given the name of the coordinate to be searched and the value, 
-! Returns the index of the closest coordinate value.  
-! Optionally returns the next closest index too, which may be < or > the
-! closest.
-! Used by get_state_meta_data.
+!-----------------------------------------------------------------------
+!> Given the name of the coordinate to be searched and the value, 
+!> Returns the index of the closest coordinate value.  
+!> Optionally returns the next closest index too, which may be < or > the
+!> closest.
+!> Used by get_state_meta_data.
 
-character (len=8), intent(in)  :: dim_name
+subroutine coord_index(dim_name, val, indx, other_indx)
+
+character (len=*), intent(in)  :: dim_name
 real(r8),          intent(in)  :: val
 integer,           intent(out) :: indx
 integer, optional, intent(out) :: other_indx
@@ -1582,6 +1628,8 @@ integer, optional, intent(out) :: other_indx
 real(r8), pointer :: coord(:)
 real(r8)          :: diff_upper, diff_lower, val_local, resol
 integer           :: coord_len, i
+
+if ( .not. module_initialized ) call static_init_model
 
 val_local = val
 
@@ -1671,26 +1719,27 @@ end subroutine coord_index
 
 real(r8), intent(in) :: filter_ens_mean(:)
 
- ens_mean = filter_ens_mean
- ! Fill ps_ens_mean, ps_ens_mean_stagr_lxx if not filled yet.
- ! WATCH OUT that it's not still filled with something other than ens_mean
- call set_ps_ens_mean_arrays(ens_mean)
+if ( .not. module_initialized ) call static_init_model
 
+ens_mean = filter_ens_mean
+
+! Fill ps_ens_mean, ps_ens_mean_stagr_lxx if not filled yet.
+! WATCH OUT that it's not still filled with something other than ens_mean
+
+call set_ps_ens_mean_arrays(ens_mean)
 
 end subroutine ens_mean_for_model
 
 
-  subroutine get_state_meta_data(index_in, location, var_kind)
-  !subroutine get_state_meta_data(index_in, index_1, index_2, index_3,var_kind)
-!=======================================================================
-! subroutine get_state_meta_data(index_in, location, var_kind, set_loc)
-!
+!-----------------------------------------------------------------------
 ! Given an integer index into the state vector structure, returns the
 ! associated location. 
 ! The location may have components that are MISSING_R8 values, since some fields
 ! don't have locations in all three dimensions, i.e. PS has no vertical level,
-!The which_vert should take care of the vertical coordinate (it will be ignored),
+! The which_vert should take care of the vertical coordinate (it will be ignored),
 !  but the others will require more interesting  fixes. 
+
+subroutine get_state_meta_data(index_in, location, var_kind)
 
 integer,             intent(in)  :: index_in
 type(location_type), intent(out) :: location
@@ -1700,6 +1749,8 @@ integer  :: which_vert
 integer  :: indx, index_1, index_2, index_3, nfld
 integer  :: box, slice
 real(r8) :: lon_val, lat_val, lev_val
+
+if ( .not. module_initialized ) call static_init_model
 
 ! In order to find what variable this is, and its location, I must subtract the
 ! individual 
@@ -2158,8 +2209,6 @@ end subroutine get_interp_prof
 !
 ! Kevin Raeder converted to single column version 4/28/2006
 !              removed longitude dimension entirely and extra arrays 10/2006
-
-implicit none
 
 real(r8),         intent(in)  :: vec(:)
 real(r8),         intent(in)  :: p_surf
@@ -2774,6 +2823,8 @@ real(r8)               :: damping_dist
 !real(r8)               ::  threshold, thresh_wght
 type(location_type)    :: local_base_obs_loc, local_obs_loc, vert_only_loc
 
+if ( .not. module_initialized ) call static_init_model
+
 !If base_obs vert type is not pressure; convert it to pressure
 
  base_array = get_location(base_obs_loc)
@@ -2948,6 +2999,8 @@ character (len=8)   :: lon_name, lat_name, lev_name
 ! model_interpolate will continue to use state passed to it;
 !    recalc p_col and model_h columns as needed.
 !    no need to convert to a standard vert coord; no distance calc involved.
+
+if ( .not. module_initialized ) call static_init_model
 
 ! Start with no errors in 
 istatus = 0
@@ -3245,6 +3298,8 @@ type(data_2d_type)      :: PS_temp
 integer                 :: i, j, k, pert_fld, mode
 integer                 :: dim1, dim2, dim3
 real(r8)                :: pert_val
+
+if ( .not. module_initialized ) call static_init_model
 
 ! perturb model parameters for the filter_ics.
 ! Use the (single) state value as the "ens_mean" here.
@@ -3615,6 +3670,8 @@ integer :: iyear, imonth, iday, ihour, imin, isec
 
 character(len=30) :: unites
 
+if ( .not. module_initialized ) call static_init_model
+
 ! Read LMDZ 'initial' file domain info
 call nc_check(nf90_open(path = trim(file_name), mode = nf90_write, ncid = ncfileid), &
            'write_lmdz_init', 'opening '//trim(file_name))
@@ -3789,6 +3846,8 @@ character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
 integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
+
+if ( .not. module_initialized ) call static_init_model
 
 ierr = 0     ! assume normal termination
 
@@ -4079,6 +4138,8 @@ character (len=8) :: cfield
 type(data_2d_type) :: PS_local
 type(data_3d_type) :: T_local,U_local,V_local,Q_local,CLDLIQ_local
 
+if ( .not. module_initialized ) call static_init_model
+
 ierr = 0     ! assume normal termination
 
 !-------------------------------------------------------------------------------
@@ -4226,25 +4287,27 @@ TYPE_CLDLIQ = 6
 end subroutine order_state_fields
 
 
-  subroutine change_lon_lat_lev_to_dart()
-!=======================================================================
+!-----------------------------------------------------------------------
+!>
+
+subroutine change_lon_lat_lev_to_dart()
 
 integer :: i, j
 real(r8), allocatable :: pres_tmp(:),ap_tmp(:),bp_tmp(:),tmp_lon(:), &
                          tmp_slon(:),tmp_lat(:),tmp_slat(:)
-
 
 !--------------------lon ..convert from (-180,180) to (0,360)formate ----------
 allocate(tmp_lon(lon%length))
 tmp_lon(:) = MISSING_R8
 
 botm_positive_lon_index = -1  ! initilise  
- do i=1, lon%length 
+
+do i=1, lon%length 
    if( lon%vals(i) >= 0.0_r8) then 
      botm_positive_lon_index = i
      go to 101
    endif
- end do
+enddo
 
 101 j = 1
 
@@ -4346,7 +4409,7 @@ end subroutine change_lon_lat_lev_to_dart
 
 subroutine convert_grid_3d_data_to_dart(lon_len,lat_len,lev_len,indx,var)
 !****************************************************************
- implicit none
+
  integer, intent(in)    :: indx
  integer, intent(in)    :: lon_len,lat_len,lev_len
  real(r8),intent(inout) :: var(:,:,:)
@@ -4389,47 +4452,52 @@ subroutine convert_grid_3d_data_to_dart(lon_len,lat_len,lev_len,indx,var)
  deallocate(var_tmp)
   end subroutine
 
-!****************************************************************
 
+!-----------------------------------------------------------------------
+!>@todo why are you transposing the dimensions
 
-subroutine convert_grid_2d_data_to_dart(lon_len,lat_len,indx,var)
-!****************************************************************
- implicit none
- integer, intent(in)    :: indx
- integer, intent(in)    :: lon_len,lat_len
- real(r8),intent(inout) :: var(:,:)
- real(r8),allocatable   :: var_tmp(:,:)
- integer                :: i,j
+subroutine convert_grid_2d_data_to_dart(lon_len, lat_len, indx, var)
 
- allocate(var_tmp(lon_len,lat_len))
- var_tmp(:,:) = 0._r8
+integer, intent(in)    :: indx
+integer, intent(in)    :: lon_len
+integer, intent(in)    :: lat_len
+real(r8),intent(inout) :: var(:,:)
 
- j = 1
- do i =indx, lon_len
+real(r8),allocatable   :: var_tmp(:,:)
+integer                :: i,j
+
+allocate(var_tmp(lon_len,lat_len))
+var_tmp(:,:) = 0.0_r8
+
+j = 1
+do i =indx, lon_len
+  var_tmp(j, :) = var(i, :)
+   j = j + 1
+end do
+
+do i = 1 , indx - 1
    var_tmp(j, :) = var(i, :)
-    j = j + 1
- end do
- do i = 1 , indx - 1
-    var_tmp(j, :) = var(i, :)
-    j = j + 1
- end do
+   j = j + 1
+end do
 
- var=var_tmp
+var=var_tmp
 !---- change lat = (90,-90) to lat = (-90,90)
- j = 1
- do i = lat_len, 1, -1
-    var_tmp(:,j)=var(:,i)
-    j = j + 1
- end do
+j = 1
+do i = lat_len, 1, -1
+   var_tmp(:,j)=var(:,i)
+   j = j + 1
+end do
 
-  var=var_tmp
+var = var_tmp
 
- deallocate(var_tmp)
- end subroutine
+deallocate(var_tmp)
+end subroutine convert_grid_2d_data_to_dart
+
+
 
  subroutine convert_grid_3d_data_to_lmdz(lon_len,lat_len,lev_len,indx,var)
 !****************************************************************
- implicit none
+
  integer, intent(in)    :: indx
  integer, intent(in)    :: lon_len,lat_len,lev_len
  real(r8),intent(inout) :: var(:,:,:)
@@ -4475,7 +4543,7 @@ end subroutine
 
  subroutine convert_grid_2d_data_to_lmdz(lon_len,lat_len,indx,var)
 !****************************************************************
- implicit none
+
  integer, intent(in)    :: lon_len,lat_len,indx
  real(r8),intent(inout) :: var(:,:)
  real(r8),allocatable   :: var_tmp(:,:)
@@ -4547,7 +4615,7 @@ subroutine write_state_vectori_grads(iim,jjm,llm,lon,lat,phis,U,V,T,Q,PS)
 !! .ctl and .dat file will be written
 !****************************************************************
 
- implicit none
+
  integer,   intent(in) :: iim,jjm,llm
  real(r8) , intent(in) :: U(iim+1,jjm+1,llm),V(iim+1,jjm,llm),T(iim+1,jjm+1,llm)
  real(r8) , intent(in) :: Q(iim+1,jjm+1,llm)
@@ -4641,7 +4709,7 @@ end subroutine write_state_vectori_grads
 ! called by write_state_vectori_grads subroutine
 
 !****************************************************************
- implicit none
+
  integer    :: n,unit,ndec
  logical    ::  rev
  real(r8)   ::  x(n),a
@@ -4703,11 +4771,34 @@ real(r8), intent(in) :: p_surface
 real(r8), intent(in) :: p_above
 real(r8)             :: scale_height
 
+write(*,*)'TJH scale height p_surface, p_above ',p_surface, p_above
+
 scale_height = 5000.0_r8  ! arbitrary impossibly large number of scale heights.
 if (p_above > 0.0_r8) scale_height = log(p_surface/p_above)
 
 end function scale_height
+
 !=======================================================================
+
+subroutine dump_grid_type(gridvar)
+type(grid_1d_type), intent(in) :: gridvar
+
+integer :: i
+
+write(*,*)
+write(*,*)'dumping grid_1d_type for "'//trim(gridvar%var_name)//'"'
+write(*,*)'dim_id     is ',gridvar%dim_id
+write(*,*)'length     is ',gridvar%length
+write(*,*)'resolution is ',gridvar%resolution
+write(*,*)'num_atts   is ',gridvar%num_atts
+do i = 1,gridvar%num_atts
+   write(*,*)'attribute (',i,') name is "',trim(gridvar%atts_names(i)), &
+             '", value is "',trim(gridvar%atts_vals(i))//'"'
+enddo
+write(*,*)'vals are ',gridvar%vals
+
+end subroutine dump_grid_type
+
 
 end module
 

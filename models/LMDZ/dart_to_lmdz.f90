@@ -24,9 +24,10 @@ use   utilities_mod, only : open_file, close_file, &
                             initialize_utilities, finalize_utilities, &
                             logfileunit, nmlfileunit, do_nml_file, do_nml_term, &
                             check_namelist_read, find_namelist_in_file
-use       model_mod, only : data_2d_type,data_3d_type, init_model_instance, write_lmdz_init, &
-                            vector_to_prog_var, static_init_model, get_model_size
-use assim_model_mod, only : aread_state_restart, open_restart_read, close_restart
+use       model_mod, only : data_2d_type, data_3d_type, init_model_instance, &
+                            write_lmdz_init, vector_to_prog_var, static_init_model, &
+                            get_model_size
+use  assim_model_mod, only : aread_state_restart, open_restart_read, close_restart
 use time_manager_mod, only : time_type, print_time, print_date
 
 implicit none
@@ -52,7 +53,7 @@ namelist /dart_to_lmdz_nml/ dart_to_lmdz_input_file,  &
 !----------------------------------------------------------------------
 
 type(data_2d_type)     :: PS_local
-type(data_3d_type)     :: T_local,U_local,V_local,Q_local,CLDLIQ_local
+type(data_3d_type)     :: T_local, U_local, V_local, Q_local, CLDLIQ_local
 type(time_type)        :: model_time, adv_to_time
 real(r8), allocatable  :: statevector(:)
 integer                :: file_unit, vecsize, iunit, io
