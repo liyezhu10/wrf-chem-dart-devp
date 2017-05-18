@@ -31,6 +31,7 @@ ln -sf $LMDZ_DIR/$limit_file limit.nc
 ln -sf $LMDZ_DIR/$gcm_exe .
 
 ## Determine model advanced date to tag LMDZ hist files
+#>@todo TJH I don't think hh can be correct for this version of trans_time
 ../trans_time
 set adv_date = `cat times | tail -1`
 echo $adv_date

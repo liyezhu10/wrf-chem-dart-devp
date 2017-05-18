@@ -35,12 +35,12 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 integer :: in_unit, out_unit, year, month, day, hour, minute, second
 integer :: ios_out
-type(time_type)       :: dart_now_time
-type(time_type)       :: dart_advance_time
-character (len = 128) :: file_name = 'temp_ic'
-character (len = 128) :: file_out  = 'times'
-character (len = 128) :: read_format = ''
-logical               :: is_advance_file = .true.
+type(time_type)    :: dart_now_time
+type(time_type)    :: dart_advance_time
+character(len=256) :: file_name = 'temp_ic'
+character(len=256) :: file_out  = 'times'
+character(len=256) :: read_format = ''
+logical            :: is_advance_file = .true.
 
 ! read in just the first 1 or 2 times from a dart restart file.
 ! in theory this should work for any dart restart file because it
@@ -49,13 +49,11 @@ logical               :: is_advance_file = .true.
 ! look below for the comment which says it's starting in on the
 ! model specific output code.
 
-
 call initialize_utilities('trans_time')
 
 ! choose your calendar type from the time manager options.   
 ! (obvious candidate for a namelist item)
 call set_calendar_type(GREGORIAN)
-
 
 ! this is supposed to autodetect whether the restart file is in
 ! binary or ascii, by trying to read in the initial time and
@@ -85,14 +83,14 @@ out_unit = open_file(file_out, 'formatted', 'write')
 call get_date(dart_now_time, year, month, day, hour, minute, second)
 write (out_unit,'(I4.4, 5(1X, I2.2))') year, month, day, hour, minute, second
 ! debug
-write (*, '')
+write (*,*)
 write (*,'(A, I4.4, 5(1X, I2.2))') 'Now time: ', year, month, day, hour, minute, second
 
 
 call get_date(dart_advance_time, year, month, day, hour, minute, second)
 write (out_unit,'(I4.4, 5(1X, I2.2))') year, month, day, hour, minute, second
 ! debug
-write (*, '')
+write (*,*)
 write (*,'(A, I4.4, 5(1X, I2.2))') 'Adv time: ', year, month, day, hour, minute, second
 
 

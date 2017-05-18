@@ -99,7 +99,7 @@ use     location_mod,  only : location_type, get_location, set_location, query_l
 use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT,KIND_PRESSURE,         &
                              KIND_SURFACE_PRESSURE, KIND_TEMPERATURE,KIND_SPECIFIC_HUMIDITY,     &
                              KIND_CLOUD_LIQUID_WATER, KIND_SURFACE_ELEVATION
-use    random_nr_mod, only : init_ran1
+!use    random_nr_mod, only : init_ran1
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
 ! end of use statements
@@ -129,11 +129,8 @@ public ::                                                            &
 !----------------------------------------------------------------------------
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-
-! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   '$URL$', &
+   '$URL$'
 character(len=32 ), parameter :: revision = '$Revision$'
 character(len=128), parameter :: revdate  = '$Date$'
 
@@ -158,9 +155,6 @@ integer :: TYPE_PS   = MISSING_I,         &
            TYPE_Q    = MISSING_I,         &
            TYPE_CLDLIQ = MISSING_I
 !-----------------------------------------------------------------------
-
-type(time_type)                  :: time_step
-type(location_type), allocatable :: state_loc(:)
 
 ! temporary output
 integer :: num_calced = 0, num_searched = 0
@@ -216,7 +210,7 @@ type(time_type) :: Time_step_atmos
 ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 ! Random sequence and init for pert_model_state
 logical                 :: first_pert_call = .true.
-type(random_seq_type)   :: random_seq
+
 ! Variable for keeping track of which ensemble member is to be perturbed
 ! by pert_model_state, which is called by filter for each ensemble member
 ! for a cold start.
@@ -226,7 +220,7 @@ integer                 :: ens_member = 0
 logical                 :: do_out
 
 ! common message string used by many subroutines
-character(len=150)               :: msgstring, string2
+character(len=512)               :: msgstring
 !----
 character (len=8), allocatable   :: cflds(:)
 integer                          :: nflds         ! # fields to read
@@ -349,10 +343,8 @@ subroutine static_init_model()
 ! spherical harmonic weights, these would also be computed here.
 ! Can be a NULL INTERFACE for the simplest models.
 
- real(r8)        :: x_loc
- integer         :: i, j, iunit, io, ncfileid
+ integer         :: iunit, io, ncfileid
  integer         :: max_levs, topog_lons, topog_lats
- type(time_type) :: model_time 
 
 !------------------------------------------------------------------
 ! only execute this code once
@@ -564,34 +556,32 @@ integer,  intent(in)  :: ncfileid
     temps%length    = 1
 
     write(*,"(A10,I3)") slon%var_name , slon%length
-    write(*,"(A10,I3)") lat%var_name , lat%length
-    write(*,"(A10,I3)") lon%var_name , lon%length
+    write(*,"(A10,I3)")  lat%var_name ,  lat%length
+    write(*,"(A10,I3)")  lon%var_name ,  lon%length
     write(*,"(A10,I3)") slat%var_name , slat%length
-    write(*,"(A10,I3)") sigs%var_name  , sigs%length
-    write(*,"(A10,I3)") sig%var_name   , sig%length
+    write(*,"(A10,I3)") sigs%var_name , sigs%length
+    write(*,"(A10,I3)")  sig%var_name ,  sig%length
 
 end subroutine
 
+!-----------------------------------------------------------------------
+!>
 
 subroutine read_lmdz_coord(ncfileid, var, cfield)
-!=======================================================================
-integer,            intent(in)  :: ncfileid   ! file and field IDs
-character (len=8),  intent(in)  :: cfield
+integer,            intent(in)  :: ncfileid
 type(grid_1d_type), intent(out) :: var
-!-----------
-!----------------------------------------------------------------------
+character (len=8),  intent(in)  :: cfield
+
 ! Local workspace
-integer :: i, coord_size             ! grid/array indices
-integer :: ncfldid    ! file and field IDs
-integer :: ncerr      ! other nc errors; don't abort
+integer :: i
+integer :: ncfldid
+integer :: num_atts
 integer, dimension(nf90_max_var_dims) :: coord_dims
-integer :: num_atts, keep_atts, alen
-integer                                     :: att_type
-!character (len=nf90_max_name)               :: att_name
-!character (len=nf90_max_name), pointer      :: att_vals(:)
 character (len=nf90_max_name) , pointer     :: att_names(:)
 character (len=nf90_max_name), pointer      :: att_vals(:)
 real(r8)                                    :: resol, resol_1, resol_n
+
+!>@todo how does the att_names pointer thing work?
 
   call nc_check(nf90_inq_varid(ncfileid,trim(cfield), ncfldid), &
                  'read_lmdz_coord', 'inq_varid '//trim(cfield))
@@ -599,24 +589,22 @@ real(r8)                                    :: resol, resol_1, resol_n
                'read_lmdz_coord', 'inqure_variable '//trim('cfield'))
 
   allocate(att_names(num_atts), att_vals(num_atts))
-!-------
+
  do i=1,num_atts
 
   call nc_check(nf90_inq_attname(ncfileid, ncfldid, i, att_names(i)), &
-                 'read_lmdz_coord', 'inq_attname '//trim('att_name'))
-  !var%atts_names(i) = att_name
+                 'read_lmdz_coord', 'inq_attname '//trim('att_names(i)'))
 
   call nc_check(nf90_get_att(ncfileid, ncfldid, att_names(i),att_vals(i)), &
-                    'read_lmdz_coord', 'get_att '//trim('att_vals' ))
+                    'read_lmdz_coord', 'get_att '//trim('att_vals(i)' ))
 
  end do
 
  call init_grid_1d_instance(var, var%length, num_atts)
 
-
- var%var_name = cfield
- var%dim_id = coord_dims(1)
- var%atts_vals = att_vals 
+ var%var_name   = cfield
+ var%dim_id     = coord_dims(1)
+ var%atts_vals  = att_vals 
  var%atts_names = att_names
 
  call nc_check(nf90_get_var(ncfileid, ncfldid, var%vals, start=(/1/) &
@@ -693,67 +681,66 @@ subroutine end_grid_1d_instance(var)
 end subroutine end_grid_1d_instance
 
 
+!-----------------------------------------------------------------------
+!>
 
-   subroutine nc_read_model_atts_3d(  ncfileid , att, var, cfield)
-!=======================================================================
-! Local workspace
-integer :: i, nchars, ierr
-integer :: ncfileid, ncfldid, ncattid, att_type
-!----------------------------------------------------------------------
+subroutine nc_read_model_atts_3d(  ncfileid , att, var, cfield)
+integer,            intent(in)    :: ncfileid
+character(len=*),   intent(in)    :: att
+type(data_3d_type), intent(inout) :: var
+character(len=*),  intent(in)     :: cfield
 
-character (len=8),  intent(in)  :: cfield
-character (len=*),  intent(in)  :: att
-type(data_3d_type)              :: var
-character (len=128)             :: att_vals
-!----------------------------------------------------------------------
+integer :: ncfldid, ncattid, att_type
+integer :: nchars, ierr
+character(len=NF90_MAX_NAME) :: att_vals
 
-    call nc_check(nf90_inq_varid(ncfileid, cfield, ncfldid),'nc_read_model_atts', &
-                 'inq_varid '//trim(cfield))
- 
-   ierr = nf90_inquire_attribute(ncfileid, ncfldid, trim(att), att_type, nchars, ncattid)
+call nc_check(nf90_inq_varid(ncfileid, cfield, ncfldid),'nc_read_model_atts', &
+              'inq_varid '//trim(cfield))
 
-   if (ierr == nf90_noerr) then
-      call nc_check(nf90_get_att(ncfileid, ncfldid, trim(att) ,att_vals ), &
-                    'nc_read_model_atts', 'get_att '//trim(att))
-      att_vals(nchars+1:128) = ' '
-   else
-      WRITE(*,*) ncfldid, 'NOT AVAILABLE!'
-   end if
+ierr = nf90_inquire_attribute(ncfileid, ncfldid, trim(att), att_type, nchars, ncattid)
 
-    var%atts_names = att 
-    var%atts_vals  = att_vals
+if (ierr == nf90_noerr) then
+   call nc_check(nf90_get_att(ncfileid, ncfldid, trim(att) ,att_vals ), &
+                 'nc_read_model_atts', 'get_att '//trim(att))
+   att_vals(nchars+1:NF90_MAX_NAME) = ' '
+else
+   WRITE(*,*) ncfldid, 'NOT AVAILABLE!'
+end if
+
+var%atts_names = att 
+var%atts_vals  = att_vals
 
 end subroutine nc_read_model_atts_3d
 
+!-----------------------------------------------------------------------
+!>
 
-   subroutine nc_read_model_atts_2d(  ncfileid , att, var, cfield)
-!=======================================================================
-! Local workspace
-integer :: i, nchars, ierr
-integer :: ncfileid, ncfldid, ncattid, att_type
-!----------------------------------------------------------------------
+subroutine nc_read_model_atts_2d(  ncfileid , att, var, cfield)
 
-character (len=8),  intent(in)  :: cfield
-character (len=*),  intent(in)  :: att
-type(data_2d_type)              :: var
-character (len=128)             :: att_vals
-!----------------------------------------------------------------------
+integer,            intent(in)    :: ncfileid
+character (len=*),  intent(in)    :: att
+type(data_2d_type), intent(inout) :: var
+character (len=*),  intent(in)    :: cfield
 
-    call nc_check(nf90_inq_varid(ncfileid, cfield,ncfldid),'nc_read_model_atts', &
-                 'inq_varid '//trim(cfield))
+integer :: ncfldid, ncattid, att_type
+integer :: nchars, ierr
+character(len=NF90_MAX_NAME) :: att_vals
 
-   ierr = nf90_inquire_attribute(ncfileid, ncfldid, trim(att), att_type, nchars,ncattid)
+call nc_check(nf90_inq_varid(ncfileid, cfield,ncfldid),'nc_read_model_atts', &
+              'inq_varid "'//trim(cfield)//'"')
 
-   if (ierr == nf90_noerr) then
-      call nc_check(nf90_get_att(ncfileid, ncfldid, trim(att) ,att_vals ), &
-                    'nc_read_model_atts', 'get_att '//trim(att))
-      att_vals(nchars+1:128) = ' '
-   else
-      WRITE(*,*) ncfldid, 'NOT AVAILABLE!'
-   end if
+ierr = nf90_inquire_attribute(ncfileid, ncfldid, trim(att), att_type, nchars, ncattid)
 
-    var%atts_names = att
-    var%atts_vals  = att_vals
+if (ierr == nf90_noerr) then
+   call nc_check(nf90_get_att(ncfileid, ncfldid, trim(att) ,att_vals ), &
+                 'nc_read_model_atts', 'get_att "'//trim(att)//'"')
+   att_vals(nchars+1:NF90_MAX_NAME) = ' '
+else
+   WRITE(*,*) ncfldid, 'NOT AVAILABLE!'
+end if
+
+var%atts_names = att
+var%atts_vals  = att_vals
 
 end subroutine nc_read_model_atts_2d
 
@@ -875,9 +862,10 @@ return
 
 end subroutine map_kinds
 
+!-----------------------------------------------------------------------
+!>
 
-   function get_model_size()
-!=======================================================================
+function get_model_size()
 
 integer :: get_model_size
 
@@ -885,90 +873,90 @@ get_model_size = model_size
 
 end function get_model_size
 
-   subroutine init_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDLIQ_local)
-!=======================================================================
-! subroutine init_model_instance(var)
-!
-! Initializes an instance of a lmdz model state variable
+!-----------------------------------------------------------------------
+!>
+!> Initializes an instance of a lmdz model state variable
+
+subroutine init_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDLIQ_local)
+
+type(data_2D_type), intent(out) :: PS_local
+type(data_3D_type), intent(out) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
 ! Initialize the storage space and return
-! keep some others name of variabls
-    type(data_2D_type), intent(in) :: PS_local
-    type(data_3D_type), intent(in) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
+! keep some others name of variables
 
-    allocate(PS_local%vals(lon%length,lat%length))
-    allocate(T_local%vals(lon%length,lat%length,sigs%length))
-    allocate(U_local%vals(slon%length,lat%length,sigs%length))
-    allocate(V_local%vals(lon%length,slat%length,sigs%length))
-    allocate(Q_local%vals(lon%length,lat%length,sigs%length))
-    allocate(CLDLIQ_local%vals(lon%length,lat%length,sigs%length))
+allocate(    PS_local%vals(lon%length, lat%length))
+allocate(     T_local%vals(lon%length, lat%length, sigs%length))
+allocate(     U_local%vals(slon%length,lat%length, sigs%length))
+allocate(     V_local%vals(lon%length, slat%length,sigs%length))
+allocate(     Q_local%vals(lon%length, lat%length, sigs%length))
+allocate(CLDLIQ_local%vals(lon%length, lat%length, sigs%length))
 
 end subroutine init_model_instance
 
 
-   subroutine end_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDLIQ_local)
-!=======================================================================
-! Initializes an instance of a lmdz model state variable
+!-----------------------------------------------------------------------
+!>
 
-! Initialize the storage space and return
-! keep some others name of variables
-    type(data_2D_type), intent(in) :: PS_local
-    type(data_3D_type), intent(in) ::  U_local,V_local,T_local,Q_local,CLDLIQ_local
+subroutine end_model_instance(PS_local, T_local, U_local, V_local, Q_local, CLDLIQ_local)
 
-    deallocate(PS_local%vals)
-    deallocate(U_local%vals)
-    deallocate(V_local%vals)
-    deallocate(T_local%vals)
-    deallocate(Q_local%vals)
-    deallocate(CLDLIQ_local%vals)
+type(data_2D_type), intent(inout) :: PS_local
+type(data_3D_type), intent(inout) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
+
+deallocate(    PS_local%vals)
+deallocate(     U_local%vals)
+deallocate(     V_local%vals)
+deallocate(     T_local%vals)
+deallocate(     Q_local%vals)
+deallocate(CLDLIQ_local%vals)
 
 end subroutine end_model_instance
 
 
+!-----------------------------------------------------------------------
+!>
 
-   subroutine read_lmdz_init(file_name, model_time)
-!=======================================================================
+subroutine read_lmdz_init(file_name, model_time)
 
 character(len = *),        intent(in)    :: file_name
 type(time_type), optional, intent(out)   :: model_time
 
 ! Local workspace
-integer :: ncfileid, ncfldid, dimid, varid, dimlen
+integer :: ncfileid, ncfldid
 
-integer(kind=4),save :: iyear, ayear, imonth, iday, ihour, imin, isec, rem
-integer, allocatable, dimension(:) :: datetmp, datesec
+integer(kind=4),save :: iyear, imonth, iday, ihour, imin, isec
 
-integer :: i, j, k
-real(r8) , allocatable ::  tmp_2d(:,:), tmp_3d(:,:,:)
+! integer :: i, j, k
+! real(r8) , allocatable :: tmp_3d(:,:,:)
 
 !----------------------------------------------------------------------
 call nc_check(nf90_open(path = trim(file_name), mode = nf90_nowrite, ncid = ncfileid), &
-      'read_lmdz_init', 'opening '//trim(file_name))
+      'read_lmdz_init', 'opening "'//trim(file_name)//'"')
 
 !----PS--
 call nc_check(nf90_inq_varid(ncfileid,'ps', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('ps'))
+                'read_lmdz_init', 'inq_varid ps')
 
 call nc_check(nf90_get_var(ncfileid, ncfldid, PS%vals ,start=(/1,1,1/)  &
                            ,count=(/lon%length,lat%length, 1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('ps'))
+                           'read_lmdz_init', 'get_var ps')
 call convert_grid_2d_data_to_dart(lon%length,lat%length,botm_positive_lon_index,PS%vals)
 !----T--
 
 call nc_check(nf90_inq_varid(ncfileid,'teta', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('teta'))
+                'read_lmdz_init', 'inq_varid teta')
 call nc_check(nf90_get_var(ncfileid, ncfldid, T%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('teta'))
+                           'read_lmdz_init', 'get_var teta')
 
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,T%vals)
 
 !-----Q--
 call nc_check(nf90_inq_varid(ncfileid,'H2Ov', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('H2Ov'))
+                'read_lmdz_init', 'inq_varid H2Ov')
 call nc_check(nf90_get_var(ncfileid, ncfldid, Q%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('H2Ov'))
+                           'read_lmdz_init', 'get_var H2Ov')
 !! start.nc has mixing ratio. It has been replaced  to specific humidity.
 !  allocate( tmp_3d (lon%length, lat%length, sigs%length ))
 !   do i=1,lon%length
@@ -985,31 +973,31 @@ call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positiv
 
 !-----CLDLIQ--
 call nc_check(nf90_inq_varid(ncfileid,'H2Ol', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('H2Ol'))
+                'read_lmdz_init', 'inq_varid H2Ol')
 call nc_check(nf90_get_var(ncfileid, ncfldid, CLDLIQ%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('H2Ol'))
+                           'read_lmdz_init', 'get_var H2Ol')
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,CLDLIQ%vals)
 !----U--
 
 call nc_check(nf90_inq_varid(ncfileid,'ucov', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('ucov'))
+                'read_lmdz_init', 'inq_varid ucov')
 call nc_check(nf90_get_var(ncfileid, ncfldid, U%vals ,start=(/1,1,1,1/)  &
                            ,count=(/slon%length,lat%length, sigs%length,1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('ucov'))
+                           'read_lmdz_init', 'get_var ucov')
 call convert_grid_3d_data_to_dart(slon%length,lat%length,sigs%length,botm_positive_slon_index,U%vals)
 
 !----V--
 
 call nc_check(nf90_inq_varid(ncfileid,'vcov', ncfldid), &
-                'read_lmdz_init', 'inq_varid '//trim('vcov'))
+                'read_lmdz_init', 'inq_varid vcov')
 call nc_check(nf90_get_var(ncfileid, ncfldid, V%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,slat%length, sigs%length,1/) ), &
-                           'read_lmdz_init', 'get_var '//trim('vcov'))
+                           'read_lmdz_init', 'get_var vcov')
 call convert_grid_3d_data_to_dart(lon%length,slat%length,sigs%length,botm_positive_lon_index,V%vals)
 
 !---
-call nc_check(nf90_close(ncfileid), 'read_lmdz_init', 'closing '//trim(file_name))
+call nc_check(nf90_close(ncfileid), 'read_lmdz_init', 'closing "'//trim(file_name)//'"')
 
 
 if(write_grads)then
@@ -1298,21 +1286,20 @@ type(time_type), intent(out) :: time
 time = set_time(0, 0)
 end subroutine init_time
 
+!-----------------------------------------------------------------------
+!> compute hybrid levels coefficient at mid layer from 'ap' and 'bp'
 
- subroutine hybrid_coefi_mid_layer(hyam, hybm, max_levs)
-!=======================================================================
-!compute hybrid levels coefficient at mid layer from 'ap' and 'bp'
- integer              :: i,j
- type(grid_1D_type)   :: hyam,hybm
- integer , intent(in) :: max_levs
- 
-  do i=1,max_levs-1
+subroutine hybrid_coefi_mid_layer(hyam, hybm, max_levs)
+type(grid_1D_type), intent(out) :: hyam, hybm
+integer,            intent(in)  :: max_levs
 
-    hyam%vals(i) = 0.5 * (ap%vals(i) + ap%vals(i+1)) 
-    hybm%vals(i) = 0.5 * (bp%vals(i) + bp%vals(i+1)) 
+integer :: i
 
-  end do
- 
+do i=1,max_levs-1
+   hyam%vals(i) = 0.5 * (ap%vals(i) + ap%vals(i+1)) 
+   hybm%vals(i) = 0.5 * (bp%vals(i) + bp%vals(i+1)) 
+enddo
+
 end subroutine hybrid_coefi_mid_layer
 
 
@@ -1535,9 +1522,9 @@ end subroutine get_val
    subroutine set_ps_ens_mean_arrays(vec)
  !======================================================
 real(r8), intent(in)   :: vec(:)
-integer :: ind, i, j, fld_index , ps_ens_mean_length 
+integer :: ind, i, j, fld_index
 
-!$Rivision num : 1
+!$Revision num : 1
 
 if (alloc_ps) then
 
@@ -1710,7 +1697,7 @@ type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_kind
 
 integer  :: which_vert
-integer  :: i, indx, index_1, index_2, index_3, nfld
+integer  :: indx, index_1, index_2, index_3, nfld
 integer  :: box, slice
 real(r8) :: lon_val, lat_val, lev_val
 
@@ -2101,7 +2088,7 @@ integer,  intent(in)  :: kind_lmdz, num_levs, lon_index, lat_index
 logical,  intent(in)  :: stagr_lon, stagr_lat
 
 real(r8)  :: var(num_levs,0:1,0:1), weight
-integer   :: k, lon_index_local, vec_ind
+integer   :: k, vec_ind
 
 ! So far only called from model_heights to get T and Q profiles for Tv
 ! calculation.
@@ -2571,7 +2558,7 @@ integer,                intent(out)   :: new_which
 real(r8), dimension(3), intent(in)    :: old_array
 real(r8), dimension(3), intent(inout) :: new_array
 
-integer   :: i, num_levs, top_lev, bot_lev
+integer   :: num_levs, top_lev, bot_lev
 integer   :: lon_index, lat_index
 integer   :: rank_kind, lmdz_kind, istatus
 real(r8)  :: p_surf,   frac
@@ -2712,8 +2699,8 @@ elseif (old_which == VERTISHEIGHT) then
    if (top_lev == 1 .and. old_array(3) > model_h(1)) then
       ! above top of model
       frac = 1.0_r8
-      !write(msgstring, *) 'ob height ',old_array(2),' above LMDZ levels at '  &
-      !                    ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
+      write(msgstring, *) 'ob height ',old_array(2),' above LMDZ levels at '  &
+                          ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
       call error_handler(E_MSG, 'convert_vert', msgstring,source,revision,revdate)
 
 
@@ -2723,8 +2710,8 @@ elseif (old_which == VERTISHEIGHT) then
    else
       ! below bottom of model
       frac = 0.0_r8
-      !write(msgstring, *) 'ob height ',old_array(3),' below LMDZ levels at ' &
-      !                    ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
+      write(msgstring, *) 'ob height ',old_array(3),' below LMDZ levels at ' &
+                          ,old_array(1) ,old_array(2) ,' for ob type',dart_kind
       call error_handler(E_MSG, 'convert_vert', msgstring,source,revision,revdate)
    endif
 
@@ -2747,44 +2734,45 @@ return
 
   end subroutine convert_vert
 
-!======================================================================================
 
-   subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
-                            num_close, close_ind, dist)
 !----------------------------------------------------------------------------
-! get_close_obs takes as input an "observation" location, a DART TYPE (not
-! KIND),
-! and a list of all potentially close locations and KINDS on this task.
-!
-! get_close_obs
-!    *) converts vertical coordinates as needed to vert_coord,
-!    *) calls location_mod/threed_sphere:get_close_obs,
-!       to which it sends this (converted) array of locations,
-!    *) gets back the distances and indices of those locations that are
-!       "close" to the base observation.
-!    *) tests for being above the highest_obs_pressure_Pa threshold,
-!       and increases the vertical distance based on height above highest_*.
-!
-! get_close_obs will use the ensemble average to convert the obs and/or state
-!               vertical location(s) to a standard (vert_coord) vertical
-!               location
+!> get_close_obs takes as input an "observation" location, a DART TYPE (not
+!> KIND),
+!> and a list of all potentially close locations and KINDS on this task.
+!>
+!> get_close_obs
+!>    *) converts vertical coordinates as needed to vert_coord,
+!>    *) calls location_mod/threed_sphere:get_close_obs,
+!>       to which it sends this (converted) array of locations,
+!>    *) gets back the distances and indices of those locations that are
+!>       "close" to the base observation.
+!>    *) tests for being above the highest_obs_pressure_Pa threshold,
+!>       and increases the vertical distance based on height above highest_*.
+!>
+!> get_close_obs will use the ensemble average to convert the obs and/or state
+!>               vertical location(s) to a standard (vert_coord) vertical
+!>               location
+
+subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+                            num_close, close_ind, dist)
 
 !FIXME : This routine is for kodiak version but latest version may differ.
 !e.g. latest version has base_obs_type instead of base_obs_kind hence
 !need to use base_obs_kind = get_obs_kind_var_type(base_obs_type) in latest
 !version. see CAM model_mod.f90
 
-
 type(get_close_type), intent(in)  :: gc
 type(location_type),  intent(in)  :: base_obs_loc, obs_loc(:)
 integer,              intent(in)  :: base_obs_kind, obs_kind(:)
 integer,              intent(out) :: num_close, close_ind(:)
 real(r8),             intent(out) :: dist(:)
+
 integer                :: k, t_ind
 integer                :: base_which, local_base_which, obs_which,local_obs_which
 real(r8), dimension(3) :: base_array, local_base_array, obs_array, local_obs_array
-real(r8)               :: damping_dist, increment, threshold, thresh_wght
-type(location_type)    :: local_base_obs_loc, local_obs_loc,vert_only_loc
+real(r8)               :: damping_dist
+!real(r8)               ::  threshold, thresh_wght
+type(location_type)    :: local_base_obs_loc, local_obs_loc, vert_only_loc
 
 !If base_obs vert type is not pressure; convert it to pressure
 
@@ -2821,7 +2809,6 @@ call loc_get_close_obs(gc, local_base_obs_loc, base_obs_kind, obs_loc, obs_kind,
 
 !threshold = highest_state_pressure_mb *100._r8
 !if (threshold > 0.0_r8) thresh_wght = 1._r8/(threshold * threshold)
-
 
 do k = 1, num_close
 
@@ -2933,9 +2920,9 @@ integer,            intent(out) :: istatus
 real(r8),           intent(out) :: interp_val
 
 integer  :: i, vstatus
-real(r8) :: bot_lon, top_lon, delta_lon,lon_above,temp_lon,             &
-            lon_below, lat_below, lat_above, lev_below,                 &
-            lon_fract, lat_fract, vals(2, 2),  a(2),                    &
+real(r8) :: bot_lon, top_lon, lon_above,                &
+            lon_below, lat_below, lat_above, lev_below, &
+            lon_fract, lat_fract, vals(2, 2),  a(2),    &
             lon_lat_lev(3), level, pressure, height
 
 integer  :: lmdz_type,  &
@@ -3255,8 +3242,8 @@ logical,  intent(out)   :: interf_provided
 type(random_seq_type)   :: random_seq
 type(data_3d_type)      :: T_temp,U_temp,V_temp,Q_temp,CLDLIQ_temp
 type(data_2d_type)      :: PS_temp
-integer                 :: i, j, k, m, pert_fld, mode, field_num
-integer                 :: dim1, dim2, dim3, member
+integer                 :: i, j, k, pert_fld, mode
+integer                 :: dim1, dim2, dim3
 real(r8)                :: pert_val
 
 ! perturb model parameters for the filter_ics.
@@ -3295,7 +3282,7 @@ else
    ens_member = ens_member + num_tasks
 endif
 
-call init_ran1(random_seq,-1*ens_member)
+!call init_ran1(random_seq,-1*ens_member)
 
 print*,nflds,cflds
 
@@ -3615,21 +3602,18 @@ end subroutine write_lmdz_coord_def
 
 ! write LMDZ 'initial' file fields that have been updated
 
-character (len = *), intent(in)           :: file_name
+character(len=*),    intent(in)           :: file_name
 type(data_2d_type),  intent(inout)        :: PS_local 
 type(data_3D_type),  intent(inout)        :: T_local,U_local,V_local,Q_local,CLDLIQ_local
 type(time_type),     intent(in), optional :: model_time
 
-integer               :: i, j, k, n, m, ifld, ncfileid, ncfldid, dim1, dim2, dim3
-integer               :: iyear, imonth, iday, ihour, imin, isec
-integer               :: dimid, dimlen, varid
-integer, allocatable, dimension(:) :: datetmp, datesec
-real(r8), allocatable :: tmp_3d(:,:,:), tmp_2d(:,:)
-!character*30 unites
-character(len=30) unites
-integer status
+integer :: ifld, ncfileid, ncfldid, dim1, dim2, dim3
+integer :: iyear, imonth, iday, ihour, imin, isec
 
-integer :: xtype, len, attnum
+! integer               :: i, j, k
+! real(r8), allocatable :: tmp_3d(:,:,:)
+
+character(len=30) :: unites
 
 ! Read LMDZ 'initial' file domain info
 call nc_check(nf90_open(path = trim(file_name), mode = nf90_write, ncid = ncfileid), &
@@ -3788,8 +3772,6 @@ end subroutine write_lmdz_init
 ! function nc_write_model_atts( ncFileID ) result (ierr)
 !
 ! Writes the model-specific attributes to a netCDF file.
-! TJH Fri Aug 29 MDT 2003
-!
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
 integer              :: ierr          ! return value of function
@@ -3797,18 +3779,16 @@ integer              :: ierr          ! return value of function
 !-----------------------------------------------------------------------------------------
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-! merge
 integer :: MemberDimID, StateVarDimID, TimeDimID,ScalarDimID
 integer :: xVarID,StateVarID, StateVarVarID
 integer :: P_id(num_dims)
-integer :: i, ifld, dim_id, g_id
+integer :: i, ifld
 integer :: grid_id(10)   ! manual choice for 10.! num of coord var 10 is sufficient
 character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
 integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 character(len=NF90_MAX_NAME) :: str1
-
 
 ierr = 0     ! assume normal termination
 
@@ -4092,7 +4072,7 @@ integer                            :: ierr          ! return value of function
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: StateVarID, ncfldid
-integer :: ifld, ii,dim1,dim2,dim3
+integer :: ifld, dim1, dim2, dim3
 
 character (len=8) :: cfield
 
@@ -4530,52 +4510,33 @@ do i = indx, lon_len
  end subroutine
 
 
+!-----------------------------------------------------------------------
+!> conversion from radian to degree
  
-  subroutine scopy(n,sx,incx,sy,incy)
-!======================================================
-  IMPLICIT NONE
+subroutine rad_to_degree(coord)
+type(grid_1D_type), intent(inout) :: coord 
 
-  integer  n,incx,incy,ix,iy,i
-  real sx((n-1)*incx+1),sy((n-1)*incy+1)
+real(r8), save :: pi = 4.0_r8 * atan(1.0_r8)
+integer  :: i
 
-   iy=1
-   ix=1
-     do  i=1,n
-         sy(iy)=sx(ix)
-         ix=ix+incx
-         iy=iy+incy
-     end do
-
-end subroutine scopy
-
-
-  subroutine rad_to_degree(coord)
-!======================================================
-!convesion form radian to degree
-  type(grid_1D_type) :: coord 
-  real(r8)           :: pi
-  integer            :: i
-
-  pi = 4._r8 * atan (1._r8)
-
-  do i= 1, size(coord%vals)
-    coord%vals(i) = coord%vals(i) * (180._r8 / pi) 
-  end do
+do i= 1, size(coord%vals)
+  coord%vals(i) = coord%vals(i) * (180.0_r8 / pi) 
+enddo
  
 end subroutine rad_to_degree
 
-  subroutine degree_to_rad(coord)
-!======================================================
-!convesion form radian to degree
-  type(grid_1D_type) :: coord 
-  real(r8)           :: pi
-  integer            :: i
+!-----------------------------------------------------------------------
+!> conversion from degree to radian
 
-  pi = 4._r8 * atan (1._r8)
+subroutine degree_to_rad(coord)
+type(grid_1D_type), intent(inout) :: coord 
 
-  do i= 1, size(coord%vals)
-    coord%vals(i) = coord%vals(i) * ( pi / 180._r8 ) 
-  end do
+real(r8), save :: pi = 4.0_r8 * atan(1.0_r8)
+integer  :: i
+
+do i= 1, size(coord%vals)
+  coord%vals(i) = coord%vals(i) * ( pi / 180.0_r8 ) 
+end do
  
 end subroutine degree_to_rad
 
@@ -4596,7 +4557,7 @@ subroutine write_state_vectori_grads(iim,jjm,llm,lon,lat,phis,U,V,T,Q,PS)
  real(r8) plev(llm), pi
  integer irec,isor,nout
  data nout/90/
- integer  :: i,j,l,ij
+ integer  :: i,j,l
 
  pi = 4.0_r8 * atan( 1.0_r8)
 
