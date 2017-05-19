@@ -6,9 +6,9 @@
 
 module model_mod
 
-!--------------------------------------------------------------------------------------------
+!-----------------------------------------------------------------------------------------
 !                Assimilation interface for LMDZ  model
-!-------------------------------------------------------------------------------------------
+!-----------------------------------------------------------------------------------------
 ! This is the interface between the LMDZ atmospheric model and DART.
 ! There are 16 required public interfaces whose arguments CANNOT be changed.
 ! There are potentially many other public routines that are typically
@@ -20,8 +20,8 @@ module model_mod
 !
 ! based on subroutines from others models especially CAM in the DART package
 ! NOTE:  This interface codes do not convert LMDZ state vectors 'ucov', 'vcov' and 'teta' 
-!        in natural winds fields (u,v) and temperaure (t) . Hence it is required to convert
-!        them inside LMDZ before writting LMDZ restart file. Similarly
+!        in natural winds fields (u,v) and temperaure (t). Hence it is required to 
+!        convert them inside LMDZ before writting LMDZ restart file. Similarly
 !        conversion from (u,v,t) to (ucov,vcov,teta) is required outside of this
 !        program. For more details please see  LMDZ5_modified_codes/README 
 !
@@ -438,12 +438,15 @@ call hybrid_coefi_mid_layer(apm, bpm, sig%length)
 
 ! Better damping algorithm for state variables near/in the LMDZ damped levels
 ! at the top of the model.  
+   
+
+model_reff  = 101325.0_r8  !! surface refrence pressure in LMDZ
+
 if (vert_coord == 'pressure') then
    !FIXME LMDZ's model_top is 1/2 level below the highest level, so
    ! apm instead of ap ???.
    !model_top   = apm%vals(1)  ! 
    model_top   = ap%vals(1)  ! 
-   model_reff  = 101325.0_r8  !! surface refrence pressure in LMDZ
 
    ! The (lon,lat) here must match the ones in the definition of vert_only_loc
    ! in get_close_obs.
@@ -527,9 +530,7 @@ module_initialized = .true.
 
 write(*,*) 'TJH leaving static_init_model'
 
-!=======================================================================
 end subroutine static_init_model
-
 
 
 !-----------------------------------------------------------------------
@@ -571,6 +572,7 @@ write(*,"(A10,I3)") sigs%var_name , sigs%length
 write(*,"(A10,I3)")  sig%var_name ,  sig%length
 
 end subroutine read_lmdz_init_size
+
 
 !-----------------------------------------------------------------------
 !>
@@ -623,10 +625,8 @@ if (cfield(1:2) == 'rl') then
    call rad_to_degree(var)
 end if
 
-if (cfield(1:2) == 'ap'.OR.cfield(1:2) == 'bp') then
-   var%resolution = MISSING_R8
-elseif (var%length < 2 .and. cfield == 'temps') then
-   ! sometimes there is only 1 time in the file.
+
+if (cfield(1:2) == 'ap' .OR. cfield(1:2) == 'bp' .OR. cfield=='temps') then
    var%resolution = MISSING_R8
 else
    resol_1 = var%vals(2) - var%vals(1)
@@ -655,14 +655,13 @@ deallocate(att_names, att_vals)
 end subroutine read_lmdz_coord
 
 
-   subroutine init_grid_1d_instance(var, length, num_atts)
-!=======================================================================
-! subroutine init_grid_1d_instance(var)
-!
-! Initializes an instance of a lmdz grid variable
+!-----------------------------------------------------------------------
+!> Initializes an instance of a lmdz grid variable
+
+subroutine init_grid_1d_instance(var, length, num_atts)
 
 type(grid_1d_type), intent(out) :: var
-integer,       intent(in ) :: length, num_atts
+integer,            intent(in ) :: length, num_atts
 
 ! Initialize the storage space and return
 allocate( var%vals      (length))
@@ -674,19 +673,17 @@ var%num_atts = num_atts
 
 !var%length = length
 
-
 end subroutine init_grid_1d_instance
 
 
+!-----------------------------------------------------------------------
+!> Ends an instance of a lmdz  grid_1d variable
+
 subroutine end_grid_1d_instance(var)
-!=======================================================================
-! subroutine end_grid_1d_instance(var)
-!
-! Ends an instance of a lmdz  grid_1d variable
 
- type(grid_1d_type), intent(inout) :: var
+type(grid_1d_type), intent(inout) :: var
 
- deallocate(var%vals, var%atts_names, var%atts_vals)
+deallocate(var%vals, var%atts_names, var%atts_vals)
 
 end subroutine end_grid_1d_instance
 
@@ -722,6 +719,7 @@ var%atts_vals  = att_vals
 
 end subroutine nc_read_model_atts_3d
 
+
 !-----------------------------------------------------------------------
 !>
 
@@ -753,7 +751,6 @@ var%atts_names = att
 var%atts_vals  = att_vals
 
 end subroutine nc_read_model_atts_2d
-
 
 
 !-----------------------------------------------------------------------
@@ -806,37 +803,30 @@ endif ! cfield
 
 end subroutine read_lmdz_horiz
 
- 
 
+!-----------------------------------------------------------------------
+!> Makes an array of 'locations within the state vector'
+!> of  all the available obs kinds that come from obs_kind_mod. 
+!> The obs kind that's needed will be the index into this array,
+!> the corresponding value will be the position of that field 
+!> (not individual variable) within the state vector according to state_name_Xd.  
+!> This subroutine will be called from static_init_model, so it will not have to
+!> be recomputed for every obs.
+!> Also maps the local model_mod TYPE_s onto the DART KIND_s by the same
+!> mechanism.
+!>
+!> other KIND_ possibilities are listed after the 'use obs_kind_mod' statement
 
+subroutine map_kinds()
 
- subroutine map_kinds()
-!=======================================================================
-! subroutine map_kinds()
 ! Borrowed from CAM
-
 ! ? Should this be a function instead; removes need to dimension obs_loc_in
 ! arbitrarily
 !   and wastefully.  But then it's called millions of times, instead of
 !   accessing an
 !   array that's defined once.
 
-! Makes an array of 'locations within the state vector'
-! of  all the available obs kinds that come from obs_kind_mod. 
-! The obs kind that's needed will be the index into this array,
-! the corresponding value will be the position of that field (not individual
-! variable) 
-! within the state vector according to state_name_Xd.  
-! This subroutine will be called from static_init_model, so it will not have to
-! be 
-! recomputed for every obs.
-! Also maps the local model_mod TYPE_s onto the DART KIND_s by the same
-! mechanism.
-
-! other KIND_ possibilities are listed after the 'use obs_kind_mod' statement
-
 !integer :: i
-
 
 dart_to_lmdz_kinds(KIND_SURFACE_PRESSURE)   = TYPE_PS
 dart_to_lmdz_kinds(KIND_TEMPERATURE)        = TYPE_T
@@ -873,6 +863,7 @@ if (TYPE_CLDLIQ /= MISSING_I)  lmdz_to_dart_kinds(TYPE_CLDLIQ) = KIND_CLOUD_LIQU
 return
 
 end subroutine map_kinds
+
 
 !-----------------------------------------------------------------------
 !>
@@ -1066,17 +1057,15 @@ end if
 end subroutine read_lmdz_init
 
 
+!-----------------------------------------------------------------------
+!>
 
-
-  subroutine  prog_var_to_vector(x,PS_local,T_local,U_local,V_local,Q_local,CLDLIQ_local)
-!=======================================================================
-! subroutine prog_var_to_vector(var, x)
+subroutine  prog_var_to_vector(x,PS_local,T_local,U_local,V_local,Q_local,CLDLIQ_local)
 real(r8),          intent(out) :: x(:)
 type(data_2D_type), intent(in) :: PS_local
 type(data_3D_type), intent(in) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
 integer :: i, j, k,indx
-!---
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1158,17 +1147,18 @@ end do
 end subroutine prog_var_to_vector 
 
 
- subroutine vector_to_prog_var(x,PS_local,T_local,U_local,V_local,Q_local,CLDLIQ_local)
-!=======================================================================
+!-----------------------------------------------------------------------
+!>
+
+subroutine vector_to_prog_var(x,PS_local,T_local,U_local,V_local,Q_local,CLDLIQ_local)
+
 real(r8),           intent(in)  :: x(model_size)
 type(data_2D_type), intent(out) :: PS_local
 type(data_3D_type), intent(out) :: U_local,V_local,T_local,Q_local,CLDLIQ_local
 
 integer :: i, j, k,indx
-!---
 
 if ( .not. module_initialized ) call static_init_model
-
 
 indx=0
 
@@ -1248,17 +1238,13 @@ end do
 end subroutine vector_to_prog_var
 
 
+!-----------------------------------------------------------------------
+!>
 
-   subroutine adv_1step(x, Time)
-!=======================================================================
-! subroutine adv_1step(x, Time)
-!
+subroutine adv_1step(x, Time)
 
-real(r8), intent(inout) :: x(:)
-
-! Time is needed for more general models like this; need to add in to
-! low-order models
-type(time_type), intent(in) :: Time
+real(r8),        intent(inout) :: x(:)
+type(time_type), intent(in)    :: Time
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1272,13 +1258,15 @@ call error_handler(E_ERR,'adv_1step', &
 end subroutine adv_1step
 
 
-   function get_model_time_step()
-!=======================================================================
-! function get_model_time_step()
-!
-! Returns the the time step of the model. In the long run should be repalced
-! by a more general routine that returns details of a general time-stepping
-! capability.
+!-----------------------------------------------------------------------
+!> Returns the the minimum block of time for a model forecast.
+!> This is NOT the dynamical timestep of the atmosphere.
+!>
+!> For example, your dynamical timestep may be 20 seconds, but you want to
+!> assimilate at most every hour. The time step returned from here would be
+!> an hour.
+
+function get_model_time_step()
 
 type(time_type) :: get_model_time_step
 
@@ -1290,9 +1278,10 @@ get_model_time_step =  Time_step_atmos
 end function get_model_time_step
 
 
-  subroutine end_model()
-!=======================================================================
-! subroutine end_model()
+!-----------------------------------------------------------------------
+!>
+
+subroutine end_model()
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1303,11 +1292,10 @@ deallocate(ens_mean)
 end subroutine end_model
 
 
-   subroutine init_conditions(x)
-!=======================================================================
-! subroutine init_conditions(x)
-!
-! Reads in restart initial conditions  -- noop for LMDZ
+!-----------------------------------------------------------------------
+!> Reads in restart initial conditions  -- noop for LMDZ
+
+subroutine init_conditions(x)
 
 real(r8), intent(inout) :: x(:)
 
@@ -1321,24 +1309,27 @@ call error_handler(E_ERR,"init_conditions", &
 
 end subroutine init_conditions
 
-   subroutine init_time(time)
-!=======================================================================
-! subroutine init_time(time)
-!
-! For now returns value of Time_init which is set in initialization routines.
+
+!-----------------------------------------------------------------------
+!> For now returns value of Time_init which is set in initialization routines.
+!> WARNING: CURRENTLY SET TO 0
+
+subroutine init_time(time)
 
 type(time_type), intent(out) :: time
 
 if ( .not. module_initialized ) call static_init_model
 
-! WARNING: CURRENTLY SET TO 0
 time = set_time(0, 0)
+
 end subroutine init_time
+
 
 !-----------------------------------------------------------------------
 !> compute hybrid levels coefficient at mid layer from 'ap' and 'bp'
 
 subroutine hybrid_coefi_mid_layer(hyam, hybm, max_levs)
+
 type(grid_1D_type), intent(out) :: hyam, hybm
 integer,            intent(in)  :: max_levs
 
@@ -1352,21 +1343,19 @@ enddo
 end subroutine hybrid_coefi_mid_layer
 
 
- subroutine plevs_lmdz (pres_surf, num_levs, pres_mid )
-!==============lmdz=========================================================
-! Find Pressures at model-layers for given surface pressure at one grid point
-! and apm,bpm hybrid coefficient
-
 !-----------------------------------------------------------------------
-real(r8), intent(in)  :: pres_surf        ! Surface pressure (pascals)
+!> Find Pressures at model-layers for given surface pressure at one grid point
+!> and apm,bpm hybrid coefficient
+
+subroutine plevs_lmdz (pres_surf, num_levs, pres_mid )
+
+real(r8), intent(in)  :: pres_surf     ! Surface pressure (pascals)
 integer,  intent(in)  :: num_levs
 real(r8), intent(out) :: pres_mid(:)   ! Pressure at model levels
-!-----------------------------------------------------------------------
 
-!---------------------------Local workspace-----------------------------
-  integer k       
-!-----------------------------------------------------------------------
-!
+integer :: k       
+
+
 ! Set midpoint pressures and layer thicknesses
 !
 ! coef
@@ -1379,16 +1368,15 @@ return
 end subroutine plevs_lmdz
 
 
-   function index_from_grid(lev_ind, lon_ind, lat_ind, ifld)
-!=======================================================================
-!Function to generate the state vector index corresponding to the grid location
-!and state variable
-!------------------
+!-----------------------------------------------------------------------
+!> generate the state vector index corresponding to the grid location
+!> and state variable
+
+function index_from_grid(lev_ind, lon_ind, lat_ind, ifld)
 
 integer, intent(in) :: lev_ind, lon_ind, lat_ind, ifld
 
 integer :: index_from_grid
-!-----
 
 index_from_grid = 0
 
@@ -1422,19 +1410,19 @@ if(ifld>6.OR.ifld<1) stop 'stoping in index_from_grid : variable not found for i
 end function index_from_grid
 
 
-   subroutine coord_val(dim_name, indx, lon_val, lat_val, lev_val)
-!==========================================================================
-! given the name of the coordinate to be searched and the index into that array, 
-! returns the coordinate value  in either lon_val, lat_val, or lev_val.
-! All 3 _val arguments are present so that this routine can return the value
-! in the coordinate that the calling routine wants it to be, and
-! search/placement doesn't
-! have to be done there.
-! Used by get_state_meta_data and model_interpolate.
+!-----------------------------------------------------------------------
+!> given the name of the coordinate to be searched and the index into that array, 
+!> returns the coordinate value  in either lon_val, lat_val, or lev_val.
+!> All 3 _val arguments are present so that this routine can return the value
+!> in the coordinate that the calling routine wants it to be, and
+!> search/placement doesn't have to be done there.
+!> Used by get_state_meta_data and model_interpolate.
 
-character (len=8), intent(in)    :: dim_name
-integer,           intent(in)    :: indx
-real(r8),          intent(inout) :: lon_val, lat_val, lev_val
+subroutine coord_val(dim_name, indx, lon_val, lat_val, lev_val)
+
+character(len=*), intent(in)    :: dim_name
+integer,          intent(in)    :: indx
+real(r8),         intent(inout) :: lon_val, lat_val, lev_val
 
 if (dim_name == 'slon    ') lon_val = slon%vals(indx)
 if (dim_name == 'lat     ') lat_val = lat%vals(indx)
@@ -1447,24 +1435,25 @@ return
 end subroutine coord_val
 
 
-   subroutine gravity(xlat,alt,galt)
-!=============================================================
-! This subroutine computes the Earth's gravity at any altitude
-! and latitude.  The model assumes the Earth is an oblate 
-! spheriod rotating at a the Earth's spin rate.  The model
-! was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
+!-----------------------------------------------------------------------
+!> This subroutine computes the Earth's gravity at any altitude
+!> and latitude.  The model assumes the Earth is an oblate 
+!> spheriod rotating at a the Earth's spin rate.  The model
+!> was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
+!>
+!>  input:    xlat, latitude in radians
+!>            alt,  altitude above the reference ellipsiod, km
+!>  output:   galt, gravity at the given lat and alt, cm/sec
 !
-!  input:    xlat, latitude in radians
-!            alt,  altitude above the reference ellipsiod, km
-!  output:   galt, gravity at the given lat and alt, cm/sec
-!
-! Compute acceleration due to the Earth's gravity at any latitude/altitude
-! author     Bill Schreiner   5/95
-! ------------------------------------------------------------------------
+!> Compute acceleration due to the Earth's gravity at any latitude/altitude
+!> author     Bill Schreiner   5/95
+
 ! Borrowed from CAM
 
-  real (r8) :: xmu, ae, f, w, xm, f2, f4, ge, g, galt, xlat,alt
-!
+subroutine gravity(xlat,alt,galt)
+
+real (r8) :: xmu, ae, f, w, xm, f2, f4, ge, g, galt, xlat,alt
+
       xmu = 398600.4415_r8       ! km^3/s^2
       ae = 6378.1363_r8          ! km
       f = 1.0_r8/298.2564_r8
@@ -1493,8 +1482,11 @@ end subroutine coord_val
 end subroutine gravity
 
  
-  function gph2gmh (h, lat)
- !======================================================
+!-----------------------------------------------------------------------
+!>
+
+function gph2gmh (h, lat)
+
 ! Barrowed from CAM
 
       real(r8) ::  h, lat, gph2gmh
@@ -1535,11 +1527,10 @@ end subroutine gravity
 end function gph2gmh
 
 
+!-----------------------------------------------------------------------
+!> Extract the value of field at a specified location from the DART state vector
 
-
-   subroutine get_val(val, x, lon_index, lat_index, level, obs_kind, istatus)
-!=======================================================================
-! Extract the value of field at a specified location from the DART state vector
+subroutine get_val(val, x, lon_index, lat_index, level, obs_kind, istatus)
 
 real(r8), intent(out) :: val
 real(r8), intent(in) :: x(:)
@@ -1565,9 +1556,13 @@ return
 end subroutine get_val
 
 
-   subroutine set_ps_ens_mean_arrays(vec)
- !======================================================
+!-----------------------------------------------------------------------
+!>
+
+subroutine set_ps_ens_mean_arrays(vec)
+
 real(r8), intent(in)   :: vec(:)
+
 integer :: ind, i, j, fld_index
 
 !$Revision num : 1
@@ -1714,8 +1709,10 @@ end if
 end subroutine coord_index
 
 
-   subroutine ens_mean_for_model(filter_ens_mean)
-!======================================================
+!-----------------------------------------------------------------------
+!>
+
+subroutine ens_mean_for_model(filter_ens_mean)
 
 real(r8), intent(in) :: filter_ens_mean(:)
 
@@ -1732,12 +1729,12 @@ end subroutine ens_mean_for_model
 
 
 !-----------------------------------------------------------------------
-! Given an integer index into the state vector structure, returns the
-! associated location. 
-! The location may have components that are MISSING_R8 values, since some fields
-! don't have locations in all three dimensions, i.e. PS has no vertical level,
-! The which_vert should take care of the vertical coordinate (it will be ignored),
-!  but the others will require more interesting  fixes. 
+!> Given an integer index into the state vector structure, returns the
+!> associated location. 
+!> The location may have components that are MISSING_R8 values, since some fields
+!> don't have locations in all three dimensions, i.e. PS has no vertical level,
+!> The which_vert should take care of the vertical coordinate (it will be ignored),
+!> but the others will require more interesting fixes. 
 
 subroutine get_state_meta_data(index_in, location, var_kind)
 
@@ -1949,15 +1946,13 @@ end if
 end subroutine get_state_meta_data
 
 
-   subroutine get_val_level(val, x, lon_index, lat_index, level, obs_kind, istatus)
-!=======================================================================
-!   subroutine get_val_level(val, x, lon_index, lat_index, level, obs_kind,
-!   istatus)
-!
-! Gets the value on level for variable obs_kind
-! at lon_index, lat_index horizontal grid point
-! This version excludes observations below lowest level and above
-! highest level.
+!-----------------------------------------------------------------------
+!> Gets the value on level for variable obs_kind
+!> at lon_index, lat_index horizontal grid point
+!> This version excludes observations below lowest level and above
+!> highest level.
+
+subroutine get_val_level(val, x, lon_index, lat_index, level, obs_kind, istatus)
 
 ! $Rivision num : 2
 
@@ -2033,24 +2028,21 @@ end if
 end subroutine get_val_level
 
 
+!-----------------------------------------------------------------------
+!> Gets the vertically interpolated value on pressure for variable obs_kind
+!> at lon_index, lat_index horizontal grid point
+!> This version excludes observations below lowest level pressure and above
+!> highest level pressure.
 
-   subroutine get_val_pressure(val, x, lon_index, lat_index, pressure, obs_kind, istatus)
-!=======================================================================
-!
-! Gets the vertically interpolated value on pressure for variable obs_kind
-! at lon_index, lat_index horizontal grid point
-!
-! This version excludes observations below lowest level pressure and above
-! highest level pressure.
-
+subroutine get_val_pressure(val, x, lon_index, lat_index, pressure, obs_kind, istatus)
 
 real(r8), intent(out) :: val
 real(r8), intent(in)  :: x(:), pressure
 integer,  intent(in)  :: lon_index, lat_index, obs_kind
 integer,  intent(out) :: istatus
 
-real(r8)              :: bot_val, top_val, p_surf, frac
-integer               :: top_lev, bot_lev, i, vstatus, num_levs
+real(r8) :: bot_val, top_val, p_surf, frac
+integer  :: top_lev, bot_lev, i, vstatus, num_levs
 
 ! No errors to start with
 istatus = 0
@@ -2125,11 +2117,14 @@ else
 
 end if
 
-end subroutine 
+end subroutine get_val_pressure
 
-   subroutine get_interp_prof (prof, vec, num_levs, lon_index, lat_index, stagr_lon, stagr_lat, &
-                            kind_lmdz, vstatus)
-!=====================================================================
+
+!-----------------------------------------------------------------------
+!>
+
+subroutine get_interp_prof (prof, vec, num_levs, lon_index, lat_index, &
+               stagr_lon, stagr_lat, kind_lmdz, vstatus)
 
 real(r8), intent(out) :: prof(num_levs)
 integer,  intent(out) :: vstatus
@@ -2201,26 +2196,23 @@ end do
 end subroutine get_interp_prof
 
 
-!===============================================================================
-   subroutine model_heights(vec, p_surf, lon_index, lat_index, num_levs, &
+!-----------------------------------------------------------------------
+!> This routine calculates geometrical height (m) at mid-layers of the LMDZ model
+
+subroutine model_heights(vec, p_surf, lon_index, lat_index, num_levs, &
                             stagr_lon, stagr_lat, model_h, istatus)
-!===============================================================================
-! This routine calculates geometrical height (m) at mid-layers of the LMDZ model
-!
+
 ! Kevin Raeder converted to single column version 4/28/2006
 !              removed longitude dimension entirely and extra arrays 10/2006
 
-real(r8),         intent(in)  :: vec(:)
-real(r8),         intent(in)  :: p_surf
-integer,          intent(in)  :: lon_index, lat_index, num_levs
-logical,          intent(in)  :: stagr_lon, stagr_lat
-integer,          intent(out) :: istatus
+real(r8), intent(in)  :: vec(:)
+real(r8), intent(in)  :: p_surf
+integer,  intent(in)  :: lon_index, lat_index, num_levs
+logical,  intent(in)  :: stagr_lon, stagr_lat
+real(r8), intent(out) :: model_h(num_levs)
+integer,  intent(out) :: istatus
 
-! OUTPUT: geometrical height at midlayer (m)  hui liu /03/29/2004 added.
-real(r8),      intent(out) ::  model_h(num_levs)
-
-! local variables; ps must be dimensioned as an array because dcz2 has it that
-! way
+! ps must be dimensioned as an array because dcz2 has it that way
 real (r8):: phi(num_levs), tv(num_levs), q_prof(num_levs), t_prof(num_levs)
 real (r8):: pmln(num_levs+1), hyba(num_levs+1,2), hybb(num_levs+1,2), pterm(num_levs)
 real (r8):: phi_surf, ht_tmp, rd, rv, rr_factor, local_lat
@@ -2301,14 +2293,13 @@ do k = 1,num_levs
 end do
 
 
-  end subroutine model_heights
+end subroutine model_heights
 
 
+!-----------------------------------------------------------------------
+!>
 
-
-! height
-!=====================================================================
-   subroutine dcz2(p_surf,phis0,tv,hyba,hybb,kmax,pmln, pterm,z2)
+subroutine dcz2(p_surf,phis0,tv,hyba,hybb,kmax,pmln, pterm,z2)
 !=====================================================================
 !       Purpose:
 !         To compute geopotential height for a CCM2 hybrid coordinate
@@ -2465,18 +2456,18 @@ end do
 
 end subroutine dcz2 
 
-   subroutine get_val_height(val, vec, lon_index, lat_index, height, obs_kind, istatus)
-!=======================================================================
-!
-! Gets the vertically interpolated value on height for variable obs_kind
-! at lon_index, lat_index horizontal grid point
-!
+
+!-----------------------------------------------------------------------
+!> Gets the vertically interpolated value on height for variable obs_kind
+!> at lon_index, lat_index horizontal grid point
+
+subroutine get_val_height(val, vec, lon_index, lat_index, height, obs_kind, istatus)
+
 ! written by Kevin Raeder, based on code from Hui Liu 4/28/2006 and
 ! get_val_pressure from Jeff Anderson
 !
 ! This version excludes observations below lowest level height and above
 ! highest level height.
-! 
 
 real(r8), intent(out) :: val
 real(r8), intent(in)  :: vec(:), height
@@ -2590,22 +2581,22 @@ end if
 end subroutine get_val_height
 
 
-!=======================================================================
-   subroutine convert_vert (old_array, old_which, new_array, new_which, dart_kind)
-!=======================================================================
-! subroutine convert_vert(old_loc, new_loc, dart_kind)
-! Uses model information and subroutines to convert the vertical location of an  ob 
-! (prior, model state variable, or actual ob) into the standard vertical
-! coordinate (pressure or log_invP = log(P0/ps)).
-! Called by model_mod:get_close_obs.
-!-----Code history
-! Kevin Raeder 10/26/2006 for CAM
-! Modified by T. Singh on  20/01/2014 for LMDZ5
-!---
+!-----------------------------------------------------------------------
+!> Uses model information and subroutines to convert the vertical location of an ob 
+!> (prior, model state variable, or actual ob) into the standard vertical
+!> coordinate (pressure or log_invP = log(P0/ps)).
+!> Called by model_mod:get_close_obs.
+
+subroutine convert_vert (old_array, old_which, new_array, new_which, dart_kind)
+
 integer,                intent(in)    :: dart_kind, old_which
 integer,                intent(out)   :: new_which
 real(r8), dimension(3), intent(in)    :: old_array
 real(r8), dimension(3), intent(inout) :: new_array
+
+!-----Code history
+! Kevin Raeder 10/26/2006 for CAM
+! Modified by T. Singh on  20/01/2014 for LMDZ5
 
 integer   :: num_levs, top_lev, bot_lev
 integer   :: lon_index, lat_index
@@ -2613,7 +2604,6 @@ integer   :: rank_kind, lmdz_kind, istatus
 real(r8)  :: p_surf,   frac
 logical   :: stagr_lon, stagr_lat
 type(location_type)   :: dum_loc
-
 
 ! set good initial values, only differences will be changed.
 stagr_lon = .false.
@@ -2781,7 +2771,7 @@ end if
 
 return
 
-  end subroutine convert_vert
+end subroutine convert_vert
 
 
 !----------------------------------------------------------------------------
@@ -2958,11 +2948,11 @@ end do
 
 end subroutine get_close_obs
 
-!--------------------------------------------------------------------------------------
 
-   subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
-!=======================================================================
-!
+!-----------------------------------------------------------------------
+!>
+
+subroutine model_interpolate(x, location, obs_type, interp_val, istatus)
 
 real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
@@ -3268,25 +3258,23 @@ end if
 end subroutine model_interpolate
 
 
+!-----------------------------------------------------------------------
+!> Perturbs a model state for generating initial ensembles
+!> Returning interf_provided means go ahead and do this with
+!> small independent perturbations.
+!>
+!> If module storage variable 'pert_sd' is positive, then we will randomly
+!> perturb the fields (based on the values of pert_sd) for each of
+!> the variable names listed in pert_names.
+!>
+!> If 'pert_sd' is negative (which includes MISSING) then the field (only one)
+!> listed in pert_names is set to a different constant value for each 
+!> ensemble member.  Those values come from 'pert_base_vals'.
+!>
+!> added to give each ens member a different sequence when perturbing model
+!> parameter fields
 
-  subroutine pert_model_state(state, pert_state, interf_provided)
-!=======================================================================
-! subroutine pert_model_state(state, pert_state, interf_provided)
-!
-! Perturbs a model state for generating initial ensembles
-! Returning interf_provided means go ahead and do this with
-! small independent perturbations.
-!
-! If module storage variable 'pert_sd' is positive, then we will randomly
-! perturb the fields (based on the values of pert_sd) for each of
-! the variable names listed in pert_names.
-!
-! If 'pert_sd' is negative (which includes MISSING) then the field (only one)
-! listed in pert_names is set to a different constant value for each 
-! ensemble member.  Those values come from 'pert_base_vals'.
-
-! added to give each ens member a different sequence when perturbing model
-! parameter fields
+subroutine pert_model_state(state, pert_state, interf_provided)
 
 real(r8), intent(in)    :: state(:)
 real(r8), intent(out)   :: pert_state(:)
@@ -3619,8 +3607,10 @@ call end_model_instance(PS_temp,T_temp,U_temp,V_temp,Q_temp,CLDLIQ_temp)
 end subroutine pert_model_state
 
 
-   subroutine write_lmdz_coord_def(ncFileID, c_name, coord, dim_id, c_id)
-!=======================================================================================
+!-----------------------------------------------------------------------
+!>
+
+subroutine write_lmdz_coord_def(ncFileID, c_name, coord, dim_id, c_id)
 
 character (len=8),  intent(in)  :: c_name
 integer,            intent(in)  :: ncFileID, dim_id
@@ -3651,11 +3641,11 @@ return
 end subroutine write_lmdz_coord_def
 
 
-   subroutine write_lmdz_init(file_name, PS_local,T_local,U_local,V_local,Q_local,  &
-                                                          CLDLIQ_local, model_time)
-!=======================================================================
+!-----------------------------------------------------------------------
+!> write LMDZ 'initial' file fields that have been updated
 
-! write LMDZ 'initial' file fields that have been updated
+subroutine write_lmdz_init(file_name, PS_local,T_local,U_local,V_local,Q_local,  &
+                                                          CLDLIQ_local, model_time)
 
 character(len=*),    intent(in)           :: file_name
 type(data_2d_type),  intent(inout)        :: PS_local 
@@ -3823,17 +3813,13 @@ PS_local%vals(1,:) = PS_local%vals(dim1,:) !periodicity
 end subroutine write_lmdz_init
 
 
+!-----------------------------------------------------------------------
+!> Writes the model-specific attributes to a netCDF file.
 
-   function nc_write_model_atts( ncFileID ) result (ierr)
-!=======================================================================
-! function nc_write_model_atts( ncFileID ) result (ierr)
-!
-! Writes the model-specific attributes to a netCDF file.
+function nc_write_model_atts( ncFileID ) result (ierr)
 
 integer, intent(in)  :: ncFileID      ! netCDF file identifier
 integer              :: ierr          ! return value of function
-
-!-----------------------------------------------------------------------------------------
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 integer :: MemberDimID, StateVarDimID, TimeDimID,ScalarDimID
@@ -4108,17 +4094,12 @@ write (*,*)'nc_write_model_atts: netCDF file ',ncFileID,' is synched ...'
 
 end function  nc_write_model_atts
 
+
+!-----------------------------------------------------------------------
+!> Writes the model-specific variables to a netCDF file
  
 
-
-  function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
-!=======================================================================
-! function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex )
-! result (ierr)
-!
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
+function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
 
 integer,                intent(in) :: ncFileID      ! netCDF file identifier
 real(r8), dimension(:), intent(in) :: statevec
@@ -4126,7 +4107,6 @@ integer,                intent(in) :: copyindex
 integer,                intent(in) :: timeindex
 integer                            :: ierr          ! return value of function
 
-!-----------------------------------------------------------------------------------------
 !type(model_type) :: Var
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
@@ -4271,19 +4251,18 @@ call end_model_instance(PS_local,T_local,U_local,V_local,Q_local,CLDLIQ_local)  
 end function nc_write_model_vars
 
 
+!-----------------------------------------------------------------------
+!>
 
+subroutine order_state_fields()
 
-
-
-
-  subroutine order_state_fields()
-!=======================================================================
 TYPE_PS     = 1
 TYPE_T      = 2
 TYPE_U      = 3
 TYPE_V      = 4
 TYPE_Q      = 5
 TYPE_CLDLIQ = 6
+
 end subroutine order_state_fields
 
 
@@ -4406,15 +4385,17 @@ deallocate(pres_tmp, ap_tmp, bp_tmp)
 end subroutine change_lon_lat_lev_to_dart
 
 
+!-----------------------------------------------------------------------
+!>
 
 subroutine convert_grid_3d_data_to_dart(lon_len,lat_len,lev_len,indx,var)
-!****************************************************************
 
- integer, intent(in)    :: indx
- integer, intent(in)    :: lon_len,lat_len,lev_len
- real(r8),intent(inout) :: var(:,:,:)
- real(r8),allocatable   :: var_tmp(:,:,:)
- integer                :: i,j
+integer, intent(in)    :: indx
+integer, intent(in)    :: lon_len,lat_len,lev_len
+real(r8),intent(inout) :: var(:,:,:)
+
+real(r8),allocatable   :: var_tmp(:,:,:)
+integer                :: i,j
 
  allocate(var_tmp(lon_len,lat_len,lev_len))
  var_tmp(:,:,:) = MISSING_R8
@@ -4450,7 +4431,8 @@ subroutine convert_grid_3d_data_to_dart(lon_len,lat_len,lev_len,indx,var)
   var=var_tmp
 
  deallocate(var_tmp)
-  end subroutine
+
+end subroutine convert_grid_3d_data_to_dart
 
 
 !-----------------------------------------------------------------------
@@ -4491,18 +4473,21 @@ end do
 var = var_tmp
 
 deallocate(var_tmp)
+
 end subroutine convert_grid_2d_data_to_dart
 
 
+!-----------------------------------------------------------------------
+!>
 
- subroutine convert_grid_3d_data_to_lmdz(lon_len,lat_len,lev_len,indx,var)
-!****************************************************************
+subroutine convert_grid_3d_data_to_lmdz(lon_len,lat_len,lev_len,indx,var)
 
- integer, intent(in)    :: indx
- integer, intent(in)    :: lon_len,lat_len,lev_len
- real(r8),intent(inout) :: var(:,:,:)
- real(r8),allocatable   :: var_tmp(:,:,:)
- integer                :: i,j
+integer, intent(in)    :: indx
+integer, intent(in)    :: lon_len,lat_len,lev_len
+real(r8),intent(inout) :: var(:,:,:)
+
+real(r8),allocatable   :: var_tmp(:,:,:)
+integer                :: i,j
 
  allocate(var_tmp(lon_len,lat_len,lev_len))
  var_tmp(:,:,:) = MISSING_R8
@@ -4538,16 +4523,20 @@ end subroutine convert_grid_2d_data_to_dart
 
   var=var_tmp
   deallocate(var_tmp)
-end subroutine
+
+end subroutine convert_grid_3d_data_to_lmdz
 
 
- subroutine convert_grid_2d_data_to_lmdz(lon_len,lat_len,indx,var)
-!****************************************************************
+!-----------------------------------------------------------------------
+!>
 
- integer, intent(in)    :: lon_len,lat_len,indx
- real(r8),intent(inout) :: var(:,:)
- real(r8),allocatable   :: var_tmp(:,:)
- integer                :: i,j
+subroutine convert_grid_2d_data_to_lmdz(lon_len,lat_len,indx,var)
+
+integer, intent(in)    :: lon_len,lat_len,indx
+real(r8),intent(inout) :: var(:,:)
+
+real(r8),allocatable   :: var_tmp(:,:)
+integer                :: i,j
 
  allocate(var_tmp(lon_len,lat_len))
  var_tmp(:,:) = 0._r8
@@ -4574,8 +4563,8 @@ do i = indx, lon_len
 
   var=var_tmp
 
- deallocate(var_tmp)
- end subroutine
+deallocate(var_tmp)
+end subroutine convert_grid_2d_data_to_lmdz
 
 
 !-----------------------------------------------------------------------
@@ -4593,6 +4582,7 @@ enddo
  
 end subroutine rad_to_degree
 
+
 !-----------------------------------------------------------------------
 !> conversion from degree to radian
 
@@ -4608,24 +4598,23 @@ end do
  
 end subroutine degree_to_rad
 
-!======================================================
+
+!-----------------------------------------------------------------------
+!> Write state vector for plotting in grads.
+!> .ctl and .dat file will be written
 
 subroutine write_state_vectori_grads(iim,jjm,llm,lon,lat,phis,U,V,T,Q,PS)
-!! Write state vector for plotting in grads 
-!! .ctl and .dat file will be written
-!****************************************************************
 
+integer , intent(in) :: iim,jjm,llm
+real(r8), intent(in) :: U(iim+1,jjm+1,llm),V(iim+1,jjm,llm),T(iim+1,jjm+1,llm)
+real(r8), intent(in) :: Q(iim+1,jjm+1,llm)
+real(r8), intent(in) :: PS(iim+1,jjm+1),lon(iim+1),lat(jjm+1),phis(iim+1,jjm+1)
 
- integer,   intent(in) :: iim,jjm,llm
- real(r8) , intent(in) :: U(iim+1,jjm+1,llm),V(iim+1,jjm,llm),T(iim+1,jjm+1,llm)
- real(r8) , intent(in) :: Q(iim+1,jjm+1,llm)
- real(r8) , intent(in) :: PS(iim+1,jjm+1),lon(iim+1),lat(jjm+1),phis(iim+1,jjm+1)
-
- real(r8) :: v_ave(iim+1,jjm+1,llm)
- real(r8) plev(llm), pi
- integer irec,isor,nout
- data nout/90/
- integer  :: i,j,l
+real(r8) :: v_ave(iim+1,jjm+1,llm)
+real(r8) plev(llm), pi
+integer irec,isor,nout
+data nout/90/
+integer  :: i,j,l
 
  pi = 4.0_r8 * atan( 1.0_r8)
 
@@ -4702,21 +4691,20 @@ subroutine write_state_vectori_grads(iim,jjm,llm,lon,lat,phis,U,V,T,Q,PS)
 
 end subroutine write_state_vectori_grads 
 
-!!+++++
 
- subroutine formcoord(unit,n,x,a,rev,text)
-! Form coordinate dicription for .ctl file
-! called by write_state_vectori_grads subroutine
+!-----------------------------------------------------------------------
+!> Form coordinate dicription for .ctl file
+!> called by write_state_vectori_grads subroutine
 
-!****************************************************************
+subroutine formcoord(unit,n,x,a,rev,text)
 
- integer    :: n,unit,ndec
- logical    ::  rev
- real(r8)   ::  x(n),a
- character*4::  text
+integer    :: n,unit,ndec
+logical    ::  rev
+real(r8)   ::  x(n),a
+character*4::  text
 
- integer    ::  i,id,i1,i2,in
- real(r8)   ::  dx,dxmin, pi
+integer    ::  i,id,i1,i2,in
+real(r8)   ::  dx,dxmin, pi
 
  pi = 4.0_r8 * atan( 1.0_r8)
 
@@ -4758,14 +4746,15 @@ end subroutine write_state_vectori_grads
 3000  format('FORMAT ',a1,'REV')
       return
 
- end subroutine formcoord
-!======================================================
+end subroutine formcoord
 
-!=======================================================================
+
+!-----------------------------------------------------------------------
+!> Function to calculate scale height, given a surface pressure and a pressure.
+!> Using the surface pressure instead of, e.g., mean sea level as the reference
+!> pressure ensures that scale height is always positive.
+
 function scale_height(p_surface, p_above)
-! Function to calculate scale height, given a surface pressure and a pressure.
-! Using the surface pressure instead of, e.g., mean sea level as the reference
-! pressure ensures that scale height is always positive.
 
 real(r8), intent(in) :: p_surface
 real(r8), intent(in) :: p_above
@@ -4778,7 +4767,9 @@ if (p_above > 0.0_r8) scale_height = log(p_surface/p_above)
 
 end function scale_height
 
-!=======================================================================
+
+!-----------------------------------------------------------------------
+!>
 
 subroutine dump_grid_type(gridvar)
 type(grid_1d_type), intent(in) :: gridvar
@@ -4799,8 +4790,9 @@ write(*,*)'vals are ',gridvar%vals
 
 end subroutine dump_grid_type
 
-
+!-----------------------------------------------------------------------
 end module
+!-----------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
 ! $URL$
