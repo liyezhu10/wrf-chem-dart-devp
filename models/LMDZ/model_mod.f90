@@ -120,11 +120,15 @@ public ::                                                            &
    get_close_maxdist_init, get_close_obs_init, get_close_obs,        &
    ens_mean_for_model
 
-public ::                                                            &
+public :: &
    data_2d_type, data_3d_type, PS, T, U, V, Q, CLDLIQ, &
    prog_var_to_vector,  &
-    vector_to_prog_var,  read_lmdz_init, &
-   init_model_instance, end_model_instance, write_lmdz_init, coord_index
+   vector_to_prog_var,  &
+   read_lmdz_init,      &
+   init_model_instance, &
+   end_model_instance,  &
+   write_lmdz_init,     &
+   coord_index
    
 !----------------------------------------------------------------------------
 !----------------------------------------------------------------------------
@@ -277,7 +281,6 @@ integer           :: impact_kind_index = -1
 logical :: print_details = .false.
 logical :: write_grads   = .true.
 
-
 ! output_state_vector = .true.     results in a "state-vector" netCDF file
 ! output_state_vector = .false.    results in a "prognostic-var" netCDF file
 logical  :: output_state_vector = .false.
@@ -368,6 +371,7 @@ call check_namelist_read(iunit, io, "model_nml")
 ! set the printed output logical variable to reduce printed output;
 ! depends on whether this is being called by dart_to_lmdz (read ens member # from
 ! file 'element' )  or by filter (multiple processes, printout controlled by do_output())
+! TJH - I don't agree with only have ens_member 1 print the output.
 
 if (file_exist('element')) then
    iunit = get_unit()
@@ -415,7 +419,7 @@ CLDLIQ%length = lon%length*lat%length*sigs%length
 
 model_size = PS%length + U%length + V%length + T%length + Q%length + CLDLIQ%length
 
-if (do_output()) print*, 'Model Size =',model_size
+if (print_details .and. do_output()) print*, 'Model Size =',model_size
 
 call read_lmdz_coord(ncfileid, lon,      'rlonv     ')
 call read_lmdz_coord(ncfileid, lat,      'rlatu     ')
@@ -428,8 +432,6 @@ call read_lmdz_coord(ncfileid, sigs ,    'nivsigs   ')
 call read_lmdz_coord(ncfileid, temps   , 'temps     ')
 
 call change_lon_lat_lev_to_dart()
-
-write(*,*) 'TJH before hybrid_coefi_mid_layer sigs%length is ',sigs%length
 
 !find hybrid layer coefficient at mid point of layers
 allocate(apm%vals(sigs%length))
@@ -474,8 +476,6 @@ else
    call error_handler(E_ERR,'static_init_model',msgstring,source,revision,revdate)
 end if
 
-write(*,*) 'TJH before order_state_fields'
-
 !------------------------------------------------------------------------
 !----
 max_levs = sig%length  !(sig%length = sigs%length + 1)
@@ -504,8 +504,6 @@ allocate(phis%vals(topog_lons, topog_lats))
 allocate(p_col(max_levs), model_h(max_levs))
 allocate(ens_mean(model_size))
 
-write(*,*) 'TJH before read_lmdz_horiz'
-
 call read_lmdz_horiz (ncfileid, phis, topog_lons, topog_lats, 'phisinit')
 
 call nc_check(nf90_close(ncfileid), &
@@ -516,8 +514,6 @@ call nc_check(nf90_close(ncfileid), &
 ! Makes an array of 'locations within the state vector'
 ! of  all the available obs kinds that come from obs_kind_mod.
 
-write(*,*) 'TJH before map_kinds'
-
 call map_kinds()
 
 !if (len_trim(impact_only_same_kind) > 0) then
@@ -527,8 +523,6 @@ call map_kinds()
 ! make sure we only come through here once
 
 module_initialized = .true.
-
-write(*,*) 'TJH leaving static_init_model'
 
 end subroutine static_init_model
 
@@ -557,7 +551,7 @@ call nc_check(nf90_inquire_dimension(ncfileid, 7, sig%var_name , sig%length), &
 
 !call nc_check(nf90_inquire_dimension(ncfileid, 15, temps%var_name , temps%length), &
 !              'read_lmdz_init_size', 'inquire for '//trim(temps%var_name))
-!if (print_details .and. do_out) write(*,*) 'Dims info = ',i, trim(dim_names(i)), dim_sizes(i)
+!if (print_details .and. do_output()) write(*,*) 'Dims info = ',i, trim(dim_names(i)), dim_sizes(i)
 
 ap%length       = sig%length
 bp%length       = sig%length
@@ -591,7 +585,7 @@ character(len=nf90_max_name), pointer :: att_names(:)
 character(len=nf90_max_name), pointer :: att_vals(:)
 real(r8) :: resol, resol_1, resol_n
 
-if (do_output()) write(*,*)'read_lmdz_coord for variable "'//trim(cfield)//'"'
+if (print_details .and. do_output()) write(*,*)'read_lmdz_coord for variable "'//trim(cfield)//'"'
 
 call nc_check(nf90_inq_varid(ncfileid,trim(cfield), ncfldid), &
                'read_lmdz_coord', 'inq_varid '//trim(cfield))
@@ -648,7 +642,7 @@ else
 endif
 
 ! If desired, pring a summary of the variable.
-if (do_output()) call dump_grid_type(var)
+if (print_details .and. do_output()) call dump_grid_type(var)
 
 deallocate(att_names, att_vals)
 
@@ -767,7 +761,7 @@ character (len=*),  intent(in)    :: cfield
 integer :: ncfldid
 integer :: i, j
 
-!if (print_details .and. do_out) PRINT*,'read_lmdz_horiz; reading ',cfield
+!if (print_details .and. do_output()) PRINT*,'read_lmdz_horiz; reading ',cfield
 !>@todo confirm: This always reads the first time step (tcount = 1)
 
 call nc_check(nf90_inq_varid(ncfileid, trim(cfield), ncfldid), &
@@ -783,14 +777,11 @@ if (cfield == 'phisinit' .and. alloc_phis) then
    allocate ( phis_stagr_latv( lon%length , slat%length) )   ! at VCOV on grid C
    alloc_phis = .false. 
 
-   write(*,*)'TJH size of PHIS%vals       is ',shape(PHIS%vals)
-   write(*,*)'TJH size of phis_stagr_lonu is ',shape(phis_stagr_lonu)
-   write(*,*)'TJH size of phis_stagr_latv is ',shape(phis_stagr_latv)
-
-   do i = 1, slon%length
-      do j = 1, lat%length
-         phis_stagr_lonu(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i+1, j))       
+   do j = 1, lat%length
+      do i = 1, slon%length - 1
+        phis_stagr_lonu(i, j) = 0.5 * (PHIS%vals(i, j) + PHIS%vals(i+1, j))       
       end do
+      phis_stagr_lonu(slon%length, j)   = 0.5 * (PHIS%vals(slon%length, j) + PHIS%vals(1, j)) !! Periodicity
    end do 
 
    do i = 1, lon%length
@@ -843,7 +834,7 @@ if (TYPE_Q /= MISSING_I)       lmdz_to_dart_kinds(TYPE_Q)      = KIND_SPECIFIC_H
 if (TYPE_CLDLIQ /= MISSING_I)  lmdz_to_dart_kinds(TYPE_CLDLIQ) = KIND_CLOUD_LIQUID_WATER 
 
 
-!if (print_details .and. do_out) then
+!if (print_details .and. do_output()) then
 !   write(*,*) 'OBS_KIND   FIELD_TYPE'
 !   do i=1,100
 !      if (dart_to_lmdz_kinds(i) /= MISSING_I) write(*,'(2I8)') i,
@@ -957,6 +948,7 @@ call nc_check(nf90_inq_varid(ncfileid,'ps', ncfldid), &
 call nc_check(nf90_get_var(ncfileid, ncfldid, PS%vals ,start=(/1,1,1/),  &
                            count=(/lon%length,lat%length, 1/) ), &
                            'read_lmdz_init', 'get_var ps')
+
 call convert_grid_2d_data_to_dart(lon%length,lat%length,botm_positive_lon_index,PS%vals)
 
 !----T--
@@ -998,6 +990,7 @@ call nc_check(nf90_inq_varid(ncfileid,'H2Ol', ncfldid), &
 call nc_check(nf90_get_var(ncfileid, ncfldid, CLDLIQ%vals ,start=(/1,1,1,1/)  &
                            ,count=(/lon%length,lat%length, sigs%length,1/) ), &
                            'read_lmdz_init', 'get_var H2Ol')
+
 call convert_grid_3d_data_to_dart(lon%length,lat%length,sigs%length,botm_positive_lon_index,CLDLIQ%vals)
 
 !----U--
@@ -1027,7 +1020,6 @@ if(write_grads)then
  call write_state_vectori_grads(lon%length-1,lat%length-1, sigs%length,lon%vals,lat%vals,  &
              PHIS%vals,U%vals, V%vals,T%vals,Q%vals, PS%vals)
 endif
-
 
 ! Read the time of the current state.
 ! extract date information from  time unit atrribute 
@@ -1589,10 +1581,12 @@ if (alloc_ps) then
 
 
 ! ps_ens_mean at stagered lat & lon grid,  check for correctnesss !!!
-    do i = 1, slon%length
-      do j = 1, lat%length
+
+   do j = 1, lat%length
+      do i = 1, slon%length - 1
         ps_ens_mean_stagr_lonu(i, j) = 0.5 * ( ps_ens_mean (i, j) + ps_ens_mean (i + 1, j))
       end do
+        ps_ens_mean_stagr_lonu(slon%length, j) = 0.5 * ( ps_ens_mean (slon%length, j) + ps_ens_mean (1, j))  !! Periodicity
     end do
 
     do i = 1, lon%length
@@ -3623,10 +3617,10 @@ integer  :: i
 call nc_check(nf90_def_var(ncFileID, name=c_name, xtype=nf90_double, dimids=dim_id, &
                         varid=c_id), 'write_lmdz_coord_def', 'def_var'//trim(c_name))
 
-!if (print_details .and. do_out) write(*,'(/A,A)') 'write_lmdz_coord_def;  ', trim(c_name)
+!if (print_details .and. do_output()) write(*,'(/A,A)') 'write_lmdz_coord_def;  ', trim(c_name)
 
 do i=1,coord%num_atts
-!   if (print_details .and. do_out) then
+!   if (print_details .and. do_output()) then
 !!      nch = len_trim(coord%atts_vals(i))
 !!                 i,trim(coord%atts_names(i)),' ', coord%atts_vals(i)(1:nch)
 !      write(*,*) '   i, att_name, att_val', &
@@ -3896,7 +3890,7 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","LMDZ"), &
 ! They have different dimids for this file than they had for start.nc
 ! P_id serves as a map between the 2 sets.
 
-if (print_details .and. do_out) write(*,*) ' dimens,       name,  size, lmdz dim_id, P[oste]rior id'
+if (print_details .and. do_output()) write(*,*) ' dimens,       name,  size, lmdz dim_id, P[oste]rior id'
 
 call nc_check(nf90_def_dim (ncid=ncFileID, name='lon     ', len=lon%length,           &
                     dimid=P_id(1)), 'nc_write_model_atts','def_dim'//trim('lon'))
@@ -4057,9 +4051,7 @@ ifld = 6
 ! Each 'vals' vector has been dimensioned to the right size for its coordinate.  
 ! The default values of 'start' and 'count'  write out the whole thing.
 !-------------------------------------------------------------------------------
-if (print_details .and. do_out) write(*,*) 'nc_write_model_atts; filling coords'
-
-
+if (print_details .and. do_output()) write(*,*) 'nc_write_model_atts; filling coords'
 
  call nc_check(nf90_put_var(ncFileID, grid_id(1),  lon%vals) &
                  ,'nc_write_model_atts', 'put_var lon')
@@ -4611,81 +4603,86 @@ real(r8), intent(in) :: Q(iim+1,jjm+1,llm)
 real(r8), intent(in) :: PS(iim+1,jjm+1),lon(iim+1),lat(jjm+1),phis(iim+1,jjm+1)
 
 real(r8) :: v_ave(iim+1,jjm+1,llm)
-real(r8) plev(llm), pi
-integer irec,isor,nout
-data nout/90/
+real(r8) :: plev(llm), pi
+integer  :: irec, isor
 integer  :: i,j,l
+integer  :: nout, noutp1
 
- pi = 4.0_r8 * atan( 1.0_r8)
+nout   = get_unit()
 
- OPEN (nout+1,FILE='start.dat', FORM='UNFORMATTED', ACCESS='DIRECT', RECL=4*(iim+1)*(jjm+1))
-          irec=1
-          isor=0
+pi = 4.0_r8 * atan( 1.0_r8)
 
-   do l=1,llm
-      plev(l)=float(L)
-   enddo
+OPEN (nout,FILE='start.dat', FORM='UNFORMATTED', ACCESS='DIRECT', RECL=4*(iim+1)*(jjm+1))
 
+irec=1
+isor=0
 
-  do l=1,llm
+do l=1,llm
+    plev(l)=float(L)
+enddo
 
-     do j=1,jjm-1
-      do i=1,iim
-       v_ave(i,j+1,L)=0.25*(V(i,j,l)+V(i+1,j,l)+ V(i,j,l)+V(i,j+1,l))
-      enddo
-     enddo
+do l=1,llm
 
-     do i=1,iim
-       v_ave(i,jjm+1,l)=(V(i,jjm,l)+V(i+1,jjm,l))*0.5
-       v_ave(i,1,l)=(V(i,1,l)+V(i+1,1,l))*0.5
-     enddo
+    do j=1,jjm-1
+    do i=1,iim
+      v_ave(i,j+1,L)=0.25*(V(i,j,l)+V(i+1,j,l)+ V(i,j,l)+V(i,j+1,l))
+    enddo
+    enddo
 
-       v_ave(iim+1,jjm+1,l)=v_ave(1,jjm+1,l)
-       v_ave(iim+1,1,l)=v_ave(1,1,l)
-  enddo
+    do i=1,iim
+      v_ave(i,jjm+1,l)=(V(i,jjm,l)+V(i+1,jjm,l))*0.5
+      v_ave(i,1,l)=(V(i,1,l)+V(i+1,1,l))*0.5
+    enddo
 
-       write(nout+1,rec=irec) ((real(PS(i,j),4),i=1,iim+1),j=1,jjm+1)
-       irec=irec+1
+    v_ave(iim+1,jjm+1,l)=v_ave(1,jjm+1,l)
+    v_ave(iim+1,1,l)=v_ave(1,1,l)
 
-       do l=1,llm
-         write(nout+1,rec=irec) ((real(U(i,j,l),4),i=1,iim+1),j=1,jjm+1)
-         irec=irec+1
-       enddo
-       do L=1,LLM
-         write(nout+1,rec=irec) ((real(v_ave(i,j,L),4),i=1,iim+1),j=1,jjm+1)
-         irec=irec+1
-       enddo
-       do l=1,llm
-         write(nout+1,rec=irec) ((real(T(i,j,l),4),i=1,iim+1),j=1,jjm+1)
-         irec=irec+1
-       enddo
+enddo
 
-       do l=1,llm
-         write(nout+1,rec=irec) ((real(Q(i,j,l),4),i=1,iim+1),j=1,jjm+1)
-         irec=irec+1
-       enddo
+write(nout,rec=irec) ((real(PS(i,j),4),i=1,iim+1),j=1,jjm+1)
+irec=irec+1
 
-      open(nout,file='start.ctl',form='formatted',status='unknown')
-      write(nout,*) 'DSET start.dat'
-!      write(nout,'(a4,2x,a20)') 'DSET','h.dat'
-      write(nout,'(a5,2x,a20)') 'UNDEF ','1.0E30'
-      !write(nout,'(a11)') 'FORMAT YREV'
-      write(nout,'(a11)') 'FORMAT ZREV'
-      write(nout,'(a5,2x,a20)') 'TITLE ','state vector start.nc'
-      call formcoord(nout,iim+1-1/iim,lon,1._r8,.false.,'XDEF')
-      !call formcoord(nout,jjm+1,lat,1._r8,.true.,'YDEF')
-      call formcoord(nout,jjm+1,lat,1._r8,.false.,'YDEF')
-!     call formcoord(nout,llm,presnivs,1.,.false.,'ZDEF')
-      call formcoord(nout,llm,plev,1.0_r8,.false.,'ZDEF')
-      write(nout,'(a5,i4,a30)') 'TDEF ',isor,' LINEAR 02JAN1987 1MO '
-      write(nout,'(a6)') 'VARS 5'
-      write(nout,1000) 'PS      ',0,  99,'surface pressure Pa'
-      write(nout,1000) 'U       ',llm,  99,'U-component wind'
-      write(nout,1000) 'V       ',llm,  99,'V-component WInd'
-      write(nout,1000) 'T       ',llm,  99,'temperature DegK'
-      write(nout,1000) 'Q       ',llm,  99,'mixing ratio (kg/kg)'
-      write(nout,'(a7)') 'ENDVARS'
-      close(nout)
+do l=1,llm
+  write(nout,rec=irec) ((real(U(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+  irec=irec+1
+enddo
+do L=1,LLM
+  write(nout,rec=irec) ((real(v_ave(i,j,L),4),i=1,iim+1),j=1,jjm+1)
+  irec=irec+1
+enddo
+do l=1,llm
+  write(nout,rec=irec) ((real(T(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+  irec=irec+1
+enddo
+
+do l=1,llm
+  write(nout,rec=irec) ((real(Q(i,j,l),4),i=1,iim+1),j=1,jjm+1)
+  irec=irec+1
+enddo
+
+close(nout)
+
+open(nout,file='start.ctl',form='formatted',status='unknown')
+   write(nout,*) 'DSET start.dat'
+!  write(nout,'(a4,2x,a20)') 'DSET','h.dat'
+   write(nout,'(a5,2x,a20)') 'UNDEF ','1.0E30'
+   !write(nout,'(a11)') 'FORMAT YREV'
+   write(nout,'(a11)') 'FORMAT ZREV'
+   write(nout,'(a5,2x,a20)') 'TITLE ','state vector start.nc'
+   call formcoord(nout,iim+1-1/iim,lon,1._r8,.false.,'XDEF')
+!  call formcoord(nout,jjm+1,lat,1._r8,.true.,'YDEF')
+   call formcoord(nout,jjm+1,lat,1._r8,.false.,'YDEF')
+!  call formcoord(nout,llm,presnivs,1.,.false.,'ZDEF')
+   call formcoord(nout,llm,plev,1.0_r8,.false.,'ZDEF')
+   write(nout,'(a5,i4,a30)') 'TDEF ',isor,' LINEAR 02JAN1987 1MO '
+   write(nout,'(a6)') 'VARS 5'
+   write(nout,1000) 'PS      ',0,  99,'surface pressure Pa'
+   write(nout,1000) 'U       ',llm,  99,'U-component wind'
+   write(nout,1000) 'V       ',llm,  99,'V-component WInd'
+   write(nout,1000) 'T       ',llm,  99,'temperature DegK'
+   write(nout,1000) 'Q       ',llm,  99,'mixing ratio (kg/kg)'
+   write(nout,'(a7)') 'ENDVARS'
+   close(nout)
 
 1000  format(a9,i4,i3,1x,a39)
 
@@ -4759,8 +4756,6 @@ function scale_height(p_surface, p_above)
 real(r8), intent(in) :: p_surface
 real(r8), intent(in) :: p_above
 real(r8)             :: scale_height
-
-write(*,*)'TJH scale height p_surface, p_above ',p_surface, p_above
 
 scale_height = 5000.0_r8  ! arbitrary impossibly large number of scale heights.
 if (p_above > 0.0_r8) scale_height = log(p_surface/p_above)

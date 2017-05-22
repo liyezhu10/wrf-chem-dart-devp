@@ -25,6 +25,8 @@
    output_timestamps        = .false.,
    output_forward_op_errors = .false.,
    output_restart_mean      = .false. 
+   trace_execution          = .true.,
+   silence                  = .false.,
 
    inf_flavor                  = 2,                       0,
    inf_initial_from_restart    = .true.,                 .false.,
@@ -62,7 +64,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 0.2,
-   sort_obs_inc                    = .true.,
+   sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .true.,
    print_every_nth_obs             = 3000,
@@ -122,8 +124,10 @@
    Time_step_days      = 0,
    print_details       = .true.,
    vert_coord          = 'log_invP'
-!!!  vert_coord          = 'pressure'
+   write_grads         = .false.
    /
+  vert_coord          = 'log_invP'
+  vert_coord          = 'pressure'
 
 ! pert_sd < 0. signals pert_base_vals to be used as the values 
 !   for each ensemble member (for 1 field), instead of the value for each field.
@@ -228,7 +232,7 @@
    reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics', 'North America',
    print_mismatched_locs = .false.,
    print_obs_locations = .false.,
-   verbose = .false.  /
+   verbose = .true.  /
 
 &restart_file_utility_nml 
    input_file_name              = "filter_restart",        
