@@ -63,20 +63,17 @@ end interface
 
 interface nc_define_integer_variable
    module procedure nc_define_var_int_1d
-   module procedure nc_define_var_int_2d
-   module procedure nc_define_var_int_3d
+   module procedure nc_define_var_int_Nd
 end interface
 
 interface nc_define_real_variable
    module procedure nc_define_var_real_1d
-   module procedure nc_define_var_real_2d
-   module procedure nc_define_var_real_3d
+   module procedure nc_define_var_real_Nd
 end interface
 
 interface nc_define_double_variable
    module procedure nc_define_var_double_1d
-   module procedure nc_define_var_double_2d
-   module procedure nc_define_var_double_3d
+   module procedure nc_define_var_double_Nd
 end interface
 
 interface nc_put_variable
@@ -120,7 +117,7 @@ contains
 
 subroutine nc_check(istatus, subr_name, context, context2, filename)
 
-integer, intent (in)                   :: istatus
+integer,          intent(in)           :: istatus
 character(len=*), intent(in)           :: subr_name
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: context2
@@ -137,18 +134,9 @@ if (present(context)) then
   msgstring1 = trim(context) // ': ' // trim(msgstring1)
 endif
 
-! more context if needed
-if (present(context2)) then
-  msgstring1 = trim(msgstring1) // ', ' // trim(context2)
-endif
-
-! filename is optional, but is very useful if specified.
-if (present(filename)) then
-  msgstring1 = trim(msgstring1) // ', file "' // trim(filename) // '"'
-endif
-
 ! this does not return 
-call error_handler(E_ERR, subr_name, msgstring1, source, revision, revdate)
+call error_handler(E_ERR, subr_name, msgstring1, source, revision, revdate, &
+                   text2=context2, text3=filename)
   
 
 end subroutine nc_check
@@ -384,6 +372,51 @@ end subroutine nc_define_var_int_1d
 
 !--------------------------------------------------------------------
 
+subroutine nc_define_var_int_Nd(ncid, varname, dimnames, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+character(len=*), intent(in) :: dimnames(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_var_int_Nd'
+integer :: ret, dimid1, dimid2, dimid3, varid
+
+if (size(dimnames) >= 1) then
+   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
+endif
+
+if (size(dimnames) >= 2) then
+   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
+endif
+
+if (size(dimnames) >= 3) then
+   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename)
+endif
+
+if (size(dimnames) >= 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d integer variables supported', &
+                      source, revision, revdate, text2='variable '//trim(varname))
+endif
+
+if (size(dimnames) == 1) then
+   ret = nf90_def_var(ncid, varname, nf90_int, dimid1, varid=varid)
+else if (size(dimnames) == 2) then
+   ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2 /), varid=varid)
+else if (size(dimnames) == 3) then
+   ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
+endif
+
+call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename)
+
+end subroutine nc_define_var_int_Nd
+
+!--------------------------------------------------------------------
+
 subroutine nc_define_var_real_1d(ncid, varname, dimname, context, filename)
 
 integer,          intent(in) :: ncid
@@ -402,6 +435,51 @@ ret = nf90_def_var(ncid, varname, nf90_real, dimid, varid)
 call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename)
 
 end subroutine nc_define_var_real_1d
+
+!--------------------------------------------------------------------
+
+subroutine nc_define_var_real_Nd(ncid, varname, dimnames, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+character(len=*), intent(in) :: dimnames(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_var_real_Nd'
+integer :: ret, dimid1, dimid2, dimid3, varid
+
+if (size(dimnames) >= 1) then
+   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
+endif
+
+if (size(dimnames) >= 2) then
+   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
+endif
+
+if (size(dimnames) >= 3) then
+   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename)
+endif
+
+if (size(dimnames) >= 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d real variables supported', &
+                      source, revision, revdate, text2='variable '//trim(varname))
+endif
+
+if (size(dimnames) == 1) then
+   ret = nf90_def_var(ncid, varname, nf90_real, dimid1, varid=varid)
+else if (size(dimnames) == 2) then
+   ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2 /), varid=varid)
+else if (size(dimnames) == 3) then
+   ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
+endif
+
+call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename)
+
+end subroutine nc_define_var_real_Nd
 
 !--------------------------------------------------------------------
 
@@ -426,168 +504,48 @@ end subroutine nc_define_var_double_1d
 
 !--------------------------------------------------------------------
 
-subroutine nc_define_var_int_2d(ncid, varname, dimnames, context, filename)
+subroutine nc_define_var_double_Nd(ncid, varname, dimnames, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
-!character(len=*), intent(in) :: dimname1
-!character(len=*), intent(in) :: dimname2
-character(len=*), dimension(2), intent(in) :: dimnames
+character(len=*), intent(in) :: dimnames(:)
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_define_var_int_2d'
-integer :: ret, dimid1, dimid2, varid
+character(len=*), parameter :: routine = 'nc_define_var_double_Nd'
+integer :: ret, dimid1, dimid2, dimid3, varid
 
-ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
+if (size(dimnames) >= 1) then
+   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
+endif
 
-ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
+if (size(dimnames) >= 2) then
+   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
+endif
 
-ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2 /), varid=varid)
-call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename)
+if (size(dimnames) >= 3) then
+   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename)
+endif
 
-end subroutine nc_define_var_int_2d
+if (size(dimnames) >= 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d double variables supported', &
+                      source, revision, revdate, text2='variable '//trim(varname))
+endif
 
-!--------------------------------------------------------------------
+if (size(dimnames) == 1) then
+   ret = nf90_def_var(ncid, varname, nf90_double, dimid1, varid=varid)
+else if (size(dimnames) == 2) then
+   ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2 /), varid=varid)
+else if (size(dimnames) == 3) then
+   ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
+endif
 
-subroutine nc_define_var_real_2d(ncid, varname, dimnames, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: varname
-!character(len=*), intent(in) :: dimname1
-!character(len=*), intent(in) :: dimname2
-character(len=*), dimension(2), intent(in) :: dimnames
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_define_var_real_2d'
-integer :: ret, dimid1, dimid2, varid
-
-ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
-
-ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2 /), varid=varid)
-call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename)
-
-end subroutine nc_define_var_real_2d
-
-!--------------------------------------------------------------------
-
-subroutine nc_define_var_double_2d(ncid, varname, dimnames, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: varname
-!character(len=*), intent(in) :: dimname1
-!character(len=*), intent(in) :: dimname2
-character(len=*), dimension(2), intent(in) :: dimnames
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_define_var_double_2d'
-integer :: ret, dimid1, dimid2, varid
-
-ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename)
-
-ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2 /), varid=varid)
 call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename)
 
-end subroutine nc_define_var_double_2d
-
-!--------------------------------------------------------------------
-
-subroutine nc_define_var_int_3d(ncid, varname, dimname1, dimname2, dimname3, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: varname
-character(len=*), intent(in) :: dimname1
-character(len=*), intent(in) :: dimname2
-character(len=*), intent(in) :: dimname3
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_define_var_int_3d'
-integer :: ret, dimid1, dimid2, dimid3, varid
-
-ret = nf90_inq_dimid(ncid, dimname1, dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname1), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname2, dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname2), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname3, dimid3)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname3), context, filename)
-
-ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename)
-
-end subroutine nc_define_var_int_3d
-
-!--------------------------------------------------------------------
-
-subroutine nc_define_var_real_3d(ncid, varname, dimname1, dimname2, dimname3, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: varname
-character(len=*), intent(in) :: dimname1
-character(len=*), intent(in) :: dimname2
-character(len=*), intent(in) :: dimname3
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_define_var_real_3d'
-integer :: ret, dimid1, dimid2, dimid3, varid
-
-ret = nf90_inq_dimid(ncid, dimname1, dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname1), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname2, dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname2), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname3, dimid3)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname3), context, filename)
-
-ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename)
-
-end subroutine nc_define_var_real_3d
-
-!--------------------------------------------------------------------
-
-subroutine nc_define_var_double_3d(ncid, varname, dimname1, dimname2, dimname3, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in) :: varname
-character(len=*), intent(in) :: dimname1
-character(len=*), intent(in) :: dimname2
-character(len=*), intent(in) :: dimname3
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_define_var_double_3d'
-integer :: ret, dimid1, dimid2, dimid3, varid
-
-ret = nf90_inq_dimid(ncid, dimname1, dimid1)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname1), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname2, dimid2)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname2), context, filename)
-
-ret = nf90_inq_dimid(ncid, dimname3, dimid3)
-call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname3), context, filename)
-
-ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename)
-
-end subroutine nc_define_var_double_3d
+end subroutine nc_define_var_double_Nd
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
@@ -616,7 +574,8 @@ end subroutine nc_put_single_int_1d
 !--------------------------------------------------------------------
 
 subroutine nc_put_int_1d(ncid, varname, varvals, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 integer,          intent(in) :: varvals(:)
 character(len=*), intent(in), optional :: context
@@ -636,6 +595,7 @@ end subroutine nc_put_int_1d
 !--------------------------------------------------------------------
 
 subroutine nc_put_single_real_1d(ncid, varname, varindex, varval, context, filename)
+
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 integer,          intent(in) :: varindex
@@ -657,7 +617,8 @@ end subroutine nc_put_single_real_1d
 !--------------------------------------------------------------------
 
 subroutine nc_put_real_1d(ncid, varname, varvals, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 real(r8),         intent(in) :: varvals(:)
 character(len=*), intent(in), optional :: context
@@ -677,7 +638,8 @@ end subroutine nc_put_real_1d
 !--------------------------------------------------------------------
 
 subroutine nc_put_int_2d(ncid, varname, varvals, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 integer,          intent(in) :: varvals(:,:)
 character(len=*), intent(in), optional :: context
@@ -697,7 +659,8 @@ end subroutine nc_put_int_2d
 !--------------------------------------------------------------------
 
 subroutine nc_put_real_2d(ncid, varname, varvals, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 real(r8),         intent(in) :: varvals(:,:)
 character(len=*), intent(in), optional :: context
@@ -718,7 +681,7 @@ end subroutine nc_put_real_2d
 
 subroutine nc_put_int_3d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 integer,          intent(in) :: varvals(:,:,:)
 character(len=*), intent(in), optional :: context
@@ -739,7 +702,7 @@ end subroutine nc_put_int_3d
 
 subroutine nc_put_real_3d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 real(r8),         intent(in) :: varvals(:,:,:)
 character(len=*), intent(in), optional :: context
@@ -762,7 +725,7 @@ end subroutine nc_put_real_3d
 
 subroutine nc_get_int_1d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: varname
 integer,          intent(out) :: varvals(:)
 character(len=*), intent(in), optional :: context
@@ -783,7 +746,7 @@ end subroutine nc_get_int_1d
 
 subroutine nc_get_real_1d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: varname
 real(r8),         intent(out) :: varvals(:)
 character(len=*), intent(in), optional :: context
@@ -804,7 +767,7 @@ end subroutine nc_get_real_1d
 
 subroutine nc_get_int_2d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: varname
 integer,          intent(out) :: varvals(:,:)
 character(len=*), intent(in), optional :: context
@@ -824,8 +787,8 @@ end subroutine nc_get_int_2d
 !--------------------------------------------------------------------
 
 subroutine nc_get_real_2d(ncid, varname, varvals, context, filename)
-integer, intent(in) :: ncid
-character(len=*), intent(in) :: varname
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
 real(r8),         intent(out) :: varvals(:,:)
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
@@ -845,7 +808,7 @@ end subroutine nc_get_real_2d
 
 subroutine nc_get_int_3d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: varname
 integer,          intent(out) :: varvals(:,:,:)
 character(len=*), intent(in), optional :: context
@@ -866,7 +829,7 @@ end subroutine nc_get_int_3d
 
 subroutine nc_get_real_3d(ncid, varname, varvals, context, filename)
 
-integer, intent(in) :: ncid
+integer,          intent(in)  :: ncid
 character(len=*), intent(in)  :: varname
 real(r8),         intent(out) :: varvals(:,:,:)
 character(len=*), intent(in), optional :: context
@@ -888,7 +851,8 @@ end subroutine nc_get_real_3d
 ! misc section: file operations, standard timestamp routine
 
 subroutine nc_add_global_creation_time(ncid, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
@@ -910,7 +874,8 @@ end subroutine nc_add_global_creation_time
 !--------------------------------------------------------------------
 
 subroutine nc_redef(ncid, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
@@ -925,7 +890,8 @@ end subroutine nc_redef
 !--------------------------------------------------------------------
 
 subroutine nc_enddef(ncid, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
@@ -940,7 +906,8 @@ end subroutine nc_enddef
 !--------------------------------------------------------------------
 
 subroutine nc_sync(ncid, context, filename)
-integer, intent(in) :: ncid
+
+integer,          intent(in) :: ncid
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 

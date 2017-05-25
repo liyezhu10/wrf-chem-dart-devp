@@ -164,16 +164,23 @@ end do
 time_step = set_time(time_step_seconds, time_step_days)
 
 ! Define the domain so the dart library code can read/write it.
-! If we are starting from a restart file, get the sizes from the
-! X and Y variables in the file.  If not, define the sizes of
-! the X and Y variables based on the namelist sizes.
 
 if (template_file /= "null") then
+   ! If we are have specified a template file then DART will use it to discover
+   ! the sizes and dimensions of the given variables.  Tell DART which NetCDF variable
+   ! names to read into the model state, and what quantities they correspond to.
+   ! Note that the state data will be read from the initial conditions file; 
+   ! the template file is only used to determine sizes and attributes.
    dom_id = add_domain(template_file, 2, (/ "X", "Y" /), (/ QTY_LARGE_SCALE_STATE, QTY_SMALL_SCALE_STATE /))
 else
+   ! If we are using the built-in initial conditions instead of reading a
+   ! restart file (for example, running perfect_model_obs with different model
+   ! sizes and so not reading from an existing restart file), then define the
+   ! variable names and sizes to DART explicitly.  The values in the state vector
+   ! will come from the call to init_conditions().
    dom_id = add_domain(2, (/ "X", "Y" /), (/ QTY_LARGE_SCALE_STATE, QTY_SMALL_SCALE_STATE /))
-   call add_dimension_to_variable(dom_id, 1, "Xdim", l96%x_size)
-   call add_dimension_to_variable(dom_id, 2, "Ydim", l96%y_size)
+   call add_dimension_to_variable(dom_id, 1, "Xlocation", l96%x_size)
+   call add_dimension_to_variable(dom_id, 2, "Ylocation", l96%y_size)
    call finished_adding_domain(dom_id)
 endif
 
@@ -448,40 +455,24 @@ call nc_add_global_attribute(ncid, "model_forcing", l96%f )
 call nc_add_global_attribute(ncid, "model_coupling_b", l96%b )
 call nc_add_global_attribute(ncid, "model_coupling_c", l96%c )
 call nc_add_global_attribute(ncid, "model_coupling_h", l96%h )
-call nc_add_global_attribute(ncid, "slow variables", "X")
-call nc_add_global_attribute(ncid, "fast variables", "Y")
+call nc_add_global_attribute(ncid, "slow variables (large scale)", "X")
+call nc_add_global_attribute(ncid, "fast variables (small scale)", "Y")
 
 
-! Define the dimensions IDs for X and Y dimensions
-! and locations
-call nc_define_dimension(ncid, "Xdim", l96%x_size)
-call nc_define_dimension(ncid, "Ydim", l96%y_size)
+! Define the dimensions IDs for X and Y location dimensions
+call nc_define_dimension(ncid, "Xlocation", l96%x_size)
+call nc_define_dimension(ncid, "Ylocation", l96%y_size)
 
-call nc_define_real_variable(ncid, "XLocation", "Xdim")
-call nc_add_location_atts   (ncid, "XLocation")
-call nc_define_real_variable(ncid, "YLocation", "Ydim")
-call nc_add_location_atts   (ncid, "YLocation")
-
-
-! Define the coordinate variables
-call nc_define_integer_variable  (ncid, "Xdim", "Xdim")
-call nc_add_attribute_to_variable(ncid, "Xdim", "long_name", "X ID")
-call nc_add_attribute_to_variable(ncid, "Xdim", "units", "indexical")
-call nc_add_attribute_to_variable(ncid, "Xdim", "valid_range", (/ 1, l96%x_size /))
-
-call nc_define_integer_variable  (ncid, "Ydim", "Ydim")
-call nc_add_attribute_to_variable(ncid, "Ydim", "long_name", "Y ID")
-call nc_add_attribute_to_variable(ncid, "Ydim", "units", "indexical")
-call nc_add_attribute_to_variable(ncid, "Ydim", "valid_range", (/ 1, l96%y_size /))
+call nc_define_real_variable(ncid, "Xlocation", "Xlocation")
+call nc_add_location_atts   (ncid, "Xlocation")
+call nc_define_real_variable(ncid, "Ylocation", "Ylocation")
+call nc_add_location_atts   (ncid, "Ylocation")
 
 ! Leave define mode so we can fill
 call nc_enddef(ncid)
 
-! Fill the state variable coordinate variables
-call nc_put_variable(ncid, "Xdim", (/ (i,i=1,l96%x_size) /) )
-call nc_put_variable(ncid, "Ydim", (/ (i,i=1,l96%y_size) /) )
-
-! indices for the start and end of the X vars and Y vars
+! The starting and ending indices of the X vars and Y vars
+! in the state vector
 xs = 1
 xe = l96%x_size
 ys = xe + 1
@@ -492,14 +483,14 @@ do i = xs, xe
    indx = i
    call get_state_meta_data(indx,lctn)
    loc = get_location(lctn)
-   call nc_put_variable(ncid, "XLocation", i, loc)
+   call nc_put_variable(ncid, "Xlocation", i, loc)
 enddo
 
 do i = ys, ye
    indx = i
    call get_state_meta_data(indx,lctn)
    loc = get_location(lctn)
-   call nc_put_variable(ncid, "YLocation", i - ys + 1, loc)
+   call nc_put_variable(ncid, "Ylocation", i - ys + 1, loc)
 enddo
 
 call nc_sync(ncid)
