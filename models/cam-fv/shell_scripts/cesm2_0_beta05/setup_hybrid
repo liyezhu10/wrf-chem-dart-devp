@@ -1,23 +1,45 @@
 #!/bin/csh -f
+#--------------------------------------------
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: setup_hybrid 11634 2017-05-13 15:14:15Z raeder@ucar.edu $
+#
 #BSUB  -n 1 
 #BSUB  -R "span[ptile=1]"
 #BSUB  -q caldera 
 #BSUB  -P P86850054
-#BSUB  -W 2:00
+#BSUB  -W 1:00
 #BSUB  -u raeder@ucar.edu
 #BSUB  -N  
 #BSUB  -a poe 
 # The job name MUST be the name of this script(file), or this file will not be
 # archived in $CASEROOT.
-#BSUB  -J setup_advanced
-#BSUB  -o CAM6_clouds_4.bld1
-#BSUB  -e CAM6_clouds_4.bld1
+#BSUB  -J setup_hybrid
+#BSUB  -o CAM4_test1_hyb.bld1
+#BSUB  -e CAM4_test1_hyb.bld1
+#--------------------------------------------
+## The job name MUST be the name of this script(file), or this file will not be
+## archived in $CASEROOT.
+#PBS  -N setup_hybrid
+#PBS  -A NCGD0028
+# Resources I want:
+#    select=#nodes
+#    ncpus=#CPUs/node
+#    mpiprocs=#MPI_tasks/node
+#PBS  -q share 
+#PBS  -l select=1:ncpus=1:mpiprocs=1
+#PBS  -l walltime=02:00:00
+# Send email after a(bort) or e(nd)
+#PBS  -m ae
+#PBS  -M raeder@ucar.edu
+# Send standard output and error to this file
+# #PBS  -o CAM4_test2_hyb.bld2
+#PBS  -o Dev5.bld2
+#PBS  -j oe 
+#--------------------------------------------
 
-# DART software - Copyright UCAR. This open source software is provided
-# by UCAR, "as is", without charge, subject to all terms of use at
-# http://www.image.ucar.edu/DAReS/DART/DART_download
-#
-# DART $Id: setup_advanced 7946 2015-04-30 21:11:34Z nancy $
 
 
 #*******************************************************************************
@@ -32,8 +54,8 @@
 # is used. Instructions on what to change to use the SE core or WACCM are
 # outlined in the models/cam-fv/model_mod.html documentation.
 #
-# This script ($rma/models/cam-fv/shell_scripts/cesm2_0/setup_advanced) has many 
-# changes from $non-rma/models/cam-fv/shell_scripts/CESM1_2_1_setup_advanced
+# This script ($rma/models/cam-fv/shell_scripts/cesm2_0_beta05/setup_advanced) has many 
+# changes from $non-rma/models/cam-fv/shell_scripts/CESM1_2_1_setup_hybrid
 # due to CESM's implementation of cime and move to perl scripts and xml files 
 # for all of the setup and running.  CESM1_5 enables running multiple cycles in a single
 # job without running st_archive.  This can make use of a large run directory, 
@@ -137,16 +159,11 @@
 # ==============================================================================
 # AMIP_CAM5_CLM40%SP_CICE%PRES_DOCN%DOM_RTM_SGLC_SWAV (F_AMIP_CAM5) (FAMIPC5)
 
-setenv case                 CAM6_clouds_4
-# setenv case            Tune_c.2_v1.5_dflt_dflt
-# F2000_DEV = 2000_CAM60_CLM50%BGC_CICE%PRES_DOCN%DOM_MOSART_CISM1%NOEVOLVE_SWAV
-#             defined in components/cam, not cime(!).
-setenv compset          F2000_DEV
+setenv case             Dev5
+# setenv case             CAM4_test2_hyb
+setenv compset          F
 setenv compset_args     "--compset $compset"
-# setenv resolution       f09_f09
-setenv resolution       f09_d025
-setenv user_grid        "  --gridfile /glade/p/work/raeder/Exp/CAM6_clouds"
-setenv user_grid        "${user_grid}/config_grids+fv1+2deg_oi0.25_gland20.xml"
+setenv resolution       f19_f19
 setenv cesmtag          cesm2_0_beta05_cam5_4_101
 setenv num_instances    3
 
@@ -179,7 +196,7 @@ setenv num_instances    3
 #                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
 # ==============================================================================
 
-setenv mach         yellowstone
+setenv mach         cheyenne
 setenv cesmdata     /glade/p/cesm/cseg/inputdata
 # setenv cesmroot     /glade/p/cesm/cseg/collections/${cesmtag}
 # setenv cesmroot     /glade/p/cesmdata/cseg/.dev/${cesmtag}
@@ -197,7 +214,8 @@ setenv CIMEROOT     $cesmroot/cime
 setenv dartroot     /glade/u/home/${USER}/DART/rma_dirs
 
 # Note that assimilate.csh looks for $base_obs_dir/YYYYMM_6H_CESM.
-setenv baseobsdir   /glade/p/image/Observations/NCEP+ACARS+GPS
+setenv baseobsdir   /glade/p/image/Observations/NCEP+ACARS
+# setenv baseobsdir   /glade/p/image/Observations/NCEP+ACARS+GPS
 
 # ==============================================================================
 # configure settings:
@@ -215,14 +233,15 @@ setenv baseobsdir   /glade/p/image/Observations/NCEP+ACARS+GPS
 # stagedir   The directory location of the reference case files.
 # ==============================================================================
 
+# setenv refcase     cesm_hybrid
+# setenv refyear     2004
+# setenv refmon      01
+# setenv refday      10
 
-# /glade/scratch/raeder/CAM6_spinup_sst.25/archive/rest/2013-06-15-00000
-# setenv refcase     CAM6_spinup2
-setenv refcase     CAM6_spinup_sst.25
-setenv refyear     2013
-setenv refmon      06
-
-setenv refday      15
+setenv refcase     Tune_2deg_3
+setenv refyear     2010
+setenv refmon      08
+setenv refday      16
 setenv reftod      00000
 
 # useful combinations of time that we use below
@@ -259,9 +278,9 @@ setenv stagedir /glade/scratch/${USER}/${refcase}/archive/rest/${reftimestamp}
 # setenv start_year    2005
 # setenv start_month   12
 # setenv start_day     15
-setenv start_year    2013
-setenv start_month   06
-setenv start_day     15
+setenv start_year    2010
+setenv start_month   08
+setenv start_day     16
 setenv start_tod     00000
 
 setenv short_term_archiver off
@@ -270,38 +289,23 @@ setenv long_term_archiver  off
 setenv stop_option         nhours
 setenv stop_n              6
 
-# Daily, 1/4-degree SSTs from Reynolds,...,Tomas
-setenv sst_dataset \
-   "/glade/p/work/raeder/Models/CAM_init/SST/avhrr-only-v2.20130101_cat_20130731_filled_c170223.nc"
-#    "/glade/p/work/raeder/Models/CAM_init/SST/avhrr-only-v2.20100101_cat_20101231_filled_c130829.nc"
-setenv sst_grid    /glade/p/work/raeder/Models/CAM_init/SST/domain.ocn.d025.120821.nc
-setenv sst_year_start $start_year
-setenv sst_year_end   $start_year
-# 
-# Monthly, 1- or 2-degree SSTs from HadOI.
-#    setenv sst_dataset ${cesmdata}/atm/cam/sst/sst_HadOIBl_bc_0.9x1.25_1850_2013_c140701.nc
-#    setenv sst_grid    ${cesmdata}/share/domains/domain.ocn.fv0.9x1.25_gx1v6.130409.nc
-#    setenv sst_year_start 1850
-#    setenv sst_year_end   2013
-# setenv sst_dataset "${cesmdata}/atm/cam/sst/sst_HadOIBl_bc_1.9x2.5_1850_2014_c150416.nc"
-# setenv sst_grid    "${cesmdata}/share/domains/domain.ocn.fv1.9x2.5_gx1v6.130409.nc"
-# setenv sst_year_end   2014
-
 # ==============================================================================
 # job settings:
 #
 # PROJECT    CESM2 preferred name for account used to charge core hours.
 #            Using setenv makes it available to utils/python/CIME/case.py/get_project
 # queue      can be changed during a series by changing the case.run
+#            Cheyenne has limited queues in the early months:
+#               capability (> 1152 NODES), regular (<= 1152 nodes), share (< 16 PROCS).
 # timewall   can be changed during a series by changing the case.run
 #
 # TJH: Advancing 30 instances for 6 hours and assimilating took
 #      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
 # ==============================================================================
 
-setenv PROJECT      P86850054
-setenv queue        premium
-setenv timewall     2:00
+setenv PROJECT      your_project_#
+setenv queue        regular
+setenv timewall     0:20
 
 # ==============================================================================
 # standard commands:
@@ -346,6 +350,9 @@ endsw
 
 if ($?LS_SUBCWD) then
    cd $LS_SUBCWD
+else if ($?PBS_O_WORKDIR) then
+   echo "changing directory to $PBS_O_WORKDIR"
+   cd $PBS_O_WORKDIR
 endif
 
 # ==============================================================================
@@ -373,6 +380,8 @@ end
 if ($?LSB_JOBNAME) then
    # This only works if the job name in the BSUB directives is the name of this script.
    setenv SetupFileName $LSB_JOBNAME
+else if ($?PBS_JOBNAME) then
+   setenv SetupFileName $PBS_JOBNAME
 else
    # Use setenv so that DART_config can access it, 
    # in particular for help with removing unneeded restart sets.
@@ -408,8 +417,8 @@ endif
 # setup_advanced will need more flexible arguments, as in CESM1_5_setup_advanced(?)
 # This may need --project, if env var PROJECT is no longer used.
 ${CIMEROOT}/scripts/create_newcase --case ${caseroot} --mach ${mach} \
-           --res ${resolution} ${compset_args} ${user_grid}
-#    --res ${resolution} --compset ${compset} --ninst $num_instances
+    --res ${resolution} ${compset_args}
+#  --ninst $num_instances
     
 if ( $status != 0 ) then
    echo "ERROR: Case could not be created."
@@ -538,9 +547,6 @@ setenv TEST_MPI           `./xmlquery MPI_RUN_COMMAND    -value`
 setenv CLM_CONFIG_OPTS    `./xmlquery CLM_CONFIG_OPTS    -value`
 setenv COMPSET            `./xmlquery COMPSET            -value`
 setenv CAM_DYCORE         `./xmlquery CAM_DYCORE         -value`
-# Broken in cesm2_0_beta05:
-# setenv BATCH_SYSTEM       `./xmlquery --subgroup config_batch BATCH_SYSTEM -value`
-setenv BATCH_SYSTEM       'lsf'
 setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE -value`
 setenv COMP_OCN           `./xmlquery COMP_OCN           -value`
 setenv CIMEROOT           `./xmlquery CIMEROOT           -value`
@@ -607,6 +613,7 @@ end
 # errors OR failures without any messages, try increasing the nodes_per_instance.
 # CAM-FV 1 degree can run on 2 nodes/instance on yellowstone.
 # CAM-SE ne30 (~ 1 degree) needed 5 nodes/instance.
+# Cheyenne has 46 Gb/node of usable memory, which is 84% more then YS(25 Gb)
 # By computing task counts like we do below, we guarantee each instance uses
 # a whole number of nodes which is the recommended configuration.
 
@@ -616,7 +623,7 @@ end
 #       BUT, do arrange it so that each member(instance) spans complete nodes:
 #       modulo(total pe count / number of instances, 15) == 0.
 
-@ nodes_per_instance = 3
+@ nodes_per_instance = 1
 
 # cesm2; is num_instances still needed here, with ninst being a create_newcase argument?
 #        Try it as it is.  Fix as necessary.
@@ -709,25 +716,6 @@ endif
 ./xmlchange EXEROOT=${exeroot}
 ./xmlchange RUNDIR=${rundir}
 
-./xmlchange SSTICE_DATA_FILENAME=$sst_dataset
-./xmlchange SSTICE_GRID_FILENAME=$sst_grid
-./xmlchange SSTICE_YEAR_ALIGN=$sst_year_start
-./xmlchange SSTICE_YEAR_START=$sst_year_start
-./xmlchange SSTICE_YEAR_END=$sst_year_end
-# Kluge to fix env_run.xml for hi-res SST data set, because something is wrong with the config_grids file.
-echo $resolution | grep d025
-if ($status == 0) then
-   set dom_map_path = /glade/p/work/raeder/Exp/GWD_TMS_CLUBB/mapping
-#    ./xmlchange LND_DOMAIN_PATH=$dom_map_path/domain_files
-#    ./xmlchange LND_DOMAIN_FILE=domain.lnd.fv1.9x2.5_d.25x.25.160407.nc
-#    ./xmlchange ROF2OCN_LIQ_RMAPNAME=$dom_map_path/gridmaps/map_r05_to_d.25_nnsm_e1000r300_160229.nc
-#    ./xmlchange ROF2OCN_ICE_RMAPNAME=$dom_map_path/gridmaps/map_r05_to_d.25_nnsm_e1000r300_160229.nc
-   ./xmlchange LND_DOMAIN_PATH=/glade/p/work/raeder/Models/cesm1_4_beta06/cime/tools/mapping/gen_domain_files/
-   ./xmlchange LND_DOMAIN_FILE=domain.lnd.fv0.9x1.25_d.25x.25.150907.nc
-   ./xmlchange ROF2OCN_LIQ_RMAPNAME=${dom_map_path}/gridmaps/map_r05_to_d.25_nnsm_e1000r300_160229.nc
-   ./xmlchange ROF2OCN_ICE_RMAPNAME=${dom_map_path}/gridmaps/map_r05_to_d.25_nnsm_e1000r300_160229.nc
-endif
-
 # Do not change the CALENDAR or the value of CONTINUE_RUN in this script.
 # Even if it's a branch from another run, where all restarts, etc. are available,
 # it still needs to change case/file names for this new case.
@@ -763,7 +751,11 @@ endif
 # TEST_MPI was set to CESM's MPI_RUN_COMMAND, above.
 # Fix it, if necessary.
 if (${TEST_MPI} == 'UNSET') then
-   ./xmlchange MPI_RUN_COMMAND=mpirun.lsf
+   if ($?LSB_JOBNAME) then
+      ./xmlchange MPI_RUN_COMMAND=mpirun.lsf
+   else if ($?PBS_JOBNAME) then
+      ./xmlchange MPI_RUN_COMMAND=mpiexec_mpt
+   endif
 endif
 
 # The river transport model ON is useful only when using an active ocean or
@@ -795,13 +787,8 @@ endif
 
 # CAM physics (etc.) selection.  (Eaton said?) It's safer to always specify the physics,
 # instead of letting the compset choose it.
-# ./xmlchange CAM_CONFIG_OPTS="-phys cam4 "
+./xmlchange CAM_CONFIG_OPTS="-phys cam4 "
 
-# These are archiving options that may be used.
-# You can turn the short/long term archivers on or off ({short,long}_term_archiver),
-# but these settings should be made in either event.
-
-./xmlchange DOUT_S_ROOT=${archdir}
 # Reduce the amount of stuff that's st_archived.
 #  > Fewer restart sets saved to         $archive/rest and/or to HPSS,
 #       CESM's DOUT_S_SAVE_INTERIM_RESTART_FILES only saves restart sets within a single
@@ -811,26 +798,6 @@ endif
 #          sets in the DART context.  
 #          This will be inherited by DART_config and inserted into assimilate.csh.
 setenv save_every_Mth_day_restarts 2
-
-
-./xmlchange -file env_batch.xml -subgroup case.st_archive -id JOB_QUEUE          -val geyser
-./xmlchange -file env_batch.xml -subgroup case.st_archive -id JOB_WALLCLOCK_TIME -val 4:00
-
-./xmlchange DOUT_L_MSROOT="${case}"
-./xmlchange DOUT_L_HPSS_ACCNT="${PROJECT}"
-./xmlchange -file env_batch.xml -subgroup case.lt_archive -id JOB_QUEUE          -val caldera
-./xmlchange -file env_batch.xml -subgroup case.lt_archive -id JOB_WALLCLOCK_TIME -val 1:00
-
-if ($short_term_archiver == 'off') then
-   ./xmlchange DOUT_S=FALSE
-else
-   ./xmlchange DOUT_S=TRUE
-endif
-if ($long_term_archiver == 'off') then
-   ./xmlchange DOUT_L_MS=FALSE
-else
-   ./xmlchange DOUT_L_MS=TRUE
-endif
 
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
@@ -978,28 +945,88 @@ echo ''
 echo 'Setting wallclock and queue in "run" subgroup.'
 echo ''
 
-# Not usefule with BATCH_SYSTEM? (instead of BATCHSUBMIT)
-# set BATCH = `echo $BATCH_SYSTEM | sed 's/ .*$//'`
-switch ( $BATCH_SYSTEM )
-   case lsf*:
-      # NCAR "bluefire", "yellowstone"
-      # -file env_batch.xml -subgroup is needed because these variables are in env_batch.xml,
-      # # cesm1_5: which defines these variables for several different jobs; run, st_archive, ...]]
-      # which defines these variables for several different jobs; case.run, case.st_archive, ...
-      # The old form of arguments is needed because xmlchange can't find env_batch.xml
-      # without -file, and that forces all args to be old form.
-      ./xmlchange --file env_batch.xml --subgroup case.run   --id JOB_QUEUE -val ${queue}
-      ./xmlchange --file env_batch.xml --subgroup case.run   --id JOB_WALLCLOCK_TIME -val ${timewall}
-   breaksw
-
-   default:
-   breaksw
-endsw
+# Update for cheyenne; it appears that JOB_* are CESM XML variables,
+# not machine or queueing system dependent.  Remove 'switch...'
+# -file env_batch.xml -subgroup is needed because these variables are in env_batch.xml,
+# which defines these variables for several different jobs; case.run, case.st_archive, ...
+# (# cesm1_5: which defines these variables for several different jobs; run, st_archive, ...)
+# The old form of arguments is needed because xmlchange can't find env_batch.xml
+# without -file, and that forces all args to be old form.
+./xmlchange --file env_batch.xml --subgroup case.run   --id JOB_QUEUE -val ${queue}
+./xmlchange --file env_batch.xml --subgroup case.run   --id JOB_WALLCLOCK_TIME -val ${timewall}
 
 # This is the part that copies several required DART files to the caseroot directory.
 
 ./DART_config || exit 80
 
+# These are archiving options that may be used.
+# You can turn the short/long term archivers on or off ({short,long}_term_archiver),
+# but these settings should be made in either event.
+
+if ($short_term_archiver == 'off') then
+   ./xmlchange DOUT_S=FALSE
+else
+   ./xmlchange DOUT_S=TRUE
+endif
+if ($long_term_archiver == 'off') then
+   ./xmlchange DOUT_L_MS=FALSE
+else
+   ./xmlchange DOUT_L_MS=TRUE
+endif
+
+# The new case.st_archive job script calls st_archive.  It runs after the case.run job.
+# It submits the next case.run job, if RESUBMIT > 0.
+# Fix some pieces.
+# /X/ means search for lines with X in them.
+# 'c' means replace the line with the following.
+# In addition, env_batch.xml has a section we want to change, which xmlchange can't do.
+#    Make st_archive run on 1 processor ( 'select' for pbs, 'ptile' for lsf). 
+
+if ($?LSB_JOBNAME) then
+   sed -e "/BSUB[ ]*-o/c\#BSUB  -o cesm_st_arch.stdout.%J" \
+       -e "/BSUB[ ]*-e/c\#BSUB  -e cesm_st_arch.stderr.%J" \
+       -e "/BSUB[ ]*-J/c\#BSUB  -J ${case}.st_arch"        \
+       -e '/ptile/c/#BSUB  -R "span[ptile=1]"'             \
+       case.st_archive >! temp.$$  || exit 55
+   ${MOVE} temp.$$ case.st_archive
+   ./xmlchange -file env_batch.xml -subgroup case.st_archive -id JOB_QUEUE -val caldera
+   
+   sed -e "/BSUB[ ]*-o/c\#BSUB  -o cesm_lt_arch.stdout.%J " \
+       -e "/BSUB[ ]*-e/c\#BSUB  -e cesm_lt_arch.stderr.%J " \
+       -e "/BSUB[ ]*-J/c\#BSUB  -J ${case}.lt_arch        " \
+       -e '/ptile/c/#BSUB  -R "span[ptile=1]"'  case.lt_archive >! temp.$$  || exit 56
+   ${MOVE} temp.$$ case.lt_archive
+   ./xmlchange -file env_batch.xml -subgroup case.lt_archive -id JOB_QUEUE -val caldera
+
+else if ($?PBS_JOBNAME) then
+   sed -e  "/PBS[ ]*-j/a\#PBS  -o cesm_st_arch.std.\$PBS_JOBID" \
+       -e  "/PBS[ ]*-N/c\#PBS  -N ${case}.st_arch"     \
+       -e "/\-l select/c\#PBS  -l select=1:ncpus=1:mpiprocs=1:ompthreads=1" \
+       case.st_archive >! temp.$$  || exit 55
+   ${MOVE} temp.$$ case.st_archive
+   ./xmlchange -file env_batch.xml -subgroup case.st_archive -id JOB_QUEUE -val share
+   # Cheyenne's 'share' queue may not be working right, so CESM runs its archivers in 'regular'
+   # on 36 processors.  Ugh.
+   # But I ran a manual st_archive in CAM6_test2_adv with 1 task in 'share' and it worked.
+   
+This is appearing literally.
+   sed -e  "/PBS[ ]*-j/a\#PBS  -o cesm_lt_arch.std.\$PBS_JOBID " \
+       -e  "/PBS[ ]*-N/c\#PBS  -N ${case}.lt_arch"      \
+       -e "/\-l select/c\#PBS  -l select=1:ncpus=1:mpiprocs=1:ompthreads=1" \
+       case.lt_archive >! temp.$$  || exit 56
+   ${MOVE} temp.$$ case.lt_archive
+   ./xmlchange -file env_batch.xml -subgroup case.lt_archive -id JOB_QUEUE -val share
+
+endif
+chmod 755 case.st_archive
+chmod 755 case.lt_archive
+
+./xmlchange -file env_batch.xml -subgroup case.st_archive -id JOB_WALLCLOCK_TIME -val 1:00
+./xmlchange -file env_batch.xml -subgroup case.lt_archive -id JOB_WALLCLOCK_TIME -val 1:00
+
+./xmlchange DOUT_S_ROOT=${archdir}
+./xmlchange DOUT_L_MSROOT="${case}"
+./xmlchange DOUT_L_HPSS_ACCNT="${PROJECT}"
 
 # ==============================================================================
 # Modify namelist templates for each instance.
@@ -1046,10 +1073,6 @@ while ($inst <= $num_instances)
    echo " fincl1        = 'PHIS:I' "                      >> ${fname}
    echo " nhtfrq        = -$stop_n "                      >> ${fname}
    echo " mfilt         = 1 "                             >> ${fname}
-   # Was needed for 2 degree spinup CAM6_2deg_spinup_sst.25,
-   # even though 1 degree worked with default 1 degree topo with a name similar to this.
-#    echo "bnd_topo = '/glade/p/cesmdata/cseg/inputdata/atm/cam/topo/fv_1.9x2.5_nc3000_Nsw084_Nrs016_Co120_Fi001_ZR_061116.nc' " >> ${fname}
-
 
 
    # Settings that differ between regular CAM and the WACCM version:
@@ -1067,41 +1090,35 @@ while ($inst <= $num_instances)
 
       set chem_datapath = "${cesmdata}/atm/cam/chem/trop_mozart_aero"
 
-
-# INTERP...  seems to not work in beta05.
-# It assigns a value to cycle year somewhere, which is incompatible with "INTERP..."
-#       if ($start_year <= 2015) then
-# 
-#          # This might be better (30 levels): ozone_1.9x2.5_L30_2005-2099_c130313.nc
-#          # No, it doesn't have PS on it.
-#          echo "prescribed_ozone_type = 'INTERP_MISSING_MONTHS'"                                          >> ${fname}
-#          echo "prescribed_ozone_datapath = '/glade/p/cesmdata/cseg/inputdata/atm/cam/ozone'"             >> ${fname}
-#          echo "prescribed_ozone_file = 'ozone_1.9x2.5_L26_1850-2015_rcp45_c101108.nc'"                   >> ${fname}
-#          echo "prescribed_ozone_name = 'O3'"                                                             >> ${fname}
-# 
-#          # Don't specify tracer_cnst_cycle_yr if _type is SERIAL or INTERP_MISSING_MONTH
-#          # echo "tracer_cnst_cycle_yr = 2010 "                                                             >> ${fname}
-#          echo "tracer_cnst_type      =  'INTERP_MISSING_MONTHS'"                                              >> ${fname}
-#          echo "tracer_cnst_datapath  = '/glade/p/cesmdata/cseg/inputdata/atm/cam/chem/trop_mozart_aero/oxid'" >> ${fname}
-#          echo "tracer_cnst_file      =  'oxid_1.9x2.5_L26_1850-2015_rcp45_c101108.nc'"                        >> ${fname}
-#          echo "tracer_cnst_filelist  = 'oxid_1.9x2.5_L26_clim_list.c090805.txt'"                              >> ${fname}
-#          echo "tracer_cnst_specifier = 'O3','OH','NO3','HO2'"                                                 >> ${fname}
-# 
-#       else 
-         if ($inst == 1) then
-            echo 'WARNING; using default ozone and tracer_cnst forcing files'
-         endif
-#       endif
-# 
-# 
       # CAM5 does prognostic aerosols by default (which is expensive).
       # Specifying the following causes CAM to use prescribed aerosols, which is cheaper.
       # Prescribed aerosols on the timescales of interest to assimilation are acceptable.
       # WACCM5 should not have these set.
 
-      # CAM6_clouds wants prognostic aerosols.
-      if (0) then
-#       if ($start_year <= 2010) then
+
+      if ($start_year <= 2015) then
+
+         # This might be better (30 levels): ozone_1.9x2.5_L30_2005-2099_c130313.nc
+         # No, it doesn't have PS on it.
+         echo "prescribed_ozone_type = 'INTERP_MISSING_MONTHS'"                                          >> ${fname}
+         echo "prescribed_ozone_datapath = '/glade/p/cesmdata/cseg/inputdata/atm/cam/ozone'"             >> ${fname}
+         echo "prescribed_ozone_file = 'ozone_1.9x2.5_L26_1850-2015_rcp45_c101108.nc'"                   >> ${fname}
+         echo "prescribed_ozone_name = 'O3'"                                                             >> ${fname}
+
+         # Don't specify tracer_cnst_cycle_yr if _type is SERIAL or INTERP_MISSING_MONTH
+         # echo "tracer_cnst_cycle_yr = 2010 "                                                             >> ${fname}
+         echo "tracer_cnst_type      =  'INTERP_MISSING_MONTHS'"                                              >> ${fname}
+         echo "tracer_cnst_datapath  = '/glade/p/cesmdata/cseg/inputdata/atm/cam/chem/trop_mozart_aero/oxid'" >> ${fname}
+         echo "tracer_cnst_file      =  'oxid_1.9x2.5_L26_1850-2015_rcp45_c101108.nc'"                        >> ${fname}
+         echo "tracer_cnst_filelist  = 'oxid_1.9x2.5_L26_clim_list.c090805.txt'"                              >> ${fname}
+         echo "tracer_cnst_specifier = 'O3','OH','NO3','HO2'"                                                 >> ${fname}
+
+      else 
+         echo 'WARNING; using default ozone and tracer_cnst forcing files'
+      endif
+# 
+# 
+      if ($start_year <= 2010) then
 # 
 #          # As of April 2015, the default files only run through 2005.
 #          # Specify non-default files for assimilation for years 2006-2010.
@@ -1154,10 +1171,7 @@ while ($inst <= $num_instances)
          echo "WARNING; using default bndtvghg"
       endif
 
-      # CAM6_clouds
-      # Can't specify this file, when CAM prognostic aerosols apparently also specifies prescribed_strataero_file.
-      if (0) then
-      # if ($start_year <= 2013) then
+      if ($start_year <= 2013) then
          echo " prescribed_volcaero_datapath = '/glade/p/cesmdata/cseg/inputdata/atm/cam/volc'"       >> ${fname}
          echo " prescribed_volcaero_file      = 'CCSM4_volcanic_1850-2013_prototype1_c130430.nc'"     >> ${fname}
       else 
@@ -1208,11 +1222,6 @@ while ($inst <= $num_instances)
    echo "hist_nhtfrq = -$stop_n"       >> ${fname}
    echo "hist_mfilt  = 1"              >> ${fname}
    echo "hist_avgflag_pertape = 'I'"   >> ${fname}
-   # This was needed to allow the interpolation of the default CLM restart file.
-   # It may not be needed in runs that start from a somewhat spun up ensemble,
-   # but we don't particularly want or need this bit of physics.
-   echo "urban_hac = 'OFF'"            >> ${fname}
-   echo "building_temp_method = 0 "    >> ${fname}
 
    # Probably never want, but if I need to start from a not spun up CLM file,
    # specified in finidat, use this
@@ -1225,9 +1234,9 @@ while ($inst <= $num_instances)
    # CICE Namelist
 
    # CAM5: 
-   echo "ice_ic = '${refcase}.cice${inst_string}.r.${reftimestamp}.nc'" >> ${fname}
+   # echo "ice_ic = '${refcase}.cice${inst_string}.r.${reftimestamp}.nc'" >> ${fname}
    # CAM4: 
-   # echo "ice_ic = 'default'" >> ${fname}
+   echo "ice_ic = 'default'" >> ${fname}
 
    if ($glacier =~ 'CISM*') then
       # ===========================================================================
@@ -1447,10 +1456,10 @@ else     # CONTINUE_RUN == FALSE
    # Replace the inflation cookie, in case it was removed by a failed first cycle.
    if ( $num_instances > 1 ) then
       ls ${stagedir}/*inf*
-      if ($status == 0) then
+      if (\$status == 0) then
          cp ${stagedir}/*inf* .
       else
-         date >! \${rundir}/cam_inflation_cookie
+         date >! ${rundir}/cam_inflation_cookie
       endif
    endif
 
@@ -1485,7 +1494,7 @@ endif
 echo ' '
 echo "ENV_RUN: variables from env_run.xml, which may be of interest:"
 set vars = ( 'CONTINUE_RUN' 'RESUBMIT' 'RUN_REF{CASE,DATE,TOD}' 'RUN_STARTDATE' 'STOP_OPTION'   \
-             'STOP_N' 'SSTICE_*' 'DOUT_S_*' 'DOUT_L_*' 'RUNDIR' 'BATCH_SYSTEM' 'MPI_RUN_COMMAND' \
+             'STOP_N' 'SSTICE_*' 'DOUT_S_*' 'DOUT_L_*' 'RUNDIR' 'MPI_RUN_COMMAND' \
              'AVGHIST')
 foreach v (`echo "$vars"`)
     grep "$v" env_run.xml | grep "entry" | sed -e "s/<entry id=//" -e "s/>//"
@@ -1540,7 +1549,6 @@ cat ${caseroot}/DART_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/models/cam-fv/scripts_cesm1_5/setup_hybrid $
-# $Revision: 7946 $
-# $Date: 2015-04-30 15:11:34 -0600 (Thu, 30 Apr 2015) $
-
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/models/cam-fv/shell_scripts/cesm2_0/setup_hybrid $
+# $Revision: 11634 $
+# $Date: 2017-05-13 09:14:15 -0600 (Sat, 13 May 2017) $

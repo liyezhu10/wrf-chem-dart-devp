@@ -31,10 +31,28 @@ setenv CASEROOT $1
 # "Fix" that here, so the rest of the script isn't confusing.
 @ cycle = $2 + 1
 
+# In CESM1_4 xmlquery must be executed in $CASEROOT.
+cd ${CASEROOT}
+setenv CASE           $CASEROOT:t
+setenv ensemble_size  `./xmlquery NINST_ATM   -value`
+setenv CAM_DYCORE     `./xmlquery CAM_DYCORE  -value`
+setenv EXEROOT        `./xmlquery EXEROOT     -value`
+setenv RUNDIR         `./xmlquery RUNDIR      -value`
+setenv archive        `./xmlquery DOUT_S_ROOT -value`
+setenv TOTALPES       `./xmlquery TOTALPES    -value`
+setenv DATA_ASSIMILATION_CYCLES        `./xmlquery DATA_ASSIMILATION_CYCLES -value`
+cd $RUNDIR
+
+setenv save_all_inf TRUE
+# A switch to signal how often to save the stages' ensemble members: NONE, RESTART_TIMES, ALL
+setenv save_stages TRUE
+
+set BASEOBSDIR = BOGUSBASEOBSDIR
+
 # The FORCE options are not optional.
 # The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following
-switch ("`hostname`")
+switch ($HOSTNAME)
    case ys*:
       # NCAR "yellowstone"
       set   MOVE = 'mv -fv'
@@ -43,9 +61,18 @@ switch ("`hostname`")
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
       setenv MP_DEBUG_NOTIMEOUT yes
-
-      set BASEOBSDIR = BOGUSBASEOBSDIR
       set  LAUNCHCMD = mpirun.lsf
+   case ch*:
+      # NCAR "cheyenne"   -v removed because it doesn't work on (my) cheyenne.
+      set   MOVE = 'mv -f'
+      set   COPY = 'cp -f --preserve=timestamps'
+      set   LINK = 'ln -fs'
+      set REMOVE = 'rm -fr'
+      # echo "Trying to set TASKS_PER_NODE using PBS_NUM_PPN $PBS_NUM_PPN"
+      # Unavailable for some reason:  set TASKS_PER_NODE = $PBS_NUM_PPN 
+      set TASKS_PER_NODE = 36
+      setenv MP_DEBUG_NOTIMEOUT yes
+      set  LAUNCHCMD = mpiexec_mpt
    breaksw
 
    case linux_system_with_utils_in_other_dirs*:
@@ -54,8 +81,6 @@ switch ("`hostname`")
       set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -fvs'
       set REMOVE = '/usr/local/bin/rm -fr'
-
-      set BASEOBSDIR = BOGUSBASEOBSDIR
       set LAUNCHCMD  = mpirun.lsf
    breaksw
 
@@ -65,28 +90,10 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-
-      set BASEOBSDIR = BOGUSBASEOBSDIR
-      set LAUNCHCMD  = "aprun -n $NTASKS"
+      set LAUNCHCMD  = "aprun -n $TOTALPES"
 
    breaksw
 endsw
-
-# In CESM1_4 xmlquery must be executed in $CASEROOT.
-cd ${CASEROOT}
-setenv CASE           $CASEROOT:t
-setenv ensemble_size  `./xmlquery NINST_ATM   -value`
-setenv CAM_DYCORE     `./xmlquery CAM_DYCORE  -value`
-setenv EXEROOT        `./xmlquery EXEROOT     -value`
-setenv RUNDIR         `./xmlquery RUNDIR      -value`
-setenv archive        `./xmlquery DOUT_S_ROOT -value`
-setenv DATA_ASSIMILATION_CYCLES        `./xmlquery DATA_ASSIMILATION_CYCLES -value`
-setenv save_all_inf TRUE
-# A switch to signal how often to save the stages' ensemble members: NONE, RESTART_TIMES, ALL
-setenv save_stages TRUE
-
-set echo verbose
-cd $RUNDIR
 
 #=========================================================================
 # Block 1: Preliminary clean up, which can run in the background.
@@ -229,7 +236,6 @@ if ($#log_list >= 3) then
    endif
 
 endif
-unset echo
 
 
 #=========================================================================
@@ -304,7 +310,7 @@ echo "`date` -- END COPY BLOCK"
 
 if ($?TASKS_PER_NODE) then
    if ($#TASKS_PER_NODE > 0) then
-      ${COPY} input.nml input.nml.$$
+      ${MOVE} input.nml input.nml.$$
       sed -e "s#layout.*#layout = 2#" \
           -e "s#tasks_per_node.*#tasks_per_node = $TASKS_PER_NODE#" \
           input.nml.$$ >! input.nml || exit 40
