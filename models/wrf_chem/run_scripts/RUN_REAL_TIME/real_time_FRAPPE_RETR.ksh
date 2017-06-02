@@ -10,7 +10,7 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072018
+export CYCLE_STR_DATE=2014072100
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072100
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -23,7 +23,7 @@ export NL_FAC_OBS_ERROR_MOPITT=2.25
 export NL_FAC_OBS_ERROR_MOPITT=2.00
 export RETRIEVAL_TYPE=RETR
 #
-export USE_LOG_CO=false
+export USE_LOG_CO=true
 if [[ ${USE_LOG_CO} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -61,16 +61,16 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=4
+export NUM_SPECIAL_FORECAST=6
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
-export SPECIAL_FORECAST_MEM[1]=25
-export SPECIAL_FORECAST_MEM[2]=26
-export SPECIAL_FORECAST_MEM[3]=27
-export SPECIAL_FORECAST_MEM[4]=28
-export SPECIAL_FORECAST_MEM[5]=20
-export SPECIAL_FORECAST_MEM[6]=21
+export SPECIAL_FORECAST_MEM[1]=10
+export SPECIAL_FORECAST_MEM[2]=12
+export SPECIAL_FORECAST_MEM[3]=13
+export SPECIAL_FORECAST_MEM[4]=16
+export SPECIAL_FORECAST_MEM[5]=17
+export SPECIAL_FORECAST_MEM[6]=24
 export SPECIAL_FORECAST_MEM[7]=22
 export SPECIAL_FORECAST_MEM[8]=23
 export SPECIAL_FORECAST_MEM[9]=24
@@ -271,18 +271,18 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=true
    export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false

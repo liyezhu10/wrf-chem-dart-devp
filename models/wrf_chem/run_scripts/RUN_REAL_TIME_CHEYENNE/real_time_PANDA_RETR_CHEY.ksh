@@ -239,7 +239,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
    export RUN_UNGRIB=false
    export RUN_METGRID=false
-   export RUN_REAL=false
+   export RUN_REAL=true
    export RUN_PERT_WRFCHEM_MET_IC=false
    export RUN_PERT_WRFCHEM_MET_BC=false
    export RUN_EXO_COLDENS=false
@@ -1481,6 +1481,10 @@ EOF
       export P_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${LBC_FREQ} 2>/dev/null) 
    done   
 fi
+
+exit
+
+
 #
 #########################################################################
 #

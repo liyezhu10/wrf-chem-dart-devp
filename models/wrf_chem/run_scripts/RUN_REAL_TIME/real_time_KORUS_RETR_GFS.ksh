@@ -9,7 +9,7 @@
 #########################################################################
 #
 # CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2016052506
+export CYCLE_STR_DATE=2016052500
 export CYCLE_STR_DATE=2016052506
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2016052506
@@ -255,7 +255,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_WRFCHEM_FIRE=false
    export RUN_WRFCHEM_CHEMI=false
    export RUN_PERT_WRFCHEM_CHEM_ICBC=false
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
    export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
@@ -708,6 +708,7 @@ export NL_NIO_GROUPS=1
 #
 # NAMELIST CHEM
 export NL_KEMIT=11
+export NL_KEMIT=6
 #
 # APM NO_CHEM
 #export NL_CHEM_OPT=0,0
