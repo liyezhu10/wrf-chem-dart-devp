@@ -264,18 +264,18 @@ end function get_single_file
 !> Initialize file_info type
 
 
-subroutine io_filenames_init(file_info, num_copies, cycling, single_file, restart_list, root_name, &
+subroutine io_filenames_init(file_info, ncopies, cycling, single_file, restart_list, root_name, &
                            check_output_compatibility)
 
-type(file_info_type),       intent(out):: file_info  !< structure with expanded list of filenames
-integer,                    intent(in) :: num_copies       !< number of ensemble copies
-logical,                    intent(in) :: cycling          !< model will cycle
-logical,                    intent(in) :: single_file      !< all copies read from one file
-character(len=*), optional, intent(in) :: restart_list(:)  !< list of restarts one for each domain
-character(len=*), optional, intent(in) :: root_name        !< base if restart_list not given
+type(file_info_type),       intent(out):: file_info       !< structure with expanded list of filenames
+integer,                    intent(in) :: ncopies         !< number of ensemble copies
+logical,                    intent(in) :: cycling         !< model will cycle
+logical,                    intent(in) :: single_file     !< all copies read from one file
+character(len=*), optional, intent(in) :: restart_list(:) !< list of restarts one for each domain
+character(len=*), optional, intent(in) :: root_name       !< base if restart_list not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
-integer :: num_domains
+integer :: ndomains
 
 file_info%single_file = single_file
 file_info%cycling     = cycling
@@ -285,17 +285,17 @@ if(present(restart_list)) file_info%restart_list = restart_list
 if(present(root_name))    file_info%root_name    = root_name
 if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
 
-num_domains = get_num_domains()
+ndomains = get_num_domains()
 
-allocate(file_info%stage_metadata%force_copy_back(num_copies))
-allocate(file_info%stage_metadata%clamp_vars(     num_copies))
-allocate(file_info%stage_metadata%inherit_units(  num_copies))
-allocate(file_info%stage_metadata%io_flag(        num_copies))
-allocate(file_info%stage_metadata%my_copy_number( num_copies))
-allocate(file_info%stage_metadata%copy_name(      num_copies))
-allocate(file_info%stage_metadata%long_name(      num_copies))
-allocate(file_info%stage_metadata%filenames(      num_copies , num_domains))
-allocate(file_info%stage_metadata%file_description(num_copies , num_domains))
+allocate(file_info%stage_metadata%force_copy_back(ncopies))
+allocate(file_info%stage_metadata%clamp_vars(     ncopies))
+allocate(file_info%stage_metadata%inherit_units(  ncopies))
+allocate(file_info%stage_metadata%io_flag(        ncopies))
+allocate(file_info%stage_metadata%my_copy_number( ncopies))
+allocate(file_info%stage_metadata%copy_name(      ncopies))
+allocate(file_info%stage_metadata%long_name(      ncopies))
+allocate(file_info%stage_metadata%filenames(      ncopies , ndomains))
+allocate(file_info%stage_metadata%file_description(ncopies , ndomains))
 
 file_info%stage_metadata%force_copy_back  = .false.
 file_info%stage_metadata%clamp_vars       = .false.
@@ -303,7 +303,7 @@ file_info%stage_metadata%inherit_units    = .true.
 file_info%stage_metadata%io_flag          = NO_IO
 file_info%stage_metadata%my_copy_number   = -1
 file_info%stage_metadata%noutput_ens      = 0
-file_info%stage_metadata%num_copies       = num_copies
+file_info%stage_metadata%num_copies       = ncopies
 file_info%stage_metadata%copy_name        = 'copy_name_not_set'
 file_info%stage_metadata%long_name        = 'long_name_not_set'
 file_info%stage_metadata%filenames        = 'null'
