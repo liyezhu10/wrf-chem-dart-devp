@@ -1806,6 +1806,103 @@ set_filename_list = max_num_input_files
 
 end function set_filename_list
 
+! !#######################################################################
+! 
+! function set_filename_list_arrays(text_array, list_array, caller_name)
+! 
+! ! return the count of names specified by either the name_array()
+! ! or the inside the list_array but not both.  caller_name is used
+! ! for error messages.  verify that if a list_array is used that
+! ! it does not contain more than the allowed number of input names
+! ! (specified by the length of the name_array).  the list_array,
+! ! if specified, must be the name of an ascii input file with
+! ! a list of names, one per line.
+! 
+! character(len=*), intent(inout) :: name_array(:)
+! character(len=*), intent(in)    :: list_array(:)
+! character(len=*), intent(in)    :: caller_name
+! integer                         :: set_filename_list_arrays
+! 
+! integer :: fileindex, max_num_input_files
+! logical :: from_file
+! character(len=64) :: fsource
+! 
+! ! here's the logic:
+! ! if the user specifies neither name_array nor list_array, error
+! ! if the user specifies both, error.
+! ! if the user gives a filelist, we make sure the length is not more
+! !   than maxfiles and read it into the explicit list and continue.
+! ! when this routine returns, the function return val is the count
+! ! and the names are in name_array()
+! 
+! if (name_array(1) == '' .and. list_array(1) == '') then
+!    call error_handler(E_ERR, caller_name, &
+!           'must specify either filenames in the namelist, or a filename containing a list of names', &
+!           source,revision,revdate)
+! endif
+!    
+! ! make sure the namelist specifies one or the other but not both
+! if (name_array(1) /= '' .and. list_array(1) /= '') then
+!    call error_handler(E_ERR, caller_name, &
+!        'cannot specify both filenames in the namelist and a filename containing a list of names', &
+!        source,revision,revdate)
+! endif
+! 
+! ! if they have specified a file which contains a list, read it into
+! ! the name_array array and set the count.
+! if (list_array /= '') then
+!    fsource = 'filenames contained in a list file'
+!    from_file = .true.
+! else
+!    fsource = 'filenames in the namelist'
+!    from_file = .false.
+! endif
+! 
+! ! the max number of names allowed in a list file is the 
+! ! size of the name_array passed in by the user.
+! max_num_input_files = size(name_array)
+! 
+! ! loop over the inputs.  if the names were already specified in the
+! ! name_array, just look for the '' to indicate the end of the list.
+! ! if the names were specified in the list_array file, read them in and
+! ! fill in the name_array and then look for ''.
+! do fileindex = 1, max_num_input_files
+!    if (from_file) &
+!       name_array(fileindex) = get_next_filename(list_array, fileindex)
+! 
+!    if (name_array(fileindex) == '') then
+!       if (fileindex == 1) then
+!          write(msgstring2,*)'reading file # ',fileindex
+!          write(msgstring3,*)'reading file name "'//trim(name_array(fileindex))//'"'
+!          call error_handler(E_ERR, caller_name, 'found no '//trim(fsource), &
+!                     source,revision,revdate,text2=msgstring2,text3=msgstring3)
+!       endif
+! 
+!       ! at the end of the list. return how many filenames were found, 
+!       ! whether the source was the name_array or the list_array.
+!       set_filename_list_arrays = fileindex - 1
+!       return
+!    endif
+! enddo
+! 
+! ! if you get here, you read in all max_num_input_files without
+! ! seeing an empty string.  if the input names were already in the
+! ! array, you're done - set the count and return.   but if you're
+! ! reading names from a file it is possible to specify more names
+! ! than fit in the list.  test for that and give an error if you
+! ! aren't at the end of the list.
+! 
+! if (from_file) then
+!    if (get_next_filename(list_array, max_num_input_files+1) /= '') then
+!       write(msgstring1, *) 'cannot specify more than ',max_num_input_files,' filenames in the list file'
+!       call error_handler(E_ERR, caller_name, msgstring1, source,revision,revdate)
+!    endif
+! endif
+! 
+! set_filename_list_arrays = max_num_input_files
+! 
+! end function set_filename_list_arrays
+
 !#######################################################################
 
 
