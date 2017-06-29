@@ -258,14 +258,14 @@ end function get_single_file
 !> Initialize file_info type
 
 
-subroutine io_filenames_init(file_info, ncopies, cycling, single_file, restart_list, root_name, &
+subroutine io_filenames_init(file_info, ncopies, cycling, single_file, restart_files, root_name, &
                            check_output_compatibility)
 type(file_info_type),       intent(out):: file_info       !< structure with expanded list of filenames
 integer,                    intent(in) :: ncopies         !< number of ensemble copies
 logical,                    intent(in) :: cycling         !< model will cycle
 logical,                    intent(in) :: single_file     !< all copies read from one file
-character(len=*), optional, intent(in) :: restart_list(:) !< list of restarts one for each domain
-character(len=*), optional, intent(in) :: root_name       !< base if restart_list not given
+character(len=*), optional, intent(in) :: restart_files(:) !< list of restarts one for each domain
+character(len=*), optional, intent(in) :: root_name       !< base if restart_files not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
 integer :: ndomains
@@ -273,12 +273,9 @@ integer :: ndomains
 file_info%single_file = single_file
 file_info%cycling     = cycling
 
-!>@todo FIXME JPH : Should these be required interfaces?
-if(present(restart_list)) file_info%restart_list = restart_list
-if(present(root_name))    file_info%root_name    = root_name
-if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
-
 ndomains = get_num_domains()
+
+print*, 'ncopies, ndomains = ', ncopies, ndomains
 
 allocate(file_info%stage_metadata%force_copy_back(ncopies))
 allocate(file_info%stage_metadata%clamp_vars(     ncopies))
@@ -302,7 +299,16 @@ file_info%stage_metadata%long_name        = 'long_name_not_set'
 file_info%stage_metadata%filenames        = 'null'
 file_info%stage_metadata%file_description = 'null'
 
+!>@todo FIXME JPH : Should these be required interfaces?
+!>@todo FIXME JPH : Needs to work for multiple domains.
+if(present(restart_files)) file_info%stage_metadata%filenames(1:ncopies , 1) = restart_files(1:ncopies)
+if(present(root_name))     file_info%root_name                               = root_name
+if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
+
 file_info%initialized = .true.
+
+print*, 'ncopies, ndomains = ', ncopies, ndomains
+!call file_info_dump(file_info)
 
 end subroutine io_filenames_init
 
@@ -329,6 +335,7 @@ num_domains = get_num_domains()
 do i = 1, ens_handle%my_num_copies ! just have owners check
    copy = ens_handle%my_copies(i)
    do idom = 1, num_domains
+      print*, my_task_id(), copy, idom
       if(file_exist(file_info%stage_metadata%filenames(copy,idom))) &
          call check_correct_variables(file_info%stage_metadata%filenames(copy,idom),idom)
    enddo
@@ -389,44 +396,45 @@ if (file_info%restart_list(1) == 'null' .or. &
         call set_file_metadata(file_info, icopy, stage_name, basename, desc, offset)
      enddo
   endif
-else
+
+else ! no restart list
 
    do idom = 1, get_num_domains()
-      ! read files from restart file list
-      fname = file_info%restart_list(idom)
-      if ( .not. file_exist(fname) ) then
-         write(msgstring,*) 'io_filenames_mod: restart_file "', &
-                            trim(fname)//'" not found'
-         call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                            source, revision, revdate)
-      endif
+      !#! ! read files from restart file list
+      !#! fname = file_info%%stage_metadata%filenames(idom)
+      !#! if ( .not. file_exist(fname) ) then
+      !#!    write(msgstring,*) 'io_filenames_mod: restart_file "', 
+      !#!                       trim(fname)//'" not found'
+      !#!    call error_handler(E_WARN,'set_member_file_metadata', msgstring, &
+      !#!                       source, revision, revdate)
+      !#! endif
 
-      write(msgstring,*) 'files from : "'//trim(fname)//'"'
-      call error_handler(E_MSG,'set_member_file_metadata', &
-                         msgstring, source, revision, revdate)
+      !#! write(msgstring,*) 'files from : "'//trim(fname)//'"'
+      !#! call error_handler(E_MSG,'set_member_file_metadata', &
+      !#!                    msgstring, source, revision, revdate)
 
-      ! Check the dimensions of the pointer file
-      call find_textfile_dims(trim(fname), nlines)
-      if( file_info%single_file ) then
-         if( nlines < 1 ) then
-            write(msgstring,*) 'io_filenames_mod: expecting 1 ', &
-                               'files in "', trim(fname), &
-                               '" and found ', nlines
-            call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                               source, revision, revdate)
-         endif
-       else
-         if( nlines < ens_size) then
-            write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
-                               'files in "', trim(fname), &
-                               '" and only found ', nlines
-            call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                               source, revision, revdate)
-         endif
-      endif
+      !#! ! Check the dimensions of the pointer file
+      !#! call find_textfile_dims(trim(fname), nlines)
+      !#! if( file_info%single_file ) then
+      !#!    if( nlines < 1 ) then
+      !#!       write(msgstring,*) 'io_filenames_mod: expecting 1 ', &
+      !#!                          'files in "', trim(fname), &
+      !#!                          '" and found ', nlines
+      !#!       call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+      !#!                          source, revision, revdate)
+      !#!    endif
+      !#!  else
+      !#!    if( nlines < ens_size) then
+      !#!       write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
+      !#!                          'files in "', trim(fname), &
+      !#!                          '" and only found ', nlines
+      !#!       call error_handler(E_WARN,'set_member_file_metadata', msgstring, &
+      !#!                          source, revision, revdate)
+      !#!    endif
+      !#! endif
 
-      ! Read filenames in
-      iunit = open_file(trim(fname),action = 'read')
+      !#! ! Read filenames in
+      !#! iunit = open_file(trim(fname),action = 'read')
 
       do icopy = 1, ens_size
          if ( file_info%single_file ) then
@@ -439,8 +447,8 @@ else
 
          write(desc,'(2A,I4)') trim(file_info%root_name), ' ensemble member ', icopy
          file_info%stage_metadata%file_description(offset+icopy,idom) = trim(desc)
-         file_info%stage_metadata%my_copy_number(  offset+icopy) = offset + icopy
-         file_info%stage_metadata%copy_name(       offset+icopy) = trim(desc)
+         file_info%stage_metadata%my_copy_number(  offset+icopy)      = offset + icopy
+         file_info%stage_metadata%copy_name(       offset+icopy)      = trim(desc)
 
          if ( ios /= 0 ) then
             write(msgstring,*)'Unable to read filename # ',icopy, &
@@ -450,7 +458,7 @@ else
          endif
       enddo
 
-      call close_file(iunit)
+      !#! call close_file(iunit)
    enddo
 endif
 

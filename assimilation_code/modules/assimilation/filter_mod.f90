@@ -80,7 +80,8 @@ use io_filenames_mod,      only : io_filenames_init, file_info_type, &
                                   set_member_file_metadata, &
                                   set_io_copy_flag, check_file_info_variable_shape, &
                                   query_copy_present, COPY_NOT_PRESENT, &
-                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY
+                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY, &
+                                  file_info_dump
 
 use direct_netcdf_mod,     only : finalize_single_file_io, write_augmented_state, &
                                   nc_get_num_times
@@ -2432,13 +2433,21 @@ else
    multi_dom = .false.
 endif
 
-print*, 'fsource :: ', fsource
+print*, 'Gsource :: ', fsource, MAX_NUM_DOMS
+   write(*,'("`",A25,"` ",A25,"`"," ",A25,"`")'), 'file array input :: ',    &
+                                         trim(file_array_input(1)), &
+                                         trim(file_array_input(2)), &
+                                         trim(file_array_input(3)), &
+                                         trim(file_array_input(4))
 
+print*, 'input_state_file_list :: "', trim(input_state_file_list(1)), '"'
+
+nfiles = 0
 do i = 1, MAX_NUM_DOMS
-   if(input_state_file_list(i) == '' ) return
+   if(input_state_file_list(i) == '' ) exit
 
-   nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
    print*, 'domain = ', i
+   nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
 enddo
    write(*,'("`",A25,"` ",A25,"`"," ",A25,"`")'), 'file array input :: ',    &
                                          trim(file_array_input(1)), &
@@ -2446,17 +2455,20 @@ enddo
                                          trim(file_array_input(3)), &
                                          trim(file_array_input(4))
 
-   print*, 'input_state_file_list :: "', input_state_file_list(1), 'nfiles = ', nfiles
-
-call exit(0)
+print*, 'file_array_input(1) :: "', trim(file_array_input(1))
+print*, 'file_array_input(2) :: "', trim(file_array_input(2))
+print*, 'file_array_input(3) :: "', trim(file_array_input(3))
+print*, 'file_array_input(4) :: "', trim(file_array_input(4))
 
 ! Allocate space for the filename handles
-call io_filenames_init(file_info_input,                      & 
-                       ncopies      = ncopies,               &
-                       cycling      = has_cycling,           &
-                       single_file  = single_file_in,        &
-                       restart_list = input_state_file_list, &
-                       root_name    = 'input')
+call io_filenames_init(file_info_input,                       & 
+                       ncopies       = ncopies,               &
+                       cycling       = has_cycling,           &
+                       single_file   = single_file_in,        &
+                       restart_files = file_array_input,      &
+                       root_name     = 'input')
+
+call file_info_dump(file_info_input,     'file_info_input1')
 
 ! Output Files (we construct the filenames)
 call io_filenames_init(file_info_mean_sd,   ncopies, has_cycling, single_file_out, root_name='input')
@@ -2466,25 +2478,33 @@ call io_filenames_init(file_info_postassim, ncopies, has_cycling, single_file_ou
 call io_filenames_init(file_info_analysis,  ncopies, has_cycling, single_file_out, root_name='analysis')
 
 ! Write restart from output_state_file_list if provided
-call io_filenames_init(file_info_output,                      &
-                       ncopies      = ncopies,                &
-                       cycling      = has_cycling,            &
-                       single_file  = single_file_out,        &
-                       restart_list = output_state_file_list, &
-                       root_name    = 'output',               &
+call io_filenames_init(file_info_output,                       &
+                       ncopies       = ncopies,                &
+                       cycling       = has_cycling,            &
+                       single_file   = single_file_out,        &
+                       restart_files = file_array_output,      &
+                       root_name     = 'output',               &
                        check_output_compatibility = .true.)
+
 
 ! Set filename metadata information
 !   Input Files
-call set_filename_info(file_info_input,    'input',     ens_size,           CURRENT_COPIES )
+!call set_filename_info(file_info_input,    'input',     ens_size,            CURRENT_COPIES )
+!call file_info_dump(file_info_input,     'file_info_input2')
 
 !   Output Files
+if (get_stage_to_write('input')) &
 call set_filename_info(file_info_mean_sd,  'input',     0,                   INPUT_COPIES )
+if (get_stage_to_write('forecast')) &
 call set_filename_info(file_info_forecast, 'forecast',  noutput_members,  FORECAST_COPIES )
+if (get_stage_to_write('preassim')) &
 call set_filename_info(file_info_preassim, 'preassim',  noutput_members,  PREASSIM_COPIES )
+if (get_stage_to_write('postassim')) &
 call set_filename_info(file_info_postassim,'postassim', noutput_members, POSTASSIM_COPIES ) 
+if (get_stage_to_write('analysis')) &
 call set_filename_info(file_info_analysis, 'analysis',  noutput_members,  ANALYSIS_COPIES )
-call set_filename_info(file_info_output,   'output',    ens_size,          CURRENT_COPIES )
+
+call set_filename_info(file_info_output,   'output',    ens_size,           CURRENT_COPIES )
 
 ! Set file IO information
 !   Input Files
@@ -2526,6 +2546,14 @@ call set_output_file_info( file_info_output,              &
                            STAGE_COPIES = CURRENT_COPIES, &
                            do_clamping  = .true.,         &
                            force_copy   = .false. )
+
+call file_info_dump(file_info_input,     'file_info_input')
+call file_info_dump(file_info_mean_sd,   'file_info_mean_sd')
+call file_info_dump(file_info_preassim,  'file_info_preassim')
+call file_info_dump(file_info_postassim, 'file_info_postassim')
+call file_info_dump(file_info_analysis,  'file_info_analysis')
+call file_info_dump(file_info_output,    'file_info_output')
+
 
 end subroutine initialize_file_information
 
