@@ -28,7 +28,8 @@ integer, parameter :: r8 = SELECTED_REAL_KIND(12,100)
 integer, parameter :: c8 = SELECTED_REAL_KIND(12,100)
 integer, parameter :: digits12 = SELECTED_REAL_KIND(12)
 
-public :: wr_netcdf_model_time,      &
+public :: nc_check,                  &
+          wr_netcdf_model_time,      &
           wr_netcdf_ctim_grid,       &
           wr_netcdf_interface_grid,  &
           wr_netcdf_oplus_grid,      &
