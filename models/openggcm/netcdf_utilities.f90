@@ -66,20 +66,23 @@ implicit none
 integer,  intent(in) :: ncid
 real(r8), intent(in) :: model_time
 
-integer :: VarID
-integer :: io1, io2
+integer :: DimID, VarID
+integer :: io
 
-io1 = nf90_def_var(ncid, 'time', nf90_double, VarID)
-io2 = nf90_put_att(ncid, VarID, 'units', 'seconds since 1966-01-01')
+io = nf90_def_dim(ncid, 'time', NF90_UNLIMITED, DimID)
+call nc_check(io, 'wr_netcdf_model_time', 'def_dim time')
 
-call nc_check(io1, 'wr_netcdf_model_time', 'def_var time')
-call nc_check(io2, 'wr_netcdf_model_time', 'put_att time units')
+io = nf90_def_var(ncid, 'time', nf90_double, (/ DimID /), VarID)
+call nc_check(io, 'wr_netcdf_model_time', 'def_var time')
 
-io1 = nf90_enddef(ncid) ! leave define mode so we can fill
-call nc_check(io1, 'wr_netcdf_model_time', 'enddef')
+io = nf90_put_att(ncid, VarID, 'units', 'seconds since 1966-01-01')
+call nc_check(io, 'wr_netcdf_model_time', 'put_att time units')
 
-io1 = nf90_put_var(ncid, VarID, model_time)
-call nc_check(io1, 'wr_netcdf_model_time', 'put_var model_time')
+io = nf90_enddef(ncid) ! leave define mode so we can fill
+call nc_check(io, 'wr_netcdf_model_time', 'enddef')
+
+io = nf90_put_var(ncid, VarID, model_time)
+call nc_check(io, 'wr_netcdf_model_time', 'put_var model_time')
 
 end subroutine wr_netcdf_model_time
 

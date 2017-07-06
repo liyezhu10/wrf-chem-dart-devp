@@ -103,3 +103,59 @@ for the semaphore - do it's thing - and then write some semaphore back that
 openggcm will recognize (how?) and advance till the next assimilation cycle.
 Jimmy is gone (Europe) until May 15th. I've got a calendar reminder (May 17)
 to request the next call. I am on PTO the following week. 
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Tue May 16 16:24:36 MDT 2017 : TJH : diving back in ... lots of questions.
+1) trillian:openggcm-2016-04-18/src/ctim-core.for  has a DART block that is 
+completely commented out ... but would otherwise write DATA.ionos2.nc - 
+which seems to have everything we need. we may reduce the number of files 
+to track up by reading/writing with a time dimension and only 
+computing/writing the grid for the first time step - are the grids stationary?
+
+2) mhd-iono.for ... also commented out.
+
+3) DART files ... new_cotr.for ?needed?  are the relevant bits in cotr_mod.f90
+   and will we need these if we don't need to convert between magnetic and 
+   geographic grids?   mhd-iono.for  ... needed or not?
+
+4) what openggcm src directory can I mess with? 
+   openggcm-2016-04-18 or openggcm-2016-02-23 or?
+
+5) how/were do I put my DART routines to include them in the 'runme' build process?
+
+*) go over topics in email
+
+*) get graphic from presentation for DART documentation/science highlight
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Thu Jun 22 14:23:05 MDT 2017: TJH : refresher:
+
++ The run-time directory is now ~/pp/tst-jr-004
++ The openggcm code is ~/openggcm-2016-04-18/src
++ The DART netcdf_utilies.f90 needs to be copied to 
+   ~/openggcm-2016-04-18/target-build/dart/netcdf_utilities.f90
++ There are a lot of questions about the netcdf file created by openggcm,
++ the mhd-iono.for file has a lot of code that is commented out that used to
+  be required - to the point that static_init_model() crashes right out of the gate.
++ Need to skype with Jimmy.
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Will the observations be on geographic latitude or geo colat?
+skip electric potential till after the hop test
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Thu Jul  6 15:44:26 MDT 2017
+
+The geographic lat and lon arrays will ultimately be 3D, so that is the shape
+that OpenGGCM writes them. This presents a huge interpolation problem, so we
+are focusing on a simpler case where the lats and lons are uniform - simple 1D arrays.
+
+The lat arrays at the moment are [-180,0] ... Jimmy agreed that OpenGGCM should write them
+[-90,90] to be clear and not potentially confused with colatitudes.
+
+Right now pmo can run ... but there is no vertical interpolation support yet.
+

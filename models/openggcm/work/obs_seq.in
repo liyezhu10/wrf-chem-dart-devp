@@ -1,7 +1,7 @@
  obs_sequence
 obs_kind_definitions
            1
-          44 SUPER_DARN_ELECTRIC_POTENTIAL   
+          44 GPS_PROFILE   
   num_copies:            0  num_qc:            0
   num_obs:            1  max_num_obs:            1
   first:            1  last:            1
