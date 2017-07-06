@@ -324,7 +324,7 @@ type(file_info_type),  intent(inout) :: file_info
 type(ensemble_type),   intent(in)    :: ens_handle
 
 integer :: num_domains
-integer :: idom, i ! loop variables
+integer :: idom, icopy ! loop variables
 
 integer :: copy
 
@@ -332,8 +332,8 @@ num_domains = get_num_domains()
 
 ! check that the netcdf files match the variables for this domain
 ! to prevent overwriting unwanted files.
-do i = 1, ens_handle%my_num_copies ! just have owners check
-   copy = ens_handle%my_copies(i)
+do icopy = 1, ens_handle%my_num_copies ! just have owners check
+   copy = ens_handle%my_copies(icopy)
    do idom = 1, num_domains
       print*, my_task_id(), copy, idom
       if(file_exist(file_info%stage_metadata%filenames(copy,idom))) &
