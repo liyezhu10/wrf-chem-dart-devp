@@ -268,14 +268,12 @@ character(len=*), optional, intent(in) :: restart_files(:) !< list of restarts o
 character(len=*), optional, intent(in) :: root_name       !< base if restart_files not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
-integer :: ndomains
+integer :: ndomains, idom, ens_size
 
 file_info%single_file = single_file
 file_info%cycling     = cycling
 
 ndomains = get_num_domains()
-
-print*, 'ncopies, ndomains = ', ncopies, ndomains
 
 allocate(file_info%stage_metadata%force_copy_back(ncopies))
 allocate(file_info%stage_metadata%clamp_vars(     ncopies))
@@ -301,14 +299,21 @@ file_info%stage_metadata%file_description = 'null'
 
 !>@todo FIXME JPH : Should these be required interfaces?
 !>@todo FIXME JPH : Needs to work for multiple domains.
-if(present(restart_files)) file_info%stage_metadata%filenames(1:ncopies , 1) = restart_files(1:ncopies)
+ens_size = 3
+if(present(restart_files)) then 
+   do idom = 1, ndomains
+      print*,idom, &
+             ens_size, &
+             (idom-1)*ens_size+1, &
+             idom*ens_size, &
+             restart_files((idom-1)*ens_size+1:idom*ens_size)
+      file_info%stage_metadata%filenames(1:ens_size , idom) = restart_files((idom-1)*ens_size+1:idom*ens_size)
+   enddo
+endif
 if(present(root_name))     file_info%root_name                               = root_name
 if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
 
 file_info%initialized = .true.
-
-print*, 'ncopies, ndomains = ', ncopies, ndomains
-!call file_info_dump(file_info)
 
 end subroutine io_filenames_init
 
@@ -363,7 +368,7 @@ offset = my_copy_start - 1
 
 if (my_copy_start <= 0)    return
 
-! Is it sufficient to check if the first file exists? JPH
+!>@todo FIXME : Is it sufficient to check if the first file exists? JPH
 if (file_info%restart_list(1) == 'null' .or. &
     file_info%restart_list(1) == '') then
 
@@ -424,7 +429,7 @@ else ! no restart list
       !#!                          source, revision, revdate)
       !#!    endif
       !#!  else
-      !#!    if( nlines < ens_size) then
+      !#!    if( nlines < ens_size ) then
       !#!       write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
       !#!                          'files in "', trim(fname), &
       !#!                          '" and only found ', nlines

@@ -86,6 +86,8 @@ use io_filenames_mod,      only : io_filenames_init, file_info_type, &
 use direct_netcdf_mod,     only : finalize_single_file_io, write_augmented_state, &
                                   nc_get_num_times
 
+use state_structure_mod,   only : get_num_domains
+
 use forward_operator_mod,  only : get_obs_ens_distrib_state
 
 use quality_control_mod,   only : initialize_qc
@@ -2383,23 +2385,14 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-integer :: noutput_members, next_file, nfiles, idom, i
+integer :: noutput_members, next_file, nfiles, idom, i, tfiles
 logical :: has_multi_domains, multi_dom
 character(len=64)  :: fsource
 character(len=256) :: file_array_input(MAXFILES), file_array_output(MAXFILES)
+character(len=256) :: file_input(MAXFILES), file_output(MAXFILES)
 
 ! local variable to shorten the name for function input
 noutput_members = num_output_state_members 
-
-! !>@todo FIXME temporary error message until we handle filename in the namelist
-! !> (for now, you need to use the indirect file which contains a list of files)
-! if (( input_state_files(1) /= 'null' .and.  input_state_files(1) /= '') .or. &
-!     (output_state_files(1) /= 'null' .and. output_state_files(1) /= '')) then
-!    call error_handler(E_ERR,'initialize_file_information', &
-!                       'input_state_files and output_state_files are currently unsupported.',  &
-!                       source, revision, revdate, &
-!                       text2='please use input_state_file_list and output_state_file_list instead')
-! endif
 
 file_array_input (:) =  input_state_files(:)
 file_array_output(:) = output_state_files(:)
@@ -2425,7 +2418,7 @@ if (file_array_input(1) /= '' .and. input_state_file_list(1) /= '') then
              text3='and a input_state_files_list containing a list of names')
 endif
 
-if (input_state_file_list(2) /= '') then
+if (input_state_file_list(2) /= '' .and. get_num_domains() >= 2) then
    fsource   = 'file list has multiple domains'
    multi_dom = .true.
 else
@@ -2434,41 +2427,48 @@ else
 endif
 
 print*, 'Gsource :: ', fsource, MAX_NUM_DOMS
-   write(*,'("`",A25,"` ",A25,"`"," ",A25,"`")'), 'file array input :: ',    &
-                                         trim(file_array_input(1)), &
-                                         trim(file_array_input(2)), &
-                                         trim(file_array_input(3)), &
-                                         trim(file_array_input(4))
 
 print*, 'input_state_file_list :: "', trim(input_state_file_list(1)), '"'
+print*, ''
+print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
+print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
+print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
+print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
 
 nfiles = 0
-do i = 1, MAX_NUM_DOMS
+tfiles = 1
+do i = 1, get_num_domains()
    if(input_state_file_list(i) == '' ) exit
 
-   print*, 'domain = ', i
    nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
-enddo
-   write(*,'("`",A25,"` ",A25,"`"," ",A25,"`")'), 'file array input :: ',    &
-                                         trim(file_array_input(1)), &
-                                         trim(file_array_input(2)), &
-                                         trim(file_array_input(3)), &
-                                         trim(file_array_input(4))
+   file_input(tfiles:tfiles+nfiles-1) = file_array_input(1:nfiles)
 
-print*, 'file_array_input(1) :: "', trim(file_array_input(1))
-print*, 'file_array_input(2) :: "', trim(file_array_input(2))
-print*, 'file_array_input(3) :: "', trim(file_array_input(3))
-print*, 'file_array_input(4) :: "', trim(file_array_input(4))
+   tfiles = tfiles + nfiles
+
+   print*, 'domain = ', i, ', nfiles = ', nfiles, ', tfiles = ', tfiles
+   print*, ''
+   print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
+   print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
+   print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
+   print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
+   print*, ''
+   print*, 'file_input(tfiles:tfiles+nfiles-1) :: "', file_input(tfiles:tfiles+nfiles-1), '"'
+
+   file_array_input(:) =  input_state_files(:)
+
+enddo
+
+   print*, 'file_input(:) :: "', file_input(1:tfiles), '"'
 
 ! Allocate space for the filename handles
 call io_filenames_init(file_info_input,                       & 
                        ncopies       = ncopies,               &
                        cycling       = has_cycling,           &
                        single_file   = single_file_in,        &
-                       restart_files = file_array_input,      &
+                       restart_files = file_input,            &
                        root_name     = 'input')
 
-call file_info_dump(file_info_input,     'file_info_input1')
+!#! call file_info_dump(file_info_input,     'file_info_input1')
 
 ! Output Files (we construct the filenames)
 call io_filenames_init(file_info_mean_sd,   ncopies, has_cycling, single_file_out, root_name='input')
@@ -2548,9 +2548,9 @@ call set_output_file_info( file_info_output,              &
                            force_copy   = .false. )
 
 call file_info_dump(file_info_input,     'file_info_input')
-call file_info_dump(file_info_mean_sd,   'file_info_mean_sd')
-call file_info_dump(file_info_preassim,  'file_info_preassim')
-call file_info_dump(file_info_postassim, 'file_info_postassim')
+!#! call file_info_dump(file_info_mean_sd,   'file_info_mean_sd')
+!#! call file_info_dump(file_info_preassim,  'file_info_preassim')
+!#! call file_info_dump(file_info_postassim, 'file_info_postassim')
 call file_info_dump(file_info_analysis,  'file_info_analysis')
 call file_info_dump(file_info_output,    'file_info_output')
 
