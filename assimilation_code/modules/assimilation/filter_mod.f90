@@ -31,7 +31,7 @@ use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG,
                                   logfileunit, nmlfileunit, timestamp,  &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term, to_upper,  &
-                                  set_filename_list
+                                  set_filename_list, find_textfile_dims
 
 use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
                                   end_assim_model,  pert_model_copies
@@ -2385,8 +2385,7 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-integer :: noutput_members, next_file, nfiles, idom, i, tfiles
-logical :: has_multi_domains, multi_dom
+integer :: noutput_members, next_file, nfiles, tfiles, nlines, idom, i
 character(len=64)  :: fsource
 character(len=256) :: file_array_input(MAXFILES), file_array_output(MAXFILES)
 character(len=256) :: file_input(MAXFILES), file_output(MAXFILES)
@@ -2394,15 +2393,16 @@ character(len=256) :: file_input(MAXFILES), file_output(MAXFILES)
 ! local variable to shorten the name for function input
 noutput_members = num_output_state_members 
 
+! file_array_{input,output} store a temporary array of files to 
+! be stored in the larger file_{input,output} when using multiple
+! domains.  This is so we can reuse set_filename_list, multiple times
 file_array_input (:) =  input_state_files(:)
 file_array_output(:) = output_state_files(:)
 
-!! check to see if mutiple domains when using text files for file input.
-!if(input_state_file_list(2) /= 'null' .or. input_state_file_list(2) /= '') then
-!   has_multi_domains = .false.
-!else
-!   has_multi_domains = .true.
-!endif
+! cummulative file list.  for each domain we expect the files in the
+! order ens1d01, ens2d01, ens3d03, and for domain 2 ens1d02, ens2d02, ens3d02,
+file_input (:) =  input_state_files(:)
+file_output(:) = output_state_files(:)
 
 if (file_array_input(1) == '' .and. input_state_file_list(1) == '') then
    call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
@@ -2418,47 +2418,50 @@ if (file_array_input(1) /= '' .and. input_state_file_list(1) /= '') then
              text3='and a input_state_files_list containing a list of names')
 endif
 
-if (input_state_file_list(2) /= '' .and. get_num_domains() >= 2) then
-   fsource   = 'file list has multiple domains'
-   multi_dom = .true.
-else
-   fsource   = 'file list has single domain'
-   multi_dom = .false.
-endif
+! Check the dimensions input_state_file_list and output_state_file_list
+call check_file_list_dimensions(input_state_file_list, 'input_state_file_list')
+call check_file_list_dimensions(output_state_file_list, 'output_state_file_list')
 
-print*, 'Gsource :: ', fsource, MAX_NUM_DOMS
+!#! print*, 'fsource :: ', fsource, MAX_NUM_DOMS
+!#! 
+!#! print*, 'input_state_file_list :: "', trim(input_state_file_list(1)), '"'
+!#! print*, ''
+!#! print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
+!#! print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
+!#! print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
+!#! print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
 
-print*, 'input_state_file_list :: "', trim(input_state_file_list(1)), '"'
-print*, ''
-print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
-print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
-print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
-print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
-
-nfiles = 0
-tfiles = 1
+! set input files
+nfiles = 0 ! number of files from a text state_file_list
+tfiles = 1 ! cummulative sum of files (with multiple domains)
 do i = 1, get_num_domains()
-   if(input_state_file_list(i) == '' ) exit
+   if(input_state_file_list(i) == 'null' .or. input_state_file_list(i) == '' ) exit
 
    nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
    file_input(tfiles:tfiles+nfiles-1) = file_array_input(1:nfiles)
 
    tfiles = tfiles + nfiles
 
-   print*, 'domain = ', i, ', nfiles = ', nfiles, ', tfiles = ', tfiles
-   print*, ''
-   print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
-   print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
-   print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
-   print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
-   print*, ''
-   print*, 'file_input(tfiles:tfiles+nfiles-1) :: "', file_input(tfiles:tfiles+nfiles-1), '"'
-
+   ! clear file_array_input array, so that we can fill the next set of input files
    file_array_input(:) =  input_state_files(:)
 
 enddo
 
-   print*, 'file_input(:) :: "', file_input(1:tfiles), '"'
+! set output files
+nfiles = 0
+tfiles = 1
+do i = 1, get_num_domains()
+   if(output_state_file_list(i) == '' .or. output_state_file_list(i) == '' ) exit
+
+   nfiles = set_filename_list(file_array_output(:), output_state_file_list(i), 'filter')
+   file_output(tfiles:tfiles+nfiles-1) = file_array_output(1:nfiles)
+
+   tfiles = tfiles + nfiles
+
+   ! clear file_array_output array, so that we can fill the next set of output files
+   file_array_output(:) =  output_state_files(:) 
+
+enddo
 
 ! Allocate space for the filename handles
 call io_filenames_init(file_info_input,                       & 
@@ -2467,8 +2470,6 @@ call io_filenames_init(file_info_input,                       &
                        single_file   = single_file_in,        &
                        restart_files = file_input,            &
                        root_name     = 'input')
-
-!#! call file_info_dump(file_info_input,     'file_info_input1')
 
 ! Output Files (we construct the filenames)
 call io_filenames_init(file_info_mean_sd,   ncopies, has_cycling, single_file_out, root_name='input')
@@ -2482,7 +2483,7 @@ call io_filenames_init(file_info_output,                       &
                        ncopies       = ncopies,                &
                        cycling       = has_cycling,            &
                        single_file   = single_file_out,        &
-                       restart_files = file_array_output,      &
+                       restart_files = file_output,            &
                        root_name     = 'output',               &
                        check_output_compatibility = .true.)
 
@@ -2494,17 +2495,18 @@ call io_filenames_init(file_info_output,                       &
 
 !   Output Files
 if (get_stage_to_write('input')) &
-call set_filename_info(file_info_mean_sd,  'input',     0,                   INPUT_COPIES )
+   call set_filename_info(file_info_mean_sd,  'input',     0,                   INPUT_COPIES )
 if (get_stage_to_write('forecast')) &
-call set_filename_info(file_info_forecast, 'forecast',  noutput_members,  FORECAST_COPIES )
+   call set_filename_info(file_info_forecast, 'forecast',  noutput_members,  FORECAST_COPIES )
 if (get_stage_to_write('preassim')) &
-call set_filename_info(file_info_preassim, 'preassim',  noutput_members,  PREASSIM_COPIES )
+   call set_filename_info(file_info_preassim, 'preassim',  noutput_members,  PREASSIM_COPIES )
 if (get_stage_to_write('postassim')) &
-call set_filename_info(file_info_postassim,'postassim', noutput_members, POSTASSIM_COPIES ) 
+   call set_filename_info(file_info_postassim,'postassim', noutput_members, POSTASSIM_COPIES ) 
 if (get_stage_to_write('analysis')) &
-call set_filename_info(file_info_analysis, 'analysis',  noutput_members,  ANALYSIS_COPIES )
+   call set_filename_info(file_info_analysis, 'analysis',  noutput_members,  ANALYSIS_COPIES )
 
-call set_filename_info(file_info_output,   'output',    ens_size,           CURRENT_COPIES )
+! we are expecting a list of output restart files so ens_size = 0.
+call set_filename_info(file_info_output,   'output',    0,                 CURRENT_COPIES )
 
 ! Set file IO information
 !   Input Files
@@ -2547,15 +2549,40 @@ call set_output_file_info( file_info_output,              &
                            do_clamping  = .true.,         &
                            force_copy   = .false. )
 
-call file_info_dump(file_info_input,     'file_info_input')
+!#! call file_info_dump(file_info_input,     'file_info_input')
 !#! call file_info_dump(file_info_mean_sd,   'file_info_mean_sd')
 !#! call file_info_dump(file_info_preassim,  'file_info_preassim')
 !#! call file_info_dump(file_info_postassim, 'file_info_postassim')
-call file_info_dump(file_info_analysis,  'file_info_analysis')
-call file_info_dump(file_info_output,    'file_info_output')
+!#! call file_info_dump(file_info_analysis,  'file_info_analysis')
+!#! call file_info_dump(file_info_output,    'file_info_output')
 
 
 end subroutine initialize_file_information
+
+!-----------------------------------------------------------
+!> Check the dimensions state_file_list
+subroutine check_file_list_dimensions(state_file_list, desc)
+character(len=*) state_file_list(:)
+character(len=*) desc
+
+integer :: nlines
+
+call find_textfile_dims(state_file_list(1), nlines)
+if ( single_file_out .and. (nlines /= 1)) then ! check that there is the proper number of iles
+write(msgstring,*) 'io_filenames_mod: expecting 1 ', &
+                   'files in "',trim(desc),'"', &
+                   '" and found ', nlines
+call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+                   source, revision, revdate, &
+                   text2='multiple "single_file" input not yet supported.  Please contact DART. ')
+else if( nlines /= -1 .and. nlines < ens_size ) then
+   write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
+                      'files in "', trim(desc), '"', &
+                      '" and only found ', nlines
+   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+                      source, revision, revdate)
+endif
+end subroutine
 
 !-----------------------------------------------------------
 !> set copy numbers. this is for when writing all stages at end
@@ -2607,8 +2634,8 @@ subroutine test_obs_copies(obs_fwd_op_ens_handle, information)
 type(ensemble_type), intent(in) :: obs_fwd_op_ens_handle
 character(len=*),    intent(in) :: information
 
-character*20  :: task_str !< string to hold the task number
-character*129 :: file_obscopies !< output file name
+character(len=20)  :: task_str !< string to hold the task number
+character(len=129) :: file_obscopies !< output file name
 integer :: i
 
 write(task_str, '(i10)') obs_fwd_op_ens_handle%my_pe

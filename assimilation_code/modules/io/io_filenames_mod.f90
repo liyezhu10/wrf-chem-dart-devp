@@ -298,19 +298,15 @@ file_info%stage_metadata%filenames        = 'null'
 file_info%stage_metadata%file_description = 'null'
 
 !>@todo FIXME JPH : Should these be required interfaces?
-!>@todo FIXME JPH : Needs to work for multiple domains.
 ens_size = 3
 if(present(restart_files)) then 
+   ! cummulative file list.  for each domain we expect the files in the
+   ! order ens1d01, ens2d01, ens3d03, and for domain 2 ens1d02, ens2d02, ens3d02,
    do idom = 1, ndomains
-      print*,idom, &
-             ens_size, &
-             (idom-1)*ens_size+1, &
-             idom*ens_size, &
-             restart_files((idom-1)*ens_size+1:idom*ens_size)
-      file_info%stage_metadata%filenames(1:ens_size , idom) = restart_files((idom-1)*ens_size+1:idom*ens_size)
+      file_info%stage_metadata%filenames(1:ens_size, idom) = restart_files((idom-1)*ens_size+1:idom*ens_size)
    enddo
 endif
-if(present(root_name))     file_info%root_name                               = root_name
+if(present(root_name))                  file_info%root_name                  = root_name
 if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
 
 file_info%initialized = .true.
@@ -340,7 +336,6 @@ num_domains = get_num_domains()
 do icopy = 1, ens_handle%my_num_copies ! just have owners check
    copy = ens_handle%my_copies(icopy)
    do idom = 1, num_domains
-      print*, my_task_id(), copy, idom
       if(file_exist(file_info%stage_metadata%filenames(copy,idom))) &
          call check_correct_variables(file_info%stage_metadata%filenames(copy,idom),idom)
    enddo
@@ -405,42 +400,6 @@ if (file_info%restart_list(1) == 'null' .or. &
 else ! no restart list
 
    do idom = 1, get_num_domains()
-      !#! ! read files from restart file list
-      !#! fname = file_info%%stage_metadata%filenames(idom)
-      !#! if ( .not. file_exist(fname) ) then
-      !#!    write(msgstring,*) 'io_filenames_mod: restart_file "', 
-      !#!                       trim(fname)//'" not found'
-      !#!    call error_handler(E_WARN,'set_member_file_metadata', msgstring, &
-      !#!                       source, revision, revdate)
-      !#! endif
-
-      !#! write(msgstring,*) 'files from : "'//trim(fname)//'"'
-      !#! call error_handler(E_MSG,'set_member_file_metadata', &
-      !#!                    msgstring, source, revision, revdate)
-
-      !#! ! Check the dimensions of the pointer file
-      !#! call find_textfile_dims(trim(fname), nlines)
-      !#! if( file_info%single_file ) then
-      !#!    if( nlines < 1 ) then
-      !#!       write(msgstring,*) 'io_filenames_mod: expecting 1 ', &
-      !#!                          'files in "', trim(fname), &
-      !#!                          '" and found ', nlines
-      !#!       call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-      !#!                          source, revision, revdate)
-      !#!    endif
-      !#!  else
-      !#!    if( nlines < ens_size ) then
-      !#!       write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
-      !#!                          'files in "', trim(fname), &
-      !#!                          '" and only found ', nlines
-      !#!       call error_handler(E_WARN,'set_member_file_metadata', msgstring, &
-      !#!                          source, revision, revdate)
-      !#!    endif
-      !#! endif
-
-      !#! ! Read filenames in
-      !#! iunit = open_file(trim(fname),action = 'read')
-
       do icopy = 1, ens_size
          if ( file_info%single_file ) then
             if ( icopy == 1 ) then
