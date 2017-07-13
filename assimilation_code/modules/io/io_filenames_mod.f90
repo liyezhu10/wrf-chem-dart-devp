@@ -75,7 +75,8 @@ public :: io_filenames_init, &
           assert_restart_names_initialized, &
           file_info_dump, &
           combine_file_info, &
-          check_file_info_variable_shape
+          check_file_info_variable_shape, &
+          check_num_restarts
 
 ! Accessor functions:
 public :: get_restart_filename, &
@@ -181,7 +182,7 @@ type file_info_type
 
 end type
 
-character(len=512) :: msgstring ! message handler
+character(len=512) :: msgstring, msgstring2, msgstring3 ! message handler
 
 contains
 
@@ -324,25 +325,62 @@ subroutine check_file_info_variable_shape(file_info, ens_handle)
 type(file_info_type),  intent(inout) :: file_info
 type(ensemble_type),   intent(in)    :: ens_handle
 
-integer :: num_domains
-integer :: idom, icopy ! loop variables
-
-integer :: copy
+integer :: num_domains, idom, icopy, my_copy
+character(len=256) :: filename
 
 num_domains = get_num_domains()
 
 ! check that the netcdf files match the variables for this domain
 ! to prevent overwriting unwanted files.
 do icopy = 1, ens_handle%my_num_copies ! just have owners check
-   copy = ens_handle%my_copies(icopy)
+   my_copy = ens_handle%my_copies(icopy)
    do idom = 1, num_domains
-      if(file_exist(file_info%stage_metadata%filenames(copy,idom))) &
-         call check_correct_variables(file_info%stage_metadata%filenames(copy,idom),idom)
+      if(file_exist(filename)) &
+         call check_correct_variables(file_info%stage_metadata%filenames(my_copy,idom),idom)
    enddo
 enddo
 
 end subroutine check_file_info_variable_shape
 
+
+!-------------------------------------------------------------------------------
+!> Check that the netcdf files variables have the correct shape
+!> to prevevent overwriting unwanted files
+
+
+subroutine check_num_restarts(file_info, ens_handle, ens_size)
+
+type(file_info_type),  intent(inout) :: file_info
+type(ensemble_type),   intent(in)    :: ens_handle
+integer,               intent(in)    :: ens_size
+
+integer :: num_domains, idom, icopy, my_copy
+character(len=256) :: filename
+
+num_domains = get_num_domains()
+
+! check that the netcdf files match the variables for this domain
+! to prevent overwriting unwanted files.
+do icopy = 1, ens_handle%my_num_copies ! just have owners check
+   my_copy = ens_handle%my_copies(icopy)
+   do idom = 1, num_domains
+      filename = get_restart_filename(file_info%stage_metadata, my_copy,idom)
+
+      if (( query_read_copy( file_info%stage_metadata, my_copy) .or. &
+            query_write_copy(file_info%stage_metadata, my_copy)) .and. trim(filename) == '' ) then
+          write(msgstring, '(2A)') "check_num_restarts: missing ensemble members ", &
+                                   "in your restart list(s)"
+          write(msgstring2,'(A)')  "Please check that you have specified the correct number of files"
+          write(msgstring3,'(A,I4," x ",I2," = ",I6)') "# files = ens_size x num_domains = ", &
+                                       ens_size, num_domains, ens_size*num_domains
+          call error_handler(E_ERR,"check_num_restarts", msgstring, &
+                             source, revision, revdate, &
+                             text2=msgstring2, text3=msgstring3)
+      endif
+   enddo
+enddo
+
+end subroutine check_num_restarts
 
 !-------------------------------------------------------
 !> read file list names
@@ -401,11 +439,7 @@ else ! no restart list
 
    do idom = 1, get_num_domains()
       do icopy = 1, ens_size
-         if ( file_info%single_file ) then
-            if ( icopy == 1 ) then
-               read(iunit,'(A)',iostat=ios) file_info%stage_metadata%filenames(offset+icopy, idom)
-            endif
-         else
+         if ( file_info%single_file .and. icopy == 1) then
             read(iunit,'(A)',iostat=ios) file_info%stage_metadata%filenames(offset+icopy, idom)
          endif
 
@@ -422,7 +456,6 @@ else ! no restart list
          endif
       enddo
 
-      !#! call close_file(iunit)
    enddo
 endif
 

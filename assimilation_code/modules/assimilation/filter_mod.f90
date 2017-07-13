@@ -77,8 +77,8 @@ use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state,
 
 use io_filenames_mod,      only : io_filenames_init, file_info_type, &
                                   combine_file_info, set_file_metadata,  &
-                                  set_member_file_metadata, &
-                                  set_io_copy_flag, check_file_info_variable_shape, &
+                                  set_member_file_metadata,  set_io_copy_flag, &
+                                  check_file_info_variable_shape, check_num_restarts, &
                                   query_copy_present, COPY_NOT_PRESENT, &
                                   READ_COPY, WRITE_COPY, READ_WRITE_COPY, &
                                   file_info_dump
@@ -514,6 +514,8 @@ call initialize_file_information(num_state_ens_copies ,                     &
                                  file_info_output)
 
 call check_file_info_variable_shape(file_info_output, state_ens_handle)
+call check_num_restarts(file_info_input,  state_ens_handle, ens_size) 
+call check_num_restarts(file_info_output, state_ens_handle, ens_size) 
 
 call set_inflation_mean_copy( prior_inflate, PRIOR_INF_COPY )
 call set_inflation_sd_copy(   prior_inflate, PRIOR_INF_SD_COPY )
@@ -2338,10 +2340,45 @@ do i = 1, nstages
    my_stage = stages(i)
    call to_upper(my_stage)
    if (trim(my_stage) /= trim('NULL')) then
-      call set_stage_to_write(stages(i),.true.)
-      write(msgstring,*)"filter will write stage : "//trim(stages(i))
-      call error_handler(E_MSG,'parse_stages_to_write:', &
+   SELECT CASE (my_stage)
+      CASE ('INPUT')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
                          msgstring,source,revision,revdate)
+      CASE ('FORECAST')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
+                         msgstring,source,revision,revdate)
+      CASE ('PREASSIM')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
+                         msgstring,source,revision,revdate)
+      CASE ('POSTASSIM')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
+                         msgstring,source,revision,revdate)
+      CASE ('ANALYSIS')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
+                         msgstring,source,revision,revdate)
+      CASE ('OUTPUT')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
+                         msgstring,source,revision,revdate)
+      CASE DEFAULT
+         write(msgstring,*)"unknown stage : "//trim(stages(i))
+         call error_handler(E_ERR,'parse_stages_to_write:', &
+                            msgstring,source,revision,revdate, &
+                           text2="currently supported stages include :",&
+                           text3="input, forecast, preassim, postassim, analysis, output")
+   END SELECT
+
    endif
 enddo
 
@@ -2419,17 +2456,8 @@ if (file_array_input(1) /= '' .and. input_state_file_list(1) /= '') then
 endif
 
 ! Check the dimensions input_state_file_list and output_state_file_list
-call check_file_list_dimensions(input_state_file_list, 'input_state_file_list')
+call check_file_list_dimensions( input_state_file_list,  'input_state_file_list')
 call check_file_list_dimensions(output_state_file_list, 'output_state_file_list')
-
-!#! print*, 'fsource :: ', fsource, MAX_NUM_DOMS
-!#! 
-!#! print*, 'input_state_file_list :: "', trim(input_state_file_list(1)), '"'
-!#! print*, ''
-!#! print*, 'file_array_input(1) :: "', trim(file_array_input(1)), '"'
-!#! print*, 'file_array_input(2) :: "', trim(file_array_input(2)), '"'
-!#! print*, 'file_array_input(3) :: "', trim(file_array_input(3)), '"'
-!#! print*, 'file_array_input(4) :: "', trim(file_array_input(4)), '"'
 
 ! set input files
 nfiles = 0 ! number of files from a text state_file_list
@@ -2439,7 +2467,6 @@ do i = 1, get_num_domains()
 
    nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
    file_input(tfiles:tfiles+nfiles-1) = file_array_input(1:nfiles)
-
    tfiles = tfiles + nfiles
 
    ! clear file_array_input array, so that we can fill the next set of input files
@@ -2549,18 +2576,12 @@ call set_output_file_info( file_info_output,              &
                            do_clamping  = .true.,         &
                            force_copy   = .false. )
 
-!#! call file_info_dump(file_info_input,     'file_info_input')
-!#! call file_info_dump(file_info_mean_sd,   'file_info_mean_sd')
-!#! call file_info_dump(file_info_preassim,  'file_info_preassim')
-!#! call file_info_dump(file_info_postassim, 'file_info_postassim')
-!#! call file_info_dump(file_info_analysis,  'file_info_analysis')
-!#! call file_info_dump(file_info_output,    'file_info_output')
-
-
 end subroutine initialize_file_information
+
 
 !-----------------------------------------------------------
 !> Check the dimensions state_file_list
+
 subroutine check_file_list_dimensions(state_file_list, desc)
 character(len=*) state_file_list(:)
 character(len=*) desc
@@ -2569,20 +2590,19 @@ integer :: nlines
 
 call find_textfile_dims(state_file_list(1), nlines)
 if ( single_file_out .and. (nlines /= 1)) then ! check that there is the proper number of iles
-write(msgstring,*) 'io_filenames_mod: expecting 1 ', &
-                   'files in "',trim(desc),'"', &
-                   '" and found ', nlines
-call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                   source, revision, revdate, &
-                   text2='multiple "single_file" input not yet supported.  Please contact DART. ')
+   write(msgstring,*) 'check_file_list_dimension: expecting 1 ', &
+                      'files in "',trim(desc), '" and found ', nlines
+   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+                      source, revision, revdate, &
+                      text2='multiple "single_file" input not yet supported.  Please contact DART. ')
 else if( nlines /= -1 .and. nlines < ens_size ) then
-   write(msgstring,*) 'io_filenames_mod: expecting ',ens_size, &
-                      'files in "', trim(desc), '"', &
+   write(msgstring,*) 'check_file_list_dimension: expecting ',ens_size, 'files in "', trim(desc), &
                       '" and only found ', nlines
    call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
                       source, revision, revdate)
 endif
-end subroutine
+
+end subroutine check_file_list_dimensions
 
 !-----------------------------------------------------------
 !> set copy numbers. this is for when writing all stages at end
