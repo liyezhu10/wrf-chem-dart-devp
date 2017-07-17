@@ -30,7 +30,8 @@ use time_manager_mod,      only : time_type, get_time, set_time, operator(/=), o
 use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG, E_DBG,       &
                                   logfileunit, nmlfileunit, timestamp,  &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
-                                  open_file, close_file, do_nml_file, do_nml_term, to_upper
+                                  open_file, close_file, do_nml_file, do_nml_term, to_upper,  &
+                                  set_multiple_filename_lists, set_filename_list, find_textfile_dims
 
 use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
                                   end_assim_model,  pert_model_copies
@@ -76,13 +77,16 @@ use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state,
 
 use io_filenames_mod,      only : io_filenames_init, file_info_type, &
                                   combine_file_info, set_file_metadata,  &
-                                  set_member_file_metadata, &
-                                  set_io_copy_flag, check_file_info_variable_shape, &
+                                  set_member_file_metadata,  set_io_copy_flag, &
+                                  check_file_info_variable_shape, check_num_restarts, &
                                   query_copy_present, COPY_NOT_PRESENT, &
-                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY
+                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY, &
+                                  file_info_dump
 
 use direct_netcdf_mod,     only : finalize_single_file_io, write_augmented_state, &
                                   nc_get_num_times
+
+use state_structure_mod,   only : get_num_domains
 
 use forward_operator_mod,  only : get_obs_ens_distrib_state
 
@@ -190,17 +194,17 @@ logical  :: distributed_state = .true. ! Default to do state complete forward op
 integer, parameter :: MAXFILES = 200
 !>@todo FIXME - how does this work for multiple domains?  ens1d1, ens2d1, ... ens1d2 or
 !> ens1d1 ens1d2, ens1d1 ens2d2, etc   i like the latter better.
-character(len=256) ::  input_state_files(MAXFILES) = 'null' 
-character(len=256) :: output_state_files(MAXFILES) = 'null' 
+character(len=256) ::  input_state_files(MAXFILES) = '' 
+character(len=256) :: output_state_files(MAXFILES) = '' 
 ! Name of files containing a list of {input,output} restart files, 1 file per domain
-character(len=256) ::  input_state_file_list(MAX_NUM_DOMS) = 'null' 
-character(len=256) :: output_state_file_list(MAX_NUM_DOMS) = 'null'
+character(len=256) ::  input_state_file_list(MAX_NUM_DOMS) = '' 
+character(len=256) :: output_state_file_list(MAX_NUM_DOMS) = ''
 ! Read in a single file and perturb this to create an ensemble
-logical            :: perturb_from_single_instance = .false.
-real(r8)           :: perturbation_amplitude       = 0.2_r8
+logical  :: perturb_from_single_instance = .false.
+real(r8) :: perturbation_amplitude       = 0.2_r8
 ! File options.  Single vs. Multiple.
-logical            :: single_file_in               = .false. ! all copies read  from 1 file
-logical            :: single_file_out              = .false. ! all copies written to 1 file
+logical  :: single_file_in               = .false. ! all copies read  from 1 file
+logical  :: single_file_out              = .false. ! all copies written to 1 file
 
 ! Stages to write.  Valid values are:
 ! multi-file:    input, forecast, preassim, postassim, analysis, output
@@ -229,16 +233,16 @@ character(len=256) :: obs_sequence_in_name  = "obs_seq.out",    &
 ! Inflation namelist entries follow, first entry for prior, second for posterior
 ! inf_flavor is 0:none, 1:obs space, 2: varying state space, 3: fixed state_space,
 ! 4 is rtps (relax to prior spread)
-integer              :: inf_flavor(2)                  = 0
-logical              :: inf_initial_from_restart(2)    = .false.
-logical              :: inf_sd_initial_from_restart(2) = .false.
-logical              :: inf_deterministic(2)           = .true.
-real(r8)             :: inf_initial(2)                 = 1.0_r8
-real(r8)             :: inf_sd_initial(2)              = 0.0_r8
-real(r8)             :: inf_damping(2)                 = 1.0_r8
-real(r8)             :: inf_lower_bound(2)             = 1.0_r8
-real(r8)             :: inf_upper_bound(2)             = 1000000.0_r8
-real(r8)             :: inf_sd_lower_bound(2)          = 0.0_r8
+integer  :: inf_flavor(2)                  = 0
+logical  :: inf_initial_from_restart(2)    = .false.
+logical  :: inf_sd_initial_from_restart(2) = .false.
+logical  :: inf_deterministic(2)           = .true.
+real(r8) :: inf_initial(2)                 = 1.0_r8
+real(r8) :: inf_sd_initial(2)              = 0.0_r8
+real(r8) :: inf_damping(2)                 = 1.0_r8
+real(r8) :: inf_lower_bound(2)             = 1.0_r8
+real(r8) :: inf_upper_bound(2)             = 1000000.0_r8
+real(r8) :: inf_sd_lower_bound(2)          = 0.0_r8
 
 namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance, &
    output_members, obs_sequence_in_name, obs_sequence_out_name, &
@@ -307,7 +311,7 @@ type(file_info_type) :: file_info_analysis
 type(file_info_type) :: file_info_output
 type(file_info_type) :: file_info_all
 
-logical                 :: ds, all_gone, allow_missing
+logical :: ds, all_gone, allow_missing
 
 ! real(r8), allocatable   :: temp_ens(:) ! for smoother
 real(r8), allocatable   :: prior_qc_copy(:)
@@ -503,21 +507,27 @@ call timestamp_message('Before reading in ensemble restart files')
 
 ! for now, assume that we only allow cycling if single_file_out is true.
 ! code in this call needs to know how to initialize the output files.
-call initialize_file_information(num_state_ens_copies, &
-                                 file_info_input, file_info_mean_sd, &
-                                 file_info_forecast, file_info_preassim, &
-                                 file_info_postassim, file_info_analysis, &
+call initialize_file_information(num_state_ens_copies ,                     &
+                                 file_info_input      , file_info_mean_sd,  &
+                                 file_info_forecast   , file_info_preassim, &
+                                 file_info_postassim  , file_info_analysis, &
                                  file_info_output)
 
 call check_file_info_variable_shape(file_info_output, state_ens_handle)
+
+! check that we have the correct number of restarts in the file list or file array
+call file_info_dump(file_info_input,     'file_info_input')
+call file_info_dump(file_info_output,     'file_info_output')
+call check_num_restarts(file_info_input,  state_ens_handle, ens_size, 'file input')
+call check_num_restarts(file_info_output, state_ens_handle, ens_size, 'file output')
 
 call set_inflation_mean_copy( prior_inflate, PRIOR_INF_COPY )
 call set_inflation_sd_copy(   prior_inflate, PRIOR_INF_SD_COPY )
 call set_inflation_mean_copy( post_inflate,  POST_INF_COPY )
 call set_inflation_sd_copy(   post_inflate,  POST_INF_SD_COPY )
 
-call read_state(state_ens_handle, file_info_input, read_time_from_file, time1, prior_inflate, post_inflate, &
-                perturb_from_single_instance)
+call read_state(state_ens_handle, file_info_input, read_time_from_file, time1, &
+                prior_inflate, post_inflate, perturb_from_single_instance)
 
 ! This must be after read_state
 call get_minmax_task_zero(prior_inflate, state_ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
@@ -2237,7 +2247,7 @@ if ( perturb_from_single_instance ) then
    !>@todo know whether we are perturbing or not
    !#! call set_perturb_members(file_info, MEM_START, num_ens)
 else
-      call set_io_copy_flag(file_info, STAGE_COPIES(MEM_START), STAGE_COPIES(MEM_START)+num_ens-1, READ_COPY)
+   call set_io_copy_flag(file_info, STAGE_COPIES(MEM_START), STAGE_COPIES(MEM_START)+num_ens-1, READ_COPY)
 endif
 
 if ( do_prior_inflate ) then
@@ -2334,10 +2344,20 @@ do i = 1, nstages
    my_stage = stages(i)
    call to_upper(my_stage)
    if (trim(my_stage) /= trim('NULL')) then
-      call set_stage_to_write(stages(i),.true.)
-      write(msgstring,*)"filter will write stage : "//trim(stages(i))
-      call error_handler(E_MSG,'parse_stages_to_write:', &
+   SELECT CASE (my_stage)
+      CASE ('INPUT', 'FORECAST', 'PREASSIM', 'POSTASSIM', 'ANALYSIS', 'OUTPUT')
+         call set_stage_to_write(stages(i),.true.)
+         write(msgstring,*)"filter will write stage : "//trim(stages(i))
+         call error_handler(E_MSG,'parse_stages_to_write:', &
                          msgstring,source,revision,revdate)
+      CASE DEFAULT
+         write(msgstring,*)"unknown stage : "//trim(stages(i))
+         call error_handler(E_ERR,'parse_stages_to_write:', &
+                            msgstring,source,revision,revdate, &
+                           text2="currently supported stages include :",&
+                           text3="input, forecast, preassim, postassim, analysis, output")
+   END SELECT
+
    endif
 enddo
 
@@ -2366,13 +2386,13 @@ end function next_copy_number
 !> initialize file names and which copies should be read and or written
 
 
-subroutine initialize_file_information(num_state_ens_copies, &
+subroutine initialize_file_information(ncopies, &
                                        file_info_input,     file_info_mean_sd, &
                                        file_info_forecast,  file_info_preassim, &
                                        file_info_postassim, file_info_analysis, &
                                        file_info_output)
 
-integer,              intent(in)  :: num_state_ens_copies
+integer,              intent(in)  :: ncopies
 type(file_info_type), intent(out) :: file_info_input
 type(file_info_type), intent(out) :: file_info_mean_sd
 type(file_info_type), intent(out) :: file_info_forecast
@@ -2381,65 +2401,192 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-!>@todo FIXME temporary error message until we handle filename in the namelist
-!> (for now, you need to use the indirect file which contains a list of files)
-if (( input_state_files(1) /= 'null' .and.  input_state_files(1) /= '') .or. &
-    (output_state_files(1) /= 'null' .and. output_state_files(1) /= '')) then
-   call error_handler(E_ERR,'initialize_file_information', &
-                      'input_state_files and output_state_files are currently unsupported.',  &
-                      source, revision, revdate, &
-                      text2='please use input_state_file_list and output_state_file_list instead')
+integer :: noutput_members, next_file, nfiles, tfiles, nlines, idom, i
+character(len=64)  :: fsource
+character(len=256) :: file_array_input(MAXFILES), file_array_output(MAXFILES)
+character(len=256) :: file_input(MAXFILES), file_output(MAXFILES)
+
+! local variable to shorten the name for function input
+noutput_members = num_output_state_members 
+
+! file_array_{input,output} store a temporary array of files to 
+! be stored in the larger file_{input,output} when using multiple
+! domains.  This is so we can reuse set_filename_list, multiple times
+file_array_input (:) =  input_state_files(:)
+file_array_output(:) = output_state_files(:)
+
+! cummulative file list.  for each domain we expect the files in the
+! order ens1d01, ens2d01, ens3d03, and for domain 2 ens1d02, ens2d02, ens3d02,
+file_input (:) =  input_state_files(:)
+file_output(:) = output_state_files(:)
+
+if (perturb_from_single_instance) then
+   file_input(:) = ''
+   do i = 1, get_num_domains()
+      file_input((i-1)*ncopies+1) = input_state_files(i)
+   enddo
 endif
 
+if (file_array_input(1) == '' .and. input_state_file_list(1) == '') then
+   call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
+              text2='must specify either input_state_files in the namelist,)', &
+              text3='or a input_state_file_list file containing a list of names')
+      
+endif
+   
+! make sure the namelist specifies one or the other but not both
+if (file_array_input(1) /= '' .and. input_state_file_list(1) /= '') then
+   call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
+             text2='cannot specify both input_state_files in the namelist ', &
+             text3='and a input_state_files_list containing a list of names')
+endif
+
+! Check the dimensions input_state_file_list and output_state_file_list
+call check_file_list_dimensions( input_state_file_list,  'input_state_file_list')
+call check_file_list_dimensions(output_state_file_list, 'output_state_file_list')
+
+! set input files
+tfiles = 1 ! cummulative sum of files (with multiple domains)
+do i = 1, get_num_domains()
+   if(input_state_file_list(i) == 'null' .or. input_state_file_list(i) == '' ) exit
+
+   nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
+   file_input(tfiles:tfiles+ens_size-1) = file_array_input(1:ens_size)
+   tfiles = tfiles + ens_size
+
+   ! clear file_array_input array, so that we can fill the next set of input files
+   file_array_input(:) =  input_state_files(:)
+
+enddo
+
+! set output files
+tfiles = 1
+do i = 1, get_num_domains()
+   if(output_state_file_list(i) == '' .or. output_state_file_list(i) == '' ) exit
+
+   nfiles = set_filename_list(file_array_output(:), output_state_file_list(i), 'filter')
+   file_output(tfiles:tfiles+ens_size-1) = file_array_output(1:ens_size)
+
+   tfiles = tfiles + ens_size
+
+   ! clear file_array_output array, so that we can fill the next set of output files
+   file_array_output(:) =  output_state_files(:) 
+
+enddo
+
 ! Allocate space for the filename handles
-call io_filenames_init(file_info_input,     num_state_ens_copies, has_cycling, single_file_in,      &
-                                            restart_list=input_state_file_list,                     &
-                                            root_name='input')
+call io_filenames_init(file_info_input,                       & 
+                       ncopies       = ncopies,               &
+                       cycling       = has_cycling,           &
+                       single_file   = single_file_in,        &
+                       restart_files = file_input,            &
+                       root_name     = 'input')
 
 ! Output Files (we construct the filenames)
-call io_filenames_init(file_info_mean_sd,   num_state_ens_copies, has_cycling, single_file_out, root_name='input')
-call io_filenames_init(file_info_forecast,  num_state_ens_copies, has_cycling, single_file_out, root_name='forecast')
-call io_filenames_init(file_info_preassim,  num_state_ens_copies, has_cycling, single_file_out, root_name='preassim')
-call io_filenames_init(file_info_postassim, num_state_ens_copies, has_cycling, single_file_out, root_name='postassim')
-call io_filenames_init(file_info_analysis,  num_state_ens_copies, has_cycling, single_file_out, root_name='analysis')
+call io_filenames_init(file_info_mean_sd,   ncopies, has_cycling, single_file_out, root_name='input')
+call io_filenames_init(file_info_forecast,  ncopies, has_cycling, single_file_out, root_name='forecast')
+call io_filenames_init(file_info_preassim,  ncopies, has_cycling, single_file_out, root_name='preassim')
+call io_filenames_init(file_info_postassim, ncopies, has_cycling, single_file_out, root_name='postassim')
+call io_filenames_init(file_info_analysis,  ncopies, has_cycling, single_file_out, root_name='analysis')
 
 ! Write restart from output_state_file_list if provided
-call io_filenames_init(file_info_output,    num_state_ens_copies, has_cycling, single_file_out,     &
-                                            restart_list=output_state_file_list, &
-                                            root_name='output', &
-                                            check_output_compatibility = .true.)
+call io_filenames_init(file_info_output,                       &
+                       ncopies       = ncopies,                &
+                       cycling       = has_cycling,            &
+                       single_file   = single_file_out,        &
+                       restart_files = file_output,            &
+                       root_name     = 'output',               &
+                       check_output_compatibility = .true.)
+
 
 ! Set filename metadata information
 !   Input Files
-call set_filename_info(file_info_input,    'input',     ens_size,                   CURRENT_COPIES )
+call set_filename_info(file_info_input,    'input',        ens_size,          CURRENT_COPIES )
+!call file_info_dump(file_info_input,     'file_info_input2')
 
 !   Output Files
-call set_filename_info(file_info_mean_sd,  'input',     0,                            INPUT_COPIES )
-call set_filename_info(file_info_forecast, 'forecast',  num_output_state_members,  FORECAST_COPIES )
-call set_filename_info(file_info_preassim, 'preassim',  num_output_state_members,  PREASSIM_COPIES )
-call set_filename_info(file_info_postassim,'postassim', num_output_state_members, POSTASSIM_COPIES ) 
-call set_filename_info(file_info_analysis, 'analysis',  num_output_state_members,  ANALYSIS_COPIES )
-call set_filename_info(file_info_output,   'output',    ens_size,                   CURRENT_COPIES )
+if (get_stage_to_write('input')) &
+   call set_filename_info(file_info_mean_sd,  'input',     0,                   INPUT_COPIES )
+if (get_stage_to_write('forecast')) &
+   call set_filename_info(file_info_forecast, 'forecast',  noutput_members,  FORECAST_COPIES )
+if (get_stage_to_write('preassim')) &
+   call set_filename_info(file_info_preassim, 'preassim',  noutput_members,  PREASSIM_COPIES )
+if (get_stage_to_write('postassim')) &
+   call set_filename_info(file_info_postassim,'postassim', noutput_members, POSTASSIM_COPIES ) 
+if (get_stage_to_write('analysis')) &
+   call set_filename_info(file_info_analysis, 'analysis',  noutput_members,  ANALYSIS_COPIES )
+
+! we are expecting a list of output restart files so ens_size = 0.
+call set_filename_info(file_info_output,   'output',    ens_size,                 CURRENT_COPIES )
 
 ! Set file IO information
 !   Input Files
 call set_input_file_info(  file_info_input, ens_size, CURRENT_COPIES ) 
 
 !   Output Files
-call set_output_file_info( file_info_mean_sd,  0,                             INPUT_COPIES, &
-                           do_clamping=.false., force_copy=.true. )
-call set_output_file_info( file_info_forecast, num_output_state_members,   FORECAST_COPIES, &
-                           do_clamping=.false., force_copy=.true. )
-call set_output_file_info( file_info_preassim, num_output_state_members,   PREASSIM_COPIES, & 
-                           do_clamping=.false., force_copy=.true. )
-call set_output_file_info( file_info_postassim, num_output_state_members, POSTASSIM_COPIES, &
-                           do_clamping=.false., force_copy=.true. )
-call set_output_file_info( file_info_analysis, num_output_state_members,   ANALYSIS_COPIES, &
-                           do_clamping=.false., force_copy=.true. )
-call set_output_file_info( file_info_output,   ens_size,                    CURRENT_COPIES, &
-                           do_clamping=.true.,  force_copy=.false. )
+call set_output_file_info( file_info_mean_sd,           & 
+                           num_ens      = 0,            &
+                           STAGE_COPIES = INPUT_COPIES, &
+                           do_clamping  = .false.,      &
+                           force_copy   = .true. )
+
+call set_output_file_info( file_info_forecast,             &
+                           num_ens      = noutput_members, &
+                           STAGE_COPIES = FORECAST_COPIES, &
+                           do_clamping  = .false.,         &
+                           force_copy   = .true. )
+
+call set_output_file_info( file_info_preassim,             &
+                           num_ens      = noutput_members, &
+                           STAGE_COPIES = PREASSIM_COPIES, & 
+                           do_clamping  = .false.,         &
+                           force_copy   = .true. )
+
+call set_output_file_info( file_info_postassim,             &
+                           num_ens      = noutput_members,  &
+                           STAGE_COPIES = POSTASSIM_COPIES, &
+                           do_clamping  = .false.,          &
+                           force_copy   = .true. )
+
+call set_output_file_info( file_info_analysis,             &
+                           num_ens      = noutput_members, &
+                           STAGE_COPIES = ANALYSIS_COPIES, &
+                           do_clamping  = .false.,         &
+                           force_copy   = .true. )
+
+call set_output_file_info( file_info_output,              &
+                           num_ens      = ens_size,       &
+                           STAGE_COPIES = CURRENT_COPIES, &
+                           do_clamping  = .true.,         &
+                           force_copy   = .false. )
 
 end subroutine initialize_file_information
+
+
+!-----------------------------------------------------------
+!> Check the dimensions state_file_list
+
+subroutine check_file_list_dimensions(state_file_list, desc)
+character(len=*) state_file_list(:)
+character(len=*) desc
+
+integer :: nlines
+
+call find_textfile_dims(state_file_list(1), nlines)
+if ( single_file_out .and. (nlines /= 1)) then ! check that there is the proper number of iles
+   write(msgstring,*) 'check_file_list_dimension: expecting 1 ', &
+                      'files in "',trim(desc), '" and found ', nlines
+   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+                      source, revision, revdate, &
+                      text2='multiple "single_file" input not yet supported.  Please contact DART. ')
+else if( nlines /= -1 .and. nlines < ens_size ) then
+   write(msgstring,*) 'check_file_list_dimension: expecting ',ens_size, 'files in "', trim(desc), &
+                      '" and only found ', nlines
+   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
+                      source, revision, revdate)
+endif
+
+end subroutine check_file_list_dimensions
 
 !-----------------------------------------------------------
 !> set copy numbers. this is for when writing all stages at end
@@ -2491,8 +2638,8 @@ subroutine test_obs_copies(obs_fwd_op_ens_handle, information)
 type(ensemble_type), intent(in) :: obs_fwd_op_ens_handle
 character(len=*),    intent(in) :: information
 
-character*20  :: task_str !< string to hold the task number
-character*129 :: file_obscopies !< output file name
+character(len=20)  :: task_str !< string to hold the task number
+character(len=129) :: file_obscopies !< output file name
 integer :: i
 
 write(task_str, '(i10)') obs_fwd_op_ens_handle%my_pe
