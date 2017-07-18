@@ -1920,7 +1920,8 @@ end function set_filename_list
 !> contrast this with the previous function where you don't know (or care)
 !> how many filenames are specified, and there's only a single listlist option.
 
-subroutine set_multiple_filename_lists(name_array, listname, nlists, nentries, caller_name)
+subroutine set_multiple_filename_lists(name_array, listname, nlists, nentries, &
+                                       caller_name, origin, origin_list)
 
 ! when this routine returns, name_array() contains (nlists * nentries) of names,
 ! either because they started out there or because we've opened up 'nlists'
@@ -1932,6 +1933,8 @@ character(len=*), intent(in)    :: listname(:)
 integer,          intent(in)    :: nlists
 integer,          intent(in)    :: nentries
 character(len=*), intent(in)    :: caller_name
+character(len=*), intent(in)    :: origin
+character(len=*), intent(in)    :: origin_list
 
 integer :: fileindex, max_num_input_files
 logical :: from_file
@@ -1947,15 +1950,18 @@ integer :: nl, ne, num_lists
 
 if (name_array(1) == '' .and. listname(1) == '') then
    call error_handler(E_ERR, caller_name, &
-          'must specify either filenames in the namelist, or a filename containing a list of names', &
-          source,revision,revdate)
+          'missing filenames',source,revision,revdate, &
+          text2='must specify either "'//trim(origin)//'" in the namelist,', &
+          text3='or a "'//trim(origin_list)//'" file containing a list of names')
 endif
    
 ! make sure the namelist specifies one or the other but not both
 if (name_array(1) /= '' .and. listname(1) /= '') then
    call error_handler(E_ERR, caller_name, &
-       'cannot specify both filenames in the namelist and a filename containing a list of names', &
-       source,revision,revdate)
+          'can not specify both an array of files and a list of files', &
+          source,revision,revdate, &
+          text2='must specify either "'//trim(origin)//'" in the namelist,', &
+          text3='or a "'//trim(origin_list)//'" file containing a list of names')
 endif
 
 ! if they have specified a file which contains a list, read it into
