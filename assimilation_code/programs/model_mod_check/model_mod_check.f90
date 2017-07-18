@@ -181,7 +181,7 @@ call io_filenames_init(file_info_input,             &
                        num_copies   = num_ens,      &
                        cycling      = single_file,  &
                        single_file  = single_file,  & 
-                       restart_list = input_state_files)
+                       restart_files = input_state_files)
 
 do imem = 1, num_ens
    write(my_base,'(A,I2)') 'inens_',    imem
@@ -202,7 +202,7 @@ call io_filenames_init(file_info_output,           &
                        num_copies   = num_ens,     &
                        cycling      = single_file, &
                        single_file  = single_file, &
-                       restart_list = output_state_files)
+                       restart_files = output_state_files)
       
 do imem = 1, num_ens
    write(my_base,'(A,I2)') 'outens_',    imem
