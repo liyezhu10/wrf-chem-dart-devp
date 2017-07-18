@@ -78,10 +78,9 @@ use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state,
 use io_filenames_mod,      only : io_filenames_init, file_info_type, &
                                   combine_file_info, set_file_metadata,  &
                                   set_member_file_metadata,  set_io_copy_flag, &
-                                  check_file_info_variable_shape, check_num_restarts, &
+                                  check_file_info_variable_shape, &
                                   query_copy_present, COPY_NOT_PRESENT, &
-                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY, &
-                                  file_info_dump
+                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY
 
 use direct_netcdf_mod,     only : finalize_single_file_io, write_augmented_state, &
                                   nc_get_num_times
@@ -514,12 +513,6 @@ call initialize_file_information(num_state_ens_copies ,                     &
                                  file_info_output)
 
 call check_file_info_variable_shape(file_info_output, state_ens_handle)
-
-! check that we have the correct number of restarts in the file list or file array
-call file_info_dump(file_info_input,     'file_info_input')
-call file_info_dump(file_info_output,     'file_info_output')
-call check_num_restarts(file_info_input,  state_ens_handle, ens_size, 'file input')
-call check_num_restarts(file_info_output, state_ens_handle, ens_size, 'file output')
 
 call set_inflation_mean_copy( prior_inflate, PRIOR_INF_COPY )
 call set_inflation_sd_copy(   prior_inflate, PRIOR_INF_SD_COPY )
@@ -2401,33 +2394,18 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-integer :: noutput_members, next_file, nfiles, tfiles, nlines, idom, i
+integer :: noutput_members, next_file, nfiles, ninput_files, ndomains, idom, i
 character(len=64)  :: fsource
-character(len=256) :: file_array_input(MAXFILES), file_array_output(MAXFILES)
-character(len=256) :: file_input(MAXFILES), file_output(MAXFILES)
+character(len=256), allocatable :: file_array_input(:,:), file_array_output(:,:)
 
 ! local variable to shorten the name for function input
 noutput_members = num_output_state_members 
+ndomains        = get_num_domains()
+ninput_files    = ens_size ! number of incomming ensemble members
 
-! file_array_{input,output} store a temporary array of files to 
-! be stored in the larger file_{input,output} when using multiple
-! domains.  This is so we can reuse set_filename_list, multiple times
-file_array_input (:) =  input_state_files(:)
-file_array_output(:) = output_state_files(:)
+if (perturb_from_single_instance) ninput_files = 1
 
-! cummulative file list.  for each domain we expect the files in the
-! order ens1d01, ens2d01, ens3d03, and for domain 2 ens1d02, ens2d02, ens3d02,
-file_input (:) =  input_state_files(:)
-file_output(:) = output_state_files(:)
-
-if (perturb_from_single_instance) then
-   file_input(:) = ''
-   do i = 1, get_num_domains()
-      file_input((i-1)*ncopies+1) = input_state_files(i)
-   enddo
-endif
-
-if (file_array_input(1) == '' .and. input_state_file_list(1) == '') then
+if (input_state_files(1) == '' .and. input_state_file_list(1) == '') then
    call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
               text2='must specify either input_state_files in the namelist,)', &
               text3='or a input_state_file_list file containing a list of names')
@@ -2435,7 +2413,7 @@ if (file_array_input(1) == '' .and. input_state_file_list(1) == '') then
 endif
    
 ! make sure the namelist specifies one or the other but not both
-if (file_array_input(1) /= '' .and. input_state_file_list(1) /= '') then
+if (input_state_files(1) /= '' .and. input_state_file_list(1) /= '') then
    call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
              text2='cannot specify both input_state_files in the namelist ', &
              text3='and a input_state_files_list containing a list of names')
@@ -2445,41 +2423,51 @@ endif
 call check_file_list_dimensions( input_state_file_list,  'input_state_file_list')
 call check_file_list_dimensions(output_state_file_list, 'output_state_file_list')
 
-! set input files
-tfiles = 1 ! cummulative sum of files (with multiple domains)
-do i = 1, get_num_domains()
-   if(input_state_file_list(i) == 'null' .or. input_state_file_list(i) == '' ) exit
+call set_multiple_filename_lists(input_state_files(:), &
+                                 input_state_file_list(:), &
+                                 ndomains, &
+                                 ninput_files,     &
+                                 'filter')
+call set_multiple_filename_lists(output_state_files(:), &
+                                 output_state_file_list(:), &
+                                 ndomains, &
+                                 ens_size, &
+                                 'filter')
 
-   nfiles = set_filename_list(file_array_input(:), input_state_file_list(i), 'filter')
-   file_input(tfiles:tfiles+ens_size-1) = file_array_input(1:ens_size)
-   tfiles = tfiles + ens_size
+! Allocate space for file arrays.  contains a matrix of files (num_ens x num_domains)
+! If perturbing from a single instance the number of input files does not have to
+! be ens_size but rather a single file (or multiple files if more than one domain)
+allocate(file_array_input(ninput_files, ndomains), file_array_output(ens_size, ndomains))
 
-   ! clear file_array_input array, so that we can fill the next set of input files
-   file_array_input(:) =  input_state_files(:)
+if (perturb_from_single_instance .and. ndomains > 1) then
+   do idom = 1, ndomains
+      print*, 'DOM ', idom, ndomains, ninput_files, ens_size
+      file_array_input(1,idom) = input_state_files(idom)
+   enddo
+else
+   file_array_input  = RESHAPE(input_state_files,  (/ninput_files, ndomains/))
+endif
 
-enddo
+file_array_output = RESHAPE(output_state_files, (/ens_size, ndomains/))
 
-! set output files
-tfiles = 1
-do i = 1, get_num_domains()
-   if(output_state_file_list(i) == '' .or. output_state_file_list(i) == '' ) exit
-
-   nfiles = set_filename_list(file_array_output(:), output_state_file_list(i), 'filter')
-   file_output(tfiles:tfiles+ens_size-1) = file_array_output(1:ens_size)
-
-   tfiles = tfiles + ens_size
-
-   ! clear file_array_output array, so that we can fill the next set of output files
-   file_array_output(:) =  output_state_files(:) 
-
-enddo
+!#! do i = 1, ninput_files
+!#! do idom = 1, ndomains
+!#!    print*, 'file_array_input(',i,',',idom,')', trim(file_array_input(i,idom))
+!#! enddo
+!#! enddo
+!#! 
+!#! do i = 1, ens_size
+!#! do idom = 1, ndomains
+!#!    print*, 'file_array_output(',i,',',idom,')', trim(file_array_output(i,idom))
+!#! enddo
+!#! enddo
 
 ! Allocate space for the filename handles
 call io_filenames_init(file_info_input,                       & 
                        ncopies       = ncopies,               &
                        cycling       = has_cycling,           &
                        single_file   = single_file_in,        &
-                       restart_files = file_input,            &
+                       restart_files = file_array_input,      &
                        root_name     = 'input')
 
 ! Output Files (we construct the filenames)
@@ -2494,7 +2482,7 @@ call io_filenames_init(file_info_output,                       &
                        ncopies       = ncopies,                &
                        cycling       = has_cycling,            &
                        single_file   = single_file_out,        &
-                       restart_files = file_output,            &
+                       restart_files = file_array_output,      &
                        root_name     = 'output',               &
                        check_output_compatibility = .true.)
 
@@ -2502,7 +2490,6 @@ call io_filenames_init(file_info_output,                       &
 ! Set filename metadata information
 !   Input Files
 call set_filename_info(file_info_input,    'input',        ens_size,          CURRENT_COPIES )
-!call file_info_dump(file_info_input,     'file_info_input2')
 
 !   Output Files
 if (get_stage_to_write('input')) &

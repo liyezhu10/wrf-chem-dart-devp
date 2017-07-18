@@ -1929,7 +1929,8 @@ subroutine set_multiple_filename_lists(name_array, listname, nlists, nentries, c
 
 character(len=*), intent(inout) :: name_array(:)
 character(len=*), intent(in)    :: listname(:)
-integer,          intent(in)    :: nlists, nentries
+integer,          intent(in)    :: nlists
+integer,          intent(in)    :: nentries
 character(len=*), intent(in)    :: caller_name
 
 integer :: fileindex, max_num_input_files

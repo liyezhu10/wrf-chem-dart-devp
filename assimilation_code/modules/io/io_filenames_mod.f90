@@ -75,8 +75,7 @@ public :: io_filenames_init, &
           assert_restart_names_initialized, &
           file_info_dump, &
           combine_file_info, &
-          check_file_info_variable_shape, &
-          check_num_restarts
+          check_file_info_variable_shape
 
 ! Accessor functions:
 public :: get_restart_filename, &
@@ -261,29 +260,30 @@ end function get_single_file
 subroutine io_filenames_init(file_info, ncopies, cycling, single_file, &
                              restart_files, root_name, check_output_compatibility)
 
-type(file_info_type),       intent(out):: file_info        !< structure with expanded list of filenames
-integer,                    intent(in) :: ncopies          !< number of ensemble copies
-logical,                    intent(in) :: cycling          !< model will cycle
-logical,                    intent(in) :: single_file      !< all copies read from one file
-character(len=*), optional, intent(in) :: restart_files(:) !< list of restarts one for each domain
-character(len=*), optional, intent(in) :: root_name        !< base if restart_files not given
+type(file_info_type),       intent(out):: file_info          !< structure with expanded list of filenames
+integer,                    intent(in) :: ncopies            !< number of ensemble copies
+logical,                    intent(in) :: cycling            !< model will cycle
+logical,                    intent(in) :: single_file        !< all copies read from one file
+character(len=*), optional, intent(in) :: restart_files(:,:) !< list of restarts one for each domain
+character(len=*), optional, intent(in) :: root_name          !< base if restart_files not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
-integer :: ndomains, idom, ens_size
+integer :: ndomains, idom
+integer :: esize(2)
 
 file_info%single_file = single_file
 file_info%cycling     = cycling
 
 ndomains = get_num_domains()
 
-allocate(file_info%stage_metadata%force_copy_back(ncopies))
-allocate(file_info%stage_metadata%clamp_vars(     ncopies))
-allocate(file_info%stage_metadata%inherit_units(  ncopies))
-allocate(file_info%stage_metadata%io_flag(        ncopies))
-allocate(file_info%stage_metadata%my_copy_number( ncopies))
-allocate(file_info%stage_metadata%copy_name(      ncopies))
-allocate(file_info%stage_metadata%long_name(      ncopies))
-allocate(file_info%stage_metadata%filenames(      ncopies , ndomains))
+allocate(file_info%stage_metadata%force_copy_back( ncopies))
+allocate(file_info%stage_metadata%clamp_vars(      ncopies))
+allocate(file_info%stage_metadata%inherit_units(   ncopies))
+allocate(file_info%stage_metadata%io_flag(         ncopies))
+allocate(file_info%stage_metadata%my_copy_number(  ncopies))
+allocate(file_info%stage_metadata%copy_name(       ncopies))
+allocate(file_info%stage_metadata%long_name(       ncopies))
+allocate(file_info%stage_metadata%filenames(       ncopies , ndomains))
 allocate(file_info%stage_metadata%file_description(ncopies , ndomains))
 
 file_info%stage_metadata%force_copy_back  = .false.
@@ -299,15 +299,13 @@ file_info%stage_metadata%filenames        = 'null'
 file_info%stage_metadata%file_description = 'null'
 
 !>@todo FIXME JPH : Should these be required interfaces?
-if(present(restart_files)) then 
-   ! cummulative file list.  for each domain we expect the files in the
-   ! order ens1d01, ens2d01, ens3d03, and for domain 2 ens1d02, ens2d02, ens3d02,
-   do idom = 1, ndomains
-      file_info%stage_metadata%filenames(1:ncopies, idom) = restart_files((idom-1)*ncopies+1:idom*ncopies)
-   enddo
+if(present(restart_files)) then
+   ! restart files are expected to be (ens_size x dom_size) arrays
+   esize = SHAPE(restart_files)
+   file_info%stage_metadata%filenames(1:esize(1),:) = restart_files(:,:)
 endif
-if(present(root_name))                  file_info%root_name                  = root_name
-if(present(check_output_compatibility)) file_info%check_output_compatibility = check_output_compatibility
+if(present(root_name))                  file_info%root_name                     = root_name
+if(present(check_output_compatibility)) file_info%check_output_compatibility    = check_output_compatibility
 file_info%initialized = .true.
 
 end subroutine io_filenames_init
@@ -340,45 +338,6 @@ enddo
 
 end subroutine check_file_info_variable_shape
 
-
-!-------------------------------------------------------------------------------
-!> Check that the netcdf files variables have the correct shape
-!> to prevevent overwriting unwanted files
-
-
-subroutine check_num_restarts(file_info, ens_handle, ens_size, context)
-
-type(file_info_type),  intent(inout) :: file_info
-type(ensemble_type),   intent(in)    :: ens_handle
-integer,               intent(in)    :: ens_size
-character(len=*),      intent(in)    :: context
-
-integer :: num_domains, idom, icopy, my_copy
-character(len=256) :: filename
-
-num_domains = get_num_domains()
-
-! check that the netcdf files match the variables for this domain
-! to prevent overwriting unwanted files.
-do icopy = 1, ens_handle%my_num_copies ! just have owners check
-   my_copy = ens_handle%my_copies(icopy)
-   do idom = 1, num_domains
-      filename = get_restart_filename(file_info%stage_metadata, my_copy,idom)
-
-      if (( query_read_copy( file_info%stage_metadata, my_copy) .or. &
-            query_write_copy(file_info%stage_metadata, my_copy)) .and. trim(filename) == '' ) then
-          write(msgstring, '(3A)') "check_num_restarts: missing ensemble members for your '", trim(context), "'"
-          write(msgstring2,'(A)')  "Please check that you have specified the correct number of files"
-          write(msgstring3,'(A,I4," x ",I2," = ",I6)') "# files = ens_size x num_domains = ", &
-                                       ens_size, num_domains, ens_size*num_domains
-          call error_handler(E_ERR,"check_num_restarts", msgstring, &
-                             source, revision, revdate, &
-                             text2=msgstring2, text3=msgstring3)
-      endif
-   enddo
-enddo
-
-end subroutine check_num_restarts
 
 !-------------------------------------------------------
 !> read file list names
