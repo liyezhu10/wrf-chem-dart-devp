@@ -31,7 +31,7 @@ use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG,
                                   logfileunit, nmlfileunit, timestamp,  &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term, to_upper,  &
-                                  set_multiple_filename_lists, set_filename_list, find_textfile_dims
+                                  set_multiple_filename_lists, find_textfile_dims
 
 use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
                                   end_assim_model,  pert_model_copies
