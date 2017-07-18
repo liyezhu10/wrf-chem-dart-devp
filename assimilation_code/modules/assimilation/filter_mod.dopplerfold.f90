@@ -80,8 +80,7 @@ use io_filenames_mod,      only : io_filenames_init, file_info_type, &
                                   set_member_file_metadata,  set_io_copy_flag, &
                                   check_file_info_variable_shape, &
                                   query_copy_present, COPY_NOT_PRESENT, &
-                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY, &
-                                  file_info_dump
+                                  READ_COPY, WRITE_COPY, READ_WRITE_COPY
 
 use direct_netcdf_mod,     only : finalize_single_file_io, write_augmented_state, &
                                   nc_get_num_times
@@ -2465,17 +2464,6 @@ endif
 
 file_array_output = RESHAPE(output_state_files, (/ens_size, ndomains/))
 
-do i = 1, ninput_files
-do idom = 1, ndomains
-   print*, 'file_array_input(',i,',',idom,')', trim(file_array_input(i,idom))
-enddo
-enddo
-
-do i = 1, ens_size
-do idom = 1, ndomains
-   print*, 'file_array_output(',i,',',idom,')', trim(file_array_output(i,idom))
-enddo
-enddo
 
 ! Allocate space for the filename handles
 call io_filenames_init(file_info_input,                       & 

@@ -2450,17 +2450,6 @@ endif
 
 file_array_output = RESHAPE(output_state_files, (/ens_size, ndomains/))
 
-!#! do i = 1, ninput_files
-!#! do idom = 1, ndomains
-!#!    print*, 'file_array_input(',i,',',idom,')', trim(file_array_input(i,idom))
-!#! enddo
-!#! enddo
-!#! 
-!#! do i = 1, ens_size
-!#! do idom = 1, ndomains
-!#!    print*, 'file_array_output(',i,',',idom,')', trim(file_array_output(i,idom))
-!#! enddo
-!#! enddo
 
 ! Allocate space for the filename handles
 call io_filenames_init(file_info_input,                       & 
