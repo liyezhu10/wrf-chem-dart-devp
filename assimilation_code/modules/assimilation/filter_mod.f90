@@ -2441,7 +2441,6 @@ allocate(file_array_input(ninput_files, ndomains), file_array_output(ens_size, n
 
 if (perturb_from_single_instance .and. ndomains > 1) then
    do idom = 1, ndomains
-      print*, 'DOM ', idom, ndomains, ninput_files, ens_size
       file_array_input(1,idom) = input_state_files(idom)
    enddo
 else
