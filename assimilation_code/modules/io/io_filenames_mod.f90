@@ -268,8 +268,7 @@ character(len=*), optional, intent(in) :: restart_files(:,:) !< list of restarts
 character(len=*), optional, intent(in) :: root_name          !< base if restart_files not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
-integer :: ndomains, idom
-integer :: esize(2)
+integer :: ndomains, idom, esize
 
 file_info%single_file = single_file
 file_info%cycling     = cycling
@@ -301,8 +300,8 @@ file_info%stage_metadata%file_description = 'null'
 !>@todo FIXME JPH : Should these be required interfaces?
 if(present(restart_files)) then
    ! restart files are expected to be (ens_size x dom_size) arrays
-   esize = SHAPE(restart_files)
-   file_info%stage_metadata%filenames(1:esize(1),:) = restart_files(:,:)
+   esize = SIZE(restart_files,1)
+   file_info%stage_metadata%filenames(1:esize,:) = restart_files(:,:)
 endif
 if(present(root_name))                  file_info%root_name                     = root_name
 if(present(check_output_compatibility)) file_info%check_output_compatibility    = check_output_compatibility

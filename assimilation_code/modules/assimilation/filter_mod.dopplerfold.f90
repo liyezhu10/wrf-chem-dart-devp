@@ -2408,60 +2408,40 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-integer :: noutput_members, next_file, nfiles, ninput_files, ndomains, idom, i
+integer :: noutput_members, next_file, ninput_files, noutput_files, ndomains, idom
 character(len=64)  :: fsource
 character(len=256), allocatable :: file_array_input(:,:), file_array_output(:,:)
 
 ! local variable to shorten the name for function input
 noutput_members = num_output_state_members 
 ndomains        = get_num_domains()
+noutput_files   = ens_size ! number of incomming ensemble members
 ninput_files    = ens_size ! number of incomming ensemble members
 
-if (perturb_from_single_instance) ninput_files = 1
+! Assign the correct number of input and output files.
+if (single_file_in .or. perturb_from_single_instance)  ninput_files = 1
+if (single_file_out)                                  noutput_files = 1
 
-if (input_state_files(1) == '' .and. input_state_file_list(1) == '') then
-   call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
-              text2='must specify either input_state_files in the namelist,)', &
-              text3='or a input_state_file_list file containing a list of names')
-      
-endif
-   
-! make sure the namelist specifies one or the other but not both
-if (input_state_files(1) /= '' .and. input_state_file_list(1) /= '') then
-   call error_handler(E_ERR, 'initialize_file_information', source,revision,revdate,&
-             text2='cannot specify both input_state_files in the namelist ', &
-             text3='and a input_state_files_list containing a list of names')
-endif
-
-! Check the dimensions input_state_file_list and output_state_file_list
-call check_file_list_dimensions( input_state_file_list,  'input_state_file_list')
-call check_file_list_dimensions(output_state_file_list, 'output_state_file_list')
-
+! Given either a vector of in/output_state_files or a text file containing
+! a list of files, return a vector of files containing the filenames.
 call set_multiple_filename_lists(input_state_files(:), &
                                  input_state_file_list(:), &
                                  ndomains, &
                                  ninput_files,     &
-                                 'filter')
+                                 'filter','input_state_files','input_state_file_list')
 call set_multiple_filename_lists(output_state_files(:), &
                                  output_state_file_list(:), &
                                  ndomains, &
-                                 ens_size, &
-                                 'filter')
+                                 noutput_files, &
+                                 'filter','output_state_files','output_state_file_list')
 
 ! Allocate space for file arrays.  contains a matrix of files (num_ens x num_domains)
 ! If perturbing from a single instance the number of input files does not have to
 ! be ens_size but rather a single file (or multiple files if more than one domain)
-allocate(file_array_input(ninput_files, ndomains), file_array_output(ens_size, ndomains))
+allocate(file_array_input(ninput_files, ndomains), file_array_output(noutput_files, ndomains))
 
-if (perturb_from_single_instance .and. ndomains > 1) then
-   do idom = 1, ndomains
-      file_array_input(1,idom) = input_state_files(idom)
-   enddo
-else
    file_array_input  = RESHAPE(input_state_files,  (/ninput_files, ndomains/))
-endif
-
-file_array_output = RESHAPE(output_state_files, (/ens_size, ndomains/))
+file_array_output = RESHAPE(output_state_files, (/noutput_files, ndomains/))
 
 
 ! Allocate space for the filename handles
@@ -2505,7 +2485,6 @@ if (get_stage_to_write('postassim')) &
 if (get_stage_to_write('analysis')) &
    call set_filename_info(file_info_analysis, 'analysis',  noutput_members,  ANALYSIS_COPIES )
 
-! we are expecting a list of output restart files so ens_size = 0.
 call set_filename_info(file_info_output,   'output',    ens_size,                 CURRENT_COPIES )
 
 ! Set file IO information
@@ -2551,31 +2530,6 @@ call set_output_file_info( file_info_output,              &
 
 end subroutine initialize_file_information
 
-
-!-----------------------------------------------------------
-!> Check the dimensions state_file_list
-
-subroutine check_file_list_dimensions(state_file_list, desc)
-character(len=*) state_file_list(:)
-character(len=*) desc
-
-integer :: nlines
-
-call find_textfile_dims(state_file_list(1), nlines)
-if ( single_file_out .and. (nlines /= 1)) then ! check that there is the proper number of iles
-   write(msgstring,*) 'check_file_list_dimension: expecting 1 ', &
-                      'files in "',trim(desc), '" and found ', nlines
-   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                      source, revision, revdate, &
-                      text2='multiple "single_file" input not yet supported.  Please contact DART. ')
-else if( nlines /= -1 .and. nlines < ens_size ) then
-   write(msgstring,*) 'check_file_list_dimension: expecting ',ens_size, 'files in "', trim(desc), &
-                      '" and only found ', nlines
-   call error_handler(E_ERR,'set_member_file_metadata', msgstring, &
-                      source, revision, revdate)
-endif
-
-end subroutine check_file_list_dimensions
 
 !-----------------------------------------------------------
 !> set copy numbers. this is for when writing all stages at end

@@ -2404,9 +2404,12 @@ ndomains        = get_num_domains()
 noutput_files   = ens_size ! number of incomming ensemble members
 ninput_files    = ens_size ! number of incomming ensemble members
 
-if (perturb_from_single_instance .or. single_file_in) ninput_files  = 1
+! Assign the correct number of input and output files.
+if (single_file_in .or. perturb_from_single_instance)  ninput_files = 1
 if (single_file_out)                                  noutput_files = 1
 
+! Given either a vector of in/output_state_files or a text file containing
+! a list of files, return a vector of files containing the filenames.
 call set_multiple_filename_lists(input_state_files(:), &
                                  input_state_file_list(:), &
                                  ndomains, &
@@ -2423,14 +2426,7 @@ call set_multiple_filename_lists(output_state_files(:), &
 ! be ens_size but rather a single file (or multiple files if more than one domain)
 allocate(file_array_input(ninput_files, ndomains), file_array_output(noutput_files, ndomains))
 
-if (perturb_from_single_instance .and. ndomains > 1) then
-   do idom = 1, ndomains
-      file_array_input(1,idom) = input_state_files(idom)
-   enddo
-else
-   file_array_input  = RESHAPE(input_state_files,  (/ninput_files, ndomains/))
-endif
-
+file_array_input  = RESHAPE(input_state_files,  (/ninput_files,  ndomains/))
 file_array_output = RESHAPE(output_state_files, (/noutput_files, ndomains/))
 
 
