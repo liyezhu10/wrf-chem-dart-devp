@@ -7,7 +7,7 @@
 module filter_mod
 
 !------------------------------------------------------------------------------
-use types_mod,             only : r8, i8, missing_r8, metadatalength, MAX_NUM_DOMS
+use types_mod,             only : r8, i8, missing_r8, metadatalength, MAX_NUM_DOMS, MAX_FILES
 use obs_sequence_mod,      only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                   get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
                                   get_obs_def, get_time_range_keys, set_obs_values, set_obs,  &
@@ -189,12 +189,10 @@ logical  :: silence                  = .false.
 logical  :: distributed_state = .true. ! Default to do state complete forward operators.
 
 ! IO options
-! Names of files given explicitly in namelist
-integer, parameter :: MAXFILES = 200
 !>@todo FIXME - how does this work for multiple domains?  ens1d1, ens2d1, ... ens1d2 or
 !> ens1d1 ens1d2, ens1d1 ens2d2, etc   i like the latter better.
-character(len=256) ::  input_state_files(MAXFILES) = '' 
-character(len=256) :: output_state_files(MAXFILES) = '' 
+character(len=256) ::  input_state_files(MAX_FILES) = '' 
+character(len=256) :: output_state_files(MAX_FILES) = '' 
 ! Name of files containing a list of {input,output} restart files, 1 file per domain
 character(len=256) ::  input_state_file_list(MAX_NUM_DOMS) = '' 
 character(len=256) :: output_state_file_list(MAX_NUM_DOMS) = ''
