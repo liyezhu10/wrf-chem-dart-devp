@@ -1967,10 +1967,10 @@ endif
 ! if they have specified a file which contains a list, read it into
 ! the name_array array and set the count.
 if (listname(1) /= '') then
-   fsource = 'filenames contained in a list file'
+   fsource = ' contained in a list file'
    from_file = .true.
 else
-   fsource = 'filenames in the namelist'
+   fsource = ' in the namelist'
    from_file = .false.
 endif
 
@@ -1978,7 +1978,7 @@ endif
 if (from_file) then
    num_lists = size(listname)
    if (num_lists < nlists) then
-      write(msgstring1, *) 'expecting ', nlists, ' filenames, got ', num_lists
+      write(msgstring1, *) 'expecting ', nlists, ' filenames in "'//trim(origin_list)//'", got ', num_lists
       call error_handler(E_ERR, caller_name, msgstring1, source,revision,revdate)
    endif
 endif
@@ -2007,14 +2007,14 @@ do nl = 1, nlists
          write(msgstring1, *) 'Missing filename'
 
          if (from_file) then
-            write(msgstring2,*)'reading listfile # ', nl, '  named "'//trim(listname(nl))//'"'
-            write(msgstring3,*)'expecting ', nentries, ' filenames, got ', ne-1
+            write(msgstring2,*)'reading entry # ', nl, ' from "'//trim(origin_list)//'"'
+            write(msgstring3,*)'expecting ', nentries, ' files, have ', ne-1
          else
-            write(msgstring2,*)'required filename # ', fileindex, ' was not found'
-            write(msgstring3,*)'expecting ', nlists*nentries, ' filenames, got ', fileindex-1
+            write(msgstring2,*)'required entry # ', fileindex, ' from "'//trim(origin)//'"'
+            write(msgstring3,*)'expecting ', nlists*nentries, ' filenames, have ', fileindex-1
          endif
 
-         call error_handler(E_ERR, caller_name, trim(msgstring1)//' in '//trim(fsource), &
+         call error_handler(E_ERR, caller_name, trim(msgstring1)//trim(fsource), &
             source,revision,revdate,text2=msgstring2,text3=msgstring3)
    
       endif
