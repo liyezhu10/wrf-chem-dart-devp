@@ -117,13 +117,13 @@
 
 
 &preprocess_nml
-    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
-   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
-     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
-    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
-   input_files              = '../../../obs_def/obs_def_reanalysis_bufr_mod.f90',
-                              '../../../obs_def/obs_def_radar_mod.f90',
-                              '../../../obs_def/obs_def_metar_mod.f90',
+    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90',
+   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
+     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
+    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
+   input_files              = '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+                              '../../../observations/forward_operators/obs_def_radar_mod.f90',
+                              '../../../observations/forward_operators/obs_def_metar_mod.f90',
   /
 
    
@@ -137,18 +137,11 @@
   /
 
 
-&assim_model_nml
-   write_binary_restart_files = .true.,
-   netCDF_large_file_support  = .true.
-  /
-
-
 &model_nml
    ncommas_restart_filename     = 'ncommas_restart.nc'
    assimilation_period_days     = 1,
    assimilation_period_seconds  = 0,
    model_perturbation_amplitude = 0.2,
-   output_state_vector          = .false.,
    calendar                     = 'Gregorian',
    debug                        = 0,
   /
@@ -190,28 +183,6 @@
 
 &mpi_utilities_nml
    reverse_task_layout = .true.,
-  /
-
-
-# Gregorian: 12 Z 1 January 1996 <==> DART: 144270 days 43200 seconds
-# Gregorian: 12 Z 1 January 2000 <==> DART: 145731 days 43200 seconds
-
-&restart_file_tool_nml
-   input_file_name              = "filter_restart",
-   output_file_name             = "filter_updated_restart",
-   ens_size                     = 1,
-   single_restart_file_in       = .true.,
-   single_restart_file_out      = .true.,
-   write_binary_restart_files   = .true.,
-   overwrite_data_time          = .false.,
-   new_data_days                = -1,
-   new_data_secs                = -1,
-   input_is_model_advance_file  = .false.,
-   output_is_model_advance_file = .false.,
-   overwrite_advance_time       = .false.,
-   new_advance_days             = -1,
-   new_advance_secs             = -1,
-   gregorian_cal                = .true.
   /
 
 

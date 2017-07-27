@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -11,7 +11,8 @@ module model_mod
 ! Modules that are absolutely required for use are listed
 
 use        types_mod, only : r4, r8, digits12, SECPERDAY, MISSING_R8,          &
-                             rad2deg, deg2rad, PI
+                             rad2deg, deg2rad, PI, obstypelength
+
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+), operator(-),           &
@@ -35,10 +36,9 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              open_file, file_exist, find_textfile_dims,        &
                              file_to_text, close_file
 
-use     obs_kind_mod, only : paramname_length,        &
-                             get_raw_obs_kind_index,  &
-                             get_raw_obs_kind_name,   &
-                             KIND_GEOPOTENTIAL_HEIGHT
+use     obs_kind_mod, only : get_index_for_quantity,  &
+                             get_name_for_quantity,   &
+                             QTY_GEOPOTENTIAL_HEIGHT
 
 use mpi_utilities_mod, only: my_task_id
 
@@ -126,7 +126,7 @@ character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_ta
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 real(r8)           :: model_perturbation_amplitude = 0.2
-logical            :: output_state_vector = .true.
+logical            :: output_state_vector = .false.
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: gitm_restart_dirname = 'gitm_restartdir'
@@ -161,7 +161,7 @@ type progvartype
    integer :: index1      ! location in dart state vector of first occurrence
    integer :: indexN      ! location in dart state vector of last  occurrence
    integer :: dart_kind
-   character(len=paramname_length) :: kind_string
+   character(len=obstypelength) :: kind_string
 end type progvartype
 
 type(progvartype), dimension(max_state_variables) :: progvar
@@ -285,7 +285,7 @@ subroutine get_state_meta_data(index_in, location, var_type)
 !------------------------------------------------------------------
 ! given an index into the state vector, return its location and
 ! if given, the var kind.   despite the name, var_type is a generic
-! kind, like those in obs_kind/obs_kind_mod.f90, starting with KIND_
+! kind, like those in obs_kind/obs_kind_mod.f90, starting with QTY_
 
 integer, intent(in)            :: index_in
 type(location_type)            :: location
@@ -404,7 +404,7 @@ endif
 ! return values have already been set, just give it a more specific error
 ! code and return here.
 
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT ) then
+if (obs_type == QTY_GEOPOTENTIAL_HEIGHT ) then
    ! ok to continue.  offsets unused in this case, but
    ! set them to something > 0 to indicate its ok.
    base_offset = 1
@@ -471,7 +471,7 @@ if(ier /= 0) then
 endif
 
 ! if we're asking about height, we have the alt arrays directly.
-if (obs_type == KIND_GEOPOTENTIAL_HEIGHT) then
+if (obs_type == QTY_GEOPOTENTIAL_HEIGHT) then
 
    ! Interpolate to the given altitude - lat/lon doesn't matter here.
    interp_val = (1 - alt_fract) * ALT(balt(1)) + alt_fract * ALT(balt(2))
@@ -546,7 +546,7 @@ subroutine static_init_model()
 ! Local variables - all the important ones have module scope
 
 character(len=NF90_MAX_NAME)    :: varname
-character(len=paramname_length) :: kind_string
+character(len=obstypelength) :: kind_string
 integer :: varsize
 integer :: iunit, io, ivar, index1, indexN
 integer :: ss, dd
@@ -646,7 +646,7 @@ do ivar = 1, nfields
    kind_string               = trim(variable_table(ivar,2))
    progvar(ivar)%varname     = varname
    progvar(ivar)%kind_string = kind_string
-   progvar(ivar)%dart_kind   = get_raw_obs_kind_index( progvar(ivar)%kind_string )
+   progvar(ivar)%dart_kind   = get_index_for_quantity( progvar(ivar)%kind_string )
    progvar(ivar)%dimlens     = 0
 
    ! I would really like decode_gitm_indices to set the following (on a per-variable basis)
@@ -1495,7 +1495,7 @@ if (istatus1 == 0) then
 !!!! THE following 20-ish+ lines are implementing the search (if f107's dist to obs is to be calculated)
 !!!! Alex 03/07/2012
    do i = 1, size(obs_kind) !have to go over the whole size because these are all the candidates
-      if (obs_kind(i) .eq. get_raw_obs_kind_index('KIND_1D_PARAMETER')) then !so right now any KIND_1D_PARAMETER will match.
+      if (obs_kind(i) .eq. get_index_for_quantity('QTY_1D_PARAMETER')) then !so right now any QTY_1D_PARAMETER will match.
 !+ right now the only parameter is f107, but if you add more parameters, you might want to change their localizations, as
 !+ right now they will be either all at the meas. location or all far (depending on est_f107 setting in pbs_file.sh)
          is_in_obs_kind = 1 !true
@@ -2081,7 +2081,7 @@ integer,  intent(out) :: NgridAlt   ! Number of Vertical grid centers
 integer,  intent(out) :: nBlocksLon, nBlocksLat
 real(r8), intent(out) :: LatStart, LatEnd, LonStart
 
-character(len=paramname_length) :: filename = 'UAM.in'
+character(len=10) :: filename = 'UAM.in'
 
 character(len=100) :: cLine  ! iCharLen_ == 100
 character(len=256) :: fileloc
@@ -3054,7 +3054,7 @@ integer, intent(in) :: dartkind
 integer, intent(out) :: index1,indexN
 
 integer :: i
-character(len=paramname_length) :: string
+character(len=obstypelength) :: string
 
 index1 = 0
 indexN = 0
@@ -3066,7 +3066,7 @@ FieldLoop : do i=1,nfields
    exit FieldLoop
 enddo FieldLoop
 
-string = get_raw_obs_kind_name(dartkind)
+string = get_name_for_quantity(dartkind)
 
 if ((index1 == 0) .or. (indexN == 0)) then
    write(string1,*) 'Problem, cannot find indices for kind ',dartkind,trim(string)
@@ -3180,7 +3180,7 @@ MyLoop : do i = 1, nrows
 
    ! Make sure DART kind is valid
 
-   if( get_raw_obs_kind_index(dartstr) < 0 ) then
+   if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
    endif

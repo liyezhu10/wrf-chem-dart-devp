@@ -32,7 +32,7 @@ function plotdat = plot_rmse_xxx_profile(fname, copy, varargin)
 %            Default is to plot all available observation types.
 %
 % OUTPUT: 'plotdat' is a structure containing what was plotted.
-%         A .pdf of each graphic is created. Each .pdf has a name that 
+%         A .pdf of each graphic is created. Each .pdf has a name that
 %         reflects the variable, quantity, and region being plotted.
 %
 % EXAMPLE 1: All the observation types possible are plotted in separate figures.
@@ -48,8 +48,8 @@ function plotdat = plot_rmse_xxx_profile(fname, copy, varargin)
 % obsname = 'RADIOSONDE_U_WIND_COMPONENT';
 % plotdat = plot_rmse_xxx_profile(fname, copy, 'obsname', obsname);
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -63,8 +63,13 @@ p = inputParser;
 
 addRequired(p,'fname',@ischar);
 addRequired(p,'copy',@ischar);
-addParamValue(p,'obsname',default_obsname,@ischar);
-parse(p, fname, copy, varargin{:});
+if (exist('inputParser/addParameter','file') == 2)
+    addParameter(p,'obsname',default_obsname,@ischar);
+else
+    addParamValue(p,'obsname',default_obsname,@ischar);
+end
+
+p.parse(fname, copy, varargin{:});
 
 % if you want to echo the input
 % disp(['fname   : ', p.Results.fname])
@@ -72,12 +77,12 @@ parse(p, fname, copy, varargin{:});
 % disp(['obsname : ', p.Results.obsname])
 
 if ~isempty(fieldnames(p.Unmatched))
-   disp('Extra inputs:')
-   disp(p.Unmatched)
+    disp('Extra inputs:')
+    disp(p.Unmatched)
 end
 
 if (exist(fname,'file') ~= 2)
-   error('file/fname <%s> does not exist',fname)
+    error('file/fname <%s> does not exist',fname)
 end
 
 %%--------------------------------------------------------------------
@@ -87,37 +92,28 @@ end
 plotdat.fname         = fname;
 plotdat.copystring    = copy;
 
-plotdat.binseparation = nc_attget(fname, nc_global, 'bin_separation');
-plotdat.binwidth      = nc_attget(fname, nc_global, 'bin_width');
-time_to_skip          = nc_attget(fname, nc_global, 'time_to_skip');
-plotdat.lonlim1       = nc_attget(fname, nc_global, 'lonlim1');
-plotdat.lonlim2       = nc_attget(fname, nc_global, 'lonlim2');
-plotdat.latlim1       = nc_attget(fname, nc_global, 'latlim1');
-plotdat.latlim2       = nc_attget(fname, nc_global, 'latlim2');
-plotdat.biasconv      = nc_attget(fname, nc_global, 'bias_convention');
+plotdat.binseparation = nc_read_att(fname, '/', 'bin_separation');
+plotdat.binwidth      = nc_read_att(fname, '/', 'bin_width');
+time_to_skip          = nc_read_att(fname, '/', 'time_to_skip');
+plotdat.lonlim1       = nc_read_att(fname, '/', 'lonlim1');
+plotdat.lonlim2       = nc_read_att(fname, '/', 'lonlim2');
+plotdat.latlim1       = nc_read_att(fname, '/', 'latlim1');
+plotdat.latlim2       = nc_read_att(fname, '/', 'latlim2');
+plotdat.biasconv      = nc_read_att(fname, '/', 'bias_convention');
 
-plotdat.bincenters    = nc_varget(fname, 'time');
-plotdat.binedges      = nc_varget(fname, 'time_bounds');
-plotdat.mlevel        = nc_varget(fname, 'mlevel');
-plotdat.plevel        = nc_varget(fname, 'plevel');
-plotdat.plevel_edges  = nc_varget(fname, 'plevel_edges');
-plotdat.hlevel        = nc_varget(fname, 'hlevel');
-plotdat.hlevel_edges  = nc_varget(fname, 'hlevel_edges');
-
-diminfo               = nc_getdiminfo(fname,'region');
-plotdat.nregions      = diminfo.Length;
-plotdat.region_names  = nc_varget(fname,'region_names');
-
-% Matlab wants character matrices to be Nx1 instead of 1xN.
-
-if (plotdat.nregions == 1 && (size(plotdat.region_names,2) == 1) )
-   plotdat.region_names = deblank(plotdat.region_names');
-end
+plotdat.mlevel        = local_ncread(fname, 'mlevel');
+plotdat.plevel        = local_ncread(fname, 'plevel');
+plotdat.plevel_edges  = local_ncread(fname, 'plevel_edges');
+plotdat.hlevel        = local_ncread(fname, 'hlevel');
+plotdat.hlevel_edges  = local_ncread(fname, 'hlevel_edges');
+plotdat.bincenters    = ncread(fname, 'time');
+plotdat.binedges      = ncread(fname, 'time_bounds');
+plotdat.region_names  = strtrim(ncread(fname, 'region_names')');
+[plotdat.nregions,~]  = nc_dim_info(fname,'region');
 
 % Coordinate between time types and dates
 
-calendar              = nc_attget(fname,'time','calendar');
-timeunits             = nc_attget(fname,'time','units');
+timeunits             = nc_read_att(fname,'time','units');
 timebase              = sscanf(timeunits,'%*s%*s%d%*c%d%*c%d'); % YYYY MM DD
 timeorigin            = datenum(timebase(1),timebase(2),timebase(3));
 timefloats            = zeros(size(time_to_skip));  % stupid int32 type conversion
@@ -132,7 +128,7 @@ plotdat.binedges      = plotdat.binedges   + timeorigin;
 plotdat.Nbins         = length(plotdat.bincenters);
 plotdat.toff          = plotdat.binedges(1) + iskip;
 plotdat.timespan      = sprintf('%s through %s', datestr(plotdat.toff), ...
-                        datestr(max(plotdat.binedges(:))));
+    datestr(max(plotdat.binedges(:))));
 plotdat.xlabel        = sprintf('rmse and %s',copy);
 
 [plotdat.allvarnames, plotdat.allvardims] = get_varsNdims(fname);
@@ -155,149 +151,140 @@ figuredata = setfigure();
 % Either use all the variables or just the one optionally specified.
 
 if strcmp(p.Results.obsname,'none')
-   varlist = 1:plotdat.nvars;
+    varlist = 1:plotdat.nvars;
 else
-   varlist = find (strcmpi(p.Results.obsname,plotdat.varnames));
-   if isempty(varlist)
-      error('%s is not in the list of observations',p.Results.obsname)
-   end
+    varlist = find (strcmpi(p.Results.obsname,plotdat.varnames));
+    if isempty(varlist)
+        error('%s is not in the list of observations',p.Results.obsname)
+    end
 end
 
 for ivar = varlist
-
-   % create the variable names of interest.
-
-   plotdat.myvarname = plotdat.varnames{ivar};
-   plotdat.guessvar  = sprintf('%s_VPguess',plotdat.varnames{ivar});
-   plotdat.analyvar  = sprintf('%s_VPanaly',plotdat.varnames{ivar});
-
-   plotdat.trusted   = nc_read_att(fname, plotdat.guessvar, 'TRUSTED');
-   if (isempty(plotdat.trusted)), plotdat.trusted = 'NO'; end
-
-   % get appropriate vertical coordinate variable
-
-   guessdims = nc_var_dims(  fname, plotdat.guessvar);
-   analydims = nc_var_dims(  fname, plotdat.analyvar);
-   varinfo   = nc_getvarinfo(fname, plotdat.analyvar);
-
-   % this is a superfluous check ... FindVerticalVars already weeds out
-   % variables only present on surface or undef because obs_diag
-   % does not time-average statistics for these.
-
-   if (~ isempty(strfind(guessdims{2},'surface')))
-      fprintf('%s is a surface field.\n',plotdat.guessvar)
-      fprintf('Cannot display a surface field this way.\n')
-      continue
-   elseif (~ isempty(strfind(guessdims{2},'undef')))
-      fprintf('%s has no vertical definition.\n',plotdat.guessvar)
-      fprintf('Cannot display this field this way.\n')
-      continue
-   end
-
-   [level_org, level_units, nlevels, level_edges, Yrange] = FindVerticalInfo(fname, plotdat.guessvar);
-   plotdat.level_org   = level_org;
-   plotdat.level_units = level_units;
-   plotdat.nlevels     = nlevels;
-   plotdat.level_edges = level_edges;
-   plotdat.Yrange      = Yrange;
-
-   % Matlab likes strictly ASCENDING order for things to be plotted,
-   % then you can impose the direction. The data is stored in the original
-   % order, so the sort indices are saved to reorder the data.
-
-   if (plotdat.level_org(1) > plotdat.level_org(plotdat.nlevels))
-      plotdat.YDir = 'reverse';
-   else
-      plotdat.YDir = 'normal';
-   end
-
-   % Add error-checking for output from older versions of obs_diag.
-
-   [levels, indices]   = sort(plotdat.level_org);
-   plotdat.level       = unique(levels);
-   if (length(plotdat.level) ~= length(levels))
-      error('There is a duplicated value in the array specifying the levels - must change your input.nml and rerun obs_diag')
-   end
-
-   plotdat.indices     = indices;
-   level_edges         = sort(plotdat.level_edges);
-   plotdat.level_edges = level_edges;
-
-   guess = nc_varget(fname, plotdat.guessvar);
-   analy = nc_varget(fname, plotdat.analyvar);
-   n = size(analy);
-
-   % singleton dimensions are auto-squeezed - which is unfortunate.
-   % We want these things to be 3D. [copy-level-region]
-   % Sometimes there is one region, sometimes one level, ...
-   % To complicate matters, the stupid 'ones' function does not allow
-   % the last dimension to be unity ... so you have double the size
-   % of the array ...
-
-   if ( plotdat.nregions == 1 )
-      bob = NaN*ones(varinfo.Size(1),varinfo.Size(2),1);
-      ted = NaN*ones(varinfo.Size(1),varinfo.Size(2),1);
-      bob(:,:,1) = guess;
-      ted(:,:,1) = analy;
-      guess = bob; clear bob
-      analy = ted; clear ted
-   elseif ( plotdat.nlevels == 1 )
-      bob = NaN*ones(varinfo.Size);
-      ted = NaN*ones(varinfo.Size);
-      bob(:,1,:) = guess;
-      ted(:,1,:) = analy;
-      guess = bob; clear bob
-      analy = ted; clear ted
-   end
-
-   % check to see if there is anything to plot
-   % The number possible is decreased by the number of observations
-   % rejected by namelist control.
-
-   fprintf('%d %s observations had DART QC of 5 (all regions).\n', ...
-           sum(sum(guess(plotdat.NQC5index, :,:))),plotdat.myvarname)
-   fprintf('%d %s observations had DART QC of 6 (all regions).\n', ...
-           sum(sum(guess(plotdat.NQC6index, :,:))),plotdat.myvarname)
-
-   nposs = sum(guess(plotdat.Npossindex,:,:)) - ...
-           sum(guess(plotdat.NQC5index ,:,:)) - ...
-           sum(guess(plotdat.NQC6index ,:,:));
-
-   if ( sum(nposs(:)) < 1 )
-      fprintf('No obs for %s...  skipping\n', plotdat.varnames{ivar})
-      continue
-   end
-
-   plotdat.ges_copy   = guess(plotdat.copyindex,  :, :);
-   plotdat.anl_copy   = analy(plotdat.copyindex,  :, :);
-   plotdat.ges_rmse   = guess(plotdat.rmseindex,  :, :);
-   plotdat.anl_rmse   = analy(plotdat.rmseindex,  :, :);
-   plotdat.ges_Nqc5   = guess(plotdat.NQC5index,  :, :);
-   plotdat.anl_Nqc5   = analy(plotdat.NQC5index,  :, :);
-   plotdat.ges_Nqc6   = guess(plotdat.NQC6index,  :, :);
-   plotdat.anl_Nqc6   = analy(plotdat.NQC6index,  :, :);
-   plotdat.ges_Nused  = guess(plotdat.Nusedindex, :, :);
-   plotdat.anl_Nused  = guess(plotdat.Nusedindex, :, :);
-   plotdat.ges_Nposs  = guess(plotdat.Npossindex, :, :) - ...
-                        plotdat.ges_Nqc5 - plotdat.ges_Nqc6;
-   plotdat.anl_Nposs  = analy(plotdat.Npossindex, :, :) - ...
-                        plotdat.anl_Nqc5 - plotdat.anl_Nqc6;
-   plotdat.Xrange     = FindRange(plotdat);
-
-   % plot by region - each in its own figure.
-
-   for iregion = 1:plotdat.nregions
-      figure(iregion); clf; orient(figuredata.orientation); wysiwyg
-      plotdat.region   = iregion;
-      plotdat.myregion = deblank(plotdat.region_names(iregion,:));
-      myplot(plotdat, figuredata);
-      BottomAnnotation(fname)
-
-      psfname = sprintf('%s_rmse_%s_profile_region%d', ...
-                plotdat.varnames{ivar}, plotdat.copystring, iregion);
-      print(gcf,'-dpdf',psfname);
-   end
-
+    
+    % create the variable names of interest.
+    
+    plotdat.myvarname = plotdat.varnames{ivar};
+    plotdat.guessvar  = sprintf('%s_VPguess',plotdat.varnames{ivar});
+    plotdat.analyvar  = sprintf('%s_VPanaly',plotdat.varnames{ivar});
+    
+    plotdat.trusted   = nc_read_att(fname, plotdat.guessvar, 'TRUSTED');
+    if (isempty(plotdat.trusted)), plotdat.trusted = 'NO'; end
+    
+    % get appropriate vertical coordinate variable
+    
+    [dimnames,~] = nc_var_dims(fname, plotdat.guessvar);
+    
+    % this is a superfluous check ... FindVerticalVars already weeds out
+    % variables only present on surface or undef because obs_diag
+    % does not time-average statistics for these.
+    
+    if (~ isempty(strfind(dimnames{2},'surface')))
+        fprintf('%s is a surface field.\n',plotdat.guessvar)
+        fprintf('Cannot display a surface field this way.\n')
+        continue
+    elseif (~ isempty(strfind(dimnames{2},'undef')))
+        fprintf('%s has no vertical definition.\n',plotdat.guessvar)
+        fprintf('Cannot display this field this way.\n')
+        continue
+    end
+    
+    [level_org, level_units, nlevels, level_edges, Yrange] = FindVerticalInfo(fname, plotdat.guessvar);
+    plotdat.level_org   = level_org;
+    plotdat.level_units = level_units;
+    plotdat.nlevels     = nlevels;
+    plotdat.level_edges = level_edges;
+    plotdat.Yrange      = Yrange;
+    
+    % Matlab likes strictly ASCENDING order for things to be plotted,
+    % then you can impose the direction. The data is stored in the original
+    % order, so the sort indices are saved to reorder the data.
+    
+    if (plotdat.level_org(1) > plotdat.level_org(plotdat.nlevels))
+        plotdat.YDir = 'reverse';
+    else
+        plotdat.YDir = 'normal';
+    end
+    
+    % Add error-checking for output from older versions of obs_diag.
+    
+    [levels, indices]   = sort(plotdat.level_org);
+    plotdat.level       = unique(levels);
+    if (length(plotdat.level) ~= length(levels))
+        error('There is a duplicated value in the array specifying the levels - must change your input.nml and rerun obs_diag')
+    end
+    
+    plotdat.indices     = indices;
+    level_edges         = sort(plotdat.level_edges);
+    plotdat.level_edges = level_edges;
+    
+    % The rest of this script was written for the third-party netcdf
+    % support. Matlab's native ncread transposes the variables, so I have to
+    % permute them back to the expected storage order.
+    
+    guess = ncread(fname, plotdat.guessvar);
+    analy = ncread(fname, plotdat.analyvar);
+    rank  = length(size(guess));
+    guess = permute(guess,rank:-1:1);
+    analy = permute(analy,rank:-1:1);
+    
+    % singleton dimensions are auto-squeezed - which is unfortunate.
+    % We want these things to be 3D. [copy-level-region]
+    
+    if ( plotdat.nlevels == 1 )
+        bob(:,1,:) = guess;
+        ted(:,1,:) = analy;
+        guess = bob; clear bob
+        analy = ted; clear ted
+    end
+    
+    % check to see if there is anything to plot
+    % The number possible is decreased by the number of observations
+    % rejected by namelist control.
+    
+    fprintf('%d %s observations had DART QC of 5 (all regions).\n', ...
+        sum(sum(guess(plotdat.NQC5index, :,:))),plotdat.myvarname)
+    fprintf('%d %s observations had DART QC of 6 (all regions).\n', ...
+        sum(sum(guess(plotdat.NQC6index, :,:))),plotdat.myvarname)
+    
+    nposs = sum(guess(plotdat.Npossindex,:,:)) - ...
+        sum(guess(plotdat.NQC5index ,:,:)) - ...
+        sum(guess(plotdat.NQC6index ,:,:));
+    
+    if ( sum(nposs(:)) < 1 )
+        fprintf('No obs for %s...  skipping\n', plotdat.varnames{ivar})
+        continue
+    end
+    
+    plotdat.ges_copy   = guess(plotdat.copyindex,  :, :);
+    plotdat.anl_copy   = analy(plotdat.copyindex,  :, :);
+    plotdat.ges_rmse   = guess(plotdat.rmseindex,  :, :);
+    plotdat.anl_rmse   = analy(plotdat.rmseindex,  :, :);
+    plotdat.ges_Nqc5   = guess(plotdat.NQC5index,  :, :);
+    plotdat.anl_Nqc5   = analy(plotdat.NQC5index,  :, :);
+    plotdat.ges_Nqc6   = guess(plotdat.NQC6index,  :, :);
+    plotdat.anl_Nqc6   = analy(plotdat.NQC6index,  :, :);
+    plotdat.ges_Nused  = guess(plotdat.Nusedindex, :, :);
+    plotdat.anl_Nused  = guess(plotdat.Nusedindex, :, :);
+    plotdat.ges_Nposs  = guess(plotdat.Npossindex, :, :) - ...
+        plotdat.ges_Nqc5 - plotdat.ges_Nqc6;
+    plotdat.anl_Nposs  = analy(plotdat.Npossindex, :, :) - ...
+        plotdat.anl_Nqc5 - plotdat.anl_Nqc6;
+    plotdat.Xrange     = FindRange(plotdat);
+    
+    % plot by region - each in its own figure.
+    
+    for iregion = 1:plotdat.nregions
+        figure(iregion); clf(iregion); orient(figuredata.orientation); wysiwyg
+        plotdat.region   = iregion;
+        plotdat.myregion = deblank(plotdat.region_names(iregion,:));
+        myplot(plotdat, figuredata);
+        BottomAnnotation(fname)
+        
+        psfname = sprintf('%s_rmse_%s_profile_region%d', ...
+            plotdat.varnames{ivar}, plotdat.copystring, iregion);
+        print(gcf,'-dpdf',psfname);
+    end
+    
 end
 
 
@@ -331,15 +318,15 @@ nused_delta = G - A;
 % Determine some quantities for the legend
 nobs = sum(nobs_used);
 if ( nobs > 1 )
-   rmse_guess  = mean(MG(isfinite(MG)));
-   rmse_analy  = mean(MA(isfinite(MA)));
-   other_guess = mean(CG(isfinite(CG)));
-   other_analy = mean(CA(isfinite(CA)));
+    rmse_guess  = mean(MG(isfinite(MG)));
+    rmse_analy  = mean(MA(isfinite(MA)));
+    other_guess = mean(CG(isfinite(CG)));
+    other_analy = mean(CA(isfinite(CA)));
 else
-   rmse_guess  = NaN;
-   rmse_analy  = NaN;
-   other_guess = NaN;
-   other_analy = NaN;
+    rmse_guess  = NaN;
+    rmse_analy  = NaN;
+    other_guess = NaN;
+    other_analy = NaN;
 end
 
 str_rmse_pr  = sprintf('%s pr=%.5g','rmse',rmse_guess);
@@ -365,7 +352,7 @@ set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
 
 hold on;
 h1 = plot(MG,plotdat.level,'k+-',MA,plotdat.level,'k+--', ...
-          CG,plotdat.level,'ro-',CA,plotdat.level,'ro--');
+    CG,plotdat.level,'ro-',CA,plotdat.level,'ro--');
 set(h1,'LineWidth',figdata.linewidth);
 hold off;
 
@@ -377,30 +364,30 @@ set(h,'Interpreter','none','Box','off')
 
 % If the observation is trusted, reference that somehow
 switch lower(plotdat.trusted)
-   case 'true'
-      axlims = axis;
-      tx = axlims(2) + (axlims(2) - axlims(1))/20;
-      if  strcmpi('normal',plotdat.YDir)
-         ty = plotdat.Yrange(1);
-      else 
-         ty = plotdat.Yrange(2);
-      end
-      h = text(tx,ty,'TRUSTED. Values include outlying observations.');
-      set(h,'FontSize',20,'Rotation',90,'VerticalAlignment','middle')
-   otherwise
+    case 'true'
+        axlims = axis;
+        tx = axlims(2) + (axlims(2) - axlims(1))/20;
+        if  strcmpi('normal',plotdat.YDir)
+            ty = plotdat.Yrange(1);
+        else
+            ty = plotdat.Yrange(2);
+        end
+        h = text(tx,ty,'TRUSTED. Values include outlying observations.');
+        set(h,'FontSize',20,'Rotation',90,'VerticalAlignment','middle')
+    otherwise
 end
 
 % Create another axes to use for plotting the observation counts
 
 ax2 = axes('position',get(ax1,'Position'), ...
-   'XAxisLocation','top', ...
-   'YAxisLocation','right', ...
-   'Color','none', ...
-   'XColor','b', ...
-   'YColor',get(ax1,'YColor'), ...
-   'YLim',get(ax1,'YLim'), ...
-   'YDir',get(ax1,'YDir'), ...
-   'FontSize',get(ax1,'FontSize'));
+    'XAxisLocation','top', ...
+    'YAxisLocation','right', ...
+    'Color','none', ...
+    'XColor','b', ...
+    'YColor',get(ax1,'YColor'), ...
+    'YLim',get(ax1,'YLim'), ...
+    'YDir',get(ax1,'YDir'), ...
+    'FontSize',get(ax1,'FontSize'));
 
 h2 = line(nobs_poss,plotdat.level,'Color','b','Parent',ax2);
 h3 = line(nobs_used,plotdat.level,'Color','b','Parent',ax2);
@@ -414,14 +401,14 @@ set(ax2,'YTick',get(ax1,'YTick'), 'YTicklabel',[]);
 xscale = matchingXticks(ax1,ax2);
 
 set(get(ax1,'Ylabel'),'String',plotdat.level_units, ...
-                      'Interpreter','none','FontSize',figdata.fontsize)
+    'Interpreter','none','FontSize',figdata.fontsize)
 set(get(ax1,'Xlabel'),'String',{plotdat.xlabel, plotdat.timespan}, ...
-                      'Interpreter','none','FontSize',figdata.fontsize)
+    'Interpreter','none','FontSize',figdata.fontsize)
 set(get(ax2,'Xlabel'),'String', ...
     ['# of obs (o=possible, \ast=assimilated) x' int2str(uint32(xscale))],'FontSize',figdata.fontsize)
 
 title({plotdat.myregion, plotdat.myvarname},  ...
-      'Interpreter', 'none', 'FontSize', figdata.fontsize, 'FontWeight', 'bold')
+    'Interpreter', 'none', 'FontSize', figdata.fontsize, 'FontWeight', 'bold')
 
 
 %=====================================================================
@@ -433,17 +420,17 @@ subplot('position',[0.10 0.01 0.8 0.04])
 axis off
 
 if ( main(1) == '/' )   % must be an absolute pathname
-   string1 = sprintf('data file: %s',main);
+    string1 = sprintf('data file: %s',main);
 else
-   mydir = pwd;
-   string1 = sprintf('data file: %s/%s',mydir,main);
+    mydir = pwd;
+    string1 = sprintf('data file: %s/%s',mydir,main);
 end
 
 h = text(0.5, 0.33, string1);
 set(h, 'HorizontalAlignment', 'center', ...
-   'VerticalAlignment','middle', ...
-   'Interpreter', 'none', ...
-   'FontSize', 8);
+    'VerticalAlignment','middle', ...
+    'Interpreter', 'none', ...
+    'FontSize', 8);
 
 
 %=====================================================================
@@ -455,7 +442,7 @@ function [y,ydims] = FindVerticalVars(x)
 % it cannot be a variable of interest.
 
 if ( ~(isfield(x,'allvarnames') && isfield(x,'allvardims')))
-   error('Doh! no ''allvarnames'' and ''allvardims'' components')
+    error('Doh! no ''allvarnames'' and ''allvardims'' components')
 end
 
 j = 0;
@@ -463,23 +450,25 @@ basenames = struct([]);
 basedims  = struct([]);
 
 for i = 1:length(x.allvarnames)
-   dimnames = lower(x.allvardims{i});
-   if (isempty(strfind(dimnames,'time')))
-      j = j + 1;
-
-      basenames{j} = ReturnBase(x.allvarnames{i});
-      basedims{j}  = x.allvardims{i};
-   end
+    dimnames = lower(x.allvardims{i});
+    if (isempty(strfind(dimnames,'time')))
+        platform = ReturnBase(x.allvarnames{i});
+        if (~ isempty(platform))
+            j = j + 1;
+            basenames{j} = platform;
+            basedims{j}  = x.allvardims{i};
+        end
+    end
 end
 
-[~,i,j] = unique(basenames);
+[~,i,~] = unique(basenames);
 y       = struct([]);
 ydims   = struct([]);
 
 for k = 1:length(i)
-   fprintf('%2d is %s\n',k,basenames{i(k)})
-   y{k} = basenames{i(k)};
-   ydims{k} = basedims{i(k)};
+    fprintf('%2d is %s\n',k,basenames{i(k)})
+    y{k} = basenames{i(k)};
+    ydims{k} = basedims{i(k)};
 end
 
 
@@ -489,23 +478,23 @@ end
 function [level_org, level_units, nlevels, level_edges, Yrange] = FindVerticalInfo(fname,varname)
 %% Find the vertical dimension and harvest some info
 
-varinfo  = nc_getvarinfo(fname,varname);
+varinfo  = ncinfo(fname,varname);
 leveldim = [];
 
-for i = 1:length(varinfo.Dimension)
-   inds = strfind(varinfo.Dimension{i},'level');
-   if ( ~ isempty(inds)), leveldim = i; end
+for i = 1:length(varinfo.Dimensions)
+    inds = strfind(varinfo.Dimensions(i).Name,'level');
+    if ( ~ isempty(inds)), leveldim = i; end
 end
 
 if ( isempty(leveldim) )
-   error('There is no level information for %s in %s',varname,fname)
+    error('There is no level information for %s in %s',varname,fname)
 end
 
-level_org   = nc_varget(fname,varinfo.Dimension{leveldim});
-level_units = nc_attget(fname,varinfo.Dimension{leveldim},'units');
+level_org   = ncread(   fname,varinfo.Dimensions(leveldim).Name);
+level_units = ncreadatt(fname,varinfo.Dimensions(leveldim).Name,'units');
 nlevels     = varinfo.Size(leveldim);
-edgename    = sprintf('%s_edges',varinfo.Dimension{leveldim});
-level_edges = nc_varget(fname, edgename);
+edgename    = sprintf('%s_edges',varinfo.Dimensions(leveldim).Name);
+level_edges = ncread(fname, edgename);
 Yrange      = [min(level_edges) max(level_edges)];
 
 
@@ -517,26 +506,26 @@ function s = ReturnBase(string1)
 s = [];
 inds = strfind(string1,'_guess');
 if (inds > 0 )
-   s = string1(1:inds-1);
-   return
+    s = string1(1:inds-1);
+    return
 end
 
 inds = strfind(string1,'_analy');
 if (inds > 0 )
-   s = string1(1:inds-1);
-   return
+    s = string1(1:inds-1);
+    return
 end
 
 inds = strfind(string1,'_VPguess');
 if (inds > 0 )
-   s = string1(1:inds-1);
-   return
+    s = string1(1:inds-1);
+    return
 end
 
 inds = strfind(string1,'_VPanaly');
 if (inds > 0 )
-   s = string1(1:inds-1);
-   return
+    s = string1(1:inds-1);
+    return
 end
 
 
@@ -555,29 +544,29 @@ bob  = [y.ges_copy(:) ; y.ges_rmse(:); y.anl_copy(:) ; y.anl_rmse(:)];
 inds = find(isfinite(bob));
 
 if ( isempty(inds) )
-   x = [0 1];
+    x = [0 1];
 else
-   glommed = bob(inds);
-   ymin    = min(glommed);
-   ymax    = max(glommed);
-
-   if ( ymax > 1.0 )
-      ymin = floor(min(glommed));
-      ymax =  ceil(max(glommed));
-   end
-
-   if (ymin == 0 && ymax == 0)
-      ymax = 1;
-   end
-
-   if (ymin == ymax)
-      ymin = ymin - 0.1*ymin;
-      ymax = ymax + 0.1*ymax;
-   end
-
-   Yrange = [ymin ymax];
-
-   x = sort([min([Yrange(1) 0.0]) Yrange(2)] ,'ascend');
+    glommed = bob(inds);
+    ymin    = min(glommed);
+    ymax    = max(glommed);
+    
+    if ( ymax > 1.0 )
+        ymin = floor(min(glommed));
+        ymax =  ceil(max(glommed));
+    end
+    
+    if (ymin == 0 && ymax == 0)
+        ymax = 1;
+    end
+    
+    if (ymin == ymax)
+        ymin = ymin - 0.1*ymin;
+        ymax = ymax + 0.1*ymax;
+    end
+    
+    Yrange = [ymin ymax];
+    
+    x = sort([min([Yrange(1) 0.0]) Yrange(2)] ,'ascend');
 end
 
 
@@ -608,13 +597,13 @@ legend_fraction = 0.22;
 % partial fix to legend space; add in option for vert coord = height.
 
 switch lower(units)
-   case 'hpa'
-      axlims(4) = max(edges);
-      axlims(3) = min(edges) - legend_fraction*(axlims(4)-min(edges));
-   case 'm'
-      axlims(3) = min(edges);
-      axlims(4) = max(edges) + legend_fraction*(max(edges)-axlims(3));
-   otherwise
+    case 'hpa'
+        axlims(4) = max(edges);
+        axlims(3) = min(edges) - legend_fraction*(axlims(4)-min(edges));
+    case 'm'
+        axlims(3) = min(edges);
+        axlims(4) = max(edges) + legend_fraction*(max(edges)-axlims(3));
+    otherwise
 end
 axis(axlims)
 
@@ -624,8 +613,8 @@ xc = [ axlims(1) axlims(2) axlims(2) axlims(1) axlims(1) ];
 
 hold on;
 for i = 1:2:(length(edges)-1)
-   yc = [ edges(i) edges(i) edges(i+1) edges(i+1) edges(i) ];
-   hf = fill(xc,yc,[0.8 0.8 0.8],'EdgeColor','none');
+    yc = [ edges(i) edges(i) edges(i+1) edges(i+1) edges(i) ];
+    hf = fill(xc,yc,[0.8 0.8 0.8],'EdgeColor','none');
 end
 hold off;
 
@@ -648,14 +637,29 @@ position    = [0.15 0.12 0.7 0.75];
 linewidth   = 2.0;
 
 figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
-   'expsymbols', {{'o','s','d','p','h','s','*'}}, ...
-   'prpolines',  {{'-','--'}}, 'position', position, ...
-   'fontsize',fontsize, 'orientation',orientation, ...
-   'linewidth',linewidth);
+    'expsymbols', {{'o','s','d','p','h','s','*'}}, ...
+    'prpolines',  {{'-','--'}}, 'position', position, ...
+    'fontsize',fontsize, 'orientation',orientation, ...
+    'linewidth',linewidth);
+
+
+%=====================================================================
+
+
+function value = local_ncread(fname,varname)
+%% If the variable exists in the file, return the contents of the variable.
+% if the variable does not exist, return empty value instead of error-ing
+% out.
+
+[variable_present, varid] = nc_var_exists(fname,varname);
+if (variable_present)
+    value = ncread(fname, varname);
+else
+    value = [];
+end
 
 
 % <next few lines under version control, do not edit>
 % $URL$
 % $Revision$
 % $Date$
-

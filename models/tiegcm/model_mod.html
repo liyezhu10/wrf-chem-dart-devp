@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (TIEGCM)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css" />
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,10 +14,10 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
-       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
           <small><small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
           $Id$</small></small>
@@ -66,7 +66,7 @@ and only the last timestep in the TIEGCM primary file is ever modified by DART.
 The TIEGCM variables to be included in a DART state vector, and possibly updated by the assimilation, 
 are specified in the DART namelist. (Some of the TIEGCM variables used to compute observation
 priors need not to be updated.) It is required to associate the TIEGCM variable name with 
-a 'generic' DART counterpart (e.g., <em class=code>NE</em> is <em class=code>KIND_ELECTRON_DENSITY</em>). 
+a 'generic' DART counterpart (e.g., <em class=code>NE</em> is <em class=code>QTY_ELECTRON_DENSITY</em>). 
 The composition of the DART state vector and which variables get updated in the TIEGCM primary file 
 are under complete user control.
 
@@ -102,7 +102,7 @@ commented. Please read and understand the scripts. The overall process is to
 <li>Set shell variables to identify the location of the DART exectuables, the TIEGCM
 executables, initial ensemble, etc.
 <li>Establish a temporary working directory for the experiment.
-<li>Populate that directory with the initial ensemble and required namlists.
+<li>Populate that directory with the initial ensemble and required namelists.
 <li>Convert each TIEGCM ensemble member to a DART initial conditions file. 
 <li>Run either <em class=program>filter</em> or 
     <em class=program>run_perfect_model_obs.csh</em>.
@@ -128,7 +128,7 @@ executables, initial ensemble, etc.
            may be responsible for advancing more than one TIEGCM instance. If so,
            each instance is done serially, one after another.
            See the documentation for 
-           <a href="../../doc/html/filter_async_modes.html"
+           <a href="../../documentation/html/filter_async_modes.html"
           >options for running DART in parallel</a>.
        <li>Copy the required information into that directory.
        <li>Update the TIEGCM restart file with the most current DART-modified state
@@ -175,16 +175,16 @@ prematurely terminating the namelist.
    assimilation_period_seconds = 3600
    estimate_f10_7              = .false.
    debug                       = 1
-   variables = 'NE',    'KIND_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
-               'OP',    'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-               'TI',    'KIND_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
-               'TE',    'KIND_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
-               'OP_NM', 'KIND_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
-               'O1',    'KIND_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'secondary',  'NO_COPY_BACK',
-               'O2',    'KIND_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'secondary',  'NO_COPY_BACK',
-               'TN',    'KIND_TEMPERATURE',               '0.0',     '6000.0',  'secondary',  'NO_COPY_BACK',
-               'ZG',    'KIND_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
-               'VTEC',  'KIND_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
+   variables = 'NE',    'QTY_ELECTRON_DENSITY',          '1000.0',  'NA',      'restart',    'UPDATE'
+               'OP',    'QTY_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+               'TI',    'QTY_TEMPERATURE_ION',           'NA',      'NA',      'restart',    'UPDATE',
+               'TE',    'QTY_TEMPERATURE_ELECTRON',      'NA',      'NA',      'restart',    'UPDATE',
+               'OP_NM', 'QTY_DENSITY_ION_OP',            'NA',      'NA',      'restart',    'UPDATE',
+               'O1',    'QTY_ATOMIC_OXYGEN_MIXING_RATIO','0.00001', '0.99999', 'secondary',  'NO_COPY_BACK',
+               'O2',    'QTY_MOLEC_OXYGEN_MIXING_RATIO', '0.00001', '0.99999', 'secondary',  'NO_COPY_BACK',
+               'TN',    'QTY_TEMPERATURE',               '0.0',     '6000.0',  'secondary',  'NO_COPY_BACK',
+               'ZG',    'QTY_GEOMETRIC_HEIGHT',          'NA',      'NA',      'secondary',  'NO_COPY_BACK',
+               'VTEC',  'QTY_VERTICAL_TEC',              'NA',      'NA',      'calculate',  'NO_COPY_BACK'
    /
 </pre>
 </div>
@@ -256,10 +256,10 @@ prematurely terminating the namelist.
         kind, the min &amp; max values, what file to read from, and whether
         or not the file should be updated after the assimilation.
         The DART kind must be one found in the
-        <em class=file>DART/obs_kind/obs_kind_mod.f90</em>
+        <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em>
         AFTER it gets built by <em class=program>preprocess</em>.
         Most of the upper atmosphere observation kinds are specified by
-        <em class=file>DART/obs_def/obs_def_upper_atm_mod.f90</em>, 
+        <em class=file>DART/observations/forward_operators/obs_def_upper_atm_mod.f90</em>, 
         so it should be specified in the 
         <em class=file>preprocess_nml</em>:<em class=code>input_files</em>
         variable. Since TIEGCM has an entire class of variables 
@@ -320,25 +320,25 @@ prematurely terminating the namelist.
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>OTHER MODULES USED</H2>
 <PRE>
-adaptive_inflate/adaptive_inflate_mod.f90
-assim_model/assim_model_mod.f90
-assim_tools/assim_tools_mod.f90
-common/types_mod.f90
-cov_cutoff/cov_cutoff_mod.f90
-ensemble_manager/ensemble_manager_mod.f90
-filter/filter.f90
+adaptive_inflate_mod.f90
+assim_model_mod.f90
+assim_tools_mod.f90
+types_mod.f90
+cov_cutoff_mod.f90
+ensemble_manager_mod.f90
+filter.f90
 location/threed_sphere/location_mod.f90
-mpi_utilities/[null_,]mpi_utilities_mod.f90
-obs_def/obs_def_mod.f90
-obs_kind/obs_kind_mod.f90
-obs_model/obs_model_mod.f90
-obs_sequence/obs_sequence_mod.f90
-random_seq/random_seq_mod.f90
-reg_factor/reg_factor_mod.f90
-smoother/smoother_mod.f90
-sort/sort_mod.f90
-time_manager/time_manager_mod.f90
-utilities/utilities_mod.f90
+[null_,]mpi_utilities_mod.f90
+obs_def_mod.f90
+obs_kind_mod.f90
+obs_model_mod.f90
+obs_sequence_mod.f90
+random_seq_mod.f90
+reg_factor_mod.f90
+smoother_mod.f90
+sort_mod.f90
+time_manager_mod.f90
+utilities_mod.f90
 </PRE>
 <P></P>
 
@@ -469,8 +469,8 @@ integer, optional,   intent(out) :: <em class=optionalcode> var_kind </em>
 <P>
 Given an integer index into the state vector structure, returns the
 associated location. A second intent(out) optional argument 
-returns the generic kind of this item, e.g. KIND_MOLEC_OXYGEN_MIXING_RATIO,
-KIND_ELECTRON_DENSITY, ...
+returns the generic kind of this item, e.g. QTY_MOLEC_OXYGEN_MIXING_RATIO,
+QTY_ELECTRON_DENSITY, ...
 This interface is required to be functional for all applications.
 </P>
 
@@ -515,7 +515,7 @@ the value in obs_val. The istatus variable should be returned as
 0 unless there is some problem in computing the interpolation in
 which case a positive value should be returned. The ikind variable
 is one of the KIND parameters defined in the
-<a href="../../obs_kind/obs_kind_mod.html">obs_kind_mod.f90</a> file
+<a href="../../assimilation_code/modules/observations/obs_kind_mod.html">obs_kind_mod.f90</a> file
 and defines which generic kind of item is being interpolated.
 </P>
 
@@ -776,7 +776,7 @@ logical,                intent(out) :: <em class=code>interf_provided</em>
 state vector and perturbs it in some way to generate initial
 conditions for spinning up ensembles. TIEGCM does this is a manner that
 is different than most other models. The F10_7 parameter must be included in 
-the DART state vector as a KIND_1D_PARAMETER and gaussian noise is added to it.
+the DART state vector as a QTY_1D_PARAMETER and gaussian noise is added to it.
 That value must be conveyed to the tiegcm namelist and used to advance the model.
 <br/>
 <br/>
@@ -1099,7 +1099,7 @@ real(r8), dimension(3), intent(in) :: <em class=code>locarray</em>
 
 <P>
 This function is <strong>only</strong> used by 
-<a href="../../utilities/model_mod_check.html">model_mod_check.f90</a>
+<a href="../../assimilation_code/programs/model_mod_check/model_mod_check.html models/POP/model_mod_check.html">model_mod_check.f90</a>
 and can be modified to suit your needs.
 <em class=program>test_interpolate()</em> exercises 
 <em class=program>model_interpolate()</em>,
@@ -1275,9 +1275,8 @@ N/A
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
-This open source software is provided by UCAR, "as is",<br>
-without charge, subject to all terms of use at<br>
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

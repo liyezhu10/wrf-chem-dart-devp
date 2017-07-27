@@ -1,7 +1,7 @@
 %% stats_wrf_time
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -20,7 +20,7 @@ if (exist(pofname,'file') ~= 2)
    error('%s does not exist.',pofname)
 end
 
-diminfo = nc_getdiminfo(prfname,'domain'); num_domains = diminfo.Length;
+[num_domains,~] = nc_dim_info(prfname,'domain');
 
 if (num_domains > 1)
 
@@ -33,11 +33,11 @@ else
 
 end
 
-diminfo = nc_getdiminfo(prfname,['soil_layers_stag_d0',int2str(id)]); sls = diminfo.Length;
-diminfo = nc_getdiminfo(prfname,['west_east_d0',       int2str(id)]); we  = diminfo.Length;
-diminfo = nc_getdiminfo(prfname,['south_north_d0',     int2str(id)]); sn  = diminfo.Length;
-diminfo = nc_getdiminfo(prfname,['bottom_top_d0',      int2str(id)]); bt  = diminfo.Length;
-ens_size = get_ens_size(prfname);
+[sls     , ~] = nc_dim_info(prfname,['soil_layers_stag_d0',int2str(id)]);
+[we      , ~] = nc_dim_info(prfname,['west_east_d0',       int2str(id)]);
+[sn      , ~] = nc_dim_info(prfname,['south_north_d0',     int2str(id)]);
+[bt      , ~] = nc_dim_info(prfname,['bottom_top_d0',      int2str(id)]);
+[ens_size, ~] = nc_dim_info(prfname,'member');
 
 true_times     = nc_varget(trfname, 'time');
 num_true_times = size(true_times, 1);
@@ -242,4 +242,3 @@ xlabel(time_unit,'Fontsize',12)
 % $URL$
 % $Revision$
 % $Date$
-

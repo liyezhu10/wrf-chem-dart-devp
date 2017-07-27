@@ -1,7 +1,7 @@
 %% stats_wrf_time_bd
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -30,7 +30,7 @@ tlat  = nc_varget(prfname,  'XLAT_d01'); sn        = size( tlat, 1);
 level = nc_varget(prfname, 'level_d01'); bt        = size(level, 1);
 times = nc_varget(prfname,      'time'); num_times = size(times, 1);
 
-ens_size = get_ens_size(prfname);
+[ens_size,~] = nc_dim_info(prfname,'member');
 true_ind = get_copy_index(trfname,'true state');
 mean_ind = get_copy_index(prfname,'ensemble mean');
 sprd_ind = get_copy_index(prfname,'ensemble spread');
@@ -247,4 +247,3 @@ xlabel('hours')
 % $URL$
 % $Revision$
 % $Date$
-

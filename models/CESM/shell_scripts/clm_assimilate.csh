@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -501,10 +501,10 @@ if ( $?LSB_PJL_TASK_GEOMETRY ) then
    setenv LSB_PJL_TASK_GEOMETRY "${ORIGINAL_LAYOUT}"
 endif
 
-${MOVE} Prior_Diag.nc      ../clm_Prior_Diag.${LND_DATE_EXT}.nc
-${MOVE} Posterior_Diag.nc  ../clm_Posterior_Diag.${LND_DATE_EXT}.nc
-${MOVE} obs_seq.final      ../clm_obs_seq.${LND_DATE_EXT}.final
-${MOVE} dart_log.out       ../clm_dart_log.${LND_DATE_EXT}.out
+${MOVE} preassim.nc    ../clm_preassim.${LND_DATE_EXT}.nc
+${MOVE} analysis.nc    ../clm_analysis.${LND_DATE_EXT}.nc
+${MOVE} obs_seq.final  ../clm_obs_seq.${LND_DATE_EXT}.final
+${MOVE} dart_log.out   ../clm_dart_log.${LND_DATE_EXT}.out
 
 # Accomodate any possible inflation files
 # 1) rename file to reflect current date

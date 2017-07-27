@@ -1,3 +1,8 @@
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
 
 Hints for porting a new model to DART:
 
@@ -122,8 +127,8 @@ the general flow is:
 
    generate an ensemble of states, or set 'start_from_restart' to .false.
    run ./filter with the single observation 
-   look at the Prior_Diag.nc and Posterior_Diag.nc files
-      diff them with ncdiff:  ncdiff Posterior_Diag.nc Prior_Diag.nc Innov.nc
+   look at the preassim.nc and analysis.nc files
+      diff them with ncdiff:  ncdiff analysis.nc preassim.nc Innov.nc
       plot it, with ncview if possible:  ncview Innov.nc
       the difference between the two is the impact of that single observation
       see if it's at the right location and if the differences seem reasonable
@@ -174,3 +179,8 @@ Feel free to write me with questions next week while you are at NCAR, if
 that is helpful.
 
 Mark
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$

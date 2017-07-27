@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>program create_ocean_obs</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css">
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css">
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -51,7 +51,7 @@
 <TR><TD> 5</TD>
     <TD>vertical coordinate flag</TD>
     <TD> see <a
-href="../../location/threed_sphere/location_mod.html#location_type">location_mod:location_type</a>
+href="../../assimilation_code/location/threed_sphere/location_mod.html#location_type">location_mod:location_type</a>
         for a full explanation. The short explanation is that
         <em>surface == -1</em>, and
         <em>depth == 3</em> There is a pathological difference between
@@ -65,12 +65,12 @@ href="../../location/threed_sphere/location_mod.html#location_type">location_mod
          parameter for <em class="program">filter</em> to ignore any 
          observation with a 
          QC&nbsp;value&nbsp;&#60;&#61;&nbsp;<a
-         href="../../filter/filter.html#Namelist">input_qc_threshold</a>
+         href="../../assimilation_code/programs/filter/filter.html#Namelist">input_qc_threshold</a>
     </TD></TR>
 <TR><TD> 8</TD>
     <TD> obs_kind_name</TD>
     <TD> a character string that must match a string in
-         <a href="../../obs_def/obs_def_MITgcm_ocean_model_mod.html">obs_def/obs_def_MITgcm_ocean_mod.f90</a></TD></TR>
+         <a href="../../observations/forward_operators/obs_def_MITgcm_ocean_model_mod.html">obs_def/obs_def_MITgcm_ocean_mod.f90</a></TD></TR>
 <TR><TD> 9</TD>
     <TD> startDate_1</TD> 
     <TD> the year-month-date of the observation (YYYYMMDD format)</TD></TR>
@@ -99,7 +99,7 @@ For example:
 
 <P>
 It is always possible to combine observation sequence files with the program 
-<a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool</a>, so
+<a href="../../assimilation_code/programs/obs_sequence_tool/obs_sequence_tool.html">obs_sequence_tool</a>, so
 it was simply convenient to generate a separate file for each observation
 platform and type ('GLIDER' and 'TEMPERATURE'), however it is by no means
 required.
@@ -138,11 +138,11 @@ with a hyperlink to the full documentation for each namelist.
 <TABLE border=0 cellpadding=3 width=100% >
 <TR><TH align="left">Namelist</TH><TH align="left">Primary Purpose</TH></TR>
 <TR><TD><a 
-    href="../../utilities/utilities_mod.html#Namelist">utilities_nml</a></TD>
+    href="../../assimilation_code/modules/utilities/utilities_mod.html#Namelist">utilities_nml</a></TD>
     <TD>set the termination level and file name for the run-time log</TD></TR>
 
 <TR><TD><a 
-    href="../../obs_sequence/obs_sequence_mod.html#Namelist">obs_sequence_nml</a></TD>
+    href="../../assimilation_code/modules/observations/obs_sequence_mod.html#Namelist">obs_sequence_nml</a></TD>
     <TD>write binary or ASCII observation sequence files</TD></TR>
 </TABLE>
 
@@ -285,9 +285,8 @@ None at this time. Feel free to suggest improvements.
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br>
-This open source software is provided by UCAR, "as is",<br>
-without charge, subject to all terms of use at<br>
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

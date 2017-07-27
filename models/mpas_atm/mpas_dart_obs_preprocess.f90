@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -32,7 +32,7 @@ program mpas_dart_obs_preprocess
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-use        types_mod, only : r8, missing_r8, earth_radius, RAD2DEG, DEG2RAD
+use        types_mod, only : r8, missing_r8, earth_radius, RAD2DEG, DEG2RAD, i8
 use    utilities_mod, only : error_handler, E_MSG, find_namelist_in_file, &
                              check_namelist_read, nc_check
 use time_manager_mod, only : time_type, operator(>=), operator(<), operator(>), operator(<=), &
@@ -40,7 +40,7 @@ use time_manager_mod, only : time_type, operator(>=), operator(<), operator(>), 
                              set_calendar_type, GREGORIAN, set_time, get_time
 use     location_mod, only : location_type, get_location, set_location, get_dist, &
                              VERTISUNDEF, VERTISSURFACE, VERTISPRESSURE, &
-                             vert_is_pressure, vert_is_height, operator(==)
+                             is_vertical, operator(==)
 use obs_sequence_mod, only : append_obs_to_seq, copy_obs, delete_obs_from_seq, &
                              destroy_obs_sequence, get_first_obs, get_last_obs, &
                              get_next_obs, get_next_obs_from_key, get_num_copies, &
@@ -51,14 +51,14 @@ use obs_sequence_mod, only : append_obs_to_seq, copy_obs, delete_obs_from_seq, &
                              set_obs_def, set_obs_values, set_qc, set_qc_meta_data, &
                              static_init_obs_sequence, write_obs_seq, init_obs_sequence
 use      obs_def_mod, only : get_obs_def_error_variance, get_obs_def_location, &
-                             get_obs_def_time, get_obs_kind, obs_def_type, &
-                             set_obs_def_error_variance, set_obs_def_kind, &
+                             get_obs_def_time, get_obs_def_type_of_obs, obs_def_type, &
+                             set_obs_def_error_variance, set_obs_def_type_of_obs, &
                              set_obs_def_location, set_obs_def_time
 use     obs_kind_mod, only : ACARS_DEWPOINT, ACARS_RELATIVE_HUMIDITY, ACARS_SPECIFIC_HUMIDITY, &
                              ACARS_TEMPERATURE, ACARS_U_WIND_COMPONENT, ACARS_V_WIND_COMPONENT, &
                              AIRCRAFT_SPECIFIC_HUMIDITY, AIRCRAFT_TEMPERATURE, AIRCRAFT_U_WIND_COMPONENT, &
                              AIRCRAFT_V_WIND_COMPONENT, GPS_PRECIPITABLE_WATER, GPSRO_REFRACTIVITY, &
-                             KIND_SURFACE_ELEVATION, LAND_SFC_ALTIMETER, LAND_SFC_DEWPOINT, &
+                             QTY_SURFACE_ELEVATION, LAND_SFC_ALTIMETER, LAND_SFC_DEWPOINT, &
                              LAND_SFC_RELATIVE_HUMIDITY, LAND_SFC_SPECIFIC_HUMIDITY, LAND_SFC_TEMPERATURE, &
                              LAND_SFC_U_WIND_COMPONENT, LAND_SFC_V_WIND_COMPONENT, MARINE_SFC_ALTIMETER, &
                              MARINE_SFC_DEWPOINT, MARINE_SFC_RELATIVE_HUMIDITY, MARINE_SFC_SPECIFIC_HUMIDITY, &
@@ -72,6 +72,7 @@ use     obs_kind_mod, only : ACARS_DEWPOINT, ACARS_RELATIVE_HUMIDITY, ACARS_SPEC
                              VORTEX_LAT, VORTEX_LON, VORTEX_PMIN, VORTEX_WMAX
 use        model_mod, only : static_init_model, get_grid_dims, get_xland, &
                              model_interpolate, find_closest_cell_center
+use ensemble_manager_mod, only : ensemble_type, init_ensemble_manager, end_ensemble_manager
 
 use           netcdf
 
@@ -153,6 +154,8 @@ type(obs_sequence_type) :: seq_all, seq_rawin, seq_sfc, seq_acars, seq_satwnd, &
 
 type(time_type)         :: anal_time
 
+type(ensemble_type)     :: dummy_ens
+
 integer :: nCells        = -1  ! Total number of cells making up the grid
 integer :: nVertices     = -1  ! Unique points in grid that are corners of cells
 integer :: nEdges        = -1  ! Straight lines between vertices making up cells
@@ -174,6 +177,7 @@ call check_namelist_read(iunit, io, "mpas_obs_preproc_nml")
 
 call static_init_obs_sequence()
 call static_init_model()
+call init_ensemble_manager(dummy_ens, 1, 1_i8)
 
 call get_grid_dims(nCells, nVertices, nEdges, nVertLevels, vertexDegree, nSoilLevels)
 
@@ -472,14 +476,14 @@ ObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a sequence
 
   !  read data from observation
   call get_obs_def(obs_in, obs_def)
-  okind   = get_obs_kind(obs_def)
+  okind   = get_obs_def_type_of_obs(obs_def)
   obs_loc = get_obs_def_location(obs_def)
   llv_loc = get_location(obs_loc)
   obs_time = get_obs_def_time(obs_def)
 
   !  check if the observation is within vertical bounds of domain
-  if ( (vert_is_pressure(obs_loc) .and. llv_loc(3) < ptop) .or. &
-       (vert_is_height(obs_loc)   .and. llv_loc(3) > htop) ) then
+  if ( (is_vertical(obs_loc, "PRESSURE") .and. llv_loc(3) < ptop) .or. &
+       (is_vertical(obs_loc, "HEIGHT")   .and. llv_loc(3) > htop) ) then
 
     prev_obsi = obs_in
     call get_next_obs(supp_obs_seq, prev_obsi, obs_in, last_obs)
@@ -728,7 +732,7 @@ real(r8)              :: obs_val(1), qc_val(1)
 type(obs_def_type)    :: obs_def
 
 call set_obs_def_location(obs_def, set_location(lon, lat, vloc, vcord))
-call set_obs_def_kind(obs_def, okind)
+call set_obs_def_type_of_obs(obs_def, okind)
 call set_obs_def_time(obs_def, otime)
 call set_obs_def_error_variance(obs_def, oerr)
 call set_obs_def(obs, obs_def)
@@ -822,8 +826,8 @@ logical, intent(in)             :: siglevel, elev_check
 real(r8), intent(in)            :: elev_max
 logical  :: rawinsonde_obs_check
 
-integer  :: istatus
-real(r8) :: llv_loc(3), xmod(1), hsfc
+integer  :: istatus(1)
+real(r8) :: llv_loc(3), hsfc(1)
 
 rawinsonde_obs_check = .true.
 llv_loc = get_location(obs_loc)
@@ -841,8 +845,8 @@ else
   !  perform elevation check for altimeter
   if ( elev_check ) then
 
-    call model_interpolate(xmod, obs_loc, KIND_SURFACE_ELEVATION, hsfc, istatus)
-    if ( abs(hsfc - llv_loc(3)) > elev_max ) rawinsonde_obs_check = .false.
+    call model_interpolate(dummy_ens, 1, obs_loc, QTY_SURFACE_ELEVATION, hsfc, istatus)
+    if ( abs(hsfc(1) - llv_loc(3)) > elev_max ) rawinsonde_obs_check = .false.
 
   end if
 
@@ -950,15 +954,15 @@ InputObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a seq
 
   !  Get the observation information, check if it is in the domain
   call get_obs_def(obs_in, obs_def)
-  okind   = get_obs_kind(obs_def)
+  okind   = get_obs_def_type_of_obs(obs_def)
   obs_loc = get_obs_def_location(obs_def)
   llv_loc = get_location(obs_loc)
   cellid  = find_closest_cell_center(llv_loc(2), llv_loc(1))
   obs_time = get_obs_def_time(obs_def)
 
   !  check vertical location
-  if ( (vert_is_pressure(obs_loc) .and. llv_loc(3) < ptop) .or. &
-       (vert_is_height(obs_loc)   .and. llv_loc(3) > htop) ) then
+  if ( (is_vertical(obs_loc, "PRESSURE") .and. llv_loc(3) < ptop) .or. &
+       (is_vertical(obs_loc, "HEIGHT")   .and. llv_loc(3) > htop) ) then
 
     prev_obs = obs_in
     call get_next_obs(seq, prev_obs, obs_in, last_obs)
@@ -1293,7 +1297,7 @@ do while ( .not. last_obs )
 
   call get_obs_def(obs, obs_def)
   obs_loc  = get_obs_def_location(obs_def)
-  obs_kind = get_obs_kind(obs_def)
+  obs_kind = get_obs_def_type_of_obs(obs_def)
   llv_loc  = get_location(obs_loc)
 
   locdex = -1
@@ -1718,7 +1722,7 @@ do while ( .not. last_obs )
 
   call get_obs_def(obs, obs_def)
   obs_loc  = get_obs_def_location(obs_def)
-  obs_kind = get_obs_kind(obs_def)
+  obs_kind = get_obs_def_type_of_obs(obs_def)
   llv_loc  = get_location(obs_loc)
 
   !  determine if observation exists
@@ -1928,17 +1932,17 @@ function surface_obs_check(elev_check, elev_max, llv_loc)
 logical, intent(in)  :: elev_check
 real(r8), intent(in) :: llv_loc(3), elev_max
 
-integer              :: istatus
+integer              :: istatus(1)
 logical              :: surface_obs_check
-real(r8)             :: xmod(1), hsfc
+real(r8)             :: hsfc(1)
 
 surface_obs_check = .true.
 
 if ( elev_check ) then
 
-  call model_interpolate(xmod, set_location(llv_loc(1), llv_loc(2), &
-      llv_loc(3), VERTISSURFACE), KIND_SURFACE_ELEVATION, hsfc, istatus)
-  if ( abs(hsfc - llv_loc(3)) > elev_max ) surface_obs_check = .false.
+  call model_interpolate(dummy_ens, 1, set_location(llv_loc(1), llv_loc(2), &
+      llv_loc(3), VERTISSURFACE), QTY_SURFACE_ELEVATION, hsfc, istatus)
+  if ( abs(hsfc(1) - llv_loc(3)) > elev_max ) surface_obs_check = .false.
 
 end if
 
@@ -2067,7 +2071,6 @@ if (westl > eastl .and. lon <= eastl) lon = lon + circumf
 end subroutine wrap_lon
 
 end program
-
 
 ! <next few lines under version control, do not edit>
 ! $URL$

@@ -1,15 +1,19 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 
 #----------------------------------------------------------------------
+# compile all programs in the current directory with a mkmf_xxx file.
+#
+# usage: [ -mpi | -nompi ]
+#----------------------------------------------------------------------
 # 'preprocess' is a program that culls the appropriate sections of the
-# observation module for the observations types in 'input.nml'; the 
-# resulting source file is used by all the remaining programs, 
+# observation module for the observations types in 'input.nml'; the
+# resulting source file is used by all the remaining programs,
 # so this MUST be run first.
 #----------------------------------------------------------------------
 

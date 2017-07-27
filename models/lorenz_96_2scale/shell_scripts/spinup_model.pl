@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -124,9 +124,9 @@ copy "filter_restart","filter_ics";
 
 # save the diagnostic files so we can see the spinup
 mkpath (["spinup"]);
-copy "Prior_Diag.nc","spinup/Prior_Diag.nc";
-copy "Posterior_Diag.nc","spinup/Posterior_Diag.nc";
-copy "Truth.nc","spinup/Truth.nc";
+copy "preassim.nc","spinup/preassim.nc";
+copy "analysis.nc","spinup/analysis.nc";
+copy "true_state.nc","spinup/true_state.nc";
 
 exit 0
 

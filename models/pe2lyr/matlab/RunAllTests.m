@@ -1,18 +1,19 @@
 function RunAllTests(dummy)
-%% RunAllTests.m
+%% RunAllTests.m pe2lyr
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
-
 
 if (nargin() > 0)
    interactive = 1;
 else
    interactive = 0;
 end
+
+%%
 
 figure(1)
 if (interactive)
@@ -33,8 +34,8 @@ end
  fprintf('Starting %s\n','PlotBins');
  clear pinfo; close all;
 
- truth_file = 'True_State.nc';
- diagn_file = 'Prior_Diag.nc';
+ truth_file = 'true_state.nc';
+ diagn_file = 'preassim.nc';
  vars1 = CheckModel(diagn_file);
  vars1 = rmfield(vars1,{'time','time_series_length','fname'});
  vars2 = CheckModelCompatibility(truth_file,diagn_file);
@@ -76,8 +77,8 @@ end
  fprintf('Starting %s\n','PlotCorrel');
  clear pinfo; clf
 
- pinfo                    = CheckModel('Prior_Diag.nc');
- pinfo.time               = nc_varget(pinfo.fname,'time');
+ pinfo                    = CheckModel('preassim.nc');
+ pinfo.time               = ncread(pinfo.fname,'time');
  pinfo.time_series_length = length(pinfo.time);
  pinfo.base_var           = 'v';
  pinfo.comp_var           = 'u';
@@ -108,7 +109,7 @@ end
  fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
 
- pinfo              = CheckModel('Prior_Diag.nc');
+ pinfo              = CheckModel('preassim.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
  pinfo.var1name     = 'u';
  pinfo.var2name     = 'v';
@@ -154,9 +155,9 @@ end
  fprintf('Starting %s\n','PlotSawtooth');
  clear pinfo; close all
 
- truth_file     = 'True_State.nc';
- prior_file     = 'Prior_Diag.nc';
- posterior_file = 'Posterior_Diag.nc';
+ truth_file     = 'true_state.nc';
+ prior_file     = 'preassim.nc';
+ posterior_file = 'analysis.nc';
  pinfo = CheckModelCompatibility(prior_file,posterior_file);
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.posterior_time = pinfo.diagn_time;
@@ -173,7 +174,7 @@ end
  pinfo.latitude    = 38.96;
  pinfo.longitude   = 255;
  pinfo.copies      = 3;
- pinfo.copyindices = [7 12 17];
+ pinfo.copyindices = [5 10 15];
 
  PlotSawtooth(pinfo)
  fprintf('Finished %s ... pausing, hit any key\n','PlotSawtooth'); pause
@@ -195,15 +196,15 @@ end
  fprintf('Starting %s\n','PlotTotalErr');
  clear pinfo; clf
 
- truth_file = 'True_State.nc';
- diagn_file = 'Prior_Diag.nc';
+ truth_file = 'true_state.nc';
+ diagn_file = 'preassim.nc';
  vars1 = CheckModel(diagn_file);
  vars1 = rmfield(vars1,{'time','time_series_length','fname'});
  vars2 = CheckModelCompatibility(truth_file,diagn_file);
  pinfo = CombineStructs(vars1,vars2);
- pinfo.levels = nc_varget(pinfo.diagn_file,'lev');
- pinfo.lons   = nc_varget(pinfo.diagn_file,'lon');
- pinfo.lats   = nc_varget(pinfo.diagn_file,'lat');
+ pinfo.levels = ncread(pinfo.diagn_file,'lev');
+ pinfo.lons   = ncread(pinfo.diagn_file,'lon');
+ pinfo.lats   = ncread(pinfo.diagn_file,'lat');
 
  PlotTotalErr(pinfo)
  fprintf('Finished %s ... pausing, hit any key\n','PlotTotalErr'); pause
@@ -220,7 +221,7 @@ end
  fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
 
- diagn_file = 'Prior_Diag.nc';
+ diagn_file = 'preassim.nc';
  pinfo = CheckModel(diagn_file);
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
  pinfo.base_var           = 'u';
@@ -260,4 +261,3 @@ end
 % $URL$
 % $Revision$
 % $Date$
-

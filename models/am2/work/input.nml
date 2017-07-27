@@ -104,11 +104,6 @@
    write_binary_obs_sequence = .false.
    /
 
-&assim_model_nml
-   write_binary_restart_files = .true.,
-   netCDF_large_file_support  = .true.
-   /
-
 &model_nml
    model_config_file  = 'fv_rst.res.nc', 
    model_restart_file = 'fv_rst.res.nc',
@@ -125,7 +120,6 @@
                   'CLOUD_LIQUID_WATER', 
                   'CLOUD_ICE', 
                   'CLOUD_FRACTION'
-   output_state_vector = .false., 
    highest_obs_pressure_mb   = 100.0,
    highest_state_pressure_mb = 150.0,
    max_obs_lat_degree        = 85.0,
@@ -158,15 +152,15 @@
 
 &preprocess_nml
            overwrite_output = .true.,
-    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
-   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
-     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
-    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
-   input_files              = '../../../obs_def/obs_def_reanalysis_bufr_mod.f90',
-                              '../../../obs_def/obs_def_gps_mod.f90',
-                              '../../../obs_def/obs_def_QuikSCAT_mod.f90',
-                              '../../../obs_def/obs_def_AIRS_mod.f90',
-                              '../../../obs_def/obs_def_cloud_mod.f90'
+    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90',
+   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
+     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
+    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
+   input_files              = '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+                              '../../../observations/forward_operators/obs_def_gps_mod.f90',
+                              '../../../observations/forward_operators/obs_def_QuikSCAT_mod.f90',
+                              '../../../observations/forward_operators/obs_def_AIRS_mod.f90',
+                              '../../../observations/forward_operators/obs_def_cloud_mod.f90'
    /
 
 &obs_kind_nml
@@ -242,24 +236,6 @@
 #   max_copy           = 300.0,
 #
 
-
-&restart_file_tool_nml
-   input_file_name              = "filter_restart",
-   output_file_name             = "filter_updated_restart",
-   ens_size                     = 1,
-   single_restart_file_in       = .true.,
-   single_restart_file_out      = .true.,
-   write_binary_restart_files   = .true.,
-   overwrite_data_time          = .false.,
-   new_data_days                = -1,
-   new_data_secs                = -1,
-   input_is_model_advance_file  = .false.,
-   output_is_model_advance_file = .false.,
-   overwrite_advance_time       = .false.,
-   new_advance_days             = -1,
-   new_advance_secs             = -1,
-   gregorian_cal                = .true.
-   /
 
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:

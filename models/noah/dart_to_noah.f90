@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -67,8 +67,8 @@ integer               :: kday, khour, noah_timestep, output_timestep
 integer               :: forcing_timestep, restart_frequency_seconds
 
 integer :: year,month,day,hour,minute,second
-character(len=obstypelength) :: datestring
-character(len=128)           :: string1,string2,string3
+character(len=32)     :: datestring
+character(len=128)    :: string1,string2,string3
 
 !----------------------------------------------------------------------
 

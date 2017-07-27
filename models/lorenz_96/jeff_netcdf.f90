@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -40,9 +40,9 @@ character(len=256) :: string1, string2
 ! The namelist variables
 !------------------------------------------------------------------
 
-character(len=129)           :: truth_file  = 'True_State.nc'
-character(len=129)           :: prior_file  = 'Prior_Diag.nc'
-character(len=129)           :: poste_file  = 'Posterior_Diag.nc'
+character(len=129)           :: truth_file  = 'true_state.nc'
+character(len=129)           :: prior_file  = 'preassim.nc'
+character(len=129)           :: poste_file  = 'analysis.nc'
 character(len=NF90_MAX_NAME) :: varstring   = 'state'
 logical                      :: verbose     = .TRUE.
 

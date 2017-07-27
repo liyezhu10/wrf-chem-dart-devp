@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -9,9 +9,9 @@ module model_mod
 ! This is a non-divergent barotropic model on the sphere.
 ! use the 2d sphere locations mod to compile
 
-use types_mod, only : r8
+use    types_mod, only : r8
 use location_mod, only : location_type, set_location, get_location
-use kinds_mod, only : KIND_VERTICAL_VORTICITY
+use obs_kind_mod, only : QTY_VERTICAL_VORTICITY
 
 ! FIXME: we don't have these in the repos
 use transforms_mod
@@ -106,7 +106,7 @@ location = set_location(lon(i), lat(j))
 !end do
 
 if (present(var_type)) then
-   var_type = KIND_VERTICAL_VORTICITY  ! FIXME - complex?  U,V velocity? flux?
+   var_type = QTY_VERTICAL_VORTICITY  ! FIXME - complex?  U,V velocity? flux?
 endif
 
 end subroutine get_state_meta_data

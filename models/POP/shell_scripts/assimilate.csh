@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -76,20 +76,6 @@ set OCN_HOUR     = `echo $OCN_DATE[4] / 3600 | bc`
 echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_SECONDS (seconds)"
 echo "valid time of model is $OCN_YEAR $OCN_MONTH $OCN_DAY $OCN_HOUR (hours)"
 
-#-------------------------------------------------------------------------
-# Create temporary working directory for the assimilation and go there
-#-------------------------------------------------------------------------
-
-set temp_dir = assimilate_pop
-echo "temp_dir is $temp_dir"
-
-if ( -d $temp_dir ) then
-   ${REMOVE} $temp_dir/*
-else
-   mkdir -p $temp_dir
-endif
-cd $temp_dir
-
 #-----------------------------------------------------------------------------
 # Get observation sequence file ... or die right away.
 # The observation file names have a time that matches the stopping time of POP.
@@ -125,8 +111,6 @@ endif
 echo "`date` -- END COPY BLOCK"
 
 # If possible, use the round-robin approach to deal out the tasks.
-# Since the ensemble manager is not used by pop_to_dart or dart_to_pop,
-# it is OK to set it here and have it used by all routines.
 
 if ($?TASKS_PER_NODE) then
    if ($#TASKS_PER_NODE > 0) then
@@ -138,36 +122,7 @@ if ($?TASKS_PER_NODE) then
 endif
 
 #=========================================================================
-# Block 2: Stage the files needed for SAMPLING ERROR CORRECTION
-#
-# The sampling error correction is a lookup table.
-# The tables were originally in the DART distribution, but should
-# have been staged to $CASEROOT at setup time.
-# Each ensemble size has its own (static) file.
-# It is only needed if
-# input.nml:&assim_tools_nml:sampling_error_correction = .true.,
-#=========================================================================
-
-set  MYSTRING = `grep sampling_error_correction input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set SECSTRING = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
-
-if ( $SECSTRING == true ) then
-   set SAMP_ERR_FILE = ${CASEROOT}/final_full.${ensemble_size}
-   if (  -e   ${SAMP_ERR_FILE} ) then
-      ${COPY} ${SAMP_ERR_FILE} .
-   else
-      echo "ERROR: no sampling error correction file for this ensemble size."
-      echo "ERROR: looking for ${SAMP_ERR_FILE}"
-      exit -3
-   endif
-else
-   echo "Sampling Error Correction not requested for this assimilation."
-endif
-
-#=========================================================================
-# Block 3: DART INFLATION
+# Block 2: DART INFLATION
 # This stages the files that contain the inflation values.
 # The inflation values change through time and should be archived.
 #
@@ -177,13 +132,6 @@ endif
 # filter_nml
 # inf_flavor                  = 2,                       0,
 # inf_initial_from_restart    = .true.,                  .false.,
-# inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
-# inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
-# inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-#
-# NOTICE: the archiving scripts more or less require the names of these
-# files to be as listed above. When being archived, the filenames get a
-# unique extension (describing the assimilation time) appended to them.
 #
 # The inflation file is essentially a duplicate of the DART model state ...
 # For the purpose of this script, they are the output of a previous assimilation,
@@ -225,26 +173,6 @@ set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
 set  PRIOR_TF = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
 set  POSTE_TF = `echo $MYSTRING[3] | tr '[:upper:]' '[:lower:]'`
 
-# its a little tricky to remove both styles of quotes from the string.
-
-set  MYSTRING = `grep inf_in_file_name input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set  PRIOR_INF_IFNAME = $MYSTRING[2]
-set  POSTE_INF_IFNAME = $MYSTRING[3]
-
-set  MYSTRING = `grep inf_out_file_name input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set  PRIOR_INF_OFNAME = $MYSTRING[2]
-set  POSTE_INF_OFNAME = $MYSTRING[3]
-
-set  MYSTRING = `grep inf_diag_file_name input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set  PRIOR_INF_DIAG = $MYSTRING[2]
-set  POSTE_INF_DIAG = $MYSTRING[3]
-
 # IFF we want PRIOR inflation:
 
 if ( $PRIOR_INF > 0 ) then
@@ -253,7 +181,7 @@ if ( $PRIOR_INF > 0 ) then
       # we are not using an existing inflation file.
       echo "inf_flavor(1) = $PRIOR_INF, using namelist values."
 
-   else if ( -e ../pop_inflation_cookie ) then
+   else if ( -e pop_inflation_cookie ) then
       # We want to use an existing inflation file, but this is
       # the first assimilation so there is no existing inflation
       # file. This is the signal we need to to coerce the namelist
@@ -270,17 +198,34 @@ ex_end
 
    else
       # Look for the output from the previous assimilation
-      (ls -rt1 ../pop_${PRIOR_INF_OFNAME}.* | tail -n 1 >! latestfile) > & /dev/null
+
+      # Checking for a prior inflation file to use
+
+      (ls -rt1 ${CASE}.pop.output_priorinf_mean.* | tail -n 1 >! latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
 
       # If one exists, use it as input for this assimilation
       if ( $nfiles > 0 ) then
          set latest = `cat latestfile`
-         ${LINK} $latest ${PRIOR_INF_IFNAME}
+         ${LINK} $latest input_priorinf_mean.nc
       else
          echo "ERROR: Requested PRIOR inflation but specified no incoming inflation file."
-         echo "ERROR: expected something like ../pop_${PRIOR_INF_OFNAME}.YYYY-MM-DD-SSSSS"
+         echo "ERROR: expected something like ${CASE}.pop.output_priorinf_mean.YYYY-MM-DD-SSSSS.nc"
          exit -4
+      endif
+
+      # Checking for a prior inflation sd file to use
+
+      (ls -rt1 ${CASE}.pop.output_priorinf_sd.* | tail -n 1 >! latestfile) > & /dev/null
+      set nfiles = `cat latestfile | wc -l`
+
+      if ( $nfiles > 0 ) then
+         set latest = `cat latestfile`
+         ${LINK} $latest input_priorinf_sd.nc
+      else
+         echo "ERROR: Requested PRIOR inflation but specified no incoming inflation SD file."
+         echo "ERROR: expected something like ${CASE}.pop.output_priorinf_sd.YYYY-MM-DD-SSSSS.nc"
+         exit 2
       endif
 
    endif
@@ -296,7 +241,7 @@ if ( $POSTE_INF > 0 ) then
       # we are not using an existing inflation file.
       echo "inf_flavor(2) = $POSTE_INF, using namelist values."
 
-   else if ( -e ../pop_inflation_cookie ) then
+   else if ( -e pop_inflation_cookie ) then
       # We want to use an existing inflation file, but this is
       # the first assimilation so there is no existing inflation
       # file. This is the signal we need to to coerce the namelist
@@ -313,97 +258,58 @@ ex_end
 
    else
       # Look for the output from the previous assimilation
-      (ls -rt1 ../pop_${POSTE_INF_OFNAME}.* | tail -n 1 >! latestfile) > & /dev/null
+      # Checking for a posterior inflation file to use
+
+      (ls -rt1 ${CASE}.pop.output_postinf_mean.* | tail -n 1 >! latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
 
-      # If one exists, use it as input for this assimilation
       if ( $nfiles > 0 ) then
          set latest = `cat latestfile`
-         ${LINK} $latest ${POSTE_INF_IFNAME}
+         ${LINK} $latest input_postinf_mean.nc
       else
          echo "ERROR: Requested POSTERIOR inflation but specified no incoming inflation file."
-         echo "ERROR: expected something like ../pop_${POSTE_INF_OFNAME}.YYYY-MM-DD-SSSSS"
+         echo "ERROR: expected something like ${CASE}.pop.output_postinf_mean.YYYY-MM-DD-SSSSS.nc"
          exit -5
       endif
+
+      # Checking for a posterior inflation sd file to use
+
+      (ls -rt1 ${CASE}.pop.output_postinf_sd.* | tail -n 1 >! latestfile) > & /dev/null
+      set nfiles = `cat latestfile | wc -l`
+
+      if ( $nfiles > 0 ) then
+         set latest = `cat latestfile`
+         ${LINK} $latest input_postinf_sd.nc
+      else
+         echo "ERROR: Requested POSTERIOR inflation but specified no incoming inflation SD file."
+         echo "ERROR: expected something like ${CASE}.pop.output_postinf_sd.YYYY-MM-DD-SSSSS.nc"
+         exit 2
+      endif
+
    endif
+
 else
    echo "Posterior Inflation       not requested for this assimilation."
 endif
 
 # Eat the cookie regardless
-${REMOVE} ../pop_inflation_cookie
+${REMOVE} pop_inflation_cookie latestfile
 
 #=========================================================================
-# Block 4: Convert N POP restart files to DART initial condition files.
-# pop_to_dart is serial code, we can do all of these at the same time
-# as long as we can have unique namelists for each of them.
-#
-# At the end of the block, we have DART initial condition files  filter_ics.[1-N]
-# that came from pointer files ../rpointer.ocn_[1-N].restart
-#
-# REQUIRED DART namelist settings:
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-#                        restart_out_file_name   = 'filter_restart'
-# &ensemble_manager_nml: single_restart_file_in  = '.false.'
-# &pop_to_dart_nml:      pop_to_dart_output_file = 'dart_ics',
-# &dart_to_pop_nml:      dart_to_pop_input_file  = 'dart_restart',
-#                        advance_time_present    = .false.
-#=========================================================================
-
-echo "`date` -- BEGIN POP-TO-DART"
-
-set member = 1
-while ( ${member} <= ${ensemble_size} )
-
-   # Each member will do its job in its own directory.
-   # That way, we can do N of them simultaneously -
-
-   set MYTEMPDIR = member_${member}
-   mkdir -p $MYTEMPDIR
-   cd $MYTEMPDIR
-
-   # make sure there are no old output logs hanging around
-   $REMOVE output.${member}.pop_to_dart
-
-   set OCN_RESTART_FILENAME = `printf ${CASE}.pop_%04d.r.${OCN_DATE_EXT}.nc  ${member}`
-   set     OCN_NML_FILENAME = `printf pop2_in_%04d        ${member}`
-   set     DART_IC_FILENAME = `printf filter_ics.%04d     ${member}`
-   set    DART_RESTART_FILE = `printf filter_restart.%04d ${member}`
-
-   sed -e "s#dart_ics#../${DART_IC_FILENAME}#" \
-       -e "s#dart_restart#../${DART_RESTART_FILE}#" < ../input.nml >! input.nml
-
-   ${LINK} ../../$OCN_RESTART_FILENAME pop.r.nc
-   ${LINK} ../../$OCN_NML_FILENAME     pop_in
-
-   echo "starting pop_to_dart for member ${member} at "`date`
-   ${EXEROOT}/pop_to_dart >! output.${member}.pop_to_dart &
-
-   cd ..
-
-   @ member++
-end
-
-wait
-
-set nsuccess = `fgrep 'Finished ... at YYYY' member*/output.[0-9]*.pop_to_dart | wc -l`
-if (${nsuccess} != ${ensemble_size}) then
-   echo "ERROR ... DART died in 'pop_to_dart' ... ERROR"
-   echo "ERROR ... DART died in 'pop_to_dart' ... ERROR"
-   exit -6
-endif
-
-echo "`date` -- END POP-TO-DART for all ${ensemble_size} members."
-
-#=========================================================================
-# Block 5: Actually run the assimilation.
-# Will result in a set of files : 'filter_restart.xxxx'
+# Block 3: Actually run the assimilation. 
+# WARNING: this version just overwrites the input - no ability to recover
 #
 # DART namelist settings required:
-# &filter_nml:           async                   = 0,
-# &filter_nml:           adv_ens_command         = "no_CESM_advance_script",
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-# &filter_nml:           restart_out_file_name   = 'filter_restart'
+# &filter_nml:           async                    = 0,
+# &filter_nml:           adv_ens_command          = "no_CESM_advance_script",
+# &filter_nml:           input_state_file_list    = "restarts_in.txt"
+# &filter_nml:           output_state_file_list   = "restarts_out.txt"
+# &filter_nml:           stages_to_write          = 'preassim', 'output'
+# &filter_nml:           output_restarts          = .true.
+# &filter_nml:           output_mean              = .true.
+# &filter_nml:           output_sd                = .true.
+# &filter_nml:           write_all_stages_at_end  = .true.
+#
 # &filter_nml:           obs_sequence_in_name    = 'obs_seq.out'
 # &filter_nml:           obs_sequence_out_name   = 'obs_seq.final'
 # &filter_nml:           init_time_days          = -1,
@@ -417,13 +323,22 @@ echo "`date` -- END POP-TO-DART for all ${ensemble_size} members."
 #
 #=========================================================================
 
+${REMOVE} restarts_in.txt restarts_out.txt
+
+foreach FILE ( rpointer.ocn_????.restart )
+   head -n 1 ${FILE} >> restarts_in.txt
+end
+
+# WARNING: this is the part where the files just get overwritten
+${COPY} restarts_in.txt restarts_out.txt
+
 # POP always needs a pop_in and a pop.r.nc to start.
 # Lots of ways to get the filename
 
-set OCN_RESTART_FILENAME = `head -n 1 ../rpointer.ocn_0001.restart`
+set OCN_RESTART_FILENAME = `head -n 1 rpointer.ocn_0001.restart`
 
-${LINK} ../$OCN_RESTART_FILENAME pop.r.nc
-${LINK} ../pop2_in_0001          pop_in
+${LINK} $OCN_RESTART_FILENAME pop.r.nc
+${LINK} pop2_in_0001          pop_in
 
 # On yellowstone, you can explore task layouts with the following:
 if ( $?LSB_PJL_TASK_GEOMETRY ) then
@@ -442,61 +357,31 @@ if ( $?LSB_PJL_TASK_GEOMETRY ) then
    setenv LSB_PJL_TASK_GEOMETRY "${ORIGINAL_LAYOUT}"
 endif
 
-${MOVE} Prior_Diag.nc      ../pop_Prior_Diag.${OCN_DATE_EXT}.nc
-${MOVE} Posterior_Diag.nc  ../pop_Posterior_Diag.${OCN_DATE_EXT}.nc
-${MOVE} obs_seq.final      ../pop_obs_seq.${OCN_DATE_EXT}.final
-${MOVE} dart_log.out       ../pop_dart_log.${OCN_DATE_EXT}.out
+#========================================================================
+# Block 4: Tag the output with the valid time of the model state
+#=========================================================================
 
-# Accomodate any possible inflation files
-# 1) rename file to reflect current date
-# 2) move to RUNDIR so the DART INFLATION BLOCK works next time and
-#    that they can get archived.
+foreach FILE ( preassim_mean.nc           preassim_sd.nc \
+               preassim_priorinf_mean.nc  preassim_priorinf_sd.nc \
+               preassim_postinf_mean.nc   preassim_postinf_sd.nc \
+               postassim_mean.nc          postassim_sd.nc \
+               postassim_priorinf_mean.nc postassim_priorinf_sd.nc \
+               postassim_postinf_mean.nc  postassim_postinf_sd.nc \
+               output_mean.nc             output_sd.nc \
+               output_priorinf_mean.nc    output_priorinf_sd.nc \
+               output_postinf_mean.nc     output_postinf_sd.nc )
 
-foreach FILE ( ${PRIOR_INF_OFNAME} ${POSTE_INF_OFNAME} ${PRIOR_INF_DIAG} ${POSTE_INF_DIAG} )
-   if ( -e ${FILE} ) then
-      ${MOVE} ${FILE} ../pop_${FILE}.${OCN_DATE_EXT}
-   else
-      echo "No ${FILE} for ${OCN_DATE_EXT}"
+   if ( -e $FILE ) then
+      set FBASE = $FILE:r
+      set FEXT = $FILE:e
+      ${MOVE} ${FILE} ${CASE}.pop.${FBASE}.${OCN_DATE_EXT}.${FEXT}
    endif
 end
 
-#=========================================================================
-# Block 6: Update the POP restart files ... simultaneously ...
-#
-# Each member will do its job in its own directory, which already exists
-# and has the required input files remaining from 'Block 4'
-#=========================================================================
+# Tag the observation file and run-time output
 
-echo "`date` -- BEGIN DART-TO-POP"
-set member = 1
-while ( $member <= $ensemble_size )
-
-   cd member_${member}
-
-   ${REMOVE} output.${member}.dart_to_pop
-
-   echo "starting dart_to_pop for member ${member} at "`date`
-   ${EXEROOT}/dart_to_pop >! output.${member}.dart_to_pop &
-
-   cd ..
-
-   @ member++
-end
-
-wait
-
-set nsuccess = `fgrep 'Finished ... at YYYY' member*/output.[0-9]*.dart_to_pop | wc -l`
-if (${nsuccess} != ${ensemble_size}) then
-   echo "ERROR ... DART died in 'dart_to_pop' ... ERROR"
-   echo "ERROR ... DART died in 'dart_to_pop' ... ERROR"
-   exit -8
-endif
-
-echo "`date` -- END DART-TO-POP for all ${ensemble_size} members."
-
-#-------------------------------------------------------------------------
-# Cleanup
-#-------------------------------------------------------------------------
+${MOVE} obs_seq.final   ${CASE}.pop.obs_seq.final.${OCN_DATE_EXT}
+${MOVE} dart_log.out    ${CASE}.pop.dart_log.${OCN_DATE_EXT}.out
 
 echo "`date` -- END POP_ASSIMILATE"
 

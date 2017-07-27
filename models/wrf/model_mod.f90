@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -44,49 +44,49 @@ use  time_manager_mod,   only : time_type, set_time, set_calendar_type, GREGORIA
                                 set_date, get_date
 
 use      location_mod,   only : location_type, get_location, set_location, &
-                                horiz_dist_only,                                  &
-                                LocationDims, LocationName, LocationLName, &
-                                query_location, vert_is_undef, vert_is_surface, &
-                                vert_is_level, vert_is_pressure, vert_is_height, &
-                                vert_is_scale_height, VERTISUNDEF, VERTISSURFACE, &
+                                query_location, VERTISUNDEF, VERTISSURFACE, &
                                 VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
-                                VERTISSCALEHEIGHT, &
-                                get_close_type, get_dist, get_close_maxdist_init, &
-                                get_close_obs_init, loc_get_close_obs => get_close_obs
+                                VERTISSCALEHEIGHT, vertical_localization_on, &
+                                set_vertical_localization_coord, &
+                                get_close_type, get_dist, is_vertical, &
+                                loc_get_close => get_close_obs
 
 use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 register_module, error_handler, E_ERR, E_WARN, &
-                                E_MSG, nmlfileunit, do_output, nc_check, &
+                                E_MSG, nmlfileunit, do_output, &
                                 find_namelist_in_file, check_namelist_read, &
                                 find_textfile_dims, file_to_text, &
                                 do_nml_file, do_nml_term, scalar
+
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
+                                 nc_add_global_creation_time, nc_redef, nc_enddef
 
 use  mpi_utilities_mod,  only : my_task_id, task_count
 
 use     random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
 
-use      obs_kind_mod,   only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                                KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, &
-                                KIND_SPECIFIC_HUMIDITY, KIND_SURFACE_ELEVATION, &
-                                KIND_PRESSURE, KIND_VERTICAL_VELOCITY, &
-                                KIND_DENSITY, KIND_FLASH_RATE_2D, &
-                                KIND_RAINWATER_MIXING_RATIO, KIND_HAIL_MIXING_RATIO, &
-                                KIND_GRAUPEL_MIXING_RATIO, KIND_SNOW_MIXING_RATIO, &
-                                KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE, &
-                                KIND_CONDENSATIONAL_HEATING, KIND_VAPOR_MIXING_RATIO, &
-                                KIND_ICE_NUMBER_CONCENTRATION, KIND_GEOPOTENTIAL_HEIGHT, &
-                                KIND_POTENTIAL_TEMPERATURE, KIND_SOIL_MOISTURE, &
-                                KIND_DROPLET_NUMBER_CONCENTR, KIND_SNOW_NUMBER_CONCENTR, &
-                                KIND_RAIN_NUMBER_CONCENTR, KIND_GRAUPEL_NUMBER_CONCENTR, &
-                                KIND_HAIL_NUMBER_CONCENTR, KIND_HAIL_VOLUME, &
-                                KIND_GRAUPEL_VOLUME, KIND_DIFFERENTIAL_REFLECTIVITY, &
-                                KIND_RADAR_REFLECTIVITY, KIND_POWER_WEIGHTED_FALL_SPEED, &
-                                KIND_SPECIFIC_DIFFERENTIAL_PHASE, &
-                                KIND_VORTEX_LAT, KIND_VORTEX_LON, &
-                                KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
-                                KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
-                                get_raw_obs_kind_index, get_num_raw_obs_kinds, &
-                                get_raw_obs_kind_name
+use      obs_kind_mod,   only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
+                                QTY_SURFACE_PRESSURE, QTY_TEMPERATURE, &
+                                QTY_SPECIFIC_HUMIDITY, QTY_SURFACE_ELEVATION, &
+                                QTY_PRESSURE, QTY_VERTICAL_VELOCITY, &
+                                QTY_DENSITY, QTY_FLASH_RATE_2D, &
+                                QTY_RAINWATER_MIXING_RATIO, QTY_HAIL_MIXING_RATIO, &
+                                QTY_GRAUPEL_MIXING_RATIO, QTY_SNOW_MIXING_RATIO, &
+                                QTY_CLOUD_LIQUID_WATER, QTY_CLOUD_ICE, &
+                                QTY_CONDENSATIONAL_HEATING, QTY_VAPOR_MIXING_RATIO, &
+                                QTY_ICE_NUMBER_CONCENTRATION, QTY_GEOPOTENTIAL_HEIGHT, &
+                                QTY_POTENTIAL_TEMPERATURE, QTY_SOIL_MOISTURE, &
+                                QTY_DROPLET_NUMBER_CONCENTR, QTY_SNOW_NUMBER_CONCENTR, &
+                                QTY_RAIN_NUMBER_CONCENTR, QTY_GRAUPEL_NUMBER_CONCENTR, &
+                                QTY_HAIL_NUMBER_CONCENTR, QTY_HAIL_VOLUME, &
+                                QTY_GRAUPEL_VOLUME, QTY_DIFFERENTIAL_REFLECTIVITY, &
+                                QTY_RADAR_REFLECTIVITY, QTY_POWER_WEIGHTED_FALL_SPEED, &
+                                QTY_SPECIFIC_DIFFERENTIAL_PHASE, &
+                                QTY_VORTEX_LAT, QTY_VORTEX_LON, &
+                                QTY_VORTEX_PMIN, QTY_VORTEX_WMAX, &
+                                QTY_SKIN_TEMPERATURE, QTY_LANDMASK, &
+                                get_index_for_quantity, get_num_quantities, &
+                                get_name_for_quantity
 
 !HK should model_mod know about the number of copies?
 use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_var_owner_index, &
@@ -96,6 +96,8 @@ use sort_mod,              only : sort
 
 use distributed_state_mod, only : get_state
 
+use default_model_mod,   only : adv_1step, init_conditions, init_time, nc_write_model_vars
+
 use state_structure_mod, only : add_domain, get_model_variable_indices, &
                                 state_structure_info, &
                                 get_index_start, get_index_end, &
@@ -104,11 +106,11 @@ use state_structure_mod, only : add_domain, get_model_variable_indices, &
 use mpi_utilities_mod,   only : all_reduce_min_max
 
 ! FIXME:
-! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
-! and kind KIND_CLOUD_ICE should be KIND_ICE_MIXING_RATIO, but for backwards
+! the kinds QTY_CLOUD_LIQUID_WATER should be QTY_CLOUDWATER_MIXING_RATIO, 
+! and kind QTY_CLOUD_ICE should be QTY_ICE_MIXING_RATIO, but for backwards
 ! compatibility with other models, they remain as is for now.  at the next
 ! major dart release, the names will be made consistent.
-! ditto KIND_ICE_NUMBER_CONCENTRATION, which should be KIND_ICE_NUMBER_CONCENTR
+! ditto QTY_ICE_NUMBER_CONCENTRATION, which should be QTY_ICE_NUMBER_CONCENTR
 ! to be consistent with the other concentration names.
 
 !nc -- module_map_utils split the declarations of PROJ_* into a separate module called
@@ -127,33 +129,30 @@ private
 
 
 !-----
-! DART requires 16 specific public interfaces from model_mod.f90 -- Note
-!   that the last four are simply "stubs" since WRF currently requires use
-!   of system called shell scripts to advance the model.
+! DART requires 18 specific public interfaces from model_mod.f90 
 
+! routines with code in this module
 public ::  get_model_size,                &
            get_state_meta_data,           &
-           get_model_time_step,           &
+           shortest_time_between_assimilations, &
            static_init_model,             &
-           pert_model_copies,             &
-           nc_write_model_atts,           &
-           nc_write_model_vars,           &
-           get_close_obs,                 &
-           get_close_maxdist_init,        &
-           get_close_obs_init,            &
            model_interpolate,             &
-           vert_convert,                  &
-           query_vert_localization_coord, &
-           construct_file_name_in,        &
+           nc_write_model_atts,           &
+           get_close_obs,                 &
+           get_close_state,               &
+           convert_vertical_obs,          &
+           convert_vertical_state,        &
+           pert_model_copies,             &
            read_model_time,               &
-           write_model_time
+           write_model_time,              &
+           end_model
 
 
-!  public stubs 
-public ::  adv_1step,       &
-           end_model,       &
-           init_time,       &
-           init_conditions
+! required routines where the code is in another module
+public ::  adv_1step,          &
+           init_time,          &
+           init_conditions,    &
+           nc_write_model_vars
 
 !-----
 ! Here is the appropriate place for other users to make additional routines
@@ -172,9 +171,8 @@ public ::  get_number_domains,          &
            get_variable_bounds,         &
            set_variable_bound_defaults, &
            get_variable_size_from_file, &
-           trans_3Dto1D, trans_1Dto3D,  &
-           trans_2Dto1D, trans_1Dto2D,  &
            get_wrf_date, set_wrf_date,  &
+           vert_convert,                &
            height_diff_check
 
 ! public parameters
@@ -255,7 +253,7 @@ character(len = 72) :: adv_mod_command = ''
 ! are IGNORED no matter what their settings in the namelist are.
 ! they are obsolete, but removing them here will cause a fatal error
 ! until users remove them from their input.nml files as well.
-namelist /model_nml/ output_state_vector, num_moist_vars, &
+namelist /model_nml/ num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, wrf_state_variables, &
                      wrf_state_bounds, sfc_elev_max_diff, &
@@ -435,18 +433,10 @@ endif
 ! helpful error message if not).
 !---------------------------
 
-num_obs_kinds = get_num_raw_obs_kinds()
+num_obs_kinds = get_num_quantities()
 allocate(in_state_vector(num_obs_kinds))
 call fill_dart_kinds_table(wrf_state_variables, in_state_vector)
 
-
-if ( debug ) then
-   if ( output_state_vector ) then
-      write(*,*)'netcdf file in state vector format'
-   else
-      write(*,*)'netcdf file in prognostic vector format'
-   endif
-endif
 
 ! set calendar type
 call set_calendar_type(calendar_type)
@@ -582,7 +572,7 @@ WRFDomains : do id=1,num_domains
       my_index =  wrf%dom(id)%var_index_list(ind)
 
       wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
-      wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
+      wrf%dom(id)%dart_kind(ind) = get_index_for_quantity(trim(wrf_state_variables(2,my_index)))
 
       if ( debug ) then
          print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
@@ -747,9 +737,10 @@ WRFDomains : do id=1,num_domains
    ! add domain - not doing anything with domain_id yet so just overwriting it
    domain_id(id) = add_domain( 'wrfinput_d0'//idom, &
                            wrf%dom(id)%number_of_wrf_variables, &
-                           var_names  = netcdf_variable_names(1:wrf%dom(id)%number_of_wrf_variables), &
-                           clamp_vals = var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,:) )
-                          
+                           var_names   = netcdf_variable_names(1:wrf%dom(id)%number_of_wrf_variables), &
+                           clamp_vals  = var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,:), &
+                           update_list = var_update_list(1:wrf%dom(id)%number_of_wrf_variables) )
+
    if (debug) call state_structure_info(domain_id(id))
 
 enddo WRFDomains 
@@ -757,6 +748,9 @@ enddo WRFDomains
 wrf%model_size = dart_index - 1
 write(errstring,*) ' wrf model size is ',wrf%model_size
 call error_handler(E_MSG, 'static_init_model', errstring)
+
+! tell the location module how we want to localize in the vertical
+call set_vertical_localization_coord(vert_localization_coord)
 
 end subroutine static_init_model
 
@@ -787,7 +781,7 @@ end function get_wrf_domain
 
 function get_model_size()
 
-integer :: get_model_size
+integer(i8) :: get_model_size
 
 get_model_size = wrf%model_size
 
@@ -828,18 +822,9 @@ end subroutine get_wrf_state_variables
 
 !#######################################################################
 
-function get_model_time_step()
-!------------------------------------------------------------------------
-! function get_model_time_step()
-!
-! Returns the time step of the model. In the long run should be replaced
-! by a more general routine that returns details of a general time-stepping
-! capability.
-!
-! toward that end ... we are now reading a namelist variable for the
-! width of the assimilation time window.
+function shortest_time_between_assimilations()
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 integer :: model_dt, assim_dt
 
 ! We need to coordinate the desired assimilation window to be a 
@@ -850,15 +835,15 @@ model_dt = nint(wrf%dom(1)%dt)
 ! The integer arithmetic does its magic.
 assim_dt = (assimilation_period_seconds / model_dt) * model_dt
 
-get_model_time_step = set_time(assim_dt)
+shortest_time_between_assimilations = set_time(assim_dt)
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
 
 !#######################################################################
 
 
-subroutine get_state_meta_data(state_handle, index_in, location, var_type_out, id_out)
+subroutine get_state_meta_data(index_in, location, var_type_out, id_out)
 
 ! Given an integer index into the DART state vector structure, returns the
 ! associated location. This is not a function because the more general
@@ -868,7 +853,6 @@ subroutine get_state_meta_data(state_handle, index_in, location, var_type_out, i
 ! this version has an optional last argument that is never called by
 ! any of the dart code, which can return the wrf domain number.
 
-type(ensemble_type), intent(in)  :: state_handle
 integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type_out, id_out
@@ -901,34 +885,16 @@ dart_type = wrf%dom(id)%dart_kind(var_id)
 ! first obtain lat/lon from (ip,jp)
 call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
 
-!HK Not doing this conversion for now in the distributed version. Doing it on demand in 
-!  vert_convert - NOPE I think that this is really slow, because each step in the sequential
-!  obs do loop is limited by the slowest processor doing vertical conversion. It makes
-!  more sense for everyone to blast through all their pieces of state. Idea: overlap this
-!  with task 0 writing the diagnostic files. 
-
-! now convert to desired vertical coordinate (defined in the namelist)
-if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
-   ! here we need level index of mass grid
-   if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
-      lev = real(kp) - 0.5_r8
-   else
-      lev = real(kp)
-   endif
-elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
-   ! directly convert to pressure
-   lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
-elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
-   lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
-elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
-   lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
-              model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
+! return staggered levels for vertical types?  check this later.
+if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+  lev = real(kp) - 0.5_r8
+else
+  lev = real(kp)
 endif
 
 if(debug) write(*,*) 'lon, lat, lev: ',lon, lat, lev
 
-! convert to DART location type
-location = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
+location = set_location(lon, lat, lev, VERTISLEVEL)
 
 ! return DART variable kind if requested
 if(present(var_type_out)) var_type_out = dart_type
@@ -1084,7 +1050,7 @@ else
    ! Is this a valid kind to interpolate?  Set up in the static_init_model code,
    ! based on entries in wrf_state_vector namelist item.
    if (.not. in_state_vector(obs_kind)) then
-      write(errstring, *) 'cannot interpolate ' // trim(get_raw_obs_kind_name(obs_kind)) &
+      write(errstring, *) 'cannot interpolate ' // trim(get_name_for_quantity(obs_kind)) &
                            // ' with the current WRF arrays in state vector'
       call error_handler(E_ERR, 'model_interpolate', errstring, &
                                  source, revision, revdate)
@@ -1161,8 +1127,8 @@ else
    ! 0.b Vertical stuff
 
    if ( debug ) then
-      write(*,*) 'vert_is_pressure ',vert_is_pressure(location)
-      write(*,*) 'vert_is_height ',vert_is_height(location)
+      write(*,*) 'is_vertical(PRESSURE) ',is_vertical(location,"PRESSURE")
+      write(*,*) 'is_vertical(HEIGHT) ',is_vertical(location,"HEIGHT")
    endif
 
    ! HK
@@ -1175,11 +1141,11 @@ else
    ! Determine corresponding model level for obs location
    ! This depends on the obs vertical coordinate
    !   From this we get a meaningful z-direction real-valued index number
-   if(vert_is_level(location)) then
+   if(is_vertical(location,"LEVEL")) then
       ! Ob is by model level
       zloc = xyz_loc(3)
 
-   elseif(vert_is_pressure(location)) then
+   elseif(is_vertical(location,"PRESSURE")) then
       ! Ob is by pressure: get corresponding mass level zloc from
       ! computed column pressure profile
       call get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_p,state_handle, ens_size)
@@ -1193,7 +1159,7 @@ else
 
       ! get pressure vertical co-ordinate
       call pres_to_zk_distrib(xyz_loc(3), v_p, wrf%dom(id)%bt, ens_size, zloc,is_lev0)
-      if(debug .and. obs_kind /= KIND_SURFACE_PRESSURE) &
+      if(debug .and. obs_kind /= QTY_SURFACE_PRESSURE) &
                 print*,' obs is by pressure and zloc,lev0 =',zloc, is_lev0
       if(debug) print*,'model pressure profile'
       if(debug) print*,v_p
@@ -1220,7 +1186,7 @@ else
 
       enddo
 
-   elseif(vert_is_height(location)) then
+   elseif(is_vertical(location,"HEIGHT")) then
 
       ! Ob is by height: get corresponding mass level zloc from
       ! computed column height profile
@@ -1248,7 +1214,7 @@ else
 
       enddo
 
-   elseif(vert_is_surface(location)) then
+   elseif(is_vertical(location,"SURFACE")) then
       zloc = 1.0_r8
       surf_var = .true.
       if(debug) print*,' obs is at the surface = ', xyz_loc(3)
@@ -1289,7 +1255,7 @@ else
          if ( .not. height_diff_check(sfc_elev_max_diff,xyz_loc(3),mod_sfc_elevation) ) zloc = missing_r8
       endif
 
-   elseif(vert_is_undef(location)) then
+   elseif(is_vertical(location,"UNDEFINED")) then
       ! the zloc value should not be used since there is no actual vertical
       ! location for this observation, but give zloc a valid value to avoid
       ! the error checks below for missing_r8
@@ -1412,41 +1378,41 @@ else
    !     at the following forward operator code.  Hence, we can remove the call to 
    !     vert_is_surface.
 
-   if (obs_kind == KIND_RAINWATER_MIXING_RATIO .or. & 
-       obs_kind == KIND_GRAUPEL_MIXING_RATIO .or. &
-       obs_kind == KIND_HAIL_MIXING_RATIO .or. &
-       obs_kind == KIND_SNOW_MIXING_RATIO .or. &
-       obs_kind == KIND_CLOUD_ICE .or. &
-       obs_kind == KIND_CLOUD_LIQUID_WATER .or. &
-       obs_kind == KIND_DROPLET_NUMBER_CONCENTR .or. &
-       obs_kind == KIND_ICE_NUMBER_CONCENTRATION .or. &
-       obs_kind == KIND_SNOW_NUMBER_CONCENTR .or. &
-       obs_kind == KIND_RAIN_NUMBER_CONCENTR .or. &
-       obs_kind == KIND_GRAUPEL_NUMBER_CONCENTR .or. &
-       obs_kind == KIND_HAIL_NUMBER_CONCENTR .or. &
-       obs_kind == KIND_CONDENSATIONAL_HEATING .or. &
-       obs_kind == KIND_POWER_WEIGHTED_FALL_SPEED .or. &
-       obs_kind == KIND_RADAR_REFLECTIVITY .or. &
-       obs_kind == KIND_DIFFERENTIAL_REFLECTIVITY .or. &
-       obs_kind == KIND_SPECIFIC_DIFFERENTIAL_PHASE ) then
+   if (obs_kind == QTY_RAINWATER_MIXING_RATIO .or. & 
+       obs_kind == QTY_GRAUPEL_MIXING_RATIO .or. &
+       obs_kind == QTY_HAIL_MIXING_RATIO .or. &
+       obs_kind == QTY_SNOW_MIXING_RATIO .or. &
+       obs_kind == QTY_CLOUD_ICE .or. &
+       obs_kind == QTY_CLOUD_LIQUID_WATER .or. &
+       obs_kind == QTY_DROPLET_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_ICE_NUMBER_CONCENTRATION .or. &
+       obs_kind == QTY_SNOW_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_RAIN_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_HAIL_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_CONDENSATIONAL_HEATING .or. &
+       obs_kind == QTY_POWER_WEIGHTED_FALL_SPEED .or. &
+       obs_kind == QTY_RADAR_REFLECTIVITY .or. &
+       obs_kind == QTY_DIFFERENTIAL_REFLECTIVITY .or. &
+       obs_kind == QTY_SPECIFIC_DIFFERENTIAL_PHASE ) then
 
        call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle)
        if (all(fld == missing_r8)) goto 200
       
 
       ! don't accept negative fld
-      if (obs_kind == KIND_RAINWATER_MIXING_RATIO .or. &
-          obs_kind == KIND_GRAUPEL_MIXING_RATIO .or. &
-          obs_kind == KIND_HAIL_MIXING_RATIO .or. &
-          obs_kind == KIND_SNOW_MIXING_RATIO .or. &
-          obs_kind == KIND_CLOUD_ICE .or. &
-          obs_kind == KIND_CLOUD_LIQUID_WATER .or. &
-          obs_kind == KIND_DROPLET_NUMBER_CONCENTR .or. &
-          obs_kind == KIND_ICE_NUMBER_CONCENTRATION .or. &
-          obs_kind == KIND_SNOW_NUMBER_CONCENTR .or. &
-          obs_kind == KIND_RAIN_NUMBER_CONCENTR .or. &
-          obs_kind == KIND_GRAUPEL_NUMBER_CONCENTR .or. &
-          obs_kind == KIND_HAIL_NUMBER_CONCENTR ) then
+      if (obs_kind == QTY_RAINWATER_MIXING_RATIO .or. &
+          obs_kind == QTY_GRAUPEL_MIXING_RATIO .or. &
+          obs_kind == QTY_HAIL_MIXING_RATIO .or. &
+          obs_kind == QTY_SNOW_MIXING_RATIO .or. &
+          obs_kind == QTY_CLOUD_ICE .or. &
+          obs_kind == QTY_CLOUD_LIQUID_WATER .or. &
+          obs_kind == QTY_DROPLET_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_ICE_NUMBER_CONCENTRATION .or. &
+          obs_kind == QTY_SNOW_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_RAIN_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_HAIL_NUMBER_CONCENTR ) then
 
           fld = max(0.0_r8, fld) ! Don't accept negative
 
@@ -1457,7 +1423,7 @@ else
 
    ! We need one case structure for both U & V because they comprise a vector which could need
    !   transformation depending on the map projection (hence, the call to gridwind_to_truewind)
-   elseif( obs_kind == KIND_U_WIND_COMPONENT .or. obs_kind == KIND_V_WIND_COMPONENT) then   ! U, V
+   elseif( obs_kind == QTY_U_WIND_COMPONENT .or. obs_kind == QTY_V_WIND_COMPONENT) then   ! U, V
 
      ! This is for 3D wind fields -- surface winds later
       if(.not. surf_var) then
@@ -1547,7 +1513,7 @@ else
                               ! Figure out which field was the actual desired observation and store that
                               !   field as one of the two elements of "fld" (the other element is the other
                               !   k-level)
-                              if( obs_kind == KIND_U_WIND_COMPONENT) then
+                              if( obs_kind == QTY_U_WIND_COMPONENT) then
                                  fld(k2, e) = utrue(e)
                               else   ! must want v
                                  fld(k2, e) = vtrue(e)
@@ -1612,7 +1578,7 @@ else
                        utrue(e), vtrue(e))
 
                   ! U10 (U at 10 meters)
-                  if( obs_kind == KIND_U_WIND_COMPONENT) then
+                  if( obs_kind == QTY_U_WIND_COMPONENT) then
                      fld(1, e) = utrue(e)
                   ! V10 (V at 10 meters)
                   else
@@ -1629,7 +1595,7 @@ else
    !-----------------------------------------------------
    ! 1.b Sensible Temperature (T, T2)
 
-   elseif ( obs_kind == KIND_TEMPERATURE ) then
+   elseif ( obs_kind == QTY_TEMPERATURE ) then
       ! This is for 3D temperature field -- surface temps later
       !print*, 'k ', k
 
@@ -1725,7 +1691,7 @@ else
 
    ! Note:  T is perturbation potential temperature (potential temperature - ts0)
    !   TH2 is potential temperature at 2 m
-   elseif ( obs_kind == KIND_POTENTIAL_TEMPERATURE ) then
+   elseif ( obs_kind == QTY_POTENTIAL_TEMPERATURE ) then
       ! This is for 3D potential temperature field -- surface pot temps later
       if(.not. surf_var) then
 
@@ -1792,7 +1758,7 @@ else
 
    !-----------------------------------------------------
    ! 1.d Density (Rho)
-   elseif (obs_kind == KIND_DENSITY) then
+   elseif (obs_kind == QTY_DENSITY) then
 
       do uk = 1, count ! for the different ks
 
@@ -1843,20 +1809,40 @@ else
    !-----------------------------------------------------
    ! 1.e Vertical Wind (W)
 
-   elseif ( obs_kind == KIND_VERTICAL_VELOCITY ) then
+   elseif ( obs_kind == QTY_VERTICAL_VELOCITY ) then
 
       ! Adjust zloc for staggered ZNW grid (or W-grid, as compared to ZNU or M-grid)
       zloc = zloc + 0.5_r8
       k = max(1,int(zloc))  !> @todo what should you do with this?
 
-     call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle )
-     if (all(fld == missing_r8)) goto 200
+      deallocate(uniquek)
+
+      ! Re-find the unique k values
+      ksort = sort(k)
+   
+      count = 1
+      do e = 2, ens_size
+          if ( ksort(e) /= ksort(e-1) ) count = count + 1
+      enddo
+   
+      allocate(uniquek(count))
+    
+      uk = 1
+      do e = 1, ens_size
+         if ( all(uniquek /= k(e)) ) then
+            uniquek(uk) = k(e)
+            uk = uk + 1
+         endif
+      enddo
+
+      call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle )
+      if (all(fld == missing_r8)) goto 200
 
     !-----------------------------------------------------
    ! 1.f Specific Humidity (SH, SH2)
    ! Look at me
    ! Convert water vapor mixing ratio to specific humidity:
-   else if( obs_kind == KIND_SPECIFIC_HUMIDITY ) then
+   else if( obs_kind == QTY_SPECIFIC_HUMIDITY ) then
 
       ! This is for 3D specific humidity -- surface spec humidity later
       if(.not. surf_var) then
@@ -1950,7 +1936,7 @@ else
 
    !-----------------------------------------------------
    ! 1.g Vapor Mixing Ratio (QV, Q2)  
-   else if( obs_kind == KIND_VAPOR_MIXING_RATIO ) then
+   else if( obs_kind == QTY_VAPOR_MIXING_RATIO ) then
 
       ! This is for 3D vapor mixing ratio -- surface QV later
       if(.not. surf_var) then
@@ -1970,7 +1956,7 @@ else
 
    !-----------------------------------------------------
    ! 1.t Pressure (P)
-   else if( obs_kind == KIND_PRESSURE .or. obs_kind == KIND_SURFACE_PRESSURE ) then
+   else if( obs_kind == QTY_PRESSURE .or. obs_kind == QTY_SURFACE_PRESSURE ) then
             ! This is for the 3D pressure field -- surface pressure later
       if(.not. surf_var) then
 
@@ -2062,8 +2048,8 @@ else
 
    !-----------------------------------------------------
    ! 1.u Vortex Center Stuff from Yongsheng
-   else if ( obs_kind == KIND_VORTEX_LAT  .or. obs_kind == KIND_VORTEX_LON .or. &
-             obs_kind == KIND_VORTEX_PMIN .or. obs_kind == KIND_VORTEX_WMAX ) then
+   else if ( obs_kind == QTY_VORTEX_LAT  .or. obs_kind == QTY_VORTEX_LON .or. &
+             obs_kind == QTY_VORTEX_PMIN .or. obs_kind == QTY_VORTEX_WMAX ) then
 
       do uk = 1, count ! for the different ks
 
@@ -2099,8 +2085,8 @@ else
 
          endif 
 
-         if ( obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON .or. &
-              obs_kind == KIND_VORTEX_PMIN ) then
+         if ( obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON .or. &
+              obs_kind == QTY_VORTEX_PMIN ) then
 
             !!   define spline interpolation box dimensions
             xlen = center_track_xmax - center_track_xmin + 1
@@ -2127,7 +2113,7 @@ else
 
          endif
 
-         if ( (obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON) .and. (.not. use_old_vortex) ) then
+         if ( (obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON) .and. (.not. use_old_vortex) ) then
 
             !  determine window that one would need wind components, thus circulation
             circ_half_size   = nint(circulation_radius/wrf%dom(id)%dx)
@@ -2366,7 +2352,7 @@ else
 
             call ij_to_latlon(wrf%dom(id)%proj, cxloc, cyloc, clat, clon)
 
-            if ( obs_kind == KIND_VORTEX_LAT ) then
+            if ( obs_kind == QTY_VORTEX_LAT ) then
                do e = 1, ens_size
                   if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
                      fld(1, e) = clat
@@ -2387,8 +2373,8 @@ else
             deallocate(uwnd, vwnd, vort, z1d)
             deallocate(vfld, pd, pp, x1d, y1d, xx1d, yy1d)
 
-         else if ( obs_kind == KIND_VORTEX_PMIN .or. (use_old_vortex .and. & 
-                  (obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON)) ) then
+         else if ( obs_kind == QTY_VORTEX_PMIN .or. (use_old_vortex .and. & 
+                  (obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON)) ) then
 
             allocate(p1d(wrf%dom(id)%bt, ens_size),  t1d(wrf%dom(id)%bt, ens_size))
             allocate(qv1d(wrf%dom(id)%bt, ens_size), z1d(wrf%dom(id)%bt, ens_size))
@@ -2490,9 +2476,9 @@ else
 
                         call ij_to_latlon(wrf%dom(id)%proj, cxloc, cyloc, clat, clon)
 
-                        if ( obs_kind == KIND_VORTEX_PMIN ) then
+                        if ( obs_kind == QTY_VORTEX_PMIN ) then
                            fld(1, e) = vcrit
-                        else if ( obs_kind == KIND_VORTEX_LAT ) then
+                        else if ( obs_kind == QTY_VORTEX_LAT ) then
                            fld(1, e) = clat
                         else
                            fld(1, e) = clon
@@ -2510,7 +2496,7 @@ else
             deallocate(vfld, pd, pp, x1d, y1d, xx1d, yy1d)
             if (all(fld == missing_r8)) goto 200
 
-         else if ( obs_kind == KIND_VORTEX_WMAX ) then   !  Maximum wind speed
+         else if ( obs_kind == QTY_VORTEX_WMAX ) then   !  Maximum wind speed
 
             maxwspd = 0.0_r8
             do i1 = center_track_xmin, center_track_xmax
@@ -2622,7 +2608,7 @@ else
    !   variable; the same is true for W as well.  If one wants to observe the surface value
    !   of either of these variables, then one can simply operate on the full 3D field 
    !   (toGrid below should return dz ~ 0 and dzm ~ 1) 
-   else if( obs_kind == KIND_GEOPOTENTIAL_HEIGHT ) then
+   else if( obs_kind == QTY_GEOPOTENTIAL_HEIGHT ) then
       !if( my_task_id() == 0 ) print*, '*** geopotential height forward operator not tested'
 
       ! make sure vector includes the needed field
@@ -2631,6 +2617,25 @@ else
          ! Adjust zloc for staggered ZNW grid (or W-grid, as compared to ZNU or M-grid)
          zloc = zloc + 0.5_r8
          k = max(1,int(zloc))  ! Only 1 value of k across the ensemble?
+
+         deallocate(uniquek)
+         ! Re-find the unique k values
+         ksort = sort(k)
+      
+         count = 1
+         do e = 2, ens_size
+             if ( ksort(e) /= ksort(e-1) ) count = count + 1
+         enddo
+      
+         allocate(uniquek(count))
+       
+         uk = 1
+         do e = 1, ens_size
+            if ( all(uniquek /= k(e)) ) then
+               uniquek(uk) = k(e)
+               uk = uk + 1
+            endif
+         enddo
 
          ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz ) .and. &
@@ -2683,7 +2688,7 @@ else
 
    ! Surface Elevation has been added by Ryan Torn to accommodate altimeter observations.
    !   HGT is not in the dart_ind vector, so get it from wrf%dom(id)%hgt.
-   else if( obs_kind == KIND_SURFACE_ELEVATION ) then
+   else if( obs_kind == QTY_SURFACE_ELEVATION ) then
 
       if ( debug ) print*,'Getting surface elevation'
 
@@ -2708,7 +2713,7 @@ else
    !-----------------------------------------------------
    ! 1.y Surface Skin Temperature (TSK)
 
-   else if( obs_kind == KIND_SKIN_TEMPERATURE ) then
+   else if( obs_kind == QTY_SKIN_TEMPERATURE ) then
      ! make sure vector includes the needed field
      if ( wrf%dom(id)%type_tsk >= 0 ) then
         call surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf%dom(id)%type_tsk, dxm, dx, dy, dym, ens_size, state_handle)
@@ -2720,7 +2725,7 @@ else
 
    ! Land Mask has been added to accommodate satellite observations.
    !   XLAND is not in the dart_ind vector, so get it from wrf%dom(id)%land
-   else if( obs_kind == KIND_LANDMASK ) then
+   else if( obs_kind == QTY_LANDMASK ) then
       if( my_task_id() == 0 ) print*, '*** Land mask forward operator not tested'
 
       if ( debug ) print*,'Getting land mask'
@@ -2751,6 +2756,7 @@ else
       istatus = 3
       if (debug) print*, 'unrecognized obs KIND, value = ', obs_kind
       deallocate(v_h, v_p)
+      if (allocated(uniquek)) deallocate(uniquek)
       return
 
    endif
@@ -2783,7 +2789,7 @@ else
 
          ! If a surface variable, or a variable with no particular vertical location
          ! (basically the entire column) then no need to do any vertical interpolation
-         if ( surf_var .or. vert_is_undef(location) ) then
+         if ( surf_var .or. is_vertical(location,"UNDEFINED") ) then
 
             !obs_val = fld(1)
              expected_obs(e) = fld(1,e) !HK
@@ -2858,6 +2864,98 @@ deallocate(uniquek)
 end subroutine model_interpolate
 
 !#######################################################################
+subroutine convert_vertical_obs(state_handle, num, locs, loc_qtys, loc_types, &
+                                which_vert, status)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: loc_types(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status(:)
+
+integer :: i
+
+do i=1, num
+   call vert_convert(state_handle, locs(i), loc_qtys(i), status(i))
+enddo
+
+end subroutine convert_vertical_obs
+
+
+!#######################################################################
+subroutine convert_vertical_state(state_handle, num, locs, loc_qtys, loc_indx, &
+                                  which_vert, istatus)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer(i8),         intent(in)    :: loc_indx(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: istatus
+
+integer :: i, istat
+integer     :: var_type, dart_type
+integer(i8) :: index
+integer     :: ip, jp, kp
+integer     :: nz, ny, nx
+logical     :: var_found
+real(r8)    :: lon, lat, lev
+character(len=129) :: string1
+
+integer :: id, var_id, state_id
+logical, parameter :: debug = .false.
+
+
+istatus = 0
+
+do i=1, num
+
+   ! from the dart index get the local variables indices
+   call get_model_variable_indices(loc_indx(i), ip, jp, kp, var_id=var_id, dom_id=state_id)
+   
+   ! convert from state_structure domain number to wrf.
+   id = get_wrf_domain(state_id)
+   
+   ! at this point, (ip,jp,kp) refer to indices in the variable's own grid
+   
+   if(debug) write(*,*) ' ip, jp, kp for index ',ip,jp,kp,index
+   if(debug) write(*,*) ' Var type: ',var_type
+   
+   var_type  = wrf%dom(id)%var_type(var_id)
+   dart_type = wrf%dom(id)%dart_kind(var_id)
+   
+   ! first obtain lat/lon from (ip,jp)
+   call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
+   
+   ! now convert to desired vertical coordinate (defined in the namelist)
+   if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
+      ! here we need level index of mass grid
+      if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+         lev = real(kp) - 0.5_r8
+      else
+         lev = real(kp)
+      endif
+   elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
+      ! directly convert to pressure
+      lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
+      lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
+      lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
+                 model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
+   endif
+   
+   locs(i) = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
+   
+enddo
+
+end subroutine convert_vertical_state
+
+
+!#######################################################################
 !> This is used in the filter_assim. The vertical conversion is done using the 
 !> mean state.
 !> I think at the moment you are over communicating
@@ -2919,7 +3017,7 @@ istatus = 1
 !> @todo This in not true anymore if you don't convert all the state variables 
 ! to the localization coordinate in get_state_meta_data
 if (obs_kind < 0) then
-   call get_state_meta_data(state_handle, int(obs_kind,i8),location)
+   call get_state_meta_data(int(obs_kind,i8),location)
    istatus = 0
    return
 endif
@@ -3613,22 +3711,14 @@ end subroutine get_wrf_horizontal_location
 !***********************************************************************
 
 
-function nc_write_model_atts( ncFileID, model_mod_writes_state_variables ) result (ierr)
+subroutine nc_write_model_atts( ncid, dom_id ) 
 !-----------------------------------------------------------------
 ! Writes the model-specific attributes to a netCDF file
-! A. Caya May 7 2003
-! T. Hoar Mar 8 2004 writes prognostic flavor
+
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: dom_id
 
 logical, parameter :: write_precip = .false.
-
-integer, intent(in)  :: ncFileID      ! netCDF file identifier
-logical, intent(out) :: model_mod_writes_state_variables
-integer              :: ierr          ! return value of function
-
-!-----------------------------------------------------------------
-
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarDimID, StateVarID, TimeDimID
 
 integer, dimension(num_domains) :: weDimID, weStagDimID, snDimID, snStagDimID, &
      btDimID, btStagDimID, slSDimID, tmp
@@ -3637,11 +3727,12 @@ integer :: MemberDimID, DomDimID
 integer :: DXVarID, DYVarID, TRUELAT1VarID, TRUELAT2VarID, STAND_LONVarID
 integer :: CEN_LATVarID, CEN_LONVarID, MAP_PROJVarID
 integer :: PERIODIC_XVarID, POLARVarID
-integer :: metadataID, wrfStateID, wrfDimID, WRFStateVarID, WRFStateDimID
 
 integer, dimension(num_domains) :: DNVarID, ZNUVarID, DNWVarID, phbVarID, &
      MubVarID, LonVarID, LatVarID, ilevVarID, XlandVarID, hgtVarID , LatuVarID, &
      LatvVarID, LonuVarID, LonvVarID, ZNWVarID
+
+integer :: TimeDimID
 
 ! currently unused, but if needed could be added back in.  these fields
 ! only appear to be supported in certain projections, so the code should
@@ -3649,134 +3740,88 @@ integer, dimension(num_domains) :: DNVarID, ZNUVarID, DNWVarID, phbVarID, &
 !integer, dimension(num_domains) :: MapFacMVarID, MapFacUVarID, MapFacVVarID
 
 integer :: var_id
-integer :: i, id
+integer :: i, id, ret
 
 character(len=129) :: title
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=NF90_MAX_NAME) :: str1
+character(len=32) :: context = 'nc_write_model_atts'
 
 character (len=1)     :: idom
 
 character(len=129), allocatable, dimension(:) :: textblock
-integer :: nlines, linelen
-integer :: linelenDimID, nlinesDimID, nmlVarID
 integer :: ind, my_index
 character(len=NF90_MAX_NAME) :: attname, varname
 character(len=129) :: unitsval, descriptionval, coordinatesval, long_nameval, coordinate_char
-integer, dimension(5) :: dimids_3D
-integer, dimension(4) :: dimids_2D
 logical               :: debug = .false.
+character(len=256) :: filename
 
-!-----------------------------------------------------------------
 
-ierr = 0     ! assume normal termination
-model_mod_writes_state_variables = .true. 
 
-!-----------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! and then put into define mode.
-!-----------------------------------------------------------------
+! use netcdf file id for identification
+write(filename,*) 'ncid', ncid
 
-call nc_check(nf90_get_att(ncFileID, NF90_GLOBAL, 'title', title), 'nc_write_model_atts','get_att')
-call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-              'nc_write_model_atts','inquire')
-call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts','redef')
-
-!-----------------------------------------------------------------
-! We need the dimension ID for the number of copies 
-!-----------------------------------------------------------------
-
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="NMLlinelen", dimid=linelenDimID), &
-              'nc_write_model_atts','inq_dimid NMLlinelen')
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="copy", dimid=MemberDimID), &
-              'nc_write_model_atts','inq_dimid copy')
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid= TimeDimID), &
-              'nc_write_model_atts','inq_dimid time')
-
-if ( TimeDimID /= unlimitedDimId ) then
-   write(errstring,*)'Time Dimension ID ',TimeDimID, &
-        ' must match Unlimited Dimension ID ',unlimitedDimID
-   call error_handler(E_ERR,'nc_write_model_atts', errstring, source, revision, revdate)
-endif
-
-!-----------------------------------------------------------------
-! Define the model size, state variable dimension ... whatever ...
-!-----------------------------------------------------------------
-call nc_check(nf90_def_dim(ncid=ncFileID, name="StateVariable", &
-              len=wrf%model_size, dimid = StateVarDimID), &
-              'nc_write_model_atts','def_dim StateVariable')
-
-!-----------------------------------------------------------------
+!-------------------------------------------------------------------------------
+! Put file into define mode and
 ! Write Global Attributes 
-!-----------------------------------------------------------------
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
+!-------------------------------------------------------------------------------
+call nc_redef(ncid)
 
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "creation_date",str1), &
-              'nc_write_model_atts','put_att creation_date')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","WRF"), &
-              'nc_write_model_atts','put_att model')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_source",source), &
-              'nc_write_model_atts','put_att model_source')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revision",revision), &
-              'nc_write_model_atts','put_att model_revision')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revdate",revdate), &
-              'nc_write_model_atts','put_att model_revdate')
+call nc_add_global_creation_time(ncid)
 
-!-----------------------------------------------------------------
-! how about namelist input? might be nice to save ...
-! long lines are truncated when read into textblock
-!-----------------------------------------------------------------
+call nc_add_global_attribute(ncid, "model_source", source )
+call nc_add_global_attribute(ncid, "model_revision", revision )
+call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
-call find_textfile_dims(wrf_nml_file, nlines, linelen)
-if (nlines <= 0 .or. linelen <= 0) have_wrf_nml_file = .false.
-
-if (have_wrf_nml_file) then
-   allocate(textblock(nlines))
-   textblock = ''
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="nlines", &
-                 len = nlines, dimid = nlinesDimID), &
-                 'nc_write_model_atts', 'def_dim nlines ')
-endif
+call nc_add_global_attribute(ncid, "model", "wrf")
 
 !-----------------------------------------------------------------
 ! Define the dimensions IDs
 !-----------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name="domain", &
+!>@todo all the wrf files use Time as the first dimension
+!> but if we are creating a file from scratch, we need this
+!> to be made
+ret = nf90_inq_dimid(ncid, "Time", TimeDimID)
+if (ret /= NF90_NOERR) then
+   call nc_check(nf90_def_dim(ncid=ncid, name="Time", &
+                 len = 1,  dimid = TimeDimID), &
+                 'nc_write_model_atts','def_dim domain')
+endif
+
+!>@todo FIXME we shouldn't need domain anymore because this
+!> routine is called once per domain.
+call nc_check(nf90_def_dim(ncid=ncid, name="domain", &
               len = num_domains,  dimid = DomDimID), &
               'nc_write_model_atts','def_dim domain')
 
-do id=1,num_domains
-   write( idom , '(I1)') id
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="west_east_d0"//idom,        &
+!>@todo FIXME all the variables below should have Time as
+!> the first dimension.  they shouldn't have _d0X in their
+!> names.
+
+!do id=1,num_domains
+   id = dom_id
+!   write( idom , '(I1)') dom_id
+   call nc_check(nf90_def_dim(ncid=ncid, name='west_east', &
                  len = wrf%dom(id)%we,  dimid = weDimID(id)), &
-                 'nc_write_model_atts','def_dim west_east_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="west_east_stag_d0"//idom,   &
+                 'nc_write_model_atts','def_dim west_east')
+   call nc_check(nf90_def_dim(ncid=ncid, name='west_east_stag',   &
                  len = wrf%dom(id)%wes, dimid = weStagDimID(id)), &
-                 'nc_write_model_atts','def_dim west_east_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="south_north_d0"//idom,      &
+                 'nc_write_model_atts','def_dim west_east_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='south_north',      &
                  len = wrf%dom(id)%sn,  dimid = snDimID(id)), &
-                 'nc_write_model_atts','def_dim south_north_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="south_north_stag_d0"//idom, &
+                 'nc_write_model_atts','def_dim south_north')
+   call nc_check(nf90_def_dim(ncid=ncid, name='south_north_stag', &
                  len = wrf%dom(id)%sns, dimid = snStagDimID(id)), &
-                 'nc_write_model_atts','def_dim south_north_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="bottom_top_d0"//idom,       &
+                 'nc_write_model_atts','def_dim south_north_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='bottom_top',       &
                  len = wrf%dom(id)%bt,  dimid = btDimID(id)), &
-                 'nc_write_model_atts','def_dim bottom_top_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="bottom_top_stag_d0"//idom,  &
+                 'nc_write_model_atts','def_dim bottom_top')
+   call nc_check(nf90_def_dim(ncid=ncid, name='bottom_top_stag',  &
                  len = wrf%dom(id)%bts, dimid = btStagDimID(id)), &
-                 'nc_write_model_atts','def_dim bottom_top_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="soil_layers_stag_d0"//idom,  &
+                 'nc_write_model_atts','def_dim bottom_top_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='soil_layers_stag',  &
                  len = wrf%dom(id)%sls, dimid = slSDimID(id)), &
-                 'nc_write_model_atts','def_dim soil_layers_stag_d0'//idom)
-enddo
+                 'nc_write_model_atts','def_dim soil_layers_stag')
+!enddo
 
 !-----------------------------------------------------------------
 ! Create the (empty) Variables and the Attributes
@@ -3787,975 +3832,503 @@ enddo
 ! Commented block is from wrfinput
 !-----------------------------------------------------------------
 
-if (have_wrf_nml_file) then
-   call nc_check(nf90_def_var(ncFileID,name="WRFnml", xtype=nf90_char,    &
-                 dimids = (/ linelenDimID, nlinesDimID /),  varid=nmlVarID), &
-                 'nc_write_model_atts', 'def_var WRFnml')
-   call nc_check(nf90_put_att(ncFileID, nmlVarID, "long_name",       &
-                 "namelist.input contents"), 'nc_write_model_atts', 'put_att WRFnml')
-endif
-
-call nc_check(nf90_def_var(ncFileID, name="DX", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DX', xtype=nf90_real, &
               dimids= DomDimID, varid=DXVarID), &
               'nc_write_model_atts','def_var DX')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "long_name", "X HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'long_name', 'X HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DX long_name')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "description", "X HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'description', 'X HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DX description')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "units", "m"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'units', 'm'), &
               'nc_write_model_atts','put_att DX units')
 
-call nc_check(nf90_def_var(ncFileID, name="DY", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DY', xtype=nf90_real, &
               dimids= DomDimID, varid=DYVarID), &
               'nc_write_model_atts','def_var DY')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "long_name", "Y HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'long_name', 'Y HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DY long_name')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "description", "Y HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'description', 'Y HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DY description')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "units", "m"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'units', 'm'), &
               'nc_write_model_atts','put_att DY units')
 
-call nc_check(nf90_def_var(ncFileID, name="TRUELAT1", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='TRUELAT1', xtype=nf90_real, &
               dimids= DomDimID, varid=TRUELAT1VarID), &
               'nc_write_model_atts','def_var TRUELAT1')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "long_name", &
-              "first standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'long_name', &
+              'first standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT1 long_name')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "description", &
-              "first standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'description', &
+              'first standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT1 description')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att TRUELAT1 units')
 
-call nc_check(nf90_def_var(ncFileID, name="TRUELAT2", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='TRUELAT2', xtype=nf90_real, &
               dimids= DomDimID, varid=TRUELAT2VarID), &
               'nc_write_model_atts','def_var TRUELAT2')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "long_name", &
-              "second standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'long_name', &
+              'second standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT2 long_name')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "description", &
-              "second standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'description', &
+              'second standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT2 description')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att TRUELAT2 units')
 
-call nc_check(nf90_def_var(ncFileID, name="STAND_LON", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='STAND_LON', xtype=nf90_real, &
               dimids= DomDimID, varid=STAND_LONVarID), &
               'nc_write_model_atts','def_var STAND_LON')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "long_name", &
-              "standard longitude"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'long_name', &
+              'standard longitude'), &
               'nc_write_model_atts','put_att STAND_LON long_name')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "description", &
-              "standard longitude"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'description', &
+              'standard longitude'), &
               'nc_write_model_atts','put_att STAND_LON description')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "units", &
-              "degrees, negative is west"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'units', &
+              'degrees, negative is west'), &
               'nc_write_model_atts','put_att STAND_LON units')
 
-call nc_check(nf90_def_var(ncFileID, name="CEN_LAT", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='CEN_LAT', xtype=nf90_real, &
               dimids= DomDimID, varid=CEN_LATVarID), &
               'nc_write_model_atts','def_var CEN_LAT')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "long_name", &
-              "center latitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'long_name', &
+              'center latitude'), &
               'nc_write_model_atts','put_att CEN_LAT long_name')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "description", &
-              "center latitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'description', &
+              'center latitude'), &
               'nc_write_model_atts','put_att CEN_LAT description')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att CEN_LAT units')
 
-call nc_check(nf90_def_var(ncFileID, name="CEN_LON", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='CEN_LON', xtype=nf90_real, &
               dimids= DomDimID, varid=CEN_LONVarID), &
               'nc_write_model_atts','def_var CEN_LON')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "long_name", &
-              "central longitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'long_name', &
+              'central longitude'), &
               'nc_write_model_atts','put_att CEN_LON long_name')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "description", &
-              "central longitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'description', &
+              'central longitude'), &
               'nc_write_model_atts','put_att CEN_LON description')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "units", &
-              "degrees, negative is west"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'units', &
+              'degrees, negative is west'), &
               'nc_write_model_atts','put_att CEN_LON units')
 
-call nc_check(nf90_def_var(ncFileID, name="MAP_PROJ", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='MAP_PROJ', xtype=nf90_real, &
               dimids= DomDimID, varid=MAP_PROJVarID), &
               'nc_write_model_atts','def_var MAP_PROJ')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "long_name", &
-              "domain map projection"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'long_name', &
+              'domain map projection'), &
               'nc_write_model_atts','put_att MAP_PROJ long_name')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "description", &
-              "domain map projection"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'description', &
+              'domain map projection'), &
               'nc_write_model_atts','put_att MAP_PROJ description')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "units", &
-              "0=none, 1=Lambert, 2=polar, 3=Mercator, 5=Cylindrical, 6=Cassini"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'units', &
+              '0=none, 1=Lambert, 2=polar, 3=Mercator, 5=Cylindrical, 6=Cassini'), &
               'nc_write_model_atts','put_att MAP_PROJ units')
 
 !nc -- we need to add in code here to report the domain values for the 
 !        boundary condition flags periodic_x and polar.  Since these are
 !        carried internally as logicals, they will first need to be 
 !        converted back to integers.
-call nc_check(nf90_def_var(ncFileID, name="PERIODIC_X", xtype=nf90_int, &
+call nc_check(nf90_def_var(ncid, name='PERIODIC_X', xtype=nf90_int, &
               dimids= DomDimID, varid=PERIODIC_XVarID), &
               'nc_write_model_atts','def_var PERIODIC_X')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "long_name", &
-              "Longitudinal periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'long_name', &
+              'Longitudinal periodic b.c. flag'), &
               'nc_write_model_atts','put_att PERIODIC_X long_name')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "description", &
-              "Longitudinal periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'description', &
+              'Longitudinal periodic b.c. flag'), &
               'nc_write_model_atts','put_att PERIODIC_X desciption')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "units", &
-              "logical: 1 = .true., 0 = .false."), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'units', &
+              'logical: 1 = .true., 0 = .false.'), &
               'nc_write_model_atts','put_att PERIODIC_X units')
 
-call nc_check(nf90_def_var(ncFileID, name="POLAR", xtype=nf90_int, &
+call nc_check(nf90_def_var(ncid, name='POLAR', xtype=nf90_int, &
               dimids= DomDimID, varid=POLARVarID), &
               'nc_write_model_atts','def_var POLAR')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "long_name", &
-              "Polar periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'long_name', &
+              'Polar periodic b.c. flag'), &
               'nc_write_model_atts','put_att POLAR long_name')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "description", &
-              "Polar periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'description', &
+              'Polar periodic b.c. flag'), &
               'nc_write_model_atts','put_att POLAR description')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "units", &
-              "logical: 1 = .true., 0 = .false."), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'units', &
+              'logical: 1 = .true., 0 = .false.'), &
               'nc_write_model_atts','put_att POLAR units')
 
 
 
-do id=1,num_domains
-   write( idom , '(I1)') id
+write( idom , '(I1)') dom_id
 
-   call nc_check(nf90_def_var(ncFileID, name="DN_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DN', xtype=nf90_real, &
                  dimids= btDimID(id), varid=DNVarID(id)), &
                  'nc_write_model_atts','def_var DN_do'//idom)
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "long_name", &
-                 "dn values on half (mass) levels"), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'long_name', &
+                 'dn values on half (mass) levels'), &
                  'nc_write_model_atts','put_att DN_do'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "description", &
-                 "dn values on half (mass) levels"), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'description', &
+                 'dn values on half (mass) levels'), &
                  'nc_write_model_atts','put_att DN_do'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "units", &
-                 ""), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'units', &
+                 ''), &
                  'nc_write_model_atts','put_att DN_do'//idom//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="ZNU_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='ZNU', xtype=nf90_real, &
                  dimids= btDimID(id), varid=ZNUVarID(id)), &
-                 'nc_write_model_atts','def_var ZNU_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "long_name", &
-                 "eta values on half (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "description", &
-                 "eta values on half (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' units')
+                 'nc_write_model_atts','def_var ZNU')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'long_name', &
+                 'eta values on half (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNU'//' long_name')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'description', &
+                 'eta values on half (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNU'//' description')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att ZNU'//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="ZNW_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='ZNW', xtype=nf90_real, &
                  dimids= btStagDimID(id), varid=ZNWVarID(id)), &
-                 'nc_write_model_atts','def_var ZNW_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "long_name", &
-                 "eta values on full (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "description", &
-                 "eta values on full (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' units')
+                 'nc_write_model_atts','def_var ZNW')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'long_name', &
+                 'eta values on full (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNW'//' long_name')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'description', &
+                 'eta values on full (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNW'//' description')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att ZNW'//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="DNW_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DNW', xtype=nf90_real, &
                  dimids= btDimID(id), varid=DNWVarID(id)), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "long_name", &
-                 "dn values on full (w) levels"), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "description", &
-                 "dn values on full (w) levels"), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' units')
+                 'nc_write_model_atts','def_var DNW')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'long_name', &
+                 'dn values on full (w) levels'), &
+                 'nc_write_model_atts','def_var DNW'//' long_name')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'description', &
+                 'dn values on full (w) levels'), &
+                 'nc_write_model_atts','def_var DNW'//' description')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','def_var DNW'//' units')
 
 !
 !    float MUB(Time, south_north, west_east) ;
 !            MUB:FieldType = 104 ;
-!            MUB:MemoryOrder = "XY " ;
-!            MUB:stagger = "" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="MUB_d0"//idom, xtype=nf90_real, &
+!            MUB:MemoryOrder = 'XY ' ;
+!            MUB:stagger = '' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='MUB', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=MubVarID(id)), &
-                 'nc_write_model_atts','def_var MUB_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "long_name", &
-                 "base state dry air mass in column"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "description", &
-                 "base state dry air mass in column"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "units", "Pa"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "coordinates", &
+                 'nc_write_model_atts','def_var MUB')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'long_name', &
+                 'base state dry air mass in column'), &
+                 'nc_write_model_atts','put_att MUB'//' long_name')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'description', &
+                 'base state dry air mass in column'), &
+                 'nc_write_model_atts','put_att MUB'//' description')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'units', 'Pa'), &
+                 'nc_write_model_atts','put_att MUB'//' units')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' coordinates')
+                 'nc_write_model_atts','put_att MUB'//' coordinates')
 
 ! Longitudes
 !      float XLONG(Time, south_north, west_east) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+   call nc_check(nf90_def_var(ncid, name='XLONG', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=LonVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG'//' long_name')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG'//' units')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG'//' valid_range')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG'//' description')
 
 !      float XLONG_U(Time, south_north, west_east_stag) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_U_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+   call nc_check(nf90_def_var(ncid, name='XLONG_U', xtype=nf90_real, &
                  dimids= (/ weStagDimID(id), snDimID(id) /), varid=LonuVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_U_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG_U')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' long_name')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' units')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG_U'//' valid_range')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' description')
 
 !      float XLONG_V(Time, south_north_stag, west_east) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_V_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLONG_V', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snStagDimID(id) /), varid=LonvVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_V_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG_V')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' long_name')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' units')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG_V'//' valid_range')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' description')
 
 ! Latitudes
 !      float XLAT(Time, south_north, west_east) ;
 !         XLAT:FieldType = 104 ;
-!         XLAT:MemoryOrder = "XY " ;
-!         XLAT:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_d0"//idom, xtype=nf90_real, &
+!         XLAT:MemoryOrder = 'XY ' ;
+!         XLAT:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT', xtype=nf90_real, &
                  dimids=(/ weDimID(id), snDimID(id) /), varid=LatVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT') 
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT'//' long_name')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT'//' units')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT'//' description')
 
 !      float XLAT_U(Time, south_north, west_east_stag) ;
 !         XLAT_U:FieldType = 104 ;
-!         XLAT_U:MemoryOrder = "XY " ;
-!         XLAT_U:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_U_d0"//idom, xtype=nf90_real, &
+!         XLAT_U:MemoryOrder = 'XY ' ;
+!         XLAT_U:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT_U', xtype=nf90_real, &
                  dimids=(/ weStagDimID(id), snDimID(id) /), varid=LatuVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_U_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT_U') 
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' long_name')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' units')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT_U'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' description')
 
 !      float XLAT_V(Time, south_north_stag, west_east) ;
 !         XLAT_V:FieldType = 104 ;
-!         XLAT_V:MemoryOrder = "XY " ;
-!         XLAT_V:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_V_d0"//idom, xtype=nf90_real, &
+!         XLAT_V:MemoryOrder = 'XY ' ;
+!         XLAT_V:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT_V', xtype=nf90_real, &
                  dimids=(/ weDimID(id), snStagDimID(id) /), varid=LatvVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_V_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT_V') 
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' long_name')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' units')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT_V'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' description')
 
 ! grid levels
-   call nc_check(nf90_def_var(ncFileID, name="level_d0"//idom, xtype=nf90_short, &
+call nc_check(nf90_def_var(ncid, name='level', xtype=nf90_short, &
                  dimids=btDimID(id), varid=ilevVarID(id)), &
-                 'nc_write_model_atts','def_var level_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "long_name", &
-                 "level index"), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "description", &
-                 "level index"), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' units')
+                 'nc_write_model_atts','def_var level')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'long_name', &
+                 'level index'), &
+                 'nc_write_model_atts','put_att level'//' long_name')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'description', &
+                 'level index'), &
+                 'nc_write_model_atts','put_att level'//' description')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att level'//' units')
 
 ! Land Mask
 !    float XLAND(Time, south_north, west_east) ;
 !            XLAND:FieldType = 104 ;
-!            XLAND:MemoryOrder = "XY " ;
-!            XLAND:units = "NA" ;
-!            XLAND:stagger = "" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="XLAND_d0"//idom, xtype=nf90_short, &
+!            XLAND:MemoryOrder = 'XY ' ;
+!            XLAND:units = 'NA' ;
+!            XLAND:stagger = '' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='XLAND', xtype=nf90_short, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=XlandVarID(id)),  &
-                 'nc_write_model_atts','def_var XLAND_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "long_name", &
-                 "LAND MASK (1 FOR LAND, 2 FOR WATER)"), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "units", " "), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "coordinates", &
+                 'nc_write_model_atts','def_var XLAND')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'long_name', &
+                 'LAND MASK (1 FOR LAND, 2 FOR WATER)'), &
+                 'nc_write_model_atts','put_att XLAND'//' long_name')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'units', ' '), &
+                 'nc_write_model_atts','put_att XLAND'//' units')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "valid_range", (/ 1, 2 /)), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "description", &
-                 "LAND MASK (1 FOR LAND, 2 FOR WATER)"), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAND'//' coordinates')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'valid_range', (/ 1, 2 /)), &
+                 'nc_write_model_atts','put_att XLAND'//' valid_range')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'description', &
+                 'LAND MASK (1 FOR LAND, 2 FOR WATER)'), &
+                 'nc_write_model_atts','put_att XLAND'//' description')
 
 ! PHB
 !    float PHB(Time, bottom_top_stag, south_north, west_east) ;
 !            PHB:FieldType = 104 ;
-!            PHB:MemoryOrder = "XYZ" ;
-!            PHB:stagger = "Z" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="PHB_d0"//idom, xtype=nf90_real, &
+!            PHB:MemoryOrder = 'XYZ' ;
+!            PHB:stagger = 'Z' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='PHB', xtype=nf90_real, &
         dimids= (/ weDimID(id), snDimID(id), btStagDimID(id) /), varid=phbVarId(id)), &
-        'nc_write_model_atts','def_var PHB_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "long_name", &
-                 "base-state geopotential"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "description", &
-                 "base-state geopotential"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "units", "m2/s2"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "coordinates", &
+        'nc_write_model_atts','def_var PHB')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'long_name', &
+                 'base-state geopotential'), &
+                 'nc_write_model_atts','put_att PHB'//' long_name')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'description', &
+                 'base-state geopotential'), &
+                 'nc_write_model_atts','put_att PHB'//' description')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'units', 'm2/s2'), &
+                 'nc_write_model_atts','put_att PHB'//' units')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "units_long_name", "m{2} s{-2}"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' units_long_name')
+                 'nc_write_model_atts','put_att PHB'//' coordinates')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'units_long_name', 'm{2} s{-2}'), &
+                 'nc_write_model_atts','put_att PHB'//' units_long_name')
 
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="HGT_d0"//idom, xtype=nf90_real, &
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='HGT', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=hgtVarId(id)), &
-                 'nc_write_model_atts','def_var HGT_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "long_name", "Terrain Height"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "description", "Terrain Height"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "units", "m"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "coordinates", &
+                 'nc_write_model_atts','def_var HGT')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'long_name', 'Terrain Height'), &
+                 'nc_write_model_atts','put_att HGT'//' long_name')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'description', 'Terrain Height'), &
+                 'nc_write_model_atts','put_att HGT'//' description')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'units', 'm'), &
+                 'nc_write_model_atts','put_att HGT'//' units')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "units_long_name", "meters"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' units_long_name')
-
-   ! can't deal with precip yet - need to leave hard coded 
-
-   if ( trim(adjustl(title(1:2))) == 'pr' .and. write_precip ) then
-
-     call nc_check(nf90_def_var(ncid=ncFileID, name="RAINC_d0"//idom, xtype=nf90_real, &
-          dimids = (/ weDimID(id), snDimID(id), MemberDimID, unlimitedDimID /), &
-          varid  = var_id),'nc_write_model_atts','def_var RAINC_d0'//idom)
-     call nc_check(nf90_put_att(ncFileID, var_id, "units", "mm"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' units')
-     call nc_check(nf90_put_att(ncFileID, var_id, "long_name", & 
-                   "ACCUMULATED TOTAL CUMULUS PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' long_name')
-     call nc_check(nf90_put_att(ncFileID, var_id, "description", & 
-                   "ACCUMULATED TOTAL CUMULUS PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' description')
-
-     call nc_check(nf90_def_var(ncid=ncFileID, name="RAINNC_d0"//idom, xtype=nf90_real, &
-          dimids = (/ weDimID(id), snDimID(id), MemberDimID, unlimitedDimID /), &
-          varid  = var_id),'nc_write_model_atts','def_var RAINNC_d0'//idom)
-     call nc_check(nf90_put_att(ncFileID, var_id, "units", "mm"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' units')
-     call nc_check(nf90_put_att(ncFileID, var_id, "long_name", & 
-                   "ACCUMULATED TOTAL GRID POINT PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' long_name')
-     call nc_check(nf90_put_att(ncFileID, var_id, "description", & 
-                   "ACCUMULATED TOTAL GRID POINT PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' description')
-
-   endif
-
-enddo
-
-if ( output_state_vector ) then
-
-   !-----------------------------------------------------------------
-   ! Create attributes for the state vector 
-   !-----------------------------------------------------------------
-
-   call nc_check(nf90_inq_dimid(ncFileID, "metadatalength", metadataID), &
-                 'nc_write_model_atts','inq_dimid metadatalength')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFStateVariables", &
-                 len = wrf%dom(1)%number_of_wrf_variables,  dimid = wrfStateID), &
-                 'nc_write_model_atts','def_dim WRFStateVariables')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFVarDimension", &
-                 len = 3,  dimid = wrfDimID), &
-                 'nc_write_model_atts','def_dim WRFVarDimensionID')
-
-   ! Define the state variable name variable
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateVariables", xtype=nf90_char, &
-                 dimids=(/ metadataID, wrfStateID /), varid=WRFStateVarID), &
-                 'nc_write_model_atts','def_var WRFStateVariables')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateVarID, "long_name", &
-                 "WRF State Variable Name"), &
-                 'nc_write_model_atts','put_att WRFStateVariables long_name')
-
-   ! Define the WRF state variable dimension lengths
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateDimensions", xtype=nf90_int, &
-                 dimids=(/ wrfDimID, wrfStateID, DomDimID /), varid=WRFStateDimID), &
-                 'nc_write_model_atts','def_var WRFStateDimensions')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateDimID, "long_name", &
-                 "WRF State Variable Dimensions"), &
-                 'nc_write_model_atts','put_att WRFStateDimensions long_name')
-
-   ! Define the actual state vector
-
-   call nc_check(nf90_def_var(ncid=ncFileID, name="state", xtype=nf90_real, &
-                 dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
-                 varid=StateVarID), &
-                 'nc_write_model_atts','def_var state')
-   call nc_check(nf90_put_att(ncFileID, StateVarID, "long_name", &
-                 "model state or fcopy"), &
-                 'nc_write_model_atts','put_att state long_name')
-
-   ! only define those that are present in the state vector
-   do id = 1,num_domains ! this makes sure we get them all 
-   write( idom , '(I1)') id
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-      ! units
-      attname = trim(wrf_state_variables(1,my_index))//'_units'
-
-      ! if we didn't already write it, do it now
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-
-         unitsval = trim(wrf%dom(id)%units(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    unitsval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! description
-      attname = trim(wrf_state_variables(1,my_index))//'_description'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         descriptionval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    descriptionval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! long_name - same as description
-      attname = trim(wrf_state_variables(1,my_index))//'_long_name'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         long_nameval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    long_nameval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! coordinates - define the name of the (sometimes staggered) 
-      !               coordinate variables to use to decode locations
-      attname = trim(wrf_state_variables(1,my_index))//'_coordinates'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         coordinatesval = trim(wrf%dom(id)%coordinates(ind))
-         if (coordinatesval(1:7) .eq. 'XLONG_U') then
-           coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
-         else if (coordinatesval(1:7) .eq. 'XLONG_V') then
-           coordinate_char = "XLONG_V_d0"//idom//" XLAT_V_d0"//idom
-         else
-           coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-         end if
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    trim(coordinate_char)), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-   enddo
-   enddo
-
-   ! Leave define mode so we can actually fill the variables.
-
-   call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
-
-   do ind = 1,wrf%dom(1)%number_of_wrf_variables
-      my_index =  wrf%dom(1)%var_index_list(ind)
-      call nc_check(nf90_put_var(ncFileID,WRFStateVarID,trim(wrf_state_variables(1,my_index)), &
-                    start = (/ 1, ind /), count = (/ len_trim(wrf_state_variables(1,my_index)),  1 /)), &
-                    'nc_write_model_atts', 'put_var WRFStateVariables')
-   enddo
-
-   do id = 1, num_domains
-      do ind = 1,wrf%dom(id)%number_of_wrf_variables
-        call nc_check(nf90_put_var(ncFileID,WRFStateDimID,wrf%dom(id)%var_size(:,ind), &
-                      start = (/ 1, ind, id /), count = (/ 3, 1, 1 /)), &
-                      'nc_write_model_atts', 'put_var WRFStateDimensions')
-      enddo
-   enddo
-
-else ! physical arrays
-
-do id=1,num_domains
-   write( idom , '(I1)') id
-
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Prognostic Variables and their attributes
-   !----------------------------------------------------------------------------
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-
-      varname = trim(wrf_state_variables(1,my_index))//'_d0'//idom
-
-      if ( debug ) write(*,*) 'Defining variable ',varname
-
-      if ( wrf%dom(id)%var_size(3,ind) > 1 ) then ! 3D variable
-
-         dimids_3D(4:5) = (/MemberDimID,unlimitedDimID/)
-
-         ! get first two dimensions based on stagger (could do this
-         ! differently)
-         select case (trim(wrf%dom(id)%stagger(ind)))
-         case ('Z')  ! mass grid staggered vertical
-           dimids_3D(1:2)=(/weDimID(id),snDimId(id)/)
-         case ('X')  ! U grid unstaggered vertical
-           dimids_3D(1:2)=(/weStagDimID(id),snDimId(id)/)
-         case ('Y')  ! V grid unstaggered vertical
-           dimids_3D(1:2)=(/weDimID(id),snStagDimId(id)/)
-         case default 
-           dimids_3D(1:2)=(/weDimID(id),snDimId(id)/)
-         end select
-
-         ! vertical dimension can be stag, unstag, or staggered soil
-         ! need to use if/then/else instead of select because testing
-         ! is against variables
-         if ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%bts ) then
-           dimids_3D(3)=btStagDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%bt ) then
-           dimids_3D(3)=btDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,ind) == wrf%dom(id)%sls ) then
-           dimids_3D(3)=slSDimID(id)
-         else
-           write(errstring,*)'Could not determine dim_id for vertical dimension to output variable '//varname
-           call error_handler(E_ERR,'nc_write_model_atts',errstring,source, revision,revdate)
-         endif
-
-         if ( debug ) write(*,*) '3D with dim ids ',dimids_3D
-
-         call nc_check(nf90_def_var(ncid=ncFileID, name=varname,  &
-                    xtype=nf90_real,dimids=dimids_3D, varid=var_id), &
-                    'nc_write_model_atts','def_var '//varname)
-
-      else ! must be 2D
-
-         dimids_2D(3:4) = (/MemberDimID,unlimitedDimID/)
-
-         select case (trim(wrf%dom(id)%stagger(ind)))
-         case ('Z')  ! mass grid staggered vertical
-           dimids_2D(1:2)=(/weDimID(id),snDimId(id)/)
-         case ('X')  ! U grid unstaggered vertical
-           dimids_2D(1:2)=(/weStagDimID(id),snDimId(id)/)
-         case ('Y')  ! V grid unstaggered vertical
-           dimids_2D(1:2)=(/weDimID(id),snStagDimId(id)/)
-         case default 
-           dimids_2D(1:2)=(/weDimID(id),snDimId(id)/)
-         end select
-
-         if ( debug ) write(*,*) '2D with dim ids ',dimids_2D
-
-         call nc_check(nf90_def_var(ncid=ncFileID, name=varname,  &
-                    xtype=nf90_real,dimids=dimids_2D, varid=var_id), &
-                    'nc_write_model_atts','def_var '//varname)
-
-      endif ! 3D or 2D
-
-      unitsval = trim(wrf%dom(id)%units(ind))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "units", trim(unitsval)), &
-                 'nc_write_model_atts','put_att '//varname//' units')
-
-      descriptionval = trim(wrf%dom(id)%description(ind))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "description", trim(descriptionval)), &
-                 'nc_write_model_atts','put_att '//varname//' description')
-
-      long_nameval = trim(wrf%dom(id)%description(ind))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "long_name", trim(long_nameval)), &
-                 'nc_write_model_atts','put_att '//varname//' long_name')
-
-      coordinatesval = trim(wrf%dom(id)%coordinates(ind))
-      if (coordinatesval(1:7) .eq. 'XLONG_U') then
-        coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
-      else if (coordinatesval(1:7) .eq. 'XLONG_V') then
-        coordinate_char = "XLONG_V_d0"//idom//" XLAT_V_d0"//idom
-      else
-        coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-      end if
-      call nc_check(nf90_put_att(ncFileID, var_id, "coordinates", trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att '//varname//' coordinates')
-
-
-      !------No info on long_name or units_long_name right now!
-!      call nc_check(nf90_put_att(ncFileID, var_id, "long_name", "x-wind component"), &
-!                 'nc_write_model_atts','put_att U_d0'//idom//' long_name')
-!      call nc_check(nf90_put_att(ncFileID, var_id, "units_long_name", "m s{-1}"), &
-!                 'nc_write_model_atts','put_att U_d0'//idom//' units_long_name')
-
-   enddo ! variables
- 
-enddo ! domains
+                 'nc_write_model_atts','put_att HGT'//' coordinates')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'units_long_name', 'meters'), &
+                 'nc_write_model_atts','put_att HGT'//' units_long_name')
 
 ! Leave define mode so we can actually fill the variables.
-call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
-
-endif
+call nc_enddef(ncid)
 
 !-----------------------------------------------------------------
 ! Fill the variables we can
 !-----------------------------------------------------------------
 
-if (have_wrf_nml_file) then
-   call file_to_text(wrf_nml_file, textblock)
-   call nc_check(nf90_put_var(ncFileID, nmlVarID, textblock ), &
-                 'nc_write_model_atts', 'put_var nmlVarID')
-   deallocate(textblock)
-endif
-
-call nc_check(nf90_put_var(ncFileID,        DXVarID, wrf%dom(1:num_domains)%dx), &
+call nc_check(nf90_put_var(ncid,        DXVarID, wrf%dom(1:num_domains)%dx), &
               'nc_write_model_atts','put_var dx')
-call nc_check(nf90_put_var(ncFileID,        DYVarID, wrf%dom(1:num_domains)%dy), &
+call nc_check(nf90_put_var(ncid,        DYVarID, wrf%dom(1:num_domains)%dy), &
               'nc_write_model_atts','put_var dy')
-call nc_check(nf90_put_var(ncFileID,  TRUELAT1VarID, wrf%dom(1:num_domains)%proj%truelat1), &
+call nc_check(nf90_put_var(ncid,  TRUELAT1VarID, wrf%dom(1:num_domains)%proj%truelat1), &
               'nc_write_model_atts','put_var truelat1')
-call nc_check(nf90_put_var(ncFileID,  TRUELAT2VarID, wrf%dom(1:num_domains)%proj%truelat2), &
+call nc_check(nf90_put_var(ncid,  TRUELAT2VarID, wrf%dom(1:num_domains)%proj%truelat2), &
               'nc_write_model_atts','put_var truelat2')
-call nc_check(nf90_put_var(ncFileID, STAND_LONVarID, wrf%dom(1:num_domains)%proj%stdlon), &
+call nc_check(nf90_put_var(ncid, STAND_LONVarID, wrf%dom(1:num_domains)%proj%stdlon), &
               'nc_write_model_atts','put_var stdlon')
-call nc_check(nf90_put_var(ncFileID,   CEN_LATVarID, wrf%dom(1:num_domains)%cen_lat), &
+call nc_check(nf90_put_var(ncid,   CEN_LATVarID, wrf%dom(1:num_domains)%cen_lat), &
               'nc_write_model_atts','put_var cen_lat')
-call nc_check(nf90_put_var(ncFileID,   CEN_LONVarID, wrf%dom(1:num_domains)%cen_lon), &
+call nc_check(nf90_put_var(ncid,   CEN_LONVarID, wrf%dom(1:num_domains)%cen_lon), &
               'nc_write_model_atts','put_var cen_lon')
-call nc_check(nf90_put_var(ncFileID,  MAP_PROJVarID, wrf%dom(1:num_domains)%map_proj), &
+call nc_check(nf90_put_var(ncid,  MAP_PROJVarID, wrf%dom(1:num_domains)%map_proj), &
               'nc_write_model_atts','put_var map_proj')
 
 !nc -- convert internally logical boundary condition variables into integers before filling
-do id=1,num_domains
-   if ( wrf%dom(id)%periodic_x ) then
-      tmp(id) = 1
-   else
-      tmp(id) = 0
-   endif
-end do
-call nc_check(nf90_put_var(ncFileID, PERIODIC_XVarID, tmp(1:num_domains) ), &
+if ( wrf%dom(dom_id)%periodic_x ) then
+   tmp(dom_id) = 1
+else
+   tmp(dom_id) = 0
+endif
+call nc_check(nf90_put_var(ncid, PERIODIC_XVarID, tmp(1:num_domains) ), &
               'nc_write_model_atts','put_var PERIODIC_XVarID')
 
-do id=1,num_domains
-   if ( wrf%dom(id)%polar ) then
-      tmp(id) = 1
-   else
-      tmp(id) = 0
-   endif
-end do
-call nc_check(nf90_put_var(ncFileID, POLARVarID, tmp(1:num_domains) ), &
+if ( wrf%dom(dom_id)%polar ) then
+   tmp(dom_id) = 1
+else
+   tmp(dom_id) = 0
+endif
+call nc_check(nf90_put_var(ncid, POLARVarID, tmp(1:num_domains) ), &
               'nc_write_model_atts','put var POLARVarID')
 
 
-do id=1,num_domains
-
 ! defining grid levels
-   call nc_check(nf90_put_var(ncFileID,       DNVarID(id), wrf%dom(id)%dn), &
+call nc_check(nf90_put_var(ncid,       DNVarID(id), wrf%dom(id)%dn), &
               'nc_write_model_atts','put_var dn')
-   call nc_check(nf90_put_var(ncFileID,      ZNUVarID(id), wrf%dom(id)%znu), &
+call nc_check(nf90_put_var(ncid,      ZNUVarID(id), wrf%dom(id)%znu), &
               'nc_write_model_atts','put_var znu')
-   call nc_check(nf90_put_var(ncFileID,      ZNWVarID(id), wrf%dom(id)%znw), &
+call nc_check(nf90_put_var(ncid,      ZNWVarID(id), wrf%dom(id)%znw), &
               'nc_write_model_atts','put_var znw')
-   call nc_check(nf90_put_var(ncFileID,      DNWVarID(id), wrf%dom(id)%dnw), &
+call nc_check(nf90_put_var(ncid,      DNWVarID(id), wrf%dom(id)%dnw), &
               'nc_write_model_atts','put_var dnw')
 
 ! defining horizontal
-   call nc_check(nf90_put_var(ncFileID,      mubVarID(id), wrf%dom(id)%mub), &
+call nc_check(nf90_put_var(ncid,      mubVarID(id), wrf%dom(id)%mub), &
               'nc_write_model_atts','put_var mub')
-   call nc_check(nf90_put_var(ncFileID,      LonVarID(id), wrf%dom(id)%longitude), &
+call nc_check(nf90_put_var(ncid,      LonVarID(id), wrf%dom(id)%longitude), &
               'nc_write_model_atts','put_var longitude')
-   call nc_check(nf90_put_var(ncFileID,      LonuVarID(id), wrf%dom(id)%longitude_u), &
+call nc_check(nf90_put_var(ncid,      LonuVarID(id), wrf%dom(id)%longitude_u), &
               'nc_write_model_atts','put_var longitude_u')
-   call nc_check(nf90_put_var(ncFileID,      LonvVarID(id), wrf%dom(id)%longitude_v), &
+call nc_check(nf90_put_var(ncid,      LonvVarID(id), wrf%dom(id)%longitude_v), &
               'nc_write_model_atts','put_var longitude_v')
-   call nc_check(nf90_put_var(ncFileID,      LatVarID(id), wrf%dom(id)%latitude), &
+call nc_check(nf90_put_var(ncid,      LatVarID(id), wrf%dom(id)%latitude), &
               'nc_write_model_atts','put_var latitude')
-   call nc_check(nf90_put_var(ncFileID,      LatuVarID(id), wrf%dom(id)%latitude_u), &
+call nc_check(nf90_put_var(ncid,      LatuVarID(id), wrf%dom(id)%latitude_u), &
               'nc_write_model_atts','put_var latitude_u')
-   call nc_check(nf90_put_var(ncFileID,      LatvVarID(id), wrf%dom(id)%latitude_v), &
+call nc_check(nf90_put_var(ncid,      LatvVarID(id), wrf%dom(id)%latitude_v), &
               'nc_write_model_atts','put_var latitude_v')
-   call nc_check(nf90_put_var(ncFileID,     ilevVarID(id), (/ (i,i=1,wrf%dom(id)%bt) /)), &
+call nc_check(nf90_put_var(ncid,     ilevVarID(id), (/ (i,i=1,wrf%dom(id)%bt) /)), &
               'nc_write_model_atts','put_var bt')
-   call nc_check(nf90_put_var(ncFileID,    XlandVarID(id), wrf%dom(id)%land), &
+call nc_check(nf90_put_var(ncid,    XlandVarID(id), wrf%dom(id)%land), &
               'nc_write_model_atts','put_var land')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacMVarID(id), wrf%dom(id)%mapfac_m), &
+!   call nc_check(nf90_put_var(ncid,  MapFacMVarID(id), wrf%dom(id)%mapfac_m), &
 !             'nc_write_model_atts','put_var mapfac_m')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacUVarID(id), wrf%dom(id)%mapfac_u), &
+!   call nc_check(nf90_put_var(ncid,  MapFacUVarID(id), wrf%dom(id)%mapfac_u), &
 !             'nc_write_model_atts','put_var mapfac_u')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacVVarID(id), wrf%dom(id)%mapfac_v), &
+!   call nc_check(nf90_put_var(ncid,  MapFacVVarID(id), wrf%dom(id)%mapfac_v), &
 !             'nc_write_model_atts','put_var mapfac_v')
-   call nc_check(nf90_put_var(ncFileID,      phbVarID(id), wrf%dom(id)%phb), &
+call nc_check(nf90_put_var(ncid,      phbVarID(id), wrf%dom(id)%phb), &
               'nc_write_model_atts','put_var phb')
-   call nc_check(nf90_put_var(ncFileID,      hgtVarID(id), wrf%dom(id)%hgt), &
+call nc_check(nf90_put_var(ncid,      hgtVarID(id), wrf%dom(id)%hgt), &
               'nc_write_model_atts','put_var hgt')
 
-enddo
 
 !-----------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-----------------------------------------------------------------
 
-call nc_check(nf90_sync(ncFileID),'nc_write_model_atts','sync')
+call nc_sync(ncid)
 
-end function nc_write_model_atts
-
-
-
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
-!-----------------------------------------------------------------
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
+end subroutine nc_write_model_atts
 
 
-integer,                intent(in) :: ncFileID      ! netCDF file identifier
-real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: copyindex
-integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
-
-!-----------------------------------------------------------------
-
-logical, parameter :: debug = .false.  
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarID, VarID, id, ind, my_index
-integer :: i,j
-real(r8), allocatable, dimension(:,:)   :: temp2d
-real(r8), allocatable, dimension(:,:,:) :: temp3d
-character(len=NF90_MAX_NAME) :: varname
-character(len=1) :: idom
-integer, dimension(2) :: dimsizes_2D
-integer, dimension(3) :: dimsizes_3D
-
-ierr = 0     ! assume normal termination
-
-!-----------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! then get all the Variable ID's we need.
-!-----------------------------------------------------------------
-
-call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-              'nc_write_model_vars','inquire')
-
-if ( output_state_vector ) then
-
-   call nc_check(nf90_inq_varid(ncFileID, "state", StateVarID), &
-              'nc_write_model_vars','inq_varid state')
-   call nc_check(nf90_put_var(ncFileID, StateVarID, statevec, &
-                start=(/ 1, copyindex, timeindex /)), &
-              'nc_write_model_vars','put_var statevec')
-
-else
-
-j = 0
-
-do id=1,num_domains
-
-   write( idom , '(I1)') id
-
-   !----------------------------------------------------------------------------
-   ! Fill the variables
-   !----------------------------------------------------------------------------
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-
-      varname = trim(wrf_state_variables(1,my_index))//'_d0'//idom
-
-      call nc_check(nf90_inq_varid(ncFileID, trim(varname), VarID), &
-                 'nc_write_model_vars','inq_varid '//trim(varname))
-
-      i       = j + 1
-      j       = i + wrf%dom(id)%var_size(1,ind) *  &
-                    wrf%dom(id)%var_size(2,ind) *  &
-                    wrf%dom(id)%var_size(3,ind) - 1 
-
-      if (debug) write(*,'(a10,'' = statevec('',i7,'':'',i7,'') with dims '',3(1x,i3))') &
-              trim(varname),i,j,wrf%dom(id)%var_size(1,ind),wrf%dom(id)%var_size(2,ind),wrf%dom(id)%var_size(3,ind)
-
-      if ( wrf%dom(id)%var_size(3,ind) > 1 ) then
-
-         dimsizes_3D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind), &
-                         wrf%dom(id)%var_size(3,ind)/)
-
-         allocate ( temp3d(dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3)) )
-         temp3d  = reshape(statevec(i:j), (/ dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3) /) ) 
-         call nc_check(nf90_put_var( ncFileID, VarID, temp3d, &
-                                  start=(/ 1, 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp3d)
-
-      else ! must be 2D
-
-         dimsizes_2D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind)/)
-
-         allocate ( temp2d(dimsizes_2D(1),dimsizes_2D(2)) )
-         temp2d  = reshape(statevec(i:j), (/ dimsizes_2D(1),dimsizes_2D(2) /) )
-         call nc_check(nf90_put_var( ncFileID, VarID, temp2d, &
-                                  start=(/ 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp2d)
-
-
-      endif
-
-   enddo ! variables
-
-enddo ! domains
-
-endif
-
-!-----------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-----------------------------------------------------------------
-
-call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars','sync')
-
-end function nc_write_model_vars
-
-!-------------------------------
-
-!  public stubs
-
-!**********************************************
-
-subroutine adv_1step(x, Time)
-
-! Does single time-step advance with vector state as
-! input and output.
-
-  real(r8), intent(inout) :: x(:)
-
-! Time is needed for more general models like this; need to add in to 
-! low-order models
-  type(time_type), intent(in) :: Time
-
-call error_handler(E_ERR,'adv_1step', &
-                  'WRF model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-
-
-end subroutine adv_1step
-
-!**********************************************
+!#######################################################################
 
 subroutine end_model()
 
 deallocate(domain_id)
 
 end subroutine end_model
-
-!**********************************************
-
-subroutine init_time(i_time)
-! For now returns value of Time_init which is set in initialization routines.
-
-  type(time_type), intent(out) :: i_time
-
-!Where should initial time come from here?
-! WARNING: CURRENTLY SET TO 0
-  i_time = set_time(0, 0)
-
-end subroutine init_time
-
-!**********************************************
-
-subroutine init_conditions(x)
-! Reads in restart initial conditions and converts to vector
-
-! Following changed to intent(inout) for ifc compiler;should be like this
-  real(r8), intent(inout) :: x(:)
-
-msgstring2 = "cannot run with 'start_from_restart = .false.' "
-msgstring3 = 'use ensemble_init in the WRF utils dir, or use wrf_to_dart'
-call error_handler(E_ERR,'init_conditions', &
-                  'WARNING!!  WRF model has no built-in default state', &
-                  source, revision, revdate, &
-                  text2=msgstring2, text3=msgstring3)
-
-end subroutine init_conditions
-
-
 
 !#######################################################################
 
@@ -5060,7 +4633,7 @@ type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: i,j,k,id,var_type
 real(r8)                        :: model_pressure_distrib
 
-integer  :: off
+integer  :: off, type_x
 real(r8) :: pres1, pres2
 integer  :: ens_size
 
@@ -5073,13 +4646,19 @@ ens_size = 1
 !   we are at the upper or lower boundary in which case we will extrapolate.
 if( (var_type == wrf%dom(id)%type_w) .or. (var_type == wrf%dom(id)%type_gz) ) then
 
+   if (var_type == wrf%dom(id)%type_w) then
+      type_x = wrf%dom(id)%type_w
+   else
+      type_x = wrf%dom(id)%type_gz
+   endif
+
    if( k == 1 ) then
 
       pres1 = scalar(model_pressure_t_distrib(i, j, k,  id, state_handle, ens_size))
       pres2 = scalar(model_pressure_t_distrib(i, j, k+1,id, state_handle, ens_size))
       model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true.)
 
-   elseif( k == wrf%dom(id)%var_size(3,wrf%dom(id)%type_w) ) then
+   elseif( k == wrf%dom(id)%var_size(3,type_x) ) then
 
       pres1 = scalar(model_pressure_t_distrib(i,j,k-1,id, state_handle, ens_size))
       pres2 = scalar(model_pressure_t_distrib(i,j,k-2,id, state_handle, ens_size))
@@ -6853,9 +6432,41 @@ end do
 end subroutine get_domain_info
 
 !#######################################################################
-!> Distributed version of get_close_obs
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, &
-                         obs_kind, num_close, close_ind, dist, state_handle)
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, state_handle)
+
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:)
+integer(i8),                   intent(in)     :: loc_indx(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_state
+
+!#######################################################################
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, state_handle)
+
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:), loc_types(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_obs
+
+!#######################################################################
+subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                     num_close, close_ind, dist, state_handle)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
 ! (obs_loc, obs_kind), returns the subset of close ones to the "base" ob, their
@@ -6867,43 +6478,42 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, &
 
 ! Vertical conversion is carried out by the subroutine vert_convert.
 
-! Note that both base_obs_loc and obs_loc are intent(inout), meaning that these
+! Note that both base_loc and locs are intent(inout), meaning that these
 ! locations are possibly modified here and returned as such to the calling routine.
 ! The calling routine is always filter_assim and these arrays are local arrays
 ! within filter_assim. In other words, these modifications will only matter within
 ! filter_assim, but will not propagate backwards to filter.
 
-!HK
-type(ensemble_type),         intent(in)  :: state_handle
-type(get_close_type),        intent(in)     :: gc
-type(location_type),         intent(inout)  :: base_obs_loc, obs_loc(:)
-integer,                     intent(in)     :: base_obs_kind, obs_kind(:)
-integer,                     intent(out)    :: num_close, close_ind(:)
-real(r8),                    intent(out)    :: dist(:)
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
 
 integer                :: t_ind, istatus1, istatus2, k
-integer                :: base_which, local_obs_which
-real(r8), dimension(3) :: base_array, local_obs_array
-type(location_type)    :: local_obs_loc
+integer                :: base_which, local_which
+real(r8), dimension(3) :: base_array, local_array
+type(location_type)    :: local_loc
 
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
-dist      = 1.0e9
+if (present(dist)) dist      = 1.0e9
 
 istatus1 = 0
 istatus2 = 0
 
-! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
+! Convert base vertical coordinate to requested vertical coordinate if necessary
 
-base_array = get_location(base_obs_loc) 
-base_which = nint(query_location(base_obs_loc))
+base_array = get_location(base_loc) 
+base_which = nint(query_location(base_loc))
 
-if (.not. horiz_dist_only) then
+if (vertical_localization_on()) then
    if (base_which /= wrf%dom(1)%localization_coord) then
       !print*, 'base_which ', base_which, 'loc coord ', wrf%dom(1)%localization_coord
-      call vert_convert(state_handle, base_obs_loc, base_obs_kind, istatus1)
+      call vert_convert(state_handle, base_loc, base_type, istatus1)
       !call error_handler(E_ERR, 'you should not call this ', 'get_close_obs')
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
@@ -6916,36 +6526,38 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+   call loc_get_close(gc, base_loc, base_type, locs, loc_qtys, loc_qtys, &
                           num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
    do k = 1, num_close
 
       t_ind = close_ind(k)
-      local_obs_loc   = obs_loc(t_ind)
-      local_obs_which = nint(query_location(local_obs_loc))
+      local_loc   = locs(t_ind)
+      local_which = nint(query_location(local_loc))
 
-      ! Convert local_obs vertical coordinate to requested vertical coordinate if necessary.
+      ! Convert local vertical coordinate to requested vertical coordinate if necessary.
       ! This should only be necessary for obs priors, as state location information already
       ! contains the correct vertical coordinate (filter_assim's call to get_state_meta_data).
-      if (.not. horiz_dist_only) then
-         if (local_obs_which /= wrf%dom(1)%localization_coord) then
-            call vert_convert(state_handle, local_obs_loc, obs_kind(t_ind), istatus2)
+      if (vertical_localization_on()) then
+         if (local_which /= wrf%dom(1)%localization_coord) then
+            call vert_convert(state_handle, local_loc, loc_qtys(t_ind), istatus2)
             ! Store the "new" location into the original full local array
-            obs_loc(t_ind) = local_obs_loc !HK Overwritting the location
+            locs(t_ind) = local_loc !HK Overwritting the location
          else
             istatus2 = 0
          endif
       endif
 
-       ! Compute distance - set distance to a very large value if vert coordinate is missing
-      ! or vert_convert returned error (istatus2=1)
-      local_obs_array = get_location(local_obs_loc)
-      if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
-         dist(k) = 1.0e9
-      else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
+      if (present(dist)) then
+         ! Compute distance - set distance to a very large value if vert coordinate is missing
+         ! or vert_convert returned error (istatus2=1)
+         local_array = get_location(local_loc)
+         if (((vertical_localization_on()).and.(local_array(3) == missing_r8)).or.(istatus2 == 1)) then
+            dist(k) = 1.0e9
+         else
+            dist(k) = get_dist(base_loc, local_loc, base_type, loc_qtys(t_ind))
+         endif
       endif
 
       !print*, 'k ', k, 'rank ', my_task_id()
@@ -6953,7 +6565,7 @@ if (istatus1 == 0) then
    end do
 endif
 
-end subroutine get_close_obs
+end subroutine get_close
 
 !#######################################################################
 !nc -- additional function from Greg Lawson & Nancy Collins
@@ -7888,48 +7500,48 @@ row = 0
 
 ! fill default state variable table here.
 row = row+1
-default_table(:,row) = (/ 'U                    ', &
-                          'KIND_U_WIND_COMPONENT', &
-                          'TYPE_U               ', &
-                          'UPDATE               ', &
-                          '999                  '  /)
+default_table(:,row) = (/ 'U                         ', &
+                          'QTY_U_WIND_COMPONENT      ', &
+                          'TYPE_U                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'V                    ', &
-                          'KIND_V_WIND_COMPONENT', &
-                          'TYPE_V               ', &
-                          'UPDATE               ', &
-                          '999                  '  /)
+default_table(:,row) = (/ 'V                         ', &
+                          'QTY_V_WIND_COMPONENT      ', &
+                          'TYPE_V                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'W                     ', &
-                          'KIND_VERTICAL_VELOCITY', &
-                          'TYPE_W                ', &
-                          'UPDATE                ', &
-                          '999                   '  /)
+default_table(:,row) = (/ 'W                         ', &
+                          'QTY_VERTICAL_VELOCITY     ', &
+                          'TYPE_W                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'PH                      ', &
-                          'KIND_GEOPOTENTIAL_HEIGHT', &
-                          'TYPE_GZ                 ', &
-                          'UPDATE                  ', &
-                          '999                     '  /)
+default_table(:,row) = (/ 'PH                        ', &
+                          'QTY_GEOPOTENTIAL_HEIGHT   ', &
+                          'TYPE_GZ                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
 default_table(:,row) = (/ 'T                         ', &
-                          'KIND_POTENTIAL_TEMPERATURE', &
+                          'QTY_POTENTIAL_TEMPERATURE ', &
                           'TYPE_T                    ', &
                           'UPDATE                    ', &
                           '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'MU           ', &
-                          'KIND_PRESSURE', &
-                          'TYPE_MU      ', &
-                          'UPDATE       ', &
-                          '999          '  /)
+default_table(:,row) = (/ 'MU                        ', &
+                          'QTY_PRESSURE              ', &
+                          'TYPE_MU                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 
 row = row+1
-default_table(:,row) = (/ 'QVAPOR                 ', &
-                          'KIND_VAPOR_MIXING_RATIO', &
-                          'TYPE_QV                ', &
-                          'UPDATE                 ', &
-                          '999                    '  /)
+default_table(:,row) = (/ 'QVAPOR                    ', &
+                          'QTY_VAPOR_MIXING_RATIO    ', &
+                          'TYPE_QV                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 
 return
 
@@ -7969,22 +7581,22 @@ do i = 1, row
    ! end of the list?
    if (wrf_state_variables(2, i) == 'NULL') exit
 
-   nextkind = get_raw_obs_kind_index(trim(wrf_state_variables(2, i)))
+   nextkind = get_index_for_quantity(trim(wrf_state_variables(2, i)))
    select case(nextkind)
 
    ! wrf stores potential temperature (temperature perturbations around a 
    ! threshold) but we can interpolate sensible temperature from it
-   case (KIND_POTENTIAL_TEMPERATURE)
-      in_state_vector(KIND_TEMPERATURE) = .true.
-      in_state_vector(KIND_POTENTIAL_TEMPERATURE) = .true.
+   case (QTY_POTENTIAL_TEMPERATURE)
+      in_state_vector(QTY_TEMPERATURE) = .true.
+      in_state_vector(QTY_POTENTIAL_TEMPERATURE) = .true.
 
    ! we use vapor mixing ratio to compute specific humidity
-   case (KIND_VAPOR_MIXING_RATIO)
-      in_state_vector(KIND_VAPOR_MIXING_RATIO) = .true.
-      in_state_vector(KIND_SPECIFIC_HUMIDITY) = .true.
+   case (QTY_VAPOR_MIXING_RATIO)
+      in_state_vector(QTY_VAPOR_MIXING_RATIO) = .true.
+      in_state_vector(QTY_SPECIFIC_HUMIDITY) = .true.
 
    ! unrecognized kind string in namelist.
-   ! 0 is actually KIND_RAW_STATE_VARIABLE and not supported here.
+   ! 0 is actually QTY_STATE_VARIABLE and not supported here.
    case (-1, 0) 
       write(errstring, *) 'unrecognized KIND string: ' // trim(wrf_state_variables(2, i))
       call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
@@ -7996,15 +7608,15 @@ do i = 1, row
 
    end select
 
-   ! NOTE: PSFC can be labeled either KIND_PRESSURE or KIND_SURFACE_PRESSURE
+   ! NOTE: PSFC can be labeled either QTY_PRESSURE or QTY_SURFACE_PRESSURE
    ! in the namelist, but make sure however it is labeled that for now we 
    ! allow surface pressure interpolation.  this may go away once we work out
-   ! KIND_FOO vs KIND_SURFACE_FOO - are they fundamentally different things
-   ! or should the decision be made based on a KIND_FOO and the vertical
+   ! QTY_FOO vs QTY_SURFACE_FOO - are they fundamentally different things
+   ! or should the decision be made based on a QTY_FOO and the vertical
    ! location type -- if it is VERTISSURFACE, then you do the 2d calc in the
    ! surface field, otherwise you do the full-up 3d interpolation.
    if ( wrf_state_variables(1, i) == 'PSFC' ) then
-      in_state_vector(KIND_SURFACE_PRESSURE) = .true.
+      in_state_vector(QTY_SURFACE_PRESSURE) = .true.
    endif
 
 enddo
@@ -8019,12 +7631,12 @@ do i = 1, size(in_state_vector)
    select case(i)
   
    ! the vortex center computations require wind speeds and phb?
-   case (KIND_VORTEX_LAT, KIND_VORTEX_LON, KIND_VORTEX_PMIN, KIND_VORTEX_WMAX)
-      if ((.not. in_state_vector(KIND_U_WIND_COMPONENT))   .or. &
-          (.not. in_state_vector(KIND_V_WIND_COMPONENT))   .or. &
-          (.not. in_state_vector(KIND_TEMPERATURE))        .or. &
-          (.not. in_state_vector(KIND_VAPOR_MIXING_RATIO)) .or. &
-          (.not. in_state_vector(KIND_PRESSURE))) then
+   case (QTY_VORTEX_LAT, QTY_VORTEX_LON, QTY_VORTEX_PMIN, QTY_VORTEX_WMAX)
+      if ((.not. in_state_vector(QTY_U_WIND_COMPONENT))   .or. &
+          (.not. in_state_vector(QTY_V_WIND_COMPONENT))   .or. &
+          (.not. in_state_vector(QTY_TEMPERATURE))        .or. &
+          (.not. in_state_vector(QTY_VAPOR_MIXING_RATIO)) .or. &
+          (.not. in_state_vector(QTY_PRESSURE))) then
          write(errstring, *) 'VORTEX kinds will require U,V,T,QVAPOR,MU in state vector'
          ! FIXME: not fatal error, just informative at this point.
          call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
@@ -8032,8 +7644,8 @@ do i = 1, size(in_state_vector)
       endif
  
    ! if you have one wind component you have to have both
-   case (KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
-      if (in_state_vector(KIND_U_WIND_COMPONENT) .neqv. in_state_vector(KIND_V_WIND_COMPONENT)) then
+   case (QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT)
+      if (in_state_vector(QTY_U_WIND_COMPONENT) .neqv. in_state_vector(QTY_V_WIND_COMPONENT)) then
          write(errstring, *) 'WIND kinds will require both U,V in state vector'
          ! FIXME: not fatal error, just informative at this point.
          call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
@@ -8048,7 +7660,7 @@ enddo
 
 ! part 3: fields you just have to have, always, and other exceptions
 ! and things that break the rules.
-if (.not. in_state_vector(KIND_GEOPOTENTIAL_HEIGHT)) then
+if (.not. in_state_vector(QTY_GEOPOTENTIAL_HEIGHT)) then
    write(errstring, *) 'PH is always a required field'
    call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
                       source, revision, revdate)
@@ -8056,8 +7668,8 @@ endif
 
 ! FIXME: is this true?  or is pressure always required, and surface
 ! pressure required only if you have any of the surface obs?
-if ((.not. in_state_vector(KIND_PRESSURE)) .and. &
-    (.not. in_state_vector(KIND_SURFACE_PRESSURE))) then
+if ((.not. in_state_vector(QTY_PRESSURE)) .and. &
+    (.not. in_state_vector(QTY_SURFACE_PRESSURE))) then
     write(errstring, *) 'One of MU or PSFC is a required field'
     call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
                        source, revision, revdate)
@@ -8066,26 +7678,26 @@ endif
 ! surface elevation and land mask are read outside the state vector mechanism,
 ! directly from the wrfinput template file, and does not vary from
 ! one ensemble member to another.
-in_state_vector(KIND_SURFACE_ELEVATION) = .true.
-in_state_vector(KIND_LANDMASK) = .true.
+in_state_vector(QTY_SURFACE_ELEVATION) = .true.
+in_state_vector(QTY_LANDMASK) = .true.
 
 ! there is no field that directly maps to the vortex measurements.
 ! if you have all the fields it needs, allow them.
-if (in_state_vector(KIND_U_WIND_COMPONENT)    .and. &
-    in_state_vector(KIND_V_WIND_COMPONENT)    .and. &
-    in_state_vector(KIND_TEMPERATURE)         .and. &
-    in_state_vector(KIND_VAPOR_MIXING_RATIO)  .and. &
-    in_state_vector(KIND_PRESSURE)) then        ! ok to add vortex types
-   in_state_vector(KIND_VORTEX_LAT)  = .true.
-   in_state_vector(KIND_VORTEX_LON)  = .true.
-   in_state_vector(KIND_VORTEX_PMIN) = .true.
-   in_state_vector(KIND_VORTEX_WMAX) = .true.
+if (in_state_vector(QTY_U_WIND_COMPONENT)    .and. &
+    in_state_vector(QTY_V_WIND_COMPONENT)    .and. &
+    in_state_vector(QTY_TEMPERATURE)         .and. &
+    in_state_vector(QTY_VAPOR_MIXING_RATIO)  .and. &
+    in_state_vector(QTY_PRESSURE)) then        ! ok to add vortex types
+   in_state_vector(QTY_VORTEX_LAT)  = .true.
+   in_state_vector(QTY_VORTEX_LON)  = .true.
+   in_state_vector(QTY_VORTEX_PMIN) = .true.
+   in_state_vector(QTY_VORTEX_WMAX) = .true.
 endif
  
 ! if you have geopotential height and pressure, you can compute
 ! a density value.
-if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
-    in_state_vector(KIND_PRESSURE) ) in_state_vector(KIND_DENSITY) = .true.
+if (in_state_vector(QTY_GEOPOTENTIAL_HEIGHT) .and. &
+    in_state_vector(QTY_PRESSURE) ) in_state_vector(QTY_DENSITY) = .true.
 
 
 ! allow reflectivity to be asked for, because the obs_def has an alternative
@@ -8093,8 +7705,8 @@ if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
 ! is not allowed it will error exit instead of returning with an invalid istatus
 ! to indicate to the caller that the interpolation failed.
 ! ditto for power weighted fall speed.
-in_state_vector(KIND_RADAR_REFLECTIVITY) = .true.
-in_state_vector(KIND_POWER_WEIGHTED_FALL_SPEED) = .true.
+in_state_vector(QTY_RADAR_REFLECTIVITY) = .true.
+in_state_vector(QTY_POWER_WEIGHTED_FALL_SPEED) = .true.
 
 
 
@@ -8405,145 +8017,11 @@ integer function get_type_ind_from_type_string(id, wrf_varname)
 
 end function get_type_ind_from_type_string
 
-!-------------------------------------------------------------
-
-subroutine trans_2Dto1D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a1d(i + nx*(j-1)) = a2d(i,j)
-   enddo
-enddo
-
-end subroutine trans_2Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_3Dto1D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a1d(i + nx*(j-1) + nx*ny*(k-1) ) = a3d(i,j,k)
-      enddo
-   enddo
-enddo
-
-end subroutine trans_3Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto2D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a2d(i,j) = a1d(i + nx*(j-1))
-   enddo
-enddo
-
-end subroutine trans_1Dto2D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto3D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a3d(i,j,k) = a1d(i + nx*(j-1) + nx*ny*(k-1) )
-      enddo
-   enddo
-enddo
-
-end subroutine trans_1Dto3D
-
 !----------------------------------------------------------------------
-
-subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(out) :: year, month, day, hour, minute, second
 character(len=19), intent(in)  :: tstring
@@ -8560,12 +8038,10 @@ return
 end subroutine get_wrf_date
 
 !----------------------------------------------------------------------
-
-subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(in) :: year, month, day, hour, minute, second
 character(len=19), intent(out)  :: tstring
@@ -8768,7 +8244,7 @@ if ( in_state ) then
 else ! not in state
 
    call error_handler(E_MSG, 'simple_interp_distrib', &
-      'obs_kind "'//trim(get_raw_obs_kind_name(obs_kind))//'" is not in state vector', &
+      'obs_kind "'//trim(get_name_for_quantity(obs_kind))//'" is not in state vector', &
       source, revision, revdate)
    fld(2, ens_size) = missing_r8
    return
@@ -8846,75 +8322,78 @@ integer, intent(in)  :: id
 part_of_state_vector = .false. ! assume not in state vector
 
 
-if    ( ( obs_kind == KIND_VERTICAL_VELOCITY)             .and. ( wrf%dom(id)%type_w >= 0 ) )  then
+if    ( ( obs_kind == QTY_VERTICAL_VELOCITY)             .and. ( wrf%dom(id)%type_w >= 0 ) )  then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_w
-else if( ( obs_kind == KIND_RAINWATER_MIXING_RATIO )      .and. ( wrf%dom(id)%type_qr >= 0 ) ) then
+else if( ( obs_kind == QTY_RAINWATER_MIXING_RATIO )      .and. ( wrf%dom(id)%type_qr >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qr
-else if( ( obs_kind == KIND_GRAUPEL_MIXING_RATIO )        .and. ( wrf%dom(id)%type_qg >= 0 ) ) then
+else if( ( obs_kind == QTY_GRAUPEL_MIXING_RATIO )        .and. ( wrf%dom(id)%type_qg >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qg
-else if( ( obs_kind == KIND_HAIL_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qh >= 0 ) ) then
+else if( ( obs_kind == QTY_HAIL_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qh >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qh
-else if( ( obs_kind == KIND_SNOW_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qs >= 0 ) ) then
+else if( ( obs_kind == QTY_SNOW_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qs >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qs
-else if( ( obs_kind == KIND_CLOUD_ICE )                   .and. ( wrf%dom(id)%type_qi >= 0 ) ) then
+else if( ( obs_kind == QTY_CLOUD_ICE )                   .and. ( wrf%dom(id)%type_qi >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qi
-else if( ( obs_kind == KIND_CLOUD_LIQUID_WATER )          .and. ( wrf%dom(id)%type_qc >= 0 ) ) then
+else if( ( obs_kind == QTY_CLOUD_LIQUID_WATER )          .and. ( wrf%dom(id)%type_qc >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_qc
-else if( ( obs_kind == KIND_DROPLET_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qndrp >= 0 ) ) then
+else if( ( obs_kind == QTY_DROPLET_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qndrp >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qndrp
-else if( ( obs_kind == KIND_ICE_NUMBER_CONCENTRATION )    .and. ( wrf%dom(id)%type_qnice >= 0 ) )then
+else if( ( obs_kind == QTY_ICE_NUMBER_CONCENTRATION )    .and. ( wrf%dom(id)%type_qnice >= 0 ) )then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_qnice
-else if( ( obs_kind == KIND_SNOW_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnsnow >= 0 ) ) then
+else if( ( obs_kind == QTY_SNOW_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnsnow >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qnsnow
-else if( ( obs_kind == KIND_RAIN_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnrain >= 0 ) ) then
+else if( ( obs_kind == QTY_RAIN_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnrain >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qnrain
-else if( ( obs_kind == KIND_GRAUPEL_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qngraupel >= 0 ) ) then
+else if( ( obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qngraupel >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_qngraupel
-else if( ( obs_kind == KIND_HAIL_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnhail >= 0 ) ) then
+else if( ( obs_kind == QTY_HAIL_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnhail >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_qnhail
-else if( ( obs_kind == KIND_CONDENSATIONAL_HEATING )      .and. ( wrf%dom(id)%type_hdiab >= 0 ) ) then
+else if( ( obs_kind == QTY_CONDENSATIONAL_HEATING )      .and. ( wrf%dom(id)%type_hdiab >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_hdiab
-else if( ( obs_kind == KIND_POWER_WEIGHTED_FALL_SPEED )   .and. ( wrf%dom(id)%type_fall_spd >= 0 ) ) then
+else if( ( obs_kind == QTY_POWER_WEIGHTED_FALL_SPEED )   .and. ( wrf%dom(id)%type_fall_spd >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_fall_spd
-else if( ( obs_kind == KIND_RADAR_REFLECTIVITY )          .and. ( wrf%dom(id)%type_refl >= 0 ) ) then
+else if( ( obs_kind == QTY_RADAR_REFLECTIVITY )          .and. ( wrf%dom(id)%type_refl >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_refl
-else if( ( obs_kind == KIND_DIFFERENTIAL_REFLECTIVITY )   .and. ( wrf%dom(id)%type_dref >= 0 ) ) then
+else if( ( obs_kind == QTY_DIFFERENTIAL_REFLECTIVITY )   .and. ( wrf%dom(id)%type_dref >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type =  wrf%dom(id)%type_dref
-else if( ( obs_kind == KIND_SPECIFIC_DIFFERENTIAL_PHASE ) .and. ( wrf%dom(id)%type_spdp >= 0 ) ) then
+else if( ( obs_kind == QTY_SPECIFIC_DIFFERENTIAL_PHASE ) .and. ( wrf%dom(id)%type_spdp >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_spdp
-else if ( ( obs_kind == KIND_VAPOR_MIXING_RATIO )         .and. ( wrf%dom(id)%type_qv >= 0 ) ) then
+else if ( ( obs_kind == QTY_VAPOR_MIXING_RATIO )         .and. ( wrf%dom(id)%type_qv >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_qv
-else if ( ( obs_kind == KIND_TEMPERATURE )                  .and. ( wrf%dom(id)%type_t >= 0 ) ) then
+else if ( ( obs_kind == QTY_TEMPERATURE )                  .and. ( wrf%dom(id)%type_t >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_t
-else if ( ( obs_kind == KIND_POTENTIAL_TEMPERATURE )        .and. ( wrf%dom(id)%type_t >= 0 ) ) then
+else if ( ( obs_kind == QTY_POTENTIAL_TEMPERATURE )        .and. ( wrf%dom(id)%type_t >= 0 ) ) then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_t
-else if ( ( obs_kind == KIND_SKIN_TEMPERATURE )              .and. ( wrf%dom(id)%type_tsk >= 0 ) )then
+else if ( ( obs_kind == QTY_SKIN_TEMPERATURE )              .and. ( wrf%dom(id)%type_tsk >= 0 ) )then
    part_of_state_vector = .true.
    wrf_type = wrf%dom(id)%type_tsk
+else if ( ( obs_kind == QTY_GEOPOTENTIAL_HEIGHT )        .and. ( wrf%dom(id)%type_gz >= 0 ) )then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_gz
 else
    call error_handler(E_MSG, 'obs_kind_in_state_vector', &
-      'obs_kind "'//trim(get_raw_obs_kind_name(obs_kind))//'" is not in state vector', &
+      'obs_kind "'//trim(get_name_for_quantity(obs_kind))//'" is not in state vector', &
        source, revision, revdate)
    part_of_state_vector = .false.
    wrf_type = -1
@@ -8933,45 +8412,18 @@ query_vert_localization_coord = vert_localization_coord
 end function query_vert_localization_coord
 
 !--------------------------------------------------------------------
-!> construct restart file name for reading
-!> model time for CESM format?
-function construct_file_name_in(stub, domain, copy)
-
-character(len=512), intent(in) :: stub
-integer,            intent(in) :: domain
-integer,            intent(in) :: copy
-character(len=1024)            :: construct_file_name_in
-
-!write(construct_file_name, '(A, i2.2, A, i2.2, A)') TRIM(stub), domain, '.', copy, '.nc'
-
-if (copy < 10) then
-   write(construct_file_name_in, '(A, i1.1, A, i2.2)') TRIM(stub), copy, '/wrfinput_d', domain
-else
-   write(construct_file_name_in, '(A, i2.2, A, i2.2)') TRIM(stub), copy, '/wrfinput_d', domain
-endif
-
-!if (copy < 10) then
-!   write(construct_file_name_in, '(A, A, i1.1, A)') TRIM(stub), '_', copy, '.nc'
-!else
-!   write(construct_file_name_in, '(A, A, i2.2, A)') TRIM(stub), '_', copy, '.nc'
-!endif
-
-end function construct_file_name_in
-
-!--------------------------------------------------------------------
 !> read the time from the input file
 function read_model_time(filename)
 
-character(len=1024), intent(in) :: filename
-integer                         :: year, month, day, hour, minute, second
-integer                         :: ret !< netcdf return code
-integer                         :: ndims, dimids(2), ivtype, ncid, var_id
-character(len=80)               :: varname
-character(len=19)               :: timestring
-integer                         :: i,  idims(2)
+character(len=*),  intent(in) :: filename
+type(time_type)               :: read_model_time
 
-type(time_type) :: read_model_time
-
+integer           :: year, month, day, hour, minute, second
+integer           :: ret ! netcdf return code
+integer           :: ndims, dimids(2), ivtype, ncid, var_id
+character(len=80) :: varname
+character(len=19) :: timestring
+integer           :: i,  idims(2)
 
 call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
                   'opening', filename )
@@ -9015,7 +8467,7 @@ character(len=19) :: timestring
 call get_date(dart_time, year, month, day, hour, minute, second)
 call set_wrf_date(timestring, year, month, day, hour, minute, second)
 
-call nc_check(nf90_Redef(ncid),"redef")
+call nc_redef(ncid)
 
 ! Define Times variable if it does not exist
 ret = nf90_inq_varid(ncid, "Times", var_id)
@@ -9041,7 +8493,7 @@ if (ret /= NF90_NOERR) then
       dimids=dim_ids, varid=var_id), "write_model_time def_var Times")
 endif
 
-call nc_check(nf90_Enddef(ncid),"Enddef")
+call nc_enddef(ncid)
 
 call nc_check( nf90_put_var(ncid, var_id, timestring), &
                'write_model_time', 'put_var Times' )
@@ -9053,6 +8505,7 @@ end subroutine write_model_time
 end module model_mod
 
 !> @}
+
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$

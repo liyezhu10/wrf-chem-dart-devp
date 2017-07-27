@@ -1,8 +1,8 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id: model_mod_check.f90 6739 2014-01-15 20:44:54Z hkershaw $
+! $Id$
 
 module test_interpolate_mod
 
@@ -22,7 +22,7 @@ use          location_mod, only : location_type, set_location, write_location,  
                                   VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT,    &
                                   VERTISSCALEHEIGHT
 
-use          obs_kind_mod, only : get_raw_obs_kind_name
+use          obs_kind_mod, only : get_name_for_quantity
 
 use  ensemble_manager_mod, only : ensemble_type
 
@@ -36,9 +36,9 @@ public :: test_interpolate_range, test_interpolate_single
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/rma_model_mod_check/models/template/model_mod_check.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 6739 $"
-character(len=128), parameter :: revdate  = "$Date: 2014-01-15 13:44:54 -0700 (Wed, 15 Jan 2014) $"
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 contains
 
@@ -106,11 +106,11 @@ test_interpolate_range = 0
 
 if ((interp_test_dlon < 0.0_r8) .or. (interp_test_dlat < 0.0_r8)) then
    if ( do_output() ) then
-      write(*,*)'Skipping the rigorous interpolation test because one of'
-      write(*,*)'interp_test_dlon,interp_test_dlat are < 0.0'
-      write(*,*)'interp_test_dlon  = ',interp_test_dlon
-      write(*,*)'interp_test_dlat  = ',interp_test_dlat
-      write(*,*)'interp_test_dvert = ',interp_test_dvert
+      write(*,'(A)')    'Skipping the rigorous interpolation test because one of'
+      write(*,'(A)')    'interp_test_dlon,interp_test_dlat are < 0.0'
+      write(*,'(A,I2)') 'interp_test_dlon  = ',interp_test_dlon
+      write(*,'(A,I2)') 'interp_test_dlat  = ',interp_test_dlat
+      write(*,'(A,I2)') 'interp_test_dvert = ',interp_test_dvert
    endif
    return
 endif
@@ -171,8 +171,10 @@ write(iunit,'(''datmat(datmat == missingvals) = NaN;'')')
 call close_file(iunit)
 
 if ( do_output() ) then
-   write(*,*) 'total interpolations  : ', nlon*nlat*nvert
-   write(*,*) 'failed interpolations : ', nfailed
+   write(*,'(A)')     '-------------------------------------------------------------'
+   write(*,'(A,I10)') 'total  interpolations : ', nlon*nlat*nvert
+   write(*,'(A,I10)') 'failed interpolations : ', nfailed
+   write(*,'(A)')     '-------------------------------------------------------------'
 endif
 
 call count_error_codes(all_ios_out, nfailed)
@@ -237,7 +239,7 @@ do imem = 1, ens_size
    call nc_check(nf90_def_var(ncid=ncid, name=field_name, xtype=nf90_double, &
            dimids=(/ nlonDimID, nlatDimID, nvertDimID /), varid=VarID(imem)), 'test_interpolate_range', &
                     'field def_var '//trim(ncfilename))
-   kind_of_interest = get_raw_obs_kind_name(mykindindex)
+   kind_of_interest = get_name_for_quantity(mykindindex)
    call nc_check(nf90_put_att(ncid, VarID(imem), 'long_name', kind_of_interest), &
               'test_interpolate_range', 'put_att field long_name '//trim(ncfilename))
    call nc_check(nf90_put_att(ncid, VarID(imem), '_FillValue', MISSING_R8), &
@@ -305,6 +307,7 @@ integer :: test_interpolate_single
 
 type(location_type) :: loc
 integer :: imem, num_passed, vertcoord
+character(len=128) :: my_location
 
 num_passed = 0
 
@@ -312,16 +315,31 @@ vertcoord = get_location_index(vertcoord_string)
 
 loc = set_location(lonval, latval, vertval, vertcoord)
 
+if ( do_output() ) then
+   call write_location(0, loc, charstring=my_location)
+   write(*,'(A)') ''
+   write(*,'(A)') '-------------------------------------------------------------'
+   write(*,'("interpolating at ",A)') trim(my_location)
+   write(*,'(A)') '-------------------------------------------------------------'
+   write(*,'(A)') ''
+endif
+
 call model_interpolate(ens_handle, ens_size, loc, mykindindex, interp_vals, ios_out)
 
 do imem = 1, ens_size
    if (ios_out(imem) == 0 ) then
-      if (do_output() ) &
-         write(*,*) 'member ', imem, 'model_interpolate SUCCESS with value', interp_vals(imem)
-      num_passed = num_passed + 1
+      if (do_output() ) then
+         write(*,'(A)') '-------------------------------------------------------------'
+         write(*,'("member ",I3,", model_interpolate SUCCESS with value ",F10.3)') imem, interp_vals(imem)
+         write(*,'(A)') '-------------------------------------------------------------'
+         num_passed = num_passed + 1
+      endif
    else
-      if (do_output() ) &
-         write(*,*) 'member ', imem, 'model_interpolate ERROR with error code', ios_out(imem)
+      if (do_output() ) then
+         write(*,'(A)') '-------------------------------------------------------------'
+         write(*,'("member ",I3,", model_interpolate ERROR with error code",I2  )') imem, ios_out(imem)
+         write(*,'(A)') '-------------------------------------------------------------'
+      endif
    endif
 enddo
 
@@ -389,3 +407,9 @@ end function  get_location_index
 !-------------------------------------------------------------------------------
 
 end module test_interpolate_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

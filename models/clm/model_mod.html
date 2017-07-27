@@ -3,8 +3,8 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (CLM)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css">
-<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css">
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
@@ -14,10 +14,10 @@
 <table border=0 summary="" cellpadding=5>
 <tr>
     <td valign=middle>
-    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
     </td>
     <td>
-       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
           <small><small>version information for this file: <br />
           <!-- version tag follows, do not edit -->
           $Id$</small></small>
@@ -159,7 +159,7 @@ mainly to indicate the location of the DART observation sequence files on your s
 <TBODY valign=top>
 
 <TR><TD>
-<a href="http://www.cesm.ucar.edu/models/clm/surface.heterogeneity.html"><img src="../../doc/images/clm_landcover.jpg" alt="CLM gridcell breakdown" height=250 /></a>
+<a href="http://www.cesm.ucar.edu/models/clm/surface.heterogeneity.html"><img src="../../documentation/images/clm_landcover.jpg" alt="CLM gridcell breakdown" height=250 /></a>
 </TD>
     <TD>"The land surface is represented by 5 primary sub-grid land cover types 
      (landunits: glacier, lake, wetland, urban, vegetated) in each grid cell. 
@@ -228,8 +228,8 @@ mainly to indicate the location of the DART observation sequence files on your s
     or both, what file the variable should be read from, and if the variable should be 
     modified by the assimilation or not. <strong>Only variables in the CLM restart file will 
     be candidates for updating.</strong> No CLM history files are modified. <strong>It is important
-    to know that the variables in the DART diagnostic files <em class=file>Prior_Diag.nc</em>
-    and <em class=file>Posterior_Diag.nc</em> will contain the unbounded versions of ALL the
+    to know that the variables in the DART diagnostic files <em class=file>preassim.nc</em>
+    and <em class=file>analysis.nc</em> will contain the unbounded versions of ALL the
     variables specied in <em class=code>clm_variables</em>.</strong>
     <br />
     <br />
@@ -289,43 +289,43 @@ mainly to indicate the location of the DART observation sequence files on your s
    should be updated may be marked NO_COPY_BACK. There are multiple choices for some
    DART kinds. This list is by no means complete.<P>
 <pre>
-       'livecrootc',  'KIND_ROOT_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'deadcrootc',  'KIND_ROOT_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'livestemc',   'KIND_STEM_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'deadstemc',   'KIND_STEM_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'livecrootn',  'KIND_ROOT_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
-       'deadcrootn',  'KIND_ROOT_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
-       'livestemn',   'KIND_STEM_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
-       'deadstemn',   'KIND_STEM_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
-       'litr1c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'litr2c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'litr3c',      'KIND_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'soil1c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'soil2c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'soil3c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'soil4c',      'KIND_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
-       'fabd',        'KIND_FPAR_DIRECT',            'NA', 'NA', 'restart', 'UPDATE',
-       'fabi',        'KIND_FPAR_DIFFUSE',           'NA', 'NA', 'restart', 'UPDATE',
-       'T_VEG',       'KIND_VEGETATION_TEMPERATURE', 'NA', 'NA', 'restart', 'UPDATE',
-       'fabd_sun_z',  'KIND_FPAR_SUNLIT_DIRECT',     'NA', 'NA', 'restart', 'UPDATE',
-       'fabd_sha_z',  'KIND_FPAR_SUNLIT_DIFFUSE',    'NA', 'NA', 'restart', 'UPDATE',
-       'fabi_sun_z',  'KIND_FPAR_SHADED_DIRECT',     'NA', 'NA', 'restart', 'UPDATE',
-       'fabi_sha_z',  'KIND_FPAR_SHADED_DIFFUSE',    'NA', 'NA', 'restart', 'UPDATE',
-       'elai',        'KIND_LEAF_AREA_INDEX',        'NA', 'NA', 'restart', 'UPDATE',
+       'livecrootc',  'QTY_ROOT_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'deadcrootc',  'QTY_ROOT_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'livestemc',   'QTY_STEM_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'deadstemc',   'QTY_STEM_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'livecrootn',  'QTY_ROOT_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
+       'deadcrootn',  'QTY_ROOT_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
+       'livestemn',   'QTY_STEM_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
+       'deadstemn',   'QTY_STEM_NITROGEN',          'NA', 'NA', 'restart', 'UPDATE',
+       'litr1c',      'QTY_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'litr2c',      'QTY_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'litr3c',      'QTY_LEAF_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'soil1c',      'QTY_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'soil2c',      'QTY_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'soil3c',      'QTY_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'soil4c',      'QTY_SOIL_CARBON',            'NA', 'NA', 'restart', 'UPDATE',
+       'fabd',        'QTY_FPAR_DIRECT',            'NA', 'NA', 'restart', 'UPDATE',
+       'fabi',        'QTY_FPAR_DIFFUSE',           'NA', 'NA', 'restart', 'UPDATE',
+       'T_VEG',       'QTY_VEGETATION_TEMPERATURE', 'NA', 'NA', 'restart', 'UPDATE',
+       'fabd_sun_z',  'QTY_FPAR_SUNLIT_DIRECT',     'NA', 'NA', 'restart', 'UPDATE',
+       'fabd_sha_z',  'QTY_FPAR_SUNLIT_DIFFUSE',    'NA', 'NA', 'restart', 'UPDATE',
+       'fabi_sun_z',  'QTY_FPAR_SHADED_DIRECT',     'NA', 'NA', 'restart', 'UPDATE',
+       'fabi_sha_z',  'QTY_FPAR_SHADED_DIFFUSE',    'NA', 'NA', 'restart', 'UPDATE',
+       'elai',        'QTY_LEAF_AREA_INDEX',        'NA', 'NA', 'restart', 'UPDATE',
 </pre>
 <P>
 <strong>Only the first variable for a DART kind in the clm_variables list 
    will be used for the forward observation operator.</strong> The following is 
    perfectly legal (for CLM4, at least):</P>
 <pre>
-clm_variables = 'LAIP_VALUE', 'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
-                'tlai',       'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
-                'elai',       'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
-                'ELAI',       'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                'LAISHA',     'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                'LAISUN',     'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                'TLAI',       'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
-                'TLAI',       'KIND_LEAF_AREA_INDEX', 'NA', 'NA', 'vector'  , 'NO_COPY_BACK'
+clm_variables = 'LAIP_VALUE', 'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
+                'tlai',       'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
+                'elai',       'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'restart' , 'UPDATE',
+                'ELAI',       'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
+                'LAISHA',     'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
+                'LAISUN',     'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
+                'TLAI',       'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'history' , 'NO_COPY_BACK',
+                'TLAI',       'QTY_LEAF_AREA_INDEX', 'NA', 'NA', 'vector'  , 'NO_COPY_BACK'
    /
 </pre>
 
@@ -364,22 +364,22 @@ prematurely terminating the namelist.
   model_perturbation_amplitude = 0.2,
   calendar                     = 'Gregorian',
   debug                        = 0
-  clm_variables  = 'frac_sno',    'KIND_SNOWCOVER_FRAC',         'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
-                   'H2OSNO',      'KIND_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
-                   'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',          '0.0', 'NA', 'restart' , 'UPDATE',
-                   'H2OSOI_ICE',  'KIND_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
-                   'T_SOISNO',    'KIND_SOIL_TEMPERATURE',       'NA' , 'NA', 'restart' , 'UPDATE',
-                   'SNOWDP',      'KIND_SNOW_THICKNESS',         'NA' , 'NA', 'restart' , 'UPDATE',
-                   'LAIP_VALUE',  'KIND_LEAF_AREA_INDEX',        'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
-                   'cpool',       'KIND_CARBON',                 '0.0', 'NA', 'restart' , 'UPDATE',
-                   'frootc',      'KIND_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
-                   'leafc',       'KIND_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
-                   'leafn',       'KIND_LEAF_NITROGEN',          '0.0', 'NA', 'restart' , 'UPDATE',
-                   'NEP',         'KIND_NET_CARBON_PRODUCTION',  'NA' , 'NA', 'history' , 'NO_COPY_BACK',
-                   'TV',          'KIND_VEGETATION_TEMPERATURE', 'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'RH2M_R',      'KIND_SPECIFIC_HUMIDITY',      'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'PBOT',        'KIND_SURFACE_PRESSURE',       'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
-                   'TBOT',        'KIND_TEMPERATURE',            'NA' , 'NA', 'vector'  , 'NO_COPY_BACK'
+  clm_variables  = 'frac_sno',    'QTY_SNOWCOVER_FRAC',         'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
+                   'H2OSNO',      'QTY_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
+                   'H2OSOI_LIQ',  'QTY_SOIL_MOISTURE',          '0.0', 'NA', 'restart' , 'UPDATE',
+                   'H2OSOI_ICE',  'QTY_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
+                   'T_SOISNO',    'QTY_SOIL_TEMPERATURE',       'NA' , 'NA', 'restart' , 'UPDATE',
+                   'SNOWDP',      'QTY_SNOW_THICKNESS',         'NA' , 'NA', 'restart' , 'UPDATE',
+                   'LAIP_VALUE',  'QTY_LEAF_AREA_INDEX',        'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
+                   'cpool',       'QTY_CARBON',                 '0.0', 'NA', 'restart' , 'UPDATE',
+                   'frootc',      'QTY_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
+                   'leafc',       'QTY_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
+                   'leafn',       'QTY_LEAF_NITROGEN',          '0.0', 'NA', 'restart' , 'UPDATE',
+                   'NEP',         'QTY_NET_CARBON_PRODUCTION',  'NA' , 'NA', 'history' , 'NO_COPY_BACK',
+                   'TV',          'QTY_VEGETATION_TEMPERATURE', 'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                   'RH2M_R',      'QTY_SPECIFIC_HUMIDITY',      'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                   'PBOT',        'QTY_SURFACE_PRESSURE',       'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                   'TBOT',        'QTY_TEMPERATURE',            'NA' , 'NA', 'vector'  , 'NO_COPY_BACK'
    /
 </pre>
 </div>
@@ -466,10 +466,10 @@ prematurely terminating the namelist.
         or not the file should be updated after the assimilation.
         <em class=removed> Only CLM variable names in the CLM restart file are valid.</em>
         The DART kind must be one found in the 
-        <em class=file>DART/obs_kind/obs_kind_mod.f90</em>
+        <em class=file>DART/assimilation_code/modules/observations/obs_kind_mod.f90</em>
         AFTER it gets built by <em class=program>preprocess</em>. Most of
         the land observation kinds are specified by 
-        <em class=file>DART/obs_def/obs_def_tower_mod.f90</em>, so it should
+        <em class=file>DART/observations/forward_operators/obs_def_tower_mod.f90</em>, so it should
         be specified in the preprocess_nml:input_files variable.
         </TD>
 </TR>
@@ -1013,7 +1013,7 @@ In distance computations any two locations closer than the
 given <em class=code>maxdist</em> will be considered close
 by the <em class=code>get_close_obs()</em> routine.
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_maxdist_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -1038,7 +1038,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -1070,7 +1070,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 
 <P>
 Pass-through to the 3D Sphere locations module. See
-<A HREF="../../location/threed_sphere/location_mod.html#get_close_obs">
+<A HREF="../../assimilation_code/location/threed_sphere/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of this subroutine.
 </P>
 
@@ -1571,9 +1571,8 @@ N/A
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
-This open source software is provided by UCAR, "as is",<br />
-without charge, subject to all terms of use at<br />
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

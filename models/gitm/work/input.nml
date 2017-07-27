@@ -117,12 +117,12 @@
 
 
 &preprocess_nml
-    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
-   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
-     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
-    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
-   input_files              = '../../../obs_def/obs_def_upper_atm_mod.f90',
-                              '../../../obs_def/obs_def_reanalysis_bufr_mod.f90'
+    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90',
+   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
+     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
+    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
+   input_files              = '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
+                              '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90'
    /
 
 
@@ -168,11 +168,6 @@
    /
 
 
-&assim_model_nml
-   write_binary_restart_files = .false.,
-   netCDF_large_file_support  = .true.
-   /
-
 # The list of variables to put into the state vector is here:
 # The definitions for the DART kinds are in DART/obs_def/obs_def*f90
 # The order doesn't matter to DART. It may to you.
@@ -182,47 +177,46 @@
    assimilation_period_days     = 0,
    assimilation_period_seconds  = 1800,
    model_perturbation_amplitude = 0.2,
-   output_state_vector          = .false.,
    calendar                     = 'Gregorian',
    debug                        = 0,
    gitm_state_variables =
-                           'Temperature',            'KIND_TEMPERATURE',
-                           'eTemperature',           'KIND_TEMPERATURE_ELECTRON',
-                           'ITemperature',           'KIND_TEMPERATURE_ION',
-                           'iO_3P_NDensityS',        'KIND_DENSITY_NEUTRAL_O3P',
-                           'iO2_NDensityS',          'KIND_DENSITY_NEUTRAL_O2',
-                           'iN2_NDensityS',          'KIND_DENSITY_NEUTRAL_N2',
-                           'iN_4S_NDensityS',        'KIND_DENSITY_NEUTRAL_N4S',
-                           'iNO_NDensityS',          'KIND_DENSITY_NEUTRAL_NO',
-                           'iN_2D_NDensityS',        'KIND_DENSITY_NEUTRAL_N2D',
-                           'iN_2P_NDensityS',        'KIND_DENSITY_NEUTRAL_N2P',
-                           'iH_NDensityS',           'KIND_DENSITY_NEUTRAL_H',
-                           'iHe_NDensityS',          'KIND_DENSITY_NEUTRAL_HE',
-                           'iCO2_NDensityS',         'KIND_DENSITY_NEUTRAL_CO2',
-                           'iO_1D_NDensityS',        'KIND_DENSITY_NEUTRAL_O1D',
-                           'iO_4SP_IDensityS',       'KIND_DENSITY_ION_O4SP',
-                           'iO2P_IDensityS',         'KIND_DENSITY_ION_O2P',
-                           'iN2P_IDensityS',         'KIND_DENSITY_ION_N2P',
-                           'iNP_IDensityS',          'KIND_DENSITY_ION_NP',
-                           'iNOP_IDensityS',         'KIND_DENSITY_ION_NOP',
-                           'iO_2DP_IDensityS',       'KIND_DENSITY_ION_O2DP',
-                           'iO_2PP_IDensityS',       'KIND_DENSITY_ION_O2PP',
-                           'iHP_IDensityS',          'KIND_DENSITY_ION_HP',
-                           'iHeP_IDensityS',         'KIND_DENSITY_ION_HEP',
-                           'ie_IDensityS',           'KIND_DENSITY_ION_E',
-                           'U_Velocity_component',   'KIND_VELOCITY_U',
-                           'V_Velocity_component',   'KIND_VELOCITY_V',
-                           'W_Velocity_component',   'KIND_VELOCITY_W',
-                           'U_IVelocity_component',  'KIND_VELOCITY_U_ION',
-                           'V_IVelocity_component',  'KIND_VELOCITY_V_ION',
-                           'W_IVelocity_component',  'KIND_VELOCITY_W_ION',
-                           'iO_3P_VerticalVelocity', 'KIND_VELOCITY_VERTICAL_O3P',
-                           'iO2_VerticalVelocity',   'KIND_VELOCITY_VERTICAL_O2',
-                           'iN2_VerticalVelocity',   'KIND_VELOCITY_VERTICAL_N2',
-                           'iN_4S_VerticalVelocity', 'KIND_VELOCITY_VERTICAL_N4S',
-                           'iNO_VerticalVelocity',   'KIND_VELOCITY_VERTICAL_NO',
-                           'f107',                   'KIND_1D_PARAMETER',
-                           'Rho',                    'KIND_DENSITY',
+                           'Temperature',            'QTY_TEMPERATURE',
+                           'eTemperature',           'QTY_TEMPERATURE_ELECTRON',
+                           'ITemperature',           'QTY_TEMPERATURE_ION',
+                           'iO_3P_NDensityS',        'QTY_DENSITY_NEUTRAL_O3P',
+                           'iO2_NDensityS',          'QTY_DENSITY_NEUTRAL_O2',
+                           'iN2_NDensityS',          'QTY_DENSITY_NEUTRAL_N2',
+                           'iN_4S_NDensityS',        'QTY_DENSITY_NEUTRAL_N4S',
+                           'iNO_NDensityS',          'QTY_DENSITY_NEUTRAL_NO',
+                           'iN_2D_NDensityS',        'QTY_DENSITY_NEUTRAL_N2D',
+                           'iN_2P_NDensityS',        'QTY_DENSITY_NEUTRAL_N2P',
+                           'iH_NDensityS',           'QTY_DENSITY_NEUTRAL_H',
+                           'iHe_NDensityS',          'QTY_DENSITY_NEUTRAL_HE',
+                           'iCO2_NDensityS',         'QTY_DENSITY_NEUTRAL_CO2',
+                           'iO_1D_NDensityS',        'QTY_DENSITY_NEUTRAL_O1D',
+                           'iO_4SP_IDensityS',       'QTY_DENSITY_ION_O4SP',
+                           'iO2P_IDensityS',         'QTY_DENSITY_ION_O2P',
+                           'iN2P_IDensityS',         'QTY_DENSITY_ION_N2P',
+                           'iNP_IDensityS',          'QTY_DENSITY_ION_NP',
+                           'iNOP_IDensityS',         'QTY_DENSITY_ION_NOP',
+                           'iO_2DP_IDensityS',       'QTY_DENSITY_ION_O2DP',
+                           'iO_2PP_IDensityS',       'QTY_DENSITY_ION_O2PP',
+                           'iHP_IDensityS',          'QTY_DENSITY_ION_HP',
+                           'iHeP_IDensityS',         'QTY_DENSITY_ION_HEP',
+                           'ie_IDensityS',           'QTY_DENSITY_ION_E',
+                           'U_Velocity_component',   'QTY_VELOCITY_U',
+                           'V_Velocity_component',   'QTY_VELOCITY_V',
+                           'W_Velocity_component',   'QTY_VELOCITY_W',
+                           'U_IVelocity_component',  'QTY_VELOCITY_U_ION',
+                           'V_IVelocity_component',  'QTY_VELOCITY_V_ION',
+                           'W_IVelocity_component',  'QTY_VELOCITY_W_ION',
+                           'iO_3P_VerticalVelocity', 'QTY_VELOCITY_VERTICAL_O3P',
+                           'iO2_VerticalVelocity',   'QTY_VELOCITY_VERTICAL_O2',
+                           'iN2_VerticalVelocity',   'QTY_VELOCITY_VERTICAL_N2',
+                           'iN_4S_VerticalVelocity', 'QTY_VELOCITY_VERTICAL_N4S',
+                           'iNO_VerticalVelocity',   'QTY_VELOCITY_VERTICAL_NO',
+                           'f107',                   'QTY_1D_PARAMETER',
+                           'Rho',                    'QTY_DENSITY',
     /
 
 
@@ -264,28 +258,6 @@
 
 &mpi_utilities_nml
    reverse_task_layout = .true.,
-   /
-
-
-# Gregorian: 12 Z 1 January 1996 <==> DART: 144270 days 43200 seconds
-# Gregorian: 12 Z 1 January 2000 <==> DART: 145731 days 43200 seconds
-
-&restart_file_tool_nml
-   input_file_name              = "dart_input",
-   output_file_name             = "dart_output",
-   ens_size                     = 1,
-   single_restart_file_in       = .true.,
-   single_restart_file_out      = .true.,
-   write_binary_restart_files   = .true.,
-   overwrite_data_time          = .false.,
-   new_data_days                = -1,
-   new_data_secs                = -1,
-   input_is_model_advance_file  = .false.,
-   output_is_model_advance_file = .false.,
-   overwrite_advance_time       = .false.,
-   new_advance_days             = -1,
-   new_advance_secs             = -1,
-   gregorian_cal                = .true.
    /
 
 

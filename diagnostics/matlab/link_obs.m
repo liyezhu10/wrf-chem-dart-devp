@@ -1,24 +1,29 @@
 function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, region)
 %% link_obs generates the 'brushable' observation plots.
 %
-% 	Three figures will be generated.
+% link_obs explores the observations in a netCDF file created by 'obs_seq_to_netcdf'.
+% All the data in the graphics are linked and are 'brushable'. Click on
+% the paintbrush icon and use the mouse to select observations in any
+% graphic. That same observation will be highlighted in ALL the graphics.
 %
-%	Figure 1 will have a 3D geographic scatterplot.
+% Three figures will be generated.
 %
-%	Figure 2 has multiple axes.
-%		The bottom axes has a plot of the observation 
-%		value vs. the QC value.
-%		The next axes provides information about the original
-%		observation index in the observation sequence file.
-%		The next axes provides the ability to select observations
-%		by time - useful if multiple observation sequence files are
-%		contained in the single input netCDF file.
-%		The final (top) axes plots the QC value as a function of time.
+% Figure 1 will have a 3D geographic scatterplot. Click on the rotate
+%          icon and drag the graphic around for the best view angle.
 %
-%	Figure 3 has a 2D scatterplot of (typically) the prior mean 
-%		observation vs. the original observation. Both of
-%		these can be changed however - the allowable set is defined
-%		by the CopyMetaData variable in the netCDF file.
+% Figure 2 has multiple axes.
+%   *   The bottom axes has a plot of the observation 'key' 
+%       (some of the linked list information in the original file).
+%   *   The middle axes provides information about the observation 
+%       density as a function of time. 
+%   *   The final (top) axes plots the QC value as a function of time.
+%
+% Figure 3 has two axes.
+%   *   The bottom axes is a 2D scatterplot of (typically) the 
+%       'prior mean observation' (or whatever you specify in Copystring) vs. the
+%       'observation' (or whatever you specify in ObsCopyString).
+%       Both of these can be changed however - the allowable settings are defined 
+%       in the CopyMetaData variable in the netCDF file.
 %		 
 % link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, region)
 %
@@ -27,6 +32,7 @@ function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, reg
 % ObsCopyString - the COPY specifying the raw observation ( -v CopyMetaData )
 % CopyString    - the COPY specifying the copy to compare to the raw obs
 % QCString      - character string  - one of (ncdump -v QCMetaData *.nc)
+% region        - geographic extent of interest
 %
 % EXAMPLE 1:
 % fname         = '/ptmp/thoar/POP/CAM/POP8/obs_epoch_001.nc';
@@ -62,8 +68,8 @@ function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, reg
 % the the Workspace window to generate a spreadsheet-like view of the 
 % observations which is also linked to the data brushing.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -90,6 +96,15 @@ end
 
 obs.ObsCopyString = obs.CopyString;
 obs.CopyString    = copy.CopyString;
+obs.region(5)     = min(obs.z); % use observation Z to specify vertical region
+obs.region(6)     = max(obs.z);
+
+% Some observations are all at same z value. Cannot use same value for
+% upper and lower axis bounds.
+if (obs.region(5) == obs.region(6))
+    obs.region(5) = obs.region(5) - 0.5;
+    obs.region(6) = obs.region(6) + 0.5;
+end
 
 %% Now pack the data in the same fashion as the cell array of column labels.
 
@@ -136,4 +151,3 @@ linked_observations(obs)
 % $URL$
 % $Revision$
 % $Date$
-

@@ -2,8 +2,8 @@
 % ----------
 % Make some diagnostic plots for DART conversion
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -12,9 +12,9 @@ clear all;
 close all;
 
 % Open up the various NetCDF files
-truth = netcdf('True_State.nc');
-prior = netcdf('Prior_Diag.nc');
-postr = netcdf('Posterior_Diag.nc');
+truth = netcdf('true_state.nc');
+prior = netcdf('preassim.nc');
+postr = netcdf('analysis.nc');
 
 % Pull out the time variable
 state_time = prior{'time'}(:);
@@ -127,4 +127,3 @@ saveas(difffig,'difference','png');
 % $URL$
 % $Revision$
 % $Date$
-

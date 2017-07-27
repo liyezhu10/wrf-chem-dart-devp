@@ -1,10 +1,17 @@
 #!/bin/csh
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
+
 #***********************************************************************************
 # Tarkeshwar Singh
 # July 2014
 # tarkphysics87@gmail.com
 
-# perpose :  prepare all initial conditions and submit filter run 
+# purpose :  prepare all initial conditions and submit filter run 
 #
 #***********************************************************************************
 # Set alias
@@ -125,8 +132,8 @@ foreach file (`cat $obs_seq_list`)
   #-------copy outputs file in OUTPUT_#### directory ----------------------------------------------
   if ($status == 0) then
     echo "Filter Finished for observation $file"
-    $MOVE Posterior_Diag.nc OUTPUT_$date
-    $MOVE Prior_Diag.nc     OUTPUT_$date
+    $MOVE analysis.nc       OUTPUT_$date
+    $MOVE preassim.nc       OUTPUT_$date
     $MOVE obs_seq.final     OUTPUT_$date
     $MOVE histhf*.nc*       OUTPUT_$date
     $MOVE histins*.nc*      OUTPUT_$date
@@ -158,4 +165,11 @@ foreach file (`cat $obs_seq_list`)
 
   #************************************************************************************************
 end  # loop $file
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
 

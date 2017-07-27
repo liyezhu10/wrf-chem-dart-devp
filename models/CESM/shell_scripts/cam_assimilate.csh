@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -445,10 +445,10 @@ echo "`date` -- BEGIN FILTER"
 ${LAUNCHCMD} ${EXEROOT}/filter_cam || exit -7
 echo "`date` -- END FILTER"
 
-${MOVE} Prior_Diag.nc      ../cam_Prior_Diag.${ATM_DATE_EXT}.nc
-${MOVE} Posterior_Diag.nc  ../cam_Posterior_Diag.${ATM_DATE_EXT}.nc
-${MOVE} obs_seq.final      ../cam_obs_seq.${ATM_DATE_EXT}.final
-${MOVE} dart_log.out       ../cam_dart_log.${ATM_DATE_EXT}.out
+${MOVE} preassim.nc      ../cam_preassim.${ATM_DATE_EXT}.nc
+${MOVE} analysis.nc      ../cam_analysis.${ATM_DATE_EXT}.nc
+${MOVE} obs_seq.final    ../cam_obs_seq.${ATM_DATE_EXT}.final
+${MOVE} dart_log.out     ../cam_dart_log.${ATM_DATE_EXT}.out
 
 # Accomodate any possible inflation files
 # 1) rename file to reflect current date
