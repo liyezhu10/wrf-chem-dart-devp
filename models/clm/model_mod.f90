@@ -35,6 +35,7 @@ use time_manager_mod, only : time_type, set_time, get_time, set_date,          &
                              operator(/=), operator(<=), operator(==)
 
 use     location_mod, only : location_type, set_location, get_location,       &
+                             is_vertical, VERTISLEVEL,                        &
                              VERTISHEIGHT, LocationDims, get_close_obs,       &
                              get_close_state, convert_vertical_obs,           &
                              convert_vertical_state
@@ -1981,7 +1982,6 @@ integer,                intent(out) :: istatus(ens_size)
 real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
 integer  :: istatus_2(ens_size)
-real(r8) :: interp_val(ens_size)
 real(r8) :: interp_val_2(ens_size)
 character(len=obstypelength) :: qty_string
 integer :: track_status(ens_size)
@@ -2013,7 +2013,7 @@ if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon
 ! This is done by trying to 'interpolate' height on a large number of levels.
 ! When the interpolation fails, you've gone one level too far. 
 
-if ((obs_kind == KIND_GEOPOTENTIAL_HEIGHT) .and. vert_is_level(location)) then
+if ((obs_kind == QTY_GEOPOTENTIAL_HEIGHT) .and. is_vertical(location, "LEVEL")) then
    if (nint(lheight) > nlevgrnd) then
       interp_val = MISSING_R8
       istatus = 1
@@ -4843,159 +4843,158 @@ deallocate(snlsno)
 
 end subroutine mark_missing_r8
 
-=======
 
 
-!>@todo FIXME ... this could be used in the converters to fix missing values
-
-subroutine mark_missing_r8(ens_handle)
-!------------------------------------------------------------------
-! Modifies the state to include missing_r8 values for unused snow levels.
-! This comes from mark_missing_r8.  This is needed when reading
-! directly from netcdf files.
-
-type(ensemble_type), intent(inout) :: ens_handle
-
-! temp space to hold data while we are reading it
-integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
-integer,  allocatable, dimension(:) :: snlsno
-real(r8), allocatable, dimension(:) :: tmp_array
-
-integer :: TimeDimID, VarID, ncNdims
-integer :: ncid
-
-integer :: numdoms, numvars
-integer :: start_index, end_index
-
-if ( .not. module_initialized ) call static_init_model
-
-allocate(snlsno(ncolumn))
-call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
-              'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
-              'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
-call nc_check(nf90_get_var(ncid, VarID, snlsno), &
-              'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
-
-! Start counting and filling the state vector one item at a time,
-! repacking the Nd arrays into a single 1d list of numbers.
-
-! Pack the variable into the DART state vector
-! Could/should fill metadata arrays at the same time ...
-! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
-! or missing value, and the restart files didn't use the right attributes anyway ...
-! (bugzilla report 1401)
-
-!>@todo FIXME: I am sure we can do this without having var complete.  This is just
-!>             the quickest way to test for now.
-if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
-call all_copies_to_all_vars(ens_handle)
-
-numdoms = get_num_domains()
-
-do idom = 1, numdoms
-   numvars = get_num_variables(idom)
-   do ivar = 1, numvars
-
-      indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
-   
-      ! README: The values in unused snow layers must be assumed to be
-      ! indeterminate. If the layer is not in use, fill with a missing value.
-      ! (levsno,column) and (levtot,column) variables may be treated identically.
-      ! abs(snlsno(j)) defines the number of valid levels in each column -
-      ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
-      ! values are in the 1D variables, SNOWDP and frac_sno.
-   
-      ! FIXME: Question, what happens to unused levels below ground? Are those
-      ! values 'special'?
-      ncNDims = get_num_dims(idom,ivar)
-      if (ncNdims == 2) then
-
-         ni = get_dim_length(idom,ivar,1) 
-         nj = get_dim_length(idom,ivar,2) 
-
-         allocate(tmp_array(ni*nj))
-         do icopy = 1, ens_handle%my_num_copies
-            if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
-                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-
-               start_index = get_index_start(idom,ivar)
-               end_index   = get_index_end(idom,ivar)
-
-               tmp_array = ens_handle%vars(start_index:end_index,icopy)
-
-               do j = 1, nj  ! loop over columns
-                  numsnowlevels = abs(snlsno(j))
-                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
-                     tmp_array(i + (j-1)*ni) = MISSING_R8
-                  enddo
-               enddo
-
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-
-            elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
-                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-   
-               start_index = get_index_start(idom,ivar)
-               end_index   = get_index_end(idom,ivar)
-
-               tmp_array = ens_handle%vars(start_index:end_index,icopy)
-
-               do j = 1, nj  ! loop over columns
-                  numsnowlevels = abs(snlsno(j))
-                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
-                     ! tmp_array(i + (j-1)*ni) = MISSING_R8
-                  enddo
-               enddo
-
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-   
-            endif
-   
-            ! Block of checks that will hopefully be corrected in the
-            ! core CLM code. There are some indeterminate values being
-            ! used instead of the missing_value code - and even then,
-            ! the missing_value code is not reliably implemented.
-   
-            if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
-               where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
-               do j = 1,nj  ! T_SOISNO has missing data in lake columns
-                 if (cols1d_ityplun(j) == LAKE) then
-                    do i = 1,ni
-                    !  write(*,*)'Found a lake column resetting the following:'
-                    !  write(*,*)data_2d_array(:,j)
-                       tmp_array(i + (j-1)*ni) = MISSING_R8
-                    enddo
-                 endif
-               enddo
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-            endif
-            if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
-                (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
-               where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
-               do j = 1,nj  ! missing data in lake columns
-                 if (cols1d_ityplun(j) == LAKE) then
-                    do i = 1,ni
-                       tmp_array(i + (j-1)*ni) = MISSING_R8
-                    enddo
-                 endif
-               enddo
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-            endif
-         enddo
-
-         deallocate(tmp_array) 
-   
-      endif
-   enddo
-enddo
-
-call all_vars_to_all_copies (ens_handle)
-deallocate(ens_handle%vars)
-
-deallocate(snlsno)
-
-end subroutine mark_missing_r8
+!#! !>@todo FIXME ... this could be used in the converters to fix missing values
+!#! 
+!#! subroutine mark_missing_r8(ens_handle)
+!#! !------------------------------------------------------------------
+!#! ! Modifies the state to include missing_r8 values for unused snow levels.
+!#! ! This comes from mark_missing_r8.  This is needed when reading
+!#! ! directly from netcdf files.
+!#! 
+!#! type(ensemble_type), intent(inout) :: ens_handle
+!#! 
+!#! ! temp space to hold data while we are reading it
+!#! integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
+!#! integer,  allocatable, dimension(:) :: snlsno
+!#! real(r8), allocatable, dimension(:) :: tmp_array
+!#! 
+!#! integer :: TimeDimID, VarID, ncNdims
+!#! integer :: ncid
+!#! 
+!#! integer :: numdoms, numvars
+!#! integer :: start_index, end_index
+!#! 
+!#! if ( .not. module_initialized ) call static_init_model
+!#! 
+!#! allocate(snlsno(ncolumn))
+!#! call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
+!#!               'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
+!#! call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
+!#!               'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
+!#! call nc_check(nf90_get_var(ncid, VarID, snlsno), &
+!#!               'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
+!#! 
+!#! ! Start counting and filling the state vector one item at a time,
+!#! ! repacking the Nd arrays into a single 1d list of numbers.
+!#! 
+!#! ! Pack the variable into the DART state vector
+!#! ! Could/should fill metadata arrays at the same time ...
+!#! ! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
+!#! ! or missing value, and the restart files didn't use the right attributes anyway ...
+!#! ! (bugzilla report 1401)
+!#! 
+!#! !>@todo FIXME: I am sure we can do this without having var complete.  This is just
+!#! !>             the quickest way to test for now.
+!#! if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+!#! call all_copies_to_all_vars(ens_handle)
+!#! 
+!#! numdoms = get_num_domains()
+!#! 
+!#! do idom = 1, numdoms
+!#!    numvars = get_num_variables(idom)
+!#!    do ivar = 1, numvars
+!#! 
+!#!       indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+!#!    
+!#!       ! README: The values in unused snow layers must be assumed to be
+!#!       ! indeterminate. If the layer is not in use, fill with a missing value.
+!#!       ! (levsno,column) and (levtot,column) variables may be treated identically.
+!#!       ! abs(snlsno(j)) defines the number of valid levels in each column -
+!#!       ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
+!#!       ! values are in the 1D variables, SNOWDP and frac_sno.
+!#!    
+!#!       ! FIXME: Question, what happens to unused levels below ground? Are those
+!#!       ! values 'special'?
+!#!       ncNDims = get_num_dims(idom,ivar)
+!#!       if (ncNdims == 2) then
+!#! 
+!#!          ni = get_dim_length(idom,ivar,1) 
+!#!          nj = get_dim_length(idom,ivar,2) 
+!#! 
+!#!          allocate(tmp_array(ni*nj))
+!#!          do icopy = 1, ens_handle%my_num_copies
+!#!             if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
+!#!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
+!#! 
+!#!                start_index = get_index_start(idom,ivar)
+!#!                end_index   = get_index_end(idom,ivar)
+!#! 
+!#!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
+!#! 
+!#!                do j = 1, nj  ! loop over columns
+!#!                   numsnowlevels = abs(snlsno(j))
+!#!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
+!#!                      tmp_array(i + (j-1)*ni) = MISSING_R8
+!#!                   enddo
+!#!                enddo
+!#! 
+!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!#! 
+!#!             elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
+!#!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
+!#!    
+!#!                start_index = get_index_start(idom,ivar)
+!#!                end_index   = get_index_end(idom,ivar)
+!#! 
+!#!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
+!#! 
+!#!                do j = 1, nj  ! loop over columns
+!#!                   numsnowlevels = abs(snlsno(j))
+!#!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
+!#!                      ! tmp_array(i + (j-1)*ni) = MISSING_R8
+!#!                   enddo
+!#!                enddo
+!#! 
+!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!#!    
+!#!             endif
+!#!    
+!#!             ! Block of checks that will hopefully be corrected in the
+!#!             ! core CLM code. There are some indeterminate values being
+!#!             ! used instead of the missing_value code - and even then,
+!#!             ! the missing_value code is not reliably implemented.
+!#!    
+!#!             if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
+!#!                where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
+!#!                do j = 1,nj  ! T_SOISNO has missing data in lake columns
+!#!                  if (cols1d_ityplun(j) == LAKE) then
+!#!                     do i = 1,ni
+!#!                     !  write(*,*)'Found a lake column resetting the following:'
+!#!                     !  write(*,*)data_2d_array(:,j)
+!#!                        tmp_array(i + (j-1)*ni) = MISSING_R8
+!#!                     enddo
+!#!                  endif
+!#!                enddo
+!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!#!             endif
+!#!             if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
+!#!                 (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
+!#!                where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
+!#!                do j = 1,nj  ! missing data in lake columns
+!#!                  if (cols1d_ityplun(j) == LAKE) then
+!#!                     do i = 1,ni
+!#!                        tmp_array(i + (j-1)*ni) = MISSING_R8
+!#!                     enddo
+!#!                  endif
+!#!                enddo
+!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!#!             endif
+!#!          enddo
+!#! 
+!#!          deallocate(tmp_array) 
+!#!    
+!#!       endif
+!#!    enddo
+!#! enddo
+!#! 
+!#! call all_vars_to_all_copies (ens_handle)
+!#! deallocate(ens_handle%vars)
+!#! 
+!#! deallocate(snlsno)
+!#! 
+!#! end subroutine mark_missing_r8
 
 !------------------------------------------------------------------
 !>@todo FIXME: now that we have the state structure, do we still
