@@ -95,7 +95,8 @@
    /
 
 &assim_tools_nml
-   filter_kind                     = 1,
+   filter_kind                     = 10,
+   GIGG_distribution_type          = "Gamma_InvGamma"
    cutoff                          = 0.02,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
