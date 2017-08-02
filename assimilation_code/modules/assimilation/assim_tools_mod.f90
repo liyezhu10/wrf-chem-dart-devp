@@ -14,10 +14,10 @@ use      types_mod,       only : r8, i8, digits12, PI, missing_r8
 use  utilities_mod,       only : file_exist, get_unit, check_namelist_read, do_output,    &
                                  find_namelist_in_file, register_module, error_handler,   &
                                  E_ERR, E_MSG, nmlfileunit, do_nml_file, do_nml_term,     &
-                                 open_file, close_file, timestamp
+                                 open_file, close_file, timestamp, to_upper
 use       sort_mod,       only : index_sort 
 use random_seq_mod,       only : random_seq_type, random_gaussian, init_random_seq,       &
-                                 random_uniform
+                                 random_uniform, random_gamma, random_inverse_gamma
 
 use obs_sequence_mod,     only : obs_sequence_type, obs_type, get_num_copies, get_num_qc, &
                                  init_obs, get_obs_from_key, get_obs_def, get_obs_values, &
@@ -88,6 +88,10 @@ integer :: print_trace_details = 0
 logical                :: first_inc_ran_call = .true.
 type (random_seq_type) :: inc_ran_seq
 
+! sequence for the GIGG filter
+logical                :: first_ran_gigg = .true.
+type (random_seq_type) :: gigg_ran_seq
+
 integer                :: num_types = 0
 real(r8), allocatable  :: cutoff_list(:)
 logical                :: has_special_cutoffs
@@ -108,6 +112,12 @@ real(r8), allocatable  :: exp_true_correl(:), alpha(:)
 ! and fill this 2d impact table. 
 real(r8), allocatable  :: obs_impact_table(:,:)
 
+! convert string to an integer in the init routine
+integer, parameter :: GAUSS_GAUSS    = 1
+integer, parameter :: GAMMA_INVGAMMA = 2
+integer, parameter :: INVGAMMA_GAMMA = 3
+integer :: GIGG_type = GAUSS_GAUSS   ! should it be something else?
+
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
    "$URL$"
@@ -126,6 +136,12 @@ character(len=128), parameter :: revdate  = "$Date$"
 !      5 = random draw from posterior
 !      6 = deterministic draw from posterior with fixed kurtosis
 !      8 = Rank Histogram Filter (see Anderson 2011)
+!     (9 = Localized Particle Filter (see Poterjoy 2016), in assim_tools_mod.pf.f90)
+!     10 = GIGG, Craig Bishop. Needs additional GIGG_distribution_type flag as follows:
+!          "Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default?)
+!          "Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
+!          "InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
+!      
 !
 !  special_localization_obs_types -> Special treatment for the specified observation types
 !  special_localization_cutoffs   -> Different cutoff value for each specified obs type
@@ -138,6 +154,7 @@ logical  :: sampling_error_correction       = .false.
 integer  :: adaptive_localization_threshold = -1
 real(r8) :: adaptive_cutoff_floor           = 0.0_r8
 integer  :: print_every_nth_obs             = 0
+character(len=64) :: GIGG_distribution_type = "Gauss_Gauss"   ! DOES THIS MAKE SENSE AS DEFAULT?
 
 ! since this is in the namelist, it has to have a fixed size.
 integer, parameter   :: MAX_ITEMS = 300
@@ -211,6 +228,7 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    allow_missing_in_clm, distribute_mean, close_obs_caching,               &
    adjust_obs_impact, obs_impact_filename, allow_any_impact_values,        &
    convert_all_state_verticals_first, convert_all_obs_verticals_first,     &
+   GIGG_distribution_type,                                                 &
    lanai_bitwise ! don't document this one -- only used for regression tests
 
 !============================================================================
@@ -224,6 +242,7 @@ subroutine assim_tools_init()
 integer :: iunit, io, i, j
 integer :: num_special_cutoff, type_index
 logical :: cache_override = .false.
+character(len=64) :: GIGG_upper
 
 call register_module(source, revision, revdate)
 
@@ -311,6 +330,28 @@ endif
 
 is_doing_vertical_conversion = (has_vertical_choice() .and. vertical_localization_on() .and. &
                                 .not. lanai_bitwise)
+
+! set GIGG_type 1, 2 or 3 here via select
+!          "Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default)
+!          "Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
+!          "InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
+
+GIGG_upper = GIGG_distribution_type
+call to_upper(GIGG_upper)   ! uppercases in place
+
+select case (GIGG_upper)
+ case("GAUSS_GAUSS")
+   GIGG_type = GAUSS_GAUSS
+ case("GAMMA_INVGAMMA")
+   GIGG_type = GAMMA_INVGAMMA 
+ case("INVGAMMA_GAMMA")
+   GIGG_type = INVGAMMA_GAMMA 
+ case default
+   write(msgstring, *) 'Unrecognized GIGG filter type string: "'//trim(GIGG_distribution_type)//'"'
+   call error_handler(E_ERR, 'assim_tools_init: ', &
+                      'Valid types are "Gauss_Gauss", "Gamma_InvGamma", and "InvGamma_Gamma"', &
+                      source, revision, revdate, text2=msgstring)
+end select
 
 call log_namelist_selections(num_special_cutoff, cache_override)
 
@@ -1332,28 +1373,32 @@ else
    ! note that at this point we've taken care of the cases where either the
    ! obs_var or the prior_var is 0, so the individual routines no longer need
    ! to have code to test for those cases.
-   if(filter_kind == 1) then
+   select case (filter_kind)
+    case (1) 
       call obs_increment_eakf(ens, ens_size, prior_mean, prior_var, &
          obs, obs_var, obs_inc, net_a)
-   else if(filter_kind == 2) then
+    case (2)
       call obs_increment_enkf(ens, ens_size, prior_var, obs, obs_var, obs_inc)
-   else if(filter_kind == 3) then
+    case (3)
       call obs_increment_kernel(ens, ens_size, obs, obs_var, obs_inc)
-   else if(filter_kind == 4) then
+    case (4) 
       call obs_increment_particle(ens, ens_size, obs, obs_var, obs_inc)
-   else if(filter_kind == 5) then
+    case (5)
       call obs_increment_ran_kf(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc)
-   else if(filter_kind == 6) then
+    case (6)
       call obs_increment_det_kf(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc)
-   else if(filter_kind == 7) then
+    case (7)
       call obs_increment_boxcar(ens, ens_size, obs, obs_var, obs_inc, rel_weights)
-   else if(filter_kind == 8) then
+    case (8) 
       call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
-   else 
+    case (10)
+      call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc, &
+                              GIGG_type, T1Rr=2.0_r8)  ! FIXME!!
+    case default
       call error_handler(E_ERR,'obs_increment', &
-                 'Illegal value of filter_kind in assim_tools namelist [1-8 OK]', &
+                 'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8,10 OK]', &
                  source, revision, revdate)
-   endif
+   end select
 endif
 
 ! Add in the extra increments if doing observation space covariance inflation
@@ -2403,6 +2448,175 @@ end do
 end subroutine obs_increment_rank_histogram
 
 
+subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc, GIGG_type, T1Rr)
+!------------------------------------------------------------------------
+!
+! Craig Bishop's GIGG filter variant.
+!  Define filter subtype to indicate whether prior and observation 
+!  likelihood pdfs are best approximated by the following assumptions:
+!   If (GIGG_type.eq.1) then Gaussian prior and Gaussian observation likelihood is assumed
+!   If (GIGG_type.eq.2) then gamma prior and inverse gamma likelihood is assumed
+!   If (GIGG_type.eq.3) then inverse-gamma prior and gamma likelihood is assumed
+
+
+! Type 1 relative ob error variance T1Rr = obs_var/(obs_truth**2) where 
+! obs_truth is the unknown true value of the observed variable.
+! For example, if the ob_error_std assigned to an instrument was in fractional form, say 0.1, 
+! then one would let T1Rr=0.1**2 and then call this program
+! Type 2 relative ob error variance T2Rr = obs_var/((obs_truth**2)+obs_var) where 
+! obs_truth is the unknown true value of the observed variable
+! Note that 1/T2Rr=((obs_truth**2)+obs_var)/obs_var= 1/T1Rr+1
+
+integer,   intent(in)  :: ens_size
+real(r8),  intent(in)  :: ens(ens_size), obs, obs_var
+real(r8),  intent(in)  :: prior_mean, prior_var
+real(r8),  intent(out) :: obs_inc(ens_size)
+integer,   intent (in) :: GIGG_type
+real(r8),  intent(in)  :: T1Rr     !?? help here?
+
+
+integer  :: i
+real(r8) :: new_mean, var_ratio, a
+real(r8) :: temp_mean, temp_var, new_ens(ens_size), new_var
+real(r8) :: T2Rr
+real(r8) :: wk1,wk2,T2Pr,inv_prior_mean
+real(r8) :: GIG_gain,T1Rr_GIG_PO,y_GIG_mean_PO,y_GIG_sample_mean_PO,nobs_GIG
+real(r8) :: IGG_gain,T1Rr_IGG_PO,y_IGG_mean_PO,y_IGG_sample_mean_PO,nobs_IGG,nanal_var_IGG,anal_var_IGG
+real(r8) :: y_GIG_var_PO,y_IGG_var_PO,T2Rr_IGG_PO
+real(r8) :: alpha,theta,lambda,beta,k_gamma
+real(r8) :: nanal_perts(ens_size),nfcst_perts(ens_size),ny_PO(ens_size),nfcst
+real(r8) :: y_GIG_PO(ens_size),y_IGG_PO(ens_size)
+
+
+
+! See comment by other init_random_seq() call.  Will preproduce results
+! exactly for the same number of mpi tasks; will not if # tasks changes.
+
+! seed the random number generator the first time through this code.
+if(first_ran_gigg) then
+   call init_random_seq(gigg_ran_seq, my_task_id() + 1)
+   first_ran_gigg = .false.
+endif
+
+
+select case (GIGG_type)
+ case (1)  ! gaussian ens prior, gaussian obs likelihood
+   ! Compute the new mean
+   var_ratio = obs_var / (prior_var + obs_var)
+   new_mean  = var_ratio * (prior_mean  + prior_var*obs / obs_var)
+
+   ! Compute sd ratio and shift ensemble
+   a = sqrt(var_ratio)
+
+   obs_inc = a * (ens - prior_mean) + new_mean - ens
+
+ case (2)   ! gamma ens prior, inverse gamma obs likelihood
+   !Define type 2 prior and ob relative variance
+   T2Pr=prior_var/(prior_mean**2+prior_var)
+   T2Rr=1/(1/T1Rr+1)
+   !Define the GIG gain
+   GIG_gain=T2Pr/(T2Pr+T2Rr)
+   inv_prior_mean=1/prior_mean
+
+   !Compute new_mean - the posterior mean. Equation (6) from Bishop (2016)
+   wk1=inv_prior_mean+GIG_gain*((1/obs)-(T2Rr+1)*inv_prior_mean)
+   new_mean=1/wk1;
+
+   !Compute obs_inc - the correction to the existing ensemble
+   !First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
+   wk1=(1/T2Rr)+2
+   !alpha is the same as k in Bishop (2016)
+   k_gamma=wk1
+   T1Rr_GIG_PO=1/wk1
+   y_GIG_mean_PO=T2Rr*wk1*obs
+   theta=y_GIG_mean_PO/k_gamma
+   y_GIG_var_PO=k_gamma*theta**2
+
+   !Now compute the perturbed observations and the normalized perturbations
+   do i=1,ens_size
+if (theta < 0) then
+   print *, 'correcting negative theta: ', theta
+   theta = -theta
+endif
+       y_GIG_PO(i)=random_gamma(gigg_ran_seq,k_gamma,theta)
+   enddo
+   wk1=0;
+   do i=1,ens_size
+       wk1=wk1+y_GIG_PO(i)
+   enddo
+
+   y_GIG_sample_mean_PO=wk1/ens_size
+   nobs_GIG=1/sqrt(y_GIG_mean_PO**2-2*y_GIG_var_PO)
+   nfcst=1/sqrt(prior_mean**2+prior_var)
+   !Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
+   do i=1,ens_size
+      ny_PO(i)=(y_GIG_PO(i)-y_GIG_sample_mean_PO)*nobs_GIG
+      nfcst_perts(i)=(ens(i)-prior_mean)*nfcst
+      nanal_perts(i)=nfcst_perts(i)+GIG_gain*(ny_PO(i)-nfcst_perts(i))
+   enddo
+
+   !Now create obs_inc=anal_ens-ens for GIG case where anal_ens=nanal_perts*new_mean + new_mean
+
+   obs_inc = (nanal_perts*new_mean + new_mean) - ens
+
+ case (3)   ! inv gamma ens prior, gamma obs likelihood
+   !Define type 2 prior relative variance
+   T2Pr=prior_var/(prior_mean**2+prior_var)
+   !Define the IGG gain
+   IGG_gain=T2Pr/(T2Pr+T1Rr)
+
+   !Compute new_mean - the posterior mean. Equation (18) from Bishop (2016)
+   new_mean=prior_mean+IGG_gain*(obs-prior_mean)
+
+
+   !Compute obs_inc - the correction to the existing ensemble
+   !First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
+   wk1=(1/T1Rr)+2
+   T2Rr_IGG_PO=1/wk1
+   y_IGG_mean_PO=obs
+   alpha=(1/T1Rr)+3
+   beta=obs*(alpha-1)
+   y_IGG_var_PO=(y_IGG_mean_PO**2)/(alpha-2)
+
+   !Now compute the perturbed observations and the normalized perturbations
+   do i=1,ens_size
+if (beta < 0) then
+   print *, 'correcting negative beta: ', beta
+   beta = -beta
+endif
+       y_IGG_PO(i)=random_inverse_gamma(gigg_ran_seq,alpha,beta)
+   enddo
+
+   wk1=0;
+   do i=1,ens_size
+       wk1=wk1+y_IGG_PO(i)
+   enddo
+   y_IGG_sample_mean_PO=wk1/ens_size
+
+   !Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
+   nobs_IGG=1/sqrt(y_IGG_mean_PO**2-y_IGG_var_PO)
+   nfcst=1/sqrt(prior_mean**2+prior_var)
+   do i=1,ens_size
+      ny_PO(i)=(y_IGG_PO(i)-y_IGG_sample_mean_PO)*nobs_IGG
+      nfcst_perts(i)=(ens(i)-prior_mean)*nfcst
+      nanal_perts(i)=nfcst_perts(i)+IGG_gain*(ny_PO(i)-nfcst_perts(i))
+   enddo
+   !Compute type 2 relative variance of posterior see equation (28) of Bishop (2016)
+   nanal_var_IGG=T2Pr-T2Pr**2/(T2Pr+T1Rr);
+   !Compute posterior variance using eq (29) of Bishop (2016)
+   anal_var_IGG=(new_mean**2)*nanal_var_IGG/(1-nanal_var_IGG)
+   !Now create obs_inc=anal_ens-ens for IGG case where anal_ens=nanal_perts*new_mean + new_mean
+
+   obs_inc = (nanal_perts*sqrt(new_mean**2+anal_var_IGG) + new_mean) - ens
+
+ case default
+   call error_handler(E_ERR, 'obs_increment_GIGG:', 'unexpected error, illegal GIGG_kind value', &
+                      source, revision, revdate)
+
+end select
+
+end subroutine obs_increment_GIGG
+
 
 
 subroutine update_ens_from_weights(ens, ens_size, rel_weight, ens_inc)
@@ -2871,8 +3085,10 @@ select case (filter_kind)
    msgstring = 'Boxcar'
  case (8)
    msgstring = 'Rank Histogram Filter'
+ case (10)
+   msgstring = 'GIGG Filter'
  case default 
-   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8', &
+   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,10', &
                       source, revision, revdate)
 end select
 call error_handler(E_MSG, 'assim_tools_init:', 'Selected filter type is '//trim(msgstring))
