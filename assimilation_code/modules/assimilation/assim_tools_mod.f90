@@ -1393,7 +1393,7 @@ else
       call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
     case (10)
       call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc, &
-                              GIGG_type, T1Rr=2.0_r8)  ! FIXME!!
+                              GIGG_type, T1Rr=(sqrt(obs_var)/obs)**2)  ! FIXME!!
     case default
       call error_handler(E_ERR,'obs_increment', &
                  'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8,10 OK]', &
