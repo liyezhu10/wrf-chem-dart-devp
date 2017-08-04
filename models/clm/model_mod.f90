@@ -2568,7 +2568,6 @@ if (present(ncid_in) .and. present(ncid_orig)) then
       where((data_1d_array < 0.0_r8)) data_1d_array = org_array
 
    if (trim(progvar(ivar)%varname) == 'H2OSNO') then
-      print*, 'SIZE : ', size(data_1d_array), ' :: SIZE ORIG',  size(org_array)
       where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
    endif
 
