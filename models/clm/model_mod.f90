@@ -83,7 +83,8 @@ use state_structure_mod,   only : add_domain, state_structure_info,   &
                                   get_index_start, get_index_end,     &
                                   get_num_domains, get_num_variables, &
                                   get_num_dims, get_dim_name,         &
-                                  get_dim_length, get_variable_name
+                                  get_dim_length, get_variable_name,  &
+                                  do_io_update
 
 
 use mpi_utilities_mod, only: my_task_id
@@ -111,7 +112,9 @@ public :: get_model_size,         &
           pert_model_copies,      &
           write_model_time,       &
           read_model_time,        &
-          end_model
+          end_model,              &
+          sv_to_restart_file,     &
+          clm_to_dart_state_vector
 
 ! the code for these routines are in other modules
 public::  init_time,              &
@@ -130,8 +133,7 @@ public :: get_gridsize,                 &
           get_grid_vertval,             &
           compute_gridcell_value,       &
           gridcell_components,          &
-          DART_get_var,                 &
-          mark_missing_r8
+          DART_get_var
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -141,6 +143,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 character(len=256) :: string1, string2, string3
 logical, save :: module_initialized = .false.
+! 'Handles' for the different domains.
+integer :: dom_restart, dom_history, dom_vector_history
 
 ! Storage for a random sequence for perturbing a single initial state
 
@@ -344,9 +348,9 @@ type(time_type) :: model_time      ! valid time of the model state
 type(time_type) :: model_timestep  ! smallest time to adv model
 
 
-INTERFACE vector_to_prog_var
-      MODULE PROCEDURE vector_to_1d_prog_var
-      MODULE PROCEDURE vector_to_2d_prog_var
+INTERFACE fill_missing_r8_with_original
+      MODULE PROCEDURE fill_missing_r8_with_orig_1d
+      MODULE PROCEDURE fill_missing_r8_with_orig_2d
 END INTERFACE
 
 INTERFACE DART_get_var
@@ -476,7 +480,7 @@ real(r8) :: spvalR8
 
 character(len=obstypelength) :: var_names(max_state_variables)
 real(r8) :: var_ranges(max_state_variables,2)
-integer :: nvars, domid
+integer :: nvars
 logical :: var_update(max_state_variables)
 
 if ( module_initialized ) return ! only need to do this once.
@@ -688,16 +692,16 @@ endif
 !> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
 
 call cluster_variables(clm_restart_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_restart_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-call state_structure_info(domid)
+dom_restart = add_domain(clm_restart_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+!call state_structure_info(dom_restart)
 
 call cluster_variables(clm_history_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-call state_structure_info(domid)
+dom_history = add_domain(clm_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+!call state_structure_info(dom_history)
 
 call cluster_variables(clm_vector_history_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_vector_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-call state_structure_info(domid)
+dom_vector_history = add_domain(clm_vector_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
+! call state_structure_info(dom_vector_history)
 
 !---------------------------------------------------------------
 ! Create the metadata arrays that are the same shape as the state vector.
@@ -1046,22 +1050,7 @@ do ivar=1, nfields
 
 enddo
 
-! Must group the variables according to the file they come from.
-!> @TODO FIXME ... add_domain() must do the right thing if nvars == 0
-!> @TODO FIXME ... io_filenames_nml:rpointer_file order must somehow match 
-!> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
 
-call cluster_variables(clm_restart_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_restart_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-if (debug > 9) call state_structure_info(domid)
-
-call cluster_variables(clm_history_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-if (debug > 9) call state_structure_info(domid)
-
-call cluster_variables(clm_vector_history_filename, nvars, var_names, var_ranges, var_update)
-domid =     add_domain(clm_vector_history_filename, nvars, var_names, clamp_vals=var_ranges, update_list=var_update)
-if (debug > 9) call state_structure_info(domid)
 
 end subroutine static_init_model
 
@@ -1518,13 +1507,13 @@ if ( .not. module_initialized ) call static_init_model
 end subroutine get_gridsize
 
 
-subroutine clm_to_dart_state_vector(state_vector, restart_time)
+subroutine clm_to_dart_state_vector(clm_file, restart_time)
 !------------------------------------------------------------------
 ! Reads the current time and state variables from a clm restart
 ! file and packs them into a dart state vector. This better happen
 ! in the same fashion as the metadata arrays are built.
 
-real(r8),         intent(out) :: state_vector(:)
+character(len=*), intent(in)  :: clm_file
 type(time_type),  intent(out) :: restart_time
 
 ! temp space to hold data while we are reading it
@@ -1534,15 +1523,12 @@ real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
+integer :: io, ncid_in, ncid_out, var_id_out, TimeDimID, VarID, ncNdims, dimlen, numvars
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME) :: varname
-integer :: io, TimeDimID, VarID, ncNdims, dimlen
-integer :: ncid
-character(len=256) :: myerrorstring
+character     (len=NF90_MAX_NAME)     :: varname
+character     (len=256)               :: myerrorstring
 
 if ( .not. module_initialized ) call static_init_model
-
-state_vector = MISSING_R8
 
 ! Must check anything with a dimension of 'levtot' or 'levsno' and manually
 ! set the values to DART missing. If only it were that easy ...
@@ -1563,40 +1549,54 @@ state_vector = MISSING_R8
 ! time of restart file
 
 allocate(snlsno(ncolumn))
-call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
+call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_in), &
               'clm_to_dart_state_vector', 'open SNLSNO'//clm_restart_filename)
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
+call nc_check(nf90_inq_varid(ncid_in,'SNLSNO', VarID), &
               'clm_to_dart_state_vector', 'inq_varid SNLSNO'//clm_restart_filename)
-call nc_check(nf90_get_var(ncid, VarID, snlsno), &
+call nc_check(nf90_get_var(ncid_in, VarID, snlsno), &
               'clm_to_dart_state_vector', 'get_var SNLSNO'//clm_restart_filename)
 
-restart_time = get_state_time(ncid)
+restart_time = get_state_time(ncid_in)
 
 if (do_output()) call print_time(restart_time,'time in restart file '//clm_restart_filename)
 if (do_output()) call print_date(restart_time,'date in restart file '//clm_restart_filename)
 
-call nc_check(nf90_close(ncid),'clm_to_dart_state_vector','close '//clm_restart_filename)
+call nc_check(nf90_close(ncid_in),'clm_to_dart_state_vector','close '//clm_restart_filename)
+
+! open an existing netcdf file that has is a copy of clm_restart_filename
+! to fill in missing_r8 values.
+call nc_check(nf90_open(trim(clm_file), NF90_WRITE, ncid_out), &
+              'clm_to_dart_state_vector', 'open clm_file file "'//trim(clm_file)//'"')
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
 
-do ivar=1, nfields
+! We just need to loop over the variables in clm_restart_filename.
+! The history and vector history files have to have no variables 
+! that need to be marked with missing values.
+numvars = get_num_variables(dom_restart)
+
+do ivar=1, numvars
 
    varname = trim(progvar(ivar)%varname)
    myerrorstring = trim(progvar(ivar)%origin)//' '//trim(progvar(ivar)%varname)
 
-   call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid), &
+   call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid_in), &
               'clm_to_dart_state_vector','open '//trim(myerrorstring))
 
    ! File is not required to have a time dimension
-   io = nf90_inq_dimid(ncid, 'time', TimeDimID)
+   io = nf90_inq_dimid(ncid_in, 'time', TimeDimID)
    if (io /= NF90_NOERR) TimeDimID = MISSING_I
 
-   call nc_check(nf90_inq_varid(ncid,   varname, VarID), &
-            'clm_to_dart_state_vector', 'inq_varid '//trim(myerrorstring))
+   call nc_check(nf90_inq_varid(ncid_in,   varname, VarID), &
+            'clm_to_dart_state_vector', 'inq_varid input '//trim(myerrorstring))
+   call nc_check(nf90_inquire_variable( ncid_in, VarID, dimids=dimIDs, ndims=ncNdims), &
+                 'clm_to_dart_state_vector', 'inquire_variable '//trim(myerrorstring))
 
-   call nc_check(nf90_inquire_variable(ncid,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'clm_to_dart_state_vector', 'inquire '//trim(myerrorstring))
+   call nc_check(nf90_inq_varid(ncid_out,   varname, var_id_out), &
+            'clm_to_dart_state_vector', 'inq_varid output '//trim(myerrorstring))
+   call nc_check(nf90_inquire_variable( ncid_out, var_id_out, dimids=dimIDs, ndims=ncNdims), &
+                 'clm_to_dart_state_vector', 'inquire_variable '//trim(myerrorstring))
 
    ! Check the rank of the variable
 
@@ -1612,7 +1612,7 @@ do ivar=1, nfields
    do i = 1,progvar(ivar)%numdims
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(myerrorstring)
-      call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
+      call nc_check(nf90_inquire_dimension(ncid_in, dimIDs(i), len=dimlen), &
             'clm_to_dart_state_vector', string1)
 
       ! Time dimension will be 1 in progvar, but not necessarily
@@ -1629,24 +1629,30 @@ do ivar=1, nfields
 
    enddo
 
-   ! Pack the variable into the DART state vector
+   ! Mark MISSING_R8 values for new output
+
    ! Could/should fill metadata arrays at the same time ...
    ! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
    ! or missing value, and the restart files didn't use the right attributes anyway ...
    ! (bugzilla report 1401)
 
-   indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+   indx = progvar(ivar)%index1
 
    if (ncNdims == 1) then
 
       ni = progvar(ivar)%dimlens(1)
       allocate(data_1d_array(ni))
-      call DART_get_var(ncid, varname, data_1d_array)
+      call DART_get_var(ncid_in, varname, data_1d_array)
 
-      do i = 1, ni
-         state_vector(indx) = data_1d_array(i)
-         indx = indx + 1
-      enddo
+      call nc_check(nf90_inquire_variable( ncid_out, var_id_out, dimids=dimIDs), &
+                    'get_var_1d', 'inquire_variable '//varname)
+
+      call nc_check(nf90_inquire_dimension(ncid_out, dimIDs(1)), &
+                    'get_var_1d', 'inquire_dimension '//varname)
+      
+      call nc_check(nf90_put_var(ncid_out, var_id_out, data_1d_array), &
+                   'nc_write_model_atts', 'put_var '//trim(varname))
+
       deallocate(data_1d_array)
 
    elseif (ncNdims == 2) then
@@ -1654,7 +1660,7 @@ do ivar=1, nfields
       ni = progvar(ivar)%dimlens(1)
       nj = progvar(ivar)%dimlens(2)
       allocate(data_2d_array(ni, nj))
-      call DART_get_var(ncid, varname, data_2d_array)
+      call DART_get_var(ncid_in, varname, data_2d_array)
 
       ! README: The values in unused snow layers must be assumed to be
       ! indeterminate. If the layer is not in use, fill with a missing value.
@@ -1713,14 +1719,12 @@ do ivar=1, nfields
          enddo
       endif
 
-      ! Finally, pack it into the DART state vector.
+      call nc_check(nf90_inquire_variable( ncid_out, VarID, dimids=dimIDs),  &
+                    'get_var_2d', 'inquire_variable '//varname)
 
-      do j = 1, nj
-      do i = 1, ni
-         state_vector(indx) = data_2d_array(i, j)
-         indx = indx + 1
-      enddo
-      enddo
+      call nc_check(nf90_put_var(ncid_out, var_id_out, data_2d_array), &
+                   'get_var_2d', 'put_var '//trim(varname))
+
       deallocate(data_2d_array)
 
    elseif (ncNdims == 3) then
@@ -1740,18 +1744,21 @@ do ivar=1, nfields
        ! nk = progvar(ivar)%dimlens(3) not needed ... time is always a singleton
 
          allocate(data_3d_array(ni, nj, 1))
-         call DART_get_var(ncid, varname, data_3d_array)
+         call DART_get_var(ncid_in, varname, data_3d_array)
 
          ! In the CLM history files, the _missing_value_ flag seems to be
          ! applied correctly for PBOT, TBOT ... so there is no need for the
          ! extra processing that is present in the previous loops.
 
-         do j = 1, nj
-         do i = 1, ni
-            state_vector(indx) = data_3d_array(i, j, 1)
-            indx = indx + 1
-         enddo
-         enddo
+         call nc_check(nf90_inquire_variable( ncid_out, VarID, dimids=dimIDs),  &
+                       'get_var_2d', 'inquire_variable '//varname)
+
+         call nc_check(nf90_inquire_dimension(ncid_out, dimIDs(1)), &
+                       'get_var_2d', 'inquire_dimension '//varname)
+         
+         call nc_check(nf90_put_var(ncid_out, VarID, data_3d_array), &
+                      'nc_write_model_atts', 'put_var '//trim(varname))
+
          deallocate(data_3d_array)
       else
 
@@ -1773,74 +1780,91 @@ do ivar=1, nfields
    endif
 
    indx = indx - 1
-   if ( indx /= get_index_end(progvar(ivar)%domain, progvar(ivar)%varname ) ) then
+   if ( indx /= progvar(ivar)%indexN ) then
       write(string1, *)'Variable '//trim(varname)//' filled wrong.'
       write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
       call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
                         source,revision,revdate,text2=string2)
    endif
 
-   call nc_check(nf90_close(ncid),'clm_to_dart_state_vector','close '//progvar(ivar)%origin)
-   ncid = 0
+   call nc_check(nf90_close(ncid_in),'clm_to_dart_state_vector','close in'//progvar(ivar)%origin)
+   ncid_in = 0
 
 enddo
 
 deallocate(snlsno)
 
+call nc_check(nf90_close(ncid_out),'clm_to_dart_state_vector','close out'//progvar(ivar)%origin)
+
 end subroutine clm_to_dart_state_vector
 
 
 
-subroutine sv_to_restart_file(state_vector, filename, dart_time)
+subroutine sv_to_restart_file(file_orig, file_out, dart_time)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a clm netcdf restart file.
 !
-real(r8),         intent(in) :: state_vector(:)
-character(len=*), intent(in) :: filename
+
+character(len=*), intent(in) :: file_orig
+character(len=*), intent(in) :: file_out
 type(time_type),  intent(in) :: dart_time
 
 ! temp space to hold data while we are writing it
 integer :: i, ni, nj, ivar
-real(r8), allocatable, dimension(:)         :: data_1d_array
-real(r8), allocatable, dimension(:,:)       :: data_2d_array
+real(r8), allocatable, dimension(:)   :: data_1d_array
+real(r8), allocatable, dimension(:,:) :: data_2d_array
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
-integer         :: VarID, ncNdims, dimlen
-integer         :: ncFileID
+integer         :: VarID, ncNdims, dimlen, numvars
+integer         :: ncid_out, ncid_orig, create_mode
 type(time_type) :: file_time
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Check that the output file exists ...
 
-if ( .not. file_exist(filename) ) then
-   write(string1,*) 'cannot open file ', trim(filename),' for writing.'
+if ( .not. file_exist(file_orig) ) then
+   write(string1,*) 'cannot open original file "', trim(file_orig),'" for writing.'
    call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
 endif
 
-call nc_check(nf90_open(trim(filename), NF90_WRITE, ncFileID), &
-             'sv_to_restart_file','open '//trim(filename))
+call nc_check(nf90_open(trim(file_orig), NF90_NOWRITE, ncid_orig), &
+             'sv_to_restart_file','open original restart "'//trim(file_orig)//'"')
+
+if ( .not. file_exist(file_out) ) then
+   write(string1,*) 'no file ', trim(file_out),' for writing so creating fresh'
+   call error_handler(E_MSG,'sv_to_restart_file',string1,source,revision,revdate)
+   ! Create file to fill the MISSING_R8 values with the original values
+   create_mode = ior(NF90_CLOBBER, NF90_64BIT_OFFSET)
+   call nc_check(nf90_create(trim(file_out), create_mode, ncid_out), &
+                'sv_to_restart_file','create dart restart "'//trim(file_out)//'"')
+   
+else
+   ! Open file to fill the MISSING_R8 values with the original values
+   call nc_check(nf90_open(trim(file_out), NF90_WRITE, ncid_out), &
+                'sv_to_restart_file','open dart restart '//trim(file_out)//'"')
+endif
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
 ! of the clm restart file, and state vector contents from a different
 ! time won't be consistent with the rest of the file.
 
-file_time = get_state_time(ncFileID)
+file_time = get_state_time(ncid_orig)
 
 if ( file_time /= dart_time ) then
    call print_time(dart_time,'DART current time',logfileunit)
    call print_time(file_time,'clm  current time',logfileunit)
    call print_time(dart_time,'DART current time')
    call print_time(file_time,'clm  current time')
-   write(string1,*)trim(filename),' current time /= model time. FATAL error.'
+   write(string1,*)trim(file_orig),' current time /= model time. FATAL error.'
    call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
 endif
 
-if (do_output()) call print_time(file_time,'time of restart file '//trim(filename))
-if (do_output()) call print_date(file_time,'date of restart file '//trim(filename))
+if (do_output()) call print_time(file_time,'time of restart file "'//trim(file_orig)//'"')
+if (do_output()) call print_date(file_time,'date of restart file "'//trim(file_orig)//'"')
 
 ! The DART prognostic variables are only defined for a single time.
 ! We already checked the assumption that variables are xy2d or xyz3d ...
@@ -1853,32 +1877,27 @@ if (do_output()) call print_date(file_time,'date of restart file '//trim(filenam
 ! In order to avoid the negative values of H2OSNO produced by DART, I added some "if" conditions
 ! to set the value of H2OSNO back to the value before assimilation if negative value is found.
 
-UPDATE : do ivar=1, nfields
+! get the number of variables for clm_restart_file
+numvars = get_num_variables(1)
+UPDATE : do ivar=1, numvars
 
    varname = trim(progvar(ivar)%varname)
-   string2 = trim(filename)//' '//trim(varname)
-
-   if ( .not. progvar(ivar)%update ) then
-      write(string1,*)'intentionally not updating '//trim(string2) 
-      write(string3,*)'as per namelist control in model_nml:clm_variables'
-      call error_handler(E_MSG, 'sv_to_restart_file', string1, text2=string3)
-      cycle UPDATE
-   endif
+   string2 = trim(file_orig)//' '//trim(varname)
 
    ! Ensure netCDF variable is conformable with progvar quantity.
    ! The TIME and Copy dimensions are intentionally not queried
    ! by looping over the dimensions stored in the progvar type.
 
-   call nc_check(nf90_inq_varid(ncFileID, varname, VarID), &
+   call nc_check(nf90_inq_varid(ncid_orig, varname, VarID), &
             'sv_to_restart_file', 'inq_varid '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(ncFileID,VarID,dimids=dimIDs,ndims=ncNdims), &
+   call nc_check(nf90_inquire_variable(ncid_orig,VarID,dimids=dimIDs,ndims=ncNdims), &
             'sv_to_restart_file', 'inquire '//trim(string2))
 
    DimCheck : do i = 1,progvar(ivar)%numdims
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
-      call nc_check(nf90_inquire_dimension(ncFileID, dimIDs(i), len=dimlen), &
+      call nc_check(nf90_inquire_dimension(ncid_orig, dimIDs(i), len=dimlen), &
             'sv_to_restart_file', string1)
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
@@ -1890,53 +1909,45 @@ UPDATE : do ivar=1, nfields
 
    enddo DimCheck
 
-   ! When called with a 4th argument, vector_to_prog_var() replaces the DART
+   ! When called with a 4th argument, fill_missing_r8_with_original() replaces the DART
    ! missing code with the value in the corresponding variable in the netCDF file.
-   ! Any clamping to physically meaningful values occurrs in vector_to_prog_var.
+   ! Any clamping to physically meaningful values occurrs in fill_missing_r8_with_original.
+   
+   if (do_io_update(dom_restart, ivar)) then
+      if (progvar(ivar)%numdims == 1) then
 
-   if (progvar(ivar)%numdims == 1) then
+         ni = progvar(ivar)%dimlens(1)
+         allocate(data_1d_array(ni))
 
-      ni = progvar(ivar)%dimlens(1)
-      allocate(data_1d_array(ni))
-      call vector_to_prog_var(state_vector, ivar, data_1d_array, ncFileID)
+         call fill_missing_r8_with_original(ivar, data_1d_array, ncid_out, ncid_orig)
 
-      call nc_check(nf90_put_var(ncFileID, VarID, data_1d_array), &
-            'sv_to_restart_file', 'put_var '//trim(varname))
-      deallocate(data_1d_array)
+         call nc_check(nf90_put_var(ncid_out, VarID, data_1d_array), &
+               'sv_to_restart_file', 'put_var '//trim(varname))
+         deallocate(data_1d_array)
 
-   elseif (progvar(ivar)%numdims == 2) then
+      elseif (progvar(ivar)%numdims == 2) then
 
-      ni = progvar(ivar)%dimlens(1)
-      nj = progvar(ivar)%dimlens(2)
-      allocate(data_2d_array(ni, nj))
-      call vector_to_prog_var(state_vector, ivar, data_2d_array, ncFileID)
+         ni = progvar(ivar)%dimlens(1)
+         nj = progvar(ivar)%dimlens(2)
+         allocate(data_2d_array(ni, nj))
+         call fill_missing_r8_with_original(ivar, data_2d_array, ncid_out, ncid_orig)
 
-      call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array), &
-            'sv_to_restart_file', 'put_var '//trim(varname))
-      deallocate(data_2d_array)
+         call nc_check(nf90_put_var(ncid_out, VarID, data_2d_array), &
+               'sv_to_restart_file', 'put_var '//trim(varname))
+         deallocate(data_2d_array)
 
-   else
-      write(string1, *) 'no support for data array of dimension ', ncNdims
-      call error_handler(E_ERR,'sv_to_restart_file', string1, &
-                        source,revision,revdate)
+      else
+         write(string1, *) 'no support for data array of dimension ', ncNdims
+         call error_handler(E_ERR,'sv_to_restart_file', string1, &
+                           source,revision,revdate)
+      endif
    endif
-
-   ! TJH FIXME ... this works perfectly if it were not for a bug in netCDF.
-   ! When they fix the bug, this will be a useful thing to restore.
-   ! Make note that the variable has been updated by DART
-!  call nc_check(nf90_Redef(ncFileID),'sv_to_restart_file', 'redef '//trim(filename))
-!  call nc_check(nf90_put_att(ncFileID, VarID,'DART','variable modified by DART'),&
-!                'sv_to_restart_file', 'modified '//trim(varname))
-!  call nc_check(nf90_enddef(ncfileID),'sv_to_restart_file','state enddef '//trim(filename))
-
 enddo UPDATE
 
-call nc_check(nf90_close(ncFileID),'sv_to_restart_file','close '//trim(filename))
-ncFileID = 0
+call nc_check(nf90_close(ncid_orig),'sv_to_restart_file','close '//trim(file_orig))
+call nc_check(nf90_close(ncid_out), 'sv_to_restart_file','close '//trim(file_out))
 
 end subroutine sv_to_restart_file
-
-
 
 !==================================================================
 ! The remaining interfaces come last
@@ -2514,7 +2525,7 @@ end subroutine get_grid_vertval
 !------------------------------------------------------------------
 
 
-subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
+subroutine fill_missing_r8_with_orig_1d(ivar, data_1d_array, ncid_in, ncid_orig)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset, into a 1d array.
 !
@@ -2525,64 +2536,28 @@ subroutine vector_to_1d_prog_var(x, ivar, data_1d_array, ncid)
 ! the corresponding (i.e. original) value from the netCDF file is
 ! used.
 
-real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
-integer, OPTIONAL,        intent(in)  :: ncid
+integer,  OPTIONAL,       intent(in)  :: ncid_in
+integer,  OPTIONAL,       intent(in)  :: ncid_orig
 
-integer :: i,ii,ei, VarID
+integer :: VarID
 real(r8), allocatable, dimension(:) :: org_array
 
-! unpack the right part of the DART state vector into a 1D array.
-
-ii = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
-ei = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname)
-
-do i = 1, progvar(ivar)%dimlens(1)
-   data_1d_array(i) = x(ii)
-   ii = ii + 1
-enddo
-
-ii = ii - 1
-if ( ii /= ei ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
-
-! Apply the min/max values, if applicable
-! This should only be true when converting to a variable that will
-! be reinserted into the CLM restart file. This is indicated
-! by the presence of the ncid variable.
-
-if (present(ncid)) then
-
-   if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
-       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
-      where ((data_1d_array /= MISSING_R8) .and. &
-             (data_1d_array > progvar(ivar)%maxvalue)) &
-              data_1d_array = progvar(ivar)%maxvalue
-   endif
-
-   if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
-       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
-      where ((data_1d_array /= MISSING_R8) .and. &
-             (data_1d_array < progvar(ivar)%minvalue)) &
-              data_1d_array = progvar(ivar)%minvalue
-   endif
+if (present(ncid_in) .and. present(ncid_orig)) then
 
    ! Replace the DART fill value with the original value and apply any clamping.
    ! Get the 'original' variable from the netcdf file.
 
    allocate(org_array(size(data_1d_array)))
 
-   call nc_check(nf90_inq_varid(ncid, progvar(ivar)%varname, VarID), &
-            'vector_to_1d_prog_var', 'inq_varid '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_inq_varid(ncid_orig, progvar(ivar)%varname, VarID), &
+            'fill_missing_r8_with_orig_1d', 'inq_varid '//trim(progvar(ivar)%varname))
 
-   call nc_check(nf90_get_var(ncid, VarID, org_array), &
-            'vector_to_1d_prog_var', 'get_var '//trim(progvar(ivar)%varname))
-
+   call nc_check(nf90_get_var(ncid_orig, VarID, org_array), &
+            'fill_missing_r8_with_orig_1d', 'get_var '//trim(progvar(ivar)%varname))
+   
+   data_1d_array = org_array
    ! restoring the indeterminate original values
 
    where(data_1d_array == MISSING_R8) data_1d_array = org_array
@@ -2592,8 +2567,10 @@ if (present(ncid)) then
    if (trim(progvar(ivar)%varname) == 'SNOWDP') &
       where((data_1d_array < 0.0_r8)) data_1d_array = org_array
 
-   if (trim(progvar(ivar)%varname) == 'H2OSNO') &
+   if (trim(progvar(ivar)%varname) == 'H2OSNO') then
+      print*, 'SIZE : ', size(data_1d_array), ' :: SIZE ORIG',  size(org_array)
       where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
+   endif
 
    deallocate(org_array)
 
@@ -2609,76 +2586,39 @@ else
 
 endif
 
-end subroutine vector_to_1d_prog_var
+end subroutine fill_missing_r8_with_orig_1d
 
 
 !------------------------------------------------------------------
 
 
-subroutine vector_to_2d_prog_var(x, ivar, data_2d_array, ncid)
+subroutine fill_missing_r8_with_orig_2d(ivar, data_2d_array, ncid_in, ncid_orig)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 2d array.
 !
-real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
-integer, OPTIONAL,        intent(in)  :: ncid
+integer,  OPTIONAL,       intent(in)  :: ncid_in
+integer,  OPTIONAL,       intent(in)  :: ncid_orig
 
-integer :: i,j,ii,ei,VarID
+integer :: VarID
 real(r8), allocatable, dimension(:,:) :: org_array
 
-! unpack the right part of the DART state vector into a 1D array.
 
-ii = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
-ei = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname)
+if (present(ncid_in) .and. present(ncid_orig)) then
 
-do j = 1,progvar(ivar)%dimlens(2)
-do i = 1,progvar(ivar)%dimlens(1)
-   data_2d_array(i,j) = x(ii)
-   ii = ii + 1
-enddo
-enddo
-
-ii = ii - 1
-if ( ii /= ei ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
-
-! Apply the min/max values, if applicable
-! This should only be true when converting to a variable that will
-! be reinserted into the CLM restart file. This is indicated
-! by the presence of the ncid variable.
-
-if (present(ncid)) then
-
-   if ((progvar(ivar)%rangeRestricted == BOUNDED_ABOVE ) .or. &
-       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
-      where ((data_2d_array /= MISSING_R8) .and. &
-             (data_2d_array > progvar(ivar)%maxvalue)) &
-              data_2d_array = progvar(ivar)%maxvalue
-   endif
-
-   if ((progvar(ivar)%rangeRestricted == BOUNDED_BELOW ) .or. &
-       (progvar(ivar)%rangeRestricted == BOUNDED_BOTH )) then
-      where ((data_2d_array /= MISSING_R8) .and. &
-             (data_2d_array < progvar(ivar)%minvalue)) &
-              data_2d_array = progvar(ivar)%minvalue
-   endif
-
-   ! Replace the DART fill value with the original value and apply any clamping.
    ! Get the 'original' variable from the netcdf file if need be.
 
    allocate(org_array(size(data_2d_array,1),size(data_2d_array,2)))
 
-   call nc_check(nf90_inq_varid(ncid, progvar(ivar)%varname, VarID), &
-            'vector_to_2d_prog_var', 'inq_varid '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_inq_varid(ncid_orig, progvar(ivar)%varname, VarID), &
+            'fill_missing_r8_with_orig_2d', 'inq_varid '//trim(progvar(ivar)%varname))
 
-   call nc_check(nf90_get_var(ncid, VarID, org_array), &
-            'vector_to_2d_prog_var', 'get_var '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_get_var(ncid_orig, VarID, org_array), &
+            'fill_missing_r8_with_orig_2d', 'get_var '//trim(progvar(ivar)%varname))
+
+   data_2d_array = org_array
 
    ! restoring the indeterminate original values
 
@@ -2708,9 +2648,9 @@ if (present(ncid)) then
 
 else
 
-   if     (progvar(ivar)%xtype == NF90_INT) then
-      where(data_2d_array == MISSING_I) data_2d_array = progvar(ivar)%spvalINT
-   elseif (progvar(ivar)%xtype == NF90_FLOAT) then
+   if     (progvar(ivar)%xtype == NF90_INT)    then
+      where(data_2d_array == MISSING_I)  data_2d_array = progvar(ivar)%spvalINT
+   elseif (progvar(ivar)%xtype == NF90_FLOAT)  then
       where(data_2d_array == MISSING_R4) data_2d_array = progvar(ivar)%spvalR4
    elseif (progvar(ivar)%xtype == NF90_DOUBLE) then
       where(data_2d_array == MISSING_R8) data_2d_array = progvar(ivar)%spvalR8
@@ -2718,7 +2658,7 @@ else
 
 endif
 
-end subroutine vector_to_2d_prog_var
+end subroutine fill_missing_r8_with_orig_2d
 
 
 !------------------------------------------------------------------
@@ -4681,320 +4621,168 @@ do ivar = 1,nfields
 enddo
 
 !>@todo FIXME ... this summary message is not finished
-if (do_output() .and. debug > 99) then
+!if (do_output() .and. debug > 99) then
    do ivar = 1,nvars
-      write(string1,*)trim(filename),' has ',trim(var_names(ivar)),var_ranges(ivar,1),var_ranges(ivar,2)
+      write(string1,*)trim(filename),' has ',trim(var_names(ivar)),var_ranges(ivar,1),var_ranges(ivar,2), progvar(ivar)%domain
       call error_handler(E_MSG,'cluster_variables',string1)
    enddo
-endif
+!endif
 
 end subroutine cluster_variables
 
 
-subroutine mark_missing_r8(ens_handle)
-!------------------------------------------------------------------
-! Modifies the state to include missing_r8 values for unused snow levels.
-! This comes from makr_missing_r8.  This is needed when reading
-! directly from netcdf files.
+! subroutine mark_missing_r8(ens_handle)
+! !------------------------------------------------------------------
+! ! Modifies the state to include missing_r8 values for unused snow levels.
+! ! This comes from makr_missing_r8.  This is needed when reading
+! ! directly from netcdf files.
+! 
+! type(ensemble_type), intent(inout) :: ens_handle
+! 
+! ! temp space to hold data while we are reading it
+! integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
+! integer,  allocatable, dimension(:) :: snlsno
+! real(r8), allocatable, dimension(:) :: tmp_array
+! 
+! integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
+! character(len=NF90_MAX_NAME) :: varname
+! integer :: io, TimeDimID, VarID, ncNdims, dimlen
+! integer :: ncid
+! character(len=256) :: myerrorstring
+! 
+! integer :: numdoms, numvars
+! integer :: start_index, end_index
+! 
+! if ( .not. module_initialized ) call static_init_model
+! 
+! allocate(snlsno(ncolumn))
+! call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
+!               'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
+! call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
+!               'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
+! call nc_check(nf90_get_var(ncid, VarID, snlsno), &
+!               'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
+! 
+! ! Start counting and filling the state vector one item at a time,
+! ! repacking the Nd arrays into a single 1d list of numbers.
+! 
+! ! Pack the variable into the DART state vector
+! ! Could/should fill metadata arrays at the same time ...
+! ! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
+! ! or missing value, and the restart files didn't use the right attributes anyway ...
+! ! (bugzilla report 1401)
+! 
+! !>@todo FIXME: I am sure we can do this without having var complete.  This is just
+! !>             the quickest way to test for now.
+! if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+! call all_copies_to_all_vars(ens_handle)
+! 
+! numdoms = get_num_domains()
+! 
+! do idom = 1, numdoms
+!    numvars = get_num_variables(idom)
+!    do ivar = 1, numvars
+! 
+!       indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+!    
+!       ! README: The values in unused snow layers must be assumed to be
+!       ! indeterminate. If the layer is not in use, fill with a missing value.
+!       ! (levsno,column) and (levtot,column) variables may be treated identically.
+!       ! abs(snlsno(j)) defines the number of valid levels in each column -
+!       ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
+!       ! values are in the 1D variables, SNOWDP and frac_sno.
+!    
+!       ! FIXME: Question, what happens to unused levels below ground? Are those
+!       ! values 'special'?
+!       ncNDims = get_num_dims(idom,ivar)
+!       if (ncNdims == 2) then
+! 
+!          ni = get_dim_length(idom,ivar,1) 
+!          nj = get_dim_length(idom,ivar,2) 
+! 
+!          allocate(tmp_array(ni*nj))
+!          do icopy = 1, ens_handle%my_num_copies
+!             if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
+!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
+! 
+!                start_index = get_index_start(idom,ivar)
+!                end_index   = get_index_end(idom,ivar)
+! 
+!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
+! 
+!                do j = 1, nj  ! loop over columns
+!                   numsnowlevels = abs(snlsno(j))
+!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
+!                      tmp_array(i + (j-1)*ni) = MISSING_R8
+!                   enddo
+!                enddo
+! 
+!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+! 
+!             elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
+!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
+!    
+!                start_index = get_index_start(idom,ivar)
+!                end_index   = get_index_end(idom,ivar)
+! 
+!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
+! 
+!                do j = 1, nj  ! loop over columns
+!                   numsnowlevels = abs(snlsno(j))
+!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
+!                      tmp_array(i + (j-1)*ni) = MISSING_R8
+!                   enddo
+!                enddo
+! 
+!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!    
+!             endif
+!    
+!             ! Block of checks that will hopefully be corrected in the
+!             ! core CLM code. There are some indeterminate values being
+!             ! used instead of the missing_value code - and even then,
+!             ! the missing_value code is not reliably implemented.
+!    
+!             if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
+!                where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
+!                do j = 1,nj  ! T_SOISNO has missing data in lake columns
+!                  if (cols1d_ityplun(j) == LAKE) then
+!                     do i = 1,ni
+!                     !  write(*,*)'Found a lake column resetting the following:'
+!                     !  write(*,*)data_2d_array(:,j)
+!                        tmp_array(i + (j-1)*ni) = MISSING_R8
+!                     enddo
+!                  endif
+!                enddo
+!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!             endif
+!             if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
+!                 (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
+!                where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
+!                do j = 1,nj  ! missing data in lake columns
+!                  if (cols1d_ityplun(j) == LAKE) then
+!                     do i = 1,ni
+!                        tmp_array(i + (j-1)*ni) = MISSING_R8
+!                     enddo
+!                  endif
+!                enddo
+!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
+!             endif
+!          enddo
+! 
+!          deallocate(tmp_array) 
+!    
+!       endif
+!    enddo
+! enddo
+! 
+! call all_vars_to_all_copies (ens_handle)
+! deallocate(ens_handle%vars)
+! 
+! deallocate(snlsno)
+! 
+! end subroutine mark_missing_r8
 
-type(ensemble_type), intent(inout) :: ens_handle
-
-! temp space to hold data while we are reading it
-integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
-integer,  allocatable, dimension(:) :: snlsno
-real(r8), allocatable, dimension(:) :: tmp_array
-
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME) :: varname
-integer :: io, TimeDimID, VarID, ncNdims, dimlen
-integer :: ncid
-character(len=256) :: myerrorstring
-
-integer :: numdoms, numvars
-integer :: start_index, end_index
-
-if ( .not. module_initialized ) call static_init_model
-
-allocate(snlsno(ncolumn))
-call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
-              'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
-call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
-              'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
-call nc_check(nf90_get_var(ncid, VarID, snlsno), &
-              'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
-
-! Start counting and filling the state vector one item at a time,
-! repacking the Nd arrays into a single 1d list of numbers.
-
-! Pack the variable into the DART state vector
-! Could/should fill metadata arrays at the same time ...
-! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
-! or missing value, and the restart files didn't use the right attributes anyway ...
-! (bugzilla report 1401)
-
-!>@todo FIXME: I am sure we can do this without having var complete.  This is just
-!>             the quickest way to test for now.
-if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
-call all_copies_to_all_vars(ens_handle)
-
-numdoms = get_num_domains()
-
-do idom = 1, numdoms
-   numvars = get_num_variables(idom)
-   do ivar = 1, numvars
-
-      indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
-   
-      ! README: The values in unused snow layers must be assumed to be
-      ! indeterminate. If the layer is not in use, fill with a missing value.
-      ! (levsno,column) and (levtot,column) variables may be treated identically.
-      ! abs(snlsno(j)) defines the number of valid levels in each column -
-      ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
-      ! values are in the 1D variables, SNOWDP and frac_sno.
-   
-      ! FIXME: Question, what happens to unused levels below ground? Are those
-      ! values 'special'?
-      ncNDims = get_num_dims(idom,ivar)
-      if (ncNdims == 2) then
-
-         ni = get_dim_length(idom,ivar,1) 
-         nj = get_dim_length(idom,ivar,2) 
-
-         allocate(tmp_array(ni*nj))
-         do icopy = 1, ens_handle%my_num_copies
-            if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
-                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-
-               start_index = get_index_start(idom,ivar)
-               end_index   = get_index_end(idom,ivar)
-
-               tmp_array = ens_handle%vars(start_index:end_index,icopy)
-
-               do j = 1, nj  ! loop over columns
-                  numsnowlevels = abs(snlsno(j))
-                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
-                     tmp_array(i + (j-1)*ni) = MISSING_R8
-                  enddo
-               enddo
-
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-
-            elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
-                     (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-   
-               start_index = get_index_start(idom,ivar)
-               end_index   = get_index_end(idom,ivar)
-
-               tmp_array = ens_handle%vars(start_index:end_index,icopy)
-
-               do j = 1, nj  ! loop over columns
-                  numsnowlevels = abs(snlsno(j))
-                  do i = 1, nlevsno - numsnowlevels  ! loop over layers
-                     tmp_array(i + (j-1)*ni) = MISSING_R8
-                  enddo
-               enddo
-
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-   
-            endif
-   
-            ! Block of checks that will hopefully be corrected in the
-            ! core CLM code. There are some indeterminate values being
-            ! used instead of the missing_value code - and even then,
-            ! the missing_value code is not reliably implemented.
-   
-            if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
-               where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
-               do j = 1,nj  ! T_SOISNO has missing data in lake columns
-                 if (cols1d_ityplun(j) == LAKE) then
-                    do i = 1,ni
-                    !  write(*,*)'Found a lake column resetting the following:'
-                    !  write(*,*)data_2d_array(:,j)
-                       tmp_array(i + (j-1)*ni) = MISSING_R8
-                    enddo
-                 endif
-               enddo
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-            endif
-            if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
-                (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
-               where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
-               do j = 1,nj  ! missing data in lake columns
-                 if (cols1d_ityplun(j) == LAKE) then
-                    do i = 1,ni
-                       tmp_array(i + (j-1)*ni) = MISSING_R8
-                    enddo
-                 endif
-               enddo
-               ens_handle%vars(start_index:end_index,icopy) = tmp_array
-            endif
-         enddo
-
-         deallocate(tmp_array) 
-   
-      endif
-   enddo
-enddo
-
-call all_vars_to_all_copies (ens_handle)
-deallocate(ens_handle%vars)
-
-deallocate(snlsno)
-
-end subroutine mark_missing_r8
-
-
-
-!#! !>@todo FIXME ... this could be used in the converters to fix missing values
-!#! 
-!#! subroutine mark_missing_r8(ens_handle)
-!#! !------------------------------------------------------------------
-!#! ! Modifies the state to include missing_r8 values for unused snow levels.
-!#! ! This comes from mark_missing_r8.  This is needed when reading
-!#! ! directly from netcdf files.
-!#! 
-!#! type(ensemble_type), intent(inout) :: ens_handle
-!#! 
-!#! ! temp space to hold data while we are reading it
-!#! integer  :: i, j, ni, nj, idom, ivar, indx, icopy, numsnowlevels
-!#! integer,  allocatable, dimension(:) :: snlsno
-!#! real(r8), allocatable, dimension(:) :: tmp_array
-!#! 
-!#! integer :: TimeDimID, VarID, ncNdims
-!#! integer :: ncid
-!#! 
-!#! integer :: numdoms, numvars
-!#! integer :: start_index, end_index
-!#! 
-!#! if ( .not. module_initialized ) call static_init_model
-!#! 
-!#! allocate(snlsno(ncolumn))
-!#! call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid), &
-!#!               'makr_missing_r8', 'open SNLSNO'//clm_restart_filename)
-!#! call nc_check(nf90_inq_varid(ncid,'SNLSNO', VarID), &
-!#!               'makr_missing_r8', 'inq_varid SNLSNO'//clm_restart_filename)
-!#! call nc_check(nf90_get_var(ncid, VarID, snlsno), &
-!#!               'makr_missing_r8', 'get_var SNLSNO'//clm_restart_filename)
-!#! 
-!#! ! Start counting and filling the state vector one item at a time,
-!#! ! repacking the Nd arrays into a single 1d list of numbers.
-!#! 
-!#! ! Pack the variable into the DART state vector
-!#! ! Could/should fill metadata arrays at the same time ...
-!#! ! As of 24 Aug 2011, CLM was not consistent about using a single fill_value
-!#! ! or missing value, and the restart files didn't use the right attributes anyway ...
-!#! ! (bugzilla report 1401)
-!#! 
-!#! !>@todo FIXME: I am sure we can do this without having var complete.  This is just
-!#! !>             the quickest way to test for now.
-!#! if(.not. allocated(ens_handle%vars)) allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
-!#! call all_copies_to_all_vars(ens_handle)
-!#! 
-!#! numdoms = get_num_domains()
-!#! 
-!#! do idom = 1, numdoms
-!#!    numvars = get_num_variables(idom)
-!#!    do ivar = 1, numvars
-!#! 
-!#!       indx = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
-!#!    
-!#!       ! README: The values in unused snow layers must be assumed to be
-!#!       ! indeterminate. If the layer is not in use, fill with a missing value.
-!#!       ! (levsno,column) and (levtot,column) variables may be treated identically.
-!#!       ! abs(snlsno(j)) defines the number of valid levels in each column -
-!#!       ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
-!#!       ! values are in the 1D variables, SNOWDP and frac_sno.
-!#!    
-!#!       ! FIXME: Question, what happens to unused levels below ground? Are those
-!#!       ! values 'special'?
-!#!       ncNDims = get_num_dims(idom,ivar)
-!#!       if (ncNdims == 2) then
-!#! 
-!#!          ni = get_dim_length(idom,ivar,1) 
-!#!          nj = get_dim_length(idom,ivar,2) 
-!#! 
-!#!          allocate(tmp_array(ni*nj))
-!#!          do icopy = 1, ens_handle%my_num_copies
-!#!             if     ( (trim(get_dim_name(idom,ivar,1)) == 'levsno')   .and. &
-!#!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-!#! 
-!#!                start_index = get_index_start(idom,ivar)
-!#!                end_index   = get_index_end(idom,ivar)
-!#! 
-!#!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
-!#! 
-!#!                do j = 1, nj  ! loop over columns
-!#!                   numsnowlevels = abs(snlsno(j))
-!#!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
-!#!                      tmp_array(i + (j-1)*ni) = MISSING_R8
-!#!                   enddo
-!#!                enddo
-!#! 
-!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
-!#! 
-!#!             elseif ( (trim(get_dim_name(idom,ivar,1)) == 'levtot') .and. &
-!#!                      (trim(get_dim_name(idom,ivar,2)) == 'column') ) then
-!#!    
-!#!                start_index = get_index_start(idom,ivar)
-!#!                end_index   = get_index_end(idom,ivar)
-!#! 
-!#!                tmp_array = ens_handle%vars(start_index:end_index,icopy)
-!#! 
-!#!                do j = 1, nj  ! loop over columns
-!#!                   numsnowlevels = abs(snlsno(j))
-!#!                   do i = 1, nlevsno - numsnowlevels  ! loop over layers
-!#!                      ! tmp_array(i + (j-1)*ni) = MISSING_R8
-!#!                   enddo
-!#!                enddo
-!#! 
-!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
-!#!    
-!#!             endif
-!#!    
-!#!             ! Block of checks that will hopefully be corrected in the
-!#!             ! core CLM code. There are some indeterminate values being
-!#!             ! used instead of the missing_value code - and even then,
-!#!             ! the missing_value code is not reliably implemented.
-!#!    
-!#!             if (trim(get_variable_name(idom,ivar)) == 'T_SOISNO') then
-!#!                where(tmp_array < 1.0_r8) tmp_array = MISSING_R8
-!#!                do j = 1,nj  ! T_SOISNO has missing data in lake columns
-!#!                  if (cols1d_ityplun(j) == LAKE) then
-!#!                     do i = 1,ni
-!#!                     !  write(*,*)'Found a lake column resetting the following:'
-!#!                     !  write(*,*)data_2d_array(:,j)
-!#!                        tmp_array(i + (j-1)*ni) = MISSING_R8
-!#!                     enddo
-!#!                  endif
-!#!                enddo
-!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
-!#!             endif
-!#!             if ((trim(get_variable_name(idom,ivar)) == 'H2OSOI_LIQ')  .or. &
-!#!                 (trim(get_variable_name(idom,ivar)) == 'H2OSOI_ICE')) then
-!#!                where(tmp_array < 0.0_r8) tmp_array = MISSING_R8
-!#!                do j = 1,nj  ! missing data in lake columns
-!#!                  if (cols1d_ityplun(j) == LAKE) then
-!#!                     do i = 1,ni
-!#!                        tmp_array(i + (j-1)*ni) = MISSING_R8
-!#!                     enddo
-!#!                  endif
-!#!                enddo
-!#!                ens_handle%vars(start_index:end_index,icopy) = tmp_array
-!#!             endif
-!#!          enddo
-!#! 
-!#!          deallocate(tmp_array) 
-!#!    
-!#!       endif
-!#!    enddo
-!#! enddo
-!#! 
-!#! call all_vars_to_all_copies (ens_handle)
-!#! deallocate(ens_handle%vars)
-!#! 
-!#! deallocate(snlsno)
-!#! 
-!#! end subroutine mark_missing_r8
 
 !------------------------------------------------------------------
 !>@todo FIXME: now that we have the state structure, do we still
@@ -5066,8 +4854,6 @@ write(     *     ,*)'   minvalue          ',progvar(ivar)%minvalue
 write(     *     ,*)'   maxvalue          ',progvar(ivar)%maxvalue
 
 end subroutine dump_progvar
-
-!------------------------------------------------------------------
 
 subroutine say(what)
 character(len=*), intent(in) :: what
