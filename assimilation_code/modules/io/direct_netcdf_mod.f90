@@ -57,6 +57,8 @@ module direct_netcdf_mod
 use types_mod,            only : r4, r8, i4, i8, MISSING_R8, MISSING_R4, MISSING_I, &
                                  digits12, metadatalength
 
+use options_mod,           only : get_missing_ok_status
+
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, map_task_to_pe, &
                                  all_copies_to_all_vars, all_vars_to_all_copies, &
                                  get_copy_owner_index, get_copy, get_ensemble_time, &
@@ -149,7 +151,6 @@ character(len=512) :: msgstring, msgstring2
 !> (but we don't remember for sure if this was the reason.)
 
 logical :: overwrite_time_in_output_file = .false.
-logical :: allow_missing_in_clm = .true.
 
 contains
 
@@ -1416,20 +1417,19 @@ end subroutine transpose_write_multi_task
 
 subroutine clamp_variable(dom_id, var_index, variable)
 
-integer,     intent(in) :: dom_id ! domain id
-integer,     intent(in) :: var_index ! variable index
+integer,     intent(in) :: dom_id      ! domain id
+integer,     intent(in) :: var_index   ! variable index
 real(r8), intent(inout) :: variable(:) ! variable
 
-real(r8) :: minclamp, maxclamp
+real(r8) :: minclamp, maxclamp, my_minmax(2)
 character(len=NF90_MAX_NAME) :: varname ! for informational log messages
-real(r8) :: my_minmax(2)
+logical  :: allow_missing ! used in CLM for state variables
 
 ! if neither bound is set, return early
 minclamp = get_io_clamping_minval(dom_id, var_index)
 maxclamp = get_io_clamping_maxval(dom_id, var_index)
 
-! comment out just for testing
-!if (minclamp == missing_r8 .and. maxclamp == missing_r8) return
+if (minclamp == missing_r8 .and. maxclamp == missing_r8) return
 
 ! if we get here, either the min, max or both have a clamping value.
   
@@ -1443,7 +1443,9 @@ maxclamp = get_io_clamping_maxval(dom_id, var_index)
 ! if we allow missing values in the state (which jeff has never
 ! liked because it makes the statistics funny), then these next
 ! two lines need to be:
-if (allow_missing_in_clm) then
+allow_missing = get_missing_ok_status()
+
+if (allow_missing) then
    my_minmax(1) = minval(variable, mask=(variable /= missing_r8))
    my_minmax(2) = maxval(variable, mask=(variable /= missing_r8))
 else
@@ -1455,11 +1457,10 @@ endif
 varname = get_variable_name(dom_id, var_index)
 
 ! is lower bound set?
-if ( minclamp /= missing_r8 ) then
+if ( minclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    if ( my_minmax(1) < minclamp ) then
-
       !>@todo again, if we're allowing missing in state, this has to be masked:
-       if (allow_missing_in_clm) then
+       if (allow_missing) then
           where(variable /= missing_r8) variable = max(minclamp, variable)
        else
           variable = max(minclamp, variable)
@@ -1475,7 +1476,7 @@ endif ! min range set
 if ( maxclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    if ( my_minmax(2) > maxclamp ) then
       !>@todo again, if we're allowing missing in state, this has to be masked:
-      if (allow_missing_in_clm) then
+      if (allow_missing) then
          where(variable /= missing_r8) variable = max(maxclamp, variable)
       else
          variable = min(maxclamp, variable)
@@ -1487,9 +1488,6 @@ if ( maxclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    endif
 
 endif ! max range set
-
-! fixme
-!where (variable == missing_r8) variable = 1.0e+36 ! or whatever fill value is
 
 end subroutine clamp_variable
 
