@@ -53,5 +53,5 @@
    output_forward_op_errors     = .false.,
    silence                      = .false.,
    
-   allow_missing_r8             = .false.
+   allow_missing_clm            = .false.
    /

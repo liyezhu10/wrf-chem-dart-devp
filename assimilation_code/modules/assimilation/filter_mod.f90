@@ -246,11 +246,11 @@ real(r8) :: inf_sd_lower_bound(2)          = 0.0_r8
 ! Some models are allowed to have MISSING_R8 values in the DART state vector.
 ! If they are encountered, it is not necessarily a FATAL error.
 ! Most of the time, if a MISSING_R8 is encountered, DART should die.
-! CLM should have allow_missing_r8 = .true.
+! CLM should have allow_missing_clm = .true.
 ! maybe POP - but in POP the missing values are land and all ensemble members
 ! have the same missing values.  CLM is different in that only some ensemble members may
 ! have missing values and so we have a deficient ensemble size at those state locations.
-logical  :: allow_missing_r8 = .false.
+logical  :: allow_missing_clm = .false.
 
 
 namelist /filter_nml/ async,     &
@@ -299,7 +299,7 @@ namelist /filter_nml/ async,     &
    output_mean,                  &
    output_sd,                    &
    write_all_stages_at_end,      &
-   allow_missing_r8
+   allow_missing_clm
 
 
 !----------------------------------------------------------------
@@ -431,7 +431,7 @@ if ( inf_flavor(2) == 4 ) then
    inf_damping(2) = 1.0_r8  ! no damping
 endif
 
-call set_allow_missing_r8(allow_missing_r8)
+call set_allow_missing_r8(allow_missing_clm)
 allow_missing = get_missing_ok_status()
 
 call trace_message('Before initializing inflation')

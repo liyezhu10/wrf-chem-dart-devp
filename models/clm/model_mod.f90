@@ -348,11 +348,6 @@ type(time_type) :: model_time      ! valid time of the model state
 type(time_type) :: model_timestep  ! smallest time to adv model
 
 
-INTERFACE fill_missing_r8_with_original
-      MODULE PROCEDURE fill_missing_r8_with_orig_1d
-      MODULE PROCEDURE fill_missing_r8_with_orig_2d
-END INTERFACE
-
 INTERFACE DART_get_var
       MODULE PROCEDURE get_var_1d
       MODULE PROCEDURE get_var_2d
@@ -1528,7 +1523,7 @@ integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character     (len=NF90_MAX_NAME)     :: varname
 character     (len=256)               :: myerrorstring
 
-if ( .not. module_initialized ) call static_init_model
+if ( .not. module_initialized ) call static_init_model()
 
 ! Must check anything with a dimension of 'levtot' or 'levsno' and manually
 ! set the values to DART missing. If only it were that easy ...
@@ -1580,8 +1575,7 @@ do ivar=1, numvars
 
    varname = trim(progvar(ivar)%varname)
    myerrorstring = trim(progvar(ivar)%origin)//' '//trim(progvar(ivar)%varname)
-
-   call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid_in), &
+   call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_in), &
               'clm_to_dart_state_vector','open '//trim(myerrorstring))
 
    ! File is not required to have a time dimension
@@ -1595,7 +1589,7 @@ do ivar=1, numvars
 
    call nc_check(nf90_inq_varid(ncid_out,   varname, var_id_out), &
             'clm_to_dart_state_vector', 'inq_varid output '//trim(myerrorstring))
-   call nc_check(nf90_inquire_variable( ncid_out, var_id_out, dimids=dimIDs, ndims=ncNdims), &
+   call nc_check(nf90_inquire_variable( ncid_out, var_id_out), &
                  'clm_to_dart_state_vector', 'inquire_variable '//trim(myerrorstring))
 
    ! Check the rank of the variable
@@ -1644,12 +1638,6 @@ do ivar=1, numvars
       allocate(data_1d_array(ni))
       call DART_get_var(ncid_in, varname, data_1d_array)
 
-      call nc_check(nf90_inquire_variable( ncid_out, var_id_out, dimids=dimIDs), &
-                    'get_var_1d', 'inquire_variable '//varname)
-
-      call nc_check(nf90_inquire_dimension(ncid_out, dimIDs(1)), &
-                    'get_var_1d', 'inquire_dimension '//varname)
-      
       call nc_check(nf90_put_var(ncid_out, var_id_out, data_1d_array), &
                    'nc_write_model_atts', 'put_var '//trim(varname))
 
@@ -1719,9 +1707,6 @@ do ivar=1, numvars
          enddo
       endif
 
-      call nc_check(nf90_inquire_variable( ncid_out, VarID, dimids=dimIDs),  &
-                    'get_var_2d', 'inquire_variable '//varname)
-
       call nc_check(nf90_put_var(ncid_out, var_id_out, data_2d_array), &
                    'get_var_2d', 'put_var '//trim(varname))
 
@@ -1750,13 +1735,7 @@ do ivar=1, numvars
          ! applied correctly for PBOT, TBOT ... so there is no need for the
          ! extra processing that is present in the previous loops.
 
-         call nc_check(nf90_inquire_variable( ncid_out, VarID, dimids=dimIDs),  &
-                       'get_var_2d', 'inquire_variable '//varname)
-
-         call nc_check(nf90_inquire_dimension(ncid_out, dimIDs(1)), &
-                       'get_var_2d', 'inquire_dimension '//varname)
-         
-         call nc_check(nf90_put_var(ncid_out, VarID, data_3d_array), &
+         call nc_check(nf90_put_var(ncid_out, var_id_out, data_3d_array), &
                       'nc_write_model_atts', 'put_var '//trim(varname))
 
          deallocate(data_3d_array)
@@ -1780,12 +1759,12 @@ do ivar=1, numvars
    endif
 
    indx = indx - 1
-   if ( indx /= progvar(ivar)%indexN ) then
-      write(string1, *)'Variable '//trim(varname)//' filled wrong.'
-      write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
-      call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
-                        source,revision,revdate,text2=string2)
-   endif
+   ! if ( indx /= progvar(ivar)%indexN ) then
+   !    write(string1, *)'Variable '//trim(varname)//' filled wrong.'
+   !    write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
+   !    call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
+   !                      source,revision,revdate,text2=string2)
+   ! endif
 
    call nc_check(nf90_close(ncid_in),'clm_to_dart_state_vector','close in'//progvar(ivar)%origin)
    ncid_in = 0
@@ -1817,7 +1796,7 @@ real(r8), allocatable, dimension(:,:) :: data_2d_array
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
-integer         :: VarID, ncNdims, dimlen, numvars
+integer         :: varid_out, VarID, ncNdims, dimlen, numvars
 integer         :: ncid_out, ncid_orig, create_mode
 type(time_type) :: file_time
 
@@ -1835,7 +1814,7 @@ call nc_check(nf90_open(trim(file_orig), NF90_NOWRITE, ncid_orig), &
 
 if ( .not. file_exist(file_out) ) then
    write(string1,*) 'no file ', trim(file_out),' for writing so creating fresh'
-   call error_handler(E_MSG,'sv_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
    ! Create file to fill the MISSING_R8 values with the original values
    create_mode = ior(NF90_CLOBBER, NF90_64BIT_OFFSET)
    call nc_check(nf90_create(trim(file_out), create_mode, ncid_out), &
@@ -1878,7 +1857,7 @@ if (do_output()) call print_date(file_time,'date of restart file "'//trim(file_o
 ! to set the value of H2OSNO back to the value before assimilation if negative value is found.
 
 ! get the number of variables for clm_restart_file
-numvars = get_num_variables(1)
+numvars = get_num_variables(dom_restart)
 UPDATE : do ivar=1, numvars
 
    varname = trim(progvar(ivar)%varname)
@@ -1890,8 +1869,12 @@ UPDATE : do ivar=1, numvars
 
    call nc_check(nf90_inq_varid(ncid_orig, varname, VarID), &
             'sv_to_restart_file', 'inq_varid '//trim(string2))
-
    call nc_check(nf90_inquire_variable(ncid_orig,VarID,dimids=dimIDs,ndims=ncNdims), &
+            'sv_to_restart_file', 'inquire '//trim(string2))
+
+   call nc_check(nf90_inq_varid(ncid_out, varname, varid_out), &
+            'sv_to_restart_file', 'inq_varid '//trim(string2))
+   call nc_check(nf90_inquire_variable(ncid_out,varid_out), &
             'sv_to_restart_file', 'inquire '//trim(string2))
 
    DimCheck : do i = 1,progvar(ivar)%numdims
@@ -1913,35 +1896,21 @@ UPDATE : do ivar=1, numvars
    ! missing code with the value in the corresponding variable in the netCDF file.
    ! Any clamping to physically meaningful values occurrs in fill_missing_r8_with_original.
    
-   if (do_io_update(dom_restart, ivar)) then
+  if (do_io_update(dom_restart, ivar)) then
       if (progvar(ivar)%numdims == 1) then
 
-         ni = progvar(ivar)%dimlens(1)
-         allocate(data_1d_array(ni))
-
-         call fill_missing_r8_with_original(ivar, data_1d_array, ncid_out, ncid_orig)
-
-         call nc_check(nf90_put_var(ncid_out, VarID, data_1d_array), &
-               'sv_to_restart_file', 'put_var '//trim(varname))
-         deallocate(data_1d_array)
+         call fill_missing_r8_with_orig_1d(ivar, ncid_out, ncid_orig)
 
       elseif (progvar(ivar)%numdims == 2) then
 
-         ni = progvar(ivar)%dimlens(1)
-         nj = progvar(ivar)%dimlens(2)
-         allocate(data_2d_array(ni, nj))
-         call fill_missing_r8_with_original(ivar, data_2d_array, ncid_out, ncid_orig)
-
-         call nc_check(nf90_put_var(ncid_out, VarID, data_2d_array), &
-               'sv_to_restart_file', 'put_var '//trim(varname))
-         deallocate(data_2d_array)
+         call fill_missing_r8_with_orig_2d(ivar, ncid_out, ncid_orig)
 
       else
          write(string1, *) 'no support for data array of dimension ', ncNdims
          call error_handler(E_ERR,'sv_to_restart_file', string1, &
                            source,revision,revdate)
       endif
-   endif
+  endif
 enddo UPDATE
 
 call nc_check(nf90_close(ncid_orig),'sv_to_restart_file','close '//trim(file_orig))
@@ -2525,7 +2494,7 @@ end subroutine get_grid_vertval
 !------------------------------------------------------------------
 
 
-subroutine fill_missing_r8_with_orig_1d(ivar, data_1d_array, ncid_in, ncid_orig)
+subroutine fill_missing_r8_with_orig_1d(ivar, ncid_out, ncid_orig)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset, into a 1d array.
 !
@@ -2537,33 +2506,37 @@ subroutine fill_missing_r8_with_orig_1d(ivar, data_1d_array, ncid_in, ncid_orig)
 ! used.
 
 integer,                  intent(in)  :: ivar
-real(r8), dimension(:),   intent(out) :: data_1d_array
-integer,  OPTIONAL,       intent(in)  :: ncid_in
+integer,  OPTIONAL,       intent(in)  :: ncid_out
 integer,  OPTIONAL,       intent(in)  :: ncid_orig
 
-integer :: VarID
-real(r8), allocatable, dimension(:) :: org_array
+integer :: VarID, varid_out
+real(r8), allocatable, dimension(:) :: org_array, data_1d_array
 
-if (present(ncid_in) .and. present(ncid_orig)) then
+if (present(ncid_out) .and. present(ncid_orig)) then
 
    ! Replace the DART fill value with the original value and apply any clamping.
    ! Get the 'original' variable from the netcdf file.
 
-   allocate(org_array(size(data_1d_array)))
-
    call nc_check(nf90_inq_varid(ncid_orig, progvar(ivar)%varname, VarID), &
             'fill_missing_r8_with_orig_1d', 'inq_varid '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_inq_varid(ncid_out, progvar(ivar)%varname, varid_out), &
+            'fill_missing_r8_with_orig_1d', 'inq_varid '//trim(progvar(ivar)%varname))
+
+   allocate(org_array(progvar(ivar)%dimlens(1)), data_1d_array(progvar(ivar)%dimlens(1)))
 
    call nc_check(nf90_get_var(ncid_orig, VarID, org_array), &
             'fill_missing_r8_with_orig_1d', 'get_var '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_get_var(ncid_out, varid_out, data_1d_array), &
+            'fill_missing_r8_with_orig_1d', 'get_var '//trim(progvar(ivar)%varname))
    
-   data_1d_array = org_array
    ! restoring the indeterminate original values
 
    where(data_1d_array == MISSING_R8) data_1d_array = org_array
 
-   ! clamping the assimilated values to physically meaningful ranges.
+   call nc_check(nf90_put_var(ncid_out, varid_out, data_1d_array), &
+         'fill_missing_r8_with_orig_1d', 'put_var '//trim(progvar(ivar)%varname))
 
+   ! clamping the assimilated values to physically meaningful ranges.
    if (trim(progvar(ivar)%varname) == 'SNOWDP') &
       where((data_1d_array < 0.0_r8)) data_1d_array = org_array
 
@@ -2571,7 +2544,7 @@ if (present(ncid_in) .and. present(ncid_orig)) then
       where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
    endif
 
-   deallocate(org_array)
+   deallocate(org_array, data_1d_array)
 
 else
 
@@ -2591,40 +2564,44 @@ end subroutine fill_missing_r8_with_orig_1d
 !------------------------------------------------------------------
 
 
-subroutine fill_missing_r8_with_orig_2d(ivar, data_2d_array, ncid_in, ncid_orig)
+subroutine fill_missing_r8_with_orig_2d(ivar, ncid_out, ncid_orig)
 !------------------------------------------------------------------
 ! convert the values from a 1d array, starting at an offset,
 ! into a 2d array.
 !
-integer,                  intent(in)  :: ivar
-real(r8), dimension(:,:), intent(out) :: data_2d_array
-integer,  OPTIONAL,       intent(in)  :: ncid_in
-integer,  OPTIONAL,       intent(in)  :: ncid_orig
+integer,  intent(in)  :: ivar
+integer,  OPTIONAL, intent(in)  :: ncid_out
+integer,  OPTIONAL, intent(in)  :: ncid_orig
 
-integer :: VarID
-real(r8), allocatable, dimension(:,:) :: org_array
+integer :: VarID, varid_out
+real(r8), allocatable, dimension(:,:) :: org_array, data_2d_array
 
 
-if (present(ncid_in) .and. present(ncid_orig)) then
+if (present(ncid_out) .and. present(ncid_orig)) then
 
    ! Get the 'original' variable from the netcdf file if need be.
 
-   allocate(org_array(size(data_2d_array,1),size(data_2d_array,2)))
+   allocate(org_array(progvar(ivar)%dimlens(1), progvar(ivar)%dimlens(2)), &
+        data_2d_array(progvar(ivar)%dimlens(1), progvar(ivar)%dimlens(2)))
 
    call nc_check(nf90_inq_varid(ncid_orig, progvar(ivar)%varname, VarID), &
             'fill_missing_r8_with_orig_2d', 'inq_varid '//trim(progvar(ivar)%varname))
-
    call nc_check(nf90_get_var(ncid_orig, VarID, org_array), &
             'fill_missing_r8_with_orig_2d', 'get_var '//trim(progvar(ivar)%varname))
 
-   data_2d_array = org_array
+   call nc_check(nf90_inq_varid(ncid_out, progvar(ivar)%varname, varid_out), &
+            'fill_missing_r8_with_orig_2d', 'inq_varid '//trim(progvar(ivar)%varname))
+   call nc_check(nf90_get_var(ncid_out, varid_out, data_2d_array), &
+            'fill_missing_r8_with_orig_2d', 'get_var '//trim(progvar(ivar)%varname))
 
    ! restoring the indeterminate original values
 
    where(data_2d_array == MISSING_R8 ) data_2d_array = org_array
 
-   ! clamping the assimilated values to physically meaningful ranges.
+   call nc_check(nf90_put_var(ncid_out, varid_out, data_2d_array), &
+         'fill_missing_r8_with_orig_1d', 'put_var '//trim(progvar(ivar)%varname))
 
+   ! clamping the assimilated values to physically meaningful ranges.
    if     (trim(progvar(ivar)%varname) == 'DZSNO') then
       where((data_2d_array < 0.0_r8)) data_2d_array = org_array
    elseif (trim(progvar(ivar)%varname) == 'ZSNO') then
@@ -2643,7 +2620,7 @@ if (present(ncid_in) .and. present(ncid_orig)) then
       where((data_2d_array < 0.0_r8)) data_2d_array = 0.0_r8
    endif
 
-   deallocate(org_array)
+   deallocate(org_array, data_2d_array)
 
 else
 
