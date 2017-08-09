@@ -585,11 +585,14 @@ if (.not. h%opt%global_grid) then
    h%ii%min_lon = minval(h%ii%lons_2d)
    h%ii%max_lon = maxval(h%ii%lons_2d)
    h%ii%lon_width = h%ii%max_lon - h%ii%min_lon  ! FIXME: wrap?
-   if (h%ii%lon_width < 0 .and. h%opt%spans_lon_zero) then
-      h%ii%lon_width = h%ii%lon_width + 360.0_r8
-   else
-      ! FIXME: error
-      call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', source, revision, revdate)
+
+   if (h%ii%lon_width < 0) then
+      if(h%opt%spans_lon_zero) then
+         h%ii%lon_width = h%ii%lon_width + 360.0_r8
+      else
+         write(*,*)'TJH lon check ',h%ii%min_lon, h%ii%max_lon, h%ii%lon_width, h%opt%spans_lon_zero
+         call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', source, revision, revdate)
+      endif
    endif
 
    h%ii%min_lat = minval(h%ii%lats_2d)
