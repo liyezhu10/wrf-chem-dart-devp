@@ -12,7 +12,9 @@
 #    only variables marked 'UPDATE' will be modified for ROMS.
 
 &model_nml
+   roms_grid_file              = 'roms_grid.nc'
    roms_filename               = 'roms_init.nc'
+   vert_transform              = 4
    assimilation_period_days    = 1
    assimilation_period_seconds = 0
    vert_localization_coord     = 3

@@ -35,4 +35,5 @@ models/ROMS/model_mod.f90
 models/ROMS/test_grid.f90
 models/ROMS/test_roms_interpolate.f90
 models/utilities/default_model_mod.f90
+models/utilities/quad_utils_mod.f90
 observations/forward_operators/obs_def_mod.f90

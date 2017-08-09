@@ -137,6 +137,8 @@ allocate(lon(nlon), lat(nlat), vert(nvert), field(nlon,nlat,nvert,ens_size))
 allocate(all_ios_out(nlon*nlat*nvert,ens_size))
 nfailed = 0
 
+field = MISSING_R8
+
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
    do jlat = 1, nlat

@@ -47,7 +47,7 @@ use     location_mod, only : location_type, set_location, get_location,         
                              write_location, set_location_missing,              &
                              get_close_obs, get_close_state,                    &
                              convert_vertical_obs, convert_vertical_state,      &
-                             VERTISHEIGHT, VERTISSURFACE
+                             VERTISHEIGHT, VERTISSURFACE, is_vertical
 
 use    utilities_mod, only : register_module, error_handler, do_nml_term,       &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,       &
@@ -89,11 +89,17 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices, &
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
                                  nc_add_global_creation_time, nc_redef, nc_enddef
 
-use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
-                                  nc_write_location
+use location_io_mod,      only : nc_write_location_atts, nc_get_location_varids, &
+                                 nc_write_location
 
-use default_model_mod,     only : pert_model_copies, nc_write_model_vars, init_conditions, &
-                                  init_time, adv_1step
+use default_model_mod,    only : pert_model_copies, nc_write_model_vars, init_conditions, &
+                                 init_time, adv_1step
+
+use quad_utils_mod,       only : quad_interp_handle, init_quad_interp, &
+                                 finalize_quad_interp, set_quad_coords, quad_lon_lat_locate, &
+                                 quad_lon_lat_evaluate, print_quad_handle, &
+                                 GRID_QUAD_FULLY_IRREGULAR, QUAD_LOCATED_CELL_CENTERS, &
+                                 QUAD_LOCATED_LON_EDGES, QUAD_LOCATED_LAT_EDGES
 
 use typesizes
 use netcdf
@@ -127,8 +133,8 @@ public :: nc_write_model_vars,           &
           get_close_state
 
 ! not required interfaces but useful for utility programs
-public :: get_time_information,          &
-          get_location_from_ijk
+public :: get_time_information!,          &
+!          get_location_from_ijk
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -139,18 +145,24 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
+type(quad_interp_handle) :: ugrid_handle, vgrid_handle, tgrid_handle
+
 ! things which can/should be in the model_nml
 logical  :: output_state_vector          = .false.
 integer  :: assimilation_period_days     = 1
 integer  :: assimilation_period_seconds  = 0
 integer  :: vert_localization_coord      = VERTISHEIGHT
 integer  :: debug = 0   ! turn up for more and more debug messages
-character(len=256) :: roms_filename = 'roms_input.nc'
+character(len=256) :: roms_grid_file     = 'roms_grid.nc'
+character(len=256) :: roms_filename      = 'roms_input.nc'
+integer  :: vert_transform               = 4
 
 namelist /model_nml/  &
    assimilation_period_days,    &
    assimilation_period_seconds, &
+   roms_grid_file,              &
    roms_filename,               &
+   vert_transform,              &
    vert_localization_coord,     &
    debug,                       &
    variables
@@ -189,13 +201,24 @@ integer :: Neta_v
 integer :: Ns_rho
 integer :: Ns_w
 
+! Vertical grid parameters
+real(r8) :: theta_s, theta_b
+real(r8) :: Tcline,  hc
+ 
+
 !>@todo FIXME ... nancy suggested creating pointers for each of these so
 !    we could simply use the myvarid as the index in the pointer ...
 
-real(r8), allocatable, target :: ULAT(:,:), ULON(:,:), UDEP(:,:,:), &
-                                 TLAT(:,:), TLON(:,:), TDEP(:,:,:), &
-                                 VLAT(:,:), VLON(:,:), VDEP(:,:,:), &
-                                 WDEP(:,:,:) !>@todo FIXME : JPH may not need this array
+!>@todo FIXME ... technically, there should be separate BATHY variables for each
+!grid. Right now, there is a function in get_state_meta_data() that estimates
+!the bathymetry on the U and V grids given the rho bathymetry. Similar problems
+!with ssh (for vertical interpolation)
+
+real(r8), allocatable, target :: ULAT(:,:), ULON(:,:), &
+                                 TLAT(:,:), TLON(:,:), &
+                                 VLAT(:,:), VLON(:,:), &
+                                 BATHY(:,:)
+logical, allocatable, target :: UMASK(:,:), VMASK(:,:), TMASK(:,:)
 
 type(time_type) :: model_timestep
 
@@ -254,6 +277,8 @@ integer, optional,   intent(out) :: var_type
 
 integer  :: iloc, vloc, jloc
 integer  :: myvarid, myqty
+real(r8), allocatable :: mybathy(:,:)
+real(r8) :: depths(Ns_rho)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -261,17 +286,26 @@ call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 
 myqty = get_kind_index(domain_id, myvarid)
 
+
+!>@todo Add the SSH, for now put at 0
 if (myqty == QTY_U_CURRENT_COMPONENT) then
-   location = set_location(ULON(iloc,jloc), ULAT(iloc,jloc), UDEP(iloc,jloc,vloc), VERTISHEIGHT)
+   allocate(mybathy(Nxi_u, Neta_u))
+   mybathy = rho2u(BATHY,'u',Nxi_rho,Neta_rho)
+   call get_depths(mybathy(iloc,jloc), 0.0_r8, depths, 1, Ns_rho)
+   location = set_location(ULON(iloc,jloc), ULAT(iloc,jloc), depths(vloc), VERTISHEIGHT)
 
 elseif (myqty == QTY_V_CURRENT_COMPONENT) then
-   location = set_location(VLON(iloc,jloc), VLAT(iloc,jloc), VDEP(iloc,jloc,vloc), VERTISHEIGHT)
+   allocate(mybathy(Nxi_v, Neta_v))
+   mybathy = rho2u(BATHY,'v',Nxi_rho,Neta_rho)
+   call get_depths(mybathy(iloc,jloc), 0.0_r8, depths, 1, Ns_rho)
+   location = set_location(VLON(iloc,jloc), VLAT(iloc,jloc), depths(vloc),VERTISHEIGHT)
 
 elseif (myqty == QTY_SEA_SURFACE_HEIGHT) then
    location = set_location(TLON(iloc,jloc), TLAT(iloc,jloc), 0.0_r8, VERTISSURFACE)
 
 else  ! Everything else is assumed to be on the rho points
-   location = set_location(TLON(iloc,jloc), TLAT(iloc,jloc), TDEP(iloc,jloc,vloc), VERTISHEIGHT)
+   call get_depths(BATHY(iloc,jloc), 0.0_r8, depths, 1, Ns_rho)
+   location = set_location(TLON(iloc,jloc), TLAT(iloc,jloc), depths(vloc), VERTISHEIGHT)
 
 endif
 
@@ -302,12 +336,29 @@ end subroutine get_state_meta_data
 
 subroutine model_interpolate(state_handle, ens_size, location, obs_type, interp_val, istatus)
 
- type(ensemble_type), intent(in) :: state_handle
- integer,             intent(in) :: ens_size
- type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_type
- integer,            intent(out) :: istatus(ens_size)
- real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+type(location_type), intent(in) :: location
+integer,             intent(in) :: obs_type
+integer,            intent(out) :: istatus(ens_size)
+real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
+
+! Local storage
+integer       :: icorn, imem, ilev, N_lev_un
+integer       :: x_ind, y_ind,lat_bot, lat_top, lon_bot, lon_top
+integer       :: lstatus, hstatus
+integer       :: Ns_var
+integer       :: var_id, ssh_id
+integer       :: hgt_bot(ens_size), hgt_top(ens_size), hgt_bot_un(2*ens_size)
+integer       :: lon_corner(4), lat_corner(4)
+integer       :: idept_un(Ns_rho)
+integer(i8)   :: dart_idx
+real(r8)      :: loc_array(3), llon, llat, lheight
+real(r8)      :: top_val, bot_val
+real(r8)      :: val_corners(4,ens_size)
+real(r8)      :: val_alldepths(Ns_rho,ens_size)
+real(r8)      :: ssh_corners(ens_size), hgt_fract(ens_size)
+real(r8)      :: depths_tmp(Ns_rho)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -315,11 +366,397 @@ if ( .not. module_initialized ) call static_init_model
 interp_val = MISSING_R8
 istatus = 99
 
-write(string1,*)'model_interpolate should not be called.'
-write(string2,*)'we are getting forward observations directly from ROMS'
-call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate, text2=string2)
+var_id = get_varid_from_kind(domain_id, obs_type)
+
+! Get the individual locations values
+loc_array = get_location(location)
+llon    = loc_array(1)
+llat    = loc_array(2)
+lheight = loc_array(3)
+
+if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
+
+!>@todo Add the transformation to in-situ temperature
+
+! kind (in-situ) temperature is a combination of potential temp,
+! salinity, and pressure based on depth.  call a routine that
+! interpolates all three, does the conversion, and returns the
+! sensible/in-situ temperature.
+!if(obs_type == QTY_TEMPERATURE) then
+!   ! we know how to interpolate this from potential temp,
+!   ! salinity, and pressure based on depth.
+!   call compute_temperature(state_handle, ens_size, llon, llat, lheight,expected_obs, istatus)
+!   if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
+!   return
+!endif
+
+! Find horizontal corners
+if(obs_type == QTY_U_CURRENT_COMPONENT) then
+   call quad_lon_lat_locate(ugrid_handle, llon, llat, lon_bot, lat_bot, lon_top,lat_top, lstatus)
+elseif (obs_type == QTY_V_CURRENT_COMPONENT) then
+   call quad_lon_lat_locate(vgrid_handle, llon, llat, lon_bot, lat_bot, lon_top,lat_top, lstatus)
+else
+   call quad_lon_lat_locate(tgrid_handle, llon, llat, lon_bot, lat_bot, lon_top,lat_top, lstatus)
+endif
+
+if (lstatus /= 0) return
+
+!PRINT *, "RE: (model_interpolate) lon_bot, lat_bot, lon_top,lat_top ",lon_bot, lat_bot, lon_top,lat_top
+lon_corner(1) = lon_bot
+lon_corner(2) = lon_top
+lon_corner(3) = lon_top
+lon_corner(4) = lon_bot
+lat_corner(1) = lat_bot
+lat_corner(2) = lat_bot
+lat_corner(3) = lat_top
+lat_corner(4) = lat_top
+
+!>@todo check to see if any of the corners are on dry land - this requires
+!knowledge of which land mask to use 
+
+
+
+! For Sea Surface values don't need the vertical coordinate
+if( is_vertical(location, "SURFACE") ) then
+   !>@todo HK CHECK surface observations
+   ! Get dart vector indices
+   if (get_num_dims(domain_id, var_id)>2) then
+      Ns_var = get_dim_length(domain_id, var_id, 3)
+   else
+      Ns_var = 1
+   endif
+   do icorn = 1,4
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), Ns_var, domain_id, var_id)
+      val_corners(icorn,:) = get_state(dart_idx, state_handle)
+   enddo
+else
+   ssh_id = get_varid_from_kind(domain_id, QTY_SEA_SURFACE_HEIGHT)
+   do icorn = 1,4
+      ! get SSH at corners location for all members
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),1, domain_id, ssh_id)
+      ssh_corners = get_state(dart_idx, state_handle)
+      ! Loop on ensemble members to get all indices of depth
+      do imem = 1,ens_size
+         call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)), ssh_corners(imem), depths_tmp, 1, Ns_rho)
+         call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem), hgt_top(imem), hgt_fract(imem), hstatus)
+!         PRINT *, "RE: (model_interpolate) zeta, dephts ",ssh_corners(imem),depths_tmp
+!         PRINT *, "RE: (model_interpolate) bot, top, frac ",hgt_bot(imem), hgt_top(imem), hgt_fract(imem)
+      enddo
+      ! Get the levels needed for the vertical interpolation
+      call unique_vec_from_two(hgt_bot, hgt_top, ens_size, hgt_bot_un, N_lev_un)
+      do ilev = 1, N_lev_un
+         dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),hgt_bot_un(ilev),domain_id, var_id)
+         val_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
+      enddo
+      ! Loop on ensemble members to do the vertical interpolation and get values at
+      ! corners
+      do imem = 1,ens_size
+         top_val = val_alldepths(hgt_top(imem),imem)
+         bot_val = val_alldepths(hgt_bot(imem),imem)
+         val_corners(icorn,imem) = bot_val + hgt_fract(imem) * (top_val - bot_val)
+      enddo
+   enddo
+endif
+
+
+!PRINT *, "RE: (model_interpolate) val_corners",val_corners
+! Do the horizontal interpolation
+if(obs_type == QTY_U_CURRENT_COMPONENT) then
+   call quad_lon_lat_evaluate(ugrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+                              ens_size, val_corners, interp_val, lstatus)
+elseif(obs_type == QTY_V_CURRENT_COMPONENT) then
+   call quad_lon_lat_evaluate(vgrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+                              ens_size, val_corners, interp_val, lstatus)
+else
+   call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+                              ens_size, val_corners, interp_val, lstatus)
+endif
+
+istatus = lstatus
 
 end subroutine model_interpolate
+
+
+!-----------------------------------------------------------------------
+!>
+!> Returns the sigma level depths for a given bathymetry (H) and 
+!> sea surface elevation (zeta).
+!>
+
+
+subroutine get_depths(H, zeta, depths, vtype, N_vert)
+
+real(r8), intent(in)  :: H              ! Bathymetry 
+real(r8), intent(in)  :: zeta           ! Sea surface elevation
+integer,  intent(in)  :: N_vert         ! Number of vertical levels
+integer,  intent(in)  :: vtype          ! type of data 
+real(r8), intent(out) :: depths(N_vert) ! output
+
+! Local storage
+INTEGER  :: ik                      ! index for loops
+REAL(r8) :: sc(N_vert),Cs(N_vert)   ! s-curves in domain [-1 < sc < 0] at vertical RHO-points.
+REAL(r8) :: ds 
+REAL(r8) :: h2,z0                   ! Useful temporary variables
+
+
+! Set S-Curves in domain [-1 < sc < 0] at vertical W- and RHO-points.
+if (vert_transform == 2) then
+    if (vtype == 2) then
+        ds=1.0/(N_vert-1)
+        sc(1) = -1.0;
+        sc(N_vert) = 0.0;
+        Cs(1) = -1.0;
+        Cs(N_vert) = 0.0;
+        do ik = 2,N_vert-1
+            sc(ik) = ds*(ik-2-N_vert)
+        enddo
+        Cs=csf(sc, N_vert)
+   else
+        ds=1.0/N_vert
+        do ik = 1,N_vert
+            sc(ik)= ds*(ik-N_vert-0.5)
+        enddo
+        Cs=csf(sc,N_vert);
+    endif
+else
+    if (vtype == 2) then
+        do ik = 1,N_vert
+            sc(ik) = (ik-2-N_vert)/(N_vert-1)
+        enddo
+    else
+        do ik = 1,N_vert
+            sc(ik)=(ik-N_vert-0.1)/N_vert
+        enddo
+    endif
+    Cs=(1.-theta_b)*(1.0/sinh(theta_s))*sinh(theta_s*sc)+theta_b*((0.5/tanh(0.5*theta_s))*tanh(theta_s*(sc+0.5))-0.5);
+endif
+
+!
+! Create S-coordinate system: based on model topography h(i,j),
+! fast-time-averaged free-surface field and vertical coordinate
+! transformation metrics compute evolving depths of of the three-
+! dimensional model grid.
+!
+if (vert_transform == 2) then
+    h2=(H+hc)
+    do ik = 1,N_vert
+        z0=hc*sc(ik)+Cs(ik)*H
+        depths(ik) = z0*H/h2 + zeta*(1.0+z0*1.0/h2)
+    enddo
+else
+    do ik = 1,N_vert
+        z0=hc*(sc(ik)-Cs(ik))+Cs(ik)*H;
+        depths(ik) = z0 + zeta*(1.0+z0*1.0/H)
+    enddo
+endif
+
+! for DART, depth is positive:
+depths = - depths
+
+
+end subroutine get_depths
+
+
+!-----------------------------------------------------------------------
+!>
+!> Computation of C function for vertical levels
+!>
+
+function csf (sc, N_vert)
+
+! Argument declaration
+real(r8), dimension(N_vert), intent(in)    :: sc                  !s-curves in domain [-1 < sc < 0]
+integer,  intent(in)                       :: N_vert                 !size of the input variable
+
+! variables declaration
+real(r8), dimension(N_vert)           :: csf                 !returned value
+integer(r8)                           :: ik                  !index for loops
+real(r8), dimension(N_vert)           :: csurf               ! Csurface
+
+IF (theta_s > 0 ) THEN
+    DO ik = 1,N_vert
+        csurf(ik)=(1-COSH(sc(ik)*theta_s))/(COSH(theta_s)-1)
+    ENDDO
+ELSE
+    DO ik = 1,N_vert
+        csurf(ik)=-(sc(ik)**2)
+    ENDDO
+ENDIF
+IF (theta_b > 0) THEN
+    DO ik = 1,N_vert
+        csf(ik) = (EXP(theta_b*csurf(ik))-1)/(1-EXP(-theta_b))
+    ENDDO
+ELSE
+    csf  = csurf
+ENDIF
+
+end function csf
+
+
+
+!-----------------------------------------------------------------------
+!>
+!> Get the top and bottom levels for a given depth.
+!>
+
+
+subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
+!=======================================================================
+!
+real(r8),             intent(in) :: lheight
+integer,              intent(in) :: nheights
+real(r8),             intent(in) :: hgt_array(nheights)
+integer,             intent(out) :: bot, top
+real(r8),            intent(out) :: fract
+integer,             intent(out) :: istatus
+
+! Local variables
+integer   :: i
+
+if ( .not. module_initialized ) call static_init_model
+
+! Succesful istatus is 0
+istatus = 0
+
+! The zc array contains the depths of the center of the vertical grid boxes
+
+! It is assumed that the top box is shallow and any observations shallower
+! than the depth of this boxes center are just given the value of the
+! top box.
+if(lheight <= hgt_array(nheights)) then
+   top = nheights
+   bot = nheights - 1
+   ! NOTE: the fract definition is the relative distance from bottom to top
+   ! ??? Make sure this is consistent with the interpolation
+   fract = 1.0_r8
+   return
+endif
+
+! Search through the boxes
+do i = nheights-1, 1, -1
+   ! If the location is shallower than this entry, it must be in this box
+   if(lheight <= hgt_array(i)) then
+      top = i +1
+      bot = i
+      fract = (lheight - hgt_array(bot)) / (hgt_array(top) - hgt_array(bot))
+      return
+   endif
+end do
+
+! Falling off the end means the location is lower than the deepest height
+! Fail with istatus 2 in this case
+istatus = 2
+
+end subroutine height_bounds
+
+
+
+
+
+
+
+function  rho2u (var_rho,ctype,size_x,size_y)
+!!---------------------------------------------------------------------
+!!                  ***  FUNCTION  rho2u  ***
+!!
+!! ** Purpose : interpole the rho centered variable var_rho
+!!                          to a field at ctype points (U or V)
+!!              size_x,size_y are the size of the 2D variable
+!!
+!! ** Method  : straight forward function
+!!
+!!---------------------------------------------------------------------
+INTEGER, INTENT(in)                      :: size_x,size_y  ! size of the input 2D variable
+REAL(r8), DIMENSION(size_x,size_y)   :: var_rho    ! 3D REAL 4 with the variable
+CHARACTER(LEN=1)                         :: ctype        ! position wanted of the variable
+REAL(r8), DIMENSION(:,:),  ALLOCATABLE   :: rho2u   ! 3D REAL 4 with the modified variable
+
+INTEGER(r8)                              :: ik,ij,ii   ! indices for loops
+
+!!----------------------------------------------------------
+
+SELECT CASE (ctype )
+   CASE ('U','u')
+      ALLOCATE ( rho2u(size_x-1,size_y))
+      DO ij=1,size_y
+         DO ii=1,size_x-1
+            rho2u(ii,ij)=0.5*(var_rho(ii,ij)+var_rho(ii+1,ij))
+         ENDDO
+      ENDDO
+   CASE ('V','v')
+      ALLOCATE ( rho2u(size_x,size_y-1))
+      DO ij=1,size_y-1
+         DO ii=1,size_x
+            rho2u(ii,ij)=0.5*(var_rho(ii,ij)+var_rho(ii,ij+1))
+         ENDDO
+      ENDDO
+END SELECT
+
+end function rho2u
+
+
+!-----------------------------------------------------------------------
+!>
+!> Return vector with unique values of vect
+!>
+
+subroutine unique_vec(val, N, val_un, N_un)
+
+integer, intent(in)  :: N
+integer, intent(in)  :: val(N)
+integer, intent(out) :: val_un(N)
+integer, intent(out) :: N_un
+
+! Local variables
+integer :: min_val, max_val, i
+
+val_un = -1000
+
+min_val = minval(val)-1
+max_val = maxval(val)
+do while (min_val<max_val)
+   i = i+1
+   min_val = minval(val, mask=val>min_val)
+   val_un(i) = min_val
+enddo
+N_un = i
+
+end subroutine unique_vec
+
+
+!-----------------------------------------------------------------------
+!>
+!> Return vector with unique values of vect
+!>
+
+subroutine unique_vec_from_two(val1, val2, N, val_un, N_un)
+
+integer, intent(in)  :: N
+integer, intent(in)  :: val1(N), val2(N)
+integer, intent(out) :: val_un(:)
+integer, intent(out) :: N_un
+
+! Local variables
+integer :: min_val, max_val, i
+integer :: val(2*N)
+
+val(1:N) = val1
+val((N+1):2*N) = val2
+
+val_un = -1000
+
+min_val = minval(val)-1
+max_val = maxval(val)
+i = 0
+do while (min_val<max_val)
+   i = i+1
+   min_val = minval(val, mask=val>min_val)
+   val_un(i) = min_val
+enddo
+N_un = i
+
+end subroutine unique_vec_from_two
+
 
 
 !-----------------------------------------------------------------------
@@ -404,6 +841,21 @@ call set_calendar_type( trim(calendar) )
 call get_grid_dimensions()
 call get_grid()
 
+! initialize the quad interp code
+call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_u, num_lats=Neta_u, &
+                      cell_relative=QUAD_LOCATED_LON_EDGES, global=.false.,spans_lon_zero=.false., &
+                      pole_wrap=.false., interp_handle=ugrid_handle)
+call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_v, num_lats=Neta_v, &
+                      cell_relative=QUAD_LOCATED_LAT_EDGES, global=.false.,spans_lon_zero=.false., &
+                      pole_wrap=.false., interp_handle=vgrid_handle)
+call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_rho, num_lats=Neta_rho, &
+                      cell_relative=QUAD_LOCATED_CELL_CENTERS, global=.false.,spans_lon_zero=.false., &
+                      pole_wrap=.false., interp_handle=tgrid_handle)
+
+call set_quad_coords(ugrid_handle, ULON, ULAT, UMASK)
+call set_quad_coords(vgrid_handle, VLON, VLAT, VMASK)
+call set_quad_coords(tgrid_handle, TLON, TLAT, TMASK)
+
 ! parse_variable_input() fills var_names, kind_list, clamp_vals, update_list
 call parse_variable_input(variables, nfields)
 
@@ -432,19 +884,23 @@ subroutine end_model()
 ! good style ... perhaps you could deallocate stuff (from static_init_model?).
 ! deallocate(state_loc)
 
-if (allocated(ULAT)) deallocate(ULAT)
-if (allocated(ULON)) deallocate(ULON)
-if (allocated(UDEP)) deallocate(UDEP)
+call finalize_quad_interp(ugrid_handle)
+call finalize_quad_interp(vgrid_handle)
+call finalize_quad_interp(tgrid_handle)
 
-if (allocated(VLAT)) deallocate(VLAT)
-if (allocated(VLON)) deallocate(VLON)
-if (allocated(VDEP)) deallocate(VDEP)
+if (allocated(ULAT))  deallocate(ULAT)
+if (allocated(ULON))  deallocate(ULON)
+if (allocated(UMASK)) deallocate(UMASK)
 
-if (allocated(TLAT)) deallocate(TLAT)
-if (allocated(TLON)) deallocate(TLON)
-if (allocated(TDEP)) deallocate(TDEP)
+if (allocated(VLAT))  deallocate(VLAT)
+if (allocated(VLON))  deallocate(VLON)
+if (allocated(VMASK)) deallocate(VMASK)
 
-if (allocated(WDEP)) deallocate(WDEP)
+if (allocated(TLAT))  deallocate(TLAT)
+if (allocated(TLON))  deallocate(TLON)
+if (allocated(TMASK)) deallocate(TMASK)
+
+if (allocated(BATHY)) deallocate(BATHY)
 
 end subroutine end_model
 
@@ -626,11 +1082,6 @@ call nc_check(NF90_inq_varid(ncid, 'lat_rho', VarID), &
 call nc_check(nf90_put_var(ncid, VarID, TLAT ), &
              'nc_write_model_atts', 'lat_rho put_var '//trim(filename))
 
-call nc_check(NF90_inq_varid(ncid, 'z_rho', VarID), &
-              'nc_write_model_atts', 'z_rho inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, TDEP ), &
-             'nc_write_model_atts', 'z_rho put_var '//trim(filename))
-
 ! the U grid
 
 call nc_check(NF90_inq_varid(ncid, 'lon_u', VarID), &
@@ -643,11 +1094,6 @@ call nc_check(NF90_inq_varid(ncid, 'lat_u', VarID), &
 call nc_check(nf90_put_var(ncid, VarID, ULAT ), &
              'nc_write_model_atts', 'lat_u put_var '//trim(filename))
 
-call nc_check(NF90_inq_varid(ncid, 'z_u', VarID), &
-              'nc_write_model_atts', 'z_u inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, UDEP ), &
-             'nc_write_model_atts', 'z_u put_var '//trim(filename))
-
 ! the V grid
 
 call nc_check(NF90_inq_varid(ncid, 'lon_v', VarID), &
@@ -659,18 +1105,6 @@ call nc_check(NF90_inq_varid(ncid, 'lat_v', VarID), &
               'nc_write_model_atts', 'lat_v inq_varid '//trim(filename))
 call nc_check(nf90_put_var(ncid, VarID, VLAT ), &
              'nc_write_model_atts', 'lat_v put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'z_v', VarID), &
-              'nc_write_model_atts', 'z_v inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, VDEP ), &
-             'nc_write_model_atts', 'z_v put_var '//trim(filename))
-
-! the W grid
-
-call nc_check(NF90_inq_varid(ncid, 'z_w', VarID), &
-              'nc_write_model_atts', 'z_w inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
-             'nc_write_model_atts', 'z_w put_var '//trim(filename))
 
 ! Flush the buffer and leave netCDF file open
 call nc_sync(ncid)
@@ -810,29 +1244,29 @@ integer :: ncid
 
 ! Read the (static) grid dimensions from the ROMS grid file.
 
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-              'get_grid_dimensions', 'open '//trim(roms_filename))
+call nc_check(nf90_open(trim(roms_grid_file), nf90_nowrite, ncid), &
+              'get_grid_dimensions', 'open '//trim(roms_grid_file))
 
-Nxi_rho   = get_dimension_length(ncid, 'xi_rho',   roms_filename)
-Nxi_u     = get_dimension_length(ncid, 'xi_u',     roms_filename)
-Nxi_v     = get_dimension_length(ncid, 'xi_v',     roms_filename)
-Neta_rho  = get_dimension_length(ncid, 'eta_rho',  roms_filename)
-Neta_u    = get_dimension_length(ncid, 'eta_u',    roms_filename)
-Neta_v    = get_dimension_length(ncid, 'eta_v',    roms_filename)
+Nxi_rho   = get_dimension_length(ncid, 'xi_rho',   roms_grid_file)
+Nxi_u     = get_dimension_length(ncid, 'xi_u',     roms_grid_file)
+Nxi_v     = get_dimension_length(ncid, 'xi_v',     roms_grid_file)
+Neta_rho  = get_dimension_length(ncid, 'eta_rho',  roms_grid_file)
+Neta_u    = get_dimension_length(ncid, 'eta_u',    roms_grid_file)
+Neta_v    = get_dimension_length(ncid, 'eta_v',    roms_grid_file)
 
 call nc_check(nf90_close(ncid), &
-              'get_grid_dimensions','close '//trim(roms_filename))
+              'get_grid_dimensions','close '//trim(roms_grid_file))
 
 ! Read the vertical dimensions from the dedicated file.
 
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-               'get_grid_dimensions', 'open '//trim(roms_filename))
+call nc_check(nf90_open(trim(roms_grid_file), nf90_nowrite, ncid), &
+               'get_grid_dimensions', 'open '//trim(roms_grid_file))
 
-Ns_rho    = get_dimension_length(ncid, 's_rho',    roms_filename)
-Ns_w      = get_dimension_length(ncid, 's_w'  ,    roms_filename)
+Ns_rho    = get_dimension_length(ncid, 's_rho',    roms_grid_file)
+Ns_w      = get_dimension_length(ncid, 's_w'  ,    roms_grid_file)
 
 call nc_check(nf90_close(ncid), &
-              'get_grid_dimensions','close '//trim(roms_filename))
+              'get_grid_dimensions','close '//trim(roms_grid_file))
 
 Nx =  Nxi_rho  ! Setting the nominal value of the 'global' variables
 Ny = Neta_rho  ! Setting the nominal value of the 'global' variables
@@ -865,87 +1299,119 @@ integer  :: ncid, VarID
 
 real(r8), parameter :: all_land = 0.001_r8
 
+real(r8), allocatable :: mask(:,:)
+
 if (.not. allocated(ULAT)) allocate(ULAT(Nxi_u, Neta_u))
 if (.not. allocated(ULON)) allocate(ULON(Nxi_u, Neta_u))
-if (.not. allocated(UDEP)) allocate(UDEP(Nxi_u, Neta_u, Nz))
+if (.not. allocated(UMASK)) allocate(UMASK(Nxi_u, Neta_u))
 
 if (.not. allocated(VLAT)) allocate(VLAT(Nxi_v, Neta_v))
 if (.not. allocated(VLON)) allocate(VLON(Nxi_v, Neta_v))
-if (.not. allocated(VDEP)) allocate(VDEP(Nxi_v, Neta_v, Nz))
+if (.not. allocated(VMASK)) allocate(VMASK(Nxi_v, Neta_v))
 
 if (.not. allocated(TLAT)) allocate(TLAT(Nxi_rho, Neta_rho))
 if (.not. allocated(TLON)) allocate(TLON(Nxi_rho, Neta_rho))
-if (.not. allocated(TDEP)) allocate(TDEP(Nxi_rho, Neta_rho, Nz))
-if (.not. allocated(WDEP)) allocate(WDEP(Nxi_rho, Neta_rho, Ns_w))
+if (.not. allocated(TMASK)) allocate(TMASK(Nxi_rho, Neta_rho))
 
-! Read the vertical information from the (separate) roms_filename
+if (.not. allocated(BATHY)) allocate(BATHY(Nxi_rho, Neta_rho))
 
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-      'get_grid', 'open '//trim(roms_filename))
+! Assume everything is ocean ... is_masked() requires land = .true..
+UMASK = .false.
+VMASK = .false.
+TMASK = .false.
 
-call nc_check(nf90_inq_varid(ncid, 'z_u', VarID), &
-      'get_grid', 'inq_varid z_u '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, UDEP), &
-      'get_grid', 'get_var z_u '//trim(roms_filename))
+call nc_check(nf90_open(trim(roms_grid_file), nf90_nowrite, ncid), &
+      'get_grid', 'open '//trim(roms_grid_file))
 
-call nc_check(nf90_inq_varid(ncid, 'z_w', VarID), &
-      'get_grid', 'inq_varid z_w '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, WDEP), &
-      'get_grid', 'get_var z_w '//trim(roms_filename))
+! Read the vertical grid parameters
 
-call nc_check(nf90_inq_varid(ncid, 'z_v', VarID), &
-      'get_grid', 'inq_varid z_v '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, VDEP), &
-      'get_grid', 'get_var z_v '//trim(roms_filename))
+call nc_check(nf90_inq_varid(ncid, 'theta_s', VarID), &
+   'get_grid', 'inq_varid theta_s '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, theta_s), &
+      'get_grid', 'get_var theta_s '//trim(roms_grid_file))
 
-call nc_check(nf90_inq_varid(ncid, 'z_rho', VarID), &
-      'get_grid', 'inq_varid z_rho '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, TDEP), &
-      'get_grid', 'get_var z_rho '//trim(roms_filename))
+call nc_check(nf90_inq_varid(ncid, 'theta_b', VarID), &
+   'get_grid', 'inq_varid theta_b '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, theta_b), &
+      'get_grid', 'get_var theta_b '//trim(roms_grid_file))
 
-call nc_check(nf90_close(ncid), &
-             'get_var','close '//trim(roms_filename))
+call nc_check(nf90_inq_varid(ncid, 'Tcline', VarID), &
+   'get_grid', 'inq_varid Tcline '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, Tcline), &
+      'get_grid', 'get_var Tcline '//trim(roms_grid_file))
+
+call nc_check(nf90_inq_varid(ncid, 'hc', VarID), &
+   'get_grid', 'inq_varid hc '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, hc), &
+      'get_grid', 'get_var hc '//trim(roms_grid_file))
 
 ! Read the rest of the grid information from the traditional grid file
 
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-      'get_grid', 'open '//trim(roms_filename))
-
 call nc_check(nf90_inq_varid(ncid, 'lon_rho', VarID), &
-   'get_grid', 'inq_varid lon_rho '//trim(roms_filename))
+   'get_grid', 'inq_varid lon_rho '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, TLON), &
-      'get_grid', 'get_var lon_rho '//trim(roms_filename))
+      'get_grid', 'get_var lon_rho '//trim(roms_grid_file))
 
 where (TLON < 0.0_r8) TLON = TLON + 360.0_r8
 
 call nc_check(nf90_inq_varid(ncid, 'lat_rho', VarID), &
-      'get_grid', 'inq_varid lat_rho '//trim(roms_filename))
+      'get_grid', 'inq_varid lat_rho '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, TLAT), &
-      'get_grid', 'get_var lat_rho '//trim(roms_filename))
+      'get_grid', 'get_var lat_rho '//trim(roms_grid_file))
 
 call nc_check(nf90_inq_varid(ncid, 'lon_u', VarID), &
-      'get_grid', 'inq_varid lon_u '//trim(roms_filename))
+      'get_grid', 'inq_varid lon_u '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, ULON), &
-      'get_grid', 'get_var lon_u '//trim(roms_filename))
+      'get_grid', 'get_var lon_u '//trim(roms_grid_file))
 
 where (ULON < 0.0_r8) ULON = ULON + 360.0_r8
 
 call nc_check(nf90_inq_varid(ncid, 'lat_u', VarID), &
-      'get_grid', 'inq_varid lat_u '//trim(roms_filename))
+      'get_grid', 'inq_varid lat_u '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, ULAT), &
-      'get_grid', 'get_var lat_u '//trim(roms_filename))
+      'get_grid', 'get_var lat_u '//trim(roms_grid_file))
 
 call nc_check(nf90_inq_varid(ncid, 'lon_v', VarID), &
-      'get_grid', 'inq_varid lon_v '//trim(roms_filename))
+      'get_grid', 'inq_varid lon_v '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, VLON), &
-      'get_grid', 'get_var lon_v '//trim(roms_filename))
+      'get_grid', 'get_var lon_v '//trim(roms_grid_file))
 
 where (VLON < 0.0_r8) VLON = VLON + 360.0_r8
 
 call nc_check(nf90_inq_varid(ncid, 'lat_v', VarID), &
-      'get_grid', 'inq_varid lat_v '//trim(roms_filename))
+      'get_grid', 'inq_varid lat_v '//trim(roms_grid_file))
 call nc_check(nf90_get_var( ncid, VarID, VLAT), &
-      'get_grid', 'get_var lat_v '//trim(roms_filename))
+      'get_grid', 'get_var lat_v '//trim(roms_grid_file))
+
+call nc_check(nf90_inq_varid(ncid, 'h', VarID), &
+      'get_grid', 'inq_varid h '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, BATHY), &
+      'get_grid', 'get_var h '//trim(roms_grid_file))
+
+allocate(mask(Nxi_u, Neta_u))
+call nc_check(nf90_inq_varid(ncid, 'mask_u', VarID), &
+      'get_grid', 'inq_varid mask_u '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, mask), &
+      'get_grid', 'get_var mask_u '//trim(roms_grid_file))
+where(mask < 0.5_r8) UMASK = .true.  ! 1.0 is water, 0.0 is land
+
+deallocate(mask)
+allocate(mask(Nxi_v, Neta_v))
+call nc_check(nf90_inq_varid(ncid, 'mask_v', VarID), &
+      'get_grid', 'inq_varid mask_v '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, mask), &
+      'get_grid', 'get_var mask_v '//trim(roms_grid_file))
+where(mask < 0.5_r8) VMASK = .true.  ! 1.0 is water, 0.0 is land
+
+deallocate(mask)
+allocate(mask(Nxi_rho, Neta_rho))
+call nc_check(nf90_inq_varid(ncid, 'mask_rho', VarID), &
+      'get_grid', 'inq_varid mask_rho '//trim(roms_grid_file))
+call nc_check(nf90_get_var( ncid, VarID, mask), &
+      'get_grid', 'get_var mask_rho '//trim(roms_grid_file))
+where(mask < 0.5_r8) TMASK = .true.  ! 1.0 is water, 0.0 is land
+
+deallocate(mask)
 
 ! Be aware that all the depths are negative values.
 ! The surface of the ocean is 0.0, the deepest is a big negative value.
@@ -953,21 +1419,25 @@ call nc_check(nf90_get_var( ncid, VarID, VLAT), &
 if (do_output() .and. debug > 0) then
     write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
     write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
-    write(string3,*)    'min/max UDEP ',minval(UDEP), maxval(UDEP)
     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
 
     write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
     write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
-    write(string3,*)    'min/max VDEP ',minval(VDEP), maxval(VDEP)
     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
 
     write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
     write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
-    write(string3,*)    'min/max TDEP ',minval(TDEP), maxval(TDEP)
     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+
+    write(string1,*)    'min/max BATHY ',minval(BATHY), maxval(BATHY)
+    call error_handler(E_MSG,'get_grid',string1)
+
 endif
 
 end subroutine get_grid
+
+
+
 
 
 !-----------------------------------------------------------------------
@@ -1413,176 +1883,175 @@ end subroutine write_roms_time_information
 !>    ISTATUS : 14 - filoc or fjloc out of range for rho grid
 !>    ISTATUS : 99 - initalized istatus, this should not happen
 
-function get_location_from_ijk(filoc, fjloc, fkloc, dart_kind, location) result(istatus)
-real(r8),            intent(in)  :: filoc
-real(r8),            intent(in)  :: fjloc
-real(r8),            intent(in)  :: fkloc
-integer,             intent(in)  :: dart_kind
-type(location_type), intent(out) :: location
-integer :: istatus ! 0 good, else bad
-
-integer  :: var_id, iloc, jloc, vloc
-integer  :: vert_type, my_kind
-real(r8) :: lon_fract, lat_fract, hgt_fract
-real(r8) :: lon_val, lat_val, hgt_val, tmp_hgt(2), hgt(4)
-real(r8), pointer :: mylon(:,:), mylat(:,:), mydep(:,:,:)
-logical, save :: first_time = .true.
-
-
-write(string1,*)'Routine not finished.'
-call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
-                      source, revision, revdate)
-
-! start out assuming bad istatus
-istatus  = 99
-
-var_id = get_varid_from_kind(domain_id, dart_kind)
-if (var_id < 0) then
-  istatus = 10 ! can not find variable id for dart_kind
-  return
-endif
-
-! check that we have a valid vertical location.
-! allow obs above the top rho point but below the
-! surface to be considered at the top rho point.
-! the commented out code is the test for excluding
-! obs above the top rho point in addition to obs
-! below the bottom rho point.
-!if (fkloc < 0.5 .or. fkloc > Ns_rho - 0.5) then
-if (fkloc < 0.5 .or. fkloc > Ns_rho) then
-  istatus = 11
-  location = set_location_missing()
-  return
-endif
-
-iloc = FLOOR(filoc)
-jloc = FLOOR(fjloc)
-vloc = FLOOR(fkloc)
-
-lon_fract = filoc - iloc
-lat_fract = fjloc - jloc
-hgt_fract = fkloc - vloc
-
-my_kind = get_kind_index(domain_id,var_id)
-if (my_kind==QTY_U_CURRENT_COMPONENT) then
-   write(string1,*)'Not interpolating ', get_name_for_quantity(my_kind), ' at the moment.'
-   write(string2,*)'Need to check that we are using the right grid for location interpolation'
-   call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
-                      source, revision, revdate, text2=string2)
-   if (filoc < 1 .or. filoc > Nxi_u-1 .or. &
-       fjloc < 1 .or. fjloc > Neta_u-1 ) then
-     istatus = 12
-     location = set_location_missing()
-     return
-   endif
-   mylon => ULON
-   mylat => ULAT
-   mydep => UDEP
-elseif (my_kind==QTY_V_CURRENT_COMPONENT) then
-   write(string1,*)'Not interpolating ', get_name_for_quantity(my_kind), ' at the moment.'
-   write(string2,*)'Need to check that we are using the right grid for location interpolation'
-   call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
-                      source, revision, revdate, text2=string2)
-   if (filoc < 1 .or. filoc > Nxi_v-1 .or. &
-       fjloc < 1 .or. fjloc > Neta_v-1 ) then
-     istatus = 13
-     location = set_location_missing()
-     return
-   endif
-   mylon => VLON
-   mylat => VLAT
-   mydep => VDEP
-else  ! Everything else is assumed to be on the rho points
-   if (filoc < 1 .or. filoc > Nxi_rho-1 .or. &
-       fjloc < 1 .or. fjloc > Neta_rho-1 ) then
-
-     write(*,*)
-     write(*,*)'filoc, Nxi_rho-1       = ',filoc, Nxi_rho-1
-     write(*,*)'fjloc, Neta_rho-1      = ',fjloc, Neta_rho-1
-     write(*,*)'fkloc, vloc, hgt_fract = ',fkloc,vloc,hgt_fract
-
-     write(logfileunit,*)
-     write(logfileunit,*)'filoc, Nxi_rho-1     = ',filoc, Nxi_rho-1
-     write(logfileunit,*)'fjloc, Neta_rho-1    = ',fjloc, Neta_rho-1
-     write(logfileunit,*)'fkloc,vloc,hgt_fract = ',fkloc,vloc,hgt_fract
-
-     istatus = 14
-     location = set_location_missing()
-     return
-   endif
-   mylon => TLON
-   mylat => TLAT
-   mydep => TDEP
-endif
-
-lon_val = (1.0-lon_fract)*(mylon(iloc,jloc)) + (lon_fract)*(mylon(iloc+1,jloc))
-lat_val = (1.0-lat_fract)*(mylat(iloc,jloc)) + (lat_fract)*(mylat(iloc  ,jloc+1))
-
-if( get_kind_index(domain_id,var_id) == QTY_SEA_SURFACE_HEIGHT ) then
-   hgt_val    = 0.0_r8
-   vert_type  = VERTISSURFACE
-else
-   if (fkloc > Ns_rho - 0.5) then
-      ! leave something in the log to remind us we're doing this and
-      ! make sure it's ok with everyone.
-      if (first_time) then
-         call error_handler(E_MSG, 'ROMS model_mod', &
-           'NOTE: Locations above the top Rho point are moved to that point')
-         first_time = .false.
-      endif
-      ! special case for obs at or closer to surface than top rho point
-      ! make them 100% at the top point
-      vloc = vloc - 1
-      hgt_fract = 1.0_r8
-   endif
-
-   ! fractional heights in the vertical for each corner of the horizontal box
-   hgt(1) = (1.0-hgt_fract)*(mydep(iloc  ,jloc,  vloc)) + hgt_fract*(mydep(iloc  ,jloc  ,vloc+1))
-   hgt(2) = (1.0-hgt_fract)*(mydep(iloc+1,jloc  ,vloc)) + hgt_fract*(mydep(iloc+1,jloc  ,vloc+1))
-   hgt(3) = (1.0-hgt_fract)*(mydep(iloc+1,jloc+1,vloc)) + hgt_fract*(mydep(iloc+1,jloc+1,vloc+1))
-   hgt(4) = (1.0-hgt_fract)*(mydep(iloc  ,jloc+1,vloc)) + hgt_fract*(mydep(iloc  ,jloc+1,vloc+1))
-
-   tmp_hgt(1) = (1.0-lon_fract)*hgt(1) + lon_fract*hgt(2)
-   tmp_hgt(2) = (1.0-lon_fract)*hgt(4) + lon_fract*hgt(3)
-
-   hgt_val   = (1.0-lat_fract)*tmp_hgt(1)+lat_fract*tmp_hgt(2)
-   vert_type = VERTISHEIGHT
-endif
-
-istatus  = 0
-location = set_location(lon_val, lat_val, hgt_val, vert_type)
-
-if (debug > 5) then
-   print*,' i,j,k', filoc, fjloc, fkloc
-
-   print*,' lon(i  ,j  ), lat(i  ,j  ) : (', mylon(iloc  ,jloc  ),',',mylat(iloc  ,jloc  ),')'
-   print*,' lon(i+1,j  ), lat(i+1,j  ) : (', mylon(iloc+1,jloc  ),',',mylat(iloc+1,jloc  ),')'
-   print*,' lon(i+1,j+1), lat(i+1,j+1) : (', mylon(iloc+1,jloc+1),',',mylat(iloc+1,jloc+1),')'
-   print*,' lon(i  ,j+1), lat(i  ,j+1) : (', mylon(iloc  ,jloc+1),',',mylon(iloc  ,jloc+1),')'
-   print*,' '
-   print*,' tmp_hgt(1)  = ', tmp_hgt(1)
-   print*,' tmp_hgt(2)  = ', tmp_hgt(2)
-   print*, ' '
-   print*,' lon_frac    = ', lon_fract
-   print*,' lat_frac    = ', lat_fract
-   print*,' hgt_frac    = ', hgt_fract
-   print*,' '
-   print*,' lon_val     = ', lon_val
-   print*,' lat_val     = ', lat_val
-   print*,' hgt_val     = ', hgt_val
-   print*,' '
-   print*,' WDEP(i  , j  , k  )', WDEP(iloc,   jloc  , vloc)
-   print*,' WDEP(i  , j+1, k  )', WDEP(iloc,   jloc+1, vloc)
-   print*,' WDEP(i+1, j+1, k  )', WDEP(iloc+1, jloc+1, vloc)
-   print*,' WDEP(i+1, j  , k  )', WDEP(iloc+1, jloc  , vloc)
-   print*,' '
-   print*,' WDEP(i  , j  , k+1)', WDEP(iloc,   jloc  , vloc+1)
-   print*,' WDEP(i  , j+1, k+1)', WDEP(iloc,   jloc+1, vloc+1)
-   print*,' WDEP(i+1, j+1, k+1)', WDEP(iloc+1, jloc+1, vloc+1)
-   print*,' WDEP(i+1, j  , k+1)', WDEP(iloc+1, jloc  , vloc+1)
-endif
-
-end function get_location_from_ijk
+!function get_location_from_ijk(filoc, fjloc, fkloc, dart_kind, location) result(istatus)
+!real(r8),            intent(in)  :: filoc
+!real(r8),            intent(in)  :: fjloc
+!real(r8),            intent(in)  :: fkloc
+!integer,             intent(in)  :: dart_kind
+!type(location_type), intent(out) :: location
+!integer :: istatus ! 0 good, else bad
+!
+!integer  :: var_id, iloc, jloc, vloc
+!integer  :: vert_type, my_kind
+!real(r8) :: lon_fract, lat_fract, hgt_fract
+!real(r8) :: lon_val, lat_val, hgt_val, tmp_hgt(2), hgt(4)
+!real(r8), pointer :: mylon(:,:), mylat(:,:), mydep(:,:,:)
+!logical, save :: first_time = .true.
+!
+!
+!write(string1,*)'Routine not finished.'
+!call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
+!                      source, revision, revdate)
+!
+!! start out assuming bad istatus
+!istatus  = 99
+!
+!var_id = get_varid_from_kind(domain_id, dart_kind)
+!if (var_id < 0) then
+!  istatus = 10 ! can not find variable id for dart_kind
+!  return
+!endif
+!
+!! check that we have a valid vertical location.
+!! allow obs above the top rho point but below the
+!! surface to be considered at the top rho point.
+!! the commented out code is the test for excluding
+!! obs above the top rho point in addition to obs
+!! below the bottom rho point.
+!!if (fkloc < 0.5 .or. fkloc > Ns_rho - 0.5) then
+!if (fkloc < 0.5 .or. fkloc > Ns_rho) then
+!  istatus = 11
+!  location = set_location_missing()
+!  return
+!endif
+!
+!iloc = FLOOR(filoc)
+!jloc = FLOOR(fjloc)
+!vloc = FLOOR(fkloc)
+!
+!lon_fract = filoc - iloc
+!lat_fract = fjloc - jloc
+!hgt_fract = fkloc - vloc
+!
+!my_kind = get_kind_index(domain_id,var_id)
+!if (my_kind==QTY_U_CURRENT_COMPONENT) then
+!   write(string1,*)'Not interpolating ', get_name_for_quantity(my_kind), ' at the moment.'
+!   write(string2,*)'Need to check that we are using the right grid for location interpolation'
+!   call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
+!                      source, revision, revdate, text2=string2)
+!   if (filoc < 1 .or. filoc > Nxi_u-1 .or. &
+!       fjloc < 1 .or. fjloc > Neta_u-1 ) then
+!     istatus = 12
+!     location = set_location_missing()
+!     return
+!   endif
+!   mylon => ULON
+!   mylat => ULAT
+!elseif (my_kind==QTY_V_CURRENT_COMPONENT) then
+!   write(string1,*)'Not interpolating ', get_name_for_quantity(my_kind), ' at the moment.'
+!   write(string2,*)'Need to check that we are using the right grid for location interpolation'
+!   call error_handler(E_ERR, 'get_location_from_ijk:', string1, &
+!                      source, revision, revdate, text2=string2)
+!   if (filoc < 1 .or. filoc > Nxi_v-1 .or. &
+!       fjloc < 1 .or. fjloc > Neta_v-1 ) then
+!     istatus = 13
+!     location = set_location_missing()
+!     return
+!   endif
+!   mylon => VLON
+!   mylat => VLAT
+!   mydep => VDEP
+!else  ! Everything else is assumed to be on the rho points
+!   if (filoc < 1 .or. filoc > Nxi_rho-1 .or. &
+!       fjloc < 1 .or. fjloc > Neta_rho-1 ) then
+!
+!     write(*,*)
+!     write(*,*)'filoc, Nxi_rho-1       = ',filoc, Nxi_rho-1
+!     write(*,*)'fjloc, Neta_rho-1      = ',fjloc, Neta_rho-1
+!     write(*,*)'fkloc, vloc, hgt_fract = ',fkloc,vloc,hgt_fract
+!
+!     write(logfileunit,*)
+!     write(logfileunit,*)'filoc, Nxi_rho-1     = ',filoc, Nxi_rho-1
+!     write(logfileunit,*)'fjloc, Neta_rho-1    = ',fjloc, Neta_rho-1
+!     write(logfileunit,*)'fkloc,vloc,hgt_fract = ',fkloc,vloc,hgt_fract
+!
+!     istatus = 14
+!     location = set_location_missing()
+!     return
+!   endif
+!   mylon => TLON
+!   mylat => TLAT
+!   mydep => TDEP
+!endif
+!
+!lon_val = (1.0-lon_fract)*(mylon(iloc,jloc)) + (lon_fract)*(mylon(iloc+1,jloc))
+!lat_val = (1.0-lat_fract)*(mylat(iloc,jloc)) + (lat_fract)*(mylat(iloc  ,jloc+1))
+!
+!if( get_kind_index(domain_id,var_id) == QTY_SEA_SURFACE_HEIGHT ) then
+!   hgt_val    = 0.0_r8
+!   vert_type  = VERTISSURFACE
+!else
+!   if (fkloc > Ns_rho - 0.5) then
+!      ! leave something in the log to remind us we're doing this and
+!      ! make sure it's ok with everyone.
+!      if (first_time) then
+!         call error_handler(E_MSG, 'ROMS model_mod', &
+!           'NOTE: Locations above the top Rho point are moved to that point')
+!         first_time = .false.
+!      endif
+!      ! special case for obs at or closer to surface than top rho point
+!      ! make them 100% at the top point
+!      vloc = vloc - 1
+!      hgt_fract = 1.0_r8
+!   endif
+!
+!   ! fractional heights in the vertical for each corner of the horizontal box
+!   hgt(1) = (1.0-hgt_fract)*(mydep(iloc  ,jloc,  vloc)) + hgt_fract*(mydep(iloc  ,jloc  ,vloc+1))
+!   hgt(2) = (1.0-hgt_fract)*(mydep(iloc+1,jloc  ,vloc)) + hgt_fract*(mydep(iloc+1,jloc  ,vloc+1))
+!   hgt(3) = (1.0-hgt_fract)*(mydep(iloc+1,jloc+1,vloc)) + hgt_fract*(mydep(iloc+1,jloc+1,vloc+1))
+!   hgt(4) = (1.0-hgt_fract)*(mydep(iloc  ,jloc+1,vloc)) + hgt_fract*(mydep(iloc  ,jloc+1,vloc+1))
+!
+!   tmp_hgt(1) = (1.0-lon_fract)*hgt(1) + lon_fract*hgt(2)
+!   tmp_hgt(2) = (1.0-lon_fract)*hgt(4) + lon_fract*hgt(3)
+!
+!   hgt_val   = (1.0-lat_fract)*tmp_hgt(1)+lat_fract*tmp_hgt(2)
+!   vert_type = VERTISHEIGHT
+!endif
+!
+!istatus  = 0
+!location = set_location(lon_val, lat_val, hgt_val, vert_type)
+!
+!if (debug > 5) then
+!   print*,' i,j,k', filoc, fjloc, fkloc
+!
+!   print*,' lon(i  ,j  ), lat(i  ,j  ) : (', mylon(iloc  ,jloc  ),',',mylat(iloc  ,jloc  ),')'
+!   print*,' lon(i+1,j  ), lat(i+1,j  ) : (', mylon(iloc+1,jloc  ),',',mylat(iloc+1,jloc  ),')'
+!   print*,' lon(i+1,j+1), lat(i+1,j+1) : (', mylon(iloc+1,jloc+1),',',mylat(iloc+1,jloc+1),')'
+!   print*,' lon(i  ,j+1), lat(i  ,j+1) : (', mylon(iloc  ,jloc+1),',',mylon(iloc  ,jloc+1),')'
+!   print*,' '
+!   print*,' tmp_hgt(1)  = ', tmp_hgt(1)
+!   print*,' tmp_hgt(2)  = ', tmp_hgt(2)
+!   print*, ' '
+!   print*,' lon_frac    = ', lon_fract
+!   print*,' lat_frac    = ', lat_fract
+!   print*,' hgt_frac    = ', hgt_fract
+!   print*,' '
+!   print*,' lon_val     = ', lon_val
+!   print*,' lat_val     = ', lat_val
+!   print*,' hgt_val     = ', hgt_val
+!   print*,' '
+!   print*,' WDEP(i  , j  , k  )', WDEP(iloc,   jloc  , vloc)
+!   print*,' WDEP(i  , j+1, k  )', WDEP(iloc,   jloc+1, vloc)
+!   print*,' WDEP(i+1, j+1, k  )', WDEP(iloc+1, jloc+1, vloc)
+!   print*,' WDEP(i+1, j  , k  )', WDEP(iloc+1, jloc  , vloc)
+!   print*,' '
+!   print*,' WDEP(i  , j  , k+1)', WDEP(iloc,   jloc  , vloc+1)
+!   print*,' WDEP(i  , j+1, k+1)', WDEP(iloc,   jloc+1, vloc+1)
+!   print*,' WDEP(i+1, j+1, k+1)', WDEP(iloc+1, jloc+1, vloc+1)
+!   print*,' WDEP(i+1, j  , k+1)', WDEP(iloc+1, jloc  , vloc+1)
+!endif
+!
+!end function get_location_from_ijk
 
 
 !===================================================================
