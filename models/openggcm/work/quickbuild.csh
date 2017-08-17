@@ -84,7 +84,7 @@ foreach TARGET ( mkmf_preprocess mkmf_* )
    # the rest of the executables, so it must be run in addition
    # to being built.
    if ( $PROG == "preprocess" ) then
-      ./preprocess || exit $n
+      ./preprocess.exe || exit $n
       set preprocess_done = 1
    endif
 
