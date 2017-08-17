@@ -14,7 +14,7 @@ use types_mod, only : r8
 
 implicit none
 
-public :: get_missing_ok_status, set_allow_missing_r8
+public :: get_missing_ok_status, set_missing_ok_status
 
 logical :: ALLOW_MISSING_R8 = .FALSE.
 
@@ -22,12 +22,12 @@ contains
 
 !------------------------------------------------------------------------
 
-subroutine set_allow_missing_r8(allow_missing)
+subroutine set_missing_ok_status(allow_missing)
 logical, intent(in) :: allow_missing
 
 ALLOW_MISSING_R8 = allow_missing
 
-end subroutine set_allow_missing_r8
+end subroutine set_missing_ok_status
 
 !------------------------------------------------------------------------
 

@@ -79,21 +79,24 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                                   all_vars_to_all_copies
 
 use distributed_state_mod, only : get_state
-use state_structure_mod,   only : add_domain, state_structure_info,   &
+
+use   state_structure_mod, only : add_domain, state_structure_info,   &
                                   get_index_start, get_index_end,     &
                                   get_num_domains, get_num_variables, &
                                   get_num_dims, get_dim_name,         &
                                   get_dim_length, get_variable_name,  &
                                   do_io_update
 
+use obs_def_utilities_mod, only : track_status
 
-use mpi_utilities_mod, only: my_task_id
+use     mpi_utilities_mod, only: my_task_id
 
-use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
+use        random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-use default_model_mod, only : adv_1step, init_time, init_conditions, nc_write_model_vars
+use     default_model_mod, only : adv_1step, init_time, init_conditions, nc_write_model_vars
 
 use typesizes
+
 use netcdf
 
 implicit none
@@ -113,8 +116,8 @@ public :: get_model_size,         &
           write_model_time,       &
           read_model_time,        &
           end_model,              &
-          sv_to_restart_file,     &
-          clm_to_dart_state_vector
+          fill_missing_r8_with_orig,     &
+          mark_missing_r8_values
 
 ! the code for these routines are in other modules
 public::  init_time,              &
@@ -1502,7 +1505,7 @@ if ( .not. module_initialized ) call static_init_model
 end subroutine get_gridsize
 
 
-subroutine clm_to_dart_state_vector(clm_file, restart_time)
+subroutine mark_missing_r8_values(clm_file, restart_time)
 !------------------------------------------------------------------
 ! Reads the current time and state variables from a clm restart
 ! file and packs them into a dart state vector. This better happen
@@ -1545,23 +1548,23 @@ if ( .not. module_initialized ) call static_init_model()
 
 allocate(snlsno(ncolumn))
 call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_clm), &
-              'clm_to_dart_state_vector', 'open SNLSNO'//clm_restart_filename)
+              'mark_missing_r8_values', 'open SNLSNO'//clm_restart_filename)
 call nc_check(nf90_inq_varid(ncid_clm,'SNLSNO', VarID), &
-              'clm_to_dart_state_vector', 'inq_varid SNLSNO'//clm_restart_filename)
+              'mark_missing_r8_values', 'inq_varid SNLSNO'//clm_restart_filename)
 call nc_check(nf90_get_var(ncid_clm, VarID, snlsno), &
-              'clm_to_dart_state_vector', 'get_var SNLSNO'//clm_restart_filename)
+              'mark_missing_r8_values', 'get_var SNLSNO'//clm_restart_filename)
 
 restart_time = get_state_time(ncid_clm)
 
 if (do_output()) call print_time(restart_time,'time in restart file '//clm_restart_filename)
 if (do_output()) call print_date(restart_time,'date in restart file '//clm_restart_filename)
 
-call nc_check(nf90_close(ncid_clm),'clm_to_dart_state_vector','close '//clm_restart_filename)
+call nc_check(nf90_close(ncid_clm),'mark_missing_r8_values','close '//clm_restart_filename)
 
 ! open an existing netcdf file that has is a copy of clm_restart_filename
 ! to fill in missing_r8 values.
 call nc_check(nf90_open(trim(clm_file), NF90_WRITE, ncid_dart), &
-              'clm_to_dart_state_vector', 'open clm_file file "'//trim(clm_file)//'"')
+              'mark_missing_r8_values', 'open clm_file file "'//trim(clm_file)//'"')
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -1576,28 +1579,28 @@ do ivar=1, numvars
    varname = trim(progvar(ivar)%varname)
    myerrorstring = trim(progvar(ivar)%origin)//' '//trim(progvar(ivar)%varname)
    call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_clm), &
-              'clm_to_dart_state_vector','open '//trim(myerrorstring))
+              'mark_missing_r8_values','open '//trim(myerrorstring))
 
    ! File is not required to have a time dimension
    io = nf90_inq_dimid(ncid_clm, 'time', TimeDimID)
    if (io /= NF90_NOERR) TimeDimID = MISSING_I
 
    call nc_check(nf90_inq_varid(ncid_clm,   varname, VarID), &
-            'clm_to_dart_state_vector', 'inq_varid input '//trim(myerrorstring))
+            'mark_missing_r8_values', 'inq_varid input '//trim(myerrorstring))
    call nc_check(nf90_inquire_variable( ncid_clm, VarID, dimids=dimIDs, ndims=ncNdims), &
-                 'clm_to_dart_state_vector', 'inquire_variable '//trim(myerrorstring))
+                 'mark_missing_r8_values', 'inquire_variable '//trim(myerrorstring))
 
    call nc_check(nf90_inq_varid(ncid_dart,   varname, var_id_out), &
-            'clm_to_dart_state_vector', 'inq_varid output '//trim(myerrorstring))
+            'mark_missing_r8_values', 'inq_varid output '//trim(myerrorstring))
    call nc_check(nf90_inquire_variable( ncid_dart, var_id_out), &
-                 'clm_to_dart_state_vector', 'inquire_variable '//trim(myerrorstring))
+                 'mark_missing_r8_values', 'inquire_variable '//trim(myerrorstring))
 
    ! Check the rank of the variable
 
    if ( ncNdims /= progvar(ivar)%numdims ) then
       write(string1, *) 'netCDF rank of '//trim(varname)//' does not match derived type knowledge'
       write(string2, *) 'netCDF rank is ',ncNdims,' expected ',progvar(ivar)%numdims
-      call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
+      call error_handler(E_ERR,'mark_missing_r8_values', string1, &
                         source,revision,revdate,text2=string2)
    endif
 
@@ -1607,7 +1610,7 @@ do ivar=1, numvars
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(myerrorstring)
       call nc_check(nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen), &
-            'clm_to_dart_state_vector', string1)
+            'mark_missing_r8_values', string1)
 
       ! Time dimension will be 1 in progvar, but not necessarily
       ! in origin file. We only want a single matching time.
@@ -1618,7 +1621,7 @@ do ivar=1, numvars
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(myerrorstring),' dim/dimlen ',i,dimlen, &
                               ' not ',progvar(ivar)%dimlens(i)
-         call error_handler(E_ERR,'clm_to_dart_state_vector',string1,source,revision,revdate)
+         call error_handler(E_ERR,'mark_missing_r8_values',string1,source,revision,revdate)
       endif
 
    enddo
@@ -1744,7 +1747,7 @@ do ivar=1, numvars
          write(string1, *) '3D variable unexpected shape -- only support nlon, nlat, time(=1)'
          write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
          write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
-         call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
+         call error_handler(E_ERR,'mark_missing_r8_values', string1, &
                            source, revision, revdate, text2=string2, text3=string3)
 
       endif
@@ -1754,7 +1757,7 @@ do ivar=1, numvars
       write(string1, *) 'no support for data array of dimension ', ncNdims
       write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
       write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
-      call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
+      call error_handler(E_ERR,'mark_missing_r8_values', string1, &
                         source, revision, revdate, text2=string2, text3=string3)
    endif
 
@@ -1762,24 +1765,24 @@ do ivar=1, numvars
    ! if ( indx /= progvar(ivar)%indexN ) then
    !    write(string1, *)'Variable '//trim(varname)//' filled wrong.'
    !    write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
-   !    call error_handler(E_ERR,'clm_to_dart_state_vector', string1, &
+   !    call error_handler(E_ERR,'mark_missing_r8_values', string1, &
    !                      source,revision,revdate,text2=string2)
    ! endif
 
-   call nc_check(nf90_close(ncid_clm),'clm_to_dart_state_vector','close in'//progvar(ivar)%origin)
+   call nc_check(nf90_close(ncid_clm),'mark_missing_r8_values','close in'//progvar(ivar)%origin)
    ncid_clm = 0
 
 enddo
 
 deallocate(snlsno)
 
-call nc_check(nf90_close(ncid_dart),'clm_to_dart_state_vector','close out'//progvar(ivar)%origin)
+call nc_check(nf90_close(ncid_dart),'mark_missing_r8_values','close out'//progvar(ivar)%origin)
 
-end subroutine clm_to_dart_state_vector
+end subroutine mark_missing_r8_values
 
 
 
-subroutine sv_to_restart_file(file_dart, file_clm, dart_time)
+subroutine fill_missing_r8_with_orig(file_dart, file_clm, dart_time)
 !------------------------------------------------------------------
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a clm netcdf restart file.
@@ -1806,20 +1809,20 @@ if ( .not. module_initialized ) call static_init_model
 
 if ( .not. file_exist(file_dart) ) then
    write(string1,*) 'cannot open dart state file "', trim(file_dart),'" for reading.'
-   call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
 endif
 
 if ( .not. file_exist(file_clm) ) then
    write(string1,*) 'cannot open clm state file "', trim(file_clm),'" for reading.'
-   call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
 endif
 
 call nc_check(nf90_open(trim(file_dart), NF90_WRITE, ncid_dart), &
-             'sv_to_restart_file','open original restart "'//trim(file_dart)//'"')
+             'fill_missing_r8_with_orig','open original restart "'//trim(file_dart)//'"')
 
 ! Open file to fill the MISSING_R8 values with the original values
 call nc_check(nf90_open(trim(file_clm), NF90_WRITE, ncid_clm), &
-             'sv_to_restart_file','open dart restart '//trim(file_clm)//'"')
+             'fill_missing_r8_with_orig','open dart restart '//trim(file_clm)//'"')
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
@@ -1834,7 +1837,7 @@ if ( file_time /= dart_time ) then
    call print_time(dart_time,'DART current time')
    call print_time(file_time,'clm  current time')
    write(string1,*)trim(file_dart),' current time /= model time. FATAL error.'
-   call error_handler(E_ERR,'sv_to_restart_file',string1,source,revision,revdate)
+   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
 endif
 
 if (do_output()) call print_time(file_time,'time of restart file "'//trim(file_dart)//'"')
@@ -1863,25 +1866,25 @@ UPDATE : do ivar=1, numvars
    ! by looping over the dimensions stored in the progvar type.
 
    call nc_check(nf90_inq_varid(ncid_clm, varname, VarID), &
-            'sv_to_restart_file', 'inq_varid '//trim(string2))
+            'fill_missing_r8_with_orig', 'inq_varid '//trim(string2))
    call nc_check(nf90_inquire_variable(ncid_clm,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'sv_to_restart_file', 'inquire '//trim(string2))
+            'fill_missing_r8_with_orig', 'inquire '//trim(string2))
 
    call nc_check(nf90_inq_varid(ncid_dart, varname, varid_out), &
-            'sv_to_restart_file', 'inq_varid '//trim(string2))
+            'fill_missing_r8_with_orig', 'inq_varid '//trim(string2))
    call nc_check(nf90_inquire_variable(ncid_dart,varid_out), &
-            'sv_to_restart_file', 'inquire '//trim(string2))
+            'fill_missing_r8_with_orig', 'inquire '//trim(string2))
 
    DimCheck : do i = 1,progvar(ivar)%numdims
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen), &
-            'sv_to_restart_file', string1)
+            'fill_missing_r8_with_orig', string1)
 
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
          write(string2,*)' but it should be.'
-         call error_handler(E_ERR, 'sv_to_restart_file', string1, &
+         call error_handler(E_ERR, 'fill_missing_r8_with_orig', string1, &
                          source, revision, revdate, text2=string2)
       endif
 
@@ -1902,23 +1905,23 @@ UPDATE : do ivar=1, numvars
 
       else
          write(string1, *) 'no support for data array of dimension ', ncNdims
-         call error_handler(E_ERR,'sv_to_restart_file', string1, &
+         call error_handler(E_ERR,'fill_missing_r8_with_orig', string1, &
                            source,revision,revdate)
       endif
   endif
 enddo UPDATE
 
-call nc_check(nf90_close(ncid_clm),  'sv_to_restart_file','close '//trim(file_clm))
-call nc_check(nf90_close(ncid_dart), 'sv_to_restart_file','close '//trim(file_dart))
+call nc_check(nf90_close(ncid_clm),  'fill_missing_r8_with_orig','close '//trim(file_clm))
+call nc_check(nf90_close(ncid_dart), 'fill_missing_r8_with_orig','close '//trim(file_dart))
 
-end subroutine sv_to_restart_file
+end subroutine fill_missing_r8_with_orig
 
 !==================================================================
 ! The remaining interfaces come last
 !==================================================================
 
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_kind, interp_val, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
 
 ! PURPOSE:
@@ -1948,7 +1951,7 @@ type(ensemble_type),    intent(in)  :: state_handle
 integer,                intent(in)  :: ens_size
 type(location_type),    intent(in)  :: location
 integer,                intent(in)  :: obs_kind
-real(r8),               intent(out) :: interp_val(ens_size)
+real(r8),               intent(out) :: expected_obs(ens_size)
 integer,                intent(out) :: istatus(ens_size)
 
 
@@ -1956,10 +1959,13 @@ integer,                intent(out) :: istatus(ens_size)
 
 real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
-integer  :: istatus_2(ens_size)
-real(r8) :: interp_val_2(ens_size)
+
+integer  ::    istatus_liq(ens_size),    istatus_ice(ens_size)
+real(r8) :: interp_val_liq(ens_size), interp_val_ice(ens_size)
+
 character(len=obstypelength) :: qty_string
-integer :: track_status(ens_size)
+
+logical  :: return_now
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1969,11 +1975,12 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-interp_val   = MISSING_R8     ! the DART bad value flag
-interp_val   = MISSING_R8     ! the DART bad value flag
-interp_val_2 = MISSING_R8     ! the DART bad value flag
+expected_obs = MISSING_R8   ! the DART bad value flag
+interp_val_liq = MISSING_R8 ! the DART bad value flag
+interp_val_ice = MISSING_R8 ! the DART bad value flag
 istatus = 99                ! unknown error
-track_status = 0
+istatus_liq = 0             ! unknown error
+istatus_ice = 0             ! unknown error
 
 ! Get the individual locations values
 
@@ -1990,10 +1997,10 @@ if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon
 
 if ((obs_kind == QTY_GEOPOTENTIAL_HEIGHT) .and. is_vertical(location, "LEVEL")) then
    if (nint(lheight) > nlevgrnd) then
-      interp_val = MISSING_R8
+      expected_obs = MISSING_R8
       istatus = 1
    else
-      interp_val = LEVGRND(nint(lheight))
+      expected_obs = LEVGRND(nint(lheight))
       istatus = 0
    endif
    return ! Early Return
@@ -2009,27 +2016,31 @@ select case( obs_kind )
 
       ! TJH FIXME : make sure this is consistent with the COSMOS operator
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
-      call get_grid_vertval(state_handle, ens_size, location, QTY_LIQUID_WATER, interp_val,   istatus)
-      call get_grid_vertval(state_handle, ens_size, location, QTY_ICE,          interp_val_2, istatus_2)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_LIQUID_WATER, interp_val_liq, istatus_liq)
+      call track_status(ens_size, istatus_liq, interp_val_liq, istatus, return_now)
+      if (return_now) return
+    
+      call get_grid_vertval(state_handle, ens_size, location, QTY_ICE,          interp_val_ice, istatus_ice)
+      call track_status(ens_size, istatus_ice, interp_val_ice, istatus, return_now)
+      if (return_now) return
 
-      where ((istatus == 0) .and. (istatus_2 == 0))
-         interp_val = interp_val + interp_val_2
-      elsewhere
-         interp_val = MISSING_R8
-         istatus = 6
-         track_status = 6
-      endwhere   
+      where (istatus == 0)
+         expected_obs = interp_val_liq + interp_val_ice
+       elsewhere
+          expected_obs = MISSING_R8
+          istatus = 6
+       endwhere   
 
    case ( QTY_SOIL_TEMPERATURE, QTY_LIQUID_WATER, QTY_ICE )
 
-      call get_grid_vertval(state_handle, ens_size, location, obs_kind, interp_val, istatus)
+      call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
    case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, &
           QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, QTY_FPAR, &
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
           QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE)
 
-      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, interp_val, istatus)
+      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
    case default
 
@@ -2039,12 +2050,12 @@ select case( obs_kind )
       write(string2,*)'AKA '//trim(qty_string)
       call error_handler(E_ERR, 'model_interpolate', string1, &
              source, revision, revdate, text2=string2)
-      interp_val = MISSING_R8
+      expected_obs = MISSING_R8
       istatus = 5
 
 end select
 
-if ((debug > 6) .and. do_output()) write(*,*)'interp_val ',interp_val
+if ((debug > 6) .and. do_output()) write(*,*)'expected_obs ',expected_obs
 
 ! istatus is set by the calls to get_grid_vertval() or compute_gridcell_value() above.
 ! leave it with the value it has - don't override it here.
@@ -2084,7 +2095,6 @@ real(r8), dimension(1) :: loninds,latinds
 real(r8), dimension(LocationDims) :: loc
 integer :: imem
 character(len=obstypelength) :: varstring
-integer :: track_status(ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2095,8 +2105,7 @@ if ( .not. module_initialized ) call static_init_model
 ! make any error codes set here be in the 10s
 
 interp_val = MISSING_R8  ! the DART bad value flag
-istatus    = 99          ! unknown error
-track_status = 0         ! assume passing
+istatus    = 0
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
@@ -2153,7 +2162,7 @@ ELEMENTS : do indexi = index1, indexN
          total(imem)      = total(imem)      + state(imem)*landarea(indexi)
          total_area(imem) = total_area(imem) +       landarea(indexi)
       else
-         track_status(imem) = 31
+         istatus(imem) = 31
          total(imem)      = MISSING_R8
          total_area(imem) = MISSING_R8
       endif
@@ -2174,16 +2183,15 @@ ELEMENTS : do indexi = index1, indexN
 enddo ELEMENTS
 
 
-where (total_area /= 0.0_r8 .and. track_status == 0) ! All good.
-   interp_val    = total/total_area
-   istatus       = 0
-   track_status  = 0
-elsewhere (total_area == 0.0 .or. track_status /= 0) ! Not good
-   interp_val    = MISSING_R8
-   istatus       = 32
-   track_status  = 32
+where (total_area /= 0.0_r8 .and. istatus == 0) ! All good.
+   interp_val = total/total_area
+   istatus    = 0
+elsewhere (total_area == 0.0 .or. istatus /= 0) ! Not good
+   interp_val  = MISSING_R8
+   istatus     = 32
 endwhere
-!# if( any(track_status == 32) ) then
+
+!# if( any(istatus == 32) ) then
 !#    if ((debug > 4) .and. do_output()) then
 !#       write(string1, *)'Variable '//trim(varstring)//' had no viable data'
 !#       write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
@@ -2242,7 +2250,6 @@ integer :: counter, counter_above, counter_below
 integer :: imem
 real(r8) :: state(ens_size)
 character(len=obstypelength) :: varstring
-integer :: track_status(ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2254,7 +2261,6 @@ if ( .not. module_initialized ) call static_init_model
 
 interp_val = MISSING_R8  ! the DART bad value flag
 istatus    = 99          ! unknown error
-track_status = 0
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
@@ -2389,7 +2395,7 @@ ELEMENTS : do indexi = index1, indexN
          above(:, counter_above) = state
          area_above(:, counter_above) = landarea(indexi)
       elsewhere(state == MISSING_R8) 
-         track_status = 21
+         istatus = 21
       endwhere
    endif
 
@@ -2400,7 +2406,7 @@ ELEMENTS : do indexi = index1, indexN
          below(:, counter_below)  =  state
          area_below(:, counter_below) = landarea(indexi)
       elsewhere(state == MISSING_R8) 
-         track_status = 22
+         istatus = 22
       endwhere
 
    endif
@@ -2436,7 +2442,7 @@ do imem = 1, ens_size
    !>@todo FIXME : is the area the same across all ensemble members ?
    total_area(imem) = sum(area_above(imem, :))
 
-   if ( total_area(imem) /= 0.0_r8 .and. track_status(imem) == 0) then
+   if ( total_area(imem) /= 0.0_r8 .and. istatus(imem) == 0) then
       ! normalize the area-based weights
       area_above(imem, :) = area_above(imem, :) / total_area(imem)
       value_above(imem) = sum(above(imem, :) * area_above(imem, :))
@@ -2451,7 +2457,7 @@ do imem = 1, ens_size
    ! Determine the value for the level below the depth of interest.
    total_area(imem) = sum(area_below(imem, :))
 
-   if ( total_area(imem) /= 0.0_r8 .and. track_status(imem) == 0 ) then
+   if ( total_area(imem) /= 0.0_r8 .and. istatus(imem) == 0 ) then
       ! normalize the area-based weights
       area_below(imem, :) = area_below(imem, :) / total_area(imem)
       value_below(imem) = sum(below(imem, :) * area_below(imem, :))
@@ -2473,12 +2479,10 @@ else
    botwght = (loc_lev - depthabove) / (depthbelow - depthabove)
 endif
 
-where ( track_status == 0 ) 
+where ( istatus == 0 ) 
    interp_val = value_above*topwght + value_below*botwght
-   istatus      = 0
-elsewhere ( track_status /= 0 )
+elsewhere ( istatus /= 0 )
    interp_val = MISSING_R8
-   istatus = track_status
 endwhere
 
 deallocate(above, below, area_above, area_below)
@@ -2525,14 +2529,6 @@ call nc_check(nf90_get_var(ncid_dart, varid_out, data_1d_array), &
 ! restoring the indeterminate original values
 
 where(data_1d_array == MISSING_R8) data_1d_array = org_array
-
-if (trim(progvar(ivar)%varname) == 'SNOWDP') &
-   where((data_1d_array < 0.0_r8)) data_1d_array = org_array
-
-if (trim(progvar(ivar)%varname) == 'H2OSNO') then 
-   where((data_1d_array <= 0.0_r8)) data_1d_array = org_array
-   num_less = count(data_1d_array <= 0.0)
-endif    
 
 call nc_check(nf90_put_var(ncid_clm, varid_out, data_1d_array), &
       'fill_missing_r8_with_orig_1d', 'put_var '//trim(progvar(ivar)%varname))
