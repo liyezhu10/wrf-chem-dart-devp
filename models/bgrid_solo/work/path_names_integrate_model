@@ -70,3 +70,4 @@ models/bgrid_solo/fms_src/shared/tracer_manager/tracer_manager.F90
 models/bgrid_solo/model_mod.f90
 models/utilities/default_model_mod.f90
 observations/forward_operators/obs_def_mod.f90
+observations/forward_operators/obs_def_utilities_mod.f90

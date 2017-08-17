@@ -30,3 +30,4 @@ assimilation_code/programs/filter/filter.f90
 models/forced_barot/barot_obs_random.f90
 models/forced_barot/model_mod.f90
 observations/forward_operators/obs_def_mod.f90
+observations/forward_operators/obs_def_utilities_mod.f90

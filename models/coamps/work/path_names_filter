@@ -40,3 +40,4 @@ models/coamps/get_name_info.f90
 models/coamps/model_mod.f90
 models/utilities/default_model_mod.f90
 observations/forward_operators/obs_def_mod.f90
+observations/forward_operators/obs_def_utilities_mod.f90

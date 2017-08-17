@@ -57,7 +57,7 @@ module direct_netcdf_mod
 use types_mod,            only : r4, r8, i4, i8, MISSING_R8, MISSING_R4, MISSING_I, &
                                  digits12, metadatalength
 
-use options_mod,           only : get_missing_ok_status
+use options_mod,          only : get_missing_ok_status
 
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, map_task_to_pe, &
                                  all_copies_to_all_vars, all_vars_to_all_copies, &
