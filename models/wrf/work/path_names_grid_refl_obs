@@ -29,3 +29,4 @@ models/wrf/WRF_DART_utilities/f2kcli.f90
 models/wrf/WRF_DART_utilities/grid_refl_obs.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
+observations/obs_converters/utilities/obs_utilities_mod.f90

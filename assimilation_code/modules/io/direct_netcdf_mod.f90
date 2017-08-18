@@ -1477,7 +1477,7 @@ if ( maxclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    if ( my_minmax(2) > maxclamp ) then
       !>@todo again, if we're allowing missing in state, this has to be masked:
       if (allow_missing) then
-         where(variable /= missing_r8) variable = max(maxclamp, variable)
+         where(variable /= missing_r8) variable = min(maxclamp, variable)
       else
          variable = min(maxclamp, variable)
       endif

@@ -9,7 +9,7 @@ module filter_mod
 !------------------------------------------------------------------------------
 use types_mod,             only : r8, i8, missing_r8, metadatalength, MAX_NUM_DOMS, MAX_FILES
 
-use options_mod,           only : get_missing_ok_status, set_allow_missing_r8
+use options_mod,           only : get_missing_ok_status, set_missing_ok_status
 
 use obs_sequence_mod,      only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                   get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
@@ -247,9 +247,6 @@ real(r8) :: inf_sd_lower_bound(2)          = 0.0_r8
 ! If they are encountered, it is not necessarily a FATAL error.
 ! Most of the time, if a MISSING_R8 is encountered, DART should die.
 ! CLM should have allow_missing_clm = .true.
-! maybe POP - but in POP the missing values are land and all ensemble members
-! have the same missing values.  CLM is different in that only some ensemble members may
-! have missing values and so we have a deficient ensemble size at those state locations.
 logical  :: allow_missing_clm = .false.
 
 
@@ -434,7 +431,7 @@ if ( inf_flavor(2) == 4 ) then
    inf_damping(2) = 1.0_r8  ! no damping
 endif
 
-call set_allow_missing_r8(allow_missing_clm)
+call set_missing_ok_status(allow_missing_clm)
 allow_missing = get_missing_ok_status()
 
 call trace_message('Before initializing inflation')

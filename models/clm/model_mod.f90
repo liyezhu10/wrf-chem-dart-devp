@@ -1978,9 +1978,9 @@ if ( .not. module_initialized ) call static_init_model
 expected_obs = MISSING_R8   ! the DART bad value flag
 interp_val_liq = MISSING_R8 ! the DART bad value flag
 interp_val_ice = MISSING_R8 ! the DART bad value flag
-istatus = 99                ! unknown error
-istatus_liq = 0             ! unknown error
-istatus_ice = 0             ! unknown error
+istatus     = 0             ! will be updated with failed values
+istatus_liq = 0
+istatus_ice = 0
 
 ! Get the individual locations values
 
@@ -2024,12 +2024,7 @@ select case( obs_kind )
       call track_status(ens_size, istatus_ice, interp_val_ice, istatus, return_now)
       if (return_now) return
 
-      where (istatus == 0)
-         expected_obs = interp_val_liq + interp_val_ice
-       elsewhere
-          expected_obs = MISSING_R8
-          istatus = 6
-       endwhere   
+      where (istatus == 0) expected_obs = interp_val_liq + interp_val_ice
 
    case ( QTY_SOIL_TEMPERATURE, QTY_LIQUID_WATER, QTY_ICE )
 
@@ -2185,10 +2180,9 @@ enddo ELEMENTS
 
 where (total_area /= 0.0_r8 .and. istatus == 0) ! All good.
    interp_val = total/total_area
-   istatus    = 0
-elsewhere (total_area == 0.0 .or. istatus /= 0) ! Not good
-   interp_val  = MISSING_R8
-   istatus     = 32
+elsewhere
+   interp_val = MISSING_R8
+   if (istatus == 0) istatus = 32
 endwhere
 
 !# if( any(istatus == 32) ) then
@@ -2394,7 +2388,7 @@ ELEMENTS : do indexi = index1, indexN
       where(state /= MISSING_R8) 
          above(:, counter_above) = state
          area_above(:, counter_above) = landarea(indexi)
-      elsewhere(state == MISSING_R8) 
+      elsewhere
          istatus = 21
       endwhere
    endif
@@ -2405,7 +2399,7 @@ ELEMENTS : do indexi = index1, indexN
       where(state /= MISSING_R8) 
          below(:, counter_below)  =  state
          area_below(:, counter_below) = landarea(indexi)
-      elsewhere(state == MISSING_R8) 
+      elsewhere
          istatus = 22
       endwhere
 
@@ -2481,7 +2475,7 @@ endif
 
 where ( istatus == 0 ) 
    interp_val = value_above*topwght + value_below*botwght
-elsewhere ( istatus /= 0 )
+elsewhere
    interp_val = MISSING_R8
 endwhere
 
