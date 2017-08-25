@@ -1,0 +1,1327 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+          "http://www.w3.org/TR/html4/strict.dtd">
+<HTML>
+<HEAD>
+<TITLE>module model_mod (OpenGGCM)</TITLE>
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css" />
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
+</HEAD>
+<BODY>
+<A NAME="TOP"></A>
+
+<H1>MODULE model_mod (OpenGGCM)</H1>
+
+<table border=0 summary="" cellpadding=5>
+<tr>
+    <td valign=middle>
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
+    </td>
+    <td>
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
+          <small><small>version information for this file: <br />
+          <!-- version tag follows, do not edit -->
+          $Id$</small></small>
+       </P></td>
+    <td><img src="doc/OpenGGCM_graphic.png" alt="OpenGGCM graphic" height=100 />
+    </td>
+</tr>
+</table>
+
+<A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#Interface">INTERFACES</A> /
+<A HREF="#FilesUsed">FILES</A> /
+<A HREF="#References">REFERENCES</A> /
+<A HREF="#Errors">ERRORS</A> /
+<A HREF="#FuturePlans">PLANS</A> /
+<A HREF="#PrivateComponents">PRIVATE COMPONENTS</A> /
+<A HREF="#Legalese">TERMS OF USE</A>
+
+
+<H2>Overview</H2>
+
+<P>
+This is the DART interface to the 
+the Open Geospace General Circulation Model  
+(<a href="https://ccmc.gsfc.nasa.gov/models/modelinfo.php?model=OpenGGCM">OpenGGCM</a>).
+ A short synopsis of OpenGGCM is as follows:
+</P>
+<ul><li>Coupled global magnetosphere - ionosphere - thermosphere model.
+    <li> 3d Magnetohydrodynamic magnetosphere model.
+    <li> Coupled with NOAA/SEC 3d dynamic/chemistry ionosphere - 
+         thermosphere model (CTIM).
+    <li> Coupled with inner magnetosphere / ring current models: Rice U. RCM, 
+         NASA/GSFC CRCM.
+    <li> Model runs on demand (&gt;500 so far) provided at the Community 
+         Coordinated Modeling Center (CCMC at NASA/GSFC).
+         <a href='http://ccmc.gsfc.nasa.gov'>
+         http://ccmc.gsfc.nasa.gov</a>
+    <li> Fully parallelized code, real-time capable. Runs on IBM/datastar, 
+         IA32/I64 based clusters, PS3 clusters, and other hardware.
+    <li> Used for basic research, numerical experiments, hypothesis testing, 
+         data analysis support, NASA/THEMIS mission support, mission planning, 
+         space weather studies, and 
+         Numerical Space Weather Forecasting in the future.
+    <li>Funding from NASA/LWS, NASA/TR&amp;T, NSF/GEM, NSF/ITR, NSF/PetaApps, 
+         AF/MURI programs.
+</ul>
+<P>
+Personnel involved with the OpenGGCM/DART project are: 
+J.&nbsp;Raeder,
+K.&nbsp;Germaschewski,
+D.&nbsp;Cramer, 
+L.&nbsp;Wang,
+K.&nbsp;Maynard,
+D.&nbsp;Arel,
+J.&nbsp;Jensen (UNH),
+T.&nbsp;Fuller-Rowell,
+N.&nbsp;Muriyama (NOAA/SEC), (Rice U.), 
+M.-C.&nbsp;Fok,
+H.-J.&nbsp;Connor (GSFC),
+T.&nbsp;Matsuo (CU),
+J.&nbsp;Anderson,
+T.&nbsp;Hoar (NCAR)
+<br />
+<br />
+OpenGGCM is <strong>not</strong> included in DART, it must be obtained from the 
+<a href="https://ccmc.gsfc.nasa.gov/models/modelinfo.php?model=OpenGGCM"
+>Community Coordinated Modeling Center</a>.
+<br />
+<br />
+DART is designed so that OpenGGCM runs as a completely separate executable.
+The OpenGGCM/DART system runs differently than what is described in the
+general DART documentation since OpenGGCM is intended to be run without
+restarting. Consequently, multiple scripts are run concurrently: one to
+run a collection of OpenGGCM instances, one to run DART, and one to
+control the coordination between the two. Semaphore files control the
+timing of the assimilation. 
+<br />
+<br />
+The composition of the DART state vector and which variables get updated in 
+OpenGGCM are under complete user control. Additional variables may be needed
+to compute the expected value of the observation.
+At present, only OpenGGCM variables that exist on the geographic grid are 
+supported, but design consideration has been given to additionally support
+variables that exist on the magnetic grid.
+The ability to find physical distances between observation locations and the 
+locations of the variables on multiple grids is fundamental to ensemble data 
+assimilation as it is generally necessary to restrict the impact of an 
+(arbitrarily-located) observation to the 'nearby' model variables. 
+<br />
+<br />
+It is required to associate the OpenGGCM variable name with a 'generic' DART 
+quantity (e.g., <em class=code>'oplus'</em> is 
+<em class=code>QTY_ELECTRON_DENSITY</em>) in order to use the observation 
+operators already included with DART. A complete list of DART quantities for
+geospace models and their observation support can be found in
+<a href='../../observations/forward_operators/obs_def_upper_atm_mod.f90'
+>obs_def_upper_atm_mod.f90</a>&nbsp;For information on how the observation
+support is provided, please read the 
+<a href='../../observations/forward_operators/DEFAULT_obs_def_mod.html'
+>Overview section</a> of the <em class=file>DEFAULT_obs_def_mod.html</em>.
+</P>
+
+<H2>Observations</H2>
+<P>Observations must be obtained from data providers and converted to a 
+DART observation sequence file. Observations from the 
+<a href="http://www.cosmic.ucar.edu">COSMIC Program</a> already have a
+converter program 
+(<a href='../../observations/obs_converters/gps/convert_cosmic_iono_cdf.f90'
+>convert_cosmic_iono_cdf.f90</a>) which is described in the 
+<a href='../../observations/obs_converters/gps/gps.html'>gps</a> 
+documentation. The COSMIC observations of <em class=code>ELEC_dens</em>
+are converted and tagged as the DART-specific type
+<em class=code>GPS_PROFILE</em> which maps to the DART quantity 
+<em class=code>QTY_ELECTRON_DENSITY</em>. This observation is the result of
+a vertical weighting kernel (hence the 'profile') so it has a location 
+representative of the center of mass of the kernel. Consequently, the 
+forward observation operator provided by 
+<em class=code>obs_def_upper_atm_mod</em> is a simple interpolation of 
+the model variable mapped to <em class=code>QTY_ELECTRON_DENSITY</em>
+to the observation location.
+<br />
+<br />
+The COSMIC data can be downloaded from the
+<a href="http://cdaac-www.cosmic.ucar.edu/cdaac/tar/rest.html"
+>CDAAC Download Interface</a>&nbsp;. 
+The <em class=program>convert_cosmic_iono_cdf</em> program specifically 
+uses the <em class=code>ionPRF</em> data type, so bundles of the data come in
+TAR files with names like 
+<em class=file>cosmic2013_ionPrf_2013.213.tar</em>&nbsp;. The individual files
+have have names like:
+<em class=file>ionPrf_C005.2013.213.01.52.G03_2013.3520_nc</em>. More 
+information on converting the COSMIC data to a DART observation sequence 
+file can be found in the  
+<a href='../../observations/obs_converters/gps/gps.html'>gps</a> documentation.
+<!-- /glade/p/image/Observations/Cosmic-Ionosphere/rawdata/cosmic2013/ionPrf/2014.074 -->
+</P>
+
+<!--=====================================================================-->
+<!--===================== DESCRIPTION OF A NAMELIST =====================-->
+<!--=====================================================================-->
+
+<A NAME="Namelist"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>NAMELIST</H2>
+<P>
+This namelist is read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand
+'&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be
+enclosed in quotes to prevent them from 
+prematurely terminating the namelist.
+</P>
+
+<div class=namelist>
+<pre>
+&amp;model_nml 
+   openggcm_template             = 'DATA.ionos2.nc'
+   assimilation_period_days      = 1
+   assimilation_period_seconds   = 0
+   model_perturbation_amplitude  = 0.2
+   debug                         = 0
+   model_state_variables         = ' '
+  /
+</pre>
+</div>
+<div>
+<TABLE border=0 cellpadding=3 width=100% summary='namelist description'>
+<THEAD align=left>
+<TR><TH> Item </TH>
+    <TH> Type </TH>
+    <TH> Description </TH> </TR>
+</THEAD>
+<TBODY valign=top>
+
+<TR><TD>openggcm_template</TD>
+    <TD>character(len=256)</TD>
+    <TD>Any OpenGGCM output file name that has the same model configuration
+        as the ensemble. This is a readonly file, so it can be a simple link
+        to ensemble member 1. This file is used to determine the geometry 
+        and the grid.</TD>
+</TR>
+
+<TR><TD>assimilation_period_seconds</TD>
+    <TD>integer</TD>
+    <TD>This specifies the width of the assimilation window.
+        The current model time is used as the center time of the
+        assimilation window. All observations in the assimilation window
+        are assimilated. BEWARE: if you put observations that occur before
+        the beginning of the assimilation_period, DART will error out because
+        it cannot move the model 'back in time' to process these observations.
+        <em class=code>assimilation_period_seconds</em> must be an integer number
+        of OpenGGCM dynamical timesteps (as specified by OpenGGCM.nml:STEP) AND
+        be able to be expressed by OpenGGCM.nml:STOP.
+        Since STOP has three components: day-of-year, hour, and minute, 
+        the <em class=code>assimilation_period_seconds</em> must be an integer
+        number of minutes.</TD>
+</TR>
+
+<TR><TD>model_perturbation_amplitude</TD>
+    <TD>real(r8)</TD>
+    <TD>When creating an ensemble of states from a single instance of OpenGGCM,
+        it is necessary to call the routine
+        <em class=code>pert_model_copies</em>.
+        <em class=code>model_perturbation_amplitude</em> is used to scale the
+        value of the variable and is used as the standard deviation of the 
+        gaussian noise added to the state for that variable and location.</TD>
+</TR>
+
+<TR><TD>debug</TD>
+    <TD>integer</TD>
+    <TD>Set to 0 (zero) for minimal output. Successively larger values
+       generate successively more output.</TD>
+</TR>
+
+<TR><TD>variables</TD>
+    <TD>character(:,4)</TD>
+    <TD>Strings that identify
+        1) the OpenGGCM variables,
+        2) their DART quantity,
+        3) whether or not the variable should be written to the output file 
+           after the assimilation, and
+        4) what kind of grid (magnetic or geographic) to use to describe 
+           the variable.
+        The DART quantity must be one found in
+        <em class=file>assimilation_code/modules/observations/obs_kind_mod.f90</em>
+        AFTER it gets built by <em class=program>preprocess</em>.
+        Most of the upper atmosphere observation kinds are specified by
+        <a href='observations/forward_operators/obs_def_upper_atm_mod.f90'
+       >observations/forward_operators/obs_def_upper_atm_mod.f90</a>, 
+        so <em class=file>obs_def_upper_atm_mod.f90</em> must be specified
+        in the <em class=file>preprocess_nml</em>:<em class=code>input_files</em>
+        <br />
+        <TABLE border=0 cellpadding=3 width=100% summary='variable description'>
+
+        <tr><td valign=top><em class=code>variables(:,1)</em></td>
+            <td valign=top> Specifies the OpenGGCM variable name in the 
+                 netCDF file.
+            </td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,2)</em></td>
+            <td valign=top> Specifies the DART quantity for that variable.
+            </td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,3)</em></td>
+            <td valign=top> Specifies if the variable should be updated in 
+                 the OpenGGCM output file. The value may be "UPDATE" or
+                 anything else. Only if <em class=code>variables(:,3)</em> = 
+                 "UPDATE" will the variable be modified in the OpenGGCM file.
+            </td></tr>
+
+        <tr><td valign=top><em class=code>variables(:,4)</em></td>
+            <td valign=top> Specifies which grid to use to describe the 
+                 variable.  The only valid possibilies are "GEOGRAPHIC_GRID" 
+                 or "MAGNETIC_GRID".
+            </td></tr>
+        </TABLE>
+
+</TD>
+</TR>
+
+</TBODY>
+</TABLE>
+
+<P>An example of a working namelist (not the default values) is:
+<pre>
+&amp;model_nml
+   openggcm_template            = "DATA.ionos2.nc"
+   assimilation_period_days     = 0
+   assimilation_period_seconds  = 3600
+   model_perturbation_amplitude = 0.1
+   debug                        = 0
+   model_state_variables        =
+      'oplus', 'QTY_ELECTRON_DENSITY', 'UPDATE', 'GEOGRAPHIC_GRID'
+  /</pre>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--==================================================================-->
+
+<A NAME="Interface"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>OTHER MODULES USED</H2>
+<PRE>
+assimilation_code/location/threed_sphere/location_mod.f90
+assimilation_code/location/utilities/default_location_mod.f90
+assimilation_code/location/utilities/location_io_mod.f90
+assimilation_code/modules/assimilation/adaptive_inflate_mod.f90
+assimilation_code/modules/assimilation/assim_model_mod.f90
+assimilation_code/modules/io/dart_time_io_mod.f90
+assimilation_code/modules/io/direct_netcdf_mod.f90
+assimilation_code/modules/io/io_filenames_mod.f90
+assimilation_code/modules/io/state_structure_mod.f90
+assimilation_code/modules/io/state_vector_io_mod.f90
+assimilation_code/modules/observations/obs_kind_mod.f90
+assimilation_code/modules/observations/obs_sequence_mod.f90
+assimilation_code/modules/utilities/distributed_state_mod.f90
+assimilation_code/modules/utilities/ensemble_manager_mod.f90
+assimilation_code/modules/utilities/netcdf_utilities_mod.f90
+assimilation_code/modules/utilities/[null_,]mpi_utilities_mod.f90
+assimilation_code/modules/utilities/[null_,]win_mod.f90
+assimilation_code/modules/utilities/random_seq_mod.f90
+assimilation_code/modules/utilities/sort_mod.f90
+assimilation_code/modules/utilities/time_manager_mod.f90
+assimilation_code/modules/utilities/types_mod.f90
+assimilation_code/modules/utilities/utilities_mod.f90
+models/openggcm/cotr_mod.f90
+models/utilities/default_model_mod.f90
+assimilation_code/modules/utilities/ensemble_manager_mod.f90
+observations/forward_operators/obs_def_mod.f90
+</PRE>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--==================================================================-->
+<!-- Declare all public entities ...                                  -->
+<!--==================================================================-->
+<!--Note to authors. The first row of the table is different.         -->
+<!--==================================================================-->
+
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>PUBLIC INTERFACES - REQUIRED</H2>
+
+<TABLE>
+<TR><TD><em class=call>use model_mod, only : </em></TD>
+                   <TD><A HREF="#get_model_size">get_model_size</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#adv_1step">adv_1step</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#get_state_meta_data">get_state_meta_data</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#model_interpolate">model_interpolate</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#shortest_time_between_assimilations">shortest_time_between_assimilations</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#static_init_model">static_init_model</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#init_time">init_time</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#init_conditions">init_conditions</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#nc_write_model_atts">nc_write_model_atts</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#nc_write_model_vars">nc_write_model_vars</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#pert_model_copies">pert_model_copies</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#get_close_obs">get_close_obs</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#get_close_state">get_close_state</A></TD></TR>
+
+<TR><TD>&nbsp;</TD><TD><A HREF="#convert_vertical_obs">convert_vertical_obs</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#convert_vertical_state">convert_vertical_state</A></TD></TR>
+
+<TR><TD>&nbsp;</TD><TD><A HREF="#read_model_time">read_model_time</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#write_model_time">write_model_time</A></TD></TR>
+<TR><TD>&nbsp;</TD><TD><A HREF="#end_model">end_model</A></TD></TR>
+</TABLE>
+
+<P>
+A namelist interface
+<a href="#Namelist"><em class=code>&amp;model_nml</em></a>
+is defined by the module, and is 
+read from file <em class=file>input.nml</em>.
+</P>
+
+<P>
+   A note about documentation style.
+   Optional arguments are enclosed in brackets
+   <em class=optionalcode>[like this]</em>.
+</P>
+
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="get_model_size"></A>
+<br>
+<div class=routine>
+<em class=call>model_size = get_model_size( )</em>
+<pre>
+integer(i8) :: <em class=code>get_model_size</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Returns the length of the model state vector.
+Required.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>model_size</em></TD>
+    <TD>The length of the model state vector.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="adv_1step"></A>
+<br>
+<div class=routine>
+<em class=call>call adv_1step(x, time)</em>
+<pre>
+real(r8), dimension(:), intent(inout) :: <em class=code>x</em>
+type(time_type),        intent(in)    :: <em class=code>time</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>Since OpenGGCM is not called as a subroutine, this is a NULL interface.
+OpenGGCM is advanced as a separate executable - i.e. <em class=code>async == 2</em>.
+<em href=program>adv_1step</em> only gets called if <em class=code>async == 0</em>.
+The subroutine must still exist, but contains no code and will not be called.
+An error message is issued if an unsupported value of 
+<em class=file>filter,perfect_model_obs</em>:<em class=code>async</em> is used.
+</P>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="get_state_meta_data"></A>
+<br>
+<div class=routine>
+<em class=call>call get_state_meta_data (index_in, location, 
+                          <em class=optionalcode>[,&nbsp;var_type]</em> )</em>
+<pre>
+integer,             intent(in)  :: <em class=code>index_in</em>
+type(location_type), intent(out) :: <em class=code>location</em>
+integer, optional,   intent(out) :: <em class=optionalcode> var_type </em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Given an integer index into the state vector structure, returns the
+associated location. A second intent(out) optional argument 
+returns the generic kind of this item, e.g. QTY_MOLEC_OXYGEN_MIXING_RATIO,
+QTY_ELECTRON_DENSITY, ...
+This interface is required to be functional for all applications.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>index_in</em></TD>
+    <TD>Index of state vector element about which information is requested.</TD></TR>
+
+<TR><TD valign=top><em class=code>location</em></TD>
+    <TD>The location of state variable element.</TD></TR>
+
+<TR><TD valign=top><em class=optionalcode>var_type</em></TD>
+    <TD>The generic quantity of the state variable element.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="model_interpolate"></A>
+<br>
+<div class=routine>
+<em class=call>call model_interpolate(state_handle, x, location, itype, obs_val, istatus)</em>
+<pre>
+type(ensemble_type),    intent(in)  :: <em class=code>state_handle</em>
+real(r8), dimension(:), intent(in)  :: <em class=code>x</em>
+type(location_type),    intent(in)  :: <em class=code>location</em>
+integer,                intent(in)  :: <em class=code>itype</em>
+real(r8),               intent(out) :: <em class=code>obs_val</em>
+integer,                intent(out) :: <em class=code>istatus</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Given a handle containing information for a state vector, a state vector,
+a location, and a model state variable kind
+interpolates the state variable field to that location and returns
+the value in <em class=code>obs_val</em>. The <em class=code>istatus</em>
+variable should be returned as 0 unless there is some problem in
+computing the interpolation in which case a positive value should be
+returned. The <em class=code>itype</em> variable
+is one of the quantity (QTY) parameters defined in 
+<a href="../../assimilation_code/modules/observations/obs_kind_mod.html">obs_kind_mod.f90</a>
+and maps the quantity to a model variable for the interpolation.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>state_handle&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The handle to the state structure containing information about
+        the state vector about which information is requested.</TD></TR>
+
+<TR><TD valign=top><em class=code>x</em></TD>
+    <TD>A model state vector.</TD></TR>
+
+<TR><TD valign=top><em class=code>location</em></TD>
+    <TD>Location to which to interpolate.</TD></TR>
+
+<TR><TD valign=top><em class=code>itype</em></TD>
+    <TD>Quantity of state field to be interpolated. </TD></TR>
+
+<TR><TD valign=top><em class=code>obs_val</em></TD>
+    <TD> The interpolated value from the model.</TD></TR>
+
+<TR><TD valign=top><em class=code>istatus</em></TD>
+    <TD>Integer value returning 0 for success.
+        Other values can be defined for various failures.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="shortest_time_between_assimilations"></A>
+<br>
+<div class=routine>
+<em class=call>var = shortest_time_between_assimilations()</em>
+<pre>
+type(time_type) :: <em class=code>shortest_time_between_assimilations</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+In the context of OpenGGCM, this function returns the assimilation window width.
+Any observation that is +/- half this time away from the model time is considered 
+to be at the model time and the observation may be assimilated. Observations
+outside this window are ignored and may cause 
+<em class=program>perfect_model_obs</em> or
+<em class=program>filter</em> to try to advance the model, which is not 
+possible for OpenGGCM. This interface is required for all applications.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>var&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The assimilation window width.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="static_init_model"></A>
+<br>
+<div class=routine>
+<em class=call>call static_init_model()</em>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Called to do one-time initialization of the model. There are no input arguments.
+<em class=code>static_init_model</em> reads the DART namelists and 
+reads the grid geometry and constructs the shape of the DART vector given the
+OpenGGCM variables specified in the DART namelist. 
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="init_time"></A>
+<br>
+<div class=routine>
+<em class=call>call init_time(time)</em>
+<pre>
+type(time_type), intent(out) :: <em class=code>time</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>This is a NULL INTERFACE for OpenGGCM. 
+If <em class=file>input.nml</em>:<em class=code>start_from_restart == .FALSE.</em>,
+this routine is called and will generate a fatal error. 
+</P>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="init_conditions"></A>
+<br>
+<div class=routine>
+<em class=call>call init_conditions(x)</em>
+<pre>
+real(r8), dimension(:), intent(out) :: <em class=code>x</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>This is a NULL INTERFACE for OpenGGCM. 
+If <em class=file>input.nml</em>:<em class=code>start_from_restart == .FALSE.</em>,
+this routine is called and will generate a fatal error. 
+</P>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="nc_write_model_atts"></A>
+<br>
+<div class=routine>
+<em class=call>call nc_write_model_atts(ncid, domain_id)</em>
+<pre>
+integer, intent(in) :: <em class=code>ncid</em>
+integer, intent(in) :: <em class=code>domain_id</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+This routine writes the model-specific attributes to netCDF files
+that DART creates.  This includes the coordinate variables and any 
+metadata, but NOT the model state.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>ncid</em></TD>
+    <TD>Integer file descriptor to previously-opened netCDF file.</TD></TR>
+
+<TR><TD valign=top><em class=code>domain_id</em></TD>
+        <TD>integer describing the domain (which can be a nesting level, a component 
+        model ...) Models with nested grids are decomposed into 'domains' in DART.
+        The concept is extended to refer to 'coupled' models where one model component 
+        may be the atmosphere, another component may be the ocean, or land, or 
+        ionosphere ... these would be referenced as different domains. </TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="nc_write_model_vars"></A>
+<br>
+<div class=routine>
+<em class=call>call nc_write_model_vars(ncid, domain_id, state_ens_handle 
+  <em class=optionalcode>[,&nbsp;memberindex]</em>
+  <em class=optionalcode>[,&nbsp;timeindex]</em>)</em>
+<pre>
+integer,             intent(in) :: <em class=code>ncid</em>
+integer,             intent(in) :: <em class=code>domain_id</em>
+type(ensemble_type), intent(in) :: <em class=code>state_ens_handle</em>
+integer, optional,   intent(in) :: <em class=optionalcode>memberindex</em>
+integer, optional,   intent(in) :: <em class=optionalcode>timeindex</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+This routine writes the DART state vector to a netCDF file. 
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>ncid</em></TD>
+    <TD>file descriptor to previously-opened netCDF file.</TD></TR>
+
+<TR><TD valign=top><em class=code>domain_id</em></TD>
+        <TD>integer describing the domain (which can be a nesting level,
+        a component model ...)</TD></TR>
+
+<TR><TD valign=top><em class=code>state_ens_handle</em></TD>
+    <TD>The handle to the state structure containing information about
+        the state vector about which information is requested.</TD></TR>
+
+<TR><TD valign=top><em class=code>memberindex</em></TD>
+    <TD> Integer index of ensemble member to be written.</TD></TR>
+
+<TR><TD valign=top><em class=code>timeindex</em></TD>
+    <TD>The timestep counter for the given state.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="pert_model_copies"></A>
+<br>
+<div class=routine>
+<em class=call>call pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provided)</em>
+<pre>
+type(ensemble_type), intent(inout) :: <em class=code>state_ens_handle</em>
+integer,             intent(in)    :: <em class=code>ens_size</em>
+real(r8),            intent(in)    :: <em class=code>pert_amp</em>
+logical,             intent(out)   :: <em class=code>interf_provided</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Given an ensemble handle, the ensemble size, and a perturbation amplitude;
+perturb the ensemble. Used to generate initial conditions for spinning up
+ensembles. If the <em class=code>model_mod</em> does not want to do this,
+instead allowing the default algorithms in <em class=program>filter</em>
+to take effect, <em class=code>interf_provided&nbsp=&nbps;.false.</em>
+and the routine can be trivial.  Otherwise, <em class=code>interf_provided</em>
+must be returned as <em class=code>.true.</em>
+<br />
+<br />
+<em class=code>pert_model_copies</em> is intended to take a single model 
+state vector and perturbs it in some way to generate initial
+conditions for spinning up ensembles.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>state_ens_handle</em></TD>
+    <TD>The handle containing an ensemble of state vectors to be perturbed.</TD></TR>
+
+<TR><TD valign=top><em class=code>ens_size</em></TD>
+    <TD>The number of ensemble members to perturb.</TD></TR>
+
+<TR><TD valign=top><em class=code>pert_amp</em></TD>
+    <TD>Not used by OpenGGCM.  OpenGGCM uses the namelist variable
+        <em class=code>model_perturbation_amplitude</em> as a multiplier 
+        of the model value to be uses as the standard deviation of the 
+        gaussian noise that is added to the model state.</TD></TR>
+
+<TR><TD valign=top><em class=code>interf_provided</em></TD>
+    <TD>This is returned as .TRUE. since the routine exists. A value of .FALSE.
+        would indicate that the default DART routine should just add noise to 
+        every element of state.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="get_close_obs"></A>
+<br>
+<div class=routine>
+<em class=call>call get_close_obs(gc, base_loc, base_type, locs, loc_qtys, 
+                                 loc_types, num_close, close_ind
+  <em class=optionalcode>[,&nbsp;dist]</em>
+  <em class=optionalcode>[,&nbsp;ens_handle]</em>) </em>
+<pre>
+type(get_close_type),          intent(in)    :: <em class=code>gc</em>
+type(location_type),           intent(inout) :: <em class=code>base_loc</em>
+integer,                       intent(in)    :: <em class=code>base_type</em>
+type(location_type),           intent(inout) :: <em class=code>locs(:)</em>
+integer,                       intent(in)    :: <em class=code>loc_qtys(:)</em>
+integer,                       intent(in)    :: <em class=code>loc_types(:)</em>
+integer,                       intent(out)   :: <em class=code>num_close</em>
+integer,                       intent(out)   :: <em class=code>close_ind(:)</em>
+real(r8),            optional, intent(out)   :: <em class=optionalcode>dist(:)</em>
+type(ensemble_type), optional, intent(out)   :: <em class=optionalcode>ens_handle</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+This is a PASS-THROUGH routine, the actual routine is the default
+one in <em class=file>location_mod</em>.
+<br />
+<br />
+Given a location and kind, compute the distances to all other locations 
+in the <em class=code>locs</em> list.  The return values are the number
+of items which are within maxdist of the base, the index numbers in the 
+original locs list, and optionally the distances.  The <em class=code>gc</em>
+contains precomputed information to speed the computations.
+<br />
+<br />
+In general this is a PASS-THROUGH ROUTINE. It is listed on
+the use line for the <a href='../template/model_mod.html'>default_model_mod</a> 
+which in turn passes it through to the 
+<a href='../../assimilation_code/location/threed_sphere/location_mod.html'
+>locations_mod</a>, and in the public list for this module, but has no subroutine 
+declaration and no other code in this module:
+</P>
+<pre>
+use default_model_mod, only: get_close_obs
+public :: get_close_obs
+</pre>
+<P>
+More information on how this might be used for custom localization applications can be
+found in the documentation for the <a href='../template/model_mod.html'>default_model_mod</a>.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>gc</em></TD>
+    <TD>The get_close_type which stores precomputed information
+        about the locations to speed up searching.</TD></TR>
+
+<TR><TD valign=top><em class=code>base_loc</em></TD>
+    <TD>Reference location. The distances will be computed
+        between this location and every other location in <em class=code>locs</em>.</TD></TR>
+
+<TR><TD valign=top><em class=code>base_type</em></TD>
+    <TD>The DART quantity at the base_loc; e.g. the integer specifying QTY_ELECTRON_DENSITY.</TD></TR>
+
+<TR><TD valign=top><em class=code>locs(:)</em></TD>
+    <TD>Compute the distance between the <em class=code>base_loc</em> and each
+        of the locations in this list.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_qtys(:)</em></TD>
+    <TD>The corresponding quantity of each item in the <em class=code>locs</em> list.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_types(:)</em></TD>
+    <TD>The corresponding type of each item in the <em class=code>locs</em> list.
+        This is not available in the default implementation but may be used in
+        custom implementations.</TD></TR>
+
+<TR><TD valign=top><em class=code>num_close</em></TD>
+    <TD>The number of items from the <em class=code>locs</em> list
+        which are within maxdist of the base location.</TD></TR>
+
+<TR><TD valign=top><em class=code>close_ind(:)</em></TD>
+    <TD>The list of index numbers from the <em class=code>locs</em> list 
+        which are within maxdist of the base location.</TD></TR>
+
+<TR><TD valign=top><em class=optionalcode>dist(:)</em></TD>
+    <TD>If present, return the distance between each entry
+        in the <em class=code>close_ind</em> list and the base location.  If not
+        present, all items in the <em class=code>locs</em> list which are closer
+        than maxdist will be added to the list but the overhead
+        of computing the exact distances will be skipped.</TD></TR>
+
+<TR><TD valign=top><em class=optionalcode>ens_handle&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The handle to the ensemble structure containing information about
+        the state vector about which information is requested.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="get_close_state"></A>
+<br>
+<div class=routine>
+<em class=call>call get_close_state(gc, base_loc, base_type, locs, loc_qtys, 
+                                 loc_indx, num_close, close_ind
+  <em class=optionalcode>[,&nbsp;dist]</em>
+  <em class=optionalcode>[,&nbsp;ens_handle]</em>) </em>
+<pre>
+type(get_close_type),          intent(in)    :: <em class=code>gc</em>
+type(location_type),           intent(inout) :: <em class=code>base_loc</em>
+integer,                       intent(in)    :: <em class=code>base_type</em>
+type(location_type),           intent(inout) :: <em class=code>locs(:)</em>
+integer,                       intent(in)    :: <em class=code>loc_qtys(:)</em>
+integer(i8),                   intent(in)    :: <em class=code>loc_indx(:)</em>
+integer,                       intent(out)   :: <em class=code>num_close</em>
+integer,                       intent(out)   :: <em class=code>close_ind(:)</em>
+real(r8),            optional, intent(out)   :: <em class=optionalcode>dist(:)</em>
+type(ensemble_type), optional, intent(out)   :: <em class=optionalcode>ens_handle</em>
+</pre>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+This is a PASS-THROUGH routine, the actual routine is the default
+one in <em class=file>location_mod</em>.
+<br />
+<br />
+Given a location and kind, compute the distances to all other locations 
+in the <em class=code>locs</em> list.  The return values are the number
+of items which are within maxdist of the base, the index numbers in the 
+original locs list, and optionally the distances.  The <em class=code>gc</em>
+contains precomputed information to speed the computations.
+<br />
+<br />
+In general this is a PASS-THROUGH ROUTINE. It is listed on
+the use line for the <a href='../template/model_mod.html'>default_model_mod</a> 
+which in turn passes it through to the 
+<a href='../../assimilation_code/location/threed_sphere/location_mod.html'
+>locations_mod</a>, and in the public list for this module, but has no subroutine 
+declaration and no other code in this module:
+</P>
+<pre>
+use default_model_mod, only: get_close_state
+public :: get_close_state
+</pre>
+<P>
+More information on how this might be used for custom localization applications can be
+found in the documentation for the <a href='../template/model_mod.html'>default_model_mod</a>.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>gc</em></TD>
+    <TD>The get_close_type which stores precomputed information
+        about the locations to speed up searching.</TD></TR>
+
+<TR><TD valign=top><em class=code>base_loc</em></TD>
+    <TD>Reference location. The distances will be computed
+        between this location and every other location in <em class=code>locs</em>.</TD></TR>
+
+<TR><TD valign=top><em class=code>base_type</em></TD>
+    <TD>The DART quantity at the base_loc; e.g. the integer specifying QTY_ELECTRON_DENSITY.</TD></TR>
+
+<TR><TD valign=top><em class=code>locs(:)</em></TD>
+    <TD>Compute the distance between the <em class=code>base_loc</em> and each
+        of the locations in this list.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_qtys(:)</em></TD>
+    <TD>The corresponding quantity of each item in the <em class=code>locs</em> list.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_indx(:)</em></TD>
+    <TD>The corresponding DART index of each item in the <em class=code>locs</em> list.
+        This is not available in the default implementation but may be used in
+        custom implementations.</TD></TR>
+
+<TR><TD valign=top><em class=code>num_close</em></TD>
+    <TD>The number of items from the <em class=code>locs</em> list
+        which are within maxdist of the base location.</TD></TR>
+
+<TR><TD valign=top><em class=code>close_ind(:)</em></TD>
+    <TD>The list of index numbers from the <em class=code>locs</em> list 
+        which are within maxdist of the base location.</TD></TR>
+
+<TR><TD valign=top><em class=optionalcode>dist(:)</em></TD>
+    <TD>If present, return the distance between each entry
+        in the <em class=code>close_ind</em> list and the base location.  If not
+        present, all items in the <em class=code>locs</em> list which are closer
+        than maxdist will be added to the list but the overhead
+        of computing the exact distances will be skipped.</TD></TR>
+
+<TR><TD valign=top><em class=optionalcode>ens_handle&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The handle to the enesmble structure containing information about
+        the state vector about which information is requested.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="convert_vertical_obs"></A>
+<br>
+<div class=routine>
+<em class=call>call convert_vertical_obs(state_handle, num, locs, loc_qtys, loc_types, which_vert, status)</em>
+<pre>
+type(ensemble_type), intent(in)  :: <em class=code>state_handle</em>
+integer,             intent(in)  :: <em class=code>num</em>
+type(location_type), intent(in)  :: <em class=code>locs(:)</em>
+integer,             intent(in)  :: <em class=code>loc_qtys(:)</em>
+integer,             intent(in)  :: <em class=code>loc_types(:)</em>
+integer,             intent(in)  :: <em class=code>which_vert</em>
+integer,             intent(out) :: <em class=code>status(:)</em>
+</pre>
+</div>
+
+<div class=indent1><!-- Description -->
+
+<P>
+This is a PASS-THROUGH routine, the actual routine is the default
+one in <em class=file>location_mod</em>.
+<br />
+<br />
+Converts the observations to the desired vertical localization coordinate system.
+Most (real) models have observations in one or more coordinate systems
+(pressure, height) and the model is generally represented in only one
+coordinate system. To be able to interpolate the model state to the
+observation location, or to compute the true distance between the state
+and the observation, it is necessary to convert everything to one
+coodinate system.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>state_handle&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The handle to the state.</TD></TR>
+
+<TR><TD valign=top><em class=code>num</em></TD>
+    <TD>the number of observation locations</TD></TR>
+
+<TR><TD valign=top><em class=code>locs</em></TD>
+    <TD>the array of observation locations</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_qtys</em></TD>
+    <TD>the array of observation quantities.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_types</em></TD>
+    <TD>the array of observation types.</TD></TR>
+
+<TR><TD valign=top><em class=code>which_vert</em></TD>
+    <TD>the desired vertical coordinate system. There is a table
+        in the <em class=file>location_mod.f90</em> that relates
+        integers to vertical coordinate systems.</TD></TR>
+
+<TR><TD valign=top><em class=code>status</em></TD>
+    <TD>Specifies the success or failure of the vertical conversion.
+        If <em class=code>istatus&nbsp;=&nbsp;0</em>, the conversion was
+        a sucess. Any other value is a failure.
+    </TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="convert_vertical_state"></A>
+<br>
+<div class=routine>
+<em class=call>call convert_vertical_state(state_handle, num, locs, loc_qtys, loc_types, which_vert, status)</em>
+<pre>
+type(ensemble_type), intent(in)  :: <em class=code>state_handle</em>
+integer,             intent(in)  :: <em class=code>num</em>
+type(location_type), intent(in)  :: <em class=code>locs(:)</em>
+integer,             intent(in)  :: <em class=code>loc_qtys(:)</em>
+integer,             intent(in)  :: <em class=code>loc_types(:)</em>
+integer,             intent(in)  :: <em class=code>which_vert</em>
+integer,             intent(out) :: <em class=code>status(:)</em>
+</pre>
+</div>
+
+<div class=indent1><!-- Description -->
+
+<P>
+This is a PASS-THROUGH routine, the actual routine is the default
+one in <em class=file>location_mod</em>.
+<br />
+<br />
+Converts the state to the desired vertical localization coordinate system.
+Most (real) models have observations in one or more coordinate systems
+(pressure, height) and the model is generally represented in only one
+coordinate system. To be able to interpolate the model state to the
+observation location, or to compute the true distance between the state
+and the observation, it is necessary to convert everything to one
+coodinate system.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>state_handle&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>The handle to the state.</TD></TR>
+
+<TR><TD valign=top><em class=code>num</em></TD>
+    <TD>the number of state locations</TD></TR>
+
+<TR><TD valign=top><em class=code>locs</em></TD>
+    <TD>the array of state locations</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_qtys</em></TD>
+    <TD>the array of state quantities.</TD></TR>
+
+<TR><TD valign=top><em class=code>loc_types</em></TD>
+    <TD>the array of state types.</TD></TR>
+
+<TR><TD valign=top><em class=code>which_vert</em></TD>
+    <TD>the desired vertical coordinate system. There is a table
+        in the <em class=file>location_mod.f90</em> that relates
+        integers to vertical coordinate systems.</TD></TR>
+
+<TR><TD valign=top><em class=code>status</em></TD>
+    <TD>Specifies the success or failure of the vertical conversion.
+        If <em class=code>istatus&nbsp;=&nbsp;0</em>, the conversion was
+        a sucess. Any other value is a failure.
+    </TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="read_model_time"></A>
+<br>
+<div class=routine>
+<em class=call>model_time = read_model_time(filename)</em>
+<pre>
+character(len=*), intent(in) :: <em class=code>filename</em>
+type(time_type)              :: <em class=code>model_time</em>
+</pre>
+</div>
+
+<div class=indent1><!-- Description -->
+
+<P>
+Reads the valid time of the model state in a netCDF file.
+There is a default routine in
+<em class=file>assimilation_code/modules/io/dart_time_io_mod.f90</em>
+that can be used as a pass-through. That routine will read the <strong>last</strong>
+timestep of a 'time' variable - which is the same strategy used for reading
+netCDF files that have multiple timesteps in them.
+If your model has some other representation of time (i.e. it does not
+use a netCDF variable named 'time') - you will have to write this routine.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>ncid</em></TD>
+    <TD>handle to an open netCDF file</TD></TR>
+
+<TR><TD valign=top><em class=code>dart_time&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>Specifies the (last) time of the model state.</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="write_model_time"></A>
+<br>
+<div class=routine>
+<em class=call>call write_model_time(ncid, dart_time)</em>
+<pre>
+integer,          intent(in) :: <em class=code>ncid</em>
+type(time_type),  intent(in) :: <em class=code>dart_time</em>
+</pre>
+</div>
+
+<div class=indent1><!-- Description -->
+
+<P>
+Writes the assimilation time to a netCDF file.
+There is a default routine in
+<em class=file>assimilation_code/modules/io/dart_time_io_mod.f90</em>
+that can be used as a pass-through.
+If your model has some other representation of time (i.e. it does not
+use a netCDF variable named 'time') - you will have to write this routine.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+
+<TR><TD valign=top><em class=code>ncid</em></TD>
+    <TD>handle to an open netCDF file</TD></TR>
+
+<TR><TD valign=top><em class=code>dart_time&nbsp;&nbsp;&nbsp;</em></TD>
+    <TD>Specifies the time of the assimilation (the current time step).</TD></TR>
+
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--===================== DESCRIPTION OF A ROUTINE =====================-->
+
+<A NAME="end_model"></A>
+<br>
+<div class=routine>
+<em class=call>call end_model()</em>
+</div>
+
+<div class=indent1>
+<!-- Description -->
+
+<P>
+Does all required shutdown and clean-up needed.
+</P>
+
+<TABLE width=100% border=0 summary="" cellpadding=3>
+</TABLE>
+
+</div>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--==================================================================-->
+<!-- Describe the Files Used by this module.                          -->
+<!--==================================================================-->
+
+<A NAME="FilesUsed"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>FILES</H2>
+
+<P>Keep in mind that there are potentially lots of other files not
+explicitly mentioned here. Their creation and use is controlled by
+namelist settings. Inflation files, diagnostic files, etc.
+
+<TABLE width=100% border=0 cellspacing=10 cellpadding=3 summary="">
+<TBODY valign=top>
+<TR><TH align=left><em class=file>filename</em></TH>
+    <TH align=left>purpose</TH></TR>
+<TR><TD><em class=file>input.nml</em></TD>
+    <TD>to read the model_mod namelist</TD></TR>
+<TR><TD><em class=file>DATA.ionos2.nc</em></TD>
+    <TD>read by the OpenGGCM model_mod</TD></TR>
+<TR><TD><em class=file>input_list.txt</em></TD>
+    <TD>file containing the list of OpenGGCM netCDF files to read.</TD></TR>
+<TR><TD><em class=file>output_list.txt</em></TD>
+    <TD>file containing the list of OpenGGCM netCDF files to write.</TD></TR>
+<TR><TD><em class=file>dart_log.out</em></TD>
+    <TD>the run-time diagnostic output</TD></TR>
+<TR><TD><em class=file>dart_log.nml</em></TD>
+    <TD>the record of all the namelists (and their values) actually USED 
+        </TD></TR>
+<TR><TD><em class=file>semaphore_file.txt</em></TD>
+    <TD>the semaphore file used to control the execution timeing between
+        DART and the OpenGGCM model advances.</TD></TR>
+</TABLE>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--==================================================================-->
+<!-- Cite references, if need be.                                     -->
+<!--==================================================================-->
+
+<A NAME="References"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>REFERENCES</H2>
+<P>None yet.</P>
+
+<P><!-- stupid space so 'top' lines up correctly --></P>
+<!--==================================================================-->
+<!-- Describe all the error conditions and codes.                     -->
+<!--==================================================================-->
+
+<A NAME="Errors"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>ERROR CODES and CONDITIONS</H2>
+
+<UL><LI>No known errors at this time, but there are a lot of untested
+        routines that will throw an error until checked. Once they have
+        been tested, the preliminary call to the error_handler() should
+        be removed.</LI>
+</UL>
+
+<H2>KNOWN BUGS</H2>
+<P>
+none at this time
+</P>
+
+<!--==================================================================-->
+<!-- Describe Future Plans.                                           -->
+<!--==================================================================-->
+
+<A NAME="FuturePlans"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>FUTURE PLANS</H2>
+<P>
+<ol><li>Getting <em class=code>model_interpolate</em> to work.</li>
+    <li>supporting more variables - perhaps ones on the magnetic grid</li>
+    <li>more robust scripting to handle the execution control.</li>
+</ol>
+</P>
+
+<!--==================================================================-->
+<!-- PrivateComponents                                                -->
+<!--==================================================================-->
+
+<A NAME="PrivateComponents"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>PRIVATE COMPONENTS</H2>
+<P>
+N/A
+</P>
+
+<!--==================================================================-->
+<!-- Legalese & Metadata                                              -->
+<!--==================================================================-->
+
+<A NAME="Legalese"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>Terms of Use</H2>
+
+<P>
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
+<a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
+http://www.image.ucar.edu/DAReS/DART/DART_download</a>
+</P>
+
+<TABLE border=0 cellpadding=0 width=100% summary="">
+<TR><TD valign=top>Contact:       </TD><TD> Tim Hoar </TD></TR>
+<TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
+<TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
+<TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>
+<TR><TD valign=top>Change&nbsp;history:&nbsp;</TD><TD> try "svn&nbsp;log" or "svn&nbsp;diff" </TD></TR>
+</TABLE>
+
+<!--==================================================================-->
+
+</BODY>
+</HTML>

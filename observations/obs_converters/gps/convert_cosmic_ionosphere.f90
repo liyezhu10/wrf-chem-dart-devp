@@ -220,7 +220,9 @@ fileloop: do      ! until out of files
    call nc_check( nf90_inq_varid(ncid, "ELEC_dens", varid) ,'inq varid ELEC_dens', next_infile)
    call nc_check( nf90_get_var(ncid, varid, elecd)         ,'get var   ELEC_dens', next_infile)
    call nc_check( nf90_get_att(ncid, varid, '_FillValue', elecd_miss) ,'get_att _FillValue elecd', next_infile)
-   
+  
+!>@todo FIXME actually do something with the FillValue 
+ 
    call nc_check( nf90_close(ncid) , 'close file', next_infile)
    
    !> @todo debug only

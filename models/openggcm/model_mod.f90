@@ -135,12 +135,15 @@ integer, parameter :: VAR_KIND_INDEX   = 2
 integer, parameter :: VAR_UPDATE_INDEX = 3
 
 ! identifiers for LAT, LON and HEIGHT
-integer, parameter :: VAR_LAT_INDEX   = 1
-integer, parameter :: VAR_LON_INDEX   = 2
-integer, parameter :: VAR_HGT_INDEX   = 3
+! The 'natural' order of the variables is height varies fastest, then lat, then lon.
+! in ncdump  ... (lon,lat,height)
+! in fortran ... (height,lat,lon)
+integer, parameter :: VAR_HGT_INDEX   = 1
+integer, parameter :: VAR_LAT_INDEX   = 2
+integer, parameter :: VAR_LON_INDEX   = 3
 
 ! things which can/should be in the model_nml
-character(len=NF90_MAX_NAME) :: openggcm_template
+character(len=NF90_MAX_NAME) :: openggcm_template = 'DATA.ionos2.nc'
 integer  :: assimilation_period_days     = 1
 integer  :: assimilation_period_seconds  = 0
 real(r8) :: model_perturbation_amplitude = 0.2
@@ -483,7 +486,7 @@ end subroutine lon_lat_interpolate
 
 !------------------------------------------------------------
 
- !> Returns the value for a single model level given the lat and lon indices
+!> Returns the value given the lon, lat, and height indices
 
 function get_val(lon_index, lat_index, height_index, var_kind, state_handle, ens_size)
 
@@ -510,10 +513,15 @@ endif
 
 var_id = get_varid_from_kind(domain_id, var_kind)
 
-dim_index(dim_order_list(var_id, VAR_LON_INDEX)) = lon_index
-dim_index(dim_order_list(var_id, VAR_LAT_INDEX)) = lat_index
+! This should take of any any permutation of storage order.
+! The use of dim_order_list means any variable can be stored
+! in any order.
 dim_index(dim_order_list(var_id, VAR_HGT_INDEX)) = height_index
+dim_index(dim_order_list(var_id, VAR_LAT_INDEX)) = lat_index
+dim_index(dim_order_list(var_id, VAR_LON_INDEX)) = lon_index
 
+! the order of the arguments to get_dart_vector_index() is always
+! in the same order as the native storage order.
 state_index = get_dart_vector_index(dim_index(1), dim_index(2), dim_index(3), &
                                     domain_id, var_id)
 
@@ -753,8 +761,6 @@ integer(i8),         intent(in)  :: index_in     !< dart state index of interest
 type(location_type), intent(out) :: location     !< location of interest
 integer, OPTIONAL,   intent(out) :: var_type     !< optional dart kind return
 
-!>@todo FIXME TJH check for correct application of the new oplus grid.
-
 ! Local variables
 real(r8) :: lat, lon, height
 integer  :: lon_index, lat_index, height_index, local_var, var_id
@@ -766,20 +772,20 @@ call get_model_variable_indices(index_in, state_loc(1), state_loc(2), state_loc(
 
 local_var = get_kind_index(domain_id, var_id)
 
-lon_index    = state_loc(dim_order_list(var_id, VAR_LON_INDEX))
+height_index = state_loc(dim_order_list(var_id, VAR_HGT_INDEX))
 lat_index    = state_loc(dim_order_list(var_id, VAR_LAT_INDEX))
-height_index = state_loc(dim_order_list(var_id, VAR_HGT_INDEX)) !>@todo check this ...  2D fields?
+lon_index    = state_loc(dim_order_list(var_id, VAR_LON_INDEX))
 
 ! we are getting a mapping array between magnetic -> geogrid
 
 if ( get_grid_type(local_var) == MAGNETIC_GRID ) then
-   lon = mag_grid%conv_2d_lon(lon_index, lat_index)
-   lat = mag_grid%conv_2d_lat(lon_index, lat_index)
    height   = 0.0_r8
+   lat = mag_grid%conv_2d_lat(lon_index, lat_index)
+   lon = mag_grid%conv_2d_lon(lon_index, lat_index)
 else
-   lon    = geo_grid%longitude(height_index, lat_index, lon_index)
-   lat    = geo_grid%latitude( height_index, lat_index, lon_index)
    height = geo_grid%height(   height_index, lat_index, lon_index)
+   lat    = geo_grid%latitude( height_index, lat_index, lon_index)
+   lon    = geo_grid%longitude(height_index, lat_index, lon_index)
 endif
 
 !>@todo  Here we are ASSUMING that electric potential is a 2D
@@ -1100,7 +1106,6 @@ integer,             intent(in)    :: ens_size !< ensemble size
 real(r8),            intent(in)    :: pert_amp !< perterbation amplitude
 logical,             intent(out)   :: interf_provided !< have you provided an interface?
 
-
 ! Local Variables
 integer     :: i, j
 integer(i8) :: dart_index
@@ -1109,6 +1114,9 @@ integer(i8) :: dart_index
 type(random_seq_type) :: random_seq
 
 if ( .not. module_initialized ) call static_init_model
+
+write(string1,*)'routine not tested'
+call error_handler(E_ERR, 'pert_model_copies', string1, source, revision, revdate)
 
 interf_provided = .true.
 
@@ -1752,9 +1760,9 @@ end subroutine transform_mag_geo
 
 !> recording the storage order of the dimensions for each variable.
 !>
-!> lon_index is   dim_order_list(VAR_ID, VAR_LON_INDEX)
-!> lat_index is   dim_order_list(VAR_ID, VAR_LAT_INDEX)
 !> hgt_index is   dim_order_list(VAR_ID, VAR_HGT_INDEX)
+!> lat_index is   dim_order_list(VAR_ID, VAR_LAT_INDEX)
+!> lon_index is   dim_order_list(VAR_ID, VAR_LON_INDEX)
 !>
 !> variables without a height dimension, VAR_HGT_INDEX is set to one.
 
@@ -1772,12 +1780,12 @@ do ivar = 1,ngood
    do jdim = 1,get_num_dims(domain_id, ivar)
       dimname = get_dim_name(domain_id, ivar, jdim)
       SELECT CASE (trim(dimname))
-         CASE ('cg_lon','ig_lon','geo_lon')
-            dim_order_list(ivar, VAR_LON_INDEX) = jdim
-         CASE ('cg_lat','ig_lat','geo_lat')
-            dim_order_list(ivar, VAR_LAT_INDEX) = jdim
          CASE ('cg_height','ig_height','geo_height')
             dim_order_list(ivar, VAR_HGT_INDEX) = jdim
+         CASE ('cg_lat','ig_lat','geo_lat')
+            dim_order_list(ivar, VAR_LAT_INDEX) = jdim
+         CASE ('cg_lon','ig_lon','geo_lon')
+            dim_order_list(ivar, VAR_LON_INDEX) = jdim
          CASE DEFAULT
             write(string1,*) 'cannot find dimension ', trim(dimname),&
                                ' for variable', get_variable_name(domain_id, ivar)

@@ -231,11 +231,10 @@
 
 &model_mod_check_nml
    verbose               = .true.
-   restart_in_file_name  = 'openggcm3D'
-   test1thru             = 5
-   x_ind                 = 1
-   loc_of_interest       = 320.0, 18.0, 1.0
-   kind_of_interest      = 'QTY_ELECTRIC_POTENTIAL'
+   test1thru             = 4
+   x_ind                 = 3951
+   loc_of_interest       = 0.0, 68.0, 100000.0
+   kind_of_interest      = 'QTY_ELECTRON_DENSITY'
    interp_test_lonrange  = 0.0, 360.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = -90.0, 90.0
@@ -243,6 +242,8 @@
    interp_test_vertrange = 1.0,  2.0
    interp_test_dvert     = 1.0
    interp_test_vertcoord = 'VERTISUNDEF'
+   input_state_files     = 'DATA.ionos2.nc'
+   output_state_files    = 'output.nc'
   /
 
 

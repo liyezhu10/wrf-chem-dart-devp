@@ -1,0 +1,8 @@
+&model_nml
+   openggcm_template             = 'DATA.ionos2.nc'
+   assimilation_period_days      = 1
+   assimilation_period_seconds   = 0
+   model_perturbation_amplitude  = 0.2
+   debug                         = 0
+   model_state_variables         = ' '
+  /
