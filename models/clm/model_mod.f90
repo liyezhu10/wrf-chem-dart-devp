@@ -2182,7 +2182,7 @@ where (total_area /= 0.0_r8 .and. istatus == 0) ! All good.
    interp_val = total/total_area
 elsewhere
    interp_val = MISSING_R8
-   if (istatus == 0) istatus = 32
+   where (istatus == 0) istatus = 32
 endwhere
 
 !# if( any(istatus == 32) ) then
