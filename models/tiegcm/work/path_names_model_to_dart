@@ -20,4 +20,3 @@ models/tiegcm/model_mod.f90
 models/tiegcm/model_to_dart.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/utilities/obs_utilities_mod.f90

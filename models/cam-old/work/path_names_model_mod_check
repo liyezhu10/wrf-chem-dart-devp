@@ -36,4 +36,3 @@ models/cam/model_mod.f90
 models/model_mod_tools/test_interpolate_threed_sphere.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/utilities/obs_utilities_mod.f90

@@ -34,4 +34,3 @@ assimilation_code/programs/perfect_model_obs/perfect_model_obs.f90
 models/cam/model_mod.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/utilities/obs_utilities_mod.f90

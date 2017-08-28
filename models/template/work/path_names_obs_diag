@@ -23,4 +23,3 @@ assimilation_code/programs/obs_diag/oned/obs_diag.f90
 models/template/model_mod.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/utilities/obs_utilities_mod.f90

@@ -28,4 +28,3 @@ assimilation_code/programs/fill_inflation_restart/fill_inflation_restart.f90
 models/NAAPS/model_mod.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/utilities/obs_utilities_mod.f90
