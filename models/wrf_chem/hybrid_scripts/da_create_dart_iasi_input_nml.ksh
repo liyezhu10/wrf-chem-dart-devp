@@ -20,6 +20,8 @@ cat > input.nml << EOF
    filedir                     = ${NL_FILEDIR}
    filename                    = ${NL_FILENAME}
    IASI_CO_retrieval_type      = ${NL_IASI_CO_RETRIEVAL_TYPE}
+   fac_obs_error               = ${NL_FAC_OBS_ERROR}
+   use_log_co                  = ${NL_USE_LOG_CO}
 /
 &obs_sequence_nml
    write_binary_obs_sequence   = .false.

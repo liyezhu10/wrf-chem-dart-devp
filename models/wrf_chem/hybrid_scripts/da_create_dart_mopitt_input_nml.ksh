@@ -53,6 +53,14 @@ cat > input.nml << EOF
    filename_seq                = 'obs_seq2008022206',obs_seq2008022212',
    filename_out                = 'obs_seq_ncep_2008022212'
 /
+&obs_def_MOPITT_CO_nml
+   MOPITT_CO_retrieval_type    = ${NL_MOPITT_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
+/ 
+&obs_def_IASI_CO_nml
+   IASI_CO_retrieval_type      = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
+/ 
 EOF
 
 

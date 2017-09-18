@@ -11,11 +11,24 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2016081800
+export CYCLE_STR_DATE=2016081806
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2016081800
+export CYCLE_END_DATE=2016081806
 export CYCLE_DATE=${CYCLE_STR_DATE}
+export NL_FAC_OBS_ERROR_MOPITT=2.00
+export NL_FAC_OBS_ERROR_IASI=2.00
+export NL_FAC_OBS_ERROR_MOPITT=4.00
+export NL_FAC_OBS_ERROR_IASI=4.00
+export NL_FAC_OBS_ERROR_MOPITT=6.00
+export NL_FAC_OBS_ERROR_IASI=6.00
+export NL_FAC_OBS_ERROR_MOPITT=8.00
+export NL_FAC_OBS_ERROR_IASI=8.00
+export NL_FAC_OBS_ERROR_MOPITT=10.00
+export NL_FAC_OBS_ERROR_IASI=10.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
+export NL_FAC_OBS_ERROR_IASI=1.00
+export NL_FAC_OBS_ERROR_MOPITT=9.00
+export NL_FAC_OBS_ERROR_IASI=9.00
 export RETRIEVAL_TYPE=RETR
 #
 export USE_LOG_CO=false
@@ -56,18 +69,19 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=9
+export NUM_SPECIAL_FORECAST=10
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
-export SPECIAL_FORECAST_MEM[1]=2
-export SPECIAL_FORECAST_MEM[2]=3
-export SPECIAL_FORECAST_MEM[3]=4
-export SPECIAL_FORECAST_MEM[4]=5
-export SPECIAL_FORECAST_MEM[5]=6
-export SPECIAL_FORECAST_MEM[6]=7
-export SPECIAL_FORECAST_MEM[7]=8
-export SPECIAL_FORECAST_MEM[8]=9
-export SPECIAL_FORECAST_MEM[9]=10
+export SPECIAL_FORECAST_FAC=1./2.
+export SPECIAL_FORECAST_MEM[1]=1
+export SPECIAL_FORECAST_MEM[2]=2
+export SPECIAL_FORECAST_MEM[3]=3
+export SPECIAL_FORECAST_MEM[4]=4
+export SPECIAL_FORECAST_MEM[5]=5
+export SPECIAL_FORECAST_MEM[6]=6
+export SPECIAL_FORECAST_MEM[7]=7
+export SPECIAL_FORECAST_MEM[8]=8
+export SPECIAL_FORECAST_MEM[9]=9
 export SPECIAL_FORECAST_MEM[10]=10
 export SPECIAL_FORECAST_MEM[11]=11
 export SPECIAL_FORECAST_MEM[12]=12
@@ -270,18 +284,18 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=true
    export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
@@ -308,13 +322,13 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=true
-      export RUN_UPDATE_BC=true
-      export RUN_WRFCHEM_CYCLE_CR=true
+      export RUN_UPDATE_BC=false
+      export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=true
+      export RUN_ENSEMBLE_MEAN_INPUT=false
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=true
+      export RUN_ENSEMBLE_MEAN_OUTPUT=false
    fi
 else
    export RUN_GEOGRID=false
@@ -477,7 +491,7 @@ export WRFDA_TIME_LIMIT=0:20
 export WRFDA_NUM_TASKS=32
 export WRFDA_TASKS_PER_NODE=8
 export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=5:59
+export FILTER_TIME_LIMIT=7:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
 export FILTER_JOB_CLASS=geyser
@@ -650,6 +664,7 @@ export NL_INPUT_OUTNAME=\'wrfapm_d\<domain\>_\<date\>\'
 #
 # DOMAINS NAMELIST:
 export NL_TIME_STEP=240
+export NL_TIME_STEP=120
 export NNL_TIME_STEP=${NL_TIME_STEP}
 export NL_TIME_STEP_FRACT_NUM=0
 export NL_TIME_STEP_FRACT_DEN=1
@@ -1184,14 +1199,14 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
-                                   'MODIS_AOD_RETRIEVAL',
-                                   'MOPITT_CO_RETRIEVAL'"
+                                   'MOPITT_CO_RETRIEVAL',
+                                   'IASI_CO_RETRIEVAL'"
+#                                   'MODIS_AOD_RETRIEVAL'"
 #                                   'PANDA_CO',
 #                                   'PANDA_O3',
-#                                   'PANDA_PM25',
+#                                   'PANDA_PM25'"
 #                                   'AIRNOW_CO',
 #                                   'AIRNOW_O3',
-#                                   'IASI_CO_RETRIEVAL'"
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
 #
 # &replace_wrf_fields_nml
@@ -3278,6 +3293,8 @@ EOFF
    export NL_FILEDIR=\'\' 
    export NL_FILENAME=${D_DATE}.dat
    export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_IASI}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
 #
 # USE IASI DATA 
    rm -rf input.nml

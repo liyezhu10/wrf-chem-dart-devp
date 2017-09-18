@@ -31,7 +31,7 @@ use      location_mod, only : location_type, get_location, set_location, &
                               VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
                               VERTISSCALEHEIGHT, &
                               get_close_type, get_dist, get_close_maxdist_init, &
-                              get_close_obs_init, loc_get_close_obs => get_close_obs
+                             get_close_obs_init, loc_get_close_obs => get_close_obs
 
 use     utilities_mod, only : file_exist, open_file, close_file, &
                               register_module, error_handler, E_ERR, E_WARN, &
@@ -73,14 +73,16 @@ use      obs_kind_mod, only : KIND_SO2, KIND_O3, KIND_CO, KIND_NO, KIND_NO2, KIN
                               KIND_C3H8, KIND_C2H6, KIND_ACET, KIND_HCHO, KIND_C2H4, &
                               KIND_C3H6, KIND_TOL, KIND_MVK, KIND_BIGALK, KIND_ISOPR, &
                               KIND_MACR, KIND_GLYALD, KIND_C10H16, &
-                              KIND_AOD, KIND_CB1, KIND_CB2, KIND_OC1, KIND_OC2, &
+                              KIND_AOD, KIND_BC1, KIND_BC2, KIND_OC1, KIND_OC2, &
                               KIND_DMS, KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
                               KIND_DST05, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
                               KIND_SSLT04, KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
                               KIND_PM25, KIND_PM10, &
 !
 ! LXL/APM +++
-                              KIND_E_O3, KIND_E_CO, KIND_E_NO, KIND_EBU_CO, KIND_EBU_NO, &
+                              KIND_E_CO, KIND_E_NO, KIND_E_NO2, KIND_E_SO2, KIND_E_OC, &
+                              KIND_E_BC, KIND_E_PM_10, KIND_E_PM_25, & 
+                              KIND_EBU_CO, KIND_EBU_NO, &
                               KIND_EBU_OC, KIND_EBU_BC, KIND_EBU_c2h4, KIND_EBU_ch2o, &
                               KIND_EBU_ch3oh
                                
@@ -328,14 +330,19 @@ TYPE wrf_static_data_for_dart
               type_smois, type_2dflash
 ! APM/AFAJ ++
    integer :: type_so2, type_o3_column, type_o3, type_co, type_no, &
-              type_no2, type_hno3, &
+              type_no2, type_bc1, type_bc2, type_oc1, type_oc2, &
+              type_dst01, type_dst02, type_dst03, type_dst04, type_dst05, & 
+              type_sslt01, type_sslt02, type_sslt03, type_sslt04, &
+              type_so4, type_pm10, type_pm25, type_hno3, &
               type_hno4, type_n2o5, type_pan, type_mek, type_ald, type_ch3o2, &
               type_c3h8, type_c2h6, type_acet, type_hcho, type_c2h4, type_c3h6, &
               type_tol, type_mvk, type_biglak, type_isopr, type_macr, type_glyald, &
               type_c10h16 
    integer :: type_tauaer1, type_tauaer2, type_tauaer3, type_tauaer4
 ! LXL/APM +++
-   integer :: type_e_o3, type_e_co, type_e_no, type_ebu_in_co, type_ebu_in_no, &
+   integer :: type_e_co, type_e_no, type_e_no2, type_e_so2, type_e_oc, type_e_bc, &
+              type_e_pm_10, type_e_pm_25, &
+              type_ebu_in_co, type_ebu_in_no, &
               type_ebu_in_oc, type_ebu_in_bc, &
               type_ebu_in_c2h4, type_ebu_in_ch2o, type_ebu_in_ch3oh       
    integer :: number_of_conv_variables, number_of_emiss_chemi_variables, &
@@ -992,18 +999,22 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_hdiab  = get_type_ind_from_type_string(id,'H_DIABATIC')
 !
 ! APM/AFAJ/LXL +++
-   wrf%dom(id)%type_o3  = get_type_ind_from_type_string(id,'o3')
    wrf%dom(id)%type_co  = get_type_ind_from_type_string(id,'co')
    wrf%dom(id)%type_no  = get_type_ind_from_type_string(id,'no')
+   wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
    wrf%dom(id)%type_tauaer1 = get_type_ind_from_type_string(id,'TAUAER1')
    wrf%dom(id)%type_tauaer2 = get_type_ind_from_type_string(id,'TAUAER2')
    wrf%dom(id)%type_tauaer3 = get_type_ind_from_type_string(id,'TAUAER3')
    wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
-   wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
    if ( add_emiss) then
-      wrf%dom(id)%type_e_o3 = get_type_ind_from_type_string(id,'e_o3')
       wrf%dom(id)%type_e_co = get_type_ind_from_type_string(id,'e_co')
       wrf%dom(id)%type_e_no = get_type_ind_from_type_string(id,'e_no')
+      wrf%dom(id)%type_e_no2 = get_type_ind_from_type_string(id,'e_no2')
+      wrf%dom(id)%type_e_so2 = get_type_ind_from_type_string(id,'e_so2')
+      wrf%dom(id)%type_e_oc = get_type_ind_from_type_string(id,'e_oc')
+      wrf%dom(id)%type_e_bc = get_type_ind_from_type_string(id,'e_bc')
+      wrf%dom(id)%type_e_pm_10 = get_type_ind_from_type_string(id,'e_pm_10')
+      wrf%dom(id)%type_e_pm_25 = get_type_ind_from_type_string(id,'e_pm_25')
       wrf%dom(id)%type_ebu_in_co = get_type_ind_from_type_string(id,'ebu_in_co')
       wrf%dom(id)%type_ebu_in_no = get_type_ind_from_type_string(id,'ebu_in_no')
       wrf%dom(id)%type_ebu_in_oc = get_type_ind_from_type_string(id,'ebu_in_oc')
@@ -3628,7 +3639,1177 @@ else
       endif
 !
 ! APM/AFAJ/LXL --
+! APM/CQM +++
+!
+!1.zd SO2
+   elseif ( obs_kind == KIND_SO2 ) then
 
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_so2 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_so2 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_so2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_so2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_so2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_so2)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd BC1
+   elseif ( obs_kind == KIND_BC1 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_bc1 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_bc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_bc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_bc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_bc1)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_bc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_bc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_bc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_bc1)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_bc1 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_bc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_bc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_bc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_bc1)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd BC2
+   elseif ( obs_kind == KIND_BC2 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_bc2 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_bc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_bc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_bc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_bc2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_bc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_bc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_bc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_bc2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_bc2 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_bc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_bc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_bc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_bc2)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd OC1
+   elseif ( obs_kind == KIND_OC1 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_oc1 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_oc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_oc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_oc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_oc1)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_oc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_oc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_oc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_oc1)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_oc1 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_oc1)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_oc1)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_oc1)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_oc1)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd OC2
+   elseif ( obs_kind == KIND_OC2 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_oc2 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_oc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_oc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_oc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_oc2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_oc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_oc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_oc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_oc2)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_oc2 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_oc2)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_oc2)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_oc2)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_oc2)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd dust1~dust5
+   elseif ( obs_kind == KIND_DST01 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_dst01 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst01)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst01)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_dst01 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst01)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_DST02 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_dst02 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst02)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst02)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_dst02 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst02)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_DST03 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_dst03 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst03)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst03)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_dst03 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst03)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+
+   elseif ( obs_kind == KIND_DST04 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_dst04 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst04)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst04)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_dst04 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst04)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_DST05 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_dst05 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst05)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst05)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst05)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst05)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst05)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst05)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst05)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst05)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_dst05 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst05)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst05)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst05)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst05)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd sea salt 1~4
+   elseif ( obs_kind == KIND_SSLT01 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_sslt01 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt01)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt01)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_sslt01 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt01)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt01)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt01)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt01)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_SSLT02 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_sslt02 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt02)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt02)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_sslt02 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt02)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt02)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt02)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt02)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_SSLT03 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_sslt03 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt03)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt03)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_sslt03 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt03)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt03)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt03)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt03)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+   elseif ( obs_kind == KIND_SSLT04 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_sslt04 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt04)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt04)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_sslt04 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt04)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt04)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt04)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt04)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd sulfate
+   elseif ( obs_kind == KIND_SO4 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_so4 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so4)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so4)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so4)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so4)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so4)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so4)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so4)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so4)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_so4 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_so4)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_so4)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_so4)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_so4)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd PM25
+   elseif ( obs_kind == KIND_PM25 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_pm25 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_pm25)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_pm25)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_pm25)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_pm25)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_pm25)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_pm25)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_pm25)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_pm25)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_pm25 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_pm25)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_pm25)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_pm25)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_pm25)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+!1.zd PM10
+   elseif ( obs_kind == KIND_PM10 ) then
+
+      ! This is for 3D field 
+      if(.not. surf_var) then
+
+         if ( wrf%dom(id)%type_pm10 >= 0 ) then
+
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+               
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_pm10)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_pm10)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_pm10)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_pm10)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               
+   
+
+               fld(1) = a1
+
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_pm10)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_pm10)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_pm10)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_pm10)
+   
+
+               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+
+               fld(2) = a1
+   
+            endif
+         endif
+
+      ! This is for surface field
+      else
+         
+         if ( wrf%dom(id)%type_pm10 >= 0 ) then
+
+
+            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
+                   .or. wrf%dom(id)%scm ) then
+   
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+
+               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_pm10)
+               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_pm10)
+               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_pm10)
+               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_pm10)
+               
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+   
+            endif
+         endif
+      endif
+! APM/CQM ---
+!
    !-----------------------------------------------------
    ! If obs_kind is not negative (for identity obs), or if it is not one of the above 15
    !   explicitly checked-for kinds, then set error istatus and missing_r8.
@@ -7414,8 +8595,8 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
             (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
             (obs_kind(t_ind).ne.KIND_AOD)             .and. &
-            (obs_kind(t_ind).ne.KIND_CB1)             .and. &
-            (obs_kind(t_ind).ne.KIND_CB2)             .and. &
+            (obs_kind(t_ind).ne.KIND_BC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_BC2)             .and. &
             (obs_kind(t_ind).ne.KIND_OC1)             .and. &
             (obs_kind(t_ind).ne.KIND_OC2)             .and. &
             (obs_kind(t_ind).ne.KIND_DMS)             .and. &
@@ -7435,7 +8616,6 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
             (obs_kind(t_ind).ne.KIND_PM10)            .and. &
             (obs_kind(t_ind).ne.KIND_PM25)            .and. &
-            (obs_kind(t_ind).ne.KIND_E_O3)            .and. &
             (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
             (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
             (obs_kind(t_ind).ne.KIND_EBU_CO)          .and. &
@@ -7481,8 +8661,8 @@ if (istatus1 == 0) then
          (obs_kind(t_ind).eq.KIND_GLYALD)          .or. &
          (obs_kind(t_ind).eq.KIND_C10H16)          .or. &
          (obs_kind(t_ind).eq.KIND_AOD)             .or. &
-         (obs_kind(t_ind).eq.KIND_CB1)             .or. &
-         (obs_kind(t_ind).eq.KIND_CB2)             .or. &
+         (obs_kind(t_ind).eq.KIND_BC1)             .or. &
+         (obs_kind(t_ind).eq.KIND_BC2)             .or. &
          (obs_kind(t_ind).eq.KIND_OC1)             .or. &
          (obs_kind(t_ind).eq.KIND_OC2)             .or. &
          (obs_kind(t_ind).eq.KIND_DMS)             .or. &
@@ -7502,7 +8682,6 @@ if (istatus1 == 0) then
          (obs_kind(t_ind).eq.KIND_TAUAER4)         .or. &
          (obs_kind(t_ind).eq.KIND_PM10)            .or. &
          (obs_kind(t_ind).eq.KIND_PM25)            .or. &
-         (obs_kind(t_ind).eq.KIND_E_O3)            .or. &
          (obs_kind(t_ind).eq.KIND_E_CO)            .or. &
          (obs_kind(t_ind).ne.KIND_E_NO)            .or. &
          (obs_kind(t_ind).eq.KIND_EBU_CO)          .or. &
@@ -7523,37 +8702,130 @@ if (istatus1 == 0) then
       endif
 !
 ! Independent assimilaiton of chem obs
+! APM - All Chem Obs must be checked in this statement
       if (use_indep_chem_assim) then     
          if ((base_obs_kind.eq.KIND_O3)       .or. &
          (base_obs_kind.eq.KIND_CO)           .or. &
          (base_obs_kind.eq.KIND_NO)           .or. &
+         (base_obs_kind.eq.KIND_NO2)          .or. &
+         (base_obs_kind.eq.KIND_HNO3)         .or. &
+         (base_obs_kind.eq.KIND_HNO4)         .or. &
+         (base_obs_kind.eq.KIND_N2O5)         .or. &
+         (base_obs_kind.eq.KIND_PAN)          .or. &
+         (base_obs_kind.eq.KIND_MEK)          .or. &
+         (base_obs_kind.eq.KIND_ALD)          .or. &
+         (base_obs_kind.eq.KIND_CH3O2)        .or. &
+         (base_obs_kind.eq.KIND_C3H8)         .or. &
+         (base_obs_kind.eq.KIND_C2H6)         .or. &
+         (base_obs_kind.eq.KIND_ACET)         .or. &
+         (base_obs_kind.eq.KIND_HCHO)         .or. &
+         (base_obs_kind.eq.KIND_C2H4)         .or. &
+         (base_obs_kind.eq.KIND_C3H6)         .or. &
+         (base_obs_kind.eq.KIND_TOL)          .or. &
+         (base_obs_kind.eq.KIND_MVK)          .or. &
+         (base_obs_kind.eq.KIND_BIGALK)       .or. &
+         (base_obs_kind.eq.KIND_ISOPR)        .or. &
+         (base_obs_kind.eq.KIND_MACR)         .or. &
+         (base_obs_kind.eq.KIND_GLYALD)       .or. &
+         (base_obs_kind.eq.KIND_C10H16)       .or. &
+         (base_obs_kind.eq.KIND_BC1)          .or. &
+         (base_obs_kind.eq.KIND_BC2)          .or. &
+         (base_obs_kind.eq.KIND_DMS)          .or. &
+         (base_obs_kind.eq.KIND_DST01)        .or. &
+         (base_obs_kind.eq.KIND_DST02)        .or. &
+         (base_obs_kind.eq.KIND_DST03)        .or. &
+         (base_obs_kind.eq.KIND_DST04)        .or. &
+         (base_obs_kind.eq.KIND_SO4)          .or. &
+         (base_obs_kind.eq.KIND_SSLT01)       .or. &
+         (base_obs_kind.eq.KIND_SSLT02)       .or. &
+         (base_obs_kind.eq.KIND_SSLT03)       .or. &
+         (base_obs_kind.eq.KIND_SSLT04)       .or. &
+         (base_obs_kind.eq.KIND_TAUAER1)      .or. &
+         (base_obs_kind.eq.KIND_TAUAER2)      .or. &
+         (base_obs_kind.eq.KIND_TAUAER3)      .or. &
+         (base_obs_kind.eq.KIND_TAUAER4)      .or. &
+         (base_obs_kind.eq.KIND_PM10)         .or. &
+         (base_obs_kind.eq.KIND_PM25)         .or. &
+!         (base_obs_kind.eq.KIND_NOy)          .or. &
+!         (base_obs_kind.eq.KIND_PB)           .or. &
+!         (base_obs_kind.eq.KIND_NMOC)         .or. &
          (base_obs_kind.eq.KIND_AOD)) then
 !
 ! Chem obs go here
-            if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3).or. &
-            (obs_kind(t_ind).eq.KIND_E_O3))) then
+            if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3))) then
                dist(k) = dist(k)
             else if ((base_obs_kind.eq.KIND_CO).and.((obs_kind(t_ind).eq.KIND_CO).or. &
             (obs_kind(t_ind).eq.KIND_E_CO))) then
                dist(k) = dist(k)
             else if ((base_obs_kind.eq.KIND_NO).and.((obs_kind(t_ind).eq.KIND_NO).or. &
-            (obs_kind(t_ind).eq.KIND_E_NO))) then
+            (obs_kind(t_ind).eq.KIND_E_NO).or.(obs_kind(t_ind).eq.KIND_E_NO2))) then
                dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_NO2).and.((obs_kind(t_ind).eq.KIND_NO2).or. &
+            (obs_kind(t_ind).eq.KIND_E_NO).or.(obs_kind(t_ind).eq.KIND_E_NO2))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_SO2).and.((obs_kind(t_ind).eq.KIND_SO2).or. &
+            (obs_kind(t_ind).eq.KIND_E_SO2))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_PM10).and.((obs_kind(t_ind).eq.KIND_PM10)&
+            .or.(obs_kind(t_ind).eq.KIND_PM25)&
+            .or.(obs_kind(t_ind).eq.KIND_SO4)&
+            .or.(obs_kind(t_ind).eq.KIND_BC1)&
+            .or.(obs_kind(t_ind).eq.KIND_BC2)&
+            .or.(obs_kind(t_ind).eq.KIND_OC1)&
+            .or.(obs_kind(t_ind).eq.KIND_OC2)&
+            .or.(obs_kind(t_ind).eq.KIND_DST01)&
+            .or.(obs_kind(t_ind).eq.KIND_DST02)&
+            .or.(obs_kind(t_ind).eq.KIND_DST03)&
+            .or.(obs_kind(t_ind).eq.KIND_DST04)&
+            .or.(obs_kind(t_ind).eq.KIND_SSLT01)&
+            .or.(obs_kind(t_ind).eq.KIND_SSLT02)&
+            .or.(obs_kind(t_ind).eq.KIND_SSLT03)&
+            .or.(obs_kind(t_ind).eq.KIND_E_PM_10)&
+            .or.(obs_kind(t_ind).eq.KIND_E_PM_25)&
+            .or.(obs_kind(t_ind).eq.KIND_E_BC)&
+            .or.(obs_kind(t_ind).eq.KIND_E_OC)&
+            )) then
+                dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_PM25).and.((obs_kind(t_ind).eq.KIND_PM25)&
+            .or.(obs_kind(t_ind).eq.KIND_SO4)&
+            .or.(obs_kind(t_ind).eq.KIND_BC1)&
+            .or.(obs_kind(t_ind).eq.KIND_BC2)&
+            .or.(obs_kind(t_ind).eq.KIND_OC1)&
+            .or.(obs_kind(t_ind).eq.KIND_OC2)&
+            .or.(obs_kind(t_ind).eq.KIND_DST01)&
+            .or.(obs_kind(t_ind).eq.KIND_DST02)&
+            .or.(obs_kind(t_ind).eq.KIND_SSLT01)&
+            .or.(obs_kind(t_ind).eq.KIND_SSLT02)&
+            .or.(obs_kind(t_ind).eq.KIND_E_PM_25)&
+            .or.(obs_kind(t_ind).eq.KIND_E_BC)&
+            .or.(obs_kind(t_ind).eq.KIND_E_OC)&
+            )) then
+                dist(k) = dist(k)
             else if ((base_obs_kind.eq.KIND_AOD).and.((obs_kind(t_ind).eq.KIND_TAUAER1).or. &
-            (obs_kind(t_ind).eq.KIND_TAUAER2).or.(obs_kind(t_ind).eq.KIND_TAUAER3).or. &
-            (obs_kind(t_ind).eq.KIND_TAUAER4).or.(obs_kind(t_ind).eq.KIND_PM10).or. &
-            (obs_kind(t_ind).eq.KIND_PM25).or.(obs_kind(t_ind).eq.KIND_DST01).or. &
-            (obs_kind(t_ind).eq.KIND_DST02).or.(obs_kind(t_ind).eq.KIND_DST03).or. &
-            (obs_kind(t_ind).eq.KIND_DST04).or.(obs_kind(t_ind).eq.KIND_DST05).or. &
-            (obs_kind(t_ind).eq.KIND_OC1).or.(obs_kind(t_ind).eq.KIND_OC2).or. &
-            (obs_kind(t_ind).eq.KIND_CB1).or.(obs_kind(t_ind).eq.KIND_CB2).or. &
-            (obs_kind(t_ind).eq.KIND_SSLT01).or.(obs_kind(t_ind).eq.KIND_SSLT02).or. &
-            (obs_kind(t_ind).eq.KIND_SSLT03).or.(obs_kind(t_ind).eq.KIND_SSLT04).or. &
-            (obs_kind(t_ind).eq.KIND_SO4).or.(obs_kind(t_ind).eq.KIND_DMS).or. &
-            (obs_kind(t_ind).eq.KIND_AOD).or.(obs_kind(t_ind).eq.KIND_EBU_CO).or. &
-            (obs_kind(t_ind).eq.KIND_EBU_NO).or.(obs_kind(t_ind).eq.KIND_EBU_OC).or. &
-            (obs_kind(t_ind).eq.KIND_EBU_BC).or.(obs_kind(t_ind).eq.KIND_EBU_c2h4).or. &
-            (obs_kind(t_ind).eq.KIND_EBU_ch2o).or.(obs_kind(t_ind).eq.KIND_EBU_ch3oh))) then
+            (obs_kind(t_ind).eq.KIND_TAUAER2).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER3).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER4).or. &
+            (obs_kind(t_ind).eq.KIND_PM10).or. &
+            (obs_kind(t_ind).eq.KIND_PM25).or. &
+            (obs_kind(t_ind).eq.KIND_DST01).or. &
+            (obs_kind(t_ind).eq.KIND_DST02).or. & 
+            (obs_kind(t_ind).eq.KIND_DST03).or. &
+            (obs_kind(t_ind).eq.KIND_DST04).or. &
+            (obs_kind(t_ind).eq.KIND_DST05).or. &
+            (obs_kind(t_ind).eq.KIND_OC1).or. &
+            (obs_kind(t_ind).eq.KIND_OC2).or. &
+            (obs_kind(t_ind).eq.KIND_BC1).or. &
+            (obs_kind(t_ind).eq.KIND_BC2).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT01).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT02).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT03).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT04).or. &
+            (obs_kind(t_ind).eq.KIND_SO4).or. &
+            (obs_kind(t_ind).eq.KIND_E_PM_10).or.&
+            (obs_kind(t_ind).eq.KIND_E_PM_25).or.&
+            (obs_kind(t_ind).eq.KIND_E_OC).or. &
+            (obs_kind(t_ind).eq.KIND_E_BC) &
+            )) then
                dist(k) = dist(k)
             else
                dist(k) = 1.0e9
@@ -7587,8 +8859,8 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
             (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
             (obs_kind(t_ind).ne.KIND_AOD)             .and. &
-            (obs_kind(t_ind).ne.KIND_CB1)             .and. &
-            (obs_kind(t_ind).ne.KIND_CB2)             .and. &
+            (obs_kind(t_ind).ne.KIND_BC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_BC2)             .and. &
             (obs_kind(t_ind).ne.KIND_OC1)             .and. &
             (obs_kind(t_ind).ne.KIND_OC2)             .and. &
             (obs_kind(t_ind).ne.KIND_DMS)             .and. &
@@ -7608,7 +8880,6 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
             (obs_kind(t_ind).ne.KIND_PM10)            .and. &
             (obs_kind(t_ind).ne.KIND_PM25)            .and. &
-            (obs_kind(t_ind).ne.KIND_E_O3)            .and. &
             (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
             (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
             (obs_kind(t_ind).ne.KIND_EBU_CO)            .and. &
@@ -8765,6 +10036,40 @@ do i = 1, size(in_state_vector)
          write(msgstring1, *) 'AOD assimilation requires TAUAER1, 2, 3, and 4 in state vector'
          call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
       endif
+
+   ! for assimilating PM in situ observations
+   case (KIND_PM25)
+      if ((.not. in_state_vector(KIND_PM25))   .or. &
+          (.not. in_state_vector(KIND_BC1))   .or. &
+          (.not. in_state_vector(KIND_BC2))   .or. &
+          (.not. in_state_vector(KIND_DST01))   .or. &
+          (.not. in_state_vector(KIND_DST02))   .or. &
+          (.not. in_state_vector(KIND_SSLT01))   .or. &
+          (.not. in_state_vector(KIND_SSLT02))   .or. &
+          (.not. in_state_vector(KIND_SO4))   .or. &
+          (.not. in_state_vector(KIND_OC1))   .or. &
+          (.not. in_state_vector(KIND_OC2))) then
+         write(msgstring1, *) 'PM2.5 assimilation requires P25, BC1,2, DUST_1,2, SEAS_1,2, sulf, OC1,2 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
+      endif
+   case (KIND_PM10)
+      if ((.not. in_state_vector(KIND_PM25))   .or. &
+          (.not. in_state_vector(KIND_BC1))   .or. &
+          (.not. in_state_vector(KIND_BC2))   .or. &
+          (.not. in_state_vector(KIND_DST01))   .or. &
+          (.not. in_state_vector(KIND_DST02))   .or. &
+          (.not. in_state_vector(KIND_DST03))   .or. &
+          (.not. in_state_vector(KIND_DST04))   .or. &
+          (.not. in_state_vector(KIND_SSLT01))   .or. &
+          (.not. in_state_vector(KIND_SSLT02))   .or. &
+          (.not. in_state_vector(KIND_SSLT03))   .or. &
+          (.not. in_state_vector(KIND_SO4))   .or. &
+          (.not. in_state_vector(KIND_OC1))   .or. &
+          (.not. in_state_vector(KIND_OC2))   .or. &
+          (.not. in_state_vector(KIND_PM10))) then
+         write(msgstring1, *) 'PM2.5 assimilation requires P25, P10, BC1,2, DUST_1,2,3,4 SEAS_1,2,3, sulf, OC1,2 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
+     endif
 
    ! by default anything else is fine
 

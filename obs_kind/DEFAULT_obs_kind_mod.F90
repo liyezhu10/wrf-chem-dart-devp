@@ -317,8 +317,8 @@ integer, parameter, public :: &
     KIND_C10H16                      = 174, &
 !
     KIND_AOD                         = 175, &
-    KIND_CB1                         = 176, &
-    KIND_CB2                         = 177, &
+    KIND_BC1                         = 176, &
+    KIND_BC2                         = 177, &
     KIND_OC1                         = 178, &
     KIND_OC2                         = 179, &
     KIND_DMS                         = 180, &
@@ -346,13 +346,19 @@ integer, parameter, public :: &
     KIND_E_O3                        = 200, &
     KIND_E_CO                        = 201, &
     KIND_E_NO                        = 202, &
-    KIND_EBU_CO                      = 203, &
-    KIND_EBU_NO                      = 204, &
-    KIND_EBU_OC                      = 205, &
-    KIND_EBU_BC                      = 206, &
-    KIND_EBU_c2h4                    = 207, &
-    KIND_EBU_ch2o                    = 208, &
-    KIND_EBU_ch3oh                   = 209
+    KIND_E_NO2                       = 203, &
+    KIND_E_SO2                       = 204, &
+    KIND_E_OC                        = 205, &
+    KIND_E_BC                        = 206, &
+    KIND_E_PM_10                     = 207, &
+    KIND_E_PM_25                     = 208, &
+    KIND_EBU_CO                      = 209, &
+    KIND_EBU_NO                      = 210, &
+    KIND_EBU_OC                      = 211, &
+    KIND_EBU_BC                      = 212, &
+    KIND_EBU_c2h4                    = 213, &
+    KIND_EBU_ch2o                    = 214, &
+    KIND_EBU_ch3oh                   = 215
 ! APMLXL --
 !
 
@@ -707,8 +713,8 @@ obs_kind_names(173) = obs_kind_type(KIND_GLYALD, 'KIND_GLYALD')
 obs_kind_names(174) = obs_kind_type(KIND_C10H16, 'KIND_C10H16')
 !
 obs_kind_names(175) = obs_kind_type(KIND_AOD, 'KIND_AOD')
-obs_kind_names(176) = obs_kind_type(KIND_CB1, 'KIND_CB1')
-obs_kind_names(177) = obs_kind_type(KIND_CB2, 'KIND_CB2')
+obs_kind_names(176) = obs_kind_type(KIND_BC1, 'KIND_CB1')
+obs_kind_names(177) = obs_kind_type(KIND_BC2, 'KIND_CB2')
 obs_kind_names(178) = obs_kind_type(KIND_OC1, 'KIND_OC1')
 obs_kind_names(179) = obs_kind_type(KIND_OC2, 'KIND_OC2')
 obs_kind_names(180) = obs_kind_type(KIND_DMS, 'KIND_DMS')
@@ -736,13 +742,19 @@ obs_kind_names(199) = obs_kind_type(KIND_NMOC, 'KIND_NMOC')
 obs_kind_names(200) = obs_kind_type(KIND_E_O3,'KIND_E_O3')
 obs_kind_names(201) = obs_kind_type(KIND_E_CO,'KIND_E_CO')
 obs_kind_names(202) = obs_kind_type(KIND_E_NO,'KIND_E_NO')
-obs_kind_names(203) = obs_kind_type(KIND_EBU_CO,'KIND_EBU_CO')
-obs_kind_names(204) = obs_kind_type(KIND_EBU_NO,'KIND_EBU_NO')
-obs_kind_names(205) = obs_kind_type(KIND_EBU_OC,'KIND_EBU_OC')
-obs_kind_names(206) = obs_kind_type(KIND_EBU_BC,'KIND_EBU_BC')
-obs_kind_names(207) = obs_kind_type(KIND_EBU_c2h4,'KIND_EBU_c2h4')
-obs_kind_names(208) = obs_kind_type(KIND_EBU_ch2o,'KIND_EBU_ch2o')
-obs_kind_names(209) = obs_kind_type(KIND_EBU_ch3oh,'KIND_EBU_ch3oh')
+obs_kind_names(203) = obs_kind_type(KIND_E_NO2,'KIND_E_NO2')
+obs_kind_names(204) = obs_kind_type(KIND_E_SO2,'KIND_E_SO2')
+obs_kind_names(205) = obs_kind_type(KIND_E_OC,'KIND_E_OC')
+obs_kind_names(206) = obs_kind_type(KIND_E_BC,'KIND_E_BC')
+obs_kind_names(207) = obs_kind_type(KIND_E_PM_10,'KIND_E_PM_10')
+obs_kind_names(208) = obs_kind_type(KIND_E_PM_25,'KIND_E_PM_25')
+obs_kind_names(209) = obs_kind_type(KIND_EBU_CO,'KIND_EBU_CO')
+obs_kind_names(210) = obs_kind_type(KIND_EBU_NO,'KIND_EBU_NO')
+obs_kind_names(211) = obs_kind_type(KIND_EBU_OC,'KIND_EBU_OC')
+obs_kind_names(212) = obs_kind_type(KIND_EBU_BC,'KIND_EBU_BC')
+obs_kind_names(213) = obs_kind_type(KIND_EBU_c2h4,'KIND_EBU_c2h4')
+obs_kind_names(214) = obs_kind_type(KIND_EBU_ch2o,'KIND_EBU_ch2o')
+obs_kind_names(215) = obs_kind_type(KIND_EBU_ch3oh,'KIND_EBU_ch3oh')
 ! APM/LXL ---
 !
 obs_kind_names(247) = obs_kind_type(KIND_CO2,             'KIND_CO2')

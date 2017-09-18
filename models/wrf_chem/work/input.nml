@@ -114,6 +114,7 @@
                               '../../../obs_def/obs_def_gps_mod.f90',
                               '../../../obs_def/obs_def_vortex_mod.f90',
                               '../../../obs_def/obs_def_gts_mod.f90',
+                              '../../../obs_def/obs_def_monitor_mod.f90',
                               '../../../obs_def/obs_def_AIRNOW_OBS_mod.f90',
                               '../../../obs_def/obs_def_PANDA_OBS_mod.f90',
                               '../../../obs_def/obs_def_OMI_NO2_mod.f90',

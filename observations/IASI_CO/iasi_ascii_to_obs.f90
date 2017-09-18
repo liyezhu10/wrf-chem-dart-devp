@@ -141,7 +141,7 @@ real*8                          :: latitude, longitude, level
 real*8                          :: co_psurf, err, co_error, co_prior
 real                            :: bin_beg, bin_end
 real                            :: sec, lat, lon, nlevels
-real                            :: pi ,rad2deg, re, wt, corr_err, fac
+real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
 real                            :: ln_10, xg_sec_avg
 real                            :: irot, nlvls_fix
 real*8, dimension(1000)         :: unif
@@ -182,6 +182,8 @@ double precision,allocatable,dimension(:,:)    :: Z,ZL,ZR,SV,U_cov,V_cov,UT_cov,
 double precision,allocatable,dimension(:,:)    :: rr_avg_k,rr_cov
 double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
+logical                 :: use_log_co
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! IASI_CO_retrieval_type:
@@ -191,7 +193,7 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !     CPSR - compact phase space retrievals
 !
 namelist /create_iasi_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         IASI_CO_retrieval_type
+         IASI_CO_retrieval_type,fac_obs_error,use_log_co
 !
 ! Set constants
 ln_10=log(10.)
@@ -495,13 +497,9 @@ qc_thinning(:)=100
 ! Assign cov_use
         cov_use(:,:)=cov_r(:,:)
 !
-! Scale cov_use
-        fac=1.0
-        fac=5.0
-!        fac=10.0
-!        fac=25.0
-!        fac=50.0
-        cov_use(:,:)=fac*cov_use(:,:)
+! assign obs error scale factor
+        fac=fac_obs_error
+!
         raw_cov(:,:)=cov_use(:,:)
 !
 ! Calculate prior term
@@ -904,7 +902,7 @@ qc_thinning(:)=100
 ! RAW with NO ROT
            if(trim(IASI_CO_retrieval_type) .eq. 'RAWR') then
               xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
-              xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+              xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
               xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -913,7 +911,7 @@ qc_thinning(:)=100
 !
 ! RAW QOR with NO ROT
 !           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
-!           xcomperr(k)=xg_raw_err(i,j,k+kstr-1)
+!           xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
@@ -922,7 +920,7 @@ qc_thinning(:)=100
 ! RAW QOR with ROT and NO SCALE
 ! comment scaling
 !           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=err2_rs_r(k)
+!           xcomperr(k)=fac*err2_rs_r(k)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=rs_avg_k(k,l)
@@ -932,7 +930,7 @@ qc_thinning(:)=100
 ! uncomment scaling
            if(trim(IASI_CO_retrieval_type) .eq. 'QOR') then
               xcomp(k)=rs_x_r(k)
-              xcomperr(k)=err2_rs_r(k)
+              xcomperr(k)=fac*err2_rs_r(k)
               xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=rs_avg_k(k,l)
@@ -942,7 +940,7 @@ qc_thinning(:)=100
 ! RAW CPSR with ROT and NO SCALE
 ! comment scaling
 !           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=err2_rs_r(k)
+!           xcomperr(k)=fac*err2_rs_r(k)
 !           xapr(k)=0.
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=rs_avg_k(k,l)
@@ -952,7 +950,7 @@ qc_thinning(:)=100
 ! uncomment scaling
            if(trim(IASI_CO_retrieval_type) .eq. 'CPSR') then
               xcomp(k)=rs_x_r(k)
-              xcomperr(k)=err2_rs_r(k)
+              xcomperr(k)=fac*err2_rs_r(k)
               xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=rs_avg_k(k,l)

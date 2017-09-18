@@ -10,9 +10,9 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072100
+export CYCLE_STR_DATE=2014072000
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072100
+export CYCLE_END_DATE=2014072000
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export NL_FAC_OBS_ERROR_MOPITT=4.00
 export NL_FAC_OBS_ERROR_MOPITT=10.0
@@ -23,7 +23,7 @@ export NL_FAC_OBS_ERROR_MOPITT=2.25
 export NL_FAC_OBS_ERROR_MOPITT=2.00
 export RETRIEVAL_TYPE=RETR
 #
-export USE_LOG_CO=true
+export USE_LOG_CO=false
 if [[ ${USE_LOG_CO} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -39,7 +39,7 @@ fi
 # VARLOC and INDEP_CHEM_ASIM may both be false but
 # they may not both be true
 #
-export VARLOC=.true.
+export VARLOC=.false.
 export INDEP_CHEM_ASIM=.false.
 #
 export ADD_EMISS=.false.
@@ -61,21 +61,21 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=6
+export NUM_SPECIAL_FORECAST=4
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
-export SPECIAL_FORECAST_MEM[1]=10
-export SPECIAL_FORECAST_MEM[2]=12
-export SPECIAL_FORECAST_MEM[3]=13
-export SPECIAL_FORECAST_MEM[4]=16
-export SPECIAL_FORECAST_MEM[5]=17
-export SPECIAL_FORECAST_MEM[6]=24
-export SPECIAL_FORECAST_MEM[7]=22
-export SPECIAL_FORECAST_MEM[8]=23
-export SPECIAL_FORECAST_MEM[9]=24
-export SPECIAL_FORECAST_MEM[10]=25
-export SPECIAL_FORECAST_MEM[11]=26
+export SPECIAL_FORECAST_MEM[1]=2
+export SPECIAL_FORECAST_MEM[2]=5
+export SPECIAL_FORECAST_MEM[3]=9
+export SPECIAL_FORECAST_MEM[4]=10
+export SPECIAL_FORECAST_MEM[5]=14
+export SPECIAL_FORECAST_MEM[6]=15
+export SPECIAL_FORECAST_MEM[7]=16
+export SPECIAL_FORECAST_MEM[8]=17
+export SPECIAL_FORECAST_MEM[9]=18
+export SPECIAL_FORECAST_MEM[10]=19
+export SPECIAL_FORECAST_MEM[11]=20
 export SPECIAL_FORECAST_MEM[12]=27
 export SPECIAL_FORECAST_MEM[13]=28
 export SPECIAL_FORECAST_MEM[14]=29
@@ -270,10 +270,10 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 #
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
-   export RUN_GEOGRID=false
-   export RUN_UNGRIB=false
-   export RUN_METGRID=false
-   export RUN_REAL=false
+   export RUN_GEOGRID=true
+   export RUN_UNGRIB=true
+   export RUN_METGRID=true
+   export RUN_REAL=true
    export RUN_PERT_WRFCHEM_MET_IC=false
    export RUN_PERT_WRFCHEM_MET_BC=false
    export RUN_EXO_COLDENS=false
@@ -1170,9 +1170,9 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
-                                   'MOPITT_CO_RETRIEVAL'"
-#                                   'AIRNOW_O3',
-#                                   'AIRNOW_CO',
+                                   'AIRNOW_O3',
+                                   'AIRNOW_CO'"
+#                                   'MOPITT_CO_RETRIEVAL',
 #                                   'MODIS_AOD_RETRIEVAL',
 #                                   'IASI_CO_RETRIEVAL'"
 #export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
@@ -1549,6 +1549,12 @@ EOF
       export P_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${LBC_FREQ} 2>/dev/null) 
    done   
 fi
+
+
+exit
+
+
+
 #
 #########################################################################
 #
