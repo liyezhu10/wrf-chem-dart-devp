@@ -12,9 +12,10 @@
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
 # initial cycle
-export CYCLE_STR_DATE=2014072418
+#export CYCLE_STR_DATE=2014072418
 # first assimilation cycle
-#export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072500
+#
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072500
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -71,7 +72,7 @@ if [[ ${RUN_FINE_SCALE_RESTART} = "true" ]]; then
 fi
 #
 # Run WRF-Chem for failed forecasts
-export RUN_SPECIAL_FORECAST=true
+export RUN_SPECIAL_FORECAST=false
 export NUM_SPECIAL_FORECAST=1
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=1./2.

@@ -65,7 +65,6 @@ public :: write_omi_no2, read_omi_no2, interactive_omi_no2, &
 integer, parameter               :: max_omi_no2_obs = 10000000
 integer, parameter               :: omi_dim = 35
 integer                          :: num_omi_no2_obs = 0
-real(r8), dimension(max_omi_no2_obs,35) :: avg_kernel
 ! lxl:real(r8), dimension(max_omi_no2_obs)	 :: mopitt_prior
 real(r8)   :: omi_pressure(omi_dim) =(/ &
         102000., 101000., 100000., 99000., 97500., 96000., 94500., &
@@ -73,9 +72,10 @@ real(r8)   :: omi_pressure(omi_dim) =(/ &
          74000.,  70000.,  66000., 61000., 56000., 50000., 45000., &
          40000.,  35000.,  28000., 20000., 12000.,  6000.,  3500., &
           2000.,   1200.,    800.,   500.,   300.,   150.,     80. /)    
-real(r8), dimension(max_omi_no2_obs)   :: omi_psurf	
-real(r8), dimension(max_omi_no2_obs)   :: omi_ptrop	
-integer,  dimension(max_omi_no2_obs)   :: omi_nlevels
+real(r8), allocatable, dimension(:,:) :: avg_kernel
+real(r8), allocatable, dimension(:)   :: omi_psurf	
+real(r8), allocatable, dimension(:)   :: omi_ptrop	
+integer,  allocatable, dimension(:)   :: omi_nlevels
 
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
@@ -99,6 +99,11 @@ subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
+
+allocate(avg_kernel(max_omi_no2_obs,omi_dim))
+allocate(omi_psurf(max_omi_no2_obs))	
+allocate(omi_ptrop(max_omi_no2_obs))	
+allocate(omi_nlevels(max_omi_no2_obs))
 
 end subroutine initialize_module
 

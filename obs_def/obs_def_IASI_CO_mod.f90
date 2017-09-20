@@ -57,15 +57,17 @@ integer, parameter               :: max_iasi_co_obs = 10000000
 integer, parameter               :: iasi_dim = 19
 integer, parameter               :: iasi_dimp = 20
 integer                          :: num_iasi_co_obs = 0
-real(r8), dimension(max_iasi_co_obs,19) :: avg_kernel
-real(r8), dimension(max_iasi_co_obs,20) :: pressure
-real(r8), dimension(max_iasi_co_obs)	:: iasi_prior
-real(r8), dimension(max_iasi_co_obs)	:: iasi_psurf	
-integer,  dimension(max_iasi_co_obs)    :: iasi_nlevels
-integer,  dimension(max_iasi_co_obs)    :: iasi_nlevelsp
+
+real(r8), allocatable, dimension(:,:) :: avg_kernel
+real(r8), allocatable, dimension(:,:) :: pressure
+real(r8), allocatable, dimension(:) :: iasi_prior
+real(r8), allocatable, dimension(:) :: iasi_psurf	
+integer,  allocatable, dimension(:) :: iasi_nlevels
+integer,  allocatable, dimension(:) :: iasi_nlevelsp
 !
 ! For now, read in all info on first read call, write all info on first write call
-logical :: already_read = .false., already_written = .false.
+logical :: already_read = .false.
+logical :: already_written = .false.
 !
 ! CVS Generated file description for error handling, do not edit
 character(len=128) :: &
@@ -95,6 +97,13 @@ contains
 integer :: iunit, rc
 call register_module(source, revision, revdate)
 module_initialized = .true.
+
+allocate(avg_kernel(max_iasi_co_obs,iasi_dim))
+allocate(pressure(max_iasi_co_obs,iasi_dimp))
+allocate(iasi_prior(max_iasi_co_obs))
+allocate(iasi_psurf(max_iasi_co_obs))
+allocate(iasi_nlevels(max_iasi_co_obs))
+allocate(iasi_nlevelsp(max_iasi_co_obs))
 
 ! Read the namelist entry.
 IASI_CO_retrieval_type='RETR'

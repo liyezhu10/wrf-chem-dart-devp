@@ -61,15 +61,16 @@ public :: write_mopitt_co, read_mopitt_co, interactive_mopitt_co, &
 integer, parameter               :: max_mopitt_co_obs = 10000000
 integer, parameter               :: mopitt_dim = 10
 integer                          :: num_mopitt_co_obs = 0
-real(r8), dimension(max_mopitt_co_obs,10) :: avg_kernel
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_prior
 real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
                               100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
 real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
                               100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
-integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
-
+!
+real(r8), allocatable, dimension(:,:) :: avg_kernel
+real(r8), allocatable, dimension(:) :: mopitt_prior
+real(r8), allocatable, dimension(:) :: mopitt_psurf	
+integer,  allocatable, dimension(:) :: mopitt_nlevels
+!
 ! For now, read in all info on first read call, write all info on first write call
 logical :: already_read = .false., already_written = .false.
 
@@ -103,7 +104,12 @@ contains
 integer :: iunit, rc
 call register_module(source, revision, revdate)
 module_initialized = .true.
-
+!
+allocate (avg_kernel(max_mopitt_co_obs,mopitt_dim))
+allocate (mopitt_prior(max_mopitt_co_obs))
+allocate (mopitt_psurf(max_mopitt_co_obs))
+allocate (mopitt_nlevels(max_mopitt_co_obs))
+!
 ! Read the namelist entry.
 MOPITT_CO_retrieval_type='RETR'
 use_log_co=.false.

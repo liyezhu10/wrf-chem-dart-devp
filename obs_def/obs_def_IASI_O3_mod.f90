@@ -62,16 +62,16 @@ module obs_def_iasi_O3_mod
    integer, parameter          :: iasi_dim = 40
 
 ! number of iasi levels used
-   integer                     :: iasi_nlevels(max_iasi_o3_obs)
+   integer, allocatable, dimension(:) :: iasi_nlevels
 !
 ! iasii averaging kernel
-   real(r8)                    :: avg_kernel(max_iasi_o3_obs,iasi_dim)
+   real(r8), allocatable, dimension(:,:) :: avg_kernel
 !
 ! iasi air column profile
-   real(r8), dimension(max_iasi_o3_obs,iasi_dim) :: iasi_air_column
+   real(r8), allocatable, dimension(:,:) :: iasi_air_column
 !
 ! prior term of x=Ax + (I-A)xa + Gey
-   real(r8)                    :: iasi_o3_prior(max_iasi_o3_obs)
+   real(r8), allocatable, dimension(:) :: iasi_o3_prior
 !
 ! nominal iasi height levels in m
    real(r8)                    :: iasi_altitude(iasi_dim) =(/ &
@@ -85,8 +85,8 @@ module obs_def_iasi_O3_mod
                                   35500.,36500.,37500.,38500.,39500. /) 
 !
 ! iasi retrieval heights
-   real(r8)                    :: iasi_heights(max_iasi_o3_obs,iasi_dim)
-   real(r8)                    :: iasi_pressure(max_iasi_o3_obs,iasi_dim)
+   real(r8), allocatable, dimension(:,:) :: iasi_heights
+   real(r8), allocatable, dimension(:,:) :: iasi_pressure
 !
 ! For now, read in all info on first read call, write all info on first write call
    logical                     :: already_read = .false., already_written = .false.
@@ -107,6 +107,14 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! subroutine initialize_module
       call register_module(source, revision, revdate)
       module_initialized = .true.
+      
+      allocate(avg_kernel(max_iasi_o3_obs,iasi_dim))
+      allocate(iasi_air_column(max_iasi_o3_obs,iasi_dim))
+      allocate(iasi_pressure(max_iasi_o3_obs,iasi_dim))
+      allocate(iasi_heights(max_iasi_o3_obs,iasi_dim))
+      allocate(iasi_o3_prior(max_iasi_o3_obs))
+      allocate(iasi_nlevels(max_iasi_o3_obs))
+
    end subroutine initialize_module
 !
    subroutine read_iasi_o3(key, ifile, fform)
@@ -127,6 +135,7 @@ character(len=128), parameter :: revdate  = "$Date$"
       integer 			:: keyin
 !
       if ( .not. module_initialized ) call initialize_module
+
 !
       fileformat = "ascii"   ! supply default
       if(present(fform)) fileformat = trim(adjustl(fform))
