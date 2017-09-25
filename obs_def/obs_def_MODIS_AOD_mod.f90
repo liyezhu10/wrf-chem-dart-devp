@@ -77,25 +77,23 @@ integer  :: counts1 = 0
 contains
 
 !----------------------------------------------------------------------
+!>
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
 end subroutine initialize_module
 
-
-
- subroutine read_modis_aod(key, ifile, fform)
 !----------------------------------------------------------------------
-!subroutine read_modis_aod(key, ifile, fform)
+!>
 
-integer,          intent(out)          :: key
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+subroutine read_modis_aod(key, ifile, fform)
+
+integer,                    intent(out) :: key
+integer,                    intent(in)  :: ifile
+character(len=*), optional, intent(in)  :: fform
 
 character(len=32) :: fileformat
 
@@ -104,13 +102,13 @@ integer :: keyin
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
 
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    read(ifile) keyin
 
@@ -124,27 +122,27 @@ call set_obs_def_modis_aod(key)
 
 end subroutine read_modis_aod
 
-
- subroutine write_modis_aod(key, ifile, fform)
 !----------------------------------------------------------------------
-!subroutine write_modis_aod(key, ifile, fform)
+!>
 
-integer,          intent(in)           :: key
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+subroutine write_modis_aod(key, ifile, fform)
+
+integer,                    intent(in) :: key
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 
 character(len=32) :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
 
 fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = trim(adjustl(fform))
+if(present(fform)) fileformat = adjustl(fform)
 
 ! Philosophy, read ALL information about this special obs_type at once???
 ! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
 ! Toggle the flag to control this reading
    
-SELECT CASE (fileformat)
+SELECT CASE (trim(fileformat))
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    write(ifile) key
 
@@ -154,11 +152,11 @@ END SELECT
 
 end subroutine write_modis_aod
 
-
- subroutine interactive_modis_aod(key)
 !----------------------------------------------------------------------
-!subroutine interactive_modis_aod(key)
-!
+!>
+
+subroutine interactive_modis_aod(key)
+
 ! Initializes the specialized part of a MODIS observation
 ! Passes back up the key for this one
 
@@ -170,7 +168,8 @@ if ( .not. module_initialized ) call initialize_module
 if(num_modis_aod_obs >= max_modis_aod_obs) then
    write(string1, *)'Not enough space for a modis AOD obs.'
    write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR,'interactive_modis_aod',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR, 'interactive_modis_aod', string1, &
+              source, revision, revdate, text2=string2)
 endif
 
 ! Increment the index
@@ -182,7 +181,8 @@ write(*, *) 'Creating an interactive_modis_aod observation'
 
 end subroutine interactive_modis_aod
 
-
+!----------------------------------------------------------------------
+!>
 
 subroutine get_expected_modis_aod(state, location, key, val, istatus)
 
@@ -218,9 +218,10 @@ val = obs_val
 
 end subroutine get_expected_modis_aod
 
+!----------------------------------------------------------------------
+!> Allows passing of obs_def special information 
 
 subroutine set_obs_def_modis_aod(key)
-! Allows passing of obs_def special information 
 
 integer, intent(in) :: key
 
@@ -229,7 +230,8 @@ if ( .not. module_initialized ) call initialize_module
 if(num_modis_aod_obs >= max_modis_aod_obs) then
    write(string1, *)'Not enough space for a modis AOD obs.'
    write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR,'set_obs_def_modis_aod',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR, 'set_obs_def_modis_aod', string1, &
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine set_obs_def_modis_aod

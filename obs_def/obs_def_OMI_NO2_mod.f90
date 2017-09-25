@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 ! Oct 16, 2014 LXL: 
 ! This is the version fixing the "wrf has no level higher than 6000Pa" error by 

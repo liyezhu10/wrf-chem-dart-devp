@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 ! Note:  This version has a namelist item for the max number of
 ! gps observations that can be read in, but it is currently commented out.

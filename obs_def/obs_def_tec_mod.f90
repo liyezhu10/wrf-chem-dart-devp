@@ -1,6 +1,8 @@
 ! DART software - Copyright 2004 - 2013 UCAR. This open source software is
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 !INSTRUMENT_TEC_NADIR,               KIND_TOTAL_ELECTRON_CONTENT 
@@ -80,11 +82,6 @@
 ! BEGIN DART PREPROCESS MODULE CODE
 module obs_def_tec_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 use        types_mod, only : r8, missing_r8, PI, deg2rad
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
@@ -106,10 +103,10 @@ public :: read_station, write_station, interactive_station,       &
           get_expected_limb, get_obs_def_limb, get_expected_nadir
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=*), parameter :: source   = &
+   "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized = .false.
 
@@ -1035,5 +1032,12 @@ end subroutine teckey_out_of_range
 !----------------------------------------------------------------------
 
 end module obs_def_tec_mod
+
 ! END DART PREPROCESS MODULE CODE
 !-----------------------------------------------------------------------------
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

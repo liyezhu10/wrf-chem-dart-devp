@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 !CLOUD_LIQUID_WATER, KIND_CLOUD_LIQUID_WATER,  COMMON_CODE

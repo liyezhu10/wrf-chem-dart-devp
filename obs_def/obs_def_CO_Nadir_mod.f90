@@ -4,7 +4,6 @@
 !
 ! DART $Id$
 
-
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
 ! IASI_CO_RETRIEVAL, KIND_CO
@@ -86,7 +85,7 @@ real(r8), dimension(max_mopitt_co_obs,mopitt_dim) :: avg_kernel
 real(r8), dimension(max_mopitt_co_obs)	          :: mopitt_prior
 real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
                               95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
-real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
+real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf
 integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
 
 ! version controlled file description for error handling, do not edit
