@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! IASI_O3_RETRIEVAL, KIND_O3
@@ -49,10 +49,15 @@ module obs_def_iasi_O3_mod
    use assim_model_mod,only    : interpolate
    use obs_kind_mod,only       : KIND_O3, KIND_SURFACE_PRESSURE, KIND_PRESSURE
    use mpi_utilities_mod,only  : my_task_id  
+
    implicit none 
    private
-   public                      :: write_iasi_o3, read_iasi_o3, interactive_iasi_o3, &
-                                  get_expected_iasi_o3, set_obs_def_iasi_o3
+
+   public :: write_iasi_o3, &
+             read_iasi_o3, &
+             interactive_iasi_o3, &
+             get_expected_iasi_o3, &
+             set_obs_def_iasi_o3
 !
 ! Storage for the special information required for observations of this type
    integer, parameter          :: max_iasi_o3_obs = 6000000
@@ -87,43 +92,47 @@ module obs_def_iasi_O3_mod
 ! iasi retrieval heights
    real(r8), allocatable, dimension(:,:) :: iasi_heights
    real(r8), allocatable, dimension(:,:) :: iasi_pressure
-!
-! For now, read in all info on first read call, write all info on first write call
-   logical                     :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
-!
-   logical, save               :: module_initialized = .false.
-   integer                     :: counts1 = 0
-!
-   contains
-!----------------------------------------------------------------------
-   subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
-      call register_module(source, revision, revdate)
-      module_initialized = .true.
-      
-      allocate(avg_kernel(max_iasi_o3_obs,iasi_dim))
-      allocate(iasi_air_column(max_iasi_o3_obs,iasi_dim))
-      allocate(iasi_pressure(max_iasi_o3_obs,iasi_dim))
-      allocate(iasi_heights(max_iasi_o3_obs,iasi_dim))
-      allocate(iasi_o3_prior(max_iasi_o3_obs))
-      allocate(iasi_nlevels(max_iasi_o3_obs))
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
-   end subroutine initialize_module
-!
+character(len=512) :: string1, string2
+
+logical, save  :: module_initialized = .false.
+integer        :: counts1 = 0
+
+contains
+
+!----------------------------------------------------------------------
+
+subroutine initialize_module
+
+call register_module(source, revision, revdate)
+module_initialized = .true.
+
+allocate(avg_kernel(max_iasi_o3_obs,iasi_dim))
+allocate(iasi_air_column(max_iasi_o3_obs,iasi_dim))
+allocate(iasi_pressure(max_iasi_o3_obs,iasi_dim))
+allocate(iasi_heights(max_iasi_o3_obs,iasi_dim))
+allocate(iasi_o3_prior(max_iasi_o3_obs))
+allocate(iasi_nlevels(max_iasi_o3_obs))
+
+end subroutine initialize_module
+
+
    subroutine read_iasi_o3(key, ifile, fform)
 !----------------------------------------------------------------------
 ! subroutine read_iasi_o3(key, ifile, fform)
-      integer, intent(out)            :: key
-      integer, intent(in)             :: ifile
-      character(len=*), intent(in), optional    :: fform
-      character(len=32) 		:: fileformat
+
+integer,          intent(out)          :: key
+integer,          intent(in)           :: ifile
+character(len=*), intent(in), optional :: fform
+
+character(len=32) :: fileformat
+
 !
 ! temp variables
       integer                         :: nlevel_1
@@ -132,7 +141,7 @@ character(len=128), parameter :: revdate  = "$Date$"
       real(r8),  dimension(iasi_dim)  :: pressure_1
       real(r8),  dimension(iasi_dim)  :: avg_kernel_1
       real(r8),  dimension(iasi_dim)  :: aircol_1
-      integer 			:: keyin
+      integer :: keyin
 !
       if ( .not. module_initialized ) call initialize_module
 
@@ -163,24 +172,25 @@ character(len=128), parameter :: revdate  = "$Date$"
       call set_obs_def_iasi_o3(key,prior_1,altitude_1(1:nlevel_1),pressure_1(1:nlevel_1), &
       avg_kernel_1(1:nlevel_1),aircol_1(1:nlevel_1),nlevel_1)
    end subroutine read_iasi_o3
-!
-   subroutine write_iasi_o3(key, ifile, fform)
-!----------------------------------------------------------------------
-! subroutine write_iasi_o3(key, ifile, fform)
 
-      integer, intent(in)             :: key
-      integer, intent(in)             :: ifile
-      character(len=*), intent(in), optional 	:: fform
-      character(len=32) 		:: fileformat
+
+!----------------------------------------------------------------------
+
+subroutine write_iasi_o3(key, ifile, fform)
+
+integer,          intent(in)           :: key
+integer,          intent(in)           :: ifile
+character(len=*), intent(in), optional :: fform
 
 ! dummy variables
-      integer                         :: nlevel_1
-      real(r8)                        :: iasi_o3_prior_1
-      real(r8), dimension(iasi_dim)   :: altitude_1
-      real(r8), dimension(iasi_dim)   :: pressure_1
-      real(r8), dimension(iasi_dim)   :: avg_kernel_1
-      real(r8), dimension(iasi_dim)   :: iasi_air_column_1
-!
+character(len=32) :: fileformat
+integer                         :: nlevel_1
+real(r8)                        :: iasi_o3_prior_1
+real(r8), dimension(iasi_dim)   :: altitude_1
+real(r8), dimension(iasi_dim)   :: pressure_1
+real(r8), dimension(iasi_dim)   :: avg_kernel_1
+real(r8), dimension(iasi_dim)   :: iasi_air_column_1
+
       if ( .not. module_initialized ) call initialize_module
 !
       fileformat = "ascii"   ! supply default
@@ -219,17 +229,14 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! Passes back up the key for this one
 !
       integer, intent(out) :: key
-      character(len=129) :: msgstring
 !
       if ( .not. module_initialized ) call initialize_module
 !
 ! Make sure there's enough space, if not die for now (clean later)
       if(num_iasi_o3_obs >= max_iasi_o3_obs) then
-! PUT IN ERROR HANDLER CALL
-         write(msgstring, *)'Not enough space for a iasi O3 obs.'
-         call error_handler(E_MSG,'interactive_iasi_o3',msgstring,source,revision,revdate)
-         write(msgstring, *)'Can only have max_iasi_o3_obs (currently ',max_iasi_o3_obs,')'
-         call error_handler(E_ERR,'interactive_iasi_o3',msgstring,source,revision,revdate)
+         write(string1, *)'Not enough space for a iasi O3 obs.'
+         write(string2, *)'Can only have max_iasi_o3_obs (currently ',max_iasi_o3_obs,')'
+         call error_handler(E_ERR,'interactive_iasi_o3',string1,source,revision,revdate,text2=string2)
       endif
 !
 ! Increment the index
@@ -251,16 +258,15 @@ character(len=128), parameter :: revdate  = "$Date$"
       real(r8), intent(out)           :: val
       integer, intent(out)            :: istatus
 !
-      integer                         :: i, ilev, kstr, apm_dom, apm_mm, nnlevels
-      type(location_type)             :: loc2
-      real(r8)                        :: mloc(3)
-      real(r8)                        :: wrf_prs(nlev_wrf)
-      real(r8)	                      :: obs_val,ubv_obs_val,level,missing
-      real(r8)	                      :: iasi_psf,iasi_psf_sv,wrf_psf,ubv_delt_prs
-      real(r8)	                      :: iasi_prs,iasi_o3_min,ylat,ylon,ylev
-      integer                         :: nlevels,iubv,icnt
-      character(len=129)              :: msgstring
-      character(len=20)               :: apm_spec
+      integer             :: i, ilev, kstr, apm_dom, apm_mm, nnlevels
+      type(location_type) :: loc2
+      real(r8)            :: mloc(3)
+      real(r8)            :: wrf_prs(nlev_wrf)
+      real(r8)            :: obs_val,ubv_obs_val,level,missing
+      real(r8)            :: iasi_psf,iasi_psf_sv,wrf_psf,ubv_delt_prs
+      real(r8)            :: iasi_prs,iasi_o3_min,ylat,ylon
+      integer             :: nlevels,icnt
+      character(len=20)   :: apm_spec
       real(r8)            :: vert_mode_filt
 !
       if ( .not. module_initialized ) call initialize_module
@@ -301,23 +307,23 @@ character(len=128), parameter :: revdate  = "$Date$"
 !
 ! Correct iasi surface pressure
       if(istatus/=0) then
-         write(msgstring, *)'APM NOTICE: IASI O3 WRF psf is bad ',wrf_psf,istatus
-         call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+         write(string1, *)'APM NOTICE: IASI O3 WRF psf is bad ',wrf_psf,istatus
+         call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          obs_val=missing
          return
       endif              
 !
       if(iasi_psf.gt.wrf_psf) then
          if((iasi_psf-wrf_psf).gt.10000.) then
-            write(msgstring, *)'APM: NOTICE - reject IASI O3 - WRF PSF too large ',iasi_psf,wrf_psf
-            call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+            write(string1, *)'APM: NOTICE - reject IASI O3 - WRF PSF too large ',iasi_psf,wrf_psf
+            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
             istatus=2
             obs_val=missing
             return
          endif
       else
-!         write(msgstring, *)'APM: NOTICE correct IASI O3 psf with WRF psf ',iasi_psf,wrf_psf
-!         call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+!         write(string1, *)'APM: NOTICE correct IASI O3 psf with WRF psf ',iasi_psf,wrf_psf
+!         call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          iasi_psf=wrf_psf
       endif
 !
@@ -335,19 +341,19 @@ character(len=128), parameter :: revdate  = "$Date$"
          endif
       enddo
       if (kstr.eq.0) then
-         write(msgstring, *)'APM: ERROR in IASI O3 obs def kstr=0: iasi_psf= ',iasi_psf
-         call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+         write(string1, *)'APM: ERROR in IASI O3 obs def kstr=0: iasi_psf= ',iasi_psf
+         call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          call abort
       elseif (kstr.gt.6) then
-         write(msgstring, *)'APM: ERROR IASI O3 psf is unrealistic: iasi_psf, wrf_psf= ',iasi_psf,wrf_psf
-         call error_handler(E_MSG,'set_obs_def_iasi_03',msgstring,source,revision,revdate)
+         write(string1, *)'APM: ERROR IASI O3 psf is unrealistic: iasi_psf, wrf_psf= ',iasi_psf,wrf_psf
+         call error_handler(E_MSG,'set_obs_def_iasi_03',string1,source,revision,revdate)
       endif
 !
 ! Reject ob when number of IASI levels from WRF cannot equal actual number of IASI levels
       nnlevels=nlevels-kstr+1
       if(nnlevels.ne.nlevels) then
-         write(msgstring, *)'APM: NOTICE reject IASI O3 ob - WRF IASI levels .ne. IASI levels, nnlvls,nlvls ',nnlevels,nlevels
-         call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+         write(string1, *)'APM: NOTICE reject IASI O3 ob - WRF IASI levels .ne. IASI levels, nnlvls,nlvls ',nnlevels,nlevels
+         call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          istatus=2
          obs_val=missing
          return
@@ -386,8 +392,8 @@ character(len=128), parameter :: revdate  = "$Date$"
          if (istatus .eq. 2 .and. ilev .eq. 1) then
             loc2 = set_location(mloc(1),mloc(2), wrf_prs(1), VERTISPRESSURE)
             call interpolate(state, loc2, KIND_O3, obs_val, istatus) 
-!            write(msgstring, *)'APM: NOTICE IASI O3 sfc extrap fix ',ilev,istatus,obs_val
-!            call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+!            write(string1, *)'APM: NOTICE IASI O3 sfc extrap fix ',ilev,istatus,obs_val
+!            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          endif
 !
 ! check for problems with the interpolation
@@ -408,16 +414,16 @@ character(len=128), parameter :: revdate  = "$Date$"
 !
 ! interpolation failed
          if (istatus /= 0) then
-            write(msgstring, *)'APM: NOTICE reject IASI O3 ob - WRF interpolation failed ',ilev,istatus,obs_val
-            call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+            write(string1, *)'APM: NOTICE reject IASI O3 ob - WRF interpolation failed ',ilev,istatus,obs_val
+            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
             obs_val = missing 
             return
          endif
 !
 ! Check for WRF O3 lower bound
          if (obs_val.lt.iasi_o3_min) then
-            write(msgstring, *)'APM: NOTICE resetting minimum IASI O3 value  '
-            call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+            write(string1, *)'APM: NOTICE resetting minimum IASI O3 value  '
+            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
             obs_val = iasi_o3_min 
          endif
          obs_val = obs_val * 1000.0_r8
@@ -436,10 +442,8 @@ subroutine wrf_dart_ubval_interp(obs_val,del_prs,domain,species,lon,lat,lev,im2,
    integer,parameter                                 :: nx2=100,ny2=40,nz2=66,nm2=12
    integer                                           :: fid1,fid2,domain,rc,im2
    integer                                           :: i,j,k,imn1,istatus
-   integer,dimension(nm1)                            :: month
    character(len=20)                                 :: species
    character(len=180)                                :: file_nam,file_in1,file_in2,path
-   character(len=nchr1),dimension(nmspc1)            :: spec_nam    
    real(r8)                                          :: lon,lat,lev,del_lon1
    real(r8)                                          :: obs_val,del_prs    
    real,dimension(nx1,ny1)                           :: xlon1,xlat1
@@ -580,7 +584,7 @@ subroutine apm_get_exo_coldens(fid,fldname,dataf,nx,ny,nz,nm)
    implicit none
    integer,parameter                      :: maxdim=4
    integer                                :: nx,ny,nz,nm
-   integer                                :: i,rc,v_ndim,natts,domain,fid
+   integer                                :: i,rc,v_ndim,natts,fid
    integer                                :: v_id,typ
    integer,dimension(maxdim)              :: v_dimid,v_dim,one
    character(len=*)                       :: fldname
@@ -1119,46 +1123,47 @@ end subroutine apm_interpolate
 !
 !----------------------------------------------------------------------
 
-   subroutine set_obs_def_iasi_o3(key, apcol_val, altretlev, pressure, akcol, aircol_val, nlev_use)
 !----------------------------------------------------------------------
+
+subroutine set_obs_def_iasi_o3(key, apcol_val, altretlev, pressure, akcol, aircol_val, nlev_use)
+
 ! Allows passing of obs_def special information 
-      integer,	 	intent(in)	:: key
-      character(len=129) 			:: msgstring
-      integer,                intent(in)      :: nlev_use
-      real(r8),               intent(in)      :: apcol_val
-      real*8, dimension(40),  intent(in)      :: altretlev
-      real*8, dimension(40),  intent(in)      :: pressure
-      real*8, dimension(40),  intent(in)      :: akcol
-      real*8, dimension(40),  intent(in)      :: aircol_val
-!
-      if ( .not. module_initialized ) call initialize_module
+integer,                intent(in) :: key
+integer,                intent(in) :: nlev_use
+real(r8),               intent(in) :: apcol_val
+real*8, dimension(40),  intent(in) :: altretlev
+real*8, dimension(40),  intent(in) :: pressure
+real*8, dimension(40),  intent(in) :: akcol
+real*8, dimension(40),  intent(in) :: aircol_val
+
+if ( .not. module_initialized ) call initialize_module
 !
 ! Check for sufficient space
       if(num_iasi_o3_obs >= max_iasi_o3_obs) then
-         write(msgstring, *)'Not enough space for a iasi O3 obs.'
-         call error_handler(E_MSG,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
-         write(msgstring, *)'Can only have max_iasi_o3_obs (currently ',max_iasi_o3_obs,')'
-         call error_handler(E_ERR,'set_obs_def_iasi_o3',msgstring,source,revision,revdate)
+         write(string1, *)'Not enough space for a iasi O3 obs.'
+         write(string2, *)'Can only have max_iasi_o3_obs (currently ',max_iasi_o3_obs,')'
+         call error_handler(E_ERR,'set_obs_def_iasi_o3',string1,source,revision,revdate,text2=string2)
       endif
 !
-      iasi_nlevels(key)		        	= nlev_use
-      iasi_o3_prior(key)			= apcol_val
-      iasi_heights(key,1:nlev_use)		= altretlev(1:nlev_use)
-      iasi_pressure(key,1:nlev_use)		= pressure(1:nlev_use)
-      avg_kernel(key, 1:nlev_use)   		= akcol(1:nlev_use)
-      iasi_air_column(key,1:nlev_use)		= aircol_val(1:nlev_use)
+      iasi_nlevels(key)               = nlev_use
+      iasi_o3_prior(key)              = apcol_val
+      iasi_heights(   key,1:nlev_use) = altretlev(1:nlev_use)
+      iasi_pressure(  key,1:nlev_use) = pressure(1:nlev_use)
+      avg_kernel(     key,1:nlev_use) = akcol(1:nlev_use)
+      iasi_air_column(key,1:nlev_use) = aircol_val(1:nlev_use)
    end subroutine set_obs_def_iasi_o3
 !
 !=================================
 ! other functions and subroutines
 !=================================
+
    function read_iasi_prior_column(ifile, fform)
-      integer,                    intent(in) :: ifile
-      real(r8)                               :: read_iasi_prior_column
+
+      integer,          intent(in)           :: ifile
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8)                               :: read_iasi_prior_column
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1174,12 +1179,11 @@ end subroutine apm_interpolate
    end function read_iasi_prior_column
 !
    subroutine write_iasi_prior_column(ifile, iasi_prior_temp, fform)
-      integer,                    intent(in) :: ifile
-      real(r8),                   intent(in) :: iasi_prior_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,          intent(in) :: ifile
+      real(r8),         intent(in) :: iasi_prior_temp
+      character(len=*), intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1193,12 +1197,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_prior_column
 !
    function read_iasi_num_levels(ifile, fform)
-      integer,                    intent(in) :: ifile
-      integer                                :: read_iasi_num_levels
+      integer,          intent(in)           :: ifile
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer                                :: read_iasi_num_levels
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1213,12 +1216,11 @@ end subroutine apm_interpolate
    end function read_iasi_num_levels
 !
    subroutine write_iasi_num_levels(ifile, number_of_levels_temp, fform)
-      integer,                    intent(in) :: ifile
-      integer,                    intent(in) :: number_of_levels_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,          intent(in) :: ifile
+      integer,          intent(in) :: number_of_levels_temp
+      character(len=*), intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1232,12 +1234,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_num_levels
 !
    function read_iasi_avg_kernels(ifile, nlevels,fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40)        :: read_iasi_avg_kernels
+      integer,          intent(in)           :: ifile, nlevels
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8), dimension(40)                :: read_iasi_avg_kernels
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1252,12 +1253,11 @@ end subroutine apm_interpolate
    end function read_iasi_avg_kernels
 !
    function read_iasi_heights(ifile, nlevels,fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40)        :: read_iasi_heights
+      integer,          intent(in)           :: ifile, nlevels
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8), dimension(40)                :: read_iasi_heights
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1272,12 +1272,11 @@ end subroutine apm_interpolate
    end function read_iasi_heights
 !
    function read_iasi_pressure(ifile, nlevels,fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40)        :: read_iasi_pressure
+      integer,          intent(in)           :: ifile, nlevels
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8), dimension(40)                :: read_iasi_pressure
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1292,12 +1291,11 @@ end subroutine apm_interpolate
    end function read_iasi_pressure
 !
    function read_iasi_prior_prof(ifile, nlevels,fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40)        :: read_iasi_prior_prof
+      integer,          intent(in)           :: ifile, nlevels
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8), dimension(40)                :: read_iasi_prior_prof
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1310,14 +1308,14 @@ end subroutine apm_interpolate
             read(ifile, *) read_iasi_prior_prof(1:nlevels)
       END SELECT
    end function read_iasi_prior_prof
-!
+
+
    function read_iasi_air_column(ifile, nlevels,fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40)        :: read_iasi_air_column
+      integer,          intent(in)           :: ifile, nlevels
       character(len=*), intent(in), optional :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      real(r8), dimension(40)                :: read_iasi_air_column
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1332,12 +1330,11 @@ end subroutine apm_interpolate
    end function read_iasi_air_column
 !
    subroutine write_iasi_avg_kernels(ifile, avg_kernels_temp, nlevels, fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40), intent(in)  :: avg_kernels_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,                 intent(in) :: ifile, nlevels
+      real(r8), dimension(40), intent(in) :: avg_kernels_temp
+      character(len=*),        intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1351,12 +1348,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_avg_kernels
 !
    subroutine write_iasi_heights(ifile, height_temp, nlevels, fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40), intent(in)  :: height_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,                 intent(in) :: ifile, nlevels
+      real(r8), dimension(40), intent(in) :: height_temp
+      character(len=*),        intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1370,12 +1366,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_heights
 
    subroutine write_iasi_pressure(ifile, pressure_temp, nlevels, fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40), intent(in)  :: pressure_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,                 intent(in) :: ifile, nlevels
+      real(r8), dimension(40), intent(in) :: pressure_temp
+      character(len=*),        intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1389,12 +1384,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_pressure
 !
    subroutine write_iasi_prior_prof(ifile, prior_prof_temp, nlevels, fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40), intent(in)  :: prior_prof_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,                 intent(in) :: ifile, nlevels
+      real(r8), dimension(40), intent(in) :: prior_prof_temp
+      character(len=*),        intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1408,12 +1402,11 @@ end subroutine apm_interpolate
    end subroutine write_iasi_prior_prof
 !
    subroutine write_iasi_air_column(ifile, aircol_prof_temp, nlevels, fform)
-      integer,                    intent(in) :: ifile, nlevels
-      real(r8), dimension(40), intent(in)  :: aircol_prof_temp
-      character(len=32),          intent(in) :: fform
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
+      integer,                 intent(in) :: ifile, nlevels
+      real(r8), dimension(40), intent(in) :: aircol_prof_temp
+      character(len=*),        intent(in) :: fform
+
+      character(len=32) :: fileformat
 !
       if ( .not. module_initialized ) call initialize_module
 !
@@ -1426,8 +1419,8 @@ end subroutine apm_interpolate
       END SELECT
    end subroutine write_iasi_air_column
 end module obs_def_iasi_O3_mod
+
 ! END DART PREPROCESS MODULE CODE
-!-----------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
 ! $URL$

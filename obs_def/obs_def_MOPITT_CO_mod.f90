@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -54,8 +56,12 @@ use    obs_kind_mod, only  : KIND_CO, KIND_SURFACE_PRESSURE, KIND_LANDMASK
 
 implicit none
 private
-public :: write_mopitt_co, read_mopitt_co, interactive_mopitt_co, &
-          get_expected_mopitt_co, set_obs_def_mopitt_co
+
+public :: write_mopitt_co, &
+          read_mopitt_co, &
+          interactive_mopitt_co, &
+          get_expected_mopitt_co, &
+          set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
 integer, parameter               :: max_mopitt_co_obs = 10000000
@@ -65,26 +71,25 @@ real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
                               100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
 real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
                               100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
-!
+
 real(r8), allocatable, dimension(:,:) :: avg_kernel
 real(r8), allocatable, dimension(:) :: mopitt_prior
-real(r8), allocatable, dimension(:) :: mopitt_psurf	
+real(r8), allocatable, dimension(:) :: mopitt_psurf
 integer,  allocatable, dimension(:) :: mopitt_nlevels
-!
-! For now, read in all info on first read call, write all info on first write call
-logical :: already_read = .false., already_written = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_mopitt_mod.f90,v $", &
-revision = "$Revision$", &
-revdate  = "$Date$"
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = &
+   "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
+
+character(len=512) :: string1, string2
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
-!
-    character(len=129)  :: MOPITT_CO_retrieval_type
-    logical             :: use_log_co
+
+character(len=129)  :: MOPITT_CO_retrieval_type
+logical             :: use_log_co
 !
 ! MOPITT_CO_retrieval_type:
 !     RAWR - retrievals in VMR (ppb) units
@@ -127,16 +132,17 @@ subroutine read_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
 !subroutine read_mopitt_co(key, ifile, fform)
 
-integer, intent(out)            :: key
-integer, intent(in)             :: ifile
-character(len=*), intent(in), optional    :: fform
-character(len=32) 		:: fileformat
+integer,          intent(out)          :: key
+integer,          intent(in)           :: ifile
+character(len=*), intent(in), optional :: fform
 
-integer			:: mopitt_nlevels_1
-real(r8)			:: mopitt_prior_1
-real(r8)			:: mopitt_psurf_1
-real(r8), dimension(mopitt_dim)	:: avg_kernels_1
-integer 			:: keyin
+character(len=32)                   :: fileformat
+
+integer  :: mopitt_nlevels_1
+real(r8) :: mopitt_prior_1
+real(r8) :: mopitt_psurf_1
+real(r8), dimension(mopitt_dim) :: avg_kernels_1
+integer  :: keyin
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -180,9 +186,9 @@ end subroutine read_mopitt_co
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
-character(len=32) 		:: fileformat
+character(len=32) :: fileformat
 real(r8), dimension(mopitt_dim) :: avg_kernels_temp
 
 if ( .not. module_initialized ) call initialize_module
@@ -225,17 +231,14 @@ end subroutine write_mopitt_co
 
 integer, intent(out) :: key
 
-character(len=129) :: msgstring
-
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_mopitt_co_obs >= max_mopitt_co_obs) then
    ! PUT IN ERROR HANDLER CALL
-   write(msgstring, *)'Not enough space for a mopitt CO obs.'
-   call error_handler(E_MSG,'interactive_mopitt_co',msgstring,source,revision,revdate)
-   write(msgstring, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
-   call error_handler(E_ERR,'interactive_mopitt_co',msgstring,source,revision,revdate)
+   write(string1, *)'Not enough space for a mopitt CO obs.'
+   write(string2, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate, text2=string2)
 endif
 
 ! Increment the index
@@ -269,16 +272,14 @@ end subroutine interactive_mopitt_co
     integer :: i,ii,kstr
     type(location_type) :: loc2
     real(r8)            :: mloc(3),fac,obs_val_min,obs_val_min_log
-    real(r8)	        :: obs_val,wrf_psf,level,wrf_landmask
+    real(r8)            :: obs_val,wrf_psf,level,wrf_landmask
     real(r8)            :: co_min,co_min_log,mopitt_prs_mid,mopitt_psf
-    real(r8)            :: vert_mode_filt,val_vmr
     real(r8)            :: wt_lnd_up,wt_lnd_dw
     real(r8)            :: wt_ocn_up,wt_ocn_dw
     real(r8)            :: val_lnd,val_ocn
 !
     integer             :: nlevels,nnlevels,check_min
-    integer             :: iflg,ilv_ocn,ilv_lnd
-    character(len=129)  :: msgstring
+    integer             :: ilv_ocn,ilv_lnd
 
 !
 ! Initialize DART
@@ -338,23 +339,23 @@ end subroutine interactive_mopitt_co
 !
 ! Correct mopitt surface pressure
     if(istatus/=0) then
-!       write(msgstring, *)'APM NOTICE: MOPITT CO WRF psf is bad ',wrf_psf,istatus
-!       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!       write(string1, *)'APM NOTICE: MOPITT CO WRF psf is bad ',wrf_psf,istatus
+!       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
        obs_val=missing_r8
        return
     endif              
 !
     if(mopitt_psf.gt.wrf_psf) then
        if((mopitt_psf-wrf_psf).gt.10000.) then
-          write(msgstring, *)'APM: NOTICE - reject MOPITT CO - WRF PSF too large ', &
+          write(string1, *)'APM: NOTICE - reject MOPITT CO - WRF PSF too large ', &
           mopitt_psf,wrf_psf
-          call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+          call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
           obs_val=missing_r8
           istatus=2
           return
        else
-!          write(msgstring, *)'APM: NOTICE correct MOPITT CO psf with WRF psf ',mopitt_psf,wrf_psf
-!          call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+!          write(string1, *)'APM: NOTICE correct MOPITT CO psf with WRF psf ',mopitt_psf,wrf_psf
+!          call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
           mopitt_psf=wrf_psf
        endif
     endif
@@ -373,22 +374,22 @@ end subroutine interactive_mopitt_co
        endif
     enddo
     if (kstr.eq.0) then
-       write(msgstring, *)'APM: ERROR in MOPITT CO obs def kstr=0: mopitt_psf= ',mopitt_psf
-       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+       write(string1, *)'APM: ERROR in MOPITT CO obs def kstr=0: mopitt_psf= ',mopitt_psf
+       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
        call exit_all()
     elseif (kstr.gt.6) then
-       write(msgstring, *)'APM: ERROR MOPITT CO surface pressure is unrealistic: mopitt_psf, wrf_psf= ', &
+       write(string1, *)'APM: ERROR MOPITT CO surface pressure is unrealistic: mopitt_psf, wrf_psf= ', &
        mopitt_psf,wrf_psf
-       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
        call exit_all()
     endif
 !
 ! Reject ob when number of MOPITT levels from WRF cannot equal actual number of MOPITT levels
     nnlevels=mopitt_dim-kstr+1
     if(nnlevels.ne.nlevels) then
-       write(msgstring, *)'APM: NOTICE reject MOPITT CO ob - WRF MOP  levels .ne. MOP levels, nnlvls,nlvls ', &
+       write(string1, *)'APM: NOTICE reject MOPITT CO ob - WRF MOP  levels .ne. MOP levels, nnlvls,nlvls ', &
        nnlevels,nlevels
-       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
        obs_val=missing_r8
        istatus=2
        return
@@ -400,9 +401,9 @@ end subroutine interactive_mopitt_co
     loc2 = set_location(mloc(1), mloc(2), 0.0_r8, VERTISUNDEF)
     call interpolate(state, loc2, KIND_LANDMASK, wrf_landmask, istatus)  
     if (istatus /= 0) then
-       write(msgstring, *)'APM ERROR: WRF interpolate wrf landmask error ', &
+       write(string1, *)'APM ERROR: WRF interpolate wrf landmask error ', &
        wrf_landmask,istatus
-       call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
        wrf_landmask = missing_r8 
        obs_val = missing_r8
        istatus = 2
@@ -430,8 +431,8 @@ end subroutine interactive_mopitt_co
        istatus = 0
        call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
        if (istatus /= 0) then
-          write(msgstring, *)'APM NOTICE: WRF extrapolation needed reject MOPITT CO ob '
-          call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+          write(string1, *)'APM NOTICE: WRF extrapolation needed reject MOPITT CO ob '
+          call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
           obs_val = missing_r8 
           return
        endif
@@ -444,9 +445,9 @@ end subroutine interactive_mopitt_co
        check_min=0 
        if (check_min.eq.0) then
           if (obs_val.lt.co_min) then
-             write(msgstring, *)'APM NOTICE: resetting minimum MOPITT CO value ', &
+             write(string1, *)'APM NOTICE: resetting minimum MOPITT CO value ', &
              obs_val,co_min,obs_val_min
-             call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source, &
+             call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source, &
              revision,revdate)
              obs_val=obs_val_min
           endif
@@ -520,9 +521,9 @@ end subroutine interactive_mopitt_co
              fac=1.
           endif
           if (obs_val.lt.fac*obs_val_min) then
-             write(msgstring, *)'APM NOTICE: resetting minimum MOPITT CO value ', &
+             write(string1, *)'APM NOTICE: resetting minimum MOPITT CO value ', &
              obs_val,fac*obs_val_min
-             call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+             call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
              obs_val=fac*obs_val_min
           endif
        endif
@@ -558,26 +559,25 @@ end subroutine get_expected_mopitt_co
 !----------------------------------------------------------------------
 ! Allows passing of obs_def special information 
 
-integer,	 	intent(in)	:: key, co_nlevels
-real*8,dimension(10),	intent(in)	:: co_avgker	
-real*8,			intent(in)	:: co_prior
-real*8,			intent(in)	:: co_psurf
-character(len=129) 			:: msgstring
+integer,                 intent(in) :: key, co_nlevels
+real(r8), dimension(10), intent(in) :: co_avgker
+real(r8),                intent(in) :: co_prior
+real(r8),                intent(in) :: co_psurf
 
 if ( .not. module_initialized ) call initialize_module
 
 if(num_mopitt_co_obs >= max_mopitt_co_obs) then
-   ! PUT IN ERROR HANDLER CALL
-   write(msgstring, *)'Not enough space for a mopitt CO obs.'
-   call error_handler(E_MSG,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
-   write(msgstring, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
-   call error_handler(E_ERR,'set_obs_def_mopitt_co',msgstring,source,revision,revdate)
+   
+   write(string1, *)'Not enough space for a mopitt CO obs.'
+   call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
+   write(string1, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   call error_handler(E_ERR,'set_obs_def_mopitt_co',string1,source,revision,revdate)
 endif
 
-avg_kernel(key,:) 	= co_avgker(:)
-mopitt_prior(key)	= co_prior
-mopitt_psurf(key)	= co_psurf
-mopitt_nlevels(key)     = co_nlevels
+avg_kernel(key,:)   = co_avgker(:)
+mopitt_prior(key)   = co_prior
+mopitt_psurf(key)   = co_psurf
+mopitt_nlevels(key) = co_nlevels
 
 end subroutine set_obs_def_mopitt_co
 
@@ -588,8 +588,6 @@ integer,                    intent(in) :: ifile
 real(r8)                               :: read_mopitt_prior
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -612,8 +610,6 @@ integer,                    intent(in) :: ifile
 integer                               :: read_mopitt_nlevels
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -634,12 +630,10 @@ end function read_mopitt_nlevels
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
-integer,                    intent(in) :: ifile
-real(r8), 		    intent(in) :: mopitt_prior_temp
-character(len=32),          intent(in) :: fform
+integer,           intent(in) :: ifile
+real(r8),          intent(in) :: mopitt_prior_temp
+character(len=32), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -661,8 +655,6 @@ integer,                    intent(in) :: ifile
 integer,                    intent(in) :: mopitt_nlevels_temp
 character(len=32),          intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -686,8 +678,6 @@ integer,                    intent(in) :: ifile
 real(r8)                               :: read_mopitt_psurf
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -706,12 +696,10 @@ end function read_mopitt_psurf
 
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
-integer,                    intent(in) :: ifile
-real(r8),		    intent(in) :: mopitt_psurf_temp
-character(len=32),          intent(in) :: fform
+integer,           intent(in) :: ifile
+real(r8),          intent(in) :: mopitt_psurf_temp
+character(len=32), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -733,8 +721,6 @@ integer,                    intent(in) :: ifile, nlevels
 real(r8), dimension(10)        :: read_mopitt_avg_kernels
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 read_mopitt_avg_kernels(:) = 0.0_r8
@@ -759,8 +745,6 @@ integer,                    intent(in) :: ifile, nlevels_temp
 real(r8), dimension(10), intent(in)  :: avg_kernels_temp
 character(len=32),          intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -778,8 +762,11 @@ end subroutine write_mopitt_avg_kernels
 
 
 
-
-
-
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -1,6 +1,8 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004, 2005, Data Assimilation Initiative, University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
+! DART software - Copyright 2004 - 2013 UCAR. This open source software is
+! provided by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MONITOR_SO2, KIND_SO2
@@ -104,25 +106,36 @@ use     location_mod, only : location_type, set_location, get_location , write_l
                              read_location
 
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_SO2, KIND_NO2, KIND_CO, KIND_O3, KIND_BC1, KIND_BC2, KIND_OC1, KIND_OC2, &
+use    obs_kind_mod,  only : KIND_SO2, KIND_NO2, KIND_CO, KIND_O3, KIND_BC1, KIND_BC2, KIND_OC1, KIND_OC2, &
                              KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
                              KIND_DST05, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
                              KIND_SSLT04, KIND_PM25, KIND_PM10,KIND_PRESSURE, KIND_TEMPERATURE 
 
 implicit none
+private
 
+public :: write_monitor_so2,  read_monitor_so2, &
+          write_monitor_no2,  read_monitor_no2, &
+          write_monitor_co,   read_monitor_co, &
+          write_monitor_o3,   read_monitor_o3, &
+          write_monitor_pm10, read_monitor_pm10, &
+          write_monitor_pm25, read_monitor_pm25, &
+          interactive_monitor_so2,  get_expected_monitor_so2, &
+          interactive_monitor_no2,  get_expected_monitor_no2, &
+          interactive_monitor_co,   get_expected_monitor_co, &
+          interactive_monitor_o3,   get_expected_monitor_o3, &
+          interactive_monitor_pm10, get_expected_monitor_pm10, &
+          interactive_monitor_pm25, get_expected_monitor_pm25
 
-logical,parameter :: use_diag=.false.
+logical, parameter :: use_diag = .false.
 
-! CVS Generated file description for error handling, do not edit
-character(len=128) :: &
-source   = "$Source: /home/thoar/CVS.REPOS/DART/obs_def/obs_def_monitor_mod_mod.f90,v $", &
-revision = "$Revision$", &
-revdate  = "$Date$"
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = &
+   "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
-integer  :: counts1 = 0
-
 
 contains
 
@@ -132,7 +145,6 @@ contains
 !----------------------------------------------------------------------------
 ! subroutine initialize_module
 
-integer :: iunit, rc
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
@@ -155,7 +167,7 @@ end subroutine read_monitor_so2
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -181,11 +193,9 @@ real(r8),            intent(out) :: so2               ! so2 concentration(ug/m3)
 integer,             intent(out) :: istatus
 
 real(r8), PARAMETER :: mso2=64   ! molecular weight
-                                          !   to avoid problems near zero in Bolton's equation
-real(r8) :: p_Pa                          ! pressure (Pa)
-real(r8) :: T_k                            ! tempreture(K)
-
-character(len=129) :: errstring
+                                 !   to avoid problems near zero in Bolton's equation
+real(r8) :: p_Pa                 ! pressure (Pa)
+real(r8) :: T_k                  ! temperature(K)
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -233,7 +243,7 @@ end subroutine read_monitor_no2
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -262,8 +272,6 @@ real(r8), PARAMETER :: mno2=46   ! molecular weight
                                           !   to avoid problems near zero in Bolton's equation
 real(r8) :: p_Pa                          ! pressure (Pa)
 real(r8) :: T_k                            ! tempreture(K)
-
-character(len=129) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -304,7 +312,7 @@ end subroutine read_monitor_o3
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -333,8 +341,6 @@ real(r8), PARAMETER :: mo3=48   ! molecular weight
                                           !   to avoid problems near zero in Bolton's equation
 real(r8) :: p_Pa                          ! pressure (Pa)
 real(r8) :: T_k                            ! tempreture(K)
-
-character(len=129) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -376,7 +382,7 @@ end subroutine read_monitor_co
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -405,8 +411,6 @@ real(r8), PARAMETER :: mco=28   ! molecular weight
                                           !   to avoid problems near zero in Bolton's equation
 real(r8) :: p_Pa                          ! pressure (Pa)
 real(r8) :: T_k                            ! tempreture(K)
-
-character(len=129) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -447,7 +451,7 @@ end subroutine read_monitor_pm25
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -479,7 +483,6 @@ real(r8) :: p_Pa                          ! pressure (Pa)
 real(r8) :: T_k                            ! tempreture(K)
 real(r8) :: PM25,BC1,BC2,DST01,DST02,SSLT01,SSLT02,SO4,OC1,OC2 !components
 real(r8) :: alt_temp 
-character(len=129) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -588,7 +591,7 @@ end subroutine read_monitor_pm10
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
-character(len=*), intent(in), optional 	:: fform
+character(len=*), intent(in), optional :: fform
 
 continue
 
@@ -620,7 +623,6 @@ real(r8) :: p_Pa                          ! pressure (Pa)
 real(r8) :: T_k                            ! tempreture(K)
 real(r8) :: PM25,BC1,BC2,DST01,DST02,DST03,DST04,SSLT01,SSLT02,SSLT03,SO4,OC1,OC2,PM10 !components
 real(r8) :: alt_temp 
-character(len=129) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -743,3 +745,9 @@ end subroutine get_expected_monitor_pm10
 
 end module obs_def_monitor_mod
 ! END DART PREPROCESS MODULE CODE
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 
 ! BEGIN DART PREPROCESS KIND LIST
@@ -65,11 +65,15 @@ use     location_mod, only : location_type, set_location, get_location, VERTISPR
 use  assim_model_mod, only : interpolate
 use    obs_kind_mod, only  : KIND_CO, KIND_PRESSURE, KIND_SURFACE_PRESSURE
 
-
 implicit none
+private
 
-public :: write_mopitt_co, read_mopitt_co, interactive_mopitt_co, &
-          get_expected_mopitt_co, get_expected_iasi_co, set_obs_def_mopitt_co
+public :: write_mopitt_co, &
+          read_mopitt_co, &
+          interactive_mopitt_co, &
+          get_expected_mopitt_co, &
+          get_expected_iasi_co, &
+          set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
 integer, parameter               :: max_mopitt_co_obs = 10000000
@@ -84,9 +88,6 @@ real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
                               95000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000. /)
 real(r8), dimension(max_mopitt_co_obs)	 :: mopitt_psurf	
 integer,  dimension(max_mopitt_co_obs)   :: mopitt_nlevels
-
-! For now, read in all info on first read call, write all info on first write call
-logical :: already_read = .false., already_written = .false.
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -120,6 +121,7 @@ end subroutine initialize_module
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
 character(len=*), intent(in), optional    :: fform
+
 character(len=32) 		:: fileformat
 
 integer			:: mopitt_nlevels_1
@@ -253,15 +255,14 @@ real(r8), intent(out)           :: val
 integer, intent(out)            :: istatus
 integer :: i,j
 integer :: num_levs, lev
-type(location_type) :: loc1,loc2,loc3,loc3p,loc3m,locS
-real(r8)            :: mloc(3), mloc1(3), mloc2(3)
-real(r8)            :: obs_val, pres, surf_pres, obs_val_int
+type(location_type) :: loc3,locS
+real(r8)            :: mloc(3)
+real(r8)            :: obs_val, obs_val_int
 real(r8)            :: top_pres, bot_pres, coef, mop_layer_wght
-real(r8)            :: i_top_pres, i_bot_pres, i_pres
+real(r8)            :: i_top_pres, i_bot_pres
 real(r8)            :: p_col(max_model_levs)
 real(r8)            :: mopitt_pres_local(mopitt_dim)
 integer             :: nlevels, start_i, end_i
-integer,  allocatable :: dim_sizes(:)
 
 if ( .not. module_initialized ) call initialize_module
 val = 0.0_r8
@@ -378,18 +379,17 @@ real(r8), intent(out)           :: val
 integer, intent(out)            :: istatus
 
 integer :: i,j
-type(location_type) :: loc1,loc2,loc3,loc3p,loc3m,locS
-real(r8)            :: mloc(3), mloc1(3), mloc2(3)
-real(r8)	    :: obs_val, pres, obs_val_int
+type(location_type) :: loc3,locS
+real(r8)            :: mloc(3)
+real(r8)            :: obs_val, obs_val_int
 
 integer             :: nlevels, start_i, end_i
 
 real(r8)            :: top_pres, bot_pres, coef, mop_layer_wght
-real(r8)            :: i_top_pres, i_bot_pres, i_pres
+real(r8)            :: i_top_pres, i_bot_pres
 integer             :: num_levs, lev
 real(r8)            :: p_col(max_model_levs)
 real(r8)            :: mopitt_pres_local(mopitt_dim)
-integer,  allocatable :: dim_sizes(:)
 
 if ( .not. module_initialized ) call initialize_module
 mloc = get_location(location)
@@ -579,8 +579,6 @@ integer,                    intent(in) :: ifile
 real(r8)                               :: read_mopitt_prior
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -603,8 +601,6 @@ integer,                    intent(in) :: ifile
 integer                               :: read_mopitt_nlevels
 character(len=*), intent(in), optional :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -625,12 +621,10 @@ end function read_mopitt_nlevels
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
-integer,                    intent(in) :: ifile
-real(r8), 		    intent(in) :: mopitt_prior_temp
-character(len=32),          intent(in) :: fform
+integer,          intent(in) :: ifile
+real(r8),         intent(in) :: mopitt_prior_temp
+character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -648,12 +642,10 @@ end subroutine write_mopitt_prior
 
 subroutine write_mopitt_nlevels(ifile, mopitt_nlevels_temp, fform)
 
-integer,                    intent(in) :: ifile
-integer,                    intent(in) :: mopitt_nlevels_temp
-character(len=32),          intent(in) :: fform
+integer,          intent(in) :: ifile
+integer,          intent(in) :: mopitt_nlevels_temp
+character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -673,12 +665,10 @@ end subroutine write_mopitt_nlevels
 
 function read_mopitt_psurf(ifile, fform)
 
-integer,                    intent(in) :: ifile
-real(r8)                               :: read_mopitt_psurf
+integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
+real(r8)                               :: read_mopitt_psurf
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -697,12 +687,10 @@ end function read_mopitt_psurf
 
 subroutine write_mopitt_psurf(ifile, mopitt_psurf_temp, fform)
 
-integer,                    intent(in) :: ifile
-real(r8),		    intent(in) :: mopitt_psurf_temp
-character(len=32),          intent(in) :: fform
+integer,          intent(in) :: ifile
+real(r8),         intent(in) :: mopitt_psurf_temp
+character(len=*), intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module
@@ -720,12 +708,10 @@ end subroutine write_mopitt_psurf
 
 function read_mopitt_avg_kernels(ifile, nlevels, fform)
 
-integer,                    intent(in) :: ifile, nlevels
-real(r8), dimension(10)        :: read_mopitt_avg_kernels
+integer,          intent(in)           :: ifile, nlevels
 character(len=*), intent(in), optional :: fform
+real(r8), dimension(10)                :: read_mopitt_avg_kernels
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 read_mopitt_avg_kernels(:) = 0.0_r8
@@ -746,12 +732,10 @@ end function read_mopitt_avg_kernels
 
 subroutine write_mopitt_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
-integer,                    intent(in) :: ifile, nlevels_temp
-real(r8), dimension(10), intent(in)  :: avg_kernels_temp
-character(len=32),          intent(in) :: fform
+integer,                 intent(in) :: ifile, nlevels_temp
+real(r8), dimension(10), intent(in) :: avg_kernels_temp
+character(len=*),        intent(in) :: fform
 
-character(len=5)   :: header
-character(len=129) :: errstring
 character(len=32)  :: fileformat
 
 if ( .not. module_initialized ) call initialize_module

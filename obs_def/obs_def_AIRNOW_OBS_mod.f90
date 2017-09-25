@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! AIRNOW_CO,                       KIND_CO,                     COMMON_CODE
