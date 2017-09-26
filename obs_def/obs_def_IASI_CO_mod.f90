@@ -40,7 +40,9 @@
 ! END DART PREPROCESS SET_OBS_DEF_IASI_CO
 !
 ! BEGIN DART PREPROCESS MODULE CODE
+
 module obs_def_iasi_CO_mod
+
 use        types_mod, only : r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
                              nmlfileunit, check_namelist_read, &
@@ -60,9 +62,9 @@ public :: write_iasi_co, &
           set_obs_def_iasi_co
 
 ! Storage for the special information required for observations of this type
-integer, parameter               :: max_iasi_co_obs = 10000000
-integer, parameter               :: iasi_dim = 19
-integer, parameter               :: iasi_dimp = 20
+integer, parameter               :: MAX_IASI_CO_OBS = 10000000
+integer, parameter               :: IASI_DIM = 19
+integer, parameter               :: IASI_DIMP = 20
 integer                          :: num_iasi_co_obs = 0
 
 real(r8), allocatable, dimension(:,:) :: avg_kernel
@@ -82,7 +84,7 @@ character(len=512) :: string1, string2
 
 logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
-!
+
 character(len=129)  :: IASI_CO_retrieval_type
 logical             :: use_log_co=.false.
 !
@@ -95,21 +97,24 @@ namelist /obs_def_IASI_CO_nml/ IASI_CO_retrieval_type, use_log_co
 contains
 
 !----------------------------------------------------------------------
+!>
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 integer :: iunit, rc
+
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
+
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
-allocate(avg_kernel(max_iasi_co_obs,iasi_dim))
-allocate(pressure(max_iasi_co_obs,iasi_dimp))
-allocate(iasi_prior(max_iasi_co_obs))
-allocate(iasi_psurf(max_iasi_co_obs))
-allocate(iasi_nlevels(max_iasi_co_obs))
-allocate(iasi_nlevelsp(max_iasi_co_obs))
+allocate(avg_kernel(   MAX_IASI_CO_OBS, IASI_DIM))
+allocate(pressure(     MAX_IASI_CO_OBS, IASI_DIMP))
+allocate(iasi_prior(   MAX_IASI_CO_OBS))
+allocate(iasi_psurf(   MAX_IASI_CO_OBS))
+allocate(iasi_nlevels( MAX_IASI_CO_OBS))
+allocate(iasi_nlevelsp(MAX_IASI_CO_OBS))
 
 ! Read the namelist entry.
 IASI_CO_retrieval_type='RETR'
@@ -137,8 +142,8 @@ integer                        :: iasi_nlevels_1
 integer                        :: iasi_nlevelsp_1
 real(r8)                       :: iasi_prior_1
 real(r8)                       :: iasi_psurf_1
-real(r8), dimension(iasi_dim)  :: avg_kernels_1
-real(r8), dimension(iasi_dimp) :: pressure_1
+real(r8), dimension(IASI_DIM)  :: avg_kernels_1
+real(r8), dimension(IASI_DIMP) :: pressure_1
 integer                        :: keyin
 
 if ( .not. module_initialized ) call initialize_module
@@ -184,8 +189,8 @@ integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
 
 character(len=32) :: fileformat
-real(r8), dimension(iasi_dim)   :: avg_kernels_temp
-real(r8), dimension(iasi_dimp)  :: pressure_temp
+real(r8), dimension(IASI_DIM)   :: avg_kernels_temp
+real(r8), dimension(IASI_DIMP)  :: pressure_temp
 if ( .not. module_initialized ) call initialize_module
 fileformat = "ascii"   ! supply default
 if(present(fform)) fileformat = trim(adjustl(fform))
@@ -224,10 +229,10 @@ integer, intent(out) :: key
 if ( .not. module_initialized ) call initialize_module
 !
 ! Make sure there's enough space, if not die for now (clean later)
-if(num_iasi_co_obs >= max_iasi_co_obs) then
+if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
    ! PUT IN ERROR HANDLER CALL
    write(string1, *)'Not enough space for a iasi CO obs.'
-   write(string2, *)'Can only have max_iasi_co obs (currently ',max_iasi_co_obs,')'
+   write(string2, *)'Can only have max_iasi_co obs (currently ',MAX_IASI_CO_OBS,')'
    call error_handler(E_ERR,'interactive_iasi_co',string1,source,revision,revdate,text2=string2)
 endif
 !
@@ -333,12 +338,12 @@ endif
 !
 ! Find kstr - the surface level index
 kstr=0
-do i=1,iasi_dim
+do i=1,IASI_DIM
    if (i.eq.1 .and. iasi_psf.gt.pressure(key,2)) then
       kstr=1
       exit
    endif
-   if (i.ne.1 .and. i.ne.iasi_dim .and. iasi_psf.le.pressure(key,i) .and. &
+   if (i.ne.1 .and. i.ne.IASI_DIM .and. iasi_psf.le.pressure(key,i) .and. &
       iasi_psf.gt.pressure(key,i+1)) then
       kstr=i
       exit   
@@ -355,7 +360,7 @@ elseif (kstr.gt.6) then
 endif
 !
 ! Reject ob when number of IASI levels from WRF cannot equal actual number of IASI levels
-nnlevels=iasi_dim-kstr+1
+nnlevels=IASI_DIM-kstr+1
 if(nnlevels.ne.nlevels) then
    write(string1, *)'APM: NOTICE reject IASI CO ob - WRF IASI lvls .ne. IASI levels, nnlvls,nlvls ',nnlevels,nlevels
    call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
@@ -416,9 +421,9 @@ real(r8),                intent(in) :: co_psurf
 
 if ( .not. module_initialized ) call initialize_module
 
-if(num_iasi_co_obs >= max_iasi_co_obs) then
+if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
    write(string1, *)'Not enough space for a iasi CO obs.'
-   write(string2, *)'Can only have max_iasi_co_obs (currently ',max_iasi_co_obs,')'
+   write(string2, *)'Can only have MAX_IASI_CO_OBS (currently ',MAX_IASI_CO_OBS,')'
    call error_handler(E_ERR,'set_obs_def_iasi_co',string1,source,revision,revdate,text2=string2)
 endif
 

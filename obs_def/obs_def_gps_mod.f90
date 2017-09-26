@@ -121,6 +121,8 @@ contains
 ! initialize global gps private key number and allocate space for obs data
 integer :: rc, iunit
 
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.

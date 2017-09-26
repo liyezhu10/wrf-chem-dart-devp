@@ -315,7 +315,7 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to reverse log10(x*1.e-6) transform of CO chemistry field
-         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+         if (use_log_co .and. trim(my_field).eq.'co') then
 !            print *, 'APM: dart_to_wrf 2D CO conversion '
             do jj=1,wrf%var_size(2,ind)
                do ii=1,wrf%var_size(1,ind)
@@ -402,7 +402,7 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to reverse log10(x*1.e-6) transform of CO chemistry field
-         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+         if (use_log_co .and. trim(my_field).eq.'co') then
 !            print *, 'APM: dart_to_wrf 3D CO conversion '
             do kk=1,wrf%var_size(3,ind)
                do jj=1,wrf%var_size(2,ind)

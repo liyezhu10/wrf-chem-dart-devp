@@ -140,18 +140,24 @@ logical, save :: module_initialized = .false.
 contains
 
 !----------------------------------------------------------------------
+!>
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
+
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
 end subroutine initialize_module
 
-subroutine read_monitor_so2(key, ifile, fform)
 
+!----------------------------------------------------------------------
+!>
+
+
+subroutine read_monitor_so2(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -162,8 +168,11 @@ continue
 end subroutine read_monitor_so2
 
 
- subroutine write_monitor_so2(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine write_monitor_so2(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
@@ -174,14 +183,21 @@ continue
 end subroutine write_monitor_so2
 
 
-subroutine interactive_monitor_so2(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_so2(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_so2
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_so2(state_vector, location, key, so2, istatus)
@@ -222,12 +238,12 @@ so2=so2*(mso2*p_pa)/(8.314*T_k) ! so2(ug/m3)
 
 end subroutine get_expected_monitor_so2
  
- 
 
+!----------------------------------------------------------------------
+!>
 
 
 subroutine read_monitor_no2(key, ifile, fform)
-
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -238,7 +254,11 @@ continue
 end subroutine read_monitor_no2
 
 
- subroutine write_monitor_no2(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
+
+
+subroutine write_monitor_no2(key, ifile, fform)
 
 
 integer, intent(in)             :: key
@@ -250,14 +270,21 @@ continue
 end subroutine write_monitor_no2
 
 
-subroutine interactive_monitor_no2(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_no2(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_no2
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_no2(state_vector, location, key, no2, istatus)
@@ -292,11 +319,14 @@ if (istatus /= 0) then
 endif
 no2=no2*(mno2*p_pa)/(8.314*T_k) ! no2(ug/m3)
 
-
 end subroutine get_expected_monitor_no2 
 
-subroutine read_monitor_o3(key, ifile, fform)
 
+!----------------------------------------------------------------------
+!>
+
+
+subroutine read_monitor_o3(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -307,8 +337,11 @@ continue
 end subroutine read_monitor_o3
 
 
- subroutine write_monitor_o3(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine write_monitor_o3(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
@@ -319,14 +352,21 @@ continue
 end subroutine write_monitor_o3
 
 
-subroutine interactive_monitor_o3(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_o3(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_o3
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_o3(state_vector, location, key, o3, istatus)
@@ -365,8 +405,11 @@ o3=o3*(mo3*p_pa)/(8.314*T_k) ! o3(ug/m3)
 end subroutine get_expected_monitor_o3
 
 
-subroutine read_monitor_co(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine read_monitor_co(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -377,8 +420,11 @@ continue
 end subroutine read_monitor_co
 
 
- subroutine write_monitor_co(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine write_monitor_co(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
@@ -389,14 +435,21 @@ continue
 end subroutine write_monitor_co
 
 
-subroutine interactive_monitor_co(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_co(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_co
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_co(state_vector, location, key, co, istatus)
@@ -431,11 +484,14 @@ if (istatus /= 0) then
 endif
 co=co*(mco*p_pa)/(1000*8.314*T_k) ! co(mg/m3)
 
-
 end subroutine get_expected_monitor_co
 
-subroutine read_monitor_pm25(key, ifile, fform)
 
+!----------------------------------------------------------------------
+!>
+
+
+subroutine read_monitor_pm25(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -446,8 +502,11 @@ continue
 end subroutine read_monitor_pm25
 
 
- subroutine write_monitor_pm25(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine write_monitor_pm25(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
@@ -458,14 +517,21 @@ continue
 end subroutine write_monitor_pm25
 
 
-subroutine interactive_monitor_pm25(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_pm25(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_pm25
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_pm25(state_vector, location, key, ppm25, istatus)
@@ -574,8 +640,11 @@ ppm25=ppm25/alt_temp ! pm25(ug/m3)
 end subroutine get_expected_monitor_pm25
 
 
-subroutine read_monitor_pm10(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine read_monitor_pm10(key, ifile, fform)
 
 integer, intent(out)            :: key
 integer, intent(in)             :: ifile
@@ -586,8 +655,11 @@ continue
 end subroutine read_monitor_pm10
 
 
- subroutine write_monitor_pm10(key, ifile, fform)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine write_monitor_pm10(key, ifile, fform)
 
 integer, intent(in)             :: key
 integer, intent(in)             :: ifile
@@ -598,14 +670,21 @@ continue
 end subroutine write_monitor_pm10
 
 
-subroutine interactive_monitor_pm10(key)
+!----------------------------------------------------------------------
+!>
 
+
+subroutine interactive_monitor_pm10(key)
 
 integer, intent(out) :: key
 
 continue
 
 end subroutine interactive_monitor_pm10
+
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine get_expected_monitor_pm10(state_vector, location, key, ppm10, istatus)
@@ -740,7 +819,6 @@ ppm10=ppm10/alt_temp ! pm10(ug/m3)
 
 
 end subroutine get_expected_monitor_pm10
-
 
 
 end module obs_def_monitor_mod

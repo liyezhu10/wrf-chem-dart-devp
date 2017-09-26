@@ -64,12 +64,12 @@ public :: write_mopitt_co, &
           set_obs_def_mopitt_co
 
 ! Storage for the special information required for observations of this type
-integer, parameter               :: max_mopitt_co_obs = 10000000
-integer, parameter               :: mopitt_dim = 10
+integer, parameter               :: MAX_MOPITT_CO_OBS = 10000000
+integer, parameter               :: MOPITT_DIM = 10
 integer                          :: num_mopitt_co_obs = 0
-real(r8)   :: mopitt_pressure(mopitt_dim) =(/ &
+real(r8)   :: mopitt_pressure(MOPITT_DIM) =(/ &
                               100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
-real(r8)   :: mopitt_pressure_mid(mopitt_dim) =(/ &
+real(r8)   :: mopitt_pressure_mid(MOPITT_DIM) =(/ &
                               100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
 
 real(r8), allocatable, dimension(:,:) :: avg_kernel
@@ -102,19 +102,21 @@ contains
 
 !----------------------------------------------------------------------
 
-  subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+subroutine initialize_module
 
 integer :: iunit, rc
+
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
+
 call register_module(source, revision, revdate)
 module_initialized = .true.
-!
-allocate (avg_kernel(max_mopitt_co_obs,mopitt_dim))
-allocate (mopitt_prior(max_mopitt_co_obs))
-allocate (mopitt_psurf(max_mopitt_co_obs))
-allocate (mopitt_nlevels(max_mopitt_co_obs))
-!
+
+allocate (avg_kernel(    MAX_MOPITT_CO_OBS,MOPITT_DIM))
+allocate (mopitt_prior(  MAX_MOPITT_CO_OBS))
+allocate (mopitt_psurf(  MAX_MOPITT_CO_OBS))
+allocate (mopitt_nlevels(MAX_MOPITT_CO_OBS))
+
 ! Read the namelist entry.
 MOPITT_CO_retrieval_type='RETR'
 use_log_co=.false.
@@ -141,7 +143,7 @@ character(len=32)                   :: fileformat
 integer  :: mopitt_nlevels_1
 real(r8) :: mopitt_prior_1
 real(r8) :: mopitt_psurf_1
-real(r8), dimension(mopitt_dim) :: avg_kernels_1
+real(r8), dimension(MOPITT_DIM) :: avg_kernels_1
 integer  :: keyin
 
 if ( .not. module_initialized ) call initialize_module
@@ -189,7 +191,7 @@ integer, intent(in)             :: ifile
 character(len=*), intent(in), optional :: fform
 
 character(len=32) :: fileformat
-real(r8), dimension(mopitt_dim) :: avg_kernels_temp
+real(r8), dimension(MOPITT_DIM) :: avg_kernels_temp
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -234,10 +236,10 @@ integer, intent(out) :: key
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
-if(num_mopitt_co_obs >= max_mopitt_co_obs) then
+if(num_mopitt_co_obs >= MAX_MOPITT_CO_OBS) then
    ! PUT IN ERROR HANDLER CALL
    write(string1, *)'Not enough space for a mopitt CO obs.'
-   write(string2, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   write(string2, *)'Can only have MAX_MOPITT_CO_OBS (currently ',MAX_MOPITT_CO_OBS,')'
    call error_handler(E_ERR,'interactive_mopitt_co',string1,source,revision,revdate, text2=string2)
 endif
 
@@ -362,12 +364,12 @@ end subroutine interactive_mopitt_co
 !
 ! Find kstr - the surface level index
     kstr=0
-    do i=1,mopitt_dim
+    do i=1,MOPITT_DIM
        if (i.eq.1 .and. mopitt_psf.gt.mopitt_pressure(2)) then
           kstr=i
           exit
        endif
-       if (i.ne.1 .and. i.ne.mopitt_dim .and. mopitt_pressure(i).ge.mopitt_psf .and. &
+       if (i.ne.1 .and. i.ne.MOPITT_DIM .and. mopitt_pressure(i).ge.mopitt_psf .and. &
        mopitt_psf.gt.mopitt_pressure(i+1)) then
           kstr=i
           exit   
@@ -385,7 +387,7 @@ end subroutine interactive_mopitt_co
     endif
 !
 ! Reject ob when number of MOPITT levels from WRF cannot equal actual number of MOPITT levels
-    nnlevels=mopitt_dim-kstr+1
+    nnlevels=MOPITT_DIM-kstr+1
     if(nnlevels.ne.nlevels) then
        write(string1, *)'APM: NOTICE reject MOPITT CO ob - WRF MOP  levels .ne. MOP levels, nnlvls,nlvls ', &
        nnlevels,nlevels
@@ -566,11 +568,11 @@ real(r8),                intent(in) :: co_psurf
 
 if ( .not. module_initialized ) call initialize_module
 
-if(num_mopitt_co_obs >= max_mopitt_co_obs) then
+if(num_mopitt_co_obs >= MAX_MOPITT_CO_OBS) then
    
    write(string1, *)'Not enough space for a mopitt CO obs.'
    call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
-   write(string1, *)'Can only have max_mopitt_co_obs (currently ',max_mopitt_co_obs,')'
+   write(string1, *)'Can only have MAX_MOPITT_CO_OBS (currently ',MAX_MOPITT_CO_OBS,')'
    call error_handler(E_ERR,'set_obs_def_mopitt_co',string1,source,revision,revdate)
 endif
 

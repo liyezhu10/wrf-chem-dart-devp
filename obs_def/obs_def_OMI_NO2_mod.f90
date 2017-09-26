@@ -66,11 +66,11 @@ public :: write_omi_no2, &
           set_obs_def_omi_no2
 
 ! Storage for the special information required for observations of this type
-integer, parameter               :: max_omi_no2_obs = 10000000
-integer, parameter               :: omi_dim = 35
+integer, parameter               :: MAX_OMI_NO2_OBS = 10000000
+integer, parameter               :: OMI_DIM = 35
 integer                          :: num_omi_no2_obs = 0
-! lxl:real(r8), dimension(max_omi_no2_obs) :: mopitt_prior
-real(r8)   :: omi_pressure(omi_dim) =(/ &
+! lxl:real(r8), dimension(MAX_OMI_NO2_OBS) :: mopitt_prior
+real(r8)   :: omi_pressure(OMI_DIM) =(/ &
         102000., 101000., 100000., 99000., 97500., 96000., 94500., &
          92500.,  90000.,  87500., 85000., 82500., 80000., 77000., &
          74000.,  70000.,  66000., 61000., 56000., 50000., 45000., &
@@ -95,25 +95,27 @@ integer  :: counts1 = 0
 contains
 
 !----------------------------------------------------------------------
+!> 
 
 subroutine initialize_module
-!----------------------------------------------------------------------------
-! subroutine initialize_module
+
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
-allocate(avg_kernel(max_omi_no2_obs,omi_dim))
-allocate(omi_psurf(max_omi_no2_obs))
-allocate(omi_ptrop(max_omi_no2_obs))
-allocate(omi_nlevels(max_omi_no2_obs))
+allocate(avg_kernel( MAX_OMI_NO2_OBS,OMI_DIM))
+allocate(omi_psurf(  MAX_OMI_NO2_OBS))
+allocate(omi_ptrop(  MAX_OMI_NO2_OBS))
+allocate(omi_nlevels(MAX_OMI_NO2_OBS))
 
 end subroutine initialize_module
 
-
+!----------------------------------------------------------------------
+!> 
 
 subroutine read_omi_no2(key, ifile, fform)
-!----------------------------------------------------------------------
 
 integer,          intent(out)          :: key
 integer,          intent(in)           :: ifile
@@ -124,7 +126,7 @@ integer           :: omi_nlevels_1
 ! lxl:real(r8):: mopitt_prior_1
 real(r8)          :: omi_psurf_1
 real(r8)          :: omi_ptrop_1
-real(r8), dimension(omi_dim):: avg_kernels_1
+real(r8), dimension(OMI_DIM):: avg_kernels_1
 integer           :: keyin
 
 if ( .not. module_initialized ) call initialize_module
@@ -163,7 +165,9 @@ call set_obs_def_omi_no2(key, avg_kernels_1, omi_psurf_1, omi_ptrop_1, omi_nleve
 
 end subroutine read_omi_no2
 
+
 !----------------------------------------------------------------------
+!> 
 
 subroutine write_omi_no2(key, ifile, fform)
 
@@ -172,7 +176,7 @@ integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
 
 character(len=32) :: fileformat
-real(r8), dimension(omi_dim) :: avg_kernels_temp
+real(r8), dimension(OMI_DIM) :: avg_kernels_temp
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -208,20 +212,19 @@ end subroutine write_omi_no2
 
 
 !----------------------------------------------------------------------
+!> Initializes the specialized part of a MOPITT observation
+!> Passes back up the key for this one
 
 subroutine interactive_omi_no2(key)
-!
-! Initializes the specialized part of a MOPITT observation
-! Passes back up the key for this one
 
 integer, intent(out) :: key
 
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure there's enough space, if not die for now (clean later)
-if(num_omi_no2_obs >= max_omi_no2_obs) then
+if(num_omi_no2_obs >= MAX_OMI_NO2_OBS) then
    write(string1, *)'Not enough space for a omi NO2 obs.'
-   write(string2, *)'Can only have max_omi_no2_obs (currently ',max_omi_no2_obs,')'
+   write(string2, *)'Can only have MAX_OMI_NO2_OBS (currently ',MAX_OMI_NO2_OBS,')'
    call error_handler(E_ERR,'interactive_omi_no2',string1,source,revision,revdate,text2=string2)
 endif
 
@@ -242,8 +245,12 @@ read(*, *) avg_kernel(num_omi_no2_obs,:)
 
 end subroutine interactive_omi_no2
 
-subroutine get_expected_omi_no2(state, location, key, val, istatus)
+
 !----------------------------------------------------------------------
+!>
+
+subroutine get_expected_omi_no2(state, location, key, val, istatus)
+
 !subroutine get_expected_omi_no2(state, location, key, val, istatus)
 !
    real(r8), intent(in)            :: state(:)
@@ -257,7 +264,7 @@ subroutine get_expected_omi_no2(state, location, key, val, istatus)
    real(r8)            :: mloc(3)
    real(r8)	       :: obs_val,wrf_psf,level,missing
    real(r8)            :: no2_min,omi_psf,omi_ptrp,omi_psf_save,mg !,mopitt_prs_mid
-   real(r8), dimension(omi_dim) :: no2_vmr
+   real(r8), dimension(OMI_DIM) :: no2_vmr
 !
    integer             :: nlevels,nnlevels
 !
@@ -301,12 +308,12 @@ subroutine get_expected_omi_no2(state, location, key, val, istatus)
 !
 ! Find kstr - the surface level index
    kstr=0
-   do i=1,omi_dim
+   do i=1,OMI_DIM
       if (i .eq. 1 .and. omi_psf .gt. omi_pressure(2)) then
          kstr=i
          exit
       endif
-      if (i .ne. 1 .and. i .ne. omi_dim .and. omi_psf .le. omi_pressure(i) .and. &
+      if (i .ne. 1 .and. i .ne. OMI_DIM .and. omi_psf .le. omi_pressure(i) .and. &
       omi_psf .gt. omi_pressure(i+1)) then
          kstr=i
          exit   
@@ -315,7 +322,7 @@ subroutine get_expected_omi_no2(state, location, key, val, istatus)
 !
 ! Find kend - index for the first OMI level above omi_ptrop
    kend=0
-   do i=1,omi_dim-1
+   do i=1,OMI_DIM-1
       if (omi_ptrp .lt. omi_pressure(i) .and. omi_ptrp .ge. omi_pressure(i+1)) then
          kend=i+1
          exit   
@@ -343,7 +350,7 @@ subroutine get_expected_omi_no2(state, location, key, val, istatus)
    endif
 !
 ! Reject ob when number of OMI levels from WRF cannot equal actual number of OMI levels
-   nnlevels=omi_dim-kstr+1-(omi_dim-kend)
+   nnlevels=OMI_DIM-kstr+1-(OMI_DIM-kend)
    if (nnlevels .ne. nlevels) then
       istatus=2
       obs_val=missing
@@ -436,10 +443,11 @@ subroutine get_expected_omi_no2(state, location, key, val, istatus)
 end subroutine get_expected_omi_no2
 
 
+!----------------------------------------------------------------------
+!> Allows passing of obs_def special information 
+
 
 subroutine set_obs_def_omi_no2(key, no2_avgker, no2_psurf, no2_ptrop, no2_nlevels)
-!----------------------------------------------------------------------
-! Allows passing of obs_def special information 
 
 integer,  intent(in) :: key, no2_nlevels
 real(r8), intent(in) :: no2_avgker(35)
@@ -449,9 +457,9 @@ real(r8), intent(in) :: no2_ptrop
 
 if ( .not. module_initialized ) call initialize_module
 
-if(num_omi_no2_obs >= max_omi_no2_obs) then
+if(num_omi_no2_obs >= MAX_OMI_NO2_OBS) then
    write(string1, *)'Not enough space for a omi NO2 obs.'
-   write(string2, *)'Can only have max_omi_no2_obs (currently ',max_omi_no2_obs,')'
+   write(string2, *)'Can only have MAX_OMI_NO2_OBS (currently ',MAX_OMI_NO2_OBS,')'
    call error_handler(E_ERR,'set_obs_def_omi_no2',string1,source,revision,revdate,text2=string2)
 endif
 
@@ -463,11 +471,14 @@ omi_nlevels(key)   = no2_nlevels
 end subroutine set_obs_def_omi_no2
 
 
+!----------------------------------------------------------------------
+!>
+
 
 function read_mopitt_prior(ifile, fform)
 
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_mopitt_prior
 
 character(len=32)  :: fileformat
@@ -487,11 +498,14 @@ END SELECT
 end function read_mopitt_prior
 
 
+!----------------------------------------------------------------------
+!>
+
 
 function read_omi_nlevels(ifile, fform)
 
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 integer                                :: read_omi_nlevels
 
 character(len=32)  :: fileformat
@@ -509,6 +523,11 @@ SELECT CASE (fileformat)
 END SELECT
 
 end function read_omi_nlevels
+
+
+!----------------------------------------------------------------------
+!>
+
 
 subroutine write_mopitt_prior(ifile, mopitt_prior_temp, fform)
 
@@ -530,6 +549,11 @@ SELECT CASE (fileformat)
 END SELECT
 
 end subroutine write_mopitt_prior
+
+
+!----------------------------------------------------------------------
+!>
+
 
 subroutine write_omi_nlevels(ifile, omi_nlevels_temp, fform)
 
@@ -553,11 +577,14 @@ END SELECT
 end subroutine write_omi_nlevels
 
 
+!----------------------------------------------------------------------
+!>
+
 
 function read_omi_psurf(ifile, fform)
 
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_omi_psurf
 
 character(len=32)  :: fileformat
@@ -576,6 +603,9 @@ END SELECT
 
 end function read_omi_psurf
 
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine write_omi_psurf(ifile, omi_psurf_temp, fform)
@@ -600,11 +630,14 @@ END SELECT
 end subroutine write_omi_psurf
 
 
+!----------------------------------------------------------------------
+!>
+
 
 function read_omi_ptrop(ifile, fform)
 
-integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+integer,                    intent(in) :: ifile
+character(len=*), optional, intent(in) :: fform
 real(r8)                               :: read_omi_ptrop
 
 character(len=32)  :: fileformat
@@ -623,6 +656,9 @@ END SELECT
 
 end function read_omi_ptrop
 
+
+!----------------------------------------------------------------------
+!>
 
 
 subroutine write_omi_ptrop(ifile, omi_ptrop_temp, fform)
@@ -647,15 +683,19 @@ END SELECT
 end subroutine write_omi_ptrop
 
 
+!----------------------------------------------------------------------
+!>
+
 
 function read_omi_avg_kernels(ifile, nlevels, fform)
 
-integer,          intent(in)           :: ifile, nlevels
-character(len=*), intent(in), optional :: fform
-real(r8), dimension(35)                :: read_omi_avg_kernels
+integer,                    intent(in) :: ifile, nlevels
+character(len=*), optional, intent(in) :: fform
+real(r8)                               :: read_omi_avg_kernels(35)
 
 character(len=32)  :: fileformat
 
+!>@todo perhaps this should go after the initialize call
 read_omi_avg_kernels(:) = 0.0_r8
 
 if ( .not. module_initialized ) call initialize_module
@@ -673,12 +713,15 @@ END SELECT
 end function read_omi_avg_kernels
 
 
+!----------------------------------------------------------------------
+!>
+
 
 subroutine write_omi_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 
-integer,                 intent(in) :: ifile, nlevels_temp
-character(len=*),        intent(in) :: fform
-real(r8), dimension(35), intent(in) :: avg_kernels_temp
+integer,          intent(in) :: ifile, nlevels_temp
+real(r8),         intent(in) :: avg_kernels_temp(35)
+character(len=*), intent(in) :: fform
 
 character(len=32)  :: fileformat
 

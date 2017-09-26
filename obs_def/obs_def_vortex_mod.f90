@@ -85,14 +85,14 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 
-! Storage for the special information required for observations of this type
-integer, parameter  :: max_vortex_obs = 3000
-
 contains
 
 !----------------------------------------------------------------------
 
 subroutine initialize_module
+
+! Prevent multiple calls from executing this code more than once.
+if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
