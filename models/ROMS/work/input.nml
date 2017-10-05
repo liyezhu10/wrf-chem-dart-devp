@@ -201,7 +201,7 @@
    assimilation_period_seconds = 0
    vert_localization_coord     = 3
    vert_transform              = 2
-   debug                       = 1
+   debug                       = 0
    variables = 'temp',   'QTY_TEMPERATURE',          'NA', 'NA', 'update',
                'salt',   'QTY_SALINITY',            '0.0', 'NA', 'update',
                'u',      'QTY_U_CURRENT_COMPONENT',  'NA', 'NA', 'update',
@@ -210,7 +210,7 @@
   /
 
 &quad_interpolate_nml
-   debug = 100
+   debug = 0
   /
 
 
@@ -338,22 +338,24 @@
    x_ind                 = 124330
 
 
+loc_of_interest       = 275.46575456693635, 25.773736052471712, 76.6467
+
 &model_mod_check_nml
    x_ind                 = 87370
    num_ens               = 1
-   loc_of_interest       = 275.48575456693635, 25.773736052471712, 76.6467
+   loc_of_interest       = 285.105, 36.5001, 10.0
    kind_of_interest      = 'QTY_TEMPERATURE'
-   interp_test_dlon      = 0.1
-   interp_test_dlat      = 0.1
+   interp_test_dlon      = 0.005
+   interp_test_dlat      = 0.005
    interp_test_dvert     = 10.0
-   interp_test_lonrange  = 280.0,  290.0
-   interp_test_latrange  = 30.0,   40.0
-   interp_test_vertrange = 0.0,    50.0
+   interp_test_lonrange  = 285.0,  288.0
+   interp_test_latrange  = 35.0,   37.0
+   interp_test_vertrange = 10.0,    11.0
    interp_test_vertcoord = 'VERTISHEIGHT'
    test1thru             = 5
    input_state_files     = '/glade/scratch/romaines/test/NWA-RE.REANA44_rst_20110611_nozeta.nc'
    output_state_files    = 'roms_output.nc'
-   verbose               = .true.
+   verbose               = .false.
   /
 
 
