@@ -34,7 +34,7 @@ module quad_utils_mod
 ! This code will interpolate in a logically rectangular but deformed lat/lon grid.
 
 ! Modules that are absolutely required for use are listed
-use        types_mod, only : r8, i8, MISSING_R8, PI
+use        types_mod, only : r8, i8, MISSING_R8, PI, deg2rad
 use     location_mod, only : location_type, get_location
 use    utilities_mod, only : register_module, error_handler, get_unit,         &
                              E_ERR, E_WARN, E_MSG, nmlfileunit,                &
@@ -382,6 +382,8 @@ select case (grid_type)
       allocate(interp_handle%ii%grid_start(interp_handle%ii%num_reg_x,interp_handle%ii%num_reg_y), &
                interp_handle%ii%grid_num(  interp_handle%ii%num_reg_x,interp_handle%ii%num_reg_y))
 
+      interp_handle%ii%grid_num = 0
+
    case default
       write(string1, *) 'unrecognized grid type: ', grid_type
       write(string2, *) 'should be one of: GRID_QUAD_FULLY_REGULAR, ', &
@@ -415,8 +417,8 @@ end subroutine init_quad_interp
 subroutine print_quad_handle(interp_handle)
 type(quad_interp_handle), intent(in) :: interp_handle
 
-print *, interp_handle%nlat, interp_handle%nlon
-print *, interp_handle%grid_type
+if (debug > 10) print *, interp_handle%nlat, interp_handle%nlon
+if (debug > 10) print *, interp_handle%grid_type
 
 select case (interp_handle%grid_type)
    case(GRID_QUAD_FULLY_REGULAR)
@@ -439,7 +441,7 @@ select case (interp_handle%grid_type)
 
 end select
 
-print *, interp_handle%opt%cell_relative
+if (debug > 10) print *, interp_handle%opt%cell_relative
 
 end subroutine print_quad_handle
 
@@ -607,11 +609,9 @@ if (.not. h%opt%global_grid) then
       if(h%opt%spans_lon_zero) then
          h%ii%lon_width = h%ii%lon_width + 360.0_r8
       else
-         string1 = 'regional grid with bad longitudes'
-         write(string2,*)'min_lon, max_lon, lon_width, spans_lon_zero: ', &
-              h%ii%min_lon, h%ii%max_lon, h%ii%lon_width, h%opt%spans_lon_zero
-         call error_handler(E_ERR,'init_irreg_interp', string1, &
-                            source, revision, revdate, text2=string2)
+         write(string1,*)'min_lon, max_lon, lon_width, spans_lon_zero: ', &
+                    h%ii%min_lon, h%ii%max_lon, h%ii%lon_width, h%opt%spans_lon_zero
+         call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', &                            source, revision, revdate, text2=string1)
       endif
    endif
 
@@ -1132,6 +1132,7 @@ do ind_x = reg_lon_ind(1), reg_lon_ind(2)
       endif
 
       ! Make sure the list storage isn't full
+!print *, 'reg_list_num, x, y = ', reg_list_num, index_x, index_y
       if(reg_list_num(index_x, index_y) >= maxlist) then
          write(string1,*) 'max_reg_list_num (',maxlist,') is too small ... increase'
          write(string2,*) 'adding 1 to bin ', index_x, index_y
@@ -1225,14 +1226,17 @@ select case (interp_handle%grid_type)
                       num_inds, start_ind, interp_handle%ii%grid_lon_list, &
                       interp_handle%ii%grid_lat_list, cyclic, nx, ny, &
                       lon_bot, lat_bot, istatus)
+if (debug > 10) print *, 'get_grid_quad returns lon/lat bot: ', lon_bot, lat_bot
    if (istatus /= 0) return
 
    ! Getting corners for accurate interpolation
    call get_quad_corners(interp_handle%ii%lons_2d, lon_bot, lat_bot, cyclic, nx, ny, &
                          x_corners, istatus)
+if (debug > 10) print *, 'get_quad_corners returns x_corners: ', x_corners
    if (istatus /= 0) return
    call get_quad_corners(interp_handle%ii%lats_2d, lon_bot, lat_bot, cyclic, nx, ny, &
                          y_corners, istatus)
+if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
    if (istatus /= 0) return
 
    ! this test shouldn't be needed
@@ -1800,10 +1804,10 @@ end subroutine line_intercept
 
 !------------------------------------------------------------
 
-subroutine quad_bilinear_interp(lon_in, lat, x_corners_in, y_corners, cyclic, &
+subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, cyclic, &
                                 p, expected_obs)
 
- real(r8),  intent(in) :: lon_in, lat, x_corners_in(4), y_corners(4), p(4)
+ real(r8),  intent(in) :: lon_in, lat_in, x_corners_in(4), y_corners_in(4), p(4)
  logical,   intent(in) :: cyclic
  real(r8), intent(out) :: expected_obs
 
@@ -1820,12 +1824,18 @@ subroutine quad_bilinear_interp(lon_in, lat, x_corners_in, y_corners, cyclic, &
 ! checks showed accuracy to seven decimal places on all tests.
 
 integer :: i
-real(r8) :: m(3, 3), v(3), r(3), a, x_corners(4), lon
-! real(r8) :: lon_mean
+real(r8) :: m(3, 3), v(3), r(3), a, b(2), c(2), x_corners(4), lon, y_corners(4), lat
+real(r8) :: lon_mean, lat_mean, interp_val, angle
 
 ! Watch out for wraparound on x_corners.
 lon = lon_in
 x_corners = x_corners_in
+lat = lat_in
+y_corners = y_corners_in
+
+if (debug > 10) write(*,'(A,4F12.3)') 'corner data values: ', p
+if (debug > 10) write(*,'(A,4F12.3)') 'original x_corners: ', x_corners
+if (debug > 10) write(*,'(A,4F12.3)') 'original y_corners: ', y_corners
 
 !> @todo FIXME does this depend on cyclic or span flag???
 
@@ -1833,29 +1843,103 @@ x_corners = x_corners_in
 ! wrap around 360, then the corners and the point to interpolate to
 ! must be adjusted to be in the range from 180 to 540 degrees.
 if(maxval(x_corners) - minval(x_corners) > 180.0_r8) then
-   if(lon < 180.0_r8) lon = lon + 360.0_r8
+print *, 'wrap in lon?'
+   if(lon < 180.0_r8) then
+print *, 'adding to lon'
+      lon = lon + 360.0_r8
+   endif
    do i = 1, 4
-      if(x_corners(i) < 180.0_r8) x_corners(i) = x_corners(i) + 360.0_r8
+      if(x_corners(i) < 180.0_r8) then
+print *, 'adding to corner ', i
+          x_corners(i) = x_corners(i) + 360.0_r8
+      endif
    enddo
 endif
-
 
 !*******
 ! Problems with extremes in polar cell interpolation can be reduced
 ! by this block, but it is not clear that it is needed for actual
 ! ocean grid data
-! Find the mean longitude of corners and remove
-!!!lon_mean = sum(x_corners) / 4.0_r8
-!!!x_corners = x_corners - lon_mean
-!!!lon = lon - lon_mean
-! Multiply everybody by the cos of the latitude
-!!!do i = 1, 4
-   !!!x_corners(i) = x_corners(i) * cos(y_corners(i) * deg2rad)
-!!!enddo
-!!!lon = lon * cos(lat * deg2rad)
+!! Find the mean longitude of corners and remove
+!lon_mean = sum(x_corners) / 4.0_r8
+!lat_mean = sum(y_corners) / 4.0_r8
+!
+!x_corners = x_corners - lon_mean
+!lon = lon - lon_mean
+!! Multiply everybody by the cos of the latitude - why?
+!do i = 1, 4
+!   !x_corners(i) = x_corners(i) * cos(y_corners(i) * deg2rad)
+!enddo
+!!lon = lon * cos(lat * deg2rad)
+!!lon_mean = lon_mean * cos(lat * deg2rad)
+!
+!y_corners = y_corners - lat_mean
+!lat = lat - lat_mean
+
+! try something else.  compute offsets from lower left,
+! rotate so line segment 1-2 is horizontal, and then
+! compute values.
+
+if (.false.) then
+print *, 'rotating quads before interp'
+do i=1, 4
+   print *,  'before', i, x_corners(i), y_corners(i)
+enddo
+print *, lat, lon
+   do i = 2, 4
+      x_corners(i) = x_corners(i) - x_corners(1)
+      y_corners(i) = y_corners(i) - y_corners(1)
+   enddo
+   lon = lon - x_corners(1)
+   lat = lat - y_corners(1)
+   x_corners(1) = 0.0_r8
+   y_corners(1) = 0.0_r8
+   
+do i=1, 4
+   print *,  'xform ', i, x_corners(i), y_corners(i)
+enddo
+print *, lat, lon
+
+   b(1) = x_corners(2)
+   b(2) = y_corners(2)
+   ! avoid degenerate cases where grid rotated
+   ! exactly +/- 90 degrees.
+   if (abs(x_corners(2)) > 0.001_r8) then
+      c(1) = x_corners(2)
+      c(2) = 0.0_r8
+   else
+      c(1) = 0.0_r8
+      c(2) = y_corners(2)
+   endif
+   
+!print *, b, c
+   angle = angle2(b, c)
+print *, 'angle = ', angle
+
+   if (abs(angle) > 0.001_r8) then
+   do i = 2, 4
+     b(1) = x_corners(i)
+     b(2) = y_corners(i)
+     b = rotate2(b, angle)
+     x_corners(i) = b(1)
+     y_corners(i) = b(2)
+   enddo
+   b(1) = lon
+   b(2) = lat
+   b = rotate2(b, angle)
+   lon = b(1)
+   lat = b(2)
+   endif
+else
+   print *, 'NOT rotating quads before interp'
+endif
+
+! now everything is in degrees relative to the lower left and rotated.
+
+if (debug > 10) write(*,'(A,5F15.5)') 'xformed x_corners, lon: ', x_corners, lon
+if (debug > 10) write(*,'(A,5F15.5)') 'xformed y_corners, lat: ', y_corners, lat
 
 !*******
-
 
 ! Fit a surface and interpolate; solve for 3x3 matrix
 do i = 1, 3
@@ -1864,6 +1948,7 @@ do i = 1, 3
    m(i, 2) = y_corners(i) - y_corners(i + 1)
    m(i, 3) = x_corners(i)*y_corners(i) - x_corners(i + 1)*y_corners(i + 1)
    v(i) = p(i) - p(i + 1)
+if (debug > 10) write(*,'(A,I3,7F12.3)') 'i, m(3), p(2), v: ', i, m(i,:), p(i), p(i+1), v(i)
 enddo
 
 ! Solve the matrix for b, c and d
@@ -1877,26 +1962,37 @@ a = p(4) - r(1) * x_corners(4) - &
 
 !----------------- Implementation test block
 ! When interpolating on dipole x3 never exceeded 1e-9 error in this test
-!!!do i = 1, 4
-   !!!interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i)+ r(3)*x_corners(i)*y_corners(i)
-   !!!if(abs(interp_val - p(i)) > 1e-9) then
-      !!!write(*, *) 'large interp residual ', interp_val - p(i)
-   !!!endif
-!!!enddo
+if (debug > 10)  write(*,'(A,8F12.3)') 'test corners: a, r(1), r(2), r(3)', a, r(1), r(2), r(3)
+do i = 1, 4
+   interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i)+ r(3)*x_corners(i)*y_corners(i)
+   if(abs(interp_val - p(i)) > 1e-9) then
+      write(*, *) 'large interp residual ', i, interp_val, p(i), interp_val - p(i)
+   endif
+if (debug > 10)  write(*,'(A,I3,8F12.5)') 'test corner: i, interp_val, x_corn, y_corn: ',  &
+                                                        i, interp_val, x_corners(i), y_corners(i)
+enddo
+
 !----------------- Implementation test block
 
 
 ! Now do the interpolation
+
 expected_obs = a + r(1)*lon + r(2)*lat + r(3)*lon*lat
+
+if (debug > 10)  write(*,'(A,8F15.5)') 'poly: expected,     lon, lat, a,  r(1)*lon,  r(2)*lat,  r(3)*lon*lat: ', &
+                                              expected_obs, lon, lat, a,  r(1)*lon,  r(2)*lat,  r(3)*lon*lat
+
 
 !********
 ! Avoid exceeding maxima or minima as stopgap for poles problem
 ! When doing bilinear interpolation in quadrangle, can get interpolated
 ! values that are outside the range of the corner values
 if(expected_obs > maxval(p)) then
-   expected_obs = maxval(p)
+!   expected_obs = maxval(p)
+if (debug > 10)  write(*,'(A,3F12.3)') 'expected obs > maxval (diff): ', expected_obs, maxval(p), abs(expected_obs - maxval(p))
 else if(expected_obs < minval(p)) then
-   expected_obs = minval(p)
+!   expected_obs = minval(p)
+if (debug > 10)  write(*,'(A,3F12.3)') 'expected obs < minval (diff): ', expected_obs, minval(p), abs(expected_obs - minval(p))
 endif
 !********
 
@@ -1926,6 +2022,7 @@ do i = 1, 3
    m_sub(:, i) = v
    numer = deter3(m_sub)
    r(i) = numer / denom
+if (debug > 10) write(*,'(A,I3,7F12.3)') 'mat: i, numer, denom, r: ', i, numer, denom, r(i)
 enddo
 
 end subroutine mat3x3
@@ -1943,6 +2040,59 @@ deter3 = m(1,1)*m(2,2)*m(3,3) + m(1,2)*m(2,3)*m(3,1) + &
          m(1,1)*m(2,3)*m(3,2) - m(3,3)*m(2,1)*m(1,2)
 
 end function deter3
+
+!------------------------------------------------------------
+! Computes dot product of two 2-vectors
+
+function dot2(a, b)
+ real(r8), intent(in) :: a(2), b(2)
+ real(r8)             :: dot2
+
+dot2 = a(1)*b(1) + a(2)*b(2)
+
+end function dot2
+
+!------------------------------------------------------------
+! compute the magnitude of a 2-vector
+
+function mag2(a)
+ real(r8), intent(in) :: a(2)
+ real(r8)             :: mag2
+
+mag2 = sqrt(a(1)*a(1) + a(2)*a(2))
+
+end function mag2
+
+!------------------------------------------------------------
+! compute the angle between two 2-vectors
+
+function angle2(a, b)
+ real(r8), intent(in) :: a(2), b(2)
+ real(r8)             :: angle2
+
+angle2 = acos(dot2(a,b) / (mag2(a) * mag2(b)))
+
+end function angle2
+
+!------------------------------------------------------------
+! rotate vector a counterclockwise by angle theta
+
+function rotate2(a, theta)
+ real(r8), intent(in) :: a(2)
+ real(r8), intent(in) :: theta
+ real(r8)             :: rotate2(2)
+
+real(r8) :: r(2,2)
+
+r(1,1) = cos(theta)
+r(1,2) = sin(theta)
+r(2,1) = sin(-theta)
+r(2,2) = cos(theta)
+
+rotate2(1) = r(1,1)*a(1) + r(1,2)*a(2)
+rotate2(2) = r(2,1)*a(1) + r(2,2)*a(2)
+
+end function rotate2
 
 !------------------------------------------------------------------
 
@@ -1991,11 +2141,7 @@ end function all_corners_valid
 
 !------------------------------------------------------------
 
-!> @todo FIXME these do the interpolation once you have the
-!> actual data values for the 4 corners, so it seems like they still
-!> belong in the generic module.
-
-! single item wrapper - make an interface block for these
+! single item wrapper
 
 subroutine quad_lon_lat_evaluate_ii_single(interp_handle, lon, lat, &
                lon_bot, lat_bot, lon_top, lat_top, invals, outval, istatus)
@@ -2019,9 +2165,8 @@ end subroutine quad_lon_lat_evaluate_ii_single
 
 !------------------------------------------------------------
 
-!>@todo  FIXME: for irreg, you need lon, lat and NOT lon_fract, lat_fract
-! for others, you DON'T need lon, lat anymore and you do need lon_fract, lat_fract
-! make this different interfaces.
+!> This is a different interface because you don't need fractions for the
+!> irregular case.
 
 subroutine quad_lon_lat_evaluate_ii_array(interp_handle, lon, lat, &
                lon_bot, lat_bot, lon_top, lat_top, nitems, invals, outvals, istatus)
@@ -2052,11 +2197,15 @@ if(interp_handle%grid_type == GRID_QUAD_FULLY_IRREGULAR) then
                          interp_handle%opt%spans_lon_zero, interp_handle%nlon, &
                          interp_handle%nlat, y_corners, istatus)
    if (istatus /= 0) return
+if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: x_corners = ', x_corners
+if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: y_corners = ', y_corners
 
+if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: invals ens1 = ', invals(:, 1)
    do e = 1, nitems
       call quad_bilinear_interp(lon, lat, x_corners, y_corners, &
                         interp_handle%opt%spans_lon_zero, invals(:,e), outvals(e))
    enddo
+if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: outvals ens1 = ', outvals(1)
 else
    string1 = 'wrong interface for this grid'
    write(string2,*)'grid type is ',interp_handle%grid_type
@@ -2070,6 +2219,7 @@ istatus = 0
 end subroutine quad_lon_lat_evaluate_ii_array
 
 !------------------------------------------------------------------
+!> single item wrapper
 
 subroutine quad_lon_lat_evaluate_ir_single(interp_handle, lon_bot, lat_bot, &
                lon_top, lat_top, lon_fract, lat_fract, invals, outval, istatus)
@@ -2093,9 +2243,8 @@ end subroutine quad_lon_lat_evaluate_ir_single
 
 !------------------------------------------------------------
 
-!>@todo FIXME: for irreg, you need lon, lat and NOT lon_fract, lat_fract
-! for others, you DON'T need lon, lat anymore and you do need lon_fract, lat_fract
-! make this different interfaces. FIXME FIXME
+!> This is a different interface because for the regular case you need
+!> the fractions across the quads.
 
 subroutine quad_lon_lat_evaluate_ir_array(interp_handle, lon_bot, lat_bot, &
            lon_top, lat_top, lon_fract, lat_fract, nitems, invals, outvals, istatus)
