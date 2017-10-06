@@ -41,6 +41,20 @@ real(r8) :: end_lon   = 150.5_r8
 real(r8) :: start_lat = -11.4_r8
 real(r8) :: end_lat   =  34.1_r8
 
+! angle to rotate data grid in degrees
+! positive is counterclockwise; will rotate
+! around lower left grid point (start lon/lat).
+!real(r8) :: angle = 45.0_r8
+!real(r8) :: angle = 30.0_r8
+!real(r8) :: angle =  90.0_r8
+!real(r8) :: angle = -30.0_r8
+!real(r8) :: angle = -10.0_r8
+ real(r8) :: angle = 0.0_r8
+
+! deform grid by this fraction of the deltas
+real(r8) :: lon_def = 0.3_r8
+real(r8) :: lat_def = 0.3_r8
+
 ! data values on the grid
 real(r8) :: grid_data(nx, ny) = MISSING_R8
 
@@ -58,15 +72,6 @@ real(r8) :: reg_start_lon = 110.0_r8
 real(r8) :: reg_end_lon   = 140.0_r8
 real(r8) :: reg_start_lat = -20.0_r8
 real(r8) :: reg_end_lat   =  30.0_r8
-
-! angle to rotate "sampling grid" in degrees
-! positive is counterclockwise; will rotate
-! around lower left grid point (start lon/lat).
-!real(r8) :: angle = 45.0_r8
-!real(r8) :: angle = 30.0_r8
-!real(r8) :: angle =  90.0_r8
-real(r8) :: angle = -30.0_r8
-!real(r8) :: angle = 0.0_r8
 
 ! where interpolated values are stored on reg grid
 real(r8) :: interp_data(nrx, nry) = MISSING_R8
@@ -92,8 +97,8 @@ lat_del = (end_lat - start_lat) / (ny-1)
 ! "data grid" corners and data vals
 do i=1, nx
    do j=1, ny
-      data_lons(i, j) = start_lon + (i-1)*lon_del
-      data_lats(i, j) = start_lat + (j-1)*lat_del
+      data_lons(i, j) = start_lon + (i-1)*lon_del + deform(lon_del, lon_def, ran)
+      data_lats(i, j) = start_lat + (j-1)*lat_del + deform(lat_del, lat_def, ran)
       if (angle /= 0.0_r8) &
          call rotate(data_lons(i, j), data_lats(i, j), angle, start_lon, start_lat)
       ! pick one:
@@ -102,11 +107,11 @@ do i=1, nx
       ! based on lon only
       !grid_data(i, j) = data_lons(i, j)
       ! based on lat only
-      grid_data(i, j) = data_lats(i, j)
+      !grid_data(i, j) = data_lats(i, j)
       ! increasing monotonically
       !grid_data(i, j) = (j-1)*nx + i
       ! random between (0-10]
-      !grid_data(i, j) = random_uniform(ran) * 10.0_r8
+      grid_data(i, j) = random_uniform(ran) * 10.0_r8
       write(iunit_orig, *) i, j, data_lons(i,j), data_lats(i, j), grid_data(i, j)
    enddo
 enddo
@@ -136,11 +141,11 @@ do i=1, nrx
    do j=1, nry
       call quad_lon_lat_locate(h, reg_lons(i), reg_lats(j), lon_bot, lat_bot, lon_top, lat_top, istatus)
       if (istatus /= 0) then
- !print *, 'location outside of grid: ', reg_lons(i), reg_lats(j)
+         !print *, 'location outside of grid: ', reg_lons(i), reg_lats(j)
          interp_data(i, j) = MISSING_R8 
          cycle
       endif
-!print *, i, j, lon_bot, lat_bot, lon_top, lat_top, reg_lons(i), reg_lats(j)
+      print *, i, j, lon_bot, lat_bot, lon_top, lat_top, reg_lons(i), reg_lats(j)
 
       ! get values of data at lon/lat bot/top indices, counterclockwise around quad
       invals(1) = grid_data(lon_bot, lat_bot)
@@ -202,6 +207,29 @@ y = b(2) + y0
 
 end subroutine rotate
 
+!------------------------------------------------------------
+! compute +/- a random value based on a width and percentage
+! of that width
+
+function deform(width, fraction, seq)
+
+use random_seq_mod
+
+ real(r8), intent(in) :: width
+ real(r8), intent(in) :: fraction
+ type(random_seq_type), intent(inout) :: seq
+ real(r8)             :: deform
+
+real(r8) :: val
+
+! random val between -1 and 1
+val = (random_uniform(seq) * 2.0_r8) - 1.0_r8
+
+deform = val * width * fraction
+
+end function deform
+
+!------------------------------------------------------------
 
 end program test_quad_interp
 
