@@ -24,4 +24,5 @@ assimilation_code/programs/create_fixed_network_seq/create_fixed_network_seq.f90
 models/POP/dart_pop_mod.f90
 models/POP/model_mod.f90
 models/utilities/default_model_mod.f90
+models/utilities/quad_utils_mod.f90
 observations/forward_operators/obs_def_mod.f90

@@ -64,7 +64,7 @@ use     obs_kind_mod, only : QTY_TEMPERATURE,           &
                              QTY_SEA_SURFACE_HEIGHT,    &
                              QTY_SEA_SURFACE_PRESSURE,  &
                              QTY_POTENTIAL_TEMPERATURE, &
-                             get_index_for_quantity,     &
+                             get_index_for_quantity,    &
                              get_name_for_quantity
 
 use     mpi_utilities_mod, only : my_task_id
@@ -277,7 +277,7 @@ integer, optional,   intent(out) :: var_type
 
 integer  :: iloc, vloc, jloc
 integer  :: myvarid, myqty
-real(r8), allocatable :: mybathy(:,:)
+real(r8) :: mybathy
 real(r8) :: depths(Ns_rho)
 
 if ( .not. module_initialized ) call static_init_model
@@ -289,15 +289,13 @@ myqty = get_kind_index(domain_id, myvarid)
 
 !>@todo Add the SSH, for now put at 0
 if (myqty == QTY_U_CURRENT_COMPONENT) then
-   allocate(mybathy(Nxi_u, Neta_u))
-   mybathy = rho2u(BATHY,'u',Nxi_rho,Neta_rho)
-   call get_depths(mybathy(iloc,jloc), 0.0_r8, depths, 1, Ns_rho)
+   mybathy = 0.5*(BATHY(iloc,jloc)+BATHY(iloc+1,jloc))
+   call get_depths(mybathy, 0.0_r8, depths, 1, Ns_rho)
    location = set_location(ULON(iloc,jloc), ULAT(iloc,jloc), depths(vloc), VERTISHEIGHT)
 
 elseif (myqty == QTY_V_CURRENT_COMPONENT) then
-   allocate(mybathy(Nxi_v, Neta_v))
-   mybathy = rho2u(BATHY,'v',Nxi_rho,Neta_rho)
-   call get_depths(mybathy(iloc,jloc), 0.0_r8, depths, 1, Ns_rho)
+   mybathy = 0.5*(BATHY(iloc,jloc)+BATHY(iloc,jloc+1))
+   call get_depths(mybathy, 0.0_r8, depths, 1, Ns_rho)
    location = set_location(VLON(iloc,jloc), VLAT(iloc,jloc), depths(vloc),VERTISHEIGHT)
 
 elseif (myqty == QTY_SEA_SURFACE_HEIGHT) then
@@ -345,13 +343,12 @@ real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated
 
 ! Local storage
 integer       :: icorn, imem, ilev, N_lev_un
-integer       :: x_ind, y_ind,lat_bot, lat_top, lon_bot, lon_top
+integer       :: lat_bot, lat_top, lon_bot, lon_top
 integer       :: lstatus, hstatus
 integer       :: Ns_var
 integer       :: var_id, ssh_id
 integer       :: hgt_bot(ens_size), hgt_top(ens_size), hgt_bot_un(2*ens_size)
 integer       :: lon_corner(4), lat_corner(4)
-integer       :: idept_un(Ns_rho)
 integer(i8)   :: dart_idx
 real(r8)      :: loc_array(3), llon, llat, lheight
 real(r8)      :: top_val, bot_val
@@ -376,19 +373,17 @@ lheight = loc_array(3)
 
 if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
 
-!>@todo Add the transformation to in-situ temperature
-
 ! kind (in-situ) temperature is a combination of potential temp,
 ! salinity, and pressure based on depth.  call a routine that
 ! interpolates all three, does the conversion, and returns the
 ! sensible/in-situ temperature.
-!if(obs_type == QTY_TEMPERATURE) then
-!   ! we know how to interpolate this from potential temp,
-!   ! salinity, and pressure based on depth.
-!   call compute_temperature(state_handle, ens_size, llon, llat, lheight,expected_obs, istatus)
-!   if (debug > 1) print *, 'interp val, istatus = ', expected_obs, istatus
-!   return
-!endif
+if(obs_type == QTY_TEMPERATURE) then
+   ! we know how to interpolate this from potential temp,
+   ! salinity, and pressure based on depth.
+   call compute_temperature(state_handle, ens_size, llon, llat, lheight, interp_val, istatus)
+   if (debug > 1) print *, 'interp val, istatus = ', interp_val, istatus
+   return
+endif
 
 ! Find horizontal corners
 if(obs_type == QTY_U_CURRENT_COMPONENT) then
@@ -401,20 +396,19 @@ endif
 
 if (lstatus /= 0) return
 
-!PRINT *, "RE: (model_interpolate) lon_bot, lat_bot, lon_top,lat_top ",lon_bot, lat_bot, lon_top,lat_top
+if (debug > 10) PRINT *, "RE: (model_interpolate) lon_bot/lat_bot, lon_top/lat_top ",lon_bot,lat_bot, lon_top,lat_top
+!>@todo FIXME: are we sure this is the right order for the corners?
 lon_corner(1) = lon_bot
-lon_corner(2) = lon_top
-lon_corner(3) = lon_top
-lon_corner(4) = lon_bot
 lat_corner(1) = lat_bot
+
+lon_corner(2) = lon_top
 lat_corner(2) = lat_bot
+
+lon_corner(3) = lon_top
 lat_corner(3) = lat_top
+
+lon_corner(4) = lon_bot
 lat_corner(4) = lat_top
-
-!>@todo check to see if any of the corners are on dry land - this requires
-!knowledge of which land mask to use 
-
-
 
 ! For Sea Surface values don't need the vertical coordinate
 if( is_vertical(location, "SURFACE") ) then
@@ -428,6 +422,7 @@ if( is_vertical(location, "SURFACE") ) then
    do icorn = 1,4
       dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), Ns_var, domain_id, var_id)
       val_corners(icorn,:) = get_state(dart_idx, state_handle)
+if (debug > 10) PRINT *, "RE: (model_interpolate) surface obs, corner ", icorn, " val_corners ens1 ", val_corners(icorn, 1)
    enddo
 else
    ssh_id = get_varid_from_kind(domain_id, QTY_SEA_SURFACE_HEIGHT)
@@ -439,37 +434,51 @@ else
       do imem = 1,ens_size
          call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)), ssh_corners(imem), depths_tmp, 1, Ns_rho)
          call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem), hgt_top(imem), hgt_fract(imem), hstatus)
-!         PRINT *, "RE: (model_interpolate) zeta, dephts ",ssh_corners(imem),depths_tmp
-!         PRINT *, "RE: (model_interpolate) bot, top, frac ",hgt_bot(imem), hgt_top(imem), hgt_fract(imem)
+         if (hstatus > 0) then
+            istatus = hstatus
+            return
+         endif
+if (debug > 1010) PRINT *, "RE: (model_interpolate) zeta, depths ",ssh_corners(imem),depths_tmp
+if (debug > 10 .and. imem == 1)   PRINT *, "RE: (model_interpolate) corner ", icorn, " vert level bot/top, frac ",hgt_bot(imem), hgt_top(imem), hgt_fract(imem)
       enddo
       ! Get the levels needed for the vertical interpolation
       call unique_vec_from_two(hgt_bot, hgt_top, ens_size, hgt_bot_un, N_lev_un)
       do ilev = 1, N_lev_un
          dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),hgt_bot_un(ilev),domain_id, var_id)
          val_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
+if (debug > 10) PRINT *, "RE: (model_interpolate) ilev ", ilev, " corner ", icorn, " val_corners ens1 ", val_alldepths(hgt_bot_un(ilev), 1)
       enddo
       ! Loop on ensemble members to do the vertical interpolation and get values at
       ! corners
       do imem = 1,ens_size
          top_val = val_alldepths(hgt_top(imem),imem)
          bot_val = val_alldepths(hgt_bot(imem),imem)
+if (debug > 10 .and. imem == 1)   PRINT *, "RE: (model_interpolate) corner ", icorn, " bot/top val ens1, hgt frac ",bot_val,top_val,hgt_fract(imem)
+
          val_corners(icorn,imem) = bot_val + hgt_fract(imem) * (top_val - bot_val)
+if (debug > 10) PRINT *, "RE: (model_interpolate) corner ", icorn, " val_corners ens1 ", val_corners(icorn, 1)
       enddo
    enddo
 endif
 
 
-!PRINT *, "RE: (model_interpolate) val_corners",val_corners
+if (debug > 10) PRINT *, "RE: (model_interpolate) val_corners",val_corners
 ! Do the horizontal interpolation
 if(obs_type == QTY_U_CURRENT_COMPONENT) then
-   call quad_lon_lat_evaluate(ugrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+   call quad_lon_lat_evaluate(ugrid_handle, llon, llat, lon_bot,lat_bot, lon_top,lat_top,&
                               ens_size, val_corners, interp_val, lstatus)
 elseif(obs_type == QTY_V_CURRENT_COMPONENT) then
-   call quad_lon_lat_evaluate(vgrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+   call quad_lon_lat_evaluate(vgrid_handle, llon, llat, lon_bot,lat_bot, lon_top,lat_top,&
                               ens_size, val_corners, interp_val, lstatus)
 else
-   call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_bot,lat_bot,lon_top, lat_top,&
+   call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_bot,lat_bot, lon_top,lat_top,&
                               ens_size, val_corners, interp_val, lstatus)
+endif
+
+if (debug > 10) then
+   do imem=1,ens_size
+      PRINT *, "RE: (model_interpolate) interpolated value, member ", imem, interp_val(imem)
+   enddo
 endif
 
 istatus = lstatus
@@ -652,7 +661,11 @@ end subroutine height_bounds
 
 
 
-
+!-----------------------------------------------------------------------
+!>
+!> Interpolate the rho centered variable var_rho to a field at ctype 
+!> points (U or V)
+!>
 
 
 function  rho2u (var_rho,ctype,size_x,size_y)
@@ -671,7 +684,7 @@ REAL(r8), DIMENSION(size_x,size_y)   :: var_rho    ! 3D REAL 4 with the variable
 CHARACTER(LEN=1)                         :: ctype        ! position wanted of the variable
 REAL(r8), DIMENSION(:,:),  ALLOCATABLE   :: rho2u   ! 3D REAL 4 with the modified variable
 
-INTEGER(r8)                              :: ik,ij,ii   ! indices for loops
+INTEGER(r8)                              :: ij,ii   ! indices for loops
 
 !!----------------------------------------------------------
 
@@ -757,6 +770,314 @@ N_un = i
 
 end subroutine unique_vec_from_two
 
+
+!------------------------------------------------------------------
+!> use potential temp, depth, and salinity to compute a sensible (in-situ)
+!> temperature
+
+subroutine compute_temperature(state_handle, ens_size, llon, llat, lheight, expected_obs, istatus)
+
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+real(r8),            intent(in)  :: llon, llat, lheight
+real(r8),            intent(out) :: expected_obs(ens_size)
+integer,             intent(out) :: istatus(ens_size)
+
+! local variables
+integer     :: icorn, imem, ilev, N_lev_un
+integer     :: ssh_id, temp_id, salt_id
+integer     :: lstatus, hstatus
+integer     :: lat_bot, lat_top, lon_bot, lon_top
+integer     :: lon_corner(4), lat_corner(4)
+integer     :: hgt_bot(ens_size), hgt_top(ens_size), hgt_bot_un(2*ens_size)
+integer(i8) :: dart_idx
+real(r8)    :: top_val, bot_val, pres_val
+real(r8)    :: salt_val(ens_size), potential_temp(ens_size)
+real(r8)    :: ssh_corners(ens_size), hgt_fract(ens_size)
+real(r8)    :: depths_tmp(Ns_rho)
+real(r8)    :: temp_alldepths(Ns_rho,ens_size)
+real(r8)    :: salt_alldepths(Ns_rho,ens_size)
+real(r8)    :: temp_corners(4,ens_size), salt_corners(4,ens_size)
+
+expected_obs(:) = MISSING_R8
+istatus = 199
+
+! Get variable indices in state vector
+ssh_id  = get_varid_from_kind(domain_id, QTY_SEA_SURFACE_HEIGHT)
+temp_id = get_varid_from_kind(domain_id, QTY_TEMPERATURE)
+salt_id = get_varid_from_kind(domain_id, QTY_SALINITY)
+
+! Find pressure equivalent to depth
+pres_val = dpth2pres(lheight)
+
+! Find horizontal corners
+call quad_lon_lat_locate(tgrid_handle, llon, llat, lon_bot, lat_bot, lon_top,lat_top, lstatus)
+if (lstatus /= 0) then
+   istatus = lstatus
+   return
+endif
+
+! Coordinates of corners 
+if (debug > 10) PRINT *, "RE: (compute_temperature) lon_bot/lat_bot, lon_top/lat_top ",lon_bot,lat_bot, lon_top,lat_top
+lon_corner(1) = lon_bot
+lat_corner(1) = lat_bot
+
+lon_corner(2) = lon_top
+lat_corner(2) = lat_bot
+
+lon_corner(3) = lon_top
+lat_corner(3) = lat_top
+
+lon_corner(4) = lon_bot
+lat_corner(4) = lat_top
+
+! Get values of T and S at corners
+do icorn = 1,4
+   ! get SSH at corners location for all members
+   dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),1,domain_id, ssh_id)
+   ssh_corners = get_state(dart_idx, state_handle)
+   do imem = 1,ens_size
+      call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)),ssh_corners(imem), depths_tmp, 1, Ns_rho)
+      call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem),hgt_top(imem), hgt_fract(imem), hstatus)
+      if (hstatus /= 0) then
+print *, 'compute_temperature, hstatus bad return.  corner, member, fract, hstatus: ', icorn, imem, hgt_fract(imem), hstatus
+         istatus = hstatus
+         return
+      endif
+   enddo
+   ! Get the levels needed for the vertical interpolation
+   call unique_vec_from_two(hgt_bot, hgt_top, ens_size, hgt_bot_un, N_lev_un)
+   do ilev = 1, N_lev_un
+      dart_idx = get_dart_vector_index(lon_corner(icorn),lat_corner(icorn),hgt_bot_un(ilev),domain_id, temp_id)
+      temp_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
+      dart_idx = get_dart_vector_index(lon_corner(icorn),lat_corner(icorn),hgt_bot_un(ilev),domain_id, salt_id)
+      salt_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
+   enddo
+   ! Loop on ensemble members to do the vertical interpolation and get values at corners
+   do imem = 1,ens_size
+      top_val = temp_alldepths(hgt_top(imem),imem)
+      bot_val = temp_alldepths(hgt_bot(imem),imem)
+if (debug > 10 .and. imem == 1)   PRINT *, "RE: (compute_temperature) temp_depths, top/bot lev, top/bot depth ", &
+                                            hgt_top(imem), hgt_bot(imem), top_val, bot_val
+      temp_corners(icorn,imem) = bot_val + hgt_fract(imem) * (top_val - bot_val)
+      top_val = salt_alldepths(hgt_top(imem),imem)
+      bot_val = salt_alldepths(hgt_bot(imem),imem)
+if (debug > 10 .and. imem == 1)   PRINT *, "RE: (compute_temperature) salt_depths, top/bot lev, top/bot depth ", &
+                                            hgt_top(imem), hgt_bot(imem), top_val, bot_val
+      salt_corners(icorn,imem) = bot_val + hgt_fract(imem) * (top_val - bot_val)
+   enddo
+enddo
+
+! Do the horizontal interpolation: get T and S at position
+if (debug > 10)   PRINT *, "RE: (compute_temperature) temp_corners ", temp_corners
+call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_bot,lat_bot,lon_top,lat_top,&
+                           ens_size, temp_corners, potential_temp, lstatus)
+if (debug > 10)   PRINT *, "RE: (compute_temperature) return val ", potential_temp
+if (lstatus /= 0) then
+   istatus = lstatus
+   return
+endif
+
+debug = debug - 100
+if (debug > 10)   PRINT *, "RE: (compute_temperature) salt_corners ", salt_corners
+call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_bot,lat_bot,lon_top,lat_top,&
+                           ens_size, salt_corners, salt_val, lstatus)
+if (debug > 10)   PRINT *, "RE: (compute_temperature) return val ", salt_val
+if (lstatus /= 0) then
+   istatus = lstatus
+   return
+endif
+debug = debug + 100
+
+print *, 'avoiding conversion '
+expected_obs = potential_temp
+
+!! and finally, convert to sensible (in-situ) temperature.
+!! potential temp in degrees C, pressure in decibars, salinity in psu or pss
+!! (g/kg).
+!do imem = 1, ens_size !> @todo should this vectorize inside insitu_temp?
+!   call insitu_temp(potential_temp(imem), salt_val(imem),pres_val*10.0_r8, expected_obs(imem))
+!   if (debug > 2) print *, 's,pt,pres,t: ', salt_val(imem), potential_temp(imem),pres_val, expected_obs(imem)
+!enddo
+
+! good return
+istatus = 0
+
+end subroutine compute_temperature
+
+
+
+!-----------------------------------------------------------------------
+!>
+!> This function computes pressure in bars from depth in meters
+!> using a mean density derived from depth-dependent global
+!> average temperatures and salinities from levitus 1994, and
+!> integrating using hydrostatic balance.
+!>
+!> references:
+!>
+!> levitus, s., r. burgett, and t.p. boyer, world ocean atlas
+!> volume 3: salinity, noaa atlas nesdis 3, us dept. of commerce, 1994.
+!>
+!> levitus, s. and t.p. boyer, world ocean atlas 1994, volume 4:
+!> temperature, noaa atlas nesdis 4, us dept. of commerce, 1994.
+!>
+!> dukowicz, j. k., 2000: reduction of pressure and pressure
+!> gradient errors in ocean simulations, j. phys. oceanogr., submitted.
+!>
+
+function dpth2pres(depth)
+
+real(r8), intent(in)  :: depth
+real(r8)              :: dpth2pres
+
+!  input parameters:
+!  nd     - size of arrays
+!  depth  - depth in meters. no units check is made
+
+!  output parameters:
+!  pressure - pressure in bars
+
+!  local variables & parameters:
+real(r8), parameter :: c1 = 1.0_r8
+
+! -----------------------------------------------------------------------
+!  convert depth in meters to pressure in bars
+! -----------------------------------------------------------------------
+
+dpth2pres = 0.059808_r8*(exp(-0.025_r8*depth) - c1)  &
+              + 0.100766_r8*depth + 2.28405e-7_r8*depth**2
+
+if (debug > 2 .and. do_output()) then
+   print *, 'depth->pressure conversion table.  cols are: depth(m),pressure(bars)'
+   print *, depth, dpth2pres
+endif
+
+end function dpth2pres
+
+
+
+!-----------------------------------------------------------------------
+!>
+!> Get the in-situ temperature from the potential temperature, salinity
+!> and pressure
+!>
+
+subroutine insitu_temp(potemp, s, lpres, insitu_t)
+
+real(r8), intent(in)  :: potemp, s, lpres
+real(r8), intent(out) :: insitu_t
+
+! CODE FROM POP MODEL -
+! nsc 1 nov 2012:  i have taken the original subroutine with call:
+!  subroutine dpotmp(press,temp,s,rp,potemp)
+! and removed the original 'press' argument (setting it to 0.0 below)
+! and renamed temp -> potemp, and potemp -> insitu_t
+! i also reordered the args to be a bit more logical.  now you specify:
+! potential temp, salinity, local pressure in decibars, and you get
+! back in-situ temperature (called sensible temperature in the atmosphere;
+! what a thermometer would measure).  the original (F77 fixed format) code
+! had a computed goto which is deprecated/obsolete.  i replaced it with
+! a set of 'if() then else if()' lines.  i did try to not alter the original
+! code so much it wasn't recognizable anymore.
+!
+!  aliciak note: rp = 0 and press = local pressure as function of depth
+!  will return potemp given temp.
+!  the trick here that if you make rp = local pressure and press = 0.0,
+!  and put potemp in the "temp" variable , it will return insitu temp in the
+!  potemp variable.
+
+! an example figure of the relationship of potential temp and in-situ temp
+! at depth:
+! http://oceanworld.tamu.edu/resources/ocng_textbook/chapter06/chapter06_05.htm
+! see the 'potential temperature' section (note graph starts at -1000m)
+
+!     title:
+!     *****
+
+!       insitu_temp  -- calculate sensible (in-situ) temperature from
+!                       local pressure, salinity, and potential temperature
+
+!     purpose:
+!     *******
+
+!       to calculate sensible temperature, taken from a converter that
+!       went from sensible/insitu temperature to potential temperature
+!
+!       ref: N.P. Fofonoff
+!            Deep Sea Research
+!            in press Nov 1976
+
+!     arguments:
+!     **********
+
+!       potemp     -> potential temperature in celsius degrees
+!       s          -> salinity pss 78
+!       lpres      -> local pressure in decibars
+!       insitu_t   <- in-situ (sensible) temperature (deg c)
+
+
+!     local variables:
+!     *********
+
+integer  :: i,j,n
+real(r8) :: dp,p,q,r1,r2,r3,r4,r5,s1,t,x
+
+!     code:
+!     ****
+
+      s1 = s - 35.0_r8
+      p  = 0.0_r8
+      t  = potemp
+
+      dp = lpres - p
+      n  = int (abs(dp)/1000.0_r8) + 1
+      dp = dp/n
+
+      do i=1,n
+         do j=1,4
+
+            r1 = ((-2.1687e-16_r8 * t + 1.8676e-14_r8) * t - 4.6206e-13_r8) * p
+            r2 = (2.7759e-12_r8*t - 1.1351e-10_r8) * s1
+            r3 = ((-5.4481e-14_r8 * t + 8.733e-12_r8) * t - 6.7795e-10_r8) * t
+            r4 = (r1 + (r2 + r3 + 1.8741e-8_r8)) * p + (-4.2393e-8_r8 * t+1.8932e-6_r8) * s1
+            r5 = r4 + ((6.6228e-10_r8 * t-6.836e-8_r8) * t + 8.5258e-6_r8) * t + 3.5803e-5_r8
+
+            x  = dp*r5
+
+            if (j == 1) then
+               t = t + 0.5_r8 * x
+               q = x
+               p = p + 0.5_r8 * dp
+
+            else if (j == 2) then
+               t = t + 0.29298322_r8 * (x-q)
+               q = 0.58578644_r8 * x + 0.121320344_r8 * q
+
+            else if (j == 3) then
+               t = t + 1.707106781_r8 * (x-q)
+               q = 3.414213562_r8*x - 4.121320344_r8*q
+               p = p + 0.5_r8*dp
+
+            else ! j must == 4
+               t = t + (x - 2.0_r8 * q) / 6.0_r8
+
+            endif
+
+         enddo ! j loop
+      enddo ! i loop
+
+      insitu_t = t
+
+if (debug > 2) print *, 'potential temp, salinity, local pressure -> sensible temp'
+if (debug > 2) print *, potemp, s, lpres, insitu_t
+
+!       potemp     -> potential temperature in celsius degrees
+!       s          -> salinity pss 78
+!       lpres      -> local pressure in decibars
+!       insitu_t   <- in-situ (sensible) temperature (deg c)
+
+end subroutine insitu_temp
 
 
 !-----------------------------------------------------------------------
@@ -1069,7 +1390,6 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
 call nc_enddef(ncid)
 
 ! Fill the coordinate variable values
-
 ! the RHO grid
 
 call nc_check(NF90_inq_varid(ncid, 'lon_rho', VarID), &
@@ -1353,6 +1673,10 @@ call nc_check(nf90_get_var( ncid, VarID, TLON), &
       'get_grid', 'get_var lon_rho '//trim(roms_grid_file))
 
 where (TLON < 0.0_r8) TLON = TLON + 360.0_r8
+    write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
+    write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
+    call error_handler(E_MSG,'get_var',string1, text2=string2)
+
 
 call nc_check(nf90_inq_varid(ncid, 'lat_rho', VarID), &
       'get_grid', 'inq_varid lat_rho '//trim(roms_grid_file))
@@ -1419,15 +1743,15 @@ deallocate(mask)
 if (do_output() .and. debug > 0) then
     write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
     write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
     write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
     write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)    'min/max BATHY ',minval(BATHY), maxval(BATHY)
     call error_handler(E_MSG,'get_grid',string1)

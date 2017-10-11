@@ -441,6 +441,9 @@ endif
 if(num_output_state_members > ens_size) num_output_state_members = ens_size
 if(num_output_obs_members   > ens_size) num_output_obs_members   = ens_size
 
+! log something here if users have output_members turned off and the output stage turned on.
+! that's perfectly legal but a bit unusual.
+
 ! Set up stages to write : input, preassim, postassim, output
 call parse_stages_to_write(stages_to_write)
 

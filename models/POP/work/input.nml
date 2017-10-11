@@ -2,8 +2,8 @@
    read_input_state_from_file = .true.
    write_output_state_to_file = .true.
    async                      = 0
-   init_time_days             = -1
-   init_time_seconds          = -1
+   init_time_days             = 149749
+   init_time_seconds          = 0
    first_obs_days             = -1
    first_obs_seconds          = -1
    last_obs_days              = -1
@@ -11,8 +11,8 @@
    output_interval            = 1
    single_file_in             = .false.
    single_file_out            = .false.
-   input_state_files          = 'perfect_ics'
-   output_state_files         = 'perfect_restart'
+   input_state_files          = 'perfect_ics.nc'
+   output_state_files         = 'perfect_restart.nc'
    obs_seq_in_file_name       = 'obs_seq.in'
    obs_seq_out_file_name      = 'obs_seq.perfect'
    adv_ens_command            = 'no_CESM_advance_script'
@@ -25,7 +25,6 @@
    silence                    = .false.
    distributed_state          = .true.
    tasks_per_model_advance    = 1
-   has_cycling                = .false.
   /
 
 &filter_nml
@@ -165,6 +164,7 @@
    binary_grid_file_format      = 'big_endian'
    mdt_reference_file_name      = '/glade/p/image/DART_test_cases/pop/pop_gx1v6/mdt_f09_g16.nc'
    debug                        = 0
+   original_interp              = .true.
    model_state_variables        = 'SALT_CUR ', 'QTY_SALINITY             ', 'UPDATE',
                                   'TEMP_CUR ', 'QTY_POTENTIAL_TEMPERATURE', 'UPDATE',
                                   'UVEL_CUR ', 'QTY_U_CURRENT_COMPONENT  ', 'UPDATE',
@@ -301,19 +301,27 @@
    verbose    = .false.
   /
 
+   interp_test_dlon      = 0.010
+   interp_test_dlat      = 0.010
+   interp_test_lonrange  = 323.0, 328.0
+   interp_test_latrange  =  25.0, 30.0
+
 &model_mod_check_nml
    input_state_files     = 'pop.r.nc'
    output_state_files    = 'check_me.nc'
    verbose               = .FALSE.
-   test1thru             = 5
-   loc_of_interest       = 320.0, 18.0, 5.0
+   test1thru             = 4
+   loc_of_interest       = 324.150, 28.380, 5.0
    x_ind                 = 10
-   kind_of_interest      = 'QTY_U_CURRENT_COMPONENT'
-   interp_test_lonrange  = 0.0, 359.0
-   interp_test_dlon      = 1.0
-   interp_test_latrange  = -89.0, 89.0
-   interp_test_dlat      = 1.0
-   interp_test_vertrange = 1000.0,  1005.0
+   kind_of_interest      = 'QTY_TEMPERATURE'
+   interp_test_dlon      = 0.010
+   interp_test_dlat      = 0.010
    interp_test_dvert     = 2000.0
+   interp_test_lonrange  = 180.0, 212.0
+   interp_test_latrange  = -68.0, -51.0
+   interp_test_vertrange =  5.0,  15.0
    interp_test_vertcoord = 'VERTISHEIGHT'
   /
+
+&quad_interpolate_nml
+/

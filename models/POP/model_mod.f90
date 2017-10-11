@@ -10,7 +10,7 @@ module model_mod
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, i4, i8, SECPERDAY, MISSING_R8, rad2deg, PI, &
-                             vtablenamelength
+                             vtablenamelength, deg2rad
 use time_manager_mod, only : time_type, set_time, set_date, get_date, get_time,&
                              print_time, print_date,                           &
                              operator(*),  operator(+), operator(-),           &
@@ -22,7 +22,7 @@ use     location_mod, only : location_type, get_dist, set_location, get_location
                              convert_vertical_obs, convert_vertical_state
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
-                             do_output, to_upper,                              &
+                             do_output, to_upper, nmlfileunit,                 &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
@@ -47,6 +47,10 @@ use state_structure_mod,   only : add_domain, get_model_variable_indices, &
                                   get_num_dims, get_domain_size, &
                                   get_dart_vector_index
 use default_model_mod,     only : adv_1step, init_time, init_conditions, nc_write_model_vars
+use quad_utils_mod, only : quad_interp_handle, init_quad_interp, finalize_quad_interp, set_quad_coords,  &
+                           quad_lon_lat_locate, quad_lon_lat_evaluate, GRID_QUAD_FULLY_IRREGULAR,        &
+                           QUAD_LOCATED_CELL_CENTERS, QUAD_LOCATED_CELL_CORNERS, &
+                           QUAD_LOCATED_LON_EDGES, QUAD_LOCATED_LAT_EDGES
 
 use typesizes
 use netcdf 
@@ -99,6 +103,11 @@ character(len=512) :: string3
 
 logical, save :: module_initialized = .false.
 
+logical :: original_interp = .true.
+
+! storage for handles for t and u grid interpolation
+type(quad_interp_handle) :: h_t, h_u
+
 ! Storage for a random sequence for perturbing a single initial state
 type(random_seq_type) :: random_seq
 
@@ -138,6 +147,7 @@ namelist /model_nml/  &
    model_state_variables,       &
    binary_grid_file_format,     &
    mdt_reference_file_name,     &
+   original_interp,             &
    debug
 
 !------------------------------------------------------------------
@@ -289,9 +299,8 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-call error_handler(E_MSG,'static_init_model','model_nml values are',' ',' ',' ')
 if (do_output()) write(logfileunit, nml=model_nml)
-if (do_output()) write(     *     , nml=model_nml)
+if (do_output()) write(nmlfileunit, nml=model_nml)
 
 ! Set the time step ... causes POP namelists to be read.
 ! Ensures model_timestep is multiple of 'ocean_dynamics_timestep'
@@ -349,7 +358,15 @@ allocate(pressure(Nz))
 call dpth2pres(Nz, ZC, pressure)
 
 ! Initialize the interpolation routines
-call init_interp()
+if ( original_interp ) then
+   call init_interp()
+else
+   ! initialize the quad interpolation routines
+   call init_quad_interp(GRID_QUAD_FULLY_IRREGULAR, Nx, Ny, QUAD_LOCATED_CELL_CENTERS, .true., .true., .true., h_t)
+   call set_quad_coords(h_t, TLON, TLAT)
+   call init_quad_interp(GRID_QUAD_FULLY_IRREGULAR, Nx, Ny, QUAD_LOCATED_CELL_CORNERS, .true., .true., .true., h_u)
+   call set_quad_coords(h_u, ULON, ULAT)
+endif
 
 !> @todo 'pop.r.nc' is hardcoded in dart_pop_mod.f90
 domain_id = add_domain('pop.r.nc', nfields, &
@@ -958,6 +975,8 @@ if ( .not. module_initialized ) call static_init_model
 ! Succesful return has istatus of 0
 istatus = 0
 
+if (original_interp) then
+
 ! Get the lower left corner for either grid type
 if(dipole_grid) then
    ! Figure out which of the regular grid boxes this is in
@@ -1095,11 +1114,25 @@ if (present(expected_mdt)) then
    pmdt(4) = MDT(lon_bot,lat_top)
 endif
 
+!! test perturbing values
+!if (lon_bot > 200 .and. lon_bot < 202 .and. lat_bot > 30 .and. lat_bot < 32) then
+!   p(3, :) = p(3, :) + 2.0_r8
+!   p(1, :) = p(1, :) - 2.0_r8
+!print *, 'adding noise to two corners for quad with lower left at ', lon_bot, lat_bot
+!endif
+!
+!if (lon_bot > 218 .and. lon_bot < 220 .and. lat_bot > 38 .and. lat_bot < 40) then
+!   p(1, :) = p(1, :) + 2.0_r8
+!print *, 'adding noise to one corner for quad with lower left at ', lon_bot, lat_bot
+!endif
+
 ! Full bilinear interpolation for quads
 if(dipole_grid) then
+!debug = debug + 100
    do e = 1, ens_size
       call quad_bilinear_interp(lon, lat, x_corners, y_corners, p(:,e), ens_size, expected_obs(e))
    enddo
+!debug = debug - 100
 
    if (present(expected_mdt)) then
       call quad_bilinear_interp(lon, lat, x_corners, y_corners, pmdt(:), 1, expected_mdt)
@@ -1118,6 +1151,74 @@ else
       expected_mdt = mdtbot + lat_fract * (mdttop - mdtbot)
    endif
 endif
+
+else  ! not original_interp
+
+   if(is_on_ugrid(var_type)) then
+      call quad_lon_lat_locate(h_u, lon, lat, lon_bot, lat_bot, lon_top, lat_top, quad_status)
+   else
+      call quad_lon_lat_locate(h_t, lon, lat, lon_bot, lat_bot, lon_top, lat_top, quad_status)
+   endif
+   if (quad_status /= 0) then
+      istatus(:) = quad_status
+      expected_obs = MISSING_R8
+      return
+   endif
+   ! Get the values at the four corners of the box or quad
+   ! Corners go around counterclockwise from lower left
+   p(1, :) = get_val(lon_bot, lat_bot, nx, state_handle, offset, ens_size, var_type, height, masked)
+   if(masked) then
+print *, 'masked true, 1'
+      istatus = 3
+      return
+   endif
+   
+   p(2, :) = get_val(lon_top, lat_bot, nx, state_handle, offset, ens_size, var_type, height, masked)
+   if(masked) then
+print *, 'masked true, 2'
+      istatus = 3
+      return
+   endif
+   
+   p(3, :) = get_val(lon_top, lat_top, nx, state_handle, offset, ens_size, var_type, height, masked)
+   if(masked) then
+print *, 'masked true, 3'
+      istatus = 3
+      return
+   endif
+   
+   p(4, :) = get_val(lon_bot, lat_top, nx, state_handle, offset, ens_size, var_type, height, masked)
+   if(masked) then
+print *, 'masked true, 4'
+      istatus = 3
+      return
+   endif
+
+   do e = 1, ens_size
+      if(is_on_ugrid(var_type)) then
+         call quad_lon_lat_evaluate(h_u, lon, lat, lon_bot, lat_bot, lon_top, lat_top, &
+                                    p(:,e), expected_obs(e), quad_status)
+      else
+         call quad_lon_lat_evaluate(h_t, lon, lat, lon_bot, lat_bot, lon_top, lat_top, &
+                                    p(:,e), expected_obs(e), quad_status)
+      endif
+      if (quad_status /= 0) istatus(e) = quad_status
+   enddo
+
+   if (present(expected_mdt)) then
+
+      ! Find the matching Mean Dynamic Topography (sea surface height reference)
+      pmdt(1) = MDT(lon_bot,lat_bot)
+      pmdt(2) = MDT(lon_top,lat_bot)
+      pmdt(3) = MDT(lon_top,lat_top)
+      pmdt(4) = MDT(lon_bot,lat_top)
+  
+      call quad_lon_lat_evaluate(h_t, lon, lat, lon_bot, lat_bot, lon_top, lat_top, &
+                                 pmdt(:), expected_mdt, quad_status)
+
+   endif
+
+endif ! original_interp
 
 end subroutine lon_lat_interpolate
 
@@ -1523,20 +1624,22 @@ end subroutine line_intercept
 !> checks showed accuracy to seven decimal places on all tests.
 
 
-subroutine quad_bilinear_interp(lon_in, lat, x_corners_in, y_corners, &
+subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, &
                                 p, ens_size, expected_obs)
 
-real(r8),  intent(in) :: lon_in, lat, x_corners_in(4), y_corners(4), p(4)
+real(r8),  intent(in) :: lon_in, lat_in, x_corners_in(4), y_corners_in(4), p(4)
 integer,   intent(in) :: ens_size
 real(r8), intent(out) :: expected_obs
 
 integer :: i
-real(r8) :: m(3, 3), v(3), r(3), a, x_corners(4), lon
-! real(r8) :: lon_mean
+real(r8) :: m(3, 3), v(3), r(3), a, x_corners(4), lon, y_corners(4), lat
+real(r8) :: lon_mean, interp_val, lat_mean
 
 ! Watch out for wraparound on x_corners.
 lon = lon_in
+lat = lat_in
 x_corners = x_corners_in
+y_corners = y_corners_in
 
 ! See if the side wraps around in longitude. If the corners longitudes
 ! wrap around 360, then the corners and the point to interpolate to
@@ -1548,20 +1651,32 @@ if(maxval(x_corners) - minval(x_corners) > 180.0_r8) then
    enddo
 endif
 
+if (debug > 10) write(*,'(A,4F12.3)') 'corner data values: ', p
+if (debug > 10) write(*,'(A,4F12.3)') 'original x_corners: ', x_corners
+if (debug > 10) write(*,'(A,4F12.3)') 'original y_corners: ', y_corners
 
 !*******
 ! Problems with extremes in polar cell interpolation can be reduced
 ! by this block, but it is not clear that it is needed for actual
 ! ocean grid data
 ! Find the mean longitude of corners and remove
-!!!lon_mean = sum(x_corners) / 4.0_r8
-!!!x_corners = x_corners - lon_mean
-!!!lon = lon - lon_mean
+lon_mean = sum(x_corners) / 4.0_r8
+lat_mean = sum(y_corners) / 4.0_r8
+
+x_corners = x_corners - lon_mean
+lon = lon - lon_mean
 ! Multiply everybody by the cos of the latitude
-!!!do i = 1, 4
-   !!!x_corners(i) = x_corners(i) * cos(y_corners(i) * deg2rad)
-!!!enddo
-!!!lon = lon * cos(lat * deg2rad)
+do i = 1, 4
+   x_corners(i) = x_corners(i) * cos(y_corners(i) * deg2rad)
+enddo
+lon = lon * cos(lat * deg2rad)
+lon_mean = lon_mean * (cos(lat * deg2rad))
+
+y_corners = y_corners - lat_mean
+lat = lat - lat_mean
+
+if (debug > 10) write(*,'(A,5F12.3)') 'xformed x_corners, lon: ', x_corners, lon
+if (debug > 10) write(*,'(A,5F12.3)') 'xformed y_corners, lat: ', y_corners, lat
 
 !*******
 
@@ -1573,37 +1688,55 @@ do i = 1, 3
    m(i, 2) = y_corners(i) - y_corners(i + 1)
    m(i, 3) = x_corners(i)*y_corners(i) - x_corners(i + 1)*y_corners(i + 1)
    v(i) = p(i) - p(i + 1)
+if (debug > 10) write(*,'(A,I3,7F12.3)') 'i, m(3), p(2), v: ', i, m(i,:), p(i), p(i+1), v(i)
 enddo
 
 ! Solve the matrix for b, c and d
 call mat3x3(m, v, r)
 
 ! r contains b, c, and d; solve for a
-a = p(4) - r(1) * x_corners(4) - r(2) * y_corners(4) - &
-   r(3) * x_corners(4)*y_corners(4)
+a = p(4) - r(1) * x_corners(4) &
+         - r(2) * y_corners(4) &
+         - r(3) * x_corners(4)*y_corners(4)
 
 
 !----------------- Implementation test block
 ! When interpolating on dipole x3 never exceeded 1e-9 error in this test
-!!!do i = 1, 4
-   !!!interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i)+ r(3)*x_corners(i)*y_corners(i)
-   !!!if(abs(interp_val - p(i)) > 1e-9) then
-      !!!write(*, *) 'large interp residual ', interp_val - p(i)
-   !!!endif
-!!!enddo
+if (debug > 10)  write(*,'(A,8F12.3)') 'test corners: a, r(1), r(2), r(3)', a, r(1), r(2), r(3)
+do i = 1, 4
+   interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i) + r(3)*x_corners(i)*y_corners(i)
+   if(abs(interp_val - p(i)) > 1e-9) then
+      write(*, *) 'large interp residual ', interp_val - p(i)
+   endif
+if (debug > 10)  write(*,'(A,I3,8F12.3)') 'test corner: i, interp_val, x_corn, y_corn: ',  &
+                                                        i, interp_val, x_corners(i), y_corners(i)
+enddo
+
+! Interp mean lon/lat
+interp_val = a + r(1)*lon_mean + r(2)*lat_mean + r(3)*lon_mean*lat_mean
+if (debug > 10)  write(*,'(A,8F12.3)') 'test mean: interp_val, lon_mean, lat_mean: ',  &
+                                                   interp_val, lon_mean, lat_mean
+
 !----------------- Implementation test block
 
 
 ! Now do the interpolation
+
 expected_obs = a + r(1)*lon + r(2)*lat + r(3)*lon*lat
+
+if (debug > 10)  write(*,'(A,8F12.3)') 'poly: expected,     lon, lat, a,  r(1)*lon,  r(2)*lat,  r(3)*lon*lat: ', &
+                                              expected_obs, lon, lat, a,  r(1)*lon,  r(2)*lat,  r(3)*lon*lat
+
 
 !********
 ! Avoid exceeding maxima or minima as stopgap for poles problem
 ! When doing bilinear interpolation in quadrangle, can get interpolated
 ! values that are outside the range of the corner values
 if(expected_obs > maxval(p)) then
+ write(*,'(A,2F12.3)') 'expected obs > maxval: ', expected_obs, maxval(p)
    expected_obs = maxval(p)
 else if(expected_obs < minval(p)) then
+ write(*,'(A,2F12.3)') 'expected obs < minval: ', expected_obs, maxval(p)
    expected_obs = minval(p)
 endif
 !********
@@ -1627,6 +1760,7 @@ integer  :: i
 
 ! Compute the denominator, det(m)
 denom = deter3(m)
+if (debug > 100) print *, denom, '  % denominator'
 
 ! Loop to compute the numerator for each component of r
 do i = 1, 3
@@ -1634,6 +1768,7 @@ do i = 1, 3
    m_sub(:, i) = v   
    numer = deter3(m_sub)
    r(i) = numer / denom
+if (debug > 10) write(*,'(A,I3,7F12.3)') 'mat: i, numer, denom, r: ', i, numer, denom, r(i)
 enddo
 
 end subroutine mat3x3
@@ -2496,18 +2631,202 @@ close(unit=15)
 
 end subroutine write_grid_interptest
 
-
 !------------------------------------------------------------------
-
 
 subroutine test_interpolation(test_casenum)
  integer, intent(in) :: test_casenum
 
-! Helen has destroyed this for now.
+! rigorous test of the interpolation routine.
 
+!%! this code needs to create a state handle and read in data
+!%! to at least one ensemble member for the interpolation routine
+!%! to work.
+!%!
+!%! ! This is storage just used for temporary test driver
+!%! integer :: imain, jmain, index, istatus, nx_temp, ny_temp
+!%! integer :: dnx_temp, dny_temp, height_ind
+!%! real(r8) :: ti, tj
+!%! 
+!%! ! Storage for testing interpolation to a different grid
+!%! integer :: dnx, dny
+!%! real(r8), allocatable :: dulon(:, :), dulat(:, :), dtlon(:, :), dtlat(:, :)
+!%! real(r8), allocatable :: reg_u_data(:, :), reg_t_data(:, :)
+!%! real(r8), allocatable :: reg_u_x(:), reg_t_x(:), dipole_u(:, :), dipole_t(:, :)
+!%! 
+!%! ! Test program reads in two grids; one is the interpolation grid
+!%! ! The second is a grid to which to interpolate.
+!%! 
+!%! ! Read of first grid
+!%! ! Set of block options for now
+!%! ! Lon lat for u on channel 12, v on 13, u data on 14, t data on 15
+!%! 
+!%! ! Case 1: regular grid to dipole
+!%! ! Case 2: dipole to regular grid
+!%! ! Case 3: regular grid to regular grid with same grid as dipole in SH
+!%! ! Case 4: regular grid with same grid as dipole in SH to regular grid
+!%! ! Case 5: regular grid with same grid as dipole in SH to dipole
+!%! ! Case 6: dipole to regular grid with same grid as dipole in SH
+!%! 
+!%! ! do not let the standard init run
+!%! module_initialized = .true.
+!%! 
+!%! if(test_casenum == 1 .or. test_casenum == 3) then
+!%!    ! Case 1 or 3: read in from regular grid 
+!%!    open(unit=12, position='rewind', action='read', file='regular_grid_u')
+!%!    open(unit=13, position='rewind', action='read', file='regular_grid_t')
+!%!    open(unit=14, position='rewind', action='read', file='regular_grid_u_data')
+!%!    open(unit=15, position='rewind', action='read', file='regular_grid_t_data')
+!%! 
+!%! else if(test_casenum == 4 .or. test_casenum == 5) then
+!%!    ! Case 3 or 4: read regular with same grid as dipole in SH
+!%!    open(unit=12, position='rewind', action='read', file='regular_griddi_u')
+!%!    open(unit=13, position='rewind', action='read', file='regular_griddi_t')
+!%!    open(unit=14, position='rewind', action='read', file='regular_griddi_u_data')
+!%!    open(unit=15, position='rewind', action='read', file='regular_griddi_t_data')
+!%! 
+!%! else if(test_casenum == 2 .or. test_casenum == 6) then
+!%!    ! Case 5: read in from dipole grid
+!%!    open(unit=12, position='rewind', action='read', file='dipole_grid_u')
+!%!    open(unit=13, position='rewind', action='read', file='dipole_grid_t')
+!%!    open(unit=14, position='rewind', action='read', file='dipole_grid_u_data')
+!%!    open(unit=15, position='rewind', action='read', file='dipole_grid_t_data')
+!%! endif
+!%! 
+!%! ! Get the size of the grid from the input u and t files
+!%! read(12, *) nx, ny
+!%! read(13, *) nx_temp, ny_temp
+!%! if(nx /= nx_temp .or. ny /= ny_temp) then
+!%!    write(string1,*)'mismatch nx,nx_temp ',nx,nx_temp,' or ny,ny_temp',ny,ny_temp
+!%!    call error_handler(E_ERR,'test_interpolation',string1,source,revision,revdate)
+!%! endif
+!%! 
+!%! ! Allocate stuff for the first grid (the one being interpolated from)
+!%! allocate(ulon(nx, ny), ulat(nx, ny), tlon(nx, ny), tlat(nx, ny))
+!%! allocate( kmt(nx, ny),  kmu(nx, ny))
+!%! allocate(reg_u_data(nx, ny), reg_t_data(nx, ny))
+!%! ! The Dart format 1d data arrays
+!%! allocate(reg_u_x(nx*ny), reg_t_x(nx*ny))
+!%! 
+!%! !call init_random_seq(rseq)
+!%! 
+!%! do imain = 1, nx
+!%!    do jmain = 1, ny
+!%!       read(12, *) ti, tj, ulon(imain, jmain), ulat(imain, jmain)
+!%!       read(13, *) ti, tj, tlon(imain, jmain), tlat(imain, jmain)
+!%!       read(14, *) ti, tj, reg_u_data(imain, jmain)
+!%!       read(15, *) ti, tj, reg_t_data(imain, jmain)
+!%!    enddo
+!%! enddo
+!%! 
+!%! !!begin NSC - change
+!%! !do imain = 1, nx
+!%! !   do jmain = 1, ny
+!%! !      reg_u_data(imain, jmain) = random_uniform(rseq) * 10.0_r8
+!%! !      reg_t_data(imain, jmain) = random_uniform(rseq) * 10.0_r8
+!%! !   enddo
+!%! !enddo
+!%! !!end NSC
+!%! 
+!%! ! Load into 1D dart data array
+!%! index = 0
+!%! do jmain = 1, ny
+!%!    do imain = 1, nx
+!%!       index = index + 1
+!%!       reg_u_x(index) = reg_u_data(imain, jmain)
+!%!       reg_t_x(index) = reg_t_data(imain, jmain)
+!%!    enddo
+!%! enddo
+!%! 
+!%! ! dummy out vertical; let height_ind always = 1 and allow
+!%! ! all grid points to be processed.
+!%! kmt = 2
+!%! kmu = 2
+!%! height_ind = 1
+!%! 
+!%! ! Initialize the interpolation data structure for this grid.
+!%! call init_interp()
+!%! 
+!%! ! Now read in the points for the output grid
+!%! ! Case 1: regular grid to dipole
+!%! ! Case 2: dipole to regular grid
+!%! ! Case 3: regular grid to regular grid with same grid as dipole in SH
+!%! ! Case 4: regular grid with same grid as dipole in SH to regular grid
+!%! ! Case 5: regular grid with same grid as dipole in SH to dipole 
+!%! ! Case 6: dipole to regular grid with same grid as dipole in SH
+!%! if(test_casenum == 1 .or. test_casenum == 5) then
+!%!    ! Output to dipole grid
+!%!    open(unit=22, position='rewind', action='read',  file='dipole_grid_u')
+!%!    open(unit=23, position='rewind', action='read',  file='dipole_grid_t')
+!%!    open(unit=24, position='rewind', action='write', file='dipole_grid_u_data.out')
+!%!    open(unit=25, position='rewind', action='write', file='dipole_grid_t_data.out')
+!%! 
+!%! else if(test_casenum == 2 .or. test_casenum == 4) then
+!%!    ! Output to regular grid
+!%!    open(unit=22, position='rewind', action='read',  file='regular_grid_u')
+!%!    open(unit=23, position='rewind', action='read',  file='regular_grid_t')
+!%!    open(unit=24, position='rewind', action='write', file='regular_grid_u_data.out')
+!%!    open(unit=25, position='rewind', action='write', file='regular_grid_t_data.out')
+!%! 
+!%! else if(test_casenum == 3 .or. test_casenum == 6) then
+!%!    ! Output to regular grid with same grid as dipole in SH
+!%!    open(unit=22, position='rewind', action='read',  file='regular_griddi_u')
+!%!    open(unit=23, position='rewind', action='read',  file='regular_griddi_t')
+!%!    open(unit=24, position='rewind', action='write', file='regular_griddi_u_data.out')
+!%!    open(unit=25, position='rewind', action='write', file='regular_griddi_t_data.out')
+!%! endif
+!%! 
+!%! read(22, *) dnx, dny
+!%! read(23, *) dnx_temp, dny_temp
+!%! if(dnx /= dnx_temp .or. dny /= dny_temp) then
+!%!    write(string1,*)'mismatch dnx,dnx_temp ',dnx,dnx_temp,' or dny,dny_temp',dny,dny_temp
+!%!    call error_handler(E_ERR,'test_interpolation',string1,source,revision,revdate)
+!%! endif
+!%! 
+!%! allocate(dulon(dnx, dny), dulat(dnx, dny), dtlon(dnx, dny), dtlat(dnx, dny))
+!%! allocate(dipole_u(dnx, dny), dipole_t(dnx, dny))
+!%! 
+!%! dipole_u = 0.0_r8   ! just put some dummy values in to make sure they get changed.
+!%! dipole_t = 0.0_r8   ! just put some dummy values in to make sure they get changed.
+!%! 
+!%! do imain = 1, dnx
+!%! do jmain = 1, dny
+!%!    read(22, *) ti, tj, dulon(imain, jmain), dulat(imain, jmain)
+!%!    read(23, *) ti, tj, dtlon(imain, jmain), dtlat(imain, jmain)
+!%! enddo
+!%! enddo
+!%! 
+!%! do imain = 1, dnx
+!%!    do jmain = 1, dny
+!%!       ! Interpolate U from the first grid to the second grid
+!%! 
+!%!       call lon_lat_interpolate(reg_u_x, dulon(imain, jmain), dulat(imain, jmain), &
+!%!          KIND_U_CURRENT_COMPONENT, height_ind, dipole_u(imain, jmain), istatus)
+!%! 
+!%!       if ( istatus /= 0 ) then
+!%!          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' U interp failed - code '',i4)') &
+!%!               imain, jmain, dulon(imain, jmain), dulat(imain, jmain), istatus
+!%!          call error_handler(E_MSG,'test_interpolation',string1,source,revision,revdate)
+!%!       endif
+!%! 
+!%!       write(24, *) dulon(imain, jmain), dulat(imain, jmain), dipole_u(imain, jmain)
+!%! 
+!%!       ! Interpolate U from the first grid to the second grid
+!%! 
+!%!       call lon_lat_interpolate(reg_t_x, dtlon(imain, jmain), dtlat(imain, jmain), &
+!%!          KIND_POTENTIAL_TEMPERATURE, height_ind, dipole_t(imain, jmain), istatus)
+!%! 
+!%!       if ( istatus /= 0 ) then
+!%!          write(string1,'(''cell'',i4,i4,1x,f12.8,1x,f12.8,'' T interp failed - code '',i4)') &
+!%!               imain,jmain, dtlon(imain, jmain), dtlat(imain, jmain), istatus
+!%!          call error_handler(E_MSG,'test_interpolation',string1,source,revision,revdate)
+!%!       endif
+!%! 
+!%!       write(25, *) dtlon(imain, jmain), dtlat(imain, jmain), dipole_t(imain, jmain)
+!%! 
+!%!    enddo
+!%! enddo
 
 end subroutine test_interpolation
-
 
 !------------------------------------------------------------------
 !> use potential temp, depth, and salinity to compute a sensible (in-situ)

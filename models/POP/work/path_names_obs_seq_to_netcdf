@@ -25,4 +25,5 @@ assimilation_code/programs/obs_seq_to_netcdf/obs_seq_to_netcdf.f90
 models/POP/dart_pop_mod.f90
 models/POP/model_mod.f90
 models/utilities/default_model_mod.f90
+models/utilities/quad_utils_mod.f90
 observations/forward_operators/obs_def_mod.f90

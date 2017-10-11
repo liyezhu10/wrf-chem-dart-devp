@@ -76,8 +76,10 @@ character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 integer  :: debug = 0   ! turn up for more and more debug messages
+integer  :: interpolation_type = 1  ! add cases for different strategies
+logical  :: do_rotate = .false.     ! rotate edge from pts 1,2 to horizontal before interp
 
-namelist /quad_interpolate_nml/ debug
+namelist /quad_interpolate_nml/ do_rotate, debug
 
 !> @todo FIXME internal routines should use h for the handle; externally callable
 !> routines should use interp_handle for clarity in the interface.
@@ -430,8 +432,6 @@ select case (interp_handle%grid_type)
    case(GRID_QUAD_FULLY_IRREGULAR)
       print * !, interp_handle%ii%lats_2D(num_lons,num_lats), interp_handle%ii%lons_2D(num_lons, num_lats)
 
-      !allocate(interp_handle%ii%grid_start(interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y), interp_handle%ii%grid_num(interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y))
-
    case default
       write(string1, *) 'unrecognized grid type: ', interp_handle%grid_type
       write(string2, *) 'should be one of: GRID_QUAD_FULLY_REGULAR, '&
@@ -664,7 +664,8 @@ do i = 1, xlim
          if (istatus /= 0) print *, 'get_quad_corners for lons returns failure'
          call get_quad_corners(h%ii%lats_2d, i, j, cyclic, nx, ny, u_c_lats, istatus)
          if (istatus /= 0) print *, 'get_quad_corners for lats returns failure'
-!print *, 'get_quad_corners returns ', u_c_lons, u_c_lats, ' for ', h%ii%lons_2d(i,j), h%ii%lats_2d(i,j), ' index ', i, j
+         !print *, 'get_quad_corners returns ', u_c_lons, u_c_lats, ' for ', &
+         !          h%ii%lons_2d(i,j), h%ii%lats_2d(i,j), ' index ', i, j
 
          ! Get list of regular boxes that cover this u dipole quad
          ! false indicates that for the u grid there's nothing special about pole
@@ -1147,7 +1148,8 @@ do ind_x = reg_lon_ind(1), reg_lon_ind(2)
       ! Store this quad in the list for this regular box
       reg_list_lon(index_x, index_y, reg_list_num(index_x, index_y)) = grid_lon_index
       reg_list_lat(index_x, index_y, reg_list_num(index_x, index_y)) = grid_lat_index
-!print *, 'adding 1 to bin ', index_x, index_y, ' for ', grid_lon_index, grid_lat_index, ' now entries = ', reg_list_num(index_x, index_y)
+      !print *, 'adding 1 to bin ', index_x, index_y, ' for ', grid_lon_index, grid_lat_index, &
+      !          ' now entries = ', reg_list_num(index_x, index_y)
    enddo
 enddo
 
@@ -1431,10 +1433,10 @@ istatus = 0
 !>@todo  FIXME: hack to get code running.  don't expand arrays - slow.
 ! search directly in a loop w/ deltas.
 do i=1, nx
-   lon_array(i) = lon_min + i*lon_del
+   lon_array(i) = lon_min + (i-1)*lon_del
 enddo
 do i=1, ny
-   lat_array(i) = lat_min + i*lat_del
+   lat_array(i) = lat_min + (i-1)*lat_del
 enddo
 
 ! Get latitude box boundaries
@@ -1497,10 +1499,12 @@ endif
 do i = 2, nlons
    dist_bot = lon_dist(lon, lon_array(i - 1))
    dist_top = lon_dist(lon, lon_array(i))
+   if (debug > 3) print *, 'lon: i, bot, top: ', i, dist_bot, dist_top
    if(dist_bot <= 0 .and. dist_top > 0) then
       bot = i - 1
       top = i
       fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
+      if (debug > 3) print *, 'lon: returning bot, top, fract', bot, top, fract
       return
    endif
 enddo
@@ -1562,10 +1566,12 @@ endif
 
 ! In the middle, search through
 do i = 2, nlats
+   if (debug > 3) print *, 'lat: i, lat, lat(i): ', i, lat, lat_array(i)
    if(lat <= lat_array(i)) then
       bot = i - 1
       top = i
       fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
+      if (debug > 3) print *, 'lat: returning bot, top, fract', bot, top, fract
       return
    endif
 enddo
@@ -1824,7 +1830,8 @@ subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, cycl
 ! checks showed accuracy to seven decimal places on all tests.
 
 integer :: i
-real(r8) :: m(3, 3), v(3), r(3), a, b(2), c(2), x_corners(4), lon, y_corners(4), lat
+real(r8) :: m(3, 3), v(3), r(3), a, b(2), c(2), d
+real(r8) :: x_corners(4), lon, y_corners(4), lat
 real(r8) :: lon_mean, lat_mean, interp_val, angle
 
 ! Watch out for wraparound on x_corners.
@@ -1843,18 +1850,13 @@ if (debug > 10) write(*,'(A,4F12.3)') 'original y_corners: ', y_corners
 ! wrap around 360, then the corners and the point to interpolate to
 ! must be adjusted to be in the range from 180 to 540 degrees.
 if(maxval(x_corners) - minval(x_corners) > 180.0_r8) then
-print *, 'wrap in lon?'
-   if(lon < 180.0_r8) then
-print *, 'adding to lon'
-      lon = lon + 360.0_r8
-   endif
+   if(lon < 180.0_r8) lon = lon + 360.0_r8
    do i = 1, 4
-      if(x_corners(i) < 180.0_r8) then
-print *, 'adding to corner ', i
-          x_corners(i) = x_corners(i) + 360.0_r8
-      endif
+      if(x_corners(i) < 180.0_r8) x_corners(i) = x_corners(i) + 360.0_r8
    enddo
 endif
+
+!>@todo FIXME here is where can select and test various interpolation types
 
 !*******
 ! Problems with extremes in polar cell interpolation can be reduced
@@ -1880,12 +1882,12 @@ endif
 ! rotate so line segment 1-2 is horizontal, and then
 ! compute values.
 
-if (.false.) then
-print *, 'rotating quads before interp'
-do i=1, 4
-   print *,  'before', i, x_corners(i), y_corners(i)
-enddo
-print *, lat, lon
+if (do_rotate) then
+   !print *, 'rotating quads before interp'
+   !do i=1, 4
+   !   print *,  'before', i, x_corners(i), y_corners(i)
+   !enddo
+   !print *, lat, lon
    do i = 2, 4
       x_corners(i) = x_corners(i) - x_corners(1)
       y_corners(i) = y_corners(i) - y_corners(1)
@@ -1895,10 +1897,10 @@ print *, lat, lon
    x_corners(1) = 0.0_r8
    y_corners(1) = 0.0_r8
    
-do i=1, 4
-   print *,  'xform ', i, x_corners(i), y_corners(i)
-enddo
-print *, lat, lon
+   !do i=1, 4
+   !   print *,  'xform ', i, x_corners(i), y_corners(i)
+   !enddo
+   !print *, lat, lon
 
    b(1) = x_corners(2)
    b(2) = y_corners(2)
@@ -1914,7 +1916,7 @@ print *, lat, lon
    
 !print *, b, c
    angle = angle2(b, c)
-print *, 'angle = ', angle
+   !print *, 'angle = ', angle
 
    if (abs(angle) > 0.001_r8) then
    do i = 2, 4
@@ -1931,7 +1933,7 @@ print *, 'angle = ', angle
    lat = b(2)
    endif
 else
-   print *, 'NOT rotating quads before interp'
+   !print *, 'NOT rotating quads before interp'
 endif
 
 ! now everything is in degrees relative to the lower left and rotated.
@@ -1951,8 +1953,15 @@ do i = 1, 3
 if (debug > 10) write(*,'(A,I3,7F12.3)') 'i, m(3), p(2), v: ', i, m(i,:), p(i), p(i+1), v(i)
 enddo
 
+! look for degenerate matrix and rotate if needed
+! compute deter of m
+!d = deter3(m)
+
 ! Solve the matrix for b, c and d
 call mat3x3(m, v, r)
+if (debug > 10) print *, 'r ', r
+if (debug > 10) print *, 'p ', p
+
 
 ! r contains b, c, and d; solve for a
 a = p(4) - r(1) * x_corners(4) - &
@@ -1965,9 +1974,8 @@ a = p(4) - r(1) * x_corners(4) - &
 if (debug > 10)  write(*,'(A,8F12.3)') 'test corners: a, r(1), r(2), r(3)', a, r(1), r(2), r(3)
 do i = 1, 4
    interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i)+ r(3)*x_corners(i)*y_corners(i)
-   if(abs(interp_val - p(i)) > 1e-9) then
-      write(*, *) 'large interp residual ', i, interp_val, p(i), interp_val - p(i)
-   endif
+
+   if(abs(interp_val - p(i)) > 1e-9) write(*, *) 'large interp residual ', i, interp_val, p(i), interp_val - p(i)
 if (debug > 10)  write(*,'(A,I3,8F12.5)') 'test corner: i, interp_val, x_corn, y_corn: ',  &
                                                         i, interp_val, x_corners(i), y_corners(i)
 enddo
@@ -2075,7 +2083,7 @@ angle2 = acos(dot2(a,b) / (mag2(a) * mag2(b)))
 end function angle2
 
 !------------------------------------------------------------
-! rotate vector a counterclockwise by angle theta
+! rotate vector a counterclockwise by angle theta (in radians)
 
 function rotate2(a, theta)
  real(r8), intent(in) :: a(2)
@@ -2232,12 +2240,13 @@ real(r8),                 intent(out) :: outval
 integer,                  intent(out) :: istatus
 
 real(r8) :: in_array(4, 1), out_array(1)
+integer  :: stat(1)
 
 in_array(:, 1) = invals
 call quad_lon_lat_evaluate_ir_array(interp_handle, lon_bot, lat_bot, lon_top, &
-              lat_top, lon_fract, lat_fract, 1, in_array, out_array, istatus)
+              lat_top, lon_fract, lat_fract, 1, in_array, out_array, stat)
 outval = out_array(1)
-istatus = 0
+istatus = stat(1)
 
 end subroutine quad_lon_lat_evaluate_ir_single
 
@@ -2255,9 +2264,9 @@ real(r8),                 intent(in)  :: lon_fract, lat_fract
 integer,                  intent(in)  :: nitems
 real(r8),                 intent(in)  :: invals(4, nitems)
 real(r8),                 intent(out) :: outvals(nitems)
-integer,                  intent(out) :: istatus
+integer,                  intent(out) :: istatus(nitems)
 
-real(r8) :: xbot(nitems), xtop(nitems)
+real(r8) :: xbot(nitems), xtop(nitems), i
 real(r8) :: x_corners(4), y_corners(4)
 
 character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_evaluate_ir_array'
@@ -2270,15 +2279,42 @@ if(interp_handle%grid_type == GRID_QUAD_FULLY_IRREGULAR) then
    write(string3,*)'cannot be    ',GRID_QUAD_FULLY_IRREGULAR
    call error_handler(E_ERR, routine, string1, &
               source, revision, revdate, text2=string2, text3=string3)
-else
-   ! Rectangular bilinear interpolation
-   xbot = invals(1, :) + lon_fract * (invals(2, :) - invals(1, :))
-   xtop = invals(4, :) + lon_fract * (invals(3, :) - invals(4, :))
-   ! Now interpolate in latitude
-   outvals(:) = xbot + lat_fract * (xtop - xbot)
 endif
 
-istatus = 0
+! Rectangular bilinear interpolation
+!>@todo FIXME should this code check invals(:) for MISSING_R8?
+!> it costs time and for grids that don't have missing data it is
+!> not needed.  should it call allow_missing_in_state() on init and
+!> key off that?  (i think yes.)
+ 
+if (.true.) then
+
+   ! have to do the items individually because some items might
+   ! have missing and others not.
+   do i=1, nitems
+      if (any(invals(:, i) == MISSING_R8)) then
+         outvals(i) = MISSING_R8
+         istatus(i) = 1
+      else
+         xbot(1) = invals(1, i) + lon_fract * (invals(2, i) - invals(1, i))
+         xtop(1) = invals(4, i) + lon_fract * (invals(3, i) - invals(4, i))
+         outvals(i) = xbot(1) + lat_fract * (xtop(1) - xbot(1))
+         istatus(i) = 0
+      endif
+   enddo
+   return
+
+else
+ 
+   ! can use array syntax and do them all at once.  no missing vals.
+   xbot = invals(1, :) + lon_fract * (invals(2, :) - invals(1, :))
+   xtop = invals(4, :) + lon_fract * (invals(3, :) - invals(4, :))
+
+   outvals(:) = xbot + lat_fract * (xtop - xbot)
+   istatus(:) = 0
+
+endif
+
 
 end subroutine quad_lon_lat_evaluate_ir_array
 
