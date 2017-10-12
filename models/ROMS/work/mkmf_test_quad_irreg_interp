@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../../build_templates/mkmf -p test_quad_interp -t ../../../build_templates/mkmf.template   \
- -a "../../.." path_names_test_quad_interp
+../../../build_templates/mkmf -p test_quad_irreg_interp -t ../../../build_templates/mkmf.template   \
+ -a "../../.." path_names_test_quad_irreg_interp
 
 exit $status
 
