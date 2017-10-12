@@ -1317,7 +1317,7 @@ else
    else if(filter_kind == 7) then
       call obs_increment_boxcar(ens, ens_size, obs, obs_var, obs_inc, rel_weights)
    else if(filter_kind == 8) then
-      call obs_increment_boxcar2(ens, ens_size, prior_var, obs, obs_var, obs_inc)
+      call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
    else 
       call error_handler(E_ERR,'obs_increment', &
                  'Illegal value of filter_kind in assim_tools namelist [1-8 OK]', &
@@ -2639,7 +2639,7 @@ end subroutine obs_increment_boxcar
 
 
 
-subroutine obs_increment_boxcar2(ens, ens_size, prior_var, &
+subroutine obs_increment_rank_histogram(ens, ens_size, prior_var, &
    obs, obs_var, obs_inc)
 !------------------------------------------------------------------------
 ! 
@@ -2875,7 +2875,7 @@ do i = 1, ens_size
                      new_ens(i) = adj_r2
                   else
                      msgstring = 'Did not get a satisfactory quadratic root' 
-                     call error_handler(E_ERR, 'obs_increment_boxcar2', msgstring, &
+                     call error_handler(E_ERR, 'obs_increment_rank_histogram', msgstring, &
                         source, revision, revdate)
                   endif
                endif
@@ -2896,7 +2896,7 @@ do i = 1, ens_size
    obs_inc(e_ind(i)) = new_ens(i) - x(i)
 end do
 
-end subroutine obs_increment_boxcar2
+end subroutine obs_increment_rank_histogram
 
 
 
