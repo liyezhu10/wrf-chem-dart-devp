@@ -10,6 +10,7 @@
 &convert_streamflow_nml
    input_file = '/glade/p/work/jamesmcc/DART/04233300_VM/nudgingTimeSliceObs/2013-09-30_22:30:00.15min.usgsTimeSlice.ncdf'
    location_file = '/glade/p/work/jamesmcc/DART/04233300_VM/DOMAIN/RouteLink.nc'
+   obs_fraction_for_error = 0.01
    verbose = 0
  /
 
@@ -24,6 +25,6 @@
  /
 
 &obs_sequence_nml
-   write_binary_obs_sequence = .false.  
+   write_binary_obs_sequence = .false.
  /
 

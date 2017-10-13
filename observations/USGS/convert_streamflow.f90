@@ -50,8 +50,9 @@ character(len=512) :: string1, string2 ! strings for messages
 
 ! input file has data quality control fields, whether to use or ignore them.
 
-integer, parameter :: NUM_COPIES = 1     ! number of copies in sequence
-integer, parameter :: NUM_QC     = 1     ! number of QC entries
+integer,  parameter :: NUM_COPIES      = 1      ! number of copies in sequence
+integer,  parameter :: NUM_QC          = 1      ! number of QC entries
+real(r8), parameter :: MIN_OBS_ERR_STD = 0.5_r8 ! m^3/sec
 
 integer :: nobs, n, i, nlinks, iunit, io, indx
 integer :: ncid_d, ncid_l, varid
@@ -88,11 +89,11 @@ type(obs_type)        :: obs
 character(len=256) :: input_file    = 'input.nc'
 character(len=256) :: location_file = 'location.nc'
 character(len=256) :: output_file   = 'obs_seq.out'
-real(r8)           :: obs_err_var_fraction = 0.01
+real(r8)           :: obs_fraction_for_error = 0.01
 integer            :: verbose = 0
 
 namelist / convert_streamflow_nml / input_file, output_file, location_file, &
-                                    obs_err_var_fraction, verbose
+                                    obs_fraction_for_error, verbose
 
 ! Get going
 
@@ -196,7 +197,10 @@ obsloop1: do n = 1, nobs
 
    if ( discharge(n) < 0.0_r8 ) cycle
 
-   oerr = min(discharge(n)*0.01, 1.0) ! some hypothetical observation error
+   ! oerr is the observation error standard deviation in this application.
+   ! The observation error variance encoded in the observation file
+   ! will be oerr*oerr
+   oerr = max(discharge(n)*obs_fraction_for_error, MIN_OBS_ERR_STD)
 
    call convert_time_string(time_string(n),oday,osec)
 
