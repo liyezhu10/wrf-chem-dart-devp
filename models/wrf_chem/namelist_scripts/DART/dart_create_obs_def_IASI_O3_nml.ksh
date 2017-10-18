@@ -1,7 +1,7 @@
 #!/bin/ksh -x
 #########################################################################
 #
-# Purpose: Create DART &obs_def_IASI_CO_nml 
+# Purpose: Create DART &obs_def_IASI_O3_nml 
 #
 #########################################################################
 #
@@ -9,9 +9,9 @@
 rm -f input.nml_temp
 touch input.nml_temp
 cat > input.nml_temp << EOF
- &obs_def_IASI_CO_nml
-   IASI_CO_retrieval_type   = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RAWR'},
-   use_log_co   = ${NL_USE_LOG_CO:-.false.},
+ &obs_def_IASI_O3_nml
+   IASI_O3_retrieval_type   = ${NL_IASI_O3_RETRIEVAL_TYPE:-'RAWR'},
+   use_log_o3   = ${NL_USE_LOG_O3:-.false.},
 / 
 EOF
 #

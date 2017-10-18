@@ -131,6 +131,7 @@
 !
 !============================================================
       fac=1.
+      obs_qc(1)=0.
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
       file_in,lat_mn,lat_mx,lon_mn,lon_mx

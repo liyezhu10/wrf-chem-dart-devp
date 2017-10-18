@@ -1000,6 +1000,7 @@ WRFDomains : do id=1,num_domains
 !
 ! APM/AFAJ/LXL +++
    wrf%dom(id)%type_co  = get_type_ind_from_type_string(id,'co')
+   wrf%dom(id)%type_o3 = get_type_ind_from_type_string(id,'o3')
    wrf%dom(id)%type_no  = get_type_ind_from_type_string(id,'no')
    wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
    wrf%dom(id)%type_tauaer1 = get_type_ind_from_type_string(id,'TAUAER1')

@@ -12,7 +12,7 @@
              integer                                   :: nchemi_emiss,nfirechemi_emiss
              integer                                   :: i,j,k,emiss
              integer                                   :: unit
-             real                                      :: fac,facc,tend
+             real                                      :: fac,facc,delt
              real,allocatable,dimension(:,:,:)         :: emiss_chemi_prior,emiss_chemi_post
              real,allocatable,dimension(:,:,:)         :: emiss_chemi_old,emiss_chemi_new
              real,allocatable,dimension(:,:,:)         :: emiss_firechemi_prior,emiss_firechemi_post
@@ -158,21 +158,16 @@
                 do i=1,nx
                    do j=1,ny
                       do k=1,nz_chemi
-                         if(emiss_chemi_prior(i,j,k).ne.0. .and. &
-                         emiss_chemi_post(i,j,k).ne.emiss_chemi_prior(i,j,k)) then
-! non-zero updated emission case
+                         if(emiss_chemi_prior(i,j,k).ne.0.) then
                             emiss_chemi_new(i,j,k)=emiss_chemi_old(i,j,k)* &
-                            facc*emiss_chemi_post(i,j,k)/emiss_chemi_prior(i,j,k)
+                            (1.+facc*((emiss_chemi_post(i,j,k)-emiss_chemi_prior(i,j,k))/ &
+                            emiss_chemi_prior(i,j,k)))
 !                            if(emiss_chemi_new(i,j,k).lt.0.) emiss_chemi_new(i,j,k)=0.
-                         elseif (emiss_chemi_post(i,j,k).ne.emiss_chemi_prior(i,j,k)) then
-! zero updated emission case
-                            tend=emiss_chemi_old(i,j,k)-emiss_chemi_prior(i,j,k)
-                            emiss_chemi_new(i,j,k)=emiss_chemi_post(i,j,k)+facc*tend
+                         else
+                            delt=emiss_chemi_post(i,j,k)-emiss_chemi_prior(i,j,k)
+                            emiss_chemi_new(i,j,k)=emiss_chemi_old(i,j,k)+facc*delt
 !                            if(emiss_chemi_new(i,j,k).lt.0.) emiss_chemi_new(i,j,k)=0.
 !                            print *, 'APM: EMISS ADJUST - tendency method ',chemi_emiss(emiss)
-                         else
-! not updated emission case
-                            emiss_chemi_new(i,j,k)=emiss_chemi_old(i,j,k) 
                          endif
                       enddo
                    enddo  
@@ -196,21 +191,16 @@
                 do i=1,nx
                    do j=1,ny
                       do k=1,nz_firechemi
-                         if(emiss_firechemi_prior(i,j,k).ne.0. .and.
-                         emiss_firechemi_post(i,j,k).ne.emiss_firechemi_prior(i,j,k)) then
-! non-zero updated emission case
+                         if(emiss_firechemi_prior(i,j,k).ne.0.) then
                             emiss_firechemi_new(i,j,k)=emiss_firechemi_old(i,j,k)* &
-                            facc*emiss_firechemi_post(i,j,k)/emiss_firechemi_prior(i,j,k)
+                            (1.+facc*((emiss_firechemi_post(i,j,k)-emiss_firechemi_prior(i,j,k))/ &
+                            emiss_firechemi_prior(i,j,k)))
 !                            if(emiss_firechemi_new(i,j,k).lt.0.) emiss_firechemi_new(i,j,k)=0.
-                         elseif(emiss_firechemi_post(i,j,k).ne.emiss_firechemi_prior(i,j,k)) then
-! zero updated emission case
-                            tend=emiss_firechemi_old(i,j,k)-emiss_firechemi_prior(i,j,k)
-                            emiss_firechemi_new(i,j,k)=emiss_firechemi_post(i,j,k)+facc*tend
+                         else
+                            delt=emiss_firechemi_post(i,j,k)-emiss_firechemi_prior(i,j,k)
+                            emiss_firechemi_new(i,j,k)=emiss_firechemi_old(i,j,k)+facc*delt
 !                            if(emiss_firechemi_new(i,j,k).lt.0.) emiss_firechemi_new(i,j,k)=0.
 !                            print *, 'APM: EMISS ADJUST - tendency method ',firechemi_emiss(emiss)
-                         else
-! not updated emission case
-                            emiss_firechemi_new(i,j,k)=emiss_firechemi_old(i,j,k) 
                          endif
                       enddo
                    enddo  

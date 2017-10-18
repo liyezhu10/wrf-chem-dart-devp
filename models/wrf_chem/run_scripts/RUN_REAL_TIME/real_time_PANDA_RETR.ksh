@@ -29,7 +29,8 @@ export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export NL_FAC_OBS_ERROR_MOPITT=9.00
 export NL_FAC_OBS_ERROR_IASI=9.00
-export RETRIEVAL_TYPE=RETR
+export RETRIEVAL_TYPE_MOPITT=RETR
+export RETRIEVAL_TYPE_IASI=RAWR
 #
 export USE_LOG_CO=false
 if [[ ${USE_LOG_CO} == true ]]; then
@@ -3000,7 +3001,7 @@ EOFF
    cp MOPITT_CO_${D_DATE}.dat ${D_DATE}.dat
    export NL_FILEDIR=\'./\' 
    export NL_FILENAME=${D_DATE}.dat
-   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
    export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_MOPITT}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
 #
@@ -3292,7 +3293,7 @@ EOFF
    fi
    export NL_FILEDIR=\'\' 
    export NL_FILENAME=${D_DATE}.dat
-   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_IASI}\'
    export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_IASI}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
 #
@@ -4082,8 +4083,8 @@ if ${RUN_COMBINE_OBS}; then
    export NL_SYNONYMOUS_COPY_LIST="'NCEP BUFR observation','MOPITT CO observation','IASI CO observation','IASI O3 observation','AIRNOW observation','PANDA observation','MODIS observation'"
    export NL_SYNONYMOUS_QC_LIST="'NCEP QC index','MOPITT CO QC index','IASI CO QC index','IASI O3 QC index','AIRNOW QC index','PANDA QC index','MODIS QC index'"
    rm -rf input.nml
-   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
-   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
+   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_IASI}\'
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
    ${HYBRID_SCRIPTS_DIR}/da_create_dart_input_nml.ksh       
 #
@@ -4117,8 +4118,8 @@ if ${RUN_PREPROCESS_OBS}; then
 #   cp ${DART_DIR}/models/wrf_chem/work/input.nml ./.
    rm -rf input.nml
    export NL_DEFAULT_STATE_VARIABLES=.true.
-   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
-   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
+   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_IASI}\'
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
    ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
    export NL_DEFAULT_STATE_VARIABLES=.false.
@@ -4534,8 +4535,8 @@ EOF
    export NL_NUM_INPUT_FILES=1
    export NL_FILENAME_SEQ="'obs_seq.out'"
    export NL_FILENAME_OUT="'obs_seq.processed'"
-   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
-   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE}\'
+   export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
+   export NL_IASI_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_IASI}\'
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
 #
    rm -rf input.nml

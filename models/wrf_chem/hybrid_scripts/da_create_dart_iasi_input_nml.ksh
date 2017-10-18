@@ -20,8 +20,10 @@ cat > input.nml << EOF
    filedir                     = ${NL_FILEDIR}
    filename                    = ${NL_FILENAME}
    IASI_CO_retrieval_type      = ${NL_IASI_CO_RETRIEVAL_TYPE}
+   IASI_O3_retrieval_type      = ${NL_IASI_O3_RETRIEVAL_TYPE}
    fac_obs_error               = ${NL_FAC_OBS_ERROR}
    use_log_co                  = ${NL_USE_LOG_CO}
+   use_log_o3                  = ${NL_USE_LOG_O3}
 /
 &obs_sequence_nml
    write_binary_obs_sequence   = .false.
@@ -53,6 +55,18 @@ cat > input.nml << EOF
    filename_seq                = 'obs_seq2008022206',obs_seq2008022212',
    filename_out                = 'obs_seq_ncep_2008022212'
 /
+&obs_def_MOPITT_CO_nml
+   MOPITT_CO_retrieval_type    = ${NL_MOPITT_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
+/ 
+&obs_def_IASI_CO_nml
+   IASI_CO_retrieval_type      = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RETR'},
+   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
+/
+&obs_def_IASI_O3_nml
+   IASI_O3_retrieval_type      = ${NL_IASI_O3_RETRIEVAL_TYPE:-'RETR'},
+   use_log_o3                  = ${NL_USE_LOG_O3:-.false.},
+/ 
 EOF
 
 

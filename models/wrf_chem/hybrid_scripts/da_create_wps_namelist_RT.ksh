@@ -57,7 +57,7 @@ cat << EOF > namelist.wps
  opt_metgrid_tbl_path             = './',
 /
 &mod_levs
- press_pa = 201300 , 200100 , 100000 , 
+ press_pa =  201300 , 200100, 100000 , 
              95000 ,  90000 , 
              85000 ,  80000 , 
              75000 ,  70000 , 

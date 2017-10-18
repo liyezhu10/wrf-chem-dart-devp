@@ -69,8 +69,12 @@ cat > input.nml << EOF
    use_log_co   = ${NL_USE_LOG_CO:-.false.},
 /
  &obs_def_IASI_CO_nml
-   IASI_CO_retrieval_type   = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RETR'},
+   IASI_CO_retrieval_type   = ${NL_IASI_CO_RETRIEVAL_TYPE:-'RAWR'},
    use_log_co   = ${NL_USE_LOG_CO:-.false.},
+/
+ &obs_def_IASI_O3_nml
+   IASI_O3_retrieval_type   = ${NL_IASI_O3_RETRIEVAL_TYPE:-'RAWR'},
+   use_log_o3   = ${NL_USE_LOG_o3:-.false.},
 /
 EOF
 

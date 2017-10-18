@@ -3,7 +3,7 @@
 ! University Corporation for Atmospheric Research
 ! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
 !
-   program create_airnow_o3_obs_sequence
+   program create_airnow_co_obs_sequence
 !
 ! <next few lines under version control, do not edit>
 ! $URL$
@@ -63,7 +63,7 @@
                                       time_type, 		&
                                       get_time
 ! 
-      use obs_kind_mod, only :        AIRNOW_O3, 		&
+      use obs_kind_mod, only :        AIRNOW_CO, 		&
                                       get_kind_from_menu
 !
       use random_seq_mod, only :      random_seq_type, 	&
@@ -131,6 +131,7 @@
 !
 !============================================================
       fac=1.0
+      obs_qc(1)=0.
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
       file_in,lat_mn,lat_mx,lon_mn,lon_mx
@@ -283,7 +284,7 @@
          which_vert           = -1       ! vert is surface
          obs_location         = set_location(longitude, latitude, level, which_vert)
          ob_err_var           = obs_err(indx)*obs_err(indx)
-         obs_kind             = AIRNOW_O3
+         obs_kind             = AIRNOW_CO
 !        
          call set_obs_def_kind(obs_def, obs_kind)
          call set_obs_def_location(obs_def, obs_location)
@@ -321,7 +322,7 @@
 ! Clean up
 !-----------------------------------------------------------------------------
       call timestamp(string1=source,string2=revision,string3=revdate,pos='end')
-   end program create_airnow_o3_obs_sequence
+   end program create_airnow_co_obs_sequence
 !
    integer function calc_greg_sec(year,month,day,hour,minute,sec,days_in_month)
       implicit none

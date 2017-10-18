@@ -10,10 +10,9 @@ program create_iasi_obs_sequence
 ! $Id$
 ! $Revision$
 ! $Date$
-
+!
 !=============================================
 ! IASI CO retrieval obs
-! Based from create_obs_sequence.f90
 !=============================================
 !
 use    utilities_mod, only : timestamp, 		&
@@ -171,6 +170,7 @@ character*4             :: chr_year
 character*129           :: filedir, filename, copy_meta_data, filen
 character*129           :: transform_typ
 character*129           :: IASI_CO_retrieval_type
+character*129           :: IASI_O3_retrieval_type
 !
 ! QOR/CPSR variables
 integer                                        :: info,nlvls_trc,qstatus
@@ -183,6 +183,7 @@ double precision,allocatable,dimension(:,:)    :: rr_avg_k,rr_cov
 double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
 logical                 :: use_log_co
+logical                 :: use_log_o3
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -193,7 +194,7 @@ logical                 :: use_log_co
 !     CPSR - compact phase space retrievals
 !
 namelist /create_iasi_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         IASI_CO_retrieval_type,fac_obs_error,use_log_co
+         IASI_CO_retrieval_type,IASI_O3_retrieval_type,fac_obs_error,use_log_co,use_log_o3
 !
 ! Set constants
 ln_10=log(10.)
@@ -902,12 +903,14 @@ qc_thinning(:)=100
 ! RAW with NO ROT
            if(trim(IASI_CO_retrieval_type) .eq. 'RAWR') then
               xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
+print *, 'xg_raw_x_r ',xg_raw_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
               xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
               enddo
            endif
+
 !
 ! RAW QOR with NO ROT
 !           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
