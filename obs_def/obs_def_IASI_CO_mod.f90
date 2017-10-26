@@ -166,8 +166,8 @@ SELECT CASE (fileformat)
    iasi_nlevelsp_1 = iasi_nlevels_1+1
    iasi_prior_1 = read_iasi_prior(ifile, fileformat)
    iasi_psurf_1 = read_iasi_psurf(ifile, fileformat)
-   avg_kernels_1(1:iasi_nlevels_1) = read_iasi_avg_kernels(ifile, iasi_nlevels_1, fileformat)
-   pressure_1(1:iasi_nlevelsp_1) = read_iasi_pressure(ifile, iasi_nlevelsp_1, fileformat)
+   avg_kernels_1(:) = read_iasi_avg_kernels(ifile, iasi_nlevels_1, fileformat)
+   pressure_1(:) = read_iasi_pressure(ifile, iasi_nlevelsp_1, fileformat)
    read(ifile) keyin
    CASE DEFAULT
    iasi_nlevels_1 = read_iasi_nlevels(ifile, fileformat)
@@ -177,8 +177,8 @@ SELECT CASE (fileformat)
    iasi_nlevelsp_1 = iasi_nlevels_1+1
    iasi_prior_1 = read_iasi_prior(ifile, fileformat)
    iasi_psurf_1 = read_iasi_psurf(ifile, fileformat)
-   avg_kernels_1(1:iasi_nlevels_1) = read_iasi_avg_kernels(ifile, iasi_nlevels_1, fileformat)
-   pressure_1(1:iasi_nlevelsp_1) = read_iasi_pressure(ifile, iasi_nlevelsp_1, fileformat)
+   avg_kernels_1(:) = read_iasi_avg_kernels(ifile, iasi_nlevels_1, fileformat)
+   pressure_1(:) = read_iasi_pressure(ifile, iasi_nlevelsp_1, fileformat)
    read(ifile, *) keyin
 END SELECT
 counts1 = counts1 + 1
@@ -237,7 +237,6 @@ if ( .not. module_initialized ) call initialize_module
 !
 ! Make sure there's enough space, if not die for now (clean later)
 if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
-   ! PUT IN ERROR HANDLER CALL
    write(string1, *)'Not enough space for a iasi CO obs.'
    write(string2, *)'Can only have max_iasi_co obs (currently ',MAX_IASI_CO_OBS,')'
    call error_handler(E_ERR,'interactive_iasi_co',string1,source,revision,revdate,text2=string2)
@@ -258,7 +257,9 @@ read(*, *) avg_kernel(num_iasi_co_obs,:)
 write(*, *) 'Input the 20 Averaging Pressure Levels '
 read(*, *) pressure(num_iasi_co_obs,:)
 end subroutine interactive_iasi_co
-!
+
+
+
 subroutine get_expected_iasi_co(state, location, key, val, istatus)
 !----------------------------------------------------------------------
 !subroutine get_expected_iasi_co(state, location, key, val, istatus)
@@ -279,6 +280,8 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
    integer             :: nlevels,nlevelsp
 
    real(r8)            :: vert_mode_filt
+
+   character(len=*), parameter :: routine = 'get_expected_iasi_co'
 !
 ! Initialize DART
    if ( .not. module_initialized ) call initialize_module
@@ -327,7 +330,7 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
 ! Check WRF carbon monoxide at surface
    if(istatus/=0) then
       write(string1, *)'APM NOTICE: WRF co_wrf_sfc is bad ',istatus
-      call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
+      call error_handler(E_MSG,routine,string1,source,revision,revdate)
       obs_val=missing
       return
    endif              
@@ -357,7 +360,7 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
 ! check for lower bound
          if (istatus.eq.0 .and. obs_val.lt.co_min) then
             write(string1, *)'APM: NOTICE resetting minimum IASI CO value ',ilev
-            call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
+            call error_handler(E_MSG,routine,string1,source,revision,revdate)
             obs_val = co_min 
          endif
       endif
@@ -365,7 +368,7 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
 ! interpolation failed
       if (istatus /= 0) then
          write(string1, *)'APM: NOTICE reject IASI CO ob - WRF interpolation failed ',istatus,ilev
-         call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
+         call error_handler(E_MSG,routine,string1,source,revision,revdate)
          obs_val = missing 
          return
       endif
@@ -399,28 +402,32 @@ subroutine set_obs_def_iasi_co(key, co_avgker, co_press, co_prior, co_psurf, co_
 ! Allows passing of obs_def special information 
 
 integer,                 intent(in) :: key, co_nlevels, co_nlevelsp
-real(r8), dimension(19), intent(in) :: co_avgker
-real(r8), dimension(20), intent(in) :: co_press
+real(r8), dimension(IASI_DIM),  intent(in) :: co_avgker
+real(r8), dimension(IASI_DIMP), intent(in) :: co_press
 real(r8),                intent(in) :: co_prior
 real(r8),                intent(in) :: co_psurf
+
+character(len=*), parameter :: routine = 'set_obs_def_iasi_co'
 
 if ( .not. module_initialized ) call initialize_module
 
 if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
    write(string1, *)'Not enough space for a iasi CO obs.'
    write(string2, *)'Can only have MAX_IASI_CO_OBS (currently ',MAX_IASI_CO_OBS,')'
-   call error_handler(E_ERR,'set_obs_def_iasi_co',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
 endif
 
-avg_kernel(   key,:) = co_avgker(1:co_nlevels)
-pressure(     key,:) = co_press(1:co_nlevelsp)
+avg_kernel(   key,1:co_nlevels)  = co_avgker(1:co_nlevels)
+pressure(     key,1:co_nlevelsp) = co_press(1:co_nlevelsp)
 iasi_prior(   key)   = co_prior
 iasi_psurf(   key)   = co_psurf
 iasi_nlevels( key)   = co_nlevels
 iasi_nlevelsp(key)   = co_nlevelsp
 
 end subroutine set_obs_def_iasi_co
-!
+
+
+
 function read_iasi_prior(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -437,7 +444,9 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_prior
 END SELECT
 end function read_iasi_prior
-!
+
+
+
 function read_iasi_nlevels(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -454,7 +463,9 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevels
 END SELECT
 end function read_iasi_nlevels
-!
+
+
+
 function read_iasi_nlevelsp(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -471,7 +482,9 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevelsp
 END SELECT
 end function read_iasi_nlevelsp
-!
+
+
+
 subroutine write_iasi_prior(ifile, iasi_prior_temp, fform)
 integer,          intent(in) :: ifile
 real(r8),         intent(in) :: iasi_prior_temp
@@ -488,7 +501,9 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_prior_temp
 END SELECT
 end subroutine write_iasi_prior
-!
+
+
+
 subroutine write_iasi_nlevels(ifile, iasi_nlevels_temp, fform)
 integer,          intent(in) :: ifile
 integer,          intent(in) :: iasi_nlevels_temp
@@ -558,7 +573,7 @@ end subroutine write_iasi_psurf
 function read_iasi_avg_kernels(ifile, nlevels, fform)
 integer,          intent(in)           :: ifile, nlevels
 character(len=*), intent(in), optional :: fform
-real(r8), dimension(19)                :: read_iasi_avg_kernels
+real(r8), dimension(IASI_DIM)           :: read_iasi_avg_kernels
 
 character(len=32)  :: fileformat
 read_iasi_avg_kernels(:) = 0.0_r8
@@ -575,7 +590,7 @@ end function read_iasi_avg_kernels
 !
 subroutine write_iasi_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 integer,                 intent(in) :: ifile, nlevels_temp
-real(r8), dimension(19), intent(in) :: avg_kernels_temp
+real(r8), dimension(:), intent(in) :: avg_kernels_temp
 character(len=*),        intent(in) :: fform
 
 character(len=32)  :: fileformat
@@ -592,7 +607,7 @@ end subroutine write_iasi_avg_kernels
 function read_iasi_pressure(ifile, nlevelsp, fform)
 integer,          intent(in)           :: ifile, nlevelsp
 character(len=*), intent(in), optional :: fform
-real(r8), dimension(20)                :: read_iasi_pressure
+real(r8), dimension(IASI_DIMP)         :: read_iasi_pressure
 
 character(len=32) :: fileformat
 read_iasi_pressure(:) = 0.0_r8
@@ -609,7 +624,7 @@ end function read_iasi_pressure
 !
 subroutine write_iasi_pressure(ifile, pressure_temp, nlevelsp_temp, fform)
 integer,                 intent(in) :: ifile, nlevelsp_temp
-real(r8), dimension(20), intent(in)  :: pressure_temp
+real(r8), dimension(IASI_DIMP), intent(in)  :: pressure_temp
 character(len=32),       intent(in) :: fform
 
 character(len=32)  :: fileformat

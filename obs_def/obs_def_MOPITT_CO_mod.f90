@@ -135,7 +135,7 @@ subroutine read_mopitt_co(key, ifile, fform)
 
 integer,          intent(out)          :: key
 integer,          intent(in)           :: ifile
-character(lenb=*), intent(in), optional :: fform
+character(len=*), intent(in), optional :: fform
 
 character(len=32)                   :: fileformat
 
